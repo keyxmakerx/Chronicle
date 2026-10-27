@@ -2963,7 +2963,7 @@ func (a *App) RegisterRoutes() {
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
-	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo)
+	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo, entities.NewChildOrderRepository(a.DB))
 	entityHandler.SetFolderService(folderService)
 	entityHandler.SetFavoriteRepo(favoriteRepo)
 	entityHandler.SetSavedFilterRepo(entities.NewSavedFilterRepository(a.DB))

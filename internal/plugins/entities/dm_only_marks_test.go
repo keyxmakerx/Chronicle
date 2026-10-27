@@ -73,7 +73,7 @@ func TestSidebarEntityList_DMOnlyLock(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := SidebarEntityList(results, nil, len(results), 7, tt.cc, nil).Render(context.Background(), &buf); err != nil {
+			if err := SidebarEntityList(results, nil, len(results), 7, tt.cc, nil, nil).Render(context.Background(), &buf); err != nil {
 				t.Fatalf("render: %v", err)
 			}
 			if got := strings.Count(buf.String(), "tree-lock"); got != tt.locks {

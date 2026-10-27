@@ -1224,7 +1224,12 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 				c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
 			}
 		}
-		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, typeID, cc, hiddenIDs))
+		// A failed read leaves every list A to Z, which still shows every page.
+		var orders map[string]string
+		if h.folders != nil {
+			orders, _ = h.folders.ChildOrders(c.Request().Context(), cc.Campaign.ID)
+		}
+		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, typeID, cc, hiddenIDs, orders))
 	}
 
 	return middleware.Render(c, http.StatusOK, SearchResultsFragment(results, total, cc))
@@ -1330,7 +1335,7 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 	})
 }
 
-// --- Bulk Operations API (multi-select in reorg mode) ---
+// --- Bulk Operations API ---
 
 // BulkMoveAPI reparents multiple entities under a target parent (entity or folder node).
 // POST /campaigns/:id/entities/bulk-move
@@ -4706,4 +4711,63 @@ func (h *Handler) requirePlayerCanView(c echo.Context, cc *campaigns.CampaignCon
 		return apperror.NewForbidden("you can't edit this page")
 	}
 	return nil
+}
+
+// SetSidebarOrderAPI sets how one sidebar container orders its rows: a
+// category's top level, a folder, or a page with pages under it.
+// PUT /campaigns/:id/sidebar-order
+func (h *Handler) SetSidebarOrderAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		Kind string `json:"kind"`
+		ID   string `json:"id"`
+		Mode string `json:"mode"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if req.Kind == OrderContainerPage {
+		if err := h.pageWriteErr(c, req.ID); err != nil {
+			return err
+		}
+	}
+	if err := h.folders.SetChildOrder(c.Request().Context(), cc.Campaign.ID, req.Kind, req.ID, req.Mode); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// MoveSidebarRowAPI puts a page or folder just before or after a sibling,
+// for a list ordered by hand. Naming the neighbour rather than an index
+// keeps the move right when the mover cannot see every sibling.
+// PUT /campaigns/:id/sidebar-order/move
+func (h *Handler) MoveSidebarRowAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		Kind   string `json:"kind"`
+		ID     string `json:"id"`
+		NextTo string `json:"next_to"`
+		After  bool   `json:"after"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if req.Kind == OrderContainerPage {
+		if err := h.pageWriteErr(c, req.ID); err != nil {
+			return err
+		}
+		if err := h.pageViewErr(c, req.NextTo); err != nil {
+			return err
+		}
+	}
+	if err := h.folders.MoveNextTo(c.Request().Context(), cc.Campaign.ID, req.Kind, req.ID, req.NextTo, req.After); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }

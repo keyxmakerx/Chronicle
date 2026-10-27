@@ -1,5 +1,5 @@
 /**
- * sidebar_tree.js -- Collapsible Tree + Drag-and-Drop for Sidebar Entity List
+ * sidebar_tree.js -- Collapsible tree for the sidebar's category panel
  *
  * Transforms the flat entity list rendered by SidebarEntityList into a
  * collapsible tree using data-parent-id attributes. No folder/page icons —
@@ -8,13 +8,15 @@
  *   - Collapsible folders, each with a chevron and its own page count
  *   - Vertical guide lines for visual hierarchy
  *   - Smooth CSS transitions for collapse/expand
- *   - Drag-and-drop reordering within the same level
- *   - Drag-and-drop reparenting (drop onto an entity to nest it)
- *   - Visual feedback distinguishing reorder vs reparent operations
  *   - Collapse state persisted in localStorage per campaign
+ *   - Each list's own order: the category's top level, a folder, or a page
+ *     with pages under it sorts A to Z, by hand or newest first
+ *     (data-root-order / data-child-order). In a list kept by hand, someone
+ *     who may edit gets up and down arrows on each row and Alt+Up/Down on a
+ *     focused row; the row menu offers the same moves and the order choice.
  *   - Extra listings (data-place-key rows): the same page under a second
- *     parent, a leaf with an "also here" label. Alt-dropping a page onto
- *     another page adds one; a plain drop still moves.
+ *     parent, a leaf with an "also here" label. They are added from the
+ *     page's own place line and never move on their own.
  *
  * Listens for HTMX afterSwap events on #sidebar-cat-results to re-initialize
  * whenever the entity list is refreshed.
@@ -25,22 +27,21 @@
   var INDENT_PX = 14;
   var STORAGE_KEY_PREFIX = 'chronicle-tree-collapsed-';
 
-  // Track the current container for the reorg-changed listener (IIFE-scoped
-  // so the listener is registered once, not per initTree call).
-  var currentTreeContainer = null;
-
-  // Folders first, then pages, each group alphabetical (sort_order only
-  // tie-breaks two same-named siblings — the drag-reorder feature this used
-  // to read in full is not reachable yet; see the module doc). Pure over its
-  // argument, so it is hoisted out of initTree() for the test suite.
-  function sortChildren(childNodes) {
+  // Folders first, then pages. Within each group the list's order decides:
+  // 'hand' by sort_order (the name breaks a tie), 'new' newest first, and
+  // anything else A to Z (sort_order breaks a tie between two same-named
+  // rows). Pure over its arguments, so it is hoisted out of initTree() for
+  // the test suite.
+  function sortChildren(childNodes, mode) {
     childNodes.sort(function (a, b) {
       var aFolder = a.el.hasAttribute('data-is-folder'), bFolder = b.el.hasAttribute('data-is-folder');
       if (aFolder !== bFolder) return aFolder ? -1 : 1;
       var nameA = (a.el.getAttribute('data-entity-name') || '').toLowerCase();
       var nameB = (b.el.getAttribute('data-entity-name') || '').toLowerCase();
-      if (nameA !== nameB) return nameA < nameB ? -1 : 1;
-      return a.sortOrder - b.sortOrder;
+      var byName = nameA === nameB ? 0 : (nameA < nameB ? -1 : 1);
+      if (mode === 'hand') return (a.sortOrder - b.sortOrder) || byName;
+      if (mode === 'new') return ((b.created || 0) - (a.created || 0)) || byName;
+      return byName || (a.sortOrder - b.sortOrder);
     });
   }
 
@@ -52,6 +53,7 @@
     node.children.forEach(function (c) { n += countPages(c); });
     return n;
   }
+
 
   /**
    * Initialize the tree for a freshly loaded entity list.
@@ -83,6 +85,7 @@
       // Resolve parent: entities may have parent_id (entity) or parent_node_id (folder).
       var parentId = el.getAttribute('data-parent-node-id') || el.getAttribute('data-parent-id') || null;
       var sortOrder = parseInt(el.getAttribute('data-sort-order') || '0', 10);
+      var created = parseInt(el.getAttribute('data-created') || '0', 10);
       var isNode = el.hasAttribute('data-node-id');
 
       nodes[id] = {
@@ -90,6 +93,7 @@
         id: id,
         parentId: parentId,
         sortOrder: sortOrder,
+        created: created,
         children: [],
         isNode: isNode,
         isPlace: !!placeKey
@@ -129,10 +133,11 @@
 
     /**
      * Render a single tree node: clones the link element, adds indent, a
-     * toggle button (for parents) or a same-size spacer (for leaves), and a
-     * folder's own page count.
+     * toggle button (for parents) or a same-size spacer (for leaves), a
+     * folder's own page count, and the move arrows when the list it sits in
+     * (listMode) is kept by hand.
      */
-    function renderNode(node, depth) {
+    function renderNode(node, depth, listMode) {
       var hasChildren = node.children.length > 0;
       var isFolder = node.el.hasAttribute('data-is-folder');
       var isCollapsed = !!collapsedSet[node.id];
@@ -144,7 +149,7 @@
       if (node.isNode) {
         wrapper.setAttribute('data-node-id', node.id);
       } else if (node.isPlace) {
-        // No data-entity-id: drag, reorder and sibling counts must not treat a
+        // No data-entity-id: a move or a sibling count must not treat a
         // listing as the page itself.
         wrapper.setAttribute('data-place-key', node.id);
         wrapper.setAttribute('data-place-entity', node.el.getAttribute('data-place-entity') || '');
@@ -169,25 +174,14 @@
         div.className = link.className;
         div.style.cssText = link.style.cssText;
         div.innerHTML = link.innerHTML;
-        ['data-entity-id', 'data-node-id', 'data-parent-id', 'data-sort-order', 'data-entity-name', 'data-sidebar-hidden', 'data-is-folder'].forEach(function (attr) {
+        ['data-entity-id', 'data-node-id', 'data-parent-id', 'data-sort-order', 'data-entity-name', 'data-sidebar-hidden', 'data-is-folder', 'data-child-order'].forEach(function (attr) {
           if (link.hasAttribute(attr)) div.setAttribute(attr, link.getAttribute(attr));
         });
         div.classList.add('sidebar-tree-item', 'cursor-default');
         link = div;
       }
 
-      // Add double-click rename for pure folder nodes (in reorg mode).
-      if (isFolder && node.isNode) {
-        link.addEventListener('dblclick', function (e) {
-          if (!document.body.classList.contains('sidebar-reorg-active')) return;
-          e.preventDefault();
-          e.stopPropagation();
-          startInlineRename(link, node.id, campaignId);
-        });
-      }
-
-      // No folder/page icon (the tree is chevron + name + count only) — mark
-      // any item with children so drag-drop can detect valid parents.
+      // No folder/page icon (the tree is chevron + name + count only).
       if (hasChildren || isFolder) {
         link.setAttribute('data-has-children', 'true');
       }
@@ -281,17 +275,29 @@
         wrapper.classList.add('has-more');
       }
 
+      // A listing follows its page, so it never moves on its own.
+      if (canEdit && listMode === 'hand' && !node.isPlace) {
+        var steps = document.createElement('span');
+        steps.className = 'tree-step';
+        steps.appendChild(stepButton(-1, node.el.getAttribute('data-entity-name') || ''));
+        steps.appendChild(stepButton(1, node.el.getAttribute('data-entity-name') || ''));
+        wrapper.appendChild(steps);
+        wrapper.classList.add('has-steps');
+      }
+
       // Render children into a collapsible container.
       if (hasChildren) {
-        sortChildren(node.children);
+        var childMode = node.el.getAttribute('data-child-order') || 'az';
+        sortChildren(node.children, childMode);
         var childContainer = document.createElement('div');
         childContainer.className = 'sidebar-tree-children';
+        childContainer.setAttribute('data-order', childMode);
         if (isCollapsed) {
           childContainer.style.maxHeight = '0';
           childContainer.setAttribute('data-collapsed', 'true');
         }
         node.children.forEach(function (child) {
-          renderNode(child, depth + 1);
+          renderNode(child, depth + 1, childMode);
           childContainer.appendChild(child._wrapper);
         });
         wrapper.appendChild(childContainer);
@@ -303,10 +309,12 @@
 
     // Sort and render root nodes.
     var roots = rootIds.map(function (id) { return nodes[id]; });
-    sortChildren(roots);
+    var rootMode = container.getAttribute('data-root-order') || 'az';
+    sortChildren(roots, rootMode);
     roots.forEach(function (node) {
-      renderNode(node, 0);
+      renderNode(node, 0, rootMode);
     });
+    refreshSteps(container);
 
     markCurrent(container);
 
@@ -326,16 +334,6 @@
       }, Math.min(i * 20, 300));
     });
 
-    // --- Drag and Drop ---
-    setupDragAndDrop(container, campaignId);
-
-    // Preserve reorg state across HTMX tree re-inits. If reorg mode is still
-    // active (body class set by sidebar_editor.js), re-apply the data
-    // attribute and drag handles on the newly created container.
-    if (container.hasAttribute('data-reorg-active') || document.body.classList.contains('sidebar-reorg-active')) {
-      container.setAttribute('data-reorg-active', 'true');
-      updateDraggable(container, true);
-    }
     document.dispatchEvent(new CustomEvent('chronicle:sidebar-tree'));
   }
 
@@ -350,501 +348,169 @@
     });
   }
 
-  /**
-   * Check if entity reorg mode is active.
-   */
-  function isReorgActive(container) {
-    return container.hasAttribute('data-reorg-active');
+  // --- Order: lists kept by hand ---------------------------------------------
+
+  function stepButton(dir, name) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tree-step-btn';
+    b.setAttribute('data-step', String(dir));
+    b.setAttribute('aria-label', 'Move ' + name + (dir < 0 ? ' up' : ' down'));
+    b.title = dir < 0 ? 'Move up (Alt+Up)' : 'Move down (Alt+Down)';
+    b.innerHTML = '<i class="fa-solid ' + (dir < 0 ? 'fa-arrow-up' : 'fa-arrow-down') + '" aria-hidden="true"></i>';
+    return b;
   }
 
-  /**
-   * Toggle draggable state on tree items based on reorg mode.
-   * When enabled, also adds entity visibility toggles (eye icons).
-   */
-  function updateDraggable(container, enabled, hiddenEntityIds, hiddenNodeIds) {
-    var hiddenEntitySet = {};
-    var hiddenNodeSet = {};
-    if (hiddenEntityIds) {
-      hiddenEntityIds.forEach(function (id) { hiddenEntitySet[id] = true; });
-    }
-    if (hiddenNodeIds) {
-      hiddenNodeIds.forEach(function (id) { hiddenNodeSet[id] = true; });
-    }
+  /** How the list a row sits in is ordered: 'az', 'hand' or 'new'. */
+  function listOrder(list) {
+    if (!list) return 'az';
+    var mode = list.id === 'sidebar-entity-tree' ? list.getAttribute('data-root-order') : list.getAttribute('data-order');
+    return mode || 'az';
+  }
 
-    var nodes = container.querySelectorAll('.sidebar-tree-node');
-    nodes.forEach(function (node) {
-      var item = node.querySelector('.sidebar-tree-item');
-      // A listing follows its page: it is not moved, hidden or reordered on its own.
-      if (item && !node.hasAttribute('data-place-key')) {
-        var entityId = node.getAttribute('data-entity-id');
-        var nodeId = node.getAttribute('data-node-id');
-        var itemId = entityId || nodeId;
-        if (enabled) {
-          item.setAttribute('draggable', 'true');
-          // Inert-link: while reorg mode is active, a capture-phase click handler
-          // swallows navigation on the row so tapping an entity leaf doesn't open
-          // its page (mirrors the category fix in #474). The grip handle, eye
-          // toggle, and collapse chevron keep working because the handler bails
-          // out when the click originates on one of those controls; folder
-          // dblclick-rename is a separate event and unaffected. The handler ref is
-          // stored on the item so deactivation removes the exact listener (no leak).
-          if (!item._reorgClickInert) {
-            item._reorgClickInert = function (e) {
-              if (e.target.closest('.reorg-drag-handle') ||
-                  e.target.closest('.reorg-entity-visibility') ||
-                  e.target.closest('.sidebar-tree-toggle')) {
-                return;
-              }
-              e.preventDefault();
-              // Immediate: htmx's boost listener sits on the same link, and
-              // a plain stopPropagation would not keep it from navigating.
-              e.stopImmediatePropagation();
-            };
-            item.addEventListener('click', item._reorgClickInert, true);
-          }
-          // Add drag handle if not present.
-          if (!node.querySelector('.reorg-drag-handle')) {
-            var handle = document.createElement('span');
-            handle.className = 'reorg-drag-handle w-5 h-5 flex items-center justify-center shrink-0 text-gray-500 cursor-grab mr-1';
-            handle.innerHTML = '<i class="fa-solid fa-grip-vertical text-[8px]"></i>';
-            item.insertBefore(handle, item.firstChild);
-          }
-          // Add visibility toggle for both entities and folder nodes.
-          if (itemId && !node.querySelector('.reorg-entity-visibility')) {
-            var isHidden = (entityId ? !!hiddenEntitySet[entityId] : !!hiddenNodeSet[nodeId]) || node.hasAttribute('data-sidebar-hidden');
-            var eyeBtn = document.createElement('button');
-            eyeBtn.type = 'button';
-            eyeBtn.className = 'reorg-entity-visibility ml-auto p-1.5 text-[11px] min-w-[28px] min-h-[28px] flex items-center justify-center rounded hover:bg-white/10 transition-colors shrink-0';
-            if (entityId) eyeBtn.setAttribute('data-entity-id', entityId);
-            if (nodeId) eyeBtn.setAttribute('data-node-id', nodeId);
-            eyeBtn.title = isHidden ? 'Show in sidebar' : 'Hide from sidebar';
-            eyeBtn.innerHTML = '<i class="fa-solid ' + (isHidden ? 'fa-eye-slash text-gray-500' : 'fa-eye text-gray-400') + '"></i>';
-            eyeBtn.addEventListener('click', function (e) {
-              e.preventDefault();
-              e.stopPropagation();
-              if (nodeId) {
-                document.dispatchEvent(new CustomEvent('chronicle:toggle-node-visibility', {
-                  detail: { nodeId: nodeId }
-                }));
-              } else {
-                document.dispatchEvent(new CustomEvent('chronicle:toggle-entity-visibility', {
-                  detail: { entityId: entityId }
-                }));
-              }
-            });
-            item.appendChild(eyeBtn);
-          }
-        } else {
-          item.removeAttribute('draggable');
-          // Remove the exact capture-phase inert listener added on activate so
-          // navigation works again on exit (Escape/toggle-off) — no leak.
-          if (item._reorgClickInert) {
-            item.removeEventListener('click', item._reorgClickInert, true);
-            item._reorgClickInert = null;
-          }
-          var handle = node.querySelector('.reorg-drag-handle');
-          if (handle) handle.remove();
-          var eyeToggle = node.querySelector('.reorg-entity-visibility');
-          if (eyeToggle) eyeToggle.remove();
-        }
-      }
+  /** The rows a move steps over: the row's siblings of its own kind (a
+   *  folder among folders, a page among pages), never an extra listing. */
+  function stepSiblings(wrapper) {
+    var list = wrapper && wrapper.parentElement;
+    if (!list) return [];
+    var folder = wrapper.hasAttribute('data-node-id');
+    return Array.prototype.filter.call(list.children, function (w) {
+      return w.classList && w.classList.contains('sidebar-tree-node') &&
+        !w.hasAttribute('data-place-key') && w.hasAttribute('data-node-id') === folder;
     });
   }
 
-  /**
-   * Setup drag-and-drop for reordering and reparenting.
-   *
-   * Drop zones are determined by mouse position relative to the target node:
-   *   - Top third: reorder (insert before target, same parent)
-   *   - Bottom two-thirds: reparent (nest inside target)
-   *
-   * Visual feedback differs: reorder shows an indigo line between items,
-   * reparent highlights the target with a left-border accent.
-   *
-   * Drag events only fire when reorg mode is active (data-reorg-active).
-   */
-  function setupDragAndDrop(container, campaignId) {
-    var dragSrcId = null;
-    var dropIndicator = null;
+  function canStep(wrapper, dir) {
+    if (!wrapper || wrapper.hasAttribute('data-place-key') || listOrder(wrapper.parentElement) !== 'hand') return false;
+    var sibs = stepSiblings(wrapper);
+    var i = sibs.indexOf(wrapper);
+    return i >= 0 && !!sibs[i + dir];
+  }
 
-    // Create drop indicator line element (reused across drag operations).
-    dropIndicator = document.createElement('div');
-    dropIndicator.className = 'sidebar-drop-indicator';
-    dropIndicator.style.display = 'none';
-
-    // Store container reference for the IIFE-scoped reorg listener.
-    currentTreeContainer = container;
-
-    // Check initial state (in case reorg was active before tree init).
-    if (isReorgActive(container)) {
-      updateDraggable(container, true);
-    }
-
-    container.addEventListener('dragstart', function (e) {
-      if (!isReorgActive(container)) return;
-      var item = e.target.closest('.sidebar-tree-item');
-      if (!item) return;
-      // A listing is a link, so the browser would start a native drag; dragging
-      // it must never move the real page.
-      if (item.hasAttribute('data-place-key')) { e.preventDefault(); return; }
-      dragSrcId = item.getAttribute('data-entity-id');
-      // 'all' so dragover can pick 'link' while Alt is held (adds a place).
-      e.dataTransfer.effectAllowed = 'all';
-      e.dataTransfer.setData('text/plain', dragSrcId);
-      // Fade the source item to indicate it's being dragged.
-      setTimeout(function () { item.style.opacity = '0.35'; }, 0);
-    });
-
-    container.addEventListener('dragend', function (e) {
-      var item = e.target.closest('.sidebar-tree-item');
-      if (item) item.style.opacity = '';
-      dragSrcId = null;
-      hideDropIndicator();
-      clearDropTargets(container);
-    });
-
-    container.addEventListener('dragover', function (e) {
-      if (!isReorgActive(container)) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-
-      var target = e.target.closest('.sidebar-tree-node');
-      if (!target) return;
-
-      var targetId = target.getAttribute('data-entity-id');
-      if (targetId === dragSrcId) return;
-
-      clearDropTargets(container);
-
-      // A listing row takes only an Alt-drop (add a place); a plain drag shows
-      // no reparent or reorder cue on it.
-      if (target.hasAttribute('data-place-key') && !e.altKey) {
-        e.dataTransfer.dropEffect = 'none';
-        return;
-      }
-
-      // Alt held: this drop lists the page here as well, it does not move it.
-      if (e.altKey) {
-        var placeTarget = placeTargetId(target);
-        if (placeTarget && placeTarget !== dragSrcId) {
-          e.dataTransfer.dropEffect = 'link';
-          target.classList.add('sidebar-drop-place');
-        } else {
-          e.dataTransfer.dropEffect = 'none';
-        }
-        return;
-      }
-      e.dataTransfer.dropEffect = 'move';
-
-      // Determine drop position: top 40% = reorder, bottom 60% = reparent.
-      var rect = target.getBoundingClientRect();
-      var thirdY = rect.top + rect.height * 0.4;
-
-      if (e.clientY < thirdY) {
-        // Reorder: insert before — show indicator line above target.
-        showDropIndicator(target, 'before');
-      } else {
-        // Reparent: nest inside — highlight target with accent border.
-        target.classList.add('sidebar-drop-reparent');
-      }
-    });
-
-    container.addEventListener('dragleave', function (e) {
-      var target = e.target.closest('.sidebar-tree-node');
-      if (target) {
-        target.classList.remove('sidebar-drop-target');
-        target.classList.remove('sidebar-drop-reparent');
-        target.classList.remove('sidebar-drop-place');
-      }
-    });
-
-    container.addEventListener('drop', function (e) {
-      if (!isReorgActive(container)) return;
-      e.preventDefault();
-      hideDropIndicator();
-      clearDropTargets(container);
-
-      var droppedId = e.dataTransfer.getData('text/plain');
-      if (!droppedId) return;
-
-      var target = e.target.closest('.sidebar-tree-node');
-      if (!target) return;
-
-      // Alt-drop adds a place; it never moves the page.
-      var wantPlace = placeRequest(droppedId, placeTargetId(target), e.altKey);
-      if (wantPlace) {
-        addPlace(campaignId, wantPlace.entityId, wantPlace.parentId);
-        return;
-      }
-      if (e.altKey) return;
-      // A listing row is not a drop target for a plain drag: it is not a folder.
-      if (target.hasAttribute('data-place-key')) return;
-
-      var targetEntityId = target.getAttribute('data-entity-id');
-      var targetNodeId = target.getAttribute('data-node-id');
-      var targetId = targetEntityId || targetNodeId;
-      if (targetId === droppedId) return;
-
-      var rect = target.getBoundingClientRect();
-      var thirdY = rect.top + rect.height * 0.4;
-
-      if (e.clientY < thirdY) {
-        // Reorder: place before target (same parent).
-        var targetParentNodeId = target.getAttribute('data-parent-node-id') || null;
-        var targetParentId = target.getAttribute('data-parent-id') || null;
-        var sortOrder = calculateTargetIndex(target, 'before', droppedId);
-        reorderEntity(campaignId, droppedId, targetParentId, sortOrder, targetParentNodeId);
-      } else {
-        // Reparent zone: behavior depends on whether target is a folder.
-        var targetIsFolder = !!target.querySelector('[data-is-folder]') || !!target.querySelector('[data-has-children]');
-        if (targetIsFolder) {
-          // Target is already a folder — append dragged entity to its children.
-          var appendIdx = folderChildCount(target);
-          if (targetNodeId) {
-            reorderEntity(campaignId, droppedId, null, appendIdx, targetNodeId);
-          } else {
-            reorderEntity(campaignId, droppedId, targetEntityId, appendIdx);
-          }
-        } else {
-          // Target is a leaf — show menu to create a new folder
-          // containing both the dragged and target entities.
-          showReparentMenu(e.clientX, e.clientY, droppedId, target, campaignId);
-        }
-      }
-    });
-
-    function showDropIndicator(targetNode, position) {
-      if (position === 'before') {
-        targetNode.parentNode.insertBefore(dropIndicator, targetNode);
-        dropIndicator.style.display = 'block';
-      }
-    }
-
-    function hideDropIndicator() {
-      dropIndicator.style.display = 'none';
-      if (dropIndicator.parentNode) {
-        dropIndicator.parentNode.removeChild(dropIndicator);
-      }
-    }
-
-    function clearDropTargets(el) {
-      var targets = el.querySelectorAll('.sidebar-drop-target, .sidebar-drop-reparent, .sidebar-drop-place');
-      for (var i = 0; i < targets.length; i++) {
-        targets[i].classList.remove('sidebar-drop-target');
-        targets[i].classList.remove('sidebar-drop-reparent');
-        targets[i].classList.remove('sidebar-drop-place');
-      }
-    }
-
-    // --- Touch Drag-and-Drop for mobile entity reordering ---
-    var TOUCH_THRESHOLD = 10;
-    var touchState = { src: null, srcId: null, ghost: null, startX: 0, startY: 0, started: false };
-
-    container.addEventListener('touchstart', function (e) {
-      if (!isReorgActive(container)) return;
-      var item = e.target.closest('.sidebar-tree-item');
-      if (!item || item.hasAttribute('data-place-key')) return;
-      var touch = e.touches[0];
-      touchState.src = item.closest('.sidebar-tree-node');
-      touchState.srcId = item.getAttribute('data-entity-id');
-      touchState.startX = touch.clientX;
-      touchState.startY = touch.clientY;
-      touchState.started = false;
-    }, { passive: false });
-
-    container.addEventListener('touchmove', function (e) {
-      if (!touchState.src) return;
-      var touch = e.touches[0];
-      var dx = touch.clientX - touchState.startX;
-      var dy = touch.clientY - touchState.startY;
-
-      if (!touchState.started) {
-        if (Math.abs(dx) + Math.abs(dy) < TOUCH_THRESHOLD) return;
-        touchState.started = true;
-        e.preventDefault();
-        touchState.ghost = touchState.src.cloneNode(true);
-        touchState.ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;opacity:0.7;width:' + touchState.src.offsetWidth + 'px';
-        document.body.appendChild(touchState.ghost);
-        touchState.src.style.opacity = '0.3';
-      }
-
-      if (touchState.started) {
-        e.preventDefault();
-        touchState.ghost.style.left = touch.clientX + 'px';
-        touchState.ghost.style.top = (touch.clientY - 16) + 'px';
-
-        clearDropTargets(container);
-        hideDropIndicator();
-        var el = document.elementFromPoint(touch.clientX, touch.clientY);
-        var target = el ? el.closest('.sidebar-tree-node') : null;
-        if (target && target !== touchState.src) {
-          var rect = target.getBoundingClientRect();
-          var thirdY = rect.top + rect.height * 0.4;
-          if (touch.clientY < thirdY) {
-            showDropIndicator(target, 'before');
-          } else {
-            target.classList.add('sidebar-drop-reparent');
-          }
-        }
-      }
-    }, { passive: false });
-
-    container.addEventListener('touchend', function (e) {
-      if (!touchState.src || !touchState.started) {
-        touchState.src = null;
-        return;
-      }
-
-      hideDropIndicator();
-      clearDropTargets(container);
-
-      var lastTouch = e.changedTouches[0];
-      var el = document.elementFromPoint(lastTouch.clientX, lastTouch.clientY);
-      var target = el ? el.closest('.sidebar-tree-node') : null;
-
-      if (target && target !== touchState.src && !target.hasAttribute('data-place-key')) {
-        var targetEntityId = target.getAttribute('data-entity-id');
-        var targetNodeId = target.getAttribute('data-node-id');
-        var rect = target.getBoundingClientRect();
-        var thirdY = rect.top + rect.height * 0.4;
-
-        if (lastTouch.clientY < thirdY) {
-          var targetParentNodeId = target.getAttribute('data-parent-node-id') || null;
-          var targetParentId = target.getAttribute('data-parent-id') || null;
-          var sortOrder = calculateTargetIndex(target, 'before', touchState.srcId);
-          reorderEntity(campaignId, touchState.srcId, targetParentId, sortOrder, targetParentNodeId);
-        } else {
-          var targetIsFolder = !!target.querySelector('[data-is-folder]') || !!target.querySelector('[data-has-children]');
-          if (targetIsFolder) {
-            var appendIdx = folderChildCount(target);
-            if (targetNodeId) {
-              reorderEntity(campaignId, touchState.srcId, null, appendIdx, targetNodeId);
-            } else {
-              reorderEntity(campaignId, touchState.srcId, targetEntityId, appendIdx);
-            }
-          } else {
-            showReparentMenu(lastTouch.clientX, lastTouch.clientY, touchState.srcId, target, campaignId);
-          }
-        }
-      }
-
-      // Cleanup.
-      if (touchState.ghost && touchState.ghost.parentNode) {
-        touchState.ghost.parentNode.removeChild(touchState.ghost);
-      }
-      if (touchState.src) touchState.src.style.opacity = '';
-      touchState.src = null;
-      touchState.ghost = null;
-      touchState.started = false;
+  /** Turns off the arrows that would step past either end of their list. */
+  function refreshSteps(root) {
+    if (!root) return;
+    root.querySelectorAll('.tree-step-btn').forEach(function (b) {
+      b.disabled = !canStep(b.closest('.sidebar-tree-node'), parseInt(b.getAttribute('data-step'), 10));
     });
   }
 
+  // Moves are saved one after another, so quick clicks land in the order
+  // they were made.
+  var moveQueue = Promise.resolve();
+
   /**
-   * Compute the 0-based index where a dragged entity should land among its
-   * destination siblings. The server treats this as a desired index and
-   * re-sequences the whole sibling set densely (0..N), so this MUST be a
-   * position index, never a midpoint sort_order.
-   *
-   *   - before the first sibling → 0
-   *   - before sibling k         → k
-   *   - append (position !== 'before') → siblings.length
-   *
-   * draggedId (optional) is the id being moved. When it already sits *before*
-   * the target in this same list, removing it on the server shifts the
-   * target left by one; we subtract so the moved item lands immediately
-   * before the target rather than one slot too late.
+   * Moves a row one place up (dir -1) or down (dir 1) in a list kept by
+   * hand: at once on screen, then saved. focusEl, when given, keeps focus
+   * on the control that made the move, so its arrows stay under the hand
+   * that is still clicking them. Returns false when the row cannot move.
    */
-  function calculateTargetIndex(targetNode, position, draggedId) {
-    // Listings are not siblings the server orders, so they take no index.
-    var siblings = realSiblings(targetNode.parentNode.querySelectorAll(':scope > .sidebar-tree-node'));
-    var targetIdx = -1;
-    var draggedIdx = -1;
-    for (var i = 0; i < siblings.length; i++) {
-      if (siblings[i] === targetNode) targetIdx = i;
-      if (draggedId) {
-        var sibId = siblings[i].getAttribute('data-entity-id') || siblings[i].getAttribute('data-node-id');
-        if (sibId === draggedId) draggedIdx = i;
-      }
+  function stepRow(wrapper, dir, focusEl) {
+    var tree = document.getElementById('sidebar-entity-tree');
+    if (!tree || !canStep(wrapper, dir)) return false;
+    var sibs = stepSiblings(wrapper);
+    var other = sibs[sibs.indexOf(wrapper) + dir];
+    var list = wrapper.parentElement;
+    // The neighbour moves, not the row: taking the row out of the page, even
+    // for a moment, would take focus off whatever in it was focused.
+    list.insertBefore(other, dir < 0 ? wrapper.nextSibling : wrapper);
+    refreshSteps(list);
+    if (focusEl) {
+      // At the end of the list its arrow turns off; the other one takes focus.
+      if (focusEl.disabled) focusEl = wrapper.querySelector(':scope > .tree-step > .tree-step-btn:not(:disabled)') || wrapper.querySelector(':scope > .sidebar-tree-item');
+      if (focusEl && document.activeElement !== focusEl) focusEl.focus({ preventScroll: true });
     }
+    if (wrapper.scrollIntoView) wrapper.scrollIntoView({ block: 'nearest' });
 
-    if (position === 'before') {
-      if (targetIdx < 0) return 0;
-      var idx = targetIdx;
-      if (draggedIdx !== -1 && draggedIdx < targetIdx) idx -= 1;
-      return idx;
-    }
-    // Append at the end of the sibling list.
-    return siblings.length;
-  }
-
-  /** The tree nodes the server orders: everything but extra listings. */
-  function realSiblings(list) {
-    var out = [];
-    for (var i = 0; i < list.length; i++) {
-      if (!(list[i].hasAttribute && list[i].hasAttribute('data-place-key'))) out.push(list[i]);
-    }
-    return out;
-  }
-
-  /**
-   * Count the direct children currently rendered inside a folder node. Used as
-   * the append index when an entity is dropped *into* a folder, so it lands at
-   * the end of that folder's child list (children stay in the DOM even when the
-   * folder is collapsed, so the count is accurate either way).
-   */
-  function folderChildCount(folderNode) {
-    var container = folderNode.querySelector(':scope > .sidebar-tree-children');
-    if (!container) return 0;
-    return realSiblings(container.querySelectorAll(':scope > .sidebar-tree-node')).length;
-  }
-
-  /**
-   * The page a drop target stands for, whether it is the page's own row or an
-   * extra listing of it. Folder nodes (sidebar_nodes) stand for no page, so a
-   * place can't be added under one: the server lists pages under pages only.
-   */
-  function placeTargetId(target) {
-    return target.getAttribute('data-entity-id') || target.getAttribute('data-place-entity') || null;
-  }
-
-  /**
-   * What an Alt-drop asks for, or null when it is not an add-a-place drop.
-   * Pure so the contract is testable: only with Alt held, only onto a page,
-   * never a page onto itself.
-   */
-  function placeRequest(droppedId, targetEntityId, altKey) {
-    // A folder row has no entity id (the drag carries nothing, or the text
-    // 'null'), so it can never be Alt-dropped.
-    if (!altKey || !droppedId || droppedId === 'null' || droppedId === 'undefined' || !targetEntityId || droppedId === targetEntityId) return null;
-    return { entityId: droppedId, parentId: targetEntityId };
-  }
-
-  /**
-   * List a page under another page as well (POST .../places). The server owns
-   * every refusal (itself, its own parent, a cycle, another campaign) and
-   * says why; the tree is re-read either way so it shows the truth.
-   */
-  function addPlace(campaignId, entityId, parentId) {
-    Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + entityId + '/places', {
-      method: 'POST',
-      body: { parent_id: parentId }
-    })
-    .then(function (resp) {
-      if (resp.ok) {
-        if (window.Chronicle && Chronicle.notify) Chronicle.notify('Listed here as well. It is the same page.', 'success');
-        refreshSidebarTree();
-        return null;
-      }
-      return resp.json().catch(function () { return {}; }).then(function (b) {
-        throw new Error((b && (b.message || b.error)) || 'Could not list the page there');
+    var folder = wrapper.hasAttribute('data-node-id');
+    var idAttr = folder ? 'data-node-id' : 'data-entity-id';
+    var link = wrapper.querySelector(':scope > .sidebar-tree-item');
+    var name = link ? link.getAttribute('data-entity-name') || '' : '';
+    announce(name + (dir < 0 ? ' moved up.' : ' moved down.'));
+    var url = '/campaigns/' + encodeURIComponent(tree.getAttribute('data-campaign-id') || '') + '/sidebar-order/move';
+    var body = { kind: folder ? 'folder' : 'page', id: wrapper.getAttribute(idAttr), next_to: other.getAttribute(idAttr), after: dir > 0 };
+    moveQueue = moveQueue.then(function () {
+      return Chronicle.apiFetch(url, { method: 'PUT', body: body }).then(function (res) {
+        if (!res.ok) throw new Error(String(res.status));
       });
-    })
-    .catch(function (err) {
-      console.error('sidebar_tree: add place failed', err);
-      if (window.Chronicle && Chronicle.notify) Chronicle.notify(err && err.message ? err.message : 'Could not list the page there', 'error');
+    }).catch(function () {
+      if (window.Chronicle && Chronicle.notify) Chronicle.notify(name + ' could not be moved. The list shows the saved order again.', 'error');
       refreshSidebarTree();
     });
+    return true;
   }
+
+  /** Says a move out loud for a screen reader, since nothing else changes. */
+  function announce(text) {
+    var live = document.getElementById('sidebar-tree-live');
+    if (!live) {
+      live = document.createElement('div');
+      live.id = 'sidebar-tree-live';
+      live.className = 'sr-only';
+      live.setAttribute('aria-live', 'polite');
+      document.body.appendChild(live);
+    }
+    live.textContent = text;
+  }
+
+  /**
+   * Saves how a list is ordered (kind 'category', 'folder' or 'page'; mode
+   * 'az', 'hand' or 'new') and redraws the tree, then runs then() once the
+   * new rows are drawn.
+   */
+  function setOrder(kind, id, mode, then) {
+    var tree = document.getElementById('sidebar-entity-tree');
+    if (!tree) return Promise.resolve(false);
+    var url = '/campaigns/' + encodeURIComponent(tree.getAttribute('data-campaign-id') || '') + '/sidebar-order';
+    return Chronicle.apiFetch(url, { method: 'PUT', body: { kind: kind, id: id, mode: mode } }).then(function (res) {
+      if (!res.ok) throw new Error(String(res.status));
+      if (then) {
+        document.addEventListener('chronicle:sidebar-tree', function once() {
+          document.removeEventListener('chronicle:sidebar-tree', once);
+          then();
+        });
+      }
+      refreshSidebarTree();
+      return true;
+    }).catch(function () {
+      if (window.Chronicle && Chronicle.notify) Chronicle.notify('The order could not be changed.', 'error');
+      refreshSidebarTree();
+      return false;
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('#sidebar-entity-tree .tree-step-btn') : null;
+    if (!b) return;
+    e.preventDefault();
+    e.stopPropagation();
+    stepRow(b.closest('.sidebar-tree-node'), parseInt(b.getAttribute('data-step'), 10), b);
+  });
+
+  // Alt+Up and Alt+Down move the focused row. A text field keeps its keys.
+  document.addEventListener('keydown', function (e) {
+    if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    var t = e.target;
+    if (!t || !t.closest || t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    var wrapper = t.closest('#sidebar-entity-tree .sidebar-tree-node');
+    var tree = document.getElementById('sidebar-entity-tree');
+    if (!wrapper || !tree || tree.getAttribute('data-can-edit') !== 'true') return;
+    if (listOrder(wrapper.parentElement) !== 'hand' || wrapper.hasAttribute('data-place-key')) return;
+    e.preventDefault();
+    stepRow(wrapper, e.key === 'ArrowUp' ? -1 : 1, t);
+  });
+
+  // The category's own order picker, drawn above its tree.
+  document.addEventListener('change', function (e) {
+    var sel = e.target;
+    if (!sel || !sel.matches || !sel.matches('[data-tree-order]')) return;
+    var tree = document.getElementById('sidebar-entity-tree');
+    if (!tree) return;
+    setOrder('category', tree.getAttribute('data-entity-type-id') || '', sel.value, function () {
+      var again = document.querySelector('[data-tree-order]');
+      if (again) again.focus({ preventScroll: true });
+    });
+  });
 
   /**
    * Refresh the sidebar entity list via HTMX to reflect updated hierarchy.
@@ -940,290 +606,7 @@
     input.addEventListener('blur', save);
   }
 
-  /**
-   * Send reorder/reparent request to the API. On success, refreshes the
-   * sidebar entity list via HTMX to reflect the new ordering.
-   */
-  /**
-   * @param {string} campaignId
-   * @param {string} entityId
-   * @param {string|null} newParentId - entity parent ID
-   * @param {number} sortOrder
-   * @param {string|null} [newParentNodeId] - sidebar folder node parent ID
-   */
-  function reorderEntity(campaignId, entityId, newParentId, sortOrder, newParentNodeId) {
-    var body = { sort_order: sortOrder };
-    if (newParentNodeId) {
-      body.parent_node_id = newParentNodeId;
-    } else {
-      body.parent_id = newParentId || null;
-    }
-
-    Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + entityId + '/reorder', {
-      method: 'PUT',
-      body: body
-    })
-    .then(function (resp) {
-      if (!resp.ok) {
-        return resp.text().then(function (body) {
-          console.error('sidebar_tree: reorder failed', resp.status, body);
-          throw new Error('Reorder failed: ' + resp.status);
-        });
-      }
-      refreshSidebarTree();
-    })
-    .catch(function (err) {
-      // Surface the failure: a silent console.error is exactly why broken
-      // reorders looked like they "did nothing" before. Re-read so the tree
-      // snaps back to the real server order instead of lying about the move.
-      console.error('sidebar_tree: reorder failed', err);
-      if (window.Chronicle && Chronicle.notify) {
-        Chronicle.notify('Could not save the new order — reverting', 'error');
-      }
-      refreshSidebarTree();
-    });
-  }
-
-  // -----------------------------------------------------------------------
-  // Reparent Menu — shown when dropping a leaf onto another leaf.
-  // Instead of making the target the parent, creates a new folder entity
-  // and groups both items under it.
-  // -----------------------------------------------------------------------
-
-  /**
-   * Remove any existing reparent context menu from the DOM.
-   */
-  function removeReparentMenu() {
-    var existing = document.getElementById('sidebar-reparent-menu');
-    if (existing) existing.remove();
-    document.removeEventListener('mousedown', onReparentMenuOutsideClick);
-  }
-
-  /**
-   * Dismiss handler: close menu when clicking outside it.
-   */
-  function onReparentMenuOutsideClick(e) {
-    var menu = document.getElementById('sidebar-reparent-menu');
-    if (menu && !menu.contains(e.target)) {
-      removeReparentMenu();
-    }
-  }
-
-  /**
-   * Show a context menu with options for grouping two entities into a folder.
-   * Appears at the drop position when a leaf entity is dropped onto another
-   * leaf entity. The original target entity is never made the folder itself —
-   * a new folder is created to contain both.
-   */
-  function showReparentMenu(x, y, droppedId, targetNode, campaignId) {
-    removeReparentMenu();
-
-    var menu = document.createElement('div');
-    menu.id = 'sidebar-reparent-menu';
-    menu.className = 'fixed z-[9999] bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[180px] text-sm';
-
-    // Clamp position to stay within viewport.
-    var menuW = 190;
-    var menuH = 80;
-    var posX = Math.min(x, window.innerWidth - menuW - 8);
-    var posY = Math.min(y, window.innerHeight - menuH - 8);
-    menu.style.left = posX + 'px';
-    menu.style.top = posY + 'px';
-
-    // Option 1: New page as folder (a real entity with content).
-    var opt1 = document.createElement('button');
-    opt1.type = 'button';
-    opt1.className = 'w-full px-3 py-2 text-left flex items-center gap-2 text-fg hover:bg-surface-hover transition-colors';
-    opt1.innerHTML = '<i class="fa-solid fa-file-lines text-xs text-fg-muted w-4 text-center"></i> New page as folder';
-    opt1.addEventListener('click', function () {
-      removeReparentMenu();
-      createGroupFolder(campaignId, droppedId, targetNode, 'New Page');
-    });
-
-    // Option 2: Empty folder (organizational only).
-    var opt2 = document.createElement('button');
-    opt2.type = 'button';
-    opt2.className = 'w-full px-3 py-2 text-left flex items-center gap-2 text-fg hover:bg-surface-hover transition-colors';
-    opt2.innerHTML = '<i class="fa-solid fa-folder text-xs text-fg-muted w-4 text-center"></i> New empty folder';
-    opt2.addEventListener('click', function () {
-      removeReparentMenu();
-      createGroupFolder(campaignId, droppedId, targetNode, 'New Folder', true);
-    });
-
-    menu.appendChild(opt1);
-    menu.appendChild(opt2);
-    document.body.appendChild(menu);
-
-    // Close on outside click (delayed to avoid the current event).
-    setTimeout(function () {
-      document.addEventListener('mousedown', onReparentMenuOutsideClick);
-    }, 0);
-  }
-
-  /**
-   * Create a new folder entity and group both the dragged and target
-   * entities under it. The folder is placed where the target was
-   * (same parent, same sort order), then both items are reparented.
-   *
-   * Flow: create folder → position folder → reparent target → reparent dragged → refresh.
-   */
-  function createGroupFolder(campaignId, droppedId, targetNode, folderName, isPureFolder) {
-    var targetId = targetNode.getAttribute('data-entity-id') || targetNode.getAttribute('data-node-id');
-    var targetParentId = targetNode.getAttribute('data-parent-node-id') || targetNode.getAttribute('data-parent-id') || null;
-    // The reorder API resequences the sibling set densely and treats sort_order
-    // in the body as a 0-based sibling index, not a raw stored sort_order.
-    // Compute the target's current sibling index so the new folder lands
-    // exactly where the target was.
-    var targetIndex = calculateTargetIndex(targetNode, 'before', null);
-
-    // Read entity type from the tree container. This is the drilled category's
-    // own type (server sets data-entity-type-id from the ?type= param), which the
-    // empty-folder node must be scoped to so it reloads via ListByType(typeID).
-    var tree = document.getElementById('sidebar-entity-tree');
-    var entityTypeId = parseInt(tree ? tree.getAttribute('data-entity-type-id') : '0', 10) || 0;
-
-    // A pure sidebar-node folder is keyed by entity type on the server and only
-    // reloads for an exact type match. Creating one with a missing/zero type
-    // would persist an orphan the sidebar never shows again while still
-    // reparenting the dropped entities under it — the silent "nothing happened"
-    // failure. Refuse rather than orphan; the page-as-folder path tolerates 0
-    // (quick-create falls back to the first type) so it is not gated here.
-    if (isPureFolder && !entityTypeId) {
-      console.error('sidebar_tree: cannot create empty folder — no entity type on tree container');
-      if (window.Chronicle && Chronicle.notify) {
-        Chronicle.notify('Could not create folder here', 'error');
-      }
-      return;
-    }
-
-    // Step 1: Create the folder — either a pure sidebar node or a real entity.
-    var createUrl = isPureFolder
-      ? '/campaigns/' + campaignId + '/sidebar-nodes'
-      : '/campaigns/' + campaignId + '/entities/quick-create';
-    var createBody = { name: folderName, entity_type_id: entityTypeId };
-
-    Chronicle.apiFetch(createUrl, {
-      method: 'POST',
-      body: createBody
-    })
-    .then(function (res) {
-      if (!res.ok) throw new Error('Failed to create folder');
-      return res.json();
-    })
-    .then(function (folder) {
-      // Step 2: Position the folder where the target was.
-      var posUrl = isPureFolder
-        ? '/campaigns/' + campaignId + '/sidebar-nodes/' + folder.id + '/reorder'
-        : '/campaigns/' + campaignId + '/entities/' + folder.id + '/reorder';
-      return Chronicle.apiFetch(posUrl, {
-        method: 'PUT',
-        body: { parent_id: targetParentId, sort_order: targetIndex }
-      }).then(function (res) {
-        if (!res.ok) throw new Error('Failed to position folder');
-        return folder;
-      });
-    })
-    .then(function (folder) {
-      // Step 3: Reparent the target entity under the new folder.
-      // Use parent_node_id for sidebar nodes, parent_id for entity folders.
-      var reparentBody = isPureFolder
-        ? { parent_node_id: folder.id, sort_order: 0 }
-        : { parent_id: folder.id, sort_order: 0 };
-      return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + targetId + '/reorder', {
-        method: 'PUT',
-        body: reparentBody
-      }).then(function (res) {
-        if (!res.ok) throw new Error('Failed to reparent target');
-        return folder;
-      });
-    })
-    .then(function (folder) {
-      // Step 4: Reparent the dragged entity under the new folder.
-      var reparentBody = isPureFolder
-        ? { parent_node_id: folder.id, sort_order: 1 }
-        : { parent_id: folder.id, sort_order: 1 };
-      return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + droppedId + '/reorder', {
-        method: 'PUT',
-        body: reparentBody
-      }).then(function (res) {
-        if (!res.ok) throw new Error('Failed to reparent dragged entity');
-      });
-    })
-    .then(function () {
-      // Step 5: Refresh the sidebar tree.
-      refreshSidebarTree();
-      Chronicle.notify('Folder created', 'success');
-    })
-    .catch(function (err) {
-      console.error('sidebar_tree: create group folder failed', err);
-      Chronicle.notify('Failed to create folder', 'error');
-    });
-  }
-
-  // Single IIFE-scoped listener for reorg mode changes. Always re-queries
-  // the DOM to avoid stale container references after HTMX swaps.
-  document.addEventListener('chronicle:reorg-changed', function (e) {
-    var container = document.getElementById('sidebar-entity-tree');
-    if (container) {
-      // Keep currentTreeContainer in sync.
-      currentTreeContainer = container;
-      var hiddenEntityIds = (e.detail && e.detail.hiddenEntityIds) || [];
-      var hiddenNodeIds = (e.detail && e.detail.hiddenNodeIds) || [];
-      updateDraggable(container, e.detail && e.detail.active, hiddenEntityIds, hiddenNodeIds);
-    }
-  });
-
-  // Listen for entity visibility changes and update the eye toggle + opacity.
-  document.addEventListener('chronicle:entity-visibility-changed', function (e) {
-    if (!e.detail || !e.detail.entityId) return;
-    var node = document.querySelector('.sidebar-tree-node[data-entity-id="' + e.detail.entityId + '"]');
-    if (!node) return;
-
-    var item = node.querySelector('.sidebar-tree-item');
-    var btn = node.querySelector('.reorg-entity-visibility');
-    if (e.detail.hidden) {
-      node.setAttribute('data-sidebar-hidden', 'true');
-      if (item) item.classList.add('opacity-40');
-      if (btn) {
-        btn.title = 'Show in sidebar';
-        btn.innerHTML = '<i class="fa-solid fa-eye-slash text-gray-500"></i>';
-      }
-    } else {
-      node.removeAttribute('data-sidebar-hidden');
-      if (item) item.classList.remove('opacity-40');
-      if (btn) {
-        btn.title = 'Hide from sidebar';
-        btn.innerHTML = '<i class="fa-solid fa-eye text-gray-400"></i>';
-      }
-    }
-  });
-
-  // Listen for folder node visibility changes and update UI.
-  document.addEventListener('chronicle:node-visibility-changed', function (e) {
-    if (!e.detail || !e.detail.nodeId) return;
-    var node = document.querySelector('.sidebar-tree-node[data-node-id="' + e.detail.nodeId + '"]');
-    if (!node) return;
-
-    var item = node.querySelector('.sidebar-tree-item');
-    var btn = node.querySelector('.reorg-entity-visibility');
-    if (e.detail.hidden) {
-      node.setAttribute('data-sidebar-hidden', 'true');
-      if (item) item.classList.add('opacity-40');
-      if (btn) {
-        btn.title = 'Show in sidebar';
-        btn.innerHTML = '<i class="fa-solid fa-eye-slash text-gray-500"></i>';
-      }
-    } else {
-      node.removeAttribute('data-sidebar-hidden');
-      if (item) item.classList.remove('opacity-40');
-      if (btn) {
-        btn.title = 'Hide from sidebar';
-        btn.innerHTML = '<i class="fa-solid fa-eye text-gray-400"></i>';
-      }
-    }
-  });
-
-  // Inject CSS for guide lines and multi-select styles.
+  // Guide lines: each nested row's line sits under its parent's chevron.
   var style = document.createElement('style');
   style.textContent = [
     '.sidebar-tree-node[data-depth]:not([data-depth="0"])::before {',
@@ -1235,131 +618,13 @@
     '  width: 1px;',
     '  background: rgba(75, 85, 99, 0.2);',
     '  pointer-events: none;',
-    '}',
-    '.sidebar-tree-node.sidebar-selected > .sidebar-tree-item {',
-    '  background: rgba(var(--accent-rgb, 99 102 241) / 0.15);',
-    '  outline: 1px solid rgba(var(--accent-rgb, 99 102 241) / 0.3);',
-    '  border-radius: 0.375rem;',
-    '}',
-    '#sidebar-bulk-bar {',
-    '  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);',
-    '  z-index: 9999; display: flex; gap: 8px; align-items: center;',
-    '  padding: 8px 16px; border-radius: 10px;',
-    '  background: var(--color-bg-secondary, #1e1e2e);',
-    '  border: 1px solid var(--color-border, #333);',
-    '  box-shadow: 0 8px 32px rgba(0,0,0,0.4);',
-    '  font-size: 12px; color: var(--color-text-primary, #e0e0e0);',
     '}'
   ].join('\n');
   document.head.appendChild(style);
 
-  // --- Multi-Select & Bulk Operations ---
-
-  var selectedIds = [];
-
-  /** Toggle selection of a tree node on Ctrl/Cmd+click. */
-  document.addEventListener('click', function (e) {
-    if (!document.body.classList.contains('sidebar-reorg-active')) return;
-    if (!e.ctrlKey && !e.metaKey) return;
-
-    var node = e.target.closest('.sidebar-tree-node');
-    if (!node) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    var id = node.getAttribute('data-entity-id') || node.getAttribute('data-node-id');
-    if (!id) return;
-
-    var idx = selectedIds.indexOf(id);
-    if (idx !== -1) {
-      selectedIds.splice(idx, 1);
-      node.classList.remove('sidebar-selected');
-    } else {
-      selectedIds.push(id);
-      node.classList.add('sidebar-selected');
-    }
-
-    updateBulkBar();
-  }, true);
-
-  /** Show or hide the floating bulk action bar. */
-  function updateBulkBar() {
-    var bar = document.getElementById('sidebar-bulk-bar');
-
-    if (selectedIds.length === 0) {
-      if (bar) bar.remove();
-      return;
-    }
-
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'sidebar-bulk-bar';
-      document.body.appendChild(bar);
-    }
-
-    var campaignId = '';
-    var tree = document.getElementById('sidebar-entity-tree');
-    if (tree) campaignId = tree.getAttribute('data-campaign-id') || '';
-
-    bar.innerHTML =
-      '<span>' + selectedIds.length + ' selected</span>' +
-      '<button type="button" class="px-2 py-1 rounded bg-accent/20 text-accent hover:bg-accent/30 transition-colors text-xs" id="bulk-move-btn">' +
-      '<i class="fa-solid fa-folder-tree mr-1"></i>Move to folder</button>' +
-      '<button type="button" class="px-2 py-1 rounded text-gray-400 hover:text-white transition-colors text-xs" id="bulk-clear-btn">' +
-      '<i class="fa-solid fa-xmark mr-1"></i>Clear</button>';
-
-    bar.querySelector('#bulk-clear-btn').addEventListener('click', clearSelection);
-
-    bar.querySelector('#bulk-move-btn').addEventListener('click', function () {
-      var targetId = prompt('Enter folder/entity ID to move into (or leave empty for root):');
-      if (targetId === null) return;
-
-      var body = { entity_ids: selectedIds };
-      if (targetId.trim()) {
-        // Determine if target is a folder node or entity.
-        var targetNode = document.querySelector('[data-node-id="' + targetId.trim() + '"]');
-        if (targetNode) {
-          body.parent_node_id = targetId.trim();
-        } else {
-          body.parent_id = targetId.trim();
-        }
-      }
-
-      Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/bulk-move', {
-        method: 'POST',
-        body: body
-      })
-      .then(function (res) {
-        if (res.ok) {
-          Chronicle.notify('Moved ' + selectedIds.length + ' items', 'success');
-          clearSelection();
-          refreshSidebarTree();
-        } else {
-          Chronicle.notify('Failed to move items', 'error');
-        }
-      });
-    });
-  }
-
-  function clearSelection() {
-    selectedIds = [];
-    document.querySelectorAll('.sidebar-selected').forEach(function (n) {
-      n.classList.remove('sidebar-selected');
-    });
-    var bar = document.getElementById('sidebar-bulk-bar');
-    if (bar) bar.remove();
-  }
-
-  // Clear selection when exiting reorg mode.
-  document.addEventListener('chronicle:reorg-changed', function (e) {
-    if (e.detail && !e.detail.active) clearSelection();
-  });
-
-  // NOTE: Tree re-init on HTMX swaps is handled by the single listener
-  // near the bottom of this file (alongside observeLoadMore). Registering
-  // a second htmx:afterSwap handler here would cause initTree to run twice,
-  // producing double toggle chevrons.
+  // Tree re-init on HTMX swaps is handled by the single listener near the
+  // bottom of this file (alongside observeLoadMore). A second
+  // htmx:afterSwap handler would run initTree twice, doubling the chevrons.
 
   // --- Load More (pagination for large categories) ---
 
@@ -1477,25 +742,25 @@
     observeLoadMore();
   }
 
-  // The row menu renames rows and reloads the tree through these.
+  // The row menu renames rows, reloads the tree, moves rows and changes a
+  // list's order through these.
   window.Chronicle = window.Chronicle || {};
-  window.Chronicle.sidebarTree = { rename: startInlineRename, refresh: refreshSidebarTree };
+  window.Chronicle.sidebarTree = {
+    rename: startInlineRename,
+    refresh: refreshSidebarTree,
+    step: stepRow,
+    canStep: canStep,
+    listOrder: listOrder,
+    setOrder: setOrder
+  };
 
-  // Test-only hook: exposes the pure drag-index + reorder-payload helpers so the
-  // node:test contract suite can assert them without a real browser DOM. `module`
-  // is undefined when loaded via <script>, so this is a no-op in the browser.
+  // Test-only hook: exposes the pure helpers so the node:test suites can
+  // assert them without a real browser DOM. `module` is undefined when
+  // loaded via <script>, so this is a no-op in the browser.
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-      calculateTargetIndex: calculateTargetIndex,
-      folderChildCount: folderChildCount,
-      reorderEntity: reorderEntity,
-      updateDraggable: updateDraggable,
-      createGroupFolder: createGroupFolder,
       sortChildren: sortChildren,
       countPages: countPages,
-      placeRequest: placeRequest,
-      placeTargetId: placeTargetId,
-      addPlace: addPlace,
       startInlineRename: startInlineRename
     };
   }

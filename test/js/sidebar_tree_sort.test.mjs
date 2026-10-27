@@ -1,8 +1,6 @@
 // sidebar_tree_sort.test.mjs — contract for the drill panel's folder tree
-// shape: folders first, then pages, both alphabetical, and a folder's own
-// page count. Nav v3 (issue #817) requires this ordering; the drag-reorder
-// sort_order field only tie-breaks two same-named siblings now (see the
-// module doc in sidebar_tree.js).
+// shape: folders first, then pages, each group in its list's own order (A to
+// Z by default, by hand, or newest first), and a folder's own page count.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -62,6 +60,7 @@ function node(name, opts = {}) {
     id: opts.id || name,
     isNode: isFolder,
     sortOrder: opts.sortOrder || 0,
+    created: opts.created || 0,
     children: opts.children || [],
     el: {
       hasAttribute: (k) => k in attrs,
@@ -96,6 +95,39 @@ test('sortChildren falls back to sort_order only between two same-named siblings
   const nodes = [node('Same', { id: 'later', sortOrder: 2 }), node('Same', { id: 'earlier', sortOrder: 1 })];
   sortChildren(nodes);
   assert.deepEqual(nodes.map((n) => n.id), ['earlier', 'later']);
+});
+
+test('by hand: sort_order decides, the name breaks a tie, folders still lead', () => {
+  const { sortChildren } = load();
+  const nodes = [
+    node('Apple', { sortOrder: 2 }),
+    node('Zed', { sortOrder: 0 }),
+    node('Mid', { sortOrder: 1 }),
+    node('Also first', { sortOrder: 0 }),
+    node('Folder', { folder: true, sortOrder: 9 }),
+  ];
+  sortChildren(nodes, 'hand');
+  assert.deepEqual(nodes.map((n) => n.id), ['Folder', 'Also first', 'Zed', 'Mid', 'Apple']);
+});
+
+test('newest first: the latest made leads, the name breaks a tie, folders still lead', () => {
+  const { sortChildren } = load();
+  const nodes = [
+    node('Old', { created: 100 }),
+    node('New', { created: 300 }),
+    node('Same b', { created: 200 }),
+    node('Same a', { created: 200 }),
+    node('Old folder', { folder: true, created: 1 }),
+  ];
+  sortChildren(nodes, 'new');
+  assert.deepEqual(nodes.map((n) => n.id), ['Old folder', 'New', 'Same a', 'Same b', 'Old']);
+});
+
+test('an unknown or missing order sorts A to Z', () => {
+  const { sortChildren } = load();
+  const nodes = [node('b', { sortOrder: 0 }), node('a', { sortOrder: 5 })];
+  sortChildren(nodes, 'random');
+  assert.deepEqual(nodes.map((n) => n.id), ['a', 'b']);
 });
 
 test('countPages counts every page in a folder\'s subtree, at any depth, and never the folders themselves', () => {

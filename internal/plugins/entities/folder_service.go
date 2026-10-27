@@ -3,6 +3,7 @@ package entities
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,18 +37,31 @@ type FolderService interface {
 	// folderID is nil. A page sits in a folder or under another page, never
 	// both, so filing it clears its parent page.
 	SetEntityFolder(ctx context.Context, campaignID, entityID string, folderID *string) error
+	// ChildOrders returns how each sidebar container in the campaign orders
+	// its rows, keyed "category:<type id>", "folder:<id>" or "page:<id>". A
+	// container that is missing sorts A to Z.
+	ChildOrders(ctx context.Context, campaignID string) (map[string]string, error)
+	// SetChildOrder sets how one container (a category's top level, a
+	// folder, or a page with pages under it) orders its rows.
+	SetChildOrder(ctx context.Context, campaignID, kind, id, mode string) error
+	// MoveNextTo puts a page or folder just before or after one of its
+	// siblings, for a container ordered by hand. The whole sibling set is
+	// renumbered, so rows the mover cannot see keep their places among
+	// themselves.
+	MoveNextTo(ctx context.Context, campaignID, kind, id, siblingID string, after bool) error
 }
 
 type folderService struct {
 	nodes    SidebarNodeRepository
 	entities EntityRepository
 	types    EntityTypeRepository
+	orders   ChildOrderRepository
 }
 
 // NewFolderService builds the folder service over the repositories it checks
 // against.
-func NewFolderService(nodes SidebarNodeRepository, ents EntityRepository, types EntityTypeRepository) FolderService {
-	return &folderService{nodes: nodes, entities: ents, types: types}
+func NewFolderService(nodes SidebarNodeRepository, ents EntityRepository, types EntityTypeRepository, orders ChildOrderRepository) FolderService {
+	return &folderService{nodes: nodes, entities: ents, types: types, orders: orders}
 }
 
 func (s *folderService) ListFolders(ctx context.Context, campaignID string, entityTypeID int) ([]SidebarNode, error) {
@@ -229,6 +243,119 @@ func (s *folderService) SetEntityFolder(ctx context.Context, campaignID, entityI
 	}
 	if err := s.entities.UpdateParentNode(ctx, entityID, campaignID, folderID); err != nil {
 		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+func (s *folderService) ChildOrders(ctx context.Context, campaignID string) (map[string]string, error) {
+	orders, err := s.orders.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return orders, nil
+}
+
+func (s *folderService) SetChildOrder(ctx context.Context, campaignID, kind, id, mode string) error {
+	if !validChildOrder(mode) {
+		return apperror.NewBadRequest("order must be az, hand or new")
+	}
+	switch kind {
+	case OrderContainerCategory:
+		typeID, err := strconv.Atoi(id)
+		if err != nil {
+			return apperror.NewNotFound("category not found")
+		}
+		et, err := s.types.FindByID(ctx, typeID)
+		if err != nil || et.CampaignID != campaignID {
+			return apperror.NewNotFound("category not found")
+		}
+	case OrderContainerFolder:
+		if _, err := s.folder(ctx, campaignID, id); err != nil {
+			return err
+		}
+	case OrderContainerPage:
+		ent, err := s.entities.FindByID(ctx, id)
+		if err != nil || ent.CampaignID != campaignID {
+			return apperror.NewNotFound("entity not found")
+		}
+	default:
+		return apperror.NewBadRequest("kind must be category, folder or page")
+	}
+	if err := s.orders.Set(ctx, campaignID, kind, id, mode); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+func (s *folderService) MoveNextTo(ctx context.Context, campaignID, kind, id, siblingID string, after bool) error {
+	if id == siblingID {
+		return apperror.NewBadRequest("a row cannot move next to itself")
+	}
+	switch kind {
+	case OrderContainerPage:
+		return s.movePageNextTo(ctx, campaignID, id, siblingID, after)
+	case OrderContainerFolder:
+		return s.moveFolderNextTo(ctx, campaignID, id, siblingID, after)
+	}
+	return apperror.NewBadRequest("kind must be page or folder")
+}
+
+func (s *folderService) movePageNextTo(ctx context.Context, campaignID, id, siblingID string, after bool) error {
+	ent, err := s.entities.FindByID(ctx, id)
+	if err != nil || ent.CampaignID != campaignID {
+		return apperror.NewNotFound("entity not found")
+	}
+	sib, err := s.entities.FindByID(ctx, siblingID)
+	if err != nil || sib.CampaignID != campaignID {
+		return apperror.NewNotFound("entity not found")
+	}
+	// A sub-category's pages keep their own numbering, so a page of one
+	// cannot be placed among the other's.
+	if !sameParent(ent.ParentID, sib.ParentID) || !sameParent(ent.ParentNodeID, sib.ParentNodeID) || ent.EntityTypeID != sib.EntityTypeID {
+		return apperror.NewBadRequest("those two pages are not in the same list")
+	}
+	ids, err := s.entities.ListSiblingIDsOrdered(ctx, campaignID, ent.EntityTypeID, ent.ParentID, ent.ParentNodeID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading siblings: %w", err))
+	}
+	ordered, ok := placeNextTo(ids, id, siblingID, after)
+	if !ok {
+		return apperror.NewBadRequest("those two pages are not in the same list")
+	}
+	if err := s.entities.ResequenceSiblings(ctx, campaignID, ordered); err != nil {
+		return apperror.NewInternal(fmt.Errorf("re-sequencing siblings: %w", err))
+	}
+	return nil
+}
+
+func (s *folderService) moveFolderNextTo(ctx context.Context, campaignID, id, siblingID string, after bool) error {
+	node, err := s.folder(ctx, campaignID, id)
+	if err != nil {
+		return err
+	}
+	sib, err := s.folder(ctx, campaignID, siblingID)
+	if err != nil {
+		return err
+	}
+	if node.EntityTypeID != sib.EntityTypeID || !sameParent(node.ParentID, sib.ParentID) {
+		return apperror.NewBadRequest("those two folders are not in the same list")
+	}
+	all, err := s.nodes.ListByType(ctx, campaignID, node.EntityTypeID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading sibling folders: %w", err))
+	}
+	ids := make([]string, 0, len(all))
+	for _, n := range all {
+		if sameParent(n.ParentID, node.ParentID) {
+			ids = append(ids, n.ID)
+		}
+	}
+	ordered, ok := placeNextTo(ids, id, siblingID, after)
+	if !ok {
+		return apperror.NewBadRequest("those two folders are not in the same list")
+	}
+	if err := s.nodes.ResequenceNodes(ctx, campaignID, ordered); err != nil {
+		return apperror.NewInternal(fmt.Errorf("re-sequencing sibling folders: %w", err))
 	}
 	return nil
 }

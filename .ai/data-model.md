@@ -116,6 +116,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | `entity_versions` | A page's title and text history | FK→`entities` CASCADE; `kind` (`created`/`edit`/`restore`/`baseline`); `user_id` no FK (history outlives the account); `DATETIME(6)` times |
 | `entity_aliases` | Alternate names an entity is searchable/linkable by | `UNIQUE(entity_id, alias)`; `FULLTEXT(alias)` |
 | `sidebar_nodes` | Pure organizational folders in the sidebar tree (no page content) | `node_type` enum(`folder`); self-nestable via `parent_id` |
+| `sidebar_child_orders` | How a sidebar list orders its rows when not A to Z (migration 59) | PK `(campaign_id, container_kind, container_id)`; `container_kind` enum(`category`,`folder`,`page`); `container_id` is the type id as text or the folder's or page's id (no FK); `mode` enum(`hand`,`new`); campaign FK CASCADE |
 | `entity_favorites` | Per-user sidebar bookmarks | composite PK `(user_id, entity_id)` |
 | `saved_filters` | Per-user saved tag-filter presets | `tag_slugs` JSON array |
 
