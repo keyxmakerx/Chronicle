@@ -14,8 +14,12 @@
  *                     a calendar to write the rules against, read as the
  *                     viewer may see it; without them the demo calendar below
  *
- * Until the crafting app stores recipes, the widget edits the demo recipes
- * below and saves nothing.
+ * On its own (the Design Lab) it edits the demo recipes below and saves
+ * nothing. The crafting app mounts it on one stored recipe by setting
+ * el._craftApp = {recipe, lists, save} before mounting: recipe is
+ * {id, name, ings: [[qty, name]], goal, roll, liquid, rules, looks} with the
+ * rules as the AI writes them, lists fills the pickers, and save(recipe) is
+ * called after every change to the rules or the looks.
  */
 (function () {
   'use strict';
@@ -370,6 +374,26 @@
     });
   }
 
+  /* A recipe the crafting app hands over: its stored rules and looks, with
+     the moments' defaults for any look not saved yet. */
+  function appRecipe(W, src, fx) {
+    var rules = R.cleanRules(src.rules, fx), defs = moments(src.name), saved = src.looks || {}, looks = {}, clean = {};
+    rules.forEach(function (q) { if (!q.look && q.players !== 'secret') q.look = R.defLook(W, q); q._def = q.look ? R.clone(q.look) : null; });
+    Object.keys(defs).forEach(function (k) {
+      clean[k] = R.cleanLook(defs[k], fx.spots, fx.looks);
+      looks[k] = saved[k] ? R.cleanLook(saved[k], fx.spots, fx.looks) || R.clone(clean[k]) : R.clone(clean[k]);
+    });
+    return {key: src.id, name: src.name, ings: src.ings || [], goal: src.goal, stat: '', roll: src.roll || '', liquid: src.liquid || '#b4232f',
+      rules: rules, looks: looks, defaults: clean};
+  }
+  /* What the crafting app stores: the rules as the AI writes them, and each
+     moment's look. */
+  function appData(r) {
+    var looks = {};
+    Object.keys(r.looks || {}).forEach(function (k) { if (r.looks[k]) looks[k] = R.lookData(r.looks[k]); });
+    return {rules: r.rules.map(R.ruleData), looks: looks};
+  }
+
   /* ---------- Reading a real calendar ---------- */
   function getJSON(url) {
     return (window.Chronicle && Chronicle.apiFetch ? Chronicle.apiFetch(url) : fetch(url, {credentials: 'same-origin', headers: {Accept: 'application/json'}}))
@@ -433,18 +457,18 @@
   /* Counts mounts, so two editors on a page keep their tab ids apart. */
   var mounts = 0;
   function start(el, input, note) {
-    var fx = {spots: FX.MOMENT_SPOTS, looks: FX.LOOKS}, W = R.world(Object.assign({sky: window.SkyWorld, span: 30}, input));
-    var S = {W: W, at: 0, fx: fx, pick: 2, recipes: recipes(W, !!input.real, fx), calm: calm};
+    var fx = {spots: FX.MOMENT_SPOTS, looks: FX.LOOKS}, W = R.world(Object.assign({sky: window.SkyWorld, span: 30}, input)), app = el._craftApp;
+    var S = {W: W, at: 0, fx: fx, pick: app ? 0 : 2, recipes: app ? [appRecipe(W, app.recipe, fx)] : recipes(W, !!input.real, fx), calm: calm, noCal: !!input.noCal};
     var ed = null, looks = null, tab = 'rules', uid = 'crr' + (++mounts);
     S.rec = function () { return S.recipes[S.pick]; };
     S.setDay = function (d) { S.at = d; };
-    S.changed = function () {};
+    S.changed = function (kind) { if (app && (kind === 'rules' || kind === 'looks')) app.save(appData(S.rec())); };
     S.say = function (msg) { var lv = el.querySelector('.crr-live'); if (lv) { lv.textContent = ''; setTimeout(function () { lv.textContent = msg; }, 30); } };
     S.goLook = function (id) { show('looks'); looks.select(id); };
     function head() {
       var r = S.rec();
       el.querySelector('.crr-t').innerHTML = '<b>' + R.esc(r.name) + '</b><small>' + r.ings.map(function (g) { return g[0] + ' ' + R.esc(g[1]); }).join(' · ') + ' → <b>' + R.esc(r.name) +
-        '</b> · 2d10 + ' + R.esc(r.stat) + ', goal ' + r.goal + '</small>';
+        '</b> · ' + R.esc(r.roll || '2d10 + ' + r.stat) + ', goal ' + r.goal + '</small>';
       Array.prototype.forEach.call(el.querySelectorAll('[data-recipe]'), function (b) { b.setAttribute('aria-pressed', String(+b.getAttribute('data-recipe') === S.pick)); });
     }
     function moveBar() {
@@ -460,8 +484,8 @@
       moveBar();
     }
     el.innerHTML = '<div class="crr">' +
-      '<div class="crr-head"><div class="crr-t"></div><div class="crr-chips" role="group" aria-label="Recipe">' + S.recipes.map(function (r, i) {
-        return '<button type="button" class="crr-cx" data-recipe="' + i + '" aria-pressed="false"><span style="width:10px;height:10px;border-radius:50%;background:' + r.liquid + '"></span>' + R.esc(r.name) + '</button>';
+      '<div class="crr-head"><div class="crr-t"></div><div class="crr-chips" role="group" aria-label="Recipe"' + (S.recipes.length > 1 ? '' : ' hidden') + '>' + S.recipes.map(function (r, i) {
+        return '<button type="button" class="crr-cx" data-recipe="' + i + '" aria-pressed="false"><span style="width:10px;height:10px;border-radius:50%;background:' + R.esc(r.liquid) + '"></span>' + R.esc(r.name) + '</button>';
       }).join('') + '</div><button type="button" class="btn btn-secondary btn-sm" data-ai aria-pressed="false">' + fa('code') + '<span>Show what the AI writes</span></button></div>' +
       '<div class="crr-banner' + (note.bad ? ' is-bad' : '') + '">' + note.html + '</div>' +
       '<div class="crr-tabs" role="tablist" aria-label="Rule editor"><button type="button" role="tab" id="' + uid + '-t-rules" data-tab="rules" aria-controls="' + uid + '-p-rules" aria-selected="true">' + fa('list-check') + 'When it can be made</button>' +
@@ -497,7 +521,15 @@
         el.innerHTML = '<p class="crr-load" role="status">The rules editor couldn’t load. Reload the page to try again.</p>';
         return;
       }
-      var ds = el.dataset, demo = '<span><b>Demo calendar.</b> Open this page with <code>?campaign_id=…&amp;calendar_id=…</code> to write rules against your own calendar. Nothing here is saved.</span>';
+      var ds = el.dataset, app = el._craftApp, demo = '<span><b>Demo calendar.</b> Open this page with <code>?campaign_id=…&amp;calendar_id=…</code> to write rules against your own calendar. Nothing here is saved.</span>';
+      var saves = app ? 'Changes save as you go.' : 'Nothing here is saved.';
+      if (app && (!ds.campaignId || !ds.calendarId)) {
+        // A campaign with no calendar the Director can see: rules about the
+        // bench, the maker or every time still work; the calendar's kinds wait for one.
+        el._crr = start(el, {calendar: {name: 'No calendar', months: [], moons: []}, lists: app.lists, knownDays: 30, noCal: true},
+          {html: '<span><b>No calendar yet.</b> Moons, events, weather and seasons come from the campaign’s calendar once it has one. ' + saves + '</span>'});
+        return;
+      }
       if (!ds.campaignId || !ds.calendarId) { el._crr = start(el, demoInput(), {html: demo}); return; }
       el.innerHTML = '<p class="crr-load" role="status">Reading the calendar…</p>';
       el._crrGen = (el._crrGen || 0) + 1;
@@ -505,11 +537,18 @@
       load(ds.campaignId, ds.calendarId, 30).then(function (input) {
         if (gen !== el._crrGen || !el.isConnected) return;
         input.real = true;
-        el._crr = start(el, input, {html: '<span><b>' + R.esc(input.calendar.name || 'Your calendar') + '</b>, as you can see it: its moons, events, rolls and the next 30 days of weather. The sample rules are written in its names. Nothing here is saved.</span>' +
+        if (app) input.lists = app.lists;
+        el._crr = start(el, input, {html: '<span><b>' + R.esc(input.calendar.name || 'Your calendar') + '</b>, as you can see it: its moons, events, rolls and the next 30 days of weather. ' +
+          (app ? '' : 'The sample rules are written in its names. ') + saves + '</span>' +
           (input.truncated ? '<span>It has more events than one list holds, so the event picker shows the first ones.</span>' : '')});
       }, function (err) {
         if (gen !== el._crrGen || !el.isConnected) return;
         if (window.console) console.warn('[craft-rules] the calendar could not be read', err);
+        if (app) {
+          el._crr = start(el, {calendar: {name: 'No calendar', months: [], moons: []}, lists: app.lists, knownDays: 30, noCal: true},
+            {bad: true, html: '<span><b>The calendar couldn’t be read</b>, so its moons, events and weather aren’t offered. Reload to try again. ' + saves + '</span>'});
+          return;
+        }
         el._crr = start(el, demoInput(), {bad: true, html: '<span><b>That calendar couldn’t be read</b> (it may not exist, or you may not be able to see it). Showing the demo calendar instead. Nothing here is saved.</span>'});
       });
     },

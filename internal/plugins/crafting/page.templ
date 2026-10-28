@@ -1,0 +1,43 @@
+// page.templ renders the Crafting app's page. The Director's editors and a
+// player's recipe book are both drawn by the crafting widget (static/js/
+// crafting.js) from the API, so this is the frame and the mount point.
+package crafting
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CraftingPage renders the full page inside the app layout.
+templ CraftingPage(cc *campaigns.CampaignContext, director bool, calendarID string) {
+	@layouts.App(cc.Campaign.Name + " - Crafting") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/crafting.css") }/>
+		<div class="mb-4">
+			<h1 class="text-2xl font-bold text-fg">
+				<i class="fa-solid fa-flask mr-2 text-fg-muted" aria-hidden="true"></i>Crafting
+			</h1>
+			<p class="text-sm text-fg-secondary mt-0.5">
+				if director {
+					Recipes, the materials they take, and the benches they are made at.
+				} else {
+					The recipes your characters know.
+				}
+			</p>
+		</div>
+		<div
+			data-widget="crafting"
+			data-campaign-id={ cc.Campaign.ID }
+			data-director={ boolAttr(director) }
+			data-calendar-id={ calendarID }
+		>
+			<p class="text-sm text-fg-muted" role="status">Loading crafting…</p>
+		</div>
+	}
+}
+
+func boolAttr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}

@@ -254,6 +254,7 @@ var builtinAddons = []addonDef{
 	{Slug: "sessions", Name: "Game nights", Description: "Plan game nights, take RSVPs and see when players are free, on the real-world calendar. Needs the Calendar.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-dice-d20", Author: "Chronicle"},
 	{Slug: "npcs", Name: "NPC Gallery", Description: "Browse and reveal character entities as NPCs for your players.", Version: "1.0.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-users", Author: "Chronicle"},
 	{Slug: "armory", Name: "Armory & Inventory", Description: "Item catalog, character inventories, and shop management. System-dependent item types with Foundry sync.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-shield-halved", Author: "Chronicle"},
+	{Slug: "crafting", Name: "Crafting", Description: "Recipes your Directors write, crafting tags on Armory items, and the benches recipes are made at. Players read the recipes they know. Needs the Armory.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-flask", Author: "Chronicle"},
 	{Slug: "player-character-claiming", Name: "Player Character Claiming", Description: "Let players claim ownership of their Player Character entities. Unlocks a claimable \"Player Characters\" sub-type and shows who has claimed which character.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-user-check", Author: "Chronicle"},
 
 	// Integrations.

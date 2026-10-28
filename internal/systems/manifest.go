@@ -108,6 +108,10 @@ type SystemManifest struct {
 	// Terms are the words the system uses for Chronicle's own roles, so a
 	// campaign reads in its game's language.
 	Terms *ManifestTerms `json:"terms,omitempty"`
+
+	// Crafting is how the system rolls and counts a crafting project
+	// (crafting.go). Nil means DefaultCraftingRules.
+	Crafting *CraftingRules `json:"crafting,omitempty"`
 }
 
 // ManifestTerms are a system's names for Chronicle's roles. An empty field
@@ -1055,6 +1059,10 @@ func ValidateManifest(m *SystemManifest) error {
 
 	if err := validateTerms(m.Terms); err != nil {
 		return fmt.Errorf("terms: %w", err)
+	}
+
+	if err := validateCrafting(m.Crafting); err != nil {
+		return fmt.Errorf("crafting: %w", err)
 	}
 
 	// Text stays as written. Every place it is shown escapes it on output

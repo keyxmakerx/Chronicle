@@ -41,6 +41,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
@@ -1238,6 +1239,7 @@ var navAppCatalog = []navAppDef{
 	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
 	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone},
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
+	{slug: "crafting", label: "Crafting", icon: "fa-flask", path: "/crafting", addons: []string{crafting.AddonSlug}, needs: []string{"armory"}, access: campaigns.NavAccessMember},
 	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone},
 	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessMemberOrAdmin},
 }
@@ -6139,6 +6141,25 @@ func (a *App) RegisterRoutes() {
 		registerRecipeBlock(blockRegistry)
 	} else {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
+	}
+
+	// Crafting: recipes, crafting tags on Armory items, benches and the
+	// campaign's crafting settings. The app and its routes exist only while
+	// its tables migrated.
+	a.registerPlugin(PluginRegistration{
+		Slug:     crafting.PluginSlug,
+		StaticFS: echo.MustSubFS(crafting.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "crafting", Scripts: []string{"js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(crafting.PluginSlug) {
+		craftingSvc := crafting.NewService(crafting.NewRepository(a.DB),
+			&craftingDirectoryAdapter{dir: stashDirectory}, &craftingRulesAdapter{sys: systemHandler})
+		crafting.RegisterRoutes(e, crafting.NewHandler(craftingSvc, &craftingCalendarAdapter{cal: calendarService}),
+			campaignService, authService, addonService)
+	} else {
+		slog.Warn("crafting plugin degraded — the Crafting app is not available")
 	}
 
 	// Tests: montages and other long tests on a page, and how they ended.

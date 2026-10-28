@@ -15,8 +15,10 @@
  *                     a calendar for the window's sky; without them the
  *                     window shows the demo calendar below
  *
- * Until the crafting app stores recipes and benches, the widget plays the
- * demo below and saves nothing.
+ * On its own (the Design Lab) it plays the demo below and saves nothing. The
+ * crafting app sets el._craftApp = {state, recipes, items, recipe, onChange,
+ * status} before mounting a build-mode bench: state is the look's saved
+ * arrangement ({look, pieces}) and onChange hears every change to it.
  */
 (function () {
   'use strict';
@@ -396,10 +398,12 @@
       var build = ds.mode === 'build' && window.CraftBenchEditor;
       var sky = ds.campaignId && ds.calendarId ? {campaignId: ds.campaignId, calendarId: ds.calendarId} : {calendar: DEMO.calendar};
       // The demo's hover cards describe the desk's own pieces (its cat, its tray), so only the desk takes them
-      var skin = Skin.create({sky: sky, thumbs: ds.thumbs || '', info: Skin === window.CraftDesk ? DEMO.info : {}});
-      var data = {recipes: DEMO.recipes, items: DEMO.items, recipe: 'heal'};
+      var app = el._craftApp || null, state = app && app.state && typeof app.state === 'object' ? app.state : null;
+      var skin = Skin.create({sky: sky, thumbs: ds.thumbs || '', info: Skin === window.CraftDesk ? DEMO.info : {}, look: state ? state.look : undefined});
+      var own = app && app.recipes && Object.keys(app.recipes).length;
+      var data = own ? {recipes: app.recipes, items: app.items || {}, recipe: app.recipe || Object.keys(app.recipes)[0]} : {recipes: DEMO.recipes, items: DEMO.items, recipe: 'heal'};
       if (build) {
-        el._crb = CraftBenchEditor.start(el, Object.assign({skin: skin}, data));
+        el._crb = CraftBenchEditor.start(el, Object.assign({skin: skin, state: state, onChange: app && app.onChange, status: app && app.status}, data));
       } else {
         var box = document.createElement('div'); box.className = 'crb-scene'; el.innerHTML = ''; el.appendChild(box);
         ['time', 'weather', 'light'].forEach(function (k) { box.setAttribute('data-' + k, skin.opts[k]); });

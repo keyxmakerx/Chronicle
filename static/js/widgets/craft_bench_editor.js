@@ -9,10 +9,12 @@
  * that fills them in, unchanged. Actions are made from the engine's fixed
  * effects and sounds, so nothing a Director writes is ever code.
  *
- * It saves nothing: state() hands back the bench as data for whatever stores
- * it. Usage:
- *   var ed = CraftBenchEditor.start(el, {skin: CraftDesk.create(o), recipes: {...}, items: {...}});
- *   ed.state(); ed.destroy();
+ * It stores nothing itself: state() hands back the bench as data, o.state
+ * starts it from a saved one, and o.onChange hears every change, so the
+ * crafting app saves it and the Design Lab doesn't. Usage:
+ *   var ed = CraftBenchEditor.start(el, {skin: CraftDesk.create(o), recipes: {...}, items: {...},
+ *     state: saved, onChange: fn, status: 'Changes save as you go.'});
+ *   ed.state(); ed.status('Saved'); ed.destroy();
  */
 window.CraftBenchEditor = (function () {
   var EFFECT_LABEL = {shake: 'Shake', sparkle: 'Sparkles', smoke: 'Puff of smoke', glow: 'Warm glow'};
@@ -36,7 +38,13 @@ window.CraftBenchEditor = (function () {
     // auto: the Director hasn't touched its words or actions, so it follows the room (a lantern says Lantern)
     function fresh(src){return {name:src.name||'',text:src.text||'',more:src.more||'',dx:0,dy:0,hidden:false,auto:true,
       acts:(src.acts||[]).filter(Array.isArray).map(function(a){return {label:a[0],fx:'b:'+a[1],sound:'',say:''};})};}
-    function initState(){Object.keys(PIECES).forEach(function(id){st[id]=fresh(skin.info[id]||{name:id});sync(id);});}
+    /* A saved piece keeps the Director's words, move and actions; the room's
+       look came back through the skin's own opts. */
+    function saved(id,src){var p=o.state&&o.state.pieces&&o.state.pieces[id];if(!p||typeof p!=='object')return null;
+      var f=fresh(src);return {name:typeof p.name==='string'&&p.name?p.name:f.name,text:typeof p.text==='string'?p.text:f.text,more:typeof p.more==='string'?p.more:f.more,
+        dx:+p.dx||0,dy:+p.dy||0,hidden:p.hidden===true,auto:false,
+        acts:Array.isArray(p.acts)?p.acts.filter(function(a){return a&&typeof a==='object';}).map(function(a){return {label:String(a.label||''),fx:String(a.fx||''),sound:String(a.sound||''),say:String(a.say||'')};}):f.acts};}
+    function initState(){Object.keys(PIECES).forEach(function(id){var src=skin.info[id]||{name:id};st[id]=saved(id,src)||fresh(src);sync(id);place(id);});}
     /* The scene reads hover cards and menus from the skin's info table on
        every hover, so an edit here shows on the next hover. */
     function sync(id){var s=st[id];skin.info[id]={name:s.name||'Unnamed piece',text:s.text,more:s.more||s.text,
@@ -194,7 +202,7 @@ window.CraftBenchEditor = (function () {
     root.innerHTML='<div class="crb"><div class="crb-bar"><div class="crb-seg" role="group" aria-label="Mode"><button type="button" data-mode="arrange" aria-pressed="true">Arrange</button><button type="button" data-mode="try" aria-pressed="false">Try it as a player</button></div>'+
       '<span class="crb-hint"></span><span class="crb-try" hidden>'+(rkeys.length>1?'<select class="crb-in crb-sm crb-recipe" aria-label="Recipe">'+rkeys.map(function(k){return opt(k,recipes[k].name||k,k===o.recipe);}).join('')+'</select>':'')+
       '<button type="button" class="crb-btn crb-sm crb-skip">Skip and roll</button></span>'+
-      '<button type="button" class="crb-btn crb-sm crb-sound" aria-pressed="false">Sound off</button><span class="crb-status">Preview only. Nothing is saved.</span></div>'+
+      '<button type="button" class="crb-btn crb-sm crb-sound" aria-pressed="false">Sound off</button><span class="crb-status" role="status">'+esc(o.status||'Preview only. Nothing is saved.')+'</span></div>'+
       '<div class="crb-wrap"><div class="crb-scene"></div><div class="crb-pcard" role="dialog" aria-label="Piece" hidden></div></div>'+
       '<div class="crb-tray"><div class="crb-ttabs" role="tablist" aria-label="Room">'+TABS.map(function(t){return '<button type="button" role="tab" data-tab="'+esc(t.id)+'" aria-selected="'+(t.id===tab)+'">'+esc(t.label)+'</button>';}).join('')+'</div>'+
       '<div class="crb-tbody" role="tabpanel"></div></div></div>';
@@ -218,7 +226,8 @@ window.CraftBenchEditor = (function () {
     renderTray();renderInsp();setMode('arrange');
 
     function destroy(){if(dead)return;dead=true;if(raf)cancelAnimationFrame(raf);raf=0;clearTimeout(lightT);window.removeEventListener('resize',placeCard);ctrl.destroy();root.innerHTML='';}
-    return {state:state,select:select,setMode:setMode,box:box,scene:ctrl,destroy:destroy};
+    function status(t){var el=$('.crb-status');if(el)el.textContent=t;}
+    return {state:state,select:select,setMode:setMode,box:box,scene:ctrl,status:status,destroy:destroy};
   }
   return {start:start};
 })();
