@@ -217,10 +217,16 @@ func TestRunEndTellsTheListenerWhoWasDown(t *testing.T) {
 	r := *view.Run
 	r.Lines = append([]RunLine{}, r.Lines...)
 	// One hobgoblin at 0 and one at full, the waiting skeletons at -1, a
-	// hero at 0: only the hobgoblin counts as down.
+	// hero at 0: only the hobgoblin counts as down. The war chief's full
+	// hit points were typed as 0, so the tab draws it down, and it is.
 	r.Lines[0].HP = []*int{intp(0)}
 	r.Lines[3].HP = []*int{intp(0), nil}
 	r.Lines[4].HP = []*int{intp(-1), nil, nil, nil}
+	for i := range r.Lines {
+		if r.Lines[i].EntityID == "gob" {
+			r.Lines[i].Max = intp(0)
+		}
+	}
 	if _, err := runs.Save(ctx, "c1", dm, RunSave{Version: view.Version, Run: &r}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -229,7 +235,7 @@ func TestRunEndTellsTheListenerWhoWasDown(t *testing.T) {
 		t.Fatalf("report: %+v, %v", rep, err)
 	}
 	want := []EndedCreature{
-		{EntityID: "gob", Name: "Goblin War Chief", Copies: 1},
+		{EntityID: "gob", Name: "Goblin War Chief", Copies: 1, Down: 1},
 		{EntityID: "hob", Name: "Hobgoblin Soldier", Copies: 2, Down: 1},
 		{Name: "Skeleton Archer", Copies: 4},
 	}

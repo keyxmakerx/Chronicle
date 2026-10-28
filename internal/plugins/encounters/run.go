@@ -88,7 +88,8 @@ type EndedFight struct {
 
 // EndedCreature is one creature row of an ended fight: its page ("" for a
 // row with none), how many copies it had and how many were at 0 hit points
-// or less. A creature still waiting to come in was never down.
+// or less, read as the Fight tab draws a box down (an untouched copy is at
+// its full hit points). A creature still waiting to come in was never down.
 type EndedCreature struct {
 	EntityID string
 	Name     string
@@ -110,6 +111,9 @@ type EndReport struct {
 // page will leave, and a fight that ended. It is implemented in
 // internal/app, so encounters never imports the app that listens.
 type FightListener interface {
+	// Leaves gives a short note per page, nil when there is nothing to
+	// say. A note beginning "No " says the page leaves nothing, and the tab
+	// draws it plain rather than marked.
 	Leaves(ctx context.Context, campaignID string, v Viewer, pageIDs []string) (map[string]string, error)
 	FightEnded(ctx context.Context, campaignID string, v Viewer, f EndedFight) (*EndReport, error)
 }
@@ -124,6 +128,9 @@ func endedFight(run *Run) EndedFight {
 		c := EndedCreature{EntityID: l.EntityID, Name: l.Name, Copies: len(l.HP)}
 		if !l.Waiting {
 			for _, hp := range l.HP {
+				if hp == nil {
+					hp = l.Max
+				}
 				if hp != nil && *hp <= 0 {
 					c.Down++
 				}

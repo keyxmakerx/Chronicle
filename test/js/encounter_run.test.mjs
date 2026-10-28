@@ -114,3 +114,18 @@ test('normaliseRun fills what a short answer lacks', () => {
   assert.equal(r.lines[0].kind, 'creature');
   assert.deepEqual(plain(r.lines[0].conds), []);
 });
+
+test('a creature’s drop chip says what its page leaves, and nothing when no page has a drop list', () => {
+  const H = load();
+  const leaves = { troll: 'Has a drop list', rat: 'No drop list' };
+  const cases = [
+    { name: 'a page with a list', line: { kind: 'creature', entityId: 'troll' }, leaves, want: 'Has a drop list' },
+    { name: 'a page without one', line: { kind: 'creature', entityId: 'rat' }, leaves, want: 'No drop list' },
+    { name: 'a row with no page', line: { kind: 'creature', entityId: '' }, leaves, want: 'No page, so no drops' },
+    { name: 'a page the server said nothing about', line: { kind: 'creature', entityId: 'bat' }, leaves, want: '' },
+    { name: 'a hero', line: { kind: 'hero', entityId: '' }, leaves, want: '' },
+    { name: 'no drop lists anywhere', line: { kind: 'creature', entityId: '' }, leaves: {}, want: '' },
+    { name: 'an older server', line: { kind: 'creature', entityId: 'troll' }, leaves: undefined, want: '' },
+  ];
+  for (const c of cases) assert.equal(H.dropNote(c.leaves, c.line), c.want, c.name);
+});

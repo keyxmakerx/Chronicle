@@ -289,7 +289,7 @@ func (s *service) trayViews(ctx context.Context, campaignID string, v Viewer, na
 	}
 	out := make([]SpoilView, 0, len(tray))
 	for _, sp := range tray {
-		sv := SpoilView{ID: sp.ID, Source: sp.PageName, Copy: sp.Copy, Copies: sp.Copies, Origin: sp.Origin, At: sp.CreatedAt, Lines: []SpoilLineView{}}
+		sv := SpoilView{ID: sp.ID, Source: sp.PageName, Copy: sp.Copy, Copies: sp.Copies, Origin: sp.Origin, ByHand: sp.Origin == "", At: sp.CreatedAt, Lines: []SpoilLineView{}}
 		ok, err := sees(sp.PageID)
 		if err != nil {
 			return nil, err
@@ -297,12 +297,17 @@ func (s *service) trayViews(ctx context.Context, campaignID string, v Viewer, na
 		if !ok {
 			// The copy count would tell a player how many of a hidden
 			// thing there were, so it goes with the name.
-			sv.Source, sv.Copy, sv.Copies, sv.Origin = unseenSource, 1, 1, ""
+			sv.Source, sv.Copy, sv.Copies, sv.Origin, sv.ByHand = unseenSource, 1, 1, "", false
 		}
 		for _, l := range sp.Lines {
 			lv := SpoilLineView{ID: l.ID, Mode: l.Mode, Tags: []string{}}
 			if n, ok := names[l.ItemID]; ok {
 				lv.ItemID, lv.Name, lv.Tags = l.ItemID, n, knownTags(tags[l.ItemID])
+				words := make([]string, len(lv.Tags))
+				for i, t := range lv.Tags {
+					words[i] = tagLabel(t)
+				}
+				lv.Kinds = strings.Join(words, ", ")
 			} else if v.Director {
 				lv.ItemID, lv.Name = l.ItemID, l.ItemName
 			} else {
@@ -670,7 +675,7 @@ func (s *service) TakeSpoil(ctx context.Context, campaignID string, lineID int64
 	if !ok {
 		return nil, errConflictMsg("someone took that first")
 	}
-	res.Got = fmt.Sprintf("%d × %s", res.Qty, item.Name)
+	res.Item, res.Got = item.Name, fmt.Sprintf("%d × %s", res.Qty, item.Name)
 	if res.Qty < 1 {
 		res.Got = "nothing"
 		res.Notes = append(res.Notes, "That tier pays nothing for this one.")

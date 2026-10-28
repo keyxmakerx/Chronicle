@@ -523,13 +523,16 @@ func TestTray_APlayerSeesOnlyWhatTheyMay(t *testing.T) {
 	if l := remnant.Lines[2]; !l.Unseen || l.Name != unseenItem || l.ItemID != "" {
 		t.Errorf("unseen item shows %+v", l)
 	}
-	if l := remnant.Lines[1]; l.Roll != "2d10 + Reason" || len(l.Tiers) != 3 || l.Tiers[2] != (Tier{Label: "17 or more", Qty: 3}) {
+	if l := remnant.Lines[1]; l.Roll != "2d10 + Reason" || len(l.Tiers) != 3 || l.Tiers[2] != (Tier{Label: "17 or more", Qty: 3}) || l.Kinds != "liquid" {
 		t.Errorf("harvest line %+v", l)
 	}
+	if remnant.Origin != "Shrine cellar" || remnant.ByHand {
+		t.Errorf("a fight's spoils say %q, by hand %v", remnant.Origin, remnant.ByHand)
+	}
 	// A page the player can't see hides its name, how many dropped and
-	// where.
+	// where, even that the Director put it in by hand.
 	for _, s := range cc.Spoils[3:] {
-		if s.Source != unseenSource || s.Copies != 1 || s.Origin != "" {
+		if s.Source != unseenSource || s.Copies != 1 || s.Origin != "" || s.ByHand {
 			t.Errorf("hidden source shows %+v", s)
 		}
 	}
@@ -537,7 +540,7 @@ func TestTray_APlayerSeesOnlyWhatTheyMay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tab: %v", err)
 	}
-	if s := tab.Tray[4]; s.Source != "The Weeping Shrine" || s.Copy != 2 || s.Copies != 2 {
+	if s := tab.Tray[4]; s.Source != "The Weeping Shrine" || s.Copy != 2 || s.Copies != 2 || !s.ByHand {
 		t.Errorf("the Director's tray %+v", s)
 	}
 	if l := tab.Tray[2].Lines[2]; l.Unseen || l.Name != "Dragon's tear" {

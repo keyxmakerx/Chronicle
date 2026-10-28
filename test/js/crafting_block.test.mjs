@@ -18,7 +18,7 @@ import vm from 'node:vm';
 const js = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'internal', 'plugins', 'crafting', 'static', 'js');
 const window = {};
 const ctx = vm.createContext({ window, Chronicle: { register() {} } });
-for (const f of ['crafting_lib.js', 'crafting_block.js', 'crafting_projects.js']) vm.runInContext(readFileSync(join(js, f), 'utf8'), ctx);
+for (const f of ['crafting_lib.js', 'crafting_tray.js', 'crafting_block.js', 'crafting_projects.js']) vm.runInContext(readFileSync(join(js, f), 'utf8'), ctx);
 const B = window.CraftingBlock, P = window.CraftingProjects, L = window.CraftingLib;
 const plain = (v) => JSON.parse(JSON.stringify(v));
 

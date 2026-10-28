@@ -6151,8 +6151,8 @@ func (a *App) RegisterRoutes() {
 		Slug:     crafting.PluginSlug,
 		StaticFS: echo.MustSubFS(crafting.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "crafting", Scripts: []string{"js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting.js"}},
-			{Name: "crafting-block", Scripts: []string{"js/crafting_lib.js", "js/crafting_block.js"}},
+			{Name: "crafting", Scripts: []string{"js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
+			{Name: "crafting-block", Scripts: []string{"js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_block.js"}},
 		},
 	})
 	craftingOn := func(ctx context.Context, campaignID string) bool {
@@ -6267,7 +6267,9 @@ func (a *App) RegisterRoutes() {
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 		runSvc := encounters.NewRunService(encounters.NewRunRepository(a.DB), encounterSvc, encounterPages)
 		// A fight that ends drops its defeated creatures' spoils.
-		if l, ok := runSvc.(interface{ SetFightListener(encounters.FightListener) }); ok && craftingFights != nil {
+		if l, ok := runSvc.(interface {
+			SetFightListener(encounters.FightListener)
+		}); ok && craftingFights != nil {
 			l.SetFightListener(craftingFights)
 		}
 		encounters.RegisterRunRoutes(e, encounters.NewRunHandler(runSvc), campaignService, authService)

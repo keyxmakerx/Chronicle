@@ -127,20 +127,25 @@ type SpoilLineView struct {
 	Name   string   `json:"name"`
 	Unseen bool     `json:"unseen,omitempty"`
 	Tags   []string `json:"tags"`
-	Mode   string   `json:"mode"`
-	Qty    int      `json:"qty,omitempty"`
-	Roll   string   `json:"roll,omitempty"`
-	Tiers  []Tier   `json:"tiers,omitempty"`
+	// Kinds names the tags in words: "bone, hide".
+	Kinds string `json:"kinds,omitempty"`
+	Mode  string `json:"mode"`
+	Qty   int    `json:"qty,omitempty"`
+	Roll  string `json:"roll,omitempty"`
+	Tiers []Tier `json:"tiers,omitempty"`
 }
 
 // SpoilView is a spoil in the tray. Source is the page's name, or
-// "Something the party found" for a player who can't see the page.
+// "Something the party found" for a player who can't see the page; that
+// player isn't told the fight's name either, or that it was put in by hand.
 type SpoilView struct {
-	ID     string          `json:"id"`
-	Source string          `json:"source"`
-	Copy   int             `json:"copy"`
-	Copies int             `json:"copies"`
-	Origin string          `json:"origin,omitempty"`
+	ID     string `json:"id"`
+	Source string `json:"source"`
+	Copy   int    `json:"copy"`
+	Copies int    `json:"copies"`
+	Origin string `json:"origin,omitempty"`
+	// ByHand says the Director put it in, not a fight.
+	ByHand bool            `json:"byHand,omitempty"`
 	At     time.Time       `json:"at"`
 	Lines  []SpoilLineView `json:"lines"`
 }
@@ -174,14 +179,16 @@ type TakeInput struct {
 // TakeResult is a line taken or harvested: what reached the hero's pack
 // and, for a harvest, the test as rolled.
 type TakeResult struct {
-	Hero  string   `json:"hero"`
+	Hero string `json:"hero"`
+	// Item is the item's name, which the taker may see now it is theirs.
+	Item  string   `json:"item"`
 	Got   string   `json:"got"`
 	Qty   int      `json:"qty"`
 	Dice  []int    `json:"dice,omitempty"`
 	Sides int      `json:"sides,omitempty"`
 	Terms []Term   `json:"terms,omitempty"`
 	Total int      `json:"total,omitempty"`
-	Tier  int      `json:"tier,omitempty"`
+	Tier  int      `json:"tier"`
 	Tiers []Tier   `json:"tiers,omitempty"`
 	Notes []string `json:"notes"`
 }

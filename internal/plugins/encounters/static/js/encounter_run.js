@@ -12,7 +12,10 @@
  * Before the first turn the lines stay in the order they were listed, so the
  * DM can type initiative down the column; from the first turn on they are in
  * turn order. A creature's name folds its numbers out under its line
- * (creature_fold.js).
+ * (creature_fold.js). When another app says what each creature's page
+ * leaves (the server's leaves, from Crafting's drop lists), a chip says so
+ * beside its name, and ending the fight shows that app's report of what
+ * was left.
  *
  * The pure helpers are exposed as window.EncounterRunHelpers for the node
  * tests. Styles live in static/css/encounters.css, scoped under .erun.
@@ -143,10 +146,18 @@
     return v !== null && v <= 0;
   }
 
+  // dropNote is the chip beside a creature: what its page leaves, or that a
+  // line with no page leaves nothing. No chips at all when the server sent
+  // none, which is when no page in the fight has a drop list.
+  function dropNote(leaves, l) {
+    if (l.kind !== 'creature' || !leaves || !Object.keys(leaves).length) return '';
+    return l.entityId ? leaves[l.entityId] || '' : 'No page, so no drops';
+  }
+
   window.EncounterRunHelpers = {
     normaliseRun: normaliseRun, parseNum: parseNum, order: order, shown: shown, nextTurn: nextTurn,
     setInit: setInit, setMax: setMax, setHP: setHP, bringIn: bringIn, addCond: addCond,
-    removeCond: removeCond, current: current, isDown: isDown, LIM: LIM
+    removeCond: removeCond, current: current, isDown: isDown, dropNote: dropNote, LIM: LIM
   };
 
   if (!window.Chronicle || typeof window.Chronicle.register !== 'function') return;
@@ -191,9 +202,9 @@
       try { conds = JSON.parse(el.getAttribute('data-conditions') || '[]') || []; } catch (e) { conds = []; }
       var url = '/campaigns/' + encodeURIComponent(cid) + '/encounter-run';
       var S = {
-        el: el, cid: cid, url: url, conds: conds, run: null, version: 0, ready: [], blocks: [],
+        el: el, cid: cid, url: url, conds: conds, run: null, version: 0, ready: [], blocks: [], leaves: {},
         nodes: {}, open: {}, folds: {}, timer: 0, dirty: false, saving: null, again: false,
-        confirmEnd: false, loaded: false, gone: false
+        confirmEnd: false, loaded: false, gone: false, report: null
       };
       el._erun = S;
       el.classList.add('erun');
@@ -236,6 +247,7 @@
       S.version = (v && v.version) || 0;
       S.ready = (v && v.ready) || [];
       S.blocks = (v && v.statBlocks) || [];
+      S.leaves = (v && v.leaves) || {};
       S.dirty = false;
       S.confirmEnd = false;
       draw(S);
@@ -327,9 +339,32 @@
     return f;
   }
 
+  // ended is the report of the fight just ended: a line per creature and,
+  // when something was left, the way to it. It stays until Done or the
+  // next fight.
+  function ended(S) {
+    var r = S.report, box = h('div', 'erun-ended');
+    box.setAttribute('role', 'status');
+    box.appendChild(h('b', '', (r.name || 'The fight') + ' is over.'));
+    var ul = h('ul');
+    r.lines.forEach(function (t) { ul.appendChild(h('li', '', t)); });
+    box.appendChild(ul);
+    var foot = h('div', 'erun-ended-foot');
+    if (r.link && r.link.charAt(0) === '/' && r.link.charAt(1) !== '/') {
+      var a = h('a', 'erun-btn erun-go', r.linkText || 'Open');
+      a.href = r.link;
+      foot.appendChild(a);
+    }
+    if (r.note) foot.appendChild(h('span', 'erun-note', r.note));
+    foot.appendChild(btn('', 'Done', 'report-done'));
+    box.appendChild(foot);
+    return box;
+  }
+
   function drawReady(S) {
     var box = S.el.querySelector('.erun-none');
     box.textContent = '';
+    if (S.report) box.appendChild(ended(S));
     box.appendChild(h('p', 'erun-lbl', 'Ready to run'));
     if (!S.ready.length) {
       box.appendChild(h('p', 'erun-note', 'No encounter is marked Ready. Open an encounter on its page, turn on Ready, and it shows here.'));
@@ -468,10 +503,11 @@
     var fold = S.folds[l.id];
     // Rebuilt only when what it shows changes: a change event can redraw
     // while Tab is moving focus into it, and a replaced button drops focus.
-    var sig = JSON.stringify([l.name, l.kind, l.entityId, l.hp.length, l.conds, !!fold]);
+    var drop = dropNote(S.leaves, l);
+    var sig = JSON.stringify([l.name, l.kind, l.entityId, l.hp.length, l.conds, !!fold, drop]);
     if (who.getAttribute('data-sig') !== sig) {
       who.setAttribute('data-sig', sig);
-      drawWho(S, who, l, fold);
+      drawWho(S, who, l, fold, drop);
     }
 
     drawHP(li.querySelector('.erun-hp'), l);
@@ -486,7 +522,7 @@
     if (fold && li.lastChild !== fold) li.appendChild(fold);
   }
 
-  function drawWho(S, who, l, fold) {
+  function drawWho(S, who, l, fold, drop) {
     who.textContent = '';
     if (l.kind === 'creature' && l.entityId) {
       who.appendChild(C.CreatureFold.nameButton(l.name, !!fold, fold && fold.id, function () { toggleFold(S, l.id); }));
@@ -494,6 +530,7 @@
       who.appendChild(h('b', 'erun-nm', l.name));
     }
     if (l.hp.length > 1) who.appendChild(h('span', 'erun-x', '\u00d7' + l.hp.length));
+    if (drop) who.appendChild(h('span', 'erun-drop' + (drop.indexOf('No ') === 0 ? '' : ' erun-has'), drop));
     l.conds.forEach(function (c) {
       var chip = h('button', 'erun-cond', c);
       chip.type = 'button';
@@ -631,6 +668,7 @@
     var act = b.getAttribute('data-act'), id = lineId(b);
     if (act === 'retry') { S.loaded = false; S.failed = false; draw(S); load(S, ''); return; }
     if (act === 'start') { start(S, b.getAttribute('data-id'), b); return; }
+    if (act === 'report-done') { S.report = null; draw(S); return; }
     if (!S.run) return;
     if (act === 'next') {
       change(S, nextTurn(S.run));
@@ -665,6 +703,7 @@
 
   function start(S, encounterId, b) {
     b.disabled = true;
+    S.report = null;
     C.apiFetch(S.url, { method: 'POST', body: { encounterId: encounterId } }).then(function (res) {
       if (res.status === 409) return load(S, 'A fight was already on, so this is that one.', true);
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -675,15 +714,19 @@
     });
   }
 
+  // end saves the last change first, since a box set to 0 a moment ago is
+  // what makes that creature drop its spoils; a save that fails stops the
+  // end, so the fight isn't over on numbers the server never got.
   function end(S, b) {
     b.disabled = true;
-    clearTimeout(S.timer);
-    S.dirty = false;
-    var wait = S.saving || Promise.resolve();
-    wait.then(function () {
+    save(S).then(function () {
+      if (S.dirty) throw new Error('unsaved');
       return C.apiFetch(S.url, { method: 'DELETE' });
     }).then(function (res) {
       if (!res.ok && res.status !== 404) throw new Error('HTTP ' + res.status);
+      return res.status === 404 ? null : res.json().catch(function () { return null; });
+    }).then(function (rep) {
+      S.report = rep && Array.isArray(rep.lines) && rep.lines.length ? rep : null;
       return load(S, 'The fight is over.', true);
     }).catch(function () {
       b.disabled = false;
