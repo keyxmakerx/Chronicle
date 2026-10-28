@@ -601,7 +601,8 @@ func (k DropsKind) plan(ctx context.Context, campaignID string, a Actor, r Recor
 		return Plan{Error: "drop lists can't be changed on this server right now"}, "", none
 	}
 	e := k.page(ctx, campaignID, name)
-	if e == nil && !(r.Action == ActionCreate && r.Made[entities.Slugify(name)]) {
+	madeHere := r.Action == ActionCreate && r.Made[entities.Slugify(name)]
+	if e == nil && !madeHere {
 		return Plan{Error: "no page called " + quote(name)}, "", none
 	}
 	var cur *CraftDrops
