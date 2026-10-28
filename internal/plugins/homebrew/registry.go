@@ -59,6 +59,10 @@ type EventDef struct {
 	// say the event happened ("Log a respite"). Only an event from no part
 	// can have one.
 	Press string
+	// Pressed, when set, is the owner's own record of a press, run before
+	// any rule (Crafting gives every project a roll for a respite). An
+	// error stops the press before anything else happens.
+	Pressed func(ctx context.Context, campaignID string, by Viewer) error
 	// Match, when set, says whether a firing meets a rule's stored args,
 	// given what happened (the payload the owner fired it with). Nil
 	// matches every firing.
