@@ -12,8 +12,9 @@
  *   - Each list's own order: the category's top level, a folder, or a page
  *     with pages under it sorts A to Z, by hand or newest first
  *     (data-root-order / data-child-order). In a list kept by hand, someone
- *     who may edit gets up and down arrows on each row and Alt+Up/Down on a
- *     focused row; the row menu offers the same moves and the order choice.
+ *     who may edit drags a row into place, or uses its up and down arrows or
+ *     Alt+Up/Down on a focused row; the row menu offers the same moves and
+ *     the order choice. Dropping a row onto a folder moves it inside.
  *   - Extra listings (data-place-key rows): the same page under a second
  *     parent, a leaf with an "also here" label. They are added from the
  *     page's own place line and never move on their own.
@@ -275,6 +276,9 @@
         wrapper.classList.add('has-more');
       }
 
+      // Drag: within a list kept by hand, and onto a folder from anywhere.
+      if (canEdit && !node.isPlace) link.setAttribute('draggable', 'true');
+
       // A listing follows its page, so it never moves on its own.
       if (canEdit && listMode === 'hand' && !node.isPlace) {
         var steps = document.createElement('span');
@@ -422,13 +426,24 @@
     }
     if (wrapper.scrollIntoView) wrapper.scrollIntoView({ block: 'nearest' });
 
+    announce(rowName(wrapper) + (dir < 0 ? ' moved up.' : ' moved down.'));
+    saveMove(wrapper, other, dir > 0);
+    return true;
+  }
+
+  function rowName(wrapper) {
+    var link = wrapper.querySelector(':scope > .sidebar-tree-item');
+    return link ? link.getAttribute('data-entity-name') || '' : '';
+  }
+
+  /** Saves a row now sitting just before (or, with after, just after) other. */
+  function saveMove(wrapper, other, after) {
+    var tree = document.getElementById('sidebar-entity-tree');
+    if (!tree) return;
     var folder = wrapper.hasAttribute('data-node-id');
     var idAttr = folder ? 'data-node-id' : 'data-entity-id';
-    var link = wrapper.querySelector(':scope > .sidebar-tree-item');
-    var name = link ? link.getAttribute('data-entity-name') || '' : '';
-    announce(name + (dir < 0 ? ' moved up.' : ' moved down.'));
     var url = '/campaigns/' + encodeURIComponent(tree.getAttribute('data-campaign-id') || '') + '/sidebar-order/move';
-    var body = { kind: folder ? 'folder' : 'page', id: wrapper.getAttribute(idAttr), next_to: other.getAttribute(idAttr), after: dir > 0 };
+    var body = { kind: folder ? 'folder' : 'page', id: wrapper.getAttribute(idAttr), next_to: other.getAttribute(idAttr), after: after };
     moveQueue = moveQueue.then(function () {
       return Chronicle.apiFetch(url, { method: 'PUT', body: body }).then(function (res) {
         if (!res.ok) throw new Error(String(res.status));
@@ -437,7 +452,105 @@
       if (window.Chronicle && Chronicle.notify) Chronicle.notify('The move could not be saved. The list shows the saved order again.', 'error');
       refreshSidebarTree();
     });
-    return true;
+  }
+
+  // --- Drag ----------------------------------------------------------------
+  // A dragged row drops beside a sibling of its own kind in a list kept by
+  // hand (the top or bottom half of the row says which side), or onto a
+  // folder to move inside it. Touch has the arrows and the row menu, since a
+  // long press there opens the menu.
+
+  var dragged = null;
+
+  /** What dropping the dragged row on wrapper at clientY would do, or null. */
+  function dropFor(wrapper, clientY) {
+    if (!dragged || !wrapper || wrapper === dragged || dragged.contains(wrapper) || wrapper.hasAttribute('data-place-key')) return null;
+    var row = wrapper.querySelector(':scope > .sidebar-tree-item');
+    if (!row) return null;
+    var sameKind = wrapper.hasAttribute('data-node-id') === dragged.hasAttribute('data-node-id');
+    if (sameKind && wrapper.parentElement === dragged.parentElement && listOrder(wrapper.parentElement) === 'hand') {
+      var r = row.getBoundingClientRect();
+      var into = wrapper.hasAttribute('data-node-id') && clientY > r.top + r.height / 3 && clientY < r.bottom - r.height / 3;
+      if (!into) return { kind: clientY < r.top + r.height / 2 ? 'before' : 'after', wrapper: wrapper, row: row };
+    }
+    if (wrapper.hasAttribute('data-node-id')) {
+      // Already in this folder: nothing would change.
+      if (dragged.parentElement && dragged.parentElement.parentElement === wrapper) return null;
+      return { kind: 'into', wrapper: wrapper, row: row };
+    }
+    return null;
+  }
+
+  function clearDrop() {
+    document.querySelectorAll('#sidebar-entity-tree .drop-before, #sidebar-entity-tree .drop-after, #sidebar-entity-tree .drop-into').forEach(function (el) {
+      el.classList.remove('drop-before', 'drop-after', 'drop-into');
+    });
+  }
+
+  document.addEventListener('dragstart', function (e) {
+    var row = e.target && e.target.closest ? e.target.closest('#sidebar-entity-tree .sidebar-tree-item[draggable="true"]') : null;
+    if (!row) return;
+    dragged = row.parentElement;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', rowName(dragged));
+    setTimeout(function () { if (dragged) dragged.classList.add('is-dragging'); }, 0);
+  });
+
+  document.addEventListener('dragover', function (e) {
+    if (!dragged) return;
+    var wrapper = e.target && e.target.closest ? e.target.closest('#sidebar-entity-tree .sidebar-tree-node') : null;
+    var drop = dropFor(wrapper, e.clientY);
+    clearDrop();
+    if (!drop) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    drop.row.classList.add('drop-' + drop.kind);
+  });
+
+  document.addEventListener('drop', function (e) {
+    if (!dragged) return;
+    var wrapper = e.target && e.target.closest ? e.target.closest('#sidebar-entity-tree .sidebar-tree-node') : null;
+    var drop = dropFor(wrapper, e.clientY);
+    var moved = dragged;
+    clearDrop();
+    if (!drop) return;
+    e.preventDefault();
+    if (drop.kind === 'into') { moveInto(moved, drop.wrapper); return; }
+    var list = moved.parentElement;
+    list.insertBefore(moved, drop.kind === 'before' ? drop.wrapper : drop.wrapper.nextSibling);
+    refreshSteps(list);
+    announce(rowName(moved) + ' moved.');
+    saveMove(moved, drop.wrapper, drop.kind === 'after');
+  });
+
+  document.addEventListener('dragend', function () {
+    if (dragged) dragged.classList.remove('is-dragging');
+    dragged = null;
+    clearDrop();
+  });
+
+  /** Files a dragged page or folder inside a folder, at the end, then redraws. */
+  function moveInto(wrapper, folderWrapper) {
+    var tree = document.getElementById('sidebar-entity-tree');
+    if (!tree) return;
+    var base = '/campaigns/' + encodeURIComponent(tree.getAttribute('data-campaign-id') || '');
+    var to = folderWrapper.getAttribute('data-node-id');
+    var isFolder = wrapper.hasAttribute('data-node-id');
+    var url = isFolder
+      ? base + '/sidebar-nodes/' + encodeURIComponent(wrapper.getAttribute('data-node-id')) + '/reorder'
+      : base + '/entities/' + encodeURIComponent(wrapper.getAttribute('data-entity-id')) + '/reorder';
+    var body = isFolder ? { parent_id: to } : { parent_id: null, parent_node_id: to, sort_order: 1000000 };
+    var name = rowName(wrapper), target = rowName(folderWrapper);
+    moveQueue = moveQueue.then(function () {
+      return Chronicle.apiFetch(url, { method: 'PUT', body: body }).then(function (res) {
+        if (!res.ok) throw new Error(String(res.status));
+        announce(name + ' moved to ' + target + '.');
+        refreshSidebarTree();
+      });
+    }).catch(function () {
+      if (window.Chronicle && Chronicle.notify) Chronicle.notify('The move could not be saved.', 'error');
+      refreshSidebarTree();
+    });
   }
 
   /** Says a move out loud for a screen reader, since nothing else changes. */

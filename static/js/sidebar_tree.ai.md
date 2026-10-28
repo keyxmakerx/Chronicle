@@ -49,6 +49,14 @@ is), turns off arrows at the ends, and saves through
 clicks save in order. A failed save says so and redraws the saved order. A
 folder steps among folders and a page among pages; extra listings never move.
 
+Someone who may edit can also drag a row (`draggable` on the row, never on
+an extra listing): in a list kept by hand, dropping on the top or bottom half
+of a sibling of the same kind places it there (the same save as the arrows);
+dropping on the middle of any folder files the row at the end of that folder
+(`PUT .../entities/:eid/reorder` or `.../sidebar-nodes/:nid/reorder`) and
+redraws. A list kept A to Z or newest first takes only the folder drop. Touch
+uses the arrows and the row menu, since a long press opens the menu.
+
 `setOrder(kind, id, mode, then)` saves a list's order and redraws. The
 category's picker (`[data-tree-order]`, drawn by the server above the tree
 for a Scribe or the owner) and the row menu's "Order inside…" use it.
@@ -89,6 +97,8 @@ are appended and the tree is re-initialized.
 
 - `PUT /campaigns/:id/sidebar-order` — a list's order `{kind, id, mode}`
 - `PUT /campaigns/:id/sidebar-order/move` — `{kind, id, next_to, after}`
+- `PUT /campaigns/:id/entities/:eid/reorder` and
+  `PUT /campaigns/:id/sidebar-nodes/:nid/reorder` — a drop onto a folder
 - `PUT /campaigns/:id/entities/:eid/metadata` and
   `PUT /campaigns/:id/sidebar-nodes/:nid` — rename
 - `GET /campaigns/:id/entities/search?sidebar=1&type=N&page=P` — entity list

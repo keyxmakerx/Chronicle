@@ -3780,6 +3780,12 @@
     :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .tree-step { opacity: 1; }
     #sidebar.nav-tools-gated:not([data-nav-tools="on"]) .tree-step { visibility: hidden; }
   }
+  /* Dragging a row: where it lands shows as a line above or below a row in a
+     list kept by hand, or as a filled folder it will move into. */
+  .sidebar-tree-node.is-dragging > .tree-row { opacity: 0.4; }
+  .tree-row.drop-before { box-shadow: inset 0 2px 0 rgb(var(--nav-accent)); }
+  .tree-row.drop-after { box-shadow: inset 0 -2px 0 rgb(var(--nav-accent)); }
+  .tree-row.drop-into { background: rgb(var(--nav-accent) / 0.18); border-radius: 6px; box-shadow: inset 0 0 0 1px rgb(var(--nav-accent) / 0.6); }
   /* The category's order picker, above its tree: a value picker, so a
      bordered control. */
   .tree-order { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 2px 14px 4px; }

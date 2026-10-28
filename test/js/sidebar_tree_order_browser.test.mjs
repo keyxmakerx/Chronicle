@@ -160,3 +160,37 @@ test('the category picker saves its order; a failed move says so and redraws the
     await pg.waitForFunction(() => [...document.querySelectorAll('#sidebar-entity-tree > .sidebar-tree-node > .sidebar-tree-item .tree-lb')].map((l) => l.textContent).join() === 'Lore,Bryn,Cass,Ash');
   } finally { await browser.close(); }
 });
+
+test('dragging a page reorders a list kept by hand; dropping it on a folder files it there', { skip }, async () => {
+  const { browser, pg } = await open(EDITOR);
+  try {
+    const rowOf = (id) => `.sidebar-tree-node[data-entity-id="${id}"] > a`;
+    // Ash onto the lower half of Cass: Ash goes after Cass.
+    const cass = await pg.locator(rowOf('e3')).boundingBox();
+    await pg.locator(rowOf('e1')).dragTo(pg.locator(rowOf('e3')), { targetPosition: { x: 20, y: cass.height - 3 } });
+    assert.deepEqual(await topNames(pg), ['Lore', 'Bryn', 'Cass', 'Ash']);
+    await pg.waitForFunction(() => sent.length === 1);
+    assert.deepEqual(await pg.evaluate(() => sent[0]), { url: '/campaigns/c1/sidebar-order/move', method: 'PUT', body: { kind: 'page', id: 'e1', next_to: 'e3', after: true } });
+
+    // Bryn onto the folder: filed at the end of Lore.
+    await pg.locator(rowOf('e2')).dragTo(pg.locator('.sidebar-tree-node[data-node-id="n1"] > .sidebar-tree-item'));
+    await pg.waitForFunction(() => sent.length === 2);
+    assert.deepEqual(await pg.evaluate(() => sent[1]), { url: '/campaigns/c1/entities/e2/reorder', method: 'PUT', body: { parent_id: null, parent_node_id: 'n1', sort_order: 1000000 } });
+    assert.equal(await pg.$('.drop-before, .drop-after, .drop-into, .is-dragging'), null, 'no drop marks are left behind');
+  } finally { await browser.close(); }
+});
+
+test('a player cannot drag rows, and a list kept A to Z takes no reorder drop', { skip }, async () => {
+  const { browser, pg } = await open('');
+  try {
+    assert.equal(await pg.$('#sidebar-entity-tree [draggable="true"]'), null);
+  } finally { await browser.close(); }
+  const ed = await open(EDITOR, 'az');
+  try {
+    const rowOf = (id) => `.sidebar-tree-node[data-entity-id="${id}"] > a`;
+    const before = await topNames(ed.pg);
+    await ed.pg.locator(rowOf('e1')).dragTo(ed.pg.locator(rowOf('e3')));
+    assert.deepEqual(await topNames(ed.pg), before);
+    assert.deepEqual(await ed.pg.evaluate(() => sent), []);
+  } finally { await ed.browser.close(); }
+});
