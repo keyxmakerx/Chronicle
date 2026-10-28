@@ -211,7 +211,7 @@ window.CraftingRecipes = (function () {
           return '<span class="cra-pill">' + esc(names[id] || 'A character') + '<button type="button" class="cra-x" data-act="rm-known" data-i="' + i + '" aria-label="Forget for ' + esc(names[id] || 'this character') + '">' + I.x + '</button></span>';
         }).join('') : '<span class="cra-fine">Nobody yet.</span>') + '</div>' +
           '<select class="cra-in cra-sm" data-f="add-known" aria-label="Add a character who knows it">' + opt('', 'Add a character…', true) +
-          app.characters.filter(function (c) { return r.known.indexOf(c.id) < 0; }).map(function (c) { return opt(c.id, c.name, false); }).join('') + '</select><em>Characters also learn it in play.</em>';
+          app.characters.filter(function (c) { return r.known.indexOf(c.id) < 0; }).map(function (c) { return opt(c.id, c.name, false); }).join('') + '</select><em>Their players see it in their recipe book.</em>';
       } else {
         h += '<em>Any character can try it.</em>';
       }
