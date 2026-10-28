@@ -12,8 +12,9 @@ import (
 // RegisterRoutes mounts the routes under the campaign group, behind the
 // crafting addon. Every member reaches every route; the service lets only a
 // Director (the Owner or a co-Director, which a role middleware cannot
-// express) see the editors' data or change anything, and shows a player
-// only the recipe book. CSRF is enforced by the global middleware.
+// express) see the editors' data or change them, shows a player only the
+// recipe book, and lets a player start and roll projects only for a
+// character they have claimed. CSRF is enforced by the global middleware.
 func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
@@ -44,4 +45,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/crafting/benches/:bid", h.UpdateBench, member)
 	cg.PUT("/crafting/benches/:bid/look/:skin", h.SaveArrangement, member)
 	cg.DELETE("/crafting/benches/:bid", h.DeleteBench, member)
+
+	cg.GET("/crafting/characters/:eid", h.Character, member)
+	cg.POST("/crafting/characters/:eid/projects", h.StartProject, member)
+	cg.GET("/crafting/projects", h.Projects, member)
+	cg.POST("/crafting/projects/:pid/roll", h.RollProject, member)
+	cg.POST("/crafting/projects/:pid/rolls", h.GiveRoll, member)
+	cg.PUT("/crafting/projects/:pid/points", h.SetPoints, member)
+	cg.DELETE("/crafting/projects/:pid", h.CancelProject, member)
+	cg.POST("/crafting/respites", h.LogRespite, member)
 }

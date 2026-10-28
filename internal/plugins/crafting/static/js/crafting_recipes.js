@@ -16,8 +16,7 @@ window.CraftingRecipes = (function () {
   /* Material art is one small shape per crafting tag, tinted, so a new item
      never needs a new picture. */
   var TAG_SHAPE = {herb: 'herb', liquid: 'liquid', metal: 'metal', hide: 'hide', bone: 'bone', magic_essence: 'essence', remnant_part: 'essence', body_part: 'hide', magic_item: 'mineral'};
-  var TAG_COLOR = {herb: '#6a9c3a', liquid: '#8fbbe0', metal: '#8d939c', hide: '#9a6a3e', bone: '#e3d6b8', magic_essence: '#a77cf0', remnant_part: '#6d45c4', body_part: '#b3263a', magic_item: '#7fd6d2'};
-  var BENCH_COLORS = {base: '#cfe3f2', paste: '#7e1a2a', mid: '#a63a4a', final: '#ff4d6d'};
+  var TAG_COLOR = L.TAG_COLOR, BENCH_COLORS = L.BENCH_COLORS;
   function shape(kind, c, sz) {
     var s = sz || 32, k = 'stroke="rgb(0 0 0 / .38)" stroke-width="1.4" stroke-linejoin="round"', d;
     if (kind === 'herb') d = '<path d="M20 4C31 11 33 25 20 36C7 25 9 11 20 4Z" fill="' + c + '" ' + k + '/><path d="M20 9V33M20 17l-5-4M20 23l6-5M20 28l-5-3" stroke="rgb(0 0 0 / .32)" stroke-width="1.2" fill="none"/>';

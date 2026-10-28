@@ -38,6 +38,13 @@ var systemViewerAllowlist = map[string]bool{
 	// ListInstances backs the Scribe+-gated binding picker route, which
 	// carries a role but no per-request user id.
 	"internal/plugins/calendar/calendar_widget_type.go": true,
+	// A recipe's rules are the Director's, so craftingDaysAdapter reads
+	// today's moons, events, weather and season with the Director's sight
+	// whoever rolls. Only the rule's effect and the words the Director chose
+	// to show reach a player; today's date reaches the block only for a
+	// viewer the default calendar is visible to, and a respite's date only
+	// the Director's Projects tab.
+	"internal/app/crafting_adapters.go": true,
 }
 
 // TestSystemViewerAllowlist scans internal/ for calls to

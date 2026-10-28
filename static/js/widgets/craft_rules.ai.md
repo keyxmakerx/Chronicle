@@ -153,5 +153,7 @@ can read as drafts. "Show what the AI writes" shows each rule's data under it.
 
 - TODO(#1842): the mockup's "If it goes wrong" and "Extras" tabs, mishap
   moments, the Benches view, and asking the AI in place.
-- TODO(#1858): evaluating the rules at the project roll.
+- TODO(#1863): rules on time of day, ingredient marks and skills at a project
+  roll. The server's reading (`internal/plugins/crafting/verdict.go`) follows
+  this verdict and leaves them "maybe", as the preview does.
 - TODO(#1824): the recipe editor's fold-out over the crafting widget.

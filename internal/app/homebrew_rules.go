@@ -10,13 +10,24 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 )
 
+// respiteEvent is the Homebrew event a logged respite fires.
+const respiteEvent = "respite.logged"
+
 func init() {
-	addWorkshopSource("respite", func(reg *homebrew.Registry, _ workshopDeps) error {
-		return reg.RegisterEvent(homebrew.EventDef{Name: "respite.logged", Label: "A respite is logged", Press: "Log a respite",
+	addWorkshopSource("respite", func(reg *homebrew.Registry, d workshopDeps) error {
+		def := homebrew.EventDef{Name: respiteEvent, Label: "A respite is logged", Press: "Log a respite",
 			Check: func(_ context.Context, _ string, raw json.RawMessage) (json.RawMessage, error) {
 				var none struct{}
 				return json.RawMessage(`{}`), strictJSON(raw, &none)
-			}})
+			}}
+		// One press is one respite for crafting too: every project in
+		// progress gets its roll.
+		if d.Respites != nil {
+			def.Pressed = func(ctx context.Context, campaignID string, by homebrew.Viewer) error {
+				return d.Respites.RespitePressed(ctx, campaignID, by)
+			}
+		}
+		return reg.RegisterEvent(def)
 	})
 }
 

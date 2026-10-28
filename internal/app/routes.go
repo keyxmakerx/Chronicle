@@ -6143,21 +6143,41 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
 
-	// Crafting: recipes, crafting tags on Armory items, benches and the
-	// campaign's crafting settings. The app and its routes exist only while
-	// its tables migrated.
+	// Crafting: recipes, crafting tags on Armory items, benches, the
+	// campaign's crafting settings, and heroes' projects, which pay and
+	// deliver through the Armory. The app, its routes and the character
+	// block exist only while its tables migrated.
 	a.registerPlugin(PluginRegistration{
 		Slug:     crafting.PluginSlug,
 		StaticFS: echo.MustSubFS(crafting.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "crafting", Scripts: []string{"js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting.js"}},
+			{Name: "crafting", Scripts: []string{"js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting.js"}},
+			{Name: "crafting-block", Scripts: []string{"js/crafting_lib.js", "js/crafting_block.js"}},
 		},
 	})
+	craftingOn := func(ctx context.Context, campaignID string) bool {
+		on, err := addonService.IsEnabledForCampaign(ctx, campaignID, crafting.AddonSlug)
+		return err == nil && on
+	}
+	// The Homebrew service is built further down; the hook is filled in then.
+	craftingRespites := &craftingRespiteHook{}
+	var craftingListener respiteListener // nil while crafting is degraded
 	if a.PluginHealth.IsHealthy(crafting.PluginSlug) {
-		craftingSvc := crafting.NewService(crafting.NewRepository(a.DB),
-			&craftingDirectoryAdapter{dir: stashDirectory}, &craftingRulesAdapter{sys: systemHandler})
+		craftingRepo := crafting.NewRepository(a.DB)
+		craftingSvc := crafting.NewService(craftingRepo,
+			&craftingDirectoryAdapter{dir: stashDirectory}, &craftingRulesAdapter{sys: systemHandler},
+			crafting.ProjectDeps{
+				Store:    craftingRepo.(crafting.ProjectStore),
+				Armory:   &craftingArmoryAdapter{stash: stashSvc},
+				Sheets:   &craftingSheetsAdapter{entities: entityService},
+				Days:     &craftingDaysAdapter{cal: calendarService},
+				Calendar: &craftingCalendarAdapter{cal: calendarService},
+				Respite:  craftingRespites,
+			})
 		crafting.RegisterRoutes(e, crafting.NewHandler(craftingSvc, &craftingCalendarAdapter{cal: calendarService}),
 			campaignService, authService, addonService)
+		registerCraftingBlock(blockRegistry, craftingSvc)
+		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
 	} else {
 		slog.Warn("crafting plugin degraded — the Crafting app is not available")
 	}
@@ -6199,6 +6219,7 @@ func (a *App) RegisterRoutes() {
 		SystemState:    systemStateSvc,
 		Systems:        systemHandler,
 		Trackers:       trackersSvc,
+		Respites:       craftingListener,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
@@ -6212,6 +6233,7 @@ func (a *App) RegisterRoutes() {
 		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService},
 			homebrew.NewRunStore(a.DB))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
+		craftingRespites.homebrew = homebrewSvc
 		// A saved recipe is placed with the Customizer only while the
 		// block that shows it exists.
 		if trackersSvc != nil {

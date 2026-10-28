@@ -1,0 +1,22 @@
+package crafting
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// BlockType is the Crafting block on a character's page.
+const BlockType = "crafting"
+
+// BlockMount is the mount point of the Crafting block. The widget reads the
+// hero's projects, pack and recipes itself and the service decides what the
+// viewer is told, so this markup carries no crafting data. The caller
+// renders it only for the character's player or a Director.
+templ BlockMount(campaignID, entityID, csrfToken string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/crafting.css") }/>
+	<div
+		data-widget="crafting-block"
+		data-campaign-id={ campaignID }
+		data-entity-id={ entityID }
+		data-csrf-token={ csrfToken }
+	>
+		<p class="text-sm text-fg-muted" role="status">Loading crafting…</p>
+	</div>
+}
