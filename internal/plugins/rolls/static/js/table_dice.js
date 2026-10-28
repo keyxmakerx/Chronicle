@@ -39,8 +39,10 @@
 
   function pts(a) { return a.map(function (p) { return p.join(','); }).join(' '); }
 
+  // Only whole numbers reach the markup, whatever the payload held.
   function svg(sides, value) {
-    var g = shapeOf(sides);
+    var g = shapeOf(Number(sides) || 0);
+    value = value == null || value === '' ? '' : (isFinite(Number(value)) ? Math.trunc(Number(value)) : '');
     var lines = g.k.map(function (k) {
       var a = g.f[k[0]], b = g.o[k[1]];
       return '<line x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '" class="tdl"/>';
@@ -48,7 +50,7 @@
     return '<svg viewBox="0 0 56 56" aria-hidden="true" focusable="false"><polygon class="tdb" points="' + pts(g.o) + '"/>' +
       g.sh.map(function (s) { return '<polygon class="tds" points="' + pts(s) + '"/>'; }).join('') +
       '<polygon class="tdf" points="' + pts(g.f) + '"/>' + lines + '<polygon class="tdr" points="' + pts(g.o) + '"/>' +
-      '<text x="' + g.t[0] + '" y="' + g.t[1] + '">' + (value == null ? '' : value) + '</text></svg>';
+      '<text x="' + g.t[0] + '" y="' + g.t[1] + '">' + value + '</text></svg>';
   }
 
   function motion() {

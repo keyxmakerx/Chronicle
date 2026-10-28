@@ -31,6 +31,9 @@
   // How long the island stays out, in ms.
   var ISLAND_STAY = 3400;
 
+  // Dice figures go into markup unescaped, so anything that isn't a whole
+  // number becomes 0 rather than trusting the payload's shape.
+  function num(v) { var n = Number(v); return isFinite(n) ? Math.trunc(n) : 0; }
   function esc(s) { return C.escapeHtml ? C.escapeHtml(s == null ? '' : String(s)) : String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -251,9 +254,9 @@
       rows += '<dt>Result</dt><dd>Only the ' + esc(this.gm) + ' sees it</dd><dt>Dice</dt><dd>' + esc(r.formula) + '</dd>';
     } else {
       var faces = (r.dice || []).map(function (d) {
-        return '<span class="tt-face" title="d' + d.sides + '">' + d.value + '</span>';
+        return '<span class="tt-face" title="d' + num(d.sides) + '">' + num(d.value) + '</span>';
       }).join('<span>+</span>');
-      var mod = r.modifier || 0;
+      var mod = num(r.modifier);
       if (mod) faces += '<span>' + (mod > 0 ? '+' : '−') + '</span><span>' + Math.abs(mod) + '</span>';
       rows += '<dt>Math</dt><dd class="tt-math">' + (faces || esc(r.formula)) + '<span>=</span><span class="tt-eq">' + esc(r.total) + '</span></dd>';
       if (r.outcome) rows += '<dt>Result</dt><dd>' + esc(r.outcome) + '</dd>';
