@@ -1,0 +1,176 @@
+/* The Table tab's drawer, roll log, roller, quick 2D dice and the roll
+   notice (the header island). Material surfaces, from the site's colour
+   tokens, so the Light and Dark themes and a style kit's palette follow; the
+   kit also sets the island's corners and edge. The tab itself is styled in
+   input.css so it never flashes unstyled. */
+
+:root { --tt-r-ctl: 8px; --tt-dm: rgb(var(--color-warn-rgb)); --td-body: #f3eee2; --td-lit: #fffdf7; --td-shade: #d9d0bb; --td-ink: #2a2418; }
+.dark { --td-body: #2b3047; --td-lit: #3a4060; --td-shade: #1d2134; --td-ink: #eef0f8; }
+[data-cz-kit="sharp"] { --tt-r-ctl: 2px; }
+[data-cz-kit="ornate"] { --tt-r-ctl: 10px; }
+
+.tt-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tt-quiet { background: none; border: 0; padding: 4px 2px; min-height: 32px; color: var(--color-accent-link, var(--color-accent)); cursor: pointer; font: inherit; font-size: 13px; }
+.tt-quiet:hover { text-decoration: underline; text-underline-offset: 3px; }
+.tt-icon { width: 32px; height: 32px; display: inline-grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--color-text-secondary); cursor: pointer; }
+.tt-icon:hover { border-color: var(--color-border); color: var(--color-text-primary); }
+.tt-icon svg { width: 16px; height: 16px; }
+
+/* ---------- The drawer drapes from the header's lower edge, over the page ---------- */
+.tt-drawer { position: absolute; z-index: 40; top: 100%; right: 10px; width: min(1040px, calc(100vw - 20px)); max-height: min(640px, calc(100vh - 72px)); display: flex; flex-direction: column;
+  background: var(--color-bg-secondary); color: var(--color-text-body); border: 1px solid var(--color-border); border-top: 0; border-radius: 0 0 12px 12px;
+  box-shadow: var(--elev-hover); clip-path: inset(0 -40px -40px -40px); font-size: 14px; line-height: 1.5; text-align: left; }
+[data-cz-kit="sharp"] .tt-drawer { border-radius: 0; border-color: var(--color-text-primary); }
+.tt-drawer.tt-opening { animation: tt-drape var(--dur-standard) var(--ease-out); }
+.tt-drawer.tt-closing { animation: tt-drape var(--dur-micro) var(--ease-in) reverse forwards; }
+@keyframes tt-drape { from { clip-path: inset(0 -40px 100% -40px); } to { clip-path: inset(0 -40px -40px -40px); } }
+.tt-dhead { display: flex; align-items: center; gap: 8px; padding: 8px 10px 6px 16px; }
+.tt-dhead h2 { flex: 1; margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-primary); }
+
+/* Leaves side by side, like the DM Screen; each shows one section. */
+.tt-leaves { display: grid; grid-template-columns: repeat(var(--tt-n, 2), minmax(0, 1fr)); min-height: 0; flex: 1; padding: 0 12px 12px; }
+.tt-leaf { min-width: 0; min-height: 0; max-height: 560px; display: flex; flex-direction: column; background: var(--color-bg-primary); border: 1px solid var(--color-border); }
+.tt-leaf:first-child { border-radius: 12px 0 0 12px; }
+.tt-leaf:last-child { border-radius: 0 12px 12px 0; }
+.tt-leaf:only-child { border-radius: 12px; }
+.tt-leaf + .tt-leaf { border-left: 0; }
+.tt-ltabs { position: relative; display: flex; padding: 4px 6px 0; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
+.tt-lpick { position: relative; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 8px; border: 0; background: none; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-link, var(--color-accent)); }
+.tt-lpick::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: 0; height: 2px; background: var(--color-accent); }
+.tt-lpick svg { width: 13px; height: 13px; transition: transform var(--dur-standard) var(--ease-out); }
+.tt-lpick[aria-expanded="true"] svg { transform: rotate(180deg); }
+.tt-lmenu { position: absolute; z-index: 5; top: 40px; left: 8px; min-width: 210px; background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 8px; box-shadow: var(--elev-hover); padding: 4px; display: flex; flex-direction: column; }
+.tt-lmenu[hidden] { display: none; }
+.tt-lmenu button { display: flex; justify-content: space-between; gap: 12px; align-items: center; border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; color: var(--color-text-primary); min-height: 32px; }
+.tt-lmenu button:hover { background: var(--color-bg-tertiary); }
+.tt-lmenu button[aria-checked="true"] { color: var(--color-accent-link, var(--color-accent)); box-shadow: inset 2px 0 0 var(--color-accent); }
+.tt-mnote { font-size: 11.5px; color: var(--color-text-muted); }
+.tt-lbody { overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; }
+.tt-lbody.tt-settle { animation: tt-settle var(--dur-large) var(--ease-out); }
+@keyframes tt-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.tt-phone-sw { display: none; }
+
+/* ---------- The roll log ---------- */
+.tt-log { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; min-height: 120px; }
+.tt-log > li { border-bottom: 1px solid var(--color-border); }
+.tt-log > li.tt-dm { box-shadow: inset 3px 0 0 var(--tt-dm); }
+.tt-log > li.tt-fresh { animation: tt-glow 1.2s var(--ease-out); }
+@keyframes tt-glow { from { background: color-mix(in srgb, var(--color-accent) 16%, transparent); } to { background: transparent; } }
+.tt-row { width: 100%; border: 0; background: none; text-align: left; cursor: pointer; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 1px 9px; padding: 8px 12px; align-items: center; font: inherit; color: inherit; }
+.tt-row:hover { background: var(--color-bg-tertiary); }
+.tt-who { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; background: var(--color-bg-tertiary); color: var(--color-text-body); grid-row: span 2; }
+.tt-l1 { min-width: 0; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.tt-l1 b { color: var(--color-text-primary); font-weight: 600; }
+.tt-l2 { min-width: 0; font-size: 11.5px; color: var(--color-text-muted); }
+.tt-tot { grid-row: span 2; font-size: 1.35rem; font-weight: 600; line-height: 1; color: var(--color-text-primary); font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+.tt-tot.tt-hid { color: var(--color-text-muted); font-size: 1.05rem; }
+.tt-chip { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; background: var(--color-bg-tertiary); color: var(--color-text-secondary); white-space: nowrap; }
+.tt-chip.tt-dmc { background: color-mix(in srgb, var(--tt-dm) 16%, transparent); color: var(--tt-dm); }
+.tt-chip.tt-out { background: color-mix(in srgb, var(--color-accent) 14%, transparent); color: var(--color-accent-link, var(--color-accent)); }
+.tt-empty { padding: 20px 14px; text-align: center; color: var(--color-text-muted); font-size: 13px; list-style: none; }
+.tt-err { color: rgb(var(--color-bad-rgb)); }
+
+/* A roll's details: the dice, the math, where it came from and who sees it. */
+.tt-detail { padding: 2px 12px 12px 47px; font-size: 12.5px; }
+.tt-detail[hidden] { display: none; }
+.tt-dl { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 4px 10px; margin: 0; }
+.tt-dl dt { color: var(--color-text-muted); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 2px; }
+.tt-dl dd { margin: 0; color: var(--color-text-primary); min-width: 0; }
+.tt-math { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.tt-face { min-width: 24px; height: 24px; padding: 0 4px; border-radius: 4px; border: 1px solid var(--color-border); font-size: 11px; display: inline-grid; place-items: center; background: var(--color-bg-secondary); }
+.tt-eq { font-size: 1.1rem; font-weight: 600; }
+
+/* ---------- The roller ---------- */
+.tt-roller { border-top: 1px solid var(--color-border); padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; background: var(--color-bg-secondary); margin: 0; }
+.tt-dice { display: flex; gap: 4px; flex-wrap: wrap; }
+.tt-dbtn { min-width: 40px; height: 32px; border-radius: var(--tt-r-ctl); border: 1px solid var(--color-border); background: var(--color-bg-secondary); box-shadow: var(--elev-resting); cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; }
+.tt-dbtn:hover { box-shadow: var(--elev-hover); }
+.tt-dbtn:active { transform: scale(0.96); }
+.tt-crow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.tt-field { flex: 1 1 120px; min-width: 0; height: 34px; border-radius: var(--tt-r-ctl); border: 1px solid var(--color-border); background: var(--color-bg-primary); padding: 0 10px; color: var(--color-text-primary); font: inherit; font-size: 13px; }
+.tt-field:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent); }
+.tt-mode { height: 34px; max-width: 100%; border-radius: var(--tt-r-ctl); border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-primary); font: inherit; font-size: 12.5px; padding: 0 6px; }
+.tt-go { height: 34px; padding: 0 14px; border-radius: var(--tt-r-ctl); border: 1px solid transparent; background: var(--color-accent-fill, var(--color-accent)); color: var(--color-accent-on-fill, #fff); font: inherit; font-weight: 600; cursor: pointer; box-shadow: var(--elev-resting); }
+.tt-go:active { transform: scale(0.96); }
+.tt-ferr { margin: 0; font-size: 12px; color: rgb(var(--color-bad-rgb)); }
+
+/* ---------- My dice ---------- */
+.tt-mydice { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.tt-mydice p { margin: 0; }
+.tt-k { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-link, var(--color-accent)); }
+.tt-from { font-size: 12.5px; color: var(--color-text-secondary); }
+.tt-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--color-border); border-radius: var(--tt-r-ctl); background: var(--color-bg-secondary); box-shadow: var(--elev-resting); overflow: hidden; }
+.tt-seg button { border: 0; border-left: 1px solid var(--color-border); background: none; padding: 6px 11px; min-height: 32px; cursor: pointer; font: inherit; font-size: 13px; color: var(--color-text-body); }
+.tt-seg button:first-child { border-left: 0; }
+.tt-seg button:hover { background: var(--color-bg-tertiary); }
+.tt-seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--color-accent) 14%, transparent); color: var(--color-accent-link, var(--color-accent)); font-weight: 600; }
+.tt-ptray { position: relative; align-self: stretch; height: 120px; border-radius: var(--tt-r-ctl); background: var(--color-bg-tertiary); border: 1px dashed var(--color-border); overflow: hidden; }
+
+/* ---------- Quick 2D dice: flat facets lit from above ---------- */
+.tt-tray { position: fixed; z-index: 900; inset: 56px 0 0 0; pointer-events: none; overflow: hidden; }
+.td-die { position: absolute; width: 56px; height: 56px; filter: drop-shadow(0 7px 7px rgb(0 0 0 / 0.22)); }
+.td-die svg, .tt-mini svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.tdb { fill: var(--td-body); stroke: var(--td-shade); stroke-width: 1; stroke-linejoin: round; }
+.tdf { fill: var(--td-lit); }
+.tds { fill: var(--td-shade); opacity: 0.55; }
+.tdl { stroke: var(--td-shade); stroke-width: 1; }
+.tdr { fill: none; stroke: transparent; stroke-width: 2.5; }
+.td-hi .tdr { stroke: var(--color-accent); }
+.td-lo .tdr { stroke: rgb(var(--color-bad-rgb)); }
+.td-die text, .tt-mini text { font: 600 17px Inter, system-ui, sans-serif; fill: var(--td-ink); text-anchor: middle; dominant-baseline: central; font-variant-numeric: tabular-nums; }
+.tt-mini { display: inline-block; width: 16px; height: 16px; flex-shrink: 0; }
+.tt-mini-l { width: 24px; height: 24px; }
+
+/* ---------- The island slides out from behind the Table tab and back ---------- */
+.tt-isl-clip { position: absolute; z-index: 35; top: 0; bottom: 0; left: 0; overflow: hidden; pointer-events: none; }
+.tt-island { position: absolute; top: 50%; right: 6px; height: 34px; margin-top: -17px; max-width: calc(100% - 12px); display: flex; align-items: center; gap: 9px; padding: 0 10px 0 6px;
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: var(--tt-r-ctl); box-shadow: var(--elev-hover); color: var(--color-text-body);
+  white-space: nowrap; pointer-events: auto; cursor: pointer; font: inherit; font-size: 13px; transform: translateX(calc(100% + 12px)); }
+.tt-island:hover { box-shadow: var(--elev-dragged); }
+.tt-island.tt-in { transform: none; transition: transform var(--dur-slide) var(--ease-slide); }
+.tt-island.tt-out { transform: translateX(calc(100% + 12px)); transition: transform var(--dur-standard) var(--ease-in); }
+.tt-island.tt-dm { box-shadow: var(--elev-hover), inset 3px 0 0 var(--tt-dm); }
+.tt-who2 { font-size: 12.5px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; }
+.tt-what2 { font-size: 12.5px; color: var(--color-text-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.tt-num { font-size: 1.2rem; font-weight: 600; line-height: 1; color: var(--color-accent-link, var(--color-accent)); min-width: 22px; text-align: right; font-variant-numeric: tabular-nums; }
+.tt-more { width: 14px; height: 14px; color: var(--color-text-muted); transition: transform var(--dur-standard) var(--ease-out); }
+.tt-island[aria-expanded="true"] .tt-more { transform: rotate(180deg); }
+[data-cz-kit="sharp"] .tt-island { box-shadow: var(--elev-resting); border-color: var(--color-text-primary); border-bottom: 3px double var(--color-text-primary); }
+[data-cz-kit="ornate"] .tt-island { border: 3px double var(--color-border); }
+[data-cz-kit="ornate"] .tt-island::before, [data-cz-kit="ornate"] .tt-island::after { content: ""; width: 5px; height: 5px; transform: rotate(45deg); border: 1px solid var(--color-accent); flex-shrink: 0; }
+
+/* The island's details drape down from its lower edge. */
+.tt-isl-detail { position: fixed; z-index: 45; top: 52px; width: min(380px, calc(100vw - 20px)); background: var(--color-bg-secondary); color: var(--color-text-body); border: 1px solid var(--color-border); border-radius: 0 0 12px 12px;
+  box-shadow: var(--elev-dragged); padding: 12px 14px; display: grid; gap: 10px; clip-path: inset(0 -40px -40px -40px); font-size: 13px; }
+.tt-isl-detail.tt-opening { animation: tt-drape var(--dur-standard) var(--ease-out); }
+.tt-isl-detail.tt-closing { animation: tt-drape var(--dur-micro) var(--ease-in) reverse forwards; }
+.tt-dhd { display: flex; align-items: center; gap: 8px; }
+.tt-dhd b { flex: 1; color: var(--color-text-primary); font-size: 14px; }
+.tt-bignum { font-size: 2rem; font-weight: 600; line-height: 1; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+.tt-foot { display: flex; justify-content: space-between; gap: 12px; }
+
+/* ---------- Phone: one leaf at a time, behind a switch ---------- */
+@media (max-width: 760px) {
+  .tt-drawer { right: 0; width: 100vw; border-left: 0; border-right: 0; border-radius: 0 0 12px 12px; }
+  .tt-leaves { grid-template-columns: 1fr; padding: 0 8px 8px; }
+  .tt-leaf { display: none; border-radius: 12px !important; border-left: 1px solid var(--color-border) !important; max-height: 470px; }
+  .tt-leaf.tt-on-phone { display: flex; }
+  .tt-phone-sw { display: flex; gap: 2px; padding: 0 10px 6px; }
+  .tt-ptab { height: 32px; padding: 0 10px; border: 0; background: none; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-secondary); border-bottom: 1px solid var(--color-border); }
+  .tt-ptab[aria-pressed="true"] { color: var(--color-accent-link, var(--color-accent)); border-bottom-color: var(--color-accent); }
+  .tt-who2 { display: none; }
+  .tt-isl-detail { left: 10px; right: 10px !important; width: auto; }
+}
+
+/* ---------- Motion: Calm fades in place, Off shows the end state ---------- */
+html[data-motion="calm"] .tt-drawer.tt-opening, html[data-motion="calm"] .tt-isl-detail.tt-opening { animation: tt-fade var(--dur-standard) linear; }
+html[data-motion="calm"] .tt-island { transform: none; opacity: 0; transition: opacity var(--dur-standard) linear; }
+html[data-motion="calm"] .tt-island.tt-in { opacity: 1; }
+html[data-motion="calm"] .tt-island.tt-out { transform: none; opacity: 0; }
+@keyframes tt-fade { from { opacity: 0; } to { opacity: 1; } }
+html[data-motion="off"] :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .tt-n) { animation: none !important; transition: none !important; }
+html[data-motion="off"] .tt-island { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .tt-n) { animation: none !important; transition: none !important; }
+  .tt-island { transform: none; }
+}

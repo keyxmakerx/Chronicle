@@ -393,6 +393,8 @@ Foundry module repo for the wire contract.
 | `crafting_projects` | A hero's crafting project: `character_id` (FK to `entities`, cascades), `recipe_id` (FK to `crafting_recipes`, sets NULL), and what the recipe said when it started (`recipe_name`, `goal`, `stat`, `result_item_id` FK to `entities` sets NULL, `result_qty`); `points`, `rolls_ready` (one per respite, stacking), `status` (`active`/`made`/`cancelled`), `delivered` (whether the made item reached the pack), `took` (what starting it took, for the Director), `started_by`, `started_at`, `finished_at`, `version`; FK to `campaigns` cascades |
 | `crafting_respites` | One row per respite logged, from the Crafting app or the Homebrew drawer: `logged_by`, `day_label` (the calendar's date then, `''` without one), `projects` (how many got a roll), `created_at`; FK to `campaigns` cascades |
 | `crafting_rolls` | Every project roll as made: `project_id` (FK to `crafting_projects`, cascades), `rolled_by`, `dice` (as they fell), `terms` (JSON, each term added), `total`, `points_from`, `points_to`; FK to `campaigns` cascades |
+| `campaign_rolls` | The roll log behind the Table tab: `origin` (`chronicle`/`foundry`) and `origin_id` (Foundry's chat message id; unique per campaign and origin, so a replay is a no-op), `source` (`table`/`crafting`/`foundry`), `roller_id` (no FK) and `roller_name`, `label`, `formula`, `dice` (JSON, as they fell), `modifier`, `total`, `outcome`, `why`, `from_where`, `mode` (`public`/`gm`/`blind`/`self`, who may see it); FK to `campaigns` cascades |
+| `campaign_roll_settings` | The table's dice look (`quick`/`rune`/`none`), which a new player starts on; FK to `campaigns` cascades |
 
 ### fieldrules (`internal/plugins/fieldrules/migrations/`)
 

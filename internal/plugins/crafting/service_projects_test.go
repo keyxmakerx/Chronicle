@@ -339,6 +339,31 @@ func TestRollProject_AddsUpAndFinishes(t *testing.T) {
 	}
 }
 
+type fakeRollLog struct{ got []ProjectRoll }
+
+func (f *fakeRollLog) ProjectRolled(_ context.Context, _ string, _ Viewer, r ProjectRoll) {
+	f.got = append(f.got, r)
+}
+
+func TestRollProject_ReachesTheRollLog(t *testing.T) {
+	fx := newProjectFx()
+	log := &fakeRollLog{}
+	fx.s.projects.Rolls = log
+	pv := fx.start(t)
+	fx.ready(pv.ID, 1)
+	fx.dice = []int{7, 8}
+	if _, err := fx.roll(t, pv.ID, WorkClean); err != nil {
+		t.Fatal(err)
+	}
+	if len(log.got) != 1 {
+		t.Fatalf("logged %d rolls, want 1", len(log.got))
+	}
+	r := log.got[0]
+	if r.Hero != "Mira" || r.Recipe != "Healing potion" || r.Sides != 10 || len(r.Dice) != 2 || r.Total != 19 || r.To != 19 || r.Goal != 30 || r.Finished {
+		t.Fatalf("logged %+v", r)
+	}
+}
+
 func TestRollProject_Refusals(t *testing.T) {
 	cases := []struct {
 		name  string

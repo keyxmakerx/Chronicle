@@ -59,6 +59,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rumours"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
@@ -6143,6 +6144,26 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
 
+	// Rolls: the campaign's roll log behind the header's Table tab. Rolls
+	// made at the Table, reported by Foundry, or made by crafting go live to
+	// the people each roll's mode lets see it.
+	a.registerPlugin(PluginRegistration{
+		Slug:     rolls.PluginSlug,
+		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/table.js"}},
+		},
+	})
+	var rollLog crafting.RollLog // nil while the roll log is degraded
+	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
+		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus})
+		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
+		syncAPIHandler.SetRolls(&rollsSyncAdapter{svc: rollsSvc}, foundryPlayerRepo)
+		rollLog = &craftingRollLog{svc: rollsSvc}
+	} else {
+		slog.Warn("rolls plugin degraded — the Table tab's roll log is not available")
+	}
+
 	// Crafting: recipes, crafting tags on Armory items, benches, the
 	// campaign's crafting settings, and heroes' projects, which pay and
 	// deliver through the Armory. The app, its routes and the character
@@ -6173,6 +6194,7 @@ func (a *App) RegisterRoutes() {
 				Days:     &craftingDaysAdapter{cal: calendarService},
 				Calendar: &craftingCalendarAdapter{cal: calendarService},
 				Respite:  craftingRespites,
+				Rolls:    rollLog,
 			})
 		crafting.RegisterRoutes(e, crafting.NewHandler(craftingSvc, &craftingCalendarAdapter{cal: calendarService}),
 			campaignService, authService, addonService)

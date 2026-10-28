@@ -189,7 +189,8 @@ would do.
   the style kit; clicking it, or a row of the roll log, drapes the roll's
   details down from it. T opens the table and R the rolls, never while
   typing; each person has quick 2D dice. The Handbook's Rules ribbon and its
-  P key stay as they are (TODO(#1475)).
+  P key stay as they are. The Table shows Rolls and My dice; Rules,
+  Conditions, Party and Notes leaves are TODO(#1475).
 - **Who sees what follows one check.** DM-only content is visible to everyone
   who can write it: the owner and members with DM access
   (`CampaignContext.VisibilityRole()` to see it, `CanAuthorDmOnly()` to write

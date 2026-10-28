@@ -14,10 +14,10 @@ import (
 )
 
 // ProjectDeps are what projects need beyond recipes: where they are kept,
-// the Armory, the hero's sheet, the calendar, and who hears of a respite.
-// Store and Armory are required for projects; Sheets, Days and Respite may
-// be nil (no characteristic is added, no calendar rule is on, no Homebrew
-// rule runs). Roll and Now are for tests.
+// the Armory, the hero's sheet, the calendar, who hears of a respite and the
+// roll log. Store and Armory are required for projects; Sheets, Days, Respite
+// and Rolls may be nil (no characteristic is added, no calendar rule is on,
+// no Homebrew rule runs, no roll reaches the log). Roll and Now are for tests.
 type ProjectDeps struct {
 	Store  ProjectStore
 	Armory Armory
@@ -27,8 +27,10 @@ type ProjectDeps struct {
 	// decides whether today's date may reach the block.
 	Calendar CalendarSource
 	Respite  RespiteHook
-	Roll     func(n int) int
-	Now      func() time.Time
+	// Rolls, when set, adds each project roll to the campaign's roll log.
+	Rolls RollLog
+	Roll  func(n int) int
+	Now   func() time.Time
 }
 
 func (s *service) projectsReady() error {
@@ -592,6 +594,12 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	}
 	if res.Finished {
 		s.deliver(ctx, e, &next, extra, names, v, res)
+	}
+	if s.projects.Rolls != nil && len(res.Dice) > 0 {
+		s.projects.Rolls.ProjectRolled(ctx, campaignID, v, ProjectRoll{
+			Hero: e.Name, Recipe: p.RecipeName, Sides: res.Sides, Dice: res.Dice, Total: res.Total,
+			From: res.From, To: res.To, Goal: p.Goal, Finished: res.Finished,
+		})
 	}
 	res.Project = s.view(next, e.Name, recipe, day, sys, names, v.Director)
 	return res, nil

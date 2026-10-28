@@ -149,6 +149,12 @@ const (
 	MsgNoticeBoardsUpdated MessageType = "notice_boards.updated"
 )
 
+// MsgRollMade carries one roll of the campaign's roll log, already shaped for
+// its audience (a blind roll's roller gets a copy without the result). Not a
+// change-feed type: a reconnect never replays old rolls; the log is read
+// through its own route.
+const MsgRollMade MessageType = "roll.made"
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"
