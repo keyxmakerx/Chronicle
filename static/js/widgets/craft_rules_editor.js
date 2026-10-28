@@ -347,7 +347,8 @@
       '<div class="crr-aibar">' + fa('wand-magic-sparkles') + '<span>Your AI can write these rules. Give it the calendar’s names, then paste back what it writes; each rule arrives as a draft for you to approve.</span>' +
       '<span class="crr-grow"></span><button type="button" class="btn btn-secondary btn-sm" data-act="copy-ai">' + fa('copy') + '<span>Copy what it needs</span></button>' +
       '<button type="button" class="btn btn-secondary btn-sm" data-act="open-paste">' + fa('paste') + '<span>Paste what it wrote</span></button></div>' + aiFold() +
-      '<div class="crr-sech"><h4>When it’s on</h4><small>The next ' + S.W.span + ' days of the calendar. Tap a day to see what applies.</small></div><div class="crr-tl">' + timeline(S) + '</div>' +
+      // Without a calendar there are no days to show, only rules
+      '<div class="crr-sech"' + (S.noCal ? ' hidden' : '') + '><h4>When it’s on</h4><small>The next ' + S.W.span + ' days of the calendar. Tap a day to see what applies.</small></div><div class="crr-tl"' + (S.noCal ? ' hidden' : '') + '>' + timeline(S) + '</div>' +
       '<div class="crr-sech"><h4>Rules</h4><small>Each one reads When → Then. Tap one to change it.</small><button type="button" class="btn btn-primary btn-sm crr-r" data-act="new">' + fa('plus') + '<span>New rule</span></button></div>' +
       '<ol class="crr-rlist">' + S.rec().rules.map(function (r, i) { return card(S, r, i); }).join('') + '</ol>' + startsFold(S) +
       '<button type="button" class="crr-addcard" data-act="new">' + fa('plus') + '<span><b>New rule</b><small>Start from a common one, or from scratch</small></span></button></div>';

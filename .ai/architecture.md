@@ -30,6 +30,7 @@ plugin or widget adds its own line.
 - `bestiary/`
 - `calendar/`
 - `campaigns/`
+- `crafting/`
 - `designlab/`
 - `dmscreen/`
 - `encounters/`

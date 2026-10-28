@@ -139,6 +139,51 @@
       },
       "additionalProperties": false,
       "description": "The game's words for Chronicle's roles."
+    },
+    "crafting": {
+      "type": "object",
+      "properties": {
+        "dice": {
+          "type": "string",
+          "pattern": "^[1-4]d(4|6|8|10|12|20)$",
+          "description": "The project roll, like \"2d10\". Absent: 2d10."
+        },
+        "characteristics": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "required": ["key", "label"],
+            "properties": {
+              "key": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$", "description": "The character sheet field the roll adds."},
+              "label": {"type": "string", "maxLength": 40, "pattern": "^\\p{L}[\\p{L}\\p{N} '\u2019.-]*$", "description": "The name shown in the recipe editor."}
+            },
+            "additionalProperties": false
+          },
+          "description": "The characteristics a recipe may add to its project roll. Absent: the Director writes one in."
+        },
+        "edge": {"type": "integer", "minimum": -10, "maximum": 10, "description": "What clean work adds to the roll."},
+        "bane": {"type": "integer", "minimum": -10, "maximum": 10, "description": "What botched work adds to the roll."},
+        "tiers": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"type": "integer", "minimum": 1},
+          "description": "The highest totals of the first and second outcome of a tiered test such as harvesting, rising. Absent: [11, 16]."
+        },
+        "labels": {
+          "type": "object",
+          "properties": {
+            "goal": {"type": "string", "maxLength": 40},
+            "prerequisite": {"type": "string", "maxLength": 40},
+            "source": {"type": "string", "maxLength": 40}
+          },
+          "additionalProperties": false,
+          "description": "The game's words for a project's goal, the item it needs first, and where the knowledge comes from."
+        }
+      },
+      "additionalProperties": false,
+      "description": "How the game rolls and counts a crafting project. Recipes and benches are the campaign's own; this is only the arithmetic."
     }
   },
   "additionalProperties": false,

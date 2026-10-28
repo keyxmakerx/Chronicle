@@ -381,6 +381,16 @@ Foundry module repo for the wire contract.
 |-------|---------|
 | `page_rumours` | What the party has heard about a page: `quote`, `source` (who said it), `sure` 1 to 3, `truth` (`open`/`true`/`false`, the Director's alone and never selected for anyone else), `belief` (`''`/`true`/`false`/`unsure`, what the party thinks) with `belief_by` and `belief_by_dm`, `by_dm` and `created_by` for the byline; FKs to `entities` and `campaigns` cascade. Capped at 200 per page |
 
+### crafting (`internal/plugins/crafting/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `crafting_settings` | One row per campaign: `skin` (`desk`/`journal`, the look players start in), `difficulty` (`easy`/`std`/`hard`), `bane` (botched work gives a bane), `skip_steps` (players may skip the steps and just roll); FK to `campaigns` cascades |
+| `crafting_recipes` | A Director's recipe: `name` (unique per campaign), `template`, `bench_kind`, `result_item_id` (FK to `entities`, sets NULL) and `result_qty`, the project's `goal`, `stat`, `prerequisite`, `source`, `cost_cents` + `cost_currency`, `who` (`all`/`learned`), and `materials`, `steps`, `colors`, `rules`, `looks` as JSON text cleaned on every write; a material's item id is no FK, so a deleted item shows as deleted; `draft` + `draft_prompt` for an AI's draft awaiting Approve; `version` for edit conflicts; FK to `campaigns` cascades |
+| `crafting_known` | Who knows a "must be learned" recipe: PK `(recipe_id, character_id)`; FKs to `crafting_recipes` and `entities` cascade |
+| `crafting_material_tags` | A crafting tag on an Armory item (`metal`, `remnant_part`, `body_part`, `bone`, `hide`, `liquid`, `herb`, `magic_item`, `magic_essence`): PK `(item_id, tag)`; FKs to `entities` and `campaigns` cascade |
+| `crafting_benches` | A named bench of one kind: `name` (unique per campaign), `kind`, `desk` and `journal` (each look's build-mode arrangement as JSON, NULL until arranged), `version`; FK to `campaigns` cascades |
+
 ### fieldrules (`internal/plugins/fieldrules/migrations/`)
 
 | Table | Purpose |

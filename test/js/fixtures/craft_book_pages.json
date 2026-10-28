@@ -1,0 +1,780 @@
+{
+ "about": "Recipes and the book page each makes, from internal/plugins/crafting/book_test.go (CRAFTING_WRITE_BOOK_FIXTURE=1). The player's book (Go bookPage) and the Director's preview (crafting_lib.js book) must both give want.",
+ "cases": [
+  {
+   "name": "a full recipe",
+   "recipe": {
+    "id": "r1",
+    "name": "Healing potion",
+    "template": "steady",
+    "bench": "apothecary",
+    "materials": [
+     {
+      "itemId": "moss",
+      "qty": 1
+     },
+     {
+      "tag": "liquid",
+      "qty": 2
+     }
+    ],
+    "steps": [
+     {
+      "t": "add",
+      "material": 0,
+      "to": "mortar"
+     },
+     {
+      "t": "grind",
+      "turns": 3
+     },
+     {
+      "t": "tip"
+     },
+     {
+      "t": "pour",
+      "material": 1
+     },
+     {
+      "t": "simmer",
+      "secs": 5
+     },
+     {
+      "t": "strike",
+      "n": 2
+     }
+    ],
+    "result": {
+     "itemId": "potion",
+     "qty": 1
+    },
+    "goal": 30,
+    "stat": "reason",
+    "prerequisite": "Fresh bloodmoss",
+    "source": "The herbalist's book",
+    "cost": {
+     "amount": 25,
+     "currency": "gp"
+    },
+    "who": "all",
+    "known": null,
+    "colors": {},
+    "rules": [
+     {
+      "when": [
+       {
+        "kind": "moon",
+        "moon": "The Lantern",
+        "phase": "full"
+       }
+      ],
+      "then": {
+       "kind": "edge"
+      },
+      "players": "book",
+      "bookLine": "Brew it under a full Lantern."
+     },
+     {
+      "when": [
+       {
+        "kind": "weather",
+        "weather": "Rain"
+       },
+       {
+        "kind": "time",
+        "time": "night"
+       }
+      ],
+      "then": {
+       "kind": "points",
+       "amount": -3
+      },
+      "chance": "1 in 4",
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "mishap",
+       "table": "Spills"
+      },
+      "players": "secret"
+     },
+     {
+      "when": [
+       {
+        "kind": "event",
+        "event": "Harvest fair"
+       }
+      ],
+      "then": {
+       "kind": "extra",
+       "amount": 2
+      },
+      "players": "whenItHappens"
+     },
+     {
+      "when": [
+       {
+        "kind": "season",
+        "season": "Winter"
+       }
+      ],
+      "then": {
+       "kind": "cannot"
+      },
+      "players": "book",
+      "draft": true
+     }
+    ],
+    "looks": null,
+    "draft": false,
+    "sortOrder": 0,
+    "version": 0,
+    "updatedAt": "0001-01-01T00:00:00Z"
+   },
+   "items": {
+    "moss": "Bloodmoss",
+    "potion": "Healing potion"
+   },
+   "want": {
+    "id": "r1",
+    "name": "Healing potion",
+    "kind": "Steady brew",
+    "bench": "Apothecary bench",
+    "needs": [
+     {
+      "qty": 1,
+      "name": "Bloodmoss"
+     },
+     {
+      "qty": 2,
+      "name": "any liquid"
+     }
+    ],
+    "method": [
+     "Put the bloodmoss in the mortar.",
+     "Grind it, three turns.",
+     "Tip the paste into the flask.",
+     "Pour a liquid of your choice to the line.",
+     "Keep the heat steady.",
+     "Catch the moment, two times."
+    ],
+    "makes": "Healing potion",
+    "makesQty": 1,
+    "goal": 30,
+    "roll": "2d10 + Reason",
+    "graded": true,
+    "prerequisite": "Fresh bloodmoss",
+    "source": "The herbalist's book",
+    "cost": {
+     "amount": 25,
+     "currency": "gp"
+    },
+    "lines": [
+     "Brew it under a full Lantern.",
+     "When the weather is Rain and it is night: -3 project points (1 in 4)."
+    ]
+   }
+  },
+  {
+   "name": "items the viewer cannot see",
+   "recipe": {
+    "id": "r2",
+    "name": "Caustic flask",
+    "template": "volatile",
+    "bench": "apothecary",
+    "materials": [
+     {
+      "itemId": "hidden",
+      "qty": 3
+     },
+     {
+      "tag": "magic_essence",
+      "qty": 1
+     }
+    ],
+    "steps": [
+     {
+      "t": "add",
+      "material": 0,
+      "to": "flask"
+     },
+     {
+      "t": "pour",
+      "material": 0
+     },
+     {
+      "t": "add"
+     },
+     {
+      "t": "simmer",
+      "secs": 10
+     },
+     {
+      "t": "strike",
+      "n": 1
+     },
+     {
+      "t": "grind",
+      "turns": 12
+     }
+    ],
+    "result": {
+     "itemId": "hidden",
+     "qty": 4
+    },
+    "goal": 45,
+    "stat": "Wisdom",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": ""
+    },
+    "who": "all",
+    "known": null,
+    "colors": {},
+    "rules": [
+     {
+      "when": [
+       {
+        "kind": "rolled",
+        "event": "Tide",
+        "result": "High"
+       }
+      ],
+      "then": {
+       "kind": "fine"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "bench",
+        "bench": "The forge"
+       }
+      ],
+      "then": {
+       "kind": "fine"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "ingredient",
+        "mark": "Moonlit"
+       }
+      ],
+      "then": {
+       "kind": "fine"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "maker",
+        "skill": "Alchemy"
+       }
+      ],
+      "then": {
+       "kind": "fine"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "only"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "cannot"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "bane"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "points",
+       "amount": 4
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "extra",
+       "amount": 1
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "becomes",
+       "item": "Ashen draught"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "mark",
+       "mark": "Blessed"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "quirk",
+       "table": "Quirks"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "discover",
+       "recipe": "Frost tonic"
+      },
+      "players": "book"
+     },
+     {
+      "when": [
+       {
+        "kind": "always"
+       }
+      ],
+      "then": {
+       "kind": "say",
+       "text": "It hums."
+      },
+      "players": "book"
+     }
+    ],
+    "looks": null,
+    "draft": false,
+    "sortOrder": 0,
+    "version": 0,
+    "updatedAt": "0001-01-01T00:00:00Z"
+   },
+   "items": {},
+   "want": {
+    "id": "r2",
+    "name": "Caustic flask",
+    "kind": "Volatile brew",
+    "bench": "Apothecary bench",
+    "needs": [
+     {
+      "qty": 3,
+      "name": "an item you haven’t seen"
+     },
+     {
+      "qty": 1,
+      "name": "any magic essence"
+     }
+    ],
+    "method": [
+     "Put the item in the flask.",
+     "Pour the item to the line.",
+     "Put it in the mortar.",
+     "Keep the heat steady for a long while.",
+     "Catch the moment.",
+     "Grind it, 12 turns."
+    ],
+    "makes": "an item you haven’t seen",
+    "makesQty": 4,
+    "goal": 45,
+    "roll": "2d10 + Wisdom",
+    "graded": true,
+    "lines": [
+     "When Tide comes up High: it comes out fine.",
+     "When it is made at The forge: it comes out fine.",
+     "When an ingredient is Moonlit: it comes out fine.",
+     "When the maker has Alchemy: it comes out fine.",
+     "Always: it can only be made then.",
+     "Always: it can’t be made.",
+     "Always: the project roll has a bane.",
+     "Always: +4 project points.",
+     "Always: it makes one more.",
+     "Always: it becomes Ashen draught.",
+     "Always: it comes out Blessed.",
+     "Always: it may come out with a quirk.",
+     "Always: you may discover Frost tonic.",
+     "Always: It hums."
+    ]
+   }
+  },
+  {
+   "name": "nothing yet",
+   "recipe": {
+    "id": "r3",
+    "name": "Untitled",
+    "template": "",
+    "bench": "apothecary",
+    "materials": [],
+    "steps": [],
+    "result": {
+     "qty": 1
+    },
+    "goal": 10,
+    "stat": "",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": "gp"
+    },
+    "who": "all",
+    "known": null,
+    "colors": {},
+    "rules": null,
+    "looks": null,
+    "draft": false,
+    "sortOrder": 0,
+    "version": 0,
+    "updatedAt": "0001-01-01T00:00:00Z"
+   },
+   "items": {},
+   "want": {
+    "id": "r3",
+    "name": "Untitled",
+    "kind": "Recipe",
+    "bench": "Apothecary bench",
+    "needs": [],
+    "method": [],
+    "makes": "",
+    "makesQty": 1,
+    "goal": 10,
+    "roll": "2d10",
+    "graded": false,
+    "lines": []
+   }
+  }
+ ],
+ "library": {
+  "tags": [
+   {
+    "key": "metal",
+    "label": "Metal"
+   },
+   {
+    "key": "remnant_part",
+    "label": "Remnant part"
+   },
+   {
+    "key": "body_part",
+    "label": "Body part"
+   },
+   {
+    "key": "bone",
+    "label": "Bone"
+   },
+   {
+    "key": "hide",
+    "label": "Hide"
+   },
+   {
+    "key": "liquid",
+    "label": "Liquid"
+   },
+   {
+    "key": "herb",
+    "label": "Herb"
+   },
+   {
+    "key": "magic_item",
+    "label": "Magic item"
+   },
+   {
+    "key": "magic_essence",
+    "label": "Magic essence"
+   }
+  ],
+  "tools": [
+   {
+    "key": "mortar",
+    "label": "mortar"
+   },
+   {
+    "key": "flask",
+    "label": "flask"
+   },
+   {
+    "key": "burner",
+    "label": "burner and bellows"
+   }
+  ],
+  "steps": [
+   {
+    "key": "add",
+    "name": "Add",
+    "blurb": "Put an ingredient in",
+    "graded": false,
+    "item": true,
+    "into": [
+     "mortar",
+     "flask"
+    ]
+   },
+   {
+    "key": "grind",
+    "name": "Grind",
+    "blurb": "Circle the pestle",
+    "tool": "mortar",
+    "graded": false,
+    "item": false,
+    "accepts": [
+     "herb",
+     "bone",
+     "body_part",
+     "remnant_part"
+    ],
+    "option": {
+     "key": "turns",
+     "label": "turns",
+     "choices": [
+      2,
+      3,
+      5
+     ],
+     "min": 1,
+     "max": 8,
+     "default": 3
+    }
+   },
+   {
+    "key": "tip",
+    "name": "Tip into the flask",
+    "blurb": "Drag the mortar over",
+    "tool": "mortar",
+    "graded": false,
+    "item": false
+   },
+   {
+    "key": "pour",
+    "name": "Pour to the line",
+    "blurb": "Stop at the gold line",
+    "tool": "flask",
+    "graded": true,
+    "item": true,
+    "accepts": [
+     "liquid",
+     "magic_essence"
+    ]
+   },
+   {
+    "key": "simmer",
+    "name": "Keep it steady",
+    "blurb": "Hold the heat in its band",
+    "tool": "burner",
+    "graded": true,
+    "item": false,
+    "option": {
+     "key": "secs",
+     "label": "",
+     "choices": [
+      5,
+      10
+     ],
+     "words": [
+      "Short",
+      "Long"
+     ],
+     "min": 2,
+     "max": 20,
+     "default": 5
+    }
+   },
+   {
+    "key": "strike",
+    "name": "Catch the moment",
+    "blurb": "Press on the gold",
+    "graded": true,
+    "item": false,
+    "option": {
+     "key": "n",
+     "label": "presses",
+     "choices": [
+      1,
+      2,
+      3
+     ],
+     "min": 1,
+     "max": 6,
+     "default": 2
+    }
+   }
+  ],
+  "benchKinds": [
+   {
+    "key": "apothecary",
+    "name": "Apothecary bench",
+    "tools": [
+     "mortar",
+     "flask",
+     "burner"
+    ]
+   }
+  ],
+  "templates": [
+   {
+    "key": "steady",
+    "name": "Steady brew",
+    "bench": "apothecary",
+    "steps": [
+     {
+      "t": "add",
+      "want": [
+       "herb",
+       "bone",
+       "body_part",
+       "remnant_part"
+      ],
+      "to": "mortar"
+     },
+     {
+      "t": "grind",
+      "turns": 3
+     },
+     {
+      "t": "tip"
+     },
+     {
+      "t": "pour",
+      "want": [
+       "liquid",
+       "magic_essence"
+      ]
+     },
+     {
+      "t": "simmer",
+      "secs": 5
+     }
+    ]
+   },
+   {
+    "key": "volatile",
+    "name": "Volatile brew",
+    "bench": "apothecary",
+    "steps": [
+     {
+      "t": "add",
+      "want": [
+       "herb",
+       "bone",
+       "body_part",
+       "remnant_part"
+      ],
+      "to": "mortar"
+     },
+     {
+      "t": "grind",
+      "turns": 2
+     },
+     {
+      "t": "tip"
+     },
+     {
+      "t": "add",
+      "want": [
+       "liquid",
+       "magic_essence"
+      ],
+      "to": "flask"
+     },
+     {
+      "t": "strike",
+      "n": 2
+     }
+    ]
+   }
+  ],
+  "skins": null,
+  "difficulties": null,
+  "moments": null,
+  "rules": {
+   "dice": "2d10",
+   "characteristics": [
+    {
+     "key": "reason",
+     "label": "Reason"
+    }
+   ],
+   "edge": 2,
+   "bane": -2,
+   "tiers": [
+    11,
+    16
+   ],
+   "labels": {
+    "goal": "Goal",
+    "prerequisite": "Item prerequisite",
+    "source": "Project source"
+   }
+  },
+  "system": "",
+  "settings": {
+   "skin": "",
+   "difficulty": "",
+   "bane": false,
+   "skip": false
+  },
+  "director": false
+ }
+}

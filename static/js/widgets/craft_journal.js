@@ -32,7 +32,7 @@ window.CraftJournal = (function () {
   /* The owner's choices. Each is a small table of values, so a look is data,
      never a second copy of the drawing code. */
   var O={stock:'parchment',ink:'gall',hand:'kalam',seal:'scarlet',emblem:'moth',binding:'oxblood',light:'candle',window:'calendar',age:'worn',
-    note:'Never let bloodmoss boil.',kit:[]};
+    note:'Measure twice, pour once.',kit:[]};
   var STOCK={
     parchment:{name:'Parchment',pp:'#ecdcba',cut:'#f6ecd4',under:'#d6c39a',edge:'#b9a57c',tone:'#8a5a20',fibre:[.42,.3,.14],laid:true},
     cotton:{name:'Cotton rag',pp:'#efe9dc',cut:'#faf6ec',under:'#dbd2bf',edge:'#c4b9a2',tone:'#7a6440',fibre:[.38,.34,.26]},

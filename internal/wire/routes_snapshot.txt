@@ -615,6 +615,25 @@ POST	/campaigns/:id/content-templates	session	plugins/entities.(*ContentTemplate
 DELETE	/campaigns/:id/content-templates/:tid	session	plugins/entities.(*ContentTemplateHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/content-templates/:tid	session	plugins/entities.(*ContentTemplateHandler).GetAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/content-templates/:tid	session	plugins/entities.(*ContentTemplateHandler).UpdateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/crafting	session	plugins/crafting.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/crafting/benches	session	plugins/crafting.(*Handler).ListBenches	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+POST	/campaigns/:id/crafting/benches	session	plugins/crafting.(*Handler).CreateBench	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/crafting/benches/:bid	session	plugins/crafting.(*Handler).DeleteBench	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/crafting/benches/:bid	session	plugins/crafting.(*Handler).GetBench	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/crafting/benches/:bid	session	plugins/crafting.(*Handler).UpdateBench	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/crafting/benches/:bid/look/:skin	session	plugins/crafting.(*Handler).SaveArrangement	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/crafting/book	session	plugins/crafting.(*Handler).Book	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/crafting/catalog	session	plugins/crafting.(*Handler).Catalog	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/crafting/library	session	plugins/crafting.(*Handler).Library	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/crafting/materials/:eid	session	plugins/crafting.(*Handler).SetTags	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/crafting/recipes	session	plugins/crafting.(*Handler).ListRecipes	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+POST	/campaigns/:id/crafting/recipes	session	plugins/crafting.(*Handler).CreateRecipe	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/crafting/recipes/:rid	session	plugins/crafting.(*Handler).DeleteRecipe	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/crafting/recipes/:rid	session	plugins/crafting.(*Handler).GetRecipe	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/crafting/recipes/:rid	session	plugins/crafting.(*Handler).UpdateRecipe	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+POST	/campaigns/:id/crafting/recipes/:rid/approve	session	plugins/crafting.(*Handler).Approve	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/crafting/recipes/:rid/rules	session	plugins/crafting.(*Handler).SaveRules	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/crafting/settings	session	plugins/crafting.(*Handler).SaveSettings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize	session	plugins/campaigns.(*Handler).Customize	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/categories	session	plugins/campaigns.(*Handler).CustomizeCategoriesPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/categories/:key	session	plugins/campaigns.(*Handler).CustomizeCategory	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1174,6 +1193,7 @@ POST	/rsvp/:token	none	plugins/sessions.(*Handler).ApplyRSVPToken	-
 GET	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).RedeemSuggestToken	-
 POST	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).ApplySuggestToken	-
 GET	/sessions/feed/:token	none	plugins/sessions.(*Handler).GameNightFeedICS	-
+GET	/static/plugins/crafting*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/encounters*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/entities*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/homebrew*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-

@@ -128,6 +128,31 @@ Entity types do not record which system created them, so when two installed syst
 
 Declaring `play` changes no behaviour by itself; it is the declaration the play-edit guard and sheet controls read.
 
+### Crafting (`crafting`)
+
+An optional top-level block saying how the game rolls and counts a crafting project in the Crafting app. Recipes, benches and steps are each campaign's own and work under any system; this is only the arithmetic and the words.
+
+```json
+"crafting": {
+  "dice": "2d10",
+  "characteristics": [{"key": "might", "label": "Might"}, {"key": "reason", "label": "Reason"}],
+  "edge": 2,
+  "bane": -2,
+  "tiers": [11, 16],
+  "labels": {"goal": "Project goal", "prerequisite": "Item prerequisite", "source": "Project source"}
+}
+```
+
+| Key | Meaning |
+|-----|---------|
+| `dice` | The project roll: one to four d4, d6, d8, d10, d12 or d20, like `2d10` |
+| `characteristics` | Up to 12 sheet fields a recipe may add to the roll, each a field `key` and the `label` the editor shows. None means the Director writes one in |
+| `edge`, `bane` | What clean and botched work add to the roll, -10 to 10 |
+| `tiers` | The highest totals of the first and second outcome of a tiered test such as harvesting, rising: `[11, 16]` makes 11 or less the first tier, 12 to 16 the second, 17 or more the third |
+| `labels` | The game's words for a project's `goal`, the item it needs first (`prerequisite`) and where the knowledge comes from (`source`), each up to 40 plain characters |
+
+Every key is optional; a missing one, or a system with no block, takes the default (2d10, no characteristic, +2 and -2, `[11, 16]`, "Goal", "Item prerequisite", "Project source"). A block that breaks these rules fails manifest validation, so the system does not load.
+
 ### Data Files
 
 Each category has a corresponding `data/<slug>.json` file. Each item is keyed by `id` or `slug` (the loader fills `id` from `slug` when `id` is empty):

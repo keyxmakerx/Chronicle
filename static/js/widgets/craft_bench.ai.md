@@ -5,8 +5,9 @@ player makes something one step at a time (drag an ingredient into the mortar,
 grind, tip it into the flask, pour to the line, keep the heat steady, strike at
 the right moment), and the steps grade into a Draw Steel project roll. Build
 mode is the same scene with an editor round it, for a Director to arrange the
-room. It runs on the admin Design Lab (`/admin/design-lab`) against demo data
-and saves nothing; the crafting app that stores recipes and benches is #1808.
+room. The crafting app (`internal/plugins/crafting`) mounts build mode on a
+Director's stored bench and saves what they arrange; the admin Design Lab
+(`/admin/design-lab`) runs it against demo data and saves nothing.
 
 ## The parts
 
@@ -33,6 +34,15 @@ pictures, `/static/img/crafting/desk/` or `/static/img/crafting/journal/`), and
 the window shows the demo calendar. The Design Lab passes
 `?campaign_id=<id>&calendar_id=<id>` through to them, so an admin can see a real
 campaign's sky in the window.
+
+The crafting app sets `el._craftApp` before mounting a build-mode bench:
+`{state, recipes, items, recipe, status, onChange}`. `state` is the look's
+saved arrangement (`{look, pieces}`, as `CraftBenchEditor`'s `state()` returns
+it, or null for a fresh room), `recipes` and `items` are the campaign's own in
+the engine's form (no recipes means the demo's), `status` is the bar's line,
+and `onChange(state)` hears every change. The editor stores nothing itself:
+saved pieces come back through `o.state`, the room's look through the skin's
+own opts, and `ed.status(text)` rewrites the bar's line.
 
 ## The engine
 

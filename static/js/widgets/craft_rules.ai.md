@@ -4,10 +4,11 @@
 rules over a calendar ("when the Lantern is full, the project roll has an
 edge"), a strip of the calendar's next 30 days showing when each rule is on,
 and a **How it looks** tab that plays each moment players see on an alchemy
-bench, dressed by dragging the shared item-look effects onto spots. It runs on
-the admin Design Lab (`/admin/design-lab`) against demo recipes, saves
-nothing, and only previews: the crafting app that stores recipes and applies
-their rules at the project roll is #1824 (part of #1808).
+bench, dressed by dragging the shared item-look effects onto spots. The
+crafting app (`internal/plugins/crafting`) mounts it on one stored recipe and
+saves its rules and looks with the recipe; the admin Design Lab
+(`/admin/design-lab`) runs it against demo recipes and saves nothing. Nothing
+applies the rules at a project roll yet.
 
 ## The parts
 
@@ -28,6 +29,15 @@ and moon phases, so a rule's "full" is the day the calendar page shows full.
 Attributes: `data-campaign-id` + `data-calendar-id`. Without both, the demo
 calendar. The Design Lab passes the bench's `?campaign_id=&calendar_id=`
 through, so an admin can write rules against a real calendar.
+
+The crafting app sets `el._craftApp = {recipe, lists, save}` before mounting.
+`recipe` is `{id, name, ings: [[qty, name]], goal, roll, liquid, rules, looks}`
+with the rules as the AI writes them; `lists` fills the pickers (benches,
+marks, skills, items, recipes, tables); `save({rules, looks})` is called after every
+change to either. The editor then shows that one recipe and no sample rules.
+With no calendar the Director can see (or one that fails to read) it starts
+with `noCal`: no day strip, no moon, event, weather or season kinds, and the
+rules about the bench, the maker and every time still work.
 
 ## A rule
 
@@ -143,5 +153,5 @@ can read as drafts. "Show what the AI writes" shows each rule's data under it.
 
 - TODO(#1842): the mockup's "If it goes wrong" and "Extras" tabs, mishap
   moments, the Benches view, and asking the AI in place.
-- TODO(#1824): saving rules with a recipe, evaluating them at the project
-  roll, and the recipe editor's fold-out over the crafting widget.
+- TODO(#1858): evaluating the rules at the project roll.
+- TODO(#1824): the recipe editor's fold-out over the crafting widget.
