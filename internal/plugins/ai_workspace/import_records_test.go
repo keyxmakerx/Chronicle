@@ -191,3 +191,40 @@ func TestImport_RecordsRefusedForSwitchedOffFeature(t *testing.T) {
 		t.Errorf("table made in a switched-off feature: %+v", m.doc.Tables)
 	}
 }
+
+// titledKind is a kind whose records have no name of their own.
+type titledKind struct{}
+
+func (titledKind) Name() string  { return "look" }
+func (titledKind) Label() string { return "Item look" }
+func (titledKind) Doc() string   { return "" }
+func (titledKind) Plan(context.Context, string, records.Actor, records.Record) records.Plan {
+	return records.Plan{Summary: "gives it a look"}
+}
+func (titledKind) Apply(context.Context, string, records.Actor, records.Record) error { return nil }
+func (titledKind) Export(context.Context, string, records.Actor) (string, error) {
+	return "", nil
+}
+func (titledKind) Title(r records.Record) string { return "Look of " + r.Str("page") }
+
+// The result names a record with no name of its own by its title, as the
+// review does, so a row never reads "Item look: " and nothing more.
+func TestImport_RecordsCommitNamesTitledRows(t *testing.T) {
+	h := NewHandler(nil)
+	h.SetImportLookup(&stubLookup{})
+	h.SetImportCommitter(importer.NewCommitter(nil))
+	h.SetRecords(records.NewRegistry(titledKind{}))
+	const md = "---\nkind: look\npage: Frost blade\n---\n"
+	form := url.Values{"markdown_source": {md}, "rec_0_include": {"on"}}
+	req := httptest.NewRequest(http.MethodPost, "/campaigns/camp-1/ai-workspace/import/commit", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(req, rec)
+	ownerCtx(c)
+	if err := h.CommitImport(c); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rec.Body.String(), "Item look: Look of Frost blade") {
+		t.Errorf("result does not name the row by its title:\n%s", rec.Body.String())
+	}
+}

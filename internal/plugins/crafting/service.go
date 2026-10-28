@@ -92,6 +92,12 @@ type Service interface {
 	FightEnded(ctx context.Context, campaignID string, v Viewer, f Fight) (*FightSpoils, error)
 	// DropNotes says which of a fight's pages have a drop list.
 	DropNotes(ctx context.Context, campaignID string, v Viewer, pageIDs []string) (map[string]string, error)
+
+	// SaveAIRecipe and CheckDrops are the AI connection's: a recipe written
+	// by an AI (a new one arrives as a draft), and a drop list's checks run
+	// at review without saving.
+	SaveAIRecipe(ctx context.Context, campaignID string, v Viewer, in AIRecipe, check bool) (*Recipe, error)
+	CheckDrops(ctx context.Context, campaignID, pageID string, v Viewer, in DropInput) error
 }
 
 type service struct {

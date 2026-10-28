@@ -6163,6 +6163,7 @@ func (a *App) RegisterRoutes() {
 	craftingRespites := &craftingRespiteHook{}
 	var craftingListener respiteListener // nil while crafting is degraded
 	var craftingFights encounters.FightListener
+	var aiCrafting records.CraftingAPI // nil while crafting is degraded
 	if a.PluginHealth.IsHealthy(crafting.PluginSlug) {
 		craftingRepo := crafting.NewRepository(a.DB)
 		craftingSvc := crafting.NewService(craftingRepo,
@@ -6182,6 +6183,7 @@ func (a *App) RegisterRoutes() {
 		registerCraftingBlock(blockRegistry, craftingSvc)
 		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
 		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
+		aiCrafting = aiCraftingAdapter{svc: craftingSvc, addons: addonService}
 	} else {
 		slog.Warn("crafting plugin degraded — the Crafting app is not available")
 	}
@@ -6333,6 +6335,7 @@ func (a *App) RegisterRoutes() {
 		AIAsks:          aiAsks,
 		ArmoryRequests:  dmSources.Requests,
 		ItemLooks:       aiItemLooks,
+		Crafting:        aiCrafting,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

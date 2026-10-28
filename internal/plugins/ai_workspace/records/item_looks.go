@@ -516,57 +516,6 @@ func itemLookBlock(l ItemLookRef) string {
 	return b.String()
 }
 
-// maxLooksShown keeps the crafting answer within the lookup's line cap.
-const maxLooksShown = 30
-
-// craftingNotStored says which parts of crafting have no home yet, so an
-// AI never guesses at recipes it can't see.
-const craftingNotStored = "Recipes, materials, harvesting and crafting benches are not stored in Chronicle yet. " +
-	"The crafting bench and its \"When… then…\" rules are previews on the admin Design Lab that save nothing, so there is nothing of theirs to read or change. " +
-	"Until they are, keep recipes and materials on ordinary pages; a material's page can still hold the look the items made from it carry."
-
-// crafting answers `what: crafting`: every item look the Actor can see, and
-// what crafting does not store yet.
-func (run *lookupRun) crafting() (LookupAnswer, error) {
-	ans := LookupAnswer{Chip: "Crafting"}
-	var b strings.Builder
-	b.WriteString("## Crafting\n\n")
-	if run.l.Looks == nil {
-		b.WriteString("Item looks can't be looked up right now.\n\n")
-		b.WriteString(craftingNotStored + "\n")
-		ans.Text = b.String()
-		return ans, nil
-	}
-	list, more, err := run.l.Looks.List(run.ctx, run.campaignID, run.a)
-	if err != nil {
-		return ans, err
-	}
-	b.WriteString("### Item looks\n\nHow each item shows its magic when it is used. The campaign's owner can send a block back, changed, to update it (the item-look block format explains the keys).\n\n")
-	if len(list) == 0 {
-		b.WriteString("No page has a look yet.\n")
-	} else {
-		shown := list
-		if len(shown) > maxLooksShown {
-			shown = shown[:maxLooksShown]
-		}
-		b.WriteString("```\n")
-		for _, l := range shown {
-			b.WriteString(itemLookBlock(l))
-		}
-		b.WriteString("```\n")
-		if n := len(list) - len(shown); n > 0 {
-			fmt.Fprintf(&b, "\n(%d more not shown; `read_page` shows one page's look.)\n", n)
-		}
-	}
-	if more {
-		b.WriteString("\n(The campaign has more looks than were read.)\n")
-	}
-	b.WriteString("\n### Not in Chronicle yet\n\n" + craftingNotStored + "\n")
-	ans.Chip = "Crafting · " + plural(len(list), "item look", "item looks")
-	ans.Text = b.String()
-	return ans, nil
-}
-
 // pageLookText is the page's look as a block, for the `page` answer.
 func (run *lookupRun) pageLookText(e *entities.Entity) string {
 	if run.l.Looks == nil {

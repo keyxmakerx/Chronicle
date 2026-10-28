@@ -29,6 +29,7 @@ type stubEncounters struct{ encounters.Service }
 type stubQuestSvc struct{ quests.QuestService }
 type stubBoardSvc struct{ quests.BoardService }
 type stubPlayerNotes struct{ entity_notes.Service }
+type stubCrafting struct{ records.CraftingAPI }
 
 func aiKindNames(d aiDeps) string {
 	var names []string
@@ -54,8 +55,8 @@ func TestAIKindsPromptOrder(t *testing.T) {
 		{
 			name: "everything wired",
 			deps: aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}},
-			want: "calendar event weather roll_night moon table shop-stock carried-item pin map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order page-map generator",
+				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}, Crafting: stubCrafting{}},
+			want: "calendar event weather roll_night moon table shop-stock carried-item pin map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order material recipe drops page-map generator",
 		},
 		{
 			name: "optional plugins degraded",
@@ -78,7 +79,7 @@ func TestAIKindsEachHaveABrief(t *testing.T) {
 	healthy := database.NewPluginHealthRegistry()
 	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)
 	reg := records.NewRegistry(aiKinds(newAIDeps(aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}}))...)
+		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}}))...)
 	caps := reg.Capabilities()
 	for _, k := range reg.Kinds() {
 		if strings.Contains(caps, "`kind: "+k.Name()+"`: "+k.Label()+"\n") {
