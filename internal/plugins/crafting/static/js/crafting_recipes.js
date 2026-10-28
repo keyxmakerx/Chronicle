@@ -139,7 +139,7 @@ window.CraftingRecipes = (function () {
     function renderForm() {
       var f = $('.cra-rform'), r = cur(), h = '', fixes = [], Rl = lib.rules, labels = Rl.labels || {};
       if (!r) {
-        f.innerHTML = '<div class="cra-empty">No recipes yet. <button type="button" class="cra-link" data-act="new">Write the first one</button>, or ask your AI to draft some.</div>';
+        f.innerHTML = '<div class="cra-empty">No recipes yet. <button type="button" class="cra-link" data-act="new">Write the first one</button>.</div>';
         return;
       }
       if (r.draft) {
