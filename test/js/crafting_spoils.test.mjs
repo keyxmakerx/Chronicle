@@ -79,7 +79,7 @@ test('a harvest’s tiers light the one the test landed in', () => {
 test('a card escapes every word it was sent', () => {
   const bad = { ...troll, source: '<img src=x onerror=alert(1)>', origin: '"><script>', lines: [{ ...troll.lines[0], name: '<b>x</b>', kinds: '<i>' }] };
   const h = T.card(bad, { acts: () => '' });
-  assert.doesNotMatch(h, /<img|<script|<b>x|<i>/);
+  assert.doesNotMatch(h, /<img|<script|<b>x|<i>/i);
   assert.match(h, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });
 
