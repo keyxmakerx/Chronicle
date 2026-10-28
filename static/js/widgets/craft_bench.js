@@ -18,7 +18,10 @@
  * On its own (the Design Lab) it plays the demo below and saves nothing. The
  * crafting app sets el._craftApp = {state, recipes, items, recipe, onChange,
  * status} before mounting a build-mode bench: state is the look's saved
- * arrangement ({look, pieces}) and onChange hears every change to it.
+ * arrangement ({look, pieces}) and onChange hears every change to it. A
+ * play-mode bench takes {state, recipes, items, recipe, settings, onWorked}:
+ * it plays the saved arrangement, the campaign's settings, and hands
+ * onWorked how the steps went so the crafting app makes the roll.
  */
 (function () {
   'use strict';
@@ -407,7 +410,9 @@
       } else {
         var box = document.createElement('div'); box.className = 'crb-scene'; el.innerHTML = ''; el.appendChild(box);
         ['time', 'weather', 'light'].forEach(function (k) { box.setAttribute('data-' + k, skin.opts[k]); });
+        if (app) { data.settings = app.settings; data.onWorked = app.onWorked; }
         el._crb = CraftScene.mount(box, skin, data);
+        if (state && window.CraftBenchEditor) CraftBenchEditor.arrange(skin, el._crb.svg, state);
       }
     },
     destroy: function (el) {

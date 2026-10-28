@@ -1,6 +1,6 @@
 // Package changesource records, on the request context, which door an entity
-// write came through (the web UI, the Foundry module, a stash move, a shop, an
-// extension). Observers of a write read it to describe the change to people;
+// write came through (the web UI, the Foundry module, a stash move, a shop, a
+// crafting project, an extension). Observers of a write read it to describe the change to people;
 // it never decides who may write, so nothing here is a permission check.
 package changesource
 
@@ -12,6 +12,7 @@ const (
 	KindFoundry   = "foundry"
 	KindStash     = "stash"
 	KindShop      = "shop"
+	KindCraft     = "craft"
 	KindExtension = "extension"
 )
 

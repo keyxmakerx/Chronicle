@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/keyxmakerx/chronicle/internal/database"
@@ -25,6 +26,14 @@ type workshopDeps struct {
 	SystemState    systemstate.Service
 	Systems        *systems.SystemHandler
 	Trackers       trackers.Service
+	// Respites hears a respite pressed in the Homebrew drawer; nil while
+	// crafting is degraded.
+	Respites respiteListener
+}
+
+// respiteListener is told of a respite the Director pressed.
+type respiteListener interface {
+	RespitePressed(ctx context.Context, campaignID string, by homebrew.Viewer) error
 }
 
 // workshopSource is one feature's Workshop registration. Label names the

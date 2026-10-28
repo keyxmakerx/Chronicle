@@ -53,6 +53,8 @@ func sourcePhrase(src changesource.Source) (string, bool) {
 		return "by an extension", true
 	case changesource.KindShop:
 		return "at a shop", true
+	case changesource.KindCraft:
+		return "for crafting", true
 	}
 	return "", false
 }

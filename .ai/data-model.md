@@ -390,6 +390,9 @@ Foundry module repo for the wire contract.
 | `crafting_known` | Who knows a "must be learned" recipe: PK `(recipe_id, character_id)`; FKs to `crafting_recipes` and `entities` cascade |
 | `crafting_material_tags` | A crafting tag on an Armory item (`metal`, `remnant_part`, `body_part`, `bone`, `hide`, `liquid`, `herb`, `magic_item`, `magic_essence`): PK `(item_id, tag)`; FKs to `entities` and `campaigns` cascade |
 | `crafting_benches` | A named bench of one kind: `name` (unique per campaign), `kind`, `desk` and `journal` (each look's build-mode arrangement as JSON, NULL until arranged), `version`; FK to `campaigns` cascades |
+| `crafting_projects` | A hero's crafting project: `character_id` (FK to `entities`, cascades), `recipe_id` (FK to `crafting_recipes`, sets NULL), and what the recipe said when it started (`recipe_name`, `goal`, `stat`, `result_item_id` FK to `entities` sets NULL, `result_qty`); `points`, `rolls_ready` (one per respite, stacking), `status` (`active`/`made`/`cancelled`), `delivered` (whether the made item reached the pack), `took` (what starting it took, for the Director), `started_by`, `started_at`, `finished_at`, `version`; FK to `campaigns` cascades |
+| `crafting_respites` | One row per respite logged, from the Crafting app or the Homebrew drawer: `logged_by`, `day_label` (the calendar's date then, `''` without one), `projects` (how many got a roll), `created_at`; FK to `campaigns` cascades |
+| `crafting_rolls` | Every project roll as made: `project_id` (FK to `crafting_projects`, cascades), `rolled_by`, `dice` (as they fell), `terms` (JSON, each term added), `total`, `points_from`, `points_to`; FK to `campaigns` cascades |
 
 ### fieldrules (`internal/plugins/fieldrules/migrations/`)
 

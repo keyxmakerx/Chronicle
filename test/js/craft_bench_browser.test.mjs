@@ -276,3 +276,39 @@ test('every journal tray picture the editor asks for exists', { skip, timeout: 1
   const missing = [...srcs].filter((s) => !existsSync(join(root, s)));
   assert.deepEqual(missing, [], 'run node tools/craft-thumbs.mjs --skin=journal to draw them');
 });
+
+test('a play mount plays the Director’s arrangement and hands its host how the steps went', { skip, timeout: 180000 }, async (t) => {
+  const { page, errors } = await bench(t, { mounts: [] });
+  await page.waitForFunction(() => window.Chronicle && Chronicle.mountWidget && window.CraftScene && window.CraftBenchEditor);
+  await page.evaluate(() => {
+    const el = document.createElement('div');
+    el.setAttribute('data-widget', 'craft_bench');
+    el._craftApp = {
+      state: { look: {}, pieces: { cat: { name: 'Mouser', text: 'The shop cat.', more: '', dx: 0, dy: 0, hidden: true, acts: [] }, candle: { name: 'Stub', text: '', more: '', dx: -40, dy: 0, hidden: false, acts: [] } } },
+      settings: { skip: true, bane: true },
+      onWorked: (work, v) => { window.__worked = [work, v.k]; }
+    };
+    document.querySelector('main').appendChild(el);
+    Chronicle.mountWidget(el);
+  });
+  await page.waitForSelector('.cr-stage');
+  const room = await page.evaluate(() => {
+    const el = document.querySelector('[data-widget="craft_bench"]'), sk = el._crb.skin;
+    const cats = [...document.querySelectorAll(sk.pieces.cat.sel)];
+    const candle = document.querySelector(sk.pieces.candle.sel);
+    return { cats: cats.length, hidden: cats.every((c) => c.style.display === 'none'), name: sk.info.cat.name, candle: candle && candle.getAttribute('transform') };
+  });
+  assert.ok(room.cats > 0, 'the desk draws its cat');
+  assert.ok(room.hidden, 'a piece the Director took off the bench stays off');
+  assert.equal(room.name, 'Mouser');
+  assert.match(room.candle, /^translate\(-40\.0,0\.0\)/);
+  // Skip to the roll: the host's button hands over how the work went instead of rolling here.
+  await page.evaluate(() => document.querySelector('[data-widget="craft_bench"]')._crb.skip());
+  await page.click('.cr-acts .cr-btn-primary');
+  await page.waitForFunction(() => window.__worked);
+  assert.deepEqual(await page.evaluate(() => window.__worked), ['skipped', 'plain']);
+  assert.equal(await page.evaluate(() => document.querySelector('[data-widget="craft_bench"]')._crb.state().phase), 'worked');
+  await page.evaluate(() => document.querySelector('[data-widget="craft_bench"]')._crb.retry());
+  assert.equal(await page.evaluate(() => document.querySelector('[data-widget="craft_bench"]')._crb.state().phase), 'roll');
+  assert.deepEqual(errors, []);
+});

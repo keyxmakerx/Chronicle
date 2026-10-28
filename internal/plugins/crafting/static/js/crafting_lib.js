@@ -2,7 +2,8 @@
  * crafting_lib.js -- what a recipe means, for the Crafting app (window.CraftingLib)
  *
  * Pure: checks a recipe as it is built, says its steps as sentences, lays
- * down a template, and turns a recipe into the page a player reads. The
+ * down a template, turns a recipe into the page a player reads, and into
+ * the bench engine's recipe a player works. The
  * fixed lists (tags, steps, bench kinds, templates) come from the server's
  * library, so these helpers and the checks on save read the same words.
  * book() mirrors book.go, so the editor's "What players see" is the page a
@@ -248,6 +249,40 @@
     r.materials.splice(i, 1);
     r.steps.forEach(function (s) { if (s.material === i) delete s.material; else if (s.material > i) s.material--; });
   }
+  /* Each tag's tint on the bench, and the brew's colours when a recipe
+     names none. */
+  var TAG_COLOR = {herb: '#6a9c3a', liquid: '#8fbbe0', metal: '#8d939c', hide: '#9a6a3e', bone: '#e3d6b8', magic_essence: '#a77cf0', remnant_part: '#6d45c4', body_part: '#b3263a', magic_item: '#7fd6d2'};
+  var BENCH_COLORS = {base: '#cfe3f2', paste: '#7e1a2a', mid: '#a63a4a', final: '#ff4d6d'};
+
+  /* A recipe a hero knows (the server's CraftRecipe) as the bench engine
+     plays it: each material an ingredient keyed by its item or tag, tinted
+     by its tag, and the brew's colours. start is the project's points. */
+  function benchRecipe(r, hero, start) {
+    var items = {}, keyOf = [], col = r.colors || {};
+    (r.needs || []).forEach(function (m, i) {
+      var k = m.itemId ? 'i' + m.itemId.replace(/[^a-zA-Z0-9]/g, '') : 't' + m.tag, t = m.tag || (m.tags || [])[0];
+      if (!items[k]) items[k] = {name: m.tag ? m.name.charAt(0).toUpperCase() + m.name.slice(1) : m.name, color: (t && TAG_COLOR[t]) || '#8a8a8a', desc: m.tag ? 'Your pick from the pack.' : ''};
+      keyOf[i] = k;
+    });
+    var stat = String(r.roll || '').split(' + ')[1] || '';
+    return {items: items, recipe: {name: r.name, kind: r.kind, who: hero, stat: stat, mod: r.statValue || 0, goal: r.goal, start: start || 0,
+      base: col.base || BENCH_COLORS.base, paste: col.paste || BENCH_COLORS.paste, mid: col.mid || BENCH_COLORS.mid, final: col.final || BENCH_COLORS.final,
+      steps: (r.steps || []).map(function (s) {
+        var o = {t: s.t};
+        if (s.material != null && keyOf[s.material]) o.item = keyOf[s.material];
+        ['to', 'turns', 'secs', 'n'].forEach(function (p) { if (s[p] != null) o[p] = s[p]; });
+        return o;
+      })}};
+  }
+
+  /* A project's points as a bar, the same in the block and the Projects tab. */
+  function progress(points, goal, label, name) {
+    var at = Math.min(points, goal), pct = goal > 0 ? Math.min(100, Math.round(at / goal * 100)) : 0;
+    return '<div class="crp-prog"><div class="crp-lab"><span>' + esc(label || 'Project points') + '</span><b>' + at + ' of ' + goal + '</b></div>' +
+      '<div class="crp-track" role="progressbar" aria-valuemin="0" aria-valuemax="' + goal + '" aria-valuenow="' + at + '" aria-label="' + esc(name) + ' points">' +
+      '<i class="' + (at >= goal ? 'is-done' : '') + '" style="width:' + pct + '%"></i></div></div>';
+  }
+
   /* What the editor sends to save a recipe. */
   function input(r) {
     return {name: r.name, template: r.template || '', bench: r.bench, materials: r.materials, steps: r.steps, result: r.result, goal: r.goal, stat: r.stat,
@@ -256,5 +291,6 @@
 
   window.CraftingLib = {esc: esc, clone: clone, find: find, num: num, tagLabel: tagLabel, matTags: matTags, matName: matName, stepKind: stepKind, benchKind: benchKind,
     toolName: toolName, stepTool: stepTool, stepCheck: stepCheck, checks: checks, methodLine: methodLine, rollWords: rollWords, templateName: templateName,
-    book: book, bookHTML: bookHTML, ruleSentence: ruleSentence, money: money, applyTemplate: applyTemplate, newStep: newStep, removeMaterial: removeMaterial, input: input};
+    book: book, bookHTML: bookHTML, ruleSentence: ruleSentence, money: money, applyTemplate: applyTemplate, newStep: newStep, removeMaterial: removeMaterial, input: input,
+    TAG_COLOR: TAG_COLOR, BENCH_COLORS: BENCH_COLORS, benchRecipe: benchRecipe, progress: progress};
 })();

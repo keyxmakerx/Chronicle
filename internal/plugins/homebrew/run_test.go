@@ -378,3 +378,59 @@ func TestRegisterPressAndRun(t *testing.T) {
 		t.Error("a browser action can't also run on the server")
 	}
 }
+
+func TestPressTellsTheOwnerFirst(t *testing.T) {
+	ctx := context.Background()
+	rig := func(t *testing.T, fail error) (*service, *fakeRuns, *[]Viewer) {
+		t.Helper()
+		var heard []Viewer
+		reg := NewRegistry()
+		if err := reg.RegisterEvent(EventDef{Name: "rest", Label: "A rest", Press: "Log a rest", Check: okCheck,
+			Pressed: func(_ context.Context, campaignID string, by Viewer) error {
+				if campaignID != camp {
+					t.Errorf("pressed in %q", campaignID)
+				}
+				heard = append(heard, by)
+				return fail
+			}}); err != nil {
+			t.Fatal(err)
+		}
+		if err := reg.RegisterAction(ActionDef{Name: "hand", Label: "Do it by hand", Check: okCheck}); err != nil {
+			t.Fatal(err)
+		}
+		runs := &fakeRuns{runs: map[string]Run{}}
+		svc := NewService(newFakeRepo(), reg, nil, runs).(*service)
+		if _, err := svc.Create(ctx, camp, dm, RecipeInput{Name: "Rest", Doc: Doc{Rules: []Rule{{When: When{Event: "rest"}, Timing: TimingHeld, Then: []Do{{Action: "hand"}}}}}}); err != nil {
+			t.Fatal(err)
+		}
+		return svc, runs, &heard
+	}
+
+	t.Run("the owner hears the press, then the rules run", func(t *testing.T) {
+		svc, runs, heard := rig(t, nil)
+		if _, err := svc.Press(ctx, camp, "rest", dm); err != nil {
+			t.Fatal(err)
+		}
+		if len(*heard) != 1 || (*heard)[0].UserID != dm.UserID || len(runs.runs) != 1 {
+			t.Fatalf("heard %+v, runs %d", *heard, len(runs.runs))
+		}
+	})
+	t.Run("a player's press reaches no one", func(t *testing.T) {
+		svc, runs, heard := rig(t, nil)
+		if _, err := svc.Press(ctx, camp, "rest", player); codeOf(err) != 403 {
+			t.Fatalf("player press: %v", err)
+		}
+		if len(*heard) != 0 || len(runs.runs) != 0 {
+			t.Fatalf("heard %+v, runs %d", *heard, len(runs.runs))
+		}
+	})
+	t.Run("the owner failing stops the press before any rule", func(t *testing.T) {
+		svc, runs, _ := rig(t, errDB)
+		if _, err := svc.Press(ctx, camp, "rest", dm); codeOf(err) != 500 {
+			t.Fatalf("press: %v", err)
+		}
+		if len(runs.runs) != 0 {
+			t.Fatalf("a rule ran: %d runs", len(runs.runs))
+		}
+	})
+}

@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 
@@ -275,5 +276,105 @@ func TestRepoIntegration_TagsAndBenches(t *testing.T) {
 	}
 	if list, _ := f.repo.ListBenches(ctx, f.campaign); len(list) != 0 {
 		t.Fatalf("benches after delete: %v", list)
+	}
+}
+
+func TestRepoIntegration_Projects(t *testing.T) {
+	f := newRepoFixture(t)
+	ctx := context.Background()
+	store := f.repo.(ProjectStore)
+	potion, mira, tobin := f.entity(t, "Healing potion"), f.entity(t, "Mira"), f.entity(t, "Tobin")
+	r := Recipe{ID: newUUID(t), Name: "Healing potion", Template: "steady", Result: Result{ItemID: potion, Qty: 1}, Goal: 30,
+		Who: "all", Rules: []Rule{}, Looks: map[string]*Look{}}
+	if err := f.repo.CreateRecipe(ctx, f.campaign, f.user, r); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newProject := func(char string, at time.Time) Project {
+		p := Project{ID: newUUID(t), CampaignID: f.campaign, CharacterID: char, RecipeID: r.ID, RecipeName: r.Name, Goal: 30, Stat: "reason",
+			ResultItemID: potion, ResultQty: 1, Status: ProjectActive, Took: "2 × Bloodmoss, 25 gp", StartedBy: f.user, StartedAt: at}
+		if err := store.CreateProject(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	a := newProject(mira, start)
+	b := newProject(mira, start.Add(time.Hour))
+	c := newProject(tobin, start.Add(2*time.Hour))
+
+	got, ok, err := store.GetProject(ctx, f.campaign, a.ID)
+	if err != nil || !ok || got.Version != 1 || got.RecipeID != r.ID || got.Took != a.Took || got.FinishedAt != nil || got.Status != ProjectActive {
+		t.Fatalf("get: %+v %v %v", got, ok, err)
+	}
+	if _, ok, _ := store.GetProject(ctx, f.other, a.ID); ok {
+		t.Fatal("a project was read through another campaign")
+	}
+	if n, _ := store.CountActive(ctx, f.campaign, mira); n != 2 {
+		t.Fatalf("Mira's active projects = %d, want 2", n)
+	}
+	list, _ := store.ListProjects(ctx, f.campaign, "", ProjectActive, 0)
+	if len(list) != 3 || list[0].ID != a.ID || list[2].ID != c.ID {
+		t.Fatalf("active list order wrong: %v", list)
+	}
+
+	// Two respites stack; a finished project gets none.
+	if n, err := store.LogRespite(ctx, f.campaign, f.user, "1 Frostmoot"); err != nil || n != 3 {
+		t.Fatalf("first respite: %d %v", n, err)
+	}
+	got, _, _ = store.GetProject(ctx, f.campaign, a.ID)
+	got.Points, got.RollsReady = 30, 0
+	done := start.Add(24 * time.Hour)
+	got.Status, got.Delivered, got.FinishedAt = ProjectMade, true, &done
+	if ok, err := store.UpdateProject(ctx, got, got.Version); !ok || err != nil {
+		t.Fatalf("finish: %v %v", ok, err)
+	}
+	if ok, _ := store.UpdateProject(ctx, got, got.Version); ok {
+		t.Fatal("a stale version was written")
+	}
+	if n, err := store.LogRespite(ctx, f.campaign, f.user, ""); err != nil || n != 2 {
+		t.Fatalf("second respite: %d %v", n, err)
+	}
+	gotB, _, _ := store.GetProject(ctx, f.campaign, b.ID)
+	if gotB.RollsReady != 2 || gotB.Version != 3 {
+		t.Fatalf("b after two respites: %+v", gotB)
+	}
+	gotA, _, _ := store.GetProject(ctx, f.campaign, a.ID)
+	if gotA.RollsReady != 0 || gotA.Status != ProjectMade || !gotA.Delivered || gotA.FinishedAt == nil || !gotA.FinishedAt.Equal(done) {
+		t.Fatalf("a after finishing: %+v", gotA)
+	}
+	if last, err := store.LastRespite(ctx, f.campaign); err != nil || last == nil || last.Projects != 2 || last.DayLabel != "" {
+		t.Fatalf("last respite: %+v %v", last, err)
+	}
+	if last, _ := store.LastRespite(ctx, f.other); last != nil {
+		t.Fatal("one campaign's respite showed in another")
+	}
+	if made, _ := store.ListProjects(ctx, f.campaign, mira, ProjectMade, 5); len(made) != 1 || made[0].ID != a.ID {
+		t.Fatalf("made list: %v", made)
+	}
+
+	if err := store.AddRoll(ctx, f.campaign, b.ID, f.user, "7,8", `[{"text":"2d10","n":15}]`, 15, 0, 15); err != nil {
+		t.Fatal(err)
+	}
+
+	// The recipe and the item it makes are deleted: the project keeps its
+	// name and goal. The hero deleted: their projects and rolls go.
+	if _, err := f.db.Exec(`DELETE FROM crafting_recipes WHERE id = ?`, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.Exec(`DELETE FROM entities WHERE id = ?`, potion); err != nil {
+		t.Fatal(err)
+	}
+	gotB, _, _ = store.GetProject(ctx, f.campaign, b.ID)
+	if gotB.RecipeID != "" || gotB.ResultItemID != "" || gotB.RecipeName != "Healing potion" || gotB.Goal != 30 {
+		t.Fatalf("b after its recipe was deleted: %+v", gotB)
+	}
+	if _, err := f.db.Exec(`DELETE FROM entities WHERE id = ?`, mira); err != nil {
+		t.Fatal(err)
+	}
+	var left, rolls int
+	_ = f.db.QueryRow(`SELECT COUNT(*) FROM crafting_projects WHERE character_id = ?`, mira).Scan(&left)
+	_ = f.db.QueryRow(`SELECT COUNT(*) FROM crafting_rolls`).Scan(&rolls)
+	if left != 0 || rolls != 0 {
+		t.Fatalf("a deleted hero left %d projects and %d rolls", left, rolls)
 	}
 }

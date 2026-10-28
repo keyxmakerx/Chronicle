@@ -6,8 +6,10 @@ grind, tip it into the flask, pour to the line, keep the heat steady, strike at
 the right moment), and the steps grade into a Draw Steel project roll. Build
 mode is the same scene with an editor round it, for a Director to arrange the
 room. The crafting app (`internal/plugins/crafting`) mounts build mode on a
-Director's stored bench and saves what they arrange; the admin Design Lab
-(`/admin/design-lab`) runs it against demo data and saves nothing.
+Director's stored bench and saves what they arrange, and mounts play mode on
+a player's project from the Crafting block, where the server makes the roll;
+the admin Design Lab (`/admin/design-lab`) runs it against demo data and
+saves nothing.
 
 ## The parts
 
@@ -44,10 +46,16 @@ and `onChange(state)` hears every change. The editor stores nothing itself:
 saved pieces come back through `o.state`, the room's look through the skin's
 own opts, and `ed.status(text)` rewrites the bar's line.
 
+A play-mode bench takes `{state, recipes, items, recipe, settings, onWorked}`
+the same way. `state` is the Director's arrangement, laid out with
+`CraftBenchEditor.arrange(skin, svg, state)` (the editor's own placing, with
+no editor round it); `settings` are the campaign's (difficulty, bane, skip);
+`onWorked` takes over the roll, below.
+
 ## The engine
 
-`CraftScene.mount(el, skin, {recipes, items, recipe, settings})` returns
-`{reset, settings, apply, sound, skip, on, state, stage, svg, skin, rerender, destroy}`.
+`CraftScene.mount(el, skin, {recipes, items, recipe, settings, onWorked})` returns
+`{reset, settings, apply, sound, skip, retry, on, state, stage, svg, skin, rerender, destroy}`.
 
 - **Recipes and items are data from anyone**, a Director or their AI, so the
   engine cleans them (`rules.cleanRecipes`, `rules.cleanItems`): strings become
@@ -61,6 +69,13 @@ own opts, and `ed.status(text)` rewrites the bar's line.
   an edge (+2 on the project roll); two or more misses earn a bane (−2) only
   when `settings.bane` is on; anything else is a plain roll. Skipping the
   steps (allowed when `settings.skip` is on) is a plain roll.
+- **A host can make the roll.** With `onWorked`, the roll phase's button
+  hands `onWorked(work, verdict)` how the steps went (`rules.work`: `clean`,
+  `botched`, `steady` or `skipped`, botched counting two misses whether or
+  not the campaign gives banes) and the scene waits in the `worked` phase
+  instead of rolling its own dice. `retry()` offers the roll again when the
+  host could not make it. Without `onWorked` the scene rolls for itself, as
+  the Design Lab does.
 - **Ids are scoped per scene.** Every id a skin draws, and every `url(#…)` and
   `href="#…"` pointing at one, is prefixed per mount (`rules.scoper`), so two
   benches on a page never share a gradient or filter. A skin writes plain ids.

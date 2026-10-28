@@ -65,19 +65,35 @@ type Service interface {
 	UpdateBench(ctx context.Context, campaignID, id string, v Viewer, in BenchInput) (*Bench, error)
 	SaveArrangement(ctx context.Context, campaignID, id, skin string, v Viewer, in ArrangementInput) (*Bench, error)
 	DeleteBench(ctx context.Context, campaignID, id string, v Viewer) error
+
+	// CanCraftFor says whether the viewer may see a character's Crafting
+	// block: a Director, or the character's player.
+	CanCraftFor(ctx context.Context, campaignID, characterID string, v Viewer) (bool, error)
+	Character(ctx context.Context, campaignID, characterID string, v Viewer) (*CharacterCrafting, error)
+	StartProject(ctx context.Context, campaignID, characterID string, v Viewer, in StartInput) (*ProjectView, error)
+	RollProject(ctx context.Context, campaignID, id string, v Viewer, in RollInput) (*RollResult, error)
+	CancelProject(ctx context.Context, campaignID, id string, v Viewer) error
+
+	Projects(ctx context.Context, campaignID string, v Viewer) (*ProjectsPage, error)
+	LogRespite(ctx context.Context, campaignID string, v Viewer) (*RespiteResult, error)
+	RespitePressed(ctx context.Context, campaignID string, v Viewer) error
+	GiveRoll(ctx context.Context, campaignID, id string, v Viewer) (*ProjectView, error)
+	SetPoints(ctx context.Context, campaignID, id string, v Viewer, in SetPointsInput) (*ProjectView, error)
 }
 
 type service struct {
-	repo  Repository
-	dir   Directory
-	rules RulesSource
-	newID func() string
+	repo     Repository
+	dir      Directory
+	rules    RulesSource
+	projects ProjectDeps
+	newID    func() string
 }
 
 // NewService builds the service. rules may be nil, which means every
-// campaign uses the default crafting rules.
-func NewService(repo Repository, dir Directory, rules RulesSource) Service {
-	return &service{repo: repo, dir: dir, rules: rules, newID: uuid.NewString}
+// campaign uses the default crafting rules. projects may be empty, and the
+// project routes then answer that projects are not set up.
+func NewService(repo Repository, dir Directory, rules RulesSource, projects ProjectDeps) Service {
+	return &service{repo: repo, dir: dir, rules: rules, projects: projects, newID: uuid.NewString}
 }
 
 func (s *service) systemRules(ctx context.Context, campaignID string) (systems.CraftingRules, string) {

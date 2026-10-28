@@ -421,6 +421,11 @@ func (s *service) Press(ctx context.Context, campaignID, event string, v Viewer)
 	if !ok || e.Press == "" {
 		return nil, errNotFound("button")
 	}
+	if e.Pressed != nil {
+		if err := e.Pressed(ctx, campaignID, v); err != nil {
+			return nil, errInternal(err)
+		}
+	}
 	if err := s.Fire(ctx, campaignID, v, Fired{Event: e.Name}); err != nil {
 		return nil, errInternal(err)
 	}
