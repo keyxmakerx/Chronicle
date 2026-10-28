@@ -79,6 +79,12 @@ type Service interface {
 	RespitePressed(ctx context.Context, campaignID string, v Viewer) error
 	GiveRoll(ctx context.Context, campaignID, id string, v Viewer) (*ProjectView, error)
 	SetPoints(ctx context.Context, campaignID, id string, v Viewer, in SetPointsInput) (*ProjectView, error)
+
+	// SetKindPictures changes what kinds wear and returns every kind as it
+	// now stands; SetItemPicture gives one item its own picture, or nil to
+	// follow its kind.
+	SetKindPictures(ctx context.Context, campaignID string, v Viewer, in KindPicturesInput) ([]Tag, error)
+	SetItemPicture(ctx context.Context, campaignID, itemID string, v Viewer, in *MaterialPicture) (*MaterialPicture, error)
 }
 
 type service struct {
@@ -117,8 +123,12 @@ func (s *service) Library(ctx context.Context, campaignID string, v Viewer) (*Li
 	if err != nil {
 		return nil, errInternal(err)
 	}
+	book, err := s.pictureBook(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
 	rules, name := s.systemRules(ctx, campaignID)
-	return &Library{Tags: Tags, Tools: Tools, Steps: StepKinds, BenchKinds: BenchKinds, Templates: Templates, Skins: Skins,
+	return &Library{Tags: book.tags(), TagGroups: TagGroups, Pictures: Pictures, Tools: Tools, Steps: StepKinds, BenchKinds: BenchKinds, Templates: Templates, Skins: Skins,
 		Difficulties: Difficulties, Moments: Moments, Rules: rules, System: name, Settings: set, Director: v.Director}, nil
 }
 
@@ -138,12 +148,16 @@ func (s *service) Catalog(ctx context.Context, campaignID string, v Viewer) (*Ca
 	if err != nil {
 		return nil, errInternal(err)
 	}
+	book, err := s.pictureBook(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
 	out := &Catalog{Items: make([]MaterialItem, 0, len(items)), Characters: chars, Truncated: cutItems || cutChars}
 	if out.Characters == nil {
 		out.Characters = []Named{}
 	}
 	for _, it := range items {
-		out.Items = append(out.Items, MaterialItem{ID: it.ID, Name: it.Name, Tags: knownTags(tags[it.ID])})
+		out.Items = append(out.Items, MaterialItem{ID: it.ID, Name: it.Name, Tags: knownTags(tags[it.ID]), Picture: book.own(it.ID)})
 	}
 	return out, nil
 }

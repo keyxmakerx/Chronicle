@@ -47,6 +47,18 @@ type Repository interface {
 	// SetTags replaces one item's tags.
 	SetTags(ctx context.Context, campaignID, itemID string, tags []string) error
 
+	// ListKindPictures returns the campaign's own picture for each kind it
+	// changed; a kind with no row wears the library's default.
+	ListKindPictures(ctx context.Context, campaignID string) (map[string]MaterialPicture, error)
+	// SetKindPictures writes several kinds at once, so a swap is one change;
+	// a nil entry puts that kind back on its default.
+	SetKindPictures(ctx context.Context, campaignID string, set map[string]*MaterialPicture) error
+	// ListItemPictures returns each item that wears its own picture.
+	ListItemPictures(ctx context.Context, campaignID string) (map[string]MaterialPicture, error)
+	// SetItemPicture gives one item its own picture; nil makes it follow its
+	// first kind again.
+	SetItemPicture(ctx context.Context, campaignID, itemID string, p *MaterialPicture) error
+
 	ListBenches(ctx context.Context, campaignID string) ([]Bench, error)
 	GetBench(ctx context.Context, campaignID, id string) (Bench, bool, error)
 	// CreateBench returns errDuplicate when the name is taken.
@@ -393,6 +405,75 @@ func (r *sqlRepository) SetTags(ctx context.Context, campaignID, itemID string, 
 		}
 	}
 	return tx.Commit()
+}
+
+// ---------- Material pictures ----------
+
+func scanPictures(rows *sql.Rows) (map[string]MaterialPicture, error) {
+	defer rows.Close()
+	out := map[string]MaterialPicture{}
+	for rows.Next() {
+		var k string
+		var p MaterialPicture
+		if err := rows.Scan(&k, &p.Picture, &p.Tint); err != nil {
+			return nil, fmt.Errorf("scan material picture: %w", err)
+		}
+		out[k] = p
+	}
+	return out, rows.Err()
+}
+
+func (r *sqlRepository) ListKindPictures(ctx context.Context, campaignID string) (map[string]MaterialPicture, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT kind, picture, tint FROM crafting_kind_pictures WHERE campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list kind pictures: %w", err)
+	}
+	return scanPictures(rows)
+}
+
+func (r *sqlRepository) SetKindPictures(ctx context.Context, campaignID string, set map[string]*MaterialPicture) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set kind pictures: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	for kind, p := range set {
+		if p == nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM crafting_kind_pictures WHERE campaign_id = ? AND kind = ?`, campaignID, kind); err != nil {
+				return fmt.Errorf("clear kind picture: %w", err)
+			}
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO crafting_kind_pictures (campaign_id, kind, picture, tint) VALUES (?, ?, ?, ?)
+			 ON DUPLICATE KEY UPDATE picture = VALUES(picture), tint = VALUES(tint)`, campaignID, kind, p.Picture, p.Tint); err != nil {
+			return fmt.Errorf("save kind picture: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *sqlRepository) ListItemPictures(ctx context.Context, campaignID string) (map[string]MaterialPicture, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT item_id, picture, tint FROM crafting_material_pictures WHERE campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list item pictures: %w", err)
+	}
+	return scanPictures(rows)
+}
+
+func (r *sqlRepository) SetItemPicture(ctx context.Context, campaignID, itemID string, p *MaterialPicture) error {
+	if p == nil {
+		if _, err := r.db.ExecContext(ctx, `DELETE FROM crafting_material_pictures WHERE campaign_id = ? AND item_id = ?`, campaignID, itemID); err != nil {
+			return fmt.Errorf("clear item picture: %w", err)
+		}
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO crafting_material_pictures (item_id, campaign_id, picture, tint) VALUES (?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE picture = VALUES(picture), tint = VALUES(tint)`, itemID, campaignID, p.Picture, p.Tint); err != nil {
+		return fmt.Errorf("save item picture: %w", err)
+	}
+	return nil
 }
 
 // ---------- Benches ----------

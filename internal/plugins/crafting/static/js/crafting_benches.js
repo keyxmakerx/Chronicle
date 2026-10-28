@@ -19,7 +19,7 @@ window.CraftingBenches = (function () {
   function a(w) { return (/^[aeiou]/i.test(w) ? 'an ' : 'a ') + w; }
 
   /* The campaign's recipes as the bench engine plays them: each material
-     becomes an ingredient keyed by its item or tag, tinted by its tag. */
+     becomes an ingredient keyed by its item or tag, wearing its picture. */
   function engineData(app, kind) {
     var lib = app.lib, CR = window.CraftingRecipes, items = {}, recipes = {};
     var stats = {};
@@ -28,8 +28,8 @@ window.CraftingBenches = (function () {
       if (!r.steps.length || r.bench !== kind) return;
       var keyOf = [];
       r.materials.forEach(function (m, i) {
-        var k = m.itemId ? 'i' + m.itemId.replace(/[^a-zA-Z0-9]/g, '') : 't' + m.tag, t = L.matTags(m, app.items)[0];
-        if (!items[k]) items[k] = {name: L.matName(lib, m, app.items), color: (t && CR.TAG_COLOR[t]) || '#8a8a8a', desc: m.tag ? 'Any ' + L.tagLabel(lib, m.tag) + ' will do.' : ''};
+        var k = m.itemId ? 'i' + m.itemId.replace(/[^a-zA-Z0-9]/g, '') : 't' + m.tag, pic = L.matPicture(lib, m, app.items);
+        if (!items[k]) items[k] = {name: L.matName(lib, m, app.items), color: pic.tint, picture: pic.picture, desc: m.tag ? 'Any ' + L.tagLabel(lib, m.tag) + ' will do.' : ''};
         keyOf[i] = k;
       });
       var col = r.colors || {};

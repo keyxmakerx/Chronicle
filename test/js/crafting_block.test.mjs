@@ -76,13 +76,14 @@ test('a roll lists the dice as rolled and every other term signed', () => {
 
 test('a known recipe becomes the bench engine’s recipe', () => {
   const r = { name: 'Caustic flask', kind: 'Volatile brew', roll: '2d10 + Reason', statValue: 2, goal: 20, colors: { final: '#a6ff3d' },
-    needs: [{ itemId: 'salt-1', name: 'Saltglass', qty: 1, tags: ['magic_item'] }, { tag: 'herb', name: 'any herb', qty: 1 }],
+    needs: [{ itemId: 'salt-1', name: 'Saltglass', qty: 1, tags: ['magic_item'], picture: { picture: 'crystals', tint: '#9fe3e0' } },
+      { tag: 'herb', name: 'any herb', qty: 1, picture: { picture: 'leaf', tint: '#6a9c3a' } }],
     steps: [{ t: 'add', material: 1, to: 'mortar' }, { t: 'grind', turns: 2 }, { t: 'add', material: 0, to: 'flask' }, { t: 'strike', n: 2 }] };
   const got = plain(L.benchRecipe(r, 'Mira', 9));
   assert.deepEqual(Object.keys(got.items), ['isalt1', 'therb']);
   assert.equal(got.items.therb.name, 'Any herb');
-  assert.equal(got.items.therb.color, L.TAG_COLOR.herb);
-  assert.equal(got.items.isalt1.color, L.TAG_COLOR.magic_item);
+  assert.deepEqual([got.items.therb.picture, got.items.therb.color], ['leaf', '#6a9c3a']);
+  assert.deepEqual([got.items.isalt1.picture, got.items.isalt1.color], ['crystals', '#9fe3e0']);
   assert.deepEqual(got.recipe.steps, [{ t: 'add', item: 'therb', to: 'mortar' }, { t: 'grind', turns: 2 }, { t: 'add', item: 'isalt1', to: 'flask' }, { t: 'strike', n: 2 }]);
   assert.equal(got.recipe.stat, 'Reason');
   assert.equal(got.recipe.mod, 2);

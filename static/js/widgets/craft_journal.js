@@ -302,6 +302,8 @@ window.CraftJournal = (function () {
       if(k==='bile')return c+'<g filter="url(#p-rough)">'+wash('M-12,-26 L12,-26 L12,20 Q12,28 0,28 Q-12,28 -12,20 Z','#4f9a2a',.52,'filter="url(#p-wc)"')+
         '<rect x="-12" y="-28" width="24" height="56" rx="9" class="p-ink"/><rect x="-10" y="-40" width="20" height="12" class="p-ink" fill="#8a1a1a" fill-opacity=".55"/></g><text class="p-hand p-itemlab" x="0" y="56" text-anchor="middle">'+lab+'</text>';
       /* Any other ingredient: a stoppered phial washed in its own colour */
+      var CP=window.CraftPictures;
+      if(CP&&it.picture&&CP.has(it.picture))return c+'<g filter="url(#p-rough)" class="cpx-touch"><svg class="'+CP.cls(it.picture)+'" x="-36" y="-50" width="72" height="72" viewBox="0 0 40 40" overflow="visible">'+CP.inner(it.picture,it.color)+'</svg></g><text class="p-hand p-itemlab" x="0" y="58" text-anchor="middle">'+lab+'</text>';
       return c+'<g filter="url(#p-rough)">'+wash('M-14,-8 L14,-8 L16,26 Q16,34 0,34 Q-16,34 -16,26 Z',ITEMC[k],.5,'filter="url(#p-wc)"')+
         '<path d="M-10,-30 L-10,-10 Q-20,-4 -18,26 Q-17,36 0,36 Q17,36 18,26 Q20,-4 10,-10 L10,-30" class="p-ink p-fillnone"/><rect x="-12" y="-42" width="24" height="12" rx="2" class="p-ink" fill="url(#p-hatch)"/>'+
         '<path d="M-12,4 L-12,26" class="p-ink p-thin"/></g><text class="p-hand p-itemlab" x="0" y="58" text-anchor="middle">'+lab+'</text>';},
