@@ -6162,6 +6162,7 @@ func (a *App) RegisterRoutes() {
 	// The Homebrew service is built further down; the hook is filled in then.
 	craftingRespites := &craftingRespiteHook{}
 	var craftingListener respiteListener // nil while crafting is degraded
+	var craftingFights encounters.FightListener
 	if a.PluginHealth.IsHealthy(crafting.PluginSlug) {
 		craftingRepo := crafting.NewRepository(a.DB)
 		craftingSvc := crafting.NewService(craftingRepo,
@@ -6169,6 +6170,8 @@ func (a *App) RegisterRoutes() {
 			crafting.ProjectDeps{
 				Store:    craftingRepo.(crafting.ProjectStore),
 				Armory:   &craftingArmoryAdapter{stash: stashSvc},
+				Spoils:   craftingRepo.(crafting.SpoilStore),
+				Pages:    &craftingPagesAdapter{entities: entityService},
 				Sheets:   &craftingSheetsAdapter{entities: entityService},
 				Days:     &craftingDaysAdapter{cal: calendarService},
 				Calendar: &craftingCalendarAdapter{cal: calendarService},
@@ -6178,6 +6181,7 @@ func (a *App) RegisterRoutes() {
 			campaignService, authService, addonService)
 		registerCraftingBlock(blockRegistry, craftingSvc)
 		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
+		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
 	} else {
 		slog.Warn("crafting plugin degraded — the Crafting app is not available")
 	}
@@ -6262,6 +6266,10 @@ func (a *App) RegisterRoutes() {
 		encounterAPI.attach(encounterSvc)
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 		runSvc := encounters.NewRunService(encounters.NewRunRepository(a.DB), encounterSvc, encounterPages)
+		// A fight that ends drops its defeated creatures' spoils.
+		if l, ok := runSvc.(interface{ SetFightListener(encounters.FightListener) }); ok && craftingFights != nil {
+			l.SetFightListener(craftingFights)
+		}
 		encounters.RegisterRunRoutes(e, encounters.NewRunHandler(runSvc), campaignService, authService)
 	} else {
 		slog.Warn("encounters plugin degraded — routes not registered")

@@ -19,15 +19,21 @@ type RunService interface {
 	Start(ctx context.Context, campaignID string, v Viewer, in RunStart) (*RunView, error)
 	// Save replaces the fight; in.Version must be the stored version.
 	Save(ctx context.Context, campaignID string, v Viewer, in RunSave) (*RunView, error)
-	// End ends the fight.
-	End(ctx context.Context, campaignID string, v Viewer) error
+	// End ends the fight and says what it left, as the fight listener
+	// tells it; ending no fight reports nothing.
+	End(ctx context.Context, campaignID string, v Viewer) (*EndReport, error)
 }
 
 type runService struct {
-	repo  RunRepository
-	enc   Service
-	pages PageDirectory
+	repo   RunRepository
+	enc    Service
+	pages  PageDirectory
+	listen FightListener
 }
+
+// SetFightListener sets who hears about fights; nil for nobody. It is set
+// once while the app is wired, before any request.
+func (s *runService) SetFightListener(l FightListener) { s.listen = l }
 
 // NewRunService builds the run service over the encounter service, which
 // decides which encounters the viewer may start.
@@ -65,6 +71,7 @@ func (s *runService) Current(ctx context.Context, campaignID string, v Viewer) (
 			return nil, err
 		}
 		out.Run, out.Version = run, row.Version
+		out.Leaves = s.leaves(ctx, campaignID, run, v)
 	} else {
 		list, _, err := s.enc.Search(ctx, campaignID, "", MaxSearchLimit, v)
 		if err != nil {
@@ -178,12 +185,64 @@ func (s *runService) Save(ctx context.Context, campaignID string, v Viewer, in R
 	return s.Current(ctx, campaignID, v)
 }
 
-func (s *runService) End(ctx context.Context, campaignID string, v Viewer) error {
+// End ends the fight, then tells the listener which creatures were down.
+// The fight is over whatever the listener answers, so its failure is
+// logged and reported as a line rather than undoing the end.
+func (s *runService) End(ctx context.Context, campaignID string, v Viewer) (*EndReport, error) {
 	if err := requireDM(v); err != nil {
-		return err
+		return nil, err
 	}
-	if err := s.repo.DeleteRun(ctx, campaignID); err != nil {
-		return apperrorInternal(err)
+	row, ended, err := s.repo.EndRun(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
 	}
-	return nil
+	out := &EndReport{Lines: []string{}}
+	if !ended {
+		return out, nil
+	}
+	run, err := decodeRun(row)
+	if err != nil {
+		slog.Warn("encounters: an ended fight could not be read", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return out, nil
+	}
+	out.Name = run.Name
+	if s.listen == nil {
+		return out, nil
+	}
+	rep, err := s.listen.FightEnded(context.WithoutCancel(ctx), campaignID, v, endedFight(run))
+	if err != nil {
+		slog.Error("encounters: the fight ended but its listener failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		out.Lines = append(out.Lines, "The fight is over, but what it left couldn’t be worked out. Check the tray before handing anything out.")
+		return out, nil
+	}
+	if rep != nil {
+		out.Lines, out.Link, out.LinkText, out.Note = rep.Lines, rep.Link, rep.LinkText, rep.Note
+		if out.Lines == nil {
+			out.Lines = []string{}
+		}
+	}
+	return out, nil
+}
+
+// leaves asks the listener what each creature's page will leave, best
+// effort: the fight shows without it.
+func (s *runService) leaves(ctx context.Context, campaignID string, run *Run, v Viewer) map[string]string {
+	if s.listen == nil {
+		return nil
+	}
+	var ids []string
+	for _, l := range run.Lines {
+		if l.Kind == LineCreature && l.EntityID != "" {
+			ids = append(ids, l.EntityID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	out, err := s.listen.Leaves(ctx, campaignID, v, ids)
+	if err != nil {
+		slog.Warn("encounters: what creatures leave is unavailable", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return nil
+	}
+	return out
 }

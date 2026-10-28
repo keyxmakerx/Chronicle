@@ -223,19 +223,20 @@ func TestRunRepositoryIntegration(t *testing.T) {
 	if err != nil || !found || r.Version != 2 || string(r.Data) != `{"round":2}` {
 		t.Fatalf("after update: %+v found=%v err=%v", r, found, err)
 	}
-	if err := repo.DeleteRun(ctx, fx.other); err != nil {
-		t.Fatal(err)
+	if _, ended, err := repo.EndRun(ctx, fx.other); err != nil || ended {
+		t.Fatalf("ending another campaign's fight: ended=%v err=%v", ended, err)
 	}
 	if _, found, _ := repo.GetRun(ctx, fx.campaign); !found {
 		t.Fatal("ending another campaign's fight ended this one")
 	}
-	if err := repo.DeleteRun(ctx, fx.campaign); err != nil {
-		t.Fatal(err)
+	// The end hands back the fight as it stood, once.
+	if r, ended, err := repo.EndRun(ctx, fx.campaign); err != nil || !ended || string(r.Data) != `{"round":2}` {
+		t.Fatalf("end: %+v ended=%v err=%v", r, ended, err)
 	}
 	if _, found, _ := repo.GetRun(ctx, fx.campaign); found {
 		t.Fatal("the fight is still on after the end")
 	}
-	if err := repo.DeleteRun(ctx, fx.campaign); err != nil {
-		t.Fatalf("ending no fight: %v", err)
+	if _, ended, err := repo.EndRun(ctx, fx.campaign); err != nil || ended {
+		t.Fatalf("ending no fight: ended=%v err=%v", ended, err)
 	}
 }

@@ -293,6 +293,43 @@ func TestCraftGive(t *testing.T) {
 	}
 }
 
+func TestSpoilGive(t *testing.T) {
+	tests := []struct {
+		name       string
+		who        Actor
+		harvested  bool
+		wantCode   int
+		wantReason string
+	}{
+		{"taken as it is", mirasPlayer, false, 0, "Took 2 × Secret from the spoils"},
+		{"harvested", gm, true, 0, "Harvested 2 × Secret"},
+		{"another player's hero", Actor{"u1", rPlayer}, false, http.StatusForbidden, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g, _ := newCraftFx()
+			err := g.svc.SpoilGive(context.Background(), "camp", tt.who, "c2", "i2", 2, tt.harvested)
+			if got := code(err); got != tt.wantCode {
+				t.Fatalf("code %d (%v), want %d", got, err, tt.wantCode)
+			}
+			if tt.wantCode != 0 {
+				if g.carried("c2", "i2") != 0 || len(g.repo.moves) != 0 {
+					t.Fatal("a refused give changed something")
+				}
+				return
+			}
+			// The player sees what they took, even an item kept private, and
+			// the history names the item but not where it dropped.
+			if g.carried("c2", "i2") != 2 || len(g.hand.allowed["i2"]) != 1 {
+				t.Fatalf("holds %d, shared with %v", g.carried("c2", "i2"), g.hand.allowed["i2"])
+			}
+			if len(g.repo.moves) != 1 || g.repo.moves[0].Reason != tt.wantReason {
+				t.Fatalf("moves %+v", g.repo.moves)
+			}
+		})
+	}
+}
+
 func TestCraftPack(t *testing.T) {
 	tests := []struct {
 		name     string

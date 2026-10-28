@@ -79,6 +79,19 @@ type Service interface {
 	RespitePressed(ctx context.Context, campaignID string, v Viewer) error
 	GiveRoll(ctx context.Context, campaignID, id string, v Viewer) (*ProjectView, error)
 	SetPoints(ctx context.Context, campaignID, id string, v Viewer, in SetPointsInput) (*ProjectView, error)
+
+	Spoils(ctx context.Context, campaignID string, v Viewer) (*SpoilsPage, error)
+	SaveDrops(ctx context.Context, campaignID, pageID string, v Viewer, in DropInput) (*DropView, error)
+	DeleteDrops(ctx context.Context, campaignID, pageID string, v Viewer) error
+	PutSpoils(ctx context.Context, campaignID string, v Viewer, in PutInput) (*PutResult, error)
+	ClearTray(ctx context.Context, campaignID string, v Viewer) error
+	ClearSpoil(ctx context.Context, campaignID, id string, v Viewer) error
+	ClearSpoilLine(ctx context.Context, campaignID string, id int64, v Viewer) error
+	TakeSpoil(ctx context.Context, campaignID string, lineID int64, v Viewer, in TakeInput) (*TakeResult, error)
+	// FightEnded puts what a fight's defeated creatures drop in the tray.
+	FightEnded(ctx context.Context, campaignID string, v Viewer, f Fight) (*FightSpoils, error)
+	// DropNotes says which of a fight's pages have a drop list.
+	DropNotes(ctx context.Context, campaignID string, v Viewer, pageIDs []string) (map[string]string, error)
 }
 
 type service struct {
