@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
@@ -19,7 +20,7 @@ func TestRollsPublisherAudience(t *testing.T) {
 	coDM := &ws.Client{UserID: "u-co", Role: permissions.RolePlayer, IsDmGranted: true, Source: "browser"}
 	roller := &ws.Client{UserID: "u-roller", Role: permissions.RolePlayer, Source: "browser"}
 	other := &ws.Client{UserID: "u-other", Role: permissions.RolePlayer, Source: "browser"}
-	foundry := &ws.Client{UserID: "u-dm", Role: permissions.RoleOwner, Source: "foundry-module"}
+	foundry := &ws.Client{UserID: "u-dm", Role: permissions.RoleOwner, Source: foundry_vtt.ModuleSource}
 
 	tests := []struct {
 		name string
