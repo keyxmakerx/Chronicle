@@ -15,6 +15,8 @@
  *   var ed = CraftBenchEditor.start(el, {skin: CraftDesk.create(o), recipes: {...}, items: {...},
  *     state: saved, onChange: fn, status: 'Changes save as you go.'});
  *   ed.state(); ed.status('Saved'); ed.destroy();
+ * CraftBenchEditor.arrange(skin, svg, saved) plays a saved arrangement
+ * without the editor.
  */
 window.CraftBenchEditor = (function () {
   var EFFECT_LABEL = {shake: 'Shake', sparkle: 'Sparkles', smoke: 'Puff of smoke', glow: 'Warm glow'};
@@ -23,6 +25,33 @@ window.CraftBenchEditor = (function () {
       I_X = '<svg viewBox="0 0 16 16" width="14" height="14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function opt(v,l,on){return '<option value="'+esc(v)+'"'+(on?' selected':'')+'>'+esc(l)+'</option>';}
+
+  // auto: the Director hasn't touched its words or actions, so it follows the room (a lantern says Lantern)
+  function fresh(src){return {name:src.name||'',text:src.text||'',more:src.more||'',dx:0,dy:0,hidden:false,auto:true,
+    acts:(src.acts||[]).filter(Array.isArray).map(function(a){return {label:a[0],fx:'b:'+a[1],sound:'',say:''};})};}
+  /* A saved piece keeps the Director's words, move and actions; the room's
+     look came back through the skin's own opts. */
+  function savedPiece(state,id,src){var p=state&&state.pieces&&state.pieces[id];if(!p||typeof p!=='object')return null;
+    var f=fresh(src);return {name:typeof p.name==='string'&&p.name?p.name:f.name,text:typeof p.text==='string'?p.text:f.text,more:typeof p.more==='string'?p.more:f.more,
+      dx:+p.dx||0,dy:+p.dy||0,hidden:p.hidden===true,auto:false,
+      acts:Array.isArray(p.acts)?p.acts.filter(function(a){return a&&typeof a==='object';}).map(function(a){return {label:String(a.label||''),fx:String(a.fx||''),sound:String(a.sound||''),say:String(a.say||'')};}):f.acts};}
+  /* The scene reads hover cards and menus from the skin's info table on
+     every hover, so an edit here shows on the next hover. */
+  function syncPiece(skin,id,s){skin.info[id]={name:s.name||'Unnamed piece',text:s.text,more:s.more||s.text,
+    acts:s.acts.map(function(a){return {label:a.label||'Untitled action',fx:a.fx,sound:a.sound,say:a.say};})};}
+  function placePiece(skin,svg,id,s){var P=(skin.pieces||{})[id];if(!P)return;
+    Array.prototype.forEach.call(svg.querySelectorAll(P.sel),function(e){if(e.__o==null)e.__o=e.getAttribute('transform')||'';e.setAttribute('transform',(s.dx||s.dy?'translate('+s.dx.toFixed(1)+','+s.dy.toFixed(1)+') ':'')+e.__o);e.style.display=s.hidden?'none':'';});
+    // While the light is dragged its glows follow at once; the full relight comes when it settles
+    if(P.light)(skin.glows||[]).forEach(function(q){var g=svg.querySelector(q);if(!g)return;if(g.__cx==null){g.__cx=+g.getAttribute('cx');g.__cy=+g.getAttribute('cy');}
+      g.setAttribute('cx',g.__cx+(s.hidden?0:s.dx)-skin.opts.ldx);g.setAttribute('cy',g.__cy+(s.hidden?0:s.dy)-skin.opts.ldy);});}
+  /* A bench played as the Director arranged it, with no editor round it:
+     each saved piece's move, hide, words and actions, put back whenever the
+     skin redraws the room. */
+  function arrange(skin,svg,state){
+    function apply(){Object.keys(skin.pieces||{}).forEach(function(id){var s=savedPiece(state,id,skin.info[id]||{name:id});if(!s)return;syncPiece(skin,id,s);placePiece(skin,svg,id,s);});}
+    if(!state||!state.pieces)return;
+    apply();svg.addEventListener('craft:redrawn',apply);
+  }
 
   function start(root, o) {
     o = o || {};
@@ -35,20 +64,9 @@ window.CraftBenchEditor = (function () {
     function decor(){return Object.keys(PIECES).filter(function(id){var P=PIECES[id];return P.kind!=='tool'&&(!P.kit||skin.opts.kit.indexOf(P.kit)>=0);});}
     function tools(){return Object.keys(PIECES).filter(function(id){return PIECES[id].kind==='tool';});}
 
-    // auto: the Director hasn't touched its words or actions, so it follows the room (a lantern says Lantern)
-    function fresh(src){return {name:src.name||'',text:src.text||'',more:src.more||'',dx:0,dy:0,hidden:false,auto:true,
-      acts:(src.acts||[]).filter(Array.isArray).map(function(a){return {label:a[0],fx:'b:'+a[1],sound:'',say:''};})};}
-    /* A saved piece keeps the Director's words, move and actions; the room's
-       look came back through the skin's own opts. */
-    function saved(id,src){var p=o.state&&o.state.pieces&&o.state.pieces[id];if(!p||typeof p!=='object')return null;
-      var f=fresh(src);return {name:typeof p.name==='string'&&p.name?p.name:f.name,text:typeof p.text==='string'?p.text:f.text,more:typeof p.more==='string'?p.more:f.more,
-        dx:+p.dx||0,dy:+p.dy||0,hidden:p.hidden===true,auto:false,
-        acts:Array.isArray(p.acts)?p.acts.filter(function(a){return a&&typeof a==='object';}).map(function(a){return {label:String(a.label||''),fx:String(a.fx||''),sound:String(a.sound||''),say:String(a.say||'')};}):f.acts};}
+    function saved(id,src){return savedPiece(o.state,id,src);}
     function initState(){Object.keys(PIECES).forEach(function(id){var src=skin.info[id]||{name:id};st[id]=saved(id,src)||fresh(src);sync(id);place(id);});}
-    /* The scene reads hover cards and menus from the skin's info table on
-       every hover, so an edit here shows on the next hover. */
-    function sync(id){var s=st[id];skin.info[id]={name:s.name||'Unnamed piece',text:s.text,more:s.more||s.text,
-      acts:s.acts.map(function(a){return {label:a.label||'Untitled action',fx:a.fx,sound:a.sound,say:a.say};})};}
+    function sync(id){syncPiece(skin,id,st[id]);}
     /* The skin redrew the room: put back every move and hide, take up new
        names for pieces the Director hasn't renamed, and pick up kit pieces. */
     function redrawn(){
@@ -66,11 +84,7 @@ window.CraftBenchEditor = (function () {
       els(id).forEach(function(e){if(e.style.display==='none')return;var q=e.getBoundingClientRect();if(!q.width)return;any=true;
         var a=toSvg(q.left,q.top),c=toSvg(q.right,q.bottom);l=Math.min(l,a.x);t=Math.min(t,a.y);r=Math.max(r,c.x);b=Math.max(b,c.y);});
       return any?{x:l,y:t,w:r-l,h:b-t}:null;}
-    function place(id){var s=st[id];if(!s)return;
-      els(id).forEach(function(e){if(e.__o==null)e.__o=e.getAttribute('transform')||'';e.setAttribute('transform',(s.dx||s.dy?'translate('+s.dx.toFixed(1)+','+s.dy.toFixed(1)+') ':'')+e.__o);e.style.display=s.hidden?'none':'';});
-      // While the light is dragged its glows follow at once; the full relight comes when it settles
-      if(PIECES[id].light)(skin.glows||[]).forEach(function(q){var g=svg.querySelector(q);if(!g)return;if(g.__cx==null){g.__cx=+g.getAttribute('cx');g.__cy=+g.getAttribute('cy');}
-        g.setAttribute('cx',g.__cx+(s.hidden?0:s.dx)-skin.opts.ldx);g.setAttribute('cy',g.__cy+(s.hidden?0:s.dy)-skin.opts.ldy);});}
+    function place(id){if(st[id])placePiece(skin,svg,id,st[id]);}
     function pieceAt(t){if(!t||!t.closest||t.closest('[data-item]'))return null;
       for(var id in PIECES){if(PIECES[id].kind==='tool'&&t.closest(PIECES[id].sel))return id;}
       var p=t.closest('[data-prop]');return p&&PIECES[p.getAttribute('data-prop')]?p.getAttribute('data-prop'):null;}
@@ -229,5 +243,5 @@ window.CraftBenchEditor = (function () {
     function status(t){var el=$('.crb-status');if(el)el.textContent=t;}
     return {state:state,select:select,setMode:setMode,box:box,scene:ctrl,status:status,destroy:destroy};
   }
-  return {start:start};
+  return {start:start,arrange:arrange};
 })();

@@ -89,3 +89,12 @@ test('step names read as instructions, with the ingredient by name', () => {
   assert.equal(C.stepName(add, ITEMS), 'Add the moss');
   assert.equal(C.stepName(grind, ITEMS), 'Grind, 2 turns');
 });
+
+test('the work a host that rolls for itself is told: botched is two misses whatever the bane setting', () => {
+  const g = (...grades) => grades.map((grade) => ({ grade }));
+  assert.equal(R.work([]), 'skipped');
+  assert.equal(R.work(g('perfect', 'good')), 'clean');
+  assert.equal(R.work(g('good', 'good')), 'steady');
+  assert.equal(R.work(g('miss', 'perfect')), 'steady');
+  assert.equal(R.work(g('miss', 'miss', 'perfect')), 'botched');
+});

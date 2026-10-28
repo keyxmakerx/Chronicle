@@ -14,7 +14,8 @@
  *
  * Usage:
  *   var scene = CraftScene.mount(el, CraftDesk.create(opts), {
- *     recipes: {...}, items: {...}, recipe: 'heal', settings: {...}
+ *     recipes: {...}, items: {...}, recipe: 'heal', settings: {...},
+ *     onWorked: function (work, verdict) {...}   // optional: the host rolls
  *   });
  *   scene.destroy();
  */
@@ -84,6 +85,15 @@ window.CraftScene = (function () {
     if(m===0&&p>=1)return {k:'edge',v:2,label:'Edge (+2)',why:'Clean work'};
     if(set.bane&&m>=2)return {k:'bane',v:-2,label:'Bane (−2)',why:'Botched work'};
     return {k:'plain',v:0,label:'No edge',why:m?'One slip':'Steady work'};
+  }
+  /* How the steps went, in the words a host that rolls for itself (the
+     crafting app, on its server) takes: botched means two misses whether or
+     not the campaign gives banes, which the host decides. */
+  function work(res){
+    var m=0,p=0;res.forEach(function(r){if(r.grade==='miss')m++;if(r.grade==='perfect')p++;});
+    if(!res.length)return 'skipped';
+    if(m===0&&p>=1)return 'clean';
+    return m>=2?'botched':'steady';
   }
   /* Recipes and items as the engine trusts them: plain strings, numbers in
      range and colours that are really colours, whoever wrote them. */
@@ -258,7 +268,8 @@ window.CraftScene = (function () {
     function enterStep(){
       var st=cur();S.mini=null;gUI.innerHTML='';parts.marks.innerHTML='';
       if(S.phase==='step'&&!st){S.phase='roll';S.verdict=verdict(S.res,set);}
-      if(S.phase==='roll'){setSay('Work done: '+S.verdict.label+'. Roll the project: 2d10 + '+S.r.stat+(S.verdict.v?(S.verdict.v>0?' + 2':' − 2'):''),[{label:'Roll 2d10',primary:true,fn:roll}]);}
+      if(S.phase==='roll'&&opts.onWorked){setSay('Work done: '+S.verdict.label+'. Make the project roll.',[{label:'Roll',primary:true,fn:worked}]);}
+      else if(S.phase==='roll'){setSay('Work done: '+S.verdict.label+'. Roll the project: 2d10 + '+S.r.stat+(S.verdict.v?(S.verdict.v>0?' + 2':' − 2'):''),[{label:'Roll 2d10',primary:true,fn:roll}]);}
       else if(S.phase==='done'){}
       else{
         setSay(stepSay(st,ITEMS));
@@ -373,6 +384,10 @@ window.CraftScene = (function () {
       var t=el('text',{'class':'cr-pop is-'+g,x:x,y:y-40,'text-anchor':'middle'});t.textContent=g==='perfect'?'Perfect':g==='good'?'Good':'Miss';gUI.appendChild(t);later(function(){t.remove();},1100);}
     function tweenColor(c,dur){var from=S.liq,o={k:0};tween(o,{k:1},dur);(function s(){S.liq=mix(from,c,o.k);if(o.k<1)frame(s);})();}
 
+    /* A host with onWorked makes the roll itself: the scene hands over how
+       the steps went and waits, and retry() offers the roll again if the
+       host could not make it. */
+    function worked(){if(S.phase!=='roll')return;S.phase='worked';acts.innerHTML='';say.textContent='Rolling…';renderBook();emitChange();opts.onWorked(work(S.res),S.verdict);}
     function roll(){if(S.phase!=='roll')return;S.phase='rolling';acts.innerHTML='';Sound.fx('dice');S.dice={t:0};renderBook();}
     function finishRoll(){var a=1+Math.floor(Math.random()*10),b=1+Math.floor(Math.random()*10),v=S.verdict.v,total=a+b+S.r.mod+v;
       S.roll={a:a,b:b,total:total};S.dice=null;drawDice(a,b,true);S.points=Math.min(S.r.goal,S.r.start+total);S.phase='done';renderBook();emitChange();
@@ -525,6 +540,7 @@ window.CraftScene = (function () {
     reset(opts.recipe);kick();
     return {reset:reset,settings:set,apply:function(){reset(S.rk);},sound:function(v){soundOn=!!v;Sound.set(v,skin.sound);},
       skip:function(){if(!set.skip||S.phase!=='step')return;S.res=[];S.phase='roll';S.verdict=verdict([],set);S.verdict.why='Steps skipped';S.liq=S.r.final;enterStep();emitChange();},
+      retry:function(){if(S.phase==='worked'){S.phase='roll';enterStep();}},
       on:on,state:function(){return S;},stage:stage,svg:svg,skin:skin,rerender:function(){renderBook();},destroy:destroy};
   }
 
@@ -532,5 +548,5 @@ window.CraftScene = (function () {
     // What a Director's own action may use, for editors to offer.
     effects:['shake','sparkle','smoke','glow'],sounds:Sound.names(),mix:mix,rgb:rgb,rnd:rnd,clamp:clamp,esc:esc,calm:calm,stepName:stepName,d10:d10,
     // The pure parts, for tests and for a skin that wants the same rules.
-    rules:{buildSteps:buildSteps,verdict:verdict,scoper:scoper,cleanRecipes:cleanRecipes,cleanItems:cleanItems,DIFF:DIFF}};
+    rules:{buildSteps:buildSteps,verdict:verdict,work:work,scoper:scoper,cleanRecipes:cleanRecipes,cleanItems:cleanItems,DIFF:DIFF}};
 })();
