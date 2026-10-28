@@ -171,7 +171,10 @@ type CharacterCrafting struct {
 	// then.
 	CalendarID string `json:"calendarId,omitempty"`
 	Today      string `json:"today,omitempty"`
-	Director   bool   `json:"director"`
+	// Spoils are the party's spoils tray, as this viewer may see it; nil
+	// when spoils aren't set up.
+	Spoils   []SpoilView `json:"spoils"`
+	Director bool        `json:"director"`
 }
 
 // StartInput starts a project. Picks fills each "any <tag>" material, by
@@ -274,6 +277,9 @@ type Armory interface {
 	// was paid ("25 gp"), "" when no coins changed hands.
 	Spend(ctx context.Context, campaignID string, v Viewer, characterID string, items []PackItem, c Cost, label string) (string, error)
 	Give(ctx context.Context, campaignID string, v Viewer, characterID, itemID string, qty int, label string) error
+	// GiveSpoil puts what a hero took or harvested from the spoils tray in
+	// their pack.
+	GiveSpoil(ctx context.Context, campaignID string, v Viewer, characterID, itemID string, qty int, harvested bool) error
 }
 
 // Sheets reads a characteristic from a hero's sheet; ok is false when the

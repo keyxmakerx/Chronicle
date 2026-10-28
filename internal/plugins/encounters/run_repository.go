@@ -27,8 +27,10 @@ type RunRepository interface {
 	// UpdateRun writes the run if the stored version is still expected and
 	// bumps it. ok is false on a lost race or when the run has ended.
 	UpdateRun(ctx context.Context, campaignID string, data []byte, expected int, userID string) (ok bool, err error)
-	// DeleteRun ends the campaign's run; ending none is not an error.
-	DeleteRun(ctx context.Context, campaignID string) error
+	// EndRun deletes the campaign's run and returns it as it was. ended is
+	// false when none was on, so of two ends at once only one gets the run;
+	// ending none is not an error.
+	EndRun(ctx context.Context, campaignID string) (r RunRow, ended bool, err error)
 }
 
 type sqlRunRepository struct{ db *sql.DB }
@@ -83,9 +85,28 @@ func (s *sqlRunRepository) UpdateRun(ctx context.Context, campaignID string, dat
 	return n == 1, nil
 }
 
-func (s *sqlRunRepository) DeleteRun(ctx context.Context, campaignID string) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM encounter_runs WHERE campaign_id = ?`, campaignID); err != nil {
-		return fmt.Errorf("delete encounter run: %w", err)
+func (s *sqlRunRepository) EndRun(ctx context.Context, campaignID string) (RunRow, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return RunRow{}, false, fmt.Errorf("end encounter run: %w", err)
 	}
-	return nil
+	defer func() { _ = tx.Rollback() }()
+	var r RunRow
+	var data string
+	err = tx.QueryRowContext(ctx,
+		`SELECT data, version FROM encounter_runs WHERE campaign_id = ? FOR UPDATE`, campaignID).Scan(&data, &r.Version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return RunRow{}, false, nil
+	}
+	if err != nil {
+		return RunRow{}, false, fmt.Errorf("end encounter run: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM encounter_runs WHERE campaign_id = ?`, campaignID); err != nil {
+		return RunRow{}, false, fmt.Errorf("end encounter run: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return RunRow{}, false, fmt.Errorf("end encounter run: %w", err)
+	}
+	r.Data = []byte(data)
+	return r, true, nil
 }

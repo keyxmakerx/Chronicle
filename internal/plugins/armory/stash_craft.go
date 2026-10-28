@@ -303,6 +303,30 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 // under the campaign lock, and writes it in their history. Like a give, a
 // private item becomes visible to the character's player first.
 func (s *stashService) CraftGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, label string) error {
+	return s.craftAdd(ctx, campaignID, a, characterID, itemID, qty, func(item string) string {
+		reason := fmt.Sprintf("Made %d × %s", qty, item)
+		if label = strings.TrimSpace(label); label != "" && label != item {
+			reason += " (" + label + ")"
+		}
+		return reason
+	})
+}
+
+// SpoilGive puts what a hero took from the spoils tray into their pack, as
+// CraftGive does. The history names only the item, never where it dropped,
+// since the player may not be able to see that page.
+func (s *stashService) SpoilGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, harvested bool) error {
+	return s.craftAdd(ctx, campaignID, a, characterID, itemID, qty, func(item string) string {
+		if harvested {
+			return fmt.Sprintf("Harvested %d × %s", qty, item)
+		}
+		return fmt.Sprintf("Took %d × %s from the spoils", qty, item)
+	})
+}
+
+// craftAdd adds an item to a character's pack for crafting, with the
+// history line reason gives for the item's name.
+func (s *stashService) craftAdd(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, reason func(item string) string) error {
 	if qty < 1 || qty > maxMoveQuantity {
 		return apperror.NewBadRequest(giveQuantityMessage)
 	}
@@ -333,16 +357,12 @@ func (s *stashService) CraftGive(ctx context.Context, campaignID string, a Actor
 		return apperror.NewConflict("Could not add it to that character.")
 	}
 	self := Endpoint{Kind: EndpointCharacter, ID: char.ID}
-	reason := fmt.Sprintf("Made %d × %s", qty, item.Name)
-	if label = strings.TrimSpace(label); label != "" && label != item.Name {
-		reason += " (" + label + ")"
-	}
 	m := &Move{
 		CampaignID: campaignID, Kind: MoveKindItem, ItemEntityID: item.ID, Quantity: qty,
-		From: self, To: self, Status: MoveApplied, RequestedBy: a.UserID, seesDmOnly: true, Reason: clipReason(reason),
+		From: self, To: self, Status: MoveApplied, RequestedBy: a.UserID, seesDmOnly: true, Reason: clipReason(reason(item.Name)),
 	}
 	if err := s.Repo.InsertMove(mctx, m); err != nil {
-		slog.Error("craft give: MADE BUT NOT RECORDED in the move history",
+		slog.Error("craft give: ADDED BUT NOT RECORDED in the move history",
 			slog.String("campaign_id", campaignID), slog.String("character_id", char.ID),
 			slog.String("item_id", item.ID), slog.Any("error", err))
 		return nil

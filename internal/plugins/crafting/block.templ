@@ -11,6 +11,7 @@ const BlockType = "crafting"
 // renders it only for the character's player or a Director.
 templ BlockMount(campaignID, entityID, csrfToken string) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/crafting.css") }/>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/spoils.css") }/>
 	<div
 		data-widget="crafting-block"
 		data-campaign-id={ campaignID }

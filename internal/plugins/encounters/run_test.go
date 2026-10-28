@@ -3,6 +3,7 @@ package encounters
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -35,9 +36,10 @@ func (m *memRunRepo) UpdateRun(_ context.Context, campaignID string, data []byte
 	return true, nil
 }
 
-func (m *memRunRepo) DeleteRun(_ context.Context, campaignID string) error {
+func (m *memRunRepo) EndRun(_ context.Context, campaignID string) (RunRow, bool, error) {
+	r, ok := m.rows[campaignID]
 	delete(m.rows, campaignID)
-	return nil
+	return r, ok, nil
 }
 
 func newRunTest(t *testing.T) (RunService, Service, *fakePages, string) {
@@ -65,7 +67,7 @@ func TestRunRefusesAllButTheDM(t *testing.T) {
 		if _, err := runs.Save(ctx, "c1", v, RunSave{Version: 1, Run: &Run{Round: 1}}); statusOf(err) != 403 {
 			t.Errorf("save as %d: %v", v.VisibilityRole, err)
 		}
-		if err := runs.End(ctx, "c1", v); statusOf(err) != 403 {
+		if _, err := runs.End(ctx, "c1", v); statusOf(err) != 403 {
 			t.Errorf("end as %d: %v", v.VisibilityRole, err)
 		}
 	}
@@ -164,7 +166,7 @@ func TestRunSaveKeepsWhatTheFightIs(t *testing.T) {
 	if _, err := runs.Save(ctx, "c1", dm, RunSave{Version: view.Version, Run: &r}); statusOf(err) != 409 {
 		t.Errorf("a stale save: %v", err)
 	}
-	if err := runs.End(ctx, "c1", dm); err != nil {
+	if _, err := runs.End(ctx, "c1", dm); err != nil {
 		t.Fatalf("end: %v", err)
 	}
 	if _, err := runs.Save(ctx, "c1", dm, RunSave{Version: 2, Run: &r}); statusOf(err) != 409 {
@@ -173,6 +175,97 @@ func TestRunSaveKeepsWhatTheFightIs(t *testing.T) {
 	after, err := runs.Current(ctx, "c1", dm)
 	if err != nil || after.Run != nil || len(after.Ready) != 1 {
 		t.Errorf("after the end: %+v, %v", after, err)
+	}
+}
+
+// fakeListener is an app that hears about fights.
+type fakeListener struct {
+	ended  []EndedFight
+	leaves []string
+	fail   bool
+}
+
+func (f *fakeListener) Leaves(_ context.Context, _ string, _ Viewer, ids []string) (map[string]string, error) {
+	f.leaves = append(f.leaves, ids...)
+	return map[string]string{"hob": "Has a drop list"}, nil
+}
+
+func (f *fakeListener) FightEnded(_ context.Context, _ string, _ Viewer, fight EndedFight) (*EndReport, error) {
+	f.ended = append(f.ended, fight)
+	if f.fail {
+		return nil, errors.New("tray is down")
+	}
+	return &EndReport{Lines: []string{"Hobgoblin Soldier left spoils."}, Link: "/somewhere", LinkText: "Open it"}, nil
+}
+
+func TestRunEndTellsTheListenerWhoWasDown(t *testing.T) {
+	runs, _, _, id := newRunTest(t)
+	ctx := context.Background()
+	l := &fakeListener{}
+	runs.(*runService).SetFightListener(l)
+	if _, err := runs.Start(ctx, "c1", dm, RunStart{EncounterID: id}); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	l.leaves = nil
+	view, err := runs.Current(ctx, "c1", dm)
+	if err != nil || view.Leaves["hob"] != "Has a drop list" {
+		t.Fatalf("leaves: %+v, %v", view, err)
+	}
+	if strings.Join(l.leaves, ",") != "gob,hob" {
+		t.Errorf("asked about %v; only creatures with a page", l.leaves)
+	}
+	r := *view.Run
+	r.Lines = append([]RunLine{}, r.Lines...)
+	// One hobgoblin at 0 and one at full, the waiting skeletons at -1, a
+	// hero at 0: only the hobgoblin counts as down. The war chief's full
+	// hit points were typed as 0, so the tab draws it down, and it is.
+	r.Lines[0].HP = []*int{intp(0)}
+	r.Lines[3].HP = []*int{intp(0), nil}
+	r.Lines[4].HP = []*int{intp(-1), nil, nil, nil}
+	for i := range r.Lines {
+		if r.Lines[i].EntityID == "gob" {
+			r.Lines[i].Max = intp(0)
+		}
+	}
+	if _, err := runs.Save(ctx, "c1", dm, RunSave{Version: view.Version, Run: &r}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	rep, err := runs.End(ctx, "c1", dm)
+	if err != nil || rep.Name != "Ramparts fight" || len(rep.Lines) != 1 || rep.Link != "/somewhere" {
+		t.Fatalf("report: %+v, %v", rep, err)
+	}
+	want := []EndedCreature{
+		{EntityID: "gob", Name: "Goblin War Chief", Copies: 1, Down: 1},
+		{EntityID: "hob", Name: "Hobgoblin Soldier", Copies: 2, Down: 1},
+		{Name: "Skeleton Archer", Copies: 4},
+	}
+	if len(l.ended) != 1 || len(l.ended[0].Creatures) != len(want) {
+		t.Fatalf("heard %+v", l.ended)
+	}
+	for i, w := range want {
+		if got := l.ended[0].Creatures[i]; got != w {
+			t.Errorf("creature %d = %+v, want %+v", i, got, w)
+		}
+	}
+	// A second end finds no fight, so nothing drops twice.
+	if rep, err := runs.End(ctx, "c1", dm); err != nil || len(rep.Lines) != 0 || len(l.ended) != 1 {
+		t.Errorf("second end: %+v, %v, heard %d", rep, err, len(l.ended))
+	}
+}
+
+func TestRunEndIsOverWhenTheListenerFails(t *testing.T) {
+	runs, _, _, id := newRunTest(t)
+	ctx := context.Background()
+	runs.(*runService).SetFightListener(&fakeListener{fail: true})
+	if _, err := runs.Start(ctx, "c1", dm, RunStart{EncounterID: id}); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	rep, err := runs.End(ctx, "c1", dm)
+	if err != nil || len(rep.Lines) != 1 || !strings.Contains(rep.Lines[0], "Check the tray") {
+		t.Fatalf("report: %+v, %v", rep, err)
+	}
+	if after, _ := runs.Current(ctx, "c1", dm); after.Run != nil {
+		t.Error("the fight is still on")
 	}
 }
 

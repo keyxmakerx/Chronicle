@@ -3,8 +3,8 @@
  *
  * A Director gets the workshop: Crafting recipes (crafting_recipes.js),
  * Materials (crafting_materials.js), Benches (crafting_benches.js), every
- * hero's Projects (crafting_projects.js) and the campaign's settings in a
- * drawer. A player gets their recipe book
+ * hero's Projects (crafting_projects.js), the party's Spoils and every drop
+ * list (crafting_spoils.js) and the campaign's settings in a drawer. A player gets their recipe book
  * (crafting_book.js). This file is the glue: it reads the API, owns the tabs,
  * the save status, the bottom message and the confirm dialog, and hands each
  * part the app. Everything is drawn from what the server sends, so a player
@@ -25,7 +25,8 @@
     var cid = String(cfg.campaignId || ''), base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
     var app = {cid: cid, base: base, director: cfg.director === true || cfg.director === 'true', calendarId: cfg.calendarId ? String(cfg.calendarId) : '', el: el,
       lib: null, items: {}, itemList: [], characters: [], truncated: false, recipes: [], benches: [], parts: {}};
-    var dead = false, toastT = 0, tab = 'recipes';
+    // The end of a fight links to #spoils, so the tray opens first.
+    var dead = false, toastT = 0, tab = window.location.hash === '#spoils' ? 'spoils' : 'recipes';
 
     /* JSON in and out; a refusal rejects with the server's own words. keep
        lets a save sent as the page closes outlive it. */
@@ -147,11 +148,13 @@
         '<button type="button" role="tab" data-tab="recipes" aria-selected="true">Crafting recipes<small>what is made</small></button>' +
         '<button type="button" role="tab" data-tab="materials" aria-selected="false" tabindex="-1">Materials<small>what they take</small></button>' +
         '<button type="button" role="tab" data-tab="benches" aria-selected="false" tabindex="-1">Benches<small>where it is made</small></button>' +
-        '<button type="button" role="tab" data-tab="projects" aria-selected="false" tabindex="-1">Projects<small>what is being made</small></button></div>' +
+        '<button type="button" role="tab" data-tab="projects" aria-selected="false" tabindex="-1">Projects<small>what is being made</small></button>' +
+        '<button type="button" role="tab" data-tab="spoils" aria-selected="false" tabindex="-1">Spoils<small>what was left</small></button></div>' +
         '<div class="cra-tools"><span class="cra-saved" role="status">' + fa('check') + '<span>All changes saved</span></span>' +
         '<button type="button" class="cra-tbtn cra-dm" data-settings aria-expanded="false">' + fa('sliders') + 'Settings</button></div></div>' +
         '<div class="cra-body"><section class="cra-pan" data-pane="recipes" role="tabpanel"></section><section class="cra-pan" data-pane="materials" role="tabpanel" hidden></section>' +
         '<section class="cra-pan" data-pane="benches" role="tabpanel" hidden></section><section class="cra-pan" data-pane="projects" role="tabpanel" hidden></section>' +
+        '<section class="cra-pan" data-pane="spoils" role="tabpanel" hidden></section>' +
         '<aside class="cra-drawer" aria-hidden="true" aria-label="Crafting settings"></aside></div>' +
         (app.truncated ? '<p class="cra-note">This campaign has more pages than one list holds, so some items or characters are missing from the pickers.</p>' : '') +
         '<div class="cra-toast" role="status" hidden></div></div>';
@@ -159,6 +162,7 @@
       app.parts.materials = CraftingMaterials.mount(el.querySelector('[data-pane="materials"]'), app);
       app.parts.benches = CraftingBenches.mount(el.querySelector('[data-pane="benches"]'), app);
       app.parts.projects = CraftingProjects.mount(el.querySelector('[data-pane="projects"]'), app);
+      app.parts.spoils = CraftingSpoils.mount(el.querySelector('[data-pane="spoils"]'), app);
       el.querySelector('.cra-tabs').addEventListener('click', function (e) { var b = e.target.closest('[role="tab"]'); if (b) showTab(b.getAttribute('data-tab')); });
       el.querySelector('.cra-tabs').addEventListener('keydown', function (e) {
         var ts = Array.prototype.slice.call(el.querySelectorAll('.cra-tabs [role="tab"]')), i = ts.indexOf(e.target);
@@ -168,6 +172,9 @@
       });
       wireDrawer();
     }
+    // Already here when the link is followed: only the hash changes.
+    function onHash() { if (window.location.hash === '#spoils' && app.parts.spoils) showTab('spoils'); }
+    window.addEventListener('hashchange', onHash);
 
     function fail(err) {
       if (dead) return;
@@ -196,6 +203,7 @@
     load();
     return {app: app, destroy: function () {
       dead = true; clearTimeout(toastT);
+      window.removeEventListener('hashchange', onHash);
       Object.keys(app.parts).forEach(function (k) { if (app.parts[k] && app.parts[k].destroy) app.parts[k].destroy(); });
       el.innerHTML = '';
     }};
@@ -203,7 +211,7 @@
 
   Chronicle.register('crafting', {
     init: function (el, cfg) {
-      if (!window.CraftingLib || !window.CraftingRecipes || !window.CraftingMaterials || !window.CraftingBenches || !window.CraftingBook || !window.CraftingProjects) {
+      if (!window.CraftingLib || !window.CraftingRecipes || !window.CraftingMaterials || !window.CraftingBenches || !window.CraftingBook || !window.CraftingProjects || !window.CraftingSpoils) {
         el.innerHTML = '<p class="text-sm text-fg-muted" role="status">Crafting couldn’t load. Reload the page to try again.</p>';
         return;
       }
