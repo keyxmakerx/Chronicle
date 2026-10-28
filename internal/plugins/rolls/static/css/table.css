@@ -17,7 +17,7 @@
 .tt-icon svg { width: 16px; height: 16px; }
 
 /* ---------- The drawer drapes from the header's lower edge, over the page ---------- */
-.tt-drawer { position: absolute; z-index: 40; top: 100%; right: 10px; width: min(1040px, calc(100vw - 20px)); max-height: min(640px, calc(100vh - 72px)); display: flex; flex-direction: column;
+.tt-drawer { position: absolute; z-index: 40; top: 100%; left: 10px; right: 10px; max-width: 1040px; margin-left: auto; max-height: min(640px, calc(100vh - 72px)); display: flex; flex-direction: column;
   background: var(--color-bg-secondary); color: var(--color-text-body); border: 1px solid var(--color-border); border-top: 0; border-radius: 0 0 12px 12px;
   box-shadow: var(--elev-hover); clip-path: inset(0 -40px -40px -40px); font-size: 14px; line-height: 1.5; text-align: left; }
 [data-cz-kit="sharp"] .tt-drawer { border-radius: 0; border-color: var(--color-text-primary); }
@@ -151,7 +151,7 @@
 
 /* ---------- Phone: one leaf at a time, behind a switch ---------- */
 @media (max-width: 760px) {
-  .tt-drawer { right: 0; width: 100vw; border-left: 0; border-right: 0; border-radius: 0 0 12px 12px; }
+  .tt-drawer { left: 0; right: 0; max-width: none; border-left: 0; border-right: 0; border-radius: 0 0 12px 12px; }
   .tt-leaves { grid-template-columns: 1fr; padding: 0 8px 8px; }
   .tt-leaf { display: none; border-radius: 12px !important; border-left: 1px solid var(--color-border) !important; max-height: 470px; }
   .tt-leaf.tt-on-phone { display: flex; }
@@ -159,6 +159,8 @@
   .tt-ptab { height: 32px; padding: 0 10px; border: 0; background: none; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-secondary); border-bottom: 1px solid var(--color-border); }
   .tt-ptab[aria-pressed="true"] { color: var(--color-accent-link, var(--color-accent)); border-bottom-color: var(--color-accent); }
   .tt-who2 { display: none; }
+  /* The leaf switch above already names the section. */
+  .tt-ltabs { display: none; }
   .tt-isl-detail { left: 10px; right: 10px !important; width: auto; }
 }
 

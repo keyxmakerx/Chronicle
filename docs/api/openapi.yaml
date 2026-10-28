@@ -2780,6 +2780,60 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /campaigns/{campaignId}/rolls:
+    post:
+      tags: [Rolls]
+      summary: Add a roll made in Foundry to the campaign's roll log
+      description: >
+        Foundry decided the numbers; Chronicle records them and sends them live
+        as roll.made to whoever the mode lets see them. A stored API key only:
+        a signed-in browser is refused. Self rolls stay in Foundry. A replay of
+        the same originId records nothing and answers 200 with duplicate true.
+      operationId: reportRoll
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [originId, dice, total, mode]
+              properties:
+                originId: {type: string, maxLength: 80, description: "Foundry's chat message id; a second roll in one message adds :1, :2"}
+                foundryUserId: {type: string, description: "The roller; linked to a member through the player report"}
+                rollerName: {type: string, maxLength: 100}
+                label: {type: string, maxLength: 160}
+                formula: {type: string, maxLength: 120}
+                dice:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                    properties:
+                      sides: {type: integer, minimum: 2, maximum: 1000}
+                      value: {type: integer, minimum: 1}
+                total: {type: integer}
+                mode: {type: string, enum: [public, gm, blind]}
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  duplicate: {type: boolean}
+        "200":
+          description: Already recorded (duplicate true)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     BearerApiKey:
