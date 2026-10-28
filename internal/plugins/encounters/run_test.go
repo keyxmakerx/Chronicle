@@ -203,12 +203,12 @@ func TestRunEndTellsTheListenerWhoWasDown(t *testing.T) {
 	ctx := context.Background()
 	l := &fakeListener{}
 	runs.(*runService).SetFightListener(l)
-	view, err := runs.Start(ctx, "c1", dm, RunStart{EncounterID: id})
-	if err != nil {
+	if _, err := runs.Start(ctx, "c1", dm, RunStart{EncounterID: id}); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	l.leaves = nil
-	if view, err = runs.Current(ctx, "c1", dm); err != nil || view.Leaves["hob"] != "Has a drop list" {
+	view, err := runs.Current(ctx, "c1", dm)
+	if err != nil || view.Leaves["hob"] != "Has a drop list" {
 		t.Fatalf("leaves: %+v, %v", view, err)
 	}
 	if strings.Join(l.leaves, ",") != "gob,hob" {
