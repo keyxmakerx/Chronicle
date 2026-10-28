@@ -54,6 +54,30 @@ func TestArmoryFieldsAdapter_KeepsShopSource(t *testing.T) {
 	}
 }
 
+// A write its caller labelled keeps its mark, so a payment's reason and a
+// crafting project's name show in the money history.
+func TestArmoryFieldsAdapter_KeepsLabelledSource(t *testing.T) {
+	tests := []struct {
+		name string
+		src  changesource.Source
+	}{
+		{"a payment", changesource.Source{Kind: changesource.KindWeb, Label: "as a quest reward", UserID: "gm"}},
+		{"a crafting project", changesource.Source{Kind: changesource.KindCraft, Label: "to make Healing Draught", UserID: "u1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mergeCapture{}
+			a := &armoryEntityFieldsAdapter{svc: svc}
+			if err := a.UpdateEntityFields(changesource.With(context.Background(), tt.src), "c1", map[string]any{"gp": 3.0}); err != nil {
+				t.Fatal(err)
+			}
+			if got, ok := changesource.From(svc.ctx); !ok || got != tt.src {
+				t.Fatalf("source = %+v, %v; want %+v", got, ok, tt.src)
+			}
+		})
+	}
+}
+
 type stashCaptureBus struct{ msgs []*ws.Message }
 
 func (b *stashCaptureBus) Publish(m *ws.Message) { b.msgs = append(b.msgs, m) }

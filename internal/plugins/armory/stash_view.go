@@ -25,9 +25,10 @@ func MoveSummary(l MoveLine) string {
 	if l.Summary != "" {
 		return l.Summary
 	}
-	// A money row from a character to itself is not a move: it records an edit
-	// of the sheet, and its stored reason already reads as a sentence.
-	if l.IsMoneyEdit() && l.Reason != "" {
+	// A row from a character to itself is not a move: it records an edit of
+	// the sheet, or materials used and an item made by crafting, and its stored
+	// reason already reads as a sentence. A give stores no reason.
+	if (l.IsMoneyEdit() || l.IsGive()) && l.Reason != "" {
 		return l.Reason
 	}
 	if l.IsGive() {

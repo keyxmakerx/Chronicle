@@ -154,6 +154,14 @@ type StashService interface {
 	CharacterPanel(ctx context.Context, campaignID string, a Actor, characterID string) (*CharacterPanelView, error)
 	CharacterHistory(ctx context.Context, campaignID string, a Actor, characterID string) ([]MoveLine, error)
 	StashHistory(ctx context.Context, campaignID string, a Actor, stashID int) ([]MoveLine, error)
+
+	// CraftPack reads what a character carries and how they pay, for a
+	// crafting project. The character's player or a GM only.
+	CraftPack(ctx context.Context, campaignID string, a Actor, characterID string) (*CraftPack, error)
+	// CraftSpend takes a project's materials and cost, all or nothing.
+	CraftSpend(ctx context.Context, campaignID string, a Actor, in CraftSpendInput) (*CraftSpendOutcome, error)
+	// CraftGive puts a finished project's item in the character's pack.
+	CraftGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, label string) error
 }
 
 // DowntimeResult counts what opening downtime did to waiting requests.
@@ -665,7 +673,9 @@ func (s *stashService) lines(ctx context.Context, campaignID string, a Actor, mo
 			l.ItemName = entityName(m.ItemEntityID)
 		}
 		l.RequesterName = userNames[m.RequestedBy]
-		if m.IsGive() {
+		if m.IsGive() && m.Reason != "" {
+			l.Summary = m.Reason
+		} else if m.IsGive() {
 			recipient := false
 			if !a.IsGM() {
 				if c, err := s.Directory.GetEntity(ctx, campaignID, m.To.ID); err == nil && c != nil {
