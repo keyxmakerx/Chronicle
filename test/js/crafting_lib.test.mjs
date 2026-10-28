@@ -122,7 +122,7 @@ test('the page escapes every word', () => {
     source: '"><script>', rules: [{ when: [{ kind: 'always' }], then: { kind: 'say', text: '<b>loud</b>' }, players: 'book' }] }),
   { evil: { id: 'evil', name: '<svg onload=alert(1)>', tags: [] } });
   const html = L.bookHTML(lib, p);
-  assert.ok(!/<img|<svg|<script|<b>/.test(html), html);
+  assert.ok(!/<\s*(img|svg|script|b)\b/i.test(html), html);
   assert.match(html, /&lt;img src=x/);
 });
 
