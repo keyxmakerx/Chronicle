@@ -51,13 +51,16 @@ func newDMOnlyRepo() *mockTimelineRepo {
 }
 
 // tlTestReq builds an echo.Context carrying a CampaignContext, an optional
-// authenticated user id, and the view-as-player flag — the inputs
-// effectiveRole and GetTimelineForViewer read in production.
+// authenticated user id, and the view-as-player toggle: the cookie
+// effectiveRole reads, and the layout flag the templates read when rendering.
 func tlTestReq(path string, cc *campaigns.CampaignContext, userID string, viewAsPlayer bool, htmx bool) echo.Context {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	ctx := layouts.SetViewingAsPlayer(req.Context(), viewAsPlayer)
 	req = req.WithContext(ctx)
+	if viewAsPlayer {
+		req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+	}
 	if htmx {
 		req.Header.Set("HX-Request", "true")
 	}

@@ -146,6 +146,16 @@
 
       function toggleEntityVisibility(entityId) {
         if (!sidebarConfig) return;
+        flipHidden(entityId);
+        render();
+        // A refused save puts the row back as the server still has it.
+        saveSidebarConfig(function () {
+          flipHidden(entityId);
+          render();
+        });
+      }
+
+      function flipHidden(entityId) {
         var idx = sidebarConfig.hidden_entity_ids.indexOf(entityId);
         if (idx === -1) {
           sidebarConfig.hidden_entity_ids.push(entityId);
@@ -154,11 +164,9 @@
           sidebarConfig.hidden_entity_ids.splice(idx, 1);
           delete hiddenSet[entityId];
         }
-        render();
-        saveSidebarConfig();
       }
 
-      function saveSidebarConfig() {
+      function saveSidebarConfig(undo) {
         if (!sidebarConfigEndpoint || !sidebarConfig) return;
         Chronicle.apiFetch(sidebarConfigEndpoint, {
           method: 'PUT',
@@ -169,7 +177,10 @@
             custom_sections: sidebarConfig.custom_sections || [],
             custom_links: sidebarConfig.custom_links || []
           }
+        }).then(function (res) {
+          if (!res.ok) throw new Error('save refused');
         }).catch(function () {
+          if (undo) undo();
           Chronicle.notify('Failed to save visibility', 'error');
         });
       }
@@ -273,7 +284,10 @@
             method: 'PUT',
             body: { sort_order: 0, parent_id: targetId }
           })
-            .then(function () { fetchEntities(); })
+            .then(function (res) {
+              if (!res.ok) throw new Error('reparent refused');
+              fetchEntities();
+            })
             .catch(function () { Chronicle.notify('Failed to reparent', 'error'); });
         } else {
           // Reorder: move dragged entity before target (same parent level).
@@ -295,7 +309,11 @@
           Chronicle.apiFetch(reorderEndpoint + '/' + dragSrcId + '/reorder', {
             method: 'PUT',
             body: { sort_order: tgtIdx, parent_id: targetParent }
+          }).then(function (res) {
+            if (!res.ok) throw new Error('reorder refused');
           }).catch(function () {
+            // The list was moved before the save; reload the server's order.
+            fetchEntities();
             Chronicle.notify('Failed to save order', 'error');
           });
         }

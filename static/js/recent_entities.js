@@ -3,7 +3,9 @@
  *
  * Tracks entity page visits in localStorage and renders a "Recent" list
  * in the sidebar drill panel. On entity pages, records the visit. On any
- * page with a sidebar, populates the #sidebar-cat-recent element.
+ * page with a sidebar, populates the #sidebar-cat-recent element, then
+ * drops the pages the viewer can no longer open
+ * (GET /campaigns/:id/entities/viewable).
  *
  * Storage key: chronicle-recent-{campaignId}
  * Format: JSON array of { id, name, type, slug, ts } (newest first, max 10).
@@ -148,6 +150,34 @@
     container.innerHTML = html;
     // Built rows join the drill panel's boost, so they open in place.
     if (window.htmx) htmx.process(container);
+    pruneRecent(campaignId, list);
+  }
+
+  // The list lives in this browser, so a page hidden from the viewer (or
+  // deleted) since the visit would stay in it. Ask the server which pages
+  // the viewer can still open and redraw without the rest. A failed check
+  // changes nothing. One check per list, so the redraw doesn't ask again.
+  var checked = {};
+  function pruneRecent(campaignId, list) {
+    var ids = list.map(function (item) { return item.id; });
+    var key = campaignId + ':' + ids.join(',');
+    if (checked[key] || !window.Chronicle || !Chronicle.apiFetch) return;
+    checked[key] = true;
+    Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignId) + '/entities/viewable?ids=' + encodeURIComponent(ids.join(',')))
+      .then(function (r) { if (!r.ok) throw new Error('check failed'); return r.json(); })
+      .then(function (data) {
+        if (!data || !Array.isArray(data.ids)) return;
+        var keep = {};
+        data.ids.forEach(function (id) { keep[id] = true; });
+        // Read the list again: a visit may have been recorded meanwhile.
+        var current = loadRecent(campaignId);
+        var kept = current.filter(function (item) { return keep[item.id] || ids.indexOf(item.id) === -1; });
+        if (kept.length === current.length) return;
+        saveRecent(campaignId, kept);
+        checked[campaignId + ':' + kept.map(function (item) { return item.id; }).join(',')] = true;
+        renderRecent(campaignId);
+      })
+      .catch(function () { /* keep the list as it is */ });
   }
 
   /**
