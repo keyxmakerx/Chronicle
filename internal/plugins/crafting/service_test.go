@@ -151,6 +151,15 @@ func (f *fakeRepo) UpdateBench(_ context.Context, _ string, b Bench, expected in
 	f.benches[b.ID] = old
 	return true, nil
 }
+func (f *fakeRepo) SaveUpgrades(_ context.Context, _, id string, u Upgrades, expected int) (bool, error) {
+	b, ok := f.benches[id]
+	if !ok || b.Version != expected {
+		return false, nil
+	}
+	b.Upgrades, b.Version = u, b.Version+1
+	f.benches[id] = b
+	return true, nil
+}
 func (f *fakeRepo) SaveArrangement(_ context.Context, _, id, skin string, state json.RawMessage, expected int) (bool, error) {
 	b, ok := f.benches[id]
 	if !ok || b.Version != expected {

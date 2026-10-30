@@ -562,18 +562,22 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 		return nil, errInvalid("your Director asks for the steps to be worked at the bench")
 	}
 	w := &Worked{}
+	var benchRules []Rule
 	if in.Bench != "" {
 		if b, ok, err := s.repo.GetBench(ctx, campaignID, in.Bench); err != nil {
 			return nil, errInternal(err)
 		} else if ok {
 			w.Bench = b.Name
+			benchRules = b.Upgrades.Rules()
 		}
 	}
 	w.Skills = s.skills(ctx, campaignID, e.ID)
+	// The bench's upgrades work on every recipe made there, beside its own.
 	var ruleList []Rule
 	if recipe != nil {
-		ruleList = recipe.Rules
+		ruleList = append(ruleList, recipe.Rules...)
 	}
+	ruleList = append(ruleList, benchRules...)
 	day := s.today(ctx, campaignID)
 	if why := hold(day, ruleList, w, v.Director); why != "" {
 		return nil, errConflictMsg(why + " The roll waits for another day.")

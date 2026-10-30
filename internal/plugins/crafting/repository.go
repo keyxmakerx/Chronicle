@@ -60,6 +60,9 @@ type Repository interface {
 	// SaveArrangement stores one look's arrangement ("desk" or "journal").
 	SaveArrangement(ctx context.Context, campaignID, id, skin string, state json.RawMessage, expected int) (ok bool, err error)
 	DeleteBench(ctx context.Context, campaignID, id string) error
+	// SaveUpgrades stores a bench's upgrade ladders; ok false on a lost
+	// version race.
+	SaveUpgrades(ctx context.Context, campaignID, id string, u Upgrades, expected int) (ok bool, err error)
 }
 
 type sqlRepository struct{ db *sql.DB }
@@ -417,12 +420,13 @@ func (r *sqlRepository) SetTags(ctx context.Context, campaignID, itemID string, 
 
 func scanBench(s rowScanner) (Bench, error) {
 	var (
-		b             Bench
-		desk, journal sql.NullString
+		b                       Bench
+		desk, journal, upgrades sql.NullString
 	)
-	if err := s.Scan(&b.ID, &b.Name, &b.Kind, &desk, &journal, &b.SortOrder, &b.Version); err != nil {
+	if err := s.Scan(&b.ID, &b.Name, &b.Kind, &desk, &journal, &upgrades, &b.SortOrder, &b.Version); err != nil {
 		return b, err
 	}
+	b.Upgrades = CleanUpgrades(json.RawMessage(upgrades.String))
 	if desk.Valid && desk.String != "" {
 		b.Desk = json.RawMessage(desk.String)
 	}
@@ -432,7 +436,7 @@ func scanBench(s rowScanner) (Bench, error) {
 	return b, nil
 }
 
-const benchColumns = `id, name, kind, desk, journal, sort_order, version`
+const benchColumns = `id, name, kind, desk, journal, upgrades, sort_order, version`
 
 func (r *sqlRepository) ListBenches(ctx context.Context, campaignID string) ([]Bench, error) {
 	rows, err := r.db.QueryContext(ctx,
@@ -502,6 +506,17 @@ func (r *sqlRepository) SaveArrangement(ctx context.Context, campaignID, id, ski
 		string(state), campaignID, id, expected)
 	if err != nil {
 		return false, fmt.Errorf("save bench arrangement: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func (r *sqlRepository) SaveUpgrades(ctx context.Context, campaignID, id string, u Upgrades, expected int) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE crafting_benches SET upgrades = ?, version = version + 1 WHERE campaign_id = ? AND id = ? AND version = ?`,
+		mustJSON(u), campaignID, id, expected)
+	if err != nil {
+		return false, fmt.Errorf("save bench upgrades: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil

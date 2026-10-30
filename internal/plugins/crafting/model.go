@@ -148,6 +148,7 @@ type Bench struct {
 	Kind      string          `json:"kind"`
 	Desk      json.RawMessage `json:"desk"`
 	Journal   json.RawMessage `json:"journal"`
+	Upgrades  Upgrades        `json:"upgrades"`
 	SortOrder int             `json:"sortOrder"`
 	Version   int             `json:"version"`
 }
@@ -157,6 +158,12 @@ type BenchInput struct {
 	Name    string `json:"name"`
 	Kind    string `json:"kind"`
 	Version int    `json:"version"`
+}
+
+// UpgradesInput saves a bench's upgrade ladders.
+type UpgradesInput struct {
+	Upgrades json.RawMessage `json:"upgrades"`
+	Version  int             `json:"version"`
 }
 
 // ArrangementInput saves one look's arrangement of a bench.

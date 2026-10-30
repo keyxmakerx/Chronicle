@@ -65,6 +65,7 @@ type Service interface {
 	CreateBench(ctx context.Context, campaignID string, v Viewer, in BenchInput) (*Bench, error)
 	UpdateBench(ctx context.Context, campaignID, id string, v Viewer, in BenchInput) (*Bench, error)
 	SaveArrangement(ctx context.Context, campaignID, id, skin string, v Viewer, in ArrangementInput) (*Bench, error)
+	SaveUpgrades(ctx context.Context, campaignID, id string, v Viewer, in UpgradesInput) (*Bench, error)
 	DeleteBench(ctx context.Context, campaignID, id string, v Viewer) error
 
 	// CanCraftFor says whether the viewer may see a character's Crafting
@@ -602,6 +603,23 @@ func (s *service) SaveArrangement(ctx context.Context, campaignID, id, skin stri
 		return nil, err
 	}
 	ok, err := s.repo.SaveArrangement(ctx, campaignID, id, skin, state, in.Version)
+	if err != nil {
+		return nil, errInternal(err)
+	}
+	if !ok {
+		return nil, errConflict()
+	}
+	return s.loadBench(ctx, campaignID, id)
+}
+
+func (s *service) SaveUpgrades(ctx context.Context, campaignID, id string, v Viewer, in UpgradesInput) (*Bench, error) {
+	if err := directorOnly(v); err != nil {
+		return nil, err
+	}
+	if _, err := s.loadBench(ctx, campaignID, id); err != nil {
+		return nil, err
+	}
+	ok, err := s.repo.SaveUpgrades(ctx, campaignID, id, CleanUpgrades(in.Upgrades), in.Version)
 	if err != nil {
 		return nil, errInternal(err)
 	}

@@ -6,7 +6,9 @@
 -- JSON too: what the item came out as (fine, marked, a quirk, made as
 -- something else) and the standing costs of the substitutes it started
 -- with. crafting_rolls.work is how the steps went on that roll ('' for rolls
--- made before it was kept), which mastery counts.
+-- made before it was kept), which mastery counts. crafting_benches.upgrades
+-- is JSON: the bench's pieces, each a short ladder of levels, and the level
+-- the party has reached.
 --
 -- Idempotent: applies on a fresh database and a second time on top of itself.
 ALTER TABLE crafting_recipes
@@ -17,3 +19,6 @@ ALTER TABLE crafting_projects
 
 ALTER TABLE crafting_rolls
     ADD COLUMN IF NOT EXISTS work VARCHAR(12) NOT NULL DEFAULT '';
+
+ALTER TABLE crafting_benches
+    ADD COLUMN IF NOT EXISTS upgrades TEXT NULL;

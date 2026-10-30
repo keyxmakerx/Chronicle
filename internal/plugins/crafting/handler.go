@@ -310,6 +310,23 @@ func (h *Handler) UpdateBench(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// SaveUpgrades handles PUT /campaigns/:id/crafting/benches/:bid/upgrades.
+func (h *Handler) SaveUpgrades(c echo.Context) error {
+	cc, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	var in UpgradesInput
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.SaveUpgrades(c.Request().Context(), cc.Campaign.ID, c.Param("bid"), v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 // SaveArrangement handles PUT /campaigns/:id/crafting/benches/:bid/look/:skin.
 func (h *Handler) SaveArrangement(c echo.Context) error {
 	cc, v, err := viewerFrom(c)
