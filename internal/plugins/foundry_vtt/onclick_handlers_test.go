@@ -41,6 +41,10 @@ func TestOnClick_HandlersAreInlineIIFE(t *testing.T) {
 					"since templ writes Call without HTML-escaping). Found:\n%s",
 					tc.call)
 			}
+			if strings.Contains(tc.call, "apiFetch(") {
+				t.Errorf("Call body uses apiFetch, which resolves on any status, so a refused "+
+					"write would report success; use Chronicle.apiAction. Body:\n%s", tc.call)
+			}
 			if strings.Contains(tc.call, "__templ_") {
 				t.Errorf("Call body contains `__templ_` — regression to the "+
 					"templ-script pattern that caused the production "+
