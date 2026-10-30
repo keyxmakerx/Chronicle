@@ -2595,6 +2595,26 @@ func (a *mapMediaVerifierAdapter) ImageInCampaign(ctx context.Context, mediaID, 
 	return strings.HasPrefix(f.MimeType, "image/"), nil
 }
 
+// MediaCampaign names the campaign a media file belongs to, for the boot
+// sweep that clears map pictures naming another campaign's file.
+func (a *mapMediaVerifierAdapter) MediaCampaign(ctx context.Context, mediaID string) (string, bool, error) {
+	f, err := a.svc.GetByID(ctx, mediaID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	if f == nil {
+		return "", false, nil
+	}
+	if f.CampaignID == nil {
+		return "", true, nil
+	}
+	return *f.CampaignID, true, nil
+}
+
 // armoryBuyerAccessAdapter wraps entities.EntityService to implement
 // armory.BuyerAccessChecker. Used by the transaction service to verify
 // the calling user can act on the buyer entity (own / shared / Owner /
@@ -6378,6 +6398,14 @@ func (a *App) RegisterRoutes() {
 		return m.ImageWidth, m.ImageHeight, nil
 	})
 	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
+	mapsService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
+	// Idempotent boot sweep: a map picture stored before the write paths
+	// checked the file's campaign is cleared if it names another campaign's.
+	if n, err := maps.ClearForeignPictures(context.Background(), maps.NewPictureRefStore(a.DB), &mapMediaVerifierAdapter{svc: mediaService}); err != nil {
+		slog.Error("maps: foreign picture sweep failed; some map pictures may still name another campaign's file", slog.Any("error", err))
+	} else if n > 0 {
+		slog.Warn("maps: foreign picture sweep cleared pictures", slog.Int("cleared", n))
+	}
 	mapsService.SetEventPublisher(mapEvents)
 	wireHexFog(mapsService, drawingService, mapEvents, hexService)
 	hexService.SetPictures(maps.NewHexPictures(drawingService))

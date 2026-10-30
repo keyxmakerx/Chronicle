@@ -79,6 +79,15 @@ func newRoundTripHarness(t *testing.T) *roundTripHarness {
 	entitySvc.SetBlockRegistry(blocks)
 	mapSvc := maps.NewMapService(maps.NewMapRepository(db))
 	drawingSvc := maps.NewDrawingService(maps.NewDrawingRepository(db))
+	mapSvc.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaSvc})
+	drawingSvc.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaSvc})
+	drawingSvc.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
+		m, err := mapSvc.GetMap(ctx, mapID)
+		if err != nil {
+			return "", err
+		}
+		return m.CampaignID, nil
+	})
 	entitySvc.SetMapVerifier(&entityMapVerifierAdapter{svc: mapSvc})
 
 	placeSvc := entities.NewPlaceService(entities.NewEntityRepository(db), entities.NewPlaceRepository(db))

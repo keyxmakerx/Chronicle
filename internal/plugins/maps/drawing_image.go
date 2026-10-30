@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -119,6 +121,56 @@ func (s *drawingService) verifyImageMedia(ctx context.Context, mapID, mediaID st
 		// Same answer for "no such file" and "another campaign's file" so the
 		// response cannot be used to probe for media ids.
 		return apperror.NewBadRequest("image must be a picture from this campaign's media")
+	}
+	return nil
+}
+
+// mediaIDPattern finds anything shaped like a media id. The media route
+// matches ids case-insensitively, so the pattern does too.
+var mediaIDPattern = regexp.MustCompile(`(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+
+// tokenImageMediaIDs lists every media id a token picture path could make a
+// viewer's browser fetch from Chronicle, in its raw and percent-decoded forms,
+// so no spelling of "/media/<id>" escapes the campaign check. A data: picture
+// fetches nothing.
+func tokenImageMediaIDs(p string) []string {
+	p = trimURLControlChars(p)
+	if len(p) >= 5 && strings.EqualFold(p[:5], "data:") {
+		return nil
+	}
+	ids := mediaIDPattern.FindAllString(p, -1)
+	if dec, err := url.PathUnescape(p); err == nil && dec != p {
+		ids = append(ids, mediaIDPattern.FindAllString(dec, -1)...)
+	}
+	return ids
+}
+
+// verifyTokenImageMedia refuses a token picture that names a media file that
+// is not an image of the map's campaign. A path naming no media file (a
+// bundled icon, a Foundry asset path) needs no lookup.
+func (s *drawingService) verifyTokenImageMedia(ctx context.Context, mapID string, path *string) error {
+	if path == nil {
+		return nil
+	}
+	ids := tokenImageMediaIDs(*path)
+	if len(ids) == 0 {
+		return nil
+	}
+	if s.media == nil || s.mapLookup == nil {
+		return apperror.NewInternal(errImageWiring)
+	}
+	campaignID, err := s.mapLookup(ctx, mapID)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		ok, err := s.media.ImageInCampaign(ctx, id, campaignID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return apperror.NewBadRequest("image_path must be a picture from this campaign's media")
+		}
 	}
 	return nil
 }

@@ -37,7 +37,9 @@ func runMapUpdate(t *testing.T, input UpdateMapInput) *Map {
 		getMapFn:    func(_ context.Context, _ string) (*Map, error) { return storedMapRow(), nil },
 		updateMapFn: func(_ context.Context, m *Map) error { written = m; return nil },
 	}
-	if err := newTestMapService(repo).UpdateMap(context.Background(), "map-1", input); err != nil {
+	svc := newTestMapService(repo)
+	svc.SetMediaVerifier(&fakeMedia{files: map[string]string{"img-999": "camp-1"}})
+	if err := svc.UpdateMap(context.Background(), "map-1", input); err != nil {
 		t.Fatalf("UpdateMap: %v", err)
 	}
 	if written == nil {
