@@ -1,10 +1,13 @@
 package timeline
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 // A connection reaches a viewer only when both of its ends are events that
 // viewer may see; the event list passed in is already filtered for them.
-func TestVisibleConnections(t *testing.T) {
+func TestListConnections_OnlyBetweenVisibleEvents(t *testing.T) {
 	// Source types are opaque here; "linked" stands in for a linked event.
 	const own, linked = "standalone", "linked"
 	label := "The Board pays the Rats"
@@ -28,7 +31,13 @@ func TestVisibleConnections(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := VisibleConnections(conns, tc.events)
+			svc := NewTimelineService(&mockTimelineRepo{
+				listConnectionsFn: func(context.Context, string) ([]EventConnection, error) { return conns, nil },
+			}, nil, nil, nil)
+			got, err := svc.ListConnections(context.Background(), "tl-1", tc.events)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if len(got) != len(tc.want) {
 				t.Fatalf("got %d connections, want %d", len(got), len(tc.want))
 			}

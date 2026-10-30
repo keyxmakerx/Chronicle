@@ -156,11 +156,10 @@ func (h *Handler) Show(c echo.Context) error {
 		}
 	}
 
-	connections, err := h.svc.ListConnections(ctx, timelineID)
+	connections, err := h.svc.ListConnections(ctx, timelineID, events)
 	if err != nil {
 		return err
 	}
-	connections = VisibleConnections(connections, events)
 
 	data := TimelineViewData{
 		CampaignID:   cc.Campaign.ID,
@@ -563,11 +562,10 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 		eras, _ = h.svc.ListCalendarEras(ctx, cc.Campaign.ID, *t.CalendarID, role)
 	}
 
-	connections, err := h.svc.ListConnections(ctx, timelineID)
+	connections, err := h.svc.ListConnections(ctx, timelineID, events)
 	if err != nil {
 		return err
 	}
-	connections = VisibleConnections(connections, events)
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"timeline":    t,
@@ -1063,7 +1061,8 @@ func (h *Handler) DeleteConnectionAPI(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-// ListConnectionsAPI returns all connections for a timeline.
+// ListConnectionsAPI returns the timeline's connections between events the
+// viewer may see.
 // GET /campaigns/:id/timelines/:tid/connections
 func (h *Handler) ListConnectionsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -1078,11 +1077,11 @@ func (h *Handler) ListConnectionsAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	connections, err := h.svc.ListConnections(ctx, timelineID)
+	connections, err := h.svc.ListConnections(ctx, timelineID, events)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, VisibleConnections(connections, events))
+	return c.JSON(http.StatusOK, connections)
 }
 
 // parseIntParam extracts an integer path parameter, returning 400 on failure.
