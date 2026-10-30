@@ -3519,11 +3519,6 @@ func (a *App) RegisterRoutes() {
 	pkgHandler := packages.NewHandler(pkgService)
 	pkgHandler.SetActivityRecorder(adminActivity)
 	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)
-	// Public package file serving — always available so Foundry VTT can
-	// fetch module.json even when the admin UI is degraded.
-	pkgServeHandler := packages.NewServeHandler(pkgService, a.Config.BaseURL)
-	packages.SetOnServeInvalidate(pkgService, pkgServeHandler.InvalidateCache)
-	packages.RegisterPublicRoutes(e, pkgServeHandler, middleware.RateLimit(300, time.Minute))
 
 	if a.PluginHealth.IsHealthy("packages") {
 		packages.RegisterRoutes(adminGroup, pkgHandler, auth.RequireReauth(authService))

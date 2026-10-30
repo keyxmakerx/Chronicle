@@ -119,11 +119,6 @@ type PackageService interface {
 	// same protected-set code path as PruneStaleVersions.
 	RunRetention(ctx context.Context) (*PruneResult, error)
 
-	// InstalledPackagePath returns the on-disk install path for the active
-	// (installed + approved) package matching the given type and slug.
-	// Returns empty string if no matching package is installed.
-	InstalledPackagePath(pkgType PackageType, slug string) string
-
 	// InstallDirForVersion returns the on-disk path for a SPECIFIC
 	// historical version of a package — regardless of which version
 	// is marked "installed" in the DB. Used by sub-plugins (foundry_vtt)
@@ -188,8 +183,7 @@ type packageService struct {
 	// just-installed dir, so the app layer can rescan AND force-load that
 	// exact dir (a deliberate rollback would otherwise lose to the
 	// rescan's highest-version policy). Empty string = plain rescan.
-	onSystemInstall   func(installPath string)
-	onServeInvalidate func() // Called after install/remove to invalidate serve cache.
+	onSystemInstall func(installPath string)
 
 	// postInstallHooks are the type-specific extension hooks. Slice
 	// (not map) so registration order is preserved and multiple hooks
@@ -251,14 +245,6 @@ func NewPackageService(repo PackageRepository, github *GitHubClient, mediaDir, b
 func SetOnSystemInstall(svc PackageService, fn func(installPath string)) {
 	if s, ok := svc.(*packageService); ok {
 		s.onSystemInstall = fn
-	}
-}
-
-// SetOnServeInvalidate wires a callback invoked after a package is installed,
-// updated, or removed. Used to invalidate the serve handler's path cache.
-func SetOnServeInvalidate(svc PackageService, fn func()) {
-	if s, ok := svc.(*packageService); ok {
-		s.onServeInvalidate = fn
 	}
 }
 
@@ -461,11 +447,6 @@ func (s *packageService) RemovePackage(ctx context.Context, id string) error {
 		slog.String("id", id),
 		slog.String("slug", pkg.Slug),
 	)
-
-	// Invalidate serve cache so removed packages stop being served.
-	if s.onServeInvalidate != nil {
-		s.onServeInvalidate()
-	}
 
 	return nil
 }
@@ -722,11 +703,6 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	// (rollbacks must beat the rescan's highest-version policy).
 	if pkg.Type != PackageTypeFoundryModule && s.onSystemInstall != nil {
 		s.onSystemInstall(destDir)
-	}
-
-	// Invalidate serve cache so the new install path is picked up.
-	if s.onServeInvalidate != nil {
-		s.onServeInvalidate()
 	}
 
 	// Success clears any prior failure record; the verifier below may
@@ -1023,23 +999,6 @@ func (s *packageService) StartAutoUpdateWorker(ctx context.Context) {
 			}
 		}
 	}
-}
-
-// InstalledPackagePath returns the on-disk install path for the active
-// (installed + approved) package matching the given type and slug.
-// Returns empty string if no matching package is installed.
-func (s *packageService) InstalledPackagePath(pkgType PackageType, slug string) string {
-	ctx := context.Background()
-	packages, err := s.repo.ListPackages(ctx)
-	if err != nil {
-		return ""
-	}
-	for _, pkg := range packages {
-		if pkg.Type == pkgType && pkg.Slug == slug && pkg.InstallPath != "" && pkg.Status == StatusApproved {
-			return pkg.InstallPath
-		}
-	}
-	return ""
 }
 
 // --- Submission/Approval Workflow ---
