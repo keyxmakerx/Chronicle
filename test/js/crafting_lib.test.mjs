@@ -59,6 +59,20 @@ test('the rules editor keeps what the server keeps', () => {
   for (const c of cases) assert.deepEqual(plain(R.cleanRules(c.input, fx).map(R.ruleData)), c.want, c.name);
 });
 
+test('the rules editor cleans a recipe\'s extras as the server does, and its answer is stable', () => {
+  const window = {};
+  const ctx = vm.createContext({ window, document: { createElement: () => ({ getContext: () => null }) }, console, Math, JSON, Date,
+    navigator: {}, requestAnimationFrame: () => 0, cancelAnimationFrame: () => {} });
+  vm.runInContext(readFileSync(join(root, 'static', 'js', 'widgets', 'craft_rules_logic.js'), 'utf8'), ctx);
+  const R = window.CraftRules;
+  const { cases } = JSON.parse(readFileSync(join(fixtures, 'craft_extras_clean.json'), 'utf8'));
+  assert.ok(cases.length >= 20);
+  for (const c of cases) {
+    assert.deepEqual(plain(R.cleanExtras(c.input, c.materials)), c.want, c.name);
+    assert.deepEqual(plain(R.cleanExtras(c.want, c.materials)), c.want, c.name + ', cleaned twice');
+  }
+});
+
 const ITEMS = {
   moss: { id: 'moss', name: 'Bloodmoss', tags: ['herb'] },
   water: { id: 'water', name: 'Spring water', tags: ['liquid'] },

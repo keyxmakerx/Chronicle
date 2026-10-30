@@ -181,12 +181,22 @@ type Named struct {
 }
 
 // Catalog is what the Director's editors pick from: the campaign's Armory
-// items with their tags, and its characters. Truncated says a list was cut
-// short, never silently.
+// items with their tags, its characters, its Rolling Tables by name and the
+// skills its characters' sheets list. Truncated says a list was cut short,
+// never silently.
 type Catalog struct {
 	Items      []MaterialItem `json:"items"`
 	Characters []Named        `json:"characters"`
+	Tables     []CatalogTable `json:"tables"`
+	Skills     []string       `json:"skills"`
 	Truncated  bool           `json:"truncated"`
+}
+
+// CatalogTable is one Rolling Table with its rows' words, so the rules
+// editor can show and try what a quirk or mishap table holds.
+type CatalogTable struct {
+	Name string   `json:"name"`
+	Rows []string `json:"rows"`
 }
 
 // Library is the fixed lists and the campaign's settings and system rules,

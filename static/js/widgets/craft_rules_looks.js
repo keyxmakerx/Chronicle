@@ -31,19 +31,30 @@
     var cur = 'success', armed = null, drag = null, undo = null, tm = null, stage = null, minis = [], dead = false;
     function rec() { return S.rec(); }
     function ruleAt(id) { return id.indexOf('rule:') === 0 ? rec().rules[+id.slice(5)] : null; }
+    /* A mishap's moment is its row on the recipe's mishap table, by place. */
+    function mishapRows() {
+      var x = rec().x, rows = x && x.mishaps && ((S.W.lists.tableRows || {})[x.mishaps.table]);
+      return (rows || []).slice(0, R.EXTRAS.limits.mishapMoments);
+    }
     function groups() {
-      return [['Every brew', EVERY], ['Your rules', rec().rules.map(function (q, i) {
-        return q.players === 'secret' || q.draft ? null : ['rule:' + i, (i + 1) + ' · ' + R.thenTitle(q.then), R.whenTitle(S.W, q.when[0])];
-      }).filter(Boolean)]];
+      return [['Every brew', EVERY], ['Mishaps', mishapRows().map(function (t, i) { return ['mishap:' + i, (i + 1) + ' · ' + t, 'a mishap mid-brew']; })],
+        ['Your rules', rec().rules.map(function (q, i) {
+          return q.players === 'secret' || q.draft ? null : ['rule:' + i, (i + 1) + ' · ' + R.thenTitle(q.then), R.whenTitle(S.W, q.when[0])];
+        }).filter(Boolean)]];
     }
     function valid(id) { return groups().some(function (g) { return g[1].some(function (o) { return o[0] === id; }); }); }
     function look(id) {
       var q = ruleAt(id);
       if (q) { if (!q.look) { q.look = R.defLook(S.W, q); q._def = R.clone(q.look); } return q.look; }
-      var r = rec(); if (!r.looks[id]) r.looks[id] = {spots: {}, words: ''};
+      var r = rec(); if (!r.looks[id]) r.looks[id] = mishapLook(id) || {spots: {}, words: ''};
       return r.looks[id];
     }
-    function def(id) { var q = ruleAt(id); return q ? q._def : rec().defaults[id]; }
+    /* Until it is dressed, a mishap rattles the work and says its row. */
+    function mishapLook(id) {
+      var m = /^mishap:(\d+)$/.exec(id), t = m && mishapRows()[+m[1]];
+      return t ? {spots: {work: {look: 'glass', move: 'shake'}}, words: String(t).slice(0, R.LIMITS.words)} : null;
+    }
+    function def(id) { var q = ruleAt(id); return q ? q._def : mishapLook(id) || rec().defaults[id]; }
     function makes(id) { if (id === 'success' || id === 'breakthrough') return true; var q = ruleAt(id); return !!(q && R.makes(q.then)); }
     function nameOf(id) { var n = ''; groups().forEach(function (g) { g[1].forEach(function (o) { if (o[0] === id) n = o[1]; }); }); return n; }
     function spot(k) { return B.SPOTS.filter(function (s) { return s.k === k; })[0] || {k: k, name: k}; }
@@ -58,7 +69,7 @@
         if (!g[1].length) return g[0] === 'Your rules' ? '<p class="crr-grp">Your rules</p><p class="crr-hint crr-railnote">No rule that players see yet.</p>' : '';
         return '<p class="crr-grp">' + esc(g[0]) + '</p>' + g[1].map(function (o) {
           return '<button type="button" class="crr-ob" data-out="' + o[0] + '" aria-pressed="' + (o[0] === cur) + '"><span class="crr-pl">' + fa('play') + '</span><span class="crr-on"><b>' + esc(o[1]) +
-            '</b><small>' + esc(o[2]) + '</small></span><span class="crr-dl">' + dots(o[0].indexOf('rule:') === 0 ? ruleAt(o[0]).look : rec().looks[o[0]]) + '</span></button>';
+            '</b><small>' + esc(o[2]) + '</small></span><span class="crr-dl">' + dots(o[0].indexOf('rule:') === 0 ? ruleAt(o[0]).look : rec().looks[o[0]] || mishapLook(o[0])) + '</span></button>';
         }).join('');
       }).join('') + (rec().rules.some(function (q) { return q.players === 'secret'; }) ? '<p class="crr-hint crr-railnote">' + fa('lock') + ' Rules set to “Only you” have no moment: players never see them fire.</p>' : '');
     }

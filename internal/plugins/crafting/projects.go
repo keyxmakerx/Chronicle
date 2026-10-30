@@ -330,8 +330,9 @@ type TableRow struct {
 // mishaps are rolled on. Implemented in internal/app over the rolltables
 // service.
 type Tables interface {
-	// Names lists the campaign's tables by name, for the rules editor.
-	Names(ctx context.Context, campaignID string) ([]string, error)
+	// All lists the campaign's tables with their rows' words, for the rules
+	// editor.
+	All(ctx context.Context, campaignID string) ([]CatalogTable, error)
 	// Rows returns a table's rows by its name; ok is false when the campaign
 	// has no table by that name.
 	Rows(ctx context.Context, campaignID, name string) (rows []TableRow, ok bool, err error)

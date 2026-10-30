@@ -184,10 +184,10 @@ func (f fakeSheets) Skills(context.Context, string, string) ([]string, bool, err
 // fakeTables is the campaign's Rolling Tables by name, every row weight 1.
 type fakeTables map[string][]string
 
-func (f fakeTables) Names(context.Context, string) ([]string, error) {
-	out := []string{}
-	for k := range f {
-		out = append(out, k)
+func (f fakeTables) All(context.Context, string) ([]CatalogTable, error) {
+	out := []CatalogTable{}
+	for k, rows := range f {
+		out = append(out, CatalogTable{Name: k, Rows: rows})
 	}
 	return out, nil
 }

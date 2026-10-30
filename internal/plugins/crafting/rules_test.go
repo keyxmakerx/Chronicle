@@ -81,6 +81,8 @@ func TestCleanLooks(t *testing.T) {
 		want map[string]*Look
 	}{
 		{"unreadable", `[1]`, map[string]*Look{}},
+		{"a mishap's moment", `{"mishap:3":{"spots":{"work":{"move":"shake"}},"words":"It cracks"},"mishap:20":{"spots":{}},"mishap:x":{"spots":{}}}`,
+			map[string]*Look{"mishap:3": {Spots: map[string]LookSpot{"work": {Move: "shake"}}, Words: "It cracks"}}},
 		{"known moments only", `{"success":{"spots":{"result":{"look":"bloom"}},"words":"It glows"},"party":{"spots":{}}}`,
 			map[string]*Look{"success": {Spots: map[string]LookSpot{"result": {Look: "bloom"}}, Words: "It glows"}}},
 		{"unknown looks and moves dropped", `{"failure":{"spots":{"heat":{"look":"lava","move":"dim"},"work":{"look":"lava"}}}}`,

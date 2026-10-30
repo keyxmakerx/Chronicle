@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -158,8 +159,49 @@ func (s *service) Catalog(ctx context.Context, campaignID string, v Viewer) (*Ca
 	for _, it := range items {
 		out.Items = append(out.Items, MaterialItem{ID: it.ID, Name: it.Name, Tags: knownTags(tags[it.ID])})
 	}
+	out.Tables, out.Skills = []CatalogTable{}, []string{}
+	if s.projects.Tables != nil {
+		all, err := s.projects.Tables.All(ctx, campaignID)
+		if err != nil {
+			return nil, errInternal(err)
+		}
+		if len(all) > maxCatalogTables {
+			all, out.Truncated = all[:maxCatalogTables], true
+		}
+		out.Tables = append(out.Tables, all...)
+	}
+	// Each sheet is its own read, so only the first few characters' skills
+	// are offered; a skill nobody's sheet lists yet can't be picked anyway.
+	seen := map[string]bool{}
+	for i, ch := range out.Characters {
+		if i >= maxSkillSheets {
+			out.Truncated = true
+			break
+		}
+		if s.projects.Sheets == nil {
+			break
+		}
+		list, _, err := s.projects.Sheets.Skills(ctx, campaignID, ch.ID)
+		if err != nil {
+			continue
+		}
+		for _, k := range list {
+			if k = strings.TrimSpace(k); k != "" && !seen[strings.ToLower(k)] {
+				seen[strings.ToLower(k)] = true
+				out.Skills = append(out.Skills, k)
+			}
+		}
+	}
+	sort.Strings(out.Skills)
 	return out, nil
 }
+
+// The catalog reads each sheet on its own, so it reads only so many, and
+// sends only so many tables.
+const (
+	maxSkillSheets   = 40
+	maxCatalogTables = 60
+)
 
 func (s *service) SaveSettings(ctx context.Context, campaignID string, v Viewer, in Settings) (*Settings, error) {
 	if err := directorOnly(v); err != nil {

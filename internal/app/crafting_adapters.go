@@ -226,16 +226,28 @@ func sheetSkills(fields map[string]any) ([]string, bool, error) {
 // them, by name, so the crafting plugin never imports rolltables.
 type craftingTablesAdapter struct{ svc rolltables.Service }
 
-func (a craftingTablesAdapter) Names(ctx context.Context, campaignID string) ([]string, error) {
+func (a craftingTablesAdapter) All(ctx context.Context, campaignID string) ([]crafting.CatalogTable, error) {
 	doc, err := a.svc.Get(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, 0, len(doc.Tables))
+	out := make([]crafting.CatalogTable, 0, len(doc.Tables))
 	for _, t := range doc.Tables {
-		out = append(out, t.Name)
+		ct := crafting.CatalogTable{Name: t.Name, Rows: make([]string, 0, len(t.Entries))}
+		for _, e := range t.Entries {
+			ct.Rows = append(ct.Rows, tableRowText(e.Name, e.Brief))
+		}
+		out = append(out, ct)
 	}
 	return out, nil
+}
+
+// tableRowText is a row as crafting shows it: its name, then its brief.
+func tableRowText(name, brief string) string {
+	if brief != "" {
+		return name + ". " + brief
+	}
+	return name
 }
 
 func (a craftingTablesAdapter) Rows(ctx context.Context, campaignID, name string) ([]crafting.TableRow, bool, error) {
@@ -249,11 +261,7 @@ func (a craftingTablesAdapter) Rows(ctx context.Context, campaignID, name string
 		}
 		rows := make([]crafting.TableRow, 0, len(t.Entries))
 		for _, e := range t.Entries {
-			text := e.Name
-			if e.Brief != "" {
-				text += ". " + e.Brief
-			}
-			rows = append(rows, crafting.TableRow{Text: text, Weight: e.Weight})
+			rows = append(rows, crafting.TableRow{Text: tableRowText(e.Name, e.Brief), Weight: e.Weight})
 		}
 		return rows, true, nil
 	}

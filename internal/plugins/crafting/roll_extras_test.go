@@ -3,6 +3,9 @@ package crafting
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -289,36 +292,52 @@ func TestStartProject_Substitute(t *testing.T) {
 	}
 }
 
-func TestCleanExtras(t *testing.T) {
-	cases := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"nothing", ``, `{"botch":{"costs":"bane"},"mishaps":null,"quality":null,"substitutes":[],"breakthrough":false,"mastery":null,"discover":null,"keeps":null,"makersMark":false,"salvage":[],"othersCanHelp":false}`},
-		{"not an object", `[1]`, `{"botch":{"costs":"bane"},"mishaps":null,"quality":null,"substitutes":[],"breakthrough":false,"mastery":null,"discover":null,"keeps":null,"makersMark":false,"salvage":[],"othersCanHelp":false}`},
-		{"a quirk botch needs its table", `{"botch":{"costs":"baneAndQuirk"}}`, `{"botch":{"costs":"bane"}`},
-		{"a quirk botch", `{"botch":{"costs":"baneAndQuirk","quirkTable":"Quirks"}}`, `{"botch":{"costs":"baneAndQuirk","quirkTable":"Quirks"}`},
-		{"a lost-ingredients botch", `{"botch":{"costs":"baneAndIngredients","quirkTable":"x"}}`, `{"botch":{"costs":"baneAndIngredients"}`},
-		{"mishaps never always", `{"mishaps":{"chance":"always","table":"M"}}`, `"mishaps":{"chance":"1 in 6","table":"M"}`},
-		{"mishaps need a table", `{"mishaps":{"chance":"1 in 4"}}`, `"mishaps":null`},
-		{"quality falls back", `{"quality":{"fine":"wild","poor":"points"}}`, `"quality":{"fine":"edge","poor":"points"}`},
-		{"substitutes are bounded and unique", `{"substitutes":[{"for":0,"use":"herb","costs":"points"},{"for":0,"use":"herb"},{"for":5,"use":"herb"},{"for":1,"use":"nonsense"}]}`, `"substitutes":[{"for":0,"use":"herb","costs":"points"}]`},
-		{"mastery snaps to a choice", `{"mastery":{"afterCleanBrews":4,"gives":"edge"}}`, `"mastery":{"afterCleanBrews":3,"gives":"edge"}`},
-		{"discovery's closeness", `{"discover":{"closeWhen":"3 of 2","learnedBy":"party"}}`, `"discover":{"closeWhen":"1 of 2","learnedBy":"party","failedTry":"used"}`},
-		{"keeps is clamped", `{"keeps":{"days":9999,"thenBecomes":"Sludge"}}`, `"keeps":{"days":360,"thenBecomes":"Sludge"}`},
-		{"salvage", `{"salvage":[{"item":"Glass","qty":7},{"item":""}]}`, `"salvage":[{"item":"Glass","qty":2}]`},
-		{"switches", `{"breakthrough":true,"makersMark":true,"othersCanHelp":"yes"}`, `"breakthrough":true`},
+// The server keeps exactly the extras the rules editor keeps: every case in
+// the shared fixture, whose answers come from craft_rules_logic.js itself.
+func TestCleanExtrasMatchesTheEditor(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "js", "fixtures", "craft_extras_clean.json"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			b, _ := json.Marshal(CleanExtras(json.RawMessage(tc.in), 2))
-			if !strings.Contains(string(b), tc.want) {
-				t.Fatalf("CleanExtras = %s, want it to hold %s", b, tc.want)
-			}
-			if tc.name == "switches" && (!strings.Contains(string(b), `"makersMark":true`) || !strings.Contains(string(b), `"othersCanHelp":false`)) {
-				t.Fatalf("switches = %s", b)
+	var fx struct {
+		Cases []struct {
+			Name      string          `json:"name"`
+			Input     json.RawMessage `json:"input"`
+			Materials int             `json:"materials"`
+			Want      json.RawMessage `json:"want"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatal(err)
+	}
+	if len(fx.Cases) == 0 {
+		t.Fatal("the fixture has no cases")
+	}
+	for _, c := range fx.Cases {
+		t.Run(c.Name, func(t *testing.T) {
+			got, _ := json.Marshal(CleanExtras(c.Input, c.Materials))
+			var g, w any
+			_ = json.Unmarshal(got, &g)
+			_ = json.Unmarshal(c.Want, &w)
+			if g, w = dropEmpty(g), dropEmpty(w); !reflect.DeepEqual(g, w) {
+				gj, _ := json.Marshal(g)
+				wj, _ := json.Marshal(w)
+				t.Errorf("server kept\n%s\neditor keeps\n%s", gj, wj)
 			}
 		})
+	}
+}
+
+func TestCatalog_TablesAndSkills(t *testing.T) {
+	fx := newProjectFx()
+	fx.s.projects.Tables = fakeTables{"Quirks": {"x"}}
+	fx.s.projects.Sheets = fakeSheets{"Alchemy": -1, "reason": 2}
+	cat, err := fx.s.Catalog(context.Background(), "c", director)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Mira's and Tobin's sheets both list Alchemy; it is offered once.
+	if len(cat.Tables) != 1 || cat.Tables[0].Name != "Quirks" || strings.Join(cat.Tables[0].Rows, ",") != "x" || strings.Join(cat.Skills, ",") != "Alchemy" {
+		t.Fatalf("tables %q skills %q", cat.Tables, cat.Skills)
 	}
 }
