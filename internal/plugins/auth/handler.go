@@ -1146,7 +1146,7 @@ func (h *Handler) ReauthConfirm(c echo.Context) error {
 		return apperror.NewBadRequest("password is required")
 	}
 
-	if err := h.service.ConfirmReauth(c.Request().Context(), session.UserID, password); err != nil {
+	if err := h.service.ConfirmReauth(c.Request().Context(), session.UserID, getSessionToken(c), password); err != nil {
 		// A wrong password here is someone with a signed-in session who
 		// doesn't know its password, so the security dashboard sees it.
 		if h.securityLogger != nil {
@@ -1157,6 +1157,10 @@ func (h *Handler) ReauthConfirm(c echo.Context) error {
 				c.RealIP(), c.Request().UserAgent(),
 				nil,
 			)
+		}
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusTooManyRequests {
+			return err
 		}
 		return apperror.NewUnauthorized("incorrect password")
 	}

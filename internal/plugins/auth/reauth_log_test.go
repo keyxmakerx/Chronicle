@@ -19,7 +19,7 @@ type reauthStubService struct {
 	err error
 }
 
-func (s *reauthStubService) ConfirmReauth(context.Context, string, string) error { return s.err }
+func (s *reauthStubService) ConfirmReauth(context.Context, string, string, string) error { return s.err }
 
 type recordingSecurityLog struct{ events []string }
 
