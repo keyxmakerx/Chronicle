@@ -8,7 +8,7 @@ import (
 // Unloading a package's folder drops the systems loaded from it or from a
 // folder inside it, and nothing else.
 func TestUnloadPackageDirsUnder(t *testing.T) {
-	root := filepath.Join("media", "packages", "systems", "pack")
+	root := filepath.Join("media", "store", "systems", "pack")
 	l := &SystemLoader{
 		modules: map[string]*loadedSystem{
 			"pack":        {manifest: &SystemManifest{ID: "pack"}, dir: filepath.Join(root, "1.0.0"), source: "package"},

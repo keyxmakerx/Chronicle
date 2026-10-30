@@ -505,7 +505,7 @@ func (s *packageService) RemovePackage(ctx context.Context, id string) error {
 // when its slug can't name a single folder.
 func (s *packageService) packageRoot(pkg *Package) string {
 	if pkg.Type == PackageTypeFoundryModule {
-		return filepath.Join(s.packagesDir(), "foundry-module")
+		return filepath.Join(s.packagesDir(), string(PackageTypeFoundryModule))
 	}
 	if pkg.Slug == "" || !filepath.IsLocal(pkg.Slug) || strings.ContainsAny(pkg.Slug, `/\`) {
 		return ""
