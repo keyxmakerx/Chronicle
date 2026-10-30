@@ -3428,6 +3428,14 @@ func (a *App) RegisterRoutes() {
 	// reject (content caps, slugs, renderer bindings…) fails the install
 	// with the real error instead of installing "green" and shadow-failing
 	// at load while the old version keeps serving.
+	packages.SetSystemDirProvider(pkgService, func(systemID string) string {
+		for _, sh := range systems.LoadedHealth() {
+			if sh.ID == systemID && sh.Source == "package" {
+				return sh.Dir
+			}
+		}
+		return ""
+	})
 	packages.SetManifestValidator(pkgService, func(manifestPath string) error {
 		_, err := systems.LoadManifest(manifestPath)
 		return err

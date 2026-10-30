@@ -205,6 +205,11 @@ type packageService struct {
 	// shadow-failure class.
 	manifestValidator func(manifestPath string) error
 
+	// systemDirFn returns the folder a package-installed system with this id
+	// is served from, or "" when none is; injected via SetSystemDirProvider.
+	// An install whose system id another package already serves is refused.
+	systemDirFn func(systemID string) string
+
 	// installLocks serializes InstallVersion per package ID. Without it a
 	// double-click, or the auto-update worker racing an admin, can share
 	// destDir mid-extract and corrupt the install.
@@ -259,6 +264,14 @@ func SetOnSystemInstall(svc PackageService, fn func(installPath string)) {
 func SetOnSystemUnload(svc PackageService, fn func(packageRoot string)) {
 	if s, ok := svc.(*packageService); ok {
 		s.onSystemUnload = fn
+	}
+}
+
+// SetSystemDirProvider wires the lookup of which folder serves a system id,
+// so one package can't replace a system another package provides.
+func SetSystemDirProvider(svc PackageService, fn func(systemID string) string) {
+	if s, ok := svc.(*packageService); ok {
+		s.systemDirFn = fn
 	}
 }
 
@@ -379,6 +392,11 @@ func (s *packageService) AddPackage(ctx context.Context, input AddPackageInput) 
 	pkgType := PackageType(input.Type)
 	if pkgType == "" {
 		pkgType = PackageTypeSystem
+	}
+	if pkgType == PackageTypeFoundryModule {
+		if err := s.ensureSingleFoundryModule(ctx, ""); err != nil {
+			return nil, err
+		}
 	}
 
 	owner, repo, _ := parseRepo(repoURL)
@@ -671,6 +689,9 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 			if err := s.manifestValidator(filepath.Join(stageDir, "manifest.json")); err != nil {
 				return fmt.Errorf("manifest validation failed for %s: %w", version, err)
 			}
+		}
+		if err := s.checkSystemIDOwner(pkg, stageDir); err != nil {
+			return err
 		}
 	}
 
@@ -1084,6 +1105,11 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 	if pkgType == "" {
 		pkgType = PackageTypeSystem
 	}
+	if pkgType == PackageTypeFoundryModule {
+		if err := s.ensureSingleFoundryModule(ctx, ""); err != nil {
+			return nil, err
+		}
+	}
 
 	// Try to parse owner/repo for GitHub URLs (non-GitHub URLs might not parse).
 	owner, repo, _ := parseRepo(repoURL)
@@ -1191,6 +1217,11 @@ func (s *packageService) ReviewPackage(ctx context.Context, packageID, adminUser
 			return fmt.Errorf("URL no longer passes validation: %w", err)
 		}
 
+		if pkg.Type == PackageTypeFoundryModule {
+			if err := s.ensureSingleFoundryModule(ctx, pkg.ID); err != nil {
+				return err
+			}
+		}
 		if err := s.repo.UpdateStatus(ctx, packageID, StatusApproved, adminUserID, input.Note); err != nil {
 			return fmt.Errorf("approving package: %w", err)
 		}
@@ -1504,6 +1535,52 @@ func repoPath(repoURL string) string {
 		return ""
 	}
 	return owner + "/" + repo
+}
+
+// checkSystemIDOwner refuses a system package whose manifest id is already
+// served from another package's folder: the loader keys systems by id, so
+// installing it would replace that package's system for every campaign.
+func (s *packageService) checkSystemIDOwner(pkg *Package, stageDir string) error {
+	if s.systemDirFn == nil {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(stageDir, "manifest.json"))
+	if err != nil {
+		return fmt.Errorf("read manifest.json: %w", err)
+	}
+	var m struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return fmt.Errorf("parse manifest.json: %w", err)
+	}
+	served := s.systemDirFn(m.ID)
+	if served == "" {
+		return nil
+	}
+	root := s.packageRoot(pkg)
+	served = filepath.Clean(served)
+	if root != "" && strings.HasPrefix(served, root+string(filepath.Separator)) {
+		return nil
+	}
+	return apperror.NewConflict(fmt.Sprintf("game system %q is already provided by another package", m.ID))
+}
+
+// ensureSingleFoundryModule refuses a second Foundry module package. Every
+// version of the module shares one folder and the Foundry integration serves
+// whichever such package it finds first, so a second one would replace the
+// module for every campaign. exceptID is the package being approved.
+func (s *packageService) ensureSingleFoundryModule(ctx context.Context, exceptID string) error {
+	all, err := s.repo.ListPackages(ctx)
+	if err != nil {
+		return fmt.Errorf("listing packages: %w", err)
+	}
+	for _, p := range all {
+		if p.Type == PackageTypeFoundryModule && p.ID != exceptID && p.Status != StatusRejected {
+			return apperror.NewConflict(fmt.Sprintf("a Foundry module package is already registered: %s", p.Name))
+		}
+	}
+	return nil
 }
 
 // rewriteSystemManifestVersion updates the "version" field in a system
