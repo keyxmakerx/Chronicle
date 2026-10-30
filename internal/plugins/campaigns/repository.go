@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -81,6 +83,9 @@ type CampaignRepository interface {
 
 	// UpdateSettings updates only the settings JSON column.
 	UpdateSettings(ctx context.Context, campaignID, settingsJSON string) error
+	// UpdateSettingsKeys sets top-level settings keys to the given JSON
+	// values (nil removes the key) and leaves every other key as stored.
+	UpdateSettingsKeys(ctx context.Context, campaignID string, keys map[string]json.RawMessage) error
 
 	// UpdateSidebarConfig updates only the sidebar_config JSON column.
 	UpdateSidebarConfig(ctx context.Context, campaignID, configJSON string) error
@@ -292,15 +297,17 @@ func (r *campaignRepository) ListPublic(ctx context.Context, limit int) ([]Campa
 	return campaigns, rows.Err()
 }
 
-// Update modifies an existing campaign's name, description, settings, and sidebar config.
+// Update modifies an existing campaign's name, slug, description and public
+// flag. Settings and sidebar config have writers of their own that change
+// only what they mean to, so this one never writes back a copy it read.
 func (r *campaignRepository) Update(ctx context.Context, campaign *Campaign) error {
 	query := `UPDATE campaigns SET name = ?, slug = ?, description = ?, is_public = ?,
-	          settings = ?, sidebar_config = ?, updated_at = NOW()
+	          updated_at = NOW()
 	          WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
 		campaign.Name, campaign.Slug, campaign.Description, campaign.IsPublic,
-		campaign.Settings, campaign.SidebarConfig, campaign.ID,
+		campaign.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating campaign: %w", err)
@@ -357,6 +364,48 @@ func (r *campaignRepository) UpdateSettings(ctx context.Context, campaignID, set
 		`UPDATE campaigns SET settings = ?, updated_at = NOW() WHERE id = ?`,
 		settingsJSON, campaignID,
 	)
+	if err != nil {
+		return fmt.Errorf("updating settings: %w", err)
+	}
+	return r.changedOrExists(ctx, result, campaignID)
+}
+
+// settingsKeyPattern is the shape of a settings key; keys are spliced into
+// JSON paths, so anything else is refused.
+var settingsKeyPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
+
+// UpdateSettingsKeys changes the named keys in one statement on the stored
+// JSON, so two writers changing different settings can't undo each other the
+// way a read, edit and write of the whole object does. Stored settings that
+// aren't valid JSON are treated as empty, as ParseSettings treats them.
+func (r *campaignRepository) UpdateSettingsKeys(ctx context.Context, campaignID string, keys map[string]json.RawMessage) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(keys))
+	for k := range keys {
+		if !settingsKeyPattern.MatchString(k) {
+			return fmt.Errorf("invalid settings key %q", k)
+		}
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	expr := "CASE WHEN JSON_VALID(settings) THEN settings ELSE '{}' END"
+	var args []any
+	for _, k := range names {
+		if keys[k] == nil {
+			expr = "JSON_REMOVE(" + expr + ", '$." + k + "')"
+		}
+	}
+	for _, k := range names {
+		if v := keys[k]; v != nil {
+			expr = "JSON_SET(" + expr + ", '$." + k + "', JSON_EXTRACT(?, '$'))"
+			args = append(args, string(v))
+		}
+	}
+	args = append(args, campaignID)
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET settings = `+expr+`, updated_at = NOW() WHERE id = ?`, args...)
 	if err != nil {
 		return fmt.Errorf("updating settings: %w", err)
 	}
