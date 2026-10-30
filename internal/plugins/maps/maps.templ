@@ -545,6 +545,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-nopic strong { font-size: 14px; color: var(--color-text-primary); }
 		.mp-nopic-ic { font-size: 22px; color: var(--color-text-secondary); margin-bottom: 4px; }
 		.mp-nopic .mp-card-row { margin-top: 8px; justify-content: center; }
+		.mp-nopic-close { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--color-text-secondary); cursor: pointer; }
+		.mp-nopic-close:hover, .mp-nopic-close:focus-visible { border-color: var(--color-border); color: var(--color-text-primary); }
 		.mp-hint { left: 50%; bottom: 14px; transform: translateX(-50%); padding: 7px 12px; font-size: 12.5px; color: var(--color-text-primary); white-space: nowrap; pointer-events: none; }
 
 		/* Pin cards: Leaflet popups restyled to match the floating controls. */
@@ -878,16 +880,18 @@ templ mapControls(data MapViewData) {
 		@mapSettingsSheet(data)
 	}
 	// A new map opens as a blank sheet; this tells its owner where the
-	// picture goes. Blank is a real choice (maps drawn from nothing), so it
-	// can be put away, and map_viewer.js remembers that per map.
-	if data.IsOwner && !data.Map.HasImage() {
+	// picture goes. Blank is a real choice (maps drawn from nothing), so
+	// Not now is saved with the map, and map_viewer.js shows the card only
+	// while the map is still empty: it never sits over pins or drawings.
+	if data.IsOwner && !data.Map.HasImage() && !data.Display.KeepBlank {
 		<div id="mp-nopic" class="mp-fl mp-nopic" role="region" aria-labelledby="mp-nopic-t" hidden>
+			<button type="button" id="mp-nopic-close" class="mp-nopic-close" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
 			<i class="fa-solid fa-image mp-nopic-ic" aria-hidden="true"></i>
 			<strong id="mp-nopic-t">This map has no picture yet</strong>
 			<span>Add your map's picture, or draw on the blank sheet.</span>
 			<div class="mp-card-row">
 				<button type="button" id="mp-nopic-add" class="mp-cbtn mp-cbtn-primary">Add a picture</button>
-				<button type="button" id="mp-nopic-x" class="mp-cbtn">Keep it blank</button>
+				<button type="button" id="mp-nopic-x" class="mp-cbtn">Not now</button>
 			</div>
 		</div>
 	}
