@@ -105,8 +105,12 @@ func (c *GitHubClient) ListReleases(ctx context.Context, repoURL string) ([]GitH
 	return releases, nil
 }
 
-// DownloadAsset downloads a release asset (ZIP file) to disk.
-// Returns the number of bytes written.
+// maxPackageDownloadBytes bounds one release download; see extractZip for
+// the bounds on what it unpacks to.
+const maxPackageDownloadBytes = 100 << 20
+
+// DownloadAsset downloads a release asset (ZIP file) to disk, refusing one
+// larger than maxPackageDownloadBytes. Returns the number of bytes written.
 func (c *GitHubClient) DownloadAsset(ctx context.Context, downloadURL, destPath string) (int64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
@@ -133,10 +137,14 @@ func (c *GitHubClient) DownloadAsset(ctx context.Context, downloadURL, destPath 
 	}
 	defer out.Close()
 
-	n, err := io.Copy(out, resp.Body)
+	n, err := io.Copy(out, io.LimitReader(resp.Body, maxPackageDownloadBytes+1))
 	if err != nil {
 		_ = os.Remove(destPath)
 		return 0, fmt.Errorf("writing file: %w", err)
+	}
+	if n > maxPackageDownloadBytes {
+		_ = os.Remove(destPath)
+		return 0, fmt.Errorf("the release download is larger than %d MB", maxPackageDownloadBytes>>20)
 	}
 
 	return n, nil

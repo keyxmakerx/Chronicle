@@ -1455,15 +1455,29 @@ func rewriteSystemManifestVersion(dir, version string) error {
 	return nil
 }
 
+// Bounds on one package release. A system pack or the Foundry module is a few
+// megabytes; these leave room to grow while stopping a release, or a zip bomb
+// inside one, from filling the server's disk.
+const (
+	maxPackageEntries        = 5000
+	maxPackageExtractedBytes = 200 << 20
+)
+
 // extractZip extracts a ZIP file to a destination directory.
 // If the zip contains a single top-level directory (common for GitHub source
 // archives), the contents are "unwrapped" so files land directly in destDir.
+// It stops past maxPackageEntries entries or maxPackageExtractedBytes written,
+// counting the bytes actually inflated rather than what the zip declares.
 func extractZip(zipPath, destDir string) error {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return fmt.Errorf("opening zip: %w", err)
 	}
 	defer func() { _ = zr.Close() }()
+	if len(zr.File) > maxPackageEntries {
+		return fmt.Errorf("the release holds more than %d files", maxPackageEntries)
+	}
+	budget := int64(maxPackageExtractedBytes)
 
 	// Detect single top-level directory wrapper (e.g. "owner-repo-hash/").
 	prefix := detectSingleRootDir(zr.File)
@@ -1503,9 +1517,11 @@ func extractZip(zipPath, destDir string) error {
 			return fmt.Errorf("creating parent dir: %w", err)
 		}
 
-		if err := extractSingleFile(zf, destPath); err != nil {
+		n, err := extractSingleFile(zf, destPath, budget)
+		if err != nil {
 			return err
 		}
+		budget -= n
 	}
 	return nil
 }
@@ -1535,22 +1551,30 @@ func detectSingleRootDir(files []*zip.File) string {
 	return prefix
 }
 
-// extractSingleFile extracts one file from the ZIP archive to disk.
-func extractSingleFile(zf *zip.File, destPath string) error {
+// extractSingleFile extracts one file from the ZIP archive to disk, writing
+// at most budget bytes, and returns how many it wrote.
+func extractSingleFile(zf *zip.File, destPath string, budget int64) (int64, error) {
+	if zf.UncompressedSize64 > uint64(budget) {
+		return 0, fmt.Errorf("the release is larger than %d MB unpacked", maxPackageExtractedBytes>>20)
+	}
 	rc, err := zf.Open()
 	if err != nil {
-		return fmt.Errorf("opening %s in zip: %w", zf.Name, err)
+		return 0, fmt.Errorf("opening %s in zip: %w", zf.Name, err)
 	}
 	defer func() { _ = rc.Close() }()
 
 	out, err := os.Create(destPath)
 	if err != nil {
-		return fmt.Errorf("creating %s: %w", destPath, err)
+		return 0, fmt.Errorf("creating %s: %w", destPath, err)
 	}
 	defer out.Close()
 
-	if _, err := io.Copy(out, rc); err != nil {
-		return fmt.Errorf("writing %s: %w", destPath, err)
+	n, err := io.Copy(out, io.LimitReader(rc, budget+1))
+	if err != nil {
+		return n, fmt.Errorf("writing %s: %w", destPath, err)
 	}
-	return nil
+	if n > budget {
+		return n, fmt.Errorf("the release is larger than %d MB unpacked", maxPackageExtractedBytes>>20)
+	}
+	return n, nil
 }
