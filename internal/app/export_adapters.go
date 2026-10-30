@@ -2872,9 +2872,9 @@ func (a *groupImportAdapter) ImportGroups(ctx context.Context, campaignID string
 
 		for _, userID := range g.MemberIDs {
 			if err := a.svc.AddGroupMember(ctx, newGroup.ID, userID); err != nil {
-				slog.Warn("import: add group member skipped (user may not exist)",
+				slog.Warn("import: add group member skipped (not a member of the campaign)",
 					slog.String("group", g.Name), slog.String("user_id", userID))
-				report.Fail("groups", "group member", userID, "no such user on this instance")
+				report.Fail("groups", "group member", userID, "not a member of this campaign")
 			}
 		}
 	}

@@ -2920,6 +2920,11 @@ func (a *App) RegisterRoutes() {
 	// setting is applied on top of the saved sidebar.
 	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))
 	groupRepo := campaigns.NewGroupRepository(a.DB)
+	if n, err := groupRepo.PruneNonMemberGroupRows(context.Background()); err != nil {
+		slog.Error("pruning group rows of removed members failed", slog.Any("error", err))
+	} else if n > 0 {
+		slog.Info("pruned group rows of removed members", slog.Int64("rows", n))
+	}
 	groupService := campaigns.NewGroupService(groupRepo)
 	campaignHandler.SetGroupService(groupService)
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
