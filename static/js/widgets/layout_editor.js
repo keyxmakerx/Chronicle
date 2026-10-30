@@ -56,7 +56,7 @@
     { type: 'recent_pages',     label: 'Recent Pages',     icon: 'fa-clock',             desc: 'Recently updated entities' },
     { type: 'entity_list',      label: 'Entity List',      icon: 'fa-list',              desc: 'Filtered list by category' },
     { type: 'text_block',       label: 'Text Block',       icon: 'fa-align-left',        desc: 'Custom rich text / HTML' },
-    { type: 'pinned_pages',     label: 'Pinned Pages',     icon: 'fa-thumbtack',         desc: 'Hand-picked entity cards' },
+    { type: 'pinned_pages',     label: 'Pinned Pages',     icon: 'fa-thumbtack',         desc: 'GM pins, then each viewer\'s starred pages' },
     { type: 'calendar_preview', label: 'Calendar',         icon: 'fa-calendar-days',     desc: 'Upcoming calendar events',       addon: 'calendar' },
     { type: 'timeline_preview', label: 'Timeline',         icon: 'fa-timeline',          desc: 'Timeline list with event counts', addon: 'timeline' },
     // map_preview retired — superseded by map_editor (entity templates)

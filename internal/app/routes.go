@@ -47,6 +47,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
@@ -4669,6 +4670,15 @@ func (a *App) RegisterRoutes() {
 	} else {
 		slog.Warn("page layout tables degraded — each category has only its main layout")
 	}
+
+	// The home's Pinned Pages widget: each member's starred pages always, and
+	// the Director's pins for everyone while their table migrated.
+	pinsHealthy := a.PluginHealth.IsHealthy(pinschema.PluginSlug)
+	if !pinsHealthy {
+		slog.Warn("page pins table degraded — the Pinned Pages widget shows only each member's starred pages")
+	}
+	pagePinService := entities.NewPagePinService(entities.NewPagePinRepository(a.DB), entityService, pinsHealthy)
+	entities.RegisterPagePinRoutes(e, entities.NewPagePinHandler(pagePinService), campaignService, authService)
 
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.

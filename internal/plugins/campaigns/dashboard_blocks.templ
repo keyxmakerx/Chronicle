@@ -8,7 +8,7 @@
 //   recent_pages   — Recently updated entities (configurable limit)
 //   entity_list    — Filtered entity list by category
 //   text_block     — Custom rich text / HTML content
-//   pinned_pages   — Hand-picked entity cards (placeholder for now)
+//   pinned_pages   — The Director's pins and the viewer's own (entities plugin)
 
 package campaigns
 
@@ -38,7 +38,7 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 		case "text_block":
 			@dashTextBlock(block.Config)
 		case "pinned_pages":
-			@dashPinnedPages(cc, block.Config)
+			@dashPinnedPages(cc)
 		case "calendar_preview":
 			@dashCalendarPreview(cc, block.Config)
 		case "timeline_preview":
@@ -291,17 +291,22 @@ templ dashTextBlock(config map[string]any) {
 	</div>
 }
 
-// dashPinnedPages renders a grid of hand-picked entity cards.
-// Config: entity_ids ([]string). For now, shows a placeholder.
-templ dashPinnedPages(cc *CampaignContext, config map[string]any) {
-	<div class="card p-4">
-		<div class="flex items-center gap-2 mb-2">
-			<i class="fa-solid fa-thumbtack text-xs text-fg-muted"></i>
-			<span class="text-sm font-semibold text-fg">Pinned Pages</span>
+// dashPinnedPages loads the Pinned Pages widget from the entities plugin
+// (PinnedPagesWidget), which knows which pages the viewer may open: the
+// Director's pins for everyone, then the viewer's own starred pages. It has
+// no settings; a player with nothing pinned sees nothing.
+templ dashPinnedPages(cc *CampaignContext) {
+	<div
+		hx-get={ fmt.Sprintf("/campaigns/%s/pinned-pages", cc.Campaign.ID) }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+		aria-busy="true"
+	>
+		<span class="inline-block w-32 h-4 mb-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" aria-hidden="true">
+			<span class="h-16 rounded-xl bg-fg-secondary/10 animate-pulse"></span>
+			<span class="h-16 rounded-xl bg-fg-secondary/10 animate-pulse"></span>
 		</div>
-		<p class="text-xs text-fg-secondary">
-			Pinned pages block. Select specific entities to feature here.
-		</p>
 	</div>
 }
 
