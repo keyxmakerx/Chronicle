@@ -1104,9 +1104,12 @@ type mediaImportAdapter struct {
 // size and quota checks as any upload. Files the upload lacks (all of them,
 // for a JSON upload) are reported once as a count.
 func (a *mediaImportAdapter) ImportMedia(ctx context.Context, campaignID, userID string, files []campaigns.ExportMediaFile, bundle *campaigns.ImportMediaBundle, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
+	// A file larger than this user may upload would be refused by Upload
+	// anyway; reading stops at the limit instead of inflating it first.
+	limit := a.svc.MaxUploadBytes(ctx, userID, campaignID)
 	missing := 0
 	for _, f := range files {
-		data, ok, err := bundle.Read(f)
+		data, ok, err := bundle.ReadAtMost(f, limit)
 		if !ok {
 			missing++
 			continue

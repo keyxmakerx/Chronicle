@@ -3,6 +3,7 @@ package campaigns
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -85,7 +86,10 @@ func TestImportMediaBundle_IgnoresUnsafeEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read zip: %v", err)
 	}
-	b := NewImportMediaBundle(r)
+	b, err := NewImportMediaBundle(r)
+	if err != nil {
+		t.Fatalf("NewImportMediaBundle: %v", err)
+	}
 	if b.Len() != 1 {
 		t.Errorf("bundle holds %d entries, want only media/ok.png", b.Len())
 	}
@@ -112,5 +116,70 @@ func TestMediaZipName(t *testing.T) {
 		if got := MediaZipName(in); got != want {
 			t.Errorf("MediaZipName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// zipOf builds an in-memory zip of the given entries.
+func zipOf(t *testing.T, entries map[string][]byte) *zip.Reader {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range entries {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		_, _ = w.Write(body)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+	r, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("read zip: %v", err)
+	}
+	return r
+}
+
+// TestImportMediaBundle_Bounds pins what a crafted import ZIP can cost: no
+// more media entries than an import may carry, no file inflated past the
+// upload limit, and an id lookup that is one map read, not a scan of every
+// entry per manifest row.
+func TestImportMediaBundle_Bounds(t *testing.T) {
+	many := make(map[string][]byte, maxImportMediaFiles+1)
+	for i := 0; i <= maxImportMediaFiles; i++ {
+		many[fmt.Sprintf("media/%d.png", i)] = nil
+	}
+	if _, err := NewImportMediaBundle(zipOf(t, many)); err == nil {
+		t.Fatalf("a zip with %d media entries was accepted", maxImportMediaFiles+1)
+	}
+
+	const id = "33333333-3333-3333-3333-333333333333"
+	b, err := NewImportMediaBundle(zipOf(t, map[string][]byte{
+		"media/" + id + ".png": bytes.Repeat([]byte("a"), 4096),
+	}))
+	if err != nil {
+		t.Fatalf("NewImportMediaBundle: %v", err)
+	}
+	if _, ok, err := b.ReadAtMost(ExportMediaFile{OriginalID: id}, 1024); !ok || err == nil {
+		t.Fatalf("a file over the limit: ok=%v err=%v, want found and refused", ok, err)
+	}
+	data, ok, err := b.ReadAtMost(ExportMediaFile{OriginalID: id}, 8192)
+	if !ok || err != nil || len(data) != 4096 {
+		t.Fatalf("a file under the limit: ok=%v err=%v len=%d", ok, err, len(data))
+	}
+}
+
+// TestValidate_RefusesTooManyMediaRows pins the manifest side of the cap.
+func TestValidate_RefusesTooManyMediaRows(t *testing.T) {
+	svc := NewExportImportService(importStubCampaignSvc{})
+	data := &CampaignExport{Format: ExportFormat, Campaign: ExportCampaignMeta{Name: "x"}}
+	data.Media = make([]ExportMediaFile, maxImportMediaFiles)
+	if err := svc.Validate(data); err != nil {
+		t.Fatalf("a manifest at the cap was refused: %v", err)
+	}
+	data.Media = append(data.Media, ExportMediaFile{})
+	if err := svc.Validate(data); err == nil {
+		t.Fatal("a manifest over the cap was accepted")
 	}
 }
