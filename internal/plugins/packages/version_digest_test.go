@@ -35,3 +35,15 @@ func TestInstallVersion_RefusesReplacedDownload(t *testing.T) {
 		t.Fatal("the recorded digest was overwritten")
 	}
 }
+
+// TestInstallVersion_RefusesSlugThatIsAPath pins that a slug which would name
+// a path rather than one file is refused before anything is downloaded.
+func TestInstallVersion_RefusesSlugThatIsAPath(t *testing.T) {
+	svc, repo, _ := installTestEnv(t, buildZip(t, map[string]string{"manifest.json": validManifest}))
+	for _, slug := range []string{"../x", `a\b`, "a/b"} {
+		repo.packages["pkg-1"].Slug = slug
+		if err := svc.InstallVersion(context.Background(), "pkg-1", "0.2.0"); err == nil || !strings.Contains(err.Error(), "file name") {
+			t.Errorf("slug %q: %v", slug, err)
+		}
+	}
+}

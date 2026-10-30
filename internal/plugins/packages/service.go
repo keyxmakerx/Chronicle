@@ -641,6 +641,11 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	defer func() { _ = os.RemoveAll(stageDir) }()
 
 	zipName := fmt.Sprintf("%s-%s.zip", pkg.Slug, version)
+	// The slug comes from a repository address, so it must name one file in
+	// the downloads folder and nothing above or beside it.
+	if strings.ContainsAny(zipName, `/\`) || !filepath.IsLocal(zipName) {
+		return apperror.NewValidation("package name can't be used as a file name")
+	}
 	zipPath := filepath.Join(dlDir, zipName)
 	_, err = s.github.DownloadAsset(ctx, ver.DownloadURL, zipPath)
 	if err != nil {
