@@ -5217,6 +5217,7 @@ func (a *App) RegisterRoutes() {
 			return t.ID, nil
 		}),
 	)
+	extApplier.SetPackEntityCreator(extensionPackPages{svc: entityService})
 	extService.SetApplier(extApplier)
 
 	// --- WASM Runtime (Layer 3 Logic Extensions) ---

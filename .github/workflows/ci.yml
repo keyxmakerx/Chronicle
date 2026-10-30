@@ -363,6 +363,7 @@ jobs:
                       TestTimelineEntityGroups_PrivateEntityVisibilityLeak \
                       TestNavPins_Integration \
                       TestVaultImport_DBImportsATreeGMOnly_Integration \
+                      TestExtensionPackPages_Integration \
                       TestUserRepository_UpdateAvatarPath_Integration \
                       TestUserRepository_ClearAvatarPathIfMatches_Integration \
                       TestUserRepository_GetTimezonesByIDs_Integration \

@@ -1,7 +1,7 @@
 // Package extensions — applier.go implements content application logic.
 // When a campaign owner enables an extension, the applier reads the manifest's
 // contributes section and creates the declared content (entity types, tags,
-// calendar presets) in the campaign. All created records are tracked via
+// entity packs) in the campaign. All created records are tracked via
 // provenance so they can be identified and optionally removed on uninstall.
 package extensions
 
@@ -19,10 +19,14 @@ import (
 // and record provenance for each created record.
 type ContentApplier interface {
 	// Apply reads the extension manifest and creates content in the campaign.
-	Apply(ctx context.Context, campaignID string, ext *Extension, manifest *ExtensionManifest) error
+	// userID is the owner who turned the extension on; created pages are theirs.
+	Apply(ctx context.Context, campaignID, userID string, ext *Extension, manifest *ExtensionManifest) error
 
 	// SetWASMLoader injects the WASM plugin loader for auto-loading plugins.
 	SetWASMLoader(loader WASMPluginLoader)
+
+	// SetPackEntityCreator injects the page creator entity packs need.
+	SetPackEntityCreator(creator PackEntityCreator)
 }
 
 // EntityTypeCreator is the subset of the entity service needed by the applier.
@@ -64,11 +68,12 @@ type WASMPluginLoader interface {
 
 // contentApplier implements ContentApplier using domain service interfaces.
 type contentApplier struct {
-	extDir         string
-	repo           ExtensionRepository
-	entityTypes    EntityTypeCreator
-	tags           TagCreator
-	wasmLoader     WASMPluginLoader
+	extDir      string
+	repo        ExtensionRepository
+	entityTypes EntityTypeCreator
+	tags        TagCreator
+	wasmLoader  WASMPluginLoader
+	packPages   PackEntityCreator
 }
 
 // NewContentApplier creates an applier with the given service dependencies.
@@ -95,17 +100,28 @@ func (a *contentApplier) SetWASMLoader(loader WASMPluginLoader) {
 	a.wasmLoader = loader
 }
 
+// SetPackEntityCreator injects the page creator used by entity packs. Without
+// one, entity packs are skipped.
+func (a *contentApplier) SetPackEntityCreator(creator PackEntityCreator) {
+	a.packPages = creator
+}
+
 // Apply applies extension content to a campaign.
-func (a *contentApplier) Apply(ctx context.Context, campaignID string, ext *Extension, manifest *ExtensionManifest) error {
+//
+// Turning an extension off and on again runs Apply again, so entity types and
+// entity packs already created for this campaign (known from provenance) are
+// not created twice.
+func (a *contentApplier) Apply(ctx context.Context, campaignID, userID string, ext *Extension, manifest *ExtensionManifest) error {
 	if manifest.Contributes == nil {
 		return nil // Nothing to apply.
 	}
 
 	c := manifest.Contributes
+	done := a.alreadyApplied(ctx, campaignID, ext.ID)
 
 	// Apply entity type templates.
 	if a.entityTypes != nil && len(c.EntityTypeTemplates) > 0 {
-		if err := a.applyEntityTypeTemplates(ctx, campaignID, ext.ID, c.EntityTypeTemplates); err != nil {
+		if err := a.applyEntityTypeTemplates(ctx, campaignID, ext.ID, c.EntityTypeTemplates, done.typeIDs); err != nil {
 			slog.Warn("failed to apply entity type templates",
 				slog.String("ext_id", ext.ExtID),
 				slog.Any("error", err),
@@ -124,16 +140,17 @@ func (a *contentApplier) Apply(ctx context.Context, campaignID string, ext *Exte
 	}
 
 	// Apply entity packs.
-	if len(c.EntityPacks) > 0 {
-		slog.Info("extension has entity packs — apply not yet implemented",
-			slog.String("ext_id", ext.ExtID),
-			slog.Int("count", len(c.EntityPacks)),
-		)
+	if a.packPages != nil && len(c.EntityPacks) > 0 {
+		// A closed browser tab must not cut a pack in half: provenance would
+		// then mark it done and the rest would never be created.
+		a.applyEntityPacks(context.WithoutCancel(ctx), campaignID, userID, ext, c.EntityPacks, done)
 	}
 
-	// Apply calendar presets.
+	// Calendar presets are not applied: a turned-on pack should offer them in
+	// the new-calendar wizard rather than create a calendar unasked.
+	// TODO(#1882)
 	if len(c.CalendarPresets) > 0 {
-		slog.Info("extension has calendar presets — apply not yet implemented",
+		slog.Info("extension calendar presets are not applied",
 			slog.String("ext_id", ext.ExtID),
 			slog.Int("count", len(c.CalendarPresets)),
 		)
@@ -175,8 +192,12 @@ func (a *contentApplier) applyEntityTypeTemplates(
 	ctx context.Context,
 	campaignID, extensionID string,
 	templates []EntityTypeTemplate,
+	typeIDs map[string]int,
 ) error {
 	for _, t := range templates {
+		if _, ok := typeIDs[t.Slug]; ok {
+			continue // Created when the extension was first turned on.
+		}
 		// A bad manifest icon falls back to the default rather than
 		// dropping the whole category.
 		icon, replaced := sanitize.IconOrDefault(t.Icon, "")
@@ -200,6 +221,8 @@ func (a *contentApplier) applyEntityTypeTemplates(
 			)
 			continue // Skip this template, try the next.
 		}
+
+		typeIDs[t.Slug] = result.ID
 
 		// Record provenance.
 		if err := a.repo.CreateProvenance(ctx, &Provenance{
@@ -405,4 +428,3 @@ func (a *contentApplier) registerWidgets(
 		)
 	}
 }
-

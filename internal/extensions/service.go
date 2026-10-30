@@ -438,7 +438,7 @@ func (s *extensionService) EnableForCampaign(ctx context.Context, campaignID, ex
 			return nil // Extension is enabled even if apply fails.
 		}
 
-		if err := s.applier.Apply(ctx, campaignID, ext, &manifest); err != nil {
+		if err := s.applier.Apply(ctx, campaignID, userID, ext, &manifest); err != nil {
 			slog.Warn("content application had errors",
 				slog.String("ext_id", ext.ExtID),
 				slog.Any("error", err),
