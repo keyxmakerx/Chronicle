@@ -216,9 +216,18 @@ func (h *MediaAPIHandler) ListMedia(c echo.Context) error {
 
 // GetMedia returns metadata for a single media file.
 // GET /api/v1/campaigns/:id/media/:mediaID
+//
+// Scribe+ like ListMedia: the answer carries a link minted for the cookieless
+// API-key flow, which the media server honours without the page-visibility
+// check a browser request gets, so a Player who learned a file's id would be
+// handed a working link to a picture on a page hidden from them.
 func (h *MediaAPIHandler) GetMedia(c echo.Context) error {
 	mediaID := c.Param("mediaID")
 	ctx := c.Request().Context()
+
+	if h.resolveRole(c) < int(campaigns.RoleScribe) {
+		return apperror.NewNotFound("media file not found")
+	}
 
 	file, err := h.mediaSvc.GetByID(ctx, mediaID)
 	if err != nil {
@@ -262,7 +271,7 @@ const maxAPIUploadBody = 11 * 1024 * 1024
 //
 // Form fields:
 //   - file: the file to upload (required)
-//   - usage_type: "attachment", "entity_image", "avatar", "backdrop" (optional, defaults to "attachment")
+//   - usage_type: "attachment" or "entity_image" (optional, defaults to "attachment")
 func (h *MediaAPIHandler) UploadMedia(c echo.Context) error {
 	// Limit request body size to prevent memory exhaustion from oversized payloads.
 	// The media service enforces the exact per-file limit; this is a coarse guard.
@@ -291,13 +300,9 @@ func (h *MediaAPIHandler) UploadMedia(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("failed to read file"))
 	}
 
-	usageType := c.FormValue("usage_type")
-	if usageType == "" {
-		usageType = media.UsageAttachment
-	}
-	// Note pictures and page files are made only by the routes that bind them.
-	if usageType == media.UsageNoteImage || usageType == media.UsagePageFile {
-		return apperror.NewBadRequest("unsupported usage type")
+	usageType, err := media.ClientUsageType(c.FormValue("usage_type"))
+	if err != nil {
+		return err
 	}
 
 	input := media.UploadInput{

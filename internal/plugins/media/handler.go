@@ -272,15 +272,8 @@ func (h *Handler) Upload(c echo.Context) error {
 		NoMerge:      ownPicture,
 	}
 
-	if input.UsageType == "" {
-		input.UsageType = UsageAttachment
-	}
-	// Note pictures come only from the notes upload route, which lets players
-	// in and records nothing a Scribe could browse; page files only from the
-	// page's Files route, which binds them to the page. Taking either type
-	// from a form field here would let anyone mint files outside those rules.
-	if input.UsageType == UsageNoteImage || input.UsageType == UsagePageFile {
-		return apperror.NewBadRequest("unsupported usage type")
+	if input.UsageType, err = ClientUsageType(input.UsageType); err != nil {
+		return err
 	}
 
 	mediaFile, err := h.service.Upload(c.Request().Context(), input)
