@@ -3,6 +3,8 @@ package packages
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -643,6 +645,10 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	_, err = s.github.DownloadAsset(ctx, ver.DownloadURL, zipPath)
 	if err != nil {
 		return fmt.Errorf("downloading version %s: %w", version, err)
+	}
+	if err := s.checkVersionDigest(ctx, ver, zipPath); err != nil {
+		_ = os.Remove(zipPath)
+		return err
 	}
 
 	if err := extractZip(zipPath, stageDir); err != nil {
@@ -1535,6 +1541,33 @@ func repoPath(repoURL string) string {
 		return ""
 	}
 	return owner + "/" + repo
+}
+
+// checkVersionDigest binds a version to the bytes of its first download.
+// GitHub release assets and tags can be replaced after the fact; without this
+// a reinstall or a campaign moving to an old version could get different code
+// under the same version number.
+func (s *packageService) checkVersionDigest(ctx context.Context, ver *PackageVersion, zipPath string) error {
+	f, err := os.Open(zipPath)
+	if err != nil {
+		return fmt.Errorf("reading download: %w", err)
+	}
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	_ = f.Close()
+	if err != nil {
+		return fmt.Errorf("reading download: %w", err)
+	}
+	digest := hex.EncodeToString(h.Sum(nil))
+	stored, err := s.repo.RecordVersionDigest(ctx, ver.ID, digest)
+	if err != nil {
+		return err
+	}
+	if stored != digest {
+		return apperror.NewConflict(fmt.Sprintf(
+			"version %s on GitHub is no longer the file first downloaded for it (it was replaced upstream); refusing to install it", ver.Version))
+	}
+	return nil
 }
 
 // checkSystemIDOwner refuses a system package whose manifest id is already

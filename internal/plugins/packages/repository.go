@@ -27,6 +27,9 @@ type PackageRepository interface {
 	GetVersion(ctx context.Context, packageID, version string) (*PackageVersion, error)
 	UpsertVersion(ctx context.Context, v *PackageVersion) error
 	MarkVersionDownloaded(ctx context.Context, id string) error
+	// RecordVersionDigest stores digest as the version's content digest if it
+	// has none yet, and returns the digest it holds afterwards.
+	RecordVersionDigest(ctx context.Context, id, digest string) (string, error)
 
 	// Usage tracking.
 	GetUsageByCampaign(ctx context.Context, systemSlug string) ([]PackageUsage, error)
@@ -456,6 +459,22 @@ func (r *packageRepository) UpsertVersion(ctx context.Context, v *PackageVersion
 		return fmt.Errorf("upserting version: %w", err)
 	}
 	return nil
+}
+
+// RecordVersionDigest keeps the first digest ever recorded for a version: the
+// conditional update writes only into an empty column, so two installs racing
+// can't both set it, and the read returns whichever one won.
+func (r *packageRepository) RecordVersionDigest(ctx context.Context, id, digest string) (string, error) {
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE package_versions SET content_sha256 = ? WHERE id = ? AND content_sha256 IS NULL`, digest, id); err != nil {
+		return "", fmt.Errorf("recording version digest: %w", err)
+	}
+	var stored sql.NullString
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT content_sha256 FROM package_versions WHERE id = ?`, id).Scan(&stored); err != nil {
+		return "", fmt.Errorf("reading version digest: %w", err)
+	}
+	return stored.String, nil
 }
 
 // MarkVersionDownloaded sets the downloaded_at timestamp for a version.

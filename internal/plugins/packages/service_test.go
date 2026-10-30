@@ -43,6 +43,8 @@ type fakeRepo struct {
 	// listed backs ListVersions (same list for every package) so retention
 	// tests can supply published dates.
 	listed []PackageVersion
+	// digests backs RecordVersionDigest, keyed by version id.
+	digests map[string]string
 }
 
 func newFakeRepo() *fakeRepo {
@@ -138,6 +140,18 @@ func (r *fakeRepo) GetVersion(_ context.Context, pkgID, version string) (*Packag
 func (r *fakeRepo) UpsertVersion(_ context.Context, _ *PackageVersion) error { return nil }
 
 func (r *fakeRepo) MarkVersionDownloaded(_ context.Context, _ string) error { return nil }
+
+func (r *fakeRepo) RecordVersionDigest(_ context.Context, id, digest string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.digests == nil {
+		r.digests = map[string]string{}
+	}
+	if r.digests[id] == "" {
+		r.digests[id] = digest
+	}
+	return r.digests[id], nil
+}
 
 func (r *fakeRepo) GetUsageByCampaign(_ context.Context, _ string) ([]PackageUsage, error) {
 	return nil, nil
