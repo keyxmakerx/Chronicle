@@ -2701,9 +2701,16 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 	}, nil
 }
 
-// loadSystemsFromPackages scans installed system packages and loads them into
-// the system registry. Package-managed systems override bundled ones.
-func (a *App) loadSystemsFromPackages(pkgService packages.PackageService) {
+// packageLister is the part of the package catalog the system loader reads.
+type packageLister interface {
+	ListPackages(ctx context.Context) ([]packages.Package, error)
+}
+
+// loadSystemsFromPackages loads the installed version of every approved system
+// package into the system registry. The catalog, not the folders on disk,
+// decides what is served: a removed or unapproved package's leftover folders
+// never load.
+func (a *App) loadSystemsFromPackages(pkgService packageLister) {
 	pkgs, err := pkgService.ListPackages(context.Background())
 	if err != nil {
 		slog.Warn("failed to list packages for system loading", slog.Any("error", err))
@@ -3276,6 +3283,7 @@ func (a *App) RegisterRoutes() {
 	// Auto-register discovered game systems as addons so new systems
 	// (from internal/systems/, package manager, or GitHub) appear in the
 	// addon UI without hardcoded definitions.
+	a.loadSystemsFromPackages(packages.NewPackageRepository(a.DB))
 	sysAddonInfos := systems.AddonInfos()
 	slog.Info("registering system addons at startup", slog.Int("count", len(sysAddonInfos)))
 	for _, info := range sysAddonInfos {
@@ -3363,7 +3371,7 @@ func (a *App) RegisterRoutes() {
 		// Taken before the rescan swaps manifests, to tell which sheet fields
 		// this install introduces.
 		presetsBefore := snapshotPresetFieldKeys()
-		systems.ScanPackageDir(filepath.Join(a.Config.Upload.MediaPath, "packages", "systems"))
+		a.loadSystemsFromPackages(pkgService)
 		// Force-load the exact dir that was just installed. The rescan
 		// above applies "highest version wins", which silently ignores a
 		// deliberate rollback to an OLDER version; an explicit install is
@@ -3404,6 +3412,15 @@ func (a *App) RegisterRoutes() {
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
 		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), presetsBefore)
+	})
+	// A removed or archived system package stops being served now, and its
+	// page renderers go with it.
+	packages.SetOnSystemUnload(pkgService, func(packageRoot string) {
+		dropped := systems.UnloadPackageDirsUnder(packageRoot)
+		slog.Info("unloaded package systems", slog.String("dir", packageRoot), slog.Any("systems", dropped))
+		freshRegistry := entities.NewEntityShowRendererRegistry()
+		registerManifestRenderers(freshRegistry)
+		entities.SetGlobalEntityShowRendererRegistry(freshRegistry)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	// Fail-loud installs: run the FULL loader-grade manifest validation at
@@ -3526,10 +3543,6 @@ func (a *App) RegisterRoutes() {
 		// Owner-facing submission routes (authenticated, not admin-only).
 		ownerGroup := e.Group("", auth.RequireAuth(authService))
 		packages.RegisterOwnerRoutes(ownerGroup, pkgOwnerHandler)
-
-		// Load systems from package manager install paths so externally
-		// managed system packs override the bundled fallbacks.
-		a.loadSystemsFromPackages(pkgService)
 
 		// Store package service reference.
 		a.pkgService = pkgService

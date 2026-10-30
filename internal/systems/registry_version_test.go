@@ -31,7 +31,7 @@ func TestVersionLess(t *testing.T) {
 	}
 }
 
-// TestLatestVersionSelection mirrors the selection loop in ScanPackageDir: the
+// TestLatestVersionSelection: picking the latest of several version folders,
 // highest semver wins regardless of os.ReadDir's alphabetical name order.
 func TestLatestVersionSelection(t *testing.T) {
 	// As os.ReadDir would return them: sorted as strings.

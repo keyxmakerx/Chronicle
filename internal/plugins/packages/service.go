@@ -186,6 +186,11 @@ type packageService struct {
 	// rescan's highest-version policy). Empty string = plain rescan.
 	onSystemInstall func(installPath string)
 
+	// onSystemUnload is called with a system package's folder (every version
+	// under it) when the package is removed or archived, so the app layer
+	// stops serving it at once instead of at the next restart.
+	onSystemUnload func(packageRoot string)
+
 	// postInstallHooks are the type-specific extension hooks. Slice
 	// (not map) so registration order is preserved and multiple hooks
 	// per type are allowed. Sub-plugins call RegisterPostInstallHook
@@ -246,6 +251,14 @@ func NewPackageService(repo PackageRepository, github *GitHubClient, mediaDir, b
 func SetOnSystemInstall(svc PackageService, fn func(installPath string)) {
 	if s, ok := svc.(*packageService); ok {
 		s.onSystemInstall = fn
+	}
+}
+
+// SetOnSystemUnload wires the callback that stops serving a removed or
+// archived system package.
+func SetOnSystemUnload(svc PackageService, fn func(packageRoot string)) {
+	if s, ok := svc.(*packageService); ok {
+		s.onSystemUnload = fn
 	}
 }
 
@@ -422,6 +435,10 @@ func (s *packageService) AddPackage(ctx context.Context, input AddPackageInput) 
 
 // RemovePackage deletes a package and cleans up its installed files.
 func (s *packageService) RemovePackage(ctx context.Context, id string) error {
+	mu := s.lockForPackage(id)
+	mu.Lock()
+	defer mu.Unlock()
+
 	pkg, err := s.repo.GetPackage(ctx, id)
 	if err != nil {
 		return fmt.Errorf("fetching package: %w", err)
@@ -430,18 +447,30 @@ func (s *packageService) RemovePackage(ctx context.Context, id string) error {
 		return fmt.Errorf("package not found")
 	}
 
-	if pkg.InstallPath != "" {
-		if err := os.RemoveAll(pkg.InstallPath); err != nil {
+	if err := s.repo.DeletePackage(ctx, id); err != nil {
+		return fmt.Errorf("deleting package: %w", err)
+	}
+
+	// Every version goes, not only the installed one: a leftover version
+	// folder would be served again, or handed to the next package that
+	// takes this one's place.
+	root := s.packageRoot(pkg)
+	if root != "" {
+		if s.onSystemUnload != nil && pkg.Type != PackageTypeFoundryModule {
+			s.onSystemUnload(root)
+		}
+		if err := os.RemoveAll(root); err != nil {
 			slog.Warn("failed to remove package files",
 				slog.String("package", pkg.Slug),
-				slog.String("path", pkg.InstallPath),
+				slog.String("path", root),
 				slog.Any("error", err),
 			)
 		}
 	}
-
-	if err := s.repo.DeletePackage(ctx, id); err != nil {
-		return fmt.Errorf("deleting package: %w", err)
+	if zips, _ := filepath.Glob(filepath.Join(s.downloadsDir(), pkg.Slug+"-*.zip")); len(zips) > 0 {
+		for _, z := range zips {
+			_ = os.Remove(z)
+		}
 	}
 
 	slog.Info("package removed",
@@ -450,6 +479,18 @@ func (s *packageService) RemovePackage(ctx context.Context, id string) error {
 	)
 
 	return nil
+}
+
+// packageRoot is the folder holding every installed version of pkg, or ""
+// when its slug can't name a single folder.
+func (s *packageService) packageRoot(pkg *Package) string {
+	if pkg.Type == PackageTypeFoundryModule {
+		return filepath.Join(s.packagesDir(), "foundry-module")
+	}
+	if pkg.Slug == "" || !filepath.IsLocal(pkg.Slug) || strings.ContainsAny(pkg.Slug, `/\`) {
+		return ""
+	}
+	return filepath.Join(s.packagesDir(), "systems", pkg.Slug)
 }
 
 // --- Version Management ---
@@ -1203,14 +1244,48 @@ func (s *packageService) DeprecatePackage(ctx context.Context, packageID, msg st
 	return nil
 }
 
-// ArchivePackage hides a package from active listings.
+// ArchivePackage hides a package from active listings and stops serving it;
+// only approved packages are served.
 func (s *packageService) ArchivePackage(ctx context.Context, packageID string) error {
-	return s.repo.UpdateStatus(ctx, packageID, StatusArchived, "", "")
+	mu := s.lockForPackage(packageID)
+	mu.Lock()
+	defer mu.Unlock()
+	pkg, err := s.repo.GetPackage(ctx, packageID)
+	if err != nil {
+		return fmt.Errorf("fetching package: %w", err)
+	}
+	if pkg == nil {
+		return apperror.NewNotFound("package not found")
+	}
+	if err := s.repo.UpdateStatus(ctx, packageID, StatusArchived, "", ""); err != nil {
+		return err
+	}
+	if root := s.packageRoot(pkg); root != "" && pkg.Type != PackageTypeFoundryModule && s.onSystemUnload != nil {
+		s.onSystemUnload(root)
+	}
+	return nil
 }
 
-// UnarchivePackage restores an archived package to approved status.
+// UnarchivePackage restores an archived package to approved status and
+// serves its installed version again.
 func (s *packageService) UnarchivePackage(ctx context.Context, packageID string) error {
-	return s.repo.UpdateStatus(ctx, packageID, StatusApproved, "", "")
+	mu := s.lockForPackage(packageID)
+	mu.Lock()
+	defer mu.Unlock()
+	pkg, err := s.repo.GetPackage(ctx, packageID)
+	if err != nil {
+		return fmt.Errorf("fetching package: %w", err)
+	}
+	if pkg == nil {
+		return apperror.NewNotFound("package not found")
+	}
+	if err := s.repo.UpdateStatus(ctx, packageID, StatusApproved, "", ""); err != nil {
+		return err
+	}
+	if pkg.Type != PackageTypeFoundryModule && pkg.InstallPath != "" && s.onSystemInstall != nil {
+		s.onSystemInstall(pkg.InstallPath)
+	}
+	return nil
 }
 
 // UpdateRepoURL changes a package's repository URL (admin only).
