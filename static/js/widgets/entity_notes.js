@@ -156,7 +156,7 @@
           '<header class="en-head">' +
             '<h3 class="en-title cb-head"><i class="fa-solid fa-note-sticky" aria-hidden="true"></i>Notes <span class="en-count cb-count" data-en-count>0</span></h3>' +
             '<span class="en-spacer"></span>' +
-            '<button type="button" class="btn btn-primary btn-sm" data-en-act="new"><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>New note</button>' +
+            '<button type="button" class="btn btn-primary btn-sm" data-en-act="new"><i class="fa-solid fa-plus" aria-hidden="true"></i>New note</button>' +
           '</header>' +
           '<div class="en-filters" role="group" aria-label="Show">' +
             chip('all', 'All', true) + chip('mine', 'Mine', false) +

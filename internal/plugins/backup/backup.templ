@@ -87,12 +87,12 @@ templ runCard(d BackupPageData) {
 				<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
 				if d.RunningNow {
 					<button type="button" class="btn-primary text-sm opacity-50 cursor-not-allowed" disabled>
-						<i class="fa-solid fa-spinner fa-spin mr-1"></i>
+						<i class="fa-solid fa-spinner fa-spin"></i>
 						Backup running…
 					</button>
 				} else {
 					<button type="submit" class="btn-primary text-sm">
-						<i class="fa-solid fa-play mr-1"></i>
+						<i class="fa-solid fa-play"></i>
 						Run backup
 					</button>
 				}

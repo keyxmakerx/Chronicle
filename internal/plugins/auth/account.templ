@@ -30,7 +30,7 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 					</div>
 					<div>
 						<label class="btn-secondary text-sm cursor-pointer">
-							<i class="fa-solid fa-camera mr-1"></i> Upload Photo
+							<i class="fa-solid fa-camera"></i> Upload Photo
 							<input
 								type="file"
 								accept="image/*"
@@ -281,7 +281,7 @@ templ twoFactorCard(st TwoFactorStatus) {
 			</ul>
 			<div class="flex flex-wrap items-center justify-end gap-2">
 				<span class="text-xs mr-auto text-fg-muted" x-bind:class="error ? 'text-red-500' : ''" x-text="copied ? 'Copied' : error" aria-live="polite"></span>
-				<button type="button" class="btn-secondary text-sm" @click="copy()"><i class="fa-regular fa-copy mr-1"></i> Copy codes</button>
+				<button type="button" class="btn-secondary text-sm" @click="copy()"><i class="fa-regular fa-copy"></i> Copy codes</button>
 				<button type="button" class="btn-primary text-sm" @click="reset()">I've saved them</button>
 			</div>
 		</div>
