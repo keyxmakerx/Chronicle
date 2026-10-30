@@ -162,7 +162,9 @@ func CSRF() echo.MiddlewareFunc {
 			// Check header first (HTMX/AJAX), then form field (traditional forms).
 			submittedToken := req.Header.Get(csrfHeaderName)
 			if submittedToken == "" {
-				submittedToken = req.FormValue(csrfFormField)
+				// The body only: a token in the address would end up in logs
+				// and Referer headers.
+				submittedToken = req.PostFormValue(csrfFormField)
 			}
 
 			// Use constant-time comparison to prevent timing side-channel attacks
