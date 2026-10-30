@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -90,7 +91,7 @@ func TestDownloadAsset_Bounded(t *testing.T) {
 	}))
 	defer srv.Close()
 	dest := filepath.Join(t.TempDir(), "big.zip")
-	c := &GitHubClient{httpClient: srv.Client()}
+	c := &GitHubClient{httpClient: srv.Client(), hostAllowed: func(*url.URL) bool { return true }}
 	if _, err := c.DownloadAsset(context.Background(), srv.URL, dest); err == nil {
 		t.Fatal("a download past the cap succeeded")
 	}

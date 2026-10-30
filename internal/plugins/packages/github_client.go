@@ -6,16 +6,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
 	"time"
 )
 
-// repoPattern extracts owner/repo from a GitHub URL. Repository names may
-// contain dots (Chronicle-DnD-5.5e), so only GitHub's name characters end
-// the match; a trailing ".git" is stripped by parseRepo.
-var repoPattern = regexp.MustCompile(`github\.com[/:]([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)`)
+// repoPattern extracts owner/repo from a GitHub URL. It is anchored to the
+// whole URL, so "github.com/owner/repo" appearing inside another host's path
+// doesn't parse: the repository shown is always the one fetched. Repository
+// names may contain dots (Chronicle-DnD-5.5e), so only GitHub's name
+// characters end the match; a trailing ".git" is stripped by parseRepo.
+var repoPattern = regexp.MustCompile(`^(?:https://(?:www\.)?github\.com/|git@github\.com:)([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)(?:[/?#].*)?$`)
 
 // GitHubRelease represents a release from the GitHub Releases API.
 type GitHubRelease struct {
@@ -39,6 +42,9 @@ type GitHubAsset struct {
 type GitHubClient struct {
 	httpClient *http.Client
 	token      string // Optional GitHub token for higher rate limits.
+	// hostAllowed decides which hosts a download may reach, on the first
+	// request and on every redirect; nil means isGitHubDownloadURL.
+	hostAllowed func(*url.URL) bool
 }
 
 // NewGitHubClient creates a GitHub API client. It reads GITHUB_TOKEN
@@ -48,6 +54,29 @@ func NewGitHubClient() *GitHubClient {
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		token:      os.Getenv("GITHUB_TOKEN"),
 	}
+}
+
+// isGitHubDownloadURL reports whether u is an HTTPS address on GitHub or the
+// hosts it serves release files from. Download addresses come from the
+// GitHub API's answer, so this keeps a tampered or unexpected answer, or a
+// redirect, from sending the server (and its GitHub token) anywhere else.
+func isGitHubDownloadURL(u *url.URL) bool {
+	if u.Scheme != "https" || u.Port() != "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	switch host {
+	case "github.com", "api.github.com", "codeload.github.com":
+		return true
+	}
+	return strings.HasSuffix(host, ".githubusercontent.com")
+}
+
+func (c *GitHubClient) downloadHostAllowed(u *url.URL) bool {
+	if c.hostAllowed != nil {
+		return c.hostAllowed(u)
+	}
+	return isGitHubDownloadURL(u)
 }
 
 // parseRepo extracts owner and repo from a GitHub URL.
@@ -116,12 +145,25 @@ func (c *GitHubClient) DownloadAsset(ctx context.Context, downloadURL, destPath 
 	if err != nil {
 		return 0, fmt.Errorf("creating download request: %w", err)
 	}
+	if !c.downloadHostAllowed(req.URL) {
+		return 0, fmt.Errorf("download address %q is not on GitHub", req.URL.Host)
+	}
 
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	client := *c.httpClient
+	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("too many redirects")
+		}
+		if !c.downloadHostAllowed(next.URL) {
+			return fmt.Errorf("download redirected off GitHub to %q", next.URL.Host)
+		}
+		return nil
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("downloading asset: %w", err)
 	}
