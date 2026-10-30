@@ -68,8 +68,10 @@ const PAGES = [
 
 class Server {
   constructor(html) {
-    const m = /<script id="fm-data-maud" type="application\/json">([\s\S]*?)<\/script>/.exec(html);
-    this.tree = m ? JSON.parse(m[1]) : null;
+    // The block's data rides in its data-json attribute, HTML-escaped.
+    const m = /<section class="fm"[^>]*\sdata-json="([^"]*)"/.exec(html);
+    const unescape = (s) => s.replace(/&#34;|&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    this.tree = m ? JSON.parse(unescape(m[1])) : null;
     this.requests = [];
     this.saves = [];
     this.failNext = null;
