@@ -90,6 +90,9 @@ type StashDeps struct {
 	Shares ShareStore
 	// Auditor writes shares to the campaign's activity log; optional.
 	Auditor ShareAuditor
+	// Copies keeps what single copies remember (copies.go); nil (the armory
+	// plugin's own table did not migrate) leaves every item plain.
+	Copies CopyStore
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's

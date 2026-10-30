@@ -4395,10 +4395,12 @@ func (a *App) RegisterRoutes() {
 	// failed the plugin is degraded and sharing is simply not offered. The
 	// activity log is bound once the audit service exists, further down.
 	var shareStore armory.ShareStore
+	var copyStore armory.CopyStore
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
 		shareStore = armory.NewShareRepository(a.DB)
+		copyStore = armory.NewCopyRepository(a.DB)
 	} else {
-		slog.Warn("armory plugin schema degraded — item sharing is off")
+		slog.Warn("armory plugin schema degraded — item sharing and remembered copies are off")
 	}
 	shareAudit := &armoryShareAuditAdapter{}
 	stashRepo := armory.NewStashRepository(a.DB)
@@ -4419,6 +4421,7 @@ func (a *App) RegisterRoutes() {
 		Notifier:   &armoryGiveNotifierAdapter{svc: sessionsService},
 		Shares:     shareStore,
 		Auditor:    shareAudit,
+		Copies:     copyStore,
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.

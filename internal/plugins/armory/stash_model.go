@@ -174,6 +174,9 @@ type Move struct {
 	// is never from such a requester, so an unset value is the safe reading
 	// (never touch a DM-only line).
 	seesDmOnly bool
+	// pick is the remembered copy the mover asked to send; a waiting
+	// request keeps it in the copy store.
+	pick int64
 }
 
 // IsMoneyEdit reports whether the row records a character's money being
@@ -217,6 +220,9 @@ type MoveInput struct {
 	Amount       string // Plain decimal text; parsed by ParseCents.
 	From         Endpoint
 	To           Endpoint
+	// Pick is a remembered copy to send first (copies.go); 0 sends plain
+	// copies first.
+	Pick int64
 }
 
 // CreateStashInput creates a stash.

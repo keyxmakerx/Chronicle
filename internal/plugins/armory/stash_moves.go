@@ -439,6 +439,12 @@ func (s *stashService) run(ctx context.Context, m *Move, refs moveRefs) (status,
 	if m.IsGive() {
 		return MoveFailed, giveReplayReason
 	}
+	// What the source held before, so its remembered copies can follow the
+	// count (copies_service.go).
+	before := 0
+	if m.Kind == MoveKindItem && s.Copies != nil {
+		before, _ = s.heldCount(ctx, m.CampaignID, m.From, m.ItemEntityID)
+	}
 	ok, err := s.debit(ctx, m, m.From, refs.from)
 	if err != nil {
 		slog.Error("stash move: debit failed", slog.Int64("move_id", m.ID), slog.Any("error", err))
@@ -456,6 +462,10 @@ func (s *stashService) run(ctx context.Context, m *Move, refs moveRefs) (status,
 				slog.String("campaign_id", m.CampaignID), slog.Any("error", rerr))
 		}
 		return MoveFailed, creditFailReason
+	}
+	if m.Kind == MoveKindItem {
+		to := m.To
+		s.takeCopies(ctx, m.CampaignID, m.From, &to, m.ItemEntityID, before, m.Quantity, s.pickedFor(ctx, m))
 	}
 	if m.Kind == MoveKindItem && m.From.Kind == EndpointCharacter {
 		s.dropEmptyCarried(ctx, m.CampaignID, m.From.ID, m.ItemEntityID)
@@ -476,7 +486,7 @@ func insufficientMessage(m *Move) string {
 // Nothing here changes any data.
 func (s *stashService) validate(ctx context.Context, campaignID string, a Actor, in MoveInput) (*Move, moveRefs, error) {
 	var refs moveRefs
-	m := &Move{CampaignID: campaignID, Kind: in.Kind, From: in.From, To: in.To, RequestedBy: a.UserID, seesDmOnly: a.SeesDmOnly()}
+	m := &Move{CampaignID: campaignID, Kind: in.Kind, From: in.From, To: in.To, RequestedBy: a.UserID, seesDmOnly: a.SeesDmOnly(), pick: in.Pick}
 
 	if !in.From.Valid() || !in.To.Valid() {
 		return nil, refs, apperror.NewBadRequest("Choose where it is going.")
@@ -644,6 +654,11 @@ func (s *stashService) Move(ctx context.Context, campaignID string, a Actor, in 
 	m.Status = MovePending
 	if err := s.Repo.InsertMove(ctx, m); err != nil {
 		return nil, err
+	}
+	if m.pick > 0 && s.Copies != nil {
+		if err := s.Copies.Pick(ctx, m.ID, m.pick); err != nil {
+			slog.Warn("stash move: a request's picked copy was not kept; plain copies go first", slog.Int64("move_id", m.ID), slog.Any("error", err))
+		}
 	}
 	ev.requested(m)
 	return &MoveOutcome{Move: *m}, nil
