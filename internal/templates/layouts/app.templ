@@ -872,7 +872,7 @@ templ Topbar() {
 			</div>
 
 			<!-- Inline search bar (hidden by default, shown when search is active) -->
-			<div id="topbar-search" class="flex-1 items-center min-w-0 hidden">
+			<div id="topbar-search" class="flex-1 items-center min-w-0 hidden" data-can-create={ fmt.Sprint(GetCampaignRole(ctx) >= 2) }>
 				<div class="relative w-full max-w-lg mx-auto">
 					<input
 						id="topbar-search-input"

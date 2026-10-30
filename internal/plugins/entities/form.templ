@@ -16,7 +16,7 @@ import (
 // "Create as:" picker when the preselect is a top-level parent that has
 // sub-category children. When nil/empty the form falls back to a flat
 // category dropdown.
-templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, csrfToken, errMsg string) {
+templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string) {
 	@layouts.App("New Page - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
 			<nav class="text-sm text-fg-secondary mb-4">
@@ -25,7 +25,7 @@ templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, pre
 				<span class="text-fg">New</span>
 			</nav>
 			<h1 class="text-2xl font-bold text-fg mb-6">Create Page</h1>
-			@EntityCreateFormComponent(cc, entityTypes, preselect, variants, parentEntity, csrfToken, errMsg)
+			@EntityCreateFormComponent(cc, entityTypes, preselect, variants, parentEntity, name, csrfToken, errMsg)
 		</div>
 	}
 }
@@ -48,7 +48,7 @@ templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 }
 
 // EntityCreateFormComponent renders the entity creation form.
-templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, csrfToken, errMsg string) {
+templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string) {
 	<div id="entity-form">
 		<form
 			class="card p-8 space-y-6"
@@ -144,6 +144,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 					type="text"
 					id="name"
 					name="name"
+					value={ name }
 					required
 					autofocus
 					class="input w-full"
@@ -164,7 +165,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 				<select id="template_id" name="template_id" class="input w-full">
 					<option value="0">Blank — start from scratch</option>
 				</select>
-				<p class="mt-1 text-xs text-fg-secondary">Pre-fill the editor with a structured template.</p>
+				<p class="mt-1 text-xs text-fg-secondary">Start the page editor with a structured template.</p>
 			</div>
 
 			<div>
@@ -264,7 +265,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 						{ *entity.Entry }
 					}
 				</textarea>
-				<p class="mt-1 text-xs text-fg-secondary">Plain text fallback. Use the rich text editor on the page view for full formatting.</p>
+				<p class="mt-1 text-xs text-fg-secondary">Plain text only. Open the page and use the page editor for headings, links and pictures.</p>
 			</div>
 
 			// Read-only Category › Sub-category lineage. Shows the type's

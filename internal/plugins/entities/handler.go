@@ -473,7 +473,18 @@ func (h *Handler) NewForm(c echo.Context) error {
 		}
 	}
 
-	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, csrfToken, ""))
+	// ?name= comes from quick search's "Create a page named …" row.
+	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, ""))
+}
+
+// prefillName is a name to start the create form with, trimmed and cut to the
+// field's own limit so a long link can't overflow it.
+func prefillName(s string) string {
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > 200 {
+		s = string(r[:200])
+	}
+	return s
 }
 
 // collectVariants returns the parent entity_type plus all its child entity_types,
@@ -565,7 +576,7 @@ func (h *Handler) Create(c echo.Context) error {
 		// Preserve the same variant-aware picker across error re-render so a
 		// failed submission doesn't drop the user back to the flat dropdown.
 		variants := collectVariants(entityTypes, req.EntityTypeID)
-		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, nil, csrfToken, errMsg))
+		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, nil, prefillName(req.Name), csrfToken, errMsg))
 	}
 
 	// Apply content template if one was selected.
