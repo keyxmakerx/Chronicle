@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/semver"
 )
 
 // SettingsReader provides read access to site settings without importing
@@ -954,8 +955,10 @@ func (s *packageService) RunAutoUpdates(ctx context.Context) error {
 			continue
 		}
 
+		// Automatic updates only move forward: an admin's rollback, or an
+		// older release published late, is never "updated" back over.
 		if latest := latestStableVersion(newVersions); latest != nil {
-			if latest.Version != pkg.InstalledVersion {
+			if pkg.InstalledVersion == "" || semver.Less(pkg.InstalledVersion, latest.Version) {
 				if err := s.InstallVersion(ctx, pkg.ID, latest.Version); err != nil {
 					slog.Warn("auto-update install failed",
 						slog.String("package", pkg.Slug),
@@ -1397,18 +1400,24 @@ func pickDownloadAsset(assets []GitHubAsset) (url string, size int64) {
 	return "", 0
 }
 
-// latestStableVersion returns the first non-prerelease version from the list.
-// If all versions are pre-releases, falls back to the newest pre-release.
+// latestStableVersion returns the highest non-prerelease version in the list,
+// or the highest pre-release when there is nothing else. It goes by version
+// number, never by the order GitHub lists releases in: a maintenance release
+// cut after a newer one (1.9.5 after 2.0.0) is not the latest.
 func latestStableVersion(versions []PackageVersion) *PackageVersion {
+	var best *PackageVersion
 	for i := range versions {
-		if !versions[i].Prerelease {
-			return &versions[i]
+		v := &versions[i]
+		switch {
+		case best == nil:
+			best = v
+		case best.Prerelease && !v.Prerelease:
+			best = v
+		case best.Prerelease == v.Prerelease && semver.Less(best.Version, v.Version):
+			best = v
 		}
 	}
-	if len(versions) > 0 {
-		return &versions[0]
-	}
-	return nil
+	return best
 }
 
 // normalizeVersion strips a leading "v" from tag names.
