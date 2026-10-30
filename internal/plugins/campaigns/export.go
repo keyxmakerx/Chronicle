@@ -207,11 +207,14 @@ type ExportCalendarData struct {
 	// Cycles/Festivals/Weather are additive sub-resources, the same
 	// "restored config the GM set, not silently reset to nothing" case as
 	// the settings above.
-	Cycles          []ExportCalendarCycle    `json:"cycles,omitempty"`
-	Festivals       []ExportCalendarFestival `json:"festivals,omitempty"`
-	Weather         *ExportCalendarWeather   `json:"weather,omitempty"`
-	EventCategories []ExportEventCategory    `json:"event_categories,omitempty"`
-	Events          []ExportCalendarEvent    `json:"events,omitempty"`
+	Cycles    []ExportCalendarCycle    `json:"cycles,omitempty"`
+	Festivals []ExportCalendarFestival `json:"festivals,omitempty"`
+	Weather   *ExportCalendarWeather   `json:"weather,omitempty"`
+	// WeatherDays are the day-by-day readings, painted or generated, with
+	// their locks. Additive.
+	WeatherDays     []ExportCalendarWeatherDay `json:"weather_days,omitempty"`
+	EventCategories []ExportEventCategory      `json:"event_categories,omitempty"`
+	Events          []ExportCalendarEvent      `json:"events,omitempty"`
 	// AdditionalCalendars are the campaign's non-default calendars. They live
 	// under the primary rather than as a second envelope key so a file
 	// written by this version still reads in an importer that only knows the
@@ -271,6 +274,22 @@ type ExportCalendarMoon struct {
 	// restored page on import, the way an era's is. Additive: an older
 	// backup has none.
 	LoreEntitySlug *string `json:"lore_entity_slug,omitempty"`
+	// PhaseMode is "manual" for a moon set by hand, with the Director's
+	// StateNames and Marks; empty (an older backup, or a cycling moon)
+	// restores it following its cycle. Additive.
+	PhaseMode  string                   `json:"phase_mode,omitempty"`
+	StateNames map[string]string        `json:"state_names,omitempty"`
+	Marks      []ExportCalendarMoonMark `json:"marks,omitempty"`
+}
+
+// ExportCalendarMoonMark is one day a hand-set moon was set to a state, and
+// whether players see the change.
+type ExportCalendarMoonMark struct {
+	Year  int    `json:"year"`
+	Month int    `json:"month"`
+	Day   int    `json:"day"`
+	State string `json:"state"`
+	Shown bool   `json:"shown"`
 }
 
 // ExportCalendarSeason is a season definition for export.
@@ -398,6 +417,18 @@ type ExportCalendarWeather struct {
 	Description            *string  `json:"description,omitempty"`
 }
 
+// ExportCalendarWeatherDay is one day's weather reading: Month is the
+// month's position in the calendar's order, Source "manual" (painted) or
+// "generated".
+type ExportCalendarWeatherDay struct {
+	Year   int    `json:"year"`
+	Month  int    `json:"month"`
+	Day    int    `json:"day"`
+	Source string `json:"source"`
+	Locked bool   `json:"locked,omitempty"`
+	ExportCalendarWeather
+}
+
 // ExportEventCategory is an event category definition for export.
 //
 // DefaultAnnounced carries a category whose events are meant to be knowable
@@ -469,6 +500,32 @@ type ExportCalendarEvent struct {
 	Ref            string                        `json:"ref,omitempty"`
 	RecurrenceRule json.RawMessage               `json:"recurrence_rule,omitempty"`
 	Overrides      []ExportCalendarEventOverride `json:"overrides,omitempty"`
+	// Roll is the event's dice or table roll and its stored nights.
+	// Additive.
+	Roll *ExportCalendarEventRoll `json:"roll,omitempty"`
+}
+
+// ExportCalendarEventRoll is an event's roll. Config is the calendar
+// plugin's roll settings as stored, carried raw like RecurrenceRule;
+// TableName names a table roll's table, which the import finds by name.
+type ExportCalendarEventRoll struct {
+	Config    json.RawMessage           `json:"config"`
+	TableName string                    `json:"table_name,omitempty"`
+	Nights    []ExportCalendarRollNight `json:"nights,omitempty"`
+}
+
+// ExportCalendarRollNight is one night's stored result. Told is absent when
+// the night follows its result's own "tell players".
+type ExportCalendarRollNight struct {
+	Year   int    `json:"year"`
+	Month  int    `json:"month"`
+	Day    int    `json:"day"`
+	Total  *int   `json:"total,omitempty"`
+	Faces  []int  `json:"faces,omitempty"`
+	Entry  string `json:"entry,omitempty"`
+	Source string `json:"source"`
+	Locked bool   `json:"locked,omitempty"`
+	Told   *bool  `json:"told,omitempty"`
 }
 
 // ExportCalendarEventOverride is one skipped or moved occurrence of a

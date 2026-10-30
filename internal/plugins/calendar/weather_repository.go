@@ -22,6 +22,8 @@ type WeatherRepository interface {
 	// ListDays returns the stored day readings for year, or for one month of
 	// it when month > 0, in date order.
 	ListDays(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error)
+	// ListAllDays returns every stored day reading, in date order.
+	ListAllDays(ctx context.Context, calendarID string) ([]DayWeather, error)
 	// SetDays upserts day readings in one transaction. A generated reading
 	// never replaces a stored manual one or a locked one; a manual reading
 	// replaces anything and clears the lock.
@@ -193,7 +195,15 @@ func (r *weatherRepo) ListDays(ctx context.Context, calendarID string, year, mon
 		q += ` AND month = ?`
 		args = append(args, month)
 	}
-	q += ` ORDER BY year, month, day`
+	return r.queryDays(ctx, q+` ORDER BY year, month, day`, args...)
+}
+
+// ListAllDays returns every day reading the calendar holds, in date order.
+func (r *weatherRepo) ListAllDays(ctx context.Context, calendarID string) ([]DayWeather, error) {
+	return r.queryDays(ctx, `SELECT `+weatherDayCols+` FROM calendar_weather_days WHERE calendar_id = ? ORDER BY year, month, day`, calendarID)
+}
+
+func (r *weatherRepo) queryDays(ctx context.Context, q string, args ...any) ([]DayWeather, error) {
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
