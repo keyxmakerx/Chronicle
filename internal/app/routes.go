@@ -1141,6 +1141,7 @@ func (a *entityEventPublisherAdapter) PublishEntityTypeEvent(eventType, campaign
 	// A DM-only category's existence is itself hidden from players, so its
 	// events never reach a socket below the DM team.
 	msg.RequiresDM = entityType.DMOnly()
+	msg.Public = !entityType.DMOnly()
 	a.bus.Publish(msg)
 }
 
@@ -1288,6 +1289,7 @@ func (a *noteEventPublisherAdapter) PublishNoteEvent(ev notes.NoteEvent) {
 	}
 	msg := ws.NewMessage(msgType, ev.CampaignID, ev.NoteID, payload)
 	msg.AllowedUsers, msg.StrictAudience = noteAudience(ev.Audience)
+	msg.Public = ev.Audience.Everyone
 	a.bus.Publish(msg)
 }
 
@@ -1353,6 +1355,7 @@ func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note
 		"noteId":   note.ID,
 	})
 	msg.AllowedUsers, msg.StrictAudience, msg.AdmitScribes = entityNoteAudience(note)
+	msg.Public = note.Audience == entity_notes.AudienceEveryone
 	h.bus.Publish(msg)
 }
 
@@ -1572,7 +1575,9 @@ func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, v
 	if len(partyPath) > 0 {
 		payload["party_path"] = partyPath
 	}
-	a.bus.Publish(ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload))
+	msg := ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload)
+	msg.Public = true
+	a.bus.Publish(msg)
 }
 
 // Kinds carried by PublishItemsChanged; the viewer maps each to a refetch.
@@ -1604,6 +1609,7 @@ func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind s
 		"kind":   kind,
 	})
 	msg.RequiresDM = dmOnly
+	msg.Public = !dmOnly
 	if rules != nil {
 		msg.AllowedUsers = rules.AllowedUsers
 		msg.DeniedUsers = rules.DeniedUsers
@@ -1625,6 +1631,7 @@ func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind s
 func (a *mapEventPublisherAdapter) publishWithAudience(msgType ws.MessageType, campaignID, resourceID string, payload any, dmOnly bool, rules *maps.VisibilityRules) {
 	msg := ws.NewMessage(msgType, campaignID, resourceID, payload)
 	msg.RequiresDM = dmOnly
+	msg.Public = !dmOnly
 	if rules != nil {
 		msg.AllowedUsers = rules.AllowedUsers
 		msg.DeniedUsers = rules.DeniedUsers
@@ -1736,7 +1743,9 @@ func (a *mapEventPublisherAdapter) PublishLayerEvent(eventType string, campaignI
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, layer.ID, layer))
+	msg := ws.NewMessage(msgType, campaignID, layer.ID, layer)
+	msg.Public = true
+	a.bus.Publish(msg)
 }
 
 // PublishFogEvent broadcasts a fog-of-war event via WebSocket. All fog
