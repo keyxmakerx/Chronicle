@@ -100,6 +100,9 @@
 
     container = document.createElement('div');
     container.id = 'chronicle-toasts';
+    // A live region, so a screen reader reads each message as it arrives.
+    container.setAttribute('role', 'status');
+    container.setAttribute('aria-live', 'polite');
     container.style.cssText = [
       'position: fixed',
       'top: 16px',
@@ -145,6 +148,8 @@
     var toast = document.createElement('div');
     toast.className = 'chronicle-toast';
     toast.dataset.toastId = id;
+    // An error interrupts; everything else waits for a pause.
+    if (type === 'error') toast.setAttribute('role', 'alert');
     toast.style.cssText = [
       'pointer-events: auto',
       'display: flex',
@@ -187,6 +192,7 @@
     close.type = 'button';
     close.style.cssText = 'border:none;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;padding:0;font-size:14px;flex-shrink:0;line-height:1;';
     close.innerHTML = '&times;';
+    close.setAttribute('aria-label', 'Dismiss');
     close.addEventListener('click', function () {
       if (record.timer) clearTimeout(record.timer);
       dismissToast(toast, id);
