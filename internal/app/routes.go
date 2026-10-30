@@ -2899,7 +2899,10 @@ func (a *App) RegisterRoutes() {
 	// Drops a user's live sockets when their co-DM grant is pulled, so a
 	// stale IsDmGranted resolved at connect time can't outlive the grant.
 	// See wsRevokerHolder — wsHub itself is constructed further down.
-	campaignService.SetConnectionRevoker(wsRevoker)
+	// The same changes end AI connector keys; aiKeys.svc is set where the
+	// connector is wired.
+	aiKeys := &aiKeyKeeper{}
+	campaignService.SetConnectionRevoker(campaignRevokers{wsRevoker, aiKeys})
 
 	// One-time, idempotent boot reconciler: convert any campaign still on the
 	// legacy sidebar model onto the unified items model. Runs synchronously
@@ -5139,6 +5142,14 @@ func (a *App) RegisterRoutes() {
 			return timeutil.LoadLocation(*u.Timezone)
 		})
 		aiAsks = aiConnectorSvc
+		aiKeys.svc = aiConnectorSvc
+		// A key ends whenever its maker's sign-ins do (password reset or
+		// change, force sign-out), in every campaign.
+		auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {
+			if err := aiConnectorSvc.EndAllKeysMadeBy(ctx, userID); err != nil {
+				slog.Error("ending AI keys failed", slog.String("user_id", userID), slog.Any("error", err))
+			}
+		})
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)
