@@ -10,31 +10,39 @@ import (
 // SearchTextReindexStore is the slice of the entity repository the
 // search_text reindex needs. The MariaDB repository implements it.
 type SearchTextReindexStore interface {
-	// ListSecretSearchCandidates returns, in id order after afterID, up to
-	// limit pages whose stored HTML holds GM-only content.
-	ListSecretSearchCandidates(ctx context.Context, afterID string, limit int) ([]SearchTextCandidate, error)
+	// ListSearchCandidates returns, in id order after afterID, up to limit
+	// pages whose search_text may hold something not every reader may see.
+	// typeID 0 means every campaign's pages that hold GM-only content or a
+	// page mention, or whose category or own fields have a GM-only or
+	// owner-only field; a typeID returns every page of that category.
+	ListSearchCandidates(ctx context.Context, typeID int, afterID string, limit int) ([]SearchTextCandidate, error)
 	// SetSearchText rewrites one page's search_text and nothing else.
 	SetSearchText(ctx context.Context, id, searchText string) error
 }
 
 // SearchTextCandidate is one page the reindex recomputes.
 type SearchTextCandidate struct {
-	ID         string
-	EntryHTML  string
-	FieldsData map[string]any
-	SearchText string
+	ID             string
+	EntityTypeID   int
+	EntryHTML      string
+	FieldsData     map[string]any
+	FieldOverrides *FieldOverrides
+	SearchText     string
 }
 
-// ReindexSecretSearchText recomputes search_text for every page whose HTML
-// holds GM-only content, so pages written before search_text stopped
-// indexing it get the same guarantee as new writes. Only rows whose text
-// changes are written, so later boots find nothing to do. Returns how many
-// rows it rewrote.
-func ReindexSecretSearchText(ctx context.Context, repo EntityRepository) (int, error) {
+// ReindexSearchText recomputes search_text the way a save would now write it,
+// so pages written before a rule tightened (GM-only text, mention names,
+// GM-only and owner-only field values) get the same guarantee as new saves.
+// typeID 0 sweeps every candidate page; a typeID redoes one category after
+// its fields change. Only rows whose text changes are written, so a later run
+// finds nothing to do. Returns how many rows it rewrote.
+func ReindexSearchText(ctx context.Context, repo EntityRepository, types EntityTypeRepository, typeID int) (int, error) {
 	store, ok := repo.(SearchTextReindexStore)
 	if !ok {
 		return 0, nil
 	}
+	fieldsOf := map[int][]FieldDefinition{}
+	known := map[int]bool{}
 	const batch = 200
 	rewritten := 0
 	after := ""
@@ -42,12 +50,25 @@ func ReindexSecretSearchText(ctx context.Context, repo EntityRepository) (int, e
 		if err := ctx.Err(); err != nil {
 			return rewritten, err
 		}
-		rows, err := store.ListSecretSearchCandidates(ctx, after, batch)
+		rows, err := store.ListSearchCandidates(ctx, typeID, after, batch)
 		if err != nil {
 			return rewritten, err
 		}
 		for _, row := range rows {
-			want := buildSearchText(row.EntryHTML, row.FieldsData)
+			if _, done := fieldsOf[row.EntityTypeID]; !done {
+				if et, err := types.FindByID(ctx, row.EntityTypeID); err == nil && et != nil {
+					fieldsOf[row.EntityTypeID], known[row.EntityTypeID] = et.Fields, true
+				} else {
+					fieldsOf[row.EntityTypeID] = nil
+				}
+			}
+			// A page whose category can't be read indexes no field values,
+			// as a save would.
+			var fields map[string]any
+			if known[row.EntityTypeID] && len(row.FieldsData) > 0 {
+				fields = searchableFields(row.FieldsData, fieldsOf[row.EntityTypeID], row.FieldOverrides)
+			}
+			want := buildSearchText(row.EntryHTML, fields)
 			if want == row.SearchText {
 				continue
 			}
@@ -63,16 +84,29 @@ func ReindexSecretSearchText(ctx context.Context, repo EntityRepository) (int, e
 	}
 }
 
-// ListSecretSearchCandidates implements SearchTextReindexStore. The markers
-// are the kinds of GM-only content sanitize.StripSecretsHTML removes.
-func (r *entityRepository) ListSecretSearchCandidates(ctx context.Context, afterID string, limit int) ([]SearchTextCandidate, error) {
+// ListSearchCandidates implements SearchTextReindexStore. The HTML markers
+// are the kinds of GM-only content sanitize.StripSecretsHTML removes, plus
+// page mentions; the field markers are FieldDefinition's JSON keys, which are
+// written only when set, matched loosely since a looser match costs only a
+// row that is left as it is.
+func (r *entityRepository) ListSearchCandidates(ctx context.Context, typeID int, afterID string, limit int) ([]SearchTextCandidate, error) {
+	where := `(e.entry_html LIKE '%data-secret%' OR e.entry_html LIKE '%ce-img--gm%' OR e.entry_html LIKE '%ce-diagram--gm%'
+		   OR e.entry_html LIKE '%ce-roll%' OR e.entry_html LIKE '%data-mention-id%'
+		   OR et.fields LIKE '%"gm_only"%' OR et.fields LIKE '%"owner_only"%'
+		   OR e.field_overrides LIKE '%"gm_only"%' OR e.field_overrides LIKE '%"owner_only"%')`
+	args := []any{afterID}
+	if typeID > 0 {
+		where = `e.entity_type_id = ?`
+		args = append(args, typeID)
+	}
+	args = append(args, limit)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, entry_html, fields_data, search_text
-		 FROM entities
-		 WHERE id > ?
-		   AND (entry_html LIKE '%data-secret%' OR entry_html LIKE '%ce-img--gm%' OR entry_html LIKE '%ce-diagram--gm%' OR entry_html LIKE '%ce-roll%')
-		 ORDER BY id
-		 LIMIT ?`, afterID, limit)
+		`SELECT e.id, e.entity_type_id, e.entry_html, e.fields_data, e.field_overrides, e.search_text
+		 FROM entities e
+		 JOIN entity_types et ON et.id = e.entity_type_id
+		 WHERE e.id > ? AND `+where+`
+		 ORDER BY e.id
+		 LIMIT ?`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing search_text candidates: %w", err)
 	}
@@ -81,8 +115,8 @@ func (r *entityRepository) ListSecretSearchCandidates(ctx context.Context, after
 	for rows.Next() {
 		var c SearchTextCandidate
 		var html, search sql.NullString
-		var fields []byte
-		if err := rows.Scan(&c.ID, &html, &fields, &search); err != nil {
+		var fields, overrides []byte
+		if err := rows.Scan(&c.ID, &c.EntityTypeID, &html, &fields, &overrides, &search); err != nil {
 			return nil, fmt.Errorf("scanning search_text candidate: %w", err)
 		}
 		c.EntryHTML, c.SearchText = html.String, search.String
@@ -90,6 +124,15 @@ func (r *entityRepository) ListSecretSearchCandidates(ctx context.Context, after
 			// A row whose fields don't parse is reindexed from its HTML alone,
 			// which can only drop words, never add secret ones.
 			_ = json.Unmarshal(fields, &c.FieldsData)
+		}
+		if len(overrides) > 0 {
+			c.FieldOverrides = &FieldOverrides{}
+			if json.Unmarshal(overrides, c.FieldOverrides) != nil {
+				// Unreadable overrides may hide a restricted added field, so
+				// the row indexes no field values.
+				c.FieldsData = nil
+				c.FieldOverrides = nil
+			}
 		}
 		out = append(out, c)
 	}

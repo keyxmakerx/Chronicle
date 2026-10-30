@@ -2837,11 +2837,12 @@ func (a *App) RegisterRoutes() {
 	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
 	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
 
-	// Pages saved before search_text stopped indexing GM-only content still
+	// Pages saved before search_text stopped indexing what not every reader
+	// may see (GM-only text, mention names, restricted field values) still
 	// carry it until edited; recompute those rows. Idempotent, so it is a
 	// no-op on later boots; detached so a large campaign can't stall startup.
 	go func() {
-		n, err := entities.ReindexSecretSearchText(a.ShutdownCtx, entityRepo)
+		n, err := entities.ReindexSearchText(a.ShutdownCtx, entityRepo, entityTypeRepo, 0)
 		if err != nil {
 			slog.Warn("entities: search_text reindex stopped", slog.Any("error", err), slog.Int("rewritten", n))
 			return
@@ -4108,6 +4109,7 @@ func (a *App) RegisterRoutes() {
 	}
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
+	sessionsHandler.SetMentionHider(entityService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
 	// People's notification choices (Account settings) filter the bell and
 	// the game-night emails.
@@ -4251,6 +4253,7 @@ func (a *App) RegisterRoutes() {
 	// Entity-privacy gate: the public posts list must respect entity
 	// visibility + campaign binding, like the entity page.
 	postHandler.SetEntityGate(&entityAccessAdapter{svc: entityService})
+	postHandler.SetMentionHider(entityService)
 	posts.RegisterRoutes(e, postHandler, campaignService, authService)
 
 	// Player Notes (entity_notes) widget: per-user, per-entity notes
@@ -5067,6 +5070,7 @@ func (a *App) RegisterRoutes() {
 		relService,
 		tagService,
 	)
+	aiWorkspaceRenderer.Pages = entityService
 	aiWorkspaceHandler := ai_workspace.NewHandler(aiWorkspaceRenderer)
 	aiWorkspaceHandler.SetAuditLogger(&aiWorkspaceAuditAdapter{svc: auditService})
 

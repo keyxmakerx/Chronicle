@@ -12,6 +12,10 @@
 package syncapi
 
 import (
+	"log/slog"
+
+	"github.com/labstack/echo/v4"
+
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -153,6 +157,45 @@ func stripEntitiesFieldsForEgress(es []entities.Entity, role int, userID string,
 	for i := range es {
 		stripEntityFieldsForEgress(&es[i], role, userID, resolveFields)
 	}
+}
+
+// hideEntityMentionsForEgress makes each mention of a page the caller can't
+// open read "a hidden page" in the entities' text, for the same callers the
+// secret strip covers: the stored link text is the hidden page's name. One
+// batch check covers every entity; a failed check hides every mention.
+func (h *APIHandler) hideEntityMentionsForEgress(c echo.Context, campaignID string, role int, userID string, es ...*entities.Entity) {
+	if role >= int(campaigns.RoleOwner) || len(es) == 0 {
+		return
+	}
+	texts := make([]*string, 0, 4*len(es))
+	for _, e := range es {
+		// Fresh copies, so the scanned model's strings are never rewritten
+		// under another reader.
+		e.Entry, e.EntryHTML = copyPtr(e.Entry), copyPtr(e.EntryHTML)
+		e.PlayerNotes, e.PlayerNotesHTML = copyPtr(e.PlayerNotes), copyPtr(e.PlayerNotesHTML)
+		texts = append(texts, e.Entry, e.EntryHTML, e.PlayerNotes, e.PlayerNotesHTML)
+	}
+	if _, err := sanitize.HideMentionsFor(c.Request().Context(), h.entitySvc, campaignID, role, userID, texts...); err != nil {
+		slog.Warn("api: checking which mentioned pages a caller can open failed; all are hidden",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+	}
+}
+
+// entityPtrs points at each element of es, so a helper can rewrite them.
+func entityPtrs(es []entities.Entity) []*entities.Entity {
+	out := make([]*entities.Entity, len(es))
+	for i := range es {
+		out[i] = &es[i]
+	}
+	return out
+}
+
+func copyPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := *p
+	return &s
 }
 
 // stripSecretsHTMLPtr is the nullable-pointer companion to

@@ -1617,8 +1617,8 @@ func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID str
 
 	input := CreateEventInput{
 		Name:                     ee.Name,
-		Description:              ee.Description,
-		DescriptionHTML:          ee.DescriptionHTML,
+		Description:              publicDescription(ee.Description),
+		DescriptionHTML:          sanitizeDescriptionHTML(ee.DescriptionHTML),
 		Year:                     ee.Year,
 		Month:                    ee.Month,
 		Day:                      ee.Day,
@@ -1772,7 +1772,7 @@ func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, err
 		CalendarID:               calendarID,
 		EntityID:                 input.EntityID,
 		Name:                     input.Name,
-		Description:              input.Description,
+		Description:              publicDescription(input.Description),
 		DescriptionHTML:          descHTML,
 		Year:                     input.Year,
 		Month:                    input.Month,
@@ -2314,7 +2314,7 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	}
 
 	evt.Name = name
-	evt.Description = description
+	evt.Description = publicDescription(description)
 	evt.DescriptionHTML = descHTML
 	evt.EntityID = input.EntityID.Ptr(evt.EntityID)
 	evt.Year = input.Year.Val(evt.Year)
@@ -3723,13 +3723,26 @@ func derefString(p *string) string {
 
 // sanitizeDescriptionHTML sanitizes an optional incoming description_html on
 // CREATE, mirroring timeline.CreateStandaloneEvent's rich-text handling: nil
-// or empty input carries no HTML forward.
+// or empty input carries no HTML forward. A description is served as stored
+// to everyone who sees its event (the event's visibility is what hides it),
+// so GM-only parts that arrive through the API or an import are dropped.
 func sanitizeDescriptionHTML(html *string) *string {
 	if html == nil || *html == "" {
 		return nil
 	}
-	sanitized := sanitize.HTML(*html)
+	sanitized := sanitize.StripSecretsHTML(sanitize.HTML(*html))
 	return &sanitized
+}
+
+// publicDescription drops GM-only parts from an event's ProseMirror
+// description, for the same reason as sanitizeDescriptionHTML. Plain text
+// comes back as it is.
+func publicDescription(desc *string) *string {
+	if desc == nil || !sanitize.HasSecrets(*desc, "") {
+		return desc
+	}
+	s := sanitize.StripSecretsJSON(*desc)
+	return &s
 }
 
 // sanitizeDescriptionHTMLField sanitizes a PRESENT patch.Field[string] on
@@ -3742,6 +3755,6 @@ func sanitizeDescriptionHTMLField(field patch.Field[string]) *string {
 	if !ok || v == "" {
 		return nil
 	}
-	sanitized := sanitize.HTML(v)
+	sanitized := sanitize.StripSecretsHTML(sanitize.HTML(v))
 	return &sanitized
 }

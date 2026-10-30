@@ -11,6 +11,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
@@ -33,6 +34,41 @@ type Service struct {
 	Folders FolderNamer
 	// RollTables is optional: nil writes each table roller by its table's id.
 	RollTables RollTableNamer
+	// Pages says which mentioned pages the player view may open. nil writes
+	// every mention in a Safe export as "a hidden page".
+	Pages PageFilter
+}
+
+// visiblePages is, for a Safe export, the pages mentioned in texts that the
+// player view may open, from one batch check. A failed check leaves the map
+// empty, so every mention is hidden rather than named wrongly.
+func (s *Service) visiblePages(ctx context.Context, campaignID string, role int, ownerID string, opts Options, texts ...*string) map[string]bool {
+	if opts.Privacy != PrivacyModeSafe || s.Pages == nil {
+		return nil
+	}
+	var ids []string
+	seen := map[string]bool{}
+	for _, t := range texts {
+		if t == nil {
+			continue
+		}
+		for _, id := range sanitize.MentionIDs(*t) {
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	out, err := s.Pages.FilterViewableEntityIDs(ctx, campaignID, ids, role, ownerID)
+	if err != nil {
+		slog.Warn("aiexport: hiding every page mention after a failed visibility check",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return nil
+	}
+	return out
 }
 
 // NewService constructs a Service. Every dependency is required for
@@ -194,6 +230,15 @@ func (s *Service) renderCategory(
 			}
 		}
 
+		texts := make([]*string, 0, len(ents))
+		for i := range ents {
+			texts = append(texts, ents[i].EntryHTML)
+			for j := range opts.EraVersions[ents[i].ID] {
+				texts = append(texts, opts.EraVersions[ents[i].ID][j].EntryHTML)
+			}
+		}
+		opts.VisiblePages = s.visiblePages(ctx, campaignID, role, ownerID, opts, texts...)
+
 		return RenderEntities(ctx, ents, types, tagsByEntity, relByEntity, opts)
 
 	case CategoryNotes:
@@ -245,6 +290,11 @@ func (s *Service) renderCategory(
 		if err != nil {
 			return "", err
 		}
+		texts := make([]*string, 0, len(events))
+		for i := range events {
+			texts = append(texts, events[i].DescriptionHTML)
+		}
+		opts.VisiblePages = s.visiblePages(ctx, campaignID, role, ownerID, opts, texts...)
 		return RenderCalendarEvents(ctx, cal, events, opts)
 
 	case CategorySessions:
@@ -269,6 +319,11 @@ func (s *Service) renderCategory(
 			}
 			linked[s2.ID] = ents
 		}
+		texts := make([]*string, 0, len(list))
+		for i := range list {
+			texts = append(texts, list[i].RecapHTML)
+		}
+		opts.VisiblePages = s.visiblePages(ctx, campaignID, role, ownerID, opts, texts...)
 		return RenderSessions(ctx, list, attendees, linked, opts)
 
 	case CategoryTimelines:
@@ -287,6 +342,14 @@ func (s *Service) renderCategory(
 			}
 			eventsByTimeline[tl.ID] = evs
 		}
+		var texts []*string
+		for i := range tls {
+			texts = append(texts, tls[i].DescriptionHTML)
+			for j := range eventsByTimeline[tls[i].ID] {
+				texts = append(texts, eventsByTimeline[tls[i].ID][j].EventDescription)
+			}
+		}
+		opts.VisiblePages = s.visiblePages(ctx, campaignID, role, ownerID, opts, texts...)
 		return RenderTimelines(ctx, tls, eventsByTimeline, opts)
 	}
 

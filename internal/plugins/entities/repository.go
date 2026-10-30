@@ -955,7 +955,7 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 	if entity.EntryHTML != nil {
 		entryHTML = *entity.EntryHTML
 	}
-	searchText := buildSearchText(entryHTML, entity.FieldsData)
+	searchText := buildSearchText(entryHTML, entity.searchFields)
 
 	query := `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, entry, entry_html, search_text,
 	          player_notes, player_notes_html,

@@ -117,15 +117,11 @@ func (h *Handler) Peek(c echo.Context) error {
 
 	// The rendered text is what the panel shows. The editor saves it together
 	// with the JSON document, and there is no server-side renderer for the
-	// JSON, so the HTML is stripped here the way GetEntry strips both forms.
-	if entity.EntryHTML != nil {
-		body := *entity.EntryHTML
-		if !canSeeGM {
-			body = sanitize.StripSecretsHTML(body)
-		}
+	// JSON, so the HTML is served here the way GetEntry serves both forms.
+	if _, body, _ := h.servedText(c, cc, nil, entity.EntryHTML); body != nil {
 		// Stored text is sanitized on write; doing it again is cheap and keeps
 		// a historical row from reaching the panel unsanitized.
-		view.BodyHTML = sanitize.HTML(body)
+		view.BodyHTML = sanitize.HTML(*body)
 	}
 
 	// The answer depends on who asks, so no shared cache may keep it.

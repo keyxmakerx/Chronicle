@@ -702,6 +702,8 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	opts := aiexport.Options{Privacy: aiexport.PrivacyModeSafe}
 	if run.director() {
 		opts.Privacy = aiexport.PrivacyModePermitted
+	} else {
+		opts.VisiblePages = run.visibleIDs()
 	}
 	opts.ParentNames = run.parentNames()
 	var pageTagMap map[string][]tags.Tag
