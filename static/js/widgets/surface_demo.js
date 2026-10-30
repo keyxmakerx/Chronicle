@@ -6,12 +6,12 @@
  * sample character data and the per-box render functions. Swap the data and
  * renderers and the same frame renders any system's sheet.
  *
- * Mounted by the Design Lab surface-demo page (/admin/design-lab). The
- * provider is seeded (zero network) so the demo works offline.
+ * Mounted by data-widget="surface-demo" on the Design Lab page
+ * (/admin/design-lab) and loaded on sight. The provider is seeded (zero
+ * network) so the demo works offline.
  *
- * The page body renders before the global <script> tags in base.templ, so
- * dynamic_surface.js may not have run yet when this file is parsed — poll
- * for Chronicle.surface rather than assuming it exists.
+ * On a direct load the widget can mount before dynamic_surface.js has run, so
+ * init polls for Chronicle.surface rather than assuming it exists.
  */
 (function () {
   'use strict';
@@ -169,30 +169,34 @@
     return card;
   }
 
-  // start — runs once the frame is present; registers renderers and mounts.
-  function start() {
-    if (window.__sdSurfaceDemoBooted) return;
+  // start — runs once the frame is present; registers renderers (once per
+  // page, they are shared) and mounts the sheet and card inside el.
+  var renderersRegistered = false;
+  function start(el) {
     var surface = window.Chronicle && Chronicle.surface;
     if (!surface || !surface.mount || !surface.registerBox) return false;  // frame not ready
-    window.__sdSurfaceDemoBooted = true;
-
-    registerRenderers(surface);
+    if (!renderersRegistered) { registerRenderers(surface); renderersRegistered = true; }
     injectDemoStyles();
 
-    var root = document.getElementById('surface-demo-root');
+    var root = el.querySelector('#surface-demo-root');
     // Clear the server-rendered loading note; mount() only appends.
     if (root) { root.textContent = ''; surface.mount(root, schema(HERO)); }
 
-    var miniSlot = document.getElementById('surface-demo-mini');
+    var miniSlot = el.querySelector('#surface-demo-mini');
     if (miniSlot) { miniSlot.textContent = ''; miniSlot.appendChild(buildMiniCard(surface)); }
     return true;
   }
 
-  // Poll for the deferred frame (see header note on load ordering).
-  var tries = 0;
-  (function waitForFrame() {
-    if (start() === false && tries++ < 120) { window.setTimeout(waitForFrame, 30); }
-  })();
+  Chronicle.register('surface-demo', {
+    init: function (el) {
+      // Poll for the deferred frame (see header note on load ordering).
+      var tries = 0;
+      (function waitForFrame() {
+        if (!el.isConnected) return;
+        if (start(el) === false && tries++ < 120) { window.setTimeout(waitForFrame, 30); }
+      })();
+    },
+  });
 
   // injectDemoStyles — component styles for the sd-* demo bits (theme-aware via
   // the --surface-* token contract). JS-injected with an id guard, like the

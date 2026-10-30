@@ -1775,16 +1775,16 @@ func validateEventDates(cal *Calendar, evt *Event) error {
 	return nil
 }
 
-// eventDatesTouched reports whether an update sends any field
-// validateEventDates judges. An edit that leaves them all alone is not
-// refused over a date stored before these checks existed.
-func eventDatesTouched(in UpdateEventInput) bool {
-	return in.Year.Present() || in.Month.Present() || in.Day.Present() ||
-		in.StartHour.Present() || in.StartMinute.Present() ||
-		in.EndYear.Present() || in.EndMonth.Present() || in.EndDay.Present() ||
-		in.EndHour.Present() || in.EndMinute.Present() ||
-		in.RecurrenceInterval.Present() || in.RecurrenceMaxOccurrences.Present() ||
-		in.RecurrenceEndYear.Present() || in.RecurrenceEndMonth.Present() || in.RecurrenceEndDay.Present()
+// anyPresent reports whether an update sends any of fields. UpdateEvent
+// runs validateEventDates only when a date field is sent, so an edit that
+// leaves them alone is not refused over a date stored before these checks.
+func anyPresent(fields ...interface{ Present() bool }) bool {
+	for _, f := range fields {
+		if f.Present() {
+			return true
+		}
+	}
+	return false
 }
 
 // buildValidatedEvent runs every check CreateEvent applies to a new event
@@ -2430,7 +2430,10 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	evt.RecurrenceEndDay = input.RecurrenceEndDay.Ptr(evt.RecurrenceEndDay)
 	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences.Ptr(evt.RecurrenceMaxOccurrences)
 	evt.RecurrenceRule = rule
-	if eventDatesTouched(input) {
+	if anyPresent(input.Year, input.Month, input.Day,
+		input.StartHour, input.StartMinute, input.EndYear, input.EndMonth, input.EndDay,
+		input.EndHour, input.EndMinute, input.RecurrenceInterval, input.RecurrenceMaxOccurrences,
+		input.RecurrenceEndYear, input.RecurrenceEndMonth, input.RecurrenceEndDay) {
 		if err := s.loadCalendarGeometry(ctx, cal); err != nil {
 			return err
 		}

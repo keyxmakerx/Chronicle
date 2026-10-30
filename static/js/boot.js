@@ -636,6 +636,30 @@
     requestAnimationFrame(updateSidebarActiveLinks);
   });
 
+  // --- Alpine inside on-sight widgets ---
+  // A page whose Alpine components are defined by its widget's script, not by
+  // a page <script> (htmx strips those from swapped content), renders the
+  // widget's mount with `x-data x-ignore`: x-data makes the mount an Alpine
+  // root, so Alpine reads x-ignore and skips what is inside until the script
+  // is in. The widget's init calls startAlpine to hand the inside over.
+  var alpineStarted = false;
+  document.addEventListener('alpine:initialized', function () { alpineStarted = true; });
+  function startAlpine(el) {
+    var go = function () {
+      if (!el.isConnected || !el.hasAttribute('x-ignore') || !window.Alpine) return;
+      el.removeAttribute('x-ignore');
+      // Alpine keeps its own flag until its observer sees the removal.
+      delete el._x_ignore;
+      // The children, not el: el's own x-data has already run.
+      Array.prototype.slice.call(el.children).forEach(function (child) {
+        window.Alpine.initTree(child);
+      });
+    };
+    if (alpineStarted) go();
+    else document.addEventListener('alpine:initialized', go, { once: true });
+  }
+  Chronicle.startAlpine = startAlpine;
+
   // Expose mount/destroy for manual use if needed.
   Chronicle.mountWidgets = mountWidgets;
   Chronicle.mountWidget = mountElement;
