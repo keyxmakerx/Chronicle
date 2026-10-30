@@ -1139,13 +1139,11 @@ func (run *lookupRun) players() (LookupAnswer, error) {
 		if h.Subtitle != "" {
 			parts = append(parts, h.Subtitle)
 		}
-		// Meters and conditions come from the DM Screen, which reads every
-		// sheet field, GM-only ones too; a player's view leaves them out.
+		// The party source builds meters, subtitle and conditions from what
+		// this view may see: in a player's view, without GM-only and
+		// owner-only sheet values.
 		var meters []string
 		for _, m := range h.Meters {
-			if !run.director() {
-				break
-			}
 			if m.Max != "" {
 				meters = append(meters, fmt.Sprintf("%s %s of %s", m.Label, m.Current, m.Max))
 			} else {
@@ -1155,7 +1153,7 @@ func (run *lookupRun) players() (LookupAnswer, error) {
 		if len(meters) > 0 {
 			parts = append(parts, strings.Join(meters, ", "))
 		}
-		if len(h.Conditions) > 0 && run.director() {
+		if len(h.Conditions) > 0 {
 			parts = append(parts, "Conditions: "+strings.Join(h.Conditions, ", "))
 		}
 		if carried := run.carried(h.ID); carried != "" {

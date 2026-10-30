@@ -7,28 +7,42 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 // aiPartyAdapter answers the AI tool's `players` lookup from the DM Screen's
 // party and the next game night's roster, so the AI sees the same numbers
-// the owner does.
+// the owner does, or, in a player's view, the ones players do.
 type aiPartyAdapter struct {
 	screen  dmscreen.Service
+	types   aiEntityTypeReader
 	nights  sessions.SessionService
 	members campaigns.CampaignService
 }
 
+// aiEntityTypeReader reads one category, for its field definitions.
+type aiEntityTypeReader interface {
+	GetEntityTypeByID(ctx context.Context, id int) (*entities.EntityType, error)
+}
+
 // Party reads the screen as its owner: the lookup route is owner-only, and
-// the lookup itself drops characters the chosen privacy mode can't see.
+// the lookup itself drops characters the chosen privacy mode can't see. In a
+// player's view each hero's GM-only and owner-only sheet values are removed
+// before the screen reads its meters, subtitle and conditions, as they are
+// from a player's copy of the page.
 func (p *aiPartyAdapter) Party(ctx context.Context, campaignID string, a records.Actor) (records.Party, error) {
 	var out records.Party
-	view, err := p.screen.Build(ctx, campaignID, dmscreen.Viewer{UserID: a.UserID, Role: int(campaigns.RoleOwner)})
+	var narrow dmscreen.FieldNarrower
+	if !a.CanAuthorDmOnly() {
+		narrow = p.playerFields(ctx)
+	}
+	heroes, err := p.screen.Party(ctx, campaignID, dmscreen.Viewer{UserID: a.UserID, Role: int(campaigns.RoleOwner)}, narrow)
 	if err != nil {
 		return out, err
 	}
-	for _, h := range view.Party {
+	for _, h := range heroes {
 		hero := records.PartyHero{ID: h.ID, Name: h.Name, Player: h.PlayerName, Subtitle: h.Subtitle, Conditions: h.Conditions}
 		for _, m := range h.Meters {
 			pm := records.PartyMeter{Label: m.Label, Current: m.Current}
@@ -43,10 +57,35 @@ func (p *aiPartyAdapter) Party(ctx context.Context, campaignID string, a records
 	return out, nil
 }
 
+// playerFields narrows a hero's sheet values to what another player may
+// see. A category that can't be read leaves no values: nothing then says
+// which are restricted.
+func (p *aiPartyAdapter) playerFields(ctx context.Context) dmscreen.FieldNarrower {
+	defs := map[int][]entities.FieldDefinition{}
+	known := map[int]bool{}
+	return func(h dmscreen.Hero) map[string]any {
+		if _, done := known[h.TypeID]; !done {
+			known[h.TypeID] = false
+			if p.types != nil {
+				if et, err := p.types.GetEntityTypeByID(ctx, h.TypeID); err == nil && et != nil {
+					defs[h.TypeID], known[h.TypeID] = et.Fields, true
+				}
+			}
+		}
+		if !known[h.TypeID] {
+			return nil
+		}
+		return entities.FilterRestrictedFields(h.Fields, defs[h.TypeID], false, false)
+	}
+}
+
 // nextNight is the next game night with each member's answer by name, or
 // nil when none is coming up or it can't be read. It looks as far ahead as
 // the DM Screen does.
 func (p *aiPartyAdapter) nextNight(ctx context.Context, campaignID string) *records.PartyNight {
+	if p.members == nil || p.nights == nil {
+		return nil
+	}
 	list, err := p.members.ListMembers(ctx, campaignID)
 	if err != nil {
 		return nil
