@@ -555,10 +555,10 @@ type DropsKind struct {
 func (DropsKind) Name() string  { return "drops" }
 func (DropsKind) Label() string { return "Drop list" }
 func (DropsKind) Doc() string {
-	return "What a page leaves when it is defeated, harvested or searched: a creature, a Remnant, a place, a magic source. Matched by `page` (the page's name). Keys: `lines` (a list, one line each, every item an Armory item: `2 Troll tooth` is taken as it is; `harvest Troll hide with Might: 1/2/4` is a test of the system's dice plus that characteristic, and the three numbers are what its three outcomes pay, lowest first, the lowest at least 1; leave out `with …` for a test that adds nothing), " +
+	return "What a page leaves when it is defeated, harvested or searched: a creature, a Remnant, a place, a magic source. Matched by `page` (the page's name). Keys: `lines` (a list, one line each, every item an Armory item: `2 Troll tooth` is taken as it is; `harvest Troll hide with Might: 1/2/4` is a test of the system's dice plus that characteristic, and the three numbers are what its three outcomes pay, lowest first, the lowest at least 1; leave out `with …` for a test that adds nothing; end a line with `; study with Reason` for a find players see only as \"Something unidentified\" until a hero's study of the system's dice plus that characteristic identifies it for the party, and add `, one chance` when the first failed study loses it for good), " +
 		"`also` (another page whose list drops first, such as the creature a Remnant came from; `none` takes it away). At most 20 lines. On update, `lines` replaces the whole list and a key you leave out keeps what is there. Removing it takes the list away; spoils already in the tray stay.\n\n" + craftingTies + "\n\n" +
 		"```\n---\nkind: drops\npage: Troll\nlines:\n  - 2 Troll tooth\n  - harvest Troll hide with Might: 1/2/4\n---\n```\n\n" +
-		"```\n---\nkind: drops\npage: Troll Remnant\nalso: Troll\nlines:\n  - 1 Remnant ash\n---\n```"
+		"```\n---\nkind: drops\npage: Troll Remnant\nalso: Troll\nlines:\n  - 1 Remnant ash; study with Reason, one chance\n---\n```"
 }
 
 // Title names the review row: "Drops of Troll".
@@ -719,6 +719,10 @@ func dropWords(c *Crafting, lines []CraftDropLine, also string) string {
 
 // dropLineText writes one line as the block reads it (block) or in words.
 func dropLineText(c *Crafting, l CraftDropLine, block bool) string {
+	return dropLineBody(c, l, block) + studyText(c, l, block)
+}
+
+func dropLineBody(c *Crafting, l CraftDropLine, block bool) string {
 	name := c.itemWords(l.ItemID)
 	if !l.Harvest {
 		if block {
@@ -733,11 +737,36 @@ func dropLineText(c *Crafting, l CraftDropLine, block bool) string {
 		}
 		return fmt.Sprintf("%s: %d/%d/%d", s, l.Yields[0], l.Yields[1], l.Yields[2])
 	}
-	test := c.Dice
-	if l.Stat != "" {
-		test += " + " + c.statLabel(l.Stat)
+	return fmt.Sprintf("harvest %s (%s: %d, %d or %d)", name, c.test(l.Stat), l.Yields[0], l.Yields[1], l.Yields[2])
+}
+
+// studyText is a line's study mark: "; study with Reason, one chance" as
+// the block reads it, or ", studied first (2d10 + Reason, one chance)".
+func studyText(c *Crafting, l CraftDropLine, block bool) string {
+	if !l.Study {
+		return ""
 	}
-	return fmt.Sprintf("harvest %s (%s: %d, %d or %d)", name, strings.TrimSpace(test), l.Yields[0], l.Yields[1], l.Yields[2])
+	once := ""
+	if l.Once {
+		once = ", one chance"
+	}
+	if block {
+		with := ""
+		if l.StudyStat != "" {
+			with = " with " + c.statLabel(l.StudyStat)
+		}
+		return "; study" + with + once
+	}
+	return ", studied first (" + c.test(l.StudyStat) + once + ")"
+}
+
+// test is the system's dice plus a characteristic: "2d10 + Might".
+func (c *Crafting) test(stat string) string {
+	t := c.Dice
+	if stat != "" {
+		t += " + " + c.statLabel(stat)
+	}
+	return strings.TrimSpace(t)
 }
 
 // Export lists every drop list as a drops block, for a Director.

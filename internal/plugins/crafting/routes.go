@@ -64,6 +64,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.DELETE("/crafting/spoils/:sid", h.ClearSpoil, member)
 	cg.DELETE("/crafting/spoil-lines/:lid", h.ClearSpoilLine, member)
 	cg.POST("/crafting/spoil-lines/:lid/take", h.TakeSpoil, member)
+	cg.POST("/crafting/spoil-lines/:lid/study", h.StudySpoil, member)
+	cg.POST("/crafting/spoil-lines/:lid/reveal", h.RevealSpoil, member)
 	cg.PUT("/crafting/drops/:eid", h.SaveDrops, member)
 	cg.DELETE("/crafting/drops/:eid", h.DeleteDrops, member)
 }

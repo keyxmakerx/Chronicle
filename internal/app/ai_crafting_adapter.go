@@ -188,7 +188,7 @@ func craftRecipe(r *crafting.Recipe, tags map[string][]string) records.CraftReci
 func craftDrops(d crafting.DropView) records.CraftDrops {
 	out := records.CraftDrops{PageID: d.PageID, Page: d.Page, Kind: d.Kind, AlsoID: d.Also, Also: d.AlsoName, Version: d.Version}
 	for _, l := range d.Lines {
-		line := records.CraftDropLine{ItemID: l.ItemID, Harvest: l.Mode == crafting.DropHarvest, Qty: l.Qty, Stat: l.Stat}
+		line := records.CraftDropLine{ItemID: l.ItemID, Harvest: l.Mode == crafting.DropHarvest, Qty: l.Qty, Stat: l.Stat, Study: l.Study, StudyStat: l.StudyStat, Once: l.Once}
 		copy(line.Yields[:], l.Yields)
 		out.Lines = append(out.Lines, line)
 	}
@@ -196,21 +196,29 @@ func craftDrops(d crafting.DropView) records.CraftDrops {
 }
 
 // craftSpoil writes a tray entry's waiting lines in words: "2 Troll tooth",
-// "harvest Troll hide, 2d10 + Might: 11 or less 1, 12 to 16 2, 17 or more 4".
+// "harvest Troll hide, 2d10 + Might: 11 or less 1, 12 to 16 2, 17 or more 4",
+// and for a find nobody has identified "…, not identified yet (study 2d10 +
+// Reason, one chance)".
 func craftSpoil(s crafting.SpoilView) records.CraftSpoil {
 	out := records.CraftSpoil{Source: s.Source, Copy: s.Copy, Copies: s.Copies, Origin: s.Origin}
 	for _, l := range s.Lines {
-		if l.Mode != crafting.DropHarvest {
-			out.Lines = append(out.Lines, fmt.Sprintf("%d %s", l.Qty, l.Name))
-			continue
-		}
-		w := "harvest " + l.Name + ", " + l.Roll
-		for i, t := range l.Tiers {
-			sep := ", "
-			if i == 0 {
-				sep = ": "
+		w := fmt.Sprintf("%d %s", l.Qty, l.Name)
+		if l.Mode == crafting.DropHarvest {
+			w = "harvest " + l.Name + ", " + l.Roll
+			for i, t := range l.Tiers {
+				sep := ", "
+				if i == 0 {
+					sep = ": "
+				}
+				w += fmt.Sprintf("%s%s %d", sep, t.Label, t.Qty)
 			}
-			w += fmt.Sprintf("%s%s %d", sep, t.Label, t.Qty)
+		}
+		if l.Locked && l.Study != nil {
+			once := ""
+			if l.Study.Once {
+				once = ", one chance"
+			}
+			w += ", not identified yet (study " + l.Study.Roll + once + ")"
 		}
 		out.Lines = append(out.Lines, w)
 	}
@@ -263,6 +271,7 @@ func (c aiCraftingAdapter) SaveDrops(ctx context.Context, campaignID, pageID str
 		if l.Harvest {
 			line = crafting.DropLine{ItemID: l.ItemID, Mode: crafting.DropHarvest, Stat: l.Stat, Yields: []int{l.Yields[0], l.Yields[1], l.Yields[2]}}
 		}
+		line.Study, line.StudyStat, line.Once = l.Study, l.StudyStat, l.Once
 		d.Lines = append(d.Lines, line)
 	}
 	v := craftViewer(a)
