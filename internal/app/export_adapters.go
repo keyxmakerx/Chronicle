@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -828,7 +829,8 @@ func (a *mapExportAdapter) ExportMaps(ctx context.Context, campaignID string, en
 					Name: mk.Name, Description: mk.Description,
 					X: mk.X, Y: mk.Y, Icon: mk.Icon, Color: mk.Color,
 					EntitySlug: entitySlug, Visibility: mk.Visibility,
-					LinkedMapRef: mk.LinkedMapID,
+					VisibilityRules: mk.VisibilityRules,
+					LinkedMapRef:    mk.LinkedMapID,
 				})
 			}
 		}
@@ -2500,6 +2502,40 @@ func importTimelineCalendar(tl campaigns.ExportTimeline, idMap *campaigns.IDMap)
 type mapImportAdapter struct {
 	mapSvc     maps.MapService
 	drawingSvc maps.DrawingService
+	users      importUserLookup
+}
+
+// importUserLookup finds a user of this site, so a pin's per-player rules are
+// restored only when they name real players.
+type importUserLookup interface {
+	GetUser(ctx context.Context, userID string) (*auth.User, error)
+}
+
+// importPinVisibility restores a pin's per-player rules when every user they
+// name exists on this site. A rule naming anyone else (an export from another
+// site) can't be honoured: dropping a deny entry would show the pin to the
+// very player it was hidden from, so the pin becomes Director-only instead.
+// demoted reports that fallback.
+func (a *mapImportAdapter) importPinVisibility(ctx context.Context, visibility string, rules *string) (vis string, kept *string, demoted bool) {
+	if rules == nil || strings.TrimSpace(*rules) == "" {
+		return visibility, nil, false
+	}
+	parsed := maps.ParseVisibilityRules(rules)
+	if parsed == nil {
+		return "dm_only", nil, true
+	}
+	if len(parsed.AllowedUsers) == 0 && len(parsed.DeniedUsers) == 0 {
+		return visibility, nil, false
+	}
+	if a.users == nil {
+		return "dm_only", nil, true
+	}
+	for _, id := range append(append([]string{}, parsed.AllowedUsers...), parsed.DeniedUsers...) {
+		if u, err := a.users.GetUser(ctx, id); err != nil || u == nil {
+			return "dm_only", nil, true
+		}
+	}
+	return visibility, rules, false
 }
 
 // importTokenImage keeps a token picture that names no media file (an
@@ -2582,15 +2618,19 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 					entityID = &id
 				}
 			}
+			vis, rules, demoted := a.importPinVisibility(ctx, mk.Visibility, mk.VisibilityRules)
 			created, err := a.mapSvc.CreateMarker(ctx, maps.CreateMarkerInput{
 				MapID: newMap.ID, Name: mk.Name, Description: mk.Description,
 				X: mk.X, Y: mk.Y, Icon: mk.Icon, Color: mk.Color,
-				EntityID: entityID, Visibility: mk.Visibility, CreatedBy: userID,
+				EntityID: entityID, Visibility: vis, VisibilityRules: rules, CreatedBy: userID,
 			})
 			if err != nil {
 				slog.Warn("import: create marker failed", slog.String("name", mk.Name), slog.Any("error", err))
 				report.Fail("maps", "map marker", mk.Name, apperror.SafeMessage(err))
 				continue
+			}
+			if demoted {
+				report.Fail("maps", "map pin", mk.Name, "its player rules name players not on this site, so it is Director-only")
 			}
 			if mk.LinkedMapRef != nil && *mk.LinkedMapRef != "" {
 				links = append(links, pendingLink{markerID: created.ID, mapRef: *mk.LinkedMapRef, name: mk.Name})

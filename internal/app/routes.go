@@ -5198,7 +5198,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
-	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
+	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService, users: authService})
 	exportSvc.SetNoteImporter(&noteImportAdapter{svc: noteSvc})
 	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonService})
 	exportSvc.SetGroupExporter(&groupExportAdapter{svc: groupService})
