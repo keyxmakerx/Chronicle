@@ -84,17 +84,33 @@ func recordGroups(d ImportReviewData) []recordGroup {
 }
 
 // pageStartsYes is a page row's first answer. Removals, and rows the
-// classifier already knows can't go through as written, start on No.
-func pageStartsYes(page importer.ParsedPage, cls importer.Classification) bool {
-	if page.FrontMatter.Action == importer.ActionDelete {
+// classifier already knows can't go through as written, start on No. So do
+// changes to existing pages a connected AI asked for: text the AI read may
+// have been written to steer it, so the owner opts each one in.
+func pageStartsYes(page importer.ParsedPage, cls importer.Classification, fromAI bool) bool {
+	switch page.FrontMatter.Action {
+	case importer.ActionDelete:
 		return false
+	case importer.ActionUpdate:
+		if fromAI {
+			return false
+		}
 	}
 	return cls.Status != importer.StatusParentProblem && cls.Status != importer.StatusActionMismatch
 }
 
 // recordStartsYes is a record row's first answer: removals, and blocks
-// applied before, start on No.
-func recordStartsYes(r RecordRow) bool { return r.Action != records.ActionDelete && r.Repeat == "" }
+// applied before, start on No, and so do a connected AI's changes to
+// existing records, as for pages.
+func recordStartsYes(r RecordRow, fromAI bool) bool {
+	if fromAI && r.Action == records.ActionUpdate {
+		return false
+	}
+	return r.Action != records.ActionDelete && r.Repeat == ""
+}
+
+// fromAI reports whether the review is of what a connected AI asked for.
+func (d ImportReviewData) fromAI() bool { return d.RequestID != 0 }
 
 // listedCount is how many rows the list offers.
 func listedCount(d ImportReviewData) int {
@@ -110,13 +126,13 @@ func listedCount(d ImportReviewData) int {
 func startingYesCount(d ImportReviewData) int {
 	n := 0
 	for _, i := range usablePages(d) {
-		if pageStartsYes(d.Pages[i], d.Classes[i]) && !d.Classes[i].GMOnly.Any() && d.Repeats[d.Pages[i].SourceIndex] == "" {
+		if pageStartsYes(d.Pages[i], d.Classes[i], d.fromAI()) && !d.Classes[i].GMOnly.Any() && d.Repeats[d.Pages[i].SourceIndex] == "" {
 			n++
 		}
 	}
 	for _, g := range recordGroups(d) {
 		for _, r := range g.Rows {
-			if recordStartsYes(r) {
+			if recordStartsYes(r, d.fromAI()) {
 				n++
 			}
 		}
