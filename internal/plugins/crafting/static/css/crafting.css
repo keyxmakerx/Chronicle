@@ -368,6 +368,8 @@ html[data-motion="off"] .cra-drawer { transition: none; }
   color: var(--cra-ok); background: rgb(var(--color-ok-rgb, 22 163 74) / .12); }
 .crp-made.is-warn { color: var(--cra-dm); background: rgb(var(--color-warn-rgb, 217 119 6) / .12); }
 .crp-made svg { flex: none; }
+.crp-made b { font-weight: 700; }
+.crp-befell { margin-bottom: 8px; }
 .crp-confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--cra-line);
   background: rgb(var(--color-bad-rgb, 220 38 38) / .1); }
 .crp-confirm p { flex: 1 1 240px; margin-right: auto; color: var(--cra-ink); font-size: 13.5px; }

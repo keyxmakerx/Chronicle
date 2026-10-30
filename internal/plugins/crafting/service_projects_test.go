@@ -680,6 +680,20 @@ func TestCharacter_ShowsWhatEachRecipeTakes(t *testing.T) {
 	if r.Charge != 2500 || r.StatValue == nil || *r.StatValue != 2 || r.Makes != "Healing potion" || len(r.Needs) != 2 || r.Needs[1].Tag != "herb" {
 		t.Fatalf("recipe = %+v", r)
 	}
+	if r.Needs[0].Sub != nil {
+		t.Fatalf("a substitute nobody set: %+v", r.Needs[0].Sub)
+	}
+	rec := fx.repo.recipes["heal"]
+	rec.Extras = DefaultExtras()
+	rec.Extras.Substitutes = []Substitute{{For: 0, Use: "liquid", Costs: "points"}}
+	fx.repo.recipes["heal"] = rec
+	again, err := fx.s.Character(context.Background(), "c", "mira", player)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sub := again.Recipes[0].Needs[0].Sub; sub == nil || *sub != (CraftSub{Tag: "liquid", Name: "any liquid", Costs: "points"}) {
+		t.Fatalf("substitute = %+v", sub)
+	}
 	for _, it := range got.Pack.Items {
 		if it.ItemID == "moss" && (len(it.Tags) != 1 || it.Tags[0] != "herb") {
 			t.Fatalf("moss tags = %v", it.Tags)

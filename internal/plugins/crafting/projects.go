@@ -128,6 +128,16 @@ type CraftNeed struct {
 	Name   string `json:"name"`
 	// Tags are a named item's crafting tags, which tint it on the bench.
 	Tags []string `json:"tags,omitempty"`
+	// Sub is what may stand in for a named item, and what that costs.
+	Sub *CraftSub `json:"sub,omitempty"`
+}
+
+// CraftSub lets any item with a tag stand in for a named material; Costs is
+// "bane", "points" (−2 to every roll) or "none".
+type CraftSub struct {
+	Tag   string `json:"tag"`
+	Name  string `json:"name"`
+	Costs string `json:"costs"`
 }
 
 // CraftRecipe is a recipe a hero knows, with what starting it takes, what a

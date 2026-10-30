@@ -270,10 +270,15 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 		cr := CraftRecipe{ID: r.ID, Name: r.Name, Template: r.Template, Kind: templateName(r.Template), Bench: r.Bench, Needs: []CraftNeed{},
 			Steps: r.Steps, Colors: r.Colors, Goal: r.Goal, Stat: r.Stat, Roll: rollWords(r.Stat, rules), MakesQty: r.Result.Qty,
 			Lines: bookPage(r, names, rules).Lines}
-		for _, m := range r.Materials {
+		for i, m := range r.Materials {
 			n := CraftNeed{ItemID: m.ItemID, Tag: m.Tag, Qty: m.Qty, Name: materialName(m, names)}
 			if m.ItemID != "" {
 				n.Tags = knownTags(tags[m.ItemID])
+				for _, sub := range r.Extras.Substitutes {
+					if sub.For == i {
+						n.Sub = &CraftSub{Tag: sub.Use, Name: materialName(Material{Tag: sub.Use}, names), Costs: sub.Costs}
+					}
+				}
 			}
 			cr.Needs = append(cr.Needs, n)
 		}
@@ -600,7 +605,7 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 
 	next := p
 	next.Details.Made = append([]string(nil), p.Details.Made...)
-	if becomes := s.befall(ctx, campaignID, e, &next, fx, x, in.Work, set, res, v); becomes != "" {
+	if becomes := s.befall(ctx, campaignID, &next, fx, x, in.Work, set, res, v); becomes != "" {
 		next.ResultItemID = becomes
 	}
 	next.Points, next.RollsReady = res.To, p.RollsReady-1

@@ -103,7 +103,7 @@ func tableNote(name string, director bool, res *RollResult) {
 // effects of rules that fired (kept on the project and shown when it is
 // made), a mishap mid-brew, and what botched work costs. It returns the
 // item the project becomes, "" for none.
-func (s *service) befall(ctx context.Context, campaignID string, e *EntityInfo, next *Project, fx []fired, x Extras, work string, set Settings, res *RollResult, v Viewer) string {
+func (s *service) befall(ctx context.Context, campaignID string, next *Project, fx []fired, x Extras, work string, set Settings, res *RollResult, v Viewer) string {
 	becomes := ""
 	made := func(note string) {
 		if len(next.Details.Made) < maxMadeNotes {
@@ -160,9 +160,6 @@ func (s *service) befall(ctx context.Context, campaignID string, e *EntityInfo, 
 			}
 		}
 	}
-	if res.Mishap != nil {
-		res.Notes = append(res.Notes, "A mishap mid-brew: "+res.Mishap.Text)
-	}
 	if work == WorkBotched && set.Bane && !res.Spoiled {
 		switch x.Botch.Costs {
 		case BotchQuirk:
@@ -173,10 +170,8 @@ func (s *service) befall(ctx context.Context, campaignID string, e *EntityInfo, 
 				tableNote(x.Botch.QuirkTable, v.Director, res)
 			}
 		case BotchIngredients:
-			if !res.Finished {
-				res.Lost = true
-				res.Notes = append(res.Notes, "The botch ruined the ingredients. "+e.Name+" has to start this project again.")
-			}
+			// The block says so from Lost, beside the roll.
+			res.Lost = !res.Finished
 		}
 	}
 	return becomes
