@@ -665,7 +665,7 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	pkg.InstalledVersion = version
 	pkg.InstallPath = destDir
 	pkg.LastInstalledAt = &now
-	if err := s.repo.UpdatePackage(ctx, pkg); err != nil {
+	if err := s.repo.SetInstalled(ctx, pkg.ID, version, destDir, now); err != nil {
 		// Keep disk consistent with the DB: leaving the new dir behind
 		// would make the next boot's highest-version scan serve a
 		// version the catalog doesn't record.
@@ -793,8 +793,7 @@ func (s *packageService) SetPinnedVersion(ctx context.Context, packageID, versio
 		return fmt.Errorf("version %s not found", version)
 	}
 
-	pkg.PinnedVersion = version
-	return s.repo.UpdatePackage(ctx, pkg)
+	return s.repo.SetPinnedVersion(ctx, pkg.ID, version)
 }
 
 // ClearPinnedVersion removes the version pin, allowing auto-updates again.
@@ -811,8 +810,7 @@ func (s *packageService) ClearPinnedVersion(ctx context.Context, packageID strin
 		return fmt.Errorf("package not found")
 	}
 
-	pkg.PinnedVersion = ""
-	return s.repo.UpdatePackage(ctx, pkg)
+	return s.repo.SetPinnedVersion(ctx, pkg.ID, "")
 }
 
 // SetAutoUpdate changes the auto-update policy for a package.
@@ -825,8 +823,7 @@ func (s *packageService) SetAutoUpdate(ctx context.Context, packageID string, po
 		return fmt.Errorf("package not found")
 	}
 
-	pkg.AutoUpdate = policy
-	return s.repo.UpdatePackage(ctx, pkg)
+	return s.repo.SetAutoUpdate(ctx, pkg.ID, policy)
 }
 
 // GetUsage returns which campaigns are using a given package. It looks up
@@ -1377,7 +1374,7 @@ func (s *packageService) fetchAndImportVersions(ctx context.Context, pkg *Packag
 
 	now := time.Now()
 	pkg.LastCheckedAt = &now
-	if err := s.repo.UpdatePackage(ctx, pkg); err != nil {
+	if err := s.repo.SetLastChecked(ctx, pkg.ID, now); err != nil {
 		slog.Warn("failed to update last_checked_at",
 			slog.String("package", pkg.Slug),
 			slog.Any("error", err),

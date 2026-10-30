@@ -14,7 +14,13 @@ type PackageRepository interface {
 	FindBySlug(ctx context.Context, slug string) (*Package, error)
 	FindByRepoURL(ctx context.Context, repoURL string) (*Package, error)
 	CreatePackage(ctx context.Context, pkg *Package) error
-	UpdatePackage(ctx context.Context, pkg *Package) error
+	// Each setter writes only its own columns. Callers hold a package row
+	// across slow network calls, and a whole-row write from that copy would
+	// undo an admin's pin, policy or install made meanwhile.
+	SetInstalled(ctx context.Context, id, version, installPath string, at time.Time) error
+	SetPinnedVersion(ctx context.Context, id, version string) error
+	SetAutoUpdate(ctx context.Context, id string, policy UpdatePolicy) error
+	SetLastChecked(ctx context.Context, id string, at time.Time) error
 	DeletePackage(ctx context.Context, id string) error
 
 	ListVersions(ctx context.Context, packageID string) ([]PackageVersion, error)
@@ -172,19 +178,40 @@ func (r *packageRepository) CreatePackage(ctx context.Context, pkg *Package) err
 }
 
 // UpdatePackage updates an existing package record.
-func (r *packageRepository) UpdatePackage(ctx context.Context, pkg *Package) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE packages SET name = ?, repo_url = ?, description = ?,
-		       installed_version = NULLIF(?,''), pinned_version = NULLIF(?,''),
-		       auto_update = ?, last_checked_at = ?, last_installed_at = ?,
-		       install_path = NULLIF(?,'')
-		WHERE id = ?`,
-		pkg.Name, pkg.RepoURL, pkg.Description,
-		pkg.InstalledVersion, pkg.PinnedVersion,
-		pkg.AutoUpdate, pkg.LastCheckedAt, pkg.LastInstalledAt,
-		pkg.InstallPath, pkg.ID)
+// SetInstalled records the version now installed and where it lives.
+func (r *packageRepository) SetInstalled(ctx context.Context, id, version, installPath string, at time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE packages SET installed_version = NULLIF(?,''), install_path = NULLIF(?,''), last_installed_at = ? WHERE id = ?`,
+		version, installPath, at, id)
 	if err != nil {
-		return fmt.Errorf("updating package %s: %w", pkg.ID, err)
+		return fmt.Errorf("recording install of package %s: %w", id, err)
+	}
+	return nil
+}
+
+// SetPinnedVersion sets, or with "" clears, the package's pin.
+func (r *packageRepository) SetPinnedVersion(ctx context.Context, id, version string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE packages SET pinned_version = NULLIF(?,'') WHERE id = ?`, version, id)
+	if err != nil {
+		return fmt.Errorf("pinning package %s: %w", id, err)
+	}
+	return nil
+}
+
+// SetAutoUpdate sets the package's automatic update policy.
+func (r *packageRepository) SetAutoUpdate(ctx context.Context, id string, policy UpdatePolicy) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE packages SET auto_update = ? WHERE id = ?`, policy, id)
+	if err != nil {
+		return fmt.Errorf("setting update policy of package %s: %w", id, err)
+	}
+	return nil
+}
+
+// SetLastChecked records when the package's releases were last fetched.
+func (r *packageRepository) SetLastChecked(ctx context.Context, id string, at time.Time) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE packages SET last_checked_at = ? WHERE id = ?`, at, id)
+	if err != nil {
+		return fmt.Errorf("recording release check of package %s: %w", id, err)
 	}
 	return nil
 }

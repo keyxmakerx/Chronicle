@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 )
 
 // errTransport is a no-op http.RoundTripper that fails every request. Used
@@ -81,11 +82,32 @@ func (r *fakeRepo) CreatePackage(_ context.Context, pkg *Package) error {
 	return nil
 }
 
-func (r *fakeRepo) UpdatePackage(_ context.Context, pkg *Package) error {
+// update applies fn to the stored package, as the column setters do.
+func (r *fakeRepo) update(id string, fn func(*Package)) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.packages[pkg.ID] = pkg
+	if p, ok := r.packages[id]; ok {
+		cp := *p
+		fn(&cp)
+		r.packages[id] = &cp
+	}
 	return nil
+}
+
+func (r *fakeRepo) SetInstalled(_ context.Context, id, version, path string, at time.Time) error {
+	return r.update(id, func(p *Package) { p.InstalledVersion, p.InstallPath, p.LastInstalledAt = version, path, &at })
+}
+
+func (r *fakeRepo) SetPinnedVersion(_ context.Context, id, version string) error {
+	return r.update(id, func(p *Package) { p.PinnedVersion = version })
+}
+
+func (r *fakeRepo) SetAutoUpdate(_ context.Context, id string, policy UpdatePolicy) error {
+	return r.update(id, func(p *Package) { p.AutoUpdate = policy })
+}
+
+func (r *fakeRepo) SetLastChecked(_ context.Context, id string, at time.Time) error {
+	return r.update(id, func(p *Package) { p.LastCheckedAt = &at })
 }
 
 func (r *fakeRepo) DeletePackage(_ context.Context, _ string) error { return nil }
