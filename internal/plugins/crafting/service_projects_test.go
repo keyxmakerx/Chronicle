@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ type fakeStore struct {
 	projects map[string]Project
 	order    []string
 	rolls    int
+	works    []string
 	respites []Respite
 }
 
@@ -55,14 +57,29 @@ func (f *fakeStore) UpdateProject(_ context.Context, p Project, expected int) (b
 	if !ok || old.Version != expected {
 		return false, nil
 	}
-	old.Points, old.RollsReady, old.Status, old.Delivered, old.FinishedAt = p.Points, p.RollsReady, p.Status, p.Delivered, p.FinishedAt
+	old.Points, old.RollsReady, old.Status, old.Delivered, old.FinishedAt, old.Details, old.ResultItemID = p.Points, p.RollsReady, p.Status, p.Delivered, p.FinishedAt, p.Details, p.ResultItemID
 	old.Version++
 	f.projects[p.ID] = old
 	return true, nil
 }
-func (f *fakeStore) AddRoll(context.Context, string, string, string, string, string, int, int, int) error {
+func (f *fakeStore) AddRoll(_ context.Context, _, projectID, _, work, _, _ string, _, _, _ int) error {
 	f.rolls++
+	f.works = append(f.works, projectID+":"+work)
 	return nil
+}
+
+// CleanRolls counts every clean roll recorded on a project of the recipe by
+// the character.
+func (f *fakeStore) CleanRolls(_ context.Context, campaignID, characterID, recipeID string) (int, error) {
+	n := 0
+	for _, w := range f.works {
+		id, work, _ := strings.Cut(w, ":")
+		p := f.projects[id]
+		if work == WorkClean && p.CampaignID == campaignID && p.CharacterID == characterID && p.RecipeID == recipeID {
+			n++
+		}
+	}
+	return n, nil
 }
 func (f *fakeStore) LogRespite(_ context.Context, campaignID, _, dayLabel string) (int, error) {
 	n := 0
@@ -151,6 +168,36 @@ type fakeSheets map[string]int
 func (f fakeSheets) Stat(_ context.Context, _, _, key string) (int, bool, error) {
 	n, ok := f[key]
 	return n, ok, nil
+}
+
+// Skills lists every key set to -1 as a skill, so one map holds both.
+func (f fakeSheets) Skills(context.Context, string, string) ([]string, bool, error) {
+	var out []string
+	for k, v := range f {
+		if v == -1 {
+			out = append(out, k)
+		}
+	}
+	return out, len(out) > 0, nil
+}
+
+// fakeTables is the campaign's Rolling Tables by name, every row weight 1.
+type fakeTables map[string][]string
+
+func (f fakeTables) Names(context.Context, string) ([]string, error) {
+	out := []string{}
+	for k := range f {
+		out = append(out, k)
+	}
+	return out, nil
+}
+func (f fakeTables) Rows(_ context.Context, _, name string) ([]TableRow, bool, error) {
+	rows, ok := f[name]
+	out := make([]TableRow, len(rows))
+	for i, r := range rows {
+		out[i] = TableRow{Text: r, Weight: 1}
+	}
+	return out, ok, nil
 }
 
 type fakeDays struct{ day *Day }
@@ -388,7 +435,7 @@ func TestRollProject_Refusals(t *testing.T) {
 			if code(err) != tc.code {
 				t.Fatalf("code = %d (%v), want %d", code(err), err, tc.code)
 			}
-			if fx.store.projects[pv.ID] != before {
+			if !reflect.DeepEqual(fx.store.projects[pv.ID], before) {
 				t.Fatalf("a refused roll changed the project")
 			}
 		})

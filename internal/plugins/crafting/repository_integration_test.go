@@ -188,7 +188,7 @@ func TestRepoIntegration_Recipes(t *testing.T) {
 		t.Fatal("a stale version was written")
 	}
 	rules := []Rule{{When: []Cond{{Kind: "always"}}, Then: Effect{Kind: "edge"}, Players: "book"}}
-	if ok, err := f.repo.UpdateRules(ctx, f.campaign, r.ID, rules, map[string]*Look{"success": {Spots: map[string]LookSpot{}}}, 2); !ok || err != nil {
+	if ok, err := f.repo.UpdateRules(ctx, f.campaign, r.ID, rules, map[string]*Look{"success": {Spots: map[string]LookSpot{}}}, DefaultExtras(), 2); !ok || err != nil {
 		t.Fatalf("rules: %v %v", ok, err)
 	}
 	if err := f.repo.SetDraft(ctx, f.campaign, r.ID, true); err != nil {
@@ -353,7 +353,7 @@ func TestRepoIntegration_Projects(t *testing.T) {
 		t.Fatalf("made list: %v", made)
 	}
 
-	if err := store.AddRoll(ctx, f.campaign, b.ID, f.user, "7,8", `[{"text":"2d10","n":15}]`, 15, 0, 15); err != nil {
+	if err := store.AddRoll(ctx, f.campaign, b.ID, f.user, WorkClean, "7,8", `[{"text":"2d10","n":15}]`, 15, 0, 15); err != nil {
 		t.Fatal(err)
 	}
 

@@ -328,7 +328,11 @@ func (s *service) SaveRules(ctx context.Context, campaignID, id string, v Viewer
 		return nil, errInvalid("rules are a list")
 	}
 	rules, looks := CleanRules(in.Rules), CleanLooks(in.Looks)
-	ok, err := s.repo.UpdateRules(ctx, campaignID, id, rules, looks, in.Version)
+	extras := stored.Extras
+	if raw := strings.TrimSpace(string(in.Extras)); raw != "" && raw != "null" {
+		extras = CleanExtras(in.Extras, len(stored.Materials))
+	}
+	ok, err := s.repo.UpdateRules(ctx, campaignID, id, rules, looks, extras, in.Version)
 	if err != nil {
 		return nil, errInternal(err)
 	}

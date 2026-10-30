@@ -6173,6 +6173,7 @@ func (a *App) RegisterRoutes() {
 				Spoils:   craftingRepo.(crafting.SpoilStore),
 				Pages:    &craftingPagesAdapter{entities: entityService},
 				Sheets:   &craftingSheetsAdapter{entities: entityService},
+				Tables:   craftingTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))},
 				Days:     &craftingDaysAdapter{cal: calendarService},
 				Calendar: &craftingCalendarAdapter{cal: calendarService},
 				Respite:  craftingRespites,

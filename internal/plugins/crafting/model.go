@@ -101,6 +101,7 @@ type Recipe struct {
 	Colors       Colors           `json:"colors"`
 	Rules        []Rule           `json:"rules"`
 	Looks        map[string]*Look `json:"looks"`
+	Extras       Extras           `json:"extras"`
 	Draft        bool             `json:"draft"`
 	DraftPrompt  string           `json:"draftPrompt,omitempty"`
 	SortOrder    int              `json:"sortOrder"`
@@ -130,10 +131,12 @@ type RecipeInput struct {
 	Version      int        `json:"version"`
 }
 
-// RulesInput saves a recipe's rules and moment looks.
+// RulesInput saves a recipe's rules, moment looks and extras. Extras left
+// out keep what the recipe has.
 type RulesInput struct {
 	Rules   json.RawMessage `json:"rules"`
 	Looks   json.RawMessage `json:"looks"`
+	Extras  json.RawMessage `json:"extras,omitempty"`
 	Version int             `json:"version"`
 }
 

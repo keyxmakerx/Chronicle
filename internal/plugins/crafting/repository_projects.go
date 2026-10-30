@@ -3,6 +3,7 @@ package crafting
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -23,7 +24,11 @@ type ProjectStore interface {
 	// and finish time if the stored version is still expected; ok is false
 	// on a lost race.
 	UpdateProject(ctx context.Context, p Project, expected int) (ok bool, err error)
-	AddRoll(ctx context.Context, campaignID, projectID, rolledBy, dice, terms string, total, from, to int) error
+	// AddRoll records a roll as made, with how the steps went.
+	AddRoll(ctx context.Context, campaignID, projectID, rolledBy, work, dice, terms string, total, from, to int) error
+	// CleanRolls counts a hero's rolls of one recipe made with clean work,
+	// which a recipe's mastery counts.
+	CleanRolls(ctx context.Context, campaignID, characterID, recipeID string) (int, error)
 	// LogRespite gives every project in progress one more roll and records
 	// the respite, in one transaction, and says how many projects it
 	// reached.
@@ -32,15 +37,23 @@ type ProjectStore interface {
 }
 
 const projectColumns = `id, campaign_id, character_id, COALESCE(recipe_id, ''), recipe_name, goal, stat, COALESCE(result_item_id, ''),
-	result_qty, points, rolls_ready, status, delivered, took, COALESCE(started_by, ''), started_at, finished_at, version`
+	result_qty, points, rolls_ready, status, delivered, took, COALESCE(started_by, ''), started_at, finished_at, version,
+	COALESCE(details, '')`
 
 func scanProject(s rowScanner) (Project, error) {
 	var (
 		p        Project
 		finished sql.NullTime
+		details  string
 	)
 	err := s.Scan(&p.ID, &p.CampaignID, &p.CharacterID, &p.RecipeID, &p.RecipeName, &p.Goal, &p.Stat, &p.ResultItemID,
-		&p.ResultQty, &p.Points, &p.RollsReady, &p.Status, &p.Delivered, &p.Took, &p.StartedBy, &p.StartedAt, &finished, &p.Version)
+		&p.ResultQty, &p.Points, &p.RollsReady, &p.Status, &p.Delivered, &p.Took, &p.StartedBy, &p.StartedAt, &finished, &p.Version,
+		&details)
+	if details != "" {
+		// Written only by this package; a value that will not decode reads
+		// as nothing recorded.
+		_ = json.Unmarshal([]byte(details), &p.Details)
+	}
 	if finished.Valid {
 		t := finished.Time
 		p.FinishedAt = &t
@@ -51,10 +64,10 @@ func scanProject(s rowScanner) (Project, error) {
 func (r *sqlRepository) CreateProject(ctx context.Context, p Project) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO crafting_projects (id, campaign_id, character_id, recipe_id, recipe_name, goal, stat, result_item_id, result_qty,
-		 points, rolls_ready, status, took, started_by, started_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
+		 points, rolls_ready, status, took, started_by, started_at, details)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
 		p.ID, p.CampaignID, p.CharacterID, nullString(p.RecipeID), p.RecipeName, p.Goal, p.Stat, nullString(p.ResultItemID), p.ResultQty,
-		ProjectActive, p.Took, nullString(p.StartedBy), p.StartedAt)
+		ProjectActive, p.Took, nullString(p.StartedBy), p.StartedAt, mustJSON(p.Details))
 	if err != nil {
 		return fmt.Errorf("create crafting project: %w", err)
 	}
@@ -124,9 +137,9 @@ func (r *sqlRepository) UpdateProject(ctx context.Context, p Project, expected i
 		finished = *p.FinishedAt
 	}
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE crafting_projects SET points = ?, rolls_ready = ?, status = ?, delivered = ?, finished_at = ?, version = version + 1
+		`UPDATE crafting_projects SET points = ?, rolls_ready = ?, status = ?, delivered = ?, finished_at = ?, details = ?, result_item_id = NULLIF(?, ''), version = version + 1
 		 WHERE campaign_id = ? AND id = ? AND version = ?`,
-		p.Points, p.RollsReady, p.Status, p.Delivered, finished, p.CampaignID, p.ID, expected)
+		p.Points, p.RollsReady, p.Status, p.Delivered, finished, mustJSON(p.Details), p.ResultItemID, p.CampaignID, p.ID, expected)
 	if err != nil {
 		return false, fmt.Errorf("update crafting project: %w", err)
 	}
@@ -137,14 +150,26 @@ func (r *sqlRepository) UpdateProject(ctx context.Context, p Project, expected i
 	return n == 1, nil
 }
 
-func (r *sqlRepository) AddRoll(ctx context.Context, campaignID, projectID, rolledBy, dice, terms string, total, from, to int) error {
+func (r *sqlRepository) AddRoll(ctx context.Context, campaignID, projectID, rolledBy, work, dice, terms string, total, from, to int) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO crafting_rolls (project_id, campaign_id, rolled_by, dice, terms, total, points_from, points_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		projectID, campaignID, nullString(rolledBy), dice, terms, total, from, to)
+		`INSERT INTO crafting_rolls (project_id, campaign_id, rolled_by, work, dice, terms, total, points_from, points_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		projectID, campaignID, nullString(rolledBy), work, dice, terms, total, from, to)
 	if err != nil {
 		return fmt.Errorf("add crafting roll: %w", err)
 	}
 	return nil
+}
+
+func (r *sqlRepository) CleanRolls(ctx context.Context, campaignID, characterID, recipeID string) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM crafting_rolls r JOIN crafting_projects p ON p.id = r.project_id
+		 WHERE r.campaign_id = ? AND p.campaign_id = ? AND p.character_id = ? AND p.recipe_id = ? AND r.work = ?`,
+		campaignID, campaignID, characterID, recipeID, WorkClean).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count clean rolls: %w", err)
+	}
+	return n, nil
 }
 
 func (r *sqlRepository) LogRespite(ctx context.Context, campaignID, loggedBy, dayLabel string) (int, error) {

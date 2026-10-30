@@ -70,12 +70,12 @@ func (f *fakeRepo) UpdateRecipe(_ context.Context, _, _ string, r Recipe, expect
 	f.recipes[r.ID] = r
 	return true, nil
 }
-func (f *fakeRepo) UpdateRules(_ context.Context, _, id string, rules []Rule, looks map[string]*Look, expected int) (bool, error) {
+func (f *fakeRepo) UpdateRules(_ context.Context, _, id string, rules []Rule, looks map[string]*Look, extras Extras, expected int) (bool, error) {
 	r, ok := f.recipes[id]
 	if !ok || r.Version != expected {
 		return false, nil
 	}
-	r.Rules, r.Looks, r.Version = rules, looks, r.Version+1
+	r.Rules, r.Looks, r.Extras, r.Version = rules, looks, extras, r.Version+1
 	f.recipes[id] = r
 	return true, nil
 }
@@ -87,6 +87,20 @@ func (f *fakeRepo) SetDraft(_ context.Context, _, id string, draft bool) error {
 }
 func (f *fakeRepo) DeleteRecipe(_ context.Context, _, id string) error {
 	delete(f.recipes, id)
+	return nil
+}
+func (f *fakeRepo) Learn(_ context.Context, _, recipeID, characterID, _ string) error {
+	r, ok := f.recipes[recipeID]
+	if !ok {
+		return nil
+	}
+	for _, k := range r.Known {
+		if k == characterID {
+			return nil
+		}
+	}
+	r.Known = append(append([]string(nil), r.Known...), characterID)
+	f.recipes[recipeID] = r
 	return nil
 }
 func (f *fakeRepo) KnownBy(_ context.Context, _ string, ids []string) (map[string][]string, error) {

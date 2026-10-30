@@ -33,6 +33,8 @@ const (
 	// recentFinished is how many finished projects the Director's tab lists.
 	recentFinished = 20
 	maxTookLen     = 500
+	// maxMadeNotes caps what a project keeps of what its item came out as.
+	maxMadeNotes = 12
 )
 
 // Project is a hero's crafting project as stored. RecipeName, Goal, Stat
@@ -56,6 +58,15 @@ type Project struct {
 	StartedAt    time.Time
 	FinishedAt   *time.Time
 	Version      int
+	Details      ProjectDetails
+}
+
+// ProjectDetails is what a project keeps beyond its numbers: what its item
+// came out as (fine, marked, a quirk, made as something else), and the
+// standing cost of each substitute it started with ("bane" or "points").
+type ProjectDetails struct {
+	Made []string `json:"made,omitempty"`
+	Subs []string `json:"subs,omitempty"`
 }
 
 // ProjectView is a project as the block and the Projects tab show it.
@@ -78,11 +89,13 @@ type ProjectView struct {
 	Makes string `json:"makes"`
 	// Undelivered is set on a finished project whose item could not be put
 	// in the hero's pack, so the Director can give it by hand.
-	Undelivered bool       `json:"undelivered,omitempty"`
-	Took        string     `json:"took,omitempty"`
-	StartedAt   time.Time  `json:"startedAt"`
-	FinishedAt  *time.Time `json:"finishedAt,omitempty"`
-	Version     int        `json:"version"`
+	Undelivered bool `json:"undelivered,omitempty"`
+	// Came names what the item came out as: "Fine", a mark, a quirk.
+	Came       []string   `json:"came,omitempty"`
+	Took       string     `json:"took,omitempty"`
+	StartedAt  time.Time  `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	Version    int        `json:"version"`
 }
 
 // PackItem is one thing a hero carries.
@@ -213,8 +226,22 @@ type RollResult struct {
 	// was used and added nothing.
 	Spoiled bool `json:"spoiled,omitempty"`
 	// Made names what reached the pack, "" when nothing did.
-	Made  string   `json:"made,omitempty"`
+	Made string `json:"made,omitempty"`
+	// Mishap is what struck mid-brew, nil when nothing did; Row is its row
+	// of the table (from 0), which picks its look on the bench.
+	Mishap *Mishap `json:"mishap,omitempty"`
+	// Breakthrough says the dice came up high enough to roll again.
+	Breakthrough bool `json:"breakthrough,omitempty"`
+	// Lost says botched work cost the ingredients: the project is over.
+	Lost  bool     `json:"lost,omitempty"`
 	Notes []string `json:"notes"`
+}
+
+// Mishap is a row of a mishap table that struck on a roll.
+type Mishap struct {
+	Table string `json:"table"`
+	Row   int    `json:"row"`
+	Text  string `json:"text"`
 }
 
 // ProjectsPage is the Director's Projects tab.
@@ -246,8 +273,11 @@ type SetPointsInput struct {
 }
 
 // Day is the campaign calendar's today, as a project roll reads it: the
-// moons, the events and rolled results on the day, its weather and season.
+// moons, the events and rolled results on the day, its weather and season,
+// and the time of day by the calendar's clock ("dawn", "day", "dusk" or
+// "night"; "" when unknown).
 type Day struct {
+	Time    string
 	Label   string
 	Moons   []DayMoon
 	Events  []string
@@ -282,10 +312,29 @@ type Armory interface {
 	GiveSpoil(ctx context.Context, campaignID string, v Viewer, characterID, itemID string, qty int, harvested bool) error
 }
 
-// Sheets reads a characteristic from a hero's sheet; ok is false when the
-// field holds no number.
+// Sheets reads a hero's sheet: a characteristic (ok is false when the field
+// holds no number), and the skills it lists (ok is false when it lists
+// none, so a rule about a skill stays unknown rather than off).
 type Sheets interface {
 	Stat(ctx context.Context, campaignID, characterID, key string) (value int, ok bool, err error)
+	Skills(ctx context.Context, campaignID, characterID string) (skills []string, ok bool, err error)
+}
+
+// TableRow is one row of a rolling table, with its relative chance.
+type TableRow struct {
+	Text   string
+	Weight float64
+}
+
+// Tables reads the campaign's Rolling Tables, which a recipe's quirks and
+// mishaps are rolled on. Implemented in internal/app over the rolltables
+// service.
+type Tables interface {
+	// Names lists the campaign's tables by name, for the rules editor.
+	Names(ctx context.Context, campaignID string) ([]string, error)
+	// Rows returns a table's rows by its name; ok is false when the campaign
+	// has no table by that name.
+	Rows(ctx context.Context, campaignID, name string) (rows []TableRow, ok bool, err error)
 }
 
 // Days reads the campaign calendar's today; nil when the campaign has none.

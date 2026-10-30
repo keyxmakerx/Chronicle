@@ -34,13 +34,16 @@ type Repository interface {
 	// version is still expected, and replaces the known list; ok is false on
 	// a lost race. errDuplicate when the new name is taken.
 	UpdateRecipe(ctx context.Context, campaignID, userID string, r Recipe, expected int) (ok bool, err error)
-	// UpdateRules writes the rules and looks on the same terms.
-	UpdateRules(ctx context.Context, campaignID, id string, rules []Rule, looks map[string]*Look, expected int) (ok bool, err error)
+	// UpdateRules writes the rules, looks and extras on the same terms.
+	UpdateRules(ctx context.Context, campaignID, id string, rules []Rule, looks map[string]*Look, extras Extras, expected int) (ok bool, err error)
 	// SetDraft clears or sets the draft flag, bumping the version.
 	SetDraft(ctx context.Context, campaignID, id string, draft bool) error
 	DeleteRecipe(ctx context.Context, campaignID, id string) error
 	// KnownBy lists the recipes each of the characters knows.
 	KnownBy(ctx context.Context, campaignID string, characterIDs []string) (map[string][]string, error)
+	// Learn adds a character to those who know a recipe; knowing it
+	// already is not an error.
+	Learn(ctx context.Context, campaignID, recipeID, characterID, userID string) error
 
 	// ListTags returns each tagged item's tags, in no particular order.
 	ListTags(ctx context.Context, campaignID string) (map[string][]string, error)
@@ -114,7 +117,7 @@ func (r *sqlRepository) SaveSettings(ctx context.Context, campaignID string, s S
 // ---------- Recipes ----------
 
 const recipeColumns = `id, name, template, bench_kind, COALESCE(result_item_id, ''), result_qty, goal, stat, prerequisite, source,
-	cost_cents, cost_currency, who, materials, steps, colors, rules, looks, draft, draft_prompt, sort_order, version, updated_at`
+	cost_cents, cost_currency, who, materials, steps, colors, rules, looks, COALESCE(extras, ''), draft, draft_prompt, sort_order, version, updated_at`
 
 type rowScanner interface{ Scan(dest ...any) error }
 
@@ -123,10 +126,11 @@ func scanRecipe(s rowScanner) (Recipe, error) {
 		r                                      Recipe
 		cents                                  int64
 		materials, steps, colors, rules, looks string
+		extras                                 string
 	)
 	if err := s.Scan(&r.ID, &r.Name, &r.Template, &r.Bench, &r.Result.ItemID, &r.Result.Qty, &r.Goal, &r.Stat,
 		&r.Prerequisite, &r.Source, &cents, &r.Cost.Currency, &r.Who, &materials, &steps, &colors, &rules, &looks,
-		&r.Draft, &r.DraftPrompt, &r.SortOrder, &r.Version, &r.UpdatedAt); err != nil {
+		&extras, &r.Draft, &r.DraftPrompt, &r.SortOrder, &r.Version, &r.UpdatedAt); err != nil {
 		return r, err
 	}
 	r.Cost.Amount = float64(cents) / 100
@@ -139,6 +143,10 @@ func scanRecipe(s rowScanner) (Recipe, error) {
 	_ = json.Unmarshal([]byte(looks), &r.Looks)
 	if colors != "" {
 		_ = json.Unmarshal([]byte(colors), &r.Colors)
+	}
+	r.Extras = DefaultExtras()
+	if extras != "" {
+		_ = json.Unmarshal([]byte(extras), &r.Extras)
 	}
 	return r, nil
 }
@@ -306,10 +314,10 @@ func (r *sqlRepository) UpdateRecipe(ctx context.Context, campaignID, userID str
 	return true, tx.Commit()
 }
 
-func (r *sqlRepository) UpdateRules(ctx context.Context, campaignID, id string, rules []Rule, looks map[string]*Look, expected int) (bool, error) {
+func (r *sqlRepository) UpdateRules(ctx context.Context, campaignID, id string, rules []Rule, looks map[string]*Look, extras Extras, expected int) (bool, error) {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE crafting_recipes SET rules = ?, looks = ?, version = version + 1 WHERE campaign_id = ? AND id = ? AND version = ?`,
-		mustJSON(rules), mustJSON(looks), campaignID, id, expected)
+		`UPDATE crafting_recipes SET rules = ?, looks = ?, extras = ?, version = version + 1 WHERE campaign_id = ? AND id = ? AND version = ?`,
+		mustJSON(rules), mustJSON(looks), mustJSON(extras), campaignID, id, expected)
 	if err != nil {
 		return false, fmt.Errorf("update recipe rules: %w", err)
 	}
@@ -328,6 +336,16 @@ func (r *sqlRepository) SetDraft(ctx context.Context, campaignID, id string, dra
 func (r *sqlRepository) DeleteRecipe(ctx context.Context, campaignID, id string) error {
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM crafting_recipes WHERE campaign_id = ? AND id = ?`, campaignID, id); err != nil {
 		return fmt.Errorf("delete recipe: %w", err)
+	}
+	return nil
+}
+
+func (r *sqlRepository) Learn(ctx context.Context, campaignID, recipeID, characterID, userID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT IGNORE INTO crafting_known (recipe_id, character_id, campaign_id, added_by)
+		 SELECT id, ?, campaign_id, ? FROM crafting_recipes WHERE campaign_id = ? AND id = ?`,
+		characterID, nullString(userID), campaignID, recipeID); err != nil {
+		return fmt.Errorf("learn recipe: %w", err)
 	}
 	return nil
 }
