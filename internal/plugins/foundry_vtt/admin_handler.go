@@ -2,6 +2,7 @@ package foundry_vtt
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -74,6 +75,9 @@ func (h *Handler) AdminForcePinCampaignHandler(c echo.Context) error {
 		campaignID, version, session.UserID, c.RealIP(), c.Request().UserAgent()); err != nil {
 		return h.respondError(c, err)
 	}
+	if err := h.holdForcePinned(c, session, campaignID); err != nil {
+		return h.respondError(c, err)
+	}
 	h.recordActivity(c, "foundry.campaign_force_pinned", "campaign", campaignID, version)
 	return c.NoContent(http.StatusNoContent)
 }
@@ -113,13 +117,32 @@ func (h *Handler) AdminForcePinOlderHandler(c echo.Context) error {
 		return apperror.NewUnauthorized("not authenticated")
 	}
 	version := c.Param("version")
-	pinned, err := h.svc.ForcePinAllToVersion(c.Request().Context(),
+	pinnedIDs, err := h.svc.ForcePinAllToVersion(c.Request().Context(),
 		version, session.UserID, c.RealIP(), c.Request().UserAgent())
 	if err != nil {
 		return h.respondError(c, err)
 	}
+	for _, cid := range pinnedIDs {
+		if err := h.holdForcePinned(c, session, cid); err != nil {
+			slog.Error("force-updated campaign was not held", slog.String("campaign", cid), slog.Any("error", err))
+		}
+	}
+	pinned := len(pinnedIDs)
 	h.recordActivity(c, "foundry.older_force_pinned", "package", "", fmt.Sprintf("%s (%d campaigns)", version, pinned))
 	return c.JSON(http.StatusOK, map[string]any{"pinned": pinned})
+}
+
+// holdForcePinned sets the admin hold on a campaign the admin just
+// force-updated, so its owner can't move straight back to the version it was
+// moved off. Owners can only move a campaign through the update modes, so
+// without them there is nothing to hold against.
+func (h *Handler) holdForcePinned(c echo.Context, session *auth.Session, campaignID string) error {
+	if h.owner == nil {
+		return nil
+	}
+	return h.owner.Hold(c.Request().Context(), campaignID, packages.ActorInfo{
+		UserID: session.UserID, IP: c.RealIP(), UserAgent: c.Request().UserAgent(), Admin: true,
+	})
 }
 
 // AdminAutoPinBannerHandler returns the auto-pin notification banner
