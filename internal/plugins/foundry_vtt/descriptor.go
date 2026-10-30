@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // descriptorFilename is the canonical name of the descriptor file
@@ -97,7 +98,33 @@ func validateDescriptor(d *PackageDescriptor) error {
 			"package.kind=%q but only \"foundry-module\" is supported in v1",
 			d.Package.Kind))
 	}
+	// The release names these paths and endpoints itself. A path is joined
+	// onto the install folder, read, and at install rewritten, so it must stay
+	// inside that folder; an endpoint is a path on Chronicle, never another
+	// host.
+	if p := d.Package.ModuleJSONPath; p != "" && (!filepath.IsLocal(p) || strings.Contains(p, `\`)) {
+		return ErrDescriptorInvalid(fmt.Errorf("package.moduleJsonPath %q must be a path inside the module", p))
+	}
+	if p := d.Serving.ZipContentRoot; p != "" && (!filepath.IsLocal(p) || strings.Contains(p, `\`)) {
+		return ErrDescriptorInvalid(fmt.Errorf("serving.zipContentRoot %q must be a path inside the module", p))
+	}
+	for name, ep := range map[string]string{
+		"serving.manifestEndpoint": d.Serving.ManifestEndpoint,
+		"serving.downloadEndpoint": d.Serving.DownloadEndpoint,
+	} {
+		if ep != "" && !isChroniclePath(ep) {
+			return ErrDescriptorInvalid(fmt.Errorf("%s %q must be a path on this Chronicle, starting with a single /", name, ep))
+		}
+	}
 	return nil
+}
+
+// isChroniclePath reports whether ep is a path on this host: one leading
+// slash, and no scheme, credentials or backslash that a browser or proxy
+// could read as another host.
+func isChroniclePath(ep string) bool {
+	return strings.HasPrefix(ep, "/") && !strings.HasPrefix(ep, "//") &&
+		!strings.ContainsAny(ep, `\@`) && !strings.Contains(ep, "://")
 }
 
 // applyDefaults fills in optional fields the descriptor didn't
