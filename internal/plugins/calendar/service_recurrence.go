@@ -83,10 +83,8 @@ func (s *calendarService) visibleAnchors(ctx context.Context, cal *Calendar, cam
 			visible = append(visible, e)
 		}
 	}
-	if !v.SkipsPerUserRules() {
-		if visible, err = s.hideFromPlayer(ctx, cal, campaignID, visible); err != nil {
-			return nil, err
-		}
+	if visible, err = s.hideFromPlayer(ctx, cal, campaignID, visible, v); err != nil {
+		return nil, err
 	}
 	out := make(map[string]Event, len(visible))
 	for _, e := range visible {
@@ -152,10 +150,8 @@ func (s *calendarService) checkRule(ctx context.Context, cal *Calendar, campaign
 			}
 		}
 	}
-	if len(dependents) > 0 && !author.SkipsPerUserRules() {
-		if dependents, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, dependents); err != nil {
-			return err
-		}
+	if dependents, err = s.hideFromPlayer(ctx, cal, campaignID, dependents, author); err != nil {
+		return err
 	}
 	if len(dependents) > 0 {
 		return apperror.NewValidation("other events repeat relative to this one, so it cannot repeat relative to another event")

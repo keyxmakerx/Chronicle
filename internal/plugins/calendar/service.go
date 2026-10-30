@@ -471,12 +471,29 @@ type calendarService struct {
 	rollRepo    EventRollRepository
 	markRepo    MoonMarkRepository
 	rollTables  RollTableSource
+	// forecastKey keys the players' weather forecast blur; see
+	// weather_forecast.go.
+	forecastKey []byte
 }
 
 // NewCalendarService constructs a CalendarService over the four
 // repositories.
 func NewCalendarService(calRepo CalendarRepository, eventRepo EventRepository, kindRepo EventKindRepository, weatherRepo WeatherRepository) CalendarService {
-	return &calendarService{calRepo: calRepo, eventRepo: eventRepo, kindRepo: kindRepo, weatherRepo: weatherRepo}
+	return &calendarService{calRepo: calRepo, eventRepo: eventRepo, kindRepo: kindRepo, weatherRepo: weatherRepo,
+		forecastKey: randomForecastKey()}
+}
+
+// SetForecastSecret keys the players' weather forecast from the site secret,
+// so forecasts stay the same across restarts. Reached via a type assertion
+// like the setters below. An empty secret, or one the key derivation
+// refuses, keeps the random key the service started with.
+func (s *calendarService) SetForecastSecret(siteSecret string) {
+	if siteSecret == "" {
+		return
+	}
+	if k, err := deriveForecastKey(siteSecret); err == nil {
+		s.forecastKey = k
+	}
 }
 
 // SetEntityVisibilityGate injects the entity-visibility check used to blank
@@ -1005,9 +1022,15 @@ func (s *calendarService) refuseSecretEraDate(ctx context.Context, cal *Calendar
 	return nil
 }
 
-// hideFromPlayer is every "not yet knowable" filter a non-author's event
-// read applies: unannounced future events, then events in a secret era.
-func (s *calendarService) hideFromPlayer(ctx context.Context, cal *Calendar, campaignID string, events []Event) ([]Event, error) {
+// hideFromPlayer is every "not yet knowable" filter an event read applies
+// for v: unannounced future events, then events in a secret era. Authors
+// (v.SkipsPerUserRules) get events back unchanged. It is the only place
+// those filters are composed, so a read cannot apply one and forget the
+// other; TestEventReads_HideNotYetKnowableEvents pins every read to it.
+func (s *calendarService) hideFromPlayer(ctx context.Context, cal *Calendar, campaignID string, events []Event, v permissions.Viewer) ([]Event, error) {
+	if v.SkipsPerUserRules() {
+		return events, nil
+	}
 	events, err := s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events)
 	if err != nil {
 		return nil, err
@@ -1824,13 +1847,11 @@ func (s *calendarService) GetEventForViewer(ctx context.Context, eventID, calend
 		return nil, apperror.NewNotFound("event not found")
 	}
 	events := []Event{*evt}
-	if !v.SkipsPerUserRules() {
-		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
-			return nil, err
-		}
-		if len(events) == 0 {
-			return nil, apperror.NewNotFound("event not found")
-		}
+	if events, err = s.hideFromPlayer(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	if len(events) == 0 {
+		return nil, apperror.NewNotFound("event not found")
 	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
@@ -1878,10 +1899,8 @@ func (s *calendarService) ListEventsByIDsForViewer(ctx context.Context, calendar
 			events = append(events, e)
 		}
 	}
-	if !v.SkipsPerUserRules() {
-		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
-			return nil, err
-		}
+	if events, err = s.hideFromPlayer(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
 	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
@@ -1927,10 +1946,8 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 	if events, err = s.expandMonth(ctx, cal, events, year, month, v); err != nil {
 		return nil, err
 	}
-	if !v.SkipsPerUserRules() {
-		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
-			return nil, err
-		}
+	if events, err = s.hideFromPlayer(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
 	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
@@ -1991,10 +2008,8 @@ func (s *calendarService) ListEventIndexForViewer(ctx context.Context, calendarI
 		return nil, false, fmt.Errorf("list event index: %w", err)
 	}
 	events = filterEventsByUser(events, v)
-	if !v.SkipsPerUserRules() {
-		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
-			return nil, false, err
-		}
+	if events, err = s.hideFromPlayer(ctx, cal, campaignID, events, v); err != nil {
+		return nil, false, err
 	}
 	needle := strings.ToLower(strings.TrimSpace(q))
 	entries := make([]EventIndexEntry, 0, len(events))
@@ -2067,10 +2082,8 @@ func (s *calendarService) ListEraEventsForViewer(ctx context.Context, eraID int,
 		return nil, 0, fmt.Errorf("list events for era: %w", err)
 	}
 	events = filterEventsByUser(events, v)
-	if !v.SkipsPerUserRules() {
-		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
-			return nil, 0, err
-		}
+	if events, err = s.hideFromPlayer(ctx, cal, campaignID, events, v); err != nil {
+		return nil, 0, err
 	}
 	inEra := make([]Event, 0, len(events))
 	for _, e := range events {
@@ -2127,10 +2140,8 @@ func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID, ca
 		return nil, fmt.Errorf("list upcoming events: %w", err)
 	}
 	events = filterEventsByUser(events, v)
-	if !v.SkipsPerUserRules() {
-		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
-			return nil, err
-		}
+	if events, err = s.hideFromPlayer(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
 	}
 	if limit > 0 && len(events) > limit {
 		events = events[:limit]
@@ -2151,8 +2162,8 @@ func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID, ca
 // AnnouncedOnDay ("only knowable on the day itself") stays secret until that
 // day arrives. An AnnouncedAhead event (a yearly festival, or one explicitly
 // marked ahead) is common knowledge regardless of date and is never dropped.
-// Callers that skip per-user rules (Owner/co-DM/system) never call this —
-// content authors already know their own unannounced events.
+// Reads reach it only through hideFromPlayer, which skips it for authors
+// (Owner/co-DM/system): they already know their own unannounced events.
 func (s *calendarService) dropUnannouncedFutureEvents(ctx context.Context, cal *Calendar, campaignID string, events []Event) ([]Event, error) {
 	if len(events) == 0 {
 		return events, nil
@@ -3329,7 +3340,7 @@ func (s *calendarService) ListWeatherForecast(ctx context.Context, calendarID, c
 			byMonth[key] = days
 		}
 		if real, ok := days[date.Day]; ok {
-			out = append(out, buildForecastEntry(calendarID, date, lead, real))
+			out = append(out, buildForecastEntry(s.forecastKey, calendarID, date, lead, real))
 		}
 	}
 	return out, nil
@@ -3519,10 +3530,8 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 			return nil, fmt.Errorf("search calendar events: search calendar %s: %w", cal.ID, err)
 		}
 		events = filterEventsByUser(events, v)
-		if !v.SkipsPerUserRules() {
-			if events, err = s.hideFromPlayer(ctx, &cal, campaignID, events); err != nil {
-				return nil, fmt.Errorf("search calendar events: %w", err)
-			}
+		if events, err = s.hideFromPlayer(ctx, &cal, campaignID, events, v); err != nil {
+			return nil, fmt.Errorf("search calendar events: %w", err)
 		}
 		for _, evt := range events {
 			icon := evt.KindIcon
@@ -3545,8 +3554,9 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 // ListEventsForCalendar implements timeline.CalendarEventLister — see the
 // interface doc comment. calendarInCampaignForViewer folds "wrong campaign"
 // and "role can't see it" into the same NotFound, which becomes an empty
-// slice here rather than an error. Linked pages the role can't see are
-// blanked the same way every other event read here blanks them.
+// slice here rather than an error. Events the role cannot know about yet are
+// dropped, and linked pages it can't see are blanked, the same way every
+// other event read here does.
 func (s *calendarService) ListEventsForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]Event, error) {
 	v := permissions.RequestViewer(role, "")
 	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
@@ -3561,10 +3571,8 @@ func (s *calendarService) ListEventsForCalendar(ctx context.Context, campaignID,
 		return nil, fmt.Errorf("list events for calendar: %w", err)
 	}
 	events = filterEventsByUser(events, v)
-	if !v.SkipsPerUserRules() {
-		if events, err = s.dropSecretEraEvents(ctx, cal, events); err != nil {
-			return nil, err
-		}
+	if events, err = s.hideFromPlayer(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
 	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err

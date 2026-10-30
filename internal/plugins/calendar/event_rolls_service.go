@@ -124,6 +124,15 @@ func (s *calendarService) rollTargetFor(ctx context.Context, eventID, calendarID
 	if err != nil {
 		return nil, err
 	}
+	// A roll is read about its event, so an event the viewer cannot know
+	// about yet answers NotFound here just as the event itself does.
+	known, err := s.hideFromPlayer(ctx, cal, campaignID, []Event{*evt}, v)
+	if err != nil {
+		return nil, err
+	}
+	if len(known) == 0 {
+		return nil, apperror.NewNotFound("event not found")
+	}
 	if err := s.loadRuleGeometry(ctx, cal); err != nil {
 		return nil, err
 	}

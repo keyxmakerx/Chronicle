@@ -2,9 +2,11 @@
 // shown in place of the real weather: the stored reading for a coming day,
 // blurred more the further ahead it looks. It is a port of forecastWeather in
 // static/js/widgets/chronicle_gen.js, simplified so it needs no climate
-// model and is fully deterministic: the same calendar, day and lead always
-// give the same entry, so a player cannot refresh their way to the truth and
-// a forecast does not change under them between page loads.
+// model and is deterministic under the server's forecast key: the same
+// calendar, day and lead always give the same entry, so a player cannot
+// refresh their way to the truth and a forecast does not change under them
+// between page loads. The key keeps the draws secret: with only public
+// inputs in the seed, a player could replay it and strip the blur.
 //
 // A forecast entry is built only from a coarse category and numbers. It never
 // carries the reading's preset id, label, colour, description or wind, since
@@ -13,8 +15,12 @@
 package calendar
 
 import (
+	"crypto/hkdf"
+	"crypto/hmac"
+	crand "crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
-	"hash/fnv"
 	"math"
 	"math/rand"
 )
@@ -81,12 +87,32 @@ func forecastConfidence(lead int) float64 {
 	return math.Min(0.97, math.Max(0.18, 0.97*math.Exp(-float64(lead-1)*k)))
 }
 
+// forecastKeyLabel separates the forecast key from every other key derived
+// from the site secret.
+const forecastKeyLabel = "chronicle-weather-forecast"
+
+// deriveForecastKey turns the site secret into the forecast key, so the key
+// is stable across restarts without a new setting.
+func deriveForecastKey(siteSecret string) ([]byte, error) {
+	return hkdf.Key(sha256.New, []byte(siteSecret), nil, forecastKeyLabel, 32)
+}
+
+// randomForecastKey is the key a service starts with before the site secret
+// is wired: unpredictable, so an unwired service never blurs reversibly, at
+// the cost of forecasts changing on restart.
+func randomForecastKey() []byte {
+	k := make([]byte, 32)
+	_, _ = crand.Read(k) // never fails on supported platforms
+	return k
+}
+
 // forecastSeed derives the entry's RNG seed from the calendar, the day and
-// the lead, so each is stable and independent of the others.
-func forecastSeed(calendarID string, date DayDate, lead int) int64 {
-	h := fnv.New64a()
-	_, _ = fmt.Fprintf(h, "%s|%d|%d|%d|%d", calendarID, date.Year, date.Month, date.Day, lead)
-	return int64(h.Sum64())
+// the lead under key, so each is stable and independent of the others and
+// cannot be recomputed without the key.
+func forecastSeed(key []byte, calendarID string, date DayDate, lead int) int64 {
+	m := hmac.New(sha256.New, key)
+	_, _ = fmt.Fprintf(m, "%s|%d|%d|%d|%d", calendarID, date.Year, date.Month, date.Day, lead)
+	return int64(binary.BigEndian.Uint64(m.Sum(nil)[:8])) //nolint:gosec // a seed's bits, not a size
 }
 
 // roundTo10 rounds to the nearest ten, the precision a chance of rain is
@@ -96,9 +122,10 @@ func roundTo10(x float64) int { return int(math.Round(x/10)) * 10 }
 // buildForecastEntry blurs the real reading for date, lead days ahead. The
 // draws from the RNG happen in a fixed order (category, then a wrong sky if
 // the forecast misses, then temperature) so each result is reproducible.
-func buildForecastEntry(calendarID string, date DayDate, lead int, real DayWeather) ForecastEntry {
+func buildForecastEntry(key []byte, calendarID string, date DayDate, lead int, real DayWeather) ForecastEntry {
 	conf := forecastConfidence(lead)
-	rng := rand.New(rand.NewSource(forecastSeed(calendarID, date, lead))) //nolint:gosec // a reproducible blur, not a secret
+	// math/rand is fine here: the secrecy lives in the keyed seed.
+	rng := rand.New(rand.NewSource(forecastSeed(key, calendarID, date, lead))) //nolint:gosec // seeded from a keyed HMAC
 
 	truth := fcCloud
 	if real.Icon != nil {

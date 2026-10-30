@@ -236,10 +236,8 @@ func (s *calendarService) PageTimeline(ctx context.Context, campaignID, entityID
 		return nil, fmt.Errorf("list events for page: %w", err)
 	}
 	events = filterEventsByUser(events, v)
-	if !v.SkipsPerUserRules() {
-		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
-			return nil, err
-		}
+	if events, err = s.hideFromPlayer(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
 	}
 	if hideDMOnly {
 		kept := events[:0]
