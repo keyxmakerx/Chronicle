@@ -558,7 +558,10 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 		x = recipe.Extras
 	}
 	mastered := s.mastered(ctx, campaignID, p, x)
-	if in.Work == WorkSkipped && !set.Skip && !v.Director && benchable && !(mastered && x.Mastery.Gives == "skip") {
+	// A hero who has mastered a recipe that rewards mastery with skipping
+	// may skip the bench steps whatever the Director asks.
+	skipEarned := mastered && x.Mastery.Gives == "skip"
+	if in.Work == WorkSkipped && !set.Skip && !v.Director && benchable && !skipEarned {
 		return nil, errInvalid("your Director asks for the steps to be worked at the bench")
 	}
 	w := &Worked{}
