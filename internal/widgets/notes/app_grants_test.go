@@ -90,6 +90,21 @@ func (r *fakeGrantRepo) RevokeAllForUser(_ context.Context, userID string, at ti
 	return nil
 }
 
+func (r *fakeGrantRepo) DeleteDead(_ context.Context, idleBefore time.Time) (int64, error) {
+	var n int64
+	for h, g := range r.byHash {
+		last := g.CreatedAt
+		if g.LastUsedAt != nil && g.LastUsedAt.After(last) {
+			last = *g.LastUsedAt
+		}
+		if g.RevokedAt != nil || last.Before(idleBefore) {
+			delete(r.byHash, h)
+			n++
+		}
+	}
+	return n, nil
+}
+
 func newTestGrantService(now *time.Time) (*appGrantService, *fakeGrantRepo) {
 	repo := newFakeGrantRepo()
 	return &appGrantService{repo: repo, now: func() time.Time { return *now }}, repo
@@ -614,5 +629,35 @@ func TestAppGrant_CapEvictionClosesOpenSockets(t *testing.T) {
 	}
 	if strings.Join(rec.calls, ",") != "notes:camp:user" {
 		t.Fatalf("socket drops %v after a grant was evicted", rec.calls)
+	}
+}
+
+// PruneDead deletes exactly the grants that can no longer authenticate: the
+// revoked ones and the ones idle past the limit, never a live one.
+func TestAppGrantPruneDead(t *testing.T) {
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	svc, repo := newTestGrantService(&now)
+	ctx := context.Background()
+	recent := now.Add(-time.Hour)
+	revokedAt := now.Add(-time.Minute)
+	repo.byHash["live"] = &AppGrant{ID: "live", CreatedAt: now.Add(-200 * 24 * time.Hour), LastUsedAt: &recent}
+	repo.byHash["fresh"] = &AppGrant{ID: "fresh", CreatedAt: now.Add(-24 * time.Hour)}
+	repo.byHash["revoked"] = &AppGrant{ID: "revoked", CreatedAt: now.Add(-time.Hour), RevokedAt: &revokedAt}
+	repo.byHash["idle"] = &AppGrant{ID: "idle", CreatedAt: now.Add(-91 * 24 * time.Hour)}
+
+	n, err := svc.PruneDead(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("deleted %d, want 2", n)
+	}
+	for _, id := range []string{"live", "fresh"} {
+		if repo.byHash[id] == nil {
+			t.Errorf("live grant %s was deleted", id)
+		}
+		if !repo.byHash[id].usable(now) {
+			t.Errorf("kept grant %s isn't usable, so the limits disagree", id)
+		}
 	}
 }

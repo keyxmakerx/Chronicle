@@ -4533,6 +4533,7 @@ func (a *App) RegisterRoutes() {
 	noteGrants := notes.NewAppGrantService(notes.NewAppGrantRepository(a.DB))
 	// See wsRevokerHolder: wsHub itself is constructed further down.
 	noteGrants.SetConnectionRevoker(wsRevoker)
+	go notes.StartAppGrantPruner(a.ShutdownCtx, noteGrants)
 	noteGrantHandler := notes.NewAppGrantHandler(noteGrants, &notesOriginAllower{baseURL: a.Config.BaseURL, settings: settingsService})
 	// Pictures and voice memos in the frames load through member-checked
 	// signed links, as Foundry's media does.
