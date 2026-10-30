@@ -204,11 +204,10 @@ func notePatchToRepoNote(note patch.Field[string]) *string {
 
 // nextUpcomingOccurrenceDate returns the next occurrence date on/after today
 // for a recurring session, counting occurrences from the series start with
-// occurrenceAt so monthly dates do not drift. The walk is capped (520 steps
-// — roughly ten years of weekly steps) so a pathological recurrence config
-// can never spin unbounded; it is not expected to run more than once or
-// twice in practice, since a session left unanswered for years is not the
-// case this exists for.
+// occurrenceAt so monthly dates do not drift. It jumps straight to the last
+// night before today (occurrenceIndexBefore), so a series that began decades
+// ago costs the same as one that began last week; the walk after the jump is
+// capped so a pathological recurrence config can never spin unbounded.
 func nextUpcomingOccurrenceDate(session *Session, today string) string {
 	if session.ScheduledDate == nil || *session.ScheduledDate == "" || session.RecurrenceType == nil {
 		return ""
@@ -217,7 +216,8 @@ func nextUpcomingOccurrenceDate(session *Session, today string) string {
 	if cur >= today {
 		return cur
 	}
-	for i := 1; i <= 520; i++ {
+	first := occurrenceIndexBefore(session, today)
+	for i := first + 1; i <= first+520; i++ {
 		next := occurrenceAt(session, i)
 		if next == "" {
 			return cur

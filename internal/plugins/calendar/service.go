@@ -1202,6 +1202,9 @@ func (s *calendarService) SetCurrentDate(ctx context.Context, calendarID, campai
 	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
 		return err
 	}
+	if year < -maxDayWeatherYear || year > maxDayWeatherYear {
+		return apperror.NewBadRequest(fmt.Sprintf("year must be between %d and %d", -maxDayWeatherYear, maxDayWeatherYear))
+	}
 	if month < 1 || month > len(cal.Months) {
 		return apperror.NewBadRequest(fmt.Sprintf("month must be between 1 and %d", len(cal.Months)))
 	}
@@ -1679,6 +1682,12 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	if err != nil {
 		return nil, err
 	}
+	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+		return nil, err
+	}
+	if err := validateEventDates(cal, evt); err != nil {
+		return nil, err
+	}
 	if err := s.refuseSecretEraDate(ctx, cal, evt, input.Author); err != nil {
 		return nil, err
 	}
@@ -1690,6 +1699,92 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	}
 	s.publish(PubEventCreated, campaignID, calendarID, evt)
 	return evt, nil
+}
+
+// validateEventDates refuses an event the calendar cannot show: a start,
+// end or repeat-until date that is not a day of the calendar, a year outside
+// the stored range, an hour or minute outside the calendar's day, an end
+// before the start, or a repeat interval or count below one. Without these a
+// bad date is stored and never shows, or fails as a server error. A calendar
+// with no months has nothing to hold dates against, so only the field checks
+// that need no geometry run there.
+func validateEventDates(cal *Calendar, evt *Event) error {
+	checkDay := func(what string, y, m, d int) error {
+		if y < -maxDayWeatherYear || y > maxDayWeatherYear {
+			return apperror.NewValidation(fmt.Sprintf("%s year must be between %d and %d", what, -maxDayWeatherYear, maxDayWeatherYear))
+		}
+		if len(cal.Months) == 0 {
+			return nil
+		}
+		return validDate(cal, DayDate{Year: y, Month: m, Day: d}, what+" date")
+	}
+	checkTime := func(what string, h, m *int) error {
+		if h != nil && (*h < 0 || (cal.HoursPerDay > 0 && *h >= cal.HoursPerDay)) {
+			return apperror.NewValidation(what + " hour is outside this calendar's day")
+		}
+		if m != nil && (*m < 0 || (cal.MinutesPerHour > 0 && *m >= cal.MinutesPerHour)) {
+			return apperror.NewValidation(what + " minute is outside this calendar's hour")
+		}
+		return nil
+	}
+
+	if err := checkDay("start", evt.Year, evt.Month, evt.Day); err != nil {
+		return err
+	}
+	if err := checkTime("start", evt.StartHour, evt.StartMinute); err != nil {
+		return err
+	}
+	if err := checkTime("end", evt.EndHour, evt.EndMinute); err != nil {
+		return err
+	}
+	endY, endM, endD := evt.Year, evt.Month, evt.Day
+	if evt.EndYear != nil && evt.EndMonth != nil && evt.EndDay != nil {
+		endY, endM, endD = *evt.EndYear, *evt.EndMonth, *evt.EndDay
+		if err := checkDay("end", endY, endM, endD); err != nil {
+			return err
+		}
+		if dateLess(endY, endM, endD, evt.Year, evt.Month, evt.Day) {
+			return apperror.NewValidation("the event ends before it starts")
+		}
+	}
+	// On the start day, an end time before the start time is backwards.
+	if endY == evt.Year && endM == evt.Month && endD == evt.Day && evt.StartHour != nil && evt.EndHour != nil {
+		minute := func(m *int) int {
+			if m == nil {
+				return 0
+			}
+			return *m
+		}
+		start := *evt.StartHour*60 + minute(evt.StartMinute)
+		end := *evt.EndHour*60 + minute(evt.EndMinute)
+		if end < start {
+			return apperror.NewValidation("the event ends before it starts")
+		}
+	}
+	if evt.RecurrenceEndYear != nil && evt.RecurrenceEndMonth != nil && evt.RecurrenceEndDay != nil {
+		if err := checkDay("repeat-until", *evt.RecurrenceEndYear, *evt.RecurrenceEndMonth, *evt.RecurrenceEndDay); err != nil {
+			return err
+		}
+	}
+	if evt.RecurrenceInterval != nil && *evt.RecurrenceInterval < 1 {
+		return apperror.NewValidation("recurrence_interval must be at least 1")
+	}
+	if evt.RecurrenceMaxOccurrences != nil && *evt.RecurrenceMaxOccurrences < 1 {
+		return apperror.NewValidation("recurrence_max_occurrences must be at least 1")
+	}
+	return nil
+}
+
+// eventDatesTouched reports whether an update sends any field
+// validateEventDates judges. An edit that leaves them all alone is not
+// refused over a date stored before these checks existed.
+func eventDatesTouched(in UpdateEventInput) bool {
+	return in.Year.Present() || in.Month.Present() || in.Day.Present() ||
+		in.StartHour.Present() || in.StartMinute.Present() ||
+		in.EndYear.Present() || in.EndMonth.Present() || in.EndDay.Present() ||
+		in.EndHour.Present() || in.EndMinute.Present() ||
+		in.RecurrenceInterval.Present() || in.RecurrenceMaxOccurrences.Present() ||
+		in.RecurrenceEndYear.Present() || in.RecurrenceEndMonth.Present() || in.RecurrenceEndDay.Present()
 }
 
 // buildValidatedEvent runs every check CreateEvent applies to a new event
@@ -2335,6 +2430,14 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	evt.RecurrenceEndDay = input.RecurrenceEndDay.Ptr(evt.RecurrenceEndDay)
 	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences.Ptr(evt.RecurrenceMaxOccurrences)
 	evt.RecurrenceRule = rule
+	if eventDatesTouched(input) {
+		if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+			return err
+		}
+		if err := validateEventDates(cal, evt); err != nil {
+			return err
+		}
+	}
 	if err := s.refuseSecretEraDate(ctx, cal, evt, v); err != nil {
 		return err
 	}

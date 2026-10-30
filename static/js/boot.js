@@ -19,6 +19,10 @@
   // WeakMap tracking mounted widget instances to prevent double-init
   // and enable cleanup on destroy.
   var mounted = new WeakMap();
+  // The same elements as a Set, because a WeakMap can't be listed: Back and
+  // Forward replace the page without a beforeSwap, so the widgets they
+  // removed are found here and destroyed.
+  var mountedEls = new Set();
 
   /**
    * Register a widget implementation.
@@ -280,6 +284,7 @@
     try {
       impl.init(el, config);
       mounted.set(el, name);
+      mountedEls.add(el);
     } catch (err) {
       console.error('[Chronicle] Failed to mount widget "' + name + '":', err);
     }
@@ -306,6 +311,7 @@
       }
     }
     mounted.delete(el);
+    mountedEls.delete(el);
   }
 
   // --- CSRF Integration ---
@@ -461,9 +467,13 @@
     }
   });
 
-  // Back and Forward fetch the page and swap in a whole new body without an
-  // afterSettle, so its widgets are mounted here.
+  // Back and Forward fetch the page and swap in a whole new body without a
+  // beforeSwap or an afterSettle, so the widgets of the page that was left
+  // are destroyed here and the restored page's are mounted.
   document.addEventListener('htmx:historyRestore', function () {
+    mountedEls.forEach(function (el) {
+      if (!el.isConnected) destroyElement(el);
+    });
     mountWidgets(document.body);
     scheduleUnmatchedWidgetScan(document.body);
   });

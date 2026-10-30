@@ -927,6 +927,45 @@ func occurrenceAt(session *Session, n int) string {
 	return at.Format("2006-01-02")
 }
 
+// occurrenceIndexBefore returns an occurrence index whose date is before
+// date (YYYY-MM-DD), close enough that a walk from it reaches date in a
+// step or two. It is 0 when date is not after the series start or cannot be
+// read. Monthly steps back one month because a clamped day (the 31st in a
+// short month) can land a night in the month after the plain count.
+func occurrenceIndexBefore(session *Session, date string) int {
+	if session.ScheduledDate == nil || session.RecurrenceType == nil {
+		return 0
+	}
+	start, err := time.Parse("2006-01-02", *session.ScheduledDate)
+	if err != nil {
+		return 0
+	}
+	target, err := time.Parse("2006-01-02", date)
+	if err != nil || !target.After(start) {
+		return 0
+	}
+	var n int
+	switch *session.RecurrenceType {
+	case RecurrenceMonthly:
+		n = (target.Year()-start.Year())*12 + int(target.Month()) - int(start.Month()) - 1
+	case RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceCustom:
+		weeks := 1
+		switch *session.RecurrenceType {
+		case RecurrenceBiWeekly:
+			weeks = 2
+		case RecurrenceCustom:
+			weeks = max(session.RecurrenceInterval, 1)
+		}
+		// Unix seconds, not Sub: a Duration overflows past about 292 years.
+		days := int((target.Unix() - start.Unix()) / 86400)
+		// One step short, so the night at the index is strictly before date.
+		n = (days - 1) / (7 * weeks)
+	default:
+		return 0
+	}
+	return max(n, 0)
+}
+
 // addMonthsClamped adds n calendar months to t, clamping the day to the last
 // day of the target month. time.AddDate normalises overflow forward instead
 // (Jan 31 + 1 month is Mar 3), which would shift the whole series.

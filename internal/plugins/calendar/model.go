@@ -390,14 +390,10 @@ func IsSupportedRecurrenceType(t string) bool {
 // reconciled so recurrence, weekday placement and moon phase can never drift
 // apart there.
 //
-// year <= 0 stays on the old linear formula: AbsoluteDay's leap term is
-// defined only for year > 0 (its own doc comment — "a negative or zero year
-// contributes nothing"), so delegating unconditionally would collapse every
-// non-positive year onto the same index (AbsoluteDay(-5,1,1) ==
-// AbsoluteDay(0,1,1)), breaking recurrence and weekday placement for any
-// calendar that permits year 0 or negative years. linearDayIndex stays
-// leap-unaware but strictly monotonic across zero and negative years, which
-// is what those two consumers actually need.
+// year <= 0 stays on the linear formula: it is leap-unaware but strictly
+// monotonic across zero and negative years, which is what recurrence and
+// weekday placement need, and switching it to AbsoluteDay's leap-aware count
+// would move every stored weekday and moon placement before year 1.
 func (c *Calendar) absDayIndex(year, month, day int) int {
 	if c.UsesRealTime() {
 		return gregorianJDN(year, month, day)
@@ -744,8 +740,12 @@ func (c *Calendar) InSecretEra(year, month, day int) bool {
 //	  = Σ (YearLength() + leapExtraDays if IsLeapYear(y))
 //	  = year·YearLength() + leapExtraDays·|{y ∈ [0,year) : IsLeapYear(y)}|
 //
-// and leapYearsBefore counts that set in O(1). A negative or zero `year`
-// contributes nothing.
+// and leapYearsBefore counts that set in O(1). Year 0 contributes nothing.
+// A negative year counts backwards the same way, subtracting the years in
+// [year, 0), so dates keep their order through year 0 and before it:
+//
+//	-Σ_{y=year}^{-1} YearLengthForYear(y)
+//	  = year·YearLength() - leapExtraDays·|{y ∈ [year,0) : IsLeapYear(y)}|
 func (c *Calendar) AbsoluteDay(year, month, day int) int {
 	total := 0
 	// Add full years — closed form, see the function comment.
@@ -753,6 +753,11 @@ func (c *Calendar) AbsoluteDay(year, month, day int) int {
 		total = year * c.YearLength()
 		if extra := c.leapExtraDays(); extra != 0 {
 			total += extra * c.leapYearsBefore(year)
+		}
+	} else if year < 0 {
+		total = year * c.YearLength()
+		if extra := c.leapExtraDays(); extra != 0 {
+			total -= extra * c.leapYearsFrom(year)
 		}
 	}
 	// Add full months in the current year.
@@ -798,6 +803,31 @@ func (c *Calendar) leapYearsBefore(year int) int {
 		return 0
 	}
 	return (year-1-r)/e + 1
+}
+
+// leapYearsFrom counts the leap years in [year, 0) for a negative year, in
+// O(1), the negative-year half of AbsoluteDay's closed form. Mirroring y to
+// -y turns it into counting members of a residue class in [1, -year], where
+// every division is on non-negative operands.
+func (c *Calendar) leapYearsFrom(year int) int {
+	e := c.LeapYearEvery
+	if e <= 0 || year >= 0 {
+		return 0
+	}
+	r := c.LeapYearOffset % e
+	if r < 0 {
+		r += e
+	}
+	// y ≡ r (mod e) is -y ≡ s (mod e).
+	s := (e - r) % e
+	n := -year
+	if s == 0 {
+		return n / e
+	}
+	if n < s {
+		return 0
+	}
+	return (n-s)/e + 1
 }
 
 // CurrentAbsoluteDay returns AbsoluteDay for the current date.
