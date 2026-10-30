@@ -5,16 +5,17 @@
 //
 // 1. Listens for entity.created/updated hooks and logs activity to KV store.
 // 2. Exports a `get_activity_log` function that returns stored activity.
-// 3. Exports a `create_session_summary` function that creates a calendar event.
-// 4. Shows how to call Chronicle host functions from Go.
+// 3. Shows how to call Chronicle host functions from Go.
 //
 // Build with TinyGo:
 //
-//	tinygo build -o dist/session_logger.wasm -target wasip1 main.go
+//	tinygo build -o dist/session_logger.wasm -target wasip1 -buildmode=c-shared main.go
 //
-// Build with Go 1.24+ (native WASM support):
+// Build with Go 1.24+ (native WASM support). -buildmode=c-shared is required:
+// without it the module loads but every call traps, because the Go runtime
+// is never initialised.
 //
-//	GOOS=wasip1 GOARCH=wasm go build -o dist/session_logger.wasm main.go
+//	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o dist/session_logger.wasm main.go
 package main
 
 import (
@@ -29,16 +30,11 @@ import (
 // Host function declarations
 // ---------------------------------------------------------------------------
 // These are provided by the Chronicle runtime. The plugin's declared
-// capabilities determine which functions are available.
+// capabilities determine which functions are available. Each signature must
+// match the host's exactly or the plugin fails to instantiate.
 
 //go:wasmimport extism:host/user chronicle_log
-func chronicleLog(offset uint64) uint64
-
-//go:wasmimport extism:host/user get_entity
-func getEntity(offset uint64) uint64
-
-//go:wasmimport extism:host/user create_event
-func createEvent(offset uint64) uint64
+func chronicleLog(offset uint64)
 
 //go:wasmimport extism:host/user kv_get
 func kvGet(offset uint64) uint64
@@ -50,11 +46,15 @@ func kvSet(offset uint64) uint64
 // Data types
 // ---------------------------------------------------------------------------
 
-// HookEvent is the payload Chronicle sends for hook events.
+// HookEvent is the input Chronicle sends to on_hook.
 type HookEvent struct {
 	Type       string `json:"type"`
-	EntityID   string `json:"entity_id,omitempty"`
-	CampaignID string `json:"campaign_id,omitempty"`
+	CampaignID string `json:"campaign_id"`
+	Payload    struct {
+		EntityID string `json:"entity_id"`
+		Name     string `json:"name"`
+	} `json:"payload"`
+	Timestamp string `json:"timestamp"`
 }
 
 // ActivityEntry represents one logged activity.
@@ -69,61 +69,50 @@ type ActivityLog struct {
 	Entries []ActivityEntry `json:"entries"`
 }
 
-// CalendarEventInput is sent to the create_event host function.
-type CalendarEventInput struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Year        int    `json:"year"`
-	Month       int    `json:"month"`
-	Day         int    `json:"day"`
-}
-
 // ---------------------------------------------------------------------------
 // Host function helpers
 // ---------------------------------------------------------------------------
 
-// logMessage sends a log message to the Chronicle server log.
+// logMessage sends an info line to the Chronicle server log.
 func logMessage(msg string) {
-	mem := pdk.AllocateString(msg)
+	input, _ := json.Marshal(map[string]string{"level": "info", "message": msg})
+	mem := pdk.AllocateBytes(input)
 	chronicleLog(mem.Offset())
 }
 
-// getEntityJSON calls the get_entity host function.
-func getEntityJSON(entityID string) ([]byte, error) {
-	input, _ := json.Marshal(map[string]string{"entity_id": entityID})
-	mem := pdk.AllocateBytes(input)
-	resultOffset := getEntity(mem.Offset())
-	resultMem := pdk.FindMemory(resultOffset)
-	return resultMem.ReadBytes(), nil
+// hostResult is how every host function answers: {"data": ...} on success,
+// {"error": "..."} on failure.
+type hostResult struct {
+	Data  json.RawMessage `json:"data"`
+	Error string          `json:"error"`
 }
 
-// kvGetValue reads a value from the plugin's KV store.
+// kvGetValue reads a value from the plugin's KV store ("null" when unset).
 func kvGetValue(key string) ([]byte, error) {
 	input, _ := json.Marshal(map[string]string{"key": key})
 	mem := pdk.AllocateBytes(input)
 	resultOffset := kvGet(mem.Offset())
 	resultMem := pdk.FindMemory(resultOffset)
-	return resultMem.ReadBytes(), nil
+	var res hostResult
+	if err := json.Unmarshal(resultMem.ReadBytes(), &res); err != nil {
+		return nil, err
+	}
+	if res.Error != "" {
+		return nil, fmt.Errorf("kv_get: %s", res.Error)
+	}
+	return res.Data, nil
 }
 
-// kvSetValue writes a value to the plugin's KV store.
+// kvSetValue writes a JSON value to the plugin's KV store. The value is sent
+// as JSON, not as a string holding JSON, so kv_get gives the same shape back.
 func kvSetValue(key string, value []byte) error {
 	input, _ := json.Marshal(map[string]any{
 		"key":   key,
-		"value": string(value),
+		"value": json.RawMessage(value),
 	})
 	mem := pdk.AllocateBytes(input)
 	kvSet(mem.Offset())
 	return nil
-}
-
-// createCalendarEvent calls the create_event host function.
-func createCalendarEvent(event CalendarEventInput) ([]byte, error) {
-	input, _ := json.Marshal(event)
-	mem := pdk.AllocateBytes(input)
-	resultOffset := createEvent(mem.Offset())
-	resultMem := pdk.FindMemory(resultOffset)
-	return resultMem.ReadBytes(), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -141,12 +130,12 @@ func onHook() int32 {
 		return 1
 	}
 
-	if event.EntityID == "" {
+	if event.Payload.EntityID == "" {
 		_ = pdk.OutputJSON(map[string]any{"ok": true, "skipped": "no entity_id"})
 		return 0
 	}
 
-	logMessage(fmt.Sprintf("session-logger: %s on entity %s", event.Type, event.EntityID))
+	logMessage(fmt.Sprintf("session-logger: %s on entity %s", event.Type, event.Payload.EntityID))
 
 	// Load existing activity log from KV store.
 	var actLog ActivityLog
@@ -159,7 +148,7 @@ func onHook() int32 {
 	actLog.Entries = append(actLog.Entries, ActivityEntry{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		EventType: event.Type,
-		EntityID:  event.EntityID,
+		EntityID:  event.Payload.EntityID,
 	})
 	if len(actLog.Entries) > 100 {
 		actLog.Entries = actLog.Entries[len(actLog.Entries)-100:]
@@ -181,54 +170,13 @@ func onHook() int32 {
 //go:wasmexport get_activity_log
 func getActivityLog() int32 {
 	existing, err := kvGetValue("activity_log")
-	if err != nil || len(existing) == 0 {
+	if err != nil || len(existing) == 0 || string(existing) == "null" {
 		_ = pdk.OutputJSON(ActivityLog{Entries: []ActivityEntry{}})
 		return 0
 	}
 
 	// Return the raw stored JSON.
 	pdk.Output(existing)
-	return 0
-}
-
-// create_session_summary creates a calendar event summarizing recent activity.
-// Input: {"year": 1492, "month": 3, "day": 15, "title": "Session 5 Summary"}
-//
-//go:wasmexport create_session_summary
-func createSessionSummary() int32 {
-	var input struct {
-		Year  int    `json:"year"`
-		Month int    `json:"month"`
-		Day   int    `json:"day"`
-		Title string `json:"title"`
-	}
-	if err := pdk.InputJSON(&input); err != nil {
-		pdk.SetError(err)
-		return 1
-	}
-
-	// Build a description from the activity log.
-	var actLog ActivityLog
-	existing, _ := kvGetValue("activity_log")
-	if len(existing) > 0 {
-		_ = json.Unmarshal(existing, &actLog)
-	}
-
-	desc := fmt.Sprintf("Activity summary: %d events recorded.", len(actLog.Entries))
-
-	result, err := createCalendarEvent(CalendarEventInput{
-		Name:        input.Title,
-		Description: desc,
-		Year:        input.Year,
-		Month:       input.Month,
-		Day:         input.Day,
-	})
-	if err != nil {
-		pdk.SetError(err)
-		return 1
-	}
-
-	pdk.Output(result)
 	return 0
 }
 

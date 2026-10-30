@@ -146,7 +146,7 @@ func (s *entityService) SaveEntry(ctx context.Context, entityID, entryJSON, entr
 		return rev, nil, nil
 	}
 	s.recordVersion(ctx, before, after, VersionEdit)
-	s.events.PublishEntityEvent("updated", after.CampaignID, entityID, after)
+	s.publishEntity(ctx, "updated", after.CampaignID, entityID, after)
 	return rev, nil, nil
 }
 
@@ -301,7 +301,7 @@ func (s *entityService) restoreVersion(ctx context.Context, entityID string, v *
 		return nil, err
 	}
 	s.recordVersion(withVersionKind(ctx, VersionRestore), &before, entity, VersionRestore)
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	return entity, nil
 }
 

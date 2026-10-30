@@ -5316,6 +5316,7 @@ func (a *App) RegisterRoutes() {
 			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
 				return err
 			}
+			ctx = changesource.With(ctx, changesource.Source{Kind: changesource.KindExtension})
 			return tagService.SetEntityTags(ctx, entityID, campaignID, tagIDs)
 		},
 		// get_entity_tags: return tags as JSON (include DM-only for WASM plugins).
@@ -5372,6 +5373,14 @@ func (a *App) RegisterRoutes() {
 	// with WASM plugins automatically loads them into the plugin manager.
 	extApplier.SetWASMLoader(wasmPluginMgr)
 
+	// Plugins live only in memory: load the enabled ones again after a
+	// restart, in the background so a slow compile does not hold up startup.
+	go func() {
+		if n := extService.LoadEnabledPlugins(a.ShutdownCtx, wasmPluginMgr); n > 0 {
+			slog.Info("loaded WASM plugins", slog.Int("count", n))
+		}
+	}()
+
 	// Store references for graceful shutdown and auto-loading.
 	a.WASMPluginManager = wasmPluginMgr
 	a.WASMHookDispatcher = wasmHookDispatcher
@@ -5379,6 +5388,8 @@ func (a *App) RegisterRoutes() {
 	// Wire campaign deletion cleanup: media files and WASM hooks.
 	campaignService.SetMediaCleaner(mediaService)
 	campaignService.SetHookDispatcher(wasmHookDispatcher)
+	entityService.SetHookDispatcher(wasmEntityHooks{d: wasmHookDispatcher})
+	tagService.SetHookDispatcher(wasmTagHooks{d: wasmHookDispatcher})
 
 	// --- Game Systems ---
 	// System reference pages and tooltip API, gated by per-campaign addon checks.

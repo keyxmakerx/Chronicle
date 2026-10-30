@@ -30,6 +30,11 @@ type ExtensionService interface {
 	GetCampaignExtension(ctx context.Context, campaignID, extID string) (*CampaignExtension, error)
 	PreviewContributes(ctx context.Context, extID string) (*ManifestContributes, error)
 
+	// LoadEnabledPlugins loads the WASM plugins of every active extension a
+	// campaign has enabled. Plugins live only in memory, so this runs at
+	// startup; it returns how many loaded.
+	LoadEnabledPlugins(ctx context.Context, loader WASMPluginLoader) int
+
 	// Provenance.
 	RecordProvenance(ctx context.Context, campaignID, extensionID, tableName, recordID, recordType string) error
 	ListProvenance(ctx context.Context, campaignID, extensionID string) ([]Provenance, error)
@@ -469,6 +474,43 @@ func (s *extensionService) GetCampaignExtension(ctx context.Context, campaignID,
 	}
 
 	return s.repo.GetCampaignExtension(ctx, campaignID, ext.ID)
+}
+
+// LoadEnabledPlugins loads the WASM plugins of every active extension that at
+// least one campaign has enabled. A plugin that fails to load is logged and
+// skipped so one broken extension cannot keep the rest out.
+func (s *extensionService) LoadEnabledPlugins(ctx context.Context, loader WASMPluginLoader) int {
+	exts, err := s.repo.List(ctx)
+	if err != nil {
+		slog.Warn("listing extensions for plugin load", slog.Any("error", err))
+		return 0
+	}
+	loaded := 0
+	for _, ext := range exts {
+		if ext.Status != StatusActive {
+			continue
+		}
+		var manifest ExtensionManifest
+		if err := json.Unmarshal(ext.Manifest, &manifest); err != nil || manifest.Contributes == nil || len(manifest.Contributes.WASMPlugins) == 0 {
+			continue
+		}
+		n, err := s.repo.CountCampaignsUsing(ctx, ext.ID)
+		if err != nil || n == 0 {
+			continue
+		}
+		for _, wp := range manifest.Contributes.WASMPlugins {
+			if err := loader.Load(ctx, ext.ExtID, wp); err != nil {
+				slog.Warn("failed to load WASM plugin at startup",
+					slog.String("ext_id", ext.ExtID),
+					slog.String("slug", wp.Slug),
+					slog.Any("error", err),
+				)
+				continue
+			}
+			loaded++
+		}
+	}
+	return loaded
 }
 
 // PreviewContributes returns what an extension will contribute when enabled.

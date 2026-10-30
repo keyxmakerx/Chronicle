@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 )
 
 // HookDispatcher fires events to WASM plugins that have registered for them.
@@ -22,7 +24,12 @@ func NewHookDispatcher(manager *PluginManager) *HookDispatcher {
 // Dispatch sends a hook event to all loaded WASM plugins that listen for it.
 // The dispatch runs each plugin call in a goroutine so the caller is not blocked.
 // Errors are logged but never returned — hooks are best-effort.
+//
+// A write a plugin made itself is not announced (see announced).
 func (d *HookDispatcher) Dispatch(ctx context.Context, event HookEvent) {
+	if !announced(ctx) {
+		return
+	}
 	targets := d.manager.PluginsForHook(event.Type)
 	if len(targets) == 0 {
 		return
@@ -89,6 +96,14 @@ func (d *HookDispatcher) Dispatch(ctx context.Context, event HookEvent) {
 			}
 		}(target.extID, target.slug)
 	}
+}
+
+// announced reports whether a write on ctx should reach plugins. A plugin's
+// own writes do not: one that updates a page on entity.updated would
+// otherwise hear its own write and loop forever.
+func announced(ctx context.Context) bool {
+	src, ok := changesource.From(ctx)
+	return !ok || src.Kind != changesource.KindExtension
 }
 
 // DispatchEntityCreated fires the entity.created hook.

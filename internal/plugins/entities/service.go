@@ -294,6 +294,7 @@ type EntityService interface {
 	SetBlockRegistry(reg *BlockRegistry)
 	SetSidebarAutoAdder(adder SidebarAutoAdder)
 	SetFieldChangeObserver(obs FieldChangeObserver)
+	SetHookDispatcher(d EntityHookDispatcher)
 }
 
 // FieldChangeObserver is told after an entity's custom fields were written.
@@ -393,9 +394,10 @@ type entityService struct {
 	safety        PageSafetyRepository // nil: no history, no Trash (tests)
 	placeGuard    PlaceGuard           // nil: no extra listings (tests)
 	fieldObserver FieldChangeObserver
-	fieldWords    FieldWords        // nil: rule fields are not checked against rules
-	fieldCalendar FieldCalendar     // nil: date fields are checked for form only
-	pageLayouts   PageLayoutService // nil: each category has only its main layout
+	fieldWords    FieldWords           // nil: rule fields are not checked against rules
+	fieldCalendar FieldCalendar        // nil: date fields are checked for form only
+	pageLayouts   PageLayoutService    // nil: each category has only its main layout
+	hooks         EntityHookDispatcher // nil: extension plugins are not told
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
@@ -595,7 +597,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 	)
 
 	s.recordVersion(WithActor(ctx, userID), nil, entity, VersionCreated)
-	s.events.PublishEntityEvent("created", campaignID, entity.ID, entity)
+	s.publishEntity(ctx, "created", campaignID, entity.ID, entity)
 	return entity, nil
 }
 
@@ -832,7 +834,7 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 	if entity.Name != before.Name || derefStr(entity.EntryHTML) != derefStr(before.EntryHTML) {
 		s.recordVersion(ctx, &before, entity, VersionEdit)
 	}
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entity.ID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entity.ID, entity)
 	if fieldsWritten {
 		s.notifyFieldsChanged(ctx, entity, oldFields, entity.FieldsData)
 	}
@@ -1066,7 +1068,7 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 		if beforeErr == nil {
 			s.recordVersion(ctx, before, entity, VersionEdit)
 		}
-		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	}
 	return nil
 }
@@ -1082,7 +1084,7 @@ func (s *entityService) UpdatePlayerNotes(ctx context.Context, entityID, notesJS
 	slog.Info("entity player notes updated", slog.String("entity_id", entityID))
 	// Emit entity updated event.
 	if entity, err := s.entities.FindByID(ctx, entityID); err == nil {
-		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	}
 	return nil
 }
@@ -1159,7 +1161,7 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 			entity = fresh
 		}
 		entity.FieldsData = fieldsData
-		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 		s.notifyFieldsChanged(ctx, entity, oldFields, fieldsData)
 	}
 	slog.Info("entity fields updated", slog.String("entity_id", entityID))
@@ -1242,7 +1244,7 @@ func (s *entityService) publishUpdatedFromStore(ctx context.Context, entityID st
 	if err != nil || entity == nil {
 		return
 	}
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 }
 
 // CheckImagePath refuses an absolute or traversing path, and media that
@@ -1294,9 +1296,9 @@ func (s *entityService) Delete(ctx context.Context, entityID string) error {
 			return err
 		}
 		slog.Info("entity moved to trash", slog.String("entity_id", entityID), slog.Int("pages", len(ids)))
-		s.events.PublishEntityEvent("deleted", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "deleted", entity.CampaignID, entityID, entity)
 		for _, id := range ids[1:] {
-			s.events.PublishEntityEvent("deleted", entity.CampaignID, id, &Entity{ID: id, CampaignID: entity.CampaignID})
+			s.publishEntity(ctx, "deleted", entity.CampaignID, id, &Entity{ID: id, CampaignID: entity.CampaignID})
 		}
 		return nil
 	}
@@ -1307,7 +1309,7 @@ func (s *entityService) Delete(ctx context.Context, entityID string) error {
 	slog.Info("entity deleted", slog.String("entity_id", entityID))
 
 	if entity != nil {
-		s.events.PublishEntityEvent("deleted", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "deleted", entity.CampaignID, entityID, entity)
 	}
 	return nil
 }
@@ -1344,7 +1346,7 @@ func (s *entityService) togglePrivate(ctx context.Context, entityID, campaignID 
 
 	// Publish event so WebSocket clients see the visibility change.
 	entity.IsPrivate = newPrivate
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 
 	return newPrivate, nil
 }
@@ -1367,7 +1369,7 @@ func (s *entityService) SetPrivateInCampaign(ctx context.Context, entityID, camp
 		return err
 	}
 	entity.IsPrivate = private
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	return nil
 }
 
@@ -1748,7 +1750,7 @@ func (s *entityService) ClaimEntity(ctx context.Context, entityID, userID string
 
 	entity.OwnerUserID = &userID
 	entity.Playable = true // ClaimOwner marks it in the same statement.
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity claimed",
 		slog.String("entity_id", entityID),
 		slog.String("user_id", userID),
@@ -1808,7 +1810,7 @@ func (s *entityService) AssignOwner(ctx context.Context, entityID string, ownerU
 	if ownerUserID != nil {
 		entity.Playable = true // UpdateOwner marks it in the same statement.
 	}
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity owner reassigned",
 		slog.String("entity_id", entityID),
 		slog.String("campaign_id", entity.CampaignID),
@@ -1848,7 +1850,7 @@ func (s *entityService) SetPlayable(ctx context.Context, campaignID, entityID st
 		return nil, apperror.NewInternal(err)
 	}
 	entity.Playable = playable
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	return entity, nil
 }
 
@@ -1901,7 +1903,7 @@ func (s *entityService) AssignMap(ctx context.Context, entityID string, mapID *s
 	}
 
 	entity.MapID = mapID
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity map assigned",
 		slog.String("entity_id", entityID),
 		slog.String("campaign_id", entity.CampaignID),
@@ -1939,7 +1941,7 @@ func (s *entityService) BulkUpdateType(ctx context.Context, campaignID string, e
 		}
 
 		entity.EntityTypeID = typeID
-		s.events.PublishEntityEvent("updated", campaignID, entityID, entity)
+		s.publishEntity(ctx, "updated", campaignID, entityID, entity)
 		updated++
 	}
 
@@ -3085,7 +3087,7 @@ func (s *entityService) SetEntityPermissions(ctx context.Context, entityID strin
 	// For VisibilityDefault the IsPrivate field was already set on the entity at
 	// the top of that case branch (line 1769), so we only need to set Visibility.
 	entity.Visibility = input.Visibility
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 
 	return nil
 }
