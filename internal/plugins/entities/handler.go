@@ -1410,12 +1410,19 @@ func (h *Handler) BulkChangeTypeAPI(c echo.Context) error {
 		}
 		req.EntityIDs = h.editablePageIDs(c, cc, req.EntityIDs)
 	}
+	// What each page was before, so the list's Undo can put it back.
+	previous := make(map[string]int, len(req.EntityIDs))
+	for _, eid := range req.EntityIDs {
+		if e, err := h.service.GetByID(c.Request().Context(), eid); err == nil && e.CampaignID == cc.Campaign.ID && e.EntityTypeID != req.EntityTypeID {
+			previous[eid] = e.EntityTypeID
+		}
+	}
 	updated, err := h.service.BulkUpdateType(c.Request().Context(), cc.Campaign.ID, req.EntityIDs, req.EntityTypeID)
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "updated": updated})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "updated": updated, "previous": previous})
 }
 
 // BulkTagsAPI assigns, removes, or sets tags on multiple entities.
@@ -1450,6 +1457,8 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	processed := 0
+	// For "add", the tags each page newly gained, so Undo removes only those.
+	added := map[string][]int{}
 	role, userID := int(cc.VisibilityRole()), auth.GetUserID(c)
 	// A caller who cannot see dm_only tags must not read, add or clear them.
 	seeDmOnly := cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
@@ -1473,6 +1482,9 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 			merged := mergeIntSets(existingIDs, req.TagIDs)
 			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged, seeDmOnly); err == nil {
 				processed++
+				if gained := subtractIntSet(merged, existingIDs); len(gained) > 0 {
+					added[eid] = gained
+				}
 			}
 		case "remove":
 			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
@@ -1496,7 +1508,7 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "processed": processed})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "processed": processed, "added": added})
 }
 
 // BulkVisibilityAPI toggles privacy for multiple entities.
@@ -1525,6 +1537,8 @@ func (h *Handler) BulkVisibilityAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	toggled := 0
+	// The pages that changed, so Undo flips back only those.
+	toggledIDs := []string{}
 	for _, eid := range req.EntityIDs {
 		entity, err := h.service.GetByID(ctx, eid)
 		if err != nil || entity.CampaignID != cc.Campaign.ID {
@@ -1533,11 +1547,12 @@ func (h *Handler) BulkVisibilityAPI(c echo.Context) error {
 		if entity.IsPrivate != req.Private {
 			if _, err := h.service.TogglePrivate(ctx, eid); err == nil {
 				toggled++
+				toggledIDs = append(toggledIDs, eid)
 			}
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "toggled": toggled})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "toggled": toggled, "toggledIds": toggledIDs})
 }
 
 // BulkDeleteAPI deletes multiple entities. Owner only.
@@ -1563,6 +1578,8 @@ func (h *Handler) BulkDeleteAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	deleted := 0
+	// The pages moved to the Trash, so Undo restores exactly those.
+	deletedIDs := []string{}
 	for _, eid := range req.EntityIDs {
 		entity, err := h.service.GetByID(ctx, eid)
 		if err != nil || entity.CampaignID != cc.Campaign.ID {
@@ -1570,10 +1587,26 @@ func (h *Handler) BulkDeleteAPI(c echo.Context) error {
 		}
 		if err := h.service.Delete(ctx, eid); err == nil {
 			deleted++
+			deletedIDs = append(deletedIDs, eid)
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "deleted": deleted})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "deleted": deleted, "deletedIds": deletedIDs})
+}
+
+// subtractIntSet returns the values of a that are not in b.
+func subtractIntSet(a, b []int) []int {
+	inB := make(map[int]bool, len(b))
+	for _, v := range b {
+		inB[v] = true
+	}
+	var out []int
+	for _, v := range a {
+		if !inB[v] {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // mergeIntSets merges two int slices, deduplicating.
