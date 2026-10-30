@@ -146,12 +146,18 @@ func fitCopies(copies []Copy, total int) []Copy {
 	return out
 }
 
+// CopyPick asks for N of a remembered copy row (0 for as many as needed).
+type CopyPick struct {
+	ID int64
+	N  int
+}
+
 // planTake decides which copies leave when take of an item's total go:
 // the picked copies first (in the order given), then plain ones, then the
 // oldest remembered ones. leaving is each remembered copy that goes with
 // how many of it; the rest are plain. copies come oldest first and are
 // first fitted to total.
-func planTake(copies []Copy, total, take int, pick []int64) (leaving []Copy) {
+func planTake(copies []Copy, total, take int, pick []CopyPick) (leaving []Copy) {
 	copies = fitCopies(copies, total)
 	plain := total
 	for _, c := range copies {
@@ -176,9 +182,13 @@ func planTake(copies []Copy, total, take int, pick []int64) (leaving []Copy) {
 	for _, c := range copies {
 		byID[c.ID] = c
 	}
-	for _, id := range pick {
-		if c, ok := byID[id]; ok {
-			takeFrom(c, c.Quantity)
+	for _, p := range pick {
+		if c, ok := byID[p.ID]; ok {
+			n := p.N
+			if n <= 0 {
+				n = c.Quantity
+			}
+			takeFrom(c, n)
 		}
 	}
 	if n := min(plain, left); n > 0 {

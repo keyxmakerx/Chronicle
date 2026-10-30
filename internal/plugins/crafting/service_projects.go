@@ -390,7 +390,10 @@ func (s *service) StartProject(ctx context.Context, campaignID, characterID stri
 	if err != nil {
 		return nil, err
 	}
-	paid, err := s.projects.Armory.Spend(ctx, campaignID, v, e.ID, items, r.Cost, r.Name)
+	for i := range items {
+		items[i].Use = in.Use[i]
+	}
+	paid, used, err := s.projects.Armory.Spend(ctx, campaignID, v, e.ID, items, r.Cost, r.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +406,7 @@ func (s *service) StartProject(ctx context.Context, campaignID, characterID stri
 	}
 	p := Project{ID: s.newID(), CampaignID: campaignID, CharacterID: e.ID, RecipeID: r.ID, RecipeName: r.Name, Goal: r.Goal, Stat: r.Stat,
 		ResultItemID: r.Result.ItemID, ResultQty: r.Result.Qty, Status: ProjectActive, Took: clipText(strings.Join(took, ", "), maxTookLen),
-		StartedBy: v.UserID, StartedAt: s.now(), Details: ProjectDetails{Subs: subs}}
+		StartedBy: v.UserID, StartedAt: s.now(), Details: ProjectDetails{Subs: subs, Used: ingredientsOf(used)}}
 	if err := s.projects.Store.CreateProject(ctx, p); err != nil {
 		slog.Error("crafting: MATERIALS TAKEN BUT THE PROJECT WAS NOT SAVED",
 			slog.String("campaign_id", campaignID), slog.String("character_id", e.ID), slog.String("recipe_id", r.ID),
@@ -586,6 +589,12 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 		}
 	}
 	w.Skills = s.skills(ctx, campaignID, e.ID)
+	if u := p.Details.Used; u != nil {
+		w.Marks = map[string]bool{}
+		for _, m := range u.Marks {
+			w.Marks[strings.ToLower(m)] = true
+		}
+	}
 	// The bench's upgrades work on every recipe made there, beside its own.
 	var ruleList []Rule
 	if recipe != nil {
@@ -623,6 +632,11 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 
 	next := p
 	next.Details.Made = append([]string(nil), p.Details.Made...)
+	if p.Details.Item != nil {
+		item := *p.Details.Item
+		item.Marks = append([]string(nil), item.Marks...)
+		next.Details.Item = &item
+	}
 	if becomes := s.befall(ctx, campaignID, &next, fx, x, in.Work, set, res, v); becomes != "" {
 		next.ResultItemID = becomes
 	}
@@ -652,7 +666,7 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 		return nil, err
 	}
 	if res.Finished {
-		s.deliver(ctx, e, &next, extra, names, v, res)
+		s.deliver(ctx, e, &next, extra, x, day, names, v, res)
 	}
 	if s.projects.Rolls != nil && len(res.Dice) > 0 {
 		s.projects.Rolls.ProjectRolled(ctx, campaignID, v, ProjectRoll{
@@ -721,6 +735,28 @@ func (s *service) addUp(ctx context.Context, campaignID string, e *EntityInfo, p
 			points = append(points, Term{Text: "Mastery", N: 2})
 		}
 	}
+	// The recipe's Quality setting acts once a roll when a fine or a poor
+	// ingredient went in.
+	if q, u := x.Quality, p.Details.Used; q != nil && u != nil {
+		if u.Fine > 0 {
+			switch q.Fine {
+			case "edge":
+				edges = append(edges, "fine ingredients")
+			case "points":
+				points = append(points, Term{Text: "Fine ingredients", N: 2})
+			case "extra":
+				extra++
+			}
+		}
+		if u.Poor > 0 {
+			switch q.Poor {
+			case "bane":
+				banes = append(banes, "poor ingredients")
+			case "points":
+				points = append(points, Term{Text: "Poor ingredients", N: -2})
+			}
+		}
+	}
 	for _, c := range p.Details.Subs {
 		switch c {
 		case "bane":
@@ -770,7 +806,7 @@ func (s *service) addUp(ctx context.Context, campaignID string, e *EntityInfo, p
 // deliver puts the made item in the hero's pack and records that it did. A
 // failed give leaves the project made but undelivered, which the Director's
 // tab shows so the item can be given by hand.
-func (s *service) deliver(ctx context.Context, e *EntityInfo, p *Project, extra int, names map[string]string, v Viewer, res *RollResult) {
+func (s *service) deliver(ctx context.Context, e *EntityInfo, p *Project, extra int, x Extras, day *Day, names map[string]string, v Viewer, res *RollResult) {
 	if p.ResultItemID == "" {
 		res.Notes = append(res.Notes, "The item this recipe makes was deleted, so nothing reached the pack. Tell your Director.")
 		return
@@ -779,13 +815,17 @@ func (s *service) deliver(ctx context.Context, e *EntityInfo, p *Project, extra 
 	if qty > maxQty {
 		qty = maxQty
 	}
-	if err := s.projects.Armory.Give(ctx, p.CampaignID, v, e.ID, p.ResultItemID, qty, p.RecipeName); err != nil {
+	k := s.madeKept(ctx, p, e, x, day)
+	if err := s.projects.Armory.Give(ctx, p.CampaignID, v, e.ID, p.ResultItemID, qty, p.RecipeName, k); err != nil {
 		slog.Error("crafting: PROJECT MADE BUT THE ITEM WAS NOT GIVEN",
 			slog.String("project_id", p.ID), slog.String("character_id", e.ID), slog.Any("error", err))
 		res.Notes = append(res.Notes, "The item couldn’t be put in "+e.Name+"’s pack. Your Director can give it from the Projects tab.")
 		return
 	}
 	res.Made = makesText(qty, p.ResultItemID, names)
+	if !k.Empty() {
+		res.Item = &k
+	}
 	done := *p
 	done.Delivered = true
 	if ok, err := s.projects.Store.UpdateProject(ctx, done, p.Version); err != nil || !ok {
@@ -922,12 +962,21 @@ func (s *service) logRespite(ctx context.Context, campaignID string, v Viewer) (
 		return 0, err
 	}
 	label := ""
-	if d := s.today(ctx, campaignID); d != nil {
+	d := s.today(ctx, campaignID)
+	if d != nil {
 		label = d.Label
 	}
 	n, err := s.projects.Store.LogRespite(ctx, campaignID, v.UserID, label)
 	if err != nil {
 		return 0, errInternal(err)
+	}
+	// A respite is when brews that keep only so long go off: whatever is
+	// due by today turns into what it becomes. A failure here never undoes
+	// the respite.
+	if d != nil && d.Abs > 0 {
+		if _, err := s.projects.Armory.GoOff(ctx, campaignID, v, d.Abs); err != nil {
+			slog.Warn("crafting: the respite could not turn what went off", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		}
 	}
 	return n, nil
 }

@@ -299,6 +299,9 @@ type HeldItem struct {
 	// SharedWith names the characters whose players the holder shared the
 	// item with.
 	SharedWith []string
+	// Copies are the ones that remember something (copies.go), oldest
+	// first; the rest of Quantity is plain.
+	Copies []Copy
 }
 
 // CharacterPanelView feeds the "Items and money" panel on a character page.

@@ -148,17 +148,17 @@ func TestCraftSpend_Refusals(t *testing.T) {
 		in   CraftSpendInput
 		want int
 	}{
-		{"another player's hero", "camp", Actor{"u1", rPlayer}, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{"i3", 1}}}, http.StatusForbidden},
-		{"holds too little", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{"i3", 5}}}, http.StatusBadRequest},
-		{"merged lines hold too little", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{"i3", 3}, {"i3", 2}}}, http.StatusBadRequest},
-		{"not carried at all", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{"i2", 1}}}, http.StatusBadRequest},
-		{"not an item", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{"n1", 1}}}, http.StatusNotFound},
-		{"not a character", "camp", gm, CraftSpendInput{CharacterID: "i1", Items: []CraftItem{{"i3", 1}}}, http.StatusNotFound},
-		{"other campaign", "other", gm, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{"i3", 1}}}, http.StatusNotFound},
-		{"zero quantity", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{"i3", 0}}}, http.StatusBadRequest},
+		{"another player's hero", "camp", Actor{"u1", rPlayer}, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{ItemID: "i3", Quantity: 1}}}, http.StatusForbidden},
+		{"holds too little", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{ItemID: "i3", Quantity: 5}}}, http.StatusBadRequest},
+		{"merged lines hold too little", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{ItemID: "i3", Quantity: 3}, {ItemID: "i3", Quantity: 2}}}, http.StatusBadRequest},
+		{"not carried at all", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{ItemID: "i2", Quantity: 1}}}, http.StatusBadRequest},
+		{"not an item", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{ItemID: "n1", Quantity: 1}}}, http.StatusNotFound},
+		{"not a character", "camp", gm, CraftSpendInput{CharacterID: "i1", Items: []CraftItem{{ItemID: "i3", Quantity: 1}}}, http.StatusNotFound},
+		{"other campaign", "other", gm, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{ItemID: "i3", Quantity: 1}}}, http.StatusNotFound},
+		{"zero quantity", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: []CraftItem{{ItemID: "i3", Quantity: 0}}}, http.StatusBadRequest},
 		{"too many kinds", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Items: many}, http.StatusBadRequest},
-		{"negative cost", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Cost: -1, Items: []CraftItem{{"i3", 1}}}, http.StatusBadRequest},
-		{"not enough coin", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Cost: 1001, Currency: "gp", Items: []CraftItem{{"i3", 1}}}, http.StatusBadRequest},
+		{"negative cost", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Cost: -1, Items: []CraftItem{{ItemID: "i3", Quantity: 1}}}, http.StatusBadRequest},
+		{"not enough coin", "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Cost: 1001, Currency: "gp", Items: []CraftItem{{ItemID: "i3", Quantity: 1}}}, http.StatusBadRequest},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -213,10 +213,10 @@ func TestCraftSpend_FailedPaymentGivesMaterialsBack(t *testing.T) {
 func TestCraftHistory_ReadsTheReason(t *testing.T) {
 	g, _ := newCraftFx()
 	ctx := context.Background()
-	if _, err := g.svc.CraftSpend(ctx, "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Label: "Sword", Items: []CraftItem{{"i3", 2}}}); err != nil {
+	if _, err := g.svc.CraftSpend(ctx, "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Label: "Sword", Items: []CraftItem{{ItemID: "i3", Quantity: 2}}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.svc.CraftGive(ctx, "camp", mirasPlayer, "c2", "i1", 1, "Healing Draught"); err != nil {
+	if err := g.svc.CraftGive(ctx, "camp", mirasPlayer, "c2", "i1", 1, "Healing Draught", Memory{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.svc.Give(ctx, "camp", gm, GiveInput{CharacterID: "c2", ItemID: "i1", Quantity: 1}); err != nil {
@@ -266,7 +266,7 @@ func TestCraftGive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g, _ := newCraftFx()
-			err := g.svc.CraftGive(context.Background(), "camp", tt.who, tt.char, tt.item, tt.qty, tt.label)
+			err := g.svc.CraftGive(context.Background(), "camp", tt.who, tt.char, tt.item, tt.qty, tt.label, Memory{})
 			if got := code(err); got != tt.wantCode {
 				t.Fatalf("code %d (%v), want %d", got, err, tt.wantCode)
 			}
@@ -308,7 +308,7 @@ func TestSpoilGive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g, _ := newCraftFx()
-			err := g.svc.SpoilGive(context.Background(), "camp", tt.who, "c2", "i2", 2, tt.harvested)
+			err := g.svc.SpoilGive(context.Background(), "camp", tt.who, "c2", "i2", 2, tt.harvested, Memory{})
 			if got := code(err); got != tt.wantCode {
 				t.Fatalf("code %d (%v), want %d", got, err, tt.wantCode)
 			}
@@ -382,5 +382,51 @@ func TestCraftCharge(t *testing.T) {
 				t.Fatalf("CraftCharge = %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCraft_RememberedCopies(t *testing.T) {
+	g, rf := newCraftFx()
+	cs := &fakeCopies{}
+	g.svc = NewStashService(StashDeps{
+		Repo: g.repo, Directory: g.dir, Visibility: g.vis, Actor: fakeActor{g.fx.dir},
+		Fields: rf, Relations: g.rels, Events: g.events, Handouts: g.hand, Notifier: g.notify, Copies: cs,
+	})
+	ctx := context.Background()
+	// Mira's 4 Iron: 2 moonlit, 1 poor, 1 plain.
+	moon, _ := cs.Add(ctx, "camp", HolderCharacter, "c2", Copy{ItemID: "i3", Quantity: 2, Memory: Memory{Marks: []string{"moonlit"}}})
+	cs.Add(ctx, "camp", HolderCharacter, "c2", Copy{ItemID: "i3", Quantity: 1, Memory: Memory{Quality: QualityPoor}})
+
+	pack, err := g.svc.CraftPack(ctx, "camp", mirasPlayer, "c2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range pack.Items {
+		if it.ItemID == "i3" && (len(it.Copies) != 2 || it.Copies[0].Quantity != 2) {
+			t.Fatalf("the pack's Iron copies %+v", it.Copies)
+		}
+	}
+
+	out, err := g.svc.CraftSpend(ctx, "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Label: "Sword",
+		Items: []CraftItem{{ItemID: "i3", Quantity: 2, Pick: []CopyPick{{ID: moon, N: 1}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Used) != 1 || !out.Used[0].Memory.HasMark("moonlit") || out.Used[0].Quantity != 1 {
+		t.Fatalf("used %+v, want one moonlit (the other one plain)", out.Used)
+	}
+	if got := cs.held(HolderCharacter, "c2"); got["moonlit"] != 1 || got["poor"] != 1 {
+		t.Fatalf("left %v", got)
+	}
+
+	made := Memory{Quality: QualityFine, How: "made", By: "Mira", On: "3 Frostmoon"}
+	if err := g.svc.CraftGive(ctx, "camp", mirasPlayer, "c2", "i1", 1, "Healing Draught", made); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.svc.CraftGive(ctx, "camp", mirasPlayer, "c2", "i1", 1, "Healing Draught", Memory{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := cs.held(HolderCharacter, "c2"); got["fine"] != 1 || len(cs.rows) != 3 {
+		t.Fatalf("after two makes, one fine and one plain: %v (%d rows)", got, len(cs.rows))
 	}
 }

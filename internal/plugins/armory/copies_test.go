@@ -13,16 +13,17 @@ func TestPlanTake(t *testing.T) {
 		name        string
 		copies      []Copy
 		total, take int
-		pick        []int64
+		pick        []CopyPick
 		want        []int64 // ids leaving, with quantities in wantQty
 		wantQty     []int
 	}{
 		{"plain first", []Copy{fine, moon}, 5, 2, nil, nil, nil},
 		{"plain runs out, oldest remembered next", []Copy{fine, moon}, 5, 3, nil, []int64{1}, []int{1}},
 		{"all of it", []Copy{fine, moon}, 5, 5, nil, []int64{1, 2}, []int{1, 2}},
-		{"a pick goes first", []Copy{fine, moon}, 5, 1, []int64{2}, []int64{2}, []int{1}},
-		{"a pick, then plain", []Copy{fine, moon}, 5, 3, []int64{1}, []int64{1}, []int{1}},
-		{"an unknown pick is ignored", []Copy{fine, moon}, 5, 1, []int64{9}, nil, nil},
+		{"a pick goes first", []Copy{fine, moon}, 5, 1, []CopyPick{{ID: 2}}, []int64{2}, []int{1}},
+		{"a pick of one, then plain", []Copy{fine, moon}, 5, 2, []CopyPick{{ID: 2, N: 1}}, []int64{2}, []int{1}},
+		{"a pick, then plain", []Copy{fine, moon}, 5, 3, []CopyPick{{ID: 1}}, []int64{1}, []int{1}},
+		{"an unknown pick is ignored", []Copy{fine, moon}, 5, 1, []CopyPick{{ID: 9}}, nil, nil},
 		{"copies over the count are fitted first", []Copy{fine, moon}, 2, 2, nil, []int64{1, 2}, []int{1, 1}},
 		{"nothing remembered", nil, 4, 2, nil, nil, nil},
 	}
@@ -215,6 +216,81 @@ func TestMove_CopiesFollowTheCount(t *testing.T) {
 		}
 		if got := cs.held(HolderCharacter, "c2"); got["moonlit"] != 1 {
 			t.Errorf("Mira got %v", got)
+		}
+	})
+}
+
+func TestGoOff(t *testing.T) {
+	ctx := context.Background()
+	gm := Actor{"gm", rOwner}
+	t.Run("a player can't", func(t *testing.T) {
+		f, _ := newCopyFx(t)
+		if _, err := f.svc.GoOff(ctx, "camp", Actor{"u1", rPlayer}, 10); code(err) != 403 {
+			t.Fatalf("got %v, want 403", err)
+		}
+	})
+	t.Run("what is due turns into what it becomes", func(t *testing.T) {
+		f, cs := newCopyFx(t)
+		// Thorin's two potions brewed on day 3 keep until day 10, then are murky.
+		cs.Add(ctx, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{How: "made", OffDay: 10, Becomes: "i2"}})
+		if n, err := f.svc.GoOff(ctx, "camp", gm, 9); err != nil || n != 0 {
+			t.Fatalf("day 9: %d, %v", n, err)
+		}
+		n, err := f.svc.GoOff(ctx, "camp", gm, 10)
+		if err != nil || n != 1 {
+			t.Fatalf("day 10: %d, %v", n, err)
+		}
+		if f.carried("c1", "i1") != 2 || f.carried("c1", "i2") != 1 {
+			t.Errorf("Thorin carries %d potions and %d of what they became", f.carried("c1", "i1"), f.carried("c1", "i2"))
+		}
+		if got := cs.held(HolderCharacter, "c1"); got["fine"] != 1 || got["moonlit"] != 1 || len(got) != 2 {
+			t.Errorf("Thorin's copies %v", got)
+		}
+		if n, _ := f.svc.GoOff(ctx, "camp", gm, 11); n != 0 {
+			t.Errorf("turned twice: %d", n)
+		}
+	})
+	t.Run("a copy that becomes nothing stays, gone off", func(t *testing.T) {
+		f, cs := newCopyFx(t)
+		cs.Add(ctx, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, OffOn: "10 Frostmoon"}})
+		if n, err := f.svc.GoOff(ctx, "camp", gm, 10); err != nil || n != 0 {
+			t.Fatalf("%d, %v", n, err)
+		}
+		if f.carried("c1", "i1") != 3 || len(cs.rows) != 3 {
+			t.Errorf("carried %d, copies %d", f.carried("c1", "i1"), len(cs.rows))
+		}
+	})
+	t.Run("a copy the count no longer covers ends", func(t *testing.T) {
+		f, cs := newCopyFx(t)
+		cs.Add(ctx, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, Becomes: "i2"}})
+		cs.Add(ctx, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, Becomes: "i2"}})
+		// Four copies remember something, but Thorin carries three.
+		n, err := f.svc.GoOff(ctx, "camp", gm, 10)
+		if err != nil || n != 1 {
+			t.Fatalf("%d, %v", n, err)
+		}
+		if f.carried("c1", "i1") != 2 || f.carried("c1", "i2") != 1 || len(cs.rows) != 2 {
+			t.Errorf("carried %d and %d, copies %+v", f.carried("c1", "i1"), f.carried("c1", "i2"), cs.rows)
+		}
+	})
+	t.Run("in a stash", func(t *testing.T) {
+		f, cs := newCopyFx(t)
+		sid := f.stash(t, "Chest")
+		if _, err := f.svc.Move(ctx, "camp", gm, MoveInput{Kind: MoveKindItem, ItemEntityID: "i1", Quantity: 3, From: charEP("c1"), To: StashEndpoint(sid)}); err != nil {
+			t.Fatal(err)
+		}
+		// The fine and the moonlit potion went into the chest with the plain one.
+		cs.Add(ctx, "camp", HolderStash, StashEndpoint(sid).ID, Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, Becomes: "i2"}})
+		if n, err := f.svc.GoOff(ctx, "camp", gm, 10); err != nil || n != 1 {
+			t.Fatalf("%d, %v", n, err)
+		}
+		held := map[string]int{}
+		all, _ := f.repo.ListItems(ctx, "camp")
+		for _, r := range all[sid] {
+			held[r.ItemEntityID] = r.Quantity
+		}
+		if held["i1"] != 2 || held["i2"] != 1 {
+			t.Errorf("the chest holds %v", held)
 		}
 	})
 }

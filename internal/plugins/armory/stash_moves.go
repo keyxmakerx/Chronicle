@@ -127,6 +127,16 @@ func (s *stashService) carried(ctx context.Context, campaignID string, a Actor, 
 			return nil, err
 		}
 	}
+	remembered := map[string][]Copy{}
+	if s.Copies != nil {
+		cs, err := s.Copies.List(ctx, campaignID, HolderCharacter, characterID, "")
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range cs {
+			remembered[c.ItemID] = append(remembered[c.ItemID], c)
+		}
+	}
 	var out []HeldItem
 	for _, r := range rels {
 		if r.DmOnly && !a.SeesDmOnly() {
@@ -139,7 +149,7 @@ func (s *stashService) carried(ctx context.Context, campaignID string, a Actor, 
 		if q < 1 {
 			continue
 		}
-		out = append(out, HeldItem{ItemID: r.ItemEntityID, Name: r.ItemName, Quantity: q})
+		out = append(out, HeldItem{ItemID: r.ItemEntityID, Name: r.ItemName, Quantity: q, Copies: fitCopies(remembered[r.ItemEntityID], q)})
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out, nil

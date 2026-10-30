@@ -164,10 +164,12 @@ type StashService interface {
 	// CraftSpend takes a project's materials and cost, all or nothing.
 	CraftSpend(ctx context.Context, campaignID string, a Actor, in CraftSpendInput) (*CraftSpendOutcome, error)
 	// CraftGive puts a finished project's item in the character's pack.
-	CraftGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, label string) error
+	CraftGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, label string, m Memory) error
 	// SpoilGive puts what a hero took or harvested from the spoils tray in
 	// their pack.
-	SpoilGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, harvested bool) error
+	SpoilGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, harvested bool, m Memory) error
+	// GoOff turns the remembered copies due by day into what they become.
+	GoOff(ctx context.Context, campaignID string, a Actor, day int64) (int, error)
 }
 
 // DowntimeResult counts what opening downtime did to waiting requests.

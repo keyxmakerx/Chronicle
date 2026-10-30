@@ -6,6 +6,7 @@ package armory
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 )
 
@@ -58,7 +59,7 @@ func (s *stashService) copiesAt(ctx context.Context, campaignID string, at Endpo
 // (to non-nil) or ends them (used up). It returns what they remembered.
 // A failure is logged, never fatal: the count has already moved, and a
 // lost memory is better than a refused move.
-func (s *stashService) takeCopies(ctx context.Context, campaignID string, from Endpoint, to *Endpoint, itemID string, totalBefore, take int, pick []int64) []Copy {
+func (s *stashService) takeCopies(ctx context.Context, campaignID string, from Endpoint, to *Endpoint, itemID string, totalBefore, take int, pick []CopyPick) []Copy {
 	if s.Copies == nil || take <= 0 {
 		return nil
 	}
@@ -114,9 +115,9 @@ func (s *stashService) remember(ctx context.Context, campaignID string, at Endpo
 }
 
 // pickedFor is the copy a move asked for, kept with the move while it waits.
-func (s *stashService) pickedFor(ctx context.Context, m *Move) []int64 {
+func (s *stashService) pickedFor(ctx context.Context, m *Move) []CopyPick {
 	if m.pick > 0 {
-		return []int64{m.pick}
+		return []CopyPick{{ID: m.pick}}
 	}
 	if s.Copies == nil || m.ID == 0 {
 		return nil
@@ -125,5 +126,103 @@ func (s *stashService) pickedFor(ctx context.Context, m *Move) []int64 {
 	if err != nil || id == 0 {
 		return nil
 	}
-	return []int64{id}
+	return []CopyPick{{ID: id}}
+}
+
+// GoOff turns every copy due to go off by day into what it becomes: at its
+// holder, that many of the item become that many of the other item, and the
+// copy ends, with a line in the holder's history. A copy that becomes
+// nothing stays and reads as gone off. Only the Director may, since it
+// changes every hero's pack at once; it returns how many copies turned.
+func (s *stashService) GoOff(ctx context.Context, campaignID string, a Actor, day int64) (int, error) {
+	if !a.IsOwner() {
+		return 0, forbidden()
+	}
+	if s.Copies == nil || day <= 0 {
+		return 0, nil
+	}
+	var ev eventBatch
+	defer ev.flush(s.Events, campaignID)
+	unlock := s.locks.lock(campaignID)
+	defer unlock()
+
+	mctx := context.WithoutCancel(ctx)
+	due, err := s.Copies.DueOff(mctx, campaignID, day)
+	if err != nil {
+		return 0, err
+	}
+	turned := 0
+	for _, c := range due {
+		if c.Memory.Becomes == "" || c.Memory.Becomes == c.ItemID {
+			continue
+		}
+		at := Endpoint{Kind: c.HolderKind, ID: c.HolderID}
+		total, err := s.heldCount(mctx, campaignID, at, c.ItemID)
+		if err != nil {
+			return turned, err
+		}
+		// The holder's copies are fitted to its count, oldest first: a copy
+		// the count no longer covers went with a change made outside the
+		// Armory and has nothing left to turn.
+		fit, err := s.copiesAt(mctx, campaignID, at, c.ItemID, total)
+		if err != nil {
+			return turned, err
+		}
+		n := 0
+		for _, f := range fit {
+			if f.ID == c.ID {
+				n = f.Quantity
+			}
+		}
+		if n == 0 {
+			if err := s.Copies.SetQuantity(mctx, campaignID, c.ID, 0); err != nil {
+				return turned, err
+			}
+			continue
+		}
+		from, err := s.loadItem(mctx, campaignID, c.ItemID)
+		if err != nil {
+			return turned, err
+		}
+		into, err := s.loadItem(mctx, campaignID, c.Memory.Becomes)
+		if err != nil {
+			// The item it becomes was deleted: it only goes off.
+			continue
+		}
+		m := &Move{
+			CampaignID: campaignID, Kind: MoveKindItem, ItemEntityID: into.ID, Quantity: n,
+			From: at, To: at, Status: MoveApplied, RequestedBy: a.UserID, seesDmOnly: true,
+			Reason: clipReason(fmt.Sprintf("%d × %s went off and became %s", n, from.Name, into.Name)),
+		}
+		take := &Move{CampaignID: campaignID, Kind: MoveKindItem, ItemEntityID: c.ItemID, Quantity: n, RequestedBy: a.UserID, seesDmOnly: true}
+		ok, err := s.debit(mctx, take, at, nil)
+		if err != nil {
+			return turned, err
+		}
+		if !ok {
+			continue
+		}
+		if err := s.credit(mctx, m, at, nil); err != nil {
+			if rerr := s.credit(mctx, take, at, nil); rerr != nil {
+				slog.Error("armory copies: RESTORE FAILED after going off", slog.String("campaign_id", campaignID),
+					slog.Int64("copy_id", c.ID), slog.Any("error", rerr))
+			}
+			return turned, err
+		}
+		if err := s.Copies.SetQuantity(mctx, campaignID, c.ID, c.Quantity-n); err != nil {
+			slog.Error("armory copies: went off but the copy stays", slog.String("campaign_id", campaignID),
+				slog.Int64("copy_id", c.ID), slog.Any("error", err))
+		}
+		if at.Kind == EndpointCharacter {
+			s.dropEmptyCarried(mctx, campaignID, at.ID, c.ItemID)
+		}
+		turned += n
+		if err := s.Repo.InsertMove(mctx, m); err != nil {
+			slog.Error("armory copies: WENT OFF BUT NOT RECORDED in the move history", slog.String("campaign_id", campaignID),
+				slog.Int64("copy_id", c.ID), slog.Any("error", err))
+			continue
+		}
+		ev.moved(m)
+	}
+	return turned, nil
 }
