@@ -5,8 +5,10 @@
 // player's book the server builds (one shared fixture, written by
 // internal/plugins/crafting/book_test.go), that the rules editor's cleaner
 // keeps exactly what the server's does (the other shared fixture), and that
-// the editor's checks, templates and saves say and send what they should.
-// Runs the scripts in a vm.
+// the editor's template picker lays a method's steps exactly as the server
+// does for an AI's recipe (a third, from ai_test.go), and that the editor's
+// checks, templates and saves say and send what they should. Runs the
+// scripts in a vm.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -45,6 +47,18 @@ test('the preview reads as the player\'s book the server builds', () => {
     for (const [id, name] of Object.entries(c.items)) items[id] = { id, name, tags: [] };
     const got = dropEmpty(plain(L.book(lib, c.recipe, items)));
     assert.deepEqual(got, dropEmpty(c.want), c.name);
+  }
+});
+
+test('a method lays the same steps in the editor as on the server', () => {
+  const { templates, cases } = JSON.parse(readFileSync(join(fixtures, 'craft_template_steps.json'), 'utf8'));
+  assert.ok(cases.length >= 4);
+  for (const c of cases) {
+    const items = {};
+    for (const [id, tags] of Object.entries(c.tags)) items[id] = { id, name: id, tags };
+    const got = plain(L.applyTemplate({ templates }, { materials: c.in.materials, steps: [] }, c.template, items));
+    const pick = (r) => ({ template: r.template, bench: r.bench, materials: r.materials, steps: r.steps });
+    assert.deepEqual(pick(got), pick(c.want), c.name);
   }
 });
 

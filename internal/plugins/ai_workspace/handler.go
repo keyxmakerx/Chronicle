@@ -769,7 +769,11 @@ func (h *Handler) commitRecord(c echo.Context, cc *campaigns.CampaignContext, i 
 	out := importer.RowOutcome{Name: rec.Name}
 	k, ok := h.records.Get(rec.Kind)
 	if ok {
-		out.Name = k.Label() + ": " + rec.Name
+		name := rec.Name
+		if t, titled := k.(records.Titled); titled && name == "" {
+			name = t.Title(rec)
+		}
+		out.Name = k.Label() + ": " + name
 	}
 	switch {
 	case c.FormValue(prefix+"include") != "on":
