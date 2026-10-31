@@ -22,6 +22,8 @@
  * - A folder, for a scribe or the owner: a new folder inside it, rename it,
  *   move it; the owner can also delete it, after a second step in the menu.
  *   Its pages go back to the top level, as the route says.
+ * - Either, for a scribe or the owner: Move up and Move down when its list
+ *   is kept by hand, and how the rows inside it are ordered when it has any.
  *
  * The editor's rows have their own buttons, so the menu stays shut while
  * the owner edits.
@@ -89,7 +91,8 @@
   /**
    * The menu's entries for a row in a category's page panel. info: kind
    * ("page", "place" for a page's extra listing, or "folder"), canEdit
-   * (scribe or owner), canDelete (owner).
+   * (scribe or owner), canDelete (owner), hand (its list is kept by hand),
+   * canUp and canDown (it can move that way), hasChildren.
    */
   function treeItemsFor(info) {
     var out = [];
@@ -109,6 +112,11 @@
     }
     out.push({ id: 'rename', label: 'Rename', icon: 'fa-i-cursor' });
     out.push({ id: 'move', label: 'Move to folder…', icon: 'fa-folder-tree' });
+    if (info.hand) {
+      out.push({ id: 'step-up', label: 'Move up', icon: 'fa-arrow-up', disabled: !info.canUp });
+      out.push({ id: 'step-down', label: 'Move down', icon: 'fa-arrow-down', disabled: !info.canDown });
+    }
+    if (info.hasChildren) out.push({ id: 'order', label: 'Order inside…', icon: 'fa-arrow-down-short-wide' });
     if (info.kind === 'folder' && info.canDelete) {
       out.push({ sep: true });
       out.push({ id: 'delete', label: 'Delete folder', icon: 'fa-trash-can', danger: true });
@@ -127,6 +135,15 @@
     out.push({ id: 'move-to', target: '', label: 'Top level', icon: 'fa-layer-group', disabled: current === '' });
     folders.forEach(function (f) {
       out.push({ id: 'move-to', target: f.id, label: f.name, icon: 'fa-folder', indent: f.depth, disabled: current === f.id });
+    });
+    return out;
+  }
+
+  /** How a row's own rows can be ordered, the current one ticked. */
+  function orderItemsFor(current) {
+    var out = [{ id: 'back', label: 'Back', icon: 'fa-arrow-left' }, { sep: true }];
+    [['az', 'A to Z'], ['hand', 'By hand'], ['new', 'Newest first']].forEach(function (o) {
+      out.push({ id: 'order-to', target: o[0], label: o[1], icon: current === o[0] ? 'fa-check' : '', checked: current === o[0] });
     });
     return out;
   }
@@ -196,6 +213,7 @@
     var parent = node.getAttribute('data-parent-id') || '';
     var parentNode = parent && tree ? tree.querySelector('.sidebar-tree-node[data-node-id="' + cssEsc(parent) + '"]') : null;
     var kind = node.hasAttribute('data-node-id') ? 'folder' : node.hasAttribute('data-place-key') ? 'place' : 'page';
+    var st = window.Chronicle && Chronicle.sidebarTree;
     return {
       tree: true,
       kind: kind,
@@ -210,6 +228,11 @@
       typeId: tree ? parseInt(tree.getAttribute('data-entity-type-id') || '0', 10) || 0 : 0,
       canEdit: !!tree && tree.getAttribute('data-can-edit') === 'true',
       canDelete: !!tree && tree.getAttribute('data-can-delete-folders') === 'true',
+      hand: !!st && kind !== 'place' && st.listOrder(node.parentElement) === 'hand',
+      canUp: !!st && st.canStep(node, -1),
+      canDown: !!st && st.canStep(node, 1),
+      hasChildren: !!node.querySelector(':scope > .sidebar-tree-children'),
+      order: link ? link.getAttribute('data-child-order') || 'az' : 'az',
       name: link ? (link.getAttribute('data-entity-name') || link.textContent || '').trim() : ''
     };
   }
@@ -250,6 +273,7 @@
       var b = el('button', 'rowmenu-item', { type: 'button', role: 'menuitem', 'data-idx': String(i), tabindex: '-1' });
       if (it.disabled) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
       if (it.danger) b.setAttribute('data-danger', '');
+      if (it.checked !== undefined) { b.setAttribute('role', 'menuitemradio'); b.setAttribute('aria-checked', String(it.checked)); }
       if (it.indent) b.style.paddingLeft = (10 + it.indent * 14) + 'px';
       var ic = el('i', it.icon ? 'fa-solid ' + it.icon : '', { 'aria-hidden': 'true' });
       var tx = el('span');
@@ -382,6 +406,7 @@
   /** The items a choice opens in place of the menu, or null. */
   function submenu(id, info) {
     if (id === 'move') return moveItemsFor(folderChoices(info), info.folder);
+    if (id === 'order') return orderItemsFor(info.order);
     if (id === 'back') return treeItemsFor(info);
     if (id === 'delete') {
       return [
@@ -469,6 +494,22 @@
         }, nm + ' could not be moved.');
         break;
       }
+      case 'step-up':
+      case 'step-down':
+        // Focus is back on the row (choose), which stays put while its
+        // neighbour moves round it.
+        if (Chronicle.sidebarTree) Chronicle.sidebarTree.step(info.node, id === 'step-up' ? -1 : 1);
+        break;
+      case 'order-to':
+        if (Chronicle.sidebarTree) {
+          Chronicle.sidebarTree.setOrder(info.kind, info.kind === 'folder' ? info.nodeId : info.entityId, it.target, function () {
+            var sel = info.kind === 'folder' ? '[data-node-id="' + cssEsc(info.nodeId) + '"]' : '[data-entity-id="' + cssEsc(info.entityId) + '"]';
+            var row = document.querySelector('#sidebar-entity-tree .sidebar-tree-node' + sel);
+            var again = row && (row.querySelector(':scope > a.sidebar-tree-item') || row.querySelector(':scope > [data-tree-more]'));
+            if (again) again.focus({ preventScroll: true });
+          });
+        }
+        break;
       case 'delete-yes':
         treeSave(treeURL(info, '/sidebar-nodes/' + encodeURIComponent(info.nodeId)), 'DELETE', undefined, function () {
           reloadTree();
@@ -566,5 +607,5 @@
   document.addEventListener('htmx:beforeSwap', function () { close(false); });
 
   window.Chronicle = window.Chronicle || {};
-  window.Chronicle.navRowMenu = { itemsFor: itemsFor, treeItemsFor: treeItemsFor, moveItemsFor: moveItemsFor, sitePath: sitePath };
+  window.Chronicle.navRowMenu = { itemsFor: itemsFor, treeItemsFor: treeItemsFor, moveItemsFor: moveItemsFor, orderItemsFor: orderItemsFor, sitePath: sitePath };
 })();

@@ -1724,58 +1724,6 @@
     /* JS swaps to fa-folder / fa-folder-open */
   }
 
-  /* Drag-and-drop feedback: highlighted drop zone. */
-  .sidebar-drop-target {
-    background-color: rgba(99, 102, 241, 0.12) !important;
-    outline: 1px dashed rgba(99, 102, 241, 0.4);
-    outline-offset: -1px;
-    border-radius: 4px;
-  }
-
-  /* Drop indicator line between items. */
-  .sidebar-drop-indicator {
-    height: 2px;
-    background: #6366f1;
-    margin: 0 8px;
-    border-radius: 1px;
-    pointer-events: none;
-    transition: opacity 150ms ease;
-  }
-
-  /* Reparent indicator: shows when dropping onto bottom half of item. */
-  .sidebar-drop-reparent {
-    background-color: rgba(99, 102, 241, 0.08) !important;
-    box-shadow: inset 2px 0 0 #6366f1;
-    border-radius: 0 4px 4px 0;
-  }
-
-  /* Reorg mode: drop target highlight for category links. */
-  .sidebar-reorg-drop-target {
-    background-color: rgba(99, 102, 241, 0.12) !important;
-    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.4);
-    border-radius: 4px;
-  }
-
-  /* Reorg mode: drag handle visibility (hidden by default, shown in reorg). */
-  .reorg-drag-handle {
-    opacity: 0.5;
-    transition: opacity 150ms ease;
-  }
-  .reorg-drag-handle:hover {
-    opacity: 1;
-  }
-
-  /* Reorg mode: subtle border on reorderable items. */
-  .sidebar-reorg-active #sidebar-cat-list .sidebar-category-link,
-  .sidebar-reorg-active #sidebar-entity-tree .sidebar-tree-node {
-    transition: background-color 150ms ease, box-shadow 150ms ease;
-  }
-
-  /* Reorg mode active indicator on toggle button. */
-  #sidebar-reorg-toggle.bg-accent\/20 {
-    background-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
-  }
-
   /* Currently-viewed entity highlight in sidebar tree. */
   .sidebar-tree-item[aria-current="page"] {
     background-color: rgb(var(--color-accent-rgb) / 0.12);
@@ -3786,8 +3734,6 @@
   .tree-row.is-place > .tree-lb { color: var(--nav-text-2); }
   .tree-also { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--nav-text-3); }
   .tree-also i { font-size: 8.5px; }
-  /* Alt held over a drop target: this drop lists the page here, it does not move it. */
-  .sidebar-drop-place { outline: 1.5px dashed rgb(var(--nav-accent) / 0.85); outline-offset: -2px; background: rgb(var(--nav-accent) / 0.12); }
   .tree-rename {
     flex: 1; min-width: 0; height: 22px; padding: 0 6px; border-radius: 5px; border: 1px solid rgb(var(--nav-accent) / 0.6);
     background: rgb(255 255 255 / 0.06); color: #fff; font-size: 12.5px;
@@ -3812,6 +3758,46 @@
     :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .tree-more { opacity: 1; }
     #sidebar.nav-tools-gated:not([data-nav-tools="on"]) .tree-more:not([aria-expanded="true"]) { visibility: hidden; }
   }
+  /* A list kept by hand: up and down arrows left of the dots, shown like the
+     dots, and kept while one of them has focus so a run of clicks or
+     Alt+arrows keeps them under the hand as the row moves. */
+  .sidebar-tree-node.has-steps > .tree-row { padding-right: 82px; }
+  .tree-step {
+    position: absolute; top: 2.5px; right: 36px; z-index: 4; display: flex; gap: 2px;
+    opacity: 0; transition: opacity 120ms ease;
+  }
+  .tree-step-btn {
+    width: 22px; height: 24px; border-radius: 6px; display: grid; place-items: center;
+    font-size: 10.5px; color: var(--nav-text-3);
+  }
+  .tree-step-btn:hover:not(:disabled) { color: var(--nav-hi); background: var(--nav-hover); }
+  .tree-step-btn:active:not(:disabled) { transform: scale(0.88); }
+  .tree-step-btn:disabled { opacity: 0.3; cursor: default; }
+  .tree-row:hover ~ .tree-step, .tree-row:focus-visible ~ .tree-step, .tree-step:hover, .tree-step:focus-within { opacity: 1; }
+  .sidebar-tree-node.has-steps:focus-within > .tree-row { background: var(--nav-hover); border-radius: 6px; }
+  .sidebar-tree-node.has-steps:has(.sidebar-tree-node:focus-within) > .tree-row { background: none; }
+  @media (hover: none) {
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .tree-step { opacity: 1; }
+    #sidebar.nav-tools-gated:not([data-nav-tools="on"]) .tree-step { visibility: hidden; }
+  }
+  /* Dragging a row: where it lands shows as a line above or below a row in a
+     list kept by hand, or as a filled folder it will move into. */
+  .sidebar-tree-node.is-dragging > .tree-row { opacity: 0.4; }
+  .tree-row.drop-before { box-shadow: inset 0 2px 0 rgb(var(--nav-accent)); }
+  .tree-row.drop-after { box-shadow: inset 0 -2px 0 rgb(var(--nav-accent)); }
+  .tree-row.drop-into { background: rgb(var(--nav-accent) / 0.18); border-radius: 6px; box-shadow: inset 0 0 0 1px rgb(var(--nav-accent) / 0.6); }
+  /* The category's order picker, above its tree: a value picker, so a
+     bordered control. */
+  .tree-order { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 2px 14px 4px; }
+  .tree-order-lb { font-size: 11px; color: var(--nav-text-3); }
+  .tree-order-sel {
+    height: 24px; padding: 0 22px 0 8px; border-radius: 6px; font-size: 11.5px; color: var(--nav-text);
+    background-color: rgb(255 255 255 / 0.05); border: 1px solid rgb(255 255 255 / 0.14);
+    box-shadow: 0 1px 1px rgb(0 0 0 / 0.2);
+  }
+  .tree-order-sel:hover { border-color: rgb(255 255 255 / 0.26); }
+  .tree-order-sel:focus-visible { outline: 2px solid rgb(var(--nav-accent) / 0.8); outline-offset: 1px; }
+  .tree-order-sel option { color: initial; }
 
   /* Folded to icons (the unpinned sidebar when the pointer leaves it). */
   .sidebar-collapsed .nav-brand { padding: 0; justify-content: center; }

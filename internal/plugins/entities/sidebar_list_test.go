@@ -21,7 +21,7 @@ func renderSidebarList(t *testing.T, results []Entity, nodes []SidebarNode, type
 	t.Helper()
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "C"}, MemberRole: campaigns.RoleOwner}
 	var buf bytes.Buffer
-	if err := SidebarEntityList(results, nodes, len(results), typeID, cc, nil).Render(context.Background(), &buf); err != nil {
+	if err := SidebarEntityList(results, nodes, len(results), typeID, cc, nil, nil).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render failed: %v", err)
 	}
 	return buf.String()
@@ -123,7 +123,7 @@ func TestSidebarEntityList_RowMenuFlags(t *testing.T) {
 	for _, tc := range cases {
 		cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "C"}, MemberRole: tc.role}
 		var buf bytes.Buffer
-		if err := SidebarEntityList([]Entity{{ID: "e-1", Name: "Page", EntityTypeID: 7}}, nil, 1, 7, cc, nil).Render(context.Background(), &buf); err != nil {
+		if err := SidebarEntityList([]Entity{{ID: "e-1", Name: "Page", EntityTypeID: 7}}, nil, 1, 7, cc, nil, nil).Render(context.Background(), &buf); err != nil {
 			t.Fatalf("render failed: %v", err)
 		}
 		html := buf.String()
@@ -133,5 +133,43 @@ func TestSidebarEntityList_RowMenuFlags(t *testing.T) {
 		if got := strings.Contains(html, `data-can-delete-folders="true"`); got != tc.delete {
 			t.Errorf("role %d: data-can-delete-folders present = %v, want %v", tc.role, got, tc.delete)
 		}
+	}
+}
+
+// TestSidebarEntityList_Orders pins the order attributes sidebar_tree.js sorts
+// by, and that only a Scribe or above gets the category's order picker.
+func TestSidebarEntityList_Orders(t *testing.T) {
+	results := []Entity{{ID: "e-1", Name: "Page", EntityTypeID: 7}, {ID: "e-2", Name: "Other", EntityTypeID: 7}}
+	nodes := []SidebarNode{{ID: "n-1", Name: "Folder", EntityTypeID: 7}}
+	orders := map[string]string{"category:7": OrderHand, "folder:n-1": OrderNew, "page:e-1": OrderHand}
+	render := func(role campaigns.Role) string {
+		cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "C"}, MemberRole: role}
+		var buf bytes.Buffer
+		if err := SidebarEntityList(results, nodes, len(results), 7, cc, nil, orders).Render(context.Background(), &buf); err != nil {
+			t.Fatalf("render failed: %v", err)
+		}
+		return buf.String()
+	}
+
+	html := render(campaigns.RoleScribe)
+	for _, want := range []string{
+		`data-root-order="hand"`,
+		`data-node-id="n-1" data-is-folder="true" data-sort-order="0" data-entity-name="Folder" data-created=`,
+		`data-child-order="new"`,
+		`data-child-order="hand"`,
+		`<option value="hand" selected>By hand</option>`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %s in:\n%s", want, html)
+		}
+	}
+	if strings.Count(html, "data-child-order") != 2 {
+		t.Errorf("a list left A to Z carries no data-child-order:\n%s", html)
+	}
+	if strings.Contains(html, "draggable") {
+		t.Errorf("rows are no longer draggable:\n%s", html)
+	}
+	if strings.Contains(render(campaigns.RolePlayer), "data-tree-order") {
+		t.Error("a player must not get the order picker")
 	}
 }

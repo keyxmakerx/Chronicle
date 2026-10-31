@@ -1,5 +1,7 @@
 package entities
 
+import "slices"
+
 // reindexForReorder computes the densely-ordered sibling slice after moving
 // `moved` to the desired 0-based `targetIndex`. It drops `moved` from the
 // current order, clamps the index into [0, len], and reinserts it there.
@@ -33,6 +35,29 @@ func reindexForReorder[T comparable](ordered []T, moved T, targetIndex int) []T 
 	copy(out[idx+1:], out[idx:])
 	out[idx] = moved
 	return out
+}
+
+// placeNextTo moves `moved` to sit just before (or, with after, just after)
+// `sibling` in ordered, for a dense re-sequence. It reports false when either
+// is missing, since the two are then not siblings.
+func placeNextTo[T comparable](ordered []T, moved, sibling T, after bool) ([]T, bool) {
+	rest := make([]T, 0, len(ordered))
+	hasMoved := false
+	for _, v := range ordered {
+		if v == moved {
+			hasMoved = true
+			continue
+		}
+		rest = append(rest, v)
+	}
+	at := slices.Index(rest, sibling)
+	if !hasMoved || at < 0 {
+		return nil, false
+	}
+	if after {
+		at++
+	}
+	return reindexForReorder(rest, moved, at), true
 }
 
 // sameParent reports whether two nullable parent pointers denote the same

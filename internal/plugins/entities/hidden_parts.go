@@ -24,22 +24,47 @@ const entryLockedMessage = "Parts of this text are hidden from players, so only 
 // they can't view answers 404, as if it were missing.
 func (h *Handler) requirePageWrite(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		cc := campaigns.GetCampaignContext(c)
-		if cc == nil {
-			return apperror.NewMissingContext()
-		}
-		if cc.CanAuthorDmOnly() {
-			return next(c)
-		}
-		access, err := h.service.CheckEntityAccess(c.Request().Context(), c.Param("eid"), cc.VisibilityRole(), auth.GetUserID(c))
-		if err != nil || !access.CanView {
-			return apperror.NewNotFound("entity not found")
-		}
-		if !access.CanEdit {
-			return apperror.NewForbidden("you can't edit this page")
+		if err := h.pageWriteErr(c, c.Param("eid")); err != nil {
+			return err
 		}
 		return next(c)
 	}
+}
+
+// pageWriteErr is requirePageWrite's check, for a route that names the page
+// in its body rather than its path.
+func (h *Handler) pageWriteErr(c echo.Context, entityID string) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.CanAuthorDmOnly() {
+		return nil
+	}
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entityID, cc.VisibilityRole(), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+	if !access.CanEdit {
+		return apperror.NewForbidden("you can't edit this page")
+	}
+	return nil
+}
+
+// pageViewErr refuses a page the viewer cannot see as not found.
+func (h *Handler) pageViewErr(c echo.Context, entityID string) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.CanAuthorDmOnly() {
+		return nil
+	}
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entityID, cc.VisibilityRole(), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
 }
 
 // textLocked reports whether this writer may not save over the stored text:

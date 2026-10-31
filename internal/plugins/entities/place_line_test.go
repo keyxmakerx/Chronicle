@@ -84,7 +84,7 @@ func TestSidebarEntityList_DrawsListingsAsPlaceRows(t *testing.T) {
 		{EntityID: "e1", EntityName: "Cook", ParentID: "p1", ParentName: "Guild"},
 	})
 	var buf bytes.Buffer
-	if err := SidebarEntityList([]Entity{parent}, nil, 1, 1, cc, nil).Render(ctx, &buf); err != nil {
+	if err := SidebarEntityList([]Entity{parent}, nil, 1, 1, cc, nil, nil).Render(ctx, &buf); err != nil {
 		t.Fatal(err)
 	}
 	html := buf.String()
