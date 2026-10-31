@@ -89,10 +89,14 @@
             e.preventDefault();
             if (!confirm('Delete saved filter "' + filter.name + '"?')) return;
             Chronicle.apiFetch('/campaigns/' + campaignId + '/saved-filters/' + filter.id, { method: 'DELETE' })
-              .then(function () {
+              .then(function (res) {
+                if (!res.ok) throw new Error('delete refused');
                 savedFiltersCache = null;
                 btn.remove();
                 Chronicle.notify('Filter deleted', 'success');
+              })
+              .catch(function () {
+                Chronicle.notify('Could not delete the filter. It is still saved.', 'error');
               });
           });
           presetsRow.appendChild(btn);
@@ -135,13 +139,14 @@
             method: 'POST',
             body: { name: name.trim(), tag_slugs: activeTags.slice() }
           }).then(function (res) {
-            if (res.ok) {
-              Chronicle.notify('Filter saved', 'success');
-              savedFiltersCache = null;
-              // Refresh the whole filter UI to show the new preset.
-              wrapper.remove();
-              injectTagFilter();
-            }
+            if (!res.ok) throw new Error('save refused');
+            Chronicle.notify('Filter saved', 'success');
+            savedFiltersCache = null;
+            // Refresh the whole filter UI to show the new preset.
+            wrapper.remove();
+            injectTagFilter();
+          }).catch(function () {
+            Chronicle.notify('Could not save the filter.', 'error');
           });
         });
         list.appendChild(chipsRow);

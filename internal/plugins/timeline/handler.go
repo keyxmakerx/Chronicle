@@ -14,7 +14,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // Handler processes HTTP requests for the timeline plugin.
@@ -74,14 +73,15 @@ func (h *Handler) requireTimelineInCampaign(c echo.Context, timelineID, campaign
 // effectiveRole returns the role to use for content filtering. The
 // view-as-player branch MUST win over the promotion below: an Owner
 // previewing the player experience needs the actual player view, not a
-// promoted-for-visibility role.
+// promoted-for-visibility role. It reads the toggle itself, because the
+// layout's copy of the flag is only set while rendering, after the data
+// has loaded.
 //
 // Outside preview mode, a DM-granted co-DM is promoted to Owner for
 // visibility via cc.VisibilityRole(), the same promotion every entity path
 // applies, so a co-DM sees dm_only timeline events too.
 func effectiveRole(c echo.Context, cc *campaigns.CampaignContext) int {
-	ctx := c.Request().Context()
-	if layouts.IsViewingAsPlayer(ctx) {
+	if campaigns.ViewingAsPlayer(c, cc) {
 		return int(campaigns.RolePlayer)
 	}
 	return cc.VisibilityRole()

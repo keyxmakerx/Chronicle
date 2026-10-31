@@ -3504,7 +3504,8 @@ func (h *Handler) UpdateEntityTypeColor(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// UpdateEntityTypeDashboard updates the category dashboard description and pinned pages
+// UpdateEntityTypeDashboard updates the category dashboard description and,
+// when the body names them, its pinned pages
 // (PUT /campaigns/:id/entity-types/:etid/dashboard).
 func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -3528,14 +3529,20 @@ func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
 	}
 
 	var body struct {
-		Description     *string  `json:"description"`
-		PinnedEntityIDs []string `json:"pinned_entity_ids"`
+		Description     *string   `json:"description"`
+		PinnedEntityIDs *[]string `json:"pinned_entity_ids"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
+	// The update is partial for pins: a save that doesn't name them (the
+	// description editor) keeps the pages already pinned.
+	pinned := et.PinnedEntityIDs
+	if body.PinnedEntityIDs != nil {
+		pinned = *body.PinnedEntityIDs
+	}
 
-	if err := h.service.UpdateEntityTypeDashboard(c.Request().Context(), etID, body.Description, body.PinnedEntityIDs); err != nil {
+	if err := h.service.UpdateEntityTypeDashboard(c.Request().Context(), etID, body.Description, pinned); err != nil {
 		return err
 	}
 

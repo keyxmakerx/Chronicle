@@ -445,11 +445,18 @@
 				// Clamp to 0-100.
 				newX = Math.max(0, Math.min(100, newX));
 				newY = Math.max(0, Math.min(100, newY));
+				var oldX = mk.x, oldY = mk.y;
 				mk.x = newX;
 				mk.y = newY;
 				// Hold the guard until the save settles, so a refetch cannot
-				// snap the pin back to the old spot mid-save.
-				updateMarkerPosition(mk).then(function() {
+				// snap the pin back to the old spot mid-save. A refused save
+				// puts the pin back where the server still has it.
+				updateMarkerPosition(mk).then(function(saved) {
+					if (!saved) {
+						mk.x = oldX;
+						mk.y = oldY;
+						lm.setLatLng(pinLatLng(oldX, oldY));
+					}
 					draggingMarkerID = null;
 					releaseMarkerGuard();
 				});
@@ -2219,17 +2226,23 @@
 	});
 
 	// Drag-end position update (silent PUT).
+	// updateMarkerPosition saves a dragged pin's spot and reports whether
+	// the server kept it.
 	async function updateMarkerPosition(mk) {
 		try {
 			// A drag only moves the marker. Updates are partial (absent
 			// keys are preserved), so the body carries just {x, y} and
 			// never echoes fields this page may hold stale copies of.
-			await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, {
+			var res = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, {
 				method: 'PUT',
 				body: { x: mk.x, y: mk.y },
 			});
+			if (!res.ok) throw new Error('The server answered ' + res.status);
+			return true;
 		} catch (err) {
 			console.error('Failed to save marker position:', err);
+			Chronicle.notify('Could not move the pin. It is back where it was.', 'error');
+			return false;
 		}
 	}
 

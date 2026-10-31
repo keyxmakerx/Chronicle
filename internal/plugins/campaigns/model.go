@@ -799,11 +799,12 @@ func (s CampaignSettings) ResolveNewEntityPrivacy(requested patch.Field[bool]) b
 }
 
 // NewPagePrivacy is ResolveNewEntityPrivacy for a page this member is making.
-// A Scribe's new page is always open to players: hidden pages are the
-// owner's and Co-DMs', and a Scribe sees what players see, so a page they
-// made hidden would vanish from their own list the moment they saved it.
+// A Player's or Scribe's new page is always open to players: hidden pages are
+// the owner's and Co-DMs', and everyone else sees what players see, so a page
+// they made hidden would answer "not found" to them the moment they saved it.
+// That includes a hero a player just made for themselves.
 func (cc *CampaignContext) NewPagePrivacy(requested patch.Field[bool]) bool {
-	if cc.MemberRole == RoleScribe && !cc.CanAuthorDmOnly() {
+	if !cc.CanAuthorDmOnly() {
 		return false
 	}
 	return cc.Campaign.ParseSettings().ResolveNewEntityPrivacy(requested)

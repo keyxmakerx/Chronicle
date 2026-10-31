@@ -251,7 +251,7 @@ templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityT
 							Chronicle.apiFetch('/campaigns/%s/entity-types/%d', {
 								method: 'PUT',
 								body: { name: etName, name_plural: etNamePlural, icon: etIcon, color: etColor }
-							}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
+							}).then(r => { if (!r.ok) throw new Error(); saved = true; }).catch(() => Chronicle.notify('Could not save. Nothing changed.', 'error')).finally(() => { saving = false; })
 						`, cc.Campaign.ID, et.ID) }
 					>
 						<span x-show="!saving">Save Identity</span>
@@ -291,8 +291,8 @@ templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityT
 								saving = true; saved = false;
 								Chronicle.apiFetch('/campaigns/%s/entity-types/%d/dashboard', {
 									method: 'PUT',
-									body: { description: desc, pinned_entity_ids: [] }
-								}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
+									body: { description: desc }
+								}).then(r => { if (!r.ok) throw new Error(); saved = true; }).catch(() => Chronicle.notify('Could not save. Nothing changed.', 'error')).finally(() => { saving = false; })
 							`, cc.Campaign.ID, et.ID) }
 						>
 							<span x-show="!saving">Save Description</span>
@@ -443,7 +443,7 @@ templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken strin
 						Chronicle.apiFetch('/campaigns/%s/entity-types/%d', {
 							method: 'PUT',
 							body: { name: etName, name_plural: etNamePlural, icon: etIcon, color: etColor }
-						}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
+						}).then(r => { if (!r.ok) throw new Error(); saved = true; }).catch(() => Chronicle.notify('Could not save. Nothing changed.', 'error')).finally(() => { saving = false; })
 					`, cc.Campaign.ID, et.ID) }
 				>
 					<span x-show="!saving">Save Changes</span>
@@ -499,8 +499,8 @@ templ categoryDashboardTab(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 						saving = true; saved = false;
 						Chronicle.apiFetch('/campaigns/%s/entity-types/%d/dashboard', {
 							method: 'PUT',
-							body: { description: desc, pinned_entity_ids: [] }
-						}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
+							body: { description: desc }
+						}).then(r => { if (!r.ok) throw new Error(); saved = true; }).catch(() => Chronicle.notify('Could not save. Nothing changed.', 'error')).finally(() => { saving = false; })
 					`, cc.Campaign.ID, et.ID) }
 				>
 					<span x-show="!saving">Save Description</span>

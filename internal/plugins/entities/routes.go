@@ -202,6 +202,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 	pub.GET("/entities", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/entities/search", h.SearchAPI, campaigns.RequireViewAccess())
+	pub.GET("/entities/viewable", h.ViewableIDsAPI, campaigns.RequireViewAccess())
 	pub.GET("/search", h.SearchPageHandler, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireViewAccess())

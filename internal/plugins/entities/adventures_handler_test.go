@@ -300,3 +300,41 @@ func TestFavorites_NeverCarryAdventuresForPlayers(t *testing.T) {
 		}
 	})
 }
+
+// TestViewableIDsAPI pins the sidebar Recent check: it answers only the pages
+// the visibility filter keeps, in the order asked, each once. The filter's
+// own rules are the repository's, proved against MariaDB elsewhere.
+func TestViewableIDsAPI(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		want  []string
+	}{
+		{"hidden and missing pages are left out", "npc-page,adv-page,gone-page,npc-page", []string{"npc-page"}},
+		{"nothing asked, nothing answered", "", []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, rec := advCtx(campaigns.RolePlayer, false, http.MethodGet, "/campaigns/c1/entities/viewable?ids="+tt.query)
+			c.SetParamNames("id")
+			c.SetParamValues("c1")
+			h := &Handler{service: NewEntityService(&mockEntityRepo{
+				filterViewableFn: func(ids []string) (map[string]bool, error) {
+					return map[string]bool{"npc-page": true}, nil
+				},
+			}, &mockEntityTypeRepo{}, &mockPermissionRepo{})}
+			if err := h.ViewableIDsAPI(c); err != nil {
+				t.Fatal(err)
+			}
+			var got struct {
+				IDs []string `json:"ids"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.IDs == nil || strings.Join(got.IDs, ",") != strings.Join(tt.want, ",") {
+				t.Errorf("ids = %v, want %v", got.IDs, tt.want)
+			}
+		})
+	}
+}

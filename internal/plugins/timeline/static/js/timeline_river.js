@@ -646,6 +646,10 @@
       var tp = this.today != null ? this.geo.parts(this.today) : null, sel = this.st.sel && this.byId[this.st.sel], sp = sel ? this.geo.parts(sel.t) : null;
       var own = {}; this.shown().forEach(function (e) { var p = self.geo.parts(e.t); if (p.y === M.y && p.m === M.m) (own[p.d] = own[p.d] || []).push(e); });
       var colour = Chronicle.calendarColor || function () { return null; };
+      // The calendar answers with the owner's own events; while the owner
+      // views as a player the month leaves out the Director-only ones, as the
+      // line above it already does.
+      var preview = document.documentElement.hasAttribute('data-view-as-player');
       var dow = inter ? '' : '<div class="dow">' + CD.gridWeekdays(cal).map(function (w) { return '<span>' + esc(w.name || '') + '</span>'; }).join('') + '</div>';
       var cells = [], i;
       for (i = 0; i < lead; i++) cells.push(null);
@@ -656,7 +660,7 @@
         if (k && k % cols === 0) h += '</div><div class="wk">';
         if (!d) { h += '<div class="day"></div>'; return; }
         var isToday = tp && tp.y === M.y && tp.m === M.m && tp.d === d, past = tp && !isToday && self.geo.t(M.y, M.m, d) < self.today;
-        var calEvs = self._onDay(list, M.y, M.m, d), mine = (own[d] || []).slice(), marks = [];
+        var calEvs = self._onDay(list, M.y, M.m, d).filter(function (ce) { return !(preview && ce.visibility === 'dm_only'); }), mine = (own[d] || []).slice(), marks = [];
         calEvs.forEach(function (ce) {
           var tid = 'calendar:' + ce.id, c = colour(ce.color || ce.kind_color);
           mine = mine.filter(function (x) { return x.id !== tid; });
