@@ -44,8 +44,9 @@ type craftingPartData struct {
 // part's check runs only inside the Director's own save.
 var craftingPartViewer = crafting.Viewer{Director: true}
 
-func registerCraftingParts(reg *homebrew.Registry, svc crafting.Service) error {
-	check := func(ctx context.Context, campaignID string, raw json.RawMessage) (json.RawMessage, error) {
+// craftingPartCheck checks a part's data on every Workshop save.
+func craftingPartCheck(svc crafting.Service) func(context.Context, string, json.RawMessage) (json.RawMessage, error) {
+	return func(ctx context.Context, campaignID string, raw json.RawMessage) (json.RawMessage, error) {
 		var d craftingPartData
 		if err := strictJSON(raw, &d); err != nil {
 			return nil, err
@@ -77,30 +78,36 @@ func registerCraftingParts(reg *homebrew.Registry, svc crafting.Service) error {
 		d.Recipes = kept
 		return json.Marshal(d)
 	}
-	checkTeach := func(_ context.Context, _ string, raw json.RawMessage) (json.RawMessage, error) {
-		var a struct {
-			Recipe string `json:"recipe"`
-		}
-		if err := strictJSON(raw, &a); err != nil {
-			return nil, err
-		}
-		a.Recipe = strings.TrimSpace(a.Recipe)
-		if a.Recipe == "" {
-			return nil, apperror.NewValidation("name the crafting recipe to teach")
-		}
-		if len([]rune(a.Recipe)) > 120 {
-			return nil, apperror.NewValidation("a recipe's name is at most 120 characters")
-		}
-		return json.Marshal(a)
+}
+
+// checkCraftingTeach checks a teach Then's args: a recipe's name, looked up when
+// the rule runs, since a recipe may be written after the rule.
+func checkCraftingTeach(_ context.Context, _ string, raw json.RawMessage) (json.RawMessage, error) {
+	var a struct {
+		Recipe string `json:"recipe"`
 	}
+	if err := strictJSON(raw, &a); err != nil {
+		return nil, err
+	}
+	a.Recipe = strings.TrimSpace(a.Recipe)
+	if a.Recipe == "" {
+		return nil, apperror.NewValidation("name the crafting recipe to teach")
+	}
+	if len([]rune(a.Recipe)) > 120 {
+		return nil, apperror.NewValidation("a recipe's name is at most 120 characters")
+	}
+	return json.Marshal(a)
+}
+
+func registerCraftingParts(reg *homebrew.Registry, svc crafting.Service) error {
 	if err := reg.RegisterPart(homebrew.PartKind{Name: craftingPartKind, Label: "Crafting recipes", ForceSee: "director",
-		Widget: craftingPartWidget, Check: check}); err != nil {
+		Widget: craftingPartWidget, Check: craftingPartCheck(svc)}); err != nil {
 		return err
 	}
 	return reg.RegisterAction(homebrew.ActionDef{
 		Name: "crafting.teach", Label: "Teach the party a crafting recipe", PartKinds: []string{craftingPartKind},
 		Fields: []homebrew.Field{{Name: "recipe", Label: "Recipe", Type: homebrew.FieldText}},
-		Check:  checkTeach,
+		Check:  checkCraftingTeach,
 		Run: func(ctx context.Context, campaignID string, a homebrew.Act) (string, error) {
 			var args struct {
 				Recipe string `json:"recipe"`

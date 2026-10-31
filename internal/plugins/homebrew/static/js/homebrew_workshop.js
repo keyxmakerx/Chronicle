@@ -8,7 +8,9 @@
  * The catalog decides what can be added: nothing here knows a game system,
  * and the server checks every save against the same catalog. Only the
  * tracker and clock shapes have a form of their own, because those two are
- * the everyday widgets the Workshop ships with.
+ * the everyday widgets the Workshop ships with. A part kind whose catalog
+ * entry names a widget is drawn by its own plugin: selecting it opens that
+ * widget over the canvas and again in the inspector (see ownerPanel).
  */
 (function () {
   'use strict';
@@ -420,6 +422,7 @@
   function fresh(S) {
     S.cur = { id: null, version: 0, name: 'Untitled recipe', doc: { parts: [], rules: [], layout: {} } };
     S.sel = null; S.dirty = false;
+    dropOwners(S);
     S.sim = simStart(S.cur.doc, S.catalog);
     redraw(S, true);
   }
@@ -430,6 +433,7 @@
       r.doc.parts.forEach(function (p) { p.data = p.data || {}; });
       r.doc.rules.forEach(function (rule) { rule.when.args = rule.when.args || {}; rule.then.forEach(function (d) { d.args = d.args || {}; }); });
       S.cur = r; S.sel = null; S.dirty = false; S.where = null;
+      dropOwners(S);
       S.sim = simStart(r.doc, S.catalog);
       redraw(S, true);
       setStatus(S, '');
@@ -473,6 +477,8 @@
     S.statusEl = h('span', 'hbw-status', '', { role: 'status' });
     S.saveBtn = btn('Save recipe', 'hbw-primary', function () { save(S); }, 'fa-check');
     S.saveBtn.disabled = true;
+    S.ownerBtn = btn('', 'hbw-primary', function () { if (S.ownerRun) S.ownerRun(); });
+    S.ownerBtn.hidden = true;
     S.libEl = h('div', 'hbw-scroll');
     S.titleEl = h('h2', 'hbw-h');
     S.wrapEl = h('div', 'hbw-wrap', '', { tabindex: '0', 'aria-label': 'Recipe canvas. Drag to move around; plus and minus zoom.' });
@@ -496,14 +502,14 @@
     S.whereEl = h('div', 'hbw-where');
     S.tryBtn = btn('Try it', '', function () { tryIt(S); }, 'fa-play');
     append(el, [
-      append(h('div', 'hbw-top'), [h('span', 'hbw-sp'), S.statusEl, S.tryBtn, S.saveBtn]),
+      append(h('div', 'hbw-top'), [h('span', 'hbw-sp'), S.statusEl, S.tryBtn, S.ownerBtn, S.saveBtn]),
       append(h('div', 'hbw-work'), [
         append(h('section', 'hbw-pane hbw-lib', '', { 'aria-label': 'Your homebrew' }), [
           append(h('div', 'hbw-pane-h'), [h('h2', 'hbw-h', 'Your homebrew'),
             iconBtn('fa-plus', 'New recipe', function () { if (leaveOk(S)) fresh(S); })]),
           S.libEl
         ]),
-        append(h('section', 'hbw-pane hbw-cvpane', '', { 'aria-label': 'Recipe' }), [
+        S.cvPane = append(h('section', 'hbw-pane hbw-cvpane', '', { 'aria-label': 'Recipe' }), [
           append(h('div', 'hbw-pane-h'), [S.titleEl]), S.wrapEl
         ]),
         append(h('section', 'hbw-pane', '', { 'aria-label': 'Inspector' }), [
@@ -863,7 +869,9 @@
 
   function drawInspector(S) {
     var box = S.inspEl, doc = S.cur.doc, sel = S.sel;
+    unmountIn(box);
     box.textContent = '';
+    ownerPanel(S);
     if (!sel) { S.inspTitle.textContent = 'Recipe'; recipeForm(S, box); return; }
     if (sel.indexOf('p:') === 0) {
       var p = partOf(doc, sel.slice(2));
@@ -889,6 +897,63 @@
     drawPreview(S);
   }
 
+  // ---------- Parts drawn by their own plugin ----------
+
+  // ownerCtx is what a part's widget gets: the part, a way to hand its data
+  // back, and a way to offer the page's main action while it is open. One
+  // per part, so the canvas and inspector mounts share it.
+  function ownerCtx(S, p) {
+    S.owners = S.owners || {};
+    var m = /^\/campaigns\/([^/]+)\//.exec(S.cfg.endpoint || '');
+    var c = S.owners[p.key];
+    if (c && c.part === p) return c;
+    c = S.owners[p.key] = {
+      campaignId: m ? decodeURIComponent(m[1]) : '', part: p,
+      setData: function (d) { p.data = d || {}; changed(S); },
+      setPrimary: function (label, run) {
+        if (S.sel !== 'p:' + p.key) label = null;
+        S.ownerRun = label ? run : null;
+        S.ownerBtn.textContent = label || '';
+        S.ownerBtn.hidden = !label;
+        S.saveBtn.classList.toggle('hbw-primary', !label);
+      }
+    };
+    return c;
+  }
+
+  function ownerMount(S, p, k, mode) {
+    var el = h('div', 'hbw-owner', '', { 'data-widget': k.widget, 'data-mode': mode });
+    el._hbPart = ownerCtx(S, p);
+    window.requestAnimationFrame(function () { if (el.isConnected && window.Chronicle) Chronicle.mountWidgets(el.parentNode, k.widget); });
+    return el;
+  }
+
+  function unmountIn(box) {
+    [].forEach.call(box.querySelectorAll('.hbw-owner'), function (e) { if (Chronicle.destroyWidget) Chronicle.destroyWidget(e); });
+  }
+
+  // ownerPanel lays the selected part's own widget over the canvas, and
+  // takes it away when something else is selected.
+  function ownerPanel(S) {
+    var p = (S.sel || '').indexOf('p:') === 0 ? partOf(S.cur.doc, S.sel.slice(2)) : null, k = p && def(S, 'parts', p.kind);
+    var want = k && k.widget ? p.key : '';
+    if (S.focusEl && S.focusKey === want) return;
+    if (S.focusEl) { unmountIn(S.focusEl); S.focusEl.remove(); S.focusEl = null; S.focusKey = ''; }
+    S.ownerRun = null; S.ownerBtn.hidden = true; S.saveBtn.classList.add('hbw-primary');
+    if (!want) return;
+    S.focusKey = want;
+    S.focusEl = append(h('div', 'hbw-focus', '', { role: 'region', 'aria-label': p.label }), [
+      append(h('div', 'hbw-row'), [quiet('Back to the canvas', function () { S.sel = null; drawCanvas(S); drawInspector(S); })]),
+      ownerMount(S, p, k, 'canvas')
+    ]);
+    S.cvPane.appendChild(S.focusEl);
+  }
+
+  function dropOwners(S) {
+    S.owners = {};
+    if (S.focusEl) { unmountIn(S.focusEl); S.focusEl.remove(); S.focusEl = null; S.focusKey = ''; }
+  }
+
   function recipeForm(S, box) {
     var c = S.cur;
     append(box, [
@@ -911,7 +976,8 @@
       shapeForm(S, box, p);
       box.appendChild(h('p', 'hbw-muted', 'Saving the recipe saves this as a tracker kind of the same name, kept in step with the recipe.'));
     }
-    else box.appendChild(h('p', 'hbw-muted', 'This kind of part is set up where it lives in the campaign.'));
+    else if (!(k && k.widget)) box.appendChild(h('p', 'hbw-muted', 'This kind of part is set up where it lives in the campaign.'));
+    if (k && k.widget) box.appendChild(ownerMount(S, p, k, 'inspector'));
     var uses = usesOf(S.cur.doc, p.key);
     append(box, [
       uses ? h('p', 'hbw-muted', 'Used by ' + uses + '.') : null,

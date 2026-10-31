@@ -25,8 +25,18 @@
     var cid = String(cfg.campaignId || ''), base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
     var app = {cid: cid, base: base, director: cfg.director === true || cfg.director === 'true', calendarId: cfg.calendarId ? String(cfg.calendarId) : '', el: el,
       lib: null, items: {}, itemList: [], characters: [], tables: [], skills: [], truncated: false, recipes: [], benches: [], parts: {}};
-    // The end of a fight links to #spoils, so the tray opens first.
-    var dead = false, toastT = 0, tab = window.location.hash === '#spoils' ? 'spoils' : 'recipes';
+    // The end of a fight links to #spoils, so the tray opens first. An item's
+    // page and the Workshop link to #recipe=<id> (with &rules for its rules)
+    // and #try=<id> (the recipe on its bench, as a player plays it).
+    var dead = false, toastT = 0, tab = window.location.hash === '#spoils' ? 'spoils' : /^#try=/.test(window.location.hash) ? 'benches' : 'recipes';
+    function deepLink() {
+      var h = window.location.hash, m = /^#(recipe|try)=([\w-]+)(&rules)?$/.exec(h);
+      if (!m || !app.parts.recipes) return false;
+      if (m[1] === 'try') { if (app.parts.benches && app.parts.benches.tryRecipe) app.parts.benches.tryRecipe(m[2]); showTab('benches'); return true; }
+      showTab('recipes');
+      if (app.parts.recipes.open) app.parts.recipes.open(m[2], !!m[3]);
+      return true;
+    }
 
     /* JSON in and out; a refusal rejects with the server's own words. keep
        lets a save sent as the page closes outlive it. */
@@ -173,7 +183,7 @@
       wireDrawer();
     }
     // Already here when the link is followed: only the hash changes.
-    function onHash() { if (window.location.hash === '#spoils' && app.parts.spoils) showTab('spoils'); }
+    function onHash() { if (window.location.hash === '#spoils' && app.parts.spoils) showTab('spoils'); else deepLink(); }
     window.addEventListener('hashchange', onHash);
 
     function fail(err) {
@@ -199,7 +209,9 @@
         app.recipes = got[2] || [];
         app.benches = got[3] || [];
         workshop();
+        if (/^#try=/.test(window.location.hash) && app.parts.benches && app.parts.benches.tryRecipe) app.parts.benches.tryRecipe(window.location.hash.slice(5));
         showTab(tab);
+        if (/^#recipe=/.test(window.location.hash)) deepLink();
       }, fail);
     }
     load();

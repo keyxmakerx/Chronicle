@@ -380,7 +380,9 @@ func buildPack(name string, all []Recipe, ids []string, items []Named, tags map[
 		}
 		body.Recipes = append(body.Recipes, pr)
 	}
-	sort.SliceStable(body.Materials, func(i, j int) bool { return strings.ToLower(body.Materials[i].Name) < strings.ToLower(body.Materials[j].Name) })
+	sort.SliceStable(body.Materials, func(i, j int) bool {
+		return strings.ToLower(body.Materials[i].Name) < strings.ToLower(body.Materials[j].Name)
+	})
 	return body
 }
 
