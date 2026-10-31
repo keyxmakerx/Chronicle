@@ -200,6 +200,10 @@ Step 5 is the only one that reports the running software; steps 1-4 can all
 succeed while the container never changes. `--no-deps` keeps MariaDB and Redis
 up.
 
+A server built from a version tag tells its site admins on Admin > Home when a
+newer release is out, from a once-a-day look at the GitHub releases. Admin >
+Security > Overview turns that look off for a server that must not call out.
+
 `docker compose up -d` alone is not an upgrade: it does not re-pull a tag that
 exists locally. The `chronicle` service sets `pull_policy: always`, but keep
 the explicit `pull`, whose output shows whether anything new arrived.

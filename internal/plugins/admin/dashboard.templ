@@ -5,12 +5,15 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// AdminDashboardPage renders the admin overview: what needs attention, then one
-// row of tiles per admin menu section.
-templ AdminDashboardPage(groups []HomeGroup, needs []NeedsItem, recent []ActivityEntry) {
+// AdminDashboardPage renders the admin overview: the new-version notice when
+// there is one, what needs attention, then one row of tiles per admin menu
+// section.
+templ AdminDashboardPage(groups []HomeGroup, needs []NeedsItem, recent []ActivityEntry, release *ReleaseNotice) {
 	@layouts.App("Home - Admin") {
 		<div class="max-w-5xl mx-auto space-y-6">
 			<h1 class="text-2xl font-bold text-fg">Home</h1>
+
+			@releaseNoticeCard(release)
 
 			@needsYouCard(needs)
 

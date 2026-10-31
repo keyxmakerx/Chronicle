@@ -76,6 +76,8 @@ type Handler struct {
 	siteLook SiteLookService
 	// trash is the site Trash; nil until wired.
 	trash TrashService
+	// releaseNotice is the new-version notice on Home; nil shows none.
+	releaseNotice *ReleaseNoticeService
 	// checkup is the site check-up behind the top bar's shield; nil until wired.
 	checkup       *CheckupService
 	checkupRunCtx context.Context
@@ -446,7 +448,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		}
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, recent))
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, recent, h.releaseNotice.Notice(ctx, auth.GetUserID(c))))
 }
 
 // StatusFigures are the live figures on the Site admin status strip.
@@ -1019,6 +1021,10 @@ func (h *Handler) Security(c echo.Context) error {
 		EventsFailed:     eventsErr != nil,
 		SessionsFailed:   sessionsErr != nil,
 	}
+	if h.releaseNotice != nil {
+		data.UpdateCheckShown = true
+		data.UpdateCheckOn = h.releaseNotice.CheckOn(ctx)
+	}
 
 	return middleware.Render(c, http.StatusOK, AdminSecurityPage(data))
 }
@@ -1536,4 +1542,7 @@ type SecurityPageData struct {
 	StatsFailed    bool
 	EventsFailed   bool
 	SessionsFailed bool
+	// UpdateCheckShown shows the new-version check switch; UpdateCheckOn is
+	// its state.
+	UpdateCheckShown, UpdateCheckOn bool
 }

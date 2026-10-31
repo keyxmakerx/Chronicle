@@ -22,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
+	"github.com/keyxmakerx/chronicle/internal/hostinfo"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -3688,16 +3689,23 @@ func (a *App) RegisterRoutes() {
 	adminBackups := &adminBackupLister{backups: backupSvc, restores: restoreSvc, settings: settingsRepo, backupDir: a.Config.BackupDir}
 	adminHandler.SetBackupLister(adminBackups)
 
+	// The new-version notice on Home checks GitHub's releases once a day; its
+	// off switch also stops the check-up's Chronicle comparison.
+	releaseNotice := admin.NewReleaseNoticeService(settingsRepo, newChronicleReleaseSource(), hostinfo.Version)
+	adminHandler.SetReleaseNoticeService(releaseNotice)
+	go releaseNotice.RunScheduler(a.ShutdownCtx)
+
 	// The site check-up behind the admin top bar's shield: a weekly backup
 	// read-back, sign-up, password reset and updates. Admin reaches the
 	// backup plugin and GitHub only through these adapters.
 	checkupDeps := admin.CheckupDeps{
-		Store:        settingsRepo,
-		Backup:       checkupBackup{svc: backupSvc, store: settingsRepo},
-		Chronicle:    newChronicleVersionChecker(),
-		Backups:      adminBackups,
-		Registration: settingsService.GetRegistrationMode,
-		EmailReady:   smtpService.IsConfigured,
+		Store:            settingsRepo,
+		ChronicleCheckOn: releaseNotice.CheckOn,
+		Backup:           checkupBackup{svc: backupSvc, store: settingsRepo},
+		Chronicle:        newChronicleVersionChecker(),
+		Backups:          adminBackups,
+		Registration:     settingsService.GetRegistrationMode,
+		EmailReady:       smtpService.IsConfigured,
 	}
 	if a.pkgService != nil {
 		checkupDeps.Packages = a.pkgService
