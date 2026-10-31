@@ -195,6 +195,7 @@ func TestBreakDown(t *testing.T) {
 		{"gives back what the recipe says", []Salvage{{Item: "Spring water", Qty: 1}}, 1, 0, []string{"1 × Spring water"}, 0},
 		{"a line that names no item is noted", []Salvage{{Item: "Spring water", Qty: 2}, {Item: "any herb", Qty: 1}}, 1, 0, []string{"2 × Spring water"}, 1},
 		{"a recipe that can't be broken down", nil, 1, 422, nil, 0},
+		{"nothing that comes back is an item", []Salvage{{Item: "any herb", Qty: 1}}, 1, 422, nil, 0},
 		{"none to break down", []Salvage{{Item: "Spring water", Qty: 1}}, 0, 422, nil, 0},
 	}
 	for _, tt := range tests {
@@ -270,6 +271,38 @@ func TestHelp(t *testing.T) {
 	// The respite's roll stays Tobin's.
 	if fx.store.projects["tp"].RollsReady != 0 || fx.store.projects["tp"].Status != ProjectMade {
 		t.Fatalf("project after: %+v", fx.store.projects["tp"])
+	}
+}
+
+// A hand works at the owner's bench of the recipe's kind, upgrades and all.
+func TestHelp_AtTheBench(t *testing.T) {
+	plus := &Rule{When: []Cond{{Kind: "always"}}, Then: Effect{Kind: "points", Amount: 2}, Players: "book"}
+	burner := Piece{Name: "Burner", Have: 1, Levels: []Level{{Name: "Oil burner", How: "start"}, {Name: "Drakefire burner", Rule: plus, How: "recipe"}}}
+	tests := []struct {
+		name  string
+		kind  string
+		total int
+	}{
+		{"a bench of the recipe's kind", "alchemy", 11},
+		{"no bench of that kind", "smithing", 9},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fx := newProjectFx()
+			fx.repo.benches["lab"] = Bench{ID: "lab", Name: "Tower lab", Kind: tt.kind, Upgrades: Upgrades{Pieces: []Piece{burner}}, Version: 1}
+			p := tobinsPotion(fx, true)
+			r := fx.repo.recipes["heal"]
+			r.Bench = "alchemy"
+			fx.repo.recipes["heal"] = r
+			fx.dice = []int{3, 4}
+			res, err := fx.s.Help(context.Background(), "c", "tp", player, HelpInput{CharacterID: "mira", Version: p.Version})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Total != tt.total {
+				t.Fatalf("total = %d, want %d; terms %q", res.Total, tt.total, termTexts(res))
+			}
+		})
 	}
 }
 
