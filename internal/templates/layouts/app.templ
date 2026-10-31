@@ -911,6 +911,9 @@ templ Topbar() {
 					hx-swap="innerHTML"
 				></div>
 			}
+			if InCampaign(ctx) && IsOwner(ctx) && !IsViewingAsPlayer(ctx) && !InSiteAdmin(ctx) {
+				@aiChip()
+			}
 			if InCampaign(ctx) {
 				<!-- Search trigger (magnifying glass) -->
 				<button

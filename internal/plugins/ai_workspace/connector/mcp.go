@@ -233,7 +233,7 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 		msg := err.Error()
 		switch {
 		case errors.Is(err, ErrTooManyWaiting):
-			msg = fmt.Sprintf("%d requests are already waiting for the owner. Ask them to review those on the campaign's Your AI page first", requestsWaiting)
+			msg = fmt.Sprintf("%d requests are already waiting for the owner. Ask them to review those from the AI button in Chronicle first", requestsWaiting)
 		case errors.Is(err, ErrCannotAsk):
 		case isAppError(err):
 			msg = "Chronicle couldn't keep the request just now. Try again in a moment"
@@ -246,7 +246,7 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 	line.Summary = fmt.Sprintf("Asked for %d %s: “%s”", q.Blocks, plural(q.Blocks, "change", "changes"), oneLine(q.Summary, 120))
 	line.Note, line.OK = "sent for your review", true
 	out := toolResult(id, fmt.Sprintf("Sent to the owner for review in Chronicle: %s. Nothing has changed yet: "+
-		"they say yes or no to each one on the campaign's Your AI page. Tell them it is waiting there, and don't send the same changes again.", q.Counts), false)
+		"they say yes or no to each one from the AI button at the top of any Chronicle page. Tell them it is waiting there, and don't send the same changes again.", q.Counts), false)
 	out.Called = line
 	return out
 }

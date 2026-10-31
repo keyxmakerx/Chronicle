@@ -6660,6 +6660,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "diag-picker", Scripts: []string{"/static/js/widgets/diag_picker.js"}},
 	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
 	{Name: "ai-import-review", Scripts: []string{"/static/js/widgets/ai_import_review.js"}},
+	{Name: "ai-chip", Scripts: []string{"/static/js/widgets/ai_chip.js"}},
 	{Name: "mini-bar-chart", Scripts: []string{"/static/js/widgets/mini_bar_chart.js"}},
 	{Name: "surface-demo", Scripts: []string{"/static/js/widgets/surface_demo.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},

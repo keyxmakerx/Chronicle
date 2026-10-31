@@ -139,7 +139,7 @@ var tools = []tool{
 		Desc: "Read this before ask_for_changes: how Chronicle writes pages and every other kind of block, and this campaign's kinds of pages with their sheet fields."},
 	{Name: toolAsk, Title: "Ask for changes", Did: "Asked for changes", Asks: true,
 		Desc: "Send changes for the campaign's owner to review: new pages, edits, removals, events and the other blocks how_to_write_changes describes. " +
-			"Nothing changes until the owner says yes to each one in Chronicle, so tell them it is waiting on their Your AI page; waiting_for_review shows later how they answered. Send one request per job, not one per block.",
+			"Nothing changes until the owner says yes to each one in Chronicle, so tell them it is waiting under the AI button in Chronicle; waiting_for_review shows later how they answered. Send one request per job, not one per block.",
 		Args: []arg{
 			{Key: "summary", Required: true, Desc: "One line for the owner saying what this does, for example \"Five characters for Coral Court\""},
 			{Key: "changes", Required: true, Max: changesMax, Keep: true, Desc: "The blocks, written as how_to_write_changes says, one after another"},

@@ -19,10 +19,12 @@ import (
 // ai_workspace_import_commit_route_test.go,
 // ai_workspace_import_tray_route_test.go, ai_page_route_test.go).
 func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.MiddlewareFunc) {
-	// The Your AI page: connect an AI app, what it asked for, what it did,
-	// copy and paste.
+	// The Your AI page (setup and history), and the AI button's counts and
+	// panel, shown on every campaign page.
 	cg.GET("/ai", h.AIPage, requireOwner)
 	cg.GET("/ai/activity", h.AIActivity, requireOwner)
+	cg.GET("/ai/chip", h.AIChip, requireOwner)
+	cg.GET("/ai/panel", h.AIPanel, requireOwner)
 	cg.POST("/ai/connection", h.ConnectAI, requireOwner)
 	cg.POST("/ai/connection/disconnect", h.DisconnectAI, requireOwner)
 	cg.POST("/ai/connection/pause", h.PauseAI, requireOwner)

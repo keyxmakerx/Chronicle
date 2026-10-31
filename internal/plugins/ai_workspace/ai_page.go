@@ -1,6 +1,6 @@
 // ai_page.go is the campaign's "Your AI" page (owner only): connecting an AI
-// app straight to the campaign, what it asked for, what it did, and the
-// copy-and-paste tool for every other AI.
+// app straight to the campaign and what it did. What it asks for and copy and
+// paste are answered in the AI panel (ai_panel.go) on any page.
 
 package ai_workspace
 

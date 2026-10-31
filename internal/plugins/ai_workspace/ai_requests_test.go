@@ -299,7 +299,7 @@ func TestAIPage_ChangeChoice(t *testing.T) {
 func TestRequest_StayAfterDisconnect(t *testing.T) {
 	h, _, _, _ := requestRig(t)
 	rec := post(t, h.DisconnectAI, "/x", nil)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Claude asks for 1 change") {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "1 request waits for you") {
 		t.Errorf("after disconnect: %d %s", rec.Code, rec.Body)
 	}
 	const stays = "What it already asked for stays here"

@@ -4991,6 +4991,49 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
   [data-cz-nav="tide"] .nav-ring::after { display: none; }
 }
 
+/* The owner's AI button and panel (layouts/ai_chip.templ, ai_chip.js). The
+   panel and scrim are moved to <body> by the widget, so the top bar's
+   stacking context never clips them. On a phone the panel is full width. */
+.ai-chip-host { position: relative; display: flex; align-items: center; }
+.ai-chip { position: relative; }
+.ai-chip[aria-expanded="true"] { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+.ai-chip-n {
+  position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  display: inline-grid; place-items: center; font-size: 0.65rem; font-weight: 700; line-height: 1;
+  background: var(--color-accent); color: #fff;
+}
+.ai-chip-n[data-tone="bad"] { background: rgb(var(--color-bad-rgb)); }
+.ai-chip-n[hidden] { display: none; }
+.ai-chip-note {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: max-content; max-width: min(320px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px;
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border); box-shadow: var(--elev-dragged);
+  font-size: 0.875rem; color: var(--color-text-primary);
+  animation: ai-note-in var(--dur-standard) var(--ease-out);
+}
+.ai-chip-note[hidden] { display: none; }
+@keyframes ai-note-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.ai-panel-scrim {
+  position: fixed; inset: 0; z-index: 70; background: rgb(0 0 0 / 0.32);
+  opacity: 0; transition: opacity var(--dur-standard) var(--ease-out);
+}
+.ai-panel-scrim.is-open { opacity: 1; }
+.ai-panel-scrim[hidden], .ai-panel[hidden] { display: none; }
+.ai-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 71; width: min(44rem, 100vw);
+  background: var(--color-bg-primary); border-left: 1px solid var(--color-border); box-shadow: var(--elev-dragged);
+  overflow-y: auto; overscroll-behavior: contain; outline: none;
+  transform: translateX(24px); opacity: 0;
+  transition: transform var(--dur-standard) var(--ease-out), opacity var(--dur-standard) var(--ease-out);
+}
+.ai-panel.is-open { transform: none; opacity: 1; }
+.ai-panel-body { padding: 16px 20px 32px; }
+.ai-panel-loading { padding: 24px 0; font-size: 0.875rem; color: var(--color-text-secondary); }
+@media (max-width: 640px) {
+  .ai-panel { border-left: 0; }
+  .ai-panel-body { padding: 12px 16px 24px; }
+}
+
 /* Calm and Off (html[data-motion], .ai/ui-standard.md "Motion").
    Calm is for everyone when the owner switches it on (data-cz-reduce) and for
    one person who picks Calm or Off in My view (both write
