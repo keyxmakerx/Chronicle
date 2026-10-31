@@ -18,7 +18,7 @@ func TestGameNightsTarget(t *testing.T) {
 		name                 string
 		cal, sid, date, want string
 	}{
-		{"no calendar, the list", "", "", "", "/campaigns/c1/sessions"},
+		{"no calendar, the Calendar app", "", "", "", "/campaigns/c1/apps/calendar"},
 		{"no calendar, the session's own page", "", "s1", "2026-10-08", "/campaigns/c1/sessions/s1"},
 		{"a night opens its day", "k1", "s1", "2026-10-08", "/campaigns/c1/calendars/k1/view?date=2026-10-08&night=s1"},
 		{"no night named opens the calendar as it is", "k1", "", "", "/campaigns/c1/calendars/k1/view"},
@@ -54,27 +54,6 @@ func TestSidebarNightDate(t *testing.T) {
 	}
 }
 
-func TestSessionPlanFrom(t *testing.T) {
-	tests := []struct {
-		name            string
-		date, clock, tz string
-		want            SessionPlan
-	}{
-		{"whole plan", "2026-10-08", "19:00", "America/Chicago", SessionPlan{"2026-10-08", "19:00", "America/Chicago"}},
-		{"no date, no plan", "", "19:00", "America/Chicago", SessionPlan{}},
-		{"bad date, no plan", "Thursday", "19:00", "", SessionPlan{}},
-		{"bad time dropped", "2026-10-08", "7pm", "", SessionPlan{Date: "2026-10-08"}},
-		{"unknown zone dropped", "2026-10-08", "19:00", "Mars/Olympus", SessionPlan{Date: "2026-10-08", Time: "19:00"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := sessionPlanFrom(tt.date, tt.clock, tt.tz); got != tt.want {
-				t.Fatalf("got %+v, want %+v", got, tt.want)
-			}
-		})
-	}
-}
-
 // stubCalendarFinder answers RealWorldCalendarID with a fixed id.
 type stubCalendarFinder struct{ id string }
 
@@ -82,8 +61,9 @@ func (s stubCalendarFinder) RealWorldCalendarID(context.Context, string, int, st
 	return s.id, nil
 }
 
-// With no real-world calendar, the owner is offered one rather than being
-// sent to the Sessions page; everyone else keeps the Sessions page.
+// Game nights have no page of their own: with no real-world calendar the
+// owner is offered one and other members get the Calendar app, while anyone
+// who isn't a member goes to the campaign. The old list address does the same.
 func TestGameNightsLink_NoRealWorldCalendar(t *testing.T) {
 	tests := []struct {
 		name, calID, query string
@@ -91,7 +71,10 @@ func TestGameNightsLink_NoRealWorldCalendar(t *testing.T) {
 		want               string
 	}{
 		{"the owner is offered a real-world calendar", "", "", campaigns.RoleOwner, "/campaigns/c1/calendars?wizard=reallife"},
-		{"a player keeps the Sessions page", "", "", campaigns.RolePlayer, "/campaigns/c1/sessions"},
+		{"a player gets the Calendar app", "", "", campaigns.RolePlayer, "/campaigns/c1/apps/calendar"},
+		{"a visitor goes to the campaign", "k1", "", campaigns.RoleNone, "/campaigns/c1"},
+		{"a visitor's named session opens its own page", "k1", "?session=s1&date=2026-10-08", campaigns.RoleNone, "/campaigns/c1/sessions/s1"},
+		{"the old list address opens the calendar", "k1", "", campaigns.RolePlayer, "/campaigns/c1/calendars/k1/view"},
 		{"a named session still opens its own page", "", "?session=s1&date=2026-10-08", campaigns.RoleOwner, "/campaigns/c1/sessions/s1"},
 		{"with a calendar, the calendar", "k1", "", campaigns.RoleOwner, "/campaigns/c1/calendars/k1/view"},
 	}

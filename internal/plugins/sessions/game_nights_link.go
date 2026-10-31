@@ -11,7 +11,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // RealWorldCalendarFinder names the calendar game nights are answered in:
@@ -23,16 +22,16 @@ type RealWorldCalendarFinder interface {
 }
 
 // SetCalendarFinder wires the lookup GameNightsLink uses. Without it every
-// game-night link falls back to the Sessions page.
+// game-night link falls back to the Calendar app.
 func (h *Handler) SetCalendarFinder(f RealWorldCalendarFinder) {
 	h.calendarFinder = f
 }
 
-// gameNightsTarget is where a game-night link lands. With a calendar it is
-// that calendar's page, opened on the session's night (or, with no session
-// named, on this month as usual); without one it is the Sessions page, or the
-// session's own page, so a campaign with no real-world calendar loses
-// nothing.
+// gameNightsTarget is where a member's game-night link lands. With a
+// calendar it is that calendar's page, opened on the session's night (or,
+// with no session named, on this month as usual). Game nights have no page
+// of their own, so without one it is the Calendar app, or a named session's
+// own page.
 func gameNightsTarget(campaignID, calendarID, sessionID, date string) string {
 	base := "/campaigns/" + url.PathEscape(campaignID)
 	_, dateErr := time.Parse("2006-01-02", date)
@@ -42,7 +41,7 @@ func gameNightsTarget(campaignID, calendarID, sessionID, date string) string {
 		return base + "/sessions/" + url.PathEscape(sessionID)
 	}
 	if calendarID == "" {
-		return base + "/sessions"
+		return base + "/apps/calendar"
 	}
 	view := base + "/calendars/" + url.PathEscape(calendarID) + "/view"
 	if sessionID == "" {
@@ -55,18 +54,25 @@ func gameNightsTarget(campaignID, calendarID, sessionID, date string) string {
 }
 
 // GameNightsLink sends the sidebar's "Game nights" link, the RSVP card's
-// links and the dashboard's game night list to the calendar, where members
-// answer. Only members answer there, so a public viewer keeps the Sessions
-// page.
+// links, the dashboard's game night list and the retired Game nights page's
+// address to the calendar, where members see and answer them. Game nights
+// are members' business, so anyone else goes to the campaign.
 // GET /campaigns/:id/game-nights[?session=ID&date=YYYY-MM-DD]
+// GET /campaigns/:id/sessions
 func (h *Handler) GameNightsLink(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	calID, found := h.realWorldCalendar(c)
 	sessionID := c.QueryParam("session")
+	if cc.MemberRole < campaigns.RolePlayer {
+		if sessionID != "" {
+			return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, "", sessionID, ""))
+		}
+		return middleware.HTMXRedirect(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID))
+	}
+	calID, found := h.realWorldCalendar(c)
 	if calID == "" && found && sessionID == "" && cc.MemberRole >= campaigns.RoleOwner {
 		// Game nights live in a real-world calendar; the owner is offered
 		// one (a single press on the calendar wizard's review step) instead
-		// of being sent to the Sessions page. The step opens over the
+		// of being sent to an empty calendar. The step opens over the
 		// calendars page; the step's own URL is a dialog fragment.
 		return middleware.HTMXRedirect(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID)+"/calendars?wizard=reallife")
 	}
@@ -118,33 +124,4 @@ func sidebarNightDate(s Session, today string) string {
 // uses.
 func gameNightsToday() string {
 	return time.Now().UTC().Add(-14 * time.Hour).Format("2006-01-02")
-}
-
-// SessionPlan pre-fills the New Session form when the calendar's "Plan it"
-// opens the Sessions page: a date, a start time and the zone that time is
-// in. The zero value is no plan, and the form opens empty as before.
-type SessionPlan struct {
-	Date string
-	Time string
-	TZ   string
-}
-
-// Active reports whether there is a plan to open the form with.
-func (p SessionPlan) Active() bool { return p.Date != "" }
-
-// sessionPlanFrom reads ?plan_date=&plan_time=&plan_tz= and keeps only
-// well-formed values: a bad date drops the whole plan, a bad time or zone
-// drops just that field.
-func sessionPlanFrom(date, clock, tz string) SessionPlan {
-	if _, err := time.Parse("2006-01-02", date); err != nil {
-		return SessionPlan{}
-	}
-	p := SessionPlan{Date: date}
-	if _, err := time.Parse("15:04", clock); err == nil {
-		p.Time = clock
-	}
-	if tz != "" && timeutil.IsValidLocation(tz) {
-		p.TZ = tz
-	}
-	return p
 }

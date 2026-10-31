@@ -535,7 +535,7 @@ func pluginURL(campaignID, slug string) string {
 	case "timeline":
 		return fmt.Sprintf("/campaigns/%s/timelines", campaignID)
 	case "sessions":
-		return fmt.Sprintf("/campaigns/%s/sessions", campaignID)
+		return fmt.Sprintf("/campaigns/%s/game-nights", campaignID)
 	case "notes":
 		return fmt.Sprintf("/campaigns/%s/journal", campaignID)
 	case "armory":

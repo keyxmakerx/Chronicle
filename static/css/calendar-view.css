@@ -2209,7 +2209,18 @@
 .cal-v5 .gnans.y{color:var(--free)}
 .cal-v5 .gnans.m{color:var(--best)}
 .cal-v5 .gnans.n{color:var(--off)}
-.cal-v5 .gnfoot{display:flex;justify-content:flex-end;padding:6px 4px 2px;border-top:1px solid var(--hair);margin-top:4px}
+.cal-v5 .gnfoot{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:4px;padding:6px 4px 2px;border-top:1px solid var(--hair);margin-top:4px}
+.cal-v5 .gnfoot .lnk{display:inline-flex;align-items:center;gap:5px}
+.cal-v5 .gnfoot .lnk[aria-expanded="true"]{color:var(--ink)}
+.cal-v5 .gnfeed{padding:8px 8px 6px;font:500 12px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .gnfeed[hidden]{display:none}
+.cal-v5 .gnfeed p{margin:0 0 8px}
+.cal-v5 .gnlinkrow{display:flex;gap:6px;margin-bottom:8px}
+.cal-v5 .gnlinkrow input{flex:1;min-width:0;height:26px;padding:0 8px;border-radius:7px;border:1px solid var(--edge);background:var(--lift);font:500 11.5px/1 var(--mono, ui-monospace, monospace);color:var(--ink)}
+.cal-v5 .gnfine{color:var(--mut);font-size:11.5px}
+.cal-v5 .gnfine .lnk{padding:0 2px;font-size:11.5px}
+.cal-v5 .gnconfirm{padding:8px;border-radius:9px;background:var(--lift)}
+.cal-v5 .gnconfirm[hidden]{display:none}
 .cal-v5 .marks .gnm .gnart{width:17px;height:17px}
 @keyframes calWaitIn{from{opacity:0;transform:scale(.97) translateY(-4px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.cal-v5 .waitpop{animation:none}}
