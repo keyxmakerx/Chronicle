@@ -362,6 +362,11 @@ func (s *service) BreakDown(ctx context.Context, campaignID, characterID string,
 		}
 		gives = append(gives, back{id, sv.Qty, fmt.Sprintf("%d × %s", sv.Qty, sv.Item)})
 	}
+	// Nothing that would come back is a real item: keep the item rather
+	// than break it for nothing.
+	if len(gives) == 0 {
+		return nil, errInvalid("nothing breaking down " + held.Name + " gives back is an item in the Armory, so it was kept. Tell your Director.")
+	}
 	if _, err := s.projects.Armory.Use(ctx, campaignID, v, e.ID, []PackItem{it}, "to break it down"); err != nil {
 		return nil, err
 	}
@@ -449,7 +454,11 @@ func (s *service) Help(ctx context.Context, campaignID, projectID string, v View
 	} else if !ok {
 		return nil, errConflictMsg(helper.Name + " has already helped with this project since the last respite.")
 	}
-	res, err := s.rollOn(ctx, campaignID, p, owner, helper, RollInput{Work: WorkSteady, Version: in.Version}, v)
+	benchID, err := s.benchFor(ctx, campaignID, r.Bench)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.rollOn(ctx, campaignID, p, owner, helper, RollInput{Work: WorkSteady, Bench: benchID, Version: in.Version}, v)
 	if err != nil {
 		if rerr := s.projects.Store.ReturnTurn(ctx, campaignID, helper.ID, TurnHelp, p.ID, rid); rerr != nil {
 			slog.Error("crafting: a failed help's turn was not given back", slog.String("character_id", helper.ID), slog.Any("error", rerr))
@@ -461,6 +470,25 @@ func (s *service) Help(ctx context.Context, campaignID, projectID string, v View
 	}
 	res.Notes = append([]string{helper.Name + " lent a hand: one extra roll, a plain one, for " + owner.Name + "’s project."}, res.Notes...)
 	return res, nil
+}
+
+// benchFor picks the bench a hand works at: the campaign's first bench of
+// the recipe's kind, the one the block shows the owner, so its upgrades
+// count for the helper's roll too. No bench of that kind is a plain roll.
+func (s *service) benchFor(ctx context.Context, campaignID, kind string) (string, error) {
+	if kind == "" {
+		return "", nil
+	}
+	benches, err := s.repo.ListBenches(ctx, campaignID)
+	if err != nil {
+		return "", errInternal(err)
+	}
+	for _, b := range benches {
+		if b.Kind == kind {
+			return b.ID, nil
+		}
+	}
+	return "", nil
 }
 
 // turnsFor reads which turns a hero has spent since the last respite.

@@ -136,7 +136,7 @@
   function mount(el, cfg) {
     var cid = String(cfg.campaignId || ''), eid = String(cfg.entityId || '');
     var base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
-    var D = null, open = null, pick = {}, use = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0;
+    var D = null, open = null, pick = {}, use = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0, momentT = 0, said = '';
     // tpicks is what goes into a try, by item; tried and broke the last try
     // and break-down; copy the copy picked to break; play says a moment is
     // playing at the bench, so the panel waits for it.
@@ -156,12 +156,18 @@
         });
       });
     }
+    /* The message is kept, not just shown: a render right after it would
+       otherwise rebuild the toast hidden before anyone reads it. */
     function toast(msg) {
+      said = msg;
+      showToast();
+      clearTimeout(toastT);
+      toastT = setTimeout(function () { said = ''; showToast(); }, 4000);
+    }
+    function showToast() {
       var t = el.querySelector('.cra-toast');
       if (!t) return;
-      t.textContent = msg; t.hidden = false;
-      clearTimeout(toastT);
-      toastT = setTimeout(function () { t.hidden = true; }, 4000);
+      t.textContent = said; t.hidden = !said;
     }
     function isOpen(kind, id) { return !!(open && open.kind === kind && open.id === id); }
     function recipe(id) { for (var i = 0; i < D.recipes.length; i++) if (D.recipes[i].id === id) return D.recipes[i]; return null; }
@@ -351,6 +357,7 @@
         (D.recipes.length ? D.recipes.map(recipeRow).join('') : '<li class="crp-empty">' + esc(hero()) + ' knows no recipes yet. The Director teaches them in the Crafting app.</li>') + '</ul>' +
         '<div class="cra-toast" role="status" hidden></div></div>';
       el.innerHTML = h;
+      showToast();
       if (open && open.kind === 'bench') mountBench(open.id);
       if (play && moment) mountMoment();
     }
@@ -400,11 +407,12 @@
       Chronicle.mountWidget(benchEl);
     }
 
-    /* Motion at the bench: off under Calm, Off or reduced motion, or with
-       no bench on the page, where the panel is all there is. */
+    /* Motion at the bench: off under Calm, Off or reduced motion, where the
+       panel is all there is. The bench's own scripts load when it mounts,
+       so a page that has not opened a bench yet still plays the moment. */
     function still() {
       var h = document.documentElement, m = h.getAttribute('data-motion');
-      return !window.CraftScene || !window.CraftMoments || !window.Chronicle.mountWidget || m === 'off' || m === 'calm' ||
+      return !window.Chronicle.mountWidget || m === 'off' || m === 'calm' ||
         h.getAttribute('data-view-motion') === 'calm' || h.hasAttribute('data-cz-reduce') ||
         !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
     }
@@ -429,15 +437,19 @@
       if (D.calendarId) { benchEl.setAttribute('data-campaign-id', cid); benchEl.setAttribute('data-calendar-id', D.calendarId); }
       benchEl._craftApp = {state: b && b[skin] && typeof b[skin] === 'object' ? b[skin] : null, recipes: {m: m.book}, items: {}, recipe: 'm',
         settings: {difficulty: D.settings.difficulty, bane: D.settings.bane, skip: false},
-        moment: Object.assign({}, m.cue, {done: function () { if (!dead && moment === m) momentDone(box); }})};
+        moment: Object.assign({}, m.cue, {done: function () { if (!dead && play && moment === m) momentDone(box); }})};
       box.appendChild(benchEl);
       Chronicle.mountWidget(benchEl);
+      // A bench whose scripts never arrive must not hold the result back.
+      clearTimeout(momentT);
+      momentT = setTimeout(function () { if (!dead && play && moment === m) momentDone(box); }, 20000);
     }
     /* The moment ended: the panel comes in under the bench, which stays
        until Done. */
     function momentDone(box) {
       var m = moment, fold = box.closest('.crp-fold');
       play = false;
+      clearTimeout(momentT);
       if (!fold) return render();
       var tmp = document.createElement('div');
       tmp.innerHTML = m.panel();
@@ -681,7 +693,7 @@
 
     el.innerHTML = '<div class="cra-loading" aria-hidden="true"><i></i><i></i><i></i></div><p class="sr-only" role="status">Loading crafting…</p>';
     load().catch(fail);
-    return {destroy: function () { dead = true; clearTimeout(toastT); unmountBench(); el.removeEventListener('click', onClick); el.removeEventListener('change', onChange); document.removeEventListener('click', outside); document.removeEventListener('keydown', onKey); el.innerHTML = ''; }};
+    return {destroy: function () { dead = true; clearTimeout(toastT); clearTimeout(momentT); unmountBench(); el.removeEventListener('click', onClick); el.removeEventListener('change', onChange); document.removeEventListener('click', outside); document.removeEventListener('keydown', onKey); el.innerHTML = ''; }};
   }
 
   Chronicle.register('crafting-block', {

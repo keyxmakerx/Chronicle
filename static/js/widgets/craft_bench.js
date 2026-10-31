@@ -398,7 +398,8 @@
   Chronicle.register('craft_bench', {
     init: function (el) {
       var ds = el.dataset, Skin = ds.skin === 'journal' ? window.CraftJournal : window.CraftDesk;
-      if (!window.CraftScene || !Skin) return;
+      // A moment's host waits on done, so a bench that cannot draw ends it at once.
+      if (!window.CraftScene || !Skin) { if (el._craftApp && el._craftApp.moment && el._craftApp.moment.done) el._craftApp.moment.done(); return; }
       injectStyle();
       var build = ds.mode === 'build' && window.CraftBenchEditor;
       var sky = ds.campaignId && ds.calendarId ? {campaignId: ds.campaignId, calendarId: ds.calendarId} : {calendar: DEMO.calendar};
@@ -415,7 +416,10 @@
         if (app) { data.settings = app.settings; data.onWorked = app.onWorked; data.moment = !!app.moment; }
         el._crb = CraftScene.mount(box, skin, data);
         if (state && window.CraftBenchEditor) CraftBenchEditor.arrange(skin, el._crb.svg, state);
-        if (app && app.moment && window.CraftMoments) CraftMoments.play(el._crb.cue, app.moment);
+        if (app && app.moment) {
+          if (window.CraftMoments) CraftMoments.play(el._crb.cue, app.moment);
+          else if (app.moment.done) app.moment.done();
+        }
       }
     },
     destroy: function (el) {
