@@ -170,7 +170,7 @@ func TestHandle_AskForChangesWaitingCap(t *testing.T) {
 		t.Errorf("stored %d", len(repo.reqs))
 	}
 	// Answering one makes room.
-	if err := s.Asks.(*Service).TurnDown(context.Background(), "camp-1", 1); err != nil {
+	if err := s.Asks.(*Service).TurnDown(context.Background(), "camp-1", "owner-1", 1); err != nil {
 		t.Fatal(err)
 	}
 	if tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "now", "changes": goodBlocks}))); tr.IsError {
@@ -181,8 +181,8 @@ func TestHandle_AskForChangesWaitingCap(t *testing.T) {
 func TestHandle_HowToWriteChanges(t *testing.T) {
 	s, sess, _ := askRig(t)
 	var gotUser, gotCampaign string
-	s.Instructions = func(_ context.Context, campaignID, _, userID string) (string, error) {
-		gotUser, gotCampaign = userID, campaignID
+	s.Instructions = func(_ context.Context, c *Connection, _ string) (string, error) {
+		gotUser, gotCampaign = c.UserID, c.CampaignID
 		return "BLOCK FORMATS", nil
 	}
 	out := s.Handle(context.Background(), sess, callBody(toolHowTo, nil))
@@ -193,7 +193,7 @@ func TestHandle_HowToWriteChanges(t *testing.T) {
 	if gotUser != "owner-1" || gotCampaign != "camp-1" {
 		t.Errorf("written for %q in %q", gotUser, gotCampaign)
 	}
-	s.Instructions = func(context.Context, string, string, string) (string, error) { return "", errors.New("db down") }
+	s.Instructions = func(context.Context, *Connection, string) (string, error) { return "", errors.New("db down") }
 	if tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolHowTo, nil))); !tr.IsError || strings.Contains(tr.Content[0].Text, "db down") {
 		t.Errorf("a failure: %+v", tr)
 	}
@@ -209,23 +209,23 @@ func TestService_RequestAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.WaitingRequest(ctx, "camp-2", q.ID); err == nil {
+	if _, err := svc.WaitingRequest(ctx, "camp-2", "owner-1", q.ID); err == nil {
 		t.Error("another campaign opened the request")
 	}
-	got, err := svc.WaitingRequest(ctx, "camp-1", q.ID)
+	got, err := svc.WaitingRequest(ctx, "camp-1", "owner-1", q.ID)
 	if err != nil || got.Body != goodBlocks {
 		t.Fatalf("got %+v, %v", got, err)
 	}
-	if err := svc.Answered(ctx, "camp-1", q.ID, "2 applied, 0 left out"); err != nil {
+	if err := svc.Answered(ctx, "camp-1", "owner-1", q.ID, "2 applied, 0 left out"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.WaitingRequest(ctx, "camp-1", q.ID); err == nil {
+	if _, err := svc.WaitingRequest(ctx, "camp-1", "owner-1", q.ID); err == nil {
 		t.Error("an answered request opened again")
 	}
-	if err := svc.TurnDown(ctx, "camp-1", q.ID); err != nil {
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); err != nil {
 		t.Fatal(err)
 	}
-	if w, _ := svc.Waiting(ctx, "camp-1"); len(w) != 0 {
+	if w, _ := svc.Waiting(ctx, "camp-1", "owner-1"); len(w) != 0 {
 		t.Errorf("still waiting: %+v", w)
 	}
 }
@@ -251,7 +251,8 @@ func TestAsk_CampaignCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s, sess, repo := askRig(t)
 			var gotCampaign, gotChanges string
-			s.Asks.(*Service).SetCheck(func(_ context.Context, campaignID, changes string) ([]string, error) {
+			s.Asks.(*Service).SetCheck(func(_ context.Context, conn *Connection, changes string) ([]string, error) {
+				campaignID := conn.CampaignID
 				gotCampaign, gotChanges = campaignID, changes
 				return tt.problems, tt.err
 			})
@@ -278,7 +279,7 @@ func TestAsk_CampaignCheck(t *testing.T) {
 func TestAsk_TooManyBlocks(t *testing.T) {
 	s, sess, repo := askRig(t)
 	checked := false
-	s.Asks.(*Service).SetCheck(func(context.Context, string, string) ([]string, error) { checked = true; return nil, nil })
+	s.Asks.(*Service).SetCheck(func(context.Context, *Connection, string) ([]string, error) { checked = true; return nil, nil })
 	block := "---\nname: P%d\n---\n\nx\n\n"
 	var b strings.Builder
 	for i := 0; i <= blocksMax; i++ {

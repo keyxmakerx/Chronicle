@@ -23,7 +23,7 @@ func (r *memRepo) Replace(_ context.Context, c *Connection) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, old := range r.conns {
-		if old.CampaignID == c.CampaignID && old.RevokedAt == nil {
+		if old.CampaignID == c.CampaignID && old.UserID == c.UserID && old.RevokedAt == nil {
 			t := c.CreatedAt
 			old.RevokedAt = &t
 		}
@@ -104,16 +104,40 @@ func (r *memRepo) SetAccess(_ context.Context, campaignID string, id int64, priv
 	return nil
 }
 
-func (r *memRepo) Current(_ context.Context, campaignID string) (*Connection, error) {
+func (r *memRepo) Current(_ context.Context, campaignID, userID string) (*Connection, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := len(r.conns) - 1; i >= 0; i-- {
-		if c := r.conns[i]; c.CampaignID == campaignID && c.RevokedAt == nil {
+		if c := r.conns[i]; c.CampaignID == campaignID && c.UserID == userID && c.RevokedAt == nil {
 			cp := *c
 			return &cp, nil
 		}
 	}
 	return nil, nil
+}
+
+func (r *memRepo) PlayerKeys(_ context.Context, campaignID string, now, _ time.Time) ([]KeyRow, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []KeyRow
+	for i := len(r.conns) - 1; i >= 0; i-- {
+		if c := r.conns[i]; c.CampaignID == campaignID && c.ForPlayer && c.Live(now) {
+			k := KeyRow{Connection: *c, PersonName: c.UserID}
+			k.KeyHash = ""
+			out = append(out, k)
+		}
+	}
+	return out, nil
+}
+
+// userOf is who made the connection id; requests and calls belong to them.
+func (r *memRepo) userOf(id int64) string {
+	for _, c := range r.conns {
+		if c.ID == id {
+			return c.UserID
+		}
+	}
+	return ""
 }
 
 func (r *memRepo) FindByHash(_ context.Context, hash string) (*Connection, error) {
@@ -152,26 +176,27 @@ func (r *memRepo) AddCall(_ context.Context, call *Call) error {
 	return nil
 }
 
-func (r *memRepo) RecentCalls(_ context.Context, campaignID string, limit int) ([]Call, error) {
+func (r *memRepo) RecentCalls(_ context.Context, campaignID, userID string, limit int) ([]Call, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []Call
 	for i := len(r.calls) - 1; i >= 0 && len(out) < limit; i-- {
-		if r.calls[i].CampaignID == campaignID {
+		if r.calls[i].CampaignID == campaignID && r.userOf(r.calls[i].ConnectionID) == userID {
 			out = append(out, r.calls[i])
 		}
 	}
 	return out, nil
 }
 
-func (r *memRepo) PruneCalls(context.Context, string, int) error { return nil }
+func (r *memRepo) PruneCalls(context.Context, string, string, int) error { return nil }
 
 func (r *memRepo) AddRequest(_ context.Context, q *Request, max int) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	waiting := 0
+	who := r.userOf(q.ConnectionID)
 	for _, x := range r.reqs {
-		if x.CampaignID == q.CampaignID && x.Status == RequestWaiting {
+		if x.CampaignID == q.CampaignID && x.Status == RequestWaiting && r.userOf(x.ConnectionID) == who {
 			waiting++
 		}
 	}
@@ -184,12 +209,12 @@ func (r *memRepo) AddRequest(_ context.Context, q *Request, max int) (int64, err
 	return cp.ID, nil
 }
 
-func (r *memRepo) Requests(_ context.Context, campaignID, status string, limit int) ([]Request, error) {
+func (r *memRepo) Requests(_ context.Context, campaignID, userID, status string, limit int) ([]Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []Request
 	for i := len(r.reqs) - 1; i >= 0 && len(out) < limit; i-- {
-		if q := r.reqs[i]; q.CampaignID == campaignID && q.Status == status {
+		if q := r.reqs[i]; q.CampaignID == campaignID && q.Status == status && r.userOf(q.ConnectionID) == userID {
 			cp := *q
 			cp.Body = ""
 			out = append(out, cp)
@@ -198,11 +223,11 @@ func (r *memRepo) Requests(_ context.Context, campaignID, status string, limit i
 	return out, nil
 }
 
-func (r *memRepo) Request(_ context.Context, campaignID string, id int64) (*Request, error) {
+func (r *memRepo) Request(_ context.Context, campaignID, userID string, id int64) (*Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, q := range r.reqs {
-		if q.ID == id && q.CampaignID == campaignID {
+		if q.ID == id && q.CampaignID == campaignID && r.userOf(q.ConnectionID) == userID {
 			cp := *q
 			return &cp, nil
 		}
@@ -210,11 +235,11 @@ func (r *memRepo) Request(_ context.Context, campaignID string, id int64) (*Requ
 	return nil, nil
 }
 
-func (r *memRepo) FinishRequest(_ context.Context, campaignID string, id int64, status, outcome string, at time.Time) (bool, error) {
+func (r *memRepo) FinishRequest(_ context.Context, campaignID, userID string, id int64, status, outcome string, at time.Time) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, q := range r.reqs {
-		if q.ID == id && q.CampaignID == campaignID && q.Status == RequestWaiting {
+		if q.ID == id && q.CampaignID == campaignID && r.userOf(q.ConnectionID) == userID && q.Status == RequestWaiting {
 			t := at
 			q.Status, q.Outcome, q.DecidedAt = status, outcome, &t
 			return true, nil
@@ -223,17 +248,35 @@ func (r *memRepo) FinishRequest(_ context.Context, campaignID string, id int64, 
 	return false, nil
 }
 
-func (r *memRepo) PruneRequests(context.Context, string, int) error { return nil }
+func (r *memRepo) PruneRequests(context.Context, string, string, int) error { return nil }
 
 // owners says who owns which campaign; a campaign missing from the map is
-// deleted or in the Trash.
+// deleted or in the Trash. Members are listed in testMembers.
 type owners map[string]string
+
+// testMembers is who else is in each campaign, for player keys.
+var testMembers = map[string][]string{"camp-1": {"player-1", "player-2"}}
 
 func (o owners) Check(_ context.Context, campaignID, userID string) (string, error) {
 	if owner, ok := o[campaignID]; ok && owner == userID {
 		return "Ashfall", nil
 	}
 	return "", ErrNotOwner
+}
+
+func (o owners) CheckMember(ctx context.Context, campaignID, userID string) (string, error) {
+	if name, err := o.Check(ctx, campaignID, userID); err == nil {
+		return name, nil
+	}
+	if _, ok := o[campaignID]; !ok {
+		return "", ErrNotMember
+	}
+	for _, m := range testMembers[campaignID] {
+		if m == userID {
+			return "Ashfall", nil
+		}
+	}
+	return "", ErrNotMember
 }
 
 // memTables is a rolling-tables store that fails the test's read-only

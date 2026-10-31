@@ -7,6 +7,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -28,7 +29,7 @@ func (h *Handler) AIChip(c echo.Context) error {
 	var out ChipCounts
 	if h.connector != nil {
 		ctx := c.Request().Context()
-		reqs, err := h.connector.Waiting(ctx, cc.Campaign.ID)
+		reqs, err := h.connector.Waiting(ctx, cc.Campaign.ID, auth.GetUserID(c))
 		if err != nil {
 			return err
 		}

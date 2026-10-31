@@ -18,22 +18,32 @@ type aiConnectorOwners struct {
 }
 
 func (a aiConnectorOwners) Check(ctx context.Context, campaignID, userID string) (string, error) {
+	return a.check(ctx, campaignID, userID, campaigns.RoleOwner, connector.ErrNotOwner)
+}
+
+// CheckMember is Check for anyone in the campaign: a player's key works
+// while its maker is still a member.
+func (a aiConnectorOwners) CheckMember(ctx context.Context, campaignID, userID string) (string, error) {
+	return a.check(ctx, campaignID, userID, campaigns.RolePlayer, connector.ErrNotMember)
+}
+
+func (a aiConnectorOwners) check(ctx context.Context, campaignID, userID string, least campaigns.Role, no error) (string, error) {
 	c, err := a.campaigns.GetByID(ctx, campaignID)
 	if isNotFound(err) || (err == nil && c == nil) {
-		return "", connector.ErrNotOwner
+		return "", no
 	}
 	if err != nil {
 		return "", err
 	}
 	m, err := a.campaigns.GetMember(ctx, campaignID, userID)
 	if isNotFound(err) || (err == nil && m == nil) {
-		return "", connector.ErrNotOwner
+		return "", no
 	}
 	if err != nil {
 		return "", err
 	}
-	if m.Role < campaigns.RoleOwner {
-		return "", connector.ErrNotOwner
+	if m.Role < least {
+		return "", no
 	}
 	return c.Name, nil
 }
@@ -70,7 +80,7 @@ func (k *aiKeyKeeper) RevokeCampaign(campaignID string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), aiKeyRevokeTimeout)
 	defer cancel()
-	if err := k.svc.Disconnect(ctx, campaignID); err != nil {
+	if err := k.svc.EndCampaignKeys(ctx, campaignID); err != nil {
 		slog.Error("ending AI keys failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
 	}
 }

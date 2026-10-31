@@ -24,6 +24,10 @@ var (
 	ErrAIOff = errors.New("AI is turned off on this server")
 	// ErrCutOff: the campaign's owner stopped every AI in the campaign.
 	ErrCutOff = errors.New("the campaign's owner has stopped AI in this campaign")
+	// ErrPlayersBlocked: the site admin doesn't let players use AI.
+	ErrPlayersBlocked = errors.New("the server's admin hasn't let players use AI")
+	// ErrPlayersOff: the campaign's owner hasn't let players use AI.
+	ErrPlayersOff = errors.New("the campaign's owner hasn't let players use AI here")
 )
 
 // ServerAccess is the site admin's switches. The zero value is AI on with
@@ -91,6 +95,7 @@ type WatchRepository interface {
 	SetServerAccess(ctx context.Context, a ServerAccess, by string, at time.Time) error
 	CampaignAccess(ctx context.Context, campaignID string) (CampaignAccess, error)
 	SetCutOff(ctx context.Context, campaignID string, at *time.Time, now time.Time) error
+	SetPlayersAllowed(ctx context.Context, campaignID string, allowed bool, now time.Time) error
 	// NoteApp adds app to the key's seen apps and reports whether it is
 	// new for a key that had seen another before.
 	NoteApp(ctx context.Context, connID int64, app string) (bool, error)
@@ -198,6 +203,51 @@ func (s *Service) checkSwitches(ctx context.Context, campaignID string) error {
 		return ErrCutOff
 	}
 	return nil
+}
+
+// checkPlayerSwitches refuses a player's key unless both the site admin and
+// the campaign's owner let players use AI. It fails closed: without the
+// switches, or when they can't be read, players are refused.
+func (s *Service) checkPlayerSwitches(ctx context.Context, campaignID string) error {
+	if s.watchRepo == nil {
+		return ErrPlayersOff
+	}
+	sa, err := s.watchRepo.ServerAccess(ctx)
+	if err != nil {
+		slog.Warn("ai connector: reading server switches", slog.Any("error", err))
+		return ErrPlayersBlocked
+	}
+	if sa.PlayersBlocked {
+		return ErrPlayersBlocked
+	}
+	ca, err := s.watchRepo.CampaignAccess(ctx, campaignID)
+	if err != nil {
+		slog.Warn("ai connector: reading campaign switches", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return ErrPlayersOff
+	}
+	if !ca.PlayersAllowed {
+		return ErrPlayersOff
+	}
+	return nil
+}
+
+// PlayersMayUseAI reports whether players can use AI in the campaign right
+// now, and why not: ErrPlayersBlocked, ErrPlayersOff, or the campaign's
+// stop (ErrCutOff, ErrAIOff), so the player's page can say which.
+func (s *Service) PlayersMayUseAI(ctx context.Context, campaignID string) error {
+	if err := s.checkSwitches(ctx, campaignID); err != nil {
+		return err
+	}
+	return s.checkPlayerSwitches(ctx, campaignID)
+}
+
+// ServerSwitches is the site admin's switches, so the owner's page can hide
+// the players switch the admin has blocked.
+func (s *Service) ServerSwitches(ctx context.Context) (ServerAccess, error) {
+	if s.watchRepo == nil {
+		return ServerAccess{PlayersBlocked: true}, nil
+	}
+	return s.watchRepo.ServerAccess(ctx)
 }
 
 // NoteConnect records the app a key connected as, and warns the owner when
@@ -395,6 +445,66 @@ func (s *Service) SetCutOff(ctx context.Context, campaignID, userID string, on b
 		at = &now
 	}
 	return s.watchRepo.SetCutOff(ctx, campaignID, at, now)
+}
+
+// SetPlayersAllowed lets the campaign's players make and use their own AI
+// key (on), or stops every player's key there (off). Turning it off keeps
+// the keys, so turning it back on needs nothing pasted again.
+func (s *Service) SetPlayersAllowed(ctx context.Context, campaignID, userID string, on bool) error {
+	if s.watchRepo == nil {
+		return apperror.NewNotFound("this switch isn't available")
+	}
+	if _, err := s.owners.Check(ctx, campaignID, userID); err != nil {
+		return apperror.NewForbidden("only the campaign's owner can let players use AI")
+	}
+	if on {
+		sa, err := s.watchRepo.ServerAccess(ctx)
+		if err != nil {
+			return err
+		}
+		if sa.PlayersBlocked {
+			return apperror.NewForbidden("the server's admin hasn't let players use AI")
+		}
+	}
+	return s.watchRepo.SetPlayersAllowed(ctx, campaignID, on, s.now().UTC().Truncate(time.Second))
+}
+
+// PlayerKeys lists the campaign's player keys for its owner.
+func (s *Service) PlayerKeys(ctx context.Context, campaignID, userID string) ([]KeyRow, error) {
+	if _, err := s.owners.Check(ctx, campaignID, userID); err != nil {
+		return nil, apperror.NewForbidden("only the campaign's owner can see players' AI keys")
+	}
+	return s.repo.PlayerKeys(ctx, campaignID, s.now().UTC(), dayOf(s.now()).UTC())
+}
+
+// StopPlayerKey pauses (stop) or resumes one player's key for the
+// campaign's owner. It returns the key, for the audit line.
+func (s *Service) StopPlayerKey(ctx context.Context, campaignID, userID string, id int64, stop bool) (*Connection, error) {
+	if s.watchRepo == nil {
+		return nil, apperror.NewNotFound("this isn't available")
+	}
+	if _, err := s.owners.Check(ctx, campaignID, userID); err != nil {
+		return nil, apperror.NewForbidden("only the campaign's owner can stop a player's AI")
+	}
+	c, err := s.watchRepo.ConnectionByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil || c.CampaignID != campaignID || !c.ForPlayer || !c.Live(s.now()) {
+		return nil, apperror.NewNotFound("that key was ended or has run out; reload the page")
+	}
+	var at *time.Time
+	if stop {
+		now := s.now().UTC().Truncate(time.Second)
+		at = &now
+	}
+	if err := s.repo.SetPaused(ctx, campaignID, id, at); err != nil {
+		return nil, err
+	}
+	if stop {
+		s.settleKeyAlerts(ctx, id, SettledPaused)
+	}
+	return c, nil
 }
 
 // --- The site admin's side ---

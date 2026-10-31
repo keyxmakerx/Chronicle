@@ -129,7 +129,7 @@ func TestRepoIntegration_ConnectionsAndCalls(t *testing.T) {
 	// A new key replaces the campaign's earlier one and leaves another
 	// campaign's alone.
 	second := mk(camp, user, h2)
-	cur, err := repo.Current(ctx, camp)
+	cur, err := repo.Current(ctx, camp, user)
 	if err != nil || cur == nil || cur.ID != second || cur.Privacy != aiexport.PrivacyModePermitted || !cur.ExpiresAt.Equal(now.Add(KeyLifetime)) {
 		t.Fatalf("current = %+v, %v", cur, err)
 	}
@@ -150,7 +150,7 @@ func TestRepoIntegration_ConnectionsAndCalls(t *testing.T) {
 	if c, _ := repo.FindByHash(ctx, h3); c == nil || c.RevokedAt == nil {
 		t.Errorf("Disconnect left the key live: %+v", c)
 	}
-	if cur, _ := repo.Current(ctx, other); cur != nil {
+	if cur, _ := repo.Current(ctx, other, otherUser); cur != nil {
 		t.Errorf("a disconnected campaign still has a connection: %+v", cur)
 	}
 
@@ -201,7 +201,7 @@ func TestRepoIntegration_ConnectionsAndCalls(t *testing.T) {
 	if err := repo.MarkUsed(ctx, second, now.Add(time.Minute), ""); err != nil {
 		t.Fatal(err)
 	}
-	if cur, _ := repo.Current(ctx, camp); cur.ClientName != "Claude" || cur.LastUsedAt == nil || !cur.LastUsedAt.Equal(now.Add(time.Minute)) {
+	if cur, _ := repo.Current(ctx, camp, user); cur.ClientName != "Claude" || cur.LastUsedAt == nil || !cur.LastUsedAt.Equal(now.Add(time.Minute)) {
 		t.Errorf("after use = %+v", cur)
 	}
 
@@ -214,17 +214,17 @@ func TestRepoIntegration_ConnectionsAndCalls(t *testing.T) {
 	if err := repo.AddCall(ctx, &Call{ConnectionID: theirs, CampaignID: other, At: now, Tool: "players", Summary: "theirs"}); err != nil {
 		t.Fatal(err)
 	}
-	calls, err := repo.RecentCalls(ctx, camp, 3)
+	calls, err := repo.RecentCalls(ctx, camp, user, 3)
 	if err != nil || len(calls) != 3 || calls[0].Summary != "call 6" || !calls[0].OK {
 		t.Fatalf("recent = %+v, %v", calls, err)
 	}
-	if err := repo.PruneCalls(ctx, camp, 2); err != nil {
+	if err := repo.PruneCalls(ctx, camp, user, 2); err != nil {
 		t.Fatal(err)
 	}
-	if calls, _ := repo.RecentCalls(ctx, camp, 50); len(calls) != 2 || calls[1].Summary != "call 5" {
+	if calls, _ := repo.RecentCalls(ctx, camp, user, 50); len(calls) != 2 || calls[1].Summary != "call 5" {
 		t.Errorf("after pruning = %+v", calls)
 	}
-	if calls, _ := repo.RecentCalls(ctx, other, 50); len(calls) != 1 {
+	if calls, _ := repo.RecentCalls(ctx, other, otherUser, 50); len(calls) != 1 {
 		t.Errorf("pruning reached another campaign: %+v", calls)
 	}
 
@@ -254,12 +254,12 @@ func TestRepoIntegration_Requests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := repo.Current(ctx, camp); c == nil || !c.CanAsk {
+	if c, _ := repo.Current(ctx, camp, user); c == nil || !c.CanAsk {
 		t.Fatalf("the Change setting wasn't kept: %+v", c)
 	}
 	theirConn, _ := repo.Replace(ctx, &Connection{CampaignID: other, UserID: otherUser, KeyHash: fmt.Sprintf("%064d", 2), KeyHint: "0002",
 		Privacy: aiexport.PrivacyModeSafe, CreatedAt: now, ExpiresAt: now.Add(KeyLifetime)})
-	if c, _ := repo.Current(ctx, other); c == nil || c.CanAsk {
+	if c, _ := repo.Current(ctx, other, otherUser); c == nil || c.CanAsk {
 		t.Fatalf("Only look read back as Ask: %+v", c)
 	}
 
@@ -283,46 +283,46 @@ func TestRepoIntegration_Requests(t *testing.T) {
 		t.Fatalf("another campaign's cap is its own: %v", err)
 	}
 
-	list, err := repo.Requests(ctx, camp, RequestWaiting, 50)
+	list, err := repo.Requests(ctx, camp, user, RequestWaiting, 50)
 	if err != nil || len(list) != 3 || list[0].ID != ids[2] || list[0].Body != "" || list[0].Summary != "r2" {
 		t.Fatalf("waiting = %+v, %v", list, err)
 	}
-	if q, _ := repo.Request(ctx, camp, theirs); q != nil {
+	if q, _ := repo.Request(ctx, camp, user, theirs); q != nil {
 		t.Errorf("read another campaign's request: %+v", q)
 	}
-	q, err := repo.Request(ctx, camp, ids[0])
+	q, err := repo.Request(ctx, camp, user, ids[0])
 	if err != nil || q == nil || q.Body != "---\nname: r0\n---\nbody\n" || q.Status != RequestWaiting {
 		t.Fatalf("request = %+v, %v", q, err)
 	}
 
-	if ok, err := repo.FinishRequest(ctx, other, ids[0], RequestAnswered, "x", now); err != nil || ok {
+	if ok, err := repo.FinishRequest(ctx, other, otherUser, ids[0], RequestAnswered, "x", now); err != nil || ok {
 		t.Errorf("answered from another campaign: %v %v", ok, err)
 	}
-	if ok, err := repo.FinishRequest(ctx, camp, ids[0], RequestAnswered, "2 applied, 0 left out", now); err != nil || !ok {
+	if ok, err := repo.FinishRequest(ctx, camp, user, ids[0], RequestAnswered, "2 applied, 0 left out", now); err != nil || !ok {
 		t.Fatalf("answer: %v %v", ok, err)
 	}
-	if ok, _ := repo.FinishRequest(ctx, camp, ids[0], RequestTurnedDown, "y", now); ok {
+	if ok, _ := repo.FinishRequest(ctx, camp, user, ids[0], RequestTurnedDown, "y", now); ok {
 		t.Error("an answered request was answered again")
 	}
-	if q, _ := repo.Request(ctx, camp, ids[0]); q.Status != RequestAnswered || q.Outcome != "2 applied, 0 left out" || q.DecidedAt == nil {
+	if q, _ := repo.Request(ctx, camp, user, ids[0]); q.Status != RequestAnswered || q.Outcome != "2 applied, 0 left out" || q.DecidedAt == nil {
 		t.Errorf("after answering = %+v", q)
 	}
 	if _, err := add(camp, conn, "room again"); err != nil {
 		t.Errorf("answering one should make room: %v", err)
 	}
-	if _, err := repo.FinishRequest(ctx, camp, ids[1], RequestTurnedDown, "nothing changed", now); err != nil {
+	if _, err := repo.FinishRequest(ctx, camp, user, ids[1], RequestTurnedDown, "nothing changed", now); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.PruneRequests(ctx, camp, 1); err != nil {
+	if err := repo.PruneRequests(ctx, camp, user, 1); err != nil {
 		t.Fatal(err)
 	}
-	if q, _ := repo.Request(ctx, camp, ids[0]); q != nil {
+	if q, _ := repo.Request(ctx, camp, user, ids[0]); q != nil {
 		t.Errorf("pruning kept the older answered request")
 	}
-	if q, _ := repo.Request(ctx, camp, ids[1]); q == nil {
+	if q, _ := repo.Request(ctx, camp, user, ids[1]); q == nil {
 		t.Errorf("pruning took the newest answered request")
 	}
-	if list, _ := repo.Requests(ctx, camp, RequestWaiting, 50); len(list) != 2 {
+	if list, _ := repo.Requests(ctx, camp, user, RequestWaiting, 50); len(list) != 2 {
 		t.Errorf("pruning touched waiting requests: %+v", list)
 	}
 

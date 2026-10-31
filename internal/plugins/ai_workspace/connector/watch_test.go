@@ -40,6 +40,12 @@ func (w *memWatch) SetCutOff(_ context.Context, id string, at *time.Time, _ time
 	w.camps[id] = a
 	return nil
 }
+func (w *memWatch) SetPlayersAllowed(_ context.Context, id string, on bool, _ time.Time) error {
+	a := w.camps[id]
+	a.PlayersAllowed = on
+	w.camps[id] = a
+	return nil
+}
 func (w *memWatch) NoteApp(_ context.Context, id int64, app string) (bool, error) {
 	for _, a := range w.apps[id] {
 		if strings.EqualFold(a, app) {

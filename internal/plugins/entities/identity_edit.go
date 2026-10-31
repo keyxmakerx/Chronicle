@@ -142,6 +142,15 @@ func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignI
 	return nil
 }
 
+// CheckClaimedOwnerPatch is authorizeFieldsWrite for a sheet change that
+// does not come through the fields route: one a player's AI asked for and
+// the player applied. It always judges the writer as a Player, whatever
+// their role, and takes the hero builder plan that player is shown, so the
+// AI can change exactly what the player could change by hand and no more.
+func CheckClaimedOwnerPatch(entity *Entity, userID, campaignID string, patch map[string]any, typeFields []FieldDefinition, plan *HeroPlan) error {
+	return authorizeFieldsWrite(campaigns.RolePlayer, entity, userID, campaignID, false, patch, typeFields, builderPicksFrom(plan))
+}
+
 // authorizeMetadataWrite decides whether a metadata PUT may proceed. A claimed
 // owner may send the name and nothing else; descriptor, parent and anything
 // unknown are refused so the narrow path cannot become a general edit.

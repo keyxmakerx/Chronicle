@@ -25,7 +25,7 @@ func renderConnect(t *testing.T, v ConnectView) string {
 func TestAIPage_ConnectSection(t *testing.T) {
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	used := now.Add(-5 * time.Minute)
-	conn := &connector.Connection{ID: 1, CampaignID: "camp-1", KeyHint: "WXYZ", Privacy: aiexport.PrivacyModePermitted,
+	conn := &connector.Connection{ID: 1, CampaignID: "camp-1", UserID: "user-1", KeyHint: "WXYZ", Privacy: aiexport.PrivacyModePermitted,
 		ClientName: "Claude", CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(connector.KeyLifetime), LastUsedAt: &used}
 	const key = "chai_secretsecretsecretsecretsecretsecretWXYZ"
 	base := ConnectView{CampaignID: "camp-1", Available: true, Endpoint: "https://c.example/api/ai/campaigns/camp-1/mcp", Now: now}

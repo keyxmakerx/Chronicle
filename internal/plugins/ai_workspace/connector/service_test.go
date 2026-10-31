@@ -115,7 +115,7 @@ func TestAuthenticate(t *testing.T) {
 			return raw, "camp-2"
 		}, ErrBadKey},
 		{"disconnected", func(svc *Service, _ *memRepo, _ owners, _ *time.Time, raw string) (string, string) {
-			_ = svc.Disconnect(ctx, "camp-1")
+			_ = svc.Disconnect(ctx, "camp-1", "owner-1")
 			return raw, "camp-1"
 		}, ErrKeyEnded},
 		{"ran out", func(_ *Service, _ *memRepo, _ owners, now *time.Time, raw string) (string, string) {
@@ -232,7 +232,7 @@ func TestDecided_NewestAnswerFirst(t *testing.T) {
 		{2, []string{"turned down", "new applied"}},
 	}
 	for _, tt := range tests {
-		got, err := svc.Decided(context.Background(), "camp-1", tt.n)
+		got, err := svc.Decided(context.Background(), "camp-1", "", tt.n)
 		if err != nil {
 			t.Fatal(err)
 		}

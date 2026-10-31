@@ -104,16 +104,16 @@ func (h *Handler) connectView(c echo.Context, cc *campaigns.CampaignContext) (Co
 	v.Available = true
 	v.Endpoint = connector.EndpointURL(h.baseURL, cc.Campaign.ID)
 	ctx := c.Request().Context()
-	conn, err := h.connector.Current(ctx, cc.Campaign.ID)
+	conn, err := h.connector.Current(ctx, cc.Campaign.ID, auth.GetUserID(c))
 	if err != nil {
 		return v, err
 	}
 	v.Conn = conn
-	if v.Calls, err = h.connector.Activity(ctx, cc.Campaign.ID); err != nil {
+	if v.Calls, err = h.connector.Activity(ctx, cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return v, err
 	}
 	v.Sittings = connector.Sittings(v.Calls)
-	if v.Requests, err = h.connector.Waiting(ctx, cc.Campaign.ID); err != nil {
+	if v.Requests, err = h.connector.Waiting(ctx, cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return v, err
 	}
 	if h.connector.Watching() {
@@ -257,7 +257,7 @@ func (h *Handler) TurnDownRequest(c echo.Context) error {
 	if err != nil || id <= 0 {
 		return apperror.NewBadRequest("that request isn't here any more")
 	}
-	if err := h.connector.TurnDown(c.Request().Context(), cc.Campaign.ID, id); err != nil {
+	if err := h.connector.TurnDown(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id); err != nil {
 		return err
 	}
 	if h.audit != nil {
@@ -422,7 +422,7 @@ func (h *Handler) ChangeAIAccess(c echo.Context) error {
 		return err
 	}
 	ctx := c.Request().Context()
-	cur, err := h.connector.Current(ctx, cc.Campaign.ID)
+	cur, err := h.connector.Current(ctx, cc.Campaign.ID, auth.GetUserID(c))
 	if err != nil {
 		return err
 	}
@@ -461,7 +461,7 @@ func (h *Handler) DisconnectAI(c echo.Context) error {
 	if h.connector == nil {
 		return apperror.NewBadRequest("connecting an AI is not available on this Chronicle site")
 	}
-	if err := h.connector.Disconnect(c.Request().Context(), cc.Campaign.ID); err != nil {
+	if err := h.connector.Disconnect(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return err
 	}
 	if h.audit != nil {

@@ -64,9 +64,10 @@ type Asker interface {
 	Ask(ctx context.Context, c *Connection, summary, changes string) (*Request, error)
 }
 
-// InstructionsFunc writes how_to_write_changes' answer: the copy-and-paste
-// prompt's standing instructions for the campaign, as its owner.
-type InstructionsFunc func(ctx context.Context, campaignID, campaignName, userID string) (string, error)
+// InstructionsFunc writes how_to_write_changes' answer for the connection's
+// maker: for the owner, the copy-and-paste prompt's standing instructions;
+// for a player, how to change their own character.
+type InstructionsFunc func(ctx context.Context, c *Connection, campaignName string) (string, error)
 
 // Server answers MCP requests with the tools.
 type Server struct {
@@ -130,7 +131,7 @@ func (s *Server) Handle(ctx context.Context, sess Session, body []byte) Outcome 
 		list := toolsFor(sess.Conn)
 		defs := make([]map[string]any, len(list))
 		for i, t := range list {
-			defs[i] = t.definition()
+			defs[i] = t.definition(sess.Conn != nil && sess.Conn.ForPlayer)
 		}
 		return reply(m.ID, map[string]any{"tools": defs})
 	case "tools/call":
@@ -175,11 +176,17 @@ func (s *Server) initialize(m rpcMessage, sess Session) Outcome {
 // the campaign's players and owner, so it is named as content, never orders.
 func instructions(sess Session) string {
 	sees := "what the campaign's players can see"
-	if sess.Conn != nil && sess.Conn.Privacy.String() == "permitted" {
+	if sess.Conn != nil && sess.Conn.Privacy.String() == "permitted" && !sess.Conn.ForPlayer {
 		sees = "what the campaign's owner can see, including their secrets"
 	}
 	changes := "They only read: nothing in the campaign can be changed through them. "
-	if sess.Conn != nil && sess.Conn.CanAsk {
+	if sess.Conn != nil && sess.Conn.ForPlayer {
+		sees = "what you, a player in it, can see"
+		if sess.Conn.CanAsk {
+			changes = "They only read, except " + toolAsk + ", which sends changes to your own character's sheet for you to review: nothing changes until you say yes to each one in Chronicle, and you can change only your own character's identity and hero builder choices. " +
+				"Read " + toolHowTo + " before asking. "
+		}
+	} else if sess.Conn != nil && sess.Conn.CanAsk {
 		changes = "They only read, except " + toolAsk + ", which sends changes for the owner to review: nothing in the campaign changes until the owner says yes to each one in Chronicle. " +
 			"Read " + toolHowTo + " before asking. "
 	}
@@ -233,7 +240,7 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 		msg := err.Error()
 		switch {
 		case errors.Is(err, ErrTooManyWaiting):
-			msg = fmt.Sprintf("%d requests are already waiting for the owner. Ask them to review those from the AI button in Chronicle first", requestsWaiting)
+			msg = fmt.Sprintf("%d requests are already waiting for review. Ask for those to be answered from the AI button in Chronicle first", requestsWaiting)
 		case errors.Is(err, ErrCannotAsk):
 		case isAppError(err):
 			msg = "Chronicle couldn't keep the request just now. Try again in a moment"
@@ -245,8 +252,12 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 	}
 	line.Summary = fmt.Sprintf("Asked for %d %s: “%s”", q.Blocks, plural(q.Blocks, "change", "changes"), oneLine(q.Summary, 120))
 	line.Note, line.OK = "sent for your review", true
-	out := toolResult(id, fmt.Sprintf("Sent to the owner for review in Chronicle: %s. Nothing has changed yet: "+
-		"they say yes or no to each one from the AI button at the top of any Chronicle page. Tell them it is waiting there, and don't send the same changes again.", q.Counts), false)
+	who := "the owner"
+	if sess.Conn.ForPlayer {
+		who = "you"
+	}
+	out := toolResult(id, fmt.Sprintf("Sent to %s for review in Chronicle: %s. Nothing has changed yet: "+
+		"each one is answered yes or no from the AI button at the top of any Chronicle page. Say it is waiting there, and don't send the same changes again.", who, q.Counts), false)
 	out.Called = line
 	return out
 }
@@ -261,7 +272,7 @@ func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session) Ou
 		out.Called = line
 		return out
 	}
-	text, err := s.Instructions(ctx, sess.Conn.CampaignID, sess.CampaignName, sess.Conn.UserID)
+	text, err := s.Instructions(ctx, sess.Conn, sess.CampaignName)
 	if err != nil {
 		out := toolResult(id, "Not answered: Chronicle couldn't write the instructions just now. Try again in a moment.", true)
 		line.Note = "couldn't be written"
@@ -270,7 +281,7 @@ func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session) Ou
 	}
 	text = "You are connected to Chronicle through tools, so two things differ from what follows. " +
 		"Where it says to write a `kind: lookup` block, use the lookup tools instead. " +
-		"Where it says to answer with blocks for the owner to paste, send them with " + toolAsk + " instead.\n\n" + strings.TrimSpace(text)
+		"Where it says to answer with blocks to paste, send them with " + toolAsk + " instead.\n\n" + strings.TrimSpace(text)
 	out := toolResult(id, text, false)
 	line.Note, line.OK = fmt.Sprintf("%d KB", (len(text)+1023)/1024), true
 	out.Called = line

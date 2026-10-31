@@ -70,6 +70,16 @@ func (r *watchRepository) SetCutOff(ctx context.Context, campaignID string, at *
 	return nil
 }
 
+func (r *watchRepository) SetPlayersAllowed(ctx context.Context, campaignID string, allowed bool, now time.Time) error {
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO ai_campaign_access (campaign_id, players_allowed, updated_at) VALUES (?, ?, ?)
+		 ON DUPLICATE KEY UPDATE players_allowed = VALUES(players_allowed), updated_at = VALUES(updated_at)`,
+		campaignID, allowed, now.UTC()); err != nil {
+		return dbError("saving players switch", err)
+	}
+	return nil
+}
+
 // seenAppsMax keeps seen_apps inside its column; once full, a new app is
 // still warned about but no longer remembered.
 const seenAppsMax = 255
@@ -223,9 +233,7 @@ func (r *watchRepository) ConnectionByID(ctx context.Context, id int64) (*Connec
 
 func (r *watchRepository) LiveKeys(ctx context.Context, now, since time.Time) ([]KeyRow, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+connectionColumns+`, cp.name, COALESCE(NULLIF(u.display_name, ''), u.email, ''),
-		   (SELECT COUNT(*) FROM ai_connection_calls k WHERE k.connection_id = c.id AND k.called_at >= ?),
-		   (SELECT COUNT(*) FROM ai_connection_calls k WHERE k.connection_id = c.id)
+		`SELECT `+connectionColumns+keyRowColumns+`
 		 FROM ai_connections c
 		 JOIN campaigns cp ON cp.id = c.campaign_id
 		 LEFT JOIN users u ON u.id = c.user_id
@@ -235,6 +243,17 @@ func (r *watchRepository) LiveKeys(ctx context.Context, now, since time.Time) ([
 	if err != nil {
 		return nil, dbError("listing keys", err)
 	}
+	return scanKeyRows(rows)
+}
+
+// keyRowColumns follow connectionColumns in a KeyRow query: the campaign's
+// name, the maker's name and the key's calls since a time (the first ?).
+const keyRowColumns = `, cp.name, COALESCE(NULLIF(u.display_name, ''), u.email, ''),
+	   (SELECT COUNT(*) FROM ai_connection_calls k WHERE k.connection_id = c.id AND k.called_at >= ?),
+	   (SELECT COUNT(*) FROM ai_connection_calls k WHERE k.connection_id = c.id)`
+
+// scanKeyRows reads KeyRows, leaving out every key hash.
+func scanKeyRows(rows *sql.Rows) ([]KeyRow, error) {
 	defer rows.Close()
 	var out []KeyRow
 	for rows.Next() {
@@ -242,7 +261,7 @@ func (r *watchRepository) LiveKeys(ctx context.Context, now, since time.Time) ([
 		var privacy string
 		var lastUsed, revoked, paused sql.NullTime
 		if err := rows.Scan(&k.ID, &k.CampaignID, &k.UserID, &k.KeyHash, &k.KeyHint, &privacy,
-			&k.CanAsk, &k.ClientName, &k.CreatedAt, &k.ExpiresAt, &lastUsed, &revoked, &paused,
+			&k.CanAsk, &k.ClientName, &k.CreatedAt, &k.ExpiresAt, &lastUsed, &revoked, &paused, &k.ForPlayer,
 			&k.CampaignName, &k.PersonName, &k.CallsToday, &k.CallsTotal); err != nil {
 			return nil, dbError("reading key", err)
 		}

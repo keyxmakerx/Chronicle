@@ -70,10 +70,11 @@ func RegisterRoutes(ech *echo.Echo, ep *Endpoint) {
 }
 
 // actorFor is who a connection's answers are read as: its maker, as a player
-// in Safe mode (the copy-and-paste lookups' exportActor rule).
+// in Safe mode (the copy-and-paste lookups' exportActor rule). A player's key
+// always reads as that player, whatever its stored privacy says.
 func actorFor(c *Connection) records.Actor {
 	role := int(campaigns.RoleOwner)
-	if c.Privacy == aiexport.PrivacyModeSafe {
+	if c.ForPlayer || c.Privacy == aiexport.PrivacyModeSafe {
 		role = int(campaigns.RolePlayer)
 	}
 	return records.Actor{UserID: c.UserID, Role: role}
@@ -114,7 +115,9 @@ func (e *Endpoint) Serve(c echo.Context) error {
 	switch {
 	case errors.Is(err, ErrKeyPaused):
 		// The key is right, so this is no failed guess to count.
-		return refuse(c, http.StatusForbidden, "This key is paused. The campaign's owner can resume it on the Your AI page.")
+		return refuse(c, http.StatusForbidden, "This key is paused. It can be resumed on the Your AI page in Chronicle.")
+	case errors.Is(err, ErrPlayersOff), errors.Is(err, ErrPlayersBlocked):
+		return refuse(c, http.StatusForbidden, "Players can't use AI in this campaign right now: "+err.Error()+".")
 	case errors.Is(err, ErrCutOff):
 		return refuse(c, http.StatusForbidden, "The campaign's owner has stopped AI in this campaign for now. They can turn it back on on the Your AI page.")
 	case errors.Is(err, ErrAIOff):
@@ -146,6 +149,8 @@ func (e *Endpoint) Serve(c echo.Context) error {
 			return refuse(c, http.StatusUnauthorized, "This key was disconnected or has run out. Make a new one on the campaign's Your AI page.")
 		case errors.Is(err, ErrOwnerGone):
 			return refuse(c, http.StatusForbidden, "Whoever made this key no longer owns the campaign. The owner can make a new one on the Your AI page.")
+		case errors.Is(err, ErrPlayerGone):
+			return refuse(c, http.StatusForbidden, "Whoever made this key is no longer in the campaign.")
 		}
 		return refuse(c, http.StatusServiceUnavailable, "Chronicle couldn't check the key just now. Try again in a moment.")
 	}

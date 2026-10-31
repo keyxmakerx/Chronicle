@@ -96,6 +96,9 @@ type Handler struct {
 	// connector makes and revokes the keys an AI app connects with.
 	// Optional — nil leaves the Your AI page with copy and paste only.
 	connector *connector.Service
+	// playerSheets is the door players' AI changes go through; nil holds
+	// every one back.
+	playerSheets PlayerSheets
 	// baseURL is the site's public address, for the connector's address.
 	baseURL string
 }
@@ -689,7 +692,7 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		if result.Failed > 0 {
 			outcome += fmt.Sprintf(", %d failed", result.Failed)
 		}
-		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, id, outcome); err != nil {
+		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id, outcome); err != nil {
 			slog.Warn("ai-workspace: marking request answered",
 				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		}
@@ -716,7 +719,7 @@ func (h *Handler) waitingRequest(c echo.Context, cc *campaigns.CampaignContext, 
 	if err != nil || id <= 0 {
 		return nil, apperror.NewBadRequest("that request isn't here any more")
 	}
-	return h.connector.WaitingRequest(c.Request().Context(), cc.Campaign.ID, id)
+	return h.connector.WaitingRequest(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id)
 }
 
 type recordCounts struct{ applied, failed int }
@@ -1049,14 +1052,24 @@ func (h *Handler) instructionsInput() prompt.Input {
 	return in
 }
 
-// ConnectorInstructions answers a connected AI's how_to_write_changes: the
-// same standing instructions "Copy AI instructions" gives, written for the
-// connection's owner.
-func (h *Handler) ConnectorInstructions(ctx context.Context, campaignID, campaignName, userID string) (string, error) {
+// ConnectorInstructions answers a connected AI's how_to_write_changes: for
+// the owner's key, the same standing instructions "Copy AI instructions"
+// gives; for a player's, how to change their own character.
+func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Connection, campaignName string) (string, error) {
+	if conn.ForPlayer {
+		var sheets []PlayerSheet
+		if h.playerSheets != nil {
+			var err error
+			if sheets, err = h.playerSheets.Sheets(ctx, conn.CampaignID, conn.UserID); err != nil {
+				return "", err
+			}
+		}
+		return playerInstructions(campaignName, sheets), nil
+	}
 	if h.promptBuilder == nil {
 		return "", errors.New("ai-workspace: prompt builder not configured")
 	}
-	return h.promptBuilder.Build(ctx, campaignName, userID, campaignID, h.instructionsInput())
+	return h.promptBuilder.Build(ctx, campaignName, conn.UserID, conn.CampaignID, h.instructionsInput())
 }
 
 // ConnectorCheck is what a connected AI is told about the changes it asks
@@ -1064,7 +1077,11 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, campaignID, campaig
 // their category doesn't have. The AI can fix its own request, where the
 // owner would have to work out the right category at review. It looks up
 // categories and folders only, never pages.
-func (h *Handler) ConnectorCheck(ctx context.Context, campaignID, changes string) ([]string, error) {
+func (h *Handler) ConnectorCheck(ctx context.Context, conn *connector.Connection, changes string) ([]string, error) {
+	if conn.ForPlayer {
+		return h.playerCheck(ctx, conn, changes)
+	}
+	campaignID := conn.CampaignID
 	if h.importLookup == nil || h.importFolders == nil {
 		return nil, nil
 	}
@@ -1078,6 +1095,22 @@ func (h *Handler) ConnectorCheck(ctx context.Context, campaignID, changes string
 	out := make([]string, 0, len(slips))
 	for _, s := range slips {
 		out = append(out, folderSlipLine(s))
+	}
+	return out, nil
+}
+
+// playerCheck tells a player's AI about every block that would be held
+// back, so it can fix its request before the player sees it.
+func (h *Handler) playerCheck(ctx context.Context, conn *connector.Connection, changes string) ([]string, error) {
+	plan, err := planPlayerChanges(ctx, h.playerSheets, conn.CampaignID, conn.UserID, changes)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, c := range plan {
+		if c.Held != "" {
+			out = append(out, fmt.Sprintf("block %d (%s): %s", c.Block, oneLineText(c.Page, 60), c.Held))
+		}
 	}
 	return out, nil
 }
