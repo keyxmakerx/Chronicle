@@ -3212,9 +3212,15 @@ components:
         entry:
           type: string
           description: >-
-            The page body: a ProseMirror JSON document, or HTML. HTML is
+            The page body: a ProseMirror JSON document, or HTML. Send either
+            as a plain string, not JSON-encoded a second time. HTML is
             sanitized and becomes the body (`entry_html`); the editor opens
-            it from there.
+            it from there. A JSON document is stored as `entry` and rendered
+            to `entry_html`: paragraphs, headings, lists, quotes, code,
+            tables, links and the bold, italic, underline, strike, code and
+            secret marks. Any other node is left out of `entry_html` until
+            the page is saved from the editor, so send HTML for anything
+            richer.
         fields_data:
           type: object
           additionalProperties: true

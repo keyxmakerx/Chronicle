@@ -191,7 +191,7 @@
       var all = model(), top = all.filter(function (c) { return !c.parent || !find(c.parent); });
       el.innerHTML = '<div class="czs-head-row"><div><h1 class="czs-h1">Categories</h1>' +
         '<p class="czs-lede">Each category is a kind of page. Open one to set up its page, its home, its fields and the text new pages start with.</p></div>' +
-        '<button type="button" class="btn-primary" data-new><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>New category</button></div>' +
+        '<button type="button" class="btn-primary" data-new><i class="fa-solid fa-plus" aria-hidden="true"></i>New category</button></div>' +
         '<div class="czs-cat-grid" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">' +
         top.map(card).join('') +
         '<button type="button" class="czs-cat-card czs-add" data-new><span class="czs-plus"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>New category</button></div>';
@@ -268,10 +268,10 @@
               '<button type="button" class="czs-icon-btn" data-rm-kind="' + esc(k.key) + '" aria-label="Remove ' + esc(k.plural || k.name) + '"' +
               (!k.isNew && (k.pages > 0 || k.trashed > 0 || kidsOf(k.key).length) ? ' disabled title="It has pages; move or delete them first"' : ' title="Remove"') + '><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>';
           }).join('') : '<p class="czs-hint">No kinds yet.</p>') + '</div>' +
-          '<div class="czs-act-row"><input class="input" id="czc-kind" maxlength="100" placeholder="Add a kind, like “Dungeons”" style="flex:1;min-width:0;width:auto"><button type="button" class="btn-secondary" id="czc-kind-add"><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Add</button></div></div>') +
+          '<div class="czs-act-row"><input class="input" id="czc-kind" maxlength="100" placeholder="Add a kind, like “Dungeons”" style="flex:1;min-width:0;width:auto"><button type="button" class="btn-secondary" id="czc-kind-add"><i class="fa-solid fa-plus" aria-hidden="true"></i>Add</button></div></div>') +
         (c.deleted ? '<div class="czs-danger"><div><span class="czs-lab">Deleted when you save</span><p class="czs-hint">Nothing is gone yet.</p></div><button type="button" class="btn-secondary" id="czc-keep">Keep it</button></div>' :
           '<div class="czs-danger"><div><span class="czs-lab">Delete ' + esc(c.plural || 'this category') + '</span><p class="czs-hint">' + (c.isNew ? 'It is only in your draft, so nothing else changes.' : (blocked || 'It has no pages, so nothing else is lost.')) + '</p></div>' +
-          '<button type="button" class="btn-danger" id="czc-delete"' + (blocked ? ' disabled' : '') + '><i class="fa-solid fa-trash-can mr-1.5" aria-hidden="true"></i>Delete category</button></div>') +
+          '<button type="button" class="btn-danger" id="czc-delete"' + (blocked ? ' disabled' : '') + '><i class="fa-solid fa-trash-can" aria-hidden="true"></i>Delete category</button></div>') +
         '</div>';
       bindSettings(c, body);
       if (focusId && document.getElementById(focusId)) document.getElementById(focusId).focus();

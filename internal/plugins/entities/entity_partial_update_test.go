@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
-	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // parentedEntity is the stored row every case starts from: parented, with a
@@ -157,10 +156,11 @@ func TestUpdate_Entry_EmptyStringPreserves_NullClears(t *testing.T) {
 
 // An HTML body (what the Foundry module sends) must not land in the entry
 // column, which only holds editor JSON: MariaDB rejects it there and the
-// whole update fails. It becomes the HTML body instead; JSON still goes to
-// entry as before.
+// whole update fails. It becomes the HTML body instead; JSON goes to entry
+// and is rendered for the HTML body.
 func TestUpdate_Entry_HTMLGoesToEntryHTML_JSONToEntry(t *testing.T) {
 	doc := `{"type":"doc","content":[]}`
+	para := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"The head of the "},{"type":"text","marks":[{"type":"bold"}],"text":"Order"},{"type":"text","text":"."}]}]}`
 	cases := []struct {
 		name      string
 		in        string
@@ -170,8 +170,10 @@ func TestUpdate_Entry_HTMLGoesToEntryHTML_JSONToEntry(t *testing.T) {
 		{"html", "<p>Hello <b>there</b></p>", nil, "<p>Hello <b>there</b></p>"},
 		{"plain text", "just words", nil, "just words"},
 		{"text that is also a JSON number", "2024", nil, "2024"},
-		// JSON keeps its existing handling byte-for-byte.
-		{"prosemirror json", doc, &doc, sanitize.HTML(doc)},
+		// Editor JSON stays in entry and is rendered for the HTML body,
+		// not stored there as escaped JSON text.
+		{"empty prosemirror doc", doc, &doc, ""},
+		{"prosemirror json", para, &para, "<p>The head of the <strong>Order</strong>.</p>"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

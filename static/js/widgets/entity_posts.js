@@ -148,7 +148,7 @@
         html += '</h3>';
         if (editable) {
           html += '<button class="btn-secondary text-xs" data-action="create-post">';
-          html += '<i class="fa-solid fa-plus mr-1"></i>Add Post';
+          html += '<i class="fa-solid fa-plus"></i>Add Post';
           html += '</button>';
         }
         html += '</div>';

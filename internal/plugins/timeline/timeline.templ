@@ -112,7 +112,7 @@ templ timelineListContent(cc *campaigns.CampaignContext, data TimelineListData) 
 					class="btn-primary text-sm"
 					onclick="document.getElementById('create-timeline-modal').classList.remove('hidden')"
 				>
-					<i class="fa-solid fa-plus mr-1"></i> New Timeline
+					<i class="fa-solid fa-plus"></i> New Timeline
 				</button>
 			}
 		</div>
@@ -232,7 +232,7 @@ templ createTimelineModal(data TimelineListData) {
 						Cancel
 					</button>
 					<button type="submit" class="btn-primary text-xs">
-						<i class="fa-solid fa-plus mr-1"></i> Create Timeline
+						<i class="fa-solid fa-plus"></i> Create Timeline
 					</button>
 				</div>
 			</form>
@@ -297,14 +297,14 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 							class="btn-primary text-xs"
 							onclick="document.getElementById('create-event-modal').classList.remove('hidden')"
 						>
-							<i class="fa-solid fa-plus mr-1"></i> Create Event
+							<i class="fa-solid fa-plus"></i> Create Event
 						</button>
 						if data.Timeline.HasCalendar() {
 							<button
 								class="btn-secondary text-xs"
 								onclick="document.getElementById('event-picker-modal').classList.remove('hidden')"
 							>
-								<i class="fa-solid fa-link mr-1"></i> Link Events
+								<i class="fa-solid fa-link"></i> Link Events
 							</button>
 							<button
 								class="btn-secondary text-xs"
@@ -315,7 +315,7 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 								x-data
 								x-on:htmx:after-request="if ($event.detail.successful) window.location.reload()"
 							>
-								<i class="fa-solid fa-link mr-1"></i> Link All
+								<i class="fa-solid fa-link"></i> Link All
 							</button>
 						}
 					}
@@ -326,7 +326,7 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 								class="btn-secondary text-xs"
 								title="Edit eras in calendar settings"
 							>
-								<i class="fa-solid fa-landmark mr-1"></i> Edit Eras
+								<i class="fa-solid fa-landmark"></i> Edit Eras
 							</a>
 						}
 						<button
@@ -338,7 +338,7 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 							x-data
 							x-on:htmx:after-request={ fmt.Sprintf("if ($event.detail.successful) window.location.href = '/campaigns/%s/timelines'", data.CampaignID) }
 						>
-							<i class="fa-solid fa-trash mr-1"></i> Delete
+							<i class="fa-solid fa-trash"></i> Delete
 						</button>
 					}
 				</div>
@@ -607,7 +607,7 @@ templ entityGroupsInline(data TimelineViewData) {
 				/>
 				<input type="color" class="input w-10 h-8" x-model="newGroupColor" value="#6b7280"/>
 				<button class="btn-primary text-xs" @click="createGroup()" :disabled="!newGroupName.trim()">
-					<i class="fa-solid fa-plus mr-1"></i> Add Group
+					<i class="fa-solid fa-plus"></i> Add Group
 				</button>
 			</div>
 			<!-- Group list -->
@@ -886,7 +886,7 @@ templ createStandaloneEventModal(data TimelineViewData) {
 							Cancel
 						</button>
 						<button type="submit" class="btn-primary text-xs" :disabled="saving">
-							<i class="fa-solid fa-plus mr-1"></i>
+							<i class="fa-solid fa-plus"></i>
 							<span x-text="saving ? 'Creating...' : 'Create Event'"></span>
 						</button>
 					</div>
@@ -1053,7 +1053,7 @@ templ editStandaloneEventModal(data TimelineViewData) {
 							Cancel
 						</button>
 						<button type="submit" class="btn-primary text-xs" :disabled="saving">
-							<i class="fa-solid fa-check mr-1"></i>
+							<i class="fa-solid fa-check"></i>
 							<span x-text="saving ? 'Saving...' : 'Save Changes'"></span>
 						</button>
 					</div>

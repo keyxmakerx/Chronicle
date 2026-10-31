@@ -465,12 +465,21 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 				moonLoreSlug = &s
 			}
 		}
-		data.Moons = append(data.Moons, campaigns.ExportCalendarMoon{
+		em := campaigns.ExportCalendarMoon{
 			Ref: m.ID, Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 			Color: m.Color, HiddenFromPlayers: &hidden,
 			BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
 			Size: m.Size, OrbitSpeed: m.OrbitSpeed, LoreEntitySlug: moonLoreSlug,
-		})
+		}
+		if m.Manual() {
+			em.PhaseMode, em.StateNames = m.PhaseMode, m.StateNames
+			for _, k := range m.Marks {
+				em.Marks = append(em.Marks, campaigns.ExportCalendarMoonMark{
+					Year: k.Year, Month: k.Month, Day: k.Day, State: k.State, Shown: k.Shown,
+				})
+			}
+		}
+		data.Moons = append(data.Moons, em)
 	}
 	for _, s := range cal.Seasons {
 		data.Seasons = append(data.Seasons, campaigns.ExportCalendarSeason{
@@ -531,20 +540,30 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 		})
 	}
 	if w := cal.Weather; w != nil {
-		data.Weather = &campaigns.ExportCalendarWeather{
-			PresetID: w.PresetID, PresetLabel: w.PresetLabel, Icon: w.Icon, Color: w.Color,
-			TemperatureCelsius: w.TemperatureCelsius, ZoneID: w.ZoneID, ZoneName: w.ZoneName,
-			Description: w.Description,
+		reading := exportWeatherReading(w.PresetID, w.PresetLabel, w.Icon, w.Color, w.TemperatureCelsius,
+			w.Wind, w.Precipitation, w.ZoneID, w.ZoneName, w.Description)
+		data.Weather = &reading
+	}
+
+	// Day weather, hand-set moons' marks and event rolls live behind the
+	// calendar's backup half; a service without it (a test fake) has none.
+	backup, _ := a.svc.(calendar.BackupService)
+	var rolls map[string]calendar.EventRollBackup
+	if backup != nil {
+		days, err := backup.DayWeatherForBackup(ctx, cal.ID, campaignID, systemViewer)
+		if err != nil {
+			return nil, fmt.Errorf("export day weather: %w", err)
 		}
-		if w.Wind != nil {
-			data.Weather.WindSpeedKPH = w.Wind.SpeedKPH
-			data.Weather.WindSpeedTier = w.Wind.SpeedTier
-			data.Weather.WindDirection = w.Wind.Direction
-			data.Weather.WindDirectionDegrees = w.Wind.DirectionDegrees
+		for _, d := range days {
+			data.WeatherDays = append(data.WeatherDays, campaigns.ExportCalendarWeatherDay{
+				Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source,
+				Locked: d.Locked != nil && *d.Locked,
+				ExportCalendarWeather: exportWeatherReading(d.PresetID, d.PresetLabel, d.Icon, d.Color,
+					d.TemperatureCelsius, d.Wind, d.Precipitation, d.ZoneID, d.ZoneName, d.Description),
+			})
 		}
-		if w.Precipitation != nil {
-			data.Weather.PrecipitationType = w.Precipitation.Type
-			data.Weather.PrecipitationIntensity = w.Precipitation.Intensity
+		if rolls, err = backup.EventRollsForBackup(ctx, cal.ID, campaignID, systemViewer); err != nil {
+			return nil, fmt.Errorf("export event rolls: %w", err)
 		}
 	}
 
@@ -596,9 +615,50 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 			AllDay: evt.AllDay, Payload: evt.Payload,
 			Ref: evt.ID, RecurrenceRule: rule, Overrides: eventOverrides,
 		})
+		if r, ok := rolls[evt.ID]; ok {
+			roll, err := exportEventRoll(r)
+			if err != nil {
+				return nil, err
+			}
+			data.Events[len(data.Events)-1].Roll = roll
+		}
 	}
 
 	return data, nil
+}
+
+// exportWeatherReading flattens a reading, the calendar's current one or a
+// day's, into the backup's shape.
+func exportWeatherReading(presetID, presetLabel, icon, color *string, temp *float64, wind *calendar.Wind,
+	precip *calendar.Precipitation, zoneID, zoneName, description *string) campaigns.ExportCalendarWeather {
+	out := campaigns.ExportCalendarWeather{
+		PresetID: presetID, PresetLabel: presetLabel, Icon: icon, Color: color,
+		TemperatureCelsius: temp, ZoneID: zoneID, ZoneName: zoneName, Description: description,
+	}
+	if wind != nil {
+		out.WindSpeedKPH, out.WindSpeedTier = wind.SpeedKPH, wind.SpeedTier
+		out.WindDirection, out.WindDirectionDegrees = wind.Direction, wind.DirectionDegrees
+	}
+	if precip != nil {
+		out.PrecipitationType, out.PrecipitationIntensity = precip.Type, precip.Intensity
+	}
+	return out
+}
+
+// exportEventRoll carries an event's roll and nights into the backup.
+func exportEventRoll(r calendar.EventRollBackup) (*campaigns.ExportCalendarEventRoll, error) {
+	cfg, err := json.Marshal(r.Config)
+	if err != nil {
+		return nil, fmt.Errorf("export event roll: %w", err)
+	}
+	out := &campaigns.ExportCalendarEventRoll{Config: cfg, TableName: r.TableName}
+	for _, n := range r.Nights {
+		out.Nights = append(out.Nights, campaigns.ExportCalendarRollNight{
+			Year: n.Year, Month: n.Month, Day: n.Day, Total: n.Total, Faces: n.Faces,
+			Entry: n.Entry, Source: n.Source, Locked: n.Locked, Told: n.Told,
+		})
+	}
+	return out, nil
 }
 
 // timelineExportAdapter implements campaigns.TimelineExporter.
@@ -1835,6 +1895,17 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 		}
 	}
 
+	// Day weather, hand-set moons and event rolls go through the calendar's
+	// backup half, as a system caller; a service without it restores none.
+	backup, _ := a.svc.(calendar.BackupService)
+	systemViewer := permissions.SystemViewer(3)
+	if backup != nil && len(data.WeatherDays) > 0 {
+		a.importWeatherDays(ctx, backup, cal.ID, campaignID, data, systemViewer, report)
+	}
+	if backup != nil && calendarDataHasHandSetMoons(data) {
+		a.importMoonHands(ctx, backup, cal.ID, campaignID, data, systemViewer, report)
+	}
+
 	// Eras, one CreateEra call each — the only way to write eras this
 	// service exposes (no bulk SetEras; see CalendarService's doc comment).
 	for _, e := range data.Eras {
@@ -1971,9 +2042,112 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 		if created[i] != "" && len(evt.Overrides) > 0 {
 			a.replayOverrides(ctx, cal.ID, campaignID, created[i], evt, report)
 		}
+		if created[i] != "" && evt.Roll != nil && backup != nil {
+			a.importEventRoll(ctx, backup, cal.ID, campaignID, created[i], evt, systemViewer, report)
+		}
 	}
 
 	return kindIDBySlug, nil
+}
+
+// importWeatherDays restores the day-by-day readings with their sources and
+// locks. A reading the calendar no longer has room for is reported.
+func (a *calendarImportAdapter) importWeatherDays(ctx context.Context, backup calendar.BackupService, calendarID, campaignID string, data *campaigns.ExportCalendarData, v permissions.Viewer, report *campaigns.ImportReport) {
+	days := make([]calendar.DayWeather, len(data.WeatherDays))
+	for i, d := range data.WeatherDays {
+		locked := d.Locked
+		w := d.ExportCalendarWeather
+		days[i] = calendar.DayWeather{
+			Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source, Locked: &locked,
+			PresetID: w.PresetID, PresetLabel: w.PresetLabel, Icon: w.Icon, Color: w.Color,
+			TemperatureCelsius: w.TemperatureCelsius, ZoneID: w.ZoneID, ZoneName: w.ZoneName,
+			Description: w.Description,
+			Wind: &calendar.Wind{SpeedKPH: w.WindSpeedKPH, SpeedTier: w.WindSpeedTier,
+				Direction: w.WindDirection, DirectionDegrees: w.WindDirectionDegrees},
+			Precipitation: &calendar.Precipitation{Type: w.PrecipitationType, Intensity: w.PrecipitationIntensity},
+		}
+	}
+	skipped, err := backup.RestoreDayWeather(ctx, calendarID, campaignID, days, v)
+	if err != nil {
+		slog.Warn("import: day weather failed", slog.Any("error", err))
+		report.Fail(campaigns.SectionCalendar, "day weather", data.Name, apperror.SafeMessage(err))
+		return
+	}
+	if skipped > 0 {
+		report.FailN(campaigns.SectionCalendar, "day weather", data.Name, "a reading's day is not on this calendar, or the reading is not valid", skipped)
+	}
+}
+
+// calendarDataHasHandSetMoons reports whether any moon was set by hand.
+func calendarDataHasHandSetMoons(data *campaigns.ExportCalendarData) bool {
+	for _, m := range data.Moons {
+		if m.PhaseMode == calendar.MoonManual {
+			return true
+		}
+	}
+	return false
+}
+
+// importMoonHands puts hand-set moons back, matching each to the re-created
+// moon by name.
+func (a *calendarImportAdapter) importMoonHands(ctx context.Context, backup calendar.BackupService, calendarID, campaignID string, data *campaigns.ExportCalendarData, v permissions.Viewer, report *campaigns.ImportReport) {
+	cal, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
+		report.Fail(campaigns.SectionCalendar, "moons", data.Name, apperror.SafeMessage(err))
+		return
+	}
+	idByName := make(map[string]int, len(cal.Moons))
+	for _, m := range cal.Moons {
+		idByName[m.Name] = m.ID
+	}
+	for _, m := range data.Moons {
+		if m.PhaseMode != calendar.MoonManual {
+			continue
+		}
+		id, ok := idByName[m.Name]
+		if !ok {
+			report.Fail(campaigns.SectionCalendar, "moon", m.Name, "the moon was not restored, so its hand-set marks were not either")
+			continue
+		}
+		hand := calendar.MoonHand{StateNames: m.StateNames}
+		for _, k := range m.Marks {
+			hand.Marks = append(hand.Marks, calendar.MoonMark{Year: k.Year, Month: k.Month, Day: k.Day, State: k.State, Shown: k.Shown})
+		}
+		skipped, err := backup.RestoreMoonHand(ctx, calendarID, campaignID, id, hand, v)
+		if err != nil {
+			slog.Warn("import: hand-set moon failed", slog.String("moon", m.Name), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "moon", m.Name, apperror.SafeMessage(err))
+			continue
+		}
+		if skipped > 0 {
+			report.FailN(campaigns.SectionCalendar, "moon mark", m.Name, "a mark's day is not on this calendar, or its state is unknown", skipped)
+		}
+	}
+}
+
+// importEventRoll restores one event's roll and its stored nights.
+func (a *calendarImportAdapter) importEventRoll(ctx context.Context, backup calendar.BackupService, calendarID, campaignID, eventID string, evt campaigns.ExportCalendarEvent, v permissions.Viewer, report *campaigns.ImportReport) {
+	roll := calendar.EventRollBackup{TableName: evt.Roll.TableName}
+	if err := json.Unmarshal(evt.Roll.Config, &roll.Config); err != nil {
+		report.Fail(campaigns.SectionCalendar, "event roll", evt.Name, "the roll's settings could not be read")
+		return
+	}
+	for _, n := range evt.Roll.Nights {
+		roll.Nights = append(roll.Nights, calendar.RollNight{
+			Year: n.Year, Month: n.Month, Day: n.Day, Total: n.Total, Faces: n.Faces,
+			Entry: n.Entry, Source: n.Source, Locked: n.Locked, Told: n.Told,
+		})
+	}
+	dropped, err := backup.RestoreEventRoll(ctx, eventID, calendarID, campaignID, roll, v)
+	if err != nil {
+		slog.Warn("import: event roll failed", slog.String("event", evt.Name), slog.Any("error", err))
+		report.Fail(campaigns.SectionCalendar, "event roll", evt.Name, apperror.SafeMessage(err))
+		return
+	}
+	if dropped {
+		report.Fail(campaigns.SectionCalendar, "event roll", evt.Name,
+			fmt.Sprintf("it rolls on the table %q, which this campaign does not have, so the roll was left off", evt.Roll.TableName))
+	}
 }
 
 // replayOverrides re-applies one event's skips and moves. The export lists

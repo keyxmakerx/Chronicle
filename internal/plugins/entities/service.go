@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/editordoc"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -794,11 +795,18 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		// Plain HTML (the sync API's clients send their page text this way)
 		// leaves entry empty: that column only holds editor JSON, so the HTML
 		// is the body from now on and the editor opens it from entry_html.
+		// Editor JSON is kept as sent and rendered here for entry_html, since
+		// no browser editor produced the HTML copy alongside it.
 		entity.Entry = nil
+		body := entry
 		if isEditorDoc(entry) {
 			entity.Entry = &entry
+			body = ""
+			if rendered, ok := editordoc.ToHTML(entry); ok {
+				body = rendered
+			}
 		}
-		sanitized := sanitize.HTML(entry)
+		sanitized := sanitize.HTML(body)
 		entity.EntryHTML = &sanitized
 	}
 

@@ -127,7 +127,7 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 			</div>
 			if cc.MemberRole >= RoleOwner {
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="cb-quiet btn-secondary text-sm">
-					<i class="fa-solid fa-gear mr-1.5 text-xs"></i> Settings
+					<i class="fa-solid fa-gear text-xs"></i> Settings
 				</a>
 			}
 		</div>

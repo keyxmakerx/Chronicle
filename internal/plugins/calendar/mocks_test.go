@@ -508,10 +508,11 @@ type fakeWeatherRepo struct {
 	getFn func(ctx context.Context, calendarID string) (*Weather, error)
 	setFn func(ctx context.Context, calendarID string, input WeatherInput) error
 
-	listDaysFn  func(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error)
-	setDaysFn   func(ctx context.Context, calendarID string, days []DayWeatherInput) error
-	clearDaysFn func(ctx context.Context, calendarID string, dates []DayDate) error
-	lockDaysFn  func(ctx context.Context, calendarID string, dates []DayDate, locked bool) (int, error)
+	listAllDaysFn func(ctx context.Context, calendarID string) ([]DayWeather, error)
+	listDaysFn    func(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error)
+	setDaysFn     func(ctx context.Context, calendarID string, days []DayWeatherInput) error
+	clearDaysFn   func(ctx context.Context, calendarID string, dates []DayDate) error
+	lockDaysFn    func(ctx context.Context, calendarID string, dates []DayDate, locked bool) (int, error)
 
 	getSettingsFn func(ctx context.Context, calendarID string) (*WeatherSettings, error)
 	setSettingsFn func(ctx context.Context, calendarID string, s WeatherSettings) error
@@ -533,6 +534,12 @@ func (m *fakeWeatherRepo) Set(ctx context.Context, calendarID string, input Weat
 func (m *fakeWeatherRepo) ListDays(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error) {
 	if m.listDaysFn != nil {
 		return m.listDaysFn(ctx, calendarID, year, month)
+	}
+	return nil, nil
+}
+func (m *fakeWeatherRepo) ListAllDays(ctx context.Context, calendarID string) ([]DayWeather, error) {
+	if m.listAllDaysFn != nil {
+		return m.listAllDaysFn(ctx, calendarID)
 	}
 	return nil, nil
 }
