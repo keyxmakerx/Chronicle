@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -1367,21 +1368,44 @@ func (h *Handler) BulkMoveAPI(c echo.Context) error {
 		return apperror.NewBadRequest("no entities selected")
 	}
 
+	if len(req.EntityIDs) > 200 {
+		return apperror.NewBadRequest("maximum 200 entities per request")
+	}
+
 	ctx := c.Request().Context()
 	req.EntityIDs = h.editablePageIDs(c, cc, req.EntityIDs)
-	for i, eid := range req.EntityIDs {
-		if err := h.service.ReorderEntity(ctx, cc.Campaign.ID, eid, req.ParentID, req.ParentNodeID, i); err != nil {
+	// Where each moved page was, so the list's Undo can put it back. Each
+	// page goes to the end of its new list, in the order it was picked.
+	previous := make(map[string]bulkMovePlace, len(req.EntityIDs))
+	moved := 0
+	for _, eid := range req.EntityIDs {
+		e, err := h.service.GetByID(ctx, eid)
+		if err != nil || e.CampaignID != cc.Campaign.ID {
+			continue
+		}
+		if err := h.service.ReorderEntity(ctx, cc.Campaign.ID, eid, req.ParentID, req.ParentNodeID, math.MaxInt32); err != nil {
 			slog.Warn("bulk move: entity failed",
 				slog.String("entity_id", eid),
 				slog.Any("error", err),
 			)
+			continue
 		}
+		previous[eid] = bulkMovePlace{ParentID: e.ParentID, ParentNodeID: e.ParentNodeID}
+		moved++
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"status": "ok",
-		"moved":  len(req.EntityIDs),
+		"status":   "ok",
+		"moved":    moved,
+		"previous": previous,
 	})
+}
+
+// bulkMovePlace is where a page sat before a bulk move: under a page, under
+// a sidebar folder, or (both nil) at the top of its category.
+type bulkMovePlace struct {
+	ParentID     *string `json:"parentId"`
+	ParentNodeID *string `json:"parentNodeId"`
 }
 
 // BulkChangeTypeAPI changes the entity type for multiple entities.

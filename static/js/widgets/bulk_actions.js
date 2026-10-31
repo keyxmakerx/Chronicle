@@ -2,8 +2,8 @@
  * bulk_actions.js -- Entity Bulk Selection & Actions
  *
  * Adds multi-select checkboxes to entity cards/rows and a floating
- * action bar with bulk operations (category, add a tag, who sees them, the
- * Trash), each picked from a list and each with Undo.
+ * action bar with bulk operations (category, add a tag, move under another
+ * page, who sees them, the Trash), each picked from a list and each with Undo.
  *
  * Mount: data-widget="bulk-actions"
  * Config:
@@ -227,6 +227,7 @@
           (onPage > count ? '<button type="button" class="quiet-word" data-bulk-action="all">Select all ' + onPage + '</button>' : '') +
           word('type', 'Type') +
           word('add-tags', 'Tags') +
+          word('move', 'Move') +
           (canHide ? word('visibility', 'Who sees') : '') +
           (isOwner ? '<button type="button" class="quiet-word" data-bulk-action="delete">Trash</button>' : '') +
           '<button type="button" class="btn-ghost btn-icon text-fg-muted" data-bulk-action="clear" aria-label="Clear selection" title="Clear selection">' +
@@ -249,6 +250,7 @@
         if (act === 'type') openPicker(btn, typeOptions, applyType, 'Find a category');
         if (act === 'add-tags') loadTags().then(function () { openPicker(btn, tagOptions, applyTag, 'Find or make a tag', true); });
         if (act === 'visibility') openPicker(btn, visibilityOptions, applyVisibility);
+        if (act === 'move') { moveResults = []; openPicker(btn, moveOptions, applyMove, 'Find a page to move them under', false, searchMove); }
       }
 
       // --- The picker ---
@@ -268,6 +270,34 @@
         ];
       }
 
+      // Move lists pages from the campaign search as you type, so it never
+      // loads every page; the top level is always offered.
+      var moveResults = [];
+      var moveTimer = null;
+      var moveSeq = 0;
+      function moveOptions() {
+        var out = [{ id: '', label: 'Top level, under no page', keep: true }];
+        moveResults.forEach(function (r) {
+          if (!selected[r.id]) out.push({ id: r.id, name: r.name, label: r.type_name ? r.name + ' · ' + r.type_name : r.name });
+        });
+        return out;
+      }
+      function searchMove(q, rerender) {
+        clearTimeout(moveTimer);
+        var seq = ++moveSeq;
+        if (q.length < 2) { moveResults = []; rerender(); return; }
+        moveTimer = setTimeout(function () {
+          Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignId) + '/entities/search?q=' + encodeURIComponent(q))
+            .then(function (res) { if (!res.ok) throw new Error('search ' + res.status); return res.json(); })
+            .then(function (data) {
+              if (seq !== moveSeq) return;
+              moveResults = Array.isArray(data.results) ? data.results : [];
+              rerender();
+            })
+            .catch(function () { if (seq === moveSeq) { moveResults = []; rerender(); } });
+        }, 200);
+      }
+
       var tagsLoaded = false;
       function loadTags() {
         if (tagsLoaded) return Promise.resolve();
@@ -277,7 +307,7 @@
           .catch(function () { Chronicle.notify('Could not load the tags. Try again.', 'error'); throw new Error('no tags'); });
       }
 
-      function openPicker(anchor, optionsFn, onPick, findLabel, canMake) {
+      function openPicker(anchor, optionsFn, onPick, findLabel, canMake, onQuery) {
         closePicker();
         var box = document.createElement('div');
         box.className = 'bulk-picker fixed z-50 bg-surface border border-edge rounded-lg shadow-xl p-1 w-64 max-h-72 flex flex-col';
@@ -306,7 +336,8 @@
         function render() {
           var q = find ? find.value.trim() : '';
           var ql = q.toLowerCase();
-          shown = optionsFn().filter(function (o) { return !ql || o.label.toLowerCase().indexOf(ql) !== -1; });
+          // A list that searches as you type is already matched by the server.
+          shown = optionsFn().filter(function (o) { return o.keep || onQuery || !ql || o.label.toLowerCase().indexOf(ql) !== -1; });
           var exact = shown.some(function (o) { return o.label.toLowerCase() === ql; });
           if (canMake && q && !exact) shown.push({ make: q, label: 'Make the tag “' + q + '”' });
           if (active >= shown.length) active = Math.max(0, shown.length - 1);
@@ -322,7 +353,7 @@
           if (o.make) {
             makeTag(o.make).then(function (t) { if (t) onPick(t.id, t.name); });
           } else {
-            onPick(o.id, o.label);
+            onPick(o.id, o.label, o);
           }
         }
         list.addEventListener('click', function (e) {
@@ -335,7 +366,11 @@
           else if (e.key === 'Enter') { e.preventDefault(); pick(active); }
           else if (e.key === 'Escape') { e.preventDefault(); closePicker(); anchor.focus(); }
         });
-        if (find) find.addEventListener('input', function () { active = 0; render(); });
+        if (find) find.addEventListener('input', function () {
+          active = 0;
+          if (onQuery) onQuery(find.value.trim(), render);
+          render();
+        });
         render();
         picker = { box: box, anchor: anchor };
         (find || list.querySelector('[data-i]') || box).focus();
@@ -401,6 +436,24 @@
           var undo = gained.length ? [{ path: '/entities/bulk-tags', body: { entity_ids: gained, tag_ids: [tagId], action: 'remove' } }] : [];
           done('Tagged ' + pages(gained.length) + ' ' + label + '.', undo);
         }).catch(function () { Chronicle.notify('The tag wasn’t added. Try again.', 'error'); });
+      }
+
+      function applyMove(parentId, label, opt) {
+        var ids = getSelectedIds();
+        post('/entities/bulk-move', { entity_ids: ids, parent_id: parentId || null }).then(function (data) {
+          var byPlace = {};
+          Object.keys(data.previous || {}).forEach(function (eid) {
+            var p = data.previous[eid] || {};
+            var key = JSON.stringify([p.parentId || null, p.parentNodeId || null]);
+            (byPlace[key] = byPlace[key] || []).push(eid);
+          });
+          var undo = Object.keys(byPlace).map(function (key) {
+            var place = JSON.parse(key);
+            return { path: '/entities/bulk-move', body: { entity_ids: byPlace[key], parent_id: place[0], parent_node_id: place[1] } };
+          });
+          var n = data.moved || 0;
+          done(parentId ? 'Moved ' + pages(n) + ' under ' + ((opt && opt.name) || label) + '.' : 'Moved ' + pages(n) + ' to the top level.', undo);
+        }).catch(function () { Chronicle.notify('The pages didn’t move. Try again.', 'error'); });
       }
 
       function applyVisibility(choice) {
