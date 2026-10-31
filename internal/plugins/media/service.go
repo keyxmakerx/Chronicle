@@ -236,7 +236,9 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		// never merged: each upload is its own file, so who may open it never
 		// depends on who else uploaded the same bytes.
 		if input.CampaignID != "" && !input.NoMerge && input.UsageType != UsageNoteImage && input.UsageType != UsagePageFile {
-			if existing, err := s.repo.FindByContentHash(ctx, input.CampaignID, contentHash); err != nil {
+			if existing, err := s.repo.FindByContentHash(ctx, input.CampaignID, contentHash); err == nil && existing == nil {
+				s.mergeCheckForNoMatch(ctx, input.CampaignID, input.UploadedBy)
+			} else if err != nil {
 				// Non-fatal — continue with a fresh upload rather than
 				// blocking the user on a transient DB hiccup.
 				slog.Warn("media dedup: lookup failed, proceeding with new upload",
@@ -496,6 +498,24 @@ func (s *mediaService) canMergeWithExisting(ctx context.Context, campaignID, exi
 		}
 	}
 	return true, refs, nil
+}
+
+// noMatchProbeID is a media id no file or page can hold (the nil UUID).
+const noMatchProbeID = "00000000-0000-0000-0000-000000000000"
+
+// mergeCheckForNoMatch makes the lookups a refused merge makes, for an upload
+// that matched nothing. A refused merge stores a separate file and answers
+// exactly like an ordinary upload; without this it would still take longer,
+// and the delay would tell the uploader that a page they can't see holds the
+// same picture. The answers are thrown away. Keep it in step with
+// canMergeWithExisting: TestUpload_NoMatchMakesTheRefusedMergeLookups pins it.
+func (s *mediaService) mergeCheckForNoMatch(ctx context.Context, campaignID, uploaderID string) {
+	_, _ = s.repo.FindReferences(ctx, campaignID, noMatchProbeID)
+	if s.entityVisibility == nil {
+		return
+	}
+	role := promotedVisibilityRole(s.memberChecker, campaignID, uploaderID)
+	_, _ = s.entityVisibility.FilterViewableEntityIDs(ctx, campaignID, []string{noMatchProbeID}, role, uploaderID)
 }
 
 // defaultCampaignlessStorageBytes caps a user's total campaign-less uploads

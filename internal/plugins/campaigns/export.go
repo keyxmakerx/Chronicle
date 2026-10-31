@@ -628,6 +628,10 @@ type ExportMarker struct {
 	Color       string  `json:"color"`
 	EntitySlug  *string `json:"entity_slug,omitempty"`
 	Visibility  string  `json:"visibility"`
+	// VisibilityRules is the pin's per-player allow/deny list, as stored
+	// (user ids). An import keeps it only when every id names a user of the
+	// target site; otherwise the pin becomes Director-only.
+	VisibilityRules *string `json:"visibility_rules,omitempty"`
 	// LinkedMapRef is the Ref of the exported map this marker opens.
 	LinkedMapRef *string `json:"linked_map_ref,omitempty"`
 }
