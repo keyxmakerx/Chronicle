@@ -376,7 +376,9 @@ window.CraftJournal = (function () {
     c.steps.forEach(function(st,i){var h=SPOT[st.item];if(h&&st.t==='add'&&st.to==='mortar'&&(i<c.i||c.phase!=='step')){
       s+='<g>'+wash('M'+(h[0]-56)+','+(h[1]-50)+' h112 v120 h-112 Z',ITEMC[st.item]||'#8a6a40',.1,'filter="url(#p-wc)"')+tape(h[0]-40,h[1]-58,-24,40)+tape(h[0]+42,h[1]-56,20,40)+
         '<path d="M'+(h[0]-58)+','+(h[1]-52)+' l-4,8 M'+(h[0]+60)+','+(h[1]-48)+' l5,7" class="p-ink p-thin" opacity=".4"/></g>';}});
-    /* The project, on a slip tucked into the page */
+    /* The project, on a slip tucked into the page; a moment that isn't a
+       project (an experiment, a breakdown) has none. */
+    if(!r.noProject){
     var px=412;s+='<g transform="rotate(-1.2 '+px+' 200)"><rect x="'+(px-12)+'" y="184" width="176" height="196" class="p-slip"/>'+tape(px+76,182,-6,52)+
       '<text class="p-small" x="'+px+'" y="214">The project</text>';
     var old=r.start,now=S.points,k=now/r.goal;
@@ -388,6 +390,7 @@ window.CraftJournal = (function () {
     if(S.roll)s+=wtext('roll',px,358,'p-rolled',S.roll.a+' + '+S.roll.b+(v.v?(v.v>0?' + 2':' \u2212 2'):'')+' = '+S.roll.total);
     s+='</g>';
     if(S.phase==='done'&&S.points<r.goal)s+=wtext('togo',154,420,'p-notet','+'+S.roll.total+' tonight. '+(r.goal-S.points)+' more at the next respite.');
+    }
     if(O.note){var ls=wrapT(O.note,24);s+='<g transform="rotate(-4 420 450)">';ls.forEach(function(l,i){s+=wtext('note-'+i+'-'+l,404,(446+i*24),'p-notet',esc(l));});s+='</g>';}
     /* Right page */
     s+='<text class="p-run" x="640" y="72">the bench</text><text class="p-hand p-cap" x="642" y="100">fig. \u2014 the bench, as I keep it</text>'+

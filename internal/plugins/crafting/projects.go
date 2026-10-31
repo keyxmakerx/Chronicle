@@ -67,6 +67,12 @@ type Project struct {
 type ProjectDetails struct {
 	Made []string `json:"made,omitempty"`
 	Subs []string `json:"subs,omitempty"`
+	// Used is what the ingredients that went in remembered; nil for a
+	// project started before copies remembered anything, whose ingredient
+	// rules stay unknown.
+	Used *Ingredients `json:"used,omitempty"`
+	// Item is what the made item will remember (fine, marks, a quirk).
+	Item *Kept `json:"item,omitempty"`
 }
 
 // ProjectView is a project as the block and the Projects tab show it.
@@ -106,6 +112,51 @@ type PackItem struct {
 	Tags   []string `json:"tags"`
 	// Picture is what the item wears: its own, or its first kind's.
 	Picture MaterialPicture `json:"picture"`
+	// Kept are the copies that remember something, oldest first; the rest
+	// of Qty is plain.
+	Kept []Kept `json:"kept,omitempty"`
+	// Use asks for remembered copies to go into a project first.
+	Use []KeptPick `json:"-"`
+}
+
+// Kept is what some copies of an item remember, as the Armory keeps them:
+// marks, fine or poor, a quirk, who made or harvested them and when, and
+// when they go off (OffDay on the calendar's day count) and what into.
+type Kept struct {
+	ID      int64    `json:"id,omitempty"`
+	Qty     int      `json:"qty,omitempty"`
+	Marks   []string `json:"marks,omitempty"`
+	Quality string   `json:"quality,omitempty"`
+	Quirk   string   `json:"quirk,omitempty"`
+	How     string   `json:"how,omitempty"`
+	By      string   `json:"by,omitempty"`
+	On      string   `json:"on,omitempty"`
+	OffDay  int64    `json:"offDay,omitempty"`
+	OffOn   string   `json:"offOn,omitempty"`
+	Becomes string   `json:"-"`
+	// BecomesName names Becomes for the block.
+	BecomesName string `json:"becomes,omitempty"`
+	// Off marks a copy that has gone off.
+	Off bool `json:"off,omitempty"`
+}
+
+// Empty reports copies that remember nothing.
+func (k Kept) Empty() bool {
+	return len(k.Marks) == 0 && k.Quality == "" && k.Quirk == "" && k.How == "" && k.OffDay == 0
+}
+
+// KeptPick asks for N copies of one remembered row.
+type KeptPick struct {
+	ID int64 `json:"id"`
+	N  int   `json:"n"`
+}
+
+// Ingredients is what the remembered copies that went into a project
+// carried: their marks, and how many were fine or poor.
+type Ingredients struct {
+	Marks []string `json:"marks,omitempty"`
+	Fine  int      `json:"fine,omitempty"`
+	Poor  int      `json:"poor,omitempty"`
 }
 
 // Pack is what a hero carries and how they pay, as the viewer may see it.
@@ -166,6 +217,10 @@ type CraftRecipe struct {
 	Cost      *Cost  `json:"cost,omitempty"`
 	Makes     string `json:"makes"`
 	MakesQty  int    `json:"makesQty"`
+	// MakesID is the item it makes, and Salvage what breaking one down gives
+	// back ("1 × Spring water"), empty when it can't be broken down.
+	MakesID string   `json:"makesId,omitempty"`
+	Salvage []string `json:"salvage,omitempty"`
 	// Charge is the cost against this hero's money, in Pack.Have's units.
 	Charge int64    `json:"charge"`
 	Lines  []string `json:"lines"`
@@ -203,6 +258,10 @@ type CharacterCrafting struct {
 	// when spoils aren't set up.
 	Spoils   []SpoilView `json:"spoils"`
 	Director bool        `json:"director"`
+	// Try is "Try something new", nil when there is nothing left this hero
+	// could find; Party is the party's projects this hero may help with.
+	Try   *TryView   `json:"try,omitempty"`
+	Party []HelpView `json:"party"`
 }
 
 // StartInput starts a project. Picks fills each "any <tag>" material, by
@@ -210,6 +269,8 @@ type CharacterCrafting struct {
 type StartInput struct {
 	RecipeID string         `json:"recipeId"`
 	Picks    map[int]string `json:"picks"`
+	// Use names, per material line, remembered copies to put in first.
+	Use map[int][]KeptPick `json:"use"`
 }
 
 // RollInput makes a project's roll. Work is how the steps went (WorkClean
@@ -240,8 +301,10 @@ type RollResult struct {
 	// Spoiled says a recipe's chance of "can't be made" came up: the roll
 	// was used and added nothing.
 	Spoiled bool `json:"spoiled,omitempty"`
-	// Made names what reached the pack, "" when nothing did.
+	// Made names what reached the pack, "" when nothing did; Item is what
+	// it remembers (fine, a mark, a quirk, who made it, when it goes off).
 	Made string `json:"made,omitempty"`
+	Item *Kept  `json:"item,omitempty"`
 	// Mishap is what struck mid-brew, nil when nothing did; Row is its row
 	// of the table (from 0), which picks its look on the bench.
 	Mishap *Mishap `json:"mishap,omitempty"`
@@ -292,6 +355,10 @@ type SetPointsInput struct {
 // and the time of day by the calendar's clock ("dawn", "day", "dusk" or
 // "night"; "" when unknown).
 type Day struct {
+	// Abs is today on the calendar's day count; After names the day n days
+	// on, as that count and in words.
+	Abs     int64
+	After   func(n int) (int64, string)
 	Time    string
 	Label   string
 	Moons   []DayMoon
@@ -320,11 +387,23 @@ type Armory interface {
 	Charge(p *Pack, c Cost) int64
 	// Spend takes the materials and the cost, all or nothing, and says what
 	// was paid ("25 gp"), "" when no coins changed hands.
-	Spend(ctx context.Context, campaignID string, v Viewer, characterID string, items []PackItem, c Cost, label string) (string, error)
-	Give(ctx context.Context, campaignID string, v Viewer, characterID, itemID string, qty int, label string) error
+	// Spend also returns what the remembered copies that went in carried.
+	Spend(ctx context.Context, campaignID string, v Viewer, characterID string, items []PackItem, c Cost, label string) (string, []Kept, error)
+	// Give puts the made item in the pack with what it remembers.
+	Give(ctx context.Context, campaignID string, v Viewer, characterID, itemID string, qty int, label string, k Kept) error
+	// Use takes items from the pack for something other than a project,
+	// which why names in the history ("in an experiment"), and returns what
+	// the remembered copies taken carried.
+	Use(ctx context.Context, campaignID string, v Viewer, characterID string, items []PackItem, why string) ([]Kept, error)
+	// GiveFor puts an item in a character's pack on behalf of a hero the
+	// viewer may act for, with the history line given.
+	GiveFor(ctx context.Context, campaignID string, v Viewer, actingFor, characterID, itemID string, qty int, why string, k Kept) error
 	// GiveSpoil puts what a hero took or harvested from the spoils tray in
 	// their pack.
-	GiveSpoil(ctx context.Context, campaignID string, v Viewer, characterID, itemID string, qty int, harvested bool) error
+	GiveSpoil(ctx context.Context, campaignID string, v Viewer, characterID, itemID string, qty int, harvested bool, k Kept) error
+	// GoOff turns every copy whose day has come into what it becomes, and
+	// says how many.
+	GoOff(ctx context.Context, campaignID string, v Viewer, day int64) (int, error)
 }
 
 // Sheets reads a hero's sheet: a characteristic (ok is false when the field

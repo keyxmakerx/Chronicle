@@ -13,8 +13,7 @@ import (
 // recipe's rules (fine, a mark, a quirk, made as something else), mishaps
 // mid-brew, discoveries, and the recipe's "If it goes wrong" and "Extras"
 // settings that the roll can carry out (botch costs, breakthroughs,
-// mastery, substitutes). Settings that need an item to remember something
-// of its own stay with the editor until the Armory can (TODO(#1883)).
+// mastery, substitutes, and what the made item remembers).
 
 // skills reads the maker's skills from their sheet, lowercased; nil when
 // the sheet lists none or can't be read, so a rule about a skill stays
@@ -110,16 +109,26 @@ func (s *service) befall(ctx context.Context, campaignID string, next *Project, 
 			next.Details.Made = append(next.Details.Made, note)
 		}
 	}
+	item := func() *Kept {
+		if next.Details.Item == nil {
+			next.Details.Item = &Kept{}
+		}
+		return next.Details.Item
+	}
 	for _, f := range fx {
 		t := f.rule.Then
 		switch t.Kind {
 		case "fine":
 			if res.Finished {
 				made("Fine")
+				item().Quality = "fine"
 			}
 		case "mark":
 			if res.Finished && t.Mark != "" {
 				made("Marked: " + t.Mark)
+				if k := item(); len(k.Marks) < maxKeptMarks {
+					k.Marks = append(k.Marks, t.Mark)
+				}
 			}
 		case "becomes":
 			if !res.Finished || t.Item == "" {
@@ -137,6 +146,7 @@ func (s *service) befall(ctx context.Context, campaignID string, next *Project, 
 			}
 			if _, text, ok := s.rollTable(ctx, campaignID, t.Table); ok {
 				made("A quirk: " + text)
+				item().Quirk = text
 			} else {
 				tableNote(t.Table, v.Director, res)
 			}
@@ -165,6 +175,7 @@ func (s *service) befall(ctx context.Context, campaignID string, next *Project, 
 		case BotchQuirk:
 			if _, text, ok := s.rollTable(ctx, campaignID, x.Botch.QuirkTable); ok {
 				made("A quirk: " + text)
+				item().Quirk = text
 				res.Notes = append(res.Notes, "The botch left a quirk: "+text)
 			} else {
 				tableNote(x.Botch.QuirkTable, v.Director, res)
@@ -237,4 +248,73 @@ func (s *service) itemByName(ctx context.Context, campaignID, name string) strin
 		}
 	}
 	return ""
+}
+
+// maxKeptMarks caps the marks one made item carries, as the Armory does.
+const maxKeptMarks = 6
+
+// ingredientsOf sums what the remembered copies that went into a project
+// carried. A project always gets one, empty when every ingredient was
+// plain, so its ingredient rules are known to be off rather than unknown.
+func ingredientsOf(used []Kept) *Ingredients {
+	out := &Ingredients{}
+	seen := map[string]bool{}
+	for _, k := range used {
+		for _, m := range k.Marks {
+			if l := strings.ToLower(m); !seen[l] {
+				seen[l] = true
+				out.Marks = append(out.Marks, m)
+			}
+		}
+		switch k.Quality {
+		case "fine":
+			out.Fine += k.Qty
+		case "poor":
+			out.Poor += k.Qty
+		}
+	}
+	return out
+}
+
+// madeKept is what the made item remembers: what the rolls gave it (fine,
+// marks, a quirk), the maker's mark, and when it goes off, by the recipe's
+// extras and the calendar's today.
+func (s *service) madeKept(ctx context.Context, p *Project, e *EntityInfo, x Extras, day *Day) Kept {
+	var k Kept
+	if p.Details.Item != nil {
+		k = *p.Details.Item
+	}
+	if x.MakersMark {
+		k.How, k.By = "made", e.Name
+		if day != nil {
+			k.On = day.Label
+		}
+	}
+	if x.Keeps != nil && x.Keeps.Days > 0 && day != nil && day.After != nil {
+		k.OffDay, k.OffOn = day.After(x.Keeps.Days)
+		if x.Keeps.ThenBecomes != "" {
+			k.Becomes = s.itemByName(ctx, p.CampaignID, x.Keeps.ThenBecomes)
+			k.BecomesName = x.Keeps.ThenBecomes
+		}
+	}
+	return k
+}
+
+// harvestKept is what harvested parts remember: a top-tier cut gives fine
+// parts and the lowest tier poor ones, with who cut them and when. The
+// middle tier's parts are plain and join the plain stack.
+func (s *service) harvestKept(ctx context.Context, campaignID string, e *EntityInfo, tier int) Kept {
+	k := Kept{How: "harvested", By: e.Name}
+	switch tier {
+	case 2:
+		k.Quality = "fine"
+	case 0:
+		k.Quality = "poor"
+	default:
+		return Kept{}
+	}
+	if d := s.today(ctx, campaignID); d != nil {
+		k.On = d.Label
+	}
+	return k
 }

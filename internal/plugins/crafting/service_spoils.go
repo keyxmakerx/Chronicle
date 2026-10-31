@@ -681,7 +681,11 @@ func (s *service) TakeSpoil(ctx context.Context, campaignID string, lineID int64
 		res.Notes = append(res.Notes, "That tier pays nothing for this one.")
 		return res, nil
 	}
-	if err := s.projects.Armory.GiveSpoil(ctx, campaignID, v, e.ID, item.ID, res.Qty, harvested); err != nil {
+	var k Kept
+	if harvested {
+		k = s.harvestKept(ctx, campaignID, e, res.Tier)
+	}
+	if err := s.projects.Armory.GiveSpoil(ctx, campaignID, v, e.ID, item.ID, res.Qty, harvested, k); err != nil {
 		if rerr := s.projects.Spoils.ReleaseLine(ctx, campaignID, l.ID); rerr != nil {
 			slog.Error("crafting: A SPOIL WAS CLAIMED BUT NEITHER GIVEN NOR PUT BACK",
 				slog.Int64("line_id", l.ID), slog.String("character_id", e.ID), slog.Any("error", rerr))

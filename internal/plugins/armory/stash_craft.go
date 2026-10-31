@@ -18,10 +18,12 @@ import (
 // maxCraftItems caps the distinct materials one project may take.
 const maxCraftItems = 24
 
-// CraftItem is one Armory item and how many.
+// CraftItem is one Armory item and how many. Pick names remembered copies
+// to use first (copies.go); without it plain ones go first.
 type CraftItem struct {
 	ItemID   string
 	Quantity int
+	Pick     []CopyPick
 }
 
 // CraftPack is what a character carries and how they pay, as the actor may
@@ -61,12 +63,17 @@ type CraftSpendInput struct {
 	Cost        Cents
 	Currency    string
 	Label       string
+	// Purpose, when set, says what the items went to in the history in
+	// place of "to make <Label>": "in an experiment".
+	Purpose string
 }
 
 // CraftSpendOutcome says what was paid ("25 gp", "1.50 gp"); empty when no coins
-// changed hands, as for a Wealth threshold.
+// changed hands, as for a Wealth threshold. Used is every remembered copy
+// that went into the project, so the roll can read their marks.
 type CraftSpendOutcome struct {
 	Paid string
+	Used []Copy
 }
 
 // craftActor loads the character and refuses an actor who may not act for it.
@@ -122,13 +129,14 @@ func mergeCraftItems(items []CraftItem) ([]CraftItem, error) {
 		}
 		if i, ok := at[id]; ok {
 			out[i].Quantity += it.Quantity
+			out[i].Pick = append(out[i].Pick, it.Pick...)
 			if out[i].Quantity > maxMoveQuantity {
 				return nil, apperror.NewBadRequest(giveQuantityMessage)
 			}
 			continue
 		}
 		at[id] = len(out)
-		out = append(out, CraftItem{ItemID: id, Quantity: it.Quantity})
+		out = append(out, CraftItem{ItemID: id, Quantity: it.Quantity, Pick: it.Pick})
 	}
 	if len(out) > maxCraftItems {
 		return nil, apperror.NewBadRequest("That is too many different materials for one project.")
@@ -162,12 +170,17 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 		names[it.ItemID] = ref.Name
 	}
 	label := strings.TrimSpace(in.Label)
+	purpose := "to make " + label
+	if p := strings.TrimSpace(in.Purpose); p != "" {
+		purpose = p
+	}
 
 	var ev eventBatch
 	defer ev.flush(s.Events, campaignID)
 	unlock := s.locks.lock(campaignID)
 	defer unlock()
 
+	heldBefore := map[string]int{}
 	for _, it := range items {
 		rel, err := s.hasItem(ctx, campaignID, char.ID, it.ItemID, a.SeesDmOnly())
 		if err != nil {
@@ -177,6 +190,7 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 		if rel != nil {
 			held, _ = parseCarried(rel.Metadata)
 		}
+		heldBefore[it.ItemID] = held
 		if held < it.Quantity {
 			return nil, apperror.NewBadRequest(fmt.Sprintf("%s holds %d × %s, and this needs %d.", char.Name, held, names[it.ItemID], it.Quantity))
 		}
@@ -221,7 +235,7 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 
 	// From here the spend completes even if the client goes away, and the
 	// coin change reads as made for this project in the money history.
-	mctx := changesource.With(context.WithoutCancel(ctx), changesource.Source{Kind: changesource.KindCraft, Label: "to make " + label, UserID: a.UserID})
+	mctx := changesource.With(context.WithoutCancel(ctx), changesource.Source{Kind: changesource.KindCraft, Label: purpose, UserID: a.UserID})
 	var undo []func()
 	rollback := func() {
 		for i := len(undo) - 1; i >= 0; i-- {
@@ -275,7 +289,9 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 		}
 		paid = fmt.Sprintf("%s %s", charge, strings.ToLower(unit))
 	}
+	var used []Copy
 	for _, it := range items {
+		used = append(used, s.takeCopies(mctx, campaignID, Endpoint{Kind: EndpointCharacter, ID: char.ID}, nil, it.ItemID, heldBefore[it.ItemID], it.Quantity, it.Pick)...)
 		s.dropEmptyCarried(mctx, campaignID, char.ID, it.ItemID)
 	}
 
@@ -286,7 +302,7 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 		m := &Move{
 			CampaignID: campaignID, Kind: MoveKindItem, ItemEntityID: it.ItemID, Quantity: it.Quantity,
 			From: self, To: self, Status: MoveApplied, RequestedBy: a.UserID, seesDmOnly: a.SeesDmOnly(),
-			Reason: clipReason(fmt.Sprintf("Used %d × %s to make %s", it.Quantity, names[it.ItemID], label)),
+			Reason: clipReason(fmt.Sprintf("Used %d × %s %s", it.Quantity, names[it.ItemID], purpose)),
 		}
 		if err := s.Repo.InsertMove(mctx, m); err != nil {
 			slog.Error("craft spend: SPENT BUT NOT RECORDED in the move history",
@@ -296,14 +312,16 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 		}
 		ev.moved(m)
 	}
-	return &CraftSpendOutcome{Paid: paid}, nil
+	return &CraftSpendOutcome{Paid: paid, Used: used}, nil
 }
 
 // CraftGive puts what a finished project made into the character's pack,
 // under the campaign lock, and writes it in their history. Like a give, a
-// private item becomes visible to the character's player first.
-func (s *stashService) CraftGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, label string) error {
-	return s.craftAdd(ctx, campaignID, a, characterID, itemID, qty, func(item string) string {
+// private item becomes visible to the character's player first. What the
+// made copies remember (fine, marked, who made them, when they go off) is
+// kept with them.
+func (s *stashService) CraftGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, label string, m Memory) error {
+	return s.craftAdd(ctx, campaignID, a, characterID, itemID, qty, m, func(item string) string {
 		reason := fmt.Sprintf("Made %d × %s", qty, item)
 		if label = strings.TrimSpace(label); label != "" && label != item {
 			reason += " (" + label + ")"
@@ -313,10 +331,11 @@ func (s *stashService) CraftGive(ctx context.Context, campaignID string, a Actor
 }
 
 // SpoilGive puts what a hero took from the spoils tray into their pack, as
-// CraftGive does. The history names only the item, never where it dropped,
-// since the player may not be able to see that page.
-func (s *stashService) SpoilGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, harvested bool) error {
-	return s.craftAdd(ctx, campaignID, a, characterID, itemID, qty, func(item string) string {
+// CraftGive does, with what a harvest remembers (fine or poor parts). The
+// history names only the item, never where it dropped, since the player may
+// not be able to see that page.
+func (s *stashService) SpoilGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, harvested bool, m Memory) error {
+	return s.craftAdd(ctx, campaignID, a, characterID, itemID, qty, m, func(item string) string {
 		if harvested {
 			return fmt.Sprintf("Harvested %d × %s", qty, item)
 		}
@@ -326,7 +345,7 @@ func (s *stashService) SpoilGive(ctx context.Context, campaignID string, a Actor
 
 // craftAdd adds an item to a character's pack for crafting, with the
 // history line reason gives for the item's name.
-func (s *stashService) craftAdd(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, reason func(item string) string) error {
+func (s *stashService) craftAdd(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, mem Memory, reason func(item string) string) error {
 	if qty < 1 || qty > maxMoveQuantity {
 		return apperror.NewBadRequest(giveQuantityMessage)
 	}
@@ -334,6 +353,31 @@ func (s *stashService) craftAdd(ctx context.Context, campaignID string, a Actor,
 	if err != nil {
 		return err
 	}
+	return s.craftAddTo(ctx, campaignID, a, char, itemID, qty, mem, reason)
+}
+
+// CraftGiveFor puts an item in a character's pack on behalf of a hero the
+// actor may act for, with the history line given: what a helper's roll
+// finished goes to the project's owner, and what breaking an item down gives
+// back goes to the hero who broke it. Adding to a pack takes nothing from
+// anyone, so acting for the hero is enough; crafting has already checked the
+// hero may help with that project.
+func (s *stashService) CraftGiveFor(ctx context.Context, campaignID string, a Actor, actingFor, characterID, itemID string, qty int, why string, m Memory) error {
+	if qty < 1 || qty > maxMoveQuantity {
+		return apperror.NewBadRequest(giveQuantityMessage)
+	}
+	if _, err := s.craftActor(ctx, campaignID, a, actingFor); err != nil {
+		return err
+	}
+	char, err := s.loadCharacter(ctx, campaignID, strings.TrimSpace(characterID))
+	if err != nil {
+		return err
+	}
+	return s.craftAddTo(ctx, campaignID, a, char, itemID, qty, m, func(string) string { return why })
+}
+
+// craftAddTo adds the item to a character already checked.
+func (s *stashService) craftAddTo(ctx context.Context, campaignID string, a Actor, char *EntityRef, itemID string, qty int, mem Memory, reason func(item string) string) error {
 	item, err := s.loadItem(ctx, campaignID, itemID)
 	if err != nil {
 		return err
@@ -357,6 +401,7 @@ func (s *stashService) craftAdd(ctx context.Context, campaignID string, a Actor,
 		return apperror.NewConflict("Could not add it to that character.")
 	}
 	self := Endpoint{Kind: EndpointCharacter, ID: char.ID}
+	s.remember(mctx, campaignID, self, item.ID, qty, mem)
 	m := &Move{
 		CampaignID: campaignID, Kind: MoveKindItem, ItemEntityID: item.ID, Quantity: qty,
 		From: self, To: self, Status: MoveApplied, RequestedBy: a.UserID, seesDmOnly: true, Reason: clipReason(reason(item.Name)),

@@ -74,6 +74,22 @@ func (a *craftingDirectoryAdapter) OwnedCharacterIDs(ctx context.Context, campai
 	return a.dir.OwnedCharacterIDs(ctx, campaignID, userID)
 }
 
+// Party is the claimed characters the role and user may see: the heroes
+// players play, as the Armory's share box reads the party.
+func (a *craftingDirectoryAdapter) Party(ctx context.Context, campaignID string, role int, userID string) ([]crafting.Named, error) {
+	refs, _, err := a.dir.ListCharactersChecked(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]crafting.Named, 0, len(refs))
+	for _, r := range refs {
+		if r.OwnerUserID != "" {
+			out = append(out, crafting.Named{ID: r.ID, Name: r.Name})
+		}
+	}
+	return out, nil
+}
+
 // craftingRulesAdapter reads the crafting block of the campaign's enabled
 // game system; with none enabled the defaults apply.
 type craftingRulesAdapter struct {
@@ -125,7 +141,11 @@ func (a *craftingArmoryAdapter) Pack(ctx context.Context, campaignID string, v c
 	out := &crafting.Pack{Name: p.Name, Items: make([]crafting.PackItem, 0, len(p.Items)), PayKind: p.PayKind, Have: int64(p.Have),
 		MoneyLabel: p.MoneyLabel, MoneyKey: p.MoneyKey}
 	for _, it := range p.Items {
-		out.Items = append(out.Items, crafting.PackItem{ItemID: it.ItemID, Name: it.Name, Qty: it.Quantity, Tags: []string{}})
+		pi := crafting.PackItem{ItemID: it.ItemID, Name: it.Name, Qty: it.Quantity, Tags: []string{}}
+		for _, c := range it.Copies {
+			pi.Kept = append(pi.Kept, keptOf(c))
+		}
+		out.Items = append(out.Items, pi)
 	}
 	return out, nil
 }
@@ -134,24 +154,72 @@ func (a *craftingArmoryAdapter) Charge(p *crafting.Pack, c crafting.Cost) int64 
 	return int64(armory.CraftCharge(&armory.CraftPack{PayKind: p.PayKind, MoneyKey: p.MoneyKey}, craftingCents(c), c.Currency))
 }
 
-func (a *craftingArmoryAdapter) Spend(ctx context.Context, campaignID string, v crafting.Viewer, characterID string, items []crafting.PackItem, c crafting.Cost, label string) (string, error) {
+func (a *craftingArmoryAdapter) Spend(ctx context.Context, campaignID string, v crafting.Viewer, characterID string, items []crafting.PackItem, c crafting.Cost, label string) (string, []crafting.Kept, error) {
 	in := armory.CraftSpendInput{CharacterID: characterID, Cost: craftingCents(c), Currency: c.Currency, Label: label}
 	for _, it := range items {
-		in.Items = append(in.Items, armory.CraftItem{ItemID: it.ItemID, Quantity: it.Qty})
+		ci := armory.CraftItem{ItemID: it.ItemID, Quantity: it.Qty}
+		for _, p := range it.Use {
+			ci.Pick = append(ci.Pick, armory.CopyPick{ID: p.ID, N: p.N})
+		}
+		in.Items = append(in.Items, ci)
 	}
 	out, err := a.stash.CraftSpend(ctx, campaignID, craftingActor(v), in)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return out.Paid, nil
+	var used []crafting.Kept
+	for _, cp := range out.Used {
+		used = append(used, keptOf(cp))
+	}
+	return out.Paid, used, nil
 }
 
-func (a *craftingArmoryAdapter) Give(ctx context.Context, campaignID string, v crafting.Viewer, characterID, itemID string, qty int, label string) error {
-	return a.stash.CraftGive(ctx, campaignID, craftingActor(v), characterID, itemID, qty, label)
+func (a *craftingArmoryAdapter) Give(ctx context.Context, campaignID string, v crafting.Viewer, characterID, itemID string, qty int, label string, k crafting.Kept) error {
+	return a.stash.CraftGive(ctx, campaignID, craftingActor(v), characterID, itemID, qty, label, memoryOf(k))
 }
 
-func (a *craftingArmoryAdapter) GiveSpoil(ctx context.Context, campaignID string, v crafting.Viewer, characterID, itemID string, qty int, harvested bool) error {
-	return a.stash.SpoilGive(ctx, campaignID, craftingActor(v), characterID, itemID, qty, harvested)
+func (a *craftingArmoryAdapter) Use(ctx context.Context, campaignID string, v crafting.Viewer, characterID string, items []crafting.PackItem, why string) ([]crafting.Kept, error) {
+	in := armory.CraftSpendInput{CharacterID: characterID, Purpose: why}
+	for _, it := range items {
+		ci := armory.CraftItem{ItemID: it.ItemID, Quantity: it.Qty}
+		for _, p := range it.Use {
+			ci.Pick = append(ci.Pick, armory.CopyPick{ID: p.ID, N: p.N})
+		}
+		in.Items = append(in.Items, ci)
+	}
+	out, err := a.stash.CraftSpend(ctx, campaignID, craftingActor(v), in)
+	if err != nil {
+		return nil, err
+	}
+	var used []crafting.Kept
+	for _, cp := range out.Used {
+		used = append(used, keptOf(cp))
+	}
+	return used, nil
+}
+
+func (a *craftingArmoryAdapter) GiveFor(ctx context.Context, campaignID string, v crafting.Viewer, actingFor, characterID, itemID string, qty int, why string, k crafting.Kept) error {
+	return a.stash.CraftGiveFor(ctx, campaignID, craftingActor(v), actingFor, characterID, itemID, qty, why, memoryOf(k))
+}
+
+func (a *craftingArmoryAdapter) GiveSpoil(ctx context.Context, campaignID string, v crafting.Viewer, characterID, itemID string, qty int, harvested bool, k crafting.Kept) error {
+	return a.stash.SpoilGive(ctx, campaignID, craftingActor(v), characterID, itemID, qty, harvested, memoryOf(k))
+}
+
+func (a *craftingArmoryAdapter) GoOff(ctx context.Context, campaignID string, v crafting.Viewer, day int64) (int, error) {
+	return a.stash.GoOff(ctx, campaignID, craftingActor(v), day)
+}
+
+// keptOf and memoryOf carry what copies remember across the plugin line.
+func keptOf(c armory.Copy) crafting.Kept {
+	m := c.Memory
+	return crafting.Kept{ID: c.ID, Qty: c.Quantity, Marks: m.Marks, Quality: m.Quality, Quirk: m.Quirk,
+		How: m.How, By: m.By, On: m.On, OffDay: m.OffDay, OffOn: m.OffOn, Becomes: m.Becomes, BecomesName: m.BecomesName, Off: m.Off}
+}
+
+func memoryOf(k crafting.Kept) armory.Memory {
+	return armory.Memory{Marks: k.Marks, Quality: k.Quality, Quirk: k.Quirk, How: k.How, By: k.By, On: k.On,
+		OffDay: k.OffDay, OffOn: k.OffOn, Becomes: k.Becomes, BecomesName: k.BecomesName, Off: k.Off}
 }
 
 // craftingSheetsAdapter reads a characteristic from a character's sheet
@@ -332,6 +400,14 @@ func (a *craftingDaysAdapter) Today(ctx context.Context, campaignID string) (*cr
 	day := &crafting.Day{Label: strconv.Itoa(d) + " " + c.MonthName(m), Rolled: map[string]string{},
 		Time: c.DayPart(y, m, d, c.CurrentHour, c.CurrentMinute)}
 	abs := c.CurrentDayIndex()
+	day.Abs = int64(abs)
+	day.After = func(n int) (int64, string) {
+		at, ok := c.AddDays(calendar.DayDate{Year: y, Month: m, Day: d}, n)
+		if !ok {
+			return 0, ""
+		}
+		return int64(c.DayNumber(at.Year, at.Month, at.Day)), strconv.Itoa(at.Day) + " " + c.MonthName(at.Month)
+	}
 	for i := range c.Moons {
 		mo := &c.Moons[i]
 		if mo.Manual() {

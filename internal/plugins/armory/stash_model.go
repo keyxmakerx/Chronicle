@@ -174,6 +174,9 @@ type Move struct {
 	// is never from such a requester, so an unset value is the safe reading
 	// (never touch a DM-only line).
 	seesDmOnly bool
+	// pick is the remembered copy the mover asked to send; a waiting
+	// request keeps it in the copy store.
+	pick int64
 }
 
 // IsMoneyEdit reports whether the row records a character's money being
@@ -217,6 +220,9 @@ type MoveInput struct {
 	Amount       string // Plain decimal text; parsed by ParseCents.
 	From         Endpoint
 	To           Endpoint
+	// Pick is a remembered copy to send first (copies.go); 0 sends plain
+	// copies first.
+	Pick int64
 }
 
 // CreateStashInput creates a stash.
@@ -293,6 +299,9 @@ type HeldItem struct {
 	// SharedWith names the characters whose players the holder shared the
 	// item with.
 	SharedWith []string
+	// Copies are the ones that remember something (copies.go), oldest
+	// first; the rest of Quantity is plain.
+	Copies []Copy
 }
 
 // CharacterPanelView feeds the "Items and money" panel on a character page.
@@ -324,6 +333,8 @@ type StashItemView struct {
 	ItemID   string
 	Name     string
 	Quantity int
+	// Copies are the ones that remember something, oldest first.
+	Copies []Copy
 }
 
 // StashView is a stash as one viewer sees it.
@@ -373,6 +384,9 @@ type MoveDialogView struct {
 	MaxMoney     Cents // Most money that can be moved.
 	Destinations []MoveDestination
 	Immediate    bool // True when the move happens at once.
+	// Copies are the source's copies of the item that remember something;
+	// with any, the box asks which ones go.
+	Copies []Copy
 }
 
 // MoveOutcome reports what Move did.

@@ -380,6 +380,50 @@ func TestRepoIntegration_Projects(t *testing.T) {
 	}
 }
 
+func TestRepoIntegration_Turns(t *testing.T) {
+	f := newRepoFixture(t)
+	ctx := context.Background()
+	store := f.repo.(ProjectStore)
+	mira := f.entity(t, "Mira")
+	if id, err := store.RespiteID(ctx, f.campaign); err != nil || id != 0 {
+		t.Fatalf("respite before the first: %d %v", id, err)
+	}
+	take := func(kind, project string, rid int64) bool {
+		t.Helper()
+		ok, err := store.TakeTurn(ctx, f.campaign, mira, kind, project, rid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	if !take(TurnTry, "", 0) || take(TurnTry, "", 0) {
+		t.Fatal("a try was taken twice at one respite")
+	}
+	if !take(TurnHelp, "p1", 0) || !take(TurnHelp, "p2", 0) || take(TurnHelp, "p1", 0) {
+		t.Fatal("helping two projects once each went wrong")
+	}
+	got, err := store.TurnsTaken(ctx, f.campaign, mira, 0)
+	if err != nil || len(got) != 3 || !got["try:"] || !got["help:p1"] {
+		t.Fatalf("turns taken %v %v", got, err)
+	}
+	if err := store.ReturnTurn(ctx, f.campaign, mira, TurnTry, "", 0); err != nil || !take(TurnTry, "", 0) {
+		t.Fatalf("a returned try couldn't be taken again: %v", err)
+	}
+	if _, err := store.LogRespite(ctx, f.campaign, f.user, ""); err != nil {
+		t.Fatal(err)
+	}
+	rid, err := store.RespiteID(ctx, f.campaign)
+	if err != nil || rid == 0 {
+		t.Fatalf("respite id after one: %d %v", rid, err)
+	}
+	if got, _ := store.TurnsTaken(ctx, f.campaign, mira, rid); len(got) != 0 || !take(TurnTry, "", rid) {
+		t.Fatalf("a new respite didn't give the turns back: %v", got)
+	}
+	if got, _ := store.TurnsTaken(ctx, f.other, mira, rid); len(got) != 0 {
+		t.Fatal("turns were read through another campaign")
+	}
+}
+
 func TestRepoIntegration_Spoils(t *testing.T) {
 	f := newRepoFixture(t)
 	ctx := context.Background()

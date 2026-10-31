@@ -18,7 +18,7 @@ import vm from 'node:vm';
 const js = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'internal', 'plugins', 'crafting', 'static', 'js');
 const window = {};
 const ctx = vm.createContext({ window, Chronicle: { register() {} } });
-for (const f of ['crafting_lib.js', 'crafting_tray.js', 'crafting_block.js', 'crafting_projects.js']) vm.runInContext(readFileSync(join(js, f), 'utf8'), ctx);
+for (const f of ['crafting_lib.js', 'crafting_tray.js', 'crafting_turns.js', 'crafting_block.js', 'crafting_projects.js']) vm.runInContext(readFileSync(join(js, f), 'utf8'), ctx);
 const B = window.CraftingBlock, P = window.CraftingProjects, L = window.CraftingLib;
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
@@ -129,4 +129,17 @@ test('the Projects tab says when the last respite was', () => {
   assert.equal(P.ago('2026-01-01T23:30:00Z', now), '30 minutes ago');
   assert.equal(P.ago('2026-01-01T21:00:00Z', now), '3 hours ago');
   assert.equal(P.ago('2025-12-31T00:00:00Z', now), '2 days ago');
+});
+
+test('remembered copies of a material are offered by name, gone-off ones never', () => {
+  const kept = [
+    { id: 3, qty: 2, marks: ['moonlit'], how: 'harvested', by: 'Mira' },
+    { id: 4, qty: 1, quality: 'poor' },
+    { id: 5, qty: 1, quality: 'fine', marks: ['fresh'] },
+    { id: 6, qty: 1, offOn: '28 Hearthmoot', off: true },
+  ];
+  const p = pack([{ ...moss, qty: 6, kept }]);
+  assert.deepEqual(plain(B.keptOf(p, 'moss').map((k) => k.id)), [3, 4, 5]);
+  assert.deepEqual(plain(B.keptOf(p, 'leaf')), []);
+  assert.deepEqual(plain(kept.slice(0, 3).map(B.keptName)), ['Moonlit', 'Poor', 'Fine, Fresh']);
 });

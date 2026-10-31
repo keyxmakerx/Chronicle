@@ -236,6 +236,11 @@ func (d *fakeDir) ListItems(_ context.Context, _ string, role int, _ string) ([]
 func (d *fakeDir) ListCharacters(context.Context, string, int, string) ([]Named, bool, error) {
 	return []Named{{"mira", "Mira"}, {"tobin", "Tobin"}}, false, nil
 }
+
+// Party is both characters: Mira is the player's, Tobin another player's.
+func (d *fakeDir) Party(context.Context, string, int, string) ([]Named, error) {
+	return []Named{{"mira", "Mira"}, {"tobin", "Tobin"}}, nil
+}
 func (d *fakeDir) OwnedCharacterIDs(_ context.Context, _, userID string) (map[string]bool, error) {
 	if userID == "player" {
 		return map[string]bool{"mira": true}, nil

@@ -16,7 +16,7 @@
  */
 (function () {
   'use strict';
-  var L = window.CraftingLib, T = window.CraftingTray, esc = L.esc, progress = L.progress;
+  var L = window.CraftingLib, T = window.CraftingTray, U = window.CraftingTurns, esc = L.esc, progress = L.progress;
   // What the server says in place of a secret rule (verdict.go ruleWords).
   var HIDDEN = 'A rule the Director keeps hidden';
   var ICON = {
@@ -56,6 +56,23 @@
   }
   var SUB_COST = {bane: 'at a bane on every roll', points: 'at −2 on every roll', none: 'at no cost'};
   /* The cost in words, against the hero's way of paying. */
+  /* The remembered copies of an item in the pack that can still go in. */
+  function keptOf(pack, id) {
+    var out = [];
+    (pack.items || []).forEach(function (it) {
+      if (it.itemId === id) (it.kept || []).forEach(function (k) { if (!k.off) out.push(k); });
+    });
+    return out;
+  }
+  /* What a remembered copy is called in the start fold: "Fine", "Moonlit". */
+  function keptName(k) {
+    var w = [];
+    if (k.quality === 'fine') w.push('Fine');
+    if (k.quality === 'poor') w.push('Poor');
+    (k.marks || []).forEach(function (m) { w.push(m.charAt(0).toUpperCase() + m.slice(1)); });
+    return w.join(', ') || 'Remembered';
+  }
+
   function costText(r, pack) {
     if (!r.cost) return '';
     if (pack.payKind === 'wealth') return 'Wealth ' + num(r.charge);
@@ -119,7 +136,11 @@
   function mount(el, cfg) {
     var cid = String(cfg.campaignId || ''), eid = String(cfg.entityId || '');
     var base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
-    var D = null, open = null, pick = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0;
+    var D = null, open = null, pick = {}, use = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0, momentT = 0, said = '';
+    // tpicks is what goes into a try, by item; tried and broke the last try
+    // and break-down; copy the copy picked to break; play says a moment is
+    // playing at the bench, so the panel waits for it.
+    var tpicks = {}, tried = null, broke = null, copy = '', play = false, moment = null;
 
     /* JSON in and out; a refusal rejects with the server's own words. */
     function api(method, path, body) {
@@ -135,12 +156,18 @@
         });
       });
     }
+    /* The message is kept, not just shown: a render right after it would
+       otherwise rebuild the toast hidden before anyone reads it. */
     function toast(msg) {
+      said = msg;
+      showToast();
+      clearTimeout(toastT);
+      toastT = setTimeout(function () { said = ''; showToast(); }, 4000);
+    }
+    function showToast() {
       var t = el.querySelector('.cra-toast');
       if (!t) return;
-      t.textContent = msg; t.hidden = false;
-      clearTimeout(toastT);
-      toastT = setTimeout(function () { t.hidden = true; }, 4000);
+      t.textContent = said; t.hidden = !said;
     }
     function isOpen(kind, id) { return !!(open && open.kind === kind && open.id === id); }
     function recipe(id) { for (var i = 0; i < D.recipes.length; i++) if (D.recipes[i].id === id) return D.recipes[i]; return null; }
@@ -175,15 +202,60 @@
     function recipeRow(r) {
       var why = blockers(r, D.pack, hero()), on = isOpen('start', r.id);
       var mats = r.needs.map(function (m) { return m.qty + ' × ' + m.name; }).concat(r.cost ? [costText(r, D.pack)] : []).join(' · ');
-      var h = '<li><div class="crp-row"><div class="crp-nm"><b>' + esc(r.name) + '</b><span class="cra-fine">' + esc(r.kind + ' · goal ' + r.goal + ' · ' + r.roll) + '</span></div>' +
+      var brk = r.salvage && r.salvage.length && r.makesId && held(D.pack, r.makesId) > 0;
+      var h = '<li data-r="' + esc(r.id) + '"><div class="crp-row"><div class="crp-nm"><b>' + esc(r.name) + '</b><span class="cra-fine">' + esc(r.kind + ' · goal ' + r.goal + ' · ' + r.roll) + '</span></div>' +
         '<div class="cra-fine">' + esc(mats || 'No materials') + '</div><div class="crp-acts">' + (why.length ? '<span class="crp-why is-block">' + esc(why[0]) + '</span>' : '') +
+        (brk ? '<button type="button" class="btn btn-secondary btn-sm" data-act="brk" data-id="' + esc(r.id) + '" aria-expanded="' + isOpen('break', r.id) + '">Break one down</button>' : '') +
         '<button type="button" class="btn btn-secondary btn-sm" data-act="start" data-id="' + esc(r.id) + '" aria-expanded="' + on + '"' + (why.length ? ' disabled' : '') + '>Start</button></div></div>';
       if (on && !why.length) h += startFold(r);
+      if (brk && isOpen('break', r.id)) h += U.breakFold(r, hero(), U.breakable(D.pack, r.makesId, keptOf, keptName), copy, busy);
+      if (broke && isOpen('broke', r.id)) h += U.brokeFold(broke, hero(), r.id, play);
       return h + '</li>';
     }
 
+    /* The party's projects this hero may help with, and a hand's roll. */
+    function helpRow(hv) {
+      var id = hv.project.id, h = U.helpRow(hv, hero(), isOpen('help', id) ? 'help' : '', busy, progress);
+      if (isOpen('helped', id) && last) h += play ? U.playing('Helping ' + hv.project.hero) : resultFold(last.project, hv.project.hero);
+      return h + '</li>';
+    }
+
+    /* The item a material line takes: its own, or the one picked in its place. */
+    function lineItem(m, i) { return (m.itemId && !(m.sub && pick[i])) ? m.itemId : pick[i]; }
+    /* How many remembered copies line i already asks for, besides copy id. */
+    function asked(i, but) {
+      var n = 0, u = use[i] || {};
+      Object.keys(u).forEach(function (id) { if (id !== String(but)) n += u[id]; });
+      return n;
+    }
+    /* Under a material line, a stepper for each remembered kind of it in
+       the pack; plain ones fill the rest. */
+    function keptRows(m, i) {
+      var id = lineItem(m, i), ks = id ? keptOf(D.pack, id) : [];
+      if (!ks.length) { delete use[i]; return ''; }
+      var u = use[i] = use[i] || {}, plain = Math.max(0, m.qty - asked(i, ''));
+      return ks.map(function (k) {
+        var n = u[k.id] || 0, max = Math.min(k.qty, m.qty - asked(i, k.id)), key = i + ':' + k.id;
+        return '<li class="crp-kept"><span class="crp-k">' + esc(keptName(k)) + '<small>' + k.qty + ' held' + (k.by ? ' · ' + (k.how === 'harvested' ? 'harvested' : 'made') + ' by ' + esc(k.by) : '') + '</small></span>' +
+          '<span class="crp-v crp-kstep"><button type="button" class="btn btn-secondary btn-sm" data-act="kless" data-id="' + key + '" aria-label="One fewer ' + esc(keptName(k)) + '"' + (n <= 0 ? ' disabled' : '') + '>−</button>' +
+          '<span aria-live="polite">' + n + '</span>' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-act="kmore" data-id="' + key + '" aria-label="One more ' + esc(keptName(k)) + '"' + (n >= max ? ' disabled' : '') + '>+</button></span></li>';
+      }).join('') + '<li class="crp-kept"><span class="crp-k">Plain<small>the rest of the ' + m.qty + ' are plain ones, which go first</small></span><span class="crp-v">' + plain + '</span></li>';
+    }
+    function step(key, d) {
+      var at = key.indexOf(':'), i = key.slice(0, at), id = key.slice(at + 1), r = recipe(open && open.id);
+      if (!r) return;
+      var m = r.needs[i], k = keptOf(D.pack, lineItem(m, i)).filter(function (x) { return String(x.id) === id; })[0];
+      if (!k) return;
+      var u = use[i] = use[i] || {}, n = (u[id] || 0) + d;
+      u[id] = Math.max(0, Math.min(n, k.qty, m.qty - asked(i, id)));
+      render();
+      focus('[data-act="' + (d > 0 ? 'kmore' : 'kless') + '"][data-id="' + key + '"]');
+    }
+
     function startFold(r) {
-      var who = esc(hero()), lines = r.needs.map(function (m, i) {
+      var who = esc(hero()), lines = r.needs.map(function (m, i) { return line(m, i) + keptRows(m, i); }).join('');
+      function line(m, i) {
         if (m.itemId && m.sub) {
           var real = held(D.pack, m.itemId) >= reserved(r, m.itemId), subs = standIns(D.pack, r, m);
           if (pick[i] == null || (pick[i] && !subs.some(function (o) { return o.id === pick[i]; })) || (!pick[i] && !real)) pick[i] = real ? '' : subs[0] && subs[0].id;
@@ -198,7 +270,7 @@
           '<select class="cra-in cra-sm" id="crk-pick-' + i + '" data-pick="' + i + '">' + opts.map(function (o) {
             return '<option value="' + esc(o.id) + '"' + (o.id === pick[i] ? ' selected' : '') + '>' + esc(o.name) + ' (' + o.qty + ')</option>';
           }).join('') + '</select></span></li>';
-      }).join('');
+      }
       var pk = D.pack.payKind;
       if (r.cost && pk === 'wealth') lines += '<li><span class="crp-k">Cost<small>Wealth is a threshold, as at a shop, so nothing is spent</small></span><span class="crp-v">Wealth ' + num(r.charge) + ' <span class="is-ok">· ' + who + ' has ' + num(D.pack.have) + '</span></span></li>';
       else if (r.cost) lines += '<li><span class="crp-k">Cost<small>' + who + ' has ' + num(D.pack.have) + ' ' + esc(unit(r, D.pack)) + ', so ' + num(D.pack.have - r.charge) + ' ' + esc(unit(r, D.pack)) + ' will be left</small></span><span class="crp-v">' + esc(L.money(r.cost)) + '</span></li>';
@@ -220,14 +292,27 @@
         '<button type="button" class="btn btn-secondary btn-sm" data-act="close" data-id="' + esc(p.id) + '">Put it away</button></div></div>';
     }
 
-    function resultFold(p) {
+    /* What the made item carries into the pack: the maker's mark and when it
+       goes off. Fine, marks and quirks are already in what befell. */
+    function carries(k) {
+      if (!k) return '';
+      var rows = [];
+      if (k.how === 'made' && k.by) rows.push(['Maker’s mark', 'Made by ' + k.by + (k.on ? ', ' + k.on : '')]);
+      if (k.offOn) rows.push(['Goes off', 'On ' + k.offOn + (k.becomes ? '. Then it becomes ' + k.becomes + '.' : '.')]);
+      if (!rows.length) return '';
+      return '<ul class="crp-lines crp-carries">' + rows.map(function (r) { return '<li><span class="crp-k">' + esc(r[0]) + '</span><span class="crp-v">' + esc(r[1]) + '</span></li>'; }).join('') + '</ul>';
+    }
+
+    function resultFold(p, who) {
+      who = who || hero();
       var R = last, rows = T.terms(R), h = '<div class="crp-fold" aria-live="polite"><h4>Project roll: ' + esc(p.name) + '</h4><div class="crp-result">' +
         (R.dice.length ? '<div class="crp-dice" aria-label="The dice show ' + esc(R.dice.join(' and ')) + '">' + R.dice.map(function (d) { return '<span class="crp-die">' + d + '</span>'; }).join('') + '</div>' : '<div></div>') +
         '<ul class="crp-terms">' + rows.map(function (t) { return '<li><span>' + esc(t.text) + '</span><span>' + esc(t.n) + '</span></li>'; }).join('') +
         '<li class="is-tot"><span>Project points</span><span>+' + R.total + '</span></li></ul>' +
         '<div class="crp-outcome">' + progress(R.to, p.goal, R.from + ' → ' + R.to, p.name);
-      h += befell(R, p.name, hero());
-      if (R.finished && R.made) h += '<div class="crp-made">' + ICON.check + '<span>' + esc(p.name) + ' is made. ' + esc(R.made) + ' is in ' + esc(hero()) + '’s pack.</span></div>';
+      h += befell(R, p.name, who);
+      if (R.finished && R.made) h += '<div class="crp-made">' + ICON.check + '<span>' + esc(p.name) + ' is made. ' + esc(R.made) + ' is in ' + esc(who) + '’s pack.</span></div>';
+      if (R.finished && R.made) h += carries(R.item);
       else if (R.finished) h += '<div class="crp-made is-warn"><span>' + esc(p.name) + ' is made.</span></div>';
       else if (!R.lost) h += '<p class="cra-fine">' + (p.goal - R.to) + ' more to go. ' + (p.rollsReady > 0 ? 'You have another roll ready.' : 'The next roll comes with the next respite.') + '</p>';
       return h + '</div></div><div class="crp-foot"><p class="cra-fine">' + esc(R.notes.join(' ')) + '</p>' +
@@ -266,11 +351,15 @@
         '<p class="cra-fine">Each project gets one roll for every respite the Director logs.' + (D.today ? ' Today is ' + esc(D.today) + '.' : '') + '</p>' +
         '<h4 class="crp-sub">In progress</h4><ul class="crp-rows">' +
         (D.projects.length ? D.projects.map(projectRow).join('') : '<li class="crp-empty">No projects yet. Start one from a recipe below.</li>') + '</ul>' +
+        (D.try ? '<h4 class="crp-sub">Try something new</h4>' + (tried ? U.triedFold(tried, hero(), play) : U.tryFold(D, tpicks, busy)) : '') +
+        (D.party && D.party.length ? '<h4 class="crp-sub">The party’s projects</h4><ul class="crp-rows">' + D.party.map(helpRow).join('') + '</ul>' : '') +
         '<h4 class="crp-sub">Recipes ' + esc(hero()) + ' knows</h4><ul class="crp-rows">' +
         (D.recipes.length ? D.recipes.map(recipeRow).join('') : '<li class="crp-empty">' + esc(hero()) + ' knows no recipes yet. The Director teaches them in the Crafting app.</li>') + '</ul>' +
         '<div class="cra-toast" role="status" hidden></div></div>';
       el.innerHTML = h;
+      showToast();
       if (open && open.kind === 'bench') mountBench(open.id);
+      if (play && moment) mountMoment();
     }
 
     function load(keep) {
@@ -316,6 +405,57 @@
         onWorked: function (work) { roll(pid, work, b ? b.id : ''); }};
       box.appendChild(benchEl);
       Chronicle.mountWidget(benchEl);
+    }
+
+    /* Motion at the bench: off under Calm, Off or reduced motion, where the
+       panel is all there is. The bench's own scripts load when it mounts,
+       so a page that has not opened a bench yet still plays the moment. */
+    function still() {
+      var h = document.documentElement, m = h.getAttribute('data-motion');
+      return !window.Chronicle.mountWidget || m === 'off' || m === 'calm' ||
+        h.getAttribute('data-view-motion') === 'calm' || h.hasAttribute('data-cz-reduce') ||
+        !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+    function tint(id) {
+      var c = '';
+      (D.pack.items || []).forEach(function (it) { if (it.itemId === id && it.picture && it.picture.tint) c = it.picture.tint; });
+      return c;
+    }
+    /* Plays a moment at the campaign's bench (m: CraftMoments.play's
+       options, the book's recipe, and the panel to show when it ends). */
+    function playMoment(m) {
+      moment = m;
+      play = !still();
+    }
+    function mountMoment() {
+      var box = el.querySelector('[data-moment]'), m = moment;
+      if (!box || !m) return;
+      var b = (m.kind && bench(m.kind)) || D.benches[0] || null, skin = D.settings.skin === 'journal' ? 'journal' : 'desk';
+      benchEl = document.createElement('div');
+      benchEl.setAttribute('data-widget', 'craft_bench');
+      benchEl.setAttribute('data-skin', skin);
+      if (D.calendarId) { benchEl.setAttribute('data-campaign-id', cid); benchEl.setAttribute('data-calendar-id', D.calendarId); }
+      benchEl._craftApp = {state: b && b[skin] && typeof b[skin] === 'object' ? b[skin] : null, recipes: {m: m.book}, items: {}, recipe: 'm',
+        settings: {difficulty: D.settings.difficulty, bane: D.settings.bane, skip: false},
+        moment: Object.assign({}, m.cue, {done: function () { if (!dead && play && moment === m) momentDone(box); }})};
+      box.appendChild(benchEl);
+      Chronicle.mountWidget(benchEl);
+      // A bench whose scripts never arrive must not hold the result back.
+      clearTimeout(momentT);
+      momentT = setTimeout(function () { if (!dead && play && moment === m) momentDone(box); }, 20000);
+    }
+    /* The moment ended: the panel comes in under the bench, which stays
+       until Done. */
+    function momentDone(box) {
+      var m = moment, fold = box.closest('.crp-fold');
+      play = false;
+      clearTimeout(momentT);
+      if (!fold) return render();
+      var tmp = document.createElement('div');
+      tmp.innerHTML = m.panel();
+      var src = tmp.firstElementChild;
+      if (src) Array.prototype.slice.call(src.children, 1).forEach(function (c) { fold.appendChild(c); });
+      if (m.after) m.after();
     }
 
     /* The server's dice, thrown on screen (CraftingTray.throwDice). */
@@ -378,14 +518,110 @@
       if (!r || busy) return;
       var picks = {};
       r.needs.forEach(function (m, i) { if ((!m.itemId || m.sub) && pick[i]) picks[i] = pick[i]; });
+      var chosen = {};
+      Object.keys(use).forEach(function (i) {
+        var list = Object.keys(use[i]).filter(function (id) { return use[i][id] > 0; }).map(function (id) { return {id: Number(id), n: use[i][id]}; });
+        if (list.length) chosen[i] = list;
+      });
       busy = true;
       render();
-      api('POST', '/characters/' + encodeURIComponent(eid) + '/projects', {recipeId: rid, picks: picks}).then(function (pv) {
+      api('POST', '/characters/' + encodeURIComponent(eid) + '/projects', {recipeId: rid, picks: picks, use: chosen}).then(function (pv) {
         busy = false;
         return load().then(function () {
           toast(r.name + ' started. ' + (pv.took ? pv.took + ' left ' + hero() + '’s pack.' : '') + (r.cost && D.pack.payKind === 'wealth' ? ' Wealth is never spent.' : ''));
         });
       }, function (err) { busy = false; render(); toast(err.message); });
+    }
+
+    /* A try: what goes in goes to the server, which says what came of it. */
+    function experiment() {
+      var items = Object.keys(tpicks).map(function (id) { return {itemId: id, qty: tpicks[id]}; });
+      if (!items.length || busy) return;
+      var put = items.map(function (x) { var it = (D.pack.items || []).filter(function (p) { return p.itemId === x.itemId; })[0]; return x.qty + ' ' + (it ? it.name : ''); });
+      busy = true;
+      render();
+      api('POST', '/characters/' + encodeURIComponent(eid) + '/experiment', {items: items}).then(function (res) {
+        busy = false;
+        if (dead) return;
+        tried = res;
+        var cols = items.map(function (x) { return tint(x.itemId); }).filter(Boolean);
+        playMoment({cue: {kind: res.outcome, colors: cols.slice(0, 2), first: 'Experimenting: ' + hero() + ' puts in ' + put.join(' and '),
+          last: U.triedWords(res, hero()), buttons: res.outcome === 'found' ? [{label: 'Start it', primary: true, fn: function () { startFound(res.recipeId); }}] : []},
+          book: {name: 'An experiment', kind: 'Experiment', who: hero(), steps: [], noProject: true},
+          panel: function () { return U.triedFold(res, hero(), false); }, after: function () { focus('[data-act="tdone"]'); }});
+        render();
+        if (!play) focus('[data-act="tdone"]');
+      }, function (err) {
+        busy = false;
+        if (dead) return;
+        toast(err.message);
+        if (err.status === 409) load().catch(fail);
+        else render();
+      });
+    }
+    function startFound(rid) {
+      tried = null; tpicks = {}; play = false; moment = null;
+      load().then(function () {
+        if (!recipe(rid)) return;
+        open = {kind: 'start', id: rid}; pick = {}; use = {};
+        render(); focus('[data-act="begin"]');
+      }).catch(fail);
+    }
+
+    /* Breaks one made item down; what it gives back goes to the pack. */
+    function breakDown(rid) {
+      var r = recipe(rid);
+      if (!r || busy) return;
+      busy = true;
+      render();
+      api('POST', '/characters/' + encodeURIComponent(eid) + '/break-down', {recipeId: rid, copy: Number(copy) || 0}).then(function (res) {
+        busy = false;
+        if (dead) return;
+        broke = res;
+        open = {kind: 'broke', id: rid};
+        var opt = U.breakable(D.pack, r.makesId, keptOf, keptName).options.filter(function (o) { return String(o.id) === String(copy); })[0];
+        playMoment({kind: r.bench, cue: {kind: 'breakdown', colors: [tint(r.makesId), tint((r.needs[0] || {}).itemId)].filter(Boolean),
+          first: 'Breaking down ' + res.item + (opt && opt.id ? ', ' + opt.name.charAt(0).toLowerCase() + opt.name.slice(1) : ''), last: U.brokeWords(res, hero())},
+          book: {name: 'Breaking down ' + res.item, kind: r.kind, who: hero(), steps: [], noProject: true},
+          panel: function () { return U.brokeFold(res, hero(), rid, false); }, after: function () { focus('[data-act="bdone"]'); }});
+        render();
+        if (!play) focus('[data-act="bdone"]');
+      }, function (err) {
+        busy = false;
+        if (dead) return;
+        toast(err.message);
+        load().catch(fail);
+      });
+    }
+
+    /* One extra roll on a party member's project, with this hero's sheet. */
+    function help(pid) {
+      var hv = (D.party || []).filter(function (x) { return x.project.id === pid; })[0];
+      if (!hv || busy) return;
+      var p = hv.project;
+      busy = true;
+      render();
+      api('POST', '/projects/' + encodeURIComponent(pid) + '/help', {characterId: eid, version: p.version}).then(function (res) {
+        busy = false;
+        if (dead) return;
+        last = res;
+        hv.project = res.project; hv.helped = true;
+        open = {kind: 'helped', id: pid};
+        var r = recipe(p.recipeId);
+        playMoment({kind: r && r.bench, cue: {kind: 'help', finished: res.finished, colors: [r && r.colors && r.colors.final].filter(Boolean),
+          first: hero() + ' lends a hand: one extra roll on ' + p.hero + '’s ' + p.name,
+          last: hero() + '’s roll: ' + res.total + (res.total === 1 ? ' point. ' : ' points. ') + p.hero + '’s project: ' + res.to + ' of ' + p.goal + (res.finished ? ', made.' : '.')},
+          book: {name: p.name, kind: p.kind, who: p.hero, stat: String(p.roll || '').split(' + ')[1] || '', goal: p.goal, start: res.from, steps: []},
+          panel: function () { return resultFold(res.project, p.hero); },
+          after: function () { throwDice(res, p.name); focus('[data-hp="' + pid + '"] [data-act="close"]'); }});
+        render();
+        if (!play) { throwDice(res, p.name); focus('[data-hp="' + pid + '"] [data-act="close"]'); }
+      }, function (err) {
+        busy = false;
+        if (dead) return;
+        toast(err.message);
+        load().catch(fail);
+      });
     }
 
     function cancel(pid) {
@@ -409,20 +645,40 @@
       var act = b.getAttribute('data-act'), id = b.getAttribute('data-id');
       switch (act) {
         case 'menu': open = isOpen('menu', id) ? null : {kind: 'menu', id: id}; render(); focus('.crp-menu button'); break;
-        case 'start': open = isOpen('start', id) ? null : {kind: 'start', id: id}; pick = {}; render(); focus('[data-act="begin"]'); break;
+        case 'start': open = isOpen('start', id) ? null : {kind: 'start', id: id}; pick = {}; use = {}; render(); focus('[data-act="begin"]'); break;
         case 'begin': begin(id); break;
+        case 'kmore': step(id, 1); break;
+        case 'kless': step(id, -1); break;
         case 'bench': open = isOpen('bench', id) ? null : {kind: 'bench', id: id}; render(); break;
         case 'plain': roll(id, 'skipped', ''); break;
-        case 'close': close(id); break;
+        case 'close':
+          if (open && open.kind === 'helped') { open = null; last = null; play = false; moment = null; load().catch(fail); break; }
+          close(id); break;
         case 'askcancel': open = {kind: 'confirm', id: id}; render(); focus('[data-act="cancel"]'); break;
         case 'cancel': open = null; cancel(id); break;
         case 'take': take(id); break;
         case 'sdone': open = null; got = null; load().catch(fail); break;
+        case 'tpick': tpicks[id] = (tpicks[id] || 0) >= held(D.pack, id) ? 0 : (tpicks[id] || 0) + 1; if (!tpicks[id]) delete tpicks[id]; render(); focus('[data-act="tpick"][data-id="' + id + '"]'); break;
+        case 'tclear': tpicks = {}; render(); break;
+        case 'ttry': experiment(); break;
+        case 'tdone': tried = null; tpicks = {}; play = false; moment = null; load().catch(fail); break;
+        case 'tstart': startFound(id); break;
+        case 'brk':
+          open = isOpen('break', id) ? null : {kind: 'break', id: id};
+          var r = recipe(id), opts = r ? U.breakable(D.pack, r.makesId, keptOf, keptName).options : [];
+          copy = opts.length ? String(opts[0].id) : '';
+          render(); focus('[data-act="bgo"]'); break;
+        case 'bgo': breakDown(id); break;
+        case 'bdone': broke = null; open = null; play = false; moment = null; load().catch(fail); focus('[data-act="brk"][data-id="' + id + '"]'); break;
+        case 'help': open = isOpen('help', id) ? null : {kind: 'help', id: id}; render(); focus('[data-act="hgo"]'); break;
+        case 'hgo': help(id); break;
       }
     }
     function onChange(e) {
       var s = e.target.closest('[data-pick]');
-      if (s) pick[s.getAttribute('data-pick')] = s.value;
+      if (s) { var i = s.getAttribute('data-pick'); pick[i] = s.value; delete use[i]; render(); focus('#crk-pick-' + i); }
+      var bk = e.target.closest('[data-brk]');
+      if (bk) copy = bk.value;
     }
     function outside(e) {
       if (open && open.kind === 'menu' && !e.target.closest('.crp-menu, [data-act="menu"]')) { open = null; render(); }
@@ -437,12 +693,12 @@
 
     el.innerHTML = '<div class="cra-loading" aria-hidden="true"><i></i><i></i><i></i></div><p class="sr-only" role="status">Loading crafting…</p>';
     load().catch(fail);
-    return {destroy: function () { dead = true; clearTimeout(toastT); unmountBench(); el.removeEventListener('click', onClick); el.removeEventListener('change', onChange); document.removeEventListener('click', outside); document.removeEventListener('keydown', onKey); el.innerHTML = ''; }};
+    return {destroy: function () { dead = true; clearTimeout(toastT); clearTimeout(momentT); unmountBench(); el.removeEventListener('click', onClick); el.removeEventListener('change', onChange); document.removeEventListener('click', outside); document.removeEventListener('keydown', onKey); el.innerHTML = ''; }};
   }
 
   Chronicle.register('crafting-block', {
     init: function (el, cfg) {
-      if (!window.CraftingLib || !window.CraftingTray) {
+      if (!window.CraftingLib || !window.CraftingTray || !window.CraftingTurns) {
         el.innerHTML = '<p class="text-sm text-fg-muted" role="status">Crafting couldn’t load. Reload the page to try again.</p>';
         return;
       }
@@ -453,5 +709,5 @@
     }
   });
 
-  window.CraftingBlock = {held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: T.terms, costText: costText, befell: befell, standIns: standIns};
+  window.CraftingBlock = {keptOf: keptOf, keptName: keptName, held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: T.terms, costText: costText, befell: befell, standIns: standIns};
 })();

@@ -90,6 +90,9 @@ type StashDeps struct {
 	Shares ShareStore
 	// Auditor writes shares to the campaign's activity log; optional.
 	Auditor ShareAuditor
+	// Copies keeps what single copies remember (copies.go); nil (the armory
+	// plugin's own table did not migrate) leaves every item plain.
+	Copies CopyStore
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's
@@ -161,10 +164,15 @@ type StashService interface {
 	// CraftSpend takes a project's materials and cost, all or nothing.
 	CraftSpend(ctx context.Context, campaignID string, a Actor, in CraftSpendInput) (*CraftSpendOutcome, error)
 	// CraftGive puts a finished project's item in the character's pack.
-	CraftGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, label string) error
+	CraftGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, label string, m Memory) error
+	// CraftGiveFor puts an item in a character's pack for a hero the actor
+	// may act for, with the history line given.
+	CraftGiveFor(ctx context.Context, campaignID string, a Actor, actingFor, characterID, itemID string, qty int, why string, m Memory) error
 	// SpoilGive puts what a hero took or harvested from the spoils tray in
 	// their pack.
-	SpoilGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, harvested bool) error
+	SpoilGive(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int, harvested bool, m Memory) error
+	// GoOff turns the remembered copies due by day into what they become.
+	GoOff(ctx context.Context, campaignID string, a Actor, day int64) (int, error)
 }
 
 // DowntimeResult counts what opening downtime did to waiting requests.
@@ -548,6 +556,17 @@ func (s *stashService) StashesPage(ctx context.Context, campaignID string, a Act
 			}
 			sv.Viewers = append(sv.Viewers, NamedRef{ID: cid, Name: name})
 		}
+		// One read of the stash's remembered copies, fitted per item below.
+		remembered := map[string][]Copy{}
+		if s.Copies != nil {
+			cs, err := s.Copies.List(ctx, campaignID, HolderStash, StashEndpoint(st.ID).ID, "")
+			if err != nil {
+				return nil, err
+			}
+			for _, c := range cs {
+				remembered[c.ItemID] = append(remembered[c.ItemID], c)
+			}
+		}
 		for _, r := range items[st.ID] {
 			if visibleItems != nil && !visibleItems[r.ItemEntityID] {
 				continue
@@ -556,7 +575,7 @@ func (s *stashService) StashesPage(ctx context.Context, campaignID string, a Act
 			if !ok {
 				continue
 			}
-			sv.Items = append(sv.Items, StashItemView{ItemID: r.ItemEntityID, Name: name, Quantity: r.Quantity})
+			sv.Items = append(sv.Items, StashItemView{ItemID: r.ItemEntityID, Name: name, Quantity: r.Quantity, Copies: fitCopies(remembered[r.ItemEntityID], r.Quantity)})
 		}
 		sort.Slice(sv.Items, func(i, j int) bool { return strings.ToLower(sv.Items[i].Name) < strings.ToLower(sv.Items[j].Name) })
 		view.Stashes = append(view.Stashes, sv)
