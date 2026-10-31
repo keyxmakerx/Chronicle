@@ -423,8 +423,8 @@
         if (displayEntities.length === 0) {
           var empty = document.createElement('div');
           empty.className = 'text-center py-8 text-fg-muted text-sm';
-          empty.innerHTML = '<i class="fa-solid fa-file-circle-plus text-lg mb-2 block opacity-50"></i>' +
-            (selectedTagName ? 'No entities with tag "' + selectedTagName + '"' : 'No entities found');
+          empty.innerHTML = '<i class="fa-solid fa-file-circle-plus text-lg mb-2 block opacity-50"></i>';
+          empty.appendChild(document.createTextNode(selectedTagName ? 'No entities with tag "' + selectedTagName + '"' : 'No entities found'));
           el.appendChild(empty);
           return;
         }

@@ -125,6 +125,7 @@
    * @param {string} [type='info'] - Type: 'success', 'error', 'info', 'warning'.
    * @param {Object} [opts] - Options.
    * @param {number} [opts.duration=4000] - Auto-dismiss duration in ms. 0 = manual.
+   * @param {Object} [opts.action] - A button after the text: {label, onClick(button)}.
    */
   Chronicle.notify = function (message, type, opts) {
     type = type || 'info';
@@ -184,6 +185,18 @@
       msg.textContent = message;
     }
     toast.appendChild(msg);
+
+    // The action button is built as a node, so callers never need opts.html
+    // to put a button beside text they don't control.
+    if (opts.action && typeof opts.action.onClick === 'function') {
+      var act = document.createElement('button');
+      act.type = 'button';
+      act.className = 'underline font-medium ml-1';
+      act.textContent = opts.action.label || 'Undo';
+      act.addEventListener('click', function () { opts.action.onClick(act); });
+      msg.appendChild(document.createTextNode(' '));
+      msg.appendChild(act);
+    }
 
     var record = { id: id, el: toast, message: message, type: type, count: 1, msgEl: msg, badgeEl: null, timer: null, duration: duration };
 
