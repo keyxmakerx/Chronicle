@@ -66,6 +66,8 @@ type AppGrantRepository interface {
 	Create(ctx context.Context, g *AppGrant, tokenHash string) error
 	FindByTokenHash(ctx context.Context, tokenHash string) (*AppGrant, error)
 	ListLive(ctx context.Context, campaignID, userID string) ([]AppGrant, error)
+	// ListLiveForUser is ListLive across every campaign.
+	ListLiveForUser(ctx context.Context, userID string) ([]AppGrant, error)
 	Revoke(ctx context.Context, id string, at time.Time) error
 	Touch(ctx context.Context, id string, at time.Time) error
 	RevokeAllForUser(ctx context.Context, userID string, at time.Time) error
@@ -90,6 +92,14 @@ type AppGrantService interface {
 	// Revoke ends one of the player's own grants. Someone else's grant, or
 	// one in another campaign, is NotFound.
 	Revoke(ctx context.Context, campaignID, userID, grantID string) error
+
+	// ListForUser returns the user's live grants in every campaign, newest
+	// first, for their account page.
+	ListForUser(ctx context.Context, userID string) ([]AppGrant, error)
+
+	// RevokeForUser ends one of the user's own grants in whichever campaign
+	// it is. Someone else's grant is NotFound.
+	RevokeForUser(ctx context.Context, userID, grantID string) error
 
 	// RevokeAllForUser ends every grant the user holds, in every campaign.
 	// Runs when all the user's sessions are destroyed (password reset or
@@ -247,6 +257,41 @@ func (s *appGrantService) Revoke(ctx context.Context, campaignID, userID, grantI
 	return apperror.NewNotFound("connection not found")
 }
 
+func (s *appGrantService) ListForUser(ctx context.Context, userID string) ([]AppGrant, error) {
+	all, err := s.repo.ListLiveForUser(ctx, userID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	now := s.now().UTC()
+	out := make([]AppGrant, 0, len(all))
+	for _, g := range all {
+		if g.usable(now) {
+			out = append(out, g)
+		}
+	}
+	return out, nil
+}
+
+func (s *appGrantService) RevokeForUser(ctx context.Context, userID, grantID string) error {
+	live, err := s.repo.ListLiveForUser(ctx, userID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	for _, g := range live {
+		if g.ID != grantID {
+			continue
+		}
+		if err := s.repo.Revoke(ctx, g.ID, s.now().UTC().Truncate(time.Second)); err != nil {
+			return apperror.NewInternal(err)
+		}
+		if s.conns != nil {
+			s.conns.RevokeNotesAppClients(g.CampaignID, userID)
+		}
+		return nil
+	}
+	return apperror.NewNotFound("connection not found")
+}
+
 func (s *appGrantService) RevokeAllInCampaign(ctx context.Context, campaignID, userID string) error {
 	if campaignID == "" || userID == "" {
 		return nil
@@ -374,6 +419,26 @@ func (r *appGrantRepository) ListLive(ctx context.Context, campaignID, userID st
 		`SELECT `+appGrantColumns+` FROM notes_app_grants
 		 WHERE campaign_id = ? AND user_id = ? AND revoked_at IS NULL
 		 ORDER BY created_at DESC, id DESC`, campaignID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing notes app grants: %w", err)
+	}
+	defer rows.Close()
+	var out []AppGrant
+	for rows.Next() {
+		g, err := scanAppGrant(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning notes app grant: %w", err)
+		}
+		out = append(out, *g)
+	}
+	return out, rows.Err()
+}
+
+func (r *appGrantRepository) ListLiveForUser(ctx context.Context, userID string) ([]AppGrant, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+appGrantColumns+` FROM notes_app_grants
+		 WHERE user_id = ? AND revoked_at IS NULL
+		 ORDER BY created_at DESC, id DESC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing notes app grants: %w", err)
 	}

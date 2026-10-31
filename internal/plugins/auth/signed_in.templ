@@ -1,0 +1,127 @@
+// signed_in.templ renders the Where you're signed in card on the account
+// page: every browser signed in as the user and every app they let act for
+// them, each with its own way to end it, and Sign out everywhere.
+package auth
+
+import (
+	"fmt"
+	"time"
+)
+
+// SignedInView is what the card shows.
+type SignedInView struct {
+	Sessions   []MySession
+	Apps       []ConnectedApp
+	CSRFToken  string
+	Message    string
+	LoadFailed bool
+}
+
+templ signedInCard(v SignedInView) {
+	<div class="card p-6 mb-6" id="signed-in">
+		<h2 class="text-lg font-semibold text-fg mb-1">Where you're signed in</h2>
+		<p class="text-sm text-fg-secondary mb-4">Browsers and apps that can act as you. Sign one out if you don't recognise it or no longer use it.</p>
+		if v.Message != "" {
+			<p class="text-sm text-fg-body mb-3 step-settle" role="status">{ v.Message }</p>
+		}
+		if v.LoadFailed {
+			<p class="text-sm text-red-600 dark:text-red-400 mb-3" role="alert">Part of this list couldn't be loaded. Reload the page to try again.</p>
+		}
+		<ul class="divide-y divide-edge rounded-lg border border-edge">
+			for _, s := range v.Sessions {
+				<li class="flex flex-wrap items-center gap-3 px-4 py-3">
+					<i class={ "fa-solid text-fg-muted w-5 text-center", templ.KV("fa-mobile-screen", s.Mobile), templ.KV("fa-desktop", !s.Mobile) } aria-hidden="true"></i>
+					<span class="flex-1 min-w-0">
+						<span class="block text-sm font-medium text-fg">
+							{ s.Device }
+							if s.Current {
+								<span class="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">This browser</span>
+							}
+						</span>
+						<span class="block text-xs text-fg-muted">Signed in { signedInAgo(s.CreatedAt, time.Now()) }</span>
+					</span>
+					if !s.Current {
+						<button
+							type="button"
+							class="btn-secondary btn-sm"
+							hx-post={ "/account/signed-in/sessions/" + s.ID + "/sign-out" }
+							hx-headers={ csrfHeader(v.CSRFToken) }
+							hx-target="#signed-in"
+							hx-swap="outerHTML"
+							hx-disabled-elt="this"
+							aria-label={ "Sign out " + s.Device }
+						>Sign out</button>
+					}
+				</li>
+			}
+			for _, a := range v.Apps {
+				<li class="flex flex-wrap items-center gap-3 px-4 py-3">
+					<i class="fa-solid fa-plug text-fg-muted w-5 text-center" aria-hidden="true"></i>
+					<span class="flex-1 min-w-0">
+						<span class="block text-sm font-medium text-fg">
+							{ a.Name }
+							if a.Place != "" {
+								<span class="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-muted">{ a.Place }</span>
+							}
+						</span>
+						<span class="block text-xs text-fg-muted truncate">
+							if a.Origin != "" {
+								<span class="font-mono">{ a.Origin }</span> ·
+							}
+							Used { signedInAgo(a.LastUsed, time.Now()) }
+						</span>
+					</span>
+					<button
+						type="button"
+						class="btn-secondary btn-sm"
+						hx-post={ "/account/signed-in/apps/" + a.ID + "/disconnect" }
+						hx-headers={ csrfHeader(v.CSRFToken) }
+						hx-target="#signed-in"
+						hx-swap="outerHTML"
+						hx-disabled-elt="this"
+						aria-label={ "Disconnect " + a.Name }
+					>Disconnect</button>
+				</li>
+			}
+		</ul>
+		<div class="flex flex-wrap items-center justify-between gap-3 mt-4">
+			<p class="text-xs text-fg-muted">Sign out everywhere ends all of these, this browser too.</p>
+			<button
+				type="button"
+				class="btn-danger btn-sm"
+				hx-post="/account/signed-in/sign-out-everywhere"
+				hx-headers={ csrfHeader(v.CSRFToken) }
+				hx-confirm="Sign out of every browser and disconnect every app? You'll need to sign in again here too."
+				hx-disabled-elt="this"
+			>Sign out everywhere</button>
+		</div>
+	</div>
+}
+
+// signedInAgo says how long ago t was in words a person reads at a glance.
+func signedInAgo(t, now time.Time) string {
+	if t.IsZero() {
+		return "a while ago"
+	}
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return plural(int(d/time.Minute), "minute") + " ago"
+	case d < 24*time.Hour:
+		return plural(int(d/time.Hour), "hour") + " ago"
+	case d < 14*24*time.Hour:
+		return plural(int(d/(24*time.Hour)), "day") + " ago"
+	case d < 60*24*time.Hour:
+		return plural(int(d/(7*24*time.Hour)), "week") + " ago"
+	}
+	return "on " + t.Format("2 Jan 2006")
+}
+
+func plural(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return fmt.Sprintf("%d %ss", n, unit)
+}

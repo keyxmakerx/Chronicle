@@ -148,6 +148,11 @@ type AuthService interface {
 	// and destroys it. Used by the admin dashboard to avoid exposing raw tokens.
 	DestroySessionByHash(ctx context.Context, tokenHash string) error
 
+	// ListMySessions and SignOutMySession back the account page's list of
+	// where the user is signed in. They only ever touch the user's own set.
+	ListMySessions(ctx context.Context, userID, currentToken string) ([]MySession, error)
+	SignOutMySession(ctx context.Context, userID, sessionID, currentToken string) error
+
 	// Two-factor sign-in.
 	TwoFactorStatus(ctx context.Context, userID string) (TwoFactorStatus, error)
 	BeginTwoFactor(ctx context.Context, userID, password string) (*TwoFactorSetup, error)

@@ -74,5 +74,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.GET("/account/email/verify", h.ConfirmEmailChange)
 
 	// Re-authentication for sensitive operations (requires auth).
+	// Where you're signed in: end another browser, disconnect an app, or end
+	// everything. Each only touches the signed-in person's own sessions.
+	e.POST("/account/signed-in/sessions/:id/sign-out", h.SignOutSessionAPI, RequireAuth(h.service), middleware.RateLimit(30, time.Minute))
+	e.POST("/account/signed-in/apps/:id/disconnect", h.DisconnectAppAPI, RequireAuth(h.service), middleware.RateLimit(30, time.Minute))
+	e.POST("/account/signed-in/sign-out-everywhere", h.SignOutEverywhereAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
 	e.POST("/account/reauth", h.ReauthConfirm, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
 }

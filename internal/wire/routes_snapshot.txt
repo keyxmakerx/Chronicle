@@ -15,6 +15,9 @@ PUT	/account/password	session	plugins/auth.(*Handler).ChangePasswordAPI	plugins/
 POST	/account/reauth	session	plugins/auth.(*Handler).ReauthConfirm	plugins/auth.RequireAuth > middleware.RateLimit
 POST	/account/sign-in/link	session	plugins/auth.(*Handler).LinkOIDC	plugins/auth.RequireAuth > middleware.RateLimit
 POST	/account/sign-in/unlink	session	plugins/auth.(*Handler).UnlinkOIDCAPI	plugins/auth.RequireAuth > middleware.RateLimit
+POST	/account/signed-in/apps/:id/disconnect	session	plugins/auth.(*Handler).DisconnectAppAPI	plugins/auth.RequireAuth > middleware.RateLimit
+POST	/account/signed-in/sessions/:id/sign-out	session	plugins/auth.(*Handler).SignOutSessionAPI	plugins/auth.RequireAuth > middleware.RateLimit
+POST	/account/signed-in/sign-out-everywhere	session	plugins/auth.(*Handler).SignOutEverywhereAPI	plugins/auth.RequireAuth > middleware.RateLimit
 PUT	/account/timezone	session	plugins/auth.(*Handler).UpdateTimezoneAPI	plugins/auth.RequireAuth
 POST	/account/two-factor/disable	session	plugins/auth.(*Handler).TwoFactorDisableAPI	plugins/auth.RequireAuth > middleware.RateLimit
 POST	/account/two-factor/enable	session	plugins/auth.(*Handler).TwoFactorEnableAPI	plugins/auth.RequireAuth > middleware.RateLimit

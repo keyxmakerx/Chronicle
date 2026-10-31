@@ -13,7 +13,7 @@ import (
 )
 
 // AccountPage renders the full account settings page.
-templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs, owned []OwnedCampaignRef, twoFactor TwoFactorStatus, methods SignInMethods, signInMsg string) {
+templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs, owned []OwnedCampaignRef, twoFactor TwoFactorStatus, methods SignInMethods, signInMsg string, signedIn SignedInView) {
 	@layouts.App("Account Settings") {
 		<div class="max-w-2xl mx-auto">
 			<div class="mb-6">
@@ -214,6 +214,7 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 			if methods.ProviderName != "" {
 				@signInMethodsCard(user, methods, signInMsg, csrfToken)
 			}
+			@signedInCard(signedIn)
 			@notifyPrefsCard(notify)
 			@deleteAccountCard(owned, twoFactor.Enabled)
 		</div>
