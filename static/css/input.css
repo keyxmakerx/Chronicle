@@ -4995,6 +4995,7 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
    panel and scrim are moved to <body> by the widget, so the top bar's
    stacking context never clips them. On a phone the panel is full width. */
 .ai-chip-host { position: relative; display: flex; align-items: center; }
+.ai-chip-host[hidden] { display: none; }
 .ai-chip { position: relative; }
 .ai-chip[aria-expanded="true"] { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
 .ai-chip-n {

@@ -219,3 +219,25 @@ func TestPlayerKey_Tools(t *testing.T) {
 		t.Errorf("instructions = %q", got)
 	}
 }
+
+// The owner can disconnect a player's key; it is then gone, not paused.
+func TestEndPlayerKey(t *testing.T) {
+	ctx := context.Background()
+	svc, _, _ := playerService(t)
+	raw, pk, err := svc.Connect(ctx, "camp-1", "player-1", aiexport.PrivacyModeSafe, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EndPlayerKey(ctx, "camp-1", "player-2", pk.ID); err == nil {
+		t.Error("a player disconnected another player's key")
+	}
+	if _, err := svc.EndPlayerKey(ctx, "camp-1", "owner-1", pk.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.Authenticate(ctx, "camp-1", raw); !errors.Is(err, ErrKeyEnded) {
+		t.Fatalf("ended key: %v, want ErrKeyEnded", err)
+	}
+	if _, err := svc.EndPlayerKey(ctx, "camp-1", "owner-1", pk.ID); err == nil {
+		t.Error("ending an ended key succeeded")
+	}
+}

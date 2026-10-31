@@ -5312,6 +5312,8 @@ func (a *App) RegisterRoutes() {
 	)
 	ai_workspace.RegisterOwnerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
 		campaigns.RequireRole(campaigns.RoleOwner))
+	ai_workspace.RegisterPlayerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
+		campaigns.RequireRole(campaigns.RolePlayer))
 
 	// --- Import from Obsidian or Markdown (Settings > Import) ---
 	// Pages, pictures and page files are reached through the narrow adapters in

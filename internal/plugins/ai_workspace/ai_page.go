@@ -52,6 +52,8 @@ type ConnectView struct {
 	Loc *time.Location
 	// Notes is the notes panel; nil when the switches aren't wired.
 	Notes *NotesView
+	// Players is the players panel; nil when the watch isn't wired.
+	Players *PlayersView
 }
 
 // NotesView is the panel saying which notes the AI reads and changes, with
@@ -126,6 +128,9 @@ func (h *Handler) connectView(c echo.Context, cc *campaigns.CampaignContext) (Co
 			return v, err
 		}
 		v.CutOff = sw.CutOffAt
+		if err := h.fillPlayers(c, cc, &v); err != nil {
+			return v, err
+		}
 	}
 	if v.Notes != nil && conn != nil && conn.Privacy == aiexport.PrivacyModeSafe {
 		v.Notes.Shut = true

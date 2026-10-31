@@ -912,7 +912,9 @@ templ Topbar() {
 				></div>
 			}
 			if InCampaign(ctx) && IsOwner(ctx) && !IsViewingAsPlayer(ctx) && !InSiteAdmin(ctx) {
-				@aiChip()
+				@aiChip("ai", false)
+			} else if InCampaign(ctx) && !IsOwner(ctx) && !IsGuest(ctx) && GetCampaignRole(ctx) >= 1 && !InSiteAdmin(ctx) {
+				@aiChip("ai/me", true)
 			}
 			if InCampaign(ctx) {
 				<!-- Search trigger (magnifying glass) -->

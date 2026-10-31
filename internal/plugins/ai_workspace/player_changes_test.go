@@ -76,6 +76,7 @@ func TestPlanPlayerChanges(t *testing.T) {
 		{"a record", "---\nkind: event\nname: Feast\ndate: 1 Deepwinter 1492\n---\n", "is a event"},
 		{"a lookup", "---\nkind: lookup\nwhat: pages\n---\n", "lookups aren't answered"},
 		{"no fields", "---\naction: update\nname: Tyne\n---\n", "changes no sheet fields"},
+		{"nothing new", "---\naction: update\nname: Tyne\nfields:\n  pronouns: she/her\n---\n", "already says this"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -124,6 +125,22 @@ func TestPlanPlayerChanges_LinesAndOtherPlayers(t *testing.T) {
 	none, _ := planPlayerChanges(context.Background(), nil, "camp-1", "player-1", block)
 	if none[0].Held == "" {
 		t.Fatal("with no door wired a change was kept")
+	}
+}
+
+// A field that already holds the value is neither shown nor written.
+func TestPlanPlayerChanges_OnlyWhatDiffers(t *testing.T) {
+	block := "---\naction: update\nname: Tyne\nfields:\n  pronouns: she/her\n  class: Fury\n---\n"
+	plan, err := planPlayerChanges(context.Background(), tyneSheets(), "camp-1", "player-1", block)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := plan[0]
+	if c.Held != "" || len(c.Lines) != 1 || c.Lines[0].Key != "class" {
+		t.Fatalf("change = %+v", c)
+	}
+	if _, ok := c.Fields["pronouns"]; ok || c.Fields["class"] != "Fury" {
+		t.Fatalf("fields = %v, want only class", c.Fields)
 	}
 }
 

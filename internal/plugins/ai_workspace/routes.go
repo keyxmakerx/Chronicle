@@ -33,6 +33,8 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.POST("/ai/notes", h.ChangeNoteAccess, requireOwner)
 	cg.POST("/ai/alerts/:aid", h.AnswerAIAlert, requireOwner)
 	cg.POST("/ai/cut-off", h.CutOffAI, requireOwner)
+	cg.POST("/ai/players", h.SetPlayersAI, requireOwner)
+	cg.POST("/ai/players/:kid", h.PlayerKeyAction, requireOwner)
 	cg.GET("/ai/requests", h.AIRequests, requireOwner)
 	cg.POST("/ai/requests/:rid/turn-down", h.TurnDownRequest, requireOwner)
 
@@ -43,4 +45,20 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.POST("/ai-workspace/import/commit", h.CommitImport, requireOwner)
 	cg.GET("/ai-workspace/import/tray", h.ImportTrayList, requireOwner)
 	cg.POST("/ai-workspace/import/tray/clear", h.ClearImportTray, requireOwner)
+}
+
+// RegisterPlayerRoutes mounts a player's own AI: the AI button and panel on
+// their screen, their key and their AI's changes. requireMember admits
+// anyone in the campaign; each handler works on the signed-in person's own
+// key and requests only, and on their own character only.
+func RegisterPlayerRoutes(cg *echo.Group, h *Handler, requireMember echo.MiddlewareFunc) {
+	cg.GET("/ai/me/chip", h.PlayerChip, requireMember)
+	cg.GET("/ai/me/panel", h.PlayerPanel, requireMember)
+	cg.GET("/ai/me/copy", h.PlayerCopy, requireMember)
+	cg.POST("/ai/me/key", h.PlayerConnect, requireMember)
+	cg.POST("/ai/me/key/disconnect", h.PlayerDisconnect, requireMember)
+	cg.POST("/ai/me/paste", h.PlayerPaste, requireMember)
+	cg.POST("/ai/me/apply", h.PlayerApply, requireMember)
+	cg.GET("/ai/me/requests/:rid", h.PlayerReviewRequest, requireMember)
+	cg.POST("/ai/me/requests/:rid/turn-down", h.PlayerTurnDown, requireMember)
 }

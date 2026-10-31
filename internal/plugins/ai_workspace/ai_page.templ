@@ -55,6 +55,9 @@ templ aiConnectSection(v ConnectView) {
 					if v.Watching {
 						@aiCutOffPanel(v)
 					}
+					if v.Players != nil {
+						@aiPlayersPanel(*v.Players)
+					}
 					if v.Notes != nil {
 						@aiNotesPanel(*v.Notes)
 					}
@@ -80,6 +83,9 @@ templ aiConnectSection(v ConnectView) {
 				}
 				if v.Notes != nil {
 					@aiNotesPanel(*v.Notes)
+				}
+				if v.Players != nil {
+					@aiPlayersPanel(*v.Players)
 				}
 				if v.Available && len(v.Sittings) > 0 {
 					@aiActivityList(v)

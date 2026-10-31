@@ -242,7 +242,7 @@ func TestAsk_CampaignCheck(t *testing.T) {
 		wantKept int
 	}{
 		{"problems refuse the request", []string{`block 1 (Coral Court): the Places category has no folder "Docks"`},
-			nil, `Not sent: the owner couldn't use it: block 1 (Coral Court): the Places category has no folder "Docks".`, 0},
+			nil, `Not sent: Chronicle couldn't use it: block 1 (Coral Court): the Places category has no folder "Docks".`, 0},
 		{"many problems are cut short", []string{"a", "b", "c", "d", "e", "f", "g"}, nil, "a; b; c; d; e; and 2 more.", 0},
 		{"no problems", nil, nil, "Sent to the owner for review", 1},
 		{"a failed check is skipped", nil, errors.New("db down"), "Sent to the owner for review", 1},

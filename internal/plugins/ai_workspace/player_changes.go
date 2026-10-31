@@ -115,8 +115,13 @@ func planPlayerChanges(ctx context.Context, sheets PlayerSheets, campaignID, use
 			}
 		}
 		if ch.Held == "" {
-			ch.SheetID, ch.Page, ch.Fields = sheet.ID, sheet.Name, p.FrontMatter.Fields
-			ch.Lines = changeLines(sheet, p.FrontMatter.Fields)
+			// Only fields that differ are offered and written, so a yes never
+			// records a change that changed nothing.
+			if ch.Lines, ch.Fields = changeLines(sheet, p.FrontMatter.Fields); len(ch.Lines) == 0 {
+				ch.Held, ch.Fields = "your character's sheet already says this", nil
+			} else {
+				ch.SheetID, ch.Page = sheet.ID, sheet.Name
+			}
 		}
 		out = append(out, ch)
 	}
@@ -167,23 +172,38 @@ func playerRefusal(err error) string {
 	return "Chronicle couldn't check this change just now"
 }
 
-// changeLines lists what a change sets, in key order, from the sheet's
-// current values.
-func changeLines(s *PlayerSheet, fields map[string]any) []PlayerChangeLine {
+// changeLines lists the fields a change would alter, in key order, from
+// the sheet's current values, and the part of fields that does so.
+func changeLines(s *PlayerSheet, fields map[string]any) ([]PlayerChangeLine, map[string]any) {
 	keys := make([]string, 0, len(fields))
 	for k := range fields {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	out := make([]PlayerChangeLine, 0, len(keys))
+	changed := map[string]any{}
 	for _, k := range keys {
-		to := ""
-		if v, ok := fields[k].(string); ok {
-			to = v
+		to := valueText(fields[k])
+		if to == s.Values[k] {
+			continue
 		}
 		out = append(out, PlayerChangeLine{Key: k, From: s.Values[k], To: to})
+		changed[k] = fields[k]
 	}
-	return out
+	return out, changed
+}
+
+// valueText is a field value as the review shows it and as the sheet's
+// current value is read.
+func valueText(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	default:
+		return strings.TrimSpace(fmt.Sprint(x))
+	}
 }
 
 // playerCounts is Chronicle's own line about a player's request.

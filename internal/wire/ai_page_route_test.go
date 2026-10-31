@@ -41,6 +41,12 @@ func TestAIPageRoutes_HaveOwnerGate(t *testing.T) {
 		{"POST", `"/ai/notes"`},
 		{"GET", `"/ai/requests"`},
 		{"POST", `"/ai/requests/:rid/turn-down"`},
+		{"GET", `"/ai/chip"`},
+		{"GET", `"/ai/panel"`},
+		{"POST", `"/ai/alerts/:aid"`},
+		{"POST", `"/ai/cut-off"`},
+		{"POST", `"/ai/players"`},
+		{"POST", `"/ai/players/:kid"`},
 	} {
 		var found, gated bool
 		ast.Inspect(fn.Body, func(n ast.Node) bool {

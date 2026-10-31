@@ -503,7 +503,7 @@ func unusable(problems []string) error {
 	if len(problems) > 5 {
 		problems = append(problems[:5:5], fmt.Sprintf("and %d more", len(problems)-5))
 	}
-	return errors.New("the owner couldn't use it: " + strings.Join(problems, "; "))
+	return errors.New("Chronicle couldn't use it: " + strings.Join(problems, "; "))
 }
 
 // cleanClientName keeps the plain characters of an app's name, cut short.

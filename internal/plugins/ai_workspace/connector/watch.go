@@ -480,6 +480,40 @@ func (s *Service) PlayerKeys(ctx context.Context, campaignID, userID string) ([]
 // StopPlayerKey pauses (stop) or resumes one player's key for the
 // campaign's owner. It returns the key, for the audit line.
 func (s *Service) StopPlayerKey(ctx context.Context, campaignID, userID string, id int64, stop bool) (*Connection, error) {
+	c, err := s.ownersPlayerKey(ctx, campaignID, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	var at *time.Time
+	if stop {
+		now := s.now().UTC().Truncate(time.Second)
+		at = &now
+	}
+	if err := s.repo.SetPaused(ctx, campaignID, id, at); err != nil {
+		return nil, err
+	}
+	if stop {
+		s.settleKeyAlerts(ctx, id, SettledPaused)
+	}
+	return c, nil
+}
+
+// EndPlayerKey disconnects one player's key for the campaign's owner. The
+// player can make a new one while players may use AI.
+func (s *Service) EndPlayerKey(ctx context.Context, campaignID, userID string, id int64) (*Connection, error) {
+	c, err := s.ownersPlayerKey(ctx, campaignID, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.RevokeOne(ctx, campaignID, id, s.now().UTC().Truncate(time.Second)); err != nil {
+		return nil, err
+	}
+	s.settleKeyAlerts(ctx, id, SettledEnded)
+	return c, nil
+}
+
+// ownersPlayerKey is a live player's key of the campaign, for its owner.
+func (s *Service) ownersPlayerKey(ctx context.Context, campaignID, userID string, id int64) (*Connection, error) {
 	if s.watchRepo == nil {
 		return nil, apperror.NewNotFound("this isn't available")
 	}
@@ -492,17 +526,6 @@ func (s *Service) StopPlayerKey(ctx context.Context, campaignID, userID string, 
 	}
 	if c == nil || c.CampaignID != campaignID || !c.ForPlayer || !c.Live(s.now()) {
 		return nil, apperror.NewNotFound("that key was ended or has run out; reload the page")
-	}
-	var at *time.Time
-	if stop {
-		now := s.now().UTC().Truncate(time.Second)
-		at = &now
-	}
-	if err := s.repo.SetPaused(ctx, campaignID, id, at); err != nil {
-		return nil, err
-	}
-	if stop {
-		s.settleKeyAlerts(ctx, id, SettledPaused)
 	}
 	return c, nil
 }

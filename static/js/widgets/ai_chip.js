@@ -1,15 +1,18 @@
 /**
- * ai_chip.js -- the owner's AI button in the top bar and the panel it opens
- * over any campaign page (layouts/ai_chip.templ; signed option D).
+ * ai_chip.js -- the AI button in the top bar and the panel it opens over any
+ * campaign page (layouts/ai_chip.templ; signed option D, and D for players).
  *
- * Mount: <div data-widget="ai-chip" data-campaign-id> in the top bar, drawn
- * only for the campaign's owner outside player view.
+ * Mount: <div data-widget="ai-chip" data-campaign-id data-ai-base> in the top
+ * bar. data-ai-base is "ai" for the owner and "ai/me" for anyone else in the
+ * campaign. A player's button starts hidden and shows only while the chip
+ * answer says players may use AI here (off: false); while hidden, Ctrl+V is
+ * left alone.
  *
  * - The button counts requests waiting and open warnings
- *   (GET /campaigns/:id/ai/chip, JSON), every 30 seconds while the tab is
+ *   (GET /campaigns/:id/<base>/chip, JSON), every 30 seconds while the tab is
  *   in view. When more requests wait than this browser last saw, a notice
  *   drops under the button with Look.
- * - The panel loads its content from GET /campaigns/:id/ai/panel through
+ * - The panel loads its content from GET /campaigns/:id/<base>/panel through
  *   htmx, so the review and its widgets work as they do anywhere. It is
  *   moved to <body> so the top bar never clips it. Escape, the scrim and
  *   the close button shut it; focus goes back to the button.
@@ -42,6 +45,7 @@
   Chronicle.register('ai-chip', {
     init: function (host, config) {
       var cid = String(config.campaignId || '');
+      var base = config.aiBase === 'ai/me' ? 'ai/me' : 'ai';
       var chip = host.querySelector('[data-ai-chip]');
       var badge = host.querySelector('[data-ai-chip-n]');
       var label = host.querySelector('[data-ai-chip-label]');
@@ -62,6 +66,8 @@
       function reviewOpen() { return !!panel.querySelector('#ai-import-review-host form, .aic-req-review form'); }
 
       function show(counts) {
+        host.hidden = !!counts.off;
+        if (counts.off) { if (state.open) close(); return; }
         var n = (counts.waiting || 0) + (counts.warnings || 0);
         badge.hidden = n === 0;
         badge.textContent = n > 9 ? '9+' : String(n);
@@ -80,7 +86,7 @@
 
       function poll() {
         if (document.hidden) return;
-        Chronicle.apiFetch('/campaigns/' + encodeURIComponent(cid) + '/ai/chip')
+        Chronicle.apiFetch('/campaigns/' + encodeURIComponent(cid) + '/' + base + '/chip')
           .then(function (r) { return r.ok ? r.json() : null; })
           .then(function (c) { if (c) show(c); })
           .catch(function () { /* the next poll tries again */ });
@@ -121,7 +127,7 @@
           }
           body.addEventListener('htmx:afterSettle', done);
           body.addEventListener('htmx:responseError', done);
-          htmx.ajax('GET', '/campaigns/' + encodeURIComponent(cid) + '/ai/panel', { target: body, swap: 'innerHTML' })
+          htmx.ajax('GET', '/campaigns/' + encodeURIComponent(cid) + '/' + base + '/panel', { target: body, swap: 'innerHTML' })
             .catch(done);
         });
       }
@@ -163,7 +169,7 @@
       }
 
       function onPaste(e) {
-        if (typing(e.target) || reviewOpen()) return;
+        if (host.hidden || typing(e.target) || reviewOpen()) return;
         var text = e.clipboardData && e.clipboardData.getData('text/plain');
         if (!text || !BLOCK_RE.test(text)) return;
         e.preventDefault();
@@ -186,7 +192,7 @@
       }
 
       function onClick(e) {
-        if (e.target.closest('[data-ai-open]')) { e.preventDefault(); open(); return; }
+        if (e.target.closest('[data-ai-open]') && !host.hidden) { e.preventDefault(); open(); return; }
         if (state.open && e.target.closest('[data-ai-close]')) close();
       }
 
@@ -197,7 +203,7 @@
       document.addEventListener('keydown', onKey);
       var onVisible = function () { if (!document.hidden) poll(); };
       document.addEventListener('visibilitychange', onVisible);
-      var onHash = function () { if (location.hash === '#copy-and-paste') open(); };
+      var onHash = function () { if (location.hash === '#copy-and-paste' && !host.hidden) open(); };
       window.addEventListener('hashchange', onHash);
       state.timer = setInterval(poll, POLL_MS);
       host._aiChip = { off: function () {
@@ -212,7 +218,7 @@
       } };
 
       poll();
-      if (location.hash === '#copy-and-paste') open();
+      if (location.hash === '#copy-and-paste' && !host.hidden) open();
     },
     destroy: function (host) {
       if (host._aiChip) { host._aiChip.off(); host._aiChip = null; }
