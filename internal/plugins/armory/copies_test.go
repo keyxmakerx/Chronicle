@@ -164,8 +164,8 @@ func newCopyFx(t *testing.T) (*fx, *fakeCopies) {
 	cs := &fakeCopies{}
 	f.svc = NewStashService(StashDeps{Repo: f.repo, Directory: f.dir, Visibility: f.vis, Actor: fakeActor{f.dir}, Fields: f.fields, Relations: f.rels, Copies: cs})
 	// Thorin carries 3 potions: one fine, one moonlit, one plain.
-	cs.Add(context.Background(), "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{Quality: QualityFine}})
-	cs.Add(context.Background(), "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{Marks: []string{"moonlit"}}})
+	mustAdd(t, cs, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{Quality: QualityFine}})
+	mustAdd(t, cs, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{Marks: []string{"moonlit"}}})
 	return f, cs
 }
 
@@ -233,7 +233,7 @@ func TestGoOff(t *testing.T) {
 	t.Run("what is due turns into what it becomes", func(t *testing.T) {
 		f, cs := newCopyFx(t)
 		// Thorin's two potions brewed on day 3 keep until day 10, then are murky.
-		cs.Add(ctx, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{How: "made", OffDay: 10, Becomes: "i2"}})
+		mustAdd(t, cs, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{How: "made", OffDay: 10, Becomes: "i2"}})
 		if n, err := f.svc.GoOff(ctx, "camp", gm, 9); err != nil || n != 0 {
 			t.Fatalf("day 9: %d, %v", n, err)
 		}
@@ -253,7 +253,7 @@ func TestGoOff(t *testing.T) {
 	})
 	t.Run("a copy that becomes nothing stays, gone off", func(t *testing.T) {
 		f, cs := newCopyFx(t)
-		cs.Add(ctx, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, OffOn: "10 Frostmoon"}})
+		mustAdd(t, cs, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, OffOn: "10 Frostmoon"}})
 		if n, err := f.svc.GoOff(ctx, "camp", gm, 10); err != nil || n != 0 {
 			t.Fatalf("%d, %v", n, err)
 		}
@@ -263,8 +263,8 @@ func TestGoOff(t *testing.T) {
 	})
 	t.Run("a copy the count no longer covers ends", func(t *testing.T) {
 		f, cs := newCopyFx(t)
-		cs.Add(ctx, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, Becomes: "i2"}})
-		cs.Add(ctx, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, Becomes: "i2"}})
+		mustAdd(t, cs, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, Becomes: "i2"}})
+		mustAdd(t, cs, "camp", HolderCharacter, "c1", Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, Becomes: "i2"}})
 		// Four copies remember something, but Thorin carries three.
 		n, err := f.svc.GoOff(ctx, "camp", gm, 10)
 		if err != nil || n != 1 {
@@ -281,7 +281,7 @@ func TestGoOff(t *testing.T) {
 			t.Fatal(err)
 		}
 		// The fine and the moonlit potion went into the chest with the plain one.
-		cs.Add(ctx, "camp", HolderStash, StashEndpoint(sid).ID, Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, Becomes: "i2"}})
+		mustAdd(t, cs, "camp", HolderStash, StashEndpoint(sid).ID, Copy{ItemID: "i1", Quantity: 1, Memory: Memory{OffDay: 10, Becomes: "i2"}})
 		if n, err := f.svc.GoOff(ctx, "camp", gm, 10); err != nil || n != 1 {
 			t.Fatalf("%d, %v", n, err)
 		}
@@ -344,5 +344,13 @@ func TestHeldCopiesAndChoices(t *testing.T) {
 	}
 	if got := copyChoice(moon); got != "The 2 Moonlit ones" {
 		t.Errorf("choice %q", got)
+	}
+}
+
+// mustAdd seeds a remembered copy, failing the test if the fake refuses.
+func mustAdd(t *testing.T, cs *fakeCopies, campaignID, kind, holderID string, c Copy) {
+	t.Helper()
+	if _, err := cs.Add(context.Background(), campaignID, kind, holderID, c); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -395,7 +395,7 @@ func TestCraft_RememberedCopies(t *testing.T) {
 	ctx := context.Background()
 	// Mira's 4 Iron: 2 moonlit, 1 poor, 1 plain.
 	moon, _ := cs.Add(ctx, "camp", HolderCharacter, "c2", Copy{ItemID: "i3", Quantity: 2, Memory: Memory{Marks: []string{"moonlit"}}})
-	cs.Add(ctx, "camp", HolderCharacter, "c2", Copy{ItemID: "i3", Quantity: 1, Memory: Memory{Quality: QualityPoor}})
+	mustAdd(t, cs, "camp", HolderCharacter, "c2", Copy{ItemID: "i3", Quantity: 1, Memory: Memory{Quality: QualityPoor}})
 
 	pack, err := g.svc.CraftPack(ctx, "camp", mirasPlayer, "c2")
 	if err != nil {

@@ -9,7 +9,6 @@ package armory
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -213,11 +212,6 @@ func planTake(copies []Copy, total, take int, pick []CopyPick) (leaving []Copy) 
 		}
 	}
 	return leaving
-}
-
-// sortCopies orders copies oldest first, the order every plan reads them in.
-func sortCopies(copies []Copy) {
-	sort.SliceStable(copies, func(i, j int) bool { return copies[i].ID < copies[j].ID })
 }
 
 // CopyTag is one word a copy wears in the pack: its quality, a mark, or
