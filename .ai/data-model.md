@@ -175,7 +175,7 @@ tracked in `golang-migrate`'s `schema_migrations` table.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type`; `trash_batch_id` (migration 48: set while the file sits in a Trash file clean-up batch; the file stays on disk until the batch is purged) |
+| `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type`; `trash_batch_id` (migration 48: set while the file sits in a Trash file clean-up batch; the file stays on disk until the batch is purged); `deleted_at` (migration 60: set while a campaign picture sits in its campaign's Trash; it still opens until the purge) |
 | `page_files` | Which page a `page_file` media file is attached to (migration 46) | `media_id` PK FK→`media_files` CASCADE; `entity_id` FK→`entities` CASCADE; `campaign_id`; `gm_only` |
 | `entity_places` | Extra places a page is listed in the page tree (migration 49); `entities.parent_id` stays the page's one real home | PK `(entity_id, parent_entity_id)`, both FK→`entities` CASCADE; `campaign_id`; `sort_order`; `created_by` (no FK) |
 | `addons` | Registry of installable features (systems/widgets/integrations/plugins) | `slug` UNIQUE; `category` enum; `status` enum(`active`,`planned`,`deprecated`); seeded by the baseline migration so the registry exists even if a plugin's own schema migration fails |

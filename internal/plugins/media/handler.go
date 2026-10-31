@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -1177,7 +1178,7 @@ func (h *Handler) CampaignMedia(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, CampaignMediaPage(cc, data))
 }
 
-// CampaignDeleteMedia handles deletion of a campaign media file
+// CampaignDeleteMedia moves a campaign picture to the campaign Trash
 // (DELETE /campaigns/:id/media/:mid).
 func (h *Handler) CampaignDeleteMedia(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -1195,11 +1196,12 @@ func (h *Handler) CampaignDeleteMedia(c echo.Context) error {
 		map[string]any{
 			"file_id":     mediaID,
 			"campaign_id": cc.Campaign.ID,
+			"to_trash":    true,
 		})
 
-	// Redirect back to media page for HTMX and standard requests.
-	c.Response().Header().Set("HX-Redirect", fmt.Sprintf("/campaigns/%s/media", cc.Campaign.ID))
-	return c.JSON(http.StatusOK, map[string]string{"status": "deleted"})
+	// Back to the media page, which offers Undo for the trashed picture.
+	c.Response().Header().Set("HX-Redirect", fmt.Sprintf("/campaigns/%s/media?trashed=%s&kind=picture", cc.Campaign.ID, url.QueryEscape(mediaID)))
+	return c.JSON(http.StatusOK, map[string]string{"status": "trashed"})
 }
 
 // CampaignMediaRefs returns an HTMX fragment showing which entities reference

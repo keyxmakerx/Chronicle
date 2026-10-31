@@ -67,8 +67,15 @@ type MediaService interface {
 	// FindReferences returns entities that reference a media file.
 	FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
 
-	// DeleteCampaignMedia deletes a media file after verifying it belongs to the campaign.
+	// DeleteCampaignMedia moves one of the campaign's own pictures to the
+	// campaign Trash. Pages using it keep showing it until the purge.
 	DeleteCampaignMedia(ctx context.Context, campaignID, mediaID string) error
+
+	// RestoreCampaignPicture, ListTrashedPictures and PurgeTrashedPictures
+	// are the media side of the campaign Trash.
+	RestoreCampaignPicture(ctx context.Context, campaignID, mediaID string) error
+	ListTrashedPictures(ctx context.Context, campaignID string) ([]TrashedPicture, error)
+	PurgeTrashedPictures(ctx context.Context, cutoff time.Time) (int, error)
 
 	// DeleteCampaignFiles removes all media files belonging to a campaign from
 	// both disk and database. Used during campaign deletion to prevent orphaned
@@ -827,7 +834,8 @@ func (s *mediaService) FindReferences(ctx context.Context, campaignID, mediaID s
 	return s.repo.FindReferences(ctx, campaignID, mediaID)
 }
 
-// DeleteCampaignMedia deletes a media file after verifying it belongs to the campaign.
+// DeleteCampaignMedia moves a picture to the campaign Trash after verifying
+// it belongs to the campaign.
 func (s *mediaService) DeleteCampaignMedia(ctx context.Context, campaignID, mediaID string) error {
 	file, err := s.repo.FindByID(ctx, mediaID)
 	if err != nil {
@@ -841,7 +849,36 @@ func (s *mediaService) DeleteCampaignMedia(ctx context.Context, campaignID, medi
 		return apperror.NewNotFound("media file not found")
 	}
 
-	return s.Delete(ctx, mediaID)
+	return s.repo.TrashCampaignPicture(ctx, campaignID, mediaID, time.Now().UTC())
+}
+
+// RestoreCampaignPicture takes a picture out of the campaign Trash.
+func (s *mediaService) RestoreCampaignPicture(ctx context.Context, campaignID, mediaID string) error {
+	return s.repo.RestoreCampaignPicture(ctx, campaignID, mediaID)
+}
+
+// ListTrashedPictures lists the campaign's trashed pictures, newest first.
+func (s *mediaService) ListTrashedPictures(ctx context.Context, campaignID string) ([]TrashedPicture, error) {
+	return s.repo.ListTrashedPictures(ctx, campaignID)
+}
+
+// PurgeTrashedPictures removes for good, row and files, every picture
+// trashed before cutoff. One file that fails is logged and left for the
+// next run.
+func (s *mediaService) PurgeTrashedPictures(ctx context.Context, cutoff time.Time) (int, error) {
+	ids, err := s.repo.ListPicturesTrashedBefore(ctx, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	purged := 0
+	for _, id := range ids {
+		if err := s.Delete(ctx, id); err != nil {
+			slog.Warn("trash purge: could not delete picture", slog.String("file_id", id), slog.Any("error", err))
+			continue
+		}
+		purged++
+	}
+	return purged, nil
 }
 
 // DeleteCampaignFiles removes all media files belonging to a campaign.

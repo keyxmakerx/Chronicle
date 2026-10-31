@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 )
 
@@ -42,4 +43,39 @@ func (g gameNightTrash) RestoreTrashed(ctx context.Context, campaignID, id strin
 
 func (g gameNightTrash) PurgeTrashedBefore(ctx context.Context, cutoff time.Time) (int, error) {
 	return g.svc.PurgeTrashedSessions(ctx, cutoff)
+}
+
+// pictureTrash puts deleted campaign pictures in the campaign Trash. A
+// trashed picture keeps showing on its pages until the purge removes its
+// files.
+type pictureTrash struct {
+	svc media.MediaService
+}
+
+func (p pictureTrash) TrashKind() string { return "picture" }
+
+func (p pictureTrash) ListTrashed(ctx context.Context, campaignID string) ([]entities.TrashedThing, error) {
+	list, err := p.svc.ListTrashedPictures(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]entities.TrashedThing, 0, len(list))
+	for _, f := range list {
+		out = append(out, entities.TrashedThing{
+			Kind: "picture", Label: "Picture", Icon: "fa-image",
+			ID: f.ID, Name: f.Name, DeletedAt: f.DeletedAt,
+		})
+	}
+	return out, nil
+}
+
+func (p pictureTrash) RestoreTrashed(ctx context.Context, campaignID, id string) (string, error) {
+	if err := p.svc.RestoreCampaignPicture(ctx, campaignID, id); err != nil {
+		return "", err
+	}
+	return "/campaigns/" + campaignID + "/media", nil
+}
+
+func (p pictureTrash) PurgeTrashedBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	return p.svc.PurgeTrashedPictures(ctx, cutoff)
 }

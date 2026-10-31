@@ -4744,8 +4744,9 @@ func (a *App) RegisterRoutes() {
 	// how many notes go with a page; without the wiring they just stay quiet.
 	pageSafetyService.SetNoteCounter(entityNotesService)
 	entityHandler.SetTrashNoteCounter(pageSafetyService)
-	// Game nights share the campaign Trash with pages.
+	// Game nights and pictures share the campaign Trash with pages.
 	pageSafetyService.AddTrashKind(gameNightTrash{svc: sessionsService})
+	pageSafetyService.AddTrashKind(pictureTrash{svc: mediaService})
 	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
 
