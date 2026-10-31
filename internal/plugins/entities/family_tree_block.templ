@@ -39,9 +39,9 @@ templ BlockFamilyTree(campaignID, entityID, entityName string, t *FamilyTree, dm
 			data-edit-url={ familyEditURL(dm, campaignID, entityID, "") }
 			data-pick-url={ familyEditURL(dm, campaignID, entityID, "/candidates") }
 			data-pages-url={ familyPagesURL(dm, campaignID) }
+			data-json={ templ.JSONString(familyWireOf(ctx, campaignID, t)) }
 			aria-label="Family tree"
 		>
-			@templ.JSONScript("fm-data-"+entityID, familyWireOf(ctx, campaignID, t))
 			<div class="fm-anchor" data-fm-anchor>
 				<div class="fm-hs" data-fm-strip-box>
 					<button

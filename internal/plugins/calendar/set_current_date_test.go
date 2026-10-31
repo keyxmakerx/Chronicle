@@ -63,6 +63,7 @@ func TestSetCurrentDate_Validation(t *testing.T) {
 				c.RealTimeZone = strPtr("UTC")
 			},
 			wantStatus: http.StatusUnprocessableEntity},
+		{name: "year beyond the stored range", campaign: testCampaignA, y: maxDayWeatherYear + 1, mo: 1, d: 1, wantStatus: http.StatusBadRequest},
 		{name: "month zero", campaign: testCampaignA, y: 1000, mo: 0, d: 1, wantStatus: http.StatusBadRequest},
 		{name: "month past last", campaign: testCampaignA, y: 1000, mo: 3, d: 1, wantStatus: http.StatusBadRequest},
 		{name: "day zero", campaign: testCampaignA, y: 1000, mo: 1, d: 0, wantStatus: http.StatusBadRequest},

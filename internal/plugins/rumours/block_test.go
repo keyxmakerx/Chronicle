@@ -2,6 +2,7 @@ package rumours
 
 import (
 	"context"
+	"html"
 	"regexp"
 	"strings"
 	"testing"
@@ -9,7 +10,14 @@ import (
 
 // render draws the block for a viewer from the real service over the seeded
 // page, which is the markup that viewer's browser receives.
+// render returns the block unescaped, so the JSON in data-json reads as it
+// does in the browser; renderRaw returns the markup as sent.
 func render(t *testing.T, repo *fakeRepo, v Viewer) string {
+	t.Helper()
+	return html.UnescapeString(renderRaw(t, repo, v))
+}
+
+func renderRaw(t *testing.T, repo *fakeRepo, v Viewer) string {
 	t.Helper()
 	view, err := newTestService(repo).View(context.Background(), tCamp, tPage, v)
 	if err != nil {
@@ -87,15 +95,17 @@ func TestBlock_NoTruthWordsReachANonDirector(t *testing.T) {
 }
 
 // TestBlock_InlineHandlersOnly proves the swap-safety rule: every control is
-// an inline IIFE built server-side, and the only <script> in the block is the
-// data one, so nothing depends on a script sibling running after an HTMX swap.
+// an inline IIFE built server-side, and the block has no script tag at all (a
+// swap strips them, data ones too), so its data rides in data-json.
 func TestBlock_InlineHandlersOnly(t *testing.T) {
 	scripts := regexp.MustCompile(`<script[^>]*>`)
 	for _, v := range []Viewer{vDM, vMira, vJo} {
 		html := render(t, seeded(), v)
-		found := scripts.FindAllString(html, -1)
-		if len(found) != 1 || !strings.Contains(found[0], `application/json`) {
-			t.Errorf("role %d: want exactly the JSON data script, got %v", v.Role, found)
+		if found := scripts.FindAllString(html, -1); len(found) != 0 {
+			t.Errorf("role %d: want no script tag, got %v", v.Role, found)
+		}
+		if !strings.Contains(html, `data-json="{`) {
+			t.Errorf("role %d: the block's data is not in data-json", v.Role)
 		}
 		if strings.Contains(html, "addEventListener") {
 			t.Errorf("role %d: block must not register listeners itself", v.Role)
@@ -157,7 +167,7 @@ func TestBlock_NoGapForAPlayerWithNothing(t *testing.T) {
 func TestBlock_EscapesWhatWasSaid(t *testing.T) {
 	repo := seeded()
 	repo.rows[3].Quote = `<img src=x onerror=alert(1)></script><b>`
-	html := render(t, repo, vDM)
+	html := renderRaw(t, repo, vDM)
 	if strings.Contains(html, `<img src=x`) || strings.Contains(html, `</script><b>`) {
 		t.Errorf("a rumour's text reached the page unescaped")
 	}

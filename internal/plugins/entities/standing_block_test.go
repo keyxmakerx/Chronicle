@@ -3,6 +3,7 @@ package entities
 import (
 	"bytes"
 	"context"
+	"html"
 	"regexp"
 	"strings"
 	"testing"
@@ -16,7 +17,8 @@ func renderStanding(t *testing.T, v *StandingView) string {
 	if err := BlockStanding(stCamp, stPage, "The Lantern Guild", v).Render(context.Background(), &buf); err != nil {
 		t.Fatal(err)
 	}
-	return buf.String()
+	// Unescaped, so the JSON in data-json reads as it does in the browser.
+	return html.UnescapeString(buf.String())
 }
 
 func viewFor(t *testing.T, repo *fakeStandingRepo, role int) *StandingView {
@@ -90,23 +92,22 @@ func TestBlockStanding_AmberEdgeAndDMTagOnlyWhenPlayersCannotSee(t *testing.T) {
 	}
 }
 
-// Swap safety: the controls are inline IIFEs written Go-side. A templ script
-// helper emits a <script> sibling that an HTMX swap does not run.
+// Swap safety: the controls are inline IIFEs written Go-side, and the block
+// has no script tag at all: an HTMX swap strips them, data ones too, so the
+// data rides in data-json.
 func TestBlockStanding_HandlersAreInlineIIFEs(t *testing.T) {
 	html := renderStanding(t, viewFor(t, seededStanding(), permissions.RoleOwner))
 	if !strings.Contains(html, "window.ChronicleStanding.toggle(el,e)") {
 		t.Error("the toggle handler is not an inline IIFE")
 	}
-	for _, m := range regexp.MustCompile(`<script[^>]*>`).FindAllString(html, -1) {
-		if !strings.Contains(m, `type="application/json"`) {
-			t.Errorf("block emits an executable script tag: %s", m)
-		}
-	}
 	if strings.Contains(html, "addEventListener") {
 		t.Error("the block's markup wires a listener itself")
 	}
-	if n := strings.Count(html, "<script"); n != 1 {
-		t.Errorf("script tags = %d, want only the data script", n)
+	if n := strings.Count(html, "<script"); n != 0 {
+		t.Errorf("script tags = %d, want none", n)
+	}
+	if !strings.Contains(html, `data-json="{`) {
+		t.Error("the block's data is not in data-json")
 	}
 }
 

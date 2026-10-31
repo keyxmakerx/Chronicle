@@ -3021,7 +3021,8 @@ func (a *App) RegisterRoutes() {
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
 	// mini→full launch enhancement, and the scripts below, each loaded on
 	// sight: the Contents block's, Standing's, the Family tree's and the
-	// Characters page's hero builder, and the chip naming a page's layout).
+	// Characters page's hero builder, the chip naming a page's layout, and
+	// the search page's Alpine component).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
@@ -3031,6 +3032,7 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
 			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
+			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
 		},
 	})
 
@@ -4179,15 +4181,16 @@ func (a *App) RegisterRoutes() {
 	sightingService := sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
 		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
 	sessionsHandler.SetSightingService(sightingService)
-	// The Last seen block's and the Game nights list's scripts load on sight
-	// (ADR-063); the block itself is registered with the other page blocks
-	// below.
+	// The Last seen block's, the Game nights list's and the session edit
+	// dialog's scripts load on sight (ADR-063); the block itself is
+	// registered with the other page blocks below.
 	a.registerPlugin(PluginRegistration{
 		Slug:     sessions.PluginSlug,
 		StaticFS: echo.MustSubFS(sessions.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "last-seen", Scripts: []string{"js/last_seen.js"}},
 			{Name: "game-nights", Scripts: []string{"js/game_nights.js"}},
+			{Name: "session-edit", Scripts: []string{"js/session_edit.js"}},
 		},
 	})
 	// Game-night links open the real-world calendar; with the calendar plugin
@@ -4283,6 +4286,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "timeline-river", Scripts: []string{"js/timeline_river.js"}},
 			{Name: "timeline-viz", Scripts: []string{"js/timeline_viz.js"}},
 			{Name: "timeline-widget", Scripts: []string{"js/timeline_widget.js"}},
+			{Name: "timeline-page", Scripts: []string{"js/timeline_page.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy("timeline") {
@@ -6516,6 +6520,9 @@ var coreWidgets = []PluginWidget{
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
 	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
+	{Name: "ai-import-review", Scripts: []string{"/static/js/widgets/ai_import_review.js"}},
+	{Name: "mini-bar-chart", Scripts: []string{"/static/js/widgets/mini_bar_chart.js"}},
+	{Name: "surface-demo", Scripts: []string{"/static/js/widgets/surface_demo.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
 	{Name: "attributes", Scripts: []string{"/static/js/widgets/attributes.js"}},
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},

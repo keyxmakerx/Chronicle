@@ -95,6 +95,11 @@ templ ImportReview(d ImportReviewData) {
 	{{ listed := listedCount(d) }}
 	{{ startYes := startingYesCount(d) }}
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_review.css") }/>
+	// aiImportReview comes from ai_import_review.js, loaded on sight wherever
+	// a review is shown. A script tag beside the form would be stripped from
+	// a swap, and Alpine reads x-data the moment the form arrives, so
+	// x-ignore holds it off until the widget hands the form over.
+	<div data-widget="ai-import-review" x-data x-ignore>
 	<form
 		id="ai-import-review"
 		hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/commit", d.CampaignID) }
@@ -233,6 +238,7 @@ templ ImportReview(d ImportReviewData) {
 			</button>
 		</div>
 	</form>
+	</div>
 }
 
 // repeatLine marks a row whose exact block was applied before.
@@ -922,111 +928,8 @@ templ importBody(cc *campaigns.CampaignContext) {
 		></div>
 		<div id="ai-import-review-host"></div>
 	</div>
-	@importReviewScript()
 }
 
-// importReviewScript defines the review screen's Alpine x-data factory
-// with the page, not inside the swapped-in review: Alpine reads x-data the
-// moment htmx inserts the form, before htmx runs scripts that came with it,
-// so a factory shipped in the fragment is always too late. The answers live
-// in the form's own radios; the factory only counts them, keeps a removal's
-// tick required while it is answered Yes, and adds J/K/Y/N.
-templ importReviewScript() {
-	<script>
-		(function () {
-			if (window.aiImportReview) { return; }
-			function typing(ev) {
-				var t = ev.target;
-				return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
-			}
-			function answer(row, yes) {
-				var radio = row.querySelector('.air-yn input[value="' + (yes ? 'on' : 'off') + '"]');
-				if (radio) { radio.checked = true; }
-			}
-			window.aiImportReview = function (startYes) {
-				return {
-					yes: startYes || 0,
-					removals: 0,
-					at: -1,
-					init: function () { this.sync(); },
-					rows: function () { return Array.prototype.slice.call(this.$root.querySelectorAll('[data-air-row]')); },
-					// sync recounts the answers and makes each removal's tick
-					// required exactly while that removal is answered Yes.
-					sync: function () {
-						var yes = 0, removals = 0;
-						this.rows().forEach(function (row) {
-							var on = !!row.querySelector('.air-y input:checked');
-							var confirm = row.querySelector('[data-air-confirm]');
-							if (confirm) { confirm.required = on; }
-							var gm = row.hasAttribute('data-air-gm') ? row.querySelector('[data-air-gm-tick]') : null;
-							if (on && !(gm && !gm.checked)) { yes++; }
-							if (on && row.dataset.airVerb === 'Remove') { removals++; }
-						});
-						this.yes = yes;
-						this.removals = removals;
-					},
-					onChange: function () { this.sync(); },
-					answerAll: function (yes) {
-						// Yes skips removals (set back to No) and rows held on No
-						// because the AI's request can't go through as written.
-						this.rows().forEach(function (row) {
-							if (yes && row.hasAttribute('data-air-hold')) { return; }
-							answer(row, yes && row.dataset.airVerb !== 'Remove');
-						});
-						this.sync();
-					},
-					onKey: function (ev) {
-						if (typing(ev) || ev.ctrlKey || ev.metaKey || ev.altKey || !this.$root.isConnected) { return; }
-						var k = (ev.key || '').toLowerCase();
-						if ('jkyn'.indexOf(k) < 0 || k.length !== 1) { return; }
-						var rows = this.rows();
-						if (!rows.length) { return; }
-						var cur = rows.indexOf(document.activeElement && document.activeElement.closest('[data-air-row]'));
-						if (cur >= 0) { this.at = cur; }
-						// Y and N answer only a row the operator has moved to, so
-						// a stray key never answers the first row unseen.
-						var picked = this.at >= 0;
-						if (k === 'j') { this.at = Math.min(rows.length - 1, this.at + 1); }
-						if (k === 'k') { this.at = Math.max(0, this.at - 1); }
-						if (this.at < 0) { this.at = 0; }
-						var row = rows[this.at];
-						row.focus();
-						row.scrollIntoView({ block: 'nearest' });
-						if ((k === 'y' || k === 'n') && picked) { answer(row, k === 'y'); this.sync(); }
-						ev.preventDefault();
-					},
-					applyDefaultsToAll: function () {
-						var form = this.$root;
-						var bulkCategory = form.querySelector('[name=bulk_default_category]')?.value || '';
-						var bulkVisibility = form.querySelector('[name=bulk_default_visibility]')?.value || '';
-						var bulkConflict = form.querySelector('[name=bulk_default_conflict]')?.value || '';
-						form.querySelectorAll('select[name$="_category"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_category') return;
-							if (bulkCategory && Array.from(sel.options).some(function (o) { return o.value === bulkCategory; })) {
-								sel.value = bulkCategory;
-								sel.dispatchEvent(new Event('change'));
-							}
-						});
-						form.querySelectorAll('select[name$="_visibility"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_visibility') return;
-							if (bulkVisibility) { sel.value = bulkVisibility; }
-						});
-						form.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_conflict') return;
-							if (bulkConflict) { sel.value = bulkConflict; }
-						});
-					},
-					skipAllConflicts: function () {
-						this.$root.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_conflict') return;
-							sel.value = 'skip';
-						});
-					},
-				};
-			};
-		})();
-	</script>
-}
 
 // ensure entities import is referenced (silences unused-import).
 var _ = entities.Slugify

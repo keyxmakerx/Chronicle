@@ -13,11 +13,15 @@ import (
 
 // absDayLoopReference is the original O(year) implementation, kept as the
 // oracle: the closed form must match it exactly, so tests assert equality
-// against this rather than against baked-in numbers.
+// against this rather than against baked-in numbers. A negative year counts
+// backwards, subtracting each year from it up to year 0.
 func absDayLoopReference(c *Calendar, year, month, day int) int {
 	total := 0
 	for y := 0; y < year; y++ {
 		total += c.YearLengthForYear(y)
+	}
+	for y := year; y < 0; y++ {
+		total -= c.YearLengthForYear(y)
 	}
 	for i := 0; i < month-1 && i < len(c.Months); i++ {
 		total += c.MonthDays(i, year)
@@ -68,9 +72,9 @@ func TestAbsoluteDayClosedFormMatchesLoop(t *testing.T) {
 		"no-months": {LeapYearEvery: 4},
 	}
 
-	// Years deliberately include 0 and negatives: the loop contributed nothing
-	// for those and the closed form must agree rather than "improve" on it.
-	years := []int{-1000, -1, 0, 1, 2, 3, 4, 5, 99, 100, 101, 400, 1523, 4001}
+	// Years deliberately include 0 and negatives, where leap years before
+	// year 0 must be counted backwards.
+	years := []int{-1000, -401, -9, -8, -7, -5, -4, -3, -1, 0, 1, 2, 3, 4, 5, 99, 100, 101, 400, 1523, 4001}
 	months := []int{0, 1, 2, 6, 12, 13, 99}
 	days := []int{0, 1, 15, 45}
 
@@ -162,5 +166,51 @@ func TestAbsoluteDayHugeYearIsExact(t *testing.T) {
 		if got := cal.AbsoluteDay(tc.year, 6, 15); got != tc.want {
 			t.Errorf("AbsoluteDay(%d,6,15) = %d, want %d", tc.year, got, tc.want)
 		}
+	}
+}
+
+// TestAbsoluteDayOrdersAcrossYearZero walks every day from year -9 to year 3
+// and requires each to be exactly one more than the day before, so dates in
+// year 0 and before it sort in calendar order.
+func TestAbsoluteDayOrdersAcrossYearZero(t *testing.T) {
+	cals := map[string]*Calendar{
+		"no-leap":             dosFixtureCalendar(0, 0),
+		"every-4-offset-0":    dosFixtureCalendar(4, 0),
+		"every-4-offset-1":    dosFixtureCalendar(4, 1),
+		"every-4-offset-neg9": dosFixtureCalendar(4, -9),
+		"every-1":             dosFixtureCalendar(1, 0),
+	}
+	for name, cal := range cals {
+		prev, first := 0, true
+		for y := -9; y <= 3; y++ {
+			for m := 1; m <= len(cal.Months); m++ {
+				for d := 1; d <= cal.MonthDays(m-1, y); d++ {
+					got := cal.AbsoluteDay(y, m, d)
+					if !first && got != prev+1 {
+						t.Fatalf("%s: AbsoluteDay(%d,%d,%d) = %d, want %d", name, y, m, d, got, prev+1)
+					}
+					prev, first = got, false
+				}
+			}
+		}
+	}
+
+	cal := dosFixtureCalendar(4, 0)
+	tests := []struct {
+		name       string
+		y1, m1, d1 int
+		y2, m2, d2 int
+	}{
+		{"year -5 before year -3", -5, 6, 1, -3, 1, 1},
+		{"late in year -1 before year 0", -1, 12, 31, 0, 1, 1},
+		{"year 0 before year 1", 0, 12, 31, 1, 1, 1},
+		{"day in year -5 before a later day", -5, 1, 1, -5, 1, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if a, b := cal.AbsoluteDay(tt.y1, tt.m1, tt.d1), cal.AbsoluteDay(tt.y2, tt.m2, tt.d2); a >= b {
+				t.Fatalf("AbsoluteDay(%d,%d,%d) = %d is not before AbsoluteDay(%d,%d,%d) = %d", tt.y1, tt.m1, tt.d1, a, tt.y2, tt.m2, tt.d2, b)
+			}
+		})
 	}
 }
