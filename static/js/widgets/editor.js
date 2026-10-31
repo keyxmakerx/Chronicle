@@ -359,6 +359,8 @@
         endpoint: endpoint,
         campaignId: campaignId,
         autosaveTimer: null,
+        typingTimer: null,
+        editSeq: 0,
         dirty: false,
         saving: false,
         statusEl: statusEl,
@@ -418,9 +420,11 @@
         editor.on('update', function () {
           if (!state.isEditing) return; // ignore updates during content loading
           state.dirty = true;
+          state.editSeq++;
           setStatus(statusEl, 'unsaved');
           updateSaveButton(toolbar, true);
           Chronicle.markDirty('editor');
+          scheduleTypingSave(state);
         });
       }
 
@@ -453,6 +457,7 @@
       if (state.autosaveTimer) {
         clearInterval(state.autosaveTimer);
       }
+      clearTimeout(state.typingTimer);
 
       // Clean up mention extension popup and listeners.
       if (state.mentionExt) {
@@ -615,6 +620,20 @@
       clearInterval(state.autosaveTimer);
       state.autosaveTimer = null;
     }
+    clearTimeout(state.typingTimer);
+    state.typingTimer = null;
+  }
+
+  // The page saves shortly after typing stops, so "Saved" follows the words
+  // rather than the 30-second timer, which stays as a backstop.
+  var TYPING_SAVE_MS = 2000;
+  function scheduleTypingSave(state) {
+    if (!(state.autosaveInterval > 0)) return;
+    clearTimeout(state.typingTimer);
+    state.typingTimer = setTimeout(function () {
+      state.typingTimer = null;
+      if (state.isEditing && state.dirty && !state.saving) saveContent(state);
+    }, TYPING_SAVE_MS);
   }
 
   // --- Toolbar ---
@@ -1000,6 +1019,7 @@
     if (state.saving || state.conflict) return;
     state.saving = true;
     setStatus(state.statusEl, 'saving');
+    var savedSeq = state.editSeq;
 
     var json = state.editor.getJSON();
     var html = state.editor.getHTML();
@@ -1027,8 +1047,13 @@
       .then(function (data) {
         if (data === null) return; // a clash; the bar is showing
         if (data && typeof data.rev === 'number' && state.rev !== null) state.rev = data.rev;
-        state.dirty = false;
         state.saving = false;
+        // Words typed while this save was on its way are not in it yet.
+        if (state.editSeq !== savedSeq) {
+          scheduleTypingSave(state);
+          return;
+        }
+        state.dirty = false;
         setStatus(state.statusEl, 'saved');
         updateSaveButton(state.toolbar, false);
         Chronicle.markClean('editor');

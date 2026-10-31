@@ -93,7 +93,7 @@ templ pageHeaderDrape(cc *campaigns.CampaignContext, entity *Entity, csrfToken s
 					@eraButton(cc, entity, "pe-qw")
 					if cc.MemberRole >= campaigns.RoleOwner {
 						<span class="pe-sp"></span>
-						@pageDeleteForm(cc, entity, csrfToken, "pe-qw is-bad", "Delete page…")
+						@pageDeleteForm(cc, entity, csrfToken, "pe-qw is-bad", "Delete page")
 					}
 				</div>
 			</div>
@@ -117,14 +117,14 @@ templ pageCloneForm(cc *campaigns.CampaignContext, entity *Entity, csrfToken, cl
 	</form>
 }
 
-// pageDeleteForm moves the page and its sub-pages to the Trash, after asking.
-// Owners only; the route checks the same.
+// pageDeleteForm moves the page and its sub-pages to the Trash without asking:
+// the list it lands on offers Undo, and the Trash restores it later. Owners
+// only; the route checks the same.
 templ pageDeleteForm(cc *campaigns.CampaignContext, entity *Entity, csrfToken, class, label string) {
 	<form
 		method="POST"
 		action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
 		hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
-		hx-confirm="Move this page and its sub-pages to the Trash? You can restore them from Manage > Trash."
 		class="inline"
 	>
 		<input type="hidden" name="_method" value="DELETE"/>

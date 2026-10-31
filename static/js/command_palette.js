@@ -1,6 +1,10 @@
 /**
  * command_palette.js -- Command Palette (Ctrl+Shift+P / Cmd+Shift+P)
  *
+ * Quick search (Ctrl+K, topbar_search.js) lists the same commands under the
+ * pages it finds; Ctrl+Shift+P opens a private window in Firefox, so the
+ * palette's own shortcut is a second way in, not the only one.
+ *
  * VSCode-style action palette for fast navigation and actions within
  * Chronicle. Lists available commands filtered by context (campaign scope,
  * active page). Fuzzy substring matching on command labels.
@@ -97,7 +101,7 @@
       cmds.push({ label: 'Go to Plugins', icon: 'fa-puzzle-piece', href: '/campaigns/' + cid + '/plugins', shortcut: '' });
 
       // Actions.
-      cmds.push({ label: 'New Page', icon: 'fa-plus', href: '/campaigns/' + cid + '/entities/new', shortcut: mod + '+N' });
+      cmds.push({ id: 'new-page', label: 'New Page', icon: 'fa-plus', href: '/campaigns/' + cid + '/entities/new', shortcut: mod + '+N' });
       cmds.push({
         label: 'Quick Capture Note', icon: 'fa-bolt', shortcut: mod + '+Shift+N',
         action: function () { if (Chronicle.openQuickCapture) Chronicle.openQuickCapture(); }
@@ -106,7 +110,7 @@
 
     // Universal actions.
     cmds.push({
-      label: 'Search Pages', icon: 'fa-search', shortcut: mod + '+K',
+      id: 'search', label: 'Search Pages', icon: 'fa-search', shortcut: mod + '+K',
       action: function () {
         if (typeof Chronicle !== 'undefined' && Chronicle.openSearch) {
           Chronicle.openSearch();
@@ -342,5 +346,7 @@
   if (typeof Chronicle !== 'undefined') {
     Chronicle.openCommandPalette = open;
     Chronicle.closeCommandPalette = close;
+    // Quick search lists these too, so one shortcut finds pages and commands.
+    Chronicle.paletteCommands = buildCommands;
   }
 })();
