@@ -64,3 +64,31 @@ func extraCategoryBlockTypes() []string {
 	sort.Strings(out)
 	return out
 }
+
+// categoryLeads maps a category's type slug to a registered block drawn under
+// the heading of that category's built-in landing page, so a plugin can give
+// its own kind of page a better front door without the GM arranging it.
+var categoryLeads = struct {
+	sync.RWMutex
+	bySlug map[string]string
+}{bySlug: map[string]string{}}
+
+// RegisterCategoryLead draws blockType (registered through
+// RegisterCategoryBlock) under the heading of every category whose type slug
+// is typeSlug, while that category has no arranged home of its own.
+func RegisterCategoryLead(typeSlug, blockType string) {
+	categoryLeads.Lock()
+	defer categoryLeads.Unlock()
+	categoryLeads.bySlug[typeSlug] = blockType
+}
+
+// renderCategoryLead draws the lead block for et, or nothing.
+func renderCategoryLead(cc *campaigns.CampaignContext, et *EntityType) templ.Component {
+	categoryLeads.RLock()
+	bt := categoryLeads.bySlug[et.Slug]
+	categoryLeads.RUnlock()
+	if bt == "" {
+		return templ.NopComponent
+	}
+	return renderExtraCategoryBlock(cc, et, bt)
+}

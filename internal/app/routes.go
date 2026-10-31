@@ -4577,6 +4577,14 @@ func (a *App) RegisterRoutes() {
 	)
 	itemLookHandler := armory.NewItemLookHandler(itemLookService)
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, itemLookHandler, shopBuyHandler, campaignService, authService, addonService)
+	// The Shops street: every shop page the viewer can see, drawn as storefronts.
+	shopStreetService := armory.NewShopStreetService(
+		armory.NewShopFrontRepository(a.DB),
+		&armoryShopCheckerAdapter{svc: entityService},
+		&armoryShopListerAdapter{svc: entityService},
+		stashSvc,
+	)
+	armory.RegisterStreetRoutes(e, armory.NewShopStreetHandler(shopStreetService), campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).
@@ -4978,6 +4986,12 @@ func (a *App) RegisterRoutes() {
 	})
 	// The same block on a category dashboard: its boards belong to the
 	// category, not to a page.
+	// The Shops street on the shop category's landing page, and as a block a
+	// GM can place on any category home.
+	entities.RegisterCategoryBlock("shop_street", func(cc *campaigns.CampaignContext, et *entities.EntityType) templ.Component {
+		return armory.ShopStreetMount(cc.Campaign.ID, cc.MemberRole >= campaigns.RoleOwner, int(cc.MemberRole))
+	})
+	entities.RegisterCategoryLead("shop", "shop_street")
 	entities.RegisterCategoryBlock("notice_boards", func(cc *campaigns.CampaignContext, et *entities.EntityType) templ.Component {
 		return quests.CategoryBoardsMount(cc.Campaign.ID, et.ID, cc.CanControlWorldState(), int(cc.MemberRole))
 	})
@@ -6620,6 +6634,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
+	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
 	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_bench.js"}},
