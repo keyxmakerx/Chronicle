@@ -21,10 +21,13 @@ type fakeRepo struct {
 	order    []string
 	tags     map[string][]string
 	benches  map[string]Bench
+	kindPics map[string]MaterialPicture
+	itemPics map[string]MaterialPicture
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{recipes: map[string]Recipe{}, tags: map[string][]string{}, benches: map[string]Bench{}}
+	return &fakeRepo{recipes: map[string]Recipe{}, tags: map[string][]string{}, benches: map[string]Bench{},
+		kindPics: map[string]MaterialPicture{}, itemPics: map[string]MaterialPicture{}}
 }
 
 func (f *fakeRepo) GetSettings(context.Context, string) (Settings, error) {
@@ -119,6 +122,30 @@ func (f *fakeRepo) KnownBy(_ context.Context, _ string, ids []string) (map[strin
 func (f *fakeRepo) ListTags(context.Context, string) (map[string][]string, error) { return f.tags, nil }
 func (f *fakeRepo) SetTags(_ context.Context, _, itemID string, tags []string) error {
 	f.tags[itemID] = tags
+	return nil
+}
+func (f *fakeRepo) ListKindPictures(context.Context, string) (map[string]MaterialPicture, error) {
+	return f.kindPics, nil
+}
+func (f *fakeRepo) SetKindPictures(_ context.Context, _ string, set map[string]*MaterialPicture) error {
+	for k, p := range set {
+		if p == nil {
+			delete(f.kindPics, k)
+		} else {
+			f.kindPics[k] = *p
+		}
+	}
+	return nil
+}
+func (f *fakeRepo) ListItemPictures(context.Context, string) (map[string]MaterialPicture, error) {
+	return f.itemPics, nil
+}
+func (f *fakeRepo) SetItemPicture(_ context.Context, _, itemID string, p *MaterialPicture) error {
+	if p == nil {
+		delete(f.itemPics, itemID)
+	} else {
+		f.itemPics[itemID] = *p
+	}
 	return nil
 }
 func (f *fakeRepo) ListBenches(context.Context, string) ([]Bench, error) {
@@ -278,6 +305,14 @@ func TestEveryWriteIsDirectorsOnly(t *testing.T) {
 			return err
 		},
 		"drop bench": func() error { return s.DeleteBench(ctx, "c", "b1", player) },
+		"kind pictures": func() error {
+			_, err := s.SetKindPictures(ctx, "c", player, KindPicturesInput{Kinds: map[string]*MaterialPicture{"herb": {Picture: "moss", Tint: "#b3263a"}}})
+			return err
+		},
+		"item picture": func() error {
+			_, err := s.SetItemPicture(ctx, "c", "moss", player, &MaterialPicture{Picture: "moss", Tint: "#b3263a"})
+			return err
+		},
 	}
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) {
@@ -286,7 +321,8 @@ func TestEveryWriteIsDirectorsOnly(t *testing.T) {
 			}
 		})
 	}
-	if _, ok := repo.recipes["r1"]; !ok || len(repo.benches) != 1 || repo.settings != nil || len(repo.tags) != 0 {
+	if _, ok := repo.recipes["r1"]; !ok || len(repo.benches) != 1 || repo.settings != nil || len(repo.tags) != 0 ||
+		len(repo.kindPics) != 0 || len(repo.itemPics) != 0 {
 		t.Fatal("a refused call still changed something")
 	}
 }
@@ -297,7 +333,7 @@ func TestLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lib.Director || lib.System != "Test system" || len(lib.Rules.Characteristics) != 1 || len(lib.Tags) != 9 || lib.Settings != DefaultSettings() {
+	if lib.Director || lib.System != "Test system" || len(lib.Rules.Characteristics) != 1 || len(lib.Tags) != len(Tags) || len(lib.Pictures) != len(Pictures) || lib.Settings != DefaultSettings() {
 		t.Fatalf("library = %+v", lib)
 	}
 }
@@ -425,7 +461,7 @@ func TestTagsAndCatalog(t *testing.T) {
 	if _, err := s.SetTags(ctx, "c", "mira", director, []string{"herb"}); code(err) != http.StatusNotFound {
 		t.Fatalf("tagging a character: %v", err)
 	}
-	if _, err := s.SetTags(ctx, "c", "moss", director, []string{"gem"}); err == nil {
+	if _, err := s.SetTags(ctx, "c", "moss", director, []string{"dragon"}); err == nil {
 		t.Fatal("an unknown tag was saved")
 	}
 	repo.tags["water"] = []string{"liquid", "bogus"}

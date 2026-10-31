@@ -104,6 +104,8 @@ type PackItem struct {
 	Name   string   `json:"name"`
 	Qty    int      `json:"qty"`
 	Tags   []string `json:"tags"`
+	// Picture is what the item wears: its own, or its first kind's.
+	Picture MaterialPicture `json:"picture"`
 }
 
 // Pack is what a hero carries and how they pay, as the viewer may see it.
@@ -126,10 +128,13 @@ type CraftNeed struct {
 	Tag    string `json:"tag,omitempty"`
 	Qty    int    `json:"qty"`
 	Name   string `json:"name"`
-	// Tags are a named item's crafting tags, which tint it on the bench.
+	// Tags are a named item's crafting tags.
 	Tags []string `json:"tags,omitempty"`
 	// Sub is what may stand in for a named item, and what that costs.
 	Sub *CraftSub `json:"sub,omitempty"`
+	// Picture is how the bench draws the line: a named item's own picture
+	// or its first kind's, or the kind's for an "any herb" line.
+	Picture MaterialPicture `json:"picture"`
 }
 
 // CraftSub lets any item with a tag stand in for a named material; Costs is

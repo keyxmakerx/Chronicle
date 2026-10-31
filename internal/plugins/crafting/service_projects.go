@@ -212,8 +212,13 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 	if err != nil {
 		return nil, errInternal(err)
 	}
+	book, err := s.pictureBook(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
 	for i := range pack.Items {
 		pack.Items[i].Tags = knownTags(tags[pack.Items[i].ItemID])
+		pack.Items[i].Picture = book.item(pack.Items[i].ItemID, pack.Items[i].Tags)
 	}
 	names, err := s.itemNames(ctx, campaignID, v)
 	if err != nil {
@@ -279,6 +284,9 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 						n.Sub = &CraftSub{Tag: sub.Use, Name: materialName(Material{Tag: sub.Use}, names), Costs: sub.Costs}
 					}
 				}
+				n.Picture = book.item(m.ItemID, n.Tags)
+			} else {
+				n.Picture = book.kind(m.Tag)
 			}
 			cr.Needs = append(cr.Needs, n)
 		}

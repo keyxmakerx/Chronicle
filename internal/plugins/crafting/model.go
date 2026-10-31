@@ -178,6 +178,21 @@ type MaterialItem struct {
 	ID   string   `json:"id"`
 	Name string   `json:"name"`
 	Tags []string `json:"tags"`
+	// Picture is the item's own picture; nil when it follows its first kind.
+	Picture *MaterialPicture `json:"picture,omitempty"`
+}
+
+// MaterialPicture is a picture from the library (Pictures) and its tint, a
+// #rrggbb colour. A kind wears one by default; an item may wear its own.
+type MaterialPicture struct {
+	Picture string `json:"picture"`
+	Tint    string `json:"tint"`
+}
+
+// KindPicturesInput changes several kinds' pictures at once, so swapping two
+// kinds is one save. A kind mapped to null goes back to its default.
+type KindPicturesInput struct {
+	Kinds map[string]*MaterialPicture `json:"kinds"`
 }
 
 // Named is a page picked by id and shown by name: a character a recipe is
@@ -209,7 +224,10 @@ type CatalogTable struct {
 // Library is the fixed lists and the campaign's settings and system rules,
 // read by both the editors and the recipe book.
 type Library struct {
+	// Tags carry each kind's picture as this campaign has it.
 	Tags         []Tag                 `json:"tags"`
+	TagGroups    []Choice              `json:"tagGroups"`
+	Pictures     []Picture             `json:"pictures"`
 	Tools        []Tool                `json:"tools"`
 	Steps        []StepKind            `json:"steps"`
 	BenchKinds   []BenchKind           `json:"benchKinds"`
