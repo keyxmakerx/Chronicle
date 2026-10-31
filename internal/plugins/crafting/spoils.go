@@ -14,11 +14,23 @@ const (
 	DropHarvest = "harvest"
 )
 
-// Spoil line statuses.
+// Spoil line statuses. A lost line was a one chance find whose study
+// failed: nobody gets it.
 const (
 	SpoilWaiting = "waiting"
 	SpoilTaken   = "taken"
 	SpoilCleared = "cleared"
+	SpoilLost    = "lost"
+)
+
+// How a study went. A study's row is written before its dice are rolled,
+// with no outcome, and filled in after; a reveal is the Director naming an
+// item without a roll.
+const (
+	StudyMiss     = "miss"
+	StudyKnown    = "known"
+	StudyLost     = "lost"
+	StudyRevealed = "revealed"
 )
 
 // Limits on drop lists and the tray.
@@ -39,12 +51,18 @@ const (
 
 // DropLine is one thing a page drops. A taken line gives Qty; a harvest
 // adds Stat ("" for none) to the system's dice and pays Yields[tier].
+// Study says nobody may take or harvest it until a hero identifies it with
+// a test adding StudyStat ("" for none); Once says the first failed study
+// loses it.
 type DropLine struct {
-	ItemID string `json:"itemId"`
-	Mode   string `json:"mode"`
-	Qty    int    `json:"qty,omitempty"`
-	Stat   string `json:"stat,omitempty"`
-	Yields []int  `json:"yields,omitempty"`
+	ItemID    string `json:"itemId"`
+	Mode      string `json:"mode"`
+	Qty       int    `json:"qty,omitempty"`
+	Stat      string `json:"stat,omitempty"`
+	Yields    []int  `json:"yields,omitempty"`
+	Study     bool   `json:"study,omitempty"`
+	StudyStat string `json:"studyStat,omitempty"`
+	Once      bool   `json:"once,omitempty"`
 }
 
 // DropList is what a page leaves when it is defeated, harvested or found.
@@ -104,6 +122,9 @@ type SpoilLine struct {
 	Qty         int
 	Stat        string
 	Yields      [3]int
+	Study       bool
+	StudyStat   string
+	Once        bool
 	Status      string
 	CharacterID string
 	TakenBy     string
@@ -133,6 +154,68 @@ type SpoilLineView struct {
 	Qty   int    `json:"qty,omitempty"`
 	Roll  string `json:"roll,omitempty"`
 	Tiers []Tier `json:"tiers,omitempty"`
+	// Locked says it waits for a study. A player reads "Something
+	// unidentified", with no id, name or kinds; the Director reads it all.
+	Locked bool       `json:"locked,omitempty"`
+	Study  *StudyView `json:"study,omitempty"`
+	// Identified names who identified the item by study ("Tobin"), or says
+	// the Director revealed it; UsedIn names the party's recipes that use
+	// it, when a study showed them.
+	Identified string   `json:"identified,omitempty"`
+	UsedIn     []string `json:"usedIn,omitempty"`
+}
+
+// StudyView is a locked line's study: the test, what each outcome does,
+// and who has tried since the last respite.
+type StudyView struct {
+	Roll  string   `json:"roll"`
+	Tiers []string `json:"tiers"`
+	// Says is what each outcome does, lowest first.
+	Says []string `json:"says"`
+	Once bool     `json:"once,omitempty"`
+	// Tried lists the misses since the last respite: "Mira rolled 8".
+	Tried []string `json:"tried,omitempty"`
+	// Wait says why the hero in view can't study it now, "" when they can.
+	Wait string `json:"wait,omitempty"`
+}
+
+// StudyResult is a study as rolled. Item, Kinds and UsedIn are filled only
+// when it landed; Lost says a one chance find is gone.
+type StudyResult struct {
+	Hero   string   `json:"hero"`
+	Dice   []int    `json:"dice"`
+	Sides  int      `json:"sides"`
+	Terms  []Term   `json:"terms"`
+	Total  int      `json:"total"`
+	Tier   int      `json:"tier"`
+	Tiers  []string `json:"tiers"`
+	Known  bool     `json:"known"`
+	Lost   bool     `json:"lost,omitempty"`
+	Item   string   `json:"item,omitempty"`
+	Kinds  string   `json:"kinds,omitempty"`
+	Mode   string   `json:"mode"`
+	UsedIn []string `json:"usedIn,omitempty"`
+	Notes  []string `json:"notes"`
+}
+
+// KnownItem is an item the party has identified.
+type KnownItem struct {
+	ItemID      string
+	CharacterID string
+	Recipes     bool
+	LearnedBy   string
+}
+
+// Study is one study or reveal of an item.
+type Study struct {
+	ID          int64
+	ItemID      string
+	LineID      int64
+	CharacterID string
+	Outcome     string
+	Rolled      *int
+	CreatedBy   string
+	At          time.Time
 }
 
 // SpoilView is a spoil in the tray. Source is the page's name, or

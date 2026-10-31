@@ -4,7 +4,9 @@
  * The party's spoils tray, the hero's projects in progress and the recipes
  * they know, laid out as the signed Crafting projects and Crafting Spoils
  * mockups. Taking or harvesting a spoil goes to the server, which rolls a
- * harvest's test and puts what it pays in the hero's pack. Starting a project, working it and every
+ * harvest's test and puts what it pays in the hero's pack; a find marked for
+ * study reads "Something unidentified" until a hero's study, also rolled on
+ * the server, tells the party what it is. Starting a project, working it and every
  * roll go to the server, which takes the materials and cost through the
  * Armory, rolls the dice and reads the recipe's rules; the block shows what
  * it answered, and throws Chronicle's dice on the server's numbers. The
@@ -120,6 +122,7 @@
     var cid = String(cfg.campaignId || ''), eid = String(cfg.entityId || '');
     var base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
     var D = null, open = null, pick = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0;
+    // got is the harvest or study whose result is unfolded; open.kind says which.
 
     /* JSON in and out; a refusal rejects with the server's own words. */
     function api(method, path, body) {
@@ -238,30 +241,38 @@
 
     function spoilActs(l) {
       if (got && isOpen('harvest', String(l.id))) return '<span class="crp-pill is-ok">Harvested</span>';
+      if (got && isOpen('study', String(l.id))) return '<span class="crp-pill ' + (got.known ? 'is-ok">Identified' : got.lost ? 'is-warn">Lost' : 'is-warn">Not yet') + '</span>';
+      if (l.locked) {
+        var wait = l.study && l.study.wait;
+        return '<button type="button" class="btn btn-primary btn-sm" data-act="study" data-id="' + l.id + '"' + (busy || wait ? ' disabled' : '') + (wait ? ' aria-describedby="crk-why-' + l.id + '"' : '') +
+          ' aria-label="' + esc('Study ' + l.name + ' with ' + hero()) + '">Study it</button>' + (wait ? '<span class="crp-why" id="crk-why-' + l.id + '">' + esc(wait) + '</span>' : '');
+      }
       var harvest = l.mode === 'harvest';
       return '<button type="button" class="btn ' + (harvest ? 'btn-primary' : 'btn-secondary') + ' btn-sm" data-act="take" data-id="' + l.id + '"' + (busy ? ' disabled' : '') +
         ' aria-label="' + esc((harvest ? 'Harvest ' : 'Take ') + l.name + ' for ' + hero()) + '">' + (harvest ? 'Harvest' : 'Take') + '</button>';
     }
 
     function harvestFold(l) {
+      if (got && isOpen('study', String(l.id))) return T.studied(got, l.id);
       return got && isOpen('harvest', String(l.id)) ? T.result(got, l.id, 'Harvest: ' + got.item) : '';
     }
 
     function spoils() {
       if (!D.spoils || !D.spoils.length) return '';
       return '<p class="cra-fine">Spoils from the party’s fights wait here until someone takes them. Take a thing as it is, or harvest it with a test that adds a characteristic from ' +
-        esc(hero()) + '’s sheet: the better the roll, the more ' + esc(hero()) + ' gets.</p><h4 class="crp-sub">Spoils to take</h4><div class="crs-tray">' +
+        esc(hero()) + '’s sheet: the better the roll, the more ' + esc(hero()) + ' gets.' + (T.locked(D.spoils) ? ' Something unidentified has to be studied first, with a test of its own.' : '') +
+        '</p><h4 class="crp-sub">Spoils to take</h4><div class="crs-tray">' +
         D.spoils.map(function (sp) {
-          return T.card(sp, {acts: spoilActs, fold: harvestFold, hit: function (l) { return got && isOpen('harvest', String(l.id)) ? got.tier || 0 : -1; }});
+          return T.card(sp, {acts: spoilActs, fold: harvestFold, hit: function (l) { return got && (isOpen('harvest', String(l.id)) || isOpen('study', String(l.id))) ? got.tier || 0 : -1; }});
         }).join('') + '</div>';
     }
 
     function render() {
       unmountBench();
-      var ready = 0, waiting = T.count(D.spoils);
+      var ready = 0, waiting = T.count(D.spoils), unknown = T.locked(D.spoils);
       D.projects.forEach(function (p) { if (p.status === 'active' && !p.waits) ready += p.rollsReady; });
       var h = '<div class="cra crp"><div class="crp-head"><h3 class="cb-head"><i class="fa-solid fa-flask" aria-hidden="true"></i> Crafting</h3>' +
-        (waiting ? '<span class="crp-pill">' + waiting + ' to take</span>' : '') +
+        (waiting ? '<span class="crp-pill">' + waiting + ' to take</span>' : '') + (unknown ? '<span class="crp-pill is-warn">' + unknown + ' to study</span>' : '') +
         (ready ? '<span class="crp-pill is-ok">' + plural(ready, 'roll', 'rolls') + ' ready</span>' : '') + '</div>' + spoils() +
         '<p class="cra-fine">Each project gets one roll for every respite the Director logs.' + (D.today ? ' Today is ' + esc(D.today) + '.' : '') + '</p>' +
         '<h4 class="crp-sub">In progress</h4><ul class="crp-rows">' +
@@ -373,6 +384,29 @@
       });
     }
 
+    /* Studies a find for this hero. The result unfolds under the line until
+       Done; a landed study names the item for everyone, a one chance miss
+       takes it out of the tray. */
+    function study(lid) {
+      if (busy) return;
+      busy = true;
+      render();
+      api('POST', '/spoil-lines/' + encodeURIComponent(lid) + '/study', {characterId: eid}).then(function (res) {
+        busy = false;
+        if (dead) return;
+        got = res;
+        open = {kind: 'study', id: String(lid)};
+        render();
+        throwDice(res, 'Study', 'a test of ' + res.total);
+        focus('[data-act="sdone"]');
+      }, function (err) {
+        busy = false;
+        if (dead) return;
+        toast(err.message);
+        load().catch(fail);
+      });
+    }
+
     function begin(rid) {
       var r = recipe(rid);
       if (!r || busy) return;
@@ -417,6 +451,7 @@
         case 'askcancel': open = {kind: 'confirm', id: id}; render(); focus('[data-act="cancel"]'); break;
         case 'cancel': open = null; cancel(id); break;
         case 'take': take(id); break;
+        case 'study': study(id); break;
         case 'sdone': open = null; got = null; load().catch(fail); break;
       }
     }

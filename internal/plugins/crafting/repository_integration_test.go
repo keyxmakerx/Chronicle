@@ -506,3 +506,121 @@ func TestRepoIntegration_Spoils(t *testing.T) {
 		t.Fatalf("drops after delete: %+v", all)
 	}
 }
+
+func TestRepoIntegration_Studies(t *testing.T) {
+	f := newRepoFixture(t)
+	ctx := context.Background()
+	store, projects := f.repo.(SpoilStore), f.repo.(ProjectStore)
+	troll, ichor, mira, tobin := f.entity(t, "Troll"), f.entity(t, "Grave ichor"), f.entity(t, "Mira"), f.entity(t, "Tobin")
+
+	// A line that needs study keeps the mark through the tray.
+	s := Spoil{ID: newUUID(t), PageID: troll, PageName: "Troll", Copy: 1, Copies: 1, CreatedBy: f.user, CreatedAt: time.Now().UTC(),
+		Lines: []SpoilLine{{ItemID: ichor, ItemName: "Grave ichor", Mode: DropTake, Qty: 1, Study: true, StudyStat: "reason", Once: true}}}
+	if err := store.AddSpoils(ctx, f.campaign, []Spoil{s}); err != nil {
+		t.Fatal(err)
+	}
+	tray, err := store.ListTray(ctx, f.campaign)
+	if err != nil || len(tray) != 1 {
+		t.Fatalf("tray %+v %v", tray, err)
+	}
+	l := tray[0].Lines[0]
+	if !l.Study || l.StudyStat != "reason" || !l.Once {
+		t.Fatalf("line %+v", l)
+	}
+
+	// One study per hero per item until a respite.
+	id, ok, err := store.StartStudy(ctx, f.campaign, Study{ItemID: ichor, LineID: l.ID, CharacterID: mira, CreatedBy: f.user})
+	if err != nil || !ok {
+		t.Fatalf("start: %v %v", ok, err)
+	}
+	if _, ok, _ := store.StartStudy(ctx, f.campaign, Study{ItemID: ichor, LineID: l.ID, CharacterID: mira}); ok {
+		t.Fatal("a hero studied twice before a respite")
+	}
+	if _, ok, _ := store.StartStudy(ctx, f.other, Study{ItemID: ichor, CharacterID: tobin}); !ok {
+		t.Fatal("another campaign's study was refused")
+	}
+	if err := store.FinishStudy(ctx, f.campaign, id, StudyMiss, 8); err != nil {
+		t.Fatal(err)
+	}
+	if recent, err := store.RecentStudies(ctx, f.campaign, 5); err != nil || len(recent) != 1 || recent[0].Outcome != StudyMiss || *recent[0].Rolled != 8 || recent[0].LineID != l.ID {
+		t.Fatalf("recent %+v %v", recent, err)
+	}
+	tobinID, ok, err := store.StartStudy(ctx, f.campaign, Study{ItemID: ichor, LineID: l.ID, CharacterID: tobin})
+	if err != nil || !ok {
+		t.Fatalf("Tobin: %v %v", ok, err)
+	}
+	// A study still rolling is no history yet, but counts as a try.
+	if recent, _ := store.RecentStudies(ctx, f.campaign, 5); len(recent) != 1 {
+		t.Fatalf("recent with one rolling %+v", recent)
+	}
+	if tries, err := store.TriesSinceRespite(ctx, f.campaign, []string{ichor}); err != nil || len(tries) != 2 || tries[0].CharacterID != mira {
+		t.Fatalf("tries %+v %v", tries, err)
+	}
+	if _, err := projects.LogRespite(ctx, f.campaign, f.user, ""); err != nil {
+		t.Fatal(err)
+	}
+	if tries, _ := store.TriesSinceRespite(ctx, f.campaign, []string{ichor}); len(tries) != 0 {
+		t.Fatalf("tries after a respite %+v", tries)
+	}
+	if _, ok, _ := store.StartStudy(ctx, f.campaign, Study{ItemID: ichor, CharacterID: mira}); !ok {
+		t.Fatal("a respite didn't let the hero study again")
+	}
+	if _, ok, _ := store.StartStudy(ctx, f.campaign, Study{ItemID: ichor, CharacterID: mira}); ok {
+		t.Fatal("a hero studied twice after one respite")
+	}
+
+	// A one chance miss loses the line, once.
+	if ok, err := store.LoseLine(ctx, f.campaign, l.ID, tobin, f.user, 4, time.Now().UTC()); err != nil || !ok {
+		t.Fatalf("lose: %v %v", ok, err)
+	}
+	if ok, _ := store.LoseLine(ctx, f.campaign, l.ID, tobin, f.user, 4, time.Now().UTC()); ok {
+		t.Fatal("a line was lost twice")
+	}
+	if got, _, _ := store.GetLine(ctx, f.campaign, l.ID); got.Status != SpoilLost || got.CharacterID != tobin || *got.Rolled != 4 {
+		t.Fatalf("lost line %+v", got)
+	}
+	if n, _ := store.CountWaiting(ctx, f.campaign); n != 0 {
+		t.Fatalf("a lost line still waits: %d", n)
+	}
+	if err := store.FinishStudy(ctx, f.campaign, tobinID, StudyLost, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	// What the party knows: the first identifier stays, recipes only grow.
+	if err := store.MarkKnown(ctx, f.campaign, KnownItem{ItemID: ichor, CharacterID: mira, LearnedBy: f.user}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkKnown(ctx, f.campaign, KnownItem{ItemID: ichor, CharacterID: tobin, Recipes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkKnown(ctx, f.campaign, KnownItem{ItemID: ichor}); err != nil {
+		t.Fatal(err)
+	}
+	known, err := store.KnownItems(ctx, f.campaign, []string{ichor, troll})
+	if err != nil || len(known) != 1 || known[ichor].CharacterID != mira || !known[ichor].Recipes {
+		t.Fatalf("known %+v %v", known, err)
+	}
+	if other, _ := store.KnownItems(ctx, f.other, []string{ichor}); len(other) != 0 {
+		t.Fatal("known read through another campaign")
+	}
+	if err := store.LogStudy(ctx, f.campaign, Study{ItemID: ichor, LineID: l.ID, Outcome: StudyRevealed, CreatedBy: f.user}); err != nil {
+		t.Fatal(err)
+	}
+	if recent, _ := store.RecentStudies(ctx, f.campaign, 10); len(recent) != 3 || recent[0].Outcome != StudyRevealed || recent[0].CharacterID != "" {
+		t.Fatalf("recent after a reveal %+v", recent)
+	}
+
+	// Deleting the hero keeps the history; deleting the item takes it all.
+	if _, err := f.db.ExecContext(ctx, `DELETE FROM entities WHERE id = ?`, mira); err != nil {
+		t.Fatal(err)
+	}
+	if known, _ := store.KnownItems(ctx, f.campaign, []string{ichor}); known[ichor].CharacterID != "" {
+		t.Fatalf("a deleted hero still identified it: %+v", known)
+	}
+	if _, err := f.db.ExecContext(ctx, `DELETE FROM entities WHERE id = ?`, ichor); err != nil {
+		t.Fatal(err)
+	}
+	if recent, _ := store.RecentStudies(ctx, f.campaign, 10); len(recent) != 0 {
+		t.Fatalf("a deleted item's studies stayed: %+v", recent)
+	}
+}

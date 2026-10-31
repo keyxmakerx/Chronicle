@@ -317,7 +317,7 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 		out.Benches = append(out.Benches, BenchPlay{ID: b.ID, Name: b.Name, Kind: b.Kind, Desk: rawOrNil(b.Desk), Journal: rawOrNil(b.Journal)})
 	}
 	if s.spoilsReady() == nil {
-		if out.Spoils, err = s.trayViews(ctx, campaignID, v, names, tags, rules); err != nil {
+		if out.Spoils, err = s.trayViews(ctx, campaignID, v, e.ID, names, tags, rules); err != nil {
 			return nil, err
 		}
 	}

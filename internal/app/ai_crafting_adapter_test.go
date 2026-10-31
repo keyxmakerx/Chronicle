@@ -56,10 +56,11 @@ func (f *craftingFake) Spoils(context.Context, string, crafting.Viewer) (*crafti
 	return &crafting.SpoilsPage{
 		Drops: []crafting.DropView{{PageID: "troll", Page: "Troll", Version: 2, Lines: []crafting.DropLine{
 			{ItemID: "moss", Mode: crafting.DropTake, Qty: 2},
-			{ItemID: "water", Mode: crafting.DropHarvest, Stat: "might", Yields: []int{1, 2, 4}}}}},
+			{ItemID: "water", Mode: crafting.DropHarvest, Stat: "might", Yields: []int{1, 2, 4}, Study: true, StudyStat: "reason", Once: true}}}},
 		Tray: []crafting.SpoilView{{Source: "Troll", Copy: 1, Copies: 2, Lines: []crafting.SpoilLineView{
 			{Name: "Moss", Mode: crafting.DropTake, Qty: 2},
-			{Name: "Water", Mode: crafting.DropHarvest, Roll: "2d10 + Might", Tiers: []crafting.Tier{{Label: "11 or less", Qty: 1}, {Label: "12 to 16", Qty: 2}, {Label: "17 or more", Qty: 4}}}}}},
+			{Name: "Water", Mode: crafting.DropHarvest, Roll: "2d10 + Might", Tiers: []crafting.Tier{{Label: "11 or less", Qty: 1}, {Label: "12 to 16", Qty: 2}, {Label: "17 or more", Qty: 4}},
+				Locked: true, Study: &crafting.StudyView{Roll: "2d10 + Reason", Once: true}}}}},
 	}, nil
 }
 
@@ -181,11 +182,11 @@ func TestAICraftingAdapterReadsDropsAndTheTray(t *testing.T) {
 		t.Fatalf("drops %+v", c.Drops)
 	}
 	d := c.Drops[0]
-	wantLines := []records.CraftDropLine{{ItemID: "moss", Qty: 2}, {ItemID: "water", Harvest: true, Stat: "might", Yields: [3]int{1, 2, 4}}}
+	wantLines := []records.CraftDropLine{{ItemID: "moss", Qty: 2}, {ItemID: "water", Harvest: true, Stat: "might", Yields: [3]int{1, 2, 4}, Study: true, StudyStat: "reason", Once: true}}
 	if d.Version != 2 || !reflect.DeepEqual(d.Lines, wantLines) {
 		t.Errorf("drop list %+v", d)
 	}
-	wantTray := []string{"2 Moss", "harvest Water, 2d10 + Might: 11 or less 1, 12 to 16 2, 17 or more 4"}
+	wantTray := []string{"2 Moss", "harvest Water, 2d10 + Might: 11 or less 1, 12 to 16 2, 17 or more 4, not identified yet (study 2d10 + Reason, one chance)"}
 	if len(c.Tray) != 1 || !reflect.DeepEqual(c.Tray[0].Lines, wantTray) || c.Tray[0].Copies != 2 {
 		t.Errorf("tray %+v", c.Tray)
 	}
@@ -210,15 +211,15 @@ func TestAICraftingAdapterWrites(t *testing.T) {
 		t.Errorf("acted as %+v, want the owner as Director", f.as)
 	}
 
-	drops := records.CraftDropsInput{AlsoID: "wolf", Version: 2, Lines: []records.CraftDropLine{{ItemID: "moss", Qty: 2}, {ItemID: "water", Harvest: true, Stat: "might", Yields: [3]int{1, 2, 4}}}}
+	drops := records.CraftDropsInput{AlsoID: "wolf", Version: 2, Lines: []records.CraftDropLine{{ItemID: "moss", Qty: 2, Study: true}, {ItemID: "water", Harvest: true, Stat: "might", Yields: [3]int{1, 2, 4}, Study: true, StudyStat: "reason", Once: true}}}
 	for _, check := range []bool{true, false} {
 		if err := a.SaveDrops(ctx, "camp", "troll", craftOwner, drops, check); err != nil {
 			t.Fatal(err)
 		}
 		wantBy := map[bool]string{true: "check", false: "save"}[check]
 		wantIn := crafting.DropInput{Also: "wolf", Version: 2, Lines: []crafting.DropLine{
-			{ItemID: "moss", Mode: crafting.DropTake, Qty: 2},
-			{ItemID: "water", Mode: crafting.DropHarvest, Stat: "might", Yields: []int{1, 2, 4}}}}
+			{ItemID: "moss", Mode: crafting.DropTake, Qty: 2, Study: true},
+			{ItemID: "water", Mode: crafting.DropHarvest, Stat: "might", Yields: []int{1, 2, 4}, Study: true, StudyStat: "reason", Once: true}}}
 		if f.dropsBy != wantBy || !reflect.DeepEqual(f.drops, wantIn) {
 			t.Errorf("check=%v: %s %+v", check, f.dropsBy, f.drops)
 		}

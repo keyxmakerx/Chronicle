@@ -5,7 +5,9 @@
  * drops in by hand, what was taken lately and every page's drop list, as the
  * signed Crafting Spoils mockup. Taking, harvesting and clearing go to the
  * server, which rolls a harvest's test and fills the hero's pack; the tab
- * shows what it answered and reloads. A drop list saves as it is edited,
+ * shows what it answered and reloads. A line marked for study reads
+ * "Something unidentified" to players until a hero's study lands or the
+ * Director reveals it; Give and Harvest for them hand it out regardless. A drop list saves as it is edited,
  * with its version, so two Directors never silently overwrite each other.
  * Players never see this tab or a drop list, only what lands in the tray.
  */
@@ -21,19 +23,35 @@ window.CraftingSpoils = (function () {
 
   /* The line beside the tray's buttons. */
   function trayLine(tray) {
-    var n = T.count(tray);
+    var n = T.count(tray), k = T.locked(tray);
     if (!n) return 'Nothing is waiting.';
-    return plural(n, 'thing', 'things') + ' from ' + plural(tray.length, 'source', 'sources') + ', waiting until someone takes them or you clear them.';
+    return plural(n, 'thing', 'things') + ' from ' + plural(tray.length, 'source', 'sources') + ', waiting until someone takes them or you clear them.' +
+      (k ? ' ' + (k === 1 ? 'One is' : k + ' are') + ' not identified yet: players see “Something unidentified” until a hero studies it or you reveal it.' : '');
   }
   /* A drop list in a few words, for its row. */
   function dropWords(d) {
-    return plural(d.lines.length, 'line', 'lines') + (d.also ? ', plus what ' + (d.alsoName || 'another page') + ' drops' : '');
+    var st = d.lines.filter(function (l) { return l.study; }).length;
+    return plural(d.lines.length, 'line', 'lines') + (st ? ', ' + st + ' needing study' : '') + (d.also ? ', plus what ' + (d.alsoName || 'another page') + ' drops' : '');
+  }
+  /* The characteristic a new study adds: the one for working things out
+     (Reason, or Intelligence), else the first. */
+  function studyStat(stats) {
+    for (var i = 0; i < stats.length; i++) if (/^(reason|intelligence)$/i.test(stats[i].key) || /^(reason|intelligence)$/i.test(stats[i].label)) return stats[i].key;
+    return stats[0] ? stats[0].key : '';
   }
   /* A line switched to a mode, keeping what carries over: a harvest starts
-     at the first characteristic and pays 1, 2 and 3. */
+     at the first characteristic and pays 1, 2 and 3; a study mark stays. */
   function lineAs(l, mode, stats) {
-    if (mode === 'harvest') return {itemId: l.itemId, mode: mode, stat: l.stat || (stats[0] ? stats[0].key : ''), yields: l.yields && l.yields.length === 3 ? l.yields : [1, 2, 3]};
-    return {itemId: l.itemId, mode: 'take', qty: l.qty || 1};
+    var out = mode === 'harvest' ? {itemId: l.itemId, mode: mode, stat: l.stat || (stats[0] ? stats[0].key : ''), yields: l.yields && l.yields.length === 3 ? l.yields : [1, 2, 3]} :
+      {itemId: l.itemId, mode: 'take', qty: l.qty || 1};
+    if (l.study) { out.study = true; out.studyStat = l.studyStat || ''; if (l.once) out.once = true; }
+    return out;
+  }
+  /* What a study has to roll to land, in words: "rolls 12 or more" when the
+     middle tier starts at a number. */
+  function lands(tiers) {
+    var m = /^\s*(\d+)/.exec((tiers || [])[1] || '');
+    return m ? 'rolls ' + m[1] + ' or more' : 'studies it successfully';
   }
   /* A typed amount, held to what the server takes; the lowest tier of a
      harvest pays at least 1. */
@@ -65,13 +83,14 @@ window.CraftingSpoils = (function () {
     function lineActs(l) {
       if (got && isOpen('harvest', l.id)) return '<span class="crp-pill is-ok">Harvested</span>';
       var id = esc(String(l.id)), h = '';
+      var reveal = l.locked ? '<button type="button" class="btn btn-secondary btn-sm" data-act="reveal" data-id="' + id + '"' + (busy ? ' disabled' : '') + '>Reveal to the party</button>' : '';
       if (page.heroes.length) {
         var who = hero(l.id);
         h = '<label class="sr-only" for="crs-who-' + id + '">Who gets ' + esc(l.name) + '</label><select class="cra-in cra-sm" id="crs-who-' + id + '" data-f="who" data-id="' + id + '">' +
           page.heroes.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === who ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select>' +
           '<button type="button" class="btn btn-secondary btn-sm" data-act="give" data-id="' + id + '"' + (busy ? ' disabled' : '') + '>' + (l.mode === 'harvest' ? 'Harvest for them' : 'Give') + '</button>';
       } else h = '<span class="cra-fine">No characters to give it to</span>';
-      return h + '<button type="button" class="crp-ib" data-act="clearline" data-id="' + id + '"' + (busy ? ' disabled' : '') + ' aria-label="Clear ' + esc(l.name) + '">' + X + '</button>';
+      return h + reveal + '<button type="button" class="crp-ib" data-act="clearline" data-id="' + id + '"' + (busy ? ' disabled' : '') + ' aria-label="Clear ' + esc(l.name) + '">' + X + '</button>';
     }
     function cardHead(s) {
       var id = esc(s.id), on = isOpen('menu', s.id);
@@ -129,10 +148,16 @@ window.CraftingSpoils = (function () {
               return '<label>' + esc(t) + ' <input type="number" class="cra-in cra-sm num" data-f="y" data-j="' + j + '"' + at + ' min="' + (j ? 0 : 1) + '" max="' + MAX_QTY + '" value="' + (l.yields[j] || 0) + '"></label>';
             }).join('') + '</span></div>';
         } else right = '<div class="crs-yields"><label>How many <input type="number" class="cra-in cra-sm num" data-f="qty"' + at + ' min="1" max="' + MAX_QTY + '" value="' + l.qty + '"></label></div>';
+        var study = '<div class="crs-dl-study"><label class="cra-sw"><input type="checkbox" id="crs-st-' + key + '" data-f="study"' + at + (l.study ? ' checked' : '') + '><span>Needs study first</span></label>' +
+          (l.study ? '<label>Study with ' + esc(page.dice || '2d10') + ' + <select class="cra-in cra-sm" data-f="studystat"' + at + ' aria-label="Characteristic for the study"><option value="">nothing</option>' +
+            stats.map(function (st) { return '<option value="' + esc(st.key) + '"' + (st.key === l.studyStat ? ' selected' : '') + '>' + esc(st.label) + '</option>'; }).join('') + '</select></label>' +
+            '<label class="cra-sw"><input type="checkbox" id="crs-once-' + key + '" data-f="once"' + at + (l.once ? ' checked' : '') + '><span>One chance</span></label>' +
+            '<span class="cra-fine">' + (l.once ? 'The first failed study loses it: the party leaves it behind.' : 'Players see “Something unidentified” until a hero ' + esc(lands(page.tiers)) + '.') + '</span>' :
+            '<span class="cra-fine">Off: players see it by name, or as “An item you haven’t seen” if they never have.</span>') + '</div>';
         return '<div class="crs-dl-row"><select class="cra-in cra-sm" id="crs-item-' + key + '" data-f="item"' + at + ' aria-label="Item">' + items + '</select>' +
           '<select class="cra-in cra-sm" id="crs-mode-' + key + '" data-f="mode"' + at + ' aria-label="How it is taken"><option value="take"' + (l.mode === 'take' ? ' selected' : '') + '>Take as it is</option>' +
           '<option value="harvest"' + (l.mode === 'harvest' ? ' selected' : '') + '>Harvest with a test</option></select>' + right +
-          (only ? '<span></span>' : '<button type="button" class="crp-ib" data-act="rmline"' + at + ' aria-label="Remove ' + esc(name || 'this line') + '">' + X + '</button>') + '</div>';
+          (only ? '<span></span>' : '<button type="button" class="crp-ib" data-act="rmline"' + at + ' aria-label="Remove ' + esc(name || 'this line') + '">' + X + '</button>') + study + '</div>';
       }).join('');
       var h = '<div class="crs-dl">' + also + rows + '<div class="crs-dl-foot">' +
         (d.lines.length < 20 ? '<button type="button" class="btn btn-secondary btn-sm" data-act="addline" data-id="' + pid + '">Add a line</button>' : '') +
@@ -314,6 +339,7 @@ window.CraftingSpoils = (function () {
         case 'clearspoil': var s = spoil(id); then(app.api('DELETE', '/spoils/' + encodeURIComponent(id)), 'Cleared what ' + (s ? s.source : 'it') + ' left.'); break;
         case 'clearline': var l = line(id); then(app.api('DELETE', '/spoil-lines/' + encodeURIComponent(id)), 'Cleared ' + (l ? l.name : 'it') + '. Nobody gets it.'); break;
         case 'give': give(id); break;
+        case 'reveal': var rl = line(id); then(app.api('POST', '/spoil-lines/' + encodeURIComponent(id) + '/reveal'), (rl ? rl.name : 'It') + ' is revealed: every player sees it by name now.'); break;
         case 'sdone': open = null; got = null; load(); break;
         case 'edit': editing = editing === id ? null : id; open = null; render(); break;
         case 'addline':
@@ -348,6 +374,15 @@ window.CraftingSpoils = (function () {
       else if (f === 'mode') { d.lines[Number(t.getAttribute('data-i'))] = lineAs(l, t.value, page.stats || []); render(); focus('#' + t.id); }
       else if (f === 'qty') { l.qty = amount(t.value, 1); t.value = l.qty; }
       else if (f === 'stat') l.stat = t.value;
+      else if (f === 'study') {
+        if (t.checked) { l.study = true; l.studyStat = l.studyStat || studyStat(page.stats || []); } else { delete l.study; delete l.studyStat; delete l.once; }
+        render(); focus('#' + t.id);
+      }
+      else if (f === 'studystat') l.studyStat = t.value;
+      else if (f === 'once') {
+        if (t.checked) l.once = true; else delete l.once;
+        render(); focus('#' + t.id);
+      }
       else if (f === 'y') {
         var j = Number(t.getAttribute('data-j'));
         if (j === 0 && !(Number(t.value) >= 1)) app.toast('Even ' + (page.tiers[0] || 'the lowest tier') + ' pays something: set it to 1 or more.');
@@ -383,5 +418,5 @@ window.CraftingSpoils = (function () {
       }
     };
   }
-  return {mount: mount, trayLine: trayLine, dropWords: dropWords, lineAs: lineAs, amount: amount};
+  return {mount: mount, trayLine: trayLine, dropWords: dropWords, lineAs: lineAs, amount: amount, studyStat: studyStat, lands: lands};
 })();
