@@ -40,6 +40,7 @@ type Appearance struct {
 	HeaderHeight    string `json:"header_height,omitempty"`    // "slim" (default) or "tall".
 	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
 	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
+	CraftArt        string `json:"craft_art,omitempty"`        // How made items are drawn (AppearanceCraftArts); "lifelike" is the default.
 	PageLook        string `json:"page_look,omitempty"`        // How pages draw their blocks (AppearancePageLooks); "standard" is the default.
 	TimelinePopup   string `json:"timeline_popup,omitempty"`   // What opens on a time line's event: "classic" (default) or "corner".
 	StyleKit        string `json:"style_kit,omitempty"`        // The pages' character under the Material page look (AppearanceStyleKits); "material" is the default.
@@ -81,6 +82,9 @@ var (
 	// AppearancePageLooks restyle every block on a page through the shared
 	// block parts without moving anything; page_look_annals.css draws Annals.
 	AppearancePageLooks = []string{"standard", "annals"}
+	// AppearanceCraftArts are the ways craft_results.js draws made items:
+	// lifelike like the crafting bench, or the softer illustrated set.
+	AppearanceCraftArts = []string{"lifelike", "illustrated"}
 	// AppearanceTimelinePopups are what opens over an event on a time line:
 	// the classic hover card, or the fading corner that grows out of the bead.
 	AppearanceTimelinePopups = []string{"classic", "corner"}
@@ -133,7 +137,8 @@ type AppearanceInput struct {
 		TimelinePopup string `json:"timelinePopup"`
 	} `json:"hover"`
 	Sheet struct {
-		Style string `json:"style"`
+		Style    string `json:"style"`
+		CraftArt string `json:"craftArt"` // "lifelike" or "illustrated".
 	} `json:"sheet"`
 	Page struct {
 		Look  string `json:"look"`
@@ -499,6 +504,7 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.PeekGlow, "peek glow", in.Sidebar.Glow, AppearanceGlows},
 		{&a.HoverCard, "hover card look", in.Hover.Look, AppearanceHoverCards},
 		{&a.SheetStyle, "character sheet style", in.Sheet.Style, AppearanceSheetStyles},
+		{&a.CraftArt, "made item pictures", in.Sheet.CraftArt, AppearanceCraftArts},
 	}
 	for _, c := range checks {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {

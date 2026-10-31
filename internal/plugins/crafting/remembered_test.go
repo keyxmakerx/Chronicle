@@ -74,14 +74,19 @@ func TestRoll_TheMadeItemRemembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Kept{Quality: "fine", How: "made", By: "Mira", On: "3 Frostmoot", OffDay: 107, OffOn: "10 Frostmoot", Becomes: "secret", BecomesName: "dragon's tear"}
-	if len(fx.arm.made) != 1 || !reflect.DeepEqual(fx.arm.made[0], want) {
-		t.Fatalf("made %+v, want %+v", fx.arm.made, want)
+	if len(fx.arm.made) != 1 || fx.arm.made[0].Look == nil {
+		t.Fatalf("made %+v, want one item with its picture", fx.arm.made)
+	}
+	got := fx.arm.made[0]
+	got.Look = nil
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("made %+v, want %+v", got, want)
 	}
 	if res.Item == nil || res.Item.Quality != "fine" || res.Item.By != "Mira" {
 		t.Errorf("the result card's item %+v", res.Item)
 	}
 
-	t.Run("a plain recipe makes a plain item", func(t *testing.T) {
+	t.Run("a plain recipe's item remembers only its picture", func(t *testing.T) {
 		fx := newProjectFx()
 		pv := fx.start(t)
 		fx.ready(pv.ID, 1)
@@ -93,7 +98,12 @@ func TestRoll_TheMadeItemRemembers(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(fx.arm.made) != 1 || !fx.arm.made[0].Empty() || res.Item != nil {
+		if len(fx.arm.made) != 1 || fx.arm.made[0].Look == nil {
+			t.Fatalf("made %+v", fx.arm.made)
+		}
+		k := fx.arm.made[0]
+		k.Look = nil
+		if !k.Empty() || res.Item == nil || res.Item.Look == nil {
 			t.Errorf("made %+v, item %+v", fx.arm.made, res.Item)
 		}
 	})

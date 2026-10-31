@@ -303,6 +303,14 @@
       return '<ul class="crp-lines crp-carries">' + rows.map(function (r) { return '<li><span class="crp-k">' + esc(r[0]) + '</span><span class="crp-v">' + esc(r[1]) + '</span></li>'; }).join('') + '</ul>';
     }
 
+    /* The made copy's own picture when it has one, drawn from what went
+       into it; the tick otherwise. The words beside it name the item. */
+    function madeIcon(item) {
+      if (item && item.look && window.CraftResults) {
+        try { return window.CraftResults.svg(item.look, 44, {cls: 'crp-look'}); } catch (e) { /* the tick stands in */ }
+      }
+      return ICON.check;
+    }
     function resultFold(p, who) {
       who = who || hero();
       var R = last, rows = T.terms(R), h = '<div class="crp-fold" aria-live="polite"><h4>Project roll: ' + esc(p.name) + '</h4><div class="crp-result">' +
@@ -311,7 +319,7 @@
         '<li class="is-tot"><span>Project points</span><span>+' + R.total + '</span></li></ul>' +
         '<div class="crp-outcome">' + progress(R.to, p.goal, R.from + ' → ' + R.to, p.name);
       h += befell(R, p.name, who);
-      if (R.finished && R.made) h += '<div class="crp-made">' + ICON.check + '<span>' + esc(p.name) + ' is made. ' + esc(R.made) + ' is in ' + esc(who) + '’s pack.</span></div>';
+      if (R.finished && R.made) h += '<div class="crp-made">' + madeIcon(R.item) + '<span>' + esc(p.name) + ' is made. ' + esc(R.made) + ' is in ' + esc(who) + '’s pack.</span></div>';
       if (R.finished && R.made) h += carries(R.item);
       else if (R.finished) h += '<div class="crp-made is-warn"><span>' + esc(p.name) + ' is made.</span></div>';
       else if (!R.lost) h += '<p class="cra-fine">' + (p.goal - R.to) + ' more to go. ' + (p.rollsReady > 0 ? 'You have another roll ready.' : 'The next roll comes with the next respite.') + '</p>';

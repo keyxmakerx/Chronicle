@@ -53,6 +53,10 @@ type AppearanceData struct {
 	// attribute, so sheets render as before.
 	SheetStyle string
 
+	// CraftArt is how made items are drawn; "illustrated" sets
+	// data-craft-art for craft_results.js, and "" or "lifelike" adds nothing.
+	CraftArt string
+
 	// PageLook is how pages draw their blocks; "" and "standard" add no
 	// attribute, and "annals" sets data-cz-page for page_look_annals.css.
 	PageLook string
@@ -123,6 +127,9 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	set("data-cz-hover", a.HoverCard)
 	if a.SheetStyle != "modern" {
 		set("data-cz-sheet", a.SheetStyle)
+	}
+	if a.CraftArt == "illustrated" {
+		attrs["data-craft-art"] = "illustrated"
 	}
 	if a.PageLook == "annals" {
 		attrs["data-cz-page"] = a.PageLook
