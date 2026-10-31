@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -15,7 +16,7 @@ import (
 type SystemLoader struct {
 	// mu guards modules + systemInstances. Reads (Get/Dir/All/Health/…) take
 	// RLock; the only writers are register + RegisterSystem (Lock). Package
-	// installs re-scan the registry at runtime (ScanPackageDir → register),
+	// installs load into the registry at runtime (DiscoverDir → register),
 	// concurrent with HTTP read handlers, so the maps must be synchronized.
 	mu              sync.RWMutex
 	systemsDir      string
@@ -281,6 +282,28 @@ func (l *SystemLoader) forceRegister(manifest *SystemManifest, dir, source strin
 		)
 	}
 	l.modules[manifest.ID] = &loadedSystem{manifest: manifest, dir: dir, source: source}
+}
+
+// unloadPackageDirsUnder removes package-sourced systems loaded from root or
+// a folder inside it, with their instances.
+func (l *SystemLoader) unloadPackageDirsUnder(root string) []string {
+	root = filepath.Clean(root)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var dropped []string
+	for id, lm := range l.modules {
+		if lm.source != "package" {
+			continue
+		}
+		dir := filepath.Clean(lm.dir)
+		if dir != root && !strings.HasPrefix(dir, root+string(filepath.Separator)) {
+			continue
+		}
+		delete(l.modules, id)
+		delete(l.systemInstances, id)
+		dropped = append(dropped, id)
+	}
+	return dropped
 }
 
 // ForceLoadDir loads the system at dir and replaces any loaded copy of the

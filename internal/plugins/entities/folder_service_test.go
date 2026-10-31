@@ -2,6 +2,8 @@ package entities
 
 import (
 	"context"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +16,8 @@ type fakeNodes struct {
 	nodes   map[string]*SidebarNode
 	deleted []string
 	parents map[string]*string
+
+	resequenced []string
 }
 
 func (f *fakeNodes) ListByType(_ context.Context, campaignID string, typeID int) ([]SidebarNode, error) {
@@ -23,7 +27,17 @@ func (f *fakeNodes) ListByType(_ context.Context, campaignID string, typeID int)
 			out = append(out, *n)
 		}
 	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SortOrder != out[j].SortOrder {
+			return out[i].SortOrder < out[j].SortOrder
+		}
+		return out[i].Name < out[j].Name
+	})
 	return out, nil
+}
+func (f *fakeNodes) ResequenceNodes(_ context.Context, _ string, ids []string) error {
+	f.resequenced = append([]string(nil), ids...)
+	return nil
 }
 func (f *fakeNodes) FindByID(_ context.Context, id string) (*SidebarNode, error) {
 	if n, ok := f.nodes[id]; ok {
@@ -52,6 +66,33 @@ type fakeFolderEntities struct {
 	parent   map[string]*string
 	nodeOf   map[string]*string
 	nodeSets int
+
+	siblings    []string // what ListSiblingIDsOrdered answers
+	resequenced []string
+}
+
+func (f *fakeFolderEntities) ListSiblingIDsOrdered(context.Context, string, int, *string, *string) ([]string, error) {
+	return f.siblings, nil
+}
+func (f *fakeFolderEntities) ResequenceSiblings(_ context.Context, _ string, ids []string) error {
+	f.resequenced = append([]string(nil), ids...)
+	return nil
+}
+
+type fakeOrders struct {
+	set map[string]string
+}
+
+func (f *fakeOrders) ListByCampaign(context.Context, string) (map[string]string, error) {
+	return f.set, nil
+}
+func (f *fakeOrders) Set(_ context.Context, _, kind, id, mode string) error {
+	if mode == OrderAZ {
+		delete(f.set, childOrderKey(kind, id))
+	} else {
+		f.set[childOrderKey(kind, id)] = mode
+	}
+	return nil
 }
 
 func (f *fakeFolderEntities) FindByID(_ context.Context, id string) (*Entity, error) {
@@ -112,7 +153,7 @@ func folderFixture() (FolderService, *fakeNodes, *fakeFolderEntities) {
 		3: {ID: 3, CampaignID: "c1", ParentTypeID: &lore},
 		9: {ID: 9, CampaignID: "c2"},
 	}}
-	return NewFolderService(nodes, ents, types), nodes, ents
+	return NewFolderService(nodes, ents, types, &fakeOrders{set: map[string]string{}}), nodes, ents
 }
 
 func TestFolderService_FindFolder(t *testing.T) {
@@ -283,5 +324,88 @@ func TestFolderService_MoveFolderRefusesExistingLoop(t *testing.T) {
 	}
 	if _, ok := nodes.parents["dup1"]; ok {
 		t.Error("the move was written")
+	}
+}
+
+func TestFolderService_SetChildOrder(t *testing.T) {
+	tests := []struct {
+		name, kind, id, mode, wantErr string
+	}{
+		{"category", OrderContainerCategory, "1", OrderHand, ""},
+		{"folder", OrderContainerFolder, "gods", OrderNew, ""},
+		{"page", OrderContainerPage, "zeus", OrderHand, ""},
+		{"back to A to Z", OrderContainerFolder, "gods", OrderAZ, ""},
+		{"unknown order", OrderContainerFolder, "gods", "random", "order must be"},
+		{"unknown kind", "map", "gods", OrderHand, "kind must be"},
+		{"category of another campaign", OrderContainerCategory, "9", OrderHand, "not found"},
+		{"category id that is not a number", OrderContainerCategory, "x", OrderHand, "not found"},
+		{"folder of another campaign", OrderContainerFolder, "other", OrderHand, "not found"},
+		{"page of another campaign", OrderContainerPage, "abroad", OrderHand, "not found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, _, _ := folderFixture()
+			err := svc.SetChildOrder(context.Background(), "c1", tt.kind, tt.id, tt.mode)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			got, _ := svc.ChildOrders(context.Background(), "c1")
+			if m := childOrderOf(got, tt.kind, tt.id); m != tt.mode {
+				t.Errorf("stored order = %q, want %q", m, tt.mode)
+			}
+		})
+	}
+}
+
+func TestFolderService_MoveNextTo(t *testing.T) {
+	tests := []struct {
+		name, kind, id, next string
+		after                bool
+		want                 []string
+		wantErr              string
+	}{
+		{"page up past a page", OrderContainerPage, "c", "b", false, []string{"a", "c", "b", "d"}, ""},
+		{"page down past a page", OrderContainerPage, "a", "b", true, []string{"b", "a", "c", "d"}, ""},
+		{"page past one the mover cannot see keeps it in place", OrderContainerPage, "d", "b", true, []string{"a", "b", "d", "c"}, ""},
+		{"next to itself", OrderContainerPage, "a", "a", false, nil, "itself"},
+		{"page in another list", OrderContainerPage, "a", "town", false, nil, "not in the same list"},
+		{"page of another campaign", OrderContainerPage, "a", "abroad", false, nil, "not found"},
+		{"folder up past a folder", OrderContainerFolder, "dup1", "gods", false, []string{"dup1", "gods", "dup2"}, ""},
+		{"folder in another folder", OrderContainerFolder, "dup1", "elder", false, nil, "not in the same list"},
+		{"unknown kind", "category", "1", "2", false, nil, "kind must be"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, nodes, ents := folderFixture()
+			for _, id := range []string{"a", "b", "c", "d"} {
+				ents.ents[id] = &Entity{ID: id, CampaignID: "c1", EntityTypeID: 1}
+			}
+			ents.siblings = []string{"a", "b", "c", "d"}
+			nodes.nodes["dup1"].SortOrder = 2
+			nodes.nodes["dup2"].SortOrder = 1
+			err := svc.MoveNextTo(context.Background(), "c1", tt.kind, tt.id, tt.next, tt.after)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			got := ents.resequenced
+			if tt.kind == OrderContainerFolder {
+				got = nodes.resequenced
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("order = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

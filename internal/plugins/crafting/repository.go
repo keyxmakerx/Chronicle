@@ -34,18 +34,33 @@ type Repository interface {
 	// version is still expected, and replaces the known list; ok is false on
 	// a lost race. errDuplicate when the new name is taken.
 	UpdateRecipe(ctx context.Context, campaignID, userID string, r Recipe, expected int) (ok bool, err error)
-	// UpdateRules writes the rules and looks on the same terms.
-	UpdateRules(ctx context.Context, campaignID, id string, rules []Rule, looks map[string]*Look, expected int) (ok bool, err error)
+	// UpdateRules writes the rules, looks and extras on the same terms.
+	UpdateRules(ctx context.Context, campaignID, id string, rules []Rule, looks map[string]*Look, extras Extras, expected int) (ok bool, err error)
 	// SetDraft clears or sets the draft flag, bumping the version.
 	SetDraft(ctx context.Context, campaignID, id string, draft bool) error
 	DeleteRecipe(ctx context.Context, campaignID, id string) error
 	// KnownBy lists the recipes each of the characters knows.
 	KnownBy(ctx context.Context, campaignID string, characterIDs []string) (map[string][]string, error)
+	// Learn adds a character to those who know a recipe; knowing it
+	// already is not an error.
+	Learn(ctx context.Context, campaignID, recipeID, characterID, userID string) error
 
 	// ListTags returns each tagged item's tags, in no particular order.
 	ListTags(ctx context.Context, campaignID string) (map[string][]string, error)
 	// SetTags replaces one item's tags.
 	SetTags(ctx context.Context, campaignID, itemID string, tags []string) error
+
+	// ListKindPictures returns the campaign's own picture for each kind it
+	// changed; a kind with no row wears the library's default.
+	ListKindPictures(ctx context.Context, campaignID string) (map[string]MaterialPicture, error)
+	// SetKindPictures writes several kinds at once, so a swap is one change;
+	// a nil entry puts that kind back on its default.
+	SetKindPictures(ctx context.Context, campaignID string, set map[string]*MaterialPicture) error
+	// ListItemPictures returns each item that wears its own picture.
+	ListItemPictures(ctx context.Context, campaignID string) (map[string]MaterialPicture, error)
+	// SetItemPicture gives one item its own picture; nil makes it follow its
+	// first kind again.
+	SetItemPicture(ctx context.Context, campaignID, itemID string, p *MaterialPicture) error
 
 	ListBenches(ctx context.Context, campaignID string) ([]Bench, error)
 	GetBench(ctx context.Context, campaignID, id string) (Bench, bool, error)
@@ -57,6 +72,9 @@ type Repository interface {
 	// SaveArrangement stores one look's arrangement ("desk" or "journal").
 	SaveArrangement(ctx context.Context, campaignID, id, skin string, state json.RawMessage, expected int) (ok bool, err error)
 	DeleteBench(ctx context.Context, campaignID, id string) error
+	// SaveUpgrades stores a bench's upgrade ladders; ok false on a lost
+	// version race.
+	SaveUpgrades(ctx context.Context, campaignID, id string, u Upgrades, expected int) (ok bool, err error)
 }
 
 type sqlRepository struct{ db *sql.DB }
@@ -114,7 +132,7 @@ func (r *sqlRepository) SaveSettings(ctx context.Context, campaignID string, s S
 // ---------- Recipes ----------
 
 const recipeColumns = `id, name, template, bench_kind, COALESCE(result_item_id, ''), result_qty, goal, stat, prerequisite, source,
-	cost_cents, cost_currency, who, materials, steps, colors, rules, looks, draft, draft_prompt, sort_order, version, updated_at`
+	cost_cents, cost_currency, who, materials, steps, colors, rules, looks, COALESCE(extras, ''), draft, draft_prompt, sort_order, version, updated_at`
 
 type rowScanner interface{ Scan(dest ...any) error }
 
@@ -123,10 +141,11 @@ func scanRecipe(s rowScanner) (Recipe, error) {
 		r                                      Recipe
 		cents                                  int64
 		materials, steps, colors, rules, looks string
+		extras                                 string
 	)
 	if err := s.Scan(&r.ID, &r.Name, &r.Template, &r.Bench, &r.Result.ItemID, &r.Result.Qty, &r.Goal, &r.Stat,
 		&r.Prerequisite, &r.Source, &cents, &r.Cost.Currency, &r.Who, &materials, &steps, &colors, &rules, &looks,
-		&r.Draft, &r.DraftPrompt, &r.SortOrder, &r.Version, &r.UpdatedAt); err != nil {
+		&extras, &r.Draft, &r.DraftPrompt, &r.SortOrder, &r.Version, &r.UpdatedAt); err != nil {
 		return r, err
 	}
 	r.Cost.Amount = float64(cents) / 100
@@ -139,6 +158,10 @@ func scanRecipe(s rowScanner) (Recipe, error) {
 	_ = json.Unmarshal([]byte(looks), &r.Looks)
 	if colors != "" {
 		_ = json.Unmarshal([]byte(colors), &r.Colors)
+	}
+	r.Extras = DefaultExtras()
+	if extras != "" {
+		_ = json.Unmarshal([]byte(extras), &r.Extras)
 	}
 	return r, nil
 }
@@ -306,10 +329,10 @@ func (r *sqlRepository) UpdateRecipe(ctx context.Context, campaignID, userID str
 	return true, tx.Commit()
 }
 
-func (r *sqlRepository) UpdateRules(ctx context.Context, campaignID, id string, rules []Rule, looks map[string]*Look, expected int) (bool, error) {
+func (r *sqlRepository) UpdateRules(ctx context.Context, campaignID, id string, rules []Rule, looks map[string]*Look, extras Extras, expected int) (bool, error) {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE crafting_recipes SET rules = ?, looks = ?, version = version + 1 WHERE campaign_id = ? AND id = ? AND version = ?`,
-		mustJSON(rules), mustJSON(looks), campaignID, id, expected)
+		`UPDATE crafting_recipes SET rules = ?, looks = ?, extras = ?, version = version + 1 WHERE campaign_id = ? AND id = ? AND version = ?`,
+		mustJSON(rules), mustJSON(looks), mustJSON(extras), campaignID, id, expected)
 	if err != nil {
 		return false, fmt.Errorf("update recipe rules: %w", err)
 	}
@@ -328,6 +351,16 @@ func (r *sqlRepository) SetDraft(ctx context.Context, campaignID, id string, dra
 func (r *sqlRepository) DeleteRecipe(ctx context.Context, campaignID, id string) error {
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM crafting_recipes WHERE campaign_id = ? AND id = ?`, campaignID, id); err != nil {
 		return fmt.Errorf("delete recipe: %w", err)
+	}
+	return nil
+}
+
+func (r *sqlRepository) Learn(ctx context.Context, campaignID, recipeID, characterID, userID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT IGNORE INTO crafting_known (recipe_id, character_id, campaign_id, added_by)
+		 SELECT id, ?, campaign_id, ? FROM crafting_recipes WHERE campaign_id = ? AND id = ?`,
+		characterID, nullString(userID), campaignID, recipeID); err != nil {
+		return fmt.Errorf("learn recipe: %w", err)
 	}
 	return nil
 }
@@ -395,16 +428,86 @@ func (r *sqlRepository) SetTags(ctx context.Context, campaignID, itemID string, 
 	return tx.Commit()
 }
 
+// ---------- Material pictures ----------
+
+func scanPictures(rows *sql.Rows) (map[string]MaterialPicture, error) {
+	defer rows.Close()
+	out := map[string]MaterialPicture{}
+	for rows.Next() {
+		var k string
+		var p MaterialPicture
+		if err := rows.Scan(&k, &p.Picture, &p.Tint); err != nil {
+			return nil, fmt.Errorf("scan material picture: %w", err)
+		}
+		out[k] = p
+	}
+	return out, rows.Err()
+}
+
+func (r *sqlRepository) ListKindPictures(ctx context.Context, campaignID string) (map[string]MaterialPicture, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT kind, picture, tint FROM crafting_kind_pictures WHERE campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list kind pictures: %w", err)
+	}
+	return scanPictures(rows)
+}
+
+func (r *sqlRepository) SetKindPictures(ctx context.Context, campaignID string, set map[string]*MaterialPicture) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set kind pictures: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	for kind, p := range set {
+		if p == nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM crafting_kind_pictures WHERE campaign_id = ? AND kind = ?`, campaignID, kind); err != nil {
+				return fmt.Errorf("clear kind picture: %w", err)
+			}
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO crafting_kind_pictures (campaign_id, kind, picture, tint) VALUES (?, ?, ?, ?)
+			 ON DUPLICATE KEY UPDATE picture = VALUES(picture), tint = VALUES(tint)`, campaignID, kind, p.Picture, p.Tint); err != nil {
+			return fmt.Errorf("save kind picture: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *sqlRepository) ListItemPictures(ctx context.Context, campaignID string) (map[string]MaterialPicture, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT item_id, picture, tint FROM crafting_material_pictures WHERE campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list item pictures: %w", err)
+	}
+	return scanPictures(rows)
+}
+
+func (r *sqlRepository) SetItemPicture(ctx context.Context, campaignID, itemID string, p *MaterialPicture) error {
+	if p == nil {
+		if _, err := r.db.ExecContext(ctx, `DELETE FROM crafting_material_pictures WHERE campaign_id = ? AND item_id = ?`, campaignID, itemID); err != nil {
+			return fmt.Errorf("clear item picture: %w", err)
+		}
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO crafting_material_pictures (item_id, campaign_id, picture, tint) VALUES (?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE picture = VALUES(picture), tint = VALUES(tint)`, itemID, campaignID, p.Picture, p.Tint); err != nil {
+		return fmt.Errorf("save item picture: %w", err)
+	}
+	return nil
+}
+
 // ---------- Benches ----------
 
 func scanBench(s rowScanner) (Bench, error) {
 	var (
-		b             Bench
-		desk, journal sql.NullString
+		b                       Bench
+		desk, journal, upgrades sql.NullString
 	)
-	if err := s.Scan(&b.ID, &b.Name, &b.Kind, &desk, &journal, &b.SortOrder, &b.Version); err != nil {
+	if err := s.Scan(&b.ID, &b.Name, &b.Kind, &desk, &journal, &upgrades, &b.SortOrder, &b.Version); err != nil {
 		return b, err
 	}
+	b.Upgrades = CleanUpgrades(json.RawMessage(upgrades.String))
 	if desk.Valid && desk.String != "" {
 		b.Desk = json.RawMessage(desk.String)
 	}
@@ -414,7 +517,7 @@ func scanBench(s rowScanner) (Bench, error) {
 	return b, nil
 }
 
-const benchColumns = `id, name, kind, desk, journal, sort_order, version`
+const benchColumns = `id, name, kind, desk, journal, upgrades, sort_order, version`
 
 func (r *sqlRepository) ListBenches(ctx context.Context, campaignID string) ([]Bench, error) {
 	rows, err := r.db.QueryContext(ctx,
@@ -484,6 +587,17 @@ func (r *sqlRepository) SaveArrangement(ctx context.Context, campaignID, id, ski
 		string(state), campaignID, id, expected)
 	if err != nil {
 		return false, fmt.Errorf("save bench arrangement: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func (r *sqlRepository) SaveUpgrades(ctx context.Context, campaignID, id string, u Upgrades, expected int) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE crafting_benches SET upgrades = ?, version = version + 1 WHERE campaign_id = ? AND id = ? AND version = ?`,
+		mustJSON(u), campaignID, id, expected)
+	if err != nil {
+		return false, fmt.Errorf("save bench upgrades: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil

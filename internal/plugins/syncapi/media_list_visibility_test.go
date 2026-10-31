@@ -140,3 +140,53 @@ func TestListMedia_StoredBearerKeyStillSeesListing(t *testing.T) {
 		t.Errorf("a stored Bearer key (Owner-resolved) must still see the listing; got total=%d", body.Total)
 	}
 }
+
+// fakeMediaSvcForGet answers GetByID with one campaign file and records
+// whether the handler asked.
+type fakeMediaSvcForGet struct {
+	media.MediaService
+	getCalled bool
+}
+
+func (f *fakeMediaSvcForGet) GetByID(_ context.Context, id string) (*media.MediaFile, error) {
+	f.getCalled = true
+	camp := "camp-1"
+	return &media.MediaFile{ID: id, CampaignID: &camp, UsageType: media.UsageAttachment, MimeType: "image/png"}, nil
+}
+
+// TestGetMedia_RoleGate pins that the single-file lookup keeps ListMedia's
+// threshold: below Scribe a session caller gets a not-found and no link,
+// while a Scribe and a stored key (Owner-resolved) still get the file.
+func TestGetMedia_RoleGate(t *testing.T) {
+	tests := []struct {
+		name    string
+		key     *APIKey
+		role    campaigns.Role
+		allowed bool
+	}{
+		{"session player", &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "p"}, campaigns.RolePlayer, false},
+		{"session scribe", &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "s"}, campaigns.RoleScribe, true},
+		{"stored key", &APIKey{ID: 42, CampaignID: "camp-1", UserID: "k"}, campaigns.RolePlayer, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mediaSvc := &fakeMediaSvcForGet{}
+			h := NewMediaAPIHandler(&stubSyncSvcForRole{}, mediaSvc)
+			h.SetCampaignService(&stubCampaignSvcForRole{getMemberFn: memberWithRole(tt.role)})
+			c, rec := newRoleContext(tt.key)
+			c.SetParamNames("id", "mediaID")
+			c.SetParamValues("camp-1", "file-1")
+
+			err := h.GetMedia(c)
+			if !tt.allowed {
+				if err == nil || mediaSvc.getCalled || rec.Body.Len() != 0 {
+					t.Fatalf("want a refusal before any lookup, err=%v looked=%v body=%s", err, mediaSvc.getCalled, rec.Body.String())
+				}
+				return
+			}
+			if err != nil || !mediaSvc.getCalled {
+				t.Fatalf("want the file, err=%v looked=%v", err, mediaSvc.getCalled)
+			}
+		})
+	}
+}

@@ -18,7 +18,7 @@ templ SystemsBrowsePage(pkgs []Package, settings PackageSecuritySettings, csrfTo
 					</p>
 				</div>
 				<a href="/systems/submit" class="btn-primary text-sm">
-					<i class="fa-solid fa-plus mr-1"></i>
+					<i class="fa-solid fa-plus"></i>
 					Submit a System
 				</a>
 			</div>
@@ -135,7 +135,7 @@ templ SystemSubmitPage(settings PackageSecuritySettings, csrfToken string) {
 							Cancel
 						</a>
 						<button type="submit" class="btn-primary text-sm">
-							<i class="fa-solid fa-paper-plane mr-1"></i>
+							<i class="fa-solid fa-paper-plane"></i>
 							if settings.RequireApproval {
 								Submit for Review
 							} else {
@@ -161,7 +161,7 @@ templ MySubmissionsPage(pkgs []Package) {
 					</p>
 				</div>
 				<a href="/systems/submit" class="btn-primary text-sm">
-					<i class="fa-solid fa-plus mr-1"></i>
+					<i class="fa-solid fa-plus"></i>
 					Submit Another
 				</a>
 			</div>

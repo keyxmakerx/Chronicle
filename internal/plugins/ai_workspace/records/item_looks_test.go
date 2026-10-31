@@ -180,29 +180,23 @@ func TestItemLookKind_Export(t *testing.T) {
 	}
 }
 
-func TestLookup_Crafting(t *testing.T) {
+func TestLookup_ItemLooks(t *testing.T) {
 	_, f := lookKind()
 	l := &Lookups{Looks: f}
-	ans := l.Answer(context.Background(), camp, owner, []Record{lookup("crafting", nil)})
+	ans := l.Answer(context.Background(), camp, owner, []Record{lookup("crafting", map[string]any{"part": "looks"})})
 	text := ans[0].Text
-	for _, want := range []string{"## Crafting", "page: \"Flametongue\"", "made_from: \"Glass adder\"", "page: \"Secret blade\"", "Recipes, materials, harvesting and crafting benches are not stored"} {
+	for _, want := range []string{"## Item looks", "page: \"Flametongue\"", "made_from: \"Glass adder\"", "page: \"Secret blade\""} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("owner's answer misses %q:\n%s", want, text)
 		}
 	}
-	if ans[0].Chip != "Crafting · 3 item looks" {
+	if ans[0].Chip != "Item looks · 3 looks" {
 		t.Fatalf("chip = %q", ans[0].Chip)
 	}
 
-	ans = l.Answer(context.Background(), camp, player, []Record{lookup("crafting", nil)})
+	ans = l.Answer(context.Background(), camp, player, []Record{lookup("looks", nil)})
 	if strings.Contains(ans[0].Text, "Secret blade") {
 		t.Fatalf("a player saw a hidden page's look:\n%s", ans[0].Text)
-	}
-
-	// Without the look service the answer still says what isn't stored.
-	ans = (&Lookups{}).Answer(context.Background(), camp, owner, []Record{lookup("recipes", nil)})
-	if ans[0].Error != "" || !strings.Contains(ans[0].Text, "can't be looked up right now") || !strings.Contains(ans[0].Text, "not stored in Chronicle yet") {
-		t.Fatalf("no service: %+v", ans[0])
 	}
 }
 

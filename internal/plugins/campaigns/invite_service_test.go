@@ -1,6 +1,7 @@
 package campaigns
 
 import (
+	"encoding/json"
 	"context"
 	"database/sql"
 	"errors"
@@ -196,6 +197,9 @@ func (m *mockCampaignRepoForInvites) UpdateBackdropPath(context.Context, string,
 	return nil
 }
 func (m *mockCampaignRepoForInvites) UpdateSettings(context.Context, string, string) error {
+	return nil
+}
+func (m *mockCampaignRepoForInvites) UpdateSettingsKeys(context.Context, string, map[string]json.RawMessage) error {
 	return nil
 }
 func (m *mockCampaignRepoForInvites) UpdateSidebarConfig(context.Context, string, string) error {

@@ -149,6 +149,12 @@ const (
 	MsgNoticeBoardsUpdated MessageType = "notice_boards.updated"
 )
 
+// MsgRollMade carries one roll of the campaign's roll log, already shaped for
+// its audience (a blind roll's roller gets a copy without the result). Not a
+// change-feed type: a reconnect never replays old rolls; the log is read
+// through its own route.
+const MsgRollMade MessageType = "roll.made"
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"
@@ -205,6 +211,19 @@ type Message struct {
 	// way DM-equivalent clients already pass, for content written for
 	// "the DM and co-DMs". Ignored under StrictAudience.
 	AdmitScribes bool `json:"-"`
+
+	// Public says the publisher checked that every member may receive this
+	// message, still narrowed by AllowedUsers/DeniedUsers. A message that is
+	// neither Public nor addressed to named users is treated as RequiresDM:
+	// a publisher that forgets to choose an audience reaches the GM side
+	// only, never players' sockets.
+	Public bool `json:"-"`
+}
+
+// dmOnlyByDefault reports whether m names no audience, so the hub treats it
+// as RequiresDM.
+func (m *Message) dmOnlyByDefault() bool {
+	return !m.Public && len(m.AllowedUsers) == 0
 }
 
 // Encode serializes a Message to JSON bytes.

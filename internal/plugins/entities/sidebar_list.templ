@@ -1,6 +1,6 @@
 // sidebar_list.templ renders a compact entity list for the sidebar drill panel.
 // Used by SearchAPI with ?sidebar=1 to display category pages inline.
-// Includes data attributes for client-side tree building and drag-and-drop.
+// Includes data attributes for client-side tree building and ordering.
 // Also renders sidebar folder nodes (pure organizational containers).
 
 package entities
@@ -13,12 +13,17 @@ import (
 
 // SidebarEntityList renders entity results and folder nodes as compact items
 // for the sidebar panel. Each item includes data attributes for tree structure
-// and reordering. sidebar_tree.js transforms this flat list into a
-// collapsible tree with drag-and-drop support — no folder/page icons: a
+// and ordering. sidebar_tree.js transforms this flat list into a
+// collapsible tree — no folder/page icons: a
 // folder is its chevron, a semibold name and a count (added client-side);
 // a page is its plain name. hiddenIDs marks entities that should appear
 // dimmed for owners. data-can-edit and data-can-delete-folders tell the row
 // menu (sidebar_row_menu.js) which actions to offer; the routes check again.
+//
+// orders says how each container sorts what is directly inside it
+// (FolderService.ChildOrders): data-root-order on the tree for the category's
+// top level, data-child-order on a folder or page row; none means A to Z.
+// data-created feeds "Newest first".
 //
 // typeID is the drilled category's own entity type (the sidebar URL's ?type=),
 // NOT a per-row type. It drives data-entity-type-id, which sidebar_tree.js
@@ -27,18 +32,22 @@ import (
 // results[0].EntityTypeID may be a SUB-type; a new folder node must anchor on
 // the category typeID, not a row's sub-type, or SearchAPI's exact-match
 // reload (ListByType(categoryTypeID)) can't find it on refresh.
-templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID int, cc *campaigns.CampaignContext, hiddenIDs map[string]bool) {
+templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID int, cc *campaigns.CampaignContext, hiddenIDs map[string]bool, orders map[string]string) {
 	if len(results) == 0 && len(nodes) == 0 {
 		<div class="px-4 py-6 text-center">
 			<i class="fa-solid fa-file-circle-plus text-lg text-gray-600 mb-2 block"></i>
 			<span class="text-xs text-gray-500">No pages yet</span>
 		</div>
 	} else {
+		if cc.MemberRole >= campaigns.RoleScribe {
+			@sidebarRootOrder(childOrderOf(orders, OrderContainerCategory, strconv.Itoa(sidebarTreeType(typeID, results, nodes))))
+		}
 		<div
 			id="sidebar-entity-tree"
 			class="sidebar-entity-list py-1"
 			data-campaign-id={ cc.Campaign.ID }
 			data-entity-type-id={ strconv.Itoa(sidebarTreeType(typeID, results, nodes)) }
+			data-root-order={ childOrderOf(orders, OrderContainerCategory, strconv.Itoa(sidebarTreeType(typeID, results, nodes))) }
 			if cc.MemberRole >= campaigns.RoleScribe {
 				data-can-edit="true"
 			}
@@ -57,7 +66,10 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 					}
 					data-sort-order={ strconv.Itoa(node.SortOrder) }
 					data-entity-name={ node.Name }
-					draggable="true"
+					data-created={ strconv.FormatInt(node.CreatedAt.Unix(), 10) }
+					if m := childOrderOf(orders, OrderContainerFolder, node.ID); m != OrderAZ {
+						data-child-order={ m }
+					}
 				>
 					<span class="tree-lb">{ node.Name }</span>
 				</div>
@@ -79,10 +91,13 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 					}
 					data-sort-order={ strconv.Itoa(entity.SortOrder) }
 					data-entity-name={ entity.Name }
+					data-created={ strconv.FormatInt(entity.CreatedAt.Unix(), 10) }
+					if m := childOrderOf(orders, OrderContainerPage, entity.ID); m != OrderAZ {
+						data-child-order={ m }
+					}
 					if hiddenIDs[entity.ID] {
 						data-sidebar-hidden="true"
 					}
-					draggable="true"
 				>
 					<span class="tree-lb">{ entity.Name }</span>
 					if sidebarDMOnly(cc, &entity) {
@@ -94,9 +109,9 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 				</a>
 			}
 			// Extra listings: the same page shown under a second parent. They
-			// carry no data-entity-id, so a drag, a reorder or a count never
-			// mistakes them for the page's real row (sidebar_tree.js keys them
-			// by data-place-key and never makes them draggable).
+			// carry no data-entity-id, so a move or a count never mistakes them
+			// for the page's real row (sidebar_tree.js keys them by
+			// data-place-key and gives them no move arrows).
 			for _, pl := range treePlacesOf(ctx) {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, pl.EntityID)) }
@@ -134,4 +149,17 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 			</div>
 		}
 	}
+}
+
+// sidebarRootOrder is the category's own order picker, above its tree, for
+// those who may change it. sidebar_tree.js saves a change and redraws.
+templ sidebarRootOrder(mode string) {
+	<div class="tree-order">
+		<label class="tree-order-lb" for="sidebar-tree-order">Order</label>
+		<select id="sidebar-tree-order" class="tree-order-sel" data-tree-order>
+			<option value="az" selected?={ mode == OrderAZ }>A to Z</option>
+			<option value="hand" selected?={ mode == OrderHand }>By hand</option>
+			<option value="new" selected?={ mode == OrderNew }>Newest first</option>
+		</select>
+	</div>
 }

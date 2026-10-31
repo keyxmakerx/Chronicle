@@ -86,6 +86,7 @@ func (h *Handler) NightPageAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.serveRecap(c, cc, session)
 	out := nightPage{Recap: strPtrVal(session.Recap), RecapHTML: strPtrVal(session.RecapHTML), Links: []nightPageLink{}}
 	for _, e := range visible {
 		out.Links = append(out.Links, nightPageLink{EntityID: e.EntityID, Name: e.EntityName, Slug: e.EntitySlug, Role: e.Role})

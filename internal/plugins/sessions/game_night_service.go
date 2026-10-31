@@ -204,11 +204,10 @@ func notePatchToRepoNote(note patch.Field[string]) *string {
 
 // nextUpcomingOccurrenceDate returns the next occurrence date on/after today
 // for a recurring session, counting occurrences from the series start with
-// occurrenceAt so monthly dates do not drift. The walk is capped (520 steps
-// — roughly ten years of weekly steps) so a pathological recurrence config
-// can never spin unbounded; it is not expected to run more than once or
-// twice in practice, since a session left unanswered for years is not the
-// case this exists for.
+// occurrenceAt so monthly dates do not drift. It jumps straight to the last
+// night before today (occurrenceIndexBefore), so a series that began decades
+// ago costs the same as one that began last week; the walk after the jump is
+// capped so a pathological recurrence config can never spin unbounded.
 func nextUpcomingOccurrenceDate(session *Session, today string) string {
 	if session.ScheduledDate == nil || *session.ScheduledDate == "" || session.RecurrenceType == nil {
 		return ""
@@ -217,7 +216,8 @@ func nextUpcomingOccurrenceDate(session *Session, today string) string {
 	if cur >= today {
 		return cur
 	}
-	for i := 1; i <= 520; i++ {
+	first := occurrenceIndexBefore(session, today)
+	for i := first + 1; i <= first+520; i++ {
 		next := occurrenceAt(session, i)
 		if next == "" {
 			return cur
@@ -331,11 +331,9 @@ func (s *sessionService) SetExcludedFromCount(ctx context.Context, sessionID, us
 
 // --- "suggest another time" ------------------------------------------------
 
-// ValidateAndRecordSuggestion is the fix for the historical bug where a
-// suggestion token was consumed BEFORE the suggested date/time was validated
-// — a bad submission (a malformed or past date) burned the single-use link
-// with nothing to show for it, forcing the member to ask the Director for a
-// fresh invite just to try again.
+// ValidateAndRecordSuggestion validates the suggested date/time BEFORE
+// consuming the suggestion token, so a bad submission (malformed or past
+// date) does not burn the single-use link.
 //
 // Order, mirroring ApplyRSVPToken's own consume-then-apply reasoning but with
 // validation moved in FRONT of consumption:
@@ -461,15 +459,12 @@ func (s *sessionService) SetCalendarFeedEnabled(ctx context.Context, campaignID 
 // rather than distinguishing "wrong token" from "turned off" to an
 // unauthenticated caller.
 //
-// Deliberately does NOT list any session data: unlike a session-scoped RSVP
-// token, a feed token has no natural expiry, so the HANDLER must re-check the
-// token's user is STILL a campaign member before this method's sibling,
-// ListFeedSessions, is ever called — a removed member's subscribed calendar
-// app would otherwise keep pulling every planned session's name, date and
-// time indefinitely, since nothing else revokes the token when membership
-// ends. Splitting the credential check from the data read means that failure
-// mode can't reach the data at all, not just "the handler happens to discard
-// it before responding".
+// Deliberately does NOT list any session data: a feed token has no natural
+// expiry, so the HANDLER must re-check that the token's user is STILL a
+// campaign member before calling ListFeedSessions, or a removed member's
+// subscribed calendar app would keep pulling every planned session's name,
+// date and time. Splitting the credential check from the data read keeps
+// that failure mode away from the data entirely.
 func (s *sessionService) ResolveFeedToken(ctx context.Context, tokenStr string) (campaignID, userID string, err error) {
 	tok, err := s.repo.FindFeedToken(ctx, tokenStr)
 	if err != nil {

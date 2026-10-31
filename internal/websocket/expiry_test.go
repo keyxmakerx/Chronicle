@@ -22,7 +22,7 @@ func TestBroadcast_SkipsExpiredClient(t *testing.T) {
 	liveConn := dialTestClient(t, srv, "camp-1", "u-live", "browser")
 	waitForClientCount(t, h, "camp-1", 2)
 
-	h.Broadcast(NewMessage(MsgMarkerCreated, "camp-1", "r-1", nil))
+	h.Broadcast(publicMessage(MsgMarkerCreated, "camp-1", "r-1", nil))
 
 	if _, arrived, err := readOneMessage(expiredConn, 300*time.Millisecond); arrived || err != nil {
 		t.Errorf("expired client received a broadcast: arrived=%v err=%v", arrived, err)

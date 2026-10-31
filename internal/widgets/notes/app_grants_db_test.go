@@ -32,6 +32,12 @@ func TestDB_AppGrantRoundTrip(t *testing.T) {
 		t.Fatalf("last use was not recorded: %+v", again.LastUsedAt)
 	}
 
+	if l, err := svc.ListForUser(ctx, users["ana"]); err != nil || len(l) != 1 || l[0].ID != g.ID {
+		t.Fatalf("ana's account page list: %+v, %v", l, err)
+	}
+	if l, _ := svc.ListForUser(ctx, users["ben"]); len(l) != 0 {
+		t.Fatalf("ben's account page lists ana's grant: %+v", l)
+	}
 	if l, _ := svc.List(ctx, campaignID, users["ben"]); len(l) != 0 {
 		t.Fatalf("ben sees ana's grants: %+v", l)
 	}

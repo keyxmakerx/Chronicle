@@ -6,23 +6,78 @@ package crafting
 // play it; the forge's and the kitchen's steps arrive with their benches.
 
 // Tag is a crafting tag on an Armory item: what kind of material it is.
+// Picture and Tint are the kind's picture: the default here, the campaign's
+// own choice once Library fills it in. Group places it in the editor's menu.
 type Tag struct {
+	Key     string `json:"key"`
+	Label   string `json:"label"`
+	Group   string `json:"group"`
+	Picture string `json:"picture"`
+	Tint    string `json:"tint"`
+	// DefaultPicture and DefaultTint are what the kind ships with, so the
+	// editor can offer to put a changed kind back.
+	DefaultPicture string `json:"defaultPicture,omitempty"`
+	DefaultTint    string `json:"defaultTint,omitempty"`
+}
+
+// Tags are the material kinds a recipe can ask for. An item's first tag in
+// this order picks its picture, so new kinds are appended, never inserted,
+// and a key is never renamed: recipes and drop lists store it.
+var Tags = []Tag{
+	{Key: "metal", Label: "Metal", Group: "earth", Picture: "ingot", Tint: "#8d939c"},
+	{Key: "remnant_part", Label: "Remnant part", Group: "magic", Picture: "shard", Tint: "#6d45c4"},
+	{Key: "body_part", Label: "Body part", Group: "creature", Picture: "heart", Tint: "#b3263a"},
+	{Key: "bone", Label: "Bone", Group: "creature", Picture: "bone", Tint: "#e3d6b8"},
+	{Key: "hide", Label: "Hide", Group: "creature", Picture: "hide", Tint: "#9a6a3e"},
+	{Key: "liquid", Label: "Liquid", Group: "made", Picture: "flask", Tint: "#8fbbe0"},
+	{Key: "herb", Label: "Herb", Group: "grown", Picture: "leaf", Tint: "#6a9c3a"},
+	{Key: "magic_item", Label: "Magic item", Group: "magic", Picture: "ring", Tint: "#7fd6d2"},
+	{Key: "magic_essence", Label: "Magic essence", Group: "magic", Picture: "drop", Tint: "#a77cf0"},
+	{Key: "fungus", Label: "Fungus", Group: "grown", Picture: "mushroom", Tint: "#c98a3a"},
+	{Key: "wood", Label: "Wood", Group: "grown", Picture: "log", Tint: "#9a7048"},
+	{Key: "resin", Label: "Resin", Group: "grown", Picture: "amber", Tint: "#d99a2b"},
+	{Key: "scale", Label: "Scale", Group: "creature", Picture: "scale", Tint: "#4f8f6a"},
+	{Key: "feather", Label: "Feather", Group: "creature", Picture: "feather", Tint: "#d9c9a3"},
+	{Key: "venom", Label: "Venom", Group: "creature", Picture: "fang", Tint: "#7cc242"},
+	{Key: "gem", Label: "Gem", Group: "earth", Picture: "gem", Tint: "#4fb3c9"},
+	{Key: "stone", Label: "Stone", Group: "earth", Picture: "stone", Tint: "#8f8a80"},
+	{Key: "powder", Label: "Powder", Group: "earth", Picture: "powder", Tint: "#e9e2d0"},
+	{Key: "cloth", Label: "Cloth", Group: "made", Picture: "cloth", Tint: "#c0504d"},
+	{Key: "paper", Label: "Paper", Group: "made", Picture: "scroll", Tint: "#b08a5a"},
+}
+
+// TagGroups name the groups of the editor's kind menu, in its order.
+var TagGroups = []Choice{
+	{"grown", "Grown"}, {"creature", "From creatures"}, {"earth", "From the earth"}, {"made", "Made"}, {"magic", "Magic"},
+}
+
+// Picture is one drawing in the material picture library, named for what
+// it shows, never for a material. The drawings live in
+// static/js/widgets/craft_pictures.js under the same keys.
+type Picture struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
 }
 
-// Tags are the material kinds a recipe can ask for, in the order the editor
-// shows them.
-var Tags = []Tag{
-	{"metal", "Metal"},
-	{"remnant_part", "Remnant part"},
-	{"body_part", "Body part"},
-	{"bone", "Bone"},
-	{"hide", "Hide"},
-	{"liquid", "Liquid"},
-	{"herb", "Herb"},
-	{"magic_item", "Magic item"},
-	{"magic_essence", "Magic essence"},
+// Pictures is every picture a kind or an item may wear, in the picker's order.
+var Pictures = []Picture{
+	{"leaf", "Leaf"}, {"sprig", "Sprig"}, {"flower", "Flower"}, {"root", "Root"}, {"moss", "Moss clump"}, {"mushroom", "Mushroom"},
+	{"seeds", "Seed pouch"}, {"flask", "Flask"}, {"vial", "Corked vial"}, {"potion", "Round bottle"}, {"jar", "Jar"}, {"drop", "Drop"},
+	{"fang", "Fang and drop"}, {"amber", "Amber lump"}, {"candle", "Wax candle"}, {"ingot", "Ingot"}, {"ore", "Ore"}, {"coin", "Coins"},
+	{"gem", "Cut gem"}, {"crystals", "Crystal cluster"}, {"stone", "Stone"}, {"rune", "Rune stone"}, {"powder", "Powder in a dish"},
+	{"salt", "Salt crystals"}, {"log", "Log"}, {"plank", "Planks"}, {"cloth", "Folded cloth"}, {"spool", "Spool of thread"},
+	{"hide", "Hide"}, {"scale", "Scales"}, {"shell", "Shell"}, {"feather", "Feather"}, {"bone", "Bone"}, {"skull", "Skull"},
+	{"claw", "Claw"}, {"horn", "Horn"}, {"heart", "Heart"}, {"eye", "Eye"}, {"tentacle", "Tentacles"}, {"shard", "Shard"}, {"orb", "Orb"}, {"ring", "Ring"},
+	{"ember", "Ember"}, {"scroll", "Scroll"}, {"ink", "Ink and quill"}, {"bundle", "Wrapped bundle"},
+}
+
+func pictureKnown(k string) bool {
+	for _, p := range Pictures {
+		if p.Key == k {
+			return true
+		}
+	}
+	return false
 }
 
 // Tool is one tool a bench has and a step uses.
@@ -69,10 +124,10 @@ type StepKind struct {
 // the moment".
 var StepKinds = []StepKind{
 	{Key: "add", Name: "Add", Blurb: "Put an ingredient in", Item: true, Into: []string{"mortar", "flask"}},
-	{Key: "grind", Name: "Grind", Blurb: "Circle the pestle", Tool: "mortar", Accepts: []string{"herb", "bone", "body_part", "remnant_part"},
+	{Key: "grind", Name: "Grind", Blurb: "Circle the pestle", Tool: "mortar", Accepts: []string{"herb", "bone", "body_part", "remnant_part", "fungus", "scale", "gem"},
 		Option: &StepOption{Key: "turns", Label: "turns", Choices: []int{2, 3, 5}, Min: 1, Max: 8, Default: 3}},
 	{Key: "tip", Name: "Tip into the flask", Blurb: "Drag the mortar over", Tool: "mortar"},
-	{Key: "pour", Name: "Pour to the line", Blurb: "Stop at the gold line", Tool: "flask", Graded: true, Item: true, Accepts: []string{"liquid", "magic_essence"}},
+	{Key: "pour", Name: "Pour to the line", Blurb: "Stop at the gold line", Tool: "flask", Graded: true, Item: true, Accepts: []string{"liquid", "magic_essence", "venom", "resin"}},
 	{Key: "simmer", Name: "Keep it steady", Blurb: "Hold the heat in its band", Tool: "burner", Graded: true,
 		Option: &StepOption{Key: "secs", Label: "", Choices: []int{5, 10}, Words: []string{"Short", "Long"}, Min: 2, Max: 20, Default: 5}},
 	{Key: "strike", Name: "Catch the moment", Blurb: "Press on the gold", Graded: true,

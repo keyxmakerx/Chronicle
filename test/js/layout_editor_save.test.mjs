@@ -1,7 +1,7 @@
 // layout_editor_save.test.mjs — pins that the shared layout editor (campaign
 // dashboard, category dashboard, entity page template) always issues a PUT to
 // its endpoint on Save, including when its layout is null (a fresh/empty
-// surface), which previously no-op'd silently.
+// surface); a skipped PUT would lose the save silently.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

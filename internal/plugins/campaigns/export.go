@@ -207,11 +207,14 @@ type ExportCalendarData struct {
 	// Cycles/Festivals/Weather are additive sub-resources, the same
 	// "restored config the GM set, not silently reset to nothing" case as
 	// the settings above.
-	Cycles          []ExportCalendarCycle    `json:"cycles,omitempty"`
-	Festivals       []ExportCalendarFestival `json:"festivals,omitempty"`
-	Weather         *ExportCalendarWeather   `json:"weather,omitempty"`
-	EventCategories []ExportEventCategory    `json:"event_categories,omitempty"`
-	Events          []ExportCalendarEvent    `json:"events,omitempty"`
+	Cycles    []ExportCalendarCycle    `json:"cycles,omitempty"`
+	Festivals []ExportCalendarFestival `json:"festivals,omitempty"`
+	Weather   *ExportCalendarWeather   `json:"weather,omitempty"`
+	// WeatherDays are the day-by-day readings, painted or generated, with
+	// their locks. Additive.
+	WeatherDays     []ExportCalendarWeatherDay `json:"weather_days,omitempty"`
+	EventCategories []ExportEventCategory      `json:"event_categories,omitempty"`
+	Events          []ExportCalendarEvent      `json:"events,omitempty"`
 	// AdditionalCalendars are the campaign's non-default calendars. They live
 	// under the primary rather than as a second envelope key so a file
 	// written by this version still reads in an importer that only knows the
@@ -238,13 +241,9 @@ type ExportCalendarWeekday struct {
 
 // ExportCalendarMoon is a moon definition for export.
 //
-// HiddenFromPlayers is an additive field (V5, #778): dropping it on export
-// would mean an imported campaign always shows a previously GM-only moon to
-// players, quietly reversing a secrecy choice the Director made — the same
-// class of mistake CLAUDE.md's partial-update warning names ("a rename push
-// once bound is_private=false and published a hidden character"). It is a
-// *bool, not bool, so a backup taken before this field existed (which omits
-// the key entirely) can be told apart from one that explicitly recorded
+// HiddenFromPlayers must be exported: dropping it would make an imported
+// campaign show a GM-only moon to players. It is a *bool, not bool, so a
+// backup that omits the key can be told apart from one that explicitly recorded
 // "visible": the exporter always writes a non-nil true/false, and a nil read
 // back on import means "unknown, from an old backup" — see
 // calendarImportAdapter.ImportCalendar, which fails that case closed
@@ -271,6 +270,22 @@ type ExportCalendarMoon struct {
 	// restored page on import, the way an era's is. Additive: an older
 	// backup has none.
 	LoreEntitySlug *string `json:"lore_entity_slug,omitempty"`
+	// PhaseMode is "manual" for a moon set by hand, with the Director's
+	// StateNames and Marks; empty (an older backup, or a cycling moon)
+	// restores it following its cycle. Additive.
+	PhaseMode  string                   `json:"phase_mode,omitempty"`
+	StateNames map[string]string        `json:"state_names,omitempty"`
+	Marks      []ExportCalendarMoonMark `json:"marks,omitempty"`
+}
+
+// ExportCalendarMoonMark is one day a hand-set moon was set to a state, and
+// whether players see the change.
+type ExportCalendarMoonMark struct {
+	Year  int    `json:"year"`
+	Month int    `json:"month"`
+	Day   int    `json:"day"`
+	State string `json:"state"`
+	Shown bool   `json:"shown"`
 }
 
 // ExportCalendarSeason is a season definition for export.
@@ -289,11 +304,8 @@ type ExportCalendarSeason struct {
 
 // ExportCalendarEra is an era definition for export.
 //
-// StartMonth/StartDay/EndMonth/EndDay are additive fields (V5, calendar-v5
-// seams, #778): the calendar plugin's Era became day-granular under V5 (see
-// calendar.Era), but this struct predates that and originally carried only
-// year boundaries. A backup written before this change (or by any importer
-// that doesn't know these fields) omits them, which unmarshals as zero —
+// StartMonth/StartDay/EndMonth/EndDay make the era day-granular (see
+// calendar.Era). A backup (or importer) that omits them unmarshals as zero —
 // calendarImportAdapter treats a zero StartMonth/StartDay as "day-level
 // precision unknown" and defaults to month 1 day 1 of the year (and month 12
 // day 31 of EndYear when set), the same "whole year" reading
@@ -398,6 +410,18 @@ type ExportCalendarWeather struct {
 	Description            *string  `json:"description,omitempty"`
 }
 
+// ExportCalendarWeatherDay is one day's weather reading: Month is the
+// month's position in the calendar's order, Source "manual" (painted) or
+// "generated".
+type ExportCalendarWeatherDay struct {
+	Year   int    `json:"year"`
+	Month  int    `json:"month"`
+	Day    int    `json:"day"`
+	Source string `json:"source"`
+	Locked bool   `json:"locked,omitempty"`
+	ExportCalendarWeather
+}
+
 // ExportEventCategory is an event category definition for export.
 //
 // DefaultAnnounced carries a category whose events are meant to be knowable
@@ -469,6 +493,32 @@ type ExportCalendarEvent struct {
 	Ref            string                        `json:"ref,omitempty"`
 	RecurrenceRule json.RawMessage               `json:"recurrence_rule,omitempty"`
 	Overrides      []ExportCalendarEventOverride `json:"overrides,omitempty"`
+	// Roll is the event's dice or table roll and its stored nights.
+	// Additive.
+	Roll *ExportCalendarEventRoll `json:"roll,omitempty"`
+}
+
+// ExportCalendarEventRoll is an event's roll. Config is the calendar
+// plugin's roll settings as stored, carried raw like RecurrenceRule;
+// TableName names a table roll's table, which the import finds by name.
+type ExportCalendarEventRoll struct {
+	Config    json.RawMessage           `json:"config"`
+	TableName string                    `json:"table_name,omitempty"`
+	Nights    []ExportCalendarRollNight `json:"nights,omitempty"`
+}
+
+// ExportCalendarRollNight is one night's stored result. Told is absent when
+// the night follows its result's own "tell players".
+type ExportCalendarRollNight struct {
+	Year   int    `json:"year"`
+	Month  int    `json:"month"`
+	Day    int    `json:"day"`
+	Total  *int   `json:"total,omitempty"`
+	Faces  []int  `json:"faces,omitempty"`
+	Entry  string `json:"entry,omitempty"`
+	Source string `json:"source"`
+	Locked bool   `json:"locked,omitempty"`
+	Told   *bool  `json:"told,omitempty"`
 }
 
 // ExportCalendarEventOverride is one skipped or moved occurrence of a
@@ -628,6 +678,10 @@ type ExportMarker struct {
 	Color       string  `json:"color"`
 	EntitySlug  *string `json:"entity_slug,omitempty"`
 	Visibility  string  `json:"visibility"`
+	// VisibilityRules is the pin's per-player allow/deny list, as stored
+	// (user ids). An import keeps it only when every id names a user of the
+	// target site; otherwise the pin becomes Director-only.
+	VisibilityRules *string `json:"visibility_rules,omitempty"`
 	// LinkedMapRef is the Ref of the exported map this marker opens.
 	LinkedMapRef *string `json:"linked_map_ref,omitempty"`
 }

@@ -142,6 +142,9 @@ type MapService interface {
 	// fog or a shadow withholds. With a fog lookup wired and this one not, the
 	// media guard refuses every campaign file rather than serve one under the fog.
 	SetPictureFileLookup(l PictureFileLookup)
+	// SetMediaVerifier wires the check that a map's background is a picture of
+	// the map's own campaign. Unwired, a background can't be set at all.
+	SetMediaVerifier(v MediaVerifier)
 }
 
 // PictureFileLookup reports whether a file is a picture on a map whose image the
@@ -178,6 +181,7 @@ type mapService struct {
 	hexFog         HexFogLookup
 	pictureFiles   PictureFileLookup
 	images         MediaImageSource
+	media          MediaVerifier
 	imageCacheDir  string
 	pictureCache   *pictureStatusCache
 }
@@ -229,6 +233,26 @@ func (s *mapService) SetShadowLookup(l ShadowLookup) {
 func (s *mapService) SetHexFogLookup(l HexFogLookup) {
 	s.hexFog = l
 	s.pictureCache.invalidate("")
+}
+
+// SetMediaVerifier implements MapService.
+func (s *mapService) SetMediaVerifier(v MediaVerifier) { s.media = v }
+
+// verifyBackground refuses a background that is not a picture of the map's
+// campaign: the map page signs a media link for whatever id is stored, so a
+// foreign id would hand that file to every viewer of the map.
+func (s *mapService) verifyBackground(ctx context.Context, campaignID, mediaID string) error {
+	if s.media == nil {
+		return apperror.NewInternal(errImageWiring)
+	}
+	ok, err := s.media.ImageInCampaign(ctx, mediaID, campaignID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return apperror.NewBadRequest("image must be a picture from this campaign's media")
+	}
+	return nil
 }
 
 // SetPictureFileLookup implements MapService.
@@ -306,6 +330,11 @@ func (s *mapService) CreateMap(ctx context.Context, input CreateMapInput) (*Map,
 	if input.CampaignID == "" {
 		return nil, apperror.NewValidation("campaign ID is required")
 	}
+	if input.ImageID != nil && *input.ImageID != "" {
+		if err := s.verifyBackground(ctx, input.CampaignID, *input.ImageID); err != nil {
+			return nil, err
+		}
+	}
 
 	m := &Map{
 		ID:          generateID(),
@@ -358,6 +387,13 @@ func (s *mapService) UpdateMap(ctx context.Context, id string, input UpdateMapIn
 	// can change anything.
 	m.Name = input.Name
 	m.Description = input.Description.Ptr(m.Description)
+	// Only a changed background needs the media lookup; re-sending the stored
+	// id keeps working even if the file was since removed.
+	if id, ok := input.ImageID.Get(); ok && id != "" && (m.ImageID == nil || *m.ImageID != id) {
+		if err := s.verifyBackground(ctx, m.CampaignID, id); err != nil {
+			return err
+		}
+	}
 	m.ImageID = input.ImageID.Ptr(m.ImageID)
 	m.ImageWidth = input.ImageWidth.Val(m.ImageWidth)
 	m.ImageHeight = input.ImageHeight.Val(m.ImageHeight)

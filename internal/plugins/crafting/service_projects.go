@@ -15,23 +15,27 @@ import (
 
 // ProjectDeps are what projects and spoils need beyond recipes: where they
 // are kept, the Armory, the campaign's pages, the hero's sheet, the
-// calendar, and who hears of a respite. Store and Armory are required for
-// projects, Spoils, Armory and Pages for spoils; Sheets, Days and Respite
-// may be nil (no characteristic is added, no calendar rule is on, no
-// Homebrew rule runs). Roll and Now are for tests.
+// calendar, who hears of a respite and the roll log. Store and Armory are
+// required for projects, Spoils, Armory and Pages for spoils; Sheets, Days,
+// Respite and Rolls may be nil (no characteristic is added, no calendar rule
+// is on, no Homebrew rule runs, no roll reaches the log). Roll and Now are
+// for tests.
 type ProjectDeps struct {
 	Store  ProjectStore
 	Armory Armory
 	Spoils SpoilStore
 	Pages  Pages
 	Sheets Sheets
+	Tables Tables
 	Days   Days
 	// Calendar names the default calendar as the viewer sees it, which
 	// decides whether today's date may reach the block.
 	Calendar CalendarSource
 	Respite  RespiteHook
-	Roll     func(n int) int
-	Now      func() time.Time
+	// Rolls, when set, adds each project roll to the campaign's roll log.
+	Rolls RollLog
+	Roll  func(n int) int
+	Now   func() time.Time
 }
 
 func (s *service) projectsReady() error {
@@ -164,7 +168,7 @@ func statLabel(key string, rules systems.CraftingRules) string {
 func (s *service) view(p Project, hero string, recipe *Recipe, day *Day, rules systems.CraftingRules, names map[string]string, director bool) ProjectView {
 	pv := ProjectView{ID: p.ID, CharacterID: p.CharacterID, Hero: hero, RecipeID: p.RecipeID, Name: p.RecipeName,
 		Roll: rollWords(p.Stat, rules), Goal: p.Goal, Points: p.Points, RollsReady: p.RollsReady, Status: p.Status,
-		Makes: makesText(p.ResultQty, p.ResultItemID, names), StartedAt: p.StartedAt, FinishedAt: p.FinishedAt, Version: p.Version}
+		Makes: makesText(p.ResultQty, p.ResultItemID, names), Came: p.Details.Made, StartedAt: p.StartedAt, FinishedAt: p.FinishedAt, Version: p.Version}
 	if director {
 		pv.Took = p.Took
 		pv.Undelivered = p.Status == ProjectMade && !p.Delivered
@@ -211,8 +215,13 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 	if err != nil {
 		return nil, errInternal(err)
 	}
+	book, err := s.pictureBook(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
 	for i := range pack.Items {
 		pack.Items[i].Tags = knownTags(tags[pack.Items[i].ItemID])
+		pack.Items[i].Picture = book.item(pack.Items[i].ItemID, pack.Items[i].Tags)
 	}
 	names, err := s.itemNames(ctx, campaignID, v)
 	if err != nil {
@@ -269,10 +278,18 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 		cr := CraftRecipe{ID: r.ID, Name: r.Name, Template: r.Template, Kind: templateName(r.Template), Bench: r.Bench, Needs: []CraftNeed{},
 			Steps: r.Steps, Colors: r.Colors, Goal: r.Goal, Stat: r.Stat, Roll: rollWords(r.Stat, rules), MakesQty: r.Result.Qty,
 			Lines: bookPage(r, names, rules).Lines}
-		for _, m := range r.Materials {
+		for i, m := range r.Materials {
 			n := CraftNeed{ItemID: m.ItemID, Tag: m.Tag, Qty: m.Qty, Name: materialName(m, names)}
 			if m.ItemID != "" {
 				n.Tags = knownTags(tags[m.ItemID])
+				for _, sub := range r.Extras.Substitutes {
+					if sub.For == i {
+						n.Sub = &CraftSub{Tag: sub.Use, Name: materialName(Material{Tag: sub.Use}, names), Costs: sub.Costs}
+					}
+				}
+				n.Picture = book.item(m.ItemID, n.Tags)
+			} else {
+				n.Picture = book.kind(m.Tag)
 			}
 			cr.Needs = append(cr.Needs, n)
 		}
@@ -369,7 +386,7 @@ func (s *service) StartProject(ctx context.Context, campaignID, characterID stri
 	if n >= maxActiveProjects {
 		return nil, errInvalid(fmt.Sprintf("%s already has %d projects in progress; finish or cancel one first", e.Name, maxActiveProjects))
 	}
-	items, err := s.materialsFor(ctx, campaignID, e, r, in.Picks, v)
+	items, subs, err := s.materialsFor(ctx, campaignID, e, r, in.Picks, v)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +403,7 @@ func (s *service) StartProject(ctx context.Context, campaignID, characterID stri
 	}
 	p := Project{ID: s.newID(), CampaignID: campaignID, CharacterID: e.ID, RecipeID: r.ID, RecipeName: r.Name, Goal: r.Goal, Stat: r.Stat,
 		ResultItemID: r.Result.ItemID, ResultQty: r.Result.Qty, Status: ProjectActive, Took: clipText(strings.Join(took, ", "), maxTookLen),
-		StartedBy: v.UserID, StartedAt: s.now()}
+		StartedBy: v.UserID, StartedAt: s.now(), Details: ProjectDetails{Subs: subs}}
 	if err := s.projects.Store.CreateProject(ctx, p); err != nil {
 		slog.Error("crafting: MATERIALS TAKEN BUT THE PROJECT WAS NOT SAVED",
 			slog.String("campaign_id", campaignID), slog.String("character_id", e.ID), slog.String("recipe_id", r.ID),
@@ -403,37 +420,52 @@ func (s *service) StartProject(ctx context.Context, campaignID, characterID stri
 
 // materialsFor turns a recipe's materials into Armory items: a named item
 // as it is, an "any <tag>" slot filled with the item the player picked,
-// which must carry the tag and be in the hero's pack. Repeated items are
-// added up by the Armory, which then checks the hero holds enough.
-func (s *service) materialsFor(ctx context.Context, campaignID string, e *EntityInfo, r *Recipe, picks map[int]string, v Viewer) ([]PackItem, error) {
+// which must carry the tag and be in the hero's pack. A named item the
+// recipe lets a substitute stand in for is filled the same way when the
+// player picks one, and the substitute's cost is returned for every roll
+// ("bane" or "points"). Repeated items are added up by the Armory, which
+// then checks the hero holds enough.
+func (s *service) materialsFor(ctx context.Context, campaignID string, e *EntityInfo, r *Recipe, picks map[int]string, v Viewer) ([]PackItem, []string, error) {
 	var (
 		out  []PackItem
+		subs []string
 		pack *Pack
 		tags map[string][]string
 	)
 	for i, m := range r.Materials {
-		if m.ItemID != "" {
+		tag := m.Tag
+		if m.ItemID != "" && strings.TrimSpace(picks[i]) != "" {
+			for _, sub := range r.Extras.Substitutes {
+				if sub.For == i {
+					tag = sub.Use
+					if sub.Costs != "none" {
+						subs = append(subs, sub.Costs)
+					}
+				}
+			}
+		}
+		if m.ItemID != "" && tag == "" {
 			it, err := s.dir.Entity(ctx, campaignID, m.ItemID)
 			if err != nil {
-				return nil, errInternal(err)
+				return nil, nil, errInternal(err)
 			}
 			if it == nil || !it.IsItem {
-				return nil, errInvalid(r.Name + " asks for an item that was deleted; ask the Director to fix the recipe")
+				return nil, nil, errInvalid(r.Name + " asks for an item that was deleted; ask the Director to fix the recipe")
 			}
 			out = append(out, PackItem{ItemID: it.ID, Name: it.Name, Qty: m.Qty})
 			continue
 		}
 		pick := strings.TrimSpace(picks[i])
 		if pick == "" {
-			return nil, errInvalid("pick which " + tagLabel(m.Tag) + " to use")
+			return nil, nil, errInvalid("pick which " + tagLabel(tag) + " to use")
 		}
 		if pack == nil {
 			var err error
 			if pack, err = s.projects.Armory.Pack(ctx, campaignID, v, e.ID); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if tags, err = s.repo.ListTags(ctx, campaignID); err != nil {
-				return nil, errInternal(err)
+				return nil, nil, errInternal(err)
 			}
 		}
 		var held *PackItem
@@ -442,12 +474,12 @@ func (s *service) materialsFor(ctx context.Context, campaignID string, e *Entity
 				held = &pack.Items[j]
 			}
 		}
-		if held == nil || !hasTag(tags[pick], m.Tag) {
-			return nil, errInvalid(fmt.Sprintf("pick a %s %s carries", tagLabel(m.Tag), e.Name))
+		if held == nil || !hasTag(tags[pick], tag) {
+			return nil, nil, errInvalid(fmt.Sprintf("pick a %s %s carries", tagLabel(tag), e.Name))
 		}
 		out = append(out, PackItem{ItemID: pick, Name: held.Name, Qty: m.Qty})
 	}
-	return out, nil
+	return out, subs, nil
 }
 
 func hasTag(tags []string, tag string) bool {
@@ -532,28 +564,41 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 			return nil, err
 		}
 	}
-	if in.Work == WorkSkipped && !set.Skip && !v.Director && benchable {
+	var x Extras
+	if recipe != nil {
+		x = recipe.Extras
+	}
+	mastered := s.mastered(ctx, campaignID, p, x)
+	// A hero who has mastered a recipe that rewards mastery with skipping
+	// may skip the bench steps whatever the Director asks.
+	skipEarned := mastered && x.Mastery.Gives == "skip"
+	if in.Work == WorkSkipped && !set.Skip && !v.Director && benchable && !skipEarned {
 		return nil, errInvalid("your Director asks for the steps to be worked at the bench")
 	}
-	bench := ""
+	w := &Worked{}
+	var benchRules []Rule
 	if in.Bench != "" {
 		if b, ok, err := s.repo.GetBench(ctx, campaignID, in.Bench); err != nil {
 			return nil, errInternal(err)
 		} else if ok {
-			bench = b.Name
+			w.Bench = b.Name
+			benchRules = b.Upgrades.Rules()
 		}
 	}
+	w.Skills = s.skills(ctx, campaignID, e.ID)
+	// The bench's upgrades work on every recipe made there, beside its own.
 	var ruleList []Rule
 	if recipe != nil {
-		ruleList = recipe.Rules
+		ruleList = append(ruleList, recipe.Rules...)
 	}
+	ruleList = append(ruleList, benchRules...)
 	day := s.today(ctx, campaignID)
-	if why := hold(day, ruleList, &bench, v.Director); why != "" {
+	if why := hold(day, ruleList, w, v.Director); why != "" {
 		return nil, errConflictMsg(why + " The roll waits for another day.")
 	}
 	sys, _ := s.systemRules(ctx, campaignID)
 	res := &RollResult{From: p.Points, Terms: []Term{}, Notes: []string{}, Dice: []int{}}
-	fx := effects(day, ruleList, &bench, s.roll)
+	fx := effects(day, ruleList, w, s.roll)
 	for _, f := range fx {
 		if f.rule.Then.Kind == "cannot" {
 			res.Spoiled = true
@@ -563,7 +608,7 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	}
 	extra := 0
 	if !res.Spoiled {
-		extra = s.addUp(ctx, campaignID, e, p, in.Work, set, sys, fx, v, res)
+		extra = s.addUp(ctx, campaignID, e, p, in.Work, set, sys, fx, x, mastered, v, res)
 		if in.Work == WorkSkipped && !benchable {
 			res.Notes[0] = "There are no steps to work, so it was a plain roll."
 		}
@@ -577,10 +622,17 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	}
 
 	next := p
+	next.Details.Made = append([]string(nil), p.Details.Made...)
+	if becomes := s.befall(ctx, campaignID, &next, fx, x, in.Work, set, res, v); becomes != "" {
+		next.ResultItemID = becomes
+	}
 	next.Points, next.RollsReady = res.To, p.RollsReady-1
-	if res.Finished {
-		now := s.now()
+	now := s.now()
+	switch {
+	case res.Finished:
 		next.Status, next.RollsReady, next.FinishedAt = ProjectMade, 0, &now
+	case res.Lost:
+		next.Status, next.RollsReady, next.FinishedAt = ProjectCancelled, 0, &now
 	}
 	ok, err := s.projects.Store.UpdateProject(ctx, next, p.Version)
 	if err != nil {
@@ -591,9 +643,10 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	}
 	next.Version = p.Version + 1
 	terms, _ := json.Marshal(res.Terms)
-	if err := s.projects.Store.AddRoll(ctx, campaignID, p.ID, v.UserID, diceText(res.Dice), string(terms), res.Total, res.From, res.To); err != nil {
+	if err := s.projects.Store.AddRoll(ctx, campaignID, p.ID, v.UserID, in.Work, diceText(res.Dice), string(terms), res.Total, res.From, res.To); err != nil {
 		slog.Error("crafting: a roll was made but not recorded", slog.String("project_id", p.ID), slog.Any("error", err))
 	}
+	s.discover(ctx, campaignID, e, fx, v, res)
 	names, err := s.itemNames(ctx, campaignID, v)
 	if err != nil {
 		return nil, err
@@ -601,13 +654,19 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	if res.Finished {
 		s.deliver(ctx, e, &next, extra, names, v, res)
 	}
+	if s.projects.Rolls != nil && len(res.Dice) > 0 {
+		s.projects.Rolls.ProjectRolled(ctx, campaignID, v, ProjectRoll{
+			Hero: e.Name, Recipe: p.RecipeName, Sides: res.Sides, Dice: res.Dice, Total: res.Total,
+			From: res.From, To: res.To, Goal: p.Goal, Finished: res.Finished,
+		})
+	}
 	res.Project = s.view(next, e.Name, recipe, day, sys, names, v.Director)
 	return res, nil
 }
 
 // addUp rolls the dice and adds every term to res, returning how many more
 // of the item a rule makes if this roll finishes the project.
-func (s *service) addUp(ctx context.Context, campaignID string, e *EntityInfo, p Project, work string, set Settings, sys systems.CraftingRules, fx []fired, v Viewer, res *RollResult) int {
+func (s *service) addUp(ctx context.Context, campaignID string, e *EntityInfo, p Project, work string, set Settings, sys systems.CraftingRules, fx []fired, x Extras, mastered bool, v Viewer, res *RollResult) int {
 	count, size, ok := systems.ParseDice(sys.Dice)
 	if !ok {
 		count, size = 2, 10
@@ -620,6 +679,18 @@ func (s *service) addUp(ctx context.Context, campaignID string, e *EntityInfo, p
 	}
 	res.Sides = size
 	res.Terms = append(res.Terms, Term{Text: fmt.Sprintf("%dd%d", count, size), N: sum})
+	// A breakthrough is the dice's top two totals, a natural 19 or 20 on
+	// 2d10: roll them again and add it.
+	if x.Breakthrough && sum >= count*size-1 {
+		again := 0
+		for i := 0; i < count; i++ {
+			d := s.roll(size)
+			res.Dice = append(res.Dice, d)
+			again += d
+		}
+		res.Breakthrough = true
+		res.Terms = append(res.Terms, Term{Text: fmt.Sprintf("A breakthrough: %dd%d again", count, size), N: again})
+	}
 	if p.Stat != "" {
 		label := statLabel(p.Stat, sys)
 		if n := s.sheetStat(ctx, campaignID, e.ID, p.Stat); n != nil {
@@ -642,6 +713,22 @@ func (s *service) addUp(ctx context.Context, campaignID string, e *EntityInfo, p
 	}
 	extra := 0
 	var points []Term
+	if mastered {
+		switch x.Mastery.Gives {
+		case "edge":
+			edges = append(edges, "mastery")
+		case "points":
+			points = append(points, Term{Text: "Mastery", N: 2})
+		}
+	}
+	for _, c := range p.Details.Subs {
+		switch c {
+		case "bane":
+			banes = append(banes, "a substitute ingredient")
+		case "points":
+			points = append(points, Term{Text: "A substitute ingredient", N: -2})
+		}
+	}
 	for _, f := range fx {
 		words := ruleWords(f.rule, v.Director)
 		switch f.rule.Then.Kind {

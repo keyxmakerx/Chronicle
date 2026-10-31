@@ -381,6 +381,11 @@ type Entity struct {
 
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`
+
+	// searchFields, when set, is the field values Create indexes for search,
+	// already without the ones only some readers may see; unset, Create
+	// indexes no field values.
+	searchFields map[string]any
 }
 
 // IsOwnedBy reports whether userID is this entity's claimed owner (used to

@@ -401,7 +401,7 @@ test('Best times counts a window only up to a game night’s length', () => {
   const v = freeView(def);
   const eve = [18, 22], day = [9, 17];
   // Mon Oct 5: everyone free all working day. Sat Oct 10 and 17: everyone
-  // free for the evening, every week. The long Monday used to win on length.
+  // free for the evening, every week. The long Monday must not win on length alone.
   fileMonth(v, {
     '2026-10-05': { ana: day, bo: day, cy: day },
     '2026-10-12': { ana: day, bo: day },

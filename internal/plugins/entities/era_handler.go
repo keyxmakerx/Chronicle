@@ -21,7 +21,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // eraTarget is the page and era an era route acts on, already checked.
@@ -241,11 +240,11 @@ func (h *Handler) GetEraEntryAPI(c echo.Context) error {
 	if v.Entry != nil {
 		stored, storedHTML = v.Entry, v.EntryHTML
 	}
-	entry, entryHTML := stripEntryFor(t.cc, stored, storedHTML)
+	entry, entryHTML, hidden := h.servedText(c, t.cc, stored, storedHTML)
 	resp := map[string]any{"entry": entry, "entry_html": entryHTML}
 	if t.cc.MemberRole >= campaigns.RoleScribe {
 		resp["rev"] = v.EntryRev
-		if textLocked(t.cc, stored, storedHTML) {
+		if hidden {
 			resp["locked"] = true
 		}
 	}
@@ -273,7 +272,7 @@ func (h *Handler) UpdateEraEntryAPI(c echo.Context) error {
 	if v.Entry != nil {
 		stored, storedHTML = v.Entry, v.EntryHTML
 	}
-	if textLocked(t.cc, stored, storedHTML) {
+	if h.textLocked(c, t.cc, stored, storedHTML) {
 		return apperror.NewForbidden(entryLockedMessage)
 	}
 	var body struct {
@@ -289,11 +288,13 @@ func (h *Handler) UpdateEraEntryAPI(c echo.Context) error {
 		return err
 	}
 	if clash != nil {
+		// The newer text goes back to this writer, so it is served like a read.
+		theirs, theirsHTML, _ := h.servedText(c, t.cc, clash.Entry, clash.EntryHTML)
 		return c.JSON(http.StatusConflict, map[string]any{
 			"error":      "edit_conflict",
 			"rev":        clash.Rev,
-			"entry":      clash.Entry,
-			"entry_html": clash.EntryHTML,
+			"entry":      theirs,
+			"entry_html": theirsHTML,
 			"by_name":    h.memberName(c, t.cc.Campaign.ID, clash.ByUserID),
 			"at":         clash.At,
 		})
@@ -411,23 +412,6 @@ func (h *Handler) UpdateEraFieldsAPI(c echo.Context) error {
 	}
 	h.logAudit(c, t.cc.Campaign.ID, audit.ActionEntityUpdated, t.entity.ID, t.entity.Name)
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// stripEntryFor removes GM-only text for everyone but the owner and Co-DMs,
-// as the usual entry route does.
-func stripEntryFor(cc *campaigns.CampaignContext, entry, entryHTML *string) (*string, *string) {
-	if cc.CanAuthorDmOnly() {
-		return entry, entryHTML
-	}
-	if entry != nil {
-		s := sanitize.StripSecretsJSON(*entry)
-		entry = &s
-	}
-	if entryHTML != nil {
-		s := sanitize.StripSecretsHTML(*entryHTML)
-		entryHTML = &s
-	}
-	return entry, entryHTML
 }
 
 // memberName is a member's display name for a clash message, or "" when it

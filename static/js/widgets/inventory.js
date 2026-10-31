@@ -124,6 +124,8 @@ Chronicle.register('inventory', {
 
     function renderItem(item) {
       var meta = parseMetadata(item.metadata);
+      // Keep the parsed copy on the item, so a change survives the redraw.
+      item.metadata = meta;
       var row = document.createElement('div');
       row.className = 'inv-item';
 
@@ -167,8 +169,9 @@ Chronicle.register('inventory', {
         qtyInput.min = 1;
         qtyInput.title = 'Quantity';
         qtyInput.addEventListener('change', function () {
+          var prev = copyMeta(meta);
           meta.quantity = parseInt(qtyInput.value) || 1;
-          updateMetadata(item.id, meta);
+          updateMetadata(item, prev);
         });
         controls.appendChild(qtyInput);
       } else {
@@ -186,8 +189,9 @@ Chronicle.register('inventory', {
       eqBtn.title = meta.equipped ? 'Click to unequip' : 'Click to equip';
       if (editable) {
         eqBtn.addEventListener('click', function () {
+          var prev = copyMeta(meta);
           meta.equipped = !meta.equipped;
-          updateMetadata(item.id, meta);
+          updateMetadata(item, prev);
           render();
         });
       } else {
@@ -202,8 +206,9 @@ Chronicle.register('inventory', {
         attBtn.textContent = meta.attuned ? 'Attuned' : 'Not Attuned';
         if (editable) {
           attBtn.addEventListener('click', function () {
+            var prev = copyMeta(meta);
             meta.attuned = !meta.attuned;
-            updateMetadata(item.id, meta);
+            updateMetadata(item, prev);
             render();
           });
         } else {
@@ -340,14 +345,26 @@ Chronicle.register('inventory', {
         });
     }
 
-    function updateMetadata(relationId, meta) {
-      Chronicle.apiFetch(relationsEndpoint + '/' + relationId + '/metadata', {
+    // updateMetadata saves the item's changed metadata. The change is drawn
+    // straight away, so a refused save puts back prev and says so.
+    function updateMetadata(item, prev) {
+      Chronicle.apiFetch(relationsEndpoint + '/' + item.id + '/metadata', {
         method: 'PUT',
-        body: { metadata: JSON.stringify(meta) },
+        body: { metadata: JSON.stringify(item.metadata) },
       })
+        .then(function (res) {
+          if (!res.ok) throw new Error('The server answered ' + res.status);
+        })
         .catch(function (err) {
           console.error('Inventory: Failed to update metadata', err);
+          item.metadata = prev;
+          render();
+          Chronicle.notify('Could not save the change to ' + (item.targetEntityName || 'this item') + '. It is back as it was.', 'error');
         });
+    }
+
+    function copyMeta(meta) {
+      return JSON.parse(JSON.stringify(meta));
     }
 
     // --- Helpers ---

@@ -49,7 +49,7 @@ func (a *trashAuth) ValidateSession(_ context.Context, token string) (*auth.Sess
 	return &auth.Session{UserID: token, IsAdmin: token == a.adminID}, nil
 }
 
-func (a *trashAuth) IsReauthValid(context.Context, string) (bool, error) { return a.reauth, nil }
+func (a *trashAuth) IsReauthValid(context.Context, string, string) (bool, error) { return a.reauth, nil }
 
 type trashFinder struct{ items []admin.OrphanedMediaItem }
 

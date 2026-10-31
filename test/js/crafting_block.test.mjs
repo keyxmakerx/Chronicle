@@ -74,15 +74,43 @@ test('a roll lists the dice as rolled and every other term signed', () => {
   assert.deepEqual(plain(rows).map((r) => r.n), ['13', '+2', '−2', '0']);
 });
 
+test('a named material with a substitute can be stood in for', () => {
+  const r = recipe({ needs: [{ itemId: 'water', name: 'Spring water', qty: 1, sub: { tag: 'herb', name: 'any herb', costs: 'bane' } }] });
+  assert.deepEqual(plain(B.standIns(pack([moss, leaf]), r, r.needs[0])), [{ id: 'moss', name: 'Bloodmoss', qty: 2 }, { id: 'leaf', name: 'Silverleaf', qty: 1 }]);
+  // No spring water, but an herb in its place: nothing blocks it.
+  assert.deepEqual(plain(B.blockers(r, pack([leaf]), 'Mira')), []);
+  assert.equal(B.blockers(r, pack([water].map((w) => ({ ...w, qty: 0 }))), 'Mira')[0], 'Needs 1 × Spring water. Mira has none.');
+  // A material never stands in for itself.
+  const self = recipe({ needs: [{ itemId: 'moss', name: 'Bloodmoss', qty: 1, sub: { tag: 'herb', name: 'any herb', costs: 'none' } }] });
+  assert.deepEqual(plain(B.standIns(pack([moss]), self, self.needs[0])), []);
+});
+
+test('what befell the work is said beside the roll, escaped', () => {
+  const cases = [
+    { name: 'nothing', r: {}, want: [] },
+    { name: 'a breakthrough', r: { breakthrough: true }, want: [/A breakthrough\./] },
+    { name: 'a mishap', r: { mishap: { table: 'M', row: 1, text: 'The <flask> cracks' } }, want: [/A mishap mid-brew:<\/b> The &lt;flask&gt; cracks/] },
+    { name: 'lost ingredients', r: { lost: true }, want: [/ruined the ingredients\.<\/b> Mira has to start Salve again/] },
+    { name: 'what it came out as, once made', r: { finished: true, project: { came: ['Fine', 'Marked: moonlit'] } }, want: [/It came out: Fine · Marked: moonlit/] },
+    { name: 'not before it is made', r: { project: { came: ['Fine'] } }, want: [] },
+  ];
+  for (const c of cases) {
+    const h = B.befell(c.r, 'Salve', 'Mira');
+    if (!c.want.length) assert.equal(h, '', c.name);
+    for (const w of c.want) assert.match(h, w, c.name);
+  }
+});
+
 test('a known recipe becomes the bench engine’s recipe', () => {
   const r = { name: 'Caustic flask', kind: 'Volatile brew', roll: '2d10 + Reason', statValue: 2, goal: 20, colors: { final: '#a6ff3d' },
-    needs: [{ itemId: 'salt-1', name: 'Saltglass', qty: 1, tags: ['magic_item'] }, { tag: 'herb', name: 'any herb', qty: 1 }],
+    needs: [{ itemId: 'salt-1', name: 'Saltglass', qty: 1, tags: ['magic_item'], picture: { picture: 'crystals', tint: '#9fe3e0' } },
+      { tag: 'herb', name: 'any herb', qty: 1, picture: { picture: 'leaf', tint: '#6a9c3a' } }],
     steps: [{ t: 'add', material: 1, to: 'mortar' }, { t: 'grind', turns: 2 }, { t: 'add', material: 0, to: 'flask' }, { t: 'strike', n: 2 }] };
   const got = plain(L.benchRecipe(r, 'Mira', 9));
   assert.deepEqual(Object.keys(got.items), ['isalt1', 'therb']);
   assert.equal(got.items.therb.name, 'Any herb');
-  assert.equal(got.items.therb.color, L.TAG_COLOR.herb);
-  assert.equal(got.items.isalt1.color, L.TAG_COLOR.magic_item);
+  assert.deepEqual([got.items.therb.picture, got.items.therb.color], ['leaf', '#6a9c3a']);
+  assert.deepEqual([got.items.isalt1.picture, got.items.isalt1.color], ['crystals', '#9fe3e0']);
   assert.deepEqual(got.recipe.steps, [{ t: 'add', item: 'therb', to: 'mortar' }, { t: 'grind', turns: 2 }, { t: 'add', item: 'isalt1', to: 'flask' }, { t: 'strike', n: 2 }]);
   assert.equal(got.recipe.stat, 'Reason');
   assert.equal(got.recipe.mod, 2);

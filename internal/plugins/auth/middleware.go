@@ -268,7 +268,7 @@ func RequireReauth(service AuthService) echo.MiddlewareFunc {
 				return handleUnauthenticated(c)
 			}
 
-			valid, err := service.IsReauthValid(c.Request().Context(), session.UserID)
+			valid, err := service.IsReauthValid(c.Request().Context(), session.UserID, getSessionToken(c))
 			if err != nil {
 				return err
 			}

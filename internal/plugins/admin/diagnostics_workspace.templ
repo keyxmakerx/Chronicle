@@ -136,7 +136,7 @@ templ DiagnosticsWorkspacePage(data DiagnosticsWorkspaceData) {
 						hx-target="#dw-review"
 						hx-swap="innerHTML"
 					>
-						<i class="fa-solid fa-list-check mr-1"></i> Parse &amp; review
+						<i class="fa-solid fa-list-check"></i> Parse &amp; review
 					</button>
 					<a href="/admin/diagnostics" target="_blank" class="text-xs text-fg-muted hover:text-accent">
 						<i class="fa-solid fa-code mr-1"></i> Raw catalog (markdown) <i class="fa-solid fa-arrow-up-right-from-square text-[8px]"></i>
@@ -252,7 +252,7 @@ templ DiagnosticsBatchReview(data DiagnosticsReviewData) {
 						hx-swap="innerHTML"
 						hx-indicator="#dw-running"
 					>
-						<i class="fa-solid fa-play mr-1"></i> Approve &amp; run { fmt.Sprintf("%d", data.Plan.RunnableN) } call(s)
+						<i class="fa-solid fa-play"></i> Approve &amp; run { fmt.Sprintf("%d", data.Plan.RunnableN) } call(s)
 					</button>
 					<span id="dw-running" class="htmx-indicator text-xs text-fg-muted">
 						<i class="fa-solid fa-spinner fa-spin mr-1"></i> running…

@@ -59,6 +59,23 @@ func (r *fakeGrantRepo) ListLive(_ context.Context, campaignID, userID string) (
 	return out, nil
 }
 
+func (r *fakeGrantRepo) ListLiveForUser(_ context.Context, userID string) ([]AppGrant, error) {
+	var out []AppGrant
+	for _, g := range r.byHash {
+		if g.UserID == userID && g.RevokedAt == nil {
+			out = append(out, *g)
+		}
+	}
+	for i := 0; i < len(out); i++ {
+		for j := i + 1; j < len(out); j++ {
+			if out[j].CreatedAt.After(out[i].CreatedAt) {
+				out[i], out[j] = out[j], out[i]
+			}
+		}
+	}
+	return out, nil
+}
+
 func (r *fakeGrantRepo) Revoke(_ context.Context, id string, at time.Time) error {
 	for _, g := range r.byHash {
 		if g.ID == id && g.RevokedAt == nil {
@@ -88,6 +105,21 @@ func (r *fakeGrantRepo) RevokeAllForUser(_ context.Context, userID string, at ti
 		}
 	}
 	return nil
+}
+
+func (r *fakeGrantRepo) DeleteDead(_ context.Context, idleBefore time.Time) (int64, error) {
+	var n int64
+	for h, g := range r.byHash {
+		last := g.CreatedAt
+		if g.LastUsedAt != nil && g.LastUsedAt.After(last) {
+			last = *g.LastUsedAt
+		}
+		if g.RevokedAt != nil || last.Before(idleBefore) {
+			delete(r.byHash, h)
+			n++
+		}
+	}
+	return n, nil
 }
 
 func newTestGrantService(now *time.Time) (*appGrantService, *fakeGrantRepo) {
@@ -614,5 +646,70 @@ func TestAppGrant_CapEvictionClosesOpenSockets(t *testing.T) {
 	}
 	if strings.Join(rec.calls, ",") != "notes:camp:user" {
 		t.Fatalf("socket drops %v after a grant was evicted", rec.calls)
+	}
+}
+
+// PruneDead deletes exactly the grants that can no longer authenticate: the
+// revoked ones and the ones idle past the limit, never a live one.
+func TestAppGrantPruneDead(t *testing.T) {
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	svc, repo := newTestGrantService(&now)
+	ctx := context.Background()
+	recent := now.Add(-time.Hour)
+	revokedAt := now.Add(-time.Minute)
+	repo.byHash["live"] = &AppGrant{ID: "live", CreatedAt: now.Add(-200 * 24 * time.Hour), LastUsedAt: &recent}
+	repo.byHash["fresh"] = &AppGrant{ID: "fresh", CreatedAt: now.Add(-24 * time.Hour)}
+	repo.byHash["revoked"] = &AppGrant{ID: "revoked", CreatedAt: now.Add(-time.Hour), RevokedAt: &revokedAt}
+	repo.byHash["idle"] = &AppGrant{ID: "idle", CreatedAt: now.Add(-91 * 24 * time.Hour)}
+
+	n, err := svc.PruneDead(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("deleted %d, want 2", n)
+	}
+	for _, id := range []string{"live", "fresh"} {
+		if repo.byHash[id] == nil {
+			t.Errorf("live grant %s was deleted", id)
+		}
+		if !repo.byHash[id].usable(now) {
+			t.Errorf("kept grant %s isn't usable, so the limits disagree", id)
+		}
+	}
+}
+
+// The account page lists a player's grants from every campaign and ends one
+// by its ID alone; another player's grant is out of reach.
+func TestAppGrant_ForUserAcrossCampaigns(t *testing.T) {
+	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	svc, _ := newTestGrantService(&now)
+	ctx := context.Background()
+	here, gHere, _ := svc.Issue(ctx, "camp", "user", "https://foundry.example")
+	now = now.Add(time.Minute)
+	_, gThere, _ := svc.Issue(ctx, "other-camp", "user", "https://foundry.example")
+	theirs, gTheirs, _ := svc.Issue(ctx, "camp", "someone-else", "https://foundry.example")
+
+	list, err := svc.ListForUser(ctx, "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 || list[0].ID != gThere.ID || list[1].ID != gHere.ID {
+		t.Fatalf("listed %+v, want the user's two grants, newest first", list)
+	}
+	if err := svc.RevokeForUser(ctx, "user", gTheirs.ID); err == nil {
+		t.Fatal("a player ended another player's grant")
+	}
+	if _, err := svc.Authenticate(ctx, theirs); err != nil {
+		t.Fatalf("another player's grant stopped working: %v", err)
+	}
+	if err := svc.RevokeForUser(ctx, "user", gHere.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Authenticate(ctx, here); err == nil {
+		t.Fatal("a disconnected grant still authenticates")
+	}
+	if list, _ := svc.ListForUser(ctx, "user"); len(list) != 1 {
+		t.Errorf("after disconnecting one, %d listed, want 1", len(list))
 	}
 }

@@ -674,6 +674,9 @@ func (s *ExportImportService) Validate(data *CampaignExport) error {
 	if data.Campaign.Name == "" {
 		return apperror.NewBadRequest("campaign name is required")
 	}
+	if len(data.Media) > maxImportMediaFiles {
+		return apperror.NewBadRequest(fmt.Sprintf("the export lists more than %d media files", maxImportMediaFiles))
+	}
 
 	// Check for duplicate entity type slugs.
 	typeSlugs := make(map[string]bool)

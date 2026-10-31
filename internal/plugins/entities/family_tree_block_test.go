@@ -2,6 +2,7 @@ package entities
 
 import (
 	"context"
+	"html"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -56,7 +57,8 @@ func TestFamilyBlockRendersOnlyWhatTheViewerMayHave(t *testing.T) {
 				// the count is the Director's own, larger, tree
 				tt.contains = append(tt.contains, familyCountLabel(tree))
 			}
-			out := renderFamily(t, tree, tt.dm)
+			// Unescaped, so the JSON in data-json reads as it does in the browser.
+			out := html.UnescapeString(renderFamily(t, tree, tt.dm))
 			for _, w := range tt.contains {
 				if !strings.Contains(out, w) {
 					t.Errorf("block lacks %q", w)

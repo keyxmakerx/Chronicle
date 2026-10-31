@@ -97,7 +97,12 @@ var tools = []tool{
 		Desc: "What a character carries.",
 		Args: []arg{{Key: "character", Desc: "The character's page name", Required: true}}},
 	{Name: "crafting", Title: "Crafting", Did: "Looked at crafting", What: "crafting",
-		Desc: "What crafting keeps in this campaign: each item's look (how it shows its magic when used, and the page it was made from, such as a Remnant). It also says which parts of crafting are not stored in Chronicle yet (recipes, materials, harvesting, benches), so don't guess at those."},
+		Desc: "The campaign's crafting: the game system's crafting rules, every recipe, every material (with the pages that drop it and the recipes that use it), every page's drop list, what waits in the spoils tray, heroes' projects and the benches. " +
+			"Give part to get recipes, materials or drop lists written as blocks you can send back changed, or looks for each item's look (how it shows its magic when used). A connection that sees what players see reads only the recipe book.",
+		Args: []arg{
+			{Key: "part", Desc: "recipes, materials, drops or looks: that part, written as blocks"},
+			{Key: "name", Desc: "One recipe, material or page with a drop list"},
+		}},
 	{Name: "my_notes", Title: "My notes", Did: "Listed your notes", What: "notes",
 		Desc: "The campaign owner's Journal notes, page jots and Player Notes on pages, and the ones other members shared with them, game night entries among them: titles, folders, pages, nights, who wrote each and who it is shared with. Use read_note for one note's text."},
 	{Name: "read_note", Title: "Read a note", Did: "Read a note", What: "note",

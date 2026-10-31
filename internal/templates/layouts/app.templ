@@ -401,9 +401,6 @@ templ adminNavRow(it AdminNavItem, makeRoom bool) {
 	</a>
 }
 
-// CampaignSidebarNav is no longer used — its content has been inlined into
-// the zone-based Sidebar() layout for proper drill-down isolation.
-
 // DefaultSidebarNav renders generic navigation when not inside a campaign.
 templ DefaultSidebarNav() {
 	// A guest is fenced to one campaign, so none of these lead anywhere for
@@ -963,6 +960,24 @@ templ Topbar() {
 				</button>
 			}
 
+			if InCampaign(ctx) && IsAuthenticated(ctx) && !InSiteAdmin(ctx) && GetCampaignRole(ctx) >= 1 {
+				<!-- The Table tab: the roll log, the dice and the roll notice.
+				     The table widget (rolls plugin) builds the drawer on first
+				     open and listens for rolls on the campaign's socket. -->
+				<div
+					class="tt-host"
+					data-widget="table"
+					data-campaign-id={ GetCampaignID(ctx) }
+					data-user-id={ GetUserID(ctx) }
+					data-director={ fmt.Sprint(GetCampaignRole(ctx) >= 3 || IsDmGranted(ctx)) }
+					data-gm-term={ GMTerm(ctx) }
+					data-css={ AssetURL("/static/plugins/rolls/css/table.css") }
+				>
+					<button type="button" class="tt-tab" data-tt-tab aria-expanded="false" aria-controls="tt-drawer" title="The table: rolls and dice (T)">
+						Table<span class="tt-n" data-tt-count hidden></span>
+					</button>
+				</div>
+			}
 			if IsAuthenticated(ctx) {
 				<!-- Notification bell. Server-rendered button + badge;
 				     the badge count refreshes via an HTMX poll, the dropdown is

@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -110,11 +111,46 @@ type Handler struct {
 	// A miss or error falls through to computing the decision fresh — the
 	// cache can only make ADR-058's access check slower, never laxer.
 	cache *redis.Client
+	// refusalFloor is the earliest a "not found" from Serve or ServeThumbnail
+	// may be answered, timed from the request's start; see holdRefusal.
+	refusalFloor time.Duration
 }
+
+// mediaRefusalFloor is well above the slowest refusal (a lookup that finds
+// a file, then the page-visibility queries that refuse it), so every refusal
+// leaves at the same moment.
+const mediaRefusalFloor = 50 * time.Millisecond
 
 // NewHandler creates a new media handler.
 func NewHandler(service MediaService) *Handler {
-	return &Handler{service: service}
+	return &Handler{service: service, refusalFloor: mediaRefusalFloor}
+}
+
+// holdRefusal answers a "not found" no sooner than refusalFloor after start.
+// A refusal of a real file runs the access checks a missing id skips, so
+// without the hold its response time would tell a caller that a guessed id
+// names a real file. Anything else is answered at once.
+func (h *Handler) holdRefusal(c echo.Context, start time.Time, err error) error {
+	if err == nil || h.refusalFloor <= 0 || !isNotFound(err) {
+		return err
+	}
+	wait := time.NewTimer(time.Until(start.Add(h.refusalFloor)))
+	defer wait.Stop()
+	select {
+	case <-wait.C:
+	case <-c.Request().Context().Done():
+	}
+	return err
+}
+
+// isNotFound is true for a domain 404 and for echo's own, which c.File
+// returns when a file's row exists but its bytes are gone.
+func isNotFound(err error) bool {
+	if apperror.SafeCode(err) == http.StatusNotFound {
+		return true
+	}
+	var he *echo.HTTPError
+	return errors.As(err, &he) && he.Code == http.StatusNotFound
 }
 
 // SetURLSigner sets the HMAC URL signer for signed URL generation and
@@ -272,15 +308,8 @@ func (h *Handler) Upload(c echo.Context) error {
 		NoMerge:      ownPicture,
 	}
 
-	if input.UsageType == "" {
-		input.UsageType = UsageAttachment
-	}
-	// Note pictures come only from the notes upload route, which lets players
-	// in and records nothing a Scribe could browse; page files only from the
-	// page's Files route, which binds them to the page. Taking either type
-	// from a form field here would let anyone mint files outside those rules.
-	if input.UsageType == UsageNoteImage || input.UsageType == UsagePageFile {
-		return apperror.NewBadRequest("unsupported usage type")
+	if input.UsageType, err = ClientUsageType(input.UsageType); err != nil {
+		return err
 	}
 
 	mediaFile, err := h.service.Upload(c.Request().Context(), input)
@@ -346,6 +375,11 @@ func (h *Handler) Upload(c echo.Context) error {
 // (checkMediaAccess denies an anonymous request); a backdrop is fully
 // public.
 func (h *Handler) Serve(c echo.Context) error {
+	start := time.Now()
+	return h.holdRefusal(c, start, h.serve(c))
+}
+
+func (h *Handler) serve(c echo.Context) error {
 	fileID := c.Param("id")
 	fileID = strings.TrimSuffix(fileID, "/")
 
@@ -378,6 +412,11 @@ var allowedThumbSizes = map[string]bool{"300": true, "800": true}
 
 // ServeThumbnail serves a thumbnail of a media file (GET /media/:id/thumb/:size).
 func (h *Handler) ServeThumbnail(c echo.Context) error {
+	start := time.Now()
+	return h.holdRefusal(c, start, h.serveThumbnail(c))
+}
+
+func (h *Handler) serveThumbnail(c echo.Context) error {
 	fileID := c.Param("id")
 	size := c.Param("size")
 
@@ -558,14 +597,10 @@ func (h *Handler) checkBaseMediaAccess(c echo.Context, file *MediaFile, isThumb 
 				// An anonymous, unsigned request against a real private file
 				// must get the same NotFound an unknown id gets (not
 				// Forbidden), or the status code becomes an id-existence
-				// oracle (see existence_oracle_reachability_test.go). An
-				// authenticated non-member still gets Forbidden: that
-				// caller already proved an identity.
-				//
-				// A residual timing side channel remains open (the DB lookup
-				// that found a real file takes measurably longer than a
-				// lookup that found none); this fix only equalizes status,
-				// body and headers.
+				// oracle (see existence_oracle_reachability_test.go); Serve's
+				// holdRefusal evens out the time. An authenticated
+				// non-member still gets Forbidden: that caller already
+				// proved an identity.
 				if file.CampaignIsPublic != nil && !*file.CampaignIsPublic && auth.GetUserID(c) == "" {
 					return apperror.NewNotFound("media file not found")
 				}

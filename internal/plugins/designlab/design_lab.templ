@@ -13,12 +13,9 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // rules editor writes a recipe's "When… then…" rules against a calendar.
 templ SurfaceDemoPage(sky BenchSky) {
 	@layouts.App("Design Lab") {
-		<!-- Sample System consumer: registers the box renderers + mounts the sheet.
-		     Loaded defer; it polls for Chronicle.surface (the frame loads later in
-		     base.templ) before mounting. -->
-		<script src={ layouts.AssetURL("/static/js/widgets/surface_demo.js") } defer></script>
-
-		<div class="max-w-5xl mx-auto space-y-6 p-4">
+		<!-- surface-demo: the sample System consumer (surface_demo.js, loaded on
+		     sight) registers the box renderers and mounts the sheet. -->
+		<div class="max-w-5xl mx-auto space-y-6 p-4" data-widget="surface-demo">
 			<header class="space-y-1.5">
 				<h1 class="text-xl font-bold text-fg">
 					<i class="fa-solid fa-wand-magic-sparkles mr-2 text-accent"></i>Design Lab

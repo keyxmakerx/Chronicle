@@ -135,7 +135,7 @@ func TestHub_NotesGrantSocketGetsNoteEventsOnly(t *testing.T) {
 	frame := registerTestClientAs(t, h, NotesAppSource, "camp", "player", 1, false)
 	browser := registerTestClient(t, h, "camp", "other", 1, false)
 
-	h.Broadcast(NewMessage(MsgEntityUpdated, "camp", "e1", map[string]string{"name": "Harbor"}))
+	h.Broadcast(publicMessage(MsgEntityUpdated, "camp", "e1", map[string]string{"name": "Harbor"}))
 	settleBroadcast()
 	if got := drainOrNil(frame); got != nil {
 		t.Fatalf("notes socket received a non-note event: %s", got)
@@ -144,7 +144,7 @@ func TestHub_NotesGrantSocketGetsNoteEventsOnly(t *testing.T) {
 		t.Fatal("browser socket missed the entity event (test setup broken)")
 	}
 
-	h.Broadcast(NewMessage(MsgNoteUpdated, "camp", "n1", map[string]string{"noteId": "n1"}))
+	h.Broadcast(publicMessage(MsgNoteUpdated, "camp", "n1", map[string]string{"noteId": "n1"}))
 	settleBroadcast()
 	got := drainOrNil(frame)
 	if got == nil {

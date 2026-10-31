@@ -38,12 +38,15 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.DELETE("/crafting/recipes/:rid", h.DeleteRecipe, member)
 
 	cg.PUT("/crafting/materials/:eid", h.SetTags, member)
+	cg.PUT("/crafting/materials/:eid/picture", h.SetItemPicture, member)
+	cg.PUT("/crafting/pictures", h.SetKindPictures, member)
 
 	cg.GET("/crafting/benches", h.ListBenches, member)
 	cg.POST("/crafting/benches", h.CreateBench, member)
 	cg.GET("/crafting/benches/:bid", h.GetBench, member)
 	cg.PUT("/crafting/benches/:bid", h.UpdateBench, member)
 	cg.PUT("/crafting/benches/:bid/look/:skin", h.SaveArrangement, member)
+	cg.PUT("/crafting/benches/:bid/upgrades", h.SaveUpgrades, member)
 	cg.DELETE("/crafting/benches/:bid", h.DeleteBench, member)
 
 	cg.GET("/crafting/characters/:eid", h.Character, member)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ type fakeStore struct {
 	projects map[string]Project
 	order    []string
 	rolls    int
+	works    []string
 	respites []Respite
 }
 
@@ -55,14 +57,29 @@ func (f *fakeStore) UpdateProject(_ context.Context, p Project, expected int) (b
 	if !ok || old.Version != expected {
 		return false, nil
 	}
-	old.Points, old.RollsReady, old.Status, old.Delivered, old.FinishedAt = p.Points, p.RollsReady, p.Status, p.Delivered, p.FinishedAt
+	old.Points, old.RollsReady, old.Status, old.Delivered, old.FinishedAt, old.Details, old.ResultItemID = p.Points, p.RollsReady, p.Status, p.Delivered, p.FinishedAt, p.Details, p.ResultItemID
 	old.Version++
 	f.projects[p.ID] = old
 	return true, nil
 }
-func (f *fakeStore) AddRoll(context.Context, string, string, string, string, string, int, int, int) error {
+func (f *fakeStore) AddRoll(_ context.Context, _, projectID, _, work, _, _ string, _, _, _ int) error {
 	f.rolls++
+	f.works = append(f.works, projectID+":"+work)
 	return nil
+}
+
+// CleanRolls counts every clean roll recorded on a project of the recipe by
+// the character.
+func (f *fakeStore) CleanRolls(_ context.Context, campaignID, characterID, recipeID string) (int, error) {
+	n := 0
+	for _, w := range f.works {
+		id, work, _ := strings.Cut(w, ":")
+		p := f.projects[id]
+		if work == WorkClean && p.CampaignID == campaignID && p.CharacterID == characterID && p.RecipeID == recipeID {
+			n++
+		}
+	}
+	return n, nil
 }
 func (f *fakeStore) LogRespite(_ context.Context, campaignID, _, dayLabel string) (int, error) {
 	n := 0
@@ -151,6 +168,36 @@ type fakeSheets map[string]int
 func (f fakeSheets) Stat(_ context.Context, _, _, key string) (int, bool, error) {
 	n, ok := f[key]
 	return n, ok, nil
+}
+
+// Skills lists every key set to -1 as a skill, so one map holds both.
+func (f fakeSheets) Skills(context.Context, string, string) ([]string, bool, error) {
+	var out []string
+	for k, v := range f {
+		if v == -1 {
+			out = append(out, k)
+		}
+	}
+	return out, len(out) > 0, nil
+}
+
+// fakeTables is the campaign's Rolling Tables by name, every row weight 1.
+type fakeTables map[string][]string
+
+func (f fakeTables) All(context.Context, string) ([]CatalogTable, error) {
+	out := []CatalogTable{}
+	for k, rows := range f {
+		out = append(out, CatalogTable{Name: k, Rows: rows})
+	}
+	return out, nil
+}
+func (f fakeTables) Rows(_ context.Context, _, name string) ([]TableRow, bool, error) {
+	rows, ok := f[name]
+	out := make([]TableRow, len(rows))
+	for i, r := range rows {
+		out[i] = TableRow{Text: r, Weight: 1}
+	}
+	return out, ok, nil
 }
 
 type fakeDays struct{ day *Day }
@@ -348,6 +395,31 @@ func TestRollProject_AddsUpAndFinishes(t *testing.T) {
 	}
 }
 
+type fakeRollLog struct{ got []ProjectRoll }
+
+func (f *fakeRollLog) ProjectRolled(_ context.Context, _ string, _ Viewer, r ProjectRoll) {
+	f.got = append(f.got, r)
+}
+
+func TestRollProject_ReachesTheRollLog(t *testing.T) {
+	fx := newProjectFx()
+	log := &fakeRollLog{}
+	fx.s.projects.Rolls = log
+	pv := fx.start(t)
+	fx.ready(pv.ID, 1)
+	fx.dice = []int{7, 8}
+	if _, err := fx.roll(t, pv.ID, WorkClean); err != nil {
+		t.Fatal(err)
+	}
+	if len(log.got) != 1 {
+		t.Fatalf("logged %d rolls, want 1", len(log.got))
+	}
+	r := log.got[0]
+	if r.Hero != "Mira" || r.Recipe != "Healing potion" || r.Sides != 10 || len(r.Dice) != 2 || r.Total != 19 || r.To != 19 || r.Goal != 30 || r.Finished {
+		t.Fatalf("logged %+v", r)
+	}
+}
+
 func TestRollProject_Refusals(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -388,7 +460,7 @@ func TestRollProject_Refusals(t *testing.T) {
 			if code(err) != tc.code {
 				t.Fatalf("code = %d (%v), want %d", code(err), err, tc.code)
 			}
-			if fx.store.projects[pv.ID] != before {
+			if !reflect.DeepEqual(fx.store.projects[pv.ID], before) {
 				t.Fatalf("a refused roll changed the project")
 			}
 		})
@@ -632,6 +704,20 @@ func TestCharacter_ShowsWhatEachRecipeTakes(t *testing.T) {
 	r := got.Recipes[0]
 	if r.Charge != 2500 || r.StatValue == nil || *r.StatValue != 2 || r.Makes != "Healing potion" || len(r.Needs) != 2 || r.Needs[1].Tag != "herb" {
 		t.Fatalf("recipe = %+v", r)
+	}
+	if r.Needs[0].Sub != nil {
+		t.Fatalf("a substitute nobody set: %+v", r.Needs[0].Sub)
+	}
+	rec := fx.repo.recipes["heal"]
+	rec.Extras = DefaultExtras()
+	rec.Extras.Substitutes = []Substitute{{For: 0, Use: "liquid", Costs: "points"}}
+	fx.repo.recipes["heal"] = rec
+	again, err := fx.s.Character(context.Background(), "c", "mira", player)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sub := again.Recipes[0].Needs[0].Sub; sub == nil || *sub != (CraftSub{Tag: "liquid", Name: "any liquid", Costs: "points"}) {
+		t.Fatalf("substitute = %+v", sub)
 	}
 	for _, it := range got.Pack.Items {
 		if it.ItemID == "moss" && (len(it.Tags) != 1 || it.Tags[0] != "herb") {

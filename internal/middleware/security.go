@@ -46,6 +46,12 @@ func SecurityHeaders() echo.MiddlewareFunc {
 					"form-action 'self'",
 			)
 
+			// The stricter script rule runs in report-only mode first: nothing
+			// is blocked, and each script the enforcing policy would refuse
+			// is reported to CSPReportPath, so the move to enforcing it can
+			// work from a list instead of a guess.
+			h.Set("Content-Security-Policy-Report-Only", reportOnlyCSP)
+
 			// Cross-Origin-Opener-Policy: isolate the browsing context from
 		// cross-origin popups (mitigates Spectre-class side-channel attacks).
 		// NOTE: Cross-Origin-Resource-Policy is NOT set because external

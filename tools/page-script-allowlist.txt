@@ -5,7 +5,7 @@
 # <main id="main-content">, which every boosted sidebar navigation swaps, and
 # htmx DELETES script tags out of a swapped fragment (allowScriptTags=false).
 # The surface then wires on a direct load and silently does not through the
-# sidebar. New ones are forbidden; these are the survivors.
+# sidebar. New ones are forbidden.
 #
 # FORMAT: `<count> <path>`, one per line, blank lines and #-comments ignored.
 # The count is occurrences of the literal `<script src=`, not lines.
@@ -22,10 +22,5 @@
 #   layouts.SetPluginBodyScripts) lands, and it is the place a page-side script
 #   should MOVE to rather than a place to add one.
 #
-# The sweep of everything below is tracked in issue #616 (C-HTMX-SCRIPT-SWEEP).
-# Each line is a surface that may be silently dead on boosted navigation today;
-# whether it actually is depends on whether the file renders inside
-# #main-content and whether its module re-inits on htmx:afterSettle. Neither is
-# assumed here — this guard stops the bleeding, the sweep does the diagnosis.
-
-1 internal/plugins/designlab/design_lab.templ
+# No page templ has one left: a page's scripts load on sight from its widget
+# mount (ADR-063) or from the plugin body-script registry. Keep it empty.

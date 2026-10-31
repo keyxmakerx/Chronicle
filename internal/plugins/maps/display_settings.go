@@ -133,6 +133,15 @@ type DisplaySettings struct {
 	// document an owner or a member with DM access may write it
 	// (MapService.SetMeasureScale), so it is its own group.
 	Measure *MeasureDisplay `json:"measure,omitempty"`
+	// Picture records the owner's answer to the empty map's "no picture yet"
+	// prompt, so a map drawn from nothing stops asking on every device.
+	Picture *PictureDisplay `json:"picture,omitempty"`
+}
+
+// PictureDisplay is the owner's choice to keep a map without a picture. Only
+// true is stored; false is the default.
+type PictureDisplay struct {
+	Blank bool `json:"blank,omitempty"`
 }
 
 // FrameDisplay overrides the campaign frame for one map. An empty Style means
@@ -229,7 +238,7 @@ func IsValidMeasureUnit(u string) bool { return oneOf(u, MeasureUnits...) }
 
 // displayGroups is the closed set of top-level keys; anything else in an
 // incoming document is dropped.
-var displayGroups = []string{"frame", "pins", "kinds", "grid", "open", "draw", "hexes", "measure"}
+var displayGroups = []string{"frame", "pins", "kinds", "grid", "open", "draw", "hexes", "measure", "picture"}
 
 func oneOf(v string, allowed ...string) bool {
 	for _, a := range allowed {
@@ -506,6 +515,17 @@ func normalizeMeasure(raw json.RawMessage) (*MeasureDisplay, error) {
 	return &MeasureDisplay{A: *in.A, B: *in.B, Length: l, Unit: in.Unit}, nil
 }
 
+func normalizePicture(raw json.RawMessage) (*PictureDisplay, error) {
+	var p PictureDisplay
+	if err := decodeGroup("picture", raw, &p); err != nil {
+		return nil, err
+	}
+	if !p.Blank {
+		return nil, nil
+	}
+	return &p, nil
+}
+
 // applyGroup validates one incoming group and writes it into ds, or removes it
 // when the group normalises to nothing (every field default). raw is never the
 // literal null here: the caller handles an explicit null as "clear this group".
@@ -528,6 +548,8 @@ func applyGroup(ds *DisplaySettings, name string, raw json.RawMessage) error {
 		ds.Hexes, err = normalizeHexes(raw)
 	case "measure":
 		ds.Measure, err = normalizeMeasure(raw)
+	case "picture":
+		ds.Picture, err = normalizePicture(raw)
 	}
 	return err
 }
@@ -550,13 +572,16 @@ func clearGroup(ds *DisplaySettings, name string) {
 		ds.Hexes = nil
 	case "measure":
 		ds.Measure = nil
+	case "picture":
+		ds.Picture = nil
 	}
 }
 
 // IsEmpty reports whether no group is set, i.e. the stored value should be NULL.
 func (d *DisplaySettings) IsEmpty() bool {
 	return d == nil || (d.Frame == nil && d.Pins == nil && d.Kinds == nil &&
-		d.Grid == nil && d.Open == nil && d.Draw == nil && d.Hexes == nil && d.Measure == nil)
+		d.Grid == nil && d.Open == nil && d.Draw == nil && d.Hexes == nil && d.Measure == nil &&
+		d.Picture == nil)
 }
 
 // MergeDisplaySettings applies an incoming display_settings document to the
@@ -708,6 +733,9 @@ type ResolvedDisplay struct {
 	// Measure is the map's scale, or null while nobody has set one. It is not
 	// secret: everyone who can see the map measures with it.
 	Measure *MeasureDisplay `json:"measure"`
+	// KeepBlank is true once the owner answered the "no picture yet" prompt
+	// with Not now, so the page never shows it again for this map.
+	KeepBlank bool `json:"keep_blank"`
 }
 
 // ResolveDisplay fills every default for a map. campaignFrame is the
@@ -785,5 +813,6 @@ func ResolveDisplay(m *Map, campaignFrame string) ResolvedDisplay {
 		ms := *d.Measure
 		r.Measure = &ms
 	}
+	r.KeepBlank = d.Picture != nil && d.Picture.Blank
 	return r
 }

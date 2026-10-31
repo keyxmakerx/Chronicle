@@ -1,0 +1,159 @@
+// page_pins.templ draws the campaign home's Pinned Pages widget and the pin
+// beside a page's name that the Director uses to pin it for everyone.
+//
+// The widget is loaded into the home by dashPinnedPages (campaigns plugin)
+// with hx-get, so the campaigns plugin never reads pages itself.
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// PinnedPagesWidget is the widget's body. The Director's pins come first as
+// cards, then the viewer's own as rows. With nothing to show, the Director is
+// told how to fill it and everyone else sees nothing.
+templ PinnedPagesWidget(cc *campaigns.CampaignContext, p PinnedPages, director bool) {
+	<section id="pinned-pages" class="cb-pins" data-pinned-pages aria-label="Pinned pages">
+		if p.Empty() {
+			if director {
+				<div class="rounded-xl border border-dashed border-edge px-4 py-3 text-sm text-fg-secondary">
+					<p class="font-medium text-fg">Nothing pinned yet</p>
+					<p class="mt-1 text-xs">
+						if p.SharedAvailable {
+							Use the pin beside a page's name to pin it here for everyone. Anyone can star a page to pin it here just for themselves.
+						} else {
+							Star a page by its name to pin it here for yourself. Each member sees the pages they starred.
+						}
+					</p>
+				</div>
+			}
+		} else {
+			if len(p.Shared) > 0 {
+				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">From the { layouts.GMTerm(ctx) }</h2>
+				<div class="cb-rows grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+					for i := range p.Shared {
+						@pinnedSharedCard(cc, &p.Shared[i], director)
+					}
+				</div>
+			}
+			if len(p.Own) > 0 {
+				<h2
+					class={ "cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-2", templ.KV("mt-5", len(p.Shared) > 0) }
+				>Your pins</h2>
+				<ul class="cb-pin-list">
+					for i := range p.Own {
+						@pinnedOwnRow(cc, &p.Own[i])
+					}
+				</ul>
+				if p.MoreOwn > 0 {
+					<p class="mt-1 px-2 text-xs text-fg-muted">
+						{ fmt.Sprintf("and %d more under Favorites in the sidebar", p.MoreOwn) }
+					</p>
+				}
+			}
+		}
+	</section>
+}
+
+// pinnedSharedCard is one page the Director pinned for everyone. The Director
+// gets a quiet × to take it off; to everyone else it is a plain link.
+templ pinnedSharedCard(cc *campaigns.CampaignContext, pg *PinnedPage, director bool) {
+	<div class="cb-row card p-0 overflow-hidden relative group" data-pinned-shared={ pg.ID }>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, pg.ID)) } class="cb-link block">
+			if pg.ImagePath != nil && *pg.ImagePath != "" {
+				<div class="cb-band h-20 bg-surface-alt overflow-hidden">
+					<img src={ layouts.MediaURL(ctx, *pg.ImagePath) } alt="" class="w-full h-full object-cover"/>
+				</div>
+			} else {
+				<div class="cb-band h-10 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", pg.TypeColor) }>
+					if pg.TypeIcon != "" {
+						<i class={ "fa-solid " + pg.TypeIcon, "text-sm opacity-30" } style={ fmt.Sprintf("color: %s", pg.TypeColor) } aria-hidden="true"></i>
+					}
+				</div>
+			}
+			<div class="cb-row-body px-3 py-2">
+				<h3 class="cb-row-name text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{ pg.Name }</h3>
+				<p class="cb-row-meta text-[11px] text-fg-muted truncate">{ pg.TypeName } · pinned for all</p>
+			</div>
+		</a>
+		if director {
+			<button
+				type="button"
+				class="absolute top-1 right-1 inline-flex items-center justify-center w-8 h-8 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-alt focus-visible:text-fg"
+				hx-delete={ fmt.Sprintf("/campaigns/%s/pinned-pages/everyone/%s", cc.Campaign.ID, pg.ID) }
+				hx-target="#pinned-pages"
+				hx-swap="outerHTML"
+				aria-label={ "Unpin " + pg.Name + " for everyone" }
+				title="Unpin for everyone"
+			>
+				<i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
+			</button>
+		}
+	</div>
+}
+
+// pinnedOwnRow is one page the viewer starred, with a quiet × that takes the
+// star off.
+templ pinnedOwnRow(cc *campaigns.CampaignContext, pg *PinnedPage) {
+	<li class="cb-row flex items-center gap-2 rounded-lg hover:bg-surface-alt group" data-pinned-own={ pg.ID }>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, pg.ID)) }
+			class="cb-link flex items-center gap-2 min-w-0 flex-1 px-2 py-1.5"
+		>
+			<i class="fa-regular fa-star text-xs text-fg-muted shrink-0" aria-hidden="true"></i>
+			<span class="text-sm text-fg truncate group-hover:text-accent transition-colors">{ pg.Name }</span>
+			<span class="text-xs text-fg-muted truncate shrink-0">{ pg.TypeName }</span>
+		</a>
+		<button
+			type="button"
+			class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-fg-muted hover:text-fg focus-visible:text-fg shrink-0"
+			hx-delete={ fmt.Sprintf("/campaigns/%s/pinned-pages/mine/%s", cc.Campaign.ID, pg.ID) }
+			hx-target="#pinned-pages"
+			hx-swap="outerHTML"
+			aria-label={ "Unpin " + pg.Name }
+			title="Unpin (takes the star off)"
+		>
+			<i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
+		</button>
+	</li>
+}
+
+// pagePinMount loads the Director's pin beside a page's name. Only the
+// Director's team asks for it; the pin's state is read when the page opens,
+// so the page itself needs no extra query.
+templ pagePinMount(cc *campaigns.CampaignContext, entity *Entity) {
+	if cc.CanAuthorDmOnly() {
+		<span
+			hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/pin", cc.Campaign.ID, entity.ID) }
+			hx-trigger="load"
+			hx-swap="outerHTML"
+		></span>
+	}
+}
+
+// PagePinButton is the Director's pin beside a page's name: a quiet icon that
+// pins the page for everyone on the home's Pinned Pages, or takes it off.
+templ PagePinButton(cc *campaigns.CampaignContext, entityID string, pinned bool) {
+	<button
+		type="button"
+		class={ "inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover:bg-surface-alt",
+			templ.KV("text-accent", pinned), templ.KV("text-fg-muted hover:text-fg", !pinned) }
+		hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/pin", cc.Campaign.ID, entityID) }
+		hx-vals={ pinVals(!pinned) }
+		hx-swap="outerHTML"
+		aria-pressed={ fmt.Sprintf("%t", pinned) }
+		aria-label="Pin for everyone on the home page"
+		if pinned {
+			title="Pinned for everyone on the home page. Click to unpin."
+		} else {
+			title="Pin for everyone on the home page"
+		}
+		data-page-pin
+	>
+		<i class="fa-solid fa-thumbtack text-sm" aria-hidden="true"></i>
+	</button>
+}

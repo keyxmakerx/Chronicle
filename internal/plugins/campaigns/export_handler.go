@@ -302,7 +302,11 @@ func extractCampaignJSONFromZip(data []byte) ([]byte, *ImportMediaBundle, error)
 	if jsonBytes == nil {
 		return nil, nil, fmt.Errorf("zip is missing campaign.json at the root; upload a chronicle export")
 	}
-	return jsonBytes, NewImportMediaBundle(r), nil
+	bundle, err := NewImportMediaBundle(r)
+	if err != nil {
+		return nil, nil, err
+	}
+	return jsonBytes, bundle, nil
 }
 
 // sanitizeFilename converts a campaign name to a safe filename component.

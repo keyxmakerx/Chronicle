@@ -97,19 +97,13 @@ type CalendarEventRef struct {
 
 // CalendarEventLinkLister resolves calendar_events details for a timeline's
 // OWN timeline_event_links rows, plus a timeline's calendar_id display name
-// — restoring the two dark spots repository.go's CALV5-PLACEHOLDER comments
-// name (the GetByID calendar-name join, and the event-link read path).
-//
-// This is a DIFFERENT, newly-added interface from CalendarLister/
-// CalendarEventLister/CalendarEraLister above: those three (plus
-// timelineForCalendarAdapter and six others toward the calendar) are their
-// own separate restoration, explicitly deferred past this one — see the
-// CALV5-PLACEHOLDER doc comment on NewTimelineService's call site in
-// app/routes.go. Implemented by a new adapter there,
-// calendarEventLinkListerAdapter, wired through SetCalendarEventLinkLister.
+// — the calendar-name read and the event-link read path, both of which cross
+// the plugin boundary. Implemented by calendarEventLinkListerAdapter in
+// app/routes.go, wired through SetCalendarEventLinkLister; separate from
+// CalendarLister/CalendarEventLister/CalendarEraLister above.
 // Optional: nil (never wired) means no calendar event can be resolved, so a
-// timeline shows standalone events only — degraded, not broken, the same
-// "dark means safe" reasoning the deletion commit used.
+// timeline shows standalone events only — degraded, not broken ("dark means
+// safe").
 type CalendarEventLinkLister interface {
 	// CalendarName returns calendarID's display name in campaignID, or ""
 	// if it doesn't exist OR role may not see it (a dm_only calendar's real
@@ -192,7 +186,11 @@ type TimelineService interface {
 	// Event connections.
 	CreateConnection(ctx context.Context, timelineID string, input CreateConnectionInput) (*EventConnection, error)
 	DeleteConnection(ctx context.Context, timelineID string, connectionID int) error
-	ListConnections(ctx context.Context, timelineID string) ([]EventConnection, error)
+	// ListConnections returns the timeline's connections whose two ends are
+	// both in among, the event list ListTimelineEvents gave the caller's
+	// viewer. There is no unfiltered read: a connection names its ends and
+	// carries a free-text label, so it is only shown alongside both events.
+	ListConnections(ctx context.Context, timelineID string, among []EventLink) ([]EventConnection, error)
 
 	// Search. Takes userID alongside role so the per-user visibility layer
 	// can build the same permissions.Viewer ListTimelines builds — role
@@ -335,7 +333,7 @@ func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string,
 		CampaignID:  campaignID,
 		CalendarID:  calendarID,
 		Name:        input.Name,
-		Description: input.Description,
+		Description: publicDescription(input.Description),
 		Color:       input.Color,
 		Icon:        input.Icon,
 		Visibility:  input.Visibility,
@@ -384,7 +382,7 @@ func (s *timelineService) GetTimelineForViewer(ctx context.Context, timelineID, 
 }
 
 // fillCalendarName sets t.CalendarName from calEventLinkLister — repository
-// reads no longer join the calendar's own `calendars` table for it (plugin
+// reads never join the calendar's own `calendars` table (plugin
 // isolation rule 8). A no-op when the timeline has no bound calendar, or
 // when the lister is unset (never wired): CalendarName then stays "", which
 // every template already renders as "no calendar bound" rather than
@@ -422,14 +420,11 @@ func (s *timelineService) ListTimelines(ctx context.Context, campaignID string, 
 // seams, #778, restores the linked half of that count alongside this filter,
 // per issue #741's own item — see timelineEventLinks/enrichLinkedEvents).
 //
-// This now runs for EVERY viewer, including Owners/co-DMs and system
-// callers: repository.go's List/ListByCalendar can no longer JOIN
-// calendar_events to count linked events in SQL (plugin isolation rule 8 —
-// the calendar's tables are not this plugin's to read), so their SQL count
-// covers standalone events only. Recounting in Go via
-// CalendarEventLinkLister is the only path that can add the linked half back
-// for ANY viewer now, not just the ones already paying for per-user
-// filtering. filterEventLinksByUser is a no-op passthrough for a viewer that
+// This runs for EVERY viewer, including Owners/co-DMs and system callers:
+// the repository's List/ListByCalendar cannot JOIN calendar_events (plugin
+// isolation rule 8 — the calendar's tables are not this plugin's to read),
+// so their SQL count covers standalone events only. Recounting in Go via
+// CalendarEventLinkLister is the only path that adds the linked half back. filterEventLinksByUser is a no-op passthrough for a viewer that
 // SkipsPerUserRules, so this costs those viewers nothing beyond the extra
 // reads themselves.
 func (s *timelineService) recountEventsForViewer(ctx context.Context, timelines []Timeline, v permissions.Viewer) error {
@@ -544,10 +539,10 @@ func (s *timelineService) UpdateTimeline(ctx context.Context, timelineID string,
 	}
 
 	t.Name = name
-	t.Description = input.Description.Ptr(t.Description)
+	t.Description = publicDescription(input.Description.Ptr(t.Description))
 	if input.DescriptionHTML.Present() {
 		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
-			sanitized := sanitize.HTML(v)
+			sanitized := publicHTML(v)
 			t.DescriptionHTML = &sanitized
 		} else {
 			t.DescriptionHTML = nil
@@ -729,11 +724,11 @@ func (s *timelineService) timelineEventLinks(ctx context.Context, timelineID str
 
 // enrichLinkedEvents fills each raw timeline_event_links row's Event* fields
 // (name, dates, category, visibility, entity) from the calendar plugin via
-// calEventLinkLister, since repository.go's ListEventLinks can no longer
-// JOIN calendar_events for them (plugin isolation rule 8). A link whose
+// calEventLinkLister, since the repository's ListEventLinks cannot JOIN
+// calendar_events (plugin isolation rule 8). A link whose
 // event the given role may not see is DROPPED here — never returned with
-// its content blanked — mirroring the deleted `JOIN calendar_events ce ...
-// WHERE ce.visibility = 'everyone'`'s row-level exclusion.
+// its content blanked — the same row-level exclusion a visibility = 'everyone'
+// filter would give.
 //
 // calEventLinkLister == nil (never wired) or a timeline with no bound
 // calendar both degrade to "no linked events resolved" rather than an
@@ -926,7 +921,7 @@ func (s *timelineService) CreateStandaloneEvent(ctx context.Context, timelineID 
 	// Sanitize HTML if provided (rich text descriptions from TipTap editor).
 	var descHTML *string
 	if input.DescriptionHTML != nil && *input.DescriptionHTML != "" {
-		sanitized := sanitize.HTML(*input.DescriptionHTML)
+		sanitized := publicHTML(*input.DescriptionHTML)
 		descHTML = &sanitized
 	}
 
@@ -941,7 +936,7 @@ func (s *timelineService) CreateStandaloneEvent(ctx context.Context, timelineID 
 		TimelineID:      timelineID,
 		EntityID:        input.EntityID,
 		Name:            input.Name,
-		Description:     input.Description,
+		Description:     publicDescription(input.Description),
 		DescriptionHTML: descHTML,
 		Year:            input.Year,
 		Month:           input.Month,
@@ -1025,7 +1020,7 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID,
 	// before.
 	if input.DescriptionHTML.Present() {
 		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
-			sanitized := sanitize.HTML(v)
+			sanitized := publicHTML(v)
 			e.DescriptionHTML = &sanitized
 		} else {
 			e.DescriptionHTML = nil
@@ -1034,7 +1029,7 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID,
 
 	e.EntityID = input.EntityID.Ptr(e.EntityID)
 	e.Name = name
-	e.Description = input.Description.Ptr(e.Description)
+	e.Description = publicDescription(input.Description.Ptr(e.Description))
 	e.Year = input.Year.Val(e.Year)
 	e.Month = input.Month.Val(e.Month)
 	e.Day = input.Day.Val(e.Day)
@@ -1394,17 +1389,21 @@ func (s *timelineService) DeleteConnection(ctx context.Context, timelineID strin
 	return s.repo.DeleteConnection(ctx, connectionID, timelineID)
 }
 
-// ListConnections returns all connections for a timeline.
-func (s *timelineService) ListConnections(ctx context.Context, timelineID string) ([]EventConnection, error) {
-	return s.repo.ListConnections(ctx, timelineID)
+// ListConnections: see the TimelineService interface.
+func (s *timelineService) ListConnections(ctx context.Context, timelineID string, among []EventLink) ([]EventConnection, error) {
+	conns, err := s.repo.ListConnections(ctx, timelineID)
+	if err != nil {
+		return nil, err
+	}
+	return visibleConnections(conns, among), nil
 }
 
-// VisibleConnections keeps only the connections whose two ends are both in
+// visibleConnections keeps only the connections whose two ends are both in
 // events, the list already filtered for this viewer. A connection row carries
 // its ends' ids and a free-text label, so one touching a hidden event would
 // otherwise tell a player the hidden event exists and, through the label,
 // what it is.
-func VisibleConnections(conns []EventConnection, events []EventLink) []EventConnection {
+func visibleConnections(conns []EventConnection, events []EventLink) []EventConnection {
 	seen := make(map[string]bool, len(events))
 	for _, e := range events {
 		seen[e.Source+":"+e.EventID] = true
@@ -1416,4 +1415,22 @@ func VisibleConnections(conns []EventConnection, events []EventLink) []EventConn
 		}
 	}
 	return out
+}
+
+// publicHTML sanitizes a timeline or standalone event description. It is
+// served as stored to everyone who sees its timeline or event (their own
+// visibility is what hides them), so GM-only parts that arrive through the
+// API or an import are dropped.
+func publicHTML(in string) string {
+	return sanitize.StripSecretsHTML(sanitize.HTML(in))
+}
+
+// publicDescription drops GM-only parts from a ProseMirror description, for
+// the same reason as publicHTML. Plain text comes back as it is.
+func publicDescription(desc *string) *string {
+	if desc == nil || !sanitize.HasSecrets(*desc, "") {
+		return desc
+	}
+	s := sanitize.StripSecretsJSON(*desc)
+	return &s
 }

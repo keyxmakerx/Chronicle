@@ -1105,8 +1105,7 @@
    standing in for the mockups' ambient canvas graph (#794). Deliberately
    NOT .gx: .gx is an absolutely-positioned label meant to overlay that
    future canvas and has no flow height of its own — every child of
-   .gframe being position:absolute collapses .gframe to zero height, which
-   is exactly what happened before this rule existed. .gtick is a normal
+   .gframe being position:absolute collapses .gframe to zero height. .gtick is a normal
    flow item instead, so .gframe sizes itself from its content. */
 .cal-v5 .gframe{display:flex;align-items:flex-end;gap:2px;min-height:78px;padding:10px 8px}
 .cal-v5 .gtick{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;flex:none;width:22px;color:var(--gtx2);font:500 10px/1 var(--sans);font-variant-numeric:tabular-nums}

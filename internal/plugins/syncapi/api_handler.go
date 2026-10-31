@@ -56,6 +56,8 @@ type APIHandler struct {
 	shopRoomAddon        string
 	shopBuyer            ShopBuyAPIService
 	dmScreen             DMScreenProvider
+	rolls                RollsProvider
+	rollPlayers          FoundryPlayerRepository
 	folders              FolderLister
 	systemState          SystemStateReader
 	systemStateWriter    SystemStateWriter
@@ -420,6 +422,7 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 	// bar (anyone but the owner and Co-DMs), mirroring the web path and
 	// GetEntity's same check at list scope.
 	stripEntitiesSecretsForEgress(items, role)
+	h.hideEntityMentionsForEgress(c, campaignID, role, userID, entityPtrs(items)...)
 
 	// Strip GM-only and owner-only field VALUES at list scope. Load the
 	// campaign's entity types ONCE (not per-entity) to resolve the markers.
@@ -486,6 +489,7 @@ func (h *APIHandler) GetEntity(c echo.Context) error {
 	// whole-entity CanView gate above lets a player read this entity, but the
 	// secret PROSE inside it must not ship.
 	stripEntitySecretsForEgress(entity, role)
+	h.hideEntityMentionsForEgress(c, entity.CampaignID, role, userID, entity)
 
 	// Strip GM-only and owner-only field VALUES from fields_data for callers
 	// who can't see them. The CanView gate above lets a player read this

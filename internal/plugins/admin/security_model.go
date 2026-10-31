@@ -34,6 +34,9 @@ const (
 	EventGuestJoined            = "guest.joined"
 	EventGuestKept              = "guest.kept"
 	EventGuestMerged            = "guest.merged"
+	EventSessionSignedOut       = "account.session_signed_out"
+	EventSignedOutEverywhere    = "account.signed_out_everywhere"
+	EventAppDisconnected        = "account.app_disconnected"
 )
 
 // SecurityEvent represents a single site-wide security event. Unlike campaign
@@ -93,6 +96,9 @@ func EventTypeLabel(eventType string) string {
 		EventGuestJoined:            "Guest Joined",
 		EventGuestKept:              "Guest Kept Their Account",
 		EventGuestMerged:            "Guest Merged Into an Account",
+		EventSessionSignedOut:       "Signed Out Another Browser",
+		EventSignedOutEverywhere:    "Signed Out Everywhere",
+		EventAppDisconnected:        "Connected App Disconnected",
 	}
 	if label, ok := labels[eventType]; ok {
 		return label
@@ -129,6 +135,9 @@ func EventTypeIcon(eventType string) string {
 		EventGuestJoined:            "fa-solid fa-ticket text-blue-500",
 		EventGuestKept:              "fa-solid fa-user-check text-emerald-500",
 		EventGuestMerged:            "fa-solid fa-code-merge text-emerald-500",
+		EventSessionSignedOut:       "fa-solid fa-right-from-bracket text-amber-500",
+		EventSignedOutEverywhere:    "fa-solid fa-power-off text-amber-500",
+		EventAppDisconnected:        "fa-solid fa-plug-circle-xmark text-amber-500",
 	}
 	if icon, ok := icons[eventType]; ok {
 		return icon

@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"log/slog"
 	"net/http"
 	"strings"
 
@@ -15,11 +14,6 @@ type CORSConfig struct {
 	// Example: ["https://chronicle.yourdomain.com", "http://localhost:3000"]
 	AllowedOrigins []string
 
-	// AllowCredentials indicates whether the browser should include cookies
-	// and auth headers in cross-origin requests. Required for session-based
-	// auth from a different origin (e.g., Foundry VTT module).
-	AllowCredentials bool
-
 	// DynamicOrigins is an optional function that returns additional allowed
 	// origins at runtime. Called per-request to support admin-managed origin
 	// whitelists stored in the database. May return nil.
@@ -30,6 +24,10 @@ type CORSConfig struct {
 // Primarily needed for the REST API (/api/v1/*) when external clients like
 // the Foundry VTT module make requests from a different origin; the web UI
 // is same-origin and doesn't need it.
+//
+// It never allows credentials: outside clients authenticate with a Bearer
+// key, and a page on an allowed origin must not be able to read Chronicle
+// pages, or post to them, with the visitor's session cookie.
 func CORS(cfg CORSConfig) echo.MiddlewareFunc {
 	// Build a set for fast origin lookup of static origins.
 	allowAll := false
@@ -39,14 +37,6 @@ func CORS(cfg CORSConfig) echo.MiddlewareFunc {
 			allowAll = true
 		}
 		staticOrigins[o] = true
-	}
-
-	// SECURITY: Wildcard origin with credentials is a dangerous misconfiguration.
-	// It allows any website to make authenticated requests to the API. Refuse to
-	// send credentials when the origin is a wildcard.
-	if allowAll && cfg.AllowCredentials {
-		slog.Warn("CORS misconfiguration: AllowedOrigins=['*'] with AllowCredentials=true is insecure — credentials will NOT be sent for wildcard origins. Specify explicit origins instead.")
-		cfg.AllowCredentials = false
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -79,10 +69,6 @@ func CORS(cfg CORSConfig) echo.MiddlewareFunc {
 			// Set CORS response headers.
 			res.Header().Set("Access-Control-Allow-Origin", origin)
 			res.Header().Set("Vary", "Origin")
-
-			if cfg.AllowCredentials {
-				res.Header().Set("Access-Control-Allow-Credentials", "true")
-			}
 
 			// Handle preflight OPTIONS requests.
 			if req.Method == http.MethodOptions {

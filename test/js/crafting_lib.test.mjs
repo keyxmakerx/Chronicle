@@ -5,8 +5,10 @@
 // player's book the server builds (one shared fixture, written by
 // internal/plugins/crafting/book_test.go), that the rules editor's cleaner
 // keeps exactly what the server's does (the other shared fixture), and that
-// the editor's checks, templates and saves say and send what they should.
-// Runs the scripts in a vm.
+// the editor's template picker lays a method's steps exactly as the server
+// does for an AI's recipe (a third, from ai_test.go), and that the editor's
+// checks, templates and saves say and send what they should. Runs the
+// scripts in a vm.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -48,6 +50,18 @@ test('the preview reads as the player\'s book the server builds', () => {
   }
 });
 
+test('a method lays the same steps in the editor as on the server', () => {
+  const { templates, cases } = JSON.parse(readFileSync(join(fixtures, 'craft_template_steps.json'), 'utf8'));
+  assert.ok(cases.length >= 4);
+  for (const c of cases) {
+    const items = {};
+    for (const [id, tags] of Object.entries(c.tags)) items[id] = { id, name: id, tags };
+    const got = plain(L.applyTemplate({ templates }, { materials: c.in.materials, steps: [] }, c.template, items));
+    const pick = (r) => ({ template: r.template, bench: r.bench, materials: r.materials, steps: r.steps });
+    assert.deepEqual(pick(got), pick(c.want), c.name);
+  }
+});
+
 test('the rules editor keeps what the server keeps', () => {
   const window = {};
   const ctx = vm.createContext({ window, document: { documentElement: { getAttribute: () => null }, createElement: () => ({ getContext: () => null, style: {} }) },
@@ -57,6 +71,20 @@ test('the rules editor keeps what the server keeps', () => {
   const { cases } = JSON.parse(readFileSync(join(fixtures, 'craft_rules_clean.json'), 'utf8'));
   assert.ok(cases.length >= 20);
   for (const c of cases) assert.deepEqual(plain(R.cleanRules(c.input, fx).map(R.ruleData)), c.want, c.name);
+});
+
+test('the rules editor cleans a recipe\'s extras as the server does, and its answer is stable', () => {
+  const window = {};
+  const ctx = vm.createContext({ window, document: { createElement: () => ({ getContext: () => null }) }, console, Math, JSON, Date,
+    navigator: {}, requestAnimationFrame: () => 0, cancelAnimationFrame: () => {} });
+  vm.runInContext(readFileSync(join(root, 'static', 'js', 'widgets', 'craft_rules_logic.js'), 'utf8'), ctx);
+  const R = window.CraftRules;
+  const { cases } = JSON.parse(readFileSync(join(fixtures, 'craft_extras_clean.json'), 'utf8'));
+  assert.ok(cases.length >= 20);
+  for (const c of cases) {
+    assert.deepEqual(plain(R.cleanExtras(c.input, c.materials)), c.want, c.name);
+    assert.deepEqual(plain(R.cleanExtras(c.want, c.materials)), c.want, c.name + ', cleaned twice');
+  }
 });
 
 const ITEMS = {

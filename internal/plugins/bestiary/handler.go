@@ -468,7 +468,7 @@ func (h *Handler) ListReviews(c echo.Context) error {
 	}
 
 	page, perPage := parsePagination(c)
-	result, err := h.svc.ListReviews(ctx, pub.ID, page, perPage)
+	result, err := h.svc.ListReviews(ctx, auth.GetUserID(c), pub.ID, page, perPage)
 	if err != nil {
 		return err
 	}

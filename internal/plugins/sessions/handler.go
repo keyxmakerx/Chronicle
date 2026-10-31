@@ -19,6 +19,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
@@ -46,6 +47,8 @@ type Handler struct {
 	sightings SightingService
 	// nightEntries gives each game night its Journal entries. Nil-safe.
 	nightEntries NightEntryService
+	// mentions hides mentions of pages a reader can't open in the recap.
+	mentions sanitize.MentionHider
 }
 
 // SetRecipientFilter wires people's notification choices into the emails.
@@ -155,6 +158,7 @@ func (h *Handler) ShowSession(c echo.Context) error {
 		return err
 	}
 	session.Entities = visibleEntities
+	h.serveRecap(c, cc, session)
 
 	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
 	recap := RecapView{
@@ -473,7 +477,12 @@ func (h *Handler) GetRecapAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, recapEditorBody(session))
+	hidden := h.serveRecap(c, cc, session)
+	body := recapEditorBody(session)
+	if hidden && cc.MemberRole >= campaigns.RoleScribe {
+		body["locked"] = true
+	}
+	return c.JSON(http.StatusOK, body)
 }
 
 // UpdateRecapAPI saves the session recap (post-session write-up visible to all members).
@@ -484,8 +493,12 @@ func (h *Handler) UpdateRecapAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 
-	if _, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID); err != nil {
+	stored, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID)
+	if err != nil {
 		return err
+	}
+	if h.serveRecap(c, cc, stored) {
+		return apperror.NewForbidden(recapLockedMessage)
 	}
 
 	var req struct {

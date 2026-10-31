@@ -44,12 +44,12 @@ func TestExampleExtensionManifests(t *testing.T) {
 // TestExampleWASMPluginManifests validates WASM-specific fields in example plugins.
 func TestExampleWASMPluginManifests(t *testing.T) {
 	examples := []struct {
-		name            string
-		path            string
-		expectedSlug    string
-		expectedCaps    int
-		expectedHooks   int
-		hasConfig       bool
+		name          string
+		path          string
+		expectedSlug  string
+		expectedCaps  int
+		expectedHooks int
+		hasConfig     bool
 	}{
 		{
 			name:          "example-wasm-rust",
@@ -63,9 +63,9 @@ func TestExampleWASMPluginManifests(t *testing.T) {
 			name:          "example-wasm-go",
 			path:          "../../extensions/example-wasm-go/manifest.json",
 			expectedSlug:  "session-logger",
-			expectedCaps:  4, // log, entity_read, calendar_write, kv_store
+			expectedCaps:  2, // log, kv_store
 			expectedHooks: 2, // entity.created, entity.updated
-			hasConfig:     true,
+			hasConfig:     false,
 		},
 	}
 

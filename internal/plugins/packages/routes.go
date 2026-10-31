@@ -60,21 +60,6 @@ func RegisterRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g.POST("/settings", h.SaveSecuritySettings, reauth)
 }
 
-// RegisterPublicRoutes mounts unauthenticated routes for serving files from
-// installed packages. External clients (e.g., Foundry VTT) fetch manifests
-// and scripts from these endpoints. Rate limiting is applied at the group level.
-func RegisterPublicRoutes(e *echo.Echo, sh *ServeHandler, rl echo.MiddlewareFunc) {
-	// Generic route: /packages/serve/:type/:slug/filepath
-	g := e.Group("/packages/serve")
-	g.Use(rl)
-	g.GET("/:type/:slug/*", sh.ServePackageFile)
-
-	// No /foundry-module/* alias: Foundry installs from per-campaign signed
-	// URLs at /api/v1/campaigns/:cid/foundry-vtt/module.json (foundry_vtt
-	// plugin's RegisterPublicRoutes), since a shared URL can't enforce
-	// per-campaign version pins.
-}
-
 // RegisterOwnerRoutes mounts the owner-facing system submission routes.
 // These routes require authentication but NOT admin privileges.
 func RegisterOwnerRoutes(authenticated *echo.Group, oh *OwnerHandler) {

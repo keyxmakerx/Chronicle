@@ -128,7 +128,7 @@
         if (entityTypes.length > 0) {
           html += '<div class="relative" data-graph-dropdown>';
           html += '<button type="button" class="btn-secondary text-xs" data-graph-dropdown-toggle>';
-          html += '<i class="fa-solid fa-filter mr-1"></i>Types';
+          html += '<i class="fa-solid fa-filter"></i>Types';
           html += '</button>';
           html += '<div class="absolute left-0 top-full mt-1 bg-surface border border-edge rounded-lg shadow-lg p-2 z-20 min-w-[180px] hidden" data-graph-dropdown-menu>';
           for (var i = 0; i < entityTypes.length; i++) {

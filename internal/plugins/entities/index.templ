@@ -132,7 +132,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
 						class="btn-primary"
-					><i class="fa-solid fa-plus mr-1.5 text-xs"></i> New Page</a>
+					><i class="fa-solid fa-plus text-xs"></i> New Page</a>
 				}
 			</div>
 		</div>
@@ -198,7 +198,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
 							class="btn-primary"
-						><i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create Your First Page</a>
+						><i class="fa-solid fa-plus text-xs"></i> Create Your First Page</a>
 					}
 				</div>
 			} else {

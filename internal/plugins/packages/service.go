@@ -3,6 +3,8 @@ package packages
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/semver"
 )
 
 // SettingsReader provides read access to site settings without importing
@@ -119,11 +122,6 @@ type PackageService interface {
 	// same protected-set code path as PruneStaleVersions.
 	RunRetention(ctx context.Context) (*PruneResult, error)
 
-	// InstalledPackagePath returns the on-disk install path for the active
-	// (installed + approved) package matching the given type and slug.
-	// Returns empty string if no matching package is installed.
-	InstalledPackagePath(pkgType PackageType, slug string) string
-
 	// InstallDirForVersion returns the on-disk path for a SPECIFIC
 	// historical version of a package — regardless of which version
 	// is marked "installed" in the DB. Used by sub-plugins (foundry_vtt)
@@ -188,8 +186,12 @@ type packageService struct {
 	// just-installed dir, so the app layer can rescan AND force-load that
 	// exact dir (a deliberate rollback would otherwise lose to the
 	// rescan's highest-version policy). Empty string = plain rescan.
-	onSystemInstall   func(installPath string)
-	onServeInvalidate func() // Called after install/remove to invalidate serve cache.
+	onSystemInstall func(installPath string)
+
+	// onSystemUnload is called with a system package's folder (every version
+	// under it) when the package is removed or archived, so the app layer
+	// stops serving it at once instead of at the next restart.
+	onSystemUnload func(packageRoot string)
 
 	// postInstallHooks are the type-specific extension hooks. Slice
 	// (not map) so registration order is preserved and multiple hooks
@@ -204,6 +206,11 @@ type packageService struct {
 	// skips the check. Closes the "installed green but rejected at load"
 	// shadow-failure class.
 	manifestValidator func(manifestPath string) error
+
+	// systemDirFn returns the folder a package-installed system with this id
+	// is served from, or "" when none is; injected via SetSystemDirProvider.
+	// An install whose system id another package already serves is refused.
+	systemDirFn func(systemID string) string
 
 	// installLocks serializes InstallVersion per package ID. Without it a
 	// double-click, or the auto-update worker racing an admin, can share
@@ -254,11 +261,19 @@ func SetOnSystemInstall(svc PackageService, fn func(installPath string)) {
 	}
 }
 
-// SetOnServeInvalidate wires a callback invoked after a package is installed,
-// updated, or removed. Used to invalidate the serve handler's path cache.
-func SetOnServeInvalidate(svc PackageService, fn func()) {
+// SetOnSystemUnload wires the callback that stops serving a removed or
+// archived system package.
+func SetOnSystemUnload(svc PackageService, fn func(packageRoot string)) {
 	if s, ok := svc.(*packageService); ok {
-		s.onServeInvalidate = fn
+		s.onSystemUnload = fn
+	}
+}
+
+// SetSystemDirProvider wires the lookup of which folder serves a system id,
+// so one package can't replace a system another package provides.
+func SetSystemDirProvider(svc PackageService, fn func(systemID string) string) {
+	if s, ok := svc.(*packageService); ok {
+		s.systemDirFn = fn
 	}
 }
 
@@ -380,6 +395,11 @@ func (s *packageService) AddPackage(ctx context.Context, input AddPackageInput) 
 	if pkgType == "" {
 		pkgType = PackageTypeSystem
 	}
+	if pkgType == PackageTypeFoundryModule {
+		if err := s.ensureSingleFoundryModule(ctx, ""); err != nil {
+			return nil, err
+		}
+	}
 
 	owner, repo, _ := parseRepo(repoURL)
 	slug := repo
@@ -435,6 +455,10 @@ func (s *packageService) AddPackage(ctx context.Context, input AddPackageInput) 
 
 // RemovePackage deletes a package and cleans up its installed files.
 func (s *packageService) RemovePackage(ctx context.Context, id string) error {
+	mu := s.lockForPackage(id)
+	mu.Lock()
+	defer mu.Unlock()
+
 	pkg, err := s.repo.GetPackage(ctx, id)
 	if err != nil {
 		return fmt.Errorf("fetching package: %w", err)
@@ -443,18 +467,30 @@ func (s *packageService) RemovePackage(ctx context.Context, id string) error {
 		return fmt.Errorf("package not found")
 	}
 
-	if pkg.InstallPath != "" {
-		if err := os.RemoveAll(pkg.InstallPath); err != nil {
+	if err := s.repo.DeletePackage(ctx, id); err != nil {
+		return fmt.Errorf("deleting package: %w", err)
+	}
+
+	// Every version goes, not only the installed one: a leftover version
+	// folder would be served again, or handed to the next package that
+	// takes this one's place.
+	root := s.packageRoot(pkg)
+	if root != "" {
+		if s.onSystemUnload != nil && pkg.Type != PackageTypeFoundryModule {
+			s.onSystemUnload(root)
+		}
+		if err := os.RemoveAll(root); err != nil {
 			slog.Warn("failed to remove package files",
 				slog.String("package", pkg.Slug),
-				slog.String("path", pkg.InstallPath),
+				slog.String("path", root),
 				slog.Any("error", err),
 			)
 		}
 	}
-
-	if err := s.repo.DeletePackage(ctx, id); err != nil {
-		return fmt.Errorf("deleting package: %w", err)
+	if zips, _ := filepath.Glob(filepath.Join(s.downloadsDir(), pkg.Slug+"-*.zip")); len(zips) > 0 {
+		for _, z := range zips {
+			_ = os.Remove(z)
+		}
 	}
 
 	slog.Info("package removed",
@@ -462,12 +498,19 @@ func (s *packageService) RemovePackage(ctx context.Context, id string) error {
 		slog.String("slug", pkg.Slug),
 	)
 
-	// Invalidate serve cache so removed packages stop being served.
-	if s.onServeInvalidate != nil {
-		s.onServeInvalidate()
-	}
-
 	return nil
+}
+
+// packageRoot is the folder holding every installed version of pkg, or ""
+// when its slug can't name a single folder.
+func (s *packageService) packageRoot(pkg *Package) string {
+	if pkg.Type == PackageTypeFoundryModule {
+		return filepath.Join(s.packagesDir(), string(PackageTypeFoundryModule))
+	}
+	if pkg.Slug == "" || !filepath.IsLocal(pkg.Slug) || strings.ContainsAny(pkg.Slug, `/\`) {
+		return ""
+	}
+	return filepath.Join(s.packagesDir(), "systems", pkg.Slug)
 }
 
 // --- Version Management ---
@@ -598,10 +641,19 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	defer func() { _ = os.RemoveAll(stageDir) }()
 
 	zipName := fmt.Sprintf("%s-%s.zip", pkg.Slug, version)
+	// The slug comes from a repository address, so it must name one file in
+	// the downloads folder and nothing above or beside it.
+	if strings.ContainsAny(zipName, `/\`) || !filepath.IsLocal(zipName) {
+		return apperror.NewValidation("package name can't be used as a file name")
+	}
 	zipPath := filepath.Join(dlDir, zipName)
 	_, err = s.github.DownloadAsset(ctx, ver.DownloadURL, zipPath)
 	if err != nil {
 		return fmt.Errorf("downloading version %s: %w", version, err)
+	}
+	if err := s.checkVersionDigest(ctx, ver, zipPath); err != nil {
+		_ = os.Remove(zipPath)
+		return err
 	}
 
 	if err := extractZip(zipPath, stageDir); err != nil {
@@ -641,13 +693,16 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 		// enforces at boot (content caps, slugs, field types, renderer
 		// bindings…), injected from the app layer. Without this, a
 		// manifest the loader will reject installs "green" and then
-		// shadow-fails at load while the old version keeps serving. Runs
+		// fails at load. Runs
 		// after the version rewrite so it validates exactly the bytes
 		// that will be served.
 		if s.manifestValidator != nil {
 			if err := s.manifestValidator(filepath.Join(stageDir, "manifest.json")); err != nil {
 				return fmt.Errorf("manifest validation failed for %s: %w", version, err)
 			}
+		}
+		if err := s.checkSystemIDOwner(pkg, stageDir); err != nil {
+			return err
 		}
 	}
 
@@ -683,7 +738,7 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	pkg.InstalledVersion = version
 	pkg.InstallPath = destDir
 	pkg.LastInstalledAt = &now
-	if err := s.repo.UpdatePackage(ctx, pkg); err != nil {
+	if err := s.repo.SetInstalled(ctx, pkg.ID, version, destDir, now); err != nil {
 		// Keep disk consistent with the DB: leaving the new dir behind
 		// would make the next boot's highest-version scan serve a
 		// version the catalog doesn't record.
@@ -722,11 +777,6 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	// (rollbacks must beat the rescan's highest-version policy).
 	if pkg.Type != PackageTypeFoundryModule && s.onSystemInstall != nil {
 		s.onSystemInstall(destDir)
-	}
-
-	// Invalidate serve cache so the new install path is picked up.
-	if s.onServeInvalidate != nil {
-		s.onServeInvalidate()
 	}
 
 	// Success clears any prior failure record; the verifier below may
@@ -816,8 +866,7 @@ func (s *packageService) SetPinnedVersion(ctx context.Context, packageID, versio
 		return fmt.Errorf("version %s not found", version)
 	}
 
-	pkg.PinnedVersion = version
-	return s.repo.UpdatePackage(ctx, pkg)
+	return s.repo.SetPinnedVersion(ctx, pkg.ID, version)
 }
 
 // ClearPinnedVersion removes the version pin, allowing auto-updates again.
@@ -834,8 +883,7 @@ func (s *packageService) ClearPinnedVersion(ctx context.Context, packageID strin
 		return fmt.Errorf("package not found")
 	}
 
-	pkg.PinnedVersion = ""
-	return s.repo.UpdatePackage(ctx, pkg)
+	return s.repo.SetPinnedVersion(ctx, pkg.ID, "")
 }
 
 // SetAutoUpdate changes the auto-update policy for a package.
@@ -848,8 +896,7 @@ func (s *packageService) SetAutoUpdate(ctx context.Context, packageID string, po
 		return fmt.Errorf("package not found")
 	}
 
-	pkg.AutoUpdate = policy
-	return s.repo.UpdatePackage(ctx, pkg)
+	return s.repo.SetAutoUpdate(ctx, pkg.ID, policy)
 }
 
 // GetUsage returns which campaigns are using a given package. It looks up
@@ -978,8 +1025,10 @@ func (s *packageService) RunAutoUpdates(ctx context.Context) error {
 			continue
 		}
 
+		// Automatic updates only move forward: an admin's rollback, or an
+		// older release published late, is never "updated" back over.
 		if latest := latestStableVersion(newVersions); latest != nil {
-			if latest.Version != pkg.InstalledVersion {
+			if pkg.InstalledVersion == "" || semver.Less(pkg.InstalledVersion, latest.Version) {
 				if err := s.InstallVersion(ctx, pkg.ID, latest.Version); err != nil {
 					slog.Warn("auto-update install failed",
 						slog.String("package", pkg.Slug),
@@ -1025,23 +1074,6 @@ func (s *packageService) StartAutoUpdateWorker(ctx context.Context) {
 	}
 }
 
-// InstalledPackagePath returns the on-disk install path for the active
-// (installed + approved) package matching the given type and slug.
-// Returns empty string if no matching package is installed.
-func (s *packageService) InstalledPackagePath(pkgType PackageType, slug string) string {
-	ctx := context.Background()
-	packages, err := s.repo.ListPackages(ctx)
-	if err != nil {
-		return ""
-	}
-	for _, pkg := range packages {
-		if pkg.Type == pkgType && pkg.Slug == slug && pkg.InstallPath != "" && pkg.Status == StatusApproved {
-			return pkg.InstallPath
-		}
-	}
-	return ""
-}
-
 // --- Submission/Approval Workflow ---
 
 // SubmitPackage lets a campaign owner submit a repo URL for admin review.
@@ -1083,6 +1115,11 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 	pkgType := PackageType(input.Type)
 	if pkgType == "" {
 		pkgType = PackageTypeSystem
+	}
+	if pkgType == PackageTypeFoundryModule {
+		if err := s.ensureSingleFoundryModule(ctx, ""); err != nil {
+			return nil, err
+		}
 	}
 
 	// Try to parse owner/repo for GitHub URLs (non-GitHub URLs might not parse).
@@ -1191,6 +1228,11 @@ func (s *packageService) ReviewPackage(ctx context.Context, packageID, adminUser
 			return fmt.Errorf("URL no longer passes validation: %w", err)
 		}
 
+		if pkg.Type == PackageTypeFoundryModule {
+			if err := s.ensureSingleFoundryModule(ctx, pkg.ID); err != nil {
+				return err
+			}
+		}
 		if err := s.repo.UpdateStatus(ctx, packageID, StatusApproved, adminUserID, input.Note); err != nil {
 			return fmt.Errorf("approving package: %w", err)
 		}
@@ -1244,14 +1286,48 @@ func (s *packageService) DeprecatePackage(ctx context.Context, packageID, msg st
 	return nil
 }
 
-// ArchivePackage hides a package from active listings.
+// ArchivePackage hides a package from active listings and stops serving it;
+// only approved packages are served.
 func (s *packageService) ArchivePackage(ctx context.Context, packageID string) error {
-	return s.repo.UpdateStatus(ctx, packageID, StatusArchived, "", "")
+	mu := s.lockForPackage(packageID)
+	mu.Lock()
+	defer mu.Unlock()
+	pkg, err := s.repo.GetPackage(ctx, packageID)
+	if err != nil {
+		return fmt.Errorf("fetching package: %w", err)
+	}
+	if pkg == nil {
+		return apperror.NewNotFound("package not found")
+	}
+	if err := s.repo.UpdateStatus(ctx, packageID, StatusArchived, "", ""); err != nil {
+		return err
+	}
+	if root := s.packageRoot(pkg); root != "" && pkg.Type != PackageTypeFoundryModule && s.onSystemUnload != nil {
+		s.onSystemUnload(root)
+	}
+	return nil
 }
 
-// UnarchivePackage restores an archived package to approved status.
+// UnarchivePackage restores an archived package to approved status and
+// serves its installed version again.
 func (s *packageService) UnarchivePackage(ctx context.Context, packageID string) error {
-	return s.repo.UpdateStatus(ctx, packageID, StatusApproved, "", "")
+	mu := s.lockForPackage(packageID)
+	mu.Lock()
+	defer mu.Unlock()
+	pkg, err := s.repo.GetPackage(ctx, packageID)
+	if err != nil {
+		return fmt.Errorf("fetching package: %w", err)
+	}
+	if pkg == nil {
+		return apperror.NewNotFound("package not found")
+	}
+	if err := s.repo.UpdateStatus(ctx, packageID, StatusApproved, "", ""); err != nil {
+		return err
+	}
+	if pkg.Type != PackageTypeFoundryModule && pkg.InstallPath != "" && s.onSystemInstall != nil {
+		s.onSystemInstall(pkg.InstallPath)
+	}
+	return nil
 }
 
 // UpdateRepoURL changes a package's repository URL (admin only).
@@ -1415,7 +1491,7 @@ func (s *packageService) fetchAndImportVersions(ctx context.Context, pkg *Packag
 
 	now := time.Now()
 	pkg.LastCheckedAt = &now
-	if err := s.repo.UpdatePackage(ctx, pkg); err != nil {
+	if err := s.repo.SetLastChecked(ctx, pkg.ID, now); err != nil {
 		slog.Warn("failed to update last_checked_at",
 			slog.String("package", pkg.Slug),
 			slog.Any("error", err),
@@ -1438,18 +1514,24 @@ func pickDownloadAsset(assets []GitHubAsset) (url string, size int64) {
 	return "", 0
 }
 
-// latestStableVersion returns the first non-prerelease version from the list.
-// If all versions are pre-releases, falls back to the newest pre-release.
+// latestStableVersion returns the highest non-prerelease version in the list,
+// or the highest pre-release when there is nothing else. It goes by version
+// number, never by the order GitHub lists releases in: a maintenance release
+// cut after a newer one (1.9.5 after 2.0.0) is not the latest.
 func latestStableVersion(versions []PackageVersion) *PackageVersion {
+	var best *PackageVersion
 	for i := range versions {
-		if !versions[i].Prerelease {
-			return &versions[i]
+		v := &versions[i]
+		switch {
+		case best == nil:
+			best = v
+		case best.Prerelease && !v.Prerelease:
+			best = v
+		case best.Prerelease == v.Prerelease && semver.Less(best.Version, v.Version):
+			best = v
 		}
 	}
-	if len(versions) > 0 {
-		return &versions[0]
-	}
-	return nil
+	return best
 }
 
 // normalizeVersion strips a leading "v" from tag names.
@@ -1464,6 +1546,79 @@ func repoPath(repoURL string) string {
 		return ""
 	}
 	return owner + "/" + repo
+}
+
+// checkVersionDigest binds a version to the bytes of its first download.
+// GitHub release assets and tags can be replaced after the fact; without this
+// a reinstall or a campaign moving to an old version could get different code
+// under the same version number.
+func (s *packageService) checkVersionDigest(ctx context.Context, ver *PackageVersion, zipPath string) error {
+	f, err := os.Open(zipPath)
+	if err != nil {
+		return fmt.Errorf("reading download: %w", err)
+	}
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	_ = f.Close()
+	if err != nil {
+		return fmt.Errorf("reading download: %w", err)
+	}
+	digest := hex.EncodeToString(h.Sum(nil))
+	stored, err := s.repo.RecordVersionDigest(ctx, ver.ID, digest)
+	if err != nil {
+		return err
+	}
+	if stored != digest {
+		return apperror.NewConflict(fmt.Sprintf(
+			"version %s on GitHub is no longer the file first downloaded for it (it was replaced upstream); refusing to install it", ver.Version))
+	}
+	return nil
+}
+
+// checkSystemIDOwner refuses a system package whose manifest id is already
+// served from another package's folder: the loader keys systems by id, so
+// installing it would replace that package's system for every campaign.
+func (s *packageService) checkSystemIDOwner(pkg *Package, stageDir string) error {
+	if s.systemDirFn == nil {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(stageDir, "manifest.json"))
+	if err != nil {
+		return fmt.Errorf("read manifest.json: %w", err)
+	}
+	var m struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return fmt.Errorf("parse manifest.json: %w", err)
+	}
+	served := s.systemDirFn(m.ID)
+	if served == "" {
+		return nil
+	}
+	root := s.packageRoot(pkg)
+	served = filepath.Clean(served)
+	if root != "" && strings.HasPrefix(served, root+string(filepath.Separator)) {
+		return nil
+	}
+	return apperror.NewConflict(fmt.Sprintf("game system %q is already provided by another package", m.ID))
+}
+
+// ensureSingleFoundryModule refuses a second Foundry module package. Every
+// version of the module shares one folder and the Foundry integration serves
+// whichever such package it finds first, so a second one would replace the
+// module for every campaign. exceptID is the package being approved.
+func (s *packageService) ensureSingleFoundryModule(ctx context.Context, exceptID string) error {
+	all, err := s.repo.ListPackages(ctx)
+	if err != nil {
+		return fmt.Errorf("listing packages: %w", err)
+	}
+	for _, p := range all {
+		if p.Type == PackageTypeFoundryModule && p.ID != exceptID && p.Status != StatusRejected {
+			return apperror.NewConflict(fmt.Sprintf("a Foundry module package is already registered: %s", p.Name))
+		}
+	}
+	return nil
 }
 
 // rewriteSystemManifestVersion updates the "version" field in a system
@@ -1496,15 +1651,29 @@ func rewriteSystemManifestVersion(dir, version string) error {
 	return nil
 }
 
+// Bounds on one package release. A system pack or the Foundry module is a few
+// megabytes; these leave room to grow while stopping a release, or a zip bomb
+// inside one, from filling the server's disk.
+const (
+	maxPackageEntries        = 5000
+	maxPackageExtractedBytes = 200 << 20
+)
+
 // extractZip extracts a ZIP file to a destination directory.
 // If the zip contains a single top-level directory (common for GitHub source
 // archives), the contents are "unwrapped" so files land directly in destDir.
+// It stops past maxPackageEntries entries or maxPackageExtractedBytes written,
+// counting the bytes actually inflated rather than what the zip declares.
 func extractZip(zipPath, destDir string) error {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return fmt.Errorf("opening zip: %w", err)
 	}
 	defer func() { _ = zr.Close() }()
+	if len(zr.File) > maxPackageEntries {
+		return fmt.Errorf("the release holds more than %d files", maxPackageEntries)
+	}
+	budget := int64(maxPackageExtractedBytes)
 
 	// Detect single top-level directory wrapper (e.g. "owner-repo-hash/").
 	prefix := detectSingleRootDir(zr.File)
@@ -1544,9 +1713,11 @@ func extractZip(zipPath, destDir string) error {
 			return fmt.Errorf("creating parent dir: %w", err)
 		}
 
-		if err := extractSingleFile(zf, destPath); err != nil {
+		n, err := extractSingleFile(zf, destPath, budget)
+		if err != nil {
 			return err
 		}
+		budget -= n
 	}
 	return nil
 }
@@ -1576,22 +1747,30 @@ func detectSingleRootDir(files []*zip.File) string {
 	return prefix
 }
 
-// extractSingleFile extracts one file from the ZIP archive to disk.
-func extractSingleFile(zf *zip.File, destPath string) error {
+// extractSingleFile extracts one file from the ZIP archive to disk, writing
+// at most budget bytes, and returns how many it wrote.
+func extractSingleFile(zf *zip.File, destPath string, budget int64) (int64, error) {
+	if zf.UncompressedSize64 > uint64(budget) {
+		return 0, fmt.Errorf("the release is larger than %d MB unpacked", maxPackageExtractedBytes>>20)
+	}
 	rc, err := zf.Open()
 	if err != nil {
-		return fmt.Errorf("opening %s in zip: %w", zf.Name, err)
+		return 0, fmt.Errorf("opening %s in zip: %w", zf.Name, err)
 	}
 	defer func() { _ = rc.Close() }()
 
 	out, err := os.Create(destPath)
 	if err != nil {
-		return fmt.Errorf("creating %s: %w", destPath, err)
+		return 0, fmt.Errorf("creating %s: %w", destPath, err)
 	}
 	defer out.Close()
 
-	if _, err := io.Copy(out, rc); err != nil {
-		return fmt.Errorf("writing %s: %w", destPath, err)
+	n, err := io.Copy(out, io.LimitReader(rc, budget+1))
+	if err != nil {
+		return n, fmt.Errorf("writing %s: %w", destPath, err)
 	}
-	return nil
+	if n > budget {
+		return n, fmt.Errorf("the release is larger than %d MB unpacked", maxPackageExtractedBytes>>20)
+	}
+	return n, nil
 }

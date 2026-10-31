@@ -233,7 +233,7 @@ func (r *sessionRepository) CountUserExceptions(ctx context.Context, campaignID,
 // ReplaceDayExceptions atomically replaces ALL of a member's exception rows for
 // one date (delete-all-for-date then insert). This is the storage side of the
 // "compose the day" UI: the editor pre-fills from the recurring pattern and
-// re-sends the whole day, so a one-hour busy mark no longer erases the rest
+// re-sends the whole day, so a one-hour busy mark does not erase the rest
 // of the day. An empty blocks slice reverts the day to the recurring pattern.
 func (r *sessionRepository) ReplaceDayExceptions(ctx context.Context, campaignID, userID, onDate string, excs []AvailabilityException) error {
 	tx, err := r.db.BeginTx(ctx, nil)

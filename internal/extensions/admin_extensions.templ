@@ -43,10 +43,10 @@ templ adminExtensionListFragment(exts []Extension, mods []*systems.SystemManifes
 				hx-target="#admin-extensions"
 				hx-swap="outerHTML"
 			>
-				<i class="fa-solid fa-rotate mr-1"></i> Rescan
+				<i class="fa-solid fa-rotate"></i> Rescan
 			</button>
 			<label class="btn btn-primary btn-sm cursor-pointer">
-				<i class="fa-solid fa-upload mr-1"></i> Install Extension
+				<i class="fa-solid fa-upload"></i> Install Extension
 				<input
 					type="file"
 					name="file"
@@ -279,7 +279,7 @@ templ adminExtensionDetailFragment(ext *Extension, manifest *ExtensionManifest) 
 					<span class="badge-gray text-xs">Disabled</span>
 				}
 				<label class="btn btn-secondary btn-sm cursor-pointer">
-					<i class="fa-solid fa-arrow-up-from-bracket mr-1"></i> Update
+					<i class="fa-solid fa-arrow-up-from-bracket"></i> Update
 					<input
 						type="file"
 						name="file"
@@ -296,7 +296,7 @@ templ adminExtensionDetailFragment(ext *Extension, manifest *ExtensionManifest) 
 					hx-delete={ "/admin/extensions/" + ext.ExtID + "?from=detail" }
 					hx-confirm={ "Uninstall " + ext.Name + "? This will remove the extension and all its data from every campaign." }
 				>
-					<i class="fa-solid fa-trash mr-1"></i> Uninstall
+					<i class="fa-solid fa-trash"></i> Uninstall
 				</button>
 			</div>
 		</div>

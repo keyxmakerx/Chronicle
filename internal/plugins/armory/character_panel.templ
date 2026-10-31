@@ -33,7 +33,7 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 						data-open-give
 						aria-expanded="false"
 						onclick={ giveOpenOnClick(giveDialogURL(v.CampaignID, "character", v.Character.ID)) }
-					><i class="fa-solid fa-gift mr-1"></i>Give an item</button>
+					><i class="fa-solid fa-gift"></i>Give an item</button>
 				}
 				@downtimePill(v.DowntimeOpen)
 			</div>

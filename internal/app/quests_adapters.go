@@ -209,6 +209,7 @@ type questAnnouncerAdapter struct {
 func (a *questAnnouncerAdapter) QuestChanged(campaignID, entityID string, version int, dmOnly bool) {
 	msg := ws.NewMessage(ws.MsgQuestUpdated, campaignID, entityID, map[string]int{"version": version})
 	msg.RequiresDM = dmOnly
+	msg.Public = !dmOnly
 	a.bus.Publish(msg)
 }
 
@@ -219,6 +220,7 @@ func (a *questAnnouncerAdapter) BoardsChanged(campaignID string, h quests.Home, 
 	}
 	msg := ws.NewMessage(ws.MsgNoticeBoardsUpdated, campaignID, id, map[string]string{"home": home})
 	msg.RequiresDM = dmOnly
+	msg.Public = !dmOnly
 	a.bus.Publish(msg)
 }
 

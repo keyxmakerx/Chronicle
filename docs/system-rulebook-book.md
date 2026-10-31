@@ -1,10 +1,9 @@
 # Writing a system's Rulebook book
 
-A game system package can ship a **book**: the Rules page then opens as a
+A system package can ship a **book**: the Rules page then opens as a
 full-screen, page-turning rulebook instead of the category browser. Chronicle
-draws the book (pages, page turns, contents, hover cards, the Player and
-Director views); the package only supplies plain text files saying what is on
-each page. Nothing here needs programming.
+draws it (pages, turns, contents, hover cards, Player and Director views); the
+package supplies only YAML files saying what is on each page. No programming.
 
 ## Where the files go
 
@@ -24,16 +23,14 @@ your-package/
 ```
 
 A package has a book when `book/book.yaml` exists. Files are
-[YAML](https://yaml.org): indented `name: value` lines, with `- ` starting
-each item of a list. Text that runs over several lines starts with `|` and is
-indented underneath. Put a value in quotes if it is a bare `Null`, `true` or
-`false`, or starts with a symbol like `*`, `[` or `{`; otherwise YAML reads it
-as something other than text.
+[YAML](https://yaml.org): `name: value` lines, `- ` for list items, `|` for
+multi-line text indented underneath. Quote a value that is a bare `Null`,
+`true` or `false`, or starts with `*`, `[` or `{`.
 
-The `book/` folder is never served to browsers as-is. Chronicle reads it, checks
-it, removes anything the reader isn't allowed to see, and sends only the rest.
-The one exception is the cover and font files that `book.yaml` names (below):
-those exact files, and no others, are sent to readers who may open the book.
+`book/` is never served as-is: Chronicle reads and checks it, strips what the
+reader may not see, and sends the rest. The exception is the cover and font
+files `book.yaml` names: exactly those are sent to readers who may open the
+book.
 
 ## book.yaml
 
@@ -80,55 +77,48 @@ parts:
 - Colours are `#` hex values. Fonts are font names separated by commas.
 - `glossary` names a file in the package's `data/` folder: a list of entries
   with `name` and `summary`. Each becomes a hover definition.
-- `look: paper` draws pages as paper inside a cover, with a soft crease
-  between them. Set the paper colours in `theme` (light `paper`, dark `ink`).
-  A book's `look`, colours and fonts belong to its game system: the site's
-  Customize settings never change them.
-- `look: bold` draws a poster-style book: dark chapter banners, heavy
-  headings and coloured result tiers. It takes its colours from `theme`
-  (`accent` colours the banners' edge and the tiers), so a book chooses
-  `paper` or `bold`, not both. Readers find their way by the Sections ribbon
-  and the bar under the book, so a bold book has no contents drawer and no
-  row of tabs. Each chapter gets its own colour from a fixed set, in book
-  order, for its banner edge, page numbers and the big first letter of its
-  intro. A chapter that is a single `wide` contents page takes the left page
-  instead, with the next chapter opening beside it.
-- `cover` is a drawn cover: the first time a reader opens the book in a
-  visit it shows closed, and a click (or Enter or Space) swings it open. A
-  **Close the book** button in the top bar swings it shut again. Draw the
-  whole cover in the file, title lettering included; Chronicle adds only a
-  small "Open" label. The art is an SVG at 400 by 516, filling a closed book
-  and cropped to fit. It is shown as a picture, so scripts in it never run,
-  and the path must be `art/<name>.svg`. Readers who ask for reduced motion
-  see the cover as a still that a click dismisses.
-- `fonts` loads font files the book ships so it does not depend on a font
-  being installed. Each entry has the `family` name, a `file` that must be
-  `fonts/<name>.woff2`, and optionally a `weight` and `style`. Use faces whose
-  licence allows redistribution (the SIL Open Font License does). Name the
-  family in `theme`'s `heading-font`, `body-font` or `ui-font` to use it. List one entry
-  per weight or style.
-- Cover and font file names use lower-case letters, digits and `-` and the
-  files must be in the package, at most 1 MB each. A missing or oversized
-  file, or a name outside these folders, is reported like any other mistake in
-  `book.yaml`.
-- `tabs` puts a row of tabs above a paper book, one per named chapter, in
-  that order (at most 12). When the campaign has written house rules, a House
-  rules tab is added at the end.
-- The book opens on `start`. A reader who has never opened it opens on
-  `first`. A link to the Rules page ending in `#<chapter>` (for example
-  `#making-a-hero`) opens that chapter instead. Without `start` the book
-  reopens where the reader left it.
-- `screen` names a chapter of quick-reference pages, such as a player
-  screen. It is left out of the page order and the tabs. Instead a ribbon
-  hangs from the top bar on every page (or the reader presses P), and its
-  pages drop down side by side over the book; Escape, the ribbon or a click
-  on the book folds them away. Contents entries, links and search results
-  for that chapter open it the same way. When `start` names the same
-  chapter, the book opens with the screen down. A list of eight or more
-  cards on a screen page gets a box to find a card by name.
-- `tabs`, `start`, `first` and `screen` must name chapters listed in
-  `parts`. A player never receives a tab, start page, screen or link that
-  leads to a Director-only chapter.
+- `look: paper` draws pages as paper inside a cover with a crease between
+  them; set the paper colours in `theme` (light `paper`, dark `ink`).
+- `look: bold` draws a poster-style book: dark chapter banners, heavy headings,
+  coloured result tiers, coloured from `theme` (`accent` colours banner edges
+  and tiers). A book is `paper` or `bold`, not both. Navigation is the Sections
+  ribbon and the bar under the book, so a bold book has no contents drawer or
+  tabs. Each chapter gets a colour from a fixed set, in book order, for its
+  banner edge, page numbers and the intro's first letter. A chapter that is a
+  single `wide` contents page takes the left page, with the next chapter
+  opening beside it.
+- A book's `look`, colours and fonts belong to its system; the site's Customize
+  settings never change them.
+- `cover` is a drawn cover. On first open in a visit the book shows closed; a
+  click, Enter or Space opens it, and **Close the book** in the top bar closes
+  it. Draw the whole cover, title lettering included; Chronicle adds only an
+  "Open" label. SVG at 400 by 516, cropped to fill, shown as a picture (scripts
+  never run), path `art/<name>.svg`. With reduced motion it is a still that a
+  click dismisses.
+- `fonts` loads font files the book ships. Each entry has `family`, a `file`
+  of the form `fonts/<name>.woff2`, and optionally `weight` and `style`; list
+  one entry per weight or style. Use faces whose licence allows
+  redistribution (SIL OFL does). Reference the family in `theme`'s
+  `heading-font`, `body-font` or `ui-font`.
+- Cover and font file names use lower-case letters, digits and `-`. Files must
+  be in the package, at most 1 MB each. A missing or oversized file, or a name
+  outside these folders, is reported like any other `book.yaml` mistake.
+- `tabs` puts a row of tabs above a paper book, one per named chapter in that
+  order (at most 12). A House rules tab is appended when the campaign has
+  house rules.
+- The book opens on `start`; a first-time reader opens on `first`; a link
+  ending in `#<chapter>` (e.g. `#making-a-hero`) opens that chapter. Without
+  `start` the book reopens where the reader left it.
+- `screen` names a chapter of quick-reference pages (e.g. a player screen),
+  left out of the page order and tabs. A ribbon hangs from the top bar on every
+  page (or press P); its pages drop down side by side over the book, and Escape,
+  the ribbon or a click on the book folds them away. Contents entries, links
+  and search results for that chapter open it the same way. If `start` names it,
+  the book opens with the screen down. Eight or more cards on a screen page
+  get a find-by-name box.
+- `tabs`, `start`, `first` and `screen` must name chapters listed in `parts`. A
+  player never receives a tab, start, screen or link to a Director-only
+  chapter.
 
 ## A chapter file
 
@@ -200,7 +190,7 @@ Every block is one item under `blocks:`. Plain text needs no `type`.
 |---|---|---|
 | text | Paragraphs | `text:` |
 | callout | A highlighted box | `title:`, `text:` |
-| roll | Dice they can roll, with the result's band highlighted | `dice:` (like `2d10`), `label:`, `modifier: true` to offer a bonus picker, `bands:` |
+| roll | Dice they can roll, with the result's band highlighted | `dice:` (`NdM`, 1-10 dice of 2-100 sides, like `2d10`), `label:`, `modifier: true` to offer a bonus picker, `bands:` |
 | cards | A row of cards that unfold for detail | `items:` each with `title:`, `summary:`, `text:` |
 | flaps | Headings that open to explain | `items:` each with `title:`, `text:` |
 | example | A worked example, stepped through line by line | `title:`, `steps:` (a list of text) |
@@ -234,49 +224,45 @@ look and what they notice, and a `?` where the numbers would be.
 
 ## The Sections bookmark
 
-Every book has a crimson bookmark at the top of the right-hand page, labelled
-**Sections**. Pressing it pulls the ribbon down into a list of the book's
-chapters, grouped by part; a chapter with more than one page lists its pages
-beneath it. Picking an entry rolls the ribbon back up and then turns to that
-page. Escape or a click elsewhere rolls it up too. Directors see their
-Director-only parts and chapters in the list; players do not. The `screen`
-chapter is left out, since it has its own ribbon. Nothing needs writing for
-it: the list is made from `parts`.
+Every book has a **Sections** bookmark at the top of the right-hand page. It
+drops a list of the book's chapters grouped by part, with a multi-page
+chapter's pages beneath it; picking one turns to that page, and Escape or a
+click elsewhere closes it. Directors see Director-only parts and chapters;
+players do not. The `screen` chapter is left out. The list is built from
+`parts`; nothing to write.
 
 ## Player and Director
 
-A Director is the campaign owner, or a member the owner has granted Director
-visibility. Directors see everything and can switch to the player view to
-check what players get. Players are sent only the player view: Director-only
-parts, chapters, pages, blocks, creature numbers and notes never leave the
-server.
+A Director is the campaign owner or a member granted Director visibility.
+Directors see everything and can switch to the player view. Players receive
+only the player view: Director-only parts, chapters, pages, blocks, creature
+numbers and notes never leave the server.
 
 ## Editing a campaign's copy
 
-The files above are the package's book. A campaign's Directors (the owner and
-any member given Director visibility) can change their own campaign's copy
-inside Chronicle: the Rules page shows an **Edit** link to them. They can
-rewrite a page, add pages to a chapter and add a chapter of house rules. The
-package files are never touched, so updating the package does not overwrite
-anything a campaign wrote; a page a campaign edited that the package has since
-changed is flagged so the Director can choose which text to keep.
+Directors see an **Edit** link on the Rules page to change their campaign's
+copy: rewrite a page, add pages to a chapter, add a house-rules chapter. The
+package files are never touched, so a package update does not overwrite
+campaign edits; a page edited by the campaign and since changed by the package
+is flagged so the Director picks which text to keep.
 
-The campaign owner can also have an AI write house rules: on the campaign's
-Your AI page, ask your AI for something with **House rules** as its content. The AI answers
-with `kind: house-rule` blocks whose front matter is a chapter file like the
-one above (`intro`, `director`, `pages`), and the owner reads the pages, drawn
-in the Handbook's own look, before anything is saved.
+The owner can also have an AI write house rules: on the campaign's Your AI
+page, ask for something with **House rules** as its content. The AI answers
+with `kind: house-rule` blocks whose front matter is a chapter file (`intro`,
+`director`, `pages`); the owner reads the pages, drawn in the Handbook's look,
+before anything is saved.
 
-A campaign's copy can be downloaded from the editor as a zip of these same
-files (`book/book.yaml` and `book/chapters/*.yaml`), with house-rules chapters
-added as `house-<name>` files in a "House rules" part, so a package author can
-fold a campaign's changes back into the package.
+The editor downloads the campaign's copy as a zip of these same files
+(`book/book.yaml`, `book/chapters/*.yaml`), house-rules chapters as
+`house-<name>` files in a "House rules" part, so an author can fold changes
+back into the package.
 
 ## When something is wrong
 
-Chronicle checks every file when the Rules page opens. A chapter with a mistake
-is replaced by a page saying so; Directors see where the mistake is (file, page
-and block) and what is wrong, players see that the chapter couldn't load. The
-rest of the book still works.
+Chronicle checks every file when the Rules page opens. A chapter with a
+mistake is replaced by a page saying so: Directors see the file, page, block
+and problem; players see only that the chapter could not load. The rest of the
+book still works.
 
-Limits: 200 chapters, 200 pages per chapter, 60 blocks per page, 1 MB per file.
+Limits: 200 chapters, 200 pages per chapter, 60 blocks per page, 60 items per
+block list, 1 MB per file.

@@ -1,0 +1,617 @@
+{
+ "about": "A recipe's extras as a Director, their AI or a hand-edited request might send them, and what the rules editor keeps (craft_rules_logic.js cleanExtras). The server cleans with internal/plugins/crafting/extras.go CleanExtras and must give the same. Regenerate want only from the editor's own cleaner.",
+ "cases": [
+  {
+   "name": "nothing",
+   "input": null,
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "not an object",
+   "input": [
+    1
+   ],
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "a quirk botch needs its table",
+   "input": {
+    "botch": {
+     "costs": "baneAndQuirk"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "a quirk botch",
+   "input": {
+    "botch": {
+     "costs": "baneAndQuirk",
+     "quirkTable": "  Quirks "
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "baneAndQuirk",
+     "quirkTable": "Quirks"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "a lost-ingredients botch drops its table",
+   "input": {
+    "botch": {
+     "costs": "baneAndIngredients",
+     "quirkTable": "x"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "baneAndIngredients"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "an unknown botch is the bane alone",
+   "input": {
+    "botch": {
+     "costs": "everything"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "mishaps are never always",
+   "input": {
+    "mishaps": {
+     "chance": "always",
+     "table": "Mishaps"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": {
+     "chance": "1 in 6",
+     "table": "Mishaps"
+    },
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "mishaps keep a known chance",
+   "input": {
+    "mishaps": {
+     "chance": "1 in 20",
+     "table": "Mishaps"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": {
+     "chance": "1 in 20",
+     "table": "Mishaps"
+    },
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "mishaps need a table",
+   "input": {
+    "mishaps": {
+     "chance": "1 in 4"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "quality falls back per side",
+   "input": {
+    "quality": {
+     "fine": "wild",
+     "poor": "points"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": {
+     "fine": "edge",
+     "poor": "points"
+    },
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "substitutes: in range, once each, known tags",
+   "input": {
+    "substitutes": [
+     {
+      "for": 0,
+      "use": "herb",
+      "costs": "points"
+     },
+     {
+      "for": 0,
+      "use": "herb"
+     },
+     {
+      "for": 5,
+      "use": "herb"
+     },
+     {
+      "for": 1,
+      "use": "nonsense"
+     },
+     {
+      "for": "1",
+      "use": "liquid",
+      "costs": "free"
+     },
+     "x"
+    ]
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [
+     {
+      "for": 0,
+      "use": "herb",
+      "costs": "points"
+     },
+     {
+      "for": 1,
+      "use": "liquid",
+      "costs": "bane"
+     }
+    ],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "mastery snaps to a choice",
+   "input": {
+    "mastery": {
+     "afterCleanBrews": 4,
+     "gives": "edge"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": {
+     "afterCleanBrews": 3,
+     "gives": "edge"
+    },
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "mastery keeps a choice",
+   "input": {
+    "mastery": {
+     "afterCleanBrews": "10",
+     "gives": "points"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": {
+     "afterCleanBrews": 10,
+     "gives": "points"
+    },
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "discovery's closeness is k of n",
+   "input": {
+    "discover": {
+     "closeWhen": "3 of 2",
+     "learnedBy": "party",
+     "hint": "  It wants something colder. "
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": {
+     "closeWhen": "1 of 2",
+     "learnedBy": "party",
+     "failedTry": "used",
+     "hint": "It wants something colder."
+    },
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "discovery keeps a good closeness",
+   "input": {
+    "discover": {
+     "closeWhen": "2 of 3",
+     "failedTry": "half"
+    }
+   },
+   "materials": 3,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": {
+     "closeWhen": "2 of 3",
+     "learnedBy": "maker",
+     "failedTry": "half"
+    },
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "discovery with one material has no closeness",
+   "input": {
+    "discover": {}
+   },
+   "materials": 1,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": {
+     "closeWhen": "",
+     "learnedBy": "maker",
+     "failedTry": "used"
+    },
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "keeps is clamped",
+   "input": {
+    "keeps": {
+     "days": 9999,
+     "thenBecomes": "Spoiled draught"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": {
+     "days": 360,
+     "thenBecomes": "Spoiled draught"
+    },
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "keeps without days is a month",
+   "input": {
+    "keeps": {
+     "days": "soon"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": {
+     "days": 30,
+     "thenBecomes": ""
+    },
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "salvage needs an item, and one or two",
+   "input": {
+    "salvage": [
+     {
+      "item": "Glass",
+      "qty": 7
+     },
+     {
+      "item": ""
+     },
+     {
+      "item": "Ash"
+     },
+     {
+      "item": "Bone",
+      "qty": 0
+     },
+     {
+      "item": "Salt"
+     },
+     {
+      "item": "More"
+     }
+    ]
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [
+     {
+      "item": "Glass",
+      "qty": 2
+     },
+     {
+      "item": "Ash",
+      "qty": 1
+     },
+     {
+      "item": "Bone",
+      "qty": 1
+     },
+     {
+      "item": "Salt",
+      "qty": 1
+     }
+    ],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "switches are true or off",
+   "input": {
+    "breakthrough": true,
+    "makersMark": "yes",
+    "othersCanHelp": 1
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": true,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "the mockup's off values",
+   "input": {
+    "quality": false,
+    "mastery": false,
+    "keeps": "forever",
+    "knownBy": "everyone"
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  }
+ ]
+}

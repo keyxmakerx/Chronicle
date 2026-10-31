@@ -127,7 +127,7 @@ func (s *entityService) SaveEntry(ctx context.Context, entityID, entryJSON, entr
 	if err != nil {
 		return 0, nil, err
 	}
-	searchText := buildSearchText(entryHTML, before.FieldsData)
+	searchText := buildSearchText(entryHTML, s.searchFieldsOf(ctx, before.EntityTypeID, before.FieldOverrides, before.FieldsData))
 
 	rev, conflict, err := s.safety.SaveEntryAtRev(ctx, entityID, entryJSON, entryHTML, searchText, *baseRev)
 	if err != nil {
@@ -146,7 +146,7 @@ func (s *entityService) SaveEntry(ctx context.Context, entityID, entryJSON, entr
 		return rev, nil, nil
 	}
 	s.recordVersion(ctx, before, after, VersionEdit)
-	s.events.PublishEntityEvent("updated", after.CampaignID, entityID, after)
+	s.publishEntity(ctx, "updated", after.CampaignID, entityID, after)
 	return rev, nil, nil
 }
 
@@ -291,17 +291,18 @@ func (s *entityService) restoreVersion(ctx context.Context, entityID string, v *
 	}
 	// Update leaves search_text alone, so refresh it, or search would still
 	// find the text the restore took away.
+	searchFields := s.searchFieldsOf(ctx, entity.EntityTypeID, entity.FieldOverrides, entity.FieldsData)
 	if entity.Entry != nil {
 		if err := s.entities.UpdateEntry(ctx, entityID, *entity.Entry, *entity.EntryHTML,
-			buildSearchText(*entity.EntryHTML, entity.FieldsData)); err != nil {
+			buildSearchText(*entity.EntryHTML, searchFields)); err != nil {
 			return nil, err
 		}
 	} else if err := s.entities.UpdateFields(ctx, entityID, entity.FieldsData,
-		buildSearchText("", entity.FieldsData)); err != nil {
+		buildSearchText("", searchFields)); err != nil {
 		return nil, err
 	}
 	s.recordVersion(withVersionKind(ctx, VersionRestore), &before, entity, VersionRestore)
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	return entity, nil
 }
 

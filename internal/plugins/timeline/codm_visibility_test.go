@@ -4,13 +4,12 @@
 // like an Owner, EXCEPT when view-as-player is active, which must still
 // force RolePlayer regardless of promotion.
 //
-// This exercises effectiveRole directly (a pure function of the preview flag
-// and CampaignContext); it proves role selection, not that every SQL/service
+// This exercises effectiveRole directly (a pure function of the preview
+// cookie and CampaignContext); it proves role selection, not that every SQL/service
 // path narrows content correctly for that role (see service.go / repository.go).
 package timeline
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,17 +18,17 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// newTimelineTestContext builds an echo.Context whose request context carries
-// the view-as-player flag, matching how the real middleware/layouts wiring
-// stores it (layouts.SetViewingAsPlayer).
+// newTimelineTestContext builds an echo.Context carrying the view-as-player
+// toggle the way a browser sends it: the cookie, not the layout's context
+// flag, which is only set while rendering, after the handler loaded its data.
 func newTimelineTestContext(viewingAsPlayer bool) echo.Context {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/timelines", nil)
-	ctx := layouts.SetViewingAsPlayer(context.Background(), viewingAsPlayer)
-	req = req.WithContext(ctx)
+	if viewingAsPlayer {
+		req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+	}
 	rec := httptest.NewRecorder()
 	return e.NewContext(req, rec)
 }

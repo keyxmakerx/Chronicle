@@ -52,14 +52,24 @@ func TestListEventsAndErasForCalendar_Integration(t *testing.T) {
 	mustEvent(hidden, "Secret Meeting", "everyone")
 
 	// A visible event on day 2 linked to a private page: the event is listed
-	// for a Player, but the page's id and name are not.
+	// for a Player, but the page's id and name are not. It is announced
+	// ahead, so being in the future doesn't hide it.
+	ahead := AnnouncedAhead
 	cultID := newTestEntity(t, db, fixA.CampaignID, fixA.UserID, "The Hidden Cult")
 	mustExec(t, db, `UPDATE entities SET is_private = 1 WHERE id = ?`, cultID)
 	if err := eventRepo.CreateEvent(ctx, &Event{
 		ID: testUUID(t), CalendarID: open.ID, Name: "Cult Gathering", EntityID: &cultID,
-		Year: 1, Month: 1, Day: 2, Visibility: "everyone", AllDay: true,
+		Year: 1, Month: 1, Day: 2, Visibility: "everyone", AllDay: true, Announced: &ahead,
 	}); err != nil {
 		t.Fatalf("create linked event: %v", err)
+	}
+	// A future event announced only on its day: the picker must not name it
+	// to anyone the month grid hides it from.
+	if err := eventRepo.CreateEvent(ctx, &Event{
+		ID: testUUID(t), CalendarID: open.ID, Name: "Ambush",
+		Year: 1, Month: 1, Day: 3, Visibility: "everyone", AllDay: true,
+	}); err != nil {
+		t.Fatalf("create unannounced event: %v", err)
 	}
 
 	if _, err := calRepo.CreateEra(ctx, open.ID, EraInput{
@@ -76,8 +86,9 @@ func TestListEventsAndErasForCalendar_Integration(t *testing.T) {
 			role       int
 			want       []string
 		}{
-			{"owner sees every event", fixA.CampaignID, open.ID, permissions.RoleOwner, []string{"Harvest Fair", "War Council", "Cult Gathering"}},
-			{"player sees only everyone events", fixA.CampaignID, open.ID, permissions.RolePlayer, []string{"Harvest Fair", "Cult Gathering"}},
+			{"owner sees every event", fixA.CampaignID, open.ID, permissions.RoleOwner, []string{"Harvest Fair", "War Council", "Cult Gathering", "Ambush"}},
+			{"player sees only everyone events it can know about", fixA.CampaignID, open.ID, permissions.RolePlayer, []string{"Harvest Fair", "Cult Gathering"}},
+			{"scribe doesn't see the unannounced future event either", fixA.CampaignID, open.ID, permissions.RoleScribe, []string{"Harvest Fair", "Cult Gathering"}},
 			{"player sees nothing on a dm_only calendar", fixA.CampaignID, hidden.ID, permissions.RolePlayer, nil},
 			{"wrong campaign returns nothing, even for owner", fixB.CampaignID, open.ID, permissions.RoleOwner, nil},
 		}

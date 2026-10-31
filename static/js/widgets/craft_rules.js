@@ -1,10 +1,11 @@
 /**
  * craft_rules.js -- the crafting rules editor widget (data-widget="craft_rules")
  *
- * One recipe's "When… then…" rules and how the moments players see look:
- * the "When it can be made" tab (craft_rules_editor.js) and the How it looks tab
- * (craft_rules_looks.js, on the bench in craft_rules_stage.js), over one
- * shared state. What a rule means lives in craft_rules_logic.js; this file
+ * One recipe's "When… then…" rules, what going wrong costs, its extras,
+ * and how the moments players see look: the "When it can be made" tab
+ * (craft_rules_editor.js), the "If it goes wrong" and Extras tabs
+ * (craft_rules_more.js) and the How it looks tab (craft_rules_looks.js, on
+ * the bench in craft_rules_stage.js), over one shared state. What a rule means lives in craft_rules_logic.js; this file
  * is the glue: it reads the mount's attributes, injects the styles once,
  * reads the calendar (or uses the demo one), and switches tabs.
  * craft_rules.ai.md is the guide.
@@ -17,9 +18,9 @@
  * On its own (the Design Lab) it edits the demo recipes below and saves
  * nothing. The crafting app mounts it on one stored recipe by setting
  * el._craftApp = {recipe, lists, save} before mounting: recipe is
- * {id, name, ings: [[qty, name]], goal, roll, liquid, rules, looks} with the
- * rules as the AI writes them, lists fills the pickers, and save(recipe) is
- * called after every change to the rules or the looks.
+ * {id, name, ings: [[qty, name]], goal, roll, liquid, rules, looks, extras}
+ * with the rules and extras as the AI writes them, lists fills the pickers,
+ * and save({rules, looks, extras}) is called after every change.
  */
 (function () {
   'use strict';
@@ -69,8 +70,12 @@
     '.crr-ib{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:0;background:none;color:var(--color-text-secondary);cursor:pointer;flex:none}',
     '.crr-ib:hover,.crr-ib:focus-visible{background:var(--color-bg-tertiary);color:var(--color-text-primary)}',
     /* Your AI */
-    '.crr-aibar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px 10px 14px;border-radius:12px;border:1px solid var(--color-border-light);background:var(--color-bg-secondary);font-size:12.5px;color:var(--color-text-secondary)}',
-    '.crr-aibar>.fa-solid{color:var(--crr-acc)}.crr-aibar>span:first-of-type{flex:1 1 280px}',
+    '.crr-askbar{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 14px;border-radius:14px;border:1px solid var(--color-border);background:var(--color-card-bg);box-shadow:var(--elev-resting)}',
+    '.crr-askbar:focus-within{border-color:var(--crr-acc);box-shadow:0 0 0 3px var(--crr-acc-s)}',
+    '.crr-askbar>.fa-solid{color:var(--crr-acc)}',
+    '.crr-ask{flex:1;min-width:0;min-height:36px;font:inherit;font-size:14px;border:0;background:none;color:var(--color-text-primary);outline:none}',
+    '.crr-askhint{margin-top:-10px}',
+    '.crr-link{font:inherit;font-size:inherit;background:none;border:0;padding:0;color:var(--crr-ink);text-decoration:underline;text-underline-offset:2px;cursor:pointer}',
     '.crr-fold{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:12px;border:1px solid var(--color-border);background:var(--color-card-bg);box-shadow:var(--elev-hover);animation:crr-drape var(--dur-standard) var(--ease-out)}',
     '.crr-fold[hidden]{display:none}',
     '@keyframes crr-drape{from{opacity:0;transform:translateY(-6px)}}',
@@ -218,6 +223,42 @@
     '.crr.is-ai .crr-aij,.crr.is-ai .crr-aicap,.crr-brief:not([hidden]){display:block}',
     '.crr-aij.crr-block{margin:0}.crr-aicap.crr-block{margin:0 0 -8px}',
     '.crr-aij .k{color:var(--crr-ink)}.crr-aij .s{color:var(--crr-help)}.crr-aij .n{color:var(--crr-risk)}',
+    /* If it goes wrong, Extras */
+    '.crr-tag2{display:inline-flex;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--crr-risk-s);color:var(--crr-risk);text-transform:none;letter-spacing:0;white-space:nowrap}',
+    '.crr-chips.crr-inl{display:inline-flex;vertical-align:middle;margin:1px 0}',
+    '.crr-sent{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0;font-size:13px;color:var(--color-text-body)}',
+    '.crr-sw{display:inline-flex;align-items:center;gap:10px;font-size:12.5px;color:var(--color-text-primary);cursor:pointer}',
+    '.crr-sw input{appearance:none;-webkit-appearance:none;width:36px;height:20px;border-radius:999px;background:var(--crr-field);position:relative;cursor:pointer;flex:none;margin:0;transition:background var(--dur-quick,.15s)}',
+    '.crr-sw input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgb(0 0 0 / .3);transition:transform var(--dur-quick,.15s) var(--ease-out)}',
+    '.crr-sw input:checked{background:var(--crr-acc)}.crr-sw input:checked::after{transform:translateX(16px)}',
+    '.crr-sw input:focus-visible{outline:2px solid var(--crr-acc);outline-offset:2px}',
+    '.crr-rcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}',
+    '.crr-rcard{font:inherit;display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:14px;border:1px solid var(--color-border);background:var(--color-card-bg);cursor:pointer;text-align:left;color:var(--color-text-body)}',
+    '.crr-rcard b{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--color-text-primary)}.crr-rcard b .fa-solid{color:var(--c)}',
+    '.crr-rcard small{font-size:12px;color:var(--color-text-secondary);line-height:1.4}',
+    '.crr-rcard[aria-pressed="true"]{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c);background:var(--cs)}',
+    '.crr-rcard:focus-visible{outline:2px solid var(--crr-acc);outline-offset:2px}',
+    '.crr-box{border:1px solid var(--color-border);border-radius:14px;background:var(--color-card-bg);padding:14px;display:flex;flex-direction:column;gap:12px}',
+    '.crr-dtable{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}',
+    '.crr-dtable li{display:flex;align-items:center;gap:8px;padding:3px;border-radius:10px;font-size:13px;transition:background var(--dur-standard) var(--ease-out)}',
+    '.crr-dtable li.is-hit{background:var(--crr-acc-s);box-shadow:inset 0 0 0 1px var(--crr-acc)}',
+    '.crr-rowt{flex:1;min-width:0}',
+    '.crr-face{flex:none;width:28px;height:28px;border-radius:8px;background:var(--color-bg-tertiary);color:var(--color-text-primary);font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center}',
+    '.crr-die{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:var(--crr-acc);color:var(--color-accent-on-fill,#fff);font-weight:800;font-size:15px;box-shadow:var(--elev-resting)}',
+    '.crr-die.is-roll{animation:crr-tumble .7s cubic-bezier(.3,.7,.3,1)}',
+    '@keyframes crr-tumble{0%{transform:rotate(0) scale(.8)}60%{transform:rotate(540deg) scale(1.15)}100%{transform:rotate(720deg) scale(1)}}',
+    '.crr-xgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}',
+    '.crr-xc{border:1px solid var(--color-border);border-radius:14px;background:var(--color-card-bg);transition:border-color var(--dur-standard),box-shadow var(--dur-standard)}',
+    '.crr-xc.is-on{border-color:var(--c);box-shadow:inset 3px 0 0 var(--c)}',
+    '.crr-xh{display:flex;align-items:flex-start;gap:12px;padding:12px 14px}',
+    '.crr-xi{width:36px;height:36px;border-radius:10px;background:var(--cs);color:var(--c);display:flex;align-items:center;justify-content:center;flex:none}',
+    '.crr-xt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}',
+    '.crr-xt b{font-size:13.5px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;flex-wrap:wrap}.crr-xt small{font-size:12px;color:var(--color-text-secondary);line-height:1.4}',
+    '.crr-xh .crr-sw{margin-top:4px}',
+    '.crr-xb{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--dur-standard) var(--ease-out)}.crr-xc.is-on .crr-xb{grid-template-rows:1fr}.crr-xb>div{overflow:hidden;min-height:0}',
+    '.crr-xbi{padding:0 14px 14px 62px;display:flex;flex-direction:column;gap:10px}.crr-xbi:empty{display:none}',
+    '@media (max-width:760px){.crr-rcards,.crr-xgrid{grid-template-columns:1fr}.crr-xbi{padding-left:14px}}',
+    'html[data-motion]:not([data-motion="full"]) .crr-die.is-roll{animation:none}',
     /* How it looks */
     '.crr-fxgrid{display:grid;grid-template-columns:200px minmax(0,1fr);gap:18px;align-items:start}',
     '.crr-orail{display:flex;flex-direction:column;gap:3px}',
@@ -313,7 +354,14 @@
   var DEMO_WEATHER = ['Clear', 'Clear', 'Partly Cloudy', 'Cloudy', 'Rain', 'Rain', 'Fog', 'Clear', 'Windy', 'Ley Surge', 'Clear', 'Overcast', 'Drizzle', 'Rain', 'Thunderstorm',
     'Clear', 'Clear', 'Mist', 'Cloudy', 'Blood Rain', 'Clear', 'Partly Cloudy', 'Snow', 'Sleet', 'Clear', 'Fog', 'Cloudy', 'Clear', 'Snow', 'Clear'];
   var LISTS = {benches: ['Alchemy bench', 'Forge', 'Field kit'], skills: ['Alchemy', 'Herbalism', 'Smithing'], items: ['Bloodnight draught', 'Spoiled draught', 'Moonwater'],
-    marks: ['Moonlit', 'Twice-moonlit', 'Fresh-picked'], recipes: ['Umbral salts', 'Lantern oil'], tables: ['Moon quirks', 'Brewing mishaps']};
+    marks: ['Moonlit', 'Twice-moonlit', 'Fresh-picked'], recipes: ['Umbral salts', 'Lantern oil'], tables: ['Moon quirks', 'Brewing mishaps'],
+    tableRows: {'Moon quirks': ['It hums faintly at night.', 'It smells of rain.', 'It is cold to the touch.', 'It glows when the Lantern is full.'],
+      'Brewing mishaps': ['The flask cracks.', 'The flame gutters.', 'The cat knocks the bench.', 'It froths over.', 'A spark catches the sleeve.', 'The mixture curdles.']}};
+  /* The demo's extras: the moonlit draught has most of them on, so both tabs
+     have something to show. */
+  var DEMO_EXTRAS = {moonlit: {botch: {costs: 'baneAndQuirk', quirkTable: 'Moon quirks'}, mishaps: {chance: '1 in 6', table: 'Brewing mishaps'}, quality: {fine: 'edge', poor: 'bane'},
+    substitutes: [{'for': 0, use: 'herb', costs: 'bane'}], breakthrough: true, mastery: {afterCleanBrews: 3, gives: 'skip'},
+    discover: {closeWhen: '2 of 3', hint: 'The moss darkens, then fades. It wants something colder.', learnedBy: 'maker', failedTry: 'used'}, keeps: {days: 12, thenBecomes: 'Spoiled draught'}}};
   function demoInput() {
     var y = 100, m = 9, d = 8, weather = {}, i;
     for (i = 0; i < DEMO_WEATHER.length; i++) { weather[y + '-' + m + '-' + d] = DEMO_WEATHER[i]; d++; if (d > 30) { d = 1; m++; } }
@@ -370,7 +418,8 @@
       rules.forEach(function (q) { if (!q.look && q.players !== 'secret') q.look = R.defLook(W, q); q._def = q.look ? R.clone(q.look) : null; });
       var looks = moments(r.name), clean = {};
       Object.keys(looks).forEach(function (k) { clean[k] = R.cleanLook(looks[k], fx.spots, fx.looks); });
-      return {key: r.key, name: r.name, ings: r.ings, goal: r.goal, stat: r.stat, liquid: r.liquid, rules: rules, looks: clean, defaults: R.clone(clean)};
+      return {key: r.key, name: r.name, ings: r.ings, goal: r.goal, stat: r.stat, liquid: r.liquid, rules: rules, looks: R.clone(clean), defaults: clean,
+        x: R.cleanExtras(DEMO_EXTRAS[r.key], r.ings.length)};
     });
   }
 
@@ -383,15 +432,16 @@
       clean[k] = R.cleanLook(defs[k], fx.spots, fx.looks);
       looks[k] = saved[k] ? R.cleanLook(saved[k], fx.spots, fx.looks) || R.clone(clean[k]) : R.clone(clean[k]);
     });
+    Object.keys(saved).forEach(function (k) { if (/^mishap:\d+$/.test(k) && saved[k]) looks[k] = R.cleanLook(saved[k], fx.spots, fx.looks); });
     return {key: src.id, name: src.name, ings: src.ings || [], goal: src.goal, stat: '', roll: src.roll || '', liquid: src.liquid || '#b4232f',
-      rules: rules, looks: looks, defaults: clean};
+      rules: rules, looks: looks, defaults: clean, x: R.cleanExtras(src.extras, (src.ings || []).length)};
   }
-  /* What the crafting app stores: the rules as the AI writes them, and each
-     moment's look. */
+  /* What the crafting app stores: the rules as the AI writes them, each
+     moment's look, and the extras. */
   function appData(r) {
     var looks = {};
     Object.keys(r.looks || {}).forEach(function (k) { if (r.looks[k]) looks[k] = R.lookData(r.looks[k]); });
-    return {rules: r.rules.map(R.ruleData), looks: looks};
+    return {rules: r.rules.map(R.ruleData), looks: looks, extras: r.x};
   }
 
   /* ---------- Reading a real calendar ---------- */
@@ -454,15 +504,16 @@
   function fa(n) { return '<i class="fa-solid fa-' + n + '" aria-hidden="true"></i>'; }
   function calm() { return (document.documentElement.getAttribute('data-motion') || 'full') !== 'full'; }
 
+  var TABS = [['rules', 'When it can be made', 'list-check'], ['wrong', 'If it goes wrong', 'triangle-exclamation'], ['extras', 'Extras', 'sliders'], ['looks', 'How it looks', 'wand-magic-sparkles']];
   /* Counts mounts, so two editors on a page keep their tab ids apart. */
   var mounts = 0;
   function start(el, input, note) {
     var fx = {spots: FX.MOMENT_SPOTS, looks: FX.LOOKS}, W = R.world(Object.assign({sky: window.SkyWorld, span: 30}, input)), app = el._craftApp;
     var S = {W: W, at: 0, fx: fx, pick: app ? 0 : 2, recipes: app ? [appRecipe(W, app.recipe, fx)] : recipes(W, !!input.real, fx), calm: calm, noCal: !!input.noCal};
-    var ed = null, looks = null, tab = 'rules', uid = 'crr' + (++mounts);
+    var ed = null, looks = null, more = {}, tab = 'rules', uid = 'crr' + (++mounts);
     S.rec = function () { return S.recipes[S.pick]; };
     S.setDay = function (d) { S.at = d; };
-    S.changed = function (kind) { if (app && (kind === 'rules' || kind === 'looks')) app.save(appData(S.rec())); };
+    S.changed = function (kind) { if (app && (kind === 'rules' || kind === 'looks' || kind === 'extras')) app.save(appData(S.rec())); };
     S.say = function (msg) { var lv = el.querySelector('.crr-live'); if (lv) { lv.textContent = ''; setTimeout(function () { lv.textContent = msg; }, 30); } };
     S.goLook = function (id) { show('looks'); looks.select(id); };
     function head() {
@@ -480,6 +531,7 @@
       Array.prototype.forEach.call(el.querySelectorAll('[role="tab"]'), function (b) { var on = b.getAttribute('data-tab') === k; b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; });
       Array.prototype.forEach.call(el.querySelectorAll('[role="tabpanel"]'), function (p) { p.hidden = p.getAttribute('data-pane') !== k; });
       if (k === 'looks') { if (!looks) looks = CraftRulesLooks.mount(el.querySelector('[data-pane="looks"]'), S); else looks.refresh(); }
+      else if (k === 'wrong' || k === 'extras') { if (!more[k]) more[k] = CraftRulesMore.mount(el.querySelector('[data-pane="' + k + '"]'), S, k); else more[k].refresh(); }
       else if (ed) ed.rules();
       moveBar();
     }
@@ -488,15 +540,16 @@
         return '<button type="button" class="crr-cx" data-recipe="' + i + '" aria-pressed="false"><span style="width:10px;height:10px;border-radius:50%;background:' + R.esc(r.liquid) + '"></span>' + R.esc(r.name) + '</button>';
       }).join('') + '</div><button type="button" class="btn btn-secondary btn-sm" data-ai aria-pressed="false">' + fa('code') + '<span>Show what the AI writes</span></button></div>' +
       '<div class="crr-banner' + (note.bad ? ' is-bad' : '') + '">' + note.html + '</div>' +
-      '<div class="crr-tabs" role="tablist" aria-label="Rule editor"><button type="button" role="tab" id="' + uid + '-t-rules" data-tab="rules" aria-controls="' + uid + '-p-rules" aria-selected="true">' + fa('list-check') + 'When it can be made</button>' +
-      '<button type="button" role="tab" id="' + uid + '-t-looks" data-tab="looks" aria-controls="' + uid + '-p-looks" aria-selected="false" tabindex="-1">' + fa('wand-magic-sparkles') + 'How it looks</button><span class="crr-tabbar"></span></div>' +
-      '<div class="crr-body"><div role="tabpanel" id="' + uid + '-p-rules" aria-labelledby="' + uid + '-t-rules" data-pane="rules"></div>' +
-      '<div role="tabpanel" id="' + uid + '-p-looks" aria-labelledby="' + uid + '-t-looks" data-pane="looks" hidden></div></div><div class="crr-sr crr-live" aria-live="polite"></div></div>';
+      '<div class="crr-tabs" role="tablist" aria-label="Rule editor">' + TABS.map(function (t, i) {
+        return '<button type="button" role="tab" id="' + uid + '-t-' + t[0] + '" data-tab="' + t[0] + '" aria-controls="' + uid + '-p-' + t[0] + '" aria-selected="' + (i === 0) + '"' + (i ? ' tabindex="-1"' : '') + '>' + fa(t[2]) + t[1] + '</button>';
+      }).join('') + '<span class="crr-tabbar"></span></div><div class="crr-body">' + TABS.map(function (t, i) {
+        return '<div role="tabpanel" id="' + uid + '-p-' + t[0] + '" aria-labelledby="' + uid + '-t-' + t[0] + '" data-pane="' + t[0] + '"' + (i ? ' hidden' : '') + '></div>';
+      }).join('') + '</div><div class="crr-sr crr-live" aria-live="polite"></div></div>';
     head();
     ed = CraftRulesEditor.mount(el.querySelector('[data-pane="rules"]'), S);
     function onClick(e) {
       var rb = e.target.closest('[data-recipe]');
-      if (rb) { S.pick = +rb.getAttribute('data-recipe'); head(); ed.refresh(); if (looks) looks.refresh(); return; }
+      if (rb) { S.pick = +rb.getAttribute('data-recipe'); head(); ed.refresh(); if (looks) looks.refresh(); Object.keys(more).forEach(function (k) { more[k].refresh(); }); return; }
       var t = e.target.closest('[role="tab"]'); if (t) { show(t.getAttribute('data-tab')); return; }
       var ai = e.target.closest('[data-ai]');
       if (ai) { var on = ai.getAttribute('aria-pressed') !== 'true'; ai.setAttribute('aria-pressed', String(on)); el.querySelector('.crr').classList.toggle('is-ai', on); }
@@ -510,14 +563,14 @@
     requestAnimationFrame(moveBar);
     return {destroy: function () {
       el.removeEventListener('click', onClick); el.removeEventListener('keydown', onKey); window.removeEventListener('resize', moveBar);
-      if (ed) ed.destroy(); if (looks) looks.destroy();
+      if (ed) ed.destroy(); if (looks) looks.destroy(); Object.keys(more).forEach(function (k) { more[k].destroy(); });
     }};
   }
 
   Chronicle.register('craft_rules', {
     init: function (el) {
       injectStyle();
-      if (!R || !FX || !window.CraftRulesEditor || !window.CraftRulesLooks || !window.SkyWorld) {
+      if (!R || !FX || !window.CraftRulesEditor || !window.CraftRulesLooks || !window.CraftRulesMore || !window.SkyWorld) {
         el.innerHTML = '<p class="crr-load" role="status">The rules editor couldn’t load. Reload the page to try again.</p>';
         return;
       }

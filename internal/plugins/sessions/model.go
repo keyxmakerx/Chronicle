@@ -34,9 +34,7 @@ const (
 	RSVPDeclined  = "declined"
 	RSVPTentative = "tentative"
 	// RSVPCarriedYes is a proposal-confirmed "yes" vote that still needs the
-	// member's own explicit confirmation before it counts as Going (operator
-	// server-change #3: a yes vote on the winning option is not automatically
-	// a Going). A member carries this status until they submit their own
+	// member's own explicit confirmation before it counts as Going. A member carries this status until they submit their own
 	// accepted/declined/tentative answer through the normal RSVP flow, which
 	// simply overwrites it — there is no separate "confirm" action.
 	RSVPCarriedYes = "carried_yes"

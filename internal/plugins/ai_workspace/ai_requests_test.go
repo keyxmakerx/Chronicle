@@ -29,6 +29,8 @@ type reqRepo struct {
 
 func (r *reqRepo) Replace(context.Context, *connector.Connection) (int64, error) { return 1, nil }
 func (r *reqRepo) RevokeAll(context.Context, string, time.Time) error            { return nil }
+func (r *reqRepo) RevokeMadeBy(context.Context, string, string, time.Time) error { return nil }
+func (r *reqRepo) RevokeAllMadeBy(context.Context, string, time.Time) error      { return nil }
 func (r *reqRepo) Current(_ context.Context, campaignID string) (*connector.Connection, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

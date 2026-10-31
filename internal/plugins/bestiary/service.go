@@ -60,8 +60,8 @@ type BestiaryService interface {
 	Rate(ctx context.Context, userID, publicationID string, rating int, reviewText *string) error
 	// RemoveRating removes a user's rating on a publication.
 	RemoveRating(ctx context.Context, userID, publicationID string) error
-	// ListReviews returns paginated reviews for a publication.
-	ListReviews(ctx context.Context, publicationID string, page, perPage int) (*ReviewListResult, error)
+	// ListReviews returns paginated reviews for a publication the user may see.
+	ListReviews(ctx context.Context, userID, publicationID string, page, perPage int) (*ReviewListResult, error)
 	// ToggleFavorite adds or removes a favorite, returning the new state.
 	ToggleFavorite(ctx context.Context, userID, publicationID string) (favorited bool, err error)
 	// RemoveFavorite removes a user's favorite on a publication.
@@ -261,6 +261,9 @@ func (s *bestiaryService) Archive(ctx context.Context, userID, publicationID str
 	if err := requireCreator(pub, userID); err != nil {
 		return err
 	}
+	if err := s.requireNotModerated(ctx, pub); err != nil {
+		return err
+	}
 	return s.repo.ArchivePublication(ctx, publicationID)
 }
 
@@ -282,12 +285,46 @@ func (s *bestiaryService) ChangeVisibility(ctx context.Context, userID, publicat
 	if err := requireCreator(pub, userID); err != nil {
 		return err
 	}
-	// Cannot change visibility of a flagged publication (admin must unflag first).
-	if pub.Visibility == VisibilityFlagged {
-		return apperror.NewForbidden("publication is under moderation review")
+	if err := s.requireNotModerated(ctx, pub); err != nil {
+		return err
 	}
 
 	return s.repo.UpdateVisibility(ctx, publicationID, visibility)
+}
+
+// requireNotModerated keeps a moderation decision out of the creator's hands.
+// A flagged publication waits for a moderator, and one a moderator archived
+// stays archived until a moderator restores it; otherwise the creator could
+// archive a flagged publication and then publish it again, or undo a
+// moderator's archive. The moderation log is the record of who archived it.
+func (s *bestiaryService) requireNotModerated(ctx context.Context, pub *Publication) error {
+	switch pub.Visibility {
+	case VisibilityFlagged:
+		return apperror.NewForbidden("publication is under moderation review")
+	case VisibilityArchived:
+		log, err := s.repo.GetModerationLog(ctx, pub.ID)
+		if err != nil {
+			return err
+		}
+		if len(log) > 0 && log[0].Action == "archive" {
+			return apperror.NewForbidden("a moderator archived this publication")
+		}
+	}
+	return nil
+}
+
+// viewable returns the publication if this user may see it: anyone may see a
+// published or unlisted one, and only its creator sees the rest. It is the
+// rule Show applies, for the routes that reach a publication by id.
+func (s *bestiaryService) viewable(ctx context.Context, userID, publicationID string) (*Publication, error) {
+	pub, err := s.repo.GetByID(ctx, publicationID)
+	if err != nil {
+		return nil, err
+	}
+	if pub.Visibility != VisibilityPublished && pub.Visibility != VisibilityUnlisted && pub.CreatorID != userID {
+		return nil, apperror.NewNotFound("publication not found")
+	}
+	return pub, nil
 }
 
 // ListPublished returns a paginated list of published publications.
@@ -406,7 +443,7 @@ func (s *bestiaryService) Rate(ctx context.Context, userID, publicationID string
 	}
 	reviewText = sanitizeOptionalText(reviewText)
 
-	pub, err := s.repo.GetByID(ctx, publicationID)
+	pub, err := s.viewable(ctx, userID, publicationID)
 	if err != nil {
 		return err
 	}
@@ -424,7 +461,10 @@ func (s *bestiaryService) RemoveRating(ctx context.Context, userID, publicationI
 }
 
 // ListReviews returns paginated reviews (ratings with text) for a publication.
-func (s *bestiaryService) ListReviews(ctx context.Context, publicationID string, page, perPage int) (*ReviewListResult, error) {
+func (s *bestiaryService) ListReviews(ctx context.Context, userID, publicationID string, page, perPage int) (*ReviewListResult, error) {
+	if _, err := s.viewable(ctx, userID, publicationID); err != nil {
+		return nil, err
+	}
 	page, perPage = clampPagination(page, perPage)
 
 	reviews, total, err := s.repo.ListReviews(ctx, publicationID, page, perPage)
@@ -450,8 +490,7 @@ func (s *bestiaryService) ListReviews(ctx context.Context, publicationID string,
 // Returns the new favorited state. The toggle and count adjustment are
 // transactional in the repo layer to prevent race conditions.
 func (s *bestiaryService) ToggleFavorite(ctx context.Context, userID, publicationID string) (bool, error) {
-	// Verify publication exists before toggling.
-	if _, err := s.repo.GetByID(ctx, publicationID); err != nil {
+	if _, err := s.viewable(ctx, userID, publicationID); err != nil {
 		return false, err
 	}
 
@@ -578,7 +617,7 @@ func (s *bestiaryService) importOrFork(ctx context.Context, userID, publicationI
 // Per-user deduplication, flag count increment, and auto-hide are all
 // transactional in the repo layer to prevent abuse and race conditions.
 func (s *bestiaryService) Flag(ctx context.Context, userID, publicationID string, reason *string) error {
-	pub, err := s.repo.GetByID(ctx, publicationID)
+	pub, err := s.viewable(ctx, userID, publicationID)
 	if err != nil {
 		return err
 	}

@@ -2,8 +2,7 @@
 // dynamic-surface demo: a live character sheet assembled by the frame
 // (Chronicle.surface) from a declarative schema, used to exercise the
 // expand/collapse box, overlay, and mini->full launch primitives without
-// touching real campaign data. (It formerly hosted a static component
-// catalogue; the moving dynamic-surface engine is the demo now.) It also
+// touching real campaign data. It also
 // shows the crafting bench kit in build mode, on demo recipes.
 package designlab
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -58,7 +59,8 @@ func installTestEnv(t *testing.T, zipContent []byte) (PackageService, *fakeRepo,
 		DownloadURL: server.URL + "/testsys-0.2.0.zip",
 	}
 
-	gh := &GitHubClient{httpClient: server.Client()}
+	// The test server stands in for GitHub's download host.
+	gh := &GitHubClient{httpClient: server.Client(), hostAllowed: func(*url.URL) bool { return true }}
 	svc := NewPackageService(repo, gh, t.TempDir(), "http://chronicle.test")
 	return svc, repo, pkg
 }

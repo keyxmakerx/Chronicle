@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -81,6 +83,9 @@ type CampaignRepository interface {
 
 	// UpdateSettings updates only the settings JSON column.
 	UpdateSettings(ctx context.Context, campaignID, settingsJSON string) error
+	// UpdateSettingsKeys sets top-level settings keys to the given JSON
+	// values (nil removes the key) and leaves every other key as stored.
+	UpdateSettingsKeys(ctx context.Context, campaignID string, keys map[string]json.RawMessage) error
 
 	// UpdateSidebarConfig updates only the sidebar_config JSON column.
 	UpdateSidebarConfig(ctx context.Context, campaignID, configJSON string) error
@@ -292,15 +297,17 @@ func (r *campaignRepository) ListPublic(ctx context.Context, limit int) ([]Campa
 	return campaigns, rows.Err()
 }
 
-// Update modifies an existing campaign's name, description, settings, and sidebar config.
+// Update modifies an existing campaign's name, slug, description and public
+// flag. Settings and sidebar config have writers of their own that change
+// only what they mean to, so this one never writes back a copy it read.
 func (r *campaignRepository) Update(ctx context.Context, campaign *Campaign) error {
 	query := `UPDATE campaigns SET name = ?, slug = ?, description = ?, is_public = ?,
-	          settings = ?, sidebar_config = ?, updated_at = NOW()
+	          updated_at = NOW()
 	          WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
 		campaign.Name, campaign.Slug, campaign.Description, campaign.IsPublic,
-		campaign.Settings, campaign.SidebarConfig, campaign.ID,
+		campaign.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating campaign: %w", err)
@@ -357,6 +364,48 @@ func (r *campaignRepository) UpdateSettings(ctx context.Context, campaignID, set
 		`UPDATE campaigns SET settings = ?, updated_at = NOW() WHERE id = ?`,
 		settingsJSON, campaignID,
 	)
+	if err != nil {
+		return fmt.Errorf("updating settings: %w", err)
+	}
+	return r.changedOrExists(ctx, result, campaignID)
+}
+
+// settingsKeyPattern is the shape of a settings key; keys are spliced into
+// JSON paths, so anything else is refused.
+var settingsKeyPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
+
+// UpdateSettingsKeys changes the named keys in one statement on the stored
+// JSON, so two writers changing different settings can't undo each other the
+// way a read, edit and write of the whole object does. Stored settings that
+// aren't valid JSON are treated as empty, as ParseSettings treats them.
+func (r *campaignRepository) UpdateSettingsKeys(ctx context.Context, campaignID string, keys map[string]json.RawMessage) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(keys))
+	for k := range keys {
+		if !settingsKeyPattern.MatchString(k) {
+			return fmt.Errorf("invalid settings key %q", k)
+		}
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	expr := "CASE WHEN JSON_VALID(settings) THEN settings ELSE '{}' END"
+	var args []any
+	for _, k := range names {
+		if keys[k] == nil {
+			expr = "JSON_REMOVE(" + expr + ", '$." + k + "')"
+		}
+	}
+	for _, k := range names {
+		if v := keys[k]; v != nil {
+			expr = "JSON_SET(" + expr + ", '$." + k + "', JSON_EXTRACT(?, '$'))"
+			args = append(args, string(v))
+		}
+	}
+	args = append(args, campaignID)
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET settings = `+expr+`, updated_at = NOW() WHERE id = ?`, args...)
 	if err != nil {
 		return fmt.Errorf("updating settings: %w", err)
 	}
@@ -528,19 +577,37 @@ func (r *campaignRepository) AddMember(ctx context.Context, member *CampaignMemb
 
 // RemoveMember deletes a campaign membership row.
 func (r *campaignRepository) RemoveMember(ctx context.Context, campaignID, userID string) error {
-	result, err := r.db.ExecContext(ctx,
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("removing campaign member: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	result, err := tx.ExecContext(ctx,
 		`DELETE FROM campaign_members WHERE campaign_id = ? AND user_id = ?`,
 		campaignID, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("removing campaign member: %w", err)
 	}
-
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return apperror.NewNotFound("member not found")
 	}
-	return nil
+
+	// Page and tag sharing trusts a group row without asking whether its user
+	// still belongs to the campaign, so a removed member's group rows go with
+	// them: left behind, they kept every page shared with the group open to
+	// the user as a visitor of a public campaign.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE cgm FROM campaign_group_members cgm
+		 JOIN campaign_groups cg ON cg.id = cgm.group_id
+		 WHERE cg.campaign_id = ? AND cgm.user_id = ?`,
+		campaignID, userID,
+	); err != nil {
+		return fmt.Errorf("removing member's group places: %w", err)
+	}
+	return tx.Commit()
 }
 
 // FindMember retrieves a user's membership with their display info.
@@ -949,6 +1016,9 @@ type GroupRepository interface {
 	AddGroupMember(ctx context.Context, groupID int, userID string) error
 	// RemoveGroupMember removes a user from a group.
 	RemoveGroupMember(ctx context.Context, groupID int, userID string) error
+	// PruneNonMemberGroupRows deletes group rows of users no longer in the
+	// group's campaign.
+	PruneNonMemberGroupRows(ctx context.Context) (int64, error)
 	// ListGroupMembers returns all members of a group with display info.
 	ListGroupMembers(ctx context.Context, groupID int) ([]GroupMemberInfo, error)
 }
@@ -1043,16 +1113,53 @@ func (r *groupRepository) DeleteGroup(ctx context.Context, groupID int) error {
 	return nil
 }
 
-// AddGroupMember adds a user to a group. Ignores duplicates.
+// AddGroupMember adds a user to a group. Ignores duplicates. Only a member of
+// the group's campaign can be added: the row is written from the membership
+// itself, so no check-then-write gap lets a non-member in.
 func (r *groupRepository) AddGroupMember(ctx context.Context, groupID int, userID string) error {
-	_, err := r.db.ExecContext(ctx,
-		`INSERT IGNORE INTO campaign_group_members (group_id, user_id) VALUES (?, ?)`,
-		groupID, userID,
+	result, err := r.db.ExecContext(ctx,
+		`INSERT IGNORE INTO campaign_group_members (group_id, user_id)
+		 SELECT cg.id, cm.user_id
+		 FROM campaign_groups cg
+		 JOIN campaign_members cm ON cm.campaign_id = cg.campaign_id AND cm.user_id = ?
+		 WHERE cg.id = ?`,
+		userID, groupID,
 	)
 	if err != nil {
 		return fmt.Errorf("adding group member: %w", err)
 	}
+	if n, _ := result.RowsAffected(); n > 0 {
+		return nil
+	}
+	// Nothing written: either already in the group, or not a member.
+	var inGroup bool
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM campaign_group_members WHERE group_id = ? AND user_id = ?)`,
+		groupID, userID,
+	).Scan(&inGroup); err != nil {
+		return fmt.Errorf("checking group member: %w", err)
+	}
+	if !inGroup {
+		return apperror.NewBadRequest("only members of this campaign can be added to its groups")
+	}
 	return nil
+}
+
+// PruneNonMemberGroupRows deletes group rows whose user is no longer a member
+// of the group's campaign, and returns how many it removed. Removal now takes
+// these rows with it; this clears the ones left by removals before that.
+func (r *groupRepository) PruneNonMemberGroupRows(ctx context.Context) (int64, error) {
+	result, err := r.db.ExecContext(ctx,
+		`DELETE cgm FROM campaign_group_members cgm
+		 JOIN campaign_groups cg ON cg.id = cgm.group_id
+		 LEFT JOIN campaign_members cm ON cm.campaign_id = cg.campaign_id AND cm.user_id = cgm.user_id
+		 WHERE cm.user_id IS NULL`,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("pruning group rows of non-members: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	return n, nil
 }
 
 // RemoveGroupMember removes a user from a group.
