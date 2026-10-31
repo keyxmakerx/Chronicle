@@ -204,70 +204,73 @@
       tag(s, 80, 46, 14, 'M73 38 Q80 40 81 56') +
       '</g>';
   };
-  /* A short sword. Polished steel mirrors what is around it, so each bevel
-     is a strip of the room: the upper bevel catches the bright sky and the
-     lower one the dark horizon and the warm floor, with a long brushed grain
-     along the blade. The guard and pommel are the trim as polished metal,
-     the grip the detail as leather wound on the bias, and the mark is set
-     under a glass cabochon in the pommel. */
+  /* An arming sword, in true proportion: a long, narrow blade with a
+     slim crossguard, a grip one hand long and a small disc pommel.
+     Polished steel mirrors what is around it, so each bevel is a strip of
+     the room: the upper bevel catches the bright sky and the lower one the
+     dark horizon and the warm floor, with a long brushed grain along the
+     blade. The guard and pommel are the trim as polished metal, the grip
+     the detail as leather wound on the bias, and the mark is set under a
+     glass cabochon in the pommel. */
   SH.blade = function (s) {
     var t = s.trim, d = s.detail, st = blend(s.body, '#a9b0b8', .45);
-    var T = 'rotate(-38 60 66) translate(60 62) scale(1.12 1.25) translate(-60 -62)';
-    var bladeP = 'M50 58 H100 L112 62 L100 66 H50Z';
+    var T = 'translate(1 2) rotate(-40 64 62)';
+    var bladeP = 'M50 59.3 H99 L120 62 L99 64.7 H50Z';
     var defs = '<defs>' + shadowDefs() +
-      h.grad('ub', 0, 0, 0, 1, [[0, mix(st, .88)], [.3, mix(st, .55)], [.7, mix(st, .05)], [1, mix(st, -.2)]]) +
+      h.grad('ub', 0, 0, 0, 1, [[0, mix(st, .9)], [.25, mix(st, .62)], [.6, mix(st, .02)], [.85, mix(st, .3)], [1, mix(st, -.15)]]) +
       h.grad('lb', 0, 0, 0, 1, [[0, mix(st, -.62)], [.3, mix(st, -.38)], [.62, mix(st, .1)], [.86, blend(mix(st, .3), '#ffd9a8', .35)], [1, mix(st, -.3)]]) +
-      h.grad('gd', 0, 0, 1, 0, [[0, mix(t, -.72)], [.2, mix(t, -.15)], [.38, mix(t, .6)], [.5, mix(t, .9)], [.62, t], [.85, mix(t, -.5)], [1, mix(t, -.75)]]) +
+      h.grad('gd', 0, 0, 1, 0, [[0, mix(t, -.72)], [.22, mix(t, -.1)], [.42, mix(t, .7)], [.55, mix(t, .9)], [.7, t], [1, mix(t, -.7)]]) +
       h.grad('fe', 0, 0, 0, 1, [[0, mix(t, .7)], [.35, t], [.7, mix(t, -.55)], [1, mix(t, -.3)]]) +
       h.grad('gp', 0, 0, 0, 1, [[0, mix(d, -.65)], [.28, mix(d, .2)], [.42, mix(d, .38)], [.72, mix(d, -.25)], [1, mix(d, -.7)]]) +
-      h.rgrad('pm', .36, .3, .8, [[0, mix(t, .95)], [.12, mix(t, .6)], [.4, t], [.68, mix(t, -.55)], [.82, mix(t, -.2)], [.92, mix(t, .15)], [1, mix(t, -.7)]]) +
+      h.rgrad('pm', .36, .3, .8, [[0, mix(t, .95)], [.14, mix(t, .6)], [.42, t], [.7, mix(t, -.55)], [.86, mix(t, -.15)], [1, mix(t, -.7)]]) +
       h.rgrad('cb', .35, .3, .75, [[0, '#fff', .7], [.3, '#fff', .12], [.7, '#fff', 0], [1, '#000', .25]]) +
       '<filter id="' + h.id('br') + '" x="0" y="0" width="1" height="1"><feTurbulence type="fractalNoise" baseFrequency=".012 .9" numOctaves="2" seed="4"/>' +
       '<feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.6 -.75"/><feComposite in2="SourceGraphic" operator="in"/></filter>' +
-      metalF('mt', '.35', 9, .8) + grainF('lg', '.9 .5', 17, 1.6, 2) + '</defs>';
+      metalF('mt', '.5', 9, .8) + grainF('lg', '.9 .5', 17, 1.6, 2) + '</defs>';
     var wraps = '';
-    for (var i = 0; i < 6; i++) {
-      var x = 26 + i * 3.1;
-      wraps += '<path d="M' + x + ' 58.6 h3.1 l-1.5 6.8 h-3.1z" fill="' + h.url('gp') + '"/>' +
-        '<path d="M' + (x + 3.1) + ' 58.6 l-1.5 6.8" stroke="' + mix(d, -.75) + '" stroke-width=".55" opacity=".85"/>' +
-        '<path d="M' + (x + .6) + ' 59.6 h1.6" stroke="#fff" stroke-opacity=".35" stroke-width=".5" stroke-linecap="round"/>';
+    for (var i = 0; i < 5; i++) {
+      var x = 31 + i * 2.8;
+      wraps += '<path d="M' + x + ' 59.5 h2.8 l-1.3 5 h-2.8z" fill="' + h.url('gp') + '"/>' +
+        '<path d="M' + (x + 2.8) + ' 59.5 l-1.3 5" stroke="' + mix(d, -.75) + '" stroke-width=".45" opacity=".85"/>' +
+        '<path d="M' + (x + .5) + ' 60.3 h1.4" stroke="#fff" stroke-opacity=".35" stroke-width=".4" stroke-linecap="round"/>';
     }
-    var sil = '<g transform="' + T + '" fill="#1a1008"><path d="' + bladeP + '"/><rect x="44" y="48" width="7" height="28" rx="3"/><rect x="25" y="58.6" width="20" height="6.8"/><circle cx="17.5" cy="62" r="8.2"/></g>';
+    var sil = '<g transform="' + T + '" fill="#1a1008"><path d="' + bladeP + '"/><rect x="46" y="50" width="4" height="24" rx="1.6"/><rect x="30" y="59.5" width="16" height="5"/><circle cx="25.5" cy="62" r="5.2"/></g>';
     return defs +
-      '<g transform="translate(4 7)" opacity=".38" filter="' + h.url('sh') + '">' + sil + '</g>' +
+      '<g transform="translate(4 7)" opacity=".36" filter="' + h.url('sh') + '">' + sil + '</g>' +
       '<g transform="' + T + '">' +
       /* the blade: two bevels, its grain, the fuller and the honed edges */
-      '<path d="M50 58 H100 L112 62 H50Z" fill="' + h.url('ub') + '"/>' +
-      '<path d="M50 62 H112 L100 66 H50Z" fill="' + h.url('lb') + '"/>' +
+      '<path d="M50 59.3 H99 L120 62 H50Z" fill="' + h.url('ub') + '"/>' +
+      '<path d="M50 62 H120 L99 64.7 H50Z" fill="' + h.url('lb') + '"/>' +
       '<path d="' + bladeP + '" fill="#fff" opacity=".28" filter="' + h.url('br') + '"/>' +
-      '<path d="M55 60.7 H93" stroke="' + mix(st, -.6) + '" stroke-width="1.2" stroke-linecap="round" opacity=".75"/>' +
-      '<path d="M55 61.7 H93" stroke="#fff" stroke-opacity=".5" stroke-width=".45" stroke-linecap="round"/>' +
-      '<path d="M50 58.25 H100 L111.4 61.8" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width=".55"/>' +
-      '<path d="M50 65.75 H100 L111.4 62.2" fill="none" stroke="' + mix(st, .55) + '" stroke-opacity=".7" stroke-width=".45"/>' +
-      '<ellipse cx="80" cy="59.3" rx="13" ry=".9" fill="#fff" opacity=".85" filter="' + h.url('s1') + '"/>' +
-      '<ellipse cx="74" cy="64.4" rx="9" ry=".7" fill="#ffd9a8" opacity=".55" filter="' + h.url('s1') + '"/>' +
-      '<path d="' + bladeP + '" fill="none" stroke="rgb(20 14 10 / .5)" stroke-width=".45"/>' +
-      /* the langet and crossguard */
-      '<path d="M50.6 59 L56 62 L50.6 65Z" fill="' + h.url('fe') + '" stroke="rgb(20 14 10 / .4)" stroke-width=".4"/>' +
-      '<rect x="44" y="48" width="7" height="28" rx="3" fill="' + h.url('gd') + '"/>' +
-      '<rect x="44" y="48" width="7" height="28" rx="3" fill="' + t + '" opacity=".25" filter="' + h.url('mt') + '"/>' +
-      '<rect x="44" y="48" width="7" height="28" rx="3" fill="none" stroke="rgb(20 14 10 / .45)" stroke-width=".5"/>' +
-      '<circle cx="47.5" cy="47.6" r="3.4" fill="' + h.url('pm') + '"/><circle cx="47.5" cy="76.4" r="3.4" fill="' + h.url('pm') + '"/>' +
+      '<path d="M54 61.6 H90" stroke="' + mix(st, -.6) + '" stroke-width=".9" stroke-linecap="round" opacity=".75"/>' +
+      '<path d="M54 62.5 H90" stroke="#fff" stroke-opacity=".5" stroke-width=".35" stroke-linecap="round"/>' +
+      '<path d="M50 59.5 H99 L119.4 61.8" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width=".45"/>' +
+      '<path d="M50 64.5 H99 L119.4 62.2" fill="none" stroke="' + mix(st, .55) + '" stroke-opacity=".7" stroke-width=".4"/>' +
+      '<ellipse cx="82" cy="60.3" rx="15" ry=".7" fill="#fff" opacity=".85" filter="' + h.url('s1') + '"/>' +
+      '<ellipse cx="74" cy="63.8" rx="10" ry=".55" fill="#ffd9a8" opacity=".55" filter="' + h.url('s1') + '"/>' +
+      '<path d="' + bladeP + '" fill="none" stroke="rgb(20 14 10 / .5)" stroke-width=".4"/>' +
+      /* the langet and the slim crossguard */
+      '<path d="M50 60 L54 62 L50 64Z" fill="' + h.url('fe') + '" stroke="rgb(20 14 10 / .4)" stroke-width=".3"/>' +
+      '<rect x="46" y="50" width="4" height="24" rx="1.6" fill="' + h.url('gd') + '"/>' +
+      '<rect x="46" y="50" width="4" height="24" rx="1.6" fill="' + t + '" opacity=".25" filter="' + h.url('mt') + '"/>' +
+      '<rect x="46" y="50" width="4" height="24" rx="1.6" fill="none" stroke="rgb(20 14 10 / .45)" stroke-width=".4"/>' +
+      '<circle cx="48" cy="49.6" r="2.3" fill="' + h.url('pm') + '"/><circle cx="48" cy="74.4" r="2.3" fill="' + h.url('pm') + '"/>' +
       /* the grip and its two ferrules */
-      '<rect x="25" y="58.6" width="19" height="6.8" fill="' + h.url('gp') + '"/>' + wraps +
-      '<rect x="25" y="58.6" width="19" height="6.8" fill="' + d + '" opacity=".3" filter="' + h.url('lg') + '"/>' +
-      '<rect x="42.2" y="58" width="2.4" height="8" rx=".6" fill="' + h.url('fe') + '"/><rect x="24.2" y="58" width="2.4" height="8" rx=".6" fill="' + h.url('fe') + '"/>' +
-      /* the pommel, and the mark under its glass */
-      '<circle cx="17.5" cy="62" r="8.2" fill="' + h.url('pm') + '"/>' +
-      '<circle cx="17.5" cy="62" r="8.2" fill="' + t + '" opacity=".2" filter="' + h.url('mt') + '"/>' +
-      '<circle cx="17.5" cy="62" r="5.4" fill="rgb(16 10 6 / .75)" stroke="' + mix(t, .45) + '" stroke-width=".7"/>' +
-      '<g transform="rotate(38 17.5 62)">' + h.mark(s.mark, 12.4, 56.9, 10.2) + '</g>' +
-      '<circle cx="17.5" cy="62" r="4.9" fill="' + h.url('cb') + '"/>' +
-      '<path d="M14.6 59.4 a4 4 0 0 1 3.4 -1.7" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width=".7" stroke-linecap="round"/>' +
-      '<circle cx="17.5" cy="62" r="8.2" fill="none" stroke="rgb(20 14 10 / .5)" stroke-width=".5"/>' +
+      '<rect x="30" y="59.5" width="16" height="5" fill="' + h.url('gp') + '"/>' + wraps +
+      '<rect x="30" y="59.5" width="16" height="5" fill="' + d + '" opacity=".3" filter="' + h.url('lg') + '"/>' +
+      '<rect x="44.4" y="59" width="1.8" height="6" rx=".5" fill="' + h.url('fe') + '"/><rect x="29.4" y="59" width="1.8" height="6" rx=".5" fill="' + h.url('fe') + '"/>' +
+      /* the disc pommel, and the mark under its glass */
+      '<circle cx="25.5" cy="62" r="5.2" fill="' + h.url('pm') + '"/>' +
+      '<circle cx="25.5" cy="62" r="5.2" fill="' + t + '" opacity=".2" filter="' + h.url('mt') + '"/>' +
+      '<circle cx="25.5" cy="62" r="3.5" fill="rgb(16 10 6 / .75)" stroke="' + mix(t, .45) + '" stroke-width=".5"/>' +
+      '<g transform="rotate(40 25.5 62)">' + h.mark(s.mark, 22.2, 58.7, 6.6) + '</g>' +
+      '<circle cx="25.5" cy="62" r="3.2" fill="' + h.url('cb') + '"/>' +
+      '<path d="M23.6 60.3 a2.6 2.6 0 0 1 2.2 -1.1" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width=".5" stroke-linecap="round"/>' +
+      '<circle cx="25.5" cy="62" r="5.2" fill="none" stroke="rgb(20 14 10 / .5)" stroke-width=".4"/>' +
       '</g>' +
-      '<path d="M97 37 l.9 2.7 2.7 .9 -2.7 .9 -.9 2.7 -.9 -2.7 -2.7 -.9 2.7 -.9z" fill="#fff" opacity=".85" filter="' + h.url('s1') + '"/>';
+      '<path d="M104 24 l.8 2.4 2.4 .8 -2.4 .8 -.8 2.4 -.8 -2.4 -2.4 -.8 2.4 -.8z" fill="#fff" opacity=".85" filter="' + h.url('s1') + '"/>';
   };
+
   /* A round buckler, hung face on. The face is painted planks in the body
      tint, the grain showing through and the paint rubbed back to wood at the
      seams; the rim and rivets are hammered trim metal; two bands of the
@@ -340,69 +343,66 @@
       '<path d="M50.4 53.6 a11 11 0 0 1 6.6 -5" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.3" stroke-linecap="round" filter="' + h.url('s1') + '"/>' +
       '<circle cx="60" cy="60" r="14" fill="none" stroke="rgb(16 10 6 / .5)" stroke-width=".6"/>';
   };
-  /* A ring lying tilted, a cut stone in its setting. The band is the trim
-     as polished metal, its inside catching the light on the far side; the
-     stone is the body tint cut into facets, each lit by which way it faces,
-     with flashes of fire and a pool of its colour thrown on the floor. The
-     detail tint is the claws that hold it. */
+  /* A solitaire ring standing a little tilted. The band is the trim as
+     polished metal: its outside rounds over towards us at the front, its
+     inside shows through the hole at the back, and the shoulders rise
+     slimly into a small four-claw setting. The stone is the body tint,
+     about a third of the band's width, cut into facets each lit by which
+     way it faces, with flashes of fire. The detail tint is the claws. */
   SH.ring = function (s) {
-    var b = s.body, t = s.trim, d = s.detail, G = 40;
+    var b = s.body, t = s.trim, d = s.detail, G = 43, CX = 60;
     var defs = '<defs>' + shadowDefs() +
-      h.grad('bk', 0, 0, 1, 0, [[0, mix(t, -.3), 0], [.12, mix(t, -.3), .9], [.5, mix(t, .7), .9], [.88, mix(t, -.2), .9], [1, mix(t, -.2), 0]]) +
-      h.grad('fr', 0, 0, 1, 0, [[0, mix(t, -.7)], [.12, mix(t, .1)], [.28, mix(t, .85)], [.4, t], [.62, mix(t, -.45)], [.82, mix(t, .4)], [.92, mix(t, .1)], [1, mix(t, -.7)]]) +
-      h.grad('cl', 0, 0, 1, 0, [[0, mix(t, -.65)], [.3, mix(t, .5)], [.55, t], [1, mix(t, -.6)]]) +
-      h.grad('pr', 0, 0, 1, 0, [[0, mix(d, -.6)], [.35, mix(d, .6)], [1, mix(d, -.5)]]) +
-      h.grad('tb', 0, 0, 1, 1, [[0, mix(b, .55)], [.35, mix(b, .15)], [.5, mix(b, .7)], [.62, b], [1, mix(b, -.45)]]) +
+      h.grad('bk', 0, 0, 1, 0, [[0, mix(t, -.3), 0], [.14, mix(t, -.35), .95], [.5, mix(t, .65), .95], [.86, mix(t, -.25), .95], [1, mix(t, -.25), 0]]) +
+      h.grad('fr', 0, 0, 1, 0, [[0, mix(t, -.7)], [.1, mix(t, .05)], [.24, mix(t, .85)], [.36, t], [.6, mix(t, -.5)], [.8, mix(t, .45)], [.9, mix(t, .05)], [1, mix(t, -.7)]]) +
+      h.grad('fv', 0, 0, 0, 1, [[0, '#000', 0], [.6, '#000', 0], [1, '#000', .4]]) +
+      h.grad('cl', 0, 0, 1, 0, [[0, mix(t, -.65)], [.3, mix(t, .55)], [.5, t], [1, mix(t, -.6)]]) +
+      h.grad('tb', 0, 0, 1, 1, [[0, mix(b, .6)], [.35, mix(b, .15)], [.5, mix(b, .75)], [.62, b], [1, mix(b, -.45)]]) +
       metalF('mt', '.8', 3, .8) + '</defs>';
-    /* crown: eight facets between the table and the girdle, each shaded by
-       how squarely it faces the light up and to the left */
+    /* crown: eight facets between the table and the girdle */
     var crown = '', pav = '', n = 8, P = [], Q = [], ofs = [.08, -.1, .14, -.04, .1, -.12, .04, -.06];
     for (var i = 0; i < n; i++) {
       var a = (i + .5) / n * Math.PI * 2;
-      P.push([60 + Math.cos(a) * 18, G + Math.sin(a) * 5.4]);
-      Q.push([60 + Math.cos(a) * 9.6, G - 9 + Math.sin(a) * 2.9]);
+      P.push([(CX + Math.cos(a) * 12).toFixed(2), (G + Math.sin(a) * 3.6).toFixed(2)]);
+      Q.push([(CX + Math.cos(a) * 6.6).toFixed(2), (G - 6 + Math.sin(a) * 2).toFixed(2)]);
     }
     for (i = 0; i < n; i++) {
-      var j = (i + 1) % n, am = (i + 1) / n * Math.PI * 2;
-      var lit = Math.cos(am - Math.PI * 1.25) * .5 + ofs[i];
-      crown += '<path d="M' + Q[i] + ' L' + Q[j] + ' L' + P[j] + ' L' + P[i] + 'Z" fill="' + mix(b, lit) + '" stroke="' + mix(b, .5) + '" stroke-opacity=".55" stroke-width=".35"/>';
-      if (P[i][1] >= G - .5 || P[j][1] >= G - .5) {
-        pav += '<path d="M' + P[i] + ' L' + P[j] + ' L60 58Z" fill="' + mix(b, i % 2 ? -.35 : .35) + '" stroke="' + mix(b, .4) + '" stroke-opacity=".4" stroke-width=".35"/>';
-      }
+      var j = (i + 1) % n, am = (i + 1) / n * Math.PI * 2, lit = Math.cos(am - Math.PI * 1.25) * .5 + ofs[i];
+      crown += '<path d="M' + Q[i] + ' L' + Q[j] + ' L' + P[j] + ' L' + P[i] + 'Z" fill="' + mix(b, lit) + '" stroke="' + mix(b, .5) + '" stroke-opacity=".5" stroke-width=".25"/>';
+      if (+P[i][1] >= G - .3 || +P[j][1] >= G - .3) pav += '<path d="M' + P[i] + ' L' + P[j] + ' L60 55Z" fill="' + mix(b, i % 2 ? -.4 : .3) + '" stroke="' + mix(b, .4) + '" stroke-opacity=".4" stroke-width=".25"/>';
     }
-    var table = 'M' + Q.join(' L') + 'Z';
     function claw(x0, y0, x1, y1) {
-      return '<path d="M' + x0 + ' ' + y0 + ' Q' + (x0 + x1) / 2 + ' ' + (y1 + 4) + ' ' + x1 + ' ' + y1 + '" fill="none" stroke="' + mix(d, -.6) + '" stroke-width="3.4" stroke-linecap="round"/>' +
-        '<path d="M' + x0 + ' ' + y0 + ' Q' + (x0 + x1) / 2 + ' ' + (y1 + 4) + ' ' + x1 + ' ' + y1 + '" fill="none" stroke="' + mix(d, .2) + '" stroke-width="2.4" stroke-linecap="round"/>' +
-        '<circle cx="' + (x1 - .4) + '" cy="' + (y1 - .4) + '" r=".7" fill="#fff" opacity=".85"/>';
+      var q = 'M' + x0 + ' ' + y0 + ' Q' + ((x0 + x1) / 2) + ' ' + (y1 + 3) + ' ' + x1 + ' ' + y1;
+      return '<path d="' + q + '" fill="none" stroke="' + mix(d, -.6) + '" stroke-width="2.3" stroke-linecap="round"/>' +
+        '<path d="' + q + '" fill="none" stroke="' + mix(d, .25) + '" stroke-width="1.5" stroke-linecap="round"/>' +
+        '<circle cx="' + (x1 - .3) + '" cy="' + (y1 - .3) + '" r=".45" fill="#fff" opacity=".9"/>';
     }
-    return defs + shadow(60, 30, b) +
-      '<ellipse cx="60" cy="98" rx="18" ry="5" fill="' + mix(b, .5) + '" opacity=".35" filter="' + h.url('s4') + '"/>' +
-      /* the band's far side, seen from inside */
-      '<ellipse cx="60" cy="82" rx="32" ry="18" fill="none" stroke="' + h.url('fr') + '" stroke-width="8.4"/>' +
-      '<path d="M30.6 83 A29.4 15 0 0 1 89.4 83" fill="none" stroke="' + h.url('bk') + '" stroke-width="3.4"/>' +
-      '<path d="M33 79.5 A27.4 13.6 0 0 1 87 79.5" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1" filter="' + h.url('s1') + '"/>' +
-      /* the collet and the stone's pavilion inside it */
-      '<path d="M46 ' + (G + 2) + ' L74 ' + (G + 2) + ' Q66 54 66 66 L54 66 Q54 54 46 ' + (G + 2) + 'Z" fill="' + h.url('cl') + '"/>' +
-      '<path d="M46 ' + (G + 2) + ' L74 ' + (G + 2) + ' Q66 54 66 66 L54 66 Q54 54 46 ' + (G + 2) + 'Z" fill="' + t + '" opacity=".25" filter="' + h.url('mt') + '"/>' +
-      '<path d="M48.4 ' + (G + 5) + ' L71.6 ' + (G + 5) + '" stroke="rgb(16 10 6 / .35)" stroke-width=".8"/><path d="M48.8 ' + (G + 6) + ' L71.2 ' + (G + 6) + '" stroke="#fff" stroke-opacity=".4" stroke-width=".5"/>' +
+    var shoulder = 'M41 66 Q49 60 53.4 50.5 L56 51.5 Q53.6 60 46.4 67.6Z';
+    return defs + '<g transform="translate(0 -7)">' + shadow(60, 30, b) + '</g>' +
+      /* the band: the whole outside, then the inside seen through the hole */
+      '<ellipse cx="60" cy="79" rx="31" ry="19" fill="none" stroke="' + h.url('fr') + '" stroke-width="7.4"/>' +
+      '<path d="M32.4 80 A27.6 15.6 0 0 1 87.6 80" fill="none" stroke="' + h.url('bk') + '" stroke-width="3"/>' +
+      '<path d="M35 76.6 A25.4 13 0 0 1 85 76.6" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width=".8" filter="' + h.url('s1') + '"/>' +
+      '<ellipse cx="60" cy="79" rx="31" ry="19" fill="none" stroke="' + t + '" stroke-width="7.4" opacity=".22" filter="' + h.url('mt') + '"/>' +
+      /* the front of the band rounds towards us: bright crest, dark lower edge */
+      '<path d="M29.6 81 A31 19 0 0 0 90.4 81" fill="none" stroke="' + h.url('fv') + '" stroke-width="7.4"/>' +
+      '<path d="M31.4 83 A29.4 17 0 0 0 70 96.6" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.1" stroke-linecap="round" filter="' + h.url('s1') + '"/>' +
+      '<path d="M66 97.6 A30 17 0 0 0 86 89" fill="none" stroke="#ffd9a8" stroke-opacity=".55" stroke-width="1" stroke-linecap="round" filter="' + h.url('s1') + '"/>' +
+      '<ellipse cx="60" cy="79" rx="34.7" ry="22.7" fill="none" stroke="rgb(16 10 6 / .45)" stroke-width=".6"/>' +
+      /* slim shoulders rising into the basket */
+      '<path d="' + shoulder + '" fill="' + h.url('cl') + '"/><path d="' + shoulder + '" fill="none" stroke="rgb(16 10 6 / .35)" stroke-width=".4"/>' +
+      '<g transform="translate(120 0) scale(-1 1)"><path d="' + shoulder + '" fill="' + h.url('cl') + '"/><path d="' + shoulder + '" fill="none" stroke="rgb(16 10 6 / .35)" stroke-width=".4"/></g>' +
+      '<path d="M51.6 ' + (G + 3) + ' H68.4 L65 56 H55Z" fill="' + h.url('cl') + '"/>' +
+      '<path d="M51.6 ' + (G + 3) + ' H68.4 L65 56 H55Z" fill="' + t + '" opacity=".25" filter="' + h.url('mt') + '"/>' +
+      '<path d="M53 ' + (G + 7) + ' H67" stroke="rgb(16 10 6 / .35)" stroke-width=".5"/>' +
+      /* the stone */
       '<g opacity=".95">' + pav + '</g>' +
-      /* the band's near side over the collet's foot */
-      '<path d="M33.5 92 A32 18 0 0 0 86.5 92" fill="none" stroke="rgb(16 10 6 / .35)" stroke-width="6" transform="translate(0 2)" filter="' + h.url('s1') + '"/>' +
-      '<path d="M28 82 A32 18 0 0 0 92 82" fill="none" stroke="' + h.url('fr') + '" stroke-width="8.4"/>' +
-      '<path d="M28 82 A32 18 0 0 0 92 82" fill="none" stroke="' + t + '" stroke-width="8.4" opacity=".25" filter="' + h.url('mt') + '"/>' +
-      '<path d="M30 80 A30.6 16.2 0 0 0 72 96.6" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.3" stroke-linecap="round" filter="' + h.url('s1') + '"/>' +
-      '<path d="M26.2 83 A33.8 19.6 0 0 0 93.8 83" fill="none" stroke="rgb(16 10 6 / .45)" stroke-width=".7"/>' +
-      '<path d="M66 96 A30 15 0 0 0 86 88" fill="none" stroke="#ffd9a8" stroke-opacity=".55" stroke-width="1.2" stroke-linecap="round" filter="' + h.url('s1') + '"/>' +
-      /* the stone's crown, its table and claws */
-      '<ellipse cx="60" cy="' + G + '" rx="18.4" ry="5.8" fill="' + mix(b, -.5) + '"/>' + crown +
-      '<path d="' + table + '" fill="' + h.url('tb') + '" stroke="' + mix(b, .6) + '" stroke-opacity=".7" stroke-width=".4"/>' +
-      '<path d="M52 30 L58 29 L56 33Z" fill="#fff" opacity=".55"/>' +
-      claw(45, 48, 43.4, 39) + claw(75, 48, 76.6, 39) + claw(53, 50, 51.4, 44.6) + claw(67, 50, 68.6, 44.6) +
-      /* fire: the light split into colours, and the brightest glints */
-      '<circle cx="66" cy="36" r=".9" fill="#ff7a6a" opacity=".85"/><circle cx="55" cy="42" r=".8" fill="#7affd8" opacity=".75"/><circle cx="70" cy="41" r=".7" fill="#ffe27a" opacity=".85"/>' +
-      '<path d="M50 26 l1.1 3.3 3.3 1.1 -3.3 1.1 -1.1 3.3 -1.1 -3.3 -3.3 -1.1 3.3 -1.1z" fill="#fff" filter="' + h.url('s1') + '"/><path d="M50 27.6 l.6 1.8 1.8 .6 -1.8 .6 -.6 1.8 -.6 -1.8 -1.8 -.6 1.8 -.6z" fill="#fff"/>' +
-      '<path d="M74 34 l.7 2 2 .7 -2 .7 -.7 2 -.7 -2 -2 -.7 2 -.7z" fill="#fff" opacity=".9"/>';
+      '<ellipse cx="60" cy="' + G + '" rx="12.3" ry="3.9" fill="' + mix(b, -.5) + '"/>' + crown +
+      '<path d="M' + Q.join(' L') + 'Z" fill="' + h.url('tb') + '" stroke="' + mix(b, .6) + '" stroke-opacity=".7" stroke-width=".3"/>' +
+      '<path d="M55.4 35.6 L59 35 L57.6 37.6Z" fill="#fff" opacity=".6"/>' +
+      claw(52.4, 48, 48.4, 41.4) + claw(67.6, 48, 71.6, 41.4) + claw(56, 50, 55.2, 45) + claw(64, 50, 64.8, 45) +
+      /* fire and glints */
+      '<circle cx="64" cy="40" r=".6" fill="#ff7a6a" opacity=".85"/><circle cx="56.5" cy="44" r=".55" fill="#7affd8" opacity=".75"/><circle cx="67" cy="43" r=".5" fill="#ffe27a" opacity=".85"/>' +
+      '<path d="M53 30.6 l.8 2.4 2.4 .8 -2.4 .8 -.8 2.4 -.8 -2.4 -2.4 -.8 2.4 -.8z" fill="#fff" filter="' + h.url('s1') + '"/><path d="M53 31.8 l.45 1.35 1.35 .45 -1.35 .45 -.45 1.35 -.45 -1.35 -1.35 -.45 1.35 -.45z" fill="#fff"/>';
   };
 
   /* Anything else: a cloth bundle tied with cord. The cloth swells from
