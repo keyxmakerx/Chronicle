@@ -65,6 +65,7 @@ type APIHandler struct {
 	history              *SyncHistoryHandler
 	quests               *QuestAPIHandler
 	encounters           *EncounterAPIHandler
+	crafting             *CraftingAPIHandler
 	signer               *media.URLSigner
 }
 

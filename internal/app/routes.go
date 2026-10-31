@@ -4453,6 +4453,9 @@ func (a *App) RegisterRoutes() {
 	questAPI := &syncQuestAPIAdapter{stash: stashSvc, actors: stashAPI, signer: urlSigner}
 	// Encounters for the Foundry module; the service attaches below.
 	encounterAPI := &syncEncounterAPIAdapter{}
+	// Crafting for the Foundry module; the service attaches below, once the
+	// crafting plugin is built.
+	craftingAPI := &syncCraftingAPIAdapter{actors: stashAPI}
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
@@ -4521,7 +4524,7 @@ func (a *App) RegisterRoutes() {
 	syncHistoryHandler.SetFoundryScenes(syncapi.NewFoundrySceneRepository(a.DB))
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -6380,6 +6383,7 @@ func (a *App) RegisterRoutes() {
 		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
 		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
 		aiCrafting = aiCraftingAdapter{svc: craftingSvc, addons: addonService}
+		craftingAPI.attach(craftingSvc)
 	} else {
 		slog.Warn("crafting plugin degraded — the Crafting app is not available")
 	}

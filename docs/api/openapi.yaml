@@ -40,6 +40,15 @@ tags:
     description: >
       Fights the DM planned on a page, for the Foundry module to load. For the
       campaign owner or a co-DM only.
+  - name: Crafting
+    description: >
+      A hero's crafting, the spoils tray and the end of a fight, for the
+      Foundry module. Needs the Crafting addon. Every call may carry
+      `actingUserId` (query for GET and DELETE, body for POST) under the same
+      rule as Stashes. A player reads and works only on characters they
+      claimed (404 for any other); only the campaign owner or a co-DM reads
+      the tray or ends a fight (403). The server rolls every die. Answers are
+      the Crafting page's own.
   - name: Quests
     description: >
       Quest boards and quest sheets, for the campaign owner or a co-DM only.
@@ -2617,6 +2626,271 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /campaigns/{campaignId}/crafting/characters/{characterId}:
+    get:
+      tags: [Crafting]
+      summary: A hero's crafting, as the Crafting block on their page shows it
+      operationId: getCraftingCharacter
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: characterId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: actingUserId
+          in: query
+          schema: {type: string}
+      responses:
+        "200":
+          description: >
+            {character, pack, projects, recipes, benches, settings, edge,
+            bane, calendarId, today, spoils, director}; a find nobody has
+            identified reaches a player as "Something unidentified"
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /campaigns/{campaignId}/crafting/characters/{characterId}/projects:
+    post:
+      tags: [Crafting]
+      summary: Start a project for a hero; takes its materials and cost
+      operationId: startCraftingProject
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: characterId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipeId]
+              properties:
+                actingUserId: {type: string}
+                recipeId: {type: string}
+                picks:
+                  type: object
+                  description: The item picked for each material slot, by slot number
+                  additionalProperties: {type: string}
+      responses:
+        "201":
+          description: The new project
+          content:
+            application/json:
+              schema: {type: object}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+  /campaigns/{campaignId}/crafting/projects/{projectId}/roll:
+    post:
+      tags: [Crafting]
+      summary: Make a project's roll; the dice are the server's
+      operationId: rollCraftingProject
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: projectId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actingUserId: {type: string}
+                work: {type: string, description: How the bench's steps went}
+                bench: {type: string, description: The bench it was worked at, empty for none}
+                version: {type: integer}
+      responses:
+        "200":
+          description: The roll as made, its terms and what it did to the project
+          content:
+            application/json:
+              schema: {type: object}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "409":
+          description: Someone else changed the project first; reload and try again
+  /campaigns/{campaignId}/crafting/projects/{projectId}:
+    delete:
+      tags: [Crafting]
+      summary: Set a project aside; what it took stays spent
+      operationId: cancelCraftingProject
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: projectId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: actingUserId
+          in: query
+          schema: {type: string}
+      responses:
+        "204":
+          description: Set aside
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Someone else changed the project first; reload and try again
+  /campaigns/{campaignId}/crafting/spoils:
+    get:
+      tags: [Crafting]
+      summary: The Director's spoils tray, drop lists and heroes
+      operationId: getCraftingSpoils
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: actingUserId
+          in: query
+          schema: {type: string}
+      responses:
+        "200":
+          description: >
+            {tray, taken, drops: [{pageId, page, kind, also, alsoName, lines,
+            version}], heroes, items, stats, tiers, dice, truncated}
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /campaigns/{campaignId}/crafting/spoil-lines/{lineId}/take:
+    post:
+      tags: [Crafting]
+      summary: Take or harvest a waiting tray line for a hero
+      operationId: takeCraftingSpoil
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: lineId
+          in: path
+          required: true
+          schema: {type: integer}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [characterId]
+              properties:
+                actingUserId: {type: string}
+                characterId: {type: string}
+      responses:
+        "200":
+          description: >
+            {hero, item, got, qty} and, for a harvest, {dice, sides, terms,
+            total, tier}
+          content:
+            application/json:
+              schema: {type: object}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "409":
+          description: Someone took it first
+  /campaigns/{campaignId}/crafting/spoil-lines/{lineId}/study:
+    post:
+      tags: [Crafting]
+      summary: Study a find nobody has identified yet, for a hero
+      operationId: studyCraftingSpoil
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: lineId
+          in: path
+          required: true
+          schema: {type: integer}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [characterId]
+              properties:
+                actingUserId: {type: string}
+                characterId: {type: string}
+      responses:
+        "200":
+          description: >
+            {hero, dice, sides, terms, total, tier, tiers, known, lost, item,
+            kinds, mode, usedIn, notes}
+          content:
+            application/json:
+              schema: {type: object}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "409":
+          description: Someone took or identified it first, or this hero tries again after the next respite
+  /campaigns/{campaignId}/crafting/fights:
+    post:
+      tags: [Crafting]
+      summary: Put what a fight's defeated creatures drop in the tray
+      description: >
+        The same as ending a fight on the DM Screen: each creature row whose
+        page has a drop list drops a share per copy down. The Foundry module
+        sends it once per combat, after the GM confirms; a second call drops
+        again.
+      operationId: craftingFightEnded
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actingUserId: {type: string}
+                name: {type: string, description: The fight's name, shown on the spoils}
+                creatures:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      pageId: {type: string, description: Empty for a creature with no Chronicle page}
+                      name: {type: string}
+                      down: {type: integer}
+                      copies: {type: integer}
+      responses:
+        "200":
+          description: "{lines: [what each creature row left], spoils: N}"
+          content:
+            application/json:
+              schema: {type: object}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /campaigns/{campaignId}/quests/homes:
     get:
       tags: [Quests]
