@@ -6305,7 +6305,7 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(crafting.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "crafting", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_upgrades.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
-			{Name: "crafting-block", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_block.js"}},
+			{Name: "crafting-block", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_turns.js", "js/crafting_block.js"}},
 		},
 	})
 	craftingOn := func(ctx context.Context, campaignID string) bool {
@@ -6625,7 +6625,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
 	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room.js"}},
-	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_bench.js"}},
+	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules_more.js", "/static/js/widgets/craft_rules.js"}},
 }
 

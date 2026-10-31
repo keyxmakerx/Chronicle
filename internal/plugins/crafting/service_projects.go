@@ -295,6 +295,7 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 		}
 		if r.Result.ItemID != "" {
 			cr.Makes = materialName(Material{ItemID: r.Result.ItemID}, names)
+			cr.MakesID, cr.Salvage = r.Result.ItemID, salvageText(r.Extras)
 		}
 		if r.Cost.Amount > 0 {
 			c := r.Cost
@@ -320,6 +321,18 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 		if out.Spoils, err = s.trayViews(ctx, campaignID, v, names, tags, rules); err != nil {
 			return nil, err
 		}
+	}
+	turns, err := s.turnsFor(ctx, campaignID, e.ID)
+	if err != nil {
+		return nil, err
+	}
+	if cands, err := s.tryable(ctx, campaignID, e.ID); err != nil {
+		return nil, err
+	} else if len(cands) > 0 {
+		out.Try = &TryView{Ready: !turns[TurnTry+":"]}
+	}
+	if out.Party, err = s.helpable(ctx, campaignID, e, recipes, turns, day, names, v); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -547,6 +560,19 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	if p.RollsReady < 1 {
 		return nil, errConflictMsg("no roll is ready; the next comes with the next respite")
 	}
+	return s.rollOn(ctx, campaignID, p, e, nil, in, v)
+}
+
+// rollOn makes one roll on a project. helper is nil for the owner's own
+// ready roll; for a party member's hand it is the hero helping, whose sheet,
+// skills and name the roll reads, and the roll is an extra one, so the
+// owner's ready rolls stay. What the roll makes still goes to the owner.
+func (s *service) rollOn(ctx context.Context, campaignID string, p Project, e, helper *EntityInfo, in RollInput, v Viewer) (*RollResult, error) {
+	roller := e
+	if helper != nil {
+		roller = helper
+	}
+	var err error
 	var recipe *Recipe
 	if p.RecipeID != "" {
 		if r, ok, err := s.repo.GetRecipe(ctx, campaignID, p.RecipeID); err != nil {
@@ -571,7 +597,8 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	if recipe != nil {
 		x = recipe.Extras
 	}
-	mastered := s.mastered(ctx, campaignID, p, x)
+	// Mastery is the maker's own practice, so a helper's roll has none.
+	mastered := helper == nil && s.mastered(ctx, campaignID, p, x)
 	// A hero who has mastered a recipe that rewards mastery with skipping
 	// may skip the bench steps whatever the Director asks.
 	skipEarned := mastered && x.Mastery.Gives == "skip"
@@ -588,7 +615,7 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 			benchRules = b.Upgrades.Rules()
 		}
 	}
-	w.Skills = s.skills(ctx, campaignID, e.ID)
+	w.Skills = s.skills(ctx, campaignID, roller.ID)
 	if u := p.Details.Used; u != nil {
 		w.Marks = map[string]bool{}
 		for _, m := range u.Marks {
@@ -617,7 +644,7 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	}
 	extra := 0
 	if !res.Spoiled {
-		extra = s.addUp(ctx, campaignID, e, p, in.Work, set, sys, fx, x, mastered, v, res)
+		extra = s.addUp(ctx, campaignID, roller, p, in.Work, set, sys, fx, x, mastered, v, res)
 		if in.Work == WorkSkipped && !benchable {
 			res.Notes[0] = "There are no steps to work, so it was a plain roll."
 		}
@@ -640,7 +667,10 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	if becomes := s.befall(ctx, campaignID, &next, fx, x, in.Work, set, res, v); becomes != "" {
 		next.ResultItemID = becomes
 	}
-	next.Points, next.RollsReady = res.To, p.RollsReady-1
+	next.Points = res.To
+	if helper == nil {
+		next.RollsReady = p.RollsReady - 1
+	}
 	now := s.now()
 	switch {
 	case res.Finished:
@@ -660,17 +690,17 @@ func (s *service) RollProject(ctx context.Context, campaignID, id string, v View
 	if err := s.projects.Store.AddRoll(ctx, campaignID, p.ID, v.UserID, in.Work, diceText(res.Dice), string(terms), res.Total, res.From, res.To); err != nil {
 		slog.Error("crafting: a roll was made but not recorded", slog.String("project_id", p.ID), slog.Any("error", err))
 	}
-	s.discover(ctx, campaignID, e, fx, v, res)
+	s.discover(ctx, campaignID, roller, fx, v, res)
 	names, err := s.itemNames(ctx, campaignID, v)
 	if err != nil {
 		return nil, err
 	}
 	if res.Finished {
-		s.deliver(ctx, e, &next, extra, x, day, names, v, res)
+		s.deliver(ctx, e, helper, &next, extra, x, day, names, v, res)
 	}
 	if s.projects.Rolls != nil && len(res.Dice) > 0 {
 		s.projects.Rolls.ProjectRolled(ctx, campaignID, v, ProjectRoll{
-			Hero: e.Name, Recipe: p.RecipeName, Sides: res.Sides, Dice: res.Dice, Total: res.Total,
+			Hero: roller.Name, Recipe: p.RecipeName, Sides: res.Sides, Dice: res.Dice, Total: res.Total,
 			From: res.From, To: res.To, Goal: p.Goal, Finished: res.Finished,
 		})
 	}
@@ -806,7 +836,9 @@ func (s *service) addUp(ctx context.Context, campaignID string, e *EntityInfo, p
 // deliver puts the made item in the hero's pack and records that it did. A
 // failed give leaves the project made but undelivered, which the Director's
 // tab shows so the item can be given by hand.
-func (s *service) deliver(ctx context.Context, e *EntityInfo, p *Project, extra int, x Extras, day *Day, names map[string]string, v Viewer, res *RollResult) {
+// A helper's roll gives it on the helper's behalf, which the Armory allows
+// for a hero the viewer may act for.
+func (s *service) deliver(ctx context.Context, e, helper *EntityInfo, p *Project, extra int, x Extras, day *Day, names map[string]string, v Viewer, res *RollResult) {
 	if p.ResultItemID == "" {
 		res.Notes = append(res.Notes, "The item this recipe makes was deleted, so nothing reached the pack. Tell your Director.")
 		return
@@ -816,7 +848,18 @@ func (s *service) deliver(ctx context.Context, e *EntityInfo, p *Project, extra 
 		qty = maxQty
 	}
 	k := s.madeKept(ctx, p, e, x, day)
-	if err := s.projects.Armory.Give(ctx, p.CampaignID, v, e.ID, p.ResultItemID, qty, p.RecipeName, k); err != nil {
+	var err error
+	if helper != nil {
+		why := "Made " + makesText(qty, p.ResultItemID, names)
+		if p.RecipeName != "" && p.RecipeName != names[p.ResultItemID] {
+			why += " (" + p.RecipeName + ")"
+		}
+		why += ", with " + helper.Name + "’s help"
+		err = s.projects.Armory.GiveFor(ctx, p.CampaignID, v, helper.ID, e.ID, p.ResultItemID, qty, why, k)
+	} else {
+		err = s.projects.Armory.Give(ctx, p.CampaignID, v, e.ID, p.ResultItemID, qty, p.RecipeName, k)
+	}
+	if err != nil {
 		slog.Error("crafting: PROJECT MADE BUT THE ITEM WAS NOT GIVEN",
 			slog.String("project_id", p.ID), slog.String("character_id", e.ID), slog.Any("error", err))
 		res.Notes = append(res.Notes, "The item couldn’t be put in "+e.Name+"’s pack. Your Director can give it from the Projects tab.")

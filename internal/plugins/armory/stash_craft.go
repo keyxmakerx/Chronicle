@@ -63,6 +63,9 @@ type CraftSpendInput struct {
 	Cost        Cents
 	Currency    string
 	Label       string
+	// Purpose, when set, says what the items went to in the history in
+	// place of "to make <Label>": "in an experiment".
+	Purpose string
 }
 
 // CraftSpendOutcome says what was paid ("25 gp", "1.50 gp"); empty when no coins
@@ -167,6 +170,10 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 		names[it.ItemID] = ref.Name
 	}
 	label := strings.TrimSpace(in.Label)
+	purpose := "to make " + label
+	if p := strings.TrimSpace(in.Purpose); p != "" {
+		purpose = p
+	}
 
 	var ev eventBatch
 	defer ev.flush(s.Events, campaignID)
@@ -228,7 +235,7 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 
 	// From here the spend completes even if the client goes away, and the
 	// coin change reads as made for this project in the money history.
-	mctx := changesource.With(context.WithoutCancel(ctx), changesource.Source{Kind: changesource.KindCraft, Label: "to make " + label, UserID: a.UserID})
+	mctx := changesource.With(context.WithoutCancel(ctx), changesource.Source{Kind: changesource.KindCraft, Label: purpose, UserID: a.UserID})
 	var undo []func()
 	rollback := func() {
 		for i := len(undo) - 1; i >= 0; i-- {
@@ -295,7 +302,7 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 		m := &Move{
 			CampaignID: campaignID, Kind: MoveKindItem, ItemEntityID: it.ItemID, Quantity: it.Quantity,
 			From: self, To: self, Status: MoveApplied, RequestedBy: a.UserID, seesDmOnly: a.SeesDmOnly(),
-			Reason: clipReason(fmt.Sprintf("Used %d × %s to make %s", it.Quantity, names[it.ItemID], label)),
+			Reason: clipReason(fmt.Sprintf("Used %d × %s %s", it.Quantity, names[it.ItemID], purpose)),
 		}
 		if err := s.Repo.InsertMove(mctx, m); err != nil {
 			slog.Error("craft spend: SPENT BUT NOT RECORDED in the move history",
@@ -346,6 +353,31 @@ func (s *stashService) craftAdd(ctx context.Context, campaignID string, a Actor,
 	if err != nil {
 		return err
 	}
+	return s.craftAddTo(ctx, campaignID, a, char, itemID, qty, mem, reason)
+}
+
+// CraftGiveFor puts an item in a character's pack on behalf of a hero the
+// actor may act for, with the history line given: what a helper's roll
+// finished goes to the project's owner, and what breaking an item down gives
+// back goes to the hero who broke it. Adding to a pack takes nothing from
+// anyone, so acting for the hero is enough; crafting has already checked the
+// hero may help with that project.
+func (s *stashService) CraftGiveFor(ctx context.Context, campaignID string, a Actor, actingFor, characterID, itemID string, qty int, why string, m Memory) error {
+	if qty < 1 || qty > maxMoveQuantity {
+		return apperror.NewBadRequest(giveQuantityMessage)
+	}
+	if _, err := s.craftActor(ctx, campaignID, a, actingFor); err != nil {
+		return err
+	}
+	char, err := s.loadCharacter(ctx, campaignID, strings.TrimSpace(characterID))
+	if err != nil {
+		return err
+	}
+	return s.craftAddTo(ctx, campaignID, a, char, itemID, qty, m, func(string) string { return why })
+}
+
+// craftAddTo adds the item to a character already checked.
+func (s *stashService) craftAddTo(ctx context.Context, campaignID string, a Actor, char *EntityRef, itemID string, qty int, mem Memory, reason func(item string) string) error {
 	item, err := s.loadItem(ctx, campaignID, itemID)
 	if err != nil {
 		return err

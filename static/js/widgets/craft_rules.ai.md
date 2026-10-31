@@ -120,10 +120,11 @@ server's `CleanExtras` (`test/js/fixtures/craft_extras_clean.json` pins both).
 on, and a chance of a mishap from a table on every roll; a table's rows are
 shown read-only (they are edited on the Rolling Tables page), with "Try a
 roll" and "Watch" for each mishap's moment. "Extras" holds breakthroughs,
-mastery, substitutes and the settings that need an item to remember
-something of its own (quality, shelf life, the maker's mark) or a player
-action that doesn't exist yet (experimenting, salvage, others helping);
-those are saved and labelled "Not yet carried out at the roll".
+mastery, substitutes, finding the recipe by experimenting, breaking the
+made item down, others helping, and the settings that need an item to
+remember something of its own (quality, shelf life, the maker's mark); those
+last are labelled "Not yet carried out at the roll". A recipe with
+"Finding it by experimenting" off can never be found that way.
 
 ## How it looks
 

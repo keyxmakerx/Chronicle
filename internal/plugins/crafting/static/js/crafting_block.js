@@ -16,7 +16,7 @@
  */
 (function () {
   'use strict';
-  var L = window.CraftingLib, T = window.CraftingTray, esc = L.esc, progress = L.progress;
+  var L = window.CraftingLib, T = window.CraftingTray, U = window.CraftingTurns, esc = L.esc, progress = L.progress;
   // What the server says in place of a secret rule (verdict.go ruleWords).
   var HIDDEN = 'A rule the Director keeps hidden';
   var ICON = {
@@ -137,6 +137,10 @@
     var cid = String(cfg.campaignId || ''), eid = String(cfg.entityId || '');
     var base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
     var D = null, open = null, pick = {}, use = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0;
+    // tpicks is what goes into a try, by item; tried and broke the last try
+    // and break-down; copy the copy picked to break; play says a moment is
+    // playing at the bench, so the panel waits for it.
+    var tpicks = {}, tried = null, broke = null, copy = '', play = false, moment = null;
 
     /* JSON in and out; a refusal rejects with the server's own words. */
     function api(method, path, body) {
@@ -192,10 +196,21 @@
     function recipeRow(r) {
       var why = blockers(r, D.pack, hero()), on = isOpen('start', r.id);
       var mats = r.needs.map(function (m) { return m.qty + ' × ' + m.name; }).concat(r.cost ? [costText(r, D.pack)] : []).join(' · ');
-      var h = '<li><div class="crp-row"><div class="crp-nm"><b>' + esc(r.name) + '</b><span class="cra-fine">' + esc(r.kind + ' · goal ' + r.goal + ' · ' + r.roll) + '</span></div>' +
+      var brk = r.salvage && r.salvage.length && r.makesId && held(D.pack, r.makesId) > 0;
+      var h = '<li data-r="' + esc(r.id) + '"><div class="crp-row"><div class="crp-nm"><b>' + esc(r.name) + '</b><span class="cra-fine">' + esc(r.kind + ' · goal ' + r.goal + ' · ' + r.roll) + '</span></div>' +
         '<div class="cra-fine">' + esc(mats || 'No materials') + '</div><div class="crp-acts">' + (why.length ? '<span class="crp-why is-block">' + esc(why[0]) + '</span>' : '') +
+        (brk ? '<button type="button" class="btn btn-secondary btn-sm" data-act="brk" data-id="' + esc(r.id) + '" aria-expanded="' + isOpen('break', r.id) + '">Break one down</button>' : '') +
         '<button type="button" class="btn btn-secondary btn-sm" data-act="start" data-id="' + esc(r.id) + '" aria-expanded="' + on + '"' + (why.length ? ' disabled' : '') + '>Start</button></div></div>';
       if (on && !why.length) h += startFold(r);
+      if (brk && isOpen('break', r.id)) h += U.breakFold(r, hero(), U.breakable(D.pack, r.makesId, keptOf, keptName), copy, busy);
+      if (broke && isOpen('broke', r.id)) h += U.brokeFold(broke, hero(), r.id, play);
+      return h + '</li>';
+    }
+
+    /* The party's projects this hero may help with, and a hand's roll. */
+    function helpRow(hv) {
+      var id = hv.project.id, h = U.helpRow(hv, hero(), isOpen('help', id) ? 'help' : '', busy, progress);
+      if (isOpen('helped', id) && last) h += play ? U.playing('Helping ' + hv.project.hero) : resultFold(last.project, hv.project.hero);
       return h + '</li>';
     }
 
@@ -282,14 +297,15 @@
       return '<ul class="crp-lines crp-carries">' + rows.map(function (r) { return '<li><span class="crp-k">' + esc(r[0]) + '</span><span class="crp-v">' + esc(r[1]) + '</span></li>'; }).join('') + '</ul>';
     }
 
-    function resultFold(p) {
+    function resultFold(p, who) {
+      who = who || hero();
       var R = last, rows = T.terms(R), h = '<div class="crp-fold" aria-live="polite"><h4>Project roll: ' + esc(p.name) + '</h4><div class="crp-result">' +
         (R.dice.length ? '<div class="crp-dice" aria-label="The dice show ' + esc(R.dice.join(' and ')) + '">' + R.dice.map(function (d) { return '<span class="crp-die">' + d + '</span>'; }).join('') + '</div>' : '<div></div>') +
         '<ul class="crp-terms">' + rows.map(function (t) { return '<li><span>' + esc(t.text) + '</span><span>' + esc(t.n) + '</span></li>'; }).join('') +
         '<li class="is-tot"><span>Project points</span><span>+' + R.total + '</span></li></ul>' +
         '<div class="crp-outcome">' + progress(R.to, p.goal, R.from + ' → ' + R.to, p.name);
-      h += befell(R, p.name, hero());
-      if (R.finished && R.made) h += '<div class="crp-made">' + ICON.check + '<span>' + esc(p.name) + ' is made. ' + esc(R.made) + ' is in ' + esc(hero()) + '’s pack.</span></div>';
+      h += befell(R, p.name, who);
+      if (R.finished && R.made) h += '<div class="crp-made">' + ICON.check + '<span>' + esc(p.name) + ' is made. ' + esc(R.made) + ' is in ' + esc(who) + '’s pack.</span></div>';
       if (R.finished && R.made) h += carries(R.item);
       else if (R.finished) h += '<div class="crp-made is-warn"><span>' + esc(p.name) + ' is made.</span></div>';
       else if (!R.lost) h += '<p class="cra-fine">' + (p.goal - R.to) + ' more to go. ' + (p.rollsReady > 0 ? 'You have another roll ready.' : 'The next roll comes with the next respite.') + '</p>';
@@ -329,11 +345,14 @@
         '<p class="cra-fine">Each project gets one roll for every respite the Director logs.' + (D.today ? ' Today is ' + esc(D.today) + '.' : '') + '</p>' +
         '<h4 class="crp-sub">In progress</h4><ul class="crp-rows">' +
         (D.projects.length ? D.projects.map(projectRow).join('') : '<li class="crp-empty">No projects yet. Start one from a recipe below.</li>') + '</ul>' +
+        (D.try ? '<h4 class="crp-sub">Try something new</h4>' + (tried ? U.triedFold(tried, hero(), play) : U.tryFold(D, tpicks, busy)) : '') +
+        (D.party && D.party.length ? '<h4 class="crp-sub">The party’s projects</h4><ul class="crp-rows">' + D.party.map(helpRow).join('') + '</ul>' : '') +
         '<h4 class="crp-sub">Recipes ' + esc(hero()) + ' knows</h4><ul class="crp-rows">' +
         (D.recipes.length ? D.recipes.map(recipeRow).join('') : '<li class="crp-empty">' + esc(hero()) + ' knows no recipes yet. The Director teaches them in the Crafting app.</li>') + '</ul>' +
         '<div class="cra-toast" role="status" hidden></div></div>';
       el.innerHTML = h;
       if (open && open.kind === 'bench') mountBench(open.id);
+      if (play && moment) mountMoment();
     }
 
     function load(keep) {
@@ -379,6 +398,52 @@
         onWorked: function (work) { roll(pid, work, b ? b.id : ''); }};
       box.appendChild(benchEl);
       Chronicle.mountWidget(benchEl);
+    }
+
+    /* Motion at the bench: off under Calm, Off or reduced motion, or with
+       no bench on the page, where the panel is all there is. */
+    function still() {
+      var h = document.documentElement, m = h.getAttribute('data-motion');
+      return !window.CraftScene || !window.CraftMoments || !window.Chronicle.mountWidget || m === 'off' || m === 'calm' ||
+        h.getAttribute('data-view-motion') === 'calm' || h.hasAttribute('data-cz-reduce') ||
+        !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+    function tint(id) {
+      var c = '';
+      (D.pack.items || []).forEach(function (it) { if (it.itemId === id && it.picture && it.picture.tint) c = it.picture.tint; });
+      return c;
+    }
+    /* Plays a moment at the campaign's bench (m: CraftMoments.play's
+       options, the book's recipe, and the panel to show when it ends). */
+    function playMoment(m) {
+      moment = m;
+      play = !still();
+    }
+    function mountMoment() {
+      var box = el.querySelector('[data-moment]'), m = moment;
+      if (!box || !m) return;
+      var b = (m.kind && bench(m.kind)) || D.benches[0] || null, skin = D.settings.skin === 'journal' ? 'journal' : 'desk';
+      benchEl = document.createElement('div');
+      benchEl.setAttribute('data-widget', 'craft_bench');
+      benchEl.setAttribute('data-skin', skin);
+      if (D.calendarId) { benchEl.setAttribute('data-campaign-id', cid); benchEl.setAttribute('data-calendar-id', D.calendarId); }
+      benchEl._craftApp = {state: b && b[skin] && typeof b[skin] === 'object' ? b[skin] : null, recipes: {m: m.book}, items: {}, recipe: 'm',
+        settings: {difficulty: D.settings.difficulty, bane: D.settings.bane, skip: false},
+        moment: Object.assign({}, m.cue, {done: function () { if (!dead && moment === m) momentDone(box); }})};
+      box.appendChild(benchEl);
+      Chronicle.mountWidget(benchEl);
+    }
+    /* The moment ended: the panel comes in under the bench, which stays
+       until Done. */
+    function momentDone(box) {
+      var m = moment, fold = box.closest('.crp-fold');
+      play = false;
+      if (!fold) return render();
+      var tmp = document.createElement('div');
+      tmp.innerHTML = m.panel();
+      var src = tmp.firstElementChild;
+      if (src) Array.prototype.slice.call(src.children, 1).forEach(function (c) { fold.appendChild(c); });
+      if (m.after) m.after();
     }
 
     /* The server's dice, thrown on screen (CraftingTray.throwDice). */
@@ -456,6 +521,97 @@
       }, function (err) { busy = false; render(); toast(err.message); });
     }
 
+    /* A try: what goes in goes to the server, which says what came of it. */
+    function experiment() {
+      var items = Object.keys(tpicks).map(function (id) { return {itemId: id, qty: tpicks[id]}; });
+      if (!items.length || busy) return;
+      var put = items.map(function (x) { var it = (D.pack.items || []).filter(function (p) { return p.itemId === x.itemId; })[0]; return x.qty + ' ' + (it ? it.name : ''); });
+      busy = true;
+      render();
+      api('POST', '/characters/' + encodeURIComponent(eid) + '/experiment', {items: items}).then(function (res) {
+        busy = false;
+        if (dead) return;
+        tried = res;
+        var cols = items.map(function (x) { return tint(x.itemId); }).filter(Boolean);
+        playMoment({cue: {kind: res.outcome, colors: cols.slice(0, 2), first: 'Experimenting: ' + hero() + ' puts in ' + put.join(' and '),
+          last: U.triedWords(res, hero()), buttons: res.outcome === 'found' ? [{label: 'Start it', primary: true, fn: function () { startFound(res.recipeId); }}] : []},
+          book: {name: 'An experiment', kind: 'Experiment', who: hero(), steps: [], noProject: true},
+          panel: function () { return U.triedFold(res, hero(), false); }, after: function () { focus('[data-act="tdone"]'); }});
+        render();
+        if (!play) focus('[data-act="tdone"]');
+      }, function (err) {
+        busy = false;
+        if (dead) return;
+        toast(err.message);
+        if (err.status === 409) load().catch(fail);
+        else render();
+      });
+    }
+    function startFound(rid) {
+      tried = null; tpicks = {}; play = false; moment = null;
+      load().then(function () {
+        if (!recipe(rid)) return;
+        open = {kind: 'start', id: rid}; pick = {}; use = {};
+        render(); focus('[data-act="begin"]');
+      }).catch(fail);
+    }
+
+    /* Breaks one made item down; what it gives back goes to the pack. */
+    function breakDown(rid) {
+      var r = recipe(rid);
+      if (!r || busy) return;
+      busy = true;
+      render();
+      api('POST', '/characters/' + encodeURIComponent(eid) + '/break-down', {recipeId: rid, copy: Number(copy) || 0}).then(function (res) {
+        busy = false;
+        if (dead) return;
+        broke = res;
+        open = {kind: 'broke', id: rid};
+        var opt = U.breakable(D.pack, r.makesId, keptOf, keptName).options.filter(function (o) { return String(o.id) === String(copy); })[0];
+        playMoment({kind: r.bench, cue: {kind: 'breakdown', colors: [tint(r.makesId), tint((r.needs[0] || {}).itemId)].filter(Boolean),
+          first: 'Breaking down ' + res.item + (opt && opt.id ? ', ' + opt.name.charAt(0).toLowerCase() + opt.name.slice(1) : ''), last: U.brokeWords(res, hero())},
+          book: {name: 'Breaking down ' + res.item, kind: r.kind, who: hero(), steps: [], noProject: true},
+          panel: function () { return U.brokeFold(res, hero(), rid, false); }, after: function () { focus('[data-act="bdone"]'); }});
+        render();
+        if (!play) focus('[data-act="bdone"]');
+      }, function (err) {
+        busy = false;
+        if (dead) return;
+        toast(err.message);
+        load().catch(fail);
+      });
+    }
+
+    /* One extra roll on a party member's project, with this hero's sheet. */
+    function help(pid) {
+      var hv = (D.party || []).filter(function (x) { return x.project.id === pid; })[0];
+      if (!hv || busy) return;
+      var p = hv.project;
+      busy = true;
+      render();
+      api('POST', '/projects/' + encodeURIComponent(pid) + '/help', {characterId: eid, version: p.version}).then(function (res) {
+        busy = false;
+        if (dead) return;
+        last = res;
+        hv.project = res.project; hv.helped = true;
+        open = {kind: 'helped', id: pid};
+        var r = recipe(p.recipeId);
+        playMoment({kind: r && r.bench, cue: {kind: 'help', finished: res.finished, colors: [r && r.colors && r.colors.final].filter(Boolean),
+          first: hero() + ' lends a hand: one extra roll on ' + p.hero + '’s ' + p.name,
+          last: hero() + '’s roll: ' + res.total + (res.total === 1 ? ' point. ' : ' points. ') + p.hero + '’s project: ' + res.to + ' of ' + p.goal + (res.finished ? ', made.' : '.')},
+          book: {name: p.name, kind: p.kind, who: p.hero, stat: String(p.roll || '').split(' + ')[1] || '', goal: p.goal, start: res.from, steps: []},
+          panel: function () { return resultFold(res.project, p.hero); },
+          after: function () { throwDice(res, p.name); focus('[data-hp="' + pid + '"] [data-act="close"]'); }});
+        render();
+        if (!play) { throwDice(res, p.name); focus('[data-hp="' + pid + '"] [data-act="close"]'); }
+      }, function (err) {
+        busy = false;
+        if (dead) return;
+        toast(err.message);
+        load().catch(fail);
+      });
+    }
+
     function cancel(pid) {
       var p = project(pid);
       if (!p) return;
@@ -483,16 +639,34 @@
         case 'kless': step(id, -1); break;
         case 'bench': open = isOpen('bench', id) ? null : {kind: 'bench', id: id}; render(); break;
         case 'plain': roll(id, 'skipped', ''); break;
-        case 'close': close(id); break;
+        case 'close':
+          if (open && open.kind === 'helped') { open = null; last = null; play = false; moment = null; load().catch(fail); break; }
+          close(id); break;
         case 'askcancel': open = {kind: 'confirm', id: id}; render(); focus('[data-act="cancel"]'); break;
         case 'cancel': open = null; cancel(id); break;
         case 'take': take(id); break;
         case 'sdone': open = null; got = null; load().catch(fail); break;
+        case 'tpick': tpicks[id] = (tpicks[id] || 0) >= held(D.pack, id) ? 0 : (tpicks[id] || 0) + 1; if (!tpicks[id]) delete tpicks[id]; render(); focus('[data-act="tpick"][data-id="' + id + '"]'); break;
+        case 'tclear': tpicks = {}; render(); break;
+        case 'ttry': experiment(); break;
+        case 'tdone': tried = null; tpicks = {}; play = false; moment = null; load().catch(fail); break;
+        case 'tstart': startFound(id); break;
+        case 'brk':
+          open = isOpen('break', id) ? null : {kind: 'break', id: id};
+          var r = recipe(id), opts = r ? U.breakable(D.pack, r.makesId, keptOf, keptName).options : [];
+          copy = opts.length ? String(opts[0].id) : '';
+          render(); focus('[data-act="bgo"]'); break;
+        case 'bgo': breakDown(id); break;
+        case 'bdone': broke = null; open = null; play = false; moment = null; load().catch(fail); focus('[data-act="brk"][data-id="' + id + '"]'); break;
+        case 'help': open = isOpen('help', id) ? null : {kind: 'help', id: id}; render(); focus('[data-act="hgo"]'); break;
+        case 'hgo': help(id); break;
       }
     }
     function onChange(e) {
       var s = e.target.closest('[data-pick]');
       if (s) { var i = s.getAttribute('data-pick'); pick[i] = s.value; delete use[i]; render(); focus('#crk-pick-' + i); }
+      var bk = e.target.closest('[data-brk]');
+      if (bk) copy = bk.value;
     }
     function outside(e) {
       if (open && open.kind === 'menu' && !e.target.closest('.crp-menu, [data-act="menu"]')) { open = null; render(); }
@@ -512,7 +686,7 @@
 
   Chronicle.register('crafting-block', {
     init: function (el, cfg) {
-      if (!window.CraftingLib || !window.CraftingTray) {
+      if (!window.CraftingLib || !window.CraftingTray || !window.CraftingTurns) {
         el.innerHTML = '<p class="text-sm text-fg-muted" role="status">Crafting couldn’t load. Reload the page to try again.</p>';
         return;
       }

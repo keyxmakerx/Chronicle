@@ -430,3 +430,51 @@ func TestCraft_RememberedCopies(t *testing.T) {
 		t.Fatalf("after two makes, one fine and one plain: %v (%d rows)", got, len(cs.rows))
 	}
 }
+
+func TestCraftGiveFor(t *testing.T) {
+	tests := []struct {
+		name      string
+		who       Actor
+		actingFor string
+		char      string
+		wantCode  int
+	}{
+		{"a helper's player into the owner's pack", mirasPlayer, "c2", "c1", 0},
+		{"the hero's own pack", mirasPlayer, "c2", "c2", 0},
+		{"acting for a hero the actor doesn't play", mirasPlayer, "c1", "c1", http.StatusForbidden},
+		{"into something that isn't a character", mirasPlayer, "c2", "i1", http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g, _ := newCraftFx()
+			before := g.carried(tt.char, "i2")
+			err := g.svc.CraftGiveFor(context.Background(), "camp", tt.who, tt.actingFor, tt.char, "i2", 1, "Made 1 × Secret (Brew), with Mira’s help", Memory{})
+			if got := code(err); got != tt.wantCode {
+				t.Fatalf("code %d (%v), want %d", got, err, tt.wantCode)
+			}
+			if tt.wantCode != 0 {
+				if len(g.repo.moves) != 0 {
+					t.Fatal("a refused give wrote history")
+				}
+				return
+			}
+			if g.carried(tt.char, "i2") != before+1 {
+				t.Fatalf("holds %d, want %d", g.carried(tt.char, "i2"), before+1)
+			}
+			if len(g.repo.moves) != 1 || g.repo.moves[0].Reason != "Made 1 × Secret (Brew), with Mira’s help" {
+				t.Fatalf("moves %+v", g.repo.moves)
+			}
+		})
+	}
+}
+
+func TestCraftSpend_PurposeNamesWhatItWasFor(t *testing.T) {
+	g, _ := newCraftFx()
+	if _, err := g.svc.CraftSpend(context.Background(), "camp", mirasPlayer, CraftSpendInput{CharacterID: "c2", Purpose: "in an experiment",
+		Items: []CraftItem{{ItemID: "i3", Quantity: 1}}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(g.repo.moves) != 1 || g.repo.moves[0].Reason != "Used 1 × Iron in an experiment" {
+		t.Fatalf("moves %+v", g.repo.moves)
+	}
+}

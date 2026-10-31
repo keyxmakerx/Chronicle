@@ -513,3 +513,17 @@ html[data-motion="off"] .cra-dot { transition: none; }
   .crp-result { grid-template-columns: minmax(0, 1fr); }
   .crp-menu { left: 0; right: auto; }
 }
+
+/* Experimenting, breaking down and helping: the try's picks as chips, and
+   a result's lead line and the book's own words. */
+.crp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.crp-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 11px; border-radius: 999px; font-size: 13px;
+  color: var(--cra-ink); background: var(--cra-field); border: 1px solid var(--cra-field-line); cursor: pointer; }
+.crp-chip small { color: var(--cra-muted); font-size: 12px; }
+.crp-chip[aria-pressed="true"] { border-color: var(--cra-acc); background: color-mix(in srgb, var(--cra-acc) 12%, var(--cra-field)); font-weight: 600; }
+.crp-chip[aria-pressed="true"] small { font-weight: 400; }
+.crp-chip:focus-visible { outline: 2px solid var(--cra-acc); outline-offset: 2px; }
+.crp-big { font-size: 15px; font-weight: 700; color: var(--cra-ink); }
+.crp-book { font-style: italic; padding: 10px 12px; border-left: 3px solid var(--cra-acc); border-radius: var(--cra-r-sm);
+  background: color-mix(in srgb, var(--cra-acc) 6%, transparent); color: var(--cra-body); }
+.crp-tried { padding: 6px 0; }

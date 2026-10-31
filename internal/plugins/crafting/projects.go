@@ -217,6 +217,10 @@ type CraftRecipe struct {
 	Cost      *Cost  `json:"cost,omitempty"`
 	Makes     string `json:"makes"`
 	MakesQty  int    `json:"makesQty"`
+	// MakesID is the item it makes, and Salvage what breaking one down gives
+	// back ("1 × Spring water"), empty when it can't be broken down.
+	MakesID string   `json:"makesId,omitempty"`
+	Salvage []string `json:"salvage,omitempty"`
 	// Charge is the cost against this hero's money, in Pack.Have's units.
 	Charge int64    `json:"charge"`
 	Lines  []string `json:"lines"`
@@ -254,6 +258,10 @@ type CharacterCrafting struct {
 	// when spoils aren't set up.
 	Spoils   []SpoilView `json:"spoils"`
 	Director bool        `json:"director"`
+	// Try is "Try something new", nil when there is nothing left this hero
+	// could find; Party is the party's projects this hero may help with.
+	Try   *TryView   `json:"try,omitempty"`
+	Party []HelpView `json:"party"`
 }
 
 // StartInput starts a project. Picks fills each "any <tag>" material, by
@@ -383,6 +391,13 @@ type Armory interface {
 	Spend(ctx context.Context, campaignID string, v Viewer, characterID string, items []PackItem, c Cost, label string) (string, []Kept, error)
 	// Give puts the made item in the pack with what it remembers.
 	Give(ctx context.Context, campaignID string, v Viewer, characterID, itemID string, qty int, label string, k Kept) error
+	// Use takes items from the pack for something other than a project,
+	// which why names in the history ("in an experiment"), and returns what
+	// the remembered copies taken carried.
+	Use(ctx context.Context, campaignID string, v Viewer, characterID string, items []PackItem, why string) ([]Kept, error)
+	// GiveFor puts an item in a character's pack on behalf of a hero the
+	// viewer may act for, with the history line given.
+	GiveFor(ctx context.Context, campaignID string, v Viewer, actingFor, characterID, itemID string, qty int, why string, k Kept) error
 	// GiveSpoil puts what a hero took or harvested from the spoils tray in
 	// their pack.
 	GiveSpoil(ctx context.Context, campaignID string, v Viewer, characterID, itemID string, qty int, harvested bool, k Kept) error

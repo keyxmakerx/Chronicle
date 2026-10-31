@@ -21,7 +21,9 @@
  * arrangement ({look, pieces}) and onChange hears every change to it. A
  * play-mode bench takes {state, recipes, items, recipe, settings, onWorked}:
  * it plays the saved arrangement, the campaign's settings, and hands
- * onWorked how the steps went so the crafting app makes the roll.
+ * onWorked how the steps went so the crafting app makes the roll. With
+ * moment set instead (CraftMoments.play's options) it plays that moment,
+ * with no steps to work.
  */
 (function () {
   'use strict';
@@ -410,9 +412,10 @@
       } else {
         var box = document.createElement('div'); box.className = 'crb-scene'; el.innerHTML = ''; el.appendChild(box);
         ['time', 'weather', 'light'].forEach(function (k) { box.setAttribute('data-' + k, skin.opts[k]); });
-        if (app) { data.settings = app.settings; data.onWorked = app.onWorked; }
+        if (app) { data.settings = app.settings; data.onWorked = app.onWorked; data.moment = !!app.moment; }
         el._crb = CraftScene.mount(box, skin, data);
         if (state && window.CraftBenchEditor) CraftBenchEditor.arrange(skin, el._crb.svg, state);
+        if (app && app.moment && window.CraftMoments) CraftMoments.play(el._crb.cue, app.moment);
       }
     },
     destroy: function (el) {

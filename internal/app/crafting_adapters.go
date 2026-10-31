@@ -74,6 +74,22 @@ func (a *craftingDirectoryAdapter) OwnedCharacterIDs(ctx context.Context, campai
 	return a.dir.OwnedCharacterIDs(ctx, campaignID, userID)
 }
 
+// Party is the claimed characters the role and user may see: the heroes
+// players play, as the Armory's share box reads the party.
+func (a *craftingDirectoryAdapter) Party(ctx context.Context, campaignID string, role int, userID string) ([]crafting.Named, error) {
+	refs, _, err := a.dir.ListCharactersChecked(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]crafting.Named, 0, len(refs))
+	for _, r := range refs {
+		if r.OwnerUserID != "" {
+			out = append(out, crafting.Named{ID: r.ID, Name: r.Name})
+		}
+	}
+	return out, nil
+}
+
 // craftingRulesAdapter reads the crafting block of the campaign's enabled
 // game system; with none enabled the defaults apply.
 type craftingRulesAdapter struct {
@@ -160,6 +176,30 @@ func (a *craftingArmoryAdapter) Spend(ctx context.Context, campaignID string, v 
 
 func (a *craftingArmoryAdapter) Give(ctx context.Context, campaignID string, v crafting.Viewer, characterID, itemID string, qty int, label string, k crafting.Kept) error {
 	return a.stash.CraftGive(ctx, campaignID, craftingActor(v), characterID, itemID, qty, label, memoryOf(k))
+}
+
+func (a *craftingArmoryAdapter) Use(ctx context.Context, campaignID string, v crafting.Viewer, characterID string, items []crafting.PackItem, why string) ([]crafting.Kept, error) {
+	in := armory.CraftSpendInput{CharacterID: characterID, Purpose: why}
+	for _, it := range items {
+		ci := armory.CraftItem{ItemID: it.ItemID, Quantity: it.Qty}
+		for _, p := range it.Use {
+			ci.Pick = append(ci.Pick, armory.CopyPick{ID: p.ID, N: p.N})
+		}
+		in.Items = append(in.Items, ci)
+	}
+	out, err := a.stash.CraftSpend(ctx, campaignID, craftingActor(v), in)
+	if err != nil {
+		return nil, err
+	}
+	var used []crafting.Kept
+	for _, cp := range out.Used {
+		used = append(used, keptOf(cp))
+	}
+	return used, nil
+}
+
+func (a *craftingArmoryAdapter) GiveFor(ctx context.Context, campaignID string, v crafting.Viewer, actingFor, characterID, itemID string, qty int, why string, k crafting.Kept) error {
+	return a.stash.CraftGiveFor(ctx, campaignID, craftingActor(v), actingFor, characterID, itemID, qty, why, memoryOf(k))
 }
 
 func (a *craftingArmoryAdapter) GiveSpoil(ctx context.Context, campaignID string, v crafting.Viewer, characterID, itemID string, qty int, harvested bool, k crafting.Kept) error {
