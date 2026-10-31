@@ -364,3 +364,22 @@ type Days interface {
 type RespiteHook interface {
 	RespiteLogged(ctx context.Context, campaignID string, v Viewer) error
 }
+
+// ProjectRoll is one project roll as the campaign's roll log shows it: the
+// dice, the total and the progress, never the terms, whose words can carry a
+// Director's secret rule.
+type ProjectRoll struct {
+	Hero     string
+	Recipe   string
+	Sides    int
+	Dice     []int
+	Total    int
+	From, To int
+	Goal     int
+	Finished bool
+}
+
+// RollLog hears each project roll so it joins the campaign's roll log.
+type RollLog interface {
+	ProjectRolled(ctx context.Context, campaignID string, v Viewer, r ProjectRoll)
+}

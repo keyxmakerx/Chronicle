@@ -56,6 +56,8 @@ type APIHandler struct {
 	shopRoomAddon        string
 	shopBuyer            ShopBuyAPIService
 	dmScreen             DMScreenProvider
+	rolls                RollsProvider
+	rollPlayers          FoundryPlayerRepository
 	folders              FolderLister
 	systemState          SystemStateReader
 	systemStateWriter    SystemStateWriter

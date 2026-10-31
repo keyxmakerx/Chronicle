@@ -158,6 +158,10 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.POST("/dm-screen/reveal/:entityID", api.RevealDMScreenCharacter, RequirePermission(PermWrite))
 	cg.POST("/dm-screen/downtime", api.SetDMScreenDowntime, RequirePermission(PermWrite))
 
+	// Shared rolls: a roll made in Foundry joins the roll log; see
+	// rolls_api.go. Session callers are refused there.
+	cg.POST("/rolls", api.ReportRoll, RequirePermission(PermWrite))
+
 	// Addon discovery (read).
 	cg.GET("/addons", api.ListAddons, RequirePermission(PermRead))
 

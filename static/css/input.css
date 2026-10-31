@@ -6827,3 +6827,29 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
   animation: why-grow var(--dur-standard) var(--ease-out) both;
 }
 @keyframes why-grow { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+
+/* The header's Table tab (rolls plugin): small capitals with a hairline under
+   it and up its right side, where the drawer hangs from. The drawer, log and
+   island are styled in the plugin's table.css, which table.js loads. */
+.tt-host { align-self: stretch; display: flex; }
+.tt-tab {
+  position: relative; display: flex; align-items: center; gap: 6px; padding: 0 12px; min-width: 44px;
+  background: none; border: 0; cursor: pointer;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+.tt-tab::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 14px; height: 1px; background: var(--color-border); }
+.tt-tab::before { content: ""; position: absolute; right: 6px; bottom: 14px; width: 1px; height: 14px; background: var(--color-border); }
+.tt-tab:hover { color: var(--color-text-primary); }
+.tt-tab:hover::after, .tt-tab:hover::before { background: var(--color-text-secondary); }
+.tt-tab[aria-expanded="true"] { color: var(--color-accent-link, var(--color-accent)); }
+.tt-tab[aria-expanded="true"]::after, .tt-tab[aria-expanded="true"]::before { background: var(--color-accent); }
+.tt-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; border-radius: 4px; }
+.tt-n {
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--color-accent-fill, var(--color-accent)); color: var(--color-accent-on-fill, #fff);
+  font-size: 10.5px; letter-spacing: 0; display: inline-grid; place-items: center;
+}
+.tt-n[hidden] { display: none; }
+.tt-n.tt-grow { animation: tt-grow var(--dur-large) var(--ease-out); }
+@keyframes tt-grow { from { transform: scale(0.7); } to { transform: scale(1); } }

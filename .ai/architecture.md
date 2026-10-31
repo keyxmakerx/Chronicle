@@ -46,6 +46,7 @@ plugin or widget adds its own line.
 - `pagetests/`
 - `quests/`
 - `restore/`
+- `rolls/`
 - `rolltables/`
 - `rumours/`
 - `sessions/`
