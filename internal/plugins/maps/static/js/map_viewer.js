@@ -445,11 +445,18 @@
 				// Clamp to 0-100.
 				newX = Math.max(0, Math.min(100, newX));
 				newY = Math.max(0, Math.min(100, newY));
+				var oldX = mk.x, oldY = mk.y;
 				mk.x = newX;
 				mk.y = newY;
 				// Hold the guard until the save settles, so a refetch cannot
-				// snap the pin back to the old spot mid-save.
-				updateMarkerPosition(mk).then(function() {
+				// snap the pin back to the old spot mid-save. A refused save
+				// puts the pin back where the server still has it.
+				updateMarkerPosition(mk).then(function(saved) {
+					if (!saved) {
+						mk.x = oldX;
+						mk.y = oldY;
+						lm.setLatLng(pinLatLng(oldX, oldY));
+					}
 					draggingMarkerID = null;
 					releaseMarkerGuard();
 				});
@@ -1116,8 +1123,20 @@
 	var panel = $id('mp-layers');
 	var layersBtn = $id('mp-layers-btn');
 	var drawingCount = 0;
+	// nopicGone: the no-picture card has been answered, or the map has
+	// content, so it must not come back on this page view.
+	var nopicGone = false;
+	var nopicChecked = false;
+	function nopicContentChanged(fromCheck) {
+		var card = document.getElementById('mp-nopic');
+		if (!card) return;
+		if (markers.length || drawingCount) nopicGone = true;
+		if (fromCheck !== false) nopicChecked = true;
+		card.hidden = nopicGone || !nopicChecked;
+	}
 	function dot(color) { return '<span class="mp-dot" style="background:' + escapeAttr(color) + '"></span>'; }
 	function renderPanel() {
+		nopicContentChanged(false);
 		if (!panel) return;
 		var focusKey = document.activeElement && panel.contains(document.activeElement)
 			? document.activeElement.getAttribute('data-key') : null;
@@ -1337,11 +1356,15 @@
 			});
 		}).catch(function() { Chronicle.notify('Could not save that change', 'error'); return false; });
 	}
-	// The name is required by the endpoint and may have been renamed since the
-	// page loaded, so the current one is read just before writing; the stamp
+	// putDisplay saves display_settings groups on their own. The name is
+	// required by the endpoint and may have been renamed since the page
+	// loaded, so the current one is read just before writing; the stamp
 	// makes a rename that lands in between a conflict instead of a revert.
-	async function putGrid(type, size) {
-		var body = { name: savedMapName, display_settings: { grid: { type: type, size: size, strength: savedD.grid_strength } } };
+	function putGrid(type, size) {
+		return putDisplay({ grid: { type: type, size: size, strength: savedD.grid_strength } });
+	}
+	async function putDisplay(groups) {
+		var body = { name: savedMapName, display_settings: groups };
 		try {
 			var res = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/meta');
 			if (res.ok) {
@@ -1823,24 +1846,46 @@
 		$id('ms-cancel').addEventListener('click', function() { closeSheet(true); });
 		syncSheet();
 
-		// The no-picture card: Add opens the sheet at its Picture field.
+		// The no-picture card: Add opens the sheet at its Picture field. The
+		// card is for an empty map only, so it waits for the hex check and
+		// goes for good once a pin or drawing exists (nopicContentChanged).
+		// Not now, the close button and Escape save the answer with the map,
+		// so it does not ask again on another device.
 		var nopic = $id('mp-nopic');
 		if (nopic) {
-			var nopicKey = 'chronicle.mapnopic.' + mapID;
-			var keptBlank = false;
-			try { keptBlank = localStorage.getItem(nopicKey) === '1'; } catch (e) { /* storage blocked: show it */ }
-			nopic.hidden = keptBlank;
+			// Before the answer was saved with the map it lived in this
+			// browser; carry an old answer over once.
+			var oldKey = 'chronicle.mapnopic.' + mapID;
+			var keptHere = false;
+			try { keptHere = localStorage.getItem(oldKey) === '1'; } catch (e) { /* storage blocked: ask */ }
+			var dismissNopic = function() {
+				if (nopicGone) return false;
+				nopicGone = true;
+				nopic.hidden = true;
+				putDisplay({ picture: { blank: true } }).then(function(ok) {
+					if (ok) { try { localStorage.removeItem(oldKey); } catch (e) { /* nothing to tidy */ } }
+				});
+				return true;
+			};
+			if (keptHere) {
+				dismissNopic();
+			} else {
+				hexHasCells().then(function(has) {
+					if (has) nopicGone = true;
+					nopicContentChanged();
+				});
+			}
+			window.__mpCloseNopic = function() { return !nopic.hidden && dismissNopic(); };
 			$id('mp-nopic-add').addEventListener('click', function() {
 				nopic.hidden = true;
+				nopicGone = true;
 				openSheet();
 				var file = $id('ms-image-file');
 				file.scrollIntoView({ block: 'nearest' });
 				file.focus();
 			});
-			$id('mp-nopic-x').addEventListener('click', function() {
-				nopic.hidden = true;
-				try { localStorage.setItem(nopicKey, '1'); } catch (e) { /* storage blocked: it comes back next visit */ }
-			});
+			$id('mp-nopic-x').addEventListener('click', dismissNopic);
+			$id('mp-nopic-close').addEventListener('click', dismissNopic);
 		}
 	}
 
@@ -1946,6 +1991,7 @@
 			// itself.
 			e.mpConsumed = true;
 			if (window.__mpCloseResults && window.__mpCloseResults()) return;
+			if (window.__mpCloseNopic && window.__mpCloseNopic()) return;
 			if (links && links.escape()) return;
 			if (closePopovers()) return;
 			if (window.__mpCloseSheet && window.__mpCloseSheet()) return;
@@ -2219,17 +2265,23 @@
 	});
 
 	// Drag-end position update (silent PUT).
+	// updateMarkerPosition saves a dragged pin's spot and reports whether
+	// the server kept it.
 	async function updateMarkerPosition(mk) {
 		try {
 			// A drag only moves the marker. Updates are partial (absent
 			// keys are preserved), so the body carries just {x, y} and
 			// never echoes fields this page may hold stale copies of.
-			await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, {
+			var res = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, {
 				method: 'PUT',
 				body: { x: mk.x, y: mk.y },
 			});
+			if (!res.ok) throw new Error('The server answered ' + res.status);
+			return true;
 		} catch (err) {
 			console.error('Failed to save marker position:', err);
+			Chronicle.notify('Could not move the pin. It is back where it was.', 'error');
+			return false;
 		}
 	}
 

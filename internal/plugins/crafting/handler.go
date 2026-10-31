@@ -250,6 +250,45 @@ func (h *Handler) SetTags(c echo.Context) error {
 	return c.JSON(http.StatusOK, tagsBody{Tags: out})
 }
 
+// SetKindPictures handles PUT /campaigns/:id/crafting/pictures.
+func (h *Handler) SetKindPictures(c echo.Context) error {
+	cc, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	var in KindPicturesInput
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.SetKindPictures(c.Request().Context(), cc.Campaign.ID, v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string][]Tag{"tags": out})
+}
+
+type itemPictureBody struct {
+	Picture *MaterialPicture `json:"picture"`
+}
+
+// SetItemPicture handles PUT /campaigns/:id/crafting/materials/:eid/picture;
+// a null picture makes the item follow its kind again.
+func (h *Handler) SetItemPicture(c echo.Context) error {
+	cc, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	var in itemPictureBody
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.SetItemPicture(c.Request().Context(), cc.Campaign.ID, c.Param("eid"), v, in.Picture)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, itemPictureBody{Picture: out})
+}
+
 // ListBenches handles GET /campaigns/:id/crafting/benches.
 func (h *Handler) ListBenches(c echo.Context) error {
 	cc, v, err := viewerFrom(c)
@@ -304,6 +343,23 @@ func (h *Handler) UpdateBench(c echo.Context) error {
 		return err
 	}
 	out, err := h.svc.UpdateBench(c.Request().Context(), cc.Campaign.ID, c.Param("bid"), v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// SaveUpgrades handles PUT /campaigns/:id/crafting/benches/:bid/upgrades.
+func (h *Handler) SaveUpgrades(c echo.Context) error {
+	cc, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	var in UpgradesInput
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.SaveUpgrades(c.Request().Context(), cc.Campaign.ID, c.Param("bid"), v, in)
 	if err != nil {
 		return err
 	}

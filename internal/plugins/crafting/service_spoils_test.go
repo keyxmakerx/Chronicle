@@ -634,10 +634,10 @@ func TestDropNotes(t *testing.T) {
 }
 
 func TestTiers(t *testing.T) {
-	if got := tierLabels([]int{11, 12}); !reflect.DeepEqual(got, []string{"11 or less", "12", "13 or more"}) {
+	if got := TierLabels([]int{11, 12}); !reflect.DeepEqual(got, []string{"11 or less", "12", "13 or more"}) {
 		t.Errorf("labels %v", got)
 	}
-	if got := tierLabels(nil); got[0] != "11 or less" {
+	if got := TierLabels(nil); got[0] != "11 or less" {
 		t.Errorf("default labels %v", got)
 	}
 	for total, want := range map[int]int{-3: 0, 11: 0, 12: 1, 16: 1, 17: 2, 40: 2} {

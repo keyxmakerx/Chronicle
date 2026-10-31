@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/editordoc"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -74,8 +76,7 @@ type EntityService interface {
 
 	// Entity types
 	GetEntityTypes(ctx context.Context, campaignID string) ([]EntityType, error)
-	// PlacePageExtras places the page pieces that used to be drawn outside
-	// the layout into a campaign's entity types (see page_extras.go).
+	// PlacePageExtras places the page pieces drawn outside the layout into a campaign's entity types (see page_extras.go).
 	PlacePageExtras(ctx context.Context, campaignID string, plans map[int]PageExtrasPlan) (int, error)
 	// PlaceSystemPanels adds only the Game System Panels block to the given
 	// types (see page_extras.go).
@@ -98,6 +99,10 @@ type EntityService interface {
 	// campaignID) that a viewer with the given role + userID may view. Batched
 	// building block for widgets that must hide private-entity nodes/targets.
 	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
+	// HideUnviewableMentions turns each mention of a page the viewer can't
+	// open into "a hidden page" in the given texts, in place, and reports how
+	// many it replaced. On error every mention is hidden.
+	HideUnviewableMentions(ctx context.Context, campaignID string, role int, userID string, texts ...*string) (int, error)
 	CreateEntityType(ctx context.Context, campaignID string, input CreateEntityTypeInput) (*EntityType, error)
 	// EnsurePlayerCharacterType idempotently premakes the campaign's claimable
 	// "Player Character" type (with the dynamic character-surface layout). Called
@@ -294,6 +299,7 @@ type EntityService interface {
 	SetBlockRegistry(reg *BlockRegistry)
 	SetSidebarAutoAdder(adder SidebarAutoAdder)
 	SetFieldChangeObserver(obs FieldChangeObserver)
+	SetHookDispatcher(d EntityHookDispatcher)
 }
 
 // FieldChangeObserver is told after an entity's custom fields were written.
@@ -393,9 +399,10 @@ type entityService struct {
 	safety        PageSafetyRepository // nil: no history, no Trash (tests)
 	placeGuard    PlaceGuard           // nil: no extra listings (tests)
 	fieldObserver FieldChangeObserver
-	fieldWords    FieldWords        // nil: rule fields are not checked against rules
-	fieldCalendar FieldCalendar     // nil: date fields are checked for form only
-	pageLayouts   PageLayoutService // nil: each category has only its main layout
+	fieldWords    FieldWords           // nil: rule fields are not checked against rules
+	fieldCalendar FieldCalendar        // nil: date fields are checked for form only
+	pageLayouts   PageLayoutService    // nil: each category has only its main layout
+	hooks         EntityHookDispatcher // nil: extension plugins are not told
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
@@ -582,6 +589,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 	if err := s.checkLinkValues(ctx, entity, nil, fieldsData); err != nil {
 		return nil, err
 	}
+	entity.searchFields = searchableFields(fieldsData, et.Fields, nil)
 
 	if err := s.entities.Create(ctx, entity); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("creating entity: %w", err))
@@ -595,7 +603,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 	)
 
 	s.recordVersion(WithActor(ctx, userID), nil, entity, VersionCreated)
-	s.events.PublishEntityEvent("created", campaignID, entity.ID, entity)
+	s.publishEntity(ctx, "created", campaignID, entity.ID, entity)
 	return entity, nil
 }
 
@@ -648,6 +656,7 @@ func (s *entityService) Clone(ctx context.Context, campaignID, userID, sourceEnt
 		UpdatedAt:      now,
 	}
 
+	clone.searchFields = s.searchFieldsOf(ctx, clone.EntityTypeID, clone.FieldOverrides, fieldsData)
 	if err := s.entities.Create(ctx, clone); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("creating cloned entity: %w", err))
 	}
@@ -787,11 +796,18 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		// Plain HTML (the sync API's clients send their page text this way)
 		// leaves entry empty: that column only holds editor JSON, so the HTML
 		// is the body from now on and the editor opens it from entry_html.
+		// Editor JSON is kept as sent and rendered here for entry_html, since
+		// no browser editor produced the HTML copy alongside it.
 		entity.Entry = nil
+		body := entry
 		if isEditorDoc(entry) {
 			entity.Entry = &entry
+			body = ""
+			if rendered, ok := editordoc.ToHTML(entry); ok {
+				body = rendered
+			}
 		}
-		sanitized := sanitize.HTML(entry)
+		sanitized := sanitize.HTML(body)
 		entity.EntryHTML = &sanitized
 	}
 
@@ -832,7 +848,7 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 	if entity.Name != before.Name || derefStr(entity.EntryHTML) != derefStr(before.EntryHTML) {
 		s.recordVersion(ctx, &before, entity, VersionEdit)
 	}
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entity.ID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entity.ID, entity)
 	if fieldsWritten {
 		s.notifyFieldsChanged(ctx, entity, oldFields, entity.FieldsData)
 	}
@@ -1053,7 +1069,7 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 	var fieldsData map[string]any
 	before, beforeErr := s.entities.FindByID(ctx, entityID)
 	if beforeErr == nil {
-		fieldsData = before.FieldsData
+		fieldsData = s.searchFieldsOf(ctx, before.EntityTypeID, before.FieldOverrides, before.FieldsData)
 	}
 	searchText := buildSearchText(entryHTML, fieldsData)
 
@@ -1066,7 +1082,7 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 		if beforeErr == nil {
 			s.recordVersion(ctx, before, entity, VersionEdit)
 		}
-		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	}
 	return nil
 }
@@ -1082,7 +1098,7 @@ func (s *entityService) UpdatePlayerNotes(ctx context.Context, entityID, notesJS
 	slog.Info("entity player notes updated", slog.String("entity_id", entityID))
 	// Emit entity updated event.
 	if entity, err := s.entities.FindByID(ctx, entityID); err == nil {
-		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	}
 	return nil
 }
@@ -1135,10 +1151,14 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 
 	// Build search_text from existing entry HTML + new field values.
 	var entryHTML string
-	if entity != nil && entity.EntryHTML != nil {
-		entryHTML = *entity.EntryHTML
+	var searchFields map[string]any
+	if entity != nil {
+		if entity.EntryHTML != nil {
+			entryHTML = *entity.EntryHTML
+		}
+		searchFields = s.searchFieldsOf(ctx, entity.EntityTypeID, entity.FieldOverrides, fieldsData)
 	}
-	searchText := buildSearchText(entryHTML, fieldsData)
+	searchText := buildSearchText(entryHTML, searchFields)
 
 	if err := s.entities.UpdateFields(ctx, entityID, fieldsData, searchText); err != nil {
 		return err
@@ -1159,7 +1179,7 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 			entity = fresh
 		}
 		entity.FieldsData = fieldsData
-		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 		s.notifyFieldsChanged(ctx, entity, oldFields, fieldsData)
 	}
 	slog.Info("entity fields updated", slog.String("entity_id", entityID))
@@ -1186,6 +1206,8 @@ func (s *entityService) UpdateFieldOverrides(ctx context.Context, entityID strin
 	if err := s.entities.UpdateFieldOverrides(ctx, entityID, overrides); err != nil {
 		return err
 	}
+	// A field added to just this page may be GM-only or owner-only.
+	s.refreshPageSearch(ctx, entityID)
 	slog.Info("entity field overrides updated", slog.String("entity_id", entityID))
 	return nil
 }
@@ -1242,7 +1264,7 @@ func (s *entityService) publishUpdatedFromStore(ctx context.Context, entityID st
 	if err != nil || entity == nil {
 		return
 	}
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 }
 
 // CheckImagePath refuses an absolute or traversing path, and media that
@@ -1294,9 +1316,9 @@ func (s *entityService) Delete(ctx context.Context, entityID string) error {
 			return err
 		}
 		slog.Info("entity moved to trash", slog.String("entity_id", entityID), slog.Int("pages", len(ids)))
-		s.events.PublishEntityEvent("deleted", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "deleted", entity.CampaignID, entityID, entity)
 		for _, id := range ids[1:] {
-			s.events.PublishEntityEvent("deleted", entity.CampaignID, id, &Entity{ID: id, CampaignID: entity.CampaignID})
+			s.publishEntity(ctx, "deleted", entity.CampaignID, id, &Entity{ID: id, CampaignID: entity.CampaignID})
 		}
 		return nil
 	}
@@ -1307,7 +1329,7 @@ func (s *entityService) Delete(ctx context.Context, entityID string) error {
 	slog.Info("entity deleted", slog.String("entity_id", entityID))
 
 	if entity != nil {
-		s.events.PublishEntityEvent("deleted", entity.CampaignID, entityID, entity)
+		s.publishEntity(ctx, "deleted", entity.CampaignID, entityID, entity)
 	}
 	return nil
 }
@@ -1344,7 +1366,7 @@ func (s *entityService) togglePrivate(ctx context.Context, entityID, campaignID 
 
 	// Publish event so WebSocket clients see the visibility change.
 	entity.IsPrivate = newPrivate
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 
 	return newPrivate, nil
 }
@@ -1367,7 +1389,7 @@ func (s *entityService) SetPrivateInCampaign(ctx context.Context, entityID, camp
 		return err
 	}
 	entity.IsPrivate = private
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	return nil
 }
 
@@ -1538,8 +1560,7 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 
 	// Migrate a stray top-level generic PC type, and (independently) nest a
 	// system's own character type — either or both may be present. Both run; an
-	// early return here is what previously left the system type unnested when a
-	// stray also existed (the operator's live both-types campaign).
+	// early return would leave the system type unnested when a stray exists.
 	if err := nest(pcType, "player-character"); err != nil {
 		return err
 	}
@@ -1748,7 +1769,7 @@ func (s *entityService) ClaimEntity(ctx context.Context, entityID, userID string
 
 	entity.OwnerUserID = &userID
 	entity.Playable = true // ClaimOwner marks it in the same statement.
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity claimed",
 		slog.String("entity_id", entityID),
 		slog.String("user_id", userID),
@@ -1808,7 +1829,7 @@ func (s *entityService) AssignOwner(ctx context.Context, entityID string, ownerU
 	if ownerUserID != nil {
 		entity.Playable = true // UpdateOwner marks it in the same statement.
 	}
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity owner reassigned",
 		slog.String("entity_id", entityID),
 		slog.String("campaign_id", entity.CampaignID),
@@ -1848,7 +1869,7 @@ func (s *entityService) SetPlayable(ctx context.Context, campaignID, entityID st
 		return nil, apperror.NewInternal(err)
 	}
 	entity.Playable = playable
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	return entity, nil
 }
 
@@ -1901,7 +1922,7 @@ func (s *entityService) AssignMap(ctx context.Context, entityID string, mapID *s
 	}
 
 	entity.MapID = mapID
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity map assigned",
 		slog.String("entity_id", entityID),
 		slog.String("campaign_id", entity.CampaignID),
@@ -1939,7 +1960,7 @@ func (s *entityService) BulkUpdateType(ctx context.Context, campaignID string, e
 		}
 
 		entity.EntityTypeID = typeID
-		s.events.PublishEntityEvent("updated", campaignID, entityID, entity)
+		s.publishEntity(ctx, "updated", campaignID, entityID, entity)
 		updated++
 	}
 
@@ -2266,6 +2287,7 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 	if err != nil {
 		return nil, err
 	}
+	restrictedBefore := restrictedFieldSet(et.Fields)
 
 	// Load-merge-write: `et` is the stored row, so an absent key keeps its
 	// value and only what the caller sent can change.
@@ -2362,6 +2384,10 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 
 	if err := s.types.Update(ctx, et); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("updating entity type: %w", err))
+	}
+	// A field may have become GM-only or owner-only, or stopped being.
+	if restrictedFieldSet(et.Fields) != restrictedBefore {
+		s.reindexCategorySearch(ctx, et.ID)
 	}
 
 	slog.Info("entity type updated",
@@ -3085,7 +3111,7 @@ func (s *entityService) SetEntityPermissions(ctx context.Context, entityID strin
 	// For VisibilityDefault the IsPrivate field was already set on the entity at
 	// the top of that case branch (line 1769), so we only need to set Visibility.
 	entity.Visibility = input.Visibility
-	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 
 	return nil
 }
@@ -3395,14 +3421,17 @@ func stripHTMLTags(s string) string {
 // buildSearchText creates the denormalized search text for an entity by
 // combining stripped HTML entry content with flattened custom field values.
 // Used to populate the search_text column for FULLTEXT search.
+//
+// search_text is one shared column matched for every viewer regardless of
+// role, so it holds only what every reader of the page may see: GM secret
+// text is stripped, mention link text (the mentioned page's name, which some
+// readers may not be allowed to see) is dropped, and fieldsData must already
+// be searchableFields. Stripping here rather than at query time means a
+// player's search can't match a word they could never read.
 func buildSearchText(entryHTML string, fieldsData map[string]any) string {
 	var parts []string
 	if entryHTML != "" {
-		// search_text is one shared column matched for every viewer regardless
-		// of role, so GM secret text must never enter it — strip it here rather
-		// than at query time, or a player's search could match a word that
-		// appears only inside a GM secret on an otherwise-visible page.
-		parts = append(parts, stripHTMLTags(sanitize.StripSecretsHTML(entryHTML)))
+		parts = append(parts, stripHTMLTags(sanitize.DropMentionText(sanitize.StripSecretsHTML(entryHTML))))
 	}
 	for _, v := range fieldsData {
 		switch val := v.(type) {
@@ -3415,6 +3444,79 @@ func buildSearchText(entryHTML string, fieldsData map[string]any) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// searchableFields is the part of a page's field values search may index:
+// GM-only and owner-only values stay out, as they do from a player's copy of
+// the page. A field added to just this page counts like a category field.
+func searchableFields(fields map[string]any, typeFields []FieldDefinition, overrides *FieldOverrides) map[string]any {
+	defs := typeFields
+	if overrides != nil && len(overrides.Added) > 0 {
+		defs = append(append([]FieldDefinition{}, typeFields...), overrides.Added...)
+	}
+	return FilterRestrictedFields(fields, defs, false, false)
+}
+
+// searchFieldsOf loads the page's category and returns its searchableFields.
+// If the category can't be read no value is indexed, since nothing then
+// says which values are restricted.
+func (s *entityService) searchFieldsOf(ctx context.Context, typeID int, overrides *FieldOverrides, fields map[string]any) map[string]any {
+	if len(fields) == 0 {
+		return nil
+	}
+	et, err := s.types.FindByID(ctx, typeID)
+	if err != nil || et == nil {
+		return nil
+	}
+	return searchableFields(fields, et.Fields, overrides)
+}
+
+// reindexCategorySearch recomputes search_text for one category's pages
+// after its fields change, so a value that just became GM-only or owner-only
+// stops matching searches now rather than at the next restart. A failure is
+// logged; the boot reindex finishes the job.
+func (s *entityService) reindexCategorySearch(ctx context.Context, typeID int) {
+	if n, err := ReindexSearchText(ctx, s.entities, s.types, typeID); err != nil {
+		slog.Warn("entities: category search_text reindex failed",
+			slog.Int("entity_type_id", typeID), slog.Int("rewritten", n), slog.Any("error", err))
+	}
+}
+
+// restrictedFieldSet names, in order, the fields whose values only some
+// readers see, so a change to which fields those are can be spotted.
+func restrictedFieldSet(defs []FieldDefinition) string {
+	var keys []string
+	for _, d := range defs {
+		if d.GMOnly {
+			keys = append(keys, "gm:"+d.Key)
+		} else if d.OwnerOnly {
+			keys = append(keys, "owner:"+d.Key)
+		}
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
+}
+
+// refreshPageSearch recomputes one page's search_text from its stored text
+// and fields. A failure is logged; the boot reindex finishes the job.
+func (s *entityService) refreshPageSearch(ctx context.Context, entityID string) {
+	store, ok := s.entities.(SearchTextReindexStore)
+	if !ok {
+		return
+	}
+	e, err := s.entities.FindByID(ctx, entityID)
+	if err != nil || e == nil {
+		return
+	}
+	html := ""
+	if e.EntryHTML != nil {
+		html = *e.EntryHTML
+	}
+	text := buildSearchText(html, s.searchFieldsOf(ctx, e.EntityTypeID, e.FieldOverrides, e.FieldsData))
+	if err := store.SetSearchText(ctx, entityID, text); err != nil {
+		slog.Warn("entities: page search_text refresh failed",
+			slog.String("entity_id", entityID), slog.Any("error", err))
+	}
 }
 
 // generateUUID creates a new v4 UUID string using crypto/rand.
@@ -3612,6 +3714,7 @@ func (s *entityService) syncFieldFlag(
 				slog.Int("entity_type_id", et.ID), slog.Any("error", uErr))
 			continue
 		}
+		s.reindexCategorySearch(ctx, et.ID)
 		updated++
 	}
 	return updated, nil

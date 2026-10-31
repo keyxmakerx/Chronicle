@@ -126,24 +126,19 @@ func (r *MigrationRunner) RunUp(ctx context.Context, extensionID, slug string, m
 			continue
 		}
 
-		// Validate SQL before execution.
-		if err := ValidateExtensionSQL(slug, m.UpSQL); err != nil {
+		// Run exactly the statements the check read.
+		stmts, err := ParseExtensionSQL(slug, m.UpSQL)
+		if err != nil {
 			return fmt.Errorf("migration %d validation failed: %w", m.Version, err)
 		}
-
-		// Execute migration statements.
-		for _, stmt := range splitStatements(m.UpSQL) {
-			stmt = strings.TrimSpace(stmt)
-			if stmt == "" {
-				continue
-			}
+		for _, stmt := range stmts {
 			if _, err := r.db.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("migration %d failed: %w", m.Version, err)
 			}
 		}
 
 		// Record the applied version.
-		_, err := r.db.ExecContext(ctx,
+		_, err = r.db.ExecContext(ctx,
 			`INSERT INTO extension_schema_versions (extension_id, version) VALUES (?, ?)`,
 			extensionID, m.Version,
 		)
@@ -192,24 +187,18 @@ func (r *MigrationRunner) RunDown(ctx context.Context, extensionID, slug string,
 			continue
 		}
 
-		// Validate down SQL.
-		if err := ValidateExtensionSQL(slug, m.DownSQL); err != nil {
+		stmts, err := ParseExtensionSQL(slug, m.DownSQL)
+		if err != nil {
 			return fmt.Errorf("down migration %d validation failed: %w", version, err)
 		}
-
-		// Execute down migration.
-		for _, stmt := range splitStatements(m.DownSQL) {
-			stmt = strings.TrimSpace(stmt)
-			if stmt == "" {
-				continue
-			}
+		for _, stmt := range stmts {
 			if _, err := r.db.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("down migration %d failed: %w", version, err)
 			}
 		}
 
 		// Remove the tracking row.
-		_, err := r.db.ExecContext(ctx,
+		_, err = r.db.ExecContext(ctx,
 			`DELETE FROM extension_schema_versions WHERE extension_id = ? AND version = ?`,
 			extensionID, version,
 		)
@@ -229,9 +218,10 @@ func (r *MigrationRunner) RunDown(ctx context.Context, extensionID, slug string,
 
 // DropExtensionTables drops all tables prefixed with ext_<slug>_ as a safety
 // net during uninstall. This catches any tables that weren't covered by down
-// migrations.
-func (r *MigrationRunner) DropExtensionTables(ctx context.Context, slug string) error {
-	prefix := "ext_" + slug + "_"
+// migrations. A table that carries the longer prefix of another installed
+// extension (others) is that extension's and is kept.
+func (r *MigrationRunner) DropExtensionTables(ctx context.Context, slug string, others []string) error {
+	prefix := ExtensionTablePrefix(slug)
 
 	rows, err := r.db.QueryContext(ctx, "SHOW TABLES")
 	if err != nil {
@@ -245,7 +235,7 @@ func (r *MigrationRunner) DropExtensionTables(ctx context.Context, slug string) 
 		if err := rows.Scan(&tableName); err != nil {
 			return fmt.Errorf("scanning table name: %w", err)
 		}
-		if strings.HasPrefix(tableName, prefix) {
+		if strings.HasPrefix(tableName, prefix) && !ownedByOther(tableName, prefix, others) {
 			toDrop = append(toDrop, tableName)
 		}
 	}
@@ -304,4 +294,16 @@ func (r *MigrationRunner) GetAppliedVersions(ctx context.Context, extensionID st
 		versions = append(versions, v)
 	}
 	return versions, rows.Err()
+}
+
+// ownedByOther reports whether table belongs to another extension whose
+// prefix is longer than prefix and also matches.
+func ownedByOther(table, prefix string, others []string) bool {
+	for _, o := range others {
+		p := ExtensionTablePrefix(o)
+		if len(p) > len(prefix) && strings.HasPrefix(table, p) {
+			return true
+		}
+	}
+	return false
 }

@@ -19,6 +19,8 @@
     { keys: mod + '+Shift+N', desc: 'Quick capture note' },
     { keys: mod + '+E', desc: 'Edit current page' },
     { keys: mod + '+S', desc: 'Save' },
+    { keys: 'T', desc: 'Open or close the Table (in a campaign)' },
+    { keys: 'R', desc: 'Roll dice at the Table' },
     { keys: '/', desc: 'Slash commands (in editor)' },
     { keys: '?', desc: 'Show this help' },
   ];

@@ -232,7 +232,7 @@ templ PruneCard(res *PruneResult, csrfToken string) {
 					hx-confirm={ fmt.Sprintf("Delete %d stale version folder(s), reclaiming %s? The newest, installed, and currently-served versions are kept. This cannot be undone.", len(res.Reclaimable), prettyBytes(pruneTotal(res))) }
 					hx-headers={ csrfHeaders(csrfToken) }
 				>
-					<i class="fa-solid fa-trash-can mr-1"></i>
+					<i class="fa-solid fa-trash-can"></i>
 					Clean up
 				</button>
 			</div>

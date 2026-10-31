@@ -114,6 +114,11 @@ func TestBulkTagsAPI_SkipsPagesOutsideCampaign(t *testing.T) {
 			if !strings.Contains(rec.Body.String(), `"processed":1`) {
 				t.Errorf("body = %s, want processed 1", rec.Body.String())
 			}
+			// Undo removes only the tags a page newly gained, and only
+			// from pages the caller could change.
+			if action == "add" && !strings.Contains(rec.Body.String(), `"added":{"own-ent":[1]}`) {
+				t.Errorf("body = %s, want added own-ent [1]", rec.Body.String())
+			}
 		})
 	}
 }

@@ -19,12 +19,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
@@ -79,6 +81,15 @@ func newRoundTripHarness(t *testing.T) *roundTripHarness {
 	entitySvc.SetBlockRegistry(blocks)
 	mapSvc := maps.NewMapService(maps.NewMapRepository(db))
 	drawingSvc := maps.NewDrawingService(maps.NewDrawingRepository(db))
+	mapSvc.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaSvc})
+	drawingSvc.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaSvc})
+	drawingSvc.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
+		m, err := mapSvc.GetMap(ctx, mapID)
+		if err != nil {
+			return "", err
+		}
+		return m.CampaignID, nil
+	})
 	entitySvc.SetMapVerifier(&entityMapVerifierAdapter{svc: mapSvc})
 
 	placeSvc := entities.NewPlaceService(entities.NewEntityRepository(db), entities.NewPlaceRepository(db))
@@ -91,7 +102,7 @@ func newRoundTripHarness(t *testing.T) *roundTripHarness {
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaSvc})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaSvc})
 	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc, placeSvc: placeSvc})
-	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapSvc, drawingSvc: drawingSvc})
+	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapSvc, drawingSvc: drawingSvc, users: auth.NewAuthService(auth.NewUserRepository(db), nil, time.Hour)})
 	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonSvc})
 	exportSvc.SetMediaImporter(&mediaImportAdapter{svc: mediaSvc})
 
@@ -563,5 +574,53 @@ func TestCampaignExportImport_CategoryStateAndLists_DBRoundTrip(t *testing.T) {
 	}
 	if st.NPCTypeIDs == nil || fmt.Sprint(*st.NPCTypeIDs) != fmt.Sprint([]int{newChar, newLocation}) {
 		t.Errorf("NPC list = %v, want [%d %d]", st.NPCTypeIDs, newChar, newLocation)
+	}
+}
+
+// A pin's per-player rules survive the round trip when they name players of
+// this site; a rule naming anyone else makes the pin Director-only, never
+// visible to every player.
+func TestCampaignExportImport_PinPlayerRules_DBRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	h := newRoundTripHarness(t)
+	ctx := context.Background()
+	owner := h.newUser("owner")
+	player := h.newUser("player")
+	src, _ := h.sourceWithPlayerCharacter(owner)
+	m, err := h.maps.CreateMap(ctx, maps.CreateMapInput{CampaignID: src.ID, Name: "Coast"})
+	if err != nil {
+		t.Fatalf("create map: %v", err)
+	}
+	known := `{"denied_users":["` + player + `"]}`
+	ghost := `{"denied_users":["` + galleryTestUUID(t) + `"]}`
+	for name, rules := range map[string]string{"Known": known, "Ghost": ghost} {
+		r := rules
+		if _, err := h.maps.CreateMarker(ctx, maps.CreateMarkerInput{
+			MapID: m.ID, Name: name, X: 1, Y: 1, Visibility: "everyone", VisibilityRules: &r, CreatedBy: owner,
+		}); err != nil {
+			t.Fatalf("create pin %s: %v", name, err)
+		}
+	}
+
+	newID, body := h.importBlob(h.newUser("importer"), "campaign.json", h.export(src, owner, "", "application/json"))
+	if newID == src.ID {
+		t.Fatalf("import made no new campaign")
+	}
+	pin := func(name string) (string, sql.NullString) {
+		var vis string
+		var rules sql.NullString
+		if err := h.db.QueryRow(`SELECT mk.visibility, mk.visibility_rules FROM map_markers mk JOIN maps m ON m.id = mk.map_id
+			WHERE m.campaign_id = ? AND mk.name = ?`, newID, name).Scan(&vis, &rules); err != nil {
+			t.Fatalf("imported pin %s not found (response: %s): %v", name, body, err)
+		}
+		return vis, rules
+	}
+	if vis, rules := pin("Known"); vis != "everyone" || !strings.Contains(rules.String, player) {
+		t.Errorf("Known pin = %q %q, want everyone with the player's rule kept", vis, rules.String)
+	}
+	if vis, _ := pin("Ghost"); vis != "dm_only" {
+		t.Errorf("Ghost pin visibility = %q, want dm_only", vis)
 	}
 }

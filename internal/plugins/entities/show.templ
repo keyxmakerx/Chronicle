@@ -284,6 +284,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				<div class="flex items-center gap-2">
 					<h1 class="cb-title text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
 					@entityFavoriteButton(entity)
+					@pagePinMount(cc, entity)
 					@dmOnlyTitleLabel(cc, entity)
 					// "Show in Foundry" for NPC pages. foundry_vtt owns it and
 					// answers empty for anything else, so this stays VTT-agnostic.
@@ -319,7 +320,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 						title="Edit page details"
 						onclick={ headerCall("nameFold") }
 					>
-						<i class="fa-solid fa-pencil mr-1"></i> Edit name
+						<i class="fa-solid fa-pencil"></i> Edit name
 					</button>
 					if isScribe {
 						@pageCloneForm(cc, entity, csrfToken, "btn-ghost btn-sm")
@@ -766,7 +767,7 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?parent_id=%s&type=%d", cc.Campaign.ID, entity.ID, entity.EntityTypeID)) }
 					class="btn-secondary text-sm"
 				>
-					<i class="fa-solid fa-plus mr-1.5 text-xs"></i>
+					<i class="fa-solid fa-plus text-xs"></i>
 					Create sub-page
 				</a>
 			}

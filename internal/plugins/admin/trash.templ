@@ -100,7 +100,7 @@ templ TrashRegion(data TrashPageData) {
 					class="btn btn-danger btn-sm"
 					disabled?={ data.Overview == nil || len(data.Overview.Entries) == 0 }
 				>
-					<i class="fa-solid fa-trash mr-1" aria-hidden="true"></i> Empty trash now…
+					<i class="fa-solid fa-trash" aria-hidden="true"></i> Empty trash now…
 				</button>
 			</div>
 		</div>
@@ -126,7 +126,7 @@ templ trashRow(e TrashEntry) {
 				class="btn btn-secondary btn-sm"
 				aria-label={ "Undo: bring back " + e.Title }
 			>
-				<i class="fa-solid fa-rotate-left mr-1" aria-hidden="true"></i> Undo
+				<i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Undo
 			</button>
 		}
 	</li>

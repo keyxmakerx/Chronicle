@@ -104,11 +104,11 @@ test('a folder cannot be moved into itself or a folder inside it', { skip }, asy
   const { browser, pg } = await open(EDITOR);
   try {
     await pg.click(row('data-node-id="n1"'), { button: 'right' });
-    assert.deepEqual(await menuLabels(pg), ['New folder inside', 'Rename', 'Move to folder…']);
+    assert.deepEqual(await menuLabels(pg), ['New folder inside', 'Rename', 'Move to folder…', 'Order inside…']);
     await pick(pg, 'Move to folder');
     assert.deepEqual(await menuLabels(pg), ['Back', '(off) Top level']);
     await pick(pg, 'Back');
-    assert.deepEqual(await menuLabels(pg), ['New folder inside', 'Rename', 'Move to folder…']);
+    assert.deepEqual(await menuLabels(pg), ['New folder inside', 'Rename', 'Move to folder…', 'Order inside…']);
   } finally { await browser.close(); }
 });
 

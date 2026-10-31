@@ -627,6 +627,88 @@
       rules: rules.map(ruleData)
     };
   }
+  /* ---------- A recipe's "If it goes wrong" and "Extras" settings ----------
+     Forgiving like the rules: an unknown value falls back to the setting's
+     default, and a setting that is off is null. The server cleans the same
+     way (internal/plugins/crafting/extras.go);
+     test/js/fixtures/craft_extras_clean.json pins both to one answer. */
+  var EXTRAS = {
+    botch: ['bane', 'baneAndQuirk', 'baneAndIngredients'],
+    fine: ['edge', 'points', 'extra', 'none'], poor: ['bane', 'points', 'none'], subCost: ['bane', 'points', 'none'],
+    after: [2, 3, 5, 10], gives: ['skip', 'edge', 'points'], learnedBy: ['maker', 'party'], failedTry: ['used', 'half', 'kept'],
+    tags: ['metal', 'remnant_part', 'body_part', 'bone', 'hide', 'liquid', 'herb', 'magic_item', 'magic_essence'],
+    limits: {subs: 8, salvage: 4, days: 360, hint: 240, mishapMoments: 20}
+  };
+  function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : null; }
+  function pick(v, opts) { return opts.indexOf(v) >= 0 ? v : opts[0]; }
+  // num is a JSON number or numeric string, rounded; NaN for anything else.
+  function num(v) {
+    if (typeof v === 'boolean') return v ? 1 : 0;
+    if (typeof v === 'string') { if (!/^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/.test(v)) return NaN; v = +v; }
+    if (typeof v !== 'number' || !isFinite(v)) return NaN;
+    return Math.floor(v + 0.5);
+  }
+  function clampN(n, lo, hi) { return n < lo ? lo : n > hi ? hi : n; }
+  function defaultExtras() {
+    return {botch: {costs: 'bane'}, mishaps: null, quality: null, substitutes: [], breakthrough: false, mastery: null, discover: null,
+      keeps: null, makersMark: false, salvage: [], othersCanHelp: false};
+  }
+  /* cleanExtras reads a recipe's extras as the AI or the editor wrote them;
+     materials is how many materials the recipe has. */
+  function cleanExtras(raw, materials) {
+    var out = defaultExtras(), m = obj(raw), x, i;
+    if (!m) return out;
+    if ((x = obj(m.botch))) {
+      if (x.costs === 'baneAndQuirk') { var qt = str(x.quirkTable); out.botch = qt ? {costs: x.costs, quirkTable: qt} : {costs: 'bane'}; }
+      else if (x.costs === 'baneAndIngredients') out.botch = {costs: x.costs};
+    }
+    if ((x = obj(m.mishaps)) && str(x.table)) {
+      var c = x.chance;
+      if (c === 'always' || CHANCES.indexOf(c) < 0) c = '1 in 6';
+      out.mishaps = {chance: c, table: str(x.table)};
+    }
+    if ((x = obj(m.quality))) out.quality = {fine: pick(x.fine, EXTRAS.fine), poor: pick(x.poor, EXTRAS.poor)};
+    if (Array.isArray(m.substitutes)) {
+      var seen = {};
+      m.substitutes.forEach(function (v) {
+        var s = obj(v);
+        if (!s || out.substitutes.length >= EXTRAS.limits.subs) return;
+        var f = num(s['for']);
+        if (!isFinite(f) || f < 0 || f >= materials || seen[f] || EXTRAS.tags.indexOf(s.use) < 0) return;
+        seen[f] = true;
+        out.substitutes.push({'for': f, use: s.use, costs: pick(s.costs, EXTRAS.subCost)});
+      });
+    }
+    out.breakthrough = m.breakthrough === true;
+    if ((x = obj(m.mastery))) {
+      var n = num(x.afterCleanBrews);
+      out.mastery = {afterCleanBrews: EXTRAS.after.indexOf(n) >= 0 ? n : 3, gives: pick(x.gives, EXTRAS.gives)};
+    }
+    if ((x = obj(m.discover))) {
+      var close = typeof x.closeWhen === 'string' ? x.closeWhen : '', ok = false;
+      for (i = 1; i < materials; i++) if (close === i + ' of ' + materials) ok = true;
+      if (!ok) close = materials > 1 ? '1 of ' + materials : '';
+      out.discover = {closeWhen: close, learnedBy: pick(x.learnedBy, EXTRAS.learnedBy), failedTry: pick(x.failedTry, EXTRAS.failedTry)};
+      var hint = str(x.hint, EXTRAS.limits.hint);
+      if (hint) out.discover.hint = hint;
+    }
+    if ((x = obj(m.keeps))) {
+      var d = num(x.days);
+      out.keeps = {days: clampN(isFinite(d) ? d : 30, 1, EXTRAS.limits.days), thenBecomes: str(x.thenBecomes)};
+    }
+    out.makersMark = m.makersMark === true;
+    if (Array.isArray(m.salvage)) {
+      m.salvage.forEach(function (v) {
+        var s = obj(v), item = s && str(s.item);
+        if (!item || out.salvage.length >= EXTRAS.limits.salvage) return;
+        var q = num(s.qty);
+        out.salvage.push({item: item, qty: clampN(isFinite(q) ? q : 1, 1, 2)});
+      });
+    }
+    out.othersCanHelp = m.othersCanHelp === true;
+    return out;
+  }
+
   /* parseAI reads what the Director pasted from their AI: one rule, a list
      of rules, or {"rules": [...]}, with or without a code fence. Every rule
      is cleaned and comes back as a draft; the count of ones that could not
@@ -651,6 +733,6 @@
     neverTogether: neverTogether, status: status, verdict: verdict, cancelledBy: cancelledBy,
     sentence: sentence, whenTitle: whenTitle, thenTitle: thenTitle, tone: tone, makes: makes,
     flattenEvents: flattenEvents, flattenRolls: flattenRolls, defCond: defCond, defThen: defThen, defLook: defLook, starters: starters,
-    aiBrief: aiBrief, parseAI: parseAI
+    aiBrief: aiBrief, parseAI: parseAI, EXTRAS: EXTRAS, defaultExtras: defaultExtras, cleanExtras: cleanExtras
   };
 })();

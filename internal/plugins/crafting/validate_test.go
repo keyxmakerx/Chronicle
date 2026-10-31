@@ -37,7 +37,7 @@ func TestCleanRecipeRefuses(t *testing.T) {
 		{"item from elsewhere", func(in *RecipeInput) { in.Materials = []Material{{ItemID: "stranger"}} }, "not an Armory item"},
 		{"a character is no material", func(in *RecipeInput) { in.Materials = []Material{{ItemID: "mira"}} }, "not an Armory item"},
 		{"a kept character is no material", func(in *RecipeInput) { in.Materials = []Material{{ItemID: "tobin"}} }, "not an Armory item"},
-		{"unknown tag", func(in *RecipeInput) { in.Materials = []Material{{Tag: "gem"}} }, "no crafting tag"},
+		{"unknown tag", func(in *RecipeInput) { in.Materials = []Material{{Tag: "dragon"}} }, "no crafting tag"},
 		{"too many materials", func(in *RecipeInput) { in.Materials = make([]Material, 13) }, "at most 12 materials"},
 		{"unknown step", func(in *RecipeInput) { in.Steps = []Step{{T: "hammer"}} }, "no step \"hammer\""},
 		{"too many steps", func(in *RecipeInput) { in.Steps = make([]Step, 25) }, "at most 24 steps"},
@@ -148,7 +148,7 @@ func TestCleanTagsAndSettings(t *testing.T) {
 	if err != nil || strings.Join(got, ",") != "metal,herb" {
 		t.Fatalf("cleanTags = %v, %v; want the library's order, once each", got, err)
 	}
-	if _, err := cleanTags([]string{"gem"}); err == nil {
+	if _, err := cleanTags([]string{"dragon"}); err == nil {
 		t.Fatal("an unknown tag was accepted")
 	}
 	if got, err := cleanTags(nil); err != nil || len(got) != 0 {

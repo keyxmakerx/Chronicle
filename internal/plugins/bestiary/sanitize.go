@@ -87,9 +87,8 @@ func sanitizeStatblockJSON(raw json.RawMessage) json.RawMessage {
 
 // sanitizePublicationInPlace scrubs the statblock and the denormalized
 // columns extracted from it. Called on every row leaving the repository so
-// rows published before this fix shipped (or written by any future path
-// that forgets the write-side pass) are still served clean — no migration,
-// no reconciler, idempotent.
+// rows stored unsanitized (or written by a path that skips the write-side
+// pass) are still served clean. Idempotent; needs no migration.
 func sanitizePublicationInPlace(p *Publication) {
 	if p == nil {
 		return

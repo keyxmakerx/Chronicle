@@ -53,15 +53,48 @@ CSS may not `@import` or load remote `url()`; SVGs may not contain scripts.
 | Key | Effect when a campaign turns the pack on |
 |---|---|
 | `entity_type_templates` | Creates entity types (name, plural, icon, colour, `category`). Template `fields` are not applied. |
+| `entity_packs` | Creates the pages in each pack file. See "Entity packs" below. |
 | `tag_collections` | Creates the tags. `parent` is ignored. |
 | `widgets` | Loads the scripts on that campaign's pages and adds them to the layout palette. See [widget.md](widget.md). |
 | `wasm_plugins` | Loads the plugins. See [wasm-plugin.md](wasm-plugin.md). |
 | `marker_icon_packs`, `themes` | Stored and listed by JSON endpoints only; no page uses them yet. |
-| `entity_packs`, `calendar_presets` | Accepted, not applied yet (#660). |
+| `calendar_presets` | Accepted, not applied yet (#1882). |
 | `relation_types`, `reference_data` | Accepted, not applied. |
 
 An apply error is logged and the pack still shows as on. Content is copied
-once per campaign; turning the pack off does not delete it.
+once per campaign: turning the pack off does not delete it, and turning it on
+again does not create entity types or pack pages a second time.
+
+## Entity packs
+
+```json
+"entity_packs": [
+  { "slug": "monsters", "name": "Monsters", "entity_type_slug": "monster",
+    "file": "data/monsters.json" }
+]
+```
+
+`entity_type_slug` is the `slug` of one of this pack's `entity_type_templates`,
+or else the slug of a category the campaign already has (`character`, say). A
+pack whose category can't be found is skipped. The file is a JSON array of
+pages, at most 10,000:
+
+```json
+[
+  { "name": "Goblin", "type_label": "Humanoid",
+    "entry": "Small, **mean** and always in a hurry.",
+    "fields": { "cr": "1/4" } },
+  { "name": "Owlbear", "private": false }
+]
+```
+
+- `name` is required (up to 200 characters).
+- `entry` is the page's text in Markdown; raw HTML is not kept.
+- `fields` sets custom field values by key.
+- Pages start GM-only, since a pack may hold spoilers; `"private": false` makes
+  one visible to players from the start.
+- A page that fails (a duplicate is fine, a blank name is not) is skipped and
+  logged; the rest of the pack still goes in.
 
 ## Own tables (optional)
 

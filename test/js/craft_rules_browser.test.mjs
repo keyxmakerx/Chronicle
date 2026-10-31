@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path';
 import { pw, chromePath, skip } from './_browser_env.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const SCRIPTS = ['item_look_fx', 'craft_rules_logic', 'craft_rules_stage', 'craft_rules_editor', 'craft_rules_looks', 'craft_rules'].map((f) => `/static/js/widgets/${f}.js`);
+const SCRIPTS = ['item_look_fx', 'craft_rules_logic', 'craft_rules_stage', 'craft_rules_editor', 'craft_rules_looks', 'craft_rules_more', 'craft_rules'].map((f) => `/static/js/widgets/${f}.js`);
 const TYPES = { '.css': 'text/css', '.js': 'application/javascript', '.woff2': 'font/woff2', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml' };
 
 function html(attrs, motion) {
@@ -75,6 +75,60 @@ test('the demo timeline says when the recipe can be made', { skip, timeout: 1800
   // Another recipe swaps the rules.
   await click(page, '[data-recipe="0"]');
   assert.equal(await count(page, '.crr-rc'), 1);
+  assert.deepEqual(errors, []);
+});
+
+test('If it goes wrong and Extras edit the recipe\'s extras, and a mishap has a moment', { skip, timeout: 180000 }, async (t) => {
+  const { page, errors } = await open(t);
+  await click(page, '[role="tab"][data-tab="wrong"]');
+  await page.waitForSelector('[data-pane="wrong"] .crr-rcard');
+  // The moonlit draught leaves a quirk when botched, rolled on its table.
+  assert.equal(await page.getAttribute('[data-botch="baneAndQuirk"]', 'aria-pressed'), 'true');
+  assert.equal(await count(page, '[data-box="quirk"] .crr-dtable li'), 4);
+  await click(page, '[data-botch="baneAndIngredients"]');
+  assert.equal(await count(page, '[data-box="quirk"]'), 0);
+  assert.equal(await page.getAttribute('[data-botch="baneAndIngredients"]', 'aria-pressed'), 'true');
+  // Mishaps roll on the table; each row's Watch opens its moment on How it looks.
+  assert.equal(await count(page, '[data-box="mishap"] [data-watch]'), 6);
+  await click(page, '[data-box="mishap"] [data-watch="2"]');
+  await page.waitForSelector('[data-pane="looks"]:not([hidden]) .crr-ob[data-out="mishap:2"][aria-pressed="true"]');
+  assert.match(await page.textContent('[data-pane="looks"] .crr-ob[data-out="mishap:2"]'), /The cat knocks the bench/);
+  // Turning mishaps off takes their moments away.
+  await click(page, '[role="tab"][data-tab="wrong"]');
+  await page.evaluate(() => { const c = document.querySelector('[data-sw="mishaps"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForSelector('[data-pane="wrong"] [data-sw="mishaps"]:not(:checked)');
+  assert.equal(await count(page, '[data-box="mishap"]'), 0);
+  await click(page, '[role="tab"][data-tab="looks"]');
+  assert.equal(await count(page, '.crr-ob[data-out^="mishap:"]'), 0);
+
+  await click(page, '[role="tab"][data-tab="extras"]');
+  await page.waitForSelector('[data-pane="extras"] .crr-xc');
+  // Mastery is on: after 3 clean brews they skip the steps. Change it.
+  await click(page, '[data-x="mastery.afterCleanBrews"][data-v="5"]');
+  assert.equal(await page.getAttribute('[data-x="mastery.afterCleanBrews"][data-v="5"]', 'aria-pressed'), 'true');
+  // A substitute is added for an ingredient nobody substitutes yet.
+  await click(page, '[data-add-sub]');
+  assert.equal(await count(page, '[data-rm-sub]'), 2);
+  assert.equal(await page.getAttribute('[data-x="substitutes.1.for"][data-v="1"]', 'aria-pressed'), 'true');
+  // What the roll can't carry out yet says so.
+  assert.match(await page.textContent('[data-pane="extras"]'), /Not yet carried out at the roll/);
+  const x = await page.evaluate(() => JSON.parse(document.querySelector('[data-pane="extras"] .crr-aij').textContent));
+  assert.deepEqual(x.mastery, { afterCleanBrews: 5, gives: 'skip' });
+  assert.equal(x.substitutes.length, 2);
+  assert.deepEqual(errors, []);
+});
+
+test('Draft it copies the ask with the brief and opens the paste box', { skip, timeout: 180000 }, async (t) => {
+  const { page, errors } = await open(t);
+  const brief = await page.evaluate(() => new Promise((res) => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (s) => { res(JSON.parse(s)); return Promise.resolve(); } } });
+    document.querySelector('.crr-ask').value = 'During a storm it can make two';
+    document.querySelector('.crr-ask').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  }));
+  assert.equal(brief.request, 'During a storm it can make two');
+  assert.match(brief.answerWith, /JSON only/);
+  await page.waitForSelector('.crr-paste:not([hidden])');
+  assert.match(await page.textContent('.crr-paste-msg'), /Copied your ask/);
   assert.deepEqual(errors, []);
 });
 

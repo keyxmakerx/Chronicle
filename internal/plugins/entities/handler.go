@@ -27,7 +27,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -473,7 +472,18 @@ func (h *Handler) NewForm(c echo.Context) error {
 		}
 	}
 
-	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, csrfToken, ""))
+	// ?name= comes from quick search's "Create a page named …" row.
+	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, ""))
+}
+
+// prefillName is a name to start the create form with, trimmed and cut to the
+// field's own limit so a long link can't overflow it.
+func prefillName(s string) string {
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > 200 {
+		s = string(r[:200])
+	}
+	return s
 }
 
 // collectVariants returns the parent entity_type plus all its child entity_types,
@@ -565,7 +575,7 @@ func (h *Handler) Create(c echo.Context) error {
 		// Preserve the same variant-aware picker across error re-render so a
 		// failed submission doesn't drop the user back to the flat dropdown.
 		variants := collectVariants(entityTypes, req.EntityTypeID)
-		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, nil, csrfToken, errMsg))
+		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, nil, prefillName(req.Name), csrfToken, errMsg))
 	}
 
 	// Apply content template if one was selected.
@@ -884,8 +894,8 @@ func (h *Handler) Update(c echo.Context) error {
 
 	fieldsData := h.parseFieldsFromForm(c, cc.Campaign.ID, entity.EntityTypeID)
 
-	// IsPrivate intentionally omitted: the form no longer carries this
-	// field (the permissions card owns it now via /permissions). A nil
+	// IsPrivate intentionally omitted: the form doesn't carry it (the
+	// permissions card owns it via /permissions). A nil
 	// IsPrivate means the service preserves the entity's current value
 	// instead of resetting it to false on every save. See model.go
 	// UpdateEntityInput for the rationale.
@@ -905,7 +915,7 @@ func (h *Handler) Update(c echo.Context) error {
 	// with hidden parts is left alone, and hidden fields keep their values.
 	userID := auth.GetUserID(c)
 	if !cc.CanAuthorDmOnly() {
-		if textLocked(cc, entity.Entry, entity.EntryHTML) {
+		if h.textLocked(c, cc, entity.Entry, entity.EntryHTML) {
 			input.Entry = patch.Absent[string]()
 		}
 		if et, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID); err == nil {
@@ -918,7 +928,7 @@ func (h *Handler) Update(c echo.Context) error {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 		entityTypes = TypesForViewer(entityTypes, cc.VisibilityRole())
 		entityType, _ := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
-		entity = servedCopy(cc, entity, entityType, userID)
+		entity = h.servedCopy(c, cc, entity, entityType, userID)
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to update entity")
 		// Fetch parent for re-rendering form.
@@ -1224,7 +1234,12 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 				c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
 			}
 		}
-		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, typeID, cc, hiddenIDs))
+		// A failed read leaves every list A to Z, which still shows every page.
+		var orders map[string]string
+		if h.folders != nil {
+			orders, _ = h.folders.ChildOrders(c.Request().Context(), cc.Campaign.ID)
+		}
+		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, typeID, cc, hiddenIDs, orders))
 	}
 
 	return middleware.Render(c, http.StatusOK, SearchResultsFragment(results, total, cc))
@@ -1330,7 +1345,7 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 	})
 }
 
-// --- Bulk Operations API (multi-select in reorg mode) ---
+// --- Bulk Operations API ---
 
 // BulkMoveAPI reparents multiple entities under a target parent (entity or folder node).
 // POST /campaigns/:id/entities/bulk-move
@@ -1399,12 +1414,19 @@ func (h *Handler) BulkChangeTypeAPI(c echo.Context) error {
 		}
 		req.EntityIDs = h.editablePageIDs(c, cc, req.EntityIDs)
 	}
+	// What each page was before, so the list's Undo can put it back.
+	previous := make(map[string]int, len(req.EntityIDs))
+	for _, eid := range req.EntityIDs {
+		if e, err := h.service.GetByID(c.Request().Context(), eid); err == nil && e.CampaignID == cc.Campaign.ID && e.EntityTypeID != req.EntityTypeID {
+			previous[eid] = e.EntityTypeID
+		}
+	}
 	updated, err := h.service.BulkUpdateType(c.Request().Context(), cc.Campaign.ID, req.EntityIDs, req.EntityTypeID)
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "updated": updated})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "updated": updated, "previous": previous})
 }
 
 // BulkTagsAPI assigns, removes, or sets tags on multiple entities.
@@ -1439,6 +1461,8 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	processed := 0
+	// For "add", the tags each page newly gained, so Undo removes only those.
+	added := map[string][]int{}
 	role, userID := int(cc.VisibilityRole()), auth.GetUserID(c)
 	// A caller who cannot see dm_only tags must not read, add or clear them.
 	seeDmOnly := cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
@@ -1462,6 +1486,9 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 			merged := mergeIntSets(existingIDs, req.TagIDs)
 			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged, seeDmOnly); err == nil {
 				processed++
+				if gained := subtractIntSet(merged, existingIDs); len(gained) > 0 {
+					added[eid] = gained
+				}
 			}
 		case "remove":
 			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
@@ -1485,7 +1512,7 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "processed": processed})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "processed": processed, "added": added})
 }
 
 // BulkVisibilityAPI toggles privacy for multiple entities.
@@ -1514,6 +1541,8 @@ func (h *Handler) BulkVisibilityAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	toggled := 0
+	// The pages that changed, so Undo flips back only those.
+	toggledIDs := []string{}
 	for _, eid := range req.EntityIDs {
 		entity, err := h.service.GetByID(ctx, eid)
 		if err != nil || entity.CampaignID != cc.Campaign.ID {
@@ -1522,11 +1551,12 @@ func (h *Handler) BulkVisibilityAPI(c echo.Context) error {
 		if entity.IsPrivate != req.Private {
 			if _, err := h.service.TogglePrivate(ctx, eid); err == nil {
 				toggled++
+				toggledIDs = append(toggledIDs, eid)
 			}
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "toggled": toggled})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "toggled": toggled, "toggledIds": toggledIDs})
 }
 
 // BulkDeleteAPI deletes multiple entities. Owner only.
@@ -1552,6 +1582,8 @@ func (h *Handler) BulkDeleteAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	deleted := 0
+	// The pages moved to the Trash, so Undo restores exactly those.
+	deletedIDs := []string{}
 	for _, eid := range req.EntityIDs {
 		entity, err := h.service.GetByID(ctx, eid)
 		if err != nil || entity.CampaignID != cc.Campaign.ID {
@@ -1559,10 +1591,26 @@ func (h *Handler) BulkDeleteAPI(c echo.Context) error {
 		}
 		if err := h.service.Delete(ctx, eid); err == nil {
 			deleted++
+			deletedIDs = append(deletedIDs, eid)
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "deleted": deleted})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "deleted": deleted, "deletedIds": deletedIDs})
+}
+
+// subtractIntSet returns the values of a that are not in b.
+func subtractIntSet(a, b []int) []int {
+	inB := make(map[int]bool, len(b))
+	for _, v := range b {
+		inB[v] = true
+	}
+	var out []int
+	for _, v := range a {
+		if !inB[v] {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // mergeIntSets merges two int slices, deduplicating.
@@ -1989,18 +2037,7 @@ func (h *Handler) GetEntry(c echo.Context) error {
 	// Strip inline secrets for everyone but the owner and Co-DMs, so players
 	// and Scribes never receive GM-only text. The owner and Co-DMs see
 	// secrets with a visual indicator.
-	entry := entity.Entry
-	entryHTML := entity.EntryHTML
-	if !cc.CanAuthorDmOnly() {
-		if entry != nil {
-			stripped := sanitize.StripSecretsJSON(*entry)
-			entry = &stripped
-		}
-		if entryHTML != nil {
-			stripped := sanitize.StripSecretsHTML(*entryHTML)
-			entryHTML = &stripped
-		}
-	}
+	entry, entryHTML, hidden := h.servedText(c, cc, entity.Entry, entity.EntryHTML)
 
 	response := map[string]any{
 		"entry":      entry,
@@ -2013,7 +2050,7 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		if rev, err := h.service.EntryRev(c.Request().Context(), entity.ID); err == nil {
 			response["rev"] = rev
 		}
-		if textLocked(cc, entity.Entry, entity.EntryHTML) {
+		if hidden {
 			response["locked"] = true
 		}
 	}
@@ -2052,7 +2089,7 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	if !access.CanEdit && !owner {
 		return apperror.NewForbidden("you can't edit this page")
 	}
-	if textLocked(cc, entity.Entry, entity.EntryHTML) {
+	if h.textLocked(c, cc, entity.Entry, entity.EntryHTML) {
 		return apperror.NewForbidden(entryLockedMessage)
 	}
 
@@ -2077,11 +2114,13 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 		return err
 	}
 	if conflict != nil {
+		// The newer text goes back to this writer, so it is served like a read.
+		theirs, theirsHTML, _ := h.servedText(c, cc, conflict.Entry, conflict.EntryHTML)
 		return c.JSON(http.StatusConflict, map[string]any{
 			"error":      "edit_conflict",
 			"rev":        conflict.Rev,
-			"entry":      conflict.Entry,
-			"entry_html": conflict.EntryHTML,
+			"entry":      theirs,
+			"entry_html": theirsHTML,
 			"by_name":    conflict.ByName,
 			"at":         conflict.At,
 		})
@@ -2123,25 +2162,15 @@ func (h *Handler) GetPlayerNotes(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	notes, notesHTML := entity.PlayerNotes, entity.PlayerNotesHTML
-	if !cc.CanAuthorDmOnly() {
-		// Player notes are meant for players, but the API accepts any editor
-		// content, so GM-only parts are removed the same way as for the entry.
-		if notes != nil {
-			stripped := sanitize.StripSecretsJSON(*notes)
-			notes = &stripped
-		}
-		if notesHTML != nil {
-			stripped := sanitize.StripSecretsHTML(*notesHTML)
-			notesHTML = &stripped
-		}
-	}
+	// Player notes are meant for players, but the API accepts any editor
+	// content, so they are served the same way as the entry.
+	notes, notesHTML, hidden := h.servedText(c, cc, entity.PlayerNotes, entity.PlayerNotesHTML)
 
 	resp := map[string]any{
 		"player_notes":      notes,
 		"player_notes_html": notesHTML,
 	}
-	if cc.MemberRole >= campaigns.RoleScribe && textLocked(cc, entity.PlayerNotes, entity.PlayerNotesHTML) {
+	if cc.MemberRole >= campaigns.RoleScribe && hidden {
 		resp["locked"] = true
 	}
 	return c.JSON(http.StatusOK, resp)
@@ -2163,7 +2192,7 @@ func (h *Handler) UpdatePlayerNotesAPI(c echo.Context) error {
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
 	}
-	if textLocked(cc, entity.PlayerNotes, entity.PlayerNotesHTML) {
+	if h.textLocked(c, cc, entity.PlayerNotes, entity.PlayerNotesHTML) {
 		return apperror.NewForbidden(entryLockedMessage)
 	}
 
@@ -2540,7 +2569,8 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 
 	var entryExcerpt string
 	if cfg.ShowEntry && entity.EntryHTML != nil {
-		entryExcerpt = previewExcerpt(*entity.EntryHTML, cc.CanAuthorDmOnly())
+		_, served, _ := h.servedText(c, cc, nil, entity.EntryHTML)
+		entryExcerpt = previewExcerpt(*served)
 	}
 
 	// Resolve image path when popup config allows it.
@@ -3523,7 +3553,8 @@ func (h *Handler) UpdateEntityTypeColor(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// UpdateEntityTypeDashboard updates the category dashboard description and pinned pages
+// UpdateEntityTypeDashboard updates the category dashboard description and,
+// when the body names them, its pinned pages
 // (PUT /campaigns/:id/entity-types/:etid/dashboard).
 func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -3547,14 +3578,20 @@ func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
 	}
 
 	var body struct {
-		Description     *string  `json:"description"`
-		PinnedEntityIDs []string `json:"pinned_entity_ids"`
+		Description     *string   `json:"description"`
+		PinnedEntityIDs *[]string `json:"pinned_entity_ids"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
+	// The update is partial for pins: a save that doesn't name them (the
+	// description editor) keeps the pages already pinned.
+	pinned := et.PinnedEntityIDs
+	if body.PinnedEntityIDs != nil {
+		pinned = *body.PinnedEntityIDs
+	}
 
-	if err := h.service.UpdateEntityTypeDashboard(c.Request().Context(), etID, body.Description, body.PinnedEntityIDs); err != nil {
+	if err := h.service.UpdateEntityTypeDashboard(c.Request().Context(), etID, body.Description, pinned); err != nil {
 		return err
 	}
 
@@ -3697,9 +3734,9 @@ func (h *Handler) GetAliasesAPI(c echo.Context) error {
 	entityID := c.Param("eid")
 
 	// Load the entity to enforce campaign scope + privacy, mirroring
-	// GetEntry/GetFieldsAPI — previously this read aliases by id with no IDOR
-	// or privacy gate (cordinator#39 finding 3). Required before exposing the
-	// route to public-campaign visitors.
+	// GetEntry/GetFieldsAPI. Without this gate aliases are readable by id
+	// across campaigns and privacy levels (IDOR); required for public-campaign
+	// visitors.
 	entity, err := h.service.GetByID(c.Request().Context(), entityID)
 	if err != nil {
 		return err
@@ -4706,4 +4743,63 @@ func (h *Handler) requirePlayerCanView(c echo.Context, cc *campaigns.CampaignCon
 		return apperror.NewForbidden("you can't edit this page")
 	}
 	return nil
+}
+
+// SetSidebarOrderAPI sets how one sidebar container orders its rows: a
+// category's top level, a folder, or a page with pages under it.
+// PUT /campaigns/:id/sidebar-order
+func (h *Handler) SetSidebarOrderAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		Kind string `json:"kind"`
+		ID   string `json:"id"`
+		Mode string `json:"mode"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if req.Kind == OrderContainerPage {
+		if err := h.pageWriteErr(c, req.ID); err != nil {
+			return err
+		}
+	}
+	if err := h.folders.SetChildOrder(c.Request().Context(), cc.Campaign.ID, req.Kind, req.ID, req.Mode); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// MoveSidebarRowAPI puts a page or folder just before or after a sibling,
+// for a list ordered by hand. Naming the neighbour rather than an index
+// keeps the move right when the mover cannot see every sibling.
+// PUT /campaigns/:id/sidebar-order/move
+func (h *Handler) MoveSidebarRowAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		Kind   string `json:"kind"`
+		ID     string `json:"id"`
+		NextTo string `json:"next_to"`
+		After  bool   `json:"after"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if req.Kind == OrderContainerPage {
+		if err := h.pageWriteErr(c, req.ID); err != nil {
+			return err
+		}
+		if err := h.pageViewErr(c, req.NextTo); err != nil {
+			return err
+		}
+	}
+	if err := h.folders.MoveNextTo(c.Request().Context(), cc.Campaign.ID, req.Kind, req.ID, req.NextTo, req.After); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }

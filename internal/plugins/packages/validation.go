@@ -90,11 +90,11 @@ func validateHostNotPrivate(hostname string) error {
 	}
 
 	// Resolve the hostname and check each IP.
+	// A name that doesn't resolve now can't be shown to be public, so it is
+	// refused rather than let through to resolve differently later.
 	ips, err := net.LookupHost(hostname)
 	if err != nil {
-		// DNS resolution failure — allow it through (the download will fail later).
-		// This prevents blocking legitimate hosts that are temporarily unresolvable.
-		return nil
+		return fmt.Errorf("could not resolve %q to check that it is a public address", hostname)
 	}
 
 	for _, ipStr := range ips {

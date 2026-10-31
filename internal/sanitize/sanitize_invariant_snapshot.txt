@@ -1,4 +1,4 @@
-internal/plugins/calendar/service.go:calendarService.applyImportedEvent	helper_depth=2	inputs=ee(ExportEvent.DescriptionHTML)
+internal/plugins/calendar/service.go:calendarService.applyImportedEvent	helper_depth=1	inputs=ee(ExportEvent.DescriptionHTML)
 internal/plugins/calendar/service.go:calendarService.CreateEvent	helper_depth=2	inputs=input(CreateEventInput.DescriptionHTML)
 internal/plugins/calendar/service.go:buildValidatedEvent	helper_depth=1	inputs=input(CreateEventInput.DescriptionHTML)
 internal/plugins/calendar/service.go:calendarService.UpdateEvent	helper_depth=1	inputs=input(UpdateEventInput.DescriptionHTML)
@@ -6,9 +6,9 @@ internal/plugins/entities/service.go:entityService.UpdateEntry	direct	inputs=ent
 internal/plugins/entities/service.go:entityService.UpdatePlayerNotes	direct	inputs=notesHTML
 internal/plugins/entities/service.go:buildSearchText	allowlisted	inputs=entryHTML
 internal/plugins/sessions/service.go:sessionService.UpdateSessionRecap	direct	inputs=recapHTML
-internal/plugins/timeline/service.go:timelineService.UpdateTimeline	direct	inputs=input(UpdateTimelineInput.DescriptionHTML)
-internal/plugins/timeline/service.go:timelineService.CreateStandaloneEvent	direct	inputs=input(CreateTimelineEventInput.DescriptionHTML)
-internal/plugins/timeline/service.go:timelineService.UpdateStandaloneEvent	direct	inputs=input(UpdateTimelineEventInput.DescriptionHTML)
+internal/plugins/timeline/service.go:timelineService.UpdateTimeline	helper_depth=1	inputs=input(UpdateTimelineInput.DescriptionHTML)
+internal/plugins/timeline/service.go:timelineService.CreateStandaloneEvent	helper_depth=1	inputs=input(CreateTimelineEventInput.DescriptionHTML)
+internal/plugins/timeline/service.go:timelineService.UpdateStandaloneEvent	helper_depth=1	inputs=input(UpdateTimelineEventInput.DescriptionHTML)
 internal/widgets/entity_notes/service.go:service.Create	helper_depth=1	inputs=req(CreateNoteRequest.BodyHTML)
 internal/widgets/entity_notes/service.go:service.Update	helper_depth=1	inputs=req(UpdateNoteRequest.BodyHTML)
 internal/widgets/notes/service.go:noteService.Update	direct	inputs=req(UpdateNoteRequest.EntryHTML)

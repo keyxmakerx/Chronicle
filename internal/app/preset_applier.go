@@ -77,7 +77,7 @@ func snapshotPresetFieldKeys() map[string]presetFieldKeys {
 
 // applyPresets is the shared walk behind ApplySystemPresets and
 // ReconcileSystemPresets. With create=false a preset with no matching type is
-// skipped. A non-nil known drops those previously-declared fields from the
+// skipped. A non-nil known drops the already-declared fields from the
 // merge. The count is types created when create is true, fields added otherwise.
 func (p *presetApplier) applyPresets(ctx context.Context, campaignID, systemSlug string, create bool, known presetFieldKeys) (int, error) {
 	manifest := systems.Find(systemSlug)

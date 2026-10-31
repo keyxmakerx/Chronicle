@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -310,8 +311,8 @@ func TestBuildForecastEntry(t *testing.T) {
 	}
 
 	t.Run("deterministic", func(t *testing.T) {
-		a := buildForecastEntry("cal-1", day, 3, reading("storm", f64p(8)))
-		b := buildForecastEntry("cal-1", day, 3, reading("storm", f64p(8)))
+		a := buildForecastEntry(testForecastKey, "cal-1", day, 3, reading("storm", f64p(8)))
+		b := buildForecastEntry(testForecastKey, "cal-1", day, 3, reading("storm", f64p(8)))
 		if !reflect.DeepEqual(a, b) {
 			t.Fatalf("same inputs gave %+v then %+v", a, b)
 		}
@@ -320,8 +321,8 @@ func TestBuildForecastEntry(t *testing.T) {
 	t.Run("a different day, lead or calendar draws independently", func(t *testing.T) {
 		seeds := map[int64]bool{}
 		for _, s := range []int64{
-			forecastSeed("cal-1", day, 3), forecastSeed("cal-1", day, 4),
-			forecastSeed("cal-1", DayDate{5, 2, 12}, 3), forecastSeed("cal-2", day, 3),
+			forecastSeed(testForecastKey, "cal-1", day, 3), forecastSeed(testForecastKey, "cal-1", day, 4),
+			forecastSeed(testForecastKey, "cal-1", DayDate{5, 2, 12}, 3), forecastSeed(testForecastKey, "cal-2", day, 3),
 		} {
 			seeds[s] = true
 		}
@@ -338,7 +339,7 @@ func TestBuildForecastEntry(t *testing.T) {
 			}
 			for lead := 1; lead <= 10; lead++ {
 				for i := 0; i < 40; i++ {
-					e := buildForecastEntry("cal-"+string(rune('a'+i)), day, lead, reading(icon, nil))
+					e := buildForecastEntry(testForecastKey, "cal-"+string(rune('a'+i)), day, lead, reading(icon, nil))
 					if !allowed[e.Icon] {
 						t.Fatalf("icon %q lead %d forecast %q, not itself or a neighbour", icon, lead, e.Icon)
 					}
@@ -351,7 +352,7 @@ func TestBuildForecastEntry(t *testing.T) {
 		for _, d := range []DayWeather{{Icon: strp("tornado")}, {}} {
 			ok := false
 			for i := 0; i < 40 && !ok; i++ {
-				e := buildForecastEntry("cal-"+string(rune('a'+i)), day, 1, d)
+				e := buildForecastEntry(testForecastKey, "cal-"+string(rune('a'+i)), day, 1, d)
 				ok = e.Icon == "cloud"
 			}
 			if !ok {
@@ -364,7 +365,7 @@ func TestBuildForecastEntry(t *testing.T) {
 		right := func(lead int) int {
 			n := 0
 			for i := 0; i < 400; i++ {
-				if buildForecastEntry("cal-"+string(rune(i)), day, lead, reading("rain", nil)).Icon == "rain" {
+				if buildForecastEntry(testForecastKey, "cal-"+string(rune(i)), day, lead, reading("rain", nil)).Icon == "rain" {
 					n++
 				}
 			}
@@ -376,7 +377,7 @@ func TestBuildForecastEntry(t *testing.T) {
 	})
 
 	t.Run("temperature is null without a reading and a widening band with one", func(t *testing.T) {
-		e := buildForecastEntry("cal-1", day, 2, reading("clear", nil))
+		e := buildForecastEntry(testForecastKey, "cal-1", day, 2, reading("clear", nil))
 		if e.TempLow != nil || e.TempHigh != nil {
 			t.Errorf("no temperature in, got %v..%v", e.TempLow, e.TempHigh)
 		}
@@ -387,7 +388,7 @@ func TestBuildForecastEntry(t *testing.T) {
 		width := func(lead int) int {
 			w := 0
 			for i := 0; i < 50; i++ {
-				e := buildForecastEntry("cal-"+string(rune('a'+i)), day, lead, reading("clear", f64p(10)))
+				e := buildForecastEntry(testForecastKey, "cal-"+string(rune('a'+i)), day, lead, reading("clear", f64p(10)))
 				if *e.TempLow > *e.TempHigh {
 					t.Fatalf("low %d above high %d", *e.TempLow, *e.TempHigh)
 				}
@@ -404,7 +405,7 @@ func TestBuildForecastEntry(t *testing.T) {
 		for _, icon := range []string{"clear", "cloud", "rain", "snow", "storm", "fog"} {
 			for lead := 1; lead <= 10; lead++ {
 				for i := 0; i < 20; i++ {
-					p := buildForecastEntry("cal-"+string(rune('a'+i)), day, lead, reading(icon, nil)).PrecipChance
+					p := buildForecastEntry(testForecastKey, "cal-"+string(rune('a'+i)), day, lead, reading(icon, nil)).PrecipChance
 					if p < 0 || p > 100 || p%10 != 0 {
 						t.Fatalf("%s lead %d chance %d", icon, lead, p)
 					}
@@ -414,11 +415,11 @@ func TestBuildForecastEntry(t *testing.T) {
 	})
 
 	t.Run("a confident wet forecast carries a high chance and a dry one a low chance", func(t *testing.T) {
-		wet := buildForecastEntry("cal-q", day, 1, reading("rain", nil))
+		wet := buildForecastEntry(testForecastKey, "cal-q", day, 1, reading("rain", nil))
 		if wet.Icon == "rain" && wet.PrecipChance != 100 {
 			t.Errorf("rain at 0.97 chance = %d, want 100", wet.PrecipChance)
 		}
-		dry := buildForecastEntry("cal-q", day, 1, reading("clear", nil))
+		dry := buildForecastEntry(testForecastKey, "cal-q", day, 1, reading("clear", nil))
 		if dry.Icon == "clear" && dry.PrecipChance != 0 {
 			t.Errorf("clear at 0.97 chance = %d, want 0", dry.PrecipChance)
 		}
@@ -912,5 +913,45 @@ func TestValidateWeatherSettings_ForecastDays(t *testing.T) {
 		if (err == nil) != tt.ok || (err != nil && !badRequest(err)) {
 			t.Errorf("days %d: err %v, want ok=%v", tt.days, err, tt.ok)
 		}
+	}
+}
+
+// testForecastKey stands in for the key production derives from the site
+// secret.
+var testForecastKey = []byte("test-forecast-key-0123456789abcd")
+
+// The blur must not be recomputable from public values: the seed depends on
+// the server's key, and a service never runs keyless.
+func TestForecastSeed_NeedsTheServerKey(t *testing.T) {
+	day := DayDate{5, 2, 11}
+	other := []byte("another-forecast-key-0123456789a")
+	for lead := 1; lead <= 10; lead++ {
+		if forecastSeed(testForecastKey, "cal-1", day, lead) == forecastSeed(other, "cal-1", day, lead) {
+			t.Fatalf("lead %d: two keys gave the same seed", lead)
+		}
+		if forecastSeed(nil, "cal-1", day, lead) == forecastSeed(testForecastKey, "cal-1", day, lead) {
+			t.Fatalf("lead %d: the keyed seed equals the keyless one", lead)
+		}
+	}
+
+	a := NewCalendarService(nil, nil, nil, nil).(*calendarService)
+	b := NewCalendarService(nil, nil, nil, nil).(*calendarService)
+	if len(a.forecastKey) != 32 || bytes.Equal(a.forecastKey, b.forecastKey) {
+		t.Fatalf("an unwired service must start with its own random key, got %x and %x", a.forecastKey, b.forecastKey)
+	}
+
+	a.SetForecastSecret("site-secret-one-0123456789abcdef")
+	b.SetForecastSecret("site-secret-one-0123456789abcdef")
+	if !bytes.Equal(a.forecastKey, b.forecastKey) {
+		t.Fatal("the same site secret must give the same key, or forecasts change on restart")
+	}
+	b.SetForecastSecret("site-secret-two-0123456789abcdef")
+	if bytes.Equal(a.forecastKey, b.forecastKey) {
+		t.Fatal("different site secrets gave the same forecast key")
+	}
+	keep := append([]byte(nil), b.forecastKey...)
+	b.SetForecastSecret("")
+	if !bytes.Equal(keep, b.forecastKey) {
+		t.Fatal("an empty secret must keep the current key")
 	}
 }

@@ -8,6 +8,15 @@
 //   bg-surface, bg-surface-alt, bg-surface-raised, bg-page
 //   border-edge, border-edge-light
 
+// A token that is a plain CSS variable has no rgb channels for Tailwind's
+// <alpha-value> slot, so `bg-surface/90` would emit no rule at all. This
+// makes an opacity modifier mix the variable toward transparent instead;
+// without a modifier the token stays the bare variable.
+const token = (v) => ({ opacityValue }) =>
+  opacityValue === undefined || String(opacityValue).startsWith('var(')
+    ? v
+    : `color-mix(in srgb, ${v} calc(${opacityValue} * 100%), transparent)`;
+
 module.exports = {
   // Toggle dark mode by adding/removing the "dark" class on <html>.
   darkMode: 'class',
@@ -71,29 +80,30 @@ module.exports = {
         // ── Semantic theme tokens ──────────────────────────────
         // These reference CSS custom properties that flip for dark mode.
         // Usage: text-fg, bg-surface, border-edge, etc.
-        // No `dark:` prefix needed — colours auto-switch.
+        // No `dark:` prefix needed — colours auto-switch. Each takes an
+        // opacity modifier (bg-surface/90) through token() above.
 
         // Foreground / text
         fg: {
-          DEFAULT: 'var(--color-text-primary)',       // headings, main text
-          body:    'var(--color-text-body)',           // body text, values
-          secondary: 'var(--color-text-secondary)',   // labels, descriptions
-          muted:   'var(--color-text-muted)',          // hints, timestamps
-          faint:   'var(--color-text-faint)',          // disabled, placeholders
+          DEFAULT: token('var(--color-text-primary)'),       // headings, main text
+          body:    token('var(--color-text-body)'),           // body text, values
+          secondary: token('var(--color-text-secondary)'),   // labels, descriptions
+          muted:   token('var(--color-text-muted)'),          // hints, timestamps
+          faint:   token('var(--color-text-faint)'),          // disabled, placeholders
         },
 
         // Background surfaces
         surface: {
-          DEFAULT: 'var(--color-card-bg)',             // card / panel bg
-          alt:     'var(--color-bg-tertiary)',          // alt rows, hover bg
-          raised:  'var(--color-bg-secondary)',         // palette items, blocks (slightly elevated)
+          DEFAULT: token('var(--color-card-bg)'),             // card / panel bg
+          alt:     token('var(--color-bg-tertiary)'),          // alt rows, hover bg
+          raised:  token('var(--color-bg-secondary)'),         // palette items, blocks (slightly elevated)
         },
-        page:      'var(--color-bg-primary)',           // main page bg
+        page:      token('var(--color-bg-primary)'),           // main page bg
 
         // Borders and dividers
         edge: {
-          DEFAULT: 'var(--color-border)',               // standard borders
-          light:   'var(--color-border-light)',          // subtle dividers
+          DEFAULT: token('var(--color-border)'),               // standard borders
+          light:   token('var(--color-border-light)'),          // subtle dividers
         },
 
         // State: yes / maybe / no. Take an opacity modifier (bg-ok/10).

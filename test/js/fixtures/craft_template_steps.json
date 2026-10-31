@@ -1,0 +1,444 @@
+{
+ "about": "A method's steps laid over a recipe, from internal/plugins/crafting/ai_test.go (CRAFTING_WRITE_TEMPLATE_FIXTURE=1). The server (Go LayTemplate) and the editor (crafting_lib.js applyTemplate) must both give want.",
+ "cases": [
+  {
+   "name": "items whose tags fit",
+   "tags": {
+    "moss": [
+     "herb"
+    ],
+    "water": [
+     "liquid"
+    ]
+   },
+   "template": "steady",
+   "in": {
+    "name": "",
+    "template": "",
+    "bench": "",
+    "materials": [
+     {
+      "itemId": "moss",
+      "qty": 2
+     },
+     {
+      "itemId": "water",
+      "qty": 1
+     }
+    ],
+    "steps": null,
+    "result": {
+     "qty": 0
+    },
+    "goal": 0,
+    "stat": "",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": ""
+    },
+    "who": "",
+    "known": null,
+    "colors": {},
+    "version": 0
+   },
+   "want": {
+    "name": "",
+    "template": "steady",
+    "bench": "apothecary",
+    "materials": [
+     {
+      "itemId": "moss",
+      "qty": 2
+     },
+     {
+      "itemId": "water",
+      "qty": 1
+     }
+    ],
+    "steps": [
+     {
+      "t": "add",
+      "material": 0,
+      "to": "mortar"
+     },
+     {
+      "t": "grind",
+      "turns": 3
+     },
+     {
+      "t": "tip"
+     },
+     {
+      "t": "pour",
+      "material": 1
+     },
+     {
+      "t": "simmer",
+      "secs": 5
+     }
+    ],
+    "result": {
+     "qty": 0
+    },
+    "goal": 0,
+    "stat": "",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": ""
+    },
+    "who": "",
+    "known": null,
+    "colors": {},
+    "version": 0
+   }
+  },
+  {
+   "name": "nothing fits, so any lines are added",
+   "tags": {
+    "ore": [
+     "metal"
+    ]
+   },
+   "template": "volatile",
+   "in": {
+    "name": "",
+    "template": "",
+    "bench": "",
+    "materials": [
+     {
+      "itemId": "ore",
+      "qty": 1
+     }
+    ],
+    "steps": null,
+    "result": {
+     "qty": 0
+    },
+    "goal": 0,
+    "stat": "",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": ""
+    },
+    "who": "",
+    "known": null,
+    "colors": {},
+    "version": 0
+   },
+   "want": {
+    "name": "",
+    "template": "volatile",
+    "bench": "apothecary",
+    "materials": [
+     {
+      "itemId": "ore",
+      "qty": 1
+     },
+     {
+      "tag": "herb",
+      "qty": 1
+     },
+     {
+      "tag": "liquid",
+      "qty": 1
+     }
+    ],
+    "steps": [
+     {
+      "t": "add",
+      "material": 1,
+      "to": "mortar"
+     },
+     {
+      "t": "grind",
+      "turns": 2
+     },
+     {
+      "t": "tip"
+     },
+     {
+      "t": "add",
+      "material": 2,
+      "to": "flask"
+     },
+     {
+      "t": "strike",
+      "n": 2
+     }
+    ],
+    "result": {
+     "qty": 0
+    },
+    "goal": 0,
+    "stat": "",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": ""
+    },
+    "who": "",
+    "known": null,
+    "colors": {},
+    "version": 0
+   }
+  },
+  {
+   "name": "an any line and an untagged item",
+   "tags": {},
+   "template": "steady",
+   "in": {
+    "name": "",
+    "template": "",
+    "bench": "",
+    "materials": [
+     {
+      "itemId": "plain",
+      "qty": 1
+     },
+     {
+      "tag": "bone",
+      "qty": 3
+     }
+    ],
+    "steps": null,
+    "result": {
+     "qty": 0
+    },
+    "goal": 0,
+    "stat": "",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": ""
+    },
+    "who": "",
+    "known": null,
+    "colors": {},
+    "version": 0
+   },
+   "want": {
+    "name": "",
+    "template": "steady",
+    "bench": "apothecary",
+    "materials": [
+     {
+      "itemId": "plain",
+      "qty": 1
+     },
+     {
+      "tag": "bone",
+      "qty": 3
+     },
+     {
+      "tag": "liquid",
+      "qty": 1
+     }
+    ],
+    "steps": [
+     {
+      "t": "add",
+      "material": 1,
+      "to": "mortar"
+     },
+     {
+      "t": "grind",
+      "turns": 3
+     },
+     {
+      "t": "tip"
+     },
+     {
+      "t": "pour",
+      "material": 2
+     },
+     {
+      "t": "simmer",
+      "secs": 5
+     }
+    ],
+    "result": {
+     "qty": 0
+    },
+    "goal": 0,
+    "stat": "",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": ""
+    },
+    "who": "",
+    "known": null,
+    "colors": {},
+    "version": 0
+   }
+  },
+  {
+   "name": "the first fitting material is used twice",
+   "tags": {
+    "moss": [
+     "herb",
+     "liquid"
+    ]
+   },
+   "template": "volatile",
+   "in": {
+    "name": "",
+    "template": "",
+    "bench": "",
+    "materials": [
+     {
+      "itemId": "moss",
+      "qty": 1
+     }
+    ],
+    "steps": null,
+    "result": {
+     "qty": 0
+    },
+    "goal": 0,
+    "stat": "",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": ""
+    },
+    "who": "",
+    "known": null,
+    "colors": {},
+    "version": 0
+   },
+   "want": {
+    "name": "",
+    "template": "volatile",
+    "bench": "apothecary",
+    "materials": [
+     {
+      "itemId": "moss",
+      "qty": 1
+     }
+    ],
+    "steps": [
+     {
+      "t": "add",
+      "material": 0,
+      "to": "mortar"
+     },
+     {
+      "t": "grind",
+      "turns": 2
+     },
+     {
+      "t": "tip"
+     },
+     {
+      "t": "add",
+      "material": 0,
+      "to": "flask"
+     },
+     {
+      "t": "strike",
+      "n": 2
+     }
+    ],
+    "result": {
+     "qty": 0
+    },
+    "goal": 0,
+    "stat": "",
+    "prerequisite": "",
+    "source": "",
+    "cost": {
+     "amount": 0,
+     "currency": ""
+    },
+    "who": "",
+    "known": null,
+    "colors": {},
+    "version": 0
+   }
+  }
+ ],
+ "templates": [
+  {
+   "key": "steady",
+   "name": "Steady brew",
+   "bench": "apothecary",
+   "steps": [
+    {
+     "t": "add",
+     "want": [
+      "herb",
+      "bone",
+      "body_part",
+      "remnant_part"
+     ],
+     "to": "mortar"
+    },
+    {
+     "t": "grind",
+     "turns": 3
+    },
+    {
+     "t": "tip"
+    },
+    {
+     "t": "pour",
+     "want": [
+      "liquid",
+      "magic_essence"
+     ]
+    },
+    {
+     "t": "simmer",
+     "secs": 5
+    }
+   ]
+  },
+  {
+   "key": "volatile",
+   "name": "Volatile brew",
+   "bench": "apothecary",
+   "steps": [
+    {
+     "t": "add",
+     "want": [
+      "herb",
+      "bone",
+      "body_part",
+      "remnant_part"
+     ],
+     "to": "mortar"
+    },
+    {
+     "t": "grind",
+     "turns": 2
+    },
+    {
+     "t": "tip"
+    },
+    {
+     "t": "add",
+     "want": [
+      "liquid",
+      "magic_essence"
+     ],
+     "to": "flask"
+    },
+    {
+     "t": "strike",
+     "n": 2
+    }
+   ]
+  }
+ ]
+}

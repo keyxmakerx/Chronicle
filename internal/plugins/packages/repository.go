@@ -14,13 +14,22 @@ type PackageRepository interface {
 	FindBySlug(ctx context.Context, slug string) (*Package, error)
 	FindByRepoURL(ctx context.Context, repoURL string) (*Package, error)
 	CreatePackage(ctx context.Context, pkg *Package) error
-	UpdatePackage(ctx context.Context, pkg *Package) error
+	// Each setter writes only its own columns. Callers hold a package row
+	// across slow network calls, and a whole-row write from that copy would
+	// undo an admin's pin, policy or install made meanwhile.
+	SetInstalled(ctx context.Context, id, version, installPath string, at time.Time) error
+	SetPinnedVersion(ctx context.Context, id, version string) error
+	SetAutoUpdate(ctx context.Context, id string, policy UpdatePolicy) error
+	SetLastChecked(ctx context.Context, id string, at time.Time) error
 	DeletePackage(ctx context.Context, id string) error
 
 	ListVersions(ctx context.Context, packageID string) ([]PackageVersion, error)
 	GetVersion(ctx context.Context, packageID, version string) (*PackageVersion, error)
 	UpsertVersion(ctx context.Context, v *PackageVersion) error
 	MarkVersionDownloaded(ctx context.Context, id string) error
+	// RecordVersionDigest stores digest as the version's content digest if it
+	// has none yet, and returns the digest it holds afterwards.
+	RecordVersionDigest(ctx context.Context, id, digest string) (string, error)
 
 	// Usage tracking.
 	GetUsageByCampaign(ctx context.Context, systemSlug string) ([]PackageUsage, error)
@@ -172,19 +181,40 @@ func (r *packageRepository) CreatePackage(ctx context.Context, pkg *Package) err
 }
 
 // UpdatePackage updates an existing package record.
-func (r *packageRepository) UpdatePackage(ctx context.Context, pkg *Package) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE packages SET name = ?, repo_url = ?, description = ?,
-		       installed_version = NULLIF(?,''), pinned_version = NULLIF(?,''),
-		       auto_update = ?, last_checked_at = ?, last_installed_at = ?,
-		       install_path = NULLIF(?,'')
-		WHERE id = ?`,
-		pkg.Name, pkg.RepoURL, pkg.Description,
-		pkg.InstalledVersion, pkg.PinnedVersion,
-		pkg.AutoUpdate, pkg.LastCheckedAt, pkg.LastInstalledAt,
-		pkg.InstallPath, pkg.ID)
+// SetInstalled records the version now installed and where it lives.
+func (r *packageRepository) SetInstalled(ctx context.Context, id, version, installPath string, at time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE packages SET installed_version = NULLIF(?,''), install_path = NULLIF(?,''), last_installed_at = ? WHERE id = ?`,
+		version, installPath, at, id)
 	if err != nil {
-		return fmt.Errorf("updating package %s: %w", pkg.ID, err)
+		return fmt.Errorf("recording install of package %s: %w", id, err)
+	}
+	return nil
+}
+
+// SetPinnedVersion sets, or with "" clears, the package's pin.
+func (r *packageRepository) SetPinnedVersion(ctx context.Context, id, version string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE packages SET pinned_version = NULLIF(?,'') WHERE id = ?`, version, id)
+	if err != nil {
+		return fmt.Errorf("pinning package %s: %w", id, err)
+	}
+	return nil
+}
+
+// SetAutoUpdate sets the package's automatic update policy.
+func (r *packageRepository) SetAutoUpdate(ctx context.Context, id string, policy UpdatePolicy) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE packages SET auto_update = ? WHERE id = ?`, policy, id)
+	if err != nil {
+		return fmt.Errorf("setting update policy of package %s: %w", id, err)
+	}
+	return nil
+}
+
+// SetLastChecked records when the package's releases were last fetched.
+func (r *packageRepository) SetLastChecked(ctx context.Context, id string, at time.Time) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE packages SET last_checked_at = ? WHERE id = ?`, at, id)
+	if err != nil {
+		return fmt.Errorf("recording release check of package %s: %w", id, err)
 	}
 	return nil
 }
@@ -429,6 +459,22 @@ func (r *packageRepository) UpsertVersion(ctx context.Context, v *PackageVersion
 		return fmt.Errorf("upserting version: %w", err)
 	}
 	return nil
+}
+
+// RecordVersionDigest keeps the first digest ever recorded for a version: the
+// conditional update writes only into an empty column, so two installs racing
+// can't both set it, and the read returns whichever one won.
+func (r *packageRepository) RecordVersionDigest(ctx context.Context, id, digest string) (string, error) {
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE package_versions SET content_sha256 = ? WHERE id = ? AND content_sha256 IS NULL`, digest, id); err != nil {
+		return "", fmt.Errorf("recording version digest: %w", err)
+	}
+	var stored sql.NullString
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT content_sha256 FROM package_versions WHERE id = ?`, id).Scan(&stored); err != nil {
+		return "", fmt.Errorf("reading version digest: %w", err)
+	}
+	return stored.String, nil
 }
 
 // MarkVersionDownloaded sets the downloaded_at timestamp for a version.

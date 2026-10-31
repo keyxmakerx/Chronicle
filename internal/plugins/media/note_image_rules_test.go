@@ -7,16 +7,19 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/png"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
 
@@ -94,26 +97,60 @@ func TestDeleteCampaignMedia_RefusesANotePicture(t *testing.T) {
 	}
 }
 
-// /media/upload will not take the note-picture usage type from a form field,
-// even from a Scribe: that would mint files outside the page rule.
-func TestHandlerUpload_RefusesNoteImageUsageType(t *testing.T) {
-	var body bytes.Buffer
-	mw := multipart.NewWriter(&body)
-	part, _ := mw.CreateFormFile("file", "a.png")
-	_, _ = part.Write(tinyPNG(t))
-	_ = mw.WriteField("campaign_id", "camp-1")
-	_ = mw.WriteField("usage_type", UsageNoteImage)
-	_ = mw.Close()
-	req := httptest.NewRequest(http.MethodPost, "/media/upload", &body)
-	req.Header.Set(echo.HeaderContentType, mw.FormDataContentType())
-	c := echo.New().NewContext(req, httptest.NewRecorder())
-	auth.SetSession(c, &auth.Session{UserID: "scribe"})
+// /media/upload takes only an attachment or a page picture from its form,
+// even from a Scribe. Every other type belongs to the route that stamps it:
+// a note picture would escape the page rule, and a backdrop with no campaign
+// is served to anyone, so letting a form name it let any signed-in user
+// publish a public file.
+func TestHandlerUpload_UsageTypeAllowlist(t *testing.T) {
+	tests := []struct {
+		usage, campaign string
+		allowed         bool
+	}{
+		{"", "camp-1", true},
+		{UsageAttachment, "camp-1", true},
+		{UsageEntityImage, "camp-1", true},
+		{UsageNoteImage, "camp-1", false},
+		{UsagePageFile, "camp-1", false},
+		{UsageBackdrop, "", false},
+		{UsageBackdrop, "camp-1", false},
+		{UsageAvatar, "", false},
+		{strings.Repeat("x", 300), "camp-1", false},
+	}
+	for _, tt := range tests {
+		name := tt.usage
+		if len(name) > 20 {
+			name = "over-long"
+		}
+		t.Run(name+"/"+tt.campaign, func(t *testing.T) {
+			var body bytes.Buffer
+			mw := multipart.NewWriter(&body)
+			part, _ := mw.CreateFormFile("file", "a.png")
+			_, _ = part.Write(tinyPNG(t))
+			if tt.campaign != "" {
+				_ = mw.WriteField("campaign_id", tt.campaign)
+			}
+			_ = mw.WriteField("usage_type", tt.usage)
+			_ = mw.Close()
+			req := httptest.NewRequest(http.MethodPost, "/media/upload", &body)
+			req.Header.Set(echo.HeaderContentType, mw.FormDataContentType())
+			c := echo.New().NewContext(req, httptest.NewRecorder())
+			auth.SetSession(c, &auth.Session{UserID: "scribe"})
 
-	svc := &fakeUploadService{}
-	h := &Handler{service: svc, memberChecker: &stubMemberChecker{roles: map[string]map[string]int{"camp-1": {"scribe": 2}}}}
-	err := h.Upload(c)
-	if err == nil || svc.uploadCalled {
-		t.Fatalf("want a refusal before the service is reached, err=%v called=%v", err, svc.uploadCalled)
+			svc := &fakeUploadService{}
+			h := &Handler{service: svc, memberChecker: &stubMemberChecker{roles: map[string]map[string]int{"camp-1": {"scribe": 2}}}}
+			err := h.Upload(c)
+			if !tt.allowed {
+				var appErr *apperror.AppError
+				if !errors.As(err, &appErr) || appErr.Code != http.StatusBadRequest || svc.uploadCalled {
+					t.Fatalf("want a 400 before the service is reached, err=%v called=%v", err, svc.uploadCalled)
+				}
+				return
+			}
+			if !svc.uploadCalled {
+				t.Fatalf("an allowed usage type did not reach the service, err=%v", err)
+			}
+		})
 	}
 }
 

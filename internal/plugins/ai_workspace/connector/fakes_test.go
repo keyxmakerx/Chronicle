@@ -46,6 +46,30 @@ func (r *memRepo) RevokeAll(_ context.Context, campaignID string, at time.Time) 
 	return nil
 }
 
+func (r *memRepo) RevokeMadeBy(_ context.Context, campaignID, userID string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.conns {
+		if c.CampaignID == campaignID && c.UserID == userID && c.RevokedAt == nil {
+			t := at
+			c.RevokedAt = &t
+		}
+	}
+	return nil
+}
+
+func (r *memRepo) RevokeAllMadeBy(_ context.Context, userID string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.conns {
+		if c.UserID == userID && c.RevokedAt == nil {
+			t := at
+			c.RevokedAt = &t
+		}
+	}
+	return nil
+}
+
 func (r *memRepo) SetPaused(_ context.Context, campaignID string, id int64, at *time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

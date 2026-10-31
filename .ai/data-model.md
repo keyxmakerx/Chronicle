@@ -1,21 +1,10 @@
 # Data Model
 
-<!-- ====================================================================== -->
-<!-- Category: Semi-static                                                    -->
-<!-- Purpose: Quick reference for the database schema. Avoids reading all      -->
-<!--          migration files to understand the data model.                   -->
-<!-- Update: After every migration is written or applied.                     -->
-<!-- ====================================================================== -->
-
-> The migrations are the source of truth: `db/migrations/*.up.sql` (core, runs
-> first) and each plugin's `internal/plugins/<name>/migrations/*.up.sql`
-> (plugin, runs after core, in rank order, `cmd/server/plugin_schemas.go`).
-> This file is a derived summary — regenerate the parts that changed whenever
-> a migration is added.
-
-Core tables live in `db/migrations/`. Plugins that own tables have a
-`migrations/` directory under `internal/plugins/<name>/`; every other plugin
-reuses core tables and owns none of its own (ADR-028).
+The migrations are the source of truth: `db/migrations/*.up.sql` (core, runs
+first) and each plugin's `internal/plugins/<name>/migrations/*.up.sql` (runs
+after core, in rank order, `cmd/server/plugin_schemas.go`). This file is a
+derived summary; update the affected part with each migration. A plugin with
+no `migrations/` directory reuses core tables (ADR-028).
 
 ## Conventions
 
@@ -70,11 +59,9 @@ campaign stays in the database and is excluded from active-campaign lists.
 
 ## Core schema
 
-Core tables live in `db/migrations/000001_baseline.up.sql` — idempotent
-(every `CREATE TABLE IF NOT EXISTS`), collapsing what used to be 63 sequential
-core+plugin migrations into their final shape (ADR-028) — plus incremental
-numbered core migrations after it, tracked once each via `golang-migrate`'s
-`schema_migrations` table.
+Core tables are in `db/migrations/000001_baseline.up.sql` (idempotent, every
+`CREATE TABLE IF NOT EXISTS`, ADR-028) plus numbered migrations after it,
+tracked in `golang-migrate`'s `schema_migrations` table.
 
 ### Users & site
 
@@ -116,6 +103,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | `entity_versions` | A page's title and text history | FK→`entities` CASCADE; `kind` (`created`/`edit`/`restore`/`baseline`); `user_id` no FK (history outlives the account); `DATETIME(6)` times |
 | `entity_aliases` | Alternate names an entity is searchable/linkable by | `UNIQUE(entity_id, alias)`; `FULLTEXT(alias)` |
 | `sidebar_nodes` | Pure organizational folders in the sidebar tree (no page content) | `node_type` enum(`folder`); self-nestable via `parent_id` |
+| `sidebar_child_orders` | How a sidebar list orders its rows when not A to Z (migration 59) | PK `(campaign_id, container_kind, container_id)`; `container_kind` enum(`category`,`folder`,`page`); `container_id` is the type id as text or the folder's or page's id (no FK); `mode` enum(`hand`,`new`); campaign FK CASCADE |
 | `entity_favorites` | Per-user sidebar bookmarks | composite PK `(user_id, entity_id)` |
 | `saved_filters` | Per-user saved tag-filter presets | `tag_slugs` JSON array |
 
@@ -156,7 +144,6 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | `shop_transactions` | Historical record of purchases/sales/transfers/gifts between entities | `transaction_type`; `price_paid` (display string) + `price_numeric` DECIMAL (aggregation); `instance_id` FK→`inventory_instances` (nullable) |
 | `inventory_instances` | Named item collections ("Party Loot", a shop's stock) | `UNIQUE(campaign_id, slug)` |
 | `inventory_items` | Instance ↔ entity junction with quantity | `UNIQUE(instance_id, entity_id)` |
-
 | `shop_rooms` | A shop page's walk-in room layout | PK `shop_entity_id` FK→`entities` CASCADE; `layout` LONGTEXT (a normalized JSON document; goods stay in `entity_relations`) |
 | `shop_purchase_requests` | A player's ask to buy a basket outside downtime, answered by the GM | `basket` JSON; `quoted_total` + `quoted_currency` (the price the player saw); `status` enum(`pending`,`applied`,`declined`,`failed`); `buyer_entity_id` is the character paying |
 
@@ -201,10 +188,8 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 ## Plugin schema
 
-Plugin migrations run after core, in rank order: each plugin registers with
-`addPluginSchema(rank, slug, fs)` from an `init` in `cmd/server`
-(`plugin_schemas.go`). A plugin's schema failing to migrate degrades that
-plugin only (`internal/database/plugin_health.go`) — it never blocks boot.
+Each plugin registers with `addPluginSchema(rank, slug, fs)` from an `init` in
+`cmd/server/plugin_schemas.go`; ranks set the run order.
 
 ### bestiary (`internal/plugins/bestiary/migrations/`)
 
@@ -221,24 +206,25 @@ Community-shared creature stat blocks, instance-wide (not campaign-scoped).
 
 ### calendar (`internal/plugins/calendar/migrations/`)
 
-Migrations 001–018 built the old calendar; `019_calv5_clean_slate` emptied
-`calendars` and `calendar_events` and dropped every other table, and
-`020_calv5_schema` onward is the V5 rebuild (#741). `019` and its two
-siblings are one-way (see `docs/deployment.md` §6). `calendars` and
-`calendar_events` are the same tables `sessions` and `timelines` still hold
-foreign keys into (migrations are append-only, so those FKs stay). What the
-plugin does with them: `internal/plugins/calendar/.ai.md`.
+`019_calv5_clean_slate` emptied `calendars` and `calendar_events` and dropped
+every other calendar table; `020_calv5_schema` onward is V5 (#741). `019` and
+its two siblings are one-way (`docs/deployment.md` §6). `sessions` and
+`timelines` hold foreign keys into `calendars` and `calendar_events`. Behaviour:
+`internal/plugins/calendar/.ai.md`.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `calendars` | A campaign's calendar | visibility columns; real-world date anchor and time zone; `hemisphere`, `forecasts_enabled`, `month_starts_new_week`; era look: `era_colors_on`, `era_feel`, `era_intensity`, `era_speed` (migration 024) |
 | `calendar_months`, `calendar_weekdays` | The year's shape | `sort_order`; months carry `is_intercalary`, `leap_year_days`; weekdays `is_rest_day` |
-| `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`, `lore_entity_id` (migration 026)) and seasons (start/end month and day) | per calendar, FK CASCADE |
+| `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`, `lore_entity_id` (migration 026), `phase_mode` `cycle`/`manual`, `state_names` JSON; migration 029) and seasons (start/end month and day) | per calendar, FK CASCADE |
+| `calendar_moon_marks` | Days the Director set a manual moon's state; a mark holds until the next | PK `(moon_id, year, month, day)`; `state`; `shown` (players see it); FK→`calendar_moons` CASCADE |
 | `calendar_eras` | Named stretches of years | `start_*`/`end_*`; look: `color`, `color_2`, `style`, `feel`; `lore_entity_id`, `dm_note`, `hidden_until_begins` (migration 024) |
 | `calendar_cycles`, `calendar_cycle_entries`, `calendar_festivals` | Repeating year-cycles and their entries; named festival days | `cycle_length`; festival `month`/`day` or `after_month` |
 | `calendar_event_kinds` | Per-campaign kinds of event (name, icon, colour, default announcement) | `UNIQUE`-slug per `campaign_id` |
 | `calendar_events` | Events | `kind_id`, `announced`, `payload` JSON; `recurrence_rule` JSON, the "repeats by rule" shape (migration 022) |
 | `calendar_event_overrides` | Skip or move one occurrence of a repeating event | PK `(event_id, occurrence_year, occurrence_month, occurrence_day)`; `action` enum(`skip`,`move`) with `new_*` date |
+| `calendar_event_rolls` | An event that rolls when it happens | PK `event_id`; `config` JSON (dice or rolling table, result bands, roll-on-arrival), validated in the service; FK→`calendar_events` CASCADE |
+| `calendar_event_roll_nights` | One stored result per occurrence date | PK `(event_id, year, month, day)`; `total`/`faces` (dice) or `entry` (table); `source`; `locked` keeps a re-roll from replacing it; `told` NULL = follow the result's own setting |
 | `calendar_weather` | The calendar's current-weather snapshot | one row per calendar |
 | `calendar_weather_days` | Weather for one date, generated or set by hand | PK `(calendar_id, year, month, day)`; `source` (`manual` by default); `locked` keeps Generate from replacing it (migration 025) |
 | `calendar_weather_settings` | The world's climate and how long weather lasts | PK `calendar_id`; `climate`, `continuity`, `kinds` (the owner's own kinds of weather), `forecast_days` (migration 025) |
@@ -281,6 +267,9 @@ core migrations cannot reference a plugin table on a fresh DB).
 | `slot_proposal_options` | A candidate slot on a proposal | `starts_at_utc`/`ends_at_utc` — UTC instants (unlike the wall-clock availability tables); `ordinal` display order |
 | `slot_proposal_responses` | Per-option per-user yes/no/maybe | `UNIQUE(option_id, user_id)`; own table, deliberately not `session_attendees`, to keep it out of campaign/export egress |
 | `slot_proposal_tokens` | Single-use email response links, mirrors `session_rsvp_tokens` | `token` UNIQUE |
+| `session_night_sightings` | Who the party saw on which game night | `UNIQUE(session_id, occurrence_date, entity_id)`; `state`; `source`; a `not_seen` row keeps a dismissed suggestion dismissed |
+| `session_night_entries` | Which Journal note is a member's entry for a night | PK `(session_id, occurrence_date, user_id)`; `note_id` UNIQUE, no FK so a deleted entry is not remade |
+| `session_night_bells` | Game-night bell items already sent (claimed before writing, so no double send) | PK `(session_id, occurrence_date, user_id, kind)` |
 | `notifications` | Generic in-app notification store | `user_id`; `campaign_id` nullable; `type`/`payload`/`link`; `read_at` NULL = unread |
 
 ### timeline (`internal/plugins/timeline/migrations/`)
@@ -295,8 +284,7 @@ core migrations cannot reference a plugin table on a fresh DB).
 
 ### syncapi (`internal/plugins/syncapi/migrations/`)
 
-REST API for external tools (Foundry VTT). See `API-CONTRACT.md` in the
-Foundry module repo for the wire contract.
+REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in the Foundry module repo.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
@@ -309,6 +297,9 @@ Foundry module repo for the wire contract.
 | `sync_change_watermarks` | How far the feed was pruned, so a stale cursor is told to resync | PK `campaign_id`; `pruned_through` |
 | `sync_calendar_date_beacons` | Per-campaign "date Foundry last saw / last applied" | PK `campaign_id`; `last_served_*` (a Bearer-authed GET was served) vs `applied_*` (Foundry confirmed it set its own date via `POST .../confirm`) — distinct claims, filled independently. |
 | `sync_events` | Sync history: one row per thing that synced, either direction, read by Manage › Sync history and the module's History tab | `direction` enum(`to_chronicle`,`to_foundry`,`link`); `reported_by` enum(`chronicle`,`client`); `parent_id` groups a catch-up run's steps; names, ids, call and answer only, never page text; `was_value` is what a change replaced, in words (a date push's old date); pruned after 90 days |
+| `foundry_monster_lists` | The monsters Foundry last reported, one row per campaign | PK `campaign_id`; `monsters` MEDIUMTEXT JSON; `truncated`; `reported_at` (stale rows pruned); display text only |
+| `foundry_monster_matches` | The DM's choices for a creature page vs. a same-named Foundry monster | PK `(campaign_id, entity_id)`; `monster_name`/`monster_pack` (hand match), `use_numbers` (`foundry`/`page`/empty), `not_same` JSON names |
+| `foundry_scenes` / `foundry_scene_reports` | Scenes in the campaign's Foundry world; the report row separates "no scenes" from "never reported" | scenes PK `(campaign_id, scene_id)`; `name`, `folder`, `is_active`, `in_navigation`; each report replaces both |
 | `foundry_players` | Players in Foundry: the GM's Foundry client's latest list of the world's users, read by the owner's Foundry page and People page | PK (`campaign_id`, `foundry_user_id`); `member_user_id` only when a campaign member; `foundry_name` ≤100, `last_failure` ≤200; each report replaces the campaign's rows; pruned 30 days after the last report |
 
 ### packages (`internal/plugins/packages/migrations/`)
@@ -369,6 +360,12 @@ Foundry module repo for the wire contract.
 | `entity_type_page_layouts` | A category's named layouts besides its main one: PK `entity_type_id`, `doc` is the JSON `PageLayouts` (`mainName`, `claimed`, `extra` of `{key, name, layout}`), checked by `PageLayouts.Check` and `ValidateLayout`; FK cascade to `entity_types` and `campaigns` |
 | `entity_page_layouts` | The layout a page chose: PK `entity_id`, `layout_key` (a named layout's key or `main`); no row means it follows its category; FK cascade to `entities` and `campaigns` |
 
+### page pins (`internal/plugins/entities/pinschema/migrations/`, registry slug `page_pins`)
+
+| Table | Notes |
+|---|---|
+| `page_pins` | Pages the Director pins for everyone on the campaign home's Pinned Pages widget: PK `(campaign_id, entity_id)`, `created_at` is the pin order, at most 12 live pins a campaign (checked by the service); reads join the live page, so a trashed page drops off and comes back if restored; FK cascade to `entities` and `campaigns`; `pinned_by` carries no FK. Each member's own pins are their stars, `entity_favorites` |
+
 ### pageblocks (`internal/plugins/pageblocks/migrations/`)
 
 | Table | Purpose |
@@ -386,16 +383,18 @@ Foundry module repo for the wire contract.
 | Table | Purpose |
 |-------|---------|
 | `crafting_settings` | One row per campaign: `skin` (`desk`/`journal`, the look players start in), `difficulty` (`easy`/`std`/`hard`), `bane` (botched work gives a bane), `skip_steps` (players may skip the steps and just roll); FK to `campaigns` cascades |
-| `crafting_recipes` | A Director's recipe: `name` (unique per campaign), `template`, `bench_kind`, `result_item_id` (FK to `entities`, sets NULL) and `result_qty`, the project's `goal`, `stat`, `prerequisite`, `source`, `cost_cents` + `cost_currency`, `who` (`all`/`learned`), and `materials`, `steps`, `colors`, `rules`, `looks` as JSON text cleaned on every write; a material's item id is no FK, so a deleted item shows as deleted; `draft` + `draft_prompt` for an AI's draft awaiting Approve; `version` for edit conflicts; FK to `campaigns` cascades |
+| `crafting_recipes` | A Director's recipe: `name` (unique per campaign), `template`, `bench_kind`, `result_item_id` (FK to `entities`, sets NULL) and `result_qty`, the project's `goal`, `stat`, `prerequisite`, `source`, `cost_cents` + `cost_currency`, `who` (`all`/`learned`), and `materials`, `steps`, `colors`, `rules`, `looks`, `extras` as JSON text cleaned on every write; a material's item id is no FK, so a deleted item shows as deleted; `draft` + `draft_prompt` for an AI's draft awaiting Approve; `version` for edit conflicts; FK to `campaigns` cascades |
 | `crafting_known` | Who knows a "must be learned" recipe: PK `(recipe_id, character_id)`; FKs to `crafting_recipes` and `entities` cascade |
 | `crafting_material_tags` | A crafting tag on an Armory item (`metal`, `remnant_part`, `body_part`, `bone`, `hide`, `liquid`, `herb`, `magic_item`, `magic_essence`): PK `(item_id, tag)`; FKs to `entities` and `campaigns` cascade |
-| `crafting_benches` | A named bench of one kind: `name` (unique per campaign), `kind`, `desk` and `journal` (each look's build-mode arrangement as JSON, NULL until arranged), `version`; FK to `campaigns` cascades |
-| `crafting_projects` | A hero's crafting project: `character_id` (FK to `entities`, cascades), `recipe_id` (FK to `crafting_recipes`, sets NULL), and what the recipe said when it started (`recipe_name`, `goal`, `stat`, `result_item_id` FK to `entities` sets NULL, `result_qty`); `points`, `rolls_ready` (one per respite, stacking), `status` (`active`/`made`/`cancelled`), `delivered` (whether the made item reached the pack), `took` (what starting it took, for the Director), `started_by`, `started_at`, `finished_at`, `version`; FK to `campaigns` cascades |
+| `crafting_benches` | A named bench of one kind: `name` (unique per campaign), `kind`, `desk` and `journal` (each look's build-mode arrangement as JSON, NULL until arranged), `upgrades` (the pieces' ladders and the level reached, JSON, NULL for none), `version`; FK to `campaigns` cascades |
+| `crafting_projects` | A hero's crafting project: `character_id` (FK to `entities`, cascades), `recipe_id` (FK to `crafting_recipes`, sets NULL), and what the recipe said when it started (`recipe_name`, `goal`, `stat`, `result_item_id` FK to `entities` sets NULL, `result_qty`); `points`, `rolls_ready` (one per respite, stacking), `status` (`active`/`made`/`cancelled`), `delivered` (whether the made item reached the pack), `took` (what starting it took, for the Director), `details` (JSON: what the item came out as, the substitutes' standing costs), `started_by`, `started_at`, `finished_at`, `version`; FK to `campaigns` cascades |
 | `crafting_respites` | One row per respite logged, from the Crafting app or the Homebrew drawer: `logged_by`, `day_label` (the calendar's date then, `''` without one), `projects` (how many got a roll), `created_at`; FK to `campaigns` cascades |
-| `crafting_rolls` | Every project roll as made: `project_id` (FK to `crafting_projects`, cascades), `rolled_by`, `dice` (as they fell), `terms` (JSON, each term added), `total`, `points_from`, `points_to`; FK to `campaigns` cascades |
+| `crafting_rolls` | Every project roll as made: `project_id` (FK to `crafting_projects`, cascades), `rolled_by`, `dice` (as they fell), `terms` (JSON, each term added), `total`, `points_from`, `points_to`, `work` (how the steps went, `''` for older rolls); FK to `campaigns` cascades |
 | `crafting_drops` | A page's drop list, what it leaves when defeated, harvested or found: PK `(campaign_id, page_id)` (FK to `entities`, cascades), `also_page_id` (a page whose list drops first, one step; FK to `entities`, sets NULL), `drop_lines` (JSON, cleaned on every write: item, `take` with a quantity or `harvest` with a characteristic and three tier yields), `updated_by`, `updated_at`, `version`; FK to `campaigns` cascades |
 | `crafting_spoils` | One thing that dropped into the party's spoils tray: `page_id` (FK to `entities`, sets NULL) and `page_name` as it was, `copy_no` of `copies` (copies of one creature that dropped together), `origin` (the fight's name, `''` when put in by hand), `created_by`, `created_at`; FK to `campaigns` cascades |
 | `crafting_spoil_lines` | A spoil's lines, copied from the drop list when it dropped: `spoil_id` (FK to `crafting_spoils`, cascades), `item_id` (FK to `entities`, cascades) and `item_name`, `mode`, `qty`, `stat`, `yield_low`/`yield_mid`/`yield_high`, `status` (`waiting`/`taken`/`cleared`), and once taken `character_id` (FK to `entities`, sets NULL), `taken_by`, `taken_qty`, `rolled` (a harvest's total), `taken_at`; FK to `campaigns` cascades |
+| `campaign_rolls` | The roll log behind the Table tab: `origin` (`chronicle`/`foundry`) and `origin_id` (Foundry's chat message id; unique per campaign and origin, so a replay is a no-op), `source` (`table`/`crafting`/`foundry`), `roller_id` (no FK) and `roller_name`, `label`, `formula`, `dice` (JSON, as they fell), `modifier`, `total`, `outcome`, `why`, `from_where`, `mode` (`public`/`gm`/`blind`/`self`, who may see it); FK to `campaigns` cascades |
+| `campaign_roll_settings` | The table's dice look (`quick`/`rune`/`none`), which a new player starts on; FK to `campaigns` cascades |
 
 ### fieldrules (`internal/plugins/fieldrules/migrations/`)
 
@@ -439,6 +438,20 @@ Foundry module repo for the wire contract.
 |---|---|---|
 | `campaign_roll_tables` | One JSON document per campaign holding all its rolling tables, replaced as a unit | `campaign_id` PK, FK→`campaigns` CASCADE; `data` LONGTEXT; `updated_by` |
 
+### ai_workspace (`internal/plugins/ai_workspace/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `ai_import_parts` | Pasted parts of a multi-paste AI answer, held in the tray until the whole answer is in | PK `(campaign_id, answer_key, part_no)`; `part_of`, `needs`; `markdown` MEDIUMTEXT (cleared once `applied_at` is set); FK→`campaigns` CASCADE |
+| `ai_import_blocks` | SHA-256 of every applied block, so a repeat paste is flagged; the text is never kept | PK `(campaign_id, block_hash)` |
+| `ai_note_access` | Which shared Journal entries and jots the AI may change besides the owner's | PK `campaign_id`; `co_dms`, `scribes`; no row = both off |
+
+### pagetests (`internal/plugins/pagetests/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `page_tests` | A long effort the party makes on a page (a montage, a chase) and its result | `name`, `shown` columns (listed by name; players get shown tests only); `data` LONGTEXT JSON validated in the service; `version` for edit conflicts; FK→`entities` and `campaigns` CASCADE |
+
 ### ai_connector (`internal/plugins/ai_workspace/connector/migrations/`)
 
 | Table | Purpose | Notable columns |
@@ -457,29 +470,18 @@ Foundry module repo for the wire contract.
   `entities.search_text`, `entity_aliases.alias`, and
   `bestiary_publications.(name, description)`. Query with
   `MATCH(...) AGAINST(? IN BOOLEAN MODE)`.
-- **Timestamps:** `DATETIME`, not `TIMESTAMP` (2038 limit) — except a handful
-  of `created_at`/`updated_at` columns predating that convention. Use
-  `parseTime=true` in the DSN for automatic Go `time.Time` scanning.
+- **Timestamps:** `DATETIME`, not `TIMESTAMP` (2038 limit), except a handful of
+  older columns. The DSN needs `parseTime=true` to scan into `time.Time`.
 
 ## Migration structure (ADR-028)
 
-Schema is split into two tiers — see `internal/database/plugin_schema.go` (the
-plugin migration runner) and `internal/database/plugin_health.go` (the health
-registry tracking which plugins have healthy schemas). Migrations are
-append-only and immutable once any live database may have applied them (see
-`.ai/conventions.md` §Migration Safety Rules) — a schema change is always a
-*new* numbered file, never an edit.
+Two tiers; runners are `internal/database/plugin_schema.go` and
+`internal/database/plugin_health.go` (which plugins have healthy schemas).
+A schema change is always a new numbered file; rules in `.ai/conventions.md`
+§Migration Safety Rules.
 
-- **Core** (`db/migrations/`): fatal on failure, runs first. A single
-  idempotent baseline (`000001_baseline.up.sql`) plus incremental numbered
-  migrations after it.
-- **Plugin** (`internal/plugins/<name>/migrations/`): graceful degradation on
-  failure. Each plugin owns its own numbered sequence and only its own
-  tables; a plugin migration may reference core tables (core always runs
-  first) but never another plugin's tables directly by FK across plugin
-  boundaries in a way that would break ordering — see the calendar/timeline/
-  sessions FK notes above for how that's handled when it's unavoidable.
-
-## Open work
-
-Rebuilding the calendar schema: #741.
+- **Core** (`db/migrations/`): fatal on failure, runs first.
+- **Plugin** (`internal/plugins/<name>/migrations/`): a failure degrades that
+  plugin only. Each plugin owns its own numbered sequence and tables, and may
+  reference core tables. A cross-plugin FK must not break rank order (see the
+  calendar, timeline and sessions notes above).

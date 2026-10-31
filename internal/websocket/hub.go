@@ -265,7 +265,7 @@ func (m *Message) DeliversTo(client *Client) bool {
 	// defense pairing with client-side visibility filters, so
 	// clients can't receive what we never send.
 	dmLike := permissions.CanSeeDmOnly(client.Role, client.IsDmGranted)
-	if m.RequiresDM && !dmLike {
+	if (m.RequiresDM || m.dmOnlyByDefault()) && !dmLike {
 		return false
 	}
 
@@ -327,27 +327,6 @@ func (m *Message) AudienceAllows(userID string) bool {
 // It is safe for concurrent use from any goroutine.
 func (h *Hub) Broadcast(msg *Message) {
 	h.broadcast <- msg
-}
-
-// BroadcastToAll sends a message to all connected clients across all campaigns.
-// Used for system-wide announcements (e.g., server shutdown notice).
-func (h *Hub) BroadcastToAll(msg *Message) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	data, err := msg.Encode()
-	if err != nil {
-		return
-	}
-
-	for _, campaign := range h.clients {
-		for _, client := range campaign {
-			select {
-			case client.send <- data:
-			default:
-			}
-		}
-	}
 }
 
 // CampaignClientCount returns the number of connected clients for a campaign.

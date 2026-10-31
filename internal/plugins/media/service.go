@@ -45,6 +45,10 @@ type MediaService interface {
 	ThumbnailPath(file *MediaFile, size string) string
 	SetStorageLimiter(limiter StorageLimiter)
 
+	// MaxUploadBytes is the largest single file this user may upload into
+	// the campaign now, or 0 for no limit.
+	MaxUploadBytes(ctx context.Context, userID, campaignID string) int64
+
 	// SetMemberChecker and SetEntityVisibilityFilter wire the ADR-058
 	// decision 5 merge-eligibility machinery (see canMergeWithExisting) —
 	// the same seams Handler wires for the decision 1 read-path check, but
@@ -236,7 +240,9 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		// never merged: each upload is its own file, so who may open it never
 		// depends on who else uploaded the same bytes.
 		if input.CampaignID != "" && !input.NoMerge && input.UsageType != UsageNoteImage && input.UsageType != UsagePageFile {
-			if existing, err := s.repo.FindByContentHash(ctx, input.CampaignID, contentHash); err != nil {
+			if existing, err := s.repo.FindByContentHash(ctx, input.CampaignID, contentHash); err == nil && existing == nil {
+				s.mergeCheckForNoMatch(ctx, input.CampaignID, input.UploadedBy)
+			} else if err != nil {
 				// Non-fatal — continue with a fresh upload rather than
 				// blocking the user on a transient DB hiccup.
 				slog.Warn("media dedup: lookup failed, proceeding with new upload",
@@ -498,6 +504,24 @@ func (s *mediaService) canMergeWithExisting(ctx context.Context, campaignID, exi
 	return true, refs, nil
 }
 
+// noMatchProbeID is a media id no file or page can hold (the nil UUID).
+const noMatchProbeID = "00000000-0000-0000-0000-000000000000"
+
+// mergeCheckForNoMatch makes the lookups a refused merge makes, for an upload
+// that matched nothing. A refused merge stores a separate file and answers
+// exactly like an ordinary upload; without this it would still take longer,
+// and the delay would tell the uploader that a page they can't see holds the
+// same picture. The answers are thrown away. Keep it in step with
+// canMergeWithExisting: TestUpload_NoMatchMakesTheRefusedMergeLookups pins it.
+func (s *mediaService) mergeCheckForNoMatch(ctx context.Context, campaignID, uploaderID string) {
+	_, _ = s.repo.FindReferences(ctx, campaignID, noMatchProbeID)
+	if s.entityVisibility == nil {
+		return
+	}
+	role := promotedVisibilityRole(s.memberChecker, campaignID, uploaderID)
+	_, _ = s.entityVisibility.FilterViewableEntityIDs(ctx, campaignID, []string{noMatchProbeID}, role, uploaderID)
+}
+
 // defaultCampaignlessStorageBytes caps a user's total campaign-less uploads
 // (avatars, and any /media/upload posted with a blank campaign_id) when no
 // per-user override raises or lowers it. Campaign-scoped uploads get their
@@ -506,6 +530,20 @@ func (s *mediaService) canMergeWithExisting(ctx context.Context, campaignID, exi
 // upload an unbounded number of avatar-sized files against the same shared
 // disk-space floor every other upload competes for.
 const defaultCampaignlessStorageBytes int64 = 25 * 1024 * 1024
+
+// MaxUploadBytes resolves the per-file limit Upload applies: the live setting
+// when the limiter is wired, else the static ceiling. A failed lookup falls
+// back to the static ceiling rather than to no limit.
+func (s *mediaService) MaxUploadBytes(ctx context.Context, userID, campaignID string) int64 {
+	if s.limiter == nil {
+		return s.maxSize
+	}
+	maxUpload, _, _, err := s.limiter.GetEffectiveLimits(ctx, userID, campaignID)
+	if err != nil {
+		return s.maxSize
+	}
+	return maxUpload
+}
 
 // checkQuotas enforces dynamic storage limits from the settings plugin.
 // Checks per-file size, campaign storage total, and campaign file count.
@@ -1245,12 +1283,11 @@ func ebmlReadUint(data []byte, el ebmlElement, parentEnd int) (uint64, bool) {
 // inside — so cost is bounded by ebmlMaxScanElements, not file size.
 //
 // A file whose Tracks element can't be found within that budget is
-// rejected: this function only ever narrows what audio/webm accepts, so
-// "can't tell" must fail closed rather than fall back to the old
-// magic-bytes-only behavior.
+// rejected: this function only narrows what audio/webm accepts, so "can't
+// tell" fails closed.
 //
-// audioOnly starts true and only a video TrackEntry actually read flips
-// it, so running out of budget partway through Tracks must never read as
+// audioOnly starts true and only a video TrackEntry actually read flips it,
+// so running out of budget partway through Tracks must never read as
 // "scanned, all audio": padding can push a video entry past the budget.
 // truncated latches on any budget exhaustion inside the Tracks walk and
 // forces rejection.

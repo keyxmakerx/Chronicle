@@ -184,11 +184,19 @@
   function asPlayer() { return document.documentElement.hasAttribute('data-view-as-player'); }
   function isDM(root) { return root.getAttribute('data-dm') === '1'; }
 
+  // jsonOf reads the block's data from data-json. A script tag would be
+  // stripped by a boosted swap; one is still read for older markup.
+  function jsonOf(root) {
+    var raw = root.getAttribute('data-json');
+    if (raw != null) return raw;
+    var s = root.querySelector('script[type="application/json"]');
+    return s ? s.textContent : '{}';
+  }
+
   function stateOf(root) {
     if (!root.__sg) {
       var data = { subjects: [] };
-      var s = root.querySelector('script[type="application/json"]');
-      try { data = JSON.parse(s ? s.textContent : '{}') || data; } catch (e) { /* an unreadable block shows nothing to change */ }
+      try { data = JSON.parse(jsonOf(root)) || data; } catch (e) { /* an unreadable block shows nothing to change */ }
       if (!data.subjects) data.subjects = [];
       root.__sg = {
         data: data, cur: root.getAttribute('data-current') || '', open: false, shown: PAGE, q: '', f: 'all',

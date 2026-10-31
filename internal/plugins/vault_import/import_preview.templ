@@ -98,7 +98,7 @@ templ PreviewPanel(campaignID string, p *Preview) {
 			>
 				<input type="hidden" name="upload" value={ p.UploadID }/>
 				<button type="submit" class="btn-primary">
-					<i class="fa-solid fa-file-import text-xs mr-1.5" aria-hidden="true"></i>
+					<i class="fa-solid fa-file-import text-xs" aria-hidden="true"></i>
 					Import { fmt.Sprint(p.Total) } { plural(p.Total, "page", "pages") }
 				</button>
 			</form>

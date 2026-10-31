@@ -13,7 +13,7 @@ import (
 )
 
 // AccountPage renders the full account settings page.
-templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs, owned []OwnedCampaignRef, twoFactor TwoFactorStatus, methods SignInMethods, signInMsg string) {
+templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs, owned []OwnedCampaignRef, twoFactor TwoFactorStatus, methods SignInMethods, signInMsg string, signedIn SignedInView) {
 	@layouts.App("Account Settings") {
 		<div class="max-w-2xl mx-auto">
 			<div class="mb-6">
@@ -30,7 +30,7 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 					</div>
 					<div>
 						<label class="btn-secondary text-sm cursor-pointer">
-							<i class="fa-solid fa-camera mr-1"></i> Upload Photo
+							<i class="fa-solid fa-camera"></i> Upload Photo
 							<input
 								type="file"
 								accept="image/*"
@@ -214,6 +214,7 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 			if methods.ProviderName != "" {
 				@signInMethodsCard(user, methods, signInMsg, csrfToken)
 			}
+			@signedInCard(signedIn)
 			@notifyPrefsCard(notify)
 			@deleteAccountCard(owned, twoFactor.Enabled)
 		</div>
@@ -281,7 +282,7 @@ templ twoFactorCard(st TwoFactorStatus) {
 			</ul>
 			<div class="flex flex-wrap items-center justify-end gap-2">
 				<span class="text-xs mr-auto text-fg-muted" x-bind:class="error ? 'text-red-500' : ''" x-text="copied ? 'Copied' : error" aria-live="polite"></span>
-				<button type="button" class="btn-secondary text-sm" @click="copy()"><i class="fa-regular fa-copy mr-1"></i> Copy codes</button>
+				<button type="button" class="btn-secondary text-sm" @click="copy()"><i class="fa-regular fa-copy"></i> Copy codes</button>
 				<button type="button" class="btn-primary text-sm" @click="reset()">I've saved them</button>
 			</div>
 		</div>

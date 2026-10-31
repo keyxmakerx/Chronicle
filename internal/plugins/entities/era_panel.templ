@@ -236,14 +236,14 @@ templ eraVersionIdentity(cc *campaigns.CampaignContext, entity *Entity, v *eraVi
 					class="btn-ghost btn-sm"
 					hx-patch={ base + "?era=" + strconv.Itoa(focus.ID) + "&hl=0" }
 					hx-vals={ `{"usual_image":"1"}` }
-				><i class="fa-regular fa-image mr-1"></i> Use the usual picture</button>
+				><i class="fa-regular fa-image"></i> Use the usual picture</button>
 			}
 			<button
 				type="button"
 				class="btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400"
 				hx-delete={ base }
 				hx-confirm={ "Remove the " + focus.Name + " version of this page? In that era it will show the usual page again." }
-			><i class="fa-solid fa-trash mr-1"></i> Remove version</button>
+			><i class="fa-solid fa-trash"></i> Remove version</button>
 		</div>
 	</div>
 }

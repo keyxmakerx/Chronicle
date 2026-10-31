@@ -150,8 +150,8 @@ func (s *hygieneService) countMediaReferences(ctx context.Context, filename stri
 }
 
 // ScanOrphanedAPIKeys finds API keys whose campaign_id references a campaign
-// that no longer exists. After migration 000058 adds the FK constraint, new
-// orphans cannot be created, but pre-existing orphans may remain.
+// that no longer exists. The FK constraint (migration 000058) blocks new
+// orphans; rows from before it may remain.
 func (s *hygieneService) ScanOrphanedAPIKeys(ctx context.Context) ([]OrphanedAPIKey, error) {
 	query := `SELECT ak.id, ak.key_prefix, ak.name, ak.campaign_id, ak.created_at
 	          FROM api_keys ak

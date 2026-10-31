@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -151,6 +150,15 @@ func main() {
 		slog.Info("icon reconcile: repaired stored icons", slog.Int("rows", n))
 	}
 
+	// Remove GM-only parts from text every reader is served as stored (event
+	// and timeline descriptions, recaps) that was saved before those writes
+	// stripped them. Same placement and failure rule as the icon reconcile.
+	if n, err := database.ReconcilePublicTextColumns(context.Background(), db, app.PublicTextColumns()); err != nil {
+		slog.Error("public text reconcile failed", slog.Any("error", err), slog.Int("rows_fixed", n))
+	} else if n > 0 {
+		slog.Info("public text reconcile: removed GM-only parts", slog.Int("rows", n))
+	}
+
 	// --- Connect to Redis ---
 	rdb, err := database.NewRedis(cfg.Redis)
 	if err != nil {
@@ -166,8 +174,8 @@ func main() {
 	if err := systems.Init("internal/systems"); err != nil {
 		slog.Warn("system initialization failed", slog.Any("error", err))
 	}
-	// Also scan package-manager-installed systems.
-	systems.ScanPackageDir(filepath.Join(cfg.Upload.MediaPath, "packages", "systems"))
+	// Package-installed systems load in RegisterRoutes, from the package
+	// catalog: only what it records as installed is served.
 
 	// --- Create Application ---
 	application, err := app.New(cfg, db, rdb, pluginHealth, pluginSchemas)

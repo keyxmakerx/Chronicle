@@ -25,9 +25,9 @@ func (s *service) spoilsReady() error {
 	return nil
 }
 
-// tierLabels names a tiered test's three outcomes from the system's two
+// TierLabels names a tiered test's three outcomes from the system's two
 // tier tops: "11 or less", "12 to 16", "17 or more".
-func tierLabels(tops []int) []string {
+func TierLabels(tops []int) []string {
 	if len(tops) != 2 {
 		tops = systems.DefaultCraftingRules().Tiers
 	}
@@ -197,7 +197,7 @@ func (s *service) Spoils(ctx context.Context, campaignID string, v Viewer) (*Spo
 		return nil, err
 	}
 	rules, _ := s.systemRules(ctx, campaignID)
-	out := &SpoilsPage{Taken: []TakenView{}, Drops: []DropView{}, Stats: rules.Characteristics, Tiers: tierLabels(rules.Tiers), Dice: rules.Dice}
+	out := &SpoilsPage{Taken: []TakenView{}, Drops: []DropView{}, Stats: rules.Characteristics, Tiers: TierLabels(rules.Tiers), Dice: rules.Dice}
 	if out.Stats == nil {
 		out.Stats = []systems.CraftingStat{}
 	}
@@ -268,7 +268,7 @@ func (s *service) trayViews(ctx context.Context, campaignID string, v Viewer, na
 	if err != nil {
 		return nil, errInternal(err)
 	}
-	labels := tierLabels(rules.Tiers)
+	labels := TierLabels(rules.Tiers)
 	seen := map[string]bool{}
 	sees := func(pageID string) (bool, error) {
 		if v.Director {
@@ -718,6 +718,6 @@ func (s *service) harvest(ctx context.Context, campaignID string, e *EntityInfo,
 		res.Total += t.N
 	}
 	res.Tier = tierOf(res.Total, rules.Tiers)
-	res.Tiers = tiersOf(l.Yields, tierLabels(rules.Tiers))
+	res.Tiers = tiersOf(l.Yields, TierLabels(rules.Tiers))
 	res.Qty = l.Yields[res.Tier]
 }

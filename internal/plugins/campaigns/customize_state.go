@@ -201,7 +201,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	if isValidHexColor(s.AccentColor) {
 		d.Colours.Accent = s.AccentColor
 	}
-	// Apps used to have their own slot; Surface A now carries that colour.
+	// The legacy Apps colour falls back into Surface 1 when unset.
 	d.Colours.S1 = optColour(s.AccentSurface1)
 	if d.Colours.S1 == nil {
 		d.Colours.S1 = optColour(s.AccentApp)

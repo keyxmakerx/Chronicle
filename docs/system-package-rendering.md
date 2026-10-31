@@ -1,43 +1,30 @@
 # System Package Rendering Contract
 
-This document describes how a Chronicle system package (Draw Steel,
-D&D 5.5e, future systems) plugs into Chronicle's entity-show page to
-render system-specific layouts. It is the external-facing contract
-for system-package authors. Internal-only conventions live in
-`.ai/conventions.md` instead.
-
-If you are building a system package and want characters / monsters /
-items to render with system-specific design rather than the generic
-layout-block fallback, this is your starting point.
+How a system package (Draw Steel, D&D 5.5e, ...) plugs into the entity-show
+page to render system-specific layouts. This is the external contract for
+package authors; internal conventions are in `.ai/conventions.md`.
 
 ## What you ship vs. what the host ships
 
-The host (Chronicle core) ships:
+The host ships:
 
 - The `EntityShowRendererRegistry` extension point.
-- The dispatch guard in `internal/plugins/entities/show.templ` that
-  consults the registry before falling through to the layout-block
-  iteration.
-- The CSS theming variables (see "Theming contract" below).
-- The generic block dispatch system (`BlockRegistry`, the existing
-  block types like `title`, `image`, `entry`, `attributes`, etc.) —
-  this is the fallback when no renderer is registered.
+- The dispatch guard in `internal/plugins/entities/show.templ`, which consults
+  the registry before the layout-block iteration.
+- The CSS theming variables (see "Theming contract").
+- The generic block system (`BlockRegistry`; `title`, `image`, `entry`,
+  `attributes`, ...), the fallback when no renderer is registered.
 
-You (the system package) ship, in `manifest.json` and your widget scripts:
+The host ships no character-specific code: no `blockStatBlock`, `blockHPBar`
+or default character layout.
 
-- A widget for each entity-type slug (or preset category) your package
-  cares about, plus a `renderers` entry binding the two (see "Declaring
-  renderers in `manifest.json`" below). Packages are manifest-only; they
-  contain no Go.
-- Any data model conventions (which `fields_data` keys, which
-  layouts) the widget relies on.
-- Optionally: JS widgets referenced from `ext_widget` blocks if you want
-  layout-editor-friendly building blocks rather than a single whole-page
-  renderer.
+You ship, in `manifest.json` and widget scripts (packages are manifest-only, no Go):
 
-The host ships **zero character-specific code**. No `blockStatBlock`,
-no `blockHPBar`, no default character layout JSON. Everything system-
-shaped is your package's responsibility.
+- A widget for each entity-type slug or preset category you care about, plus a
+  `renderers` entry binding them (see "Declaring renderers in `manifest.json`").
+- The data conventions (`fields_data` keys, layouts) the widget relies on.
+- Optionally, JS widgets for `ext_widget` blocks, for layout-editor building
+  blocks instead of a whole-page renderer.
 
 ## The registry
 
@@ -54,6 +41,9 @@ type EntityShowRenderContext struct {
     ShowCalendar   bool
     CSRFToken      string
     UserID         string // viewing user's id; empty for an anonymous viewer
+    OwnerName      string
+    NPCPage        bool
+    NamedLayout    bool
 }
 
 type EntityShowRenderer func(ctx EntityShowRenderContext) templ.Component
@@ -65,43 +55,29 @@ func (r *EntityShowRendererRegistry) Register(slug string, renderer EntityShowRe
 func (r *EntityShowRendererRegistry) Lookup(slug string) (EntityShowRenderer, bool)
 ```
 
-The registry is keyed on the entity-type **slug**, not on system ID
-or campaign-level concepts. A single system package can register
-multiple slugs (e.g. `drawsteel-character`, `drawsteel-monster`,
-`drawsteel-item`). Each slug gets exactly one renderer.
+The registry is keyed on the entity-type **slug**, not on system ID. One
+package can register several slugs (`drawsteel-character`,
+`drawsteel-monster`, ...), each with exactly one renderer.
 
-The `EntityShowRenderContext` mirrors the args of the `EntityShowPage`
-templ exactly. Anything the block-dispatch fallback can read, your
-renderer can read too — `Ancestors`, `Children`, `CSRFToken`, the
-addon flags. If you find yourself needing data the context doesn't
-expose, file a request: the host extends the context struct in a
-follow-up rather than have you reach into globals.
+`EntityShowRenderContext` carries what the block fallback can read
+(`Ancestors`, `Children`, `CSRFToken`, the addon flags). If you need more, file
+an issue to extend the struct; do not reach into globals.
 
 ## How registration works
 
-For an installed package, registration is driven by the manifest. At
-startup, and again after every package install or update, the host
-walks each loaded system manifest's `renderers` and registers, for each
-entry, a Go renderer that emits one widget mount point
-(`registerManifestRenderers` in `internal/app/routes.go`). The set is
-built in a fresh registry and then published, so in-flight requests never
-see a half-built state. Packages do not call `Register` themselves.
+Registration is driven by the manifest. At startup and after every package
+install or update, the host walks each loaded manifest's `renderers` and
+registers a Go renderer that emits one widget mount point
+(`registerManifestRenderers` in `internal/app/routes.go`). The set is built in a
+fresh registry and then published, so in-flight requests never see a
+half-built state. No restart is needed; new renderers apply to the next page
+view. Packages never call `Register` themselves; that call is for in-tree Go
+code. Both paths fill the same registry, and the last registration for a slug
+wins (admins control which packages are installed, so collisions are rare).
 
-The direct `Register(slug, renderer)` call on the registry is for
-Chronicle's own in-tree Go code only. Both paths fill the same
-`EntityShowRendererRegistry`, and "last registration wins" if two target
-the same slug.
+## Dispatch
 
-## Registration timing
-
-- Renderers register at startup, after `BlockRegistry` is built and before
-  the global registry is published.
-- Installing or updating a system package rebuilds and publishes a fresh
-  registry without a restart; new renderers apply to the next page view.
-
-## Failure modes — exactly one
-
-When you navigate to an entity show page, dispatch goes:
+On an entity show page:
 
 1. Build `EntityShowRenderContext` from the request data.
 2. Look up the entity type's slug in the registry.
@@ -118,18 +94,13 @@ then not asked for the page; the owner places your sheet with the Game
 System Sheet block (`game_system_sheet`), which calls your renderer with
 `NamedLayout` false.
 
-That is the full failure-mode table. There is no "renderer crashes,
-generic fallback runs" scenario — a panic inside your renderer
-propagates through templ's normal error handling and produces a
-500 page, same as any other render bug. Don't panic in your
-renderer; return a `templ.Component` that displays the error
-gracefully if your renderer has a recoverable failure mode.
+A panic inside your renderer is not caught: it produces a 500 page like any
+other render bug. Return a `templ.Component` that shows the error for any
+recoverable failure.
 
 ## Theming contract
 
-The host exposes these CSS variables. Use them in your renderer's
-markup so a campaign-level theme override automatically retints
-your output without per-renderer code:
+Use these CSS variables so a campaign-level theme retints your output:
 
 | Variable | Use |
 |---|---|
@@ -141,8 +112,7 @@ your output without per-renderer code:
 | `--color-accent-light-rgb` | Same, for the light variant. |
 | `--font-campaign` | Campaign body font override. |
 
-Plus the canonical Tailwind tokens documented in
-`.ai/conventions.md` and `tailwind.config.js`:
+Plus the Tailwind tokens in `.ai/conventions.md` and `tailwind.config.js`:
 
 - `bg-surface`, `bg-surface-alt`, `bg-surface-raised`, `bg-page`
 - `text-fg`, `text-fg-body`, `text-fg-secondary`, `text-fg-muted`,
@@ -150,42 +120,24 @@ Plus the canonical Tailwind tokens documented in
 - `border-edge`, `border-edge-light`
 - `bg-accent`, `bg-accent-hover`, `text-accent`
 
-Do not define your own brand colors. A campaign owner who sets a
-custom accent color expects it to apply across the whole
-experience, including your system's renderer.
+Do not define your own brand colors; a campaign's accent must apply to your
+renderer too.
 
-## What's out of scope (V1)
+## Out of scope
 
-- **Generic system-shaped blocks** (host-provided `blockStatBlock`,
-  resource bars, ability cards). System packages own these.
-- **Default character layouts** that ship with the host. Your
-  package's renderer is the layout for your slugs.
-- **Renderer-level config**. Per-entity state lives in
-  `fields_data`; per-campaign state lives in campaign settings.
-  The renderer takes a slug and a context, no plugin config.
-- **Edit-in-place, dice integration, encounter / session state.**
-  These are larger product surfaces this registry does not cover.
+- Host-provided system-shaped blocks (stat blocks, resource bars, ability cards) and default character layouts: the package owns them.
+- Renderer-level config: per-entity state lives in `fields_data`, per-campaign state in campaign settings. A renderer takes a slug and a context.
+- Edit-in-place, dice integration, encounter and session state.
 
-## Related extension points
+## Lighter extension points
 
-If your needs are simpler than a whole-page renderer, you may not
-need this registry at all:
+The registry is for whole-page rendering. For less:
 
-- **Custom block types**: register against the existing
-  `BlockRegistry` (`internal/plugins/entities/block_registry.go`)
-  and reference them from a layout JSON. This is the right fit
-  when you want building blocks the campaign owner can mix and
-  match in the layout editor, rather than an opinionated system-
-  specific page.
-- **JS widgets**: register a JS module with `Chronicle.register()`
-  and reference it from an `ext_widget` block. Right fit for
-  client-side interactivity (dice rollers, animated cards) that
-  doesn't need server rendering.
-
-The slug-keyed registry is for **system-specific page rendering**:
-"a Draw Steel character should look like *this*, not like a
-collection of generic blocks." If that doesn't match your need,
-one of the lighter-weight extension points above probably does.
+- **Custom block types:** register against `BlockRegistry`
+  (`internal/plugins/entities/block_registry.go`) and reference them from a
+  layout JSON; the owner mixes them in the layout editor.
+- **JS widgets:** `Chronicle.register()` plus an `ext_widget` block, for
+  client-side interactivity (dice rollers, animated cards).
 
 ## Declaring renderers in `manifest.json`
 
@@ -212,17 +164,13 @@ package's `manifest.json` and the host wires it up:
 }
 ```
 
-For each entry the host registers a renderer that emits a single
-mount point — `<div data-widget="drawsteel-character-card"
-data-entity-id="…" data-campaign-id="…">` — and the existing
-`boot.js` auto-mounter takes over: it finds the element, calls the
-widget's registered `init(el, config)`, and the widget owns the
-rest of the page from there. The `data-*` attributes round-trip
-into `config.entityId` and `config.campaignId` (see
-`static/js/boot.js` for the kebab-to-camel conversion rules).
+Each entry registers a renderer that emits one mount point,
+`<div data-widget="drawsteel-character-card" data-entity-id="…"
+data-campaign-id="…">`. `boot.js` finds it and calls the widget's `init(el,
+config)`; the widget owns the page from there. `data-*` attributes become
+`config.entityId` and so on (kebab to camel; see `static/js/boot.js`).
 
-The mount also carries what the widget needs to draw its own controls, all
-`"true"`/`"false"` except the name and visibility:
+The mount also carries, all `"true"`/`"false"` except the name and visibility:
 
 | Attribute | Meaning |
 |---|---|
@@ -236,42 +184,37 @@ The mount also carries what the widget needs to draw its own controls, all
 | `data-claimed-by-me` | The viewer is that someone. |
 | `data-claimed-name` | The claimant's display name ("a player" when it can't be resolved), empty when unclaimed. |
 
-To change the picture, a widget dispatches a bubbling DOM event,
-`chronicle:change-image` with `detail: { entityId }`; the page opens its
-existing upload for that page, and does nothing for a viewer who may not
-change it. After a rename saved from the header, the page dispatches
-`chronicle:page-renamed` with `detail: { entityId, name }` for a widget that
-draws the name itself.
+To change the picture, a widget dispatches the bubbling event
+`chronicle:change-image` with `detail: { entityId }`; the page opens its upload,
+and does nothing for a viewer who may not change it. After a rename from the
+header the page dispatches `chronicle:page-renamed` with `detail: { entityId,
+name }`.
 
 The host draws the page header (name, favorite, claim marker, Edit name,
-History, and Clone and Delete under a more menu) above the widget, and Player
-notes, Relations, Tags and Sub-pages below it, so a widget does not draw
-those.
+History, Clone and Delete under a more menu) above the widget, and Player
+notes, Relations, Tags and Sub-pages below it. Do not draw those.
 
 ### Validation rules (enforced at install time)
 
-A manifest with an invalid `renderers` block is rejected during
-package install — the package never lands on disk and never reaches
-the renderer registry. Every entry must satisfy:
+An invalid `renderers` block rejects the package at install. Every entry
+must satisfy:
 
-- **Exactly one** of `slug` or `preset_category` is set (see "Binding a
-  renderer by preset category" below). `slug` matches one of this manifest's
-  `entity_presets[].slug`; `preset_category` matches one of this manifest's
-  `entity_presets[].category`. Cross-manifest references are forbidden — a
-  manifest can only register renderers for entity types/categories it owns.
-- `widget` matches one of this manifest's `widgets[].slug`. Same
-  rule — a renderer must mount a widget the same package ships.
+- Exactly one of `slug` or `preset_category` is set (see "Binding by preset
+  category"). `slug` matches one of this manifest's `entity_presets[].slug`;
+  `preset_category` matches one of its `entity_presets[].category`. A manifest
+  cannot bind types or categories it does not own.
+- `widget` matches one of this manifest's `widgets[].slug`.
 - `slug`/`preset_category` and `widget` are valid slugs (lowercase letters,
   numbers, hyphens, underscores).
 - A manifest declares no more than 10 renderers.
 
 ### Adding a panel to NPC pages (`entity_panels`)
 
-A renderer replaces a page; a panel adds to one. To offer a widget on NPC or
-monster pages in campaigns that have your system enabled, declare it in
-`entity_panels`. The panels show where the owner places the "Game System
-Panels" block in the page template (and above a renderer's page, which has no
-template); nothing is added to a page the owner has not placed it on:
+A renderer replaces a page; a panel adds to one. Declare a widget in
+`entity_panels` to offer it on NPC or monster pages in campaigns with your
+system enabled. Panels show where the owner places the "Game System Panels"
+block in the page template (and above a renderer's page, which has no
+template); nothing is added where the owner has not placed it:
 
 ```json
 "widgets": [
@@ -284,29 +227,26 @@ template); nothing is added to a page the owner has not placed it on:
 ```
 
 - `widget` must match one of this manifest's `widgets[].slug`.
-- `applies_to` is `"npc"` or `"creature"`. Any other value is rejected at
-  install so a typo is loud.
-  - `"npc"` means the same page types as the NPC gallery: the ones the
-    campaign owner listed as NPCs on the Characters page, with their sub-types
-    but not the player-character type. A system's creature types are not NPCs
-    until the owner lists them.
-  - `"creature"` means creature page types: preset category `creature`, or a
-    slug of `creature` or `*-monster`, with their sub-types, listed as NPCs or
-    not. Use it for a stat block that belongs on every bestiary page.
-  - Neither ever matches a page a player has claimed as their character, and a
-    widget aimed at both mounts once on a page that is both.
-  - A Chronicle older than the `"creature"` audience rejects a manifest that
-    uses it, so ship it once the instances you target have it.
+- `applies_to` is `"npc"` or `"creature"`; anything else is rejected at install.
+  - `"npc"`: the page types the owner listed as NPCs on the Characters page,
+    with their sub-types, not the player-character type. A system's creature
+    types are not NPCs until the owner lists them.
+  - `"creature"`: preset category `creature`, or a slug of `creature` or
+    `*-monster`, with sub-types, listed as NPCs or not. For a stat block on every
+    bestiary page.
+  - Neither matches a page a player has claimed, and a widget aimed at both
+    mounts once on a page that is both.
+  - An older Chronicle rejects a manifest using `"creature"`; ship it once your
+    target instances have it.
 - A manifest declares no more than 10 panels.
 
 The host emits `<div data-widget="…" data-campaign-id="…" data-entity-id="…"
 data-system-id="…" data-is-gm="true|false">`. `data-is-gm` is true for the
-campaign owner and members granted DM access; use it to decide whether to show
-GM-only controls, and never rely on it to protect data. Your widget script is
-loaded the same way as any other widget of the enabled system.
+campaign owner and members granted DM access; use it for GM-only controls, never
+to protect data. The script loads like any other widget of the enabled system.
 
-To keep state for the panel, use the page-state API (the owner/DM team writes,
-anyone who can view the page reads the public half):
+Panel state uses the page-state API (the owner/DM team writes; anyone who can
+view the page reads the public half):
 
 - `GET|PUT /campaigns/:id/entities/:eid/system-state/:system/:key` with the
   session. `PUT` takes `{"public": {…}?, "gm": {…}?}`; an absent half keeps what
@@ -322,21 +262,10 @@ anyone who can view the page reads the public half):
   the same shapes under the same rules, except that any campaign member may
   read the public half and a write publishes nothing.
 
-### Lifecycle and overrides
+### Binding by preset category
 
-Registration happens at boot and again after each package install or update
-(see "Registration timing"); no restart is needed.
-
-If two installed manifests declare a renderer for the same slug,
-the last one to register wins. Admins control which packages are
-installed, so this collision case is rare in practice.
-
-### Binding a renderer by preset category (system-agnostic)
-
-A renderer entry binds by **either `slug` or `preset_category`** — exactly
-one (the manifest validator enforces this). `slug` binds your widget to a
-specific entity type your package owns. `preset_category` binds it to a
-*category* instead, matching one of your `entity_presets[].category` values:
+A renderer binds by `slug` (a type your package owns) or `preset_category` (a
+category, matching one of your `entity_presets[].category` values), never both:
 
 ```json
 "renderers": [
@@ -344,24 +273,21 @@ specific entity type your package owns. `preset_category` binds it to a
 ]
 ```
 
-The widget then renders **any** entity type carrying that preset category —
-not just one bespoke slug. At render time the host resolves **slug first**
-(most specific), then falls back to the entity type's `preset_category`, so a
-preset binding never shadows another package's slug-bound type. This is the
-system-agnostic seam that lets a package fill a category Chronicle core owns
-(see "Player-character sheet" below). No DB change — it's manifest JSON only.
+The widget then renders any entity type carrying that category. The host
+resolves slug first, then the type's `preset_category`, so a preset binding
+never shadows another package's slug-bound type. This lets a package fill a
+category core owns (see "Player-character sheet").
 
 A `preset_category` binding draws a hero's sheet, so it skips NPC pages: an
 unclaimed page whose type is on the campaign's NPC list keeps its layout. A
-claimed page, or one marked playable (every hero the hero creator makes), is a
-player's character and gets the renderer whatever its type.
-A `slug` binding is the package's own type and applies to every page of it.
+claimed page, or one marked playable (every hero the hero creator makes), gets
+the renderer whatever its type. A `slug` binding applies to every page of that
+type.
 
 ### Player-character sheet
 
-Chronicle's **Player Character Claiming** addon owns a player-character
-*category* (Chronicle owns the category; the system fills the rendering). To
-fill it, a system package ships:
+The Player Character Claiming addon owns a player-character category; the
+system fills the rendering. A package ships:
 
 1. **An entity preset with `category: "character"`** plus its `fields` — the
    field schema your sheet reads:
@@ -383,43 +309,37 @@ fill it, a system package ships:
    ]
    ```
 
-   The **slug** form binds the sheet to your own character type — that type
-   already renders via it, which is why a package that owns its type's slug
-   needs nothing more. The **`preset_category`** form is the modularity
-   capability: it renders any `character`-category type, including a generic
-   Chronicle-owned "Player Characters" type, without your package owning its
-   slug. Ship one or both.
+   The `slug` form binds the sheet to your own character type. The
+   `preset_category` form renders any `character`-category type, including a
+   generic Chronicle-owned "Player Characters" type your package does not own.
+   Ship one or both.
 
-When the addon is enabled in a campaign that has your system, your character
-preset (fields and sheet) is applied to the existing top-level **Characters**
-category; no second category is created beside it. A system-less campaign gets a generic
-"Player Characters" type instead.
+When the addon is enabled in a campaign with your system, your character preset
+(fields and sheet) is applied to the existing top-level **Characters** category;
+no second category is created. A system-less campaign gets a generic "Player
+Characters" type.
 
-**Modularity — this is the whole point.** A new system (e.g. D&D 5e) gets the
-**identical** behavior with **zero Chronicle core changes**: ship a manifest
-with a `category: "character"` preset (its fields) and a `character-sheet`
-renderer, and the same placement on Characters, the same claiming, and the same sheet rendering
-apply. Chronicle core detects "a system character type" generically (by preset
-category / claimability) and never references any system by name — every system
-specific (fields, widget, renderer, the type's name) lives in the package's
-manifest.
+A new system needs no core changes: ship a `category: "character"` preset and a
+`character-sheet` renderer. Core finds a system character type generically (by
+preset category and claimability) and never names a system; fields, widget,
+renderer and type name all live in the manifest.
 
 ### Sheet styles and motion (`data-sheet`)
 
-A system's character sheet gets its styles and its motion from Chronicle; the
-package ships markup only. Put `data-sheet` on the sheet's root element (a block
-element that is not transformed). Chronicle then sets `data-sheet-style` on it
-from the campaign's chosen sheet style (`html[data-cz-sheet]`), or `modern` when
-none is chosen, and loads that style's fonts. The twelve styles are `modern`,
+Chronicle supplies a sheet's styles and motion; the package ships markup only.
+Put `data-sheet` on the sheet's root (a block element that is not transformed).
+Chronicle sets `data-sheet-style` on it from the campaign's sheet style
+(`html[data-cz-sheet]`), or `modern`, and loads that style's fonts. The twelve
+styles are `modern`,
 `parchment`, `ledger`, `journal`, `vellum`, `night`, `deck`, `pencil`,
 `starship`, `neon`, `runes` and `brass`. Do not set colours, fonts, shadows,
-durations or effects yourself: read the `--paper-*` tokens (`--paper-ink`,
+durations or effects yourself. Read the `--paper-*` tokens (`--paper-ink`,
 `--paper-ink-soft`, `--paper-mute`, `--paper-edge`, `--paper-accent`,
 `--paper-neg`, `--paper-font`, `--paper-head-font`, `--paper-num-font`,
 `--ts` for the type scale) and the shared classes in `static/css/paper.css`
 (`.paper`, `.paper-stack`, `.paper-kind`, `.paper-title`, `.paper-pull`,
-`.paper-slip`, `.paper-pin`), and a style change reaches your sheet for free.
-Nothing outside a `[data-sheet]` root is restyled.
+`.paper-slip`, `.paper-pin`) so style changes reach your sheet. Nothing outside
+a `[data-sheet]` root is restyled.
 
 What your markup carries:
 
@@ -434,42 +354,37 @@ What your markup carries:
 | `<details data-sheet-fold>` with `.fold-body > .fold-in[data-move="fold"]` | A fold that opens to its real height. |
 | `data-v` / `data-pv` on a number | A value that can change; call `Chronicle.sheetMotion.land(el, oldText)` after changing it. |
 
-Moves. Every moving thing says which standard move it is with `data-move`:
+Moves: every moving element names its standard move with `data-move`:
 `slide-out` (a panel from behind the sheet), `grow` (a slip out of the thing
 pressed), `fold` (a fold's content) or `settle` (the sheet arriving on a new
-page; add `.paper-settle` to play it once). A style never changes timing; it
-gives each move its own look, and chooses which move each role uses
-(`--sheet-panel-move`, `--sheet-slip-move`, `--sheet-page-move`). `data-move`
-is honoured only under `[data-sheet]`; elsewhere on the site it means
-something else.
+page; add `.paper-settle` to play it once). A style never changes timing; it gives each move its look and picks the move
+for each role (`--sheet-panel-move`, `--sheet-slip-move`, `--sheet-page-move`).
+`data-move` is honoured only under `[data-sheet]`.
 
-Changed values. Each style has its own `--change-move` (`mark`, `rewrite`,
-`roll`, `glitch`, `carve` or `odometer`): the plain ink mark, a pencil erase
-and rewrite, scrambling digits, a glitch, a stone carving, or an odometer.
-`Chronicle.sheetMotion.land(el, oldText)` picks the right one; with no old
-text it shows something new arriving.
+Changed values: each style sets `--change-move` (`mark`, `rewrite`, `roll`,
+`glitch`, `carve` or `odometer`). `Chronicle.sheetMotion.land(el, oldText)`
+applies it; with no old text it shows a new value arriving.
 
 Events on the root: `sheet:panel-ready` (`detail.body` is the panel's body, so
 the package can wire widgets inside it), `sheet:open`, `sheet:close`, and
 `sheet:close-blocked` (a panel marked unsaved was asked to close). Mark one
 with `Chronicle.sheetMotion.mount(root).setDirty(true)`.
 
-Full, Calm and Off. Full plays every move. Calm (the owner's reduce switch or a
-person's own Calm pick) fades in place and opens folds at once. Off (the
-device's reduced-motion setting or a person's Off pick) jumps to the end state.
-The engine and the styles enforce both; a package has nothing to do for them.
+Motion levels: Full plays every move. Calm (owner's reduce switch or a
+person's Calm pick) fades in place and opens folds at once. Off (device
+reduced-motion or a person's Off pick) jumps to the end state. The engine
+enforces both; packages do nothing.
 
 ### Hero creator
 
-Chronicle's hero creator (Characters → Create hero) needs nothing beyond what
-the sheet already uses. It asks one question per **text field** of your
-`category: "character"` preset that has entries to pick from (your data file
-for that field, plus any entries the campaign's Directors added), in the
-order the preset lists its fields. The field's `label` names the step, so
-call it "Lineage" and the creator says "Choose your lineage".
+The hero creator (Characters > Create hero) needs nothing beyond the sheet. It
+asks one question per text field of your `category: "character"` preset that
+has entries to pick from (your data file for that field plus Director-added
+entries), in preset order. The field's `label` names the step ("Lineage" gives
+"Choose your lineage").
 
-Each entry opens into a leaf drawn only from what the entry carries, with no
-empty sections:
+Each entry opens into a leaf drawn only from what it carries, with no empty
+sections:
 
 - `summary` and `description` make the Overview; `{@category term}` markers
   read as plain words.
@@ -491,11 +406,10 @@ show or edit it.
 ### Checking the AI's numbers (`Chronicle.sheetChecks`)
 
 When the campaign's AI writes a page with sheet fields, the AI Import review
-row can set each number it wrote beside what your published formulas give,
-and let the director take the formula's number instead. Chronicle does no
-arithmetic of its own: your package adds the check, keyed by the sheet's
-kind, from any script Chronicle loads for the campaign (a text renderer or a
-widget):
+row can set each number beside what your published formulas give and let the
+director take the formula's. Chronicle does no arithmetic: your package adds
+the check, keyed by sheet kind, from any script loaded for the campaign (text
+renderer or widget):
 
 ```js
 (Chronicle.sheetChecks = Chronicle.sheetChecks || {}).creature = {
@@ -531,7 +445,6 @@ widget):
 
 ### Server-side rendering
 
-A renderer that needs server-side work (loading sibling entities,
-conditional dispatch on entity data) is Chronicle in-tree Go code, not
-something a package can ship; a package's widget fetches what it needs
-from the API instead.
+Server-side work (loading sibling entities, conditional dispatch on entity
+data) is in-tree Go, not something a package ships; a widget fetches what it
+needs from the API.

@@ -112,7 +112,7 @@ inventory() {
 # read_allowlist <file> — strips comments and blank lines, normalises spacing.
 read_allowlist() {
   sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1" \
-    | grep -v '^$' \
+    | { grep -v '^$' || true; } \
     | awk '{print $1" "$2}' \
     | sort -k2
 }

@@ -1,12 +1,17 @@
 # System Plugin Marketplace - Architecture & Specification
 
-## 1. Executive Summary
+## 1. Summary
 
-Game systems in Chronicle are **independently developed, submitted, reviewed, installed, and activated per-campaign**. Chronicle provides a generic runtime (system loader, tooltip renderer, entity presets, Foundry sync); all system-specific behavior lives in the system package itself.
+Game systems are developed, submitted, reviewed, installed and activated per
+campaign independently of Chronicle core. Core provides a generic runtime
+(system loader, tooltip renderer, entity presets, Foundry sync); all
+system-specific behavior lives in the package, driven by its manifest. No
+custom Go code is needed for any system.
 
-System packages are distributed as GitHub repositories with tagged releases. Admins install them via the package manager. Campaign owners enable them as addons. The Foundry VTT module auto-detects the active system and syncs characters using field annotations from the manifest.
-
-No custom Go code is required for any game system. Everything is manifest-driven.
+Packages are GitHub repositories with tagged releases. Admins install them via
+the package manager, campaign owners enable them as addons, and the Foundry
+module detects the active system and syncs characters from the manifest's field
+annotations.
 
 ## 2. System Package Format
 
@@ -55,7 +60,7 @@ See `docs/repo-templates/chronicle-systems/schema/manifest.schema.json` for the 
 
 ### Category Fields
 
-Each category defines fields that control tooltip rendering and reference page display:
+Category fields control tooltip rendering and reference page display:
 
 ```json
 {
@@ -71,7 +76,7 @@ Each category defines fields that control tooltip rendering and reference page d
 
 Valid field types: `string`, `number`, `boolean`, `list`, `markdown`, `enum`, `url`.
 
-A category with `"director": true` is for the campaign's Directors only: its reference pages, search hits, tooltips and raw `data/<slug>.json` file answer 404 below Director. For content the system's book keeps in a Director-only chapter.
+A category with `"director": true` is Director-only: its reference pages, search hits, tooltips and raw `data/<slug>.json` answer 404 below Director. Use it for content the system's book keeps in a Director-only chapter.
 
 ### Entity Preset Fields with Foundry Annotations
 
@@ -99,7 +104,7 @@ Character presets can include `foundry_path` for automatic VTT sync:
 
 ### Play Controls (`play`)
 
-An entity preset field may carry an optional `play` object declaring that it can be changed during play, so Chronicle core never needs to know a system's field names. It applies to preset fields only (category fields are reference data) and is copied onto the entity type's stored field definition, the same way `gm_only` is.
+An entity preset field may carry a `play` object declaring it can be changed during play, so core never needs a system's field names. It applies to preset fields only (category fields are reference data) and is copied onto the entity type's stored field definition, like `gm_only`.
 
 ```json
 {
@@ -122,11 +127,11 @@ An entity preset field may carry an optional `play` object declaring that it can
 | `to_foundry` | Whether a play edit is written to Foundry; absent means follow the field's `foundry_writable` |
 | `combat_authority` | `foundry` or `chronicle`: which side wins during combat; absent leaves it undecided |
 
-A `play` block is dropped at load, and the field stays an ordinary field, when: `edit`, `kind` or `combat_authority` has an unknown value; `max_field` names a missing field, the field itself or a non-number field; `options` is empty for `conditions` or `choice`, has more than 50 entries, or holds an empty or over-64-character value; `min` is greater than `max`; `step` or `max_length` is negative; or the field is `gm_only` and `edit` is `owner`. The rest of the system still loads. Each drop is logged and listed under the system's validation warnings (the diagnostics page and the install preview).
+A `play` block is dropped at load, leaving an ordinary field, when: `edit`, `kind` or `combat_authority` is unknown; `max_field` names a missing field, the field itself or a non-number field; `options` is empty for `conditions`/`choice`, has over 50 entries, or holds an empty or over-64-character value; `min` > `max`; `step` or `max_length` is negative; or the field is `gm_only` with `edit: owner`. The rest of the system still loads. Each drop is logged and listed in the system's validation warnings (diagnostics page, install preview).
 
-Entity types do not record which system created them, so when two installed systems declare the same category and field key with different `play` blocks, neither block is copied onto existing types.
+Entity types do not record their source system, so when two installed systems declare the same category and field key with different `play` blocks, neither is copied onto existing types.
 
-Declaring `play` changes no behaviour by itself; it is the declaration the play-edit guard and sheet controls read.
+`play` is only a declaration; the play-edit guard and sheet controls read it.
 
 ### Crafting (`crafting`)
 
@@ -155,7 +160,7 @@ Every key is optional; a missing one, or a system with no block, takes the defau
 
 ### Data Files
 
-Each category has a corresponding `data/<slug>.json` file. Each item is keyed by `id` or `slug` (the loader fills `id` from `slug` when `id` is empty):
+Each category has a `data/<slug>.json` file. Items are keyed by `id` or `slug` (the loader fills `id` from `slug`):
 
 ```json
 [
@@ -173,66 +178,35 @@ Each category has a corresponding `data/<slug>.json` file. Each item is keyed by
 
 ### Validation Rules
 
-- `id` in manifest must match directory name
-- All categories must have matching data files
-- Property keys in data items must match category field definitions
-- Entity preset slugs must be unique
-- Character preset slug must end with "-character"
-- Max 20 categories, 100 fields per category, 10 entity presets, 100 fields per preset
+`ValidateManifest` in `internal/systems/manifest.go`:
+
+- `id`, `name` and `api_version` are required. `id`, category, preset, widget and text-renderer slugs match `^[a-z0-9][a-z0-9_-]*$`. `status` is `available` or `coming_soon` (default `coming_soon`).
+- Limits: 20 categories, 100 fields per category, 10 entity presets, 100 fields per preset, 20 relation presets, 10 widgets, 5 text renderers, 10 renderers, 10 entity panels.
+- `script_file` and text-renderer `file` end in `.js` and contain no path traversal. Field types are limited to the list above.
+- Warnings, not errors: no categories, no entity presets, no preset slug ending in `-character` (Foundry character sync won't work), no `foundry_system_id`, no field with `foundry_path`.
 
 ## 3. Installation & Loading Flow
 
-```
-                 ┌─────────────┐
-                 │  GitHub Repo │
-                 │  (releases)  │
-                 └──────┬──────┘
-                        │ 1. Submit repo URL
-                        v
-                 ┌─────────────┐
-                 │ Admin Review │  2. Approve/reject
-                 │   Workflow   │
-                 └──────┬──────┘
-                        │ 3. Poll GitHub Releases API
-                        v
-                 ┌─────────────┐
-                 │  Download &  │  4. Extract ZIP to
-                 │   Extract    │     media/packages/systems/<slug>/<version>/
-                 └──────┬──────┘
-                        │ 5. Validate manifest
-                        v
-                 ┌─────────────┐
-                 │  System      │  6. LoadAdditionalDir() discovers manifest
-                 │  Registry    │     GenericSystem instantiated
-                 └──────┬──────┘
-                        │ 7. AddonInfos() auto-registers as addon
-                        v
-                 ┌─────────────┐
-                 │  Campaign    │  8. Owner enables addon
-                 │  Activation  │
-                 └─────────────┘
-```
-
-### Key code paths:
-- **Submission**: `PackageService.SubmitPackage()` in `internal/plugins/packages/service.go`
-- **Review**: `PackageService.ReviewPackage()` — admin approves with notes
-- **Version discovery**: `PackageService.CheckForUpdates()` — polls GitHub Releases API
-- **Installation**: `PackageService.InstallVersion()` — downloads ZIP, extracts, validates
-- **System loading**: `systems.LoadAdditionalDir()` in `internal/systems/registry.go`
-- **Addon registration**: `systems.AddonInfos()` returns metadata for all discovered systems
+1. Submit a GitHub repo URL: `PackageService.SubmitPackage()` in `internal/plugins/packages/service.go`.
+2. Admin approves or rejects with notes: `ReviewPackage()`.
+3. `CheckForUpdates()` polls the GitHub Releases API.
+4. `InstallVersion()` downloads the ZIP, extracts it to `media/packages/systems/<slug>/<version>/` and validates the manifest.
+5. `systems.LoadAdditionalDir()` (`internal/systems/registry.go`) discovers the manifest and instantiates a `GenericSystem`.
+6. `systems.AddonInfos()` returns every discovered system so it registers as an addon.
+7. A campaign owner enables the addon.
 
 ## 4. Per-Campaign Activation
 
 Systems are exposed to campaigns through the addon system:
 
-1. **Auto-registration**: On startup, `AddonInfos()` returns all discovered systems. The addons plugin calls `RegisterSystemAddon()` to ensure each system has an addon database row.
+1. **Auto-registration**: at startup the addons plugin calls `RegisterSystemAddon()` for each system from `AddonInfos()`, so each has an addon row.
 2. **Campaign toggle**: Campaign owners enable/disable system addons via campaign settings.
 3. **Middleware gating**: `requireSystemAddon()` middleware checks that the system addon is enabled before serving system routes.
-4. **Entity presets**: When enabled, entity type templates from the manifest become available for creating new entities.
+4. **Entity presets**: once enabled, the manifest's entity type templates are available for new entities.
 
 ## 5. Character Sheet Rendering
 
-Character sheets are rendered using Chronicle's entity system:
+Character sheets use the entity system:
 
 1. System manifest declares `entity_presets` with field definitions
 2. When a campaign enables the system, entity types are created from presets
@@ -262,9 +236,8 @@ Reference items support hover tooltips and card popups:
 
 ### Tooltip Rendering
 
-The `GenericTooltipRenderer` in `internal/systems/generic_tooltip.go` produces HTML tooltip fragments using the manifest's category field definitions. No custom Go code is needed.
+`GenericTooltipRenderer` (`internal/systems/generic_tooltip.go`) renders tooltip HTML from the manifest's category field definitions.
 
-**How it works:**
 1. User hovers over an @mention referencing a system item
 2. Handler calls `TooltipRenderer().RenderTooltip(item)`
 3. GenericTooltipRenderer reads field definitions from the manifest's category
@@ -278,11 +251,11 @@ Systems can override the default tooltip with a Go `text/template` string:
 "tooltip_template": "<div class=\"tooltip\">{{.Name}} ({{.Properties.level}})</div>"
 ```
 
-Systems needing richer, interactive stat-block popups can mount a custom JS widget in the entity sidebar or as an overlay card (see §5 Custom Widgets) rather than relying on the tooltip renderer.
+For interactive stat-block popups, mount a custom widget in the entity sidebar or as an overlay card (§5) instead.
 
 ## 7. VTT Sync Integration
 
-The Foundry VTT module uses a single generic adapter for all systems:
+The Foundry module uses one generic adapter for all systems.
 
 ### Detection Flow
 1. On module load, `SyncManager._detectSystem()` queries `/systems` API
@@ -291,10 +264,10 @@ The Foundry VTT module uses a single generic adapter for all systems:
 
 ### Field Sync Flow
 1. `ActorSync._loadAdapter()` creates a generic adapter via `createGenericAdapter()`
-2. Generic adapter fetches field definitions from `/systems/:id/character-fields` API
+2. The adapter fetches field definitions from the `character-fields` endpoint (§10)
 3. Fields with `foundry_path` annotations are auto-mapped
-4. `toChronicleFields(actor)`: reads Foundry actor data at each `foundry_path`, maps to Chronicle field keys
-5. `fromChronicleFields(entity)`: reads Chronicle field values, writes to Foundry actor at each `foundry_path` (respecting `foundry_writable`)
+4. `toChronicleFields(actor)` reads actor data at each `foundry_path` into Chronicle field keys.
+5. `fromChronicleFields(entity)` writes Chronicle values to the actor at each `foundry_path`, respecting `foundry_writable`.
 
 ### Requirements for VTT Sync
 - System manifest must include `foundry_system_id`
@@ -304,33 +277,27 @@ The Foundry VTT module uses a single generic adapter for all systems:
 
 ## 8. Rules Engine (WASM Extensions)
 
-For systems that need computed fields, validation rules, or dice rolling, WASM extensions provide a sandboxed execution environment.
+WASM extensions give a sandboxed environment for computed fields, validation and dice rolling.
 
 ### Architecture
-- `PluginManager` in `internal/extensions/wasm_manager.go` manages WASM lifecycles
-- Plugins declare capabilities upfront; host only exposes matching functions
-- Memory limits and execution timeouts enforced per plugin
+- `PluginManager` (`internal/extensions/wasm_manager.go`) manages WASM lifecycles.
+- Plugins declare capabilities upfront; the host exposes only matching functions.
+- Memory limits and execution timeouts are enforced per plugin.
 
-### Capabilities Available
-Each capability unlocks a group of host functions:
+### Capabilities
+Each unlocks a group of host functions:
 - `log` — `chronicle_log`
 - `entity_read` — `get_entity`, `search_entities`, `list_entity_types`
 - `entity_write` — `update_entity_fields`
 - `calendar_read` — `get_calendar`, `list_events`
-- `calendar_write` — `create_event`
-- `tag_read` — `list_tags`, `get_entity_tags`
-- `tag_write` — `set_entity_tags`
+- `calendar_write` — `create_event` (the calendar functions always error until the rebuild lands, #778)
+- `tag_read` — `list_tags`
+- `tag_write` — `set_entity_tags`, `get_entity_tags`
 - `relation_write` — `create_relation`
 - `kv_store` — `kv_get`, `kv_set`, `kv_delete` (per-plugin storage)
 - `message` — `send_message` (plugin-to-plugin)
 
-### Use Cases
-- Auto-calculate derived stats (AC, spell save DC, carry capacity)
-- Validate field constraints (ability scores 1-30, level 1-20)
-- Dice rolling and random table lookups
-- Session event logging
-
-### WASM Plugin Manifest
+### WASM plugin manifest
 ```json
 "contributes": {
   "wasm_plugins": [{
@@ -346,28 +313,24 @@ Each capability unlocks a group of host functions:
 ## 9. Security Model
 
 ### Content Scanning
-- ZIP extraction: path traversal prevention, symlink rejection
-- File type allowlist (JSON, JS, CSS, SVG, PNG, WASM)
-- File size limits per package
-- SVG/CSS sanitization
+- ZIP extraction rejects path traversal and symlinks.
+- File type allowlist: JSON, JS, CSS, SVG, PNG, WASM.
+- Per-package file size limits; SVG and CSS are sanitized.
 
 ### Manifest Validation
-- Required fields enforced
-- Slug format validation (lowercase, alphanumeric, hyphens)
-- Content limits (max categories, fields, presets)
-- HTML sanitization of manifest strings
+- Required fields, slug format and content limits (see Validation Rules).
+- Manifest strings are HTML-sanitized.
 
 ### WASM Sandboxing
-- Capability-based security: plugins declare needed capabilities
-- Host only exposes functions matching declared capabilities
-- Memory limits and execution timeouts
-- No direct filesystem or network access
+- Host functions are limited to the declared capabilities.
+- Memory limits and execution timeouts.
+- No direct filesystem or network access.
 
 ### Approval Workflow
 - `owner_upload_policy`: auto_approve, require_approval, or disabled
 - `repository_policy`: github_only, any_git, or allow_all
 - Admin review with approve/reject and notes
-- Package lifecycle: pending -> approved -> deprecated -> archived
+- Package lifecycle: `pending`, `approved`, `rejected`, `deprecated`, `archived`
 
 ## 10. API Endpoints
 
@@ -409,12 +372,14 @@ owner or co-Director). Format: `docs/system-rulebook-book.md`.
 | POST | `/campaigns/:id/systems/preview` | Preview before install |
 | DELETE | `/campaigns/:id/systems/custom` | Remove custom system |
 
-### Character Fields API (for Foundry module)
+### Character Fields API (Foundry module)
+Registered in `internal/plugins/syncapi/routes.go` under `/api/v1/campaigns/:id`, with read permission. Paths below are relative to that.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/systems/:id/character-fields` | Character field definitions with foundry_path |
-| GET | `/systems/:id/item-fields` | Item field definitions |
-| GET | `/systems/:id/creature-fields` | Creature field definitions, with the fields Foundry may send back |
+| GET | `/systems/:systemId/character-fields` | Character field definitions with foundry_path |
+| GET | `/systems/:systemId/item-fields` | Item field definitions |
+| GET | `/systems/:systemId/creature-fields` | Creature field definitions, with the fields Foundry may send back |
 
 ### Package Management (Admin)
 | Method | Path | Description |
@@ -428,6 +393,8 @@ owner or co-Director). Format: `docs/system-rulebook-book.md`.
 | GET | `/admin/packages/pending` | List pending submissions |
 | POST | `/admin/packages/:id/review` | Approve/reject submission |
 
+Other `/admin/packages` routes (versions, pin, retention, usage, per-campaign hold/move, prune, deprecate, archive, settings) are in `internal/plugins/packages/routes.go`.
+
 ### Owner Submission
 | Method | Path | Description |
 |--------|------|-------------|
@@ -437,15 +404,13 @@ owner or co-Director). Format: `docs/system-rulebook-book.md`.
 
 ## 11. System Independence
 
-No system-specific Go code lives in Chronicle core. D&D 5e and Draw Steel are
-standalone repos; the Foundry module uses the generic adapter exclusively, and
-system detection is fully API-driven.
-
-Open work: #740.
+No system-specific Go code lives in core. D&D 5e and Draw Steel are standalone
+repos; the Foundry module uses the generic adapter only, and system detection is
+API-driven. Open work: #740.
 
 ### Adding a New Game System
 
-No Chronicle code changes required. Just:
+No core changes required:
 
 1. Create a GitHub repo with `manifest.json` + `data/*.json`
 2. Tag a release (e.g., `v1.0.0`)

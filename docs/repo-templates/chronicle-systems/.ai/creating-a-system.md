@@ -104,8 +104,9 @@ At minimum, define a character preset:
 ]
 ```
 
-**CRITICAL:** The character preset slug MUST end with `"-character"`.
-Chronicle uses this convention to find the character preset programmatically.
+The character preset slug must end with `"-character"`; Chronicle finds the
+character preset by that suffix. Without one the install shows a warning and
+Foundry character sync does not work.
 
 ### 2d: Add Foundry VTT Integration (Optional)
 
@@ -219,7 +220,7 @@ This checks:
    ```
 
 2. Upload to a Chronicle instance:
-   - Go to **Campaign Settings > Content Packs > Upload System**
+   - Go to **Manage > Game & features** (`/campaigns/<id>/extensions`), custom game system upload
    - Upload the ZIP
    - Check the validation report
 

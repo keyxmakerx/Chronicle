@@ -184,12 +184,12 @@ templ manifestRow(m ManifestSummary, runningNow bool, csrfToken string) {
 			/>
 			if runningNow {
 				<button type="button" class="btn-danger text-sm opacity-50 cursor-not-allowed" disabled>
-					<i class="fa-solid fa-spinner fa-spin mr-1"></i>
+					<i class="fa-solid fa-spinner fa-spin"></i>
 					Restore in progress…
 				</button>
 			} else {
 				<button type="submit" class="btn-danger text-sm">
-					<i class="fa-solid fa-rotate-left mr-1"></i>
+					<i class="fa-solid fa-rotate-left"></i>
 					Restore from this backup
 				</button>
 			}

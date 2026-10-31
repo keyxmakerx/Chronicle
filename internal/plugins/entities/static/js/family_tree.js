@@ -501,13 +501,21 @@
     return s;
   }
 
+  // jsonOf reads the block's data from data-json. A script tag would be
+  // stripped by a boosted swap; one is still read for older markup.
+  function jsonOf(root) {
+    var raw = root.getAttribute('data-json');
+    if (raw != null) return raw;
+    var s = root.querySelector('script[type="application/json"]');
+    return s ? s.textContent : '{}';
+  }
+
   function rootOf(el) { return el && el.closest ? el.closest('.fm') : null; }
 
   function Family(root) {
     var self = this;
-    var dataEl = root.querySelector('script[type="application/json"]');
     var data = {};
-    try { data = JSON.parse(dataEl ? dataEl.textContent : '{}'); } catch (e) { data = {}; }
+    try { data = JSON.parse(jsonOf(root)); } catch (e) { data = {}; }
     var M = buildModel(data);
     var PAGE = M.page;
     // BASE is the family as saved; M is the family as edited. They differ only

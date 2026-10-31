@@ -40,11 +40,9 @@ templ CategoryBlockSwitch(cc *campaigns.CampaignContext, et *EntityType, block c
 			@catTimelinePreview(cc, block.Config)
 		default:
 			@renderExtraCategoryBlock(cc, et, block.Type)
-		// map_preview was removed in favor of the per-entity map_editor
-		// block (see internal/plugins/maps/entity_map_block.templ). The
-		// old type silently drops at render — existing category layouts
-		// keep the JSON entry but no UI shows. Scribe+ can re-add via
-		// the new block in the layout editor.
+		// map_preview is not a block type: layouts still holding it keep the
+		// JSON entry but render nothing. The per-entity map_editor block
+		// replaces it.
 	}
 }
 
@@ -79,7 +77,7 @@ templ catHeader(cc *campaigns.CampaignContext, et *EntityType, total int) {
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
 						class="btn-primary text-sm"
 					>
-						<i class="fa-solid fa-plus mr-1.5 text-xs"></i> New Page
+						<i class="fa-solid fa-plus text-xs"></i> New Page
 					</a>
 				}
 			</div>
@@ -131,7 +129,7 @@ templ catEntityGrid(cc *campaigns.CampaignContext, et *EntityType, entities []En
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
 					class="btn-primary"
 				>
-					<i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create { et.Name }
+					<i class="fa-solid fa-plus text-xs"></i> Create { et.Name }
 				</a>
 			}
 		</div>

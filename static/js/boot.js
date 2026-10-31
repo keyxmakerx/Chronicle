@@ -19,6 +19,10 @@
   // WeakMap tracking mounted widget instances to prevent double-init
   // and enable cleanup on destroy.
   var mounted = new WeakMap();
+  // The same elements as a Set, because a WeakMap can't be listed: Back and
+  // Forward replace the page without a beforeSwap, so the widgets they
+  // removed are found here and destroyed.
+  var mountedEls = new Set();
 
   /**
    * Register a widget implementation.
@@ -280,6 +284,7 @@
     try {
       impl.init(el, config);
       mounted.set(el, name);
+      mountedEls.add(el);
     } catch (err) {
       console.error('[Chronicle] Failed to mount widget "' + name + '":', err);
     }
@@ -306,6 +311,7 @@
       }
     }
     mounted.delete(el);
+    mountedEls.delete(el);
   }
 
   // --- CSRF Integration ---
@@ -461,9 +467,13 @@
     }
   });
 
-  // Back and Forward fetch the page and swap in a whole new body without an
-  // afterSettle, so its widgets are mounted here.
+  // Back and Forward fetch the page and swap in a whole new body without a
+  // beforeSwap or an afterSettle, so the widgets of the page that was left
+  // are destroyed here and the restored page's are mounted.
   document.addEventListener('htmx:historyRestore', function () {
+    mountedEls.forEach(function (el) {
+      if (!el.isConnected) destroyElement(el);
+    });
     mountWidgets(document.body);
     scheduleUnmatchedWidgetScan(document.body);
   });
@@ -625,6 +635,30 @@
   window.addEventListener('popstate', function () {
     requestAnimationFrame(updateSidebarActiveLinks);
   });
+
+  // --- Alpine inside on-sight widgets ---
+  // A page whose Alpine components are defined by its widget's script, not by
+  // a page <script> (htmx strips those from swapped content), renders the
+  // widget's mount with `x-data x-ignore`: x-data makes the mount an Alpine
+  // root, so Alpine reads x-ignore and skips what is inside until the script
+  // is in. The widget's init calls startAlpine to hand the inside over.
+  var alpineStarted = false;
+  document.addEventListener('alpine:initialized', function () { alpineStarted = true; });
+  function startAlpine(el) {
+    var go = function () {
+      if (!el.isConnected || !el.hasAttribute('x-ignore') || !window.Alpine) return;
+      el.removeAttribute('x-ignore');
+      // Alpine keeps its own flag until its observer sees the removal.
+      delete el._x_ignore;
+      // The children, not el: el's own x-data has already run.
+      Array.prototype.slice.call(el.children).forEach(function (child) {
+        window.Alpine.initTree(child);
+      });
+    };
+    if (alpineStarted) go();
+    else document.addEventListener('alpine:initialized', go, { once: true });
+  }
+  Chronicle.startAlpine = startAlpine;
 
   // Expose mount/destroy for manual use if needed.
   Chronicle.mountWidgets = mountWidgets;
@@ -872,6 +906,46 @@
     }
 
     return fetch(url, fetchOpts);
+  };
+
+  /**
+   * apiAction sends a write through apiFetch and settles on its outcome, for
+   * buttons that report a result: it resolves with the JSON body ({} when there
+   * is none) on a 2xx and rejects with the server's message otherwise. A 403
+   * asking for the password opens the password modal and re-sends the request
+   * once the password is confirmed; cancelling rejects.
+   *
+   * @param {string} url - Request URL.
+   * @param {Object} [opts] - apiFetch options.
+   * @returns {Promise<Object>} The parsed response body.
+   */
+  Chronicle.apiAction = function (url, opts) {
+    return Chronicle.apiFetch(url, opts).then(function (resp) {
+      var trigger = (resp.headers && resp.headers.get('HX-Trigger')) || '';
+      if (resp.status === 403 && trigger.indexOf('reauth-required') !== -1) {
+        return new Promise(function (resolve, reject) {
+          function stop() {
+            window.removeEventListener('reauth-confirmed', onConfirmed);
+            window.removeEventListener('reauth-cancelled', onCancelled);
+          }
+          function onConfirmed() { stop(); resolve(Chronicle.apiAction(url, opts)); }
+          function onCancelled() { stop(); reject(new Error('password not confirmed')); }
+          window.addEventListener('reauth-confirmed', onConfirmed);
+          window.addEventListener('reauth-cancelled', onCancelled);
+          window.dispatchEvent(new CustomEvent('reauth-required'));
+        });
+      }
+      return resp.text().then(function (text) {
+        var data = {};
+        if (text) {
+          try { data = JSON.parse(text); } catch (e) { data = {}; }
+        }
+        if (!resp.ok) {
+          throw new Error((data && (data.message || data.error)) || ('request failed (' + resp.status + ')'));
+        }
+        return data;
+      });
+    });
   };
 
   // Local words for one page, per visit: what the page's place or the

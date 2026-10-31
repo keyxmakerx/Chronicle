@@ -228,7 +228,7 @@ func (h *Handler) ConfirmProposalAPI(c echo.Context) error {
 	// Auto-invite members + send RSVP email (parity with manual CreateSession) and
 	// notify everyone who responded — all best-effort, off the request path.
 	//
-	// The confirmer is Going immediately (operator server-change #3); a plain
+	// The confirmer is Going immediately; a plain
 	// yes vote on the option that got confirmed is not automatically a Going
 	// for anyone ELSE, so they're carried in as RSVPCarriedYes and still owe
 	// an explicit confirm. Both are set AFTER the blanket InviteAll below, or

@@ -344,9 +344,12 @@
   }
   function render(S, root) {
     root.innerHTML = '<div class="crr-pane">' +
-      '<div class="crr-aibar">' + fa('wand-magic-sparkles') + '<span>Your AI can write these rules. Give it the calendar’s names, then paste back what it writes; each rule arrives as a draft for you to approve.</span>' +
-      '<span class="crr-grow"></span><button type="button" class="btn btn-secondary btn-sm" data-act="copy-ai">' + fa('copy') + '<span>Copy what it needs</span></button>' +
-      '<button type="button" class="btn btn-secondary btn-sm" data-act="open-paste">' + fa('paste') + '<span>Paste what it wrote</span></button></div>' + aiFold() +
+      // Ask your AI: Chronicle runs no AI itself, so Draft it copies the ask
+      // with everything the AI needs, and the answer is pasted back below.
+      '<div class="crr-askbar">' + fa('wand-magic-sparkles') + '<input class="crr-ask" maxlength="' + R.LIMITS.line + '" placeholder="Ask your AI for a rule, like “during a storm it can make two, but it’s risky”" aria-label="What you want your AI to write">' +
+      '<button type="button" class="btn btn-primary btn-sm" data-act="copy-ai">' + fa('copy') + '<span>Draft it</span></button></div>' +
+      '<p class="crr-hint crr-askhint">Draft it copies your words and the calendar’s names for your AI. Paste its answer back and each rule arrives as a draft for you to approve. ' +
+      '<button type="button" class="crr-link" data-act="open-paste">Paste what it wrote</button></p>' + aiFold() +
       // Without a calendar there are no days to show, only rules
       '<div class="crr-sech"' + (S.noCal ? ' hidden' : '') + '><h4>When it’s on</h4><small>The next ' + S.W.span + ' days of the calendar. Tap a day to see what applies.</small></div><div class="crr-tl"' + (S.noCal ? ' hidden' : '') + '>' + timeline(S) + '</div>' +
       '<div class="crr-sech"><h4>Rules</h4><small>Each one reads When → Then. Tap one to change it.</small><button type="button" class="btn btn-primary btn-sm crr-r" data-act="new">' + fa('plus') + '<span>New rule</span></button></div>' +
@@ -408,10 +411,17 @@
       var b = $('.crr-tl-day[data-d="' + S.at + '"]'); if (b) b.focus({preventScroll: false});
     }
     function copyBrief() {
-      var text = JSON.stringify(R.aiBrief(S.W, S.rec().name, S.rec().rules, S.fx), null, 2), msg = $('.crr-paste-msg');
+      var brief = R.aiBrief(S.W, S.rec().name, S.rec().rules, S.fx), ask = $('.crr-ask') && $('.crr-ask').value.trim(), msg = $('.crr-paste-msg');
+      if (ask) { brief.request = ask; brief.answerWith = 'The JSON only: {"rules": [ … ]}, each rule as above.'; }
+      var text = JSON.stringify(brief, null, 2);
       function shown() { fold('.crr-paste', true); var pre = $('.crr-brief'); pre.hidden = false; pre.textContent = text; msg.textContent = 'Copying isn’t allowed here. Select the text below and copy it.'; }
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () { if (!dead) S.say('Copied. Paste it to your AI with what you want this recipe to do.'); }, shown);
+        navigator.clipboard.writeText(text).then(function () {
+          if (dead) return;
+          fold('.crr-paste', true, '.crr-area');
+          msg.textContent = ask ? 'Copied your ask. Paste it to your AI, then paste its answer here.' : 'Copied. Paste it to your AI with what you want this recipe to do, then paste its answer here.';
+          S.say(msg.textContent);
+        }, shown);
       } else shown();
     }
     function readPaste() {
@@ -499,6 +509,7 @@
     }
     function onKey(e) {
       var t = e.target;
+      if (e.key === 'Enter' && t.classList.contains('crr-ask')) { e.preventDefault(); copyBrief(); return; }
       if ((e.key === 'Enter' || e.key === ' ') && t.classList.contains('crr-rhd')) { e.preventDefault(); open(+t.closest('.crr-rc').getAttribute('data-i')); return; }
       if (t.classList.contains('crr-tl-day')) {
         var n = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : e.key === 'Home' ? -S.at : e.key === 'End' ? S.W.span : 0;

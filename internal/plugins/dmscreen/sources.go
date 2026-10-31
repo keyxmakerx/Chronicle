@@ -102,6 +102,7 @@ type PresenceSource interface {
 // Hero is a claimed player character with its raw sheet fields.
 type Hero struct {
 	ID           string
+	TypeID       int // the hero's category, which says which sheet values are restricted
 	Name         string
 	PlayerName   string
 	PlayerUserID string

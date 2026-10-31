@@ -30,3 +30,18 @@ func (a calendarRollTablesAdapter) RollTable(ctx context.Context, campaignID, ta
 	}
 	return nil, nil
 }
+
+// RollTableIDByName finds a table by its exact name, for a restored table
+// roll whose old table id means nothing in this campaign. "" when none.
+func (a calendarRollTablesAdapter) RollTableIDByName(ctx context.Context, campaignID, name string) (string, error) {
+	doc, err := a.svc.Get(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	for _, t := range doc.Tables {
+		if t.Name == name {
+			return t.ID, nil
+		}
+	}
+	return "", nil
+}

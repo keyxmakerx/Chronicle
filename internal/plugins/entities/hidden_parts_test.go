@@ -16,11 +16,18 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 const (
 	plainHTML  = `<p>The harbor at dawn.</p>`
 	secretHTML = `<p>The harbor at dawn.</p><p><span data-secret="true">The mayor smuggles.</span></p>`
+	// hiddenMentionHTML names a page the test's readers can't open; the
+	// mayor's page is one they can.
+	hiddenMentionHTML  = `<p>The harbor at dawn, watched by <a data-mention-id="` + hiddenPageID + `" href="/campaigns/c1/entities/` + hiddenPageID + `">The smuggler king</a>.</p>`
+	visibleMentionHTML = `<p>The harbor at dawn, run by <a data-mention-id="` + mayorPageID + `" href="/campaigns/c1/entities/` + mayorPageID + `">The mayor</a>.</p>`
+	hiddenPageID       = "aaaaaaaa-0000-4000-8000-000000000001"
+	mayorPageID        = "aaaaaaaa-0000-4000-8000-000000000002"
 )
 
 // hiddenPartsSvc is a page in campaign c1 whose access and stored text the
@@ -53,6 +60,19 @@ func (s *hiddenPartsSvc) GetEntityTypeByID(_ context.Context, _ int) (*EntityTyp
 		return &EntityType{}, nil
 	}
 	return s.et, nil
+}
+
+// HideUnviewableMentions lets readers open only the mayor's page.
+func (s *hiddenPartsSvc) HideUnviewableMentions(_ context.Context, _ string, _ int, _ string, texts ...*string) (int, error) {
+	total := 0
+	for _, t := range texts {
+		if t != nil {
+			var n int
+			*t, n = sanitize.HideMentions(*t, func(id string) bool { return id == mayorPageID })
+			total += n
+		}
+	}
+	return total, nil
 }
 
 func (s *hiddenPartsSvc) EntryRev(_ context.Context, _ string) (int, error) { return 1, nil }
@@ -132,6 +152,9 @@ func TestEntryWithHiddenParts(t *testing.T) {
 		{"scribe, text with a secret", scribeCC(false), secretHTML, true},
 		{"scribe, plain text", scribeCC(false), plainHTML, false},
 		{"co-dm, text with a secret", scribeCC(true), secretHTML, false},
+		{"scribe, text naming a page they can't open", scribeCC(false), hiddenMentionHTML, true},
+		{"scribe, text naming a page they can open", scribeCC(false), visibleMentionHTML, false},
+		{"co-dm, text naming a hidden page", scribeCC(true), hiddenMentionHTML, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -152,8 +175,8 @@ func TestEntryWithHiddenParts(t *testing.T) {
 			if locked, _ := got["locked"].(bool); locked != tt.wantLocked {
 				t.Errorf("locked = %v, want %v", locked, tt.wantLocked)
 			}
-			if tt.wantLocked && strings.Contains(rec.Body.String(), "smuggles") {
-				t.Error("a Scribe was served the secret")
+			if tt.wantLocked && (strings.Contains(rec.Body.String(), "smuggle") || strings.Contains(rec.Body.String(), hiddenPageID)) {
+				t.Error("a Scribe was served the secret or the hidden page's name")
 			}
 
 			// The save over it is refused, and nothing is stored.
@@ -244,21 +267,26 @@ func TestRequireCreatableType(t *testing.T) {
 }
 
 func TestServedCopy(t *testing.T) {
-	stored := secretHTML
+	stored, notes := secretHTML, hiddenMentionHTML
 	et := &EntityType{Fields: []FieldDefinition{{Key: "gm_notes", GMOnly: true}}}
-	e := &Entity{ID: "e1", EntryHTML: &stored, FieldsData: map[string]any{"gm_notes": "x", "might": 2}}
+	e := &Entity{ID: "e1", EntryHTML: &stored, PlayerNotesHTML: &notes, FieldsData: map[string]any{"gm_notes": "x", "might": 2}}
+	h := &Handler{service: &hiddenPartsSvc{}}
 
-	got := servedCopy(scribeCC(false), e, et, "u1")
+	c, _ := hiddenPartsCtx(scribeCC(false), http.MethodGet, "")
+	got := h.servedCopy(c, scribeCC(false), e, et, "u1")
 	if strings.Contains(*got.EntryHTML, "smuggles") {
 		t.Error("the served copy kept the secret")
+	}
+	if strings.Contains(*got.PlayerNotesHTML, "smuggler king") || !strings.Contains(*got.PlayerNotesHTML, sanitize.HiddenMentionText) {
+		t.Errorf("the served copy named a hidden page: %q", *got.PlayerNotesHTML)
 	}
 	if _, ok := got.FieldsData["gm_notes"]; ok {
 		t.Error("the served copy kept the GM-only field")
 	}
-	if *e.EntryHTML != secretHTML || e.FieldsData["gm_notes"] != "x" {
+	if *e.EntryHTML != secretHTML || *e.PlayerNotesHTML != hiddenMentionHTML || e.FieldsData["gm_notes"] != "x" {
 		t.Error("the stored entity was changed")
 	}
-	if servedCopy(scribeCC(true), e, et, "u1") != e {
+	if h.servedCopy(c, scribeCC(true), e, et, "u1") != e {
 		t.Error("a co-dm is served the page as stored")
 	}
 }

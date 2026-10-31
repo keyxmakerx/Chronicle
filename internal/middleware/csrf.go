@@ -126,6 +126,10 @@ func CSRF() echo.MiddlewareFunc {
 			if strings.HasPrefix(req.URL.Path, "/api/") || req.URL.Path == "/ws" {
 				return next(c)
 			}
+			// Browsers send CSP reports with no token; the endpoint only logs.
+			if req.URL.Path == CSPReportPath && req.Method == http.MethodPost {
+				return next(c)
+			}
 
 			isSecure := schemeIsSecure(req)
 
@@ -162,7 +166,9 @@ func CSRF() echo.MiddlewareFunc {
 			// Check header first (HTMX/AJAX), then form field (traditional forms).
 			submittedToken := req.Header.Get(csrfHeaderName)
 			if submittedToken == "" {
-				submittedToken = req.FormValue(csrfFormField)
+				// The body only: a token in the address would end up in logs
+				// and Referer headers.
+				submittedToken = req.PostFormValue(csrfFormField)
 			}
 
 			// Use constant-time comparison to prevent timing side-channel attacks

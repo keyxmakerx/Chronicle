@@ -180,3 +180,32 @@ func writeFile(t *testing.T, dir, name, body string) {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
+
+// TestLoadDescriptor_PathsStayInside pins that a release's descriptor can't
+// point the install hook or the server outside the module's own folder, or
+// its endpoints at another host.
+func TestLoadDescriptor_PathsStayInside(t *testing.T) {
+	refused := []string{
+		`{"schemaVersion": 1, "package": {"moduleJsonPath": "../../systems/x/1.0.0/manifest.json"}}`,
+		`{"schemaVersion": 1, "package": {"moduleJsonPath": "/etc/chronicle/config.json"}}`,
+		`{"schemaVersion": 1, "package": {"moduleJsonPath": "dist\\..\\..\\x.json"}}`,
+		`{"schemaVersion": 1, "serving": {"zipContentRoot": "../"}}`,
+		`{"schemaVersion": 1, "serving": {"manifestEndpoint": "https://evil.example/m.json"}}`,
+		`{"schemaVersion": 1, "serving": {"manifestEndpoint": "//evil.example/m.json"}}`,
+		`{"schemaVersion": 1, "serving": {"downloadEndpoint": "/x@evil.example/m.zip"}}`,
+		`{"schemaVersion": 1, "serving": {"downloadEndpoint": "relative/m.zip"}}`,
+	}
+	for _, body := range refused {
+		dir := t.TempDir()
+		writeFile(t, dir, descriptorFilename, body)
+		if _, err := loadDescriptor(dir); err == nil {
+			t.Errorf("accepted %s", body)
+		}
+	}
+	dir := t.TempDir()
+	writeFile(t, dir, descriptorFilename,
+		`{"schemaVersion": 1, "package": {"moduleJsonPath": "dist/module.json"}, "serving": {"zipContentRoot": "dist", "manifestEndpoint": "/custom/{campaign_id}?t={token}"}}`)
+	if _, err := loadDescriptor(dir); err != nil {
+		t.Fatalf("a descriptor with inside paths was refused: %v", err)
+	}
+}

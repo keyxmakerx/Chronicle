@@ -864,6 +864,9 @@ func (s *drawingService) CreateToken(ctx context.Context, input CreateTokenInput
 	if err := validateTokenImagePath(input.ImagePath); err != nil {
 		return nil, err
 	}
+	if err := s.verifyTokenImageMedia(ctx, input.MapID, input.ImagePath); err != nil {
+		return nil, err
+	}
 
 	t := &Token{
 		ID:             generateID(),
@@ -943,6 +946,7 @@ func (s *drawingService) UpdateToken(ctx context.Context, id, mapID string, isDM
 	if input.Name != "" {
 		t.Name = input.Name
 	}
+	storedImagePath := t.ImagePath
 	t.ImagePath = input.ImagePath.Ptr(t.ImagePath)
 	// Validate only a newly-supplied image_path, never the merged/stored
 	// value: per the partial-update contract, an update that omits
@@ -952,6 +956,11 @@ func (s *drawingService) UpdateToken(ctx context.Context, id, mapID string, isDM
 	if input.ImagePath.Present() {
 		if err := validateTokenImagePath(t.ImagePath); err != nil {
 			return err
+		}
+		if t.ImagePath != nil && (storedImagePath == nil || *storedImagePath != *t.ImagePath) {
+			if err := s.verifyTokenImageMedia(ctx, t.MapID, t.ImagePath); err != nil {
+				return err
+			}
 		}
 	}
 	t.X = input.X.Val(t.X)

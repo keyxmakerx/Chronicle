@@ -622,7 +622,7 @@ func (s *campaignService) SaveAppearance(ctx context.Context, campaignID string,
 			return err
 		}
 	}
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // AdoptMaterialPageLook stores the Material page look for a campaign whose
@@ -645,7 +645,7 @@ func (s *campaignService) AdoptMaterialPageLook(ctx context.Context, campaignID 
 	if err != nil {
 		return false, apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
-	if err := s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON)); err != nil {
+	if err := s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON); err != nil {
 		return false, err
 	}
 	return true, nil

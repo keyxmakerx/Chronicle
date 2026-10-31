@@ -10,11 +10,12 @@ import (
 // rules editor previews them (craft_rules_logic.js condOn, ruleOn and
 // verdict): drafts count for nothing, a certain "can't be made" holds the
 // roll, with any "only then" rule at least one must be on, and an edge and
-// a bane cancel. The roll knows two things the preview cannot: the bench it
-// was worked at, and the chance, which is rolled here. Time of day,
-// ingredient marks and the maker's skills are still unknown when a roll is
-// made, so a rule needing one stays "maybe", as in the preview: it never
-// holds a roll and never adds to one. TODO(#1863)
+// a bane cancel. The roll knows what the preview cannot: the bench it was
+// worked at, the maker's skills, the time of day by the calendar's clock,
+// and the chance, which is rolled here. Ingredient marks are still unknown,
+// because an item in a pack keeps nothing of its own, so a rule needing one
+// stays "maybe", as in the preview: it never holds a roll and never adds to
+// one. TODO(#1883)
 
 // tri is a condition's answer on the day.
 type tri int
@@ -51,10 +52,17 @@ func (d *Day) moon(name string) *DayMoon {
 	return nil
 }
 
-// condOn answers one condition on the day, worked at bench: "" for none,
-// nil when not yet known (a project listed before it is worked). With no
-// calendar every calendar condition is off, as a name the calendar lacks is.
-func condOn(d *Day, c Cond, bench *string) tri {
+// Worked is what a roll knows of how it was worked: the bench's name ("" for
+// none) and the maker's skills, lowercased (nil when the sheet lists none).
+// A nil *Worked is a project listed before it is worked.
+type Worked struct {
+	Bench  string
+	Skills map[string]bool
+}
+
+// condOn answers one condition on the day, as worked. With no calendar
+// every calendar condition is off, as a name the calendar lacks is.
+func condOn(d *Day, c Cond, w *Worked) tri {
 	yes := func(b bool) tri {
 		if b {
 			return on
@@ -96,20 +104,33 @@ func condOn(d *Day, c Cond, bench *string) tri {
 	case "season":
 		return yes(d != nil && d.Season != "" && d.Season == c.Season)
 	case "bench":
-		if bench == nil {
+		if w == nil {
 			return maybe
 		}
-		return yes(*bench != "" && *bench == c.Bench)
+		return yes(w.Bench != "" && w.Bench == c.Bench)
+	case "time":
+		if d == nil {
+			return off
+		}
+		if d.Time == "" {
+			return maybe
+		}
+		return yes(d.Time == c.Time)
+	case "maker":
+		if w == nil || w.Skills == nil {
+			return maybe
+		}
+		return yes(w.Skills[strings.ToLower(strings.TrimSpace(c.Skill))])
 	}
 	return maybe
 }
 
 // ruleOn is off when any condition is off, maybe when one can't be known,
 // and on otherwise.
-func ruleOn(d *Day, r Rule, bench *string) tri {
+func ruleOn(d *Day, r Rule, w *Worked) tri {
 	out := on
 	for _, c := range r.When {
-		switch condOn(d, c, bench) {
+		switch condOn(d, c, w) {
 		case off:
 			return off
 		case maybe:
@@ -143,14 +164,14 @@ func ruleWords(r Rule, director bool) string {
 // hold says why a recipe can't be worked on the day, "" when it can: a
 // certain "can't be made", or "only then" rules none of which is on. Only
 // rules that are certain hold a roll.
-func hold(d *Day, rules []Rule, bench *string, director bool) string {
+func hold(d *Day, rules []Rule, w *Worked, director bool) string {
 	var only []Rule
 	onlyOn := false
 	for _, r := range rules {
 		if r.Draft {
 			continue
 		}
-		v := ruleOn(d, r, bench)
+		v := ruleOn(d, r, w)
 		switch r.Then.Kind {
 		case "only":
 			only = append(only, r)
@@ -176,10 +197,10 @@ type fired struct {
 // those that took effect, leaving out "only then" and certain "can't be
 // made" rules, which hold decided before the roll. roll(n) is a die of n
 // sides.
-func effects(d *Day, rules []Rule, bench *string, roll func(n int) int) []fired {
+func effects(d *Day, rules []Rule, w *Worked, roll func(n int) int) []fired {
 	var out []fired
 	for _, r := range rules {
-		if r.Draft || r.Then.Kind == "only" || ruleOn(d, r, bench) != on {
+		if r.Draft || r.Then.Kind == "only" || ruleOn(d, r, w) != on {
 			continue
 		}
 		n := chanceIn(r.Chance)

@@ -58,7 +58,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 				<div class="flex items-center gap-2">
 					<span class="text-xs text-fg-muted">Last 24 hours</span>
 					<button onclick="location.reload()" class="btn-secondary text-sm">
-						<i class="fa-solid fa-refresh mr-1"></i> Refresh
+						<i class="fa-solid fa-refresh"></i> Refresh
 					</button>
 				</div>
 			</div>
@@ -81,16 +81,14 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 				<div class="card p-5">
 					<h3 class="text-sm font-semibold text-fg mb-3">Request Volume (24h)</h3>
-					<div class="h-48" id="request-chart"
+					<div class="h-48" id="request-chart" data-widget="mini-bar-chart"
 						data-points={ timeSeriesJSON(data.RequestSeries) }>
-						<canvas></canvas>
 					</div>
 				</div>
 				<div class="card p-5">
 					<h3 class="text-sm font-semibold text-fg mb-3">Security Events (24h)</h3>
-					<div class="h-48" id="security-chart"
+					<div class="h-48" id="security-chart" data-widget="mini-bar-chart"
 						data-points={ timeSeriesJSON(data.SecuritySeries) }>
-						<canvas></canvas>
 					</div>
 				</div>
 			</div>
@@ -119,7 +117,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 					<div class="flex items-center justify-between">
 						<p class="text-xs text-fg-muted">One origin per line (e.g., <code class="text-xs">http://localhost:30000</code>)</p>
 						<button type="submit" class="btn-primary text-sm">
-							<i class="fa-solid fa-save mr-1"></i> Save Origins
+							<i class="fa-solid fa-save"></i> Save Origins
 						</button>
 					</div>
 				</form>
@@ -322,36 +320,6 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 				</div>
 			</div>
 		</div>
-
-		// Chart initialization script.
-		<script>
-		document.addEventListener('DOMContentLoaded', function() {
-			// Simple bar chart rendering using CSS — no Chart.js dependency.
-			function renderMiniChart(containerId) {
-				const container = document.getElementById(containerId);
-				if (!container) return;
-				const points = JSON.parse(container.dataset.points || '[]');
-				if (points.length === 0) {
-					container.innerHTML = '<p class="text-sm text-fg-muted italic text-center pt-16">No data available</p>';
-					return;
-				}
-				const maxVal = Math.max(...points.map(p => p.y), 1);
-				const barWidth = Math.max(100 / points.length - 1, 2);
-				let html = '<div class="flex items-end h-full gap-px">';
-				points.forEach(p => {
-					const height = Math.max((p.y / maxVal) * 100, 2);
-					html += `<div class="flex-1 flex flex-col items-center justify-end h-full">
-						<div class="w-full bg-accent/70 rounded-t" style="height: ${height}%" title="${p.x}: ${p.y}"></div>
-						<span class="text-[9px] text-fg-muted mt-1 truncate w-full text-center">${p.x}</span>
-					</div>`;
-				});
-				html += '</div>';
-				container.innerHTML = html;
-			}
-			renderMiniChart('request-chart');
-			renderMiniChart('security-chart');
-		});
-		</script>
 	}
 }
 

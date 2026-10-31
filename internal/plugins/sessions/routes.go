@@ -45,11 +45,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.POST("/sessions", h.CreateSession, campaigns.RequireRole(campaigns.RoleScribe))
 	// Move (schedule-changing edits) and delete run a game night, so a
 	// co-Director (the IsDmGranted capability — not necessarily Scribe role,
-	// see campaigns.CampaignContext.CanAuthorDmOnly) gets them too, per the
-	// operator's server-change #4 ("Co-Directors run game nights with the
-	// Director's controls: move, cancel, restore, propose and confirm").
-	// scribeOrCoDirector/ownerOrCoDirector below are declared once and reused
-	// by every route this build widens the same way.
+	// see campaigns.CampaignContext.CanAuthorDmOnly) gets them too, so Co-Directors
+	// run game nights with the Director's controls (move, cancel, restore,
+	// propose, confirm). scribeOrCoDirector/ownerOrCoDirector below are
+	// declared once and reused by every route widened the same way.
 	cg.PUT("/sessions/:sid", h.UpdateSessionAPI, scribeOrCoDirector())
 	cg.DELETE("/sessions/:sid", h.DeleteSessionAPI, ownerOrCoDirector())
 	cg.GET("/sessions/:sid/recap", h.GetRecapAPI, campaigns.RequireRole(campaigns.RolePlayer))

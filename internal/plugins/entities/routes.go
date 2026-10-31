@@ -148,6 +148,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/sidebar-nodes/:nid", h.RenameSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/sidebar-nodes/:nid/reorder", h.ReorderSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/sidebar-nodes/:nid", h.DeleteSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// How a category, folder or page orders the rows inside it, and moving a
+	// row among its siblings when that order is by hand (Scribe+; a page
+	// also needs its own edit check, made in the handler).
+	cg.PUT("/sidebar-order", h.SetSidebarOrderAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/sidebar-order/move", h.MoveSidebarRowAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Sub-category type reorder (Owner only): dense re-sequence of a sub-type
 	// among its parent's children. Owner-gated to match every other
@@ -202,6 +207,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 	pub.GET("/entities", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/entities/search", h.SearchAPI, campaigns.RequireViewAccess())
+	pub.GET("/entities/viewable", h.ViewableIDsAPI, campaigns.RequireViewAccess())
 	pub.GET("/search", h.SearchPageHandler, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireViewAccess())

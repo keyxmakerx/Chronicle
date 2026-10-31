@@ -21,9 +21,8 @@
  * of the broader canEdit/canAuthorDmOnly — a co-Director who can reach this
  * file will still see that one affordance 403 if this gating is loosened
  * without a matching routes.go change. Creating an event kind, toggling a
- * moon's hidden flag and managing eras used to be narrower the same way;
- * their routes are now CanAuthorDmOnly too, so they gate on
- * `view.canAuthorDmOnly` like every other co-Director write in this file.
+ * moon's hidden flag and managing eras gate on `view.canAuthorDmOnly` like
+ * every other co-Director write in this file.
  */
 (function () {
   'use strict';
@@ -1201,9 +1200,8 @@
       // stays the honest plain text this textarea can actually edit, and
       // description_html is rebuilt from that same text so the view (which
       // prefers description_html — calendar_view.js's _evpHTML/showGlance)
-      // renders what was typed instead of a stale rich-text render left over
-      // from before this save (description_html is patch.Field, so leaving
-      // it out of the body would PRESERVE that old HTML, not clear it —
+      // renders what was typed (description_html is patch.Field, so leaving it
+      // out of the body would PRESERVE the old HTML, not clear it —
       // UpdateEventInput's doc comment, model.go).
       var descText = form.description.value;
       var body = {

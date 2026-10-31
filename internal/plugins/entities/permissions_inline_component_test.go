@@ -33,7 +33,7 @@ import (
 func TestEntityCreateFormComponent_NoIsPrivateCheckbox(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}}
 	entityTypes := []EntityType{{ID: 1, Name: "Character", Enabled: true}}
-	component := EntityCreateFormComponent(cc, entityTypes, 1, nil, nil, "csrf", "")
+	component := EntityCreateFormComponent(cc, entityTypes, 1, nil, nil, "", "csrf", "")
 
 	var buf bytes.Buffer
 	if err := component.Render(context.Background(), &buf); err != nil {

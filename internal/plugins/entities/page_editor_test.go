@@ -132,8 +132,12 @@ func TestBlockTitle_InPageEditor(t *testing.T) {
 			if got := strings.Contains(html, "data-pe-drape"); got != tc.wantSheet {
 				t.Errorf("sheet = %v, want %v", got, tc.wantSheet)
 			}
-			if got := strings.Contains(html, "Delete page…"); got != tc.wantDelete {
+			if got := strings.Contains(html, "Delete page"); got != tc.wantDelete {
 				t.Errorf("Delete page = %v, want %v", got, tc.wantDelete)
+			}
+			// The Trash and its Undo make a confirm in front of the delete redundant.
+			if strings.Contains(html, "Move this page and its sub-pages") {
+				t.Error("page delete still asks a confirm before an undoable move to the Trash")
 			}
 			if !tc.wantSheet {
 				return

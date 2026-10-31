@@ -249,19 +249,35 @@
     r.materials.splice(i, 1);
     r.steps.forEach(function (s) { if (s.material === i) delete s.material; else if (s.material > i) s.material--; });
   }
-  /* Each tag's tint on the bench, and the brew's colours when a recipe
-     names none. */
-  var TAG_COLOR = {herb: '#6a9c3a', liquid: '#8fbbe0', metal: '#8d939c', hide: '#9a6a3e', bone: '#e3d6b8', magic_essence: '#a77cf0', remnant_part: '#6d45c4', body_part: '#b3263a', magic_item: '#7fd6d2'};
+  /* What a material wears, {picture, tint}: a kind's picture as the campaign
+     set it (lib.tags), or an item's own, else its first kind's. Pass an
+     item from the catalog ({tags, picture}), a kind key, or a recipe's
+     material with the catalog's items. picture is '' when there is none. */
+  function matPicture(lib, x, items) {
+    if (x && typeof x === 'object' && (x.itemId || x.tag)) {
+      if (x.tag) return matPicture(lib, x.tag);
+      var it = (items || {})[x.itemId];
+      return it ? matPicture(lib, it) : {picture: '', tint: '#8a8a8a'};
+    }
+    if (typeof x === 'string') {
+      var t = find(lib.tags, x);
+      return t ? {picture: t.picture, tint: t.tint} : {picture: '', tint: '#8a8a8a'};
+    }
+    if (x && x.picture && x.picture.picture) return {picture: x.picture.picture, tint: x.picture.tint};
+    return x && x.tags && x.tags.length ? matPicture(lib, x.tags[0]) : {picture: '', tint: '#8a8a8a'};
+  }
+  /* The brew's colours when a recipe names none. */
   var BENCH_COLORS = {base: '#cfe3f2', paste: '#7e1a2a', mid: '#a63a4a', final: '#ff4d6d'};
 
   /* A recipe a hero knows (the server's CraftRecipe) as the bench engine
-     plays it: each material an ingredient keyed by its item or tag, tinted
-     by its tag, and the brew's colours. start is the project's points. */
+     plays it: each material an ingredient keyed by its item or tag, wearing
+     the picture the server worked out for it, and the brew's colours.
+     start is the project's points. */
   function benchRecipe(r, hero, start) {
     var items = {}, keyOf = [], col = r.colors || {};
     (r.needs || []).forEach(function (m, i) {
-      var k = m.itemId ? 'i' + m.itemId.replace(/[^a-zA-Z0-9]/g, '') : 't' + m.tag, t = m.tag || (m.tags || [])[0];
-      if (!items[k]) items[k] = {name: m.tag ? m.name.charAt(0).toUpperCase() + m.name.slice(1) : m.name, color: (t && TAG_COLOR[t]) || '#8a8a8a', desc: m.tag ? 'Your pick from the pack.' : ''};
+      var k = m.itemId ? 'i' + m.itemId.replace(/[^a-zA-Z0-9]/g, '') : 't' + m.tag, pic = m.picture || {};
+      if (!items[k]) items[k] = {name: m.tag ? m.name.charAt(0).toUpperCase() + m.name.slice(1) : m.name, color: pic.tint || '#8a8a8a', picture: pic.picture || '', desc: m.tag ? 'Your pick from the pack.' : ''};
       keyOf[i] = k;
     });
     var stat = String(r.roll || '').split(' + ')[1] || '';
@@ -292,5 +308,5 @@
   window.CraftingLib = {esc: esc, clone: clone, find: find, num: num, tagLabel: tagLabel, matTags: matTags, matName: matName, stepKind: stepKind, benchKind: benchKind,
     toolName: toolName, stepTool: stepTool, stepCheck: stepCheck, checks: checks, methodLine: methodLine, rollWords: rollWords, templateName: templateName,
     book: book, bookHTML: bookHTML, ruleSentence: ruleSentence, money: money, applyTemplate: applyTemplate, newStep: newStep, removeMaterial: removeMaterial, input: input,
-    TAG_COLOR: TAG_COLOR, BENCH_COLORS: BENCH_COLORS, benchRecipe: benchRecipe, progress: progress};
+    matPicture: matPicture, BENCH_COLORS: BENCH_COLORS, benchRecipe: benchRecipe, progress: progress};
 })();

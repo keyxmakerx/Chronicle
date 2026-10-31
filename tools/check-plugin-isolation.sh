@@ -310,7 +310,7 @@ ${violations}
 
 Plugin-name string literals must live inside the owning plugin's directory
 or pass through the plugin-registration interface (PluginSlug const, service
-interfaces, etc.). Per cordinator/decisions/2026-05-21-core-tenets.md §T-B2.
+interfaces, etc.). Tenet T-B2 (plugin isolation).
 
 Existing violations in main are grandfathered. This guard only catches NEW
 additions. If your change is a legitimate cross-plugin reference (e.g. the

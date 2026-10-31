@@ -34,9 +34,9 @@ templ BlockStanding(campaignID, entityID, entityName string, v *StandingView) {
 		data-entity-name={ entityName }
 		data-dm={ standingDigit(v.CanEdit) }
 		data-current={ first.Key }
+		data-json={ templ.JSONString(v) }
 		aria-label="Standing"
 	>
-		@templ.JSONScript("sg-data-"+entityID, v)
 		<div class="sg-h">
 			<h2 class="cb-head sg-title">
 				<i class="fa-solid fa-scale-balanced" aria-hidden="true"></i>

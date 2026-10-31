@@ -159,7 +159,7 @@ templ contentTemplatesTab(cc *CampaignContext) {
 			<div>
 				<h2 class="text-base font-semibold text-fg mb-0.5">Content Templates</h2>
 				<p class="text-xs text-fg-secondary">
-					Pre-fill the editor when creating new pages. Templates appear in the create form and the editor's "/" menu.
+					Pre-fill the page editor when creating new pages. Templates appear in the create form and the page editor's "/" menu.
 				</p>
 			</div>
 		</div>
@@ -292,7 +292,7 @@ templ contentTemplatesTab(cc *CampaignContext) {
 					@click="creating = true"
 					class="btn-primary text-sm"
 				>
-					<i class="fa-solid fa-plus mr-1.5"></i> New Template
+					<i class="fa-solid fa-plus"></i> New Template
 				</button>
 			</div>
 
@@ -356,7 +356,7 @@ templ contentTemplatesTab(cc *CampaignContext) {
 
 					<div class="flex items-center gap-3">
 						<button @click="save()" class="btn-primary text-sm">
-							<i class="fa-solid fa-check mr-1.5"></i>
+							<i class="fa-solid fa-check"></i>
 							<span x-text="editing ? 'Update' : 'Create'"></span>
 						</button>
 						<button @click="cancel()" class="btn-secondary text-sm">Cancel</button>

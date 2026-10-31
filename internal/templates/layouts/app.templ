@@ -47,6 +47,9 @@ templ fullApp(title string) {
 	@Base(title) {
 		<!-- Global HTMX loading indicator (thin bar at top of viewport) -->
 		<div id="htmx-indicator" class="htmx-indicator"></div>
+		<!-- The first stop for the keyboard: past the sidebar and top bar
+		     straight to the page. Hidden until it has focus. -->
+		<a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[10001] focus:px-3 focus:py-2 focus:rounded-md focus:bg-surface focus:text-accent focus:shadow-md">Skip to content</a>
 		<!-- Escape closes the phone drawer (unless something on top already took
 		     the key) and hands focus back to the menu button that opened it. -->
 		<div
@@ -147,7 +150,7 @@ templ fullApp(title string) {
 				<!-- Page content (scrollable). The row also holds the pages opened
 				     beside it (static/js/beside.js). -->
 				<div id="beside-row" class="flex-1 flex min-h-0 min-w-0">
-					<main class="flex-1 min-w-0 overflow-y-auto px-3 py-3 md:px-5 md:py-4 bg-surface" id="main-content">
+					<main class="flex-1 min-w-0 overflow-y-auto px-3 py-3 md:px-5 md:py-4 bg-surface focus:outline-none" id="main-content" tabindex="-1">
 						if InCampaign(ctx) {
 							<!-- Which sidebar row this page belongs to, and its name. A
 							     boosted navigation swaps only #main-content, so this is
@@ -397,9 +400,6 @@ templ adminNavRow(it AdminNavItem, makeRoom bool) {
 		}
 	</a>
 }
-
-// CampaignSidebarNav is no longer used — its content has been inlined into
-// the zone-based Sidebar() layout for proper drill-down isolation.
 
 // DefaultSidebarNav renders generic navigation when not inside a campaign.
 templ DefaultSidebarNav() {
@@ -869,7 +869,7 @@ templ Topbar() {
 			</div>
 
 			<!-- Inline search bar (hidden by default, shown when search is active) -->
-			<div id="topbar-search" class="flex-1 items-center min-w-0 hidden">
+			<div id="topbar-search" class="flex-1 items-center min-w-0 hidden" data-can-create={ fmt.Sprint(GetCampaignRole(ctx) >= 2) }>
 				<div class="relative w-full max-w-lg mx-auto">
 					<input
 						id="topbar-search-input"
@@ -960,6 +960,24 @@ templ Topbar() {
 				</button>
 			}
 
+			if InCampaign(ctx) && IsAuthenticated(ctx) && !InSiteAdmin(ctx) && GetCampaignRole(ctx) >= 1 {
+				<!-- The Table tab: the roll log, the dice and the roll notice.
+				     The table widget (rolls plugin) builds the drawer on first
+				     open and listens for rolls on the campaign's socket. -->
+				<div
+					class="tt-host"
+					data-widget="table"
+					data-campaign-id={ GetCampaignID(ctx) }
+					data-user-id={ GetUserID(ctx) }
+					data-director={ fmt.Sprint(GetCampaignRole(ctx) >= 3 || IsDmGranted(ctx)) }
+					data-gm-term={ GMTerm(ctx) }
+					data-css={ AssetURL("/static/plugins/rolls/css/table.css") }
+				>
+					<button type="button" class="tt-tab" data-tt-tab aria-expanded="false" aria-controls="tt-drawer" title="The table: rolls and dice (T)">
+						Table<span class="tt-n" data-tt-count hidden></span>
+					</button>
+				</div>
+			}
 			if IsAuthenticated(ctx) {
 				<!-- Notification bell. Server-rendered button + badge;
 				     the badge count refreshes via an HTMX poll, the dropdown is

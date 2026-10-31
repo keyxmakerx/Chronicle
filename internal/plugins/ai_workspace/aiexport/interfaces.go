@@ -21,6 +21,12 @@ type EntityLister interface {
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
 }
 
+// PageFilter returns which of the given pages a viewer may open, in one
+// batch. The entities service implements it.
+type PageFilter interface {
+	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
+}
+
 // NoteLister mirrors notes.NoteService for the listing path. The owner-side
 // filter (own + shared + explicit share-with-owner) is already enforced
 // inside notes.Service.ListByUserAndCampaign, so the aiexport renderer does

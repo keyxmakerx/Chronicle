@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -29,6 +30,11 @@ type ExtensionService interface {
 	DisableForCampaign(ctx context.Context, campaignID, extID string) error
 	GetCampaignExtension(ctx context.Context, campaignID, extID string) (*CampaignExtension, error)
 	PreviewContributes(ctx context.Context, extID string) (*ManifestContributes, error)
+
+	// LoadEnabledPlugins loads the WASM plugins of every active extension a
+	// campaign has enabled. Plugins live only in memory, so this runs at
+	// startup; it returns how many loaded.
+	LoadEnabledPlugins(ctx context.Context, loader WASMPluginLoader) int
 
 	// Provenance.
 	RecordProvenance(ctx context.Context, campaignID, extensionID, tableName, recordID, recordType string) error
@@ -93,6 +99,9 @@ func (s *extensionService) Install(ctx context.Context, zipPath, userID string) 
 	}
 	if existing != nil {
 		return nil, apperror.NewConflict(fmt.Sprintf("extension %q is already installed (version %s)", manifest.ID, existing.Version))
+	}
+	if err := s.requireOwnTablePrefix(ctx, manifest.ID); err != nil {
+		return nil, err
 	}
 
 	// Validate extracted content files (CSS, SVG safety).
@@ -199,7 +208,7 @@ func (s *extensionService) Uninstall(ctx context.Context, extID string) error {
 			}
 		}
 		// Safety net: drop any remaining ext_<slug>_* tables.
-		if err := s.migRunner.DropExtensionTables(ctx, slug); err != nil {
+		if err := s.migRunner.DropExtensionTables(ctx, slug, s.otherSlugs(ctx, ext.ExtID)); err != nil {
 			slog.Warn("failed to drop extension tables",
 				slog.String("ext_id", ext.ExtID),
 				slog.Any("error", err),
@@ -344,6 +353,10 @@ func (s *extensionService) Rescan(ctx context.Context) (int, error) {
 		if existing != nil {
 			continue
 		}
+		if err := s.requireOwnTablePrefix(ctx, manifest.ID); err != nil {
+			slog.Warn("skipping extension", slog.String("dir", entry.Name()), slog.Any("error", err))
+			continue
+		}
 
 		// Validate content files.
 		extDir := filepath.Join(s.extDir, entry.Name())
@@ -433,7 +446,7 @@ func (s *extensionService) EnableForCampaign(ctx context.Context, campaignID, ex
 			return nil // Extension is enabled even if apply fails.
 		}
 
-		if err := s.applier.Apply(ctx, campaignID, ext, &manifest); err != nil {
+		if err := s.applier.Apply(ctx, campaignID, userID, ext, &manifest); err != nil {
 			slog.Warn("content application had errors",
 				slog.String("ext_id", ext.ExtID),
 				slog.Any("error", err),
@@ -469,6 +482,43 @@ func (s *extensionService) GetCampaignExtension(ctx context.Context, campaignID,
 	}
 
 	return s.repo.GetCampaignExtension(ctx, campaignID, ext.ID)
+}
+
+// LoadEnabledPlugins loads the WASM plugins of every active extension that at
+// least one campaign has enabled. A plugin that fails to load is logged and
+// skipped so one broken extension cannot keep the rest out.
+func (s *extensionService) LoadEnabledPlugins(ctx context.Context, loader WASMPluginLoader) int {
+	exts, err := s.repo.List(ctx)
+	if err != nil {
+		slog.Warn("listing extensions for plugin load", slog.Any("error", err))
+		return 0
+	}
+	loaded := 0
+	for _, ext := range exts {
+		if ext.Status != StatusActive {
+			continue
+		}
+		var manifest ExtensionManifest
+		if err := json.Unmarshal(ext.Manifest, &manifest); err != nil || manifest.Contributes == nil || len(manifest.Contributes.WASMPlugins) == 0 {
+			continue
+		}
+		n, err := s.repo.CountCampaignsUsing(ctx, ext.ID)
+		if err != nil || n == 0 {
+			continue
+		}
+		for _, wp := range manifest.Contributes.WASMPlugins {
+			if err := loader.Load(ctx, ext.ExtID, wp); err != nil {
+				slog.Warn("failed to load WASM plugin at startup",
+					slog.String("ext_id", ext.ExtID),
+					slog.String("slug", wp.Slug),
+					slog.Any("error", err),
+				)
+				continue
+			}
+			loaded++
+		}
+	}
+	return loaded
 }
 
 // PreviewContributes returns what an extension will contribute when enabled.
@@ -535,6 +585,46 @@ func (s *extensionService) ListData(ctx context.Context, campaignID, extensionID
 // sanitizeSlug converts an extension ID (e.g., "my-cool-extension") into a
 // safe table prefix component (e.g., "my_cool_extension") by replacing
 // non-alphanumeric characters with underscores.
+// requireOwnTablePrefix refuses an extension whose table prefix begins with,
+// or is the start of, an installed extension's: with "foo" installed,
+// "foo-bar" would own ext_foo_bar_* tables that "foo"'s migrations may also
+// name, and uninstalling "foo" would drop them.
+func (s *extensionService) requireOwnTablePrefix(ctx context.Context, extID string) error {
+	installed, err := s.repo.List(ctx)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing extensions: %w", err))
+	}
+	for _, other := range installed {
+		if other.ExtID != extID && tablePrefixesOverlap(sanitizeSlug(extID), sanitizeSlug(other.ExtID)) {
+			return apperror.NewConflict(fmt.Sprintf("extension %q can't be installed alongside %q: their table names would overlap", extID, other.ExtID))
+		}
+	}
+	return nil
+}
+
+// otherSlugs lists the slugs of every installed extension but extID. A failed
+// lookup returns nil, which only makes the uninstall safety net drop less.
+func (s *extensionService) otherSlugs(ctx context.Context, extID string) []string {
+	installed, err := s.repo.List(ctx)
+	if err != nil {
+		return nil
+	}
+	var slugs []string
+	for _, other := range installed {
+		if other.ExtID != extID {
+			slugs = append(slugs, sanitizeSlug(other.ExtID))
+		}
+	}
+	return slugs
+}
+
+// tablePrefixesOverlap reports whether one slug's table prefix starts the
+// other's.
+func tablePrefixesOverlap(a, b string) bool {
+	pa, pb := ExtensionTablePrefix(a), ExtensionTablePrefix(b)
+	return strings.HasPrefix(pa, pb) || strings.HasPrefix(pb, pa)
+}
+
 func sanitizeSlug(extID string) string {
 	var result []byte
 	for _, ch := range []byte(extID) {

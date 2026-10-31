@@ -29,10 +29,10 @@ templ GuestCodesCard(campaignID string, codes []GuestCode, fresh *NewGuestCode, 
 				<div class="flex flex-wrap items-center gap-3">
 					<span class="font-mono text-2xl font-semibold tracking-widest text-fg" aria-label={ "Code " + fresh.Code }>{ fresh.Code }</span>
 					<button type="button" class="btn-secondary text-sm" @click="copy(code, 'Code copied')">
-						<i class="fa-solid fa-copy mr-1" aria-hidden="true"></i>Copy
+						<i class="fa-solid fa-copy" aria-hidden="true"></i>Copy
 					</button>
 					<button type="button" class="btn-secondary text-sm" @click="copy(link, 'Invite link copied')">
-						<i class="fa-solid fa-link mr-1" aria-hidden="true"></i>Copy invite link
+						<i class="fa-solid fa-link" aria-hidden="true"></i>Copy invite link
 					</button>
 				</div>
 				<p class="text-xs text-fg-secondary mt-2">

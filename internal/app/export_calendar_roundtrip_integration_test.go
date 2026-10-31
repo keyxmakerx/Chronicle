@@ -190,7 +190,7 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 	}
 	visRules := `{"denied_users":["player-1"]}`
 	if _, err := calSvc.CreateEvent(ctx, srcCal.ID, srcCampaignID, calendar.CreateEventInput{
-		Name: "Secret War Council", Year: 998, Month: 3, Day: 1,
+		Name: "Secret War Council", Year: 998, Month: 2, Day: 1,
 		Visibility: "dm_only", VisibilityRules: &visRules, CanAuthorDmOnly: true,
 	}); err != nil {
 		t.Fatalf("create dm_only event: %v", err)
@@ -318,7 +318,7 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 	// event that just round-tripped — proves the import didn't accidentally
 	// widen visibility on write.
 	playerViewer := permissions.RequestViewer(permissions.RolePlayer, "player-2")
-	playerEvents, err := calSvc.ListEventsForMonth(ctx, dstCal.ID, dstCampaignID, 998, 3, playerViewer)
+	playerEvents, err := calSvc.ListEventsForMonth(ctx, dstCal.ID, dstCampaignID, 998, 2, playerViewer)
 	if err != nil {
 		t.Fatalf("list events for month (player): %v", err)
 	}

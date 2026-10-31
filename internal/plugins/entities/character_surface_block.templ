@@ -1,15 +1,17 @@
 // character_surface_block.templ — the `character_surface` layout block. It
 // renders the container the dynamic-surface frame mounts into, with the entity's
-// real data seeded inline (zero-flash, no extra fetch). The existing
-// `dynamic-surface` widget (dynamic_surface.js) reads the inline schema and
-// mounts it; the generic box renderers live in static/js/widgets/character_surface.js.
+// real data seeded in an attribute (zero-flash, no extra fetch; a script tag
+// would be stripped by a boosted swap). The existing `dynamic-surface` widget
+// (dynamic_surface.js) reads the schema and mounts it; the generic box renderers live in static/js/widgets/character_surface.js.
 
 package entities
 
 import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 
 templ blockCharacterSurface(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken, userID string) {
-	<div class="cs-character-surface" data-widget="dynamic-surface">
-		@templ.Raw(`<script type="application/json" data-surface-schema>` + CharacterSurfaceSchemaJSON(entity, entityType, cc.Campaign.ID, csrfToken, canWriteDescription(ctx, cc, entity), cc.CanAuthorDmOnly(), entity.IsOwnedBy(userID), surfacePictureEndpoint(ctx, cc, entity)) + `</script>`)
-	</div>
+	<div
+		class="cs-character-surface"
+		data-widget="dynamic-surface"
+		data-surface-schema={ CharacterSurfaceSchemaJSON(entity, entityType, cc.Campaign.ID, csrfToken, canWriteDescription(ctx, cc, entity), cc.CanAuthorDmOnly(), entity.IsOwnedBy(userID), surfacePictureEndpoint(ctx, cc, entity)) }
+	></div>
 }

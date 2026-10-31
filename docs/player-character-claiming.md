@@ -1,244 +1,122 @@
-# Player Character Claiming — Operator Guide
+# Player Character Claiming: Operator Guide
 
-This guide walks you through enabling and using the Player Character Claiming feature in Chronicle.
+Player Character Claiming links player-owned characters to campaign members.
+Players can claim unclaimed characters; Scribes and the owner can assign,
+reassign and clear ownership. The Characters page shows who owns what, and
+every change is in the audit log. It is optional and enabled per campaign.
 
-## Overview
+## Enable
 
-Player Character Claiming allows you to:
-- Link player-owned characters to campaign members
-- Let players claim unclaimed characters themselves
-- See who owns which character on the Characters dashboard
-- Reassign ownership between players or clear ownership entirely
-- Track all claiming activity in the audit log
+The campaign owner switches it on:
 
-The feature is **optional** and must be explicitly enabled per campaign.
+1. Open the campaign, then **Game & features** (under Manage;
+   `/campaigns/<id>/extensions`).
+2. Under **Features**, find **Player Character Claiming** and click **Enable**
+   (it shows **On** when active).
 
-## Quick Start
+### The "Player Characters" category
 
-### 1. Enable the Addon
+Enabling creates a **Player Characters** category nested under the default
+**Characters** category, claimable by default. It is not created if the
+campaign already has one or has a game system; then the system's character sheet
+and fields live on **Characters** itself, which is the claimable type. See it
+under **Customize** > **Manage Categories** (or **Manage** beside **Categories**
+on the campaign page).
 
-The addon is switched on per campaign, by the campaign owner:
+A campaign with a separate system character category (e.g. **Heroes**) beside
+**Characters** shows "Your characters are split between ..." on the addon's
+setup page. Answering the question there moves its pages into **Characters**,
+which takes over the sheet and fields. The old category is turned off, not
+deleted, and claims stay.
 
-1. Open your campaign and click **Game & features** (on the campaign page,
-   under Manage; the address is `/campaigns/<id>/extensions`)
-2. Under **Features**, find **Player Character Claiming**
-3. Click **Enable** (the button turns to **On** when active)
-4. The addon is now active for this campaign only
+A category with no explicit claimable setting counts as claimable when its
+preset is a character or its slug ends in `-character`. The checkbox below
+overrides that either way.
 
-### 2. A "Player Characters" Sub-Type Appears
+Scribes and the owner create characters with **New Page** in the Player
+Characters category, or in any category marked claimable.
 
-After enabling the addon:
-- Open the campaign's **Customize** page and click **Manage Categories**
-  (or use **Manage** beside **Categories** on the campaign page)
-- Enabling creates a category named **Player Characters**, nested under the
-  default **Characters** category, unless the campaign already has one or has a
-  game system. A game system's character sheet and fields go onto
-  **Characters** itself, which serves as the claimable type; no separate
-  category is made beside it
-  - The new category is claimable by default
-  - Characters in this category can be claimed by players
+## Player workflow
 
-**Characters split in two:** a campaign that has a separate system character
-category (for example **Heroes**) next to **Characters** shows a warning on the
-addon's setup page, "Your characters are split between ...". Answer the
-question there to move its pages into **Characters**. **Characters** takes over
-the sheet and fields, the old category is turned off, not deleted, and claims
-stay as they are.
+1. The player opens an unclaimed character and sees "This character is
+   unclaimed." with a **Claim character** button.
+2. Clicking it reloads the page with **Claimed by <PlayerName>**.
+3. The character appears in the **Yours** band of the **Characters** page (and
+   in **The Party** band if its category is on the party list), the page shows
+   the owner's name to everyone who can see it, and the claim is logged.
 
-**Note:** A category with no explicit claimable setting counts as claimable
-when its preset is a character or its slug ends in `-character`; the checkbox
-described under Setup below overrides that either way.
+A player can claim only a character they can see; claiming one you already own
+changes nothing. Claiming one owned by someone else shows an error; only a
+Scribe or the owner can reassign.
 
-### 3. Add Player Characters
-
-Scribes and the owner create characters in the Player Characters category:
-1. Go to the **Player Characters** category
-2. Click **New Page**
-3. Fill in the name, description, and fields as normal
-4. Save
-
-**Alternatively:** Create characters in any category and edit the category
-settings to mark it as claimable (see §Setup below).
-
-## Player Workflow: Claiming a Character
-
-Once a character is created and unclaimed:
-
-1. **Player opens the character page**
-   - They see a banner at the top: "This character is unclaimed." with a
-     **Claim character** button
-
-2. **Player clicks the claim button**
-   - The page reloads and the banner reads **"Claimed by <PlayerName>"**
-   - The character is now linked to the player's account
-
-3. **Result**
-   - The character appears in the **Yours** band at the top of the
-     **Characters** page, and in **The Party** band if its category is on the
-     party list
-   - The character's page shows the owner's name to everyone who can see it
-   - The claim is recorded in the activity log
-
-A player can only claim a character they can see. Claiming a character you
-already own changes nothing.
-
-**Conflict resolution:** If a player tries to claim a character already claimed
-by someone else, they'll see an error. Only a Scribe or the owner can reassign
-ownership.
-
-## GM Workflow: Managing Ownership
-
-### Assign and Unclaim With the Players Box
+## GM workflow: the Players box
 
 On the **Characters** page, Scribes and the owner get a **Players** button in
-the Party head. It opens the **Players** box:
+the Party head:
 
-- One row per player, with the character they play as a chip. The **x** on a
-  chip unclaims it (the owner is cleared and the character can be claimed
-  again).
-- **Give a character** on a row opens a finder; type a name and pick a result.
-  Giving with nothing typed lists only free characters.
-- **Free to pick** holds playable characters with no owner. The **x** on one
-  takes it off the list. **Add a character** puts a character on the list.
-- A player with no character yet sees **Pick your character** above the
-  Party, listing the free characters they can see.
+- One row per player, with their character as a chip. The **x** on a chip
+  unclaims it (owner cleared, claimable again).
+- **Give a character** opens a finder; pick a result. With nothing typed it
+  lists only free characters. Reassigning is the same: pick the new player.
+- **Free to pick** holds playable characters with no owner. **x** removes one
+  from the list; **Add a character** adds one.
+- A player with no character sees **Pick your character** above the Party,
+  listing the free characters they can see.
 
-Reassigning is the same as giving: pick the new player. The activity log
-records the change under the acting member's name.
+## Claimable categories
 
-## Setup & Configuration
+Under **Customize** > **Manage Categories**:
 
-### Enable Claiming for an Existing Category
+- **Enable on an existing category:** **Edit** its card, check **Players can
+  claim entities of this type**, save.
+- **Disable:** uncheck it and save. The claim button disappears and its
+  characters leave the Players box.
+- **New claimable category:** in the add-category form, check the same box
+  (visible when the addon is on) and click **Add Category**.
 
-If you have an existing "Character" category and want to enable claiming:
+## Audit
 
-1. Open **Customize** → **Manage Categories**
-2. Find your Character category
-3. Click **Edit** on its card
-4. Check the box: **"Players can claim entities of this type"**
-5. Save
-6. Characters in this category are now claimable
+Owner only, at `/campaigns/<id>/activity`:
 
-### Disable Claiming for a Category
+| Action | Label | Example |
+|---|---|---|
+| `entity.claimed` | claimed | "Alice claimed Tyne" |
+| `entity.owner_changed` | reassigned owner of | "GM Bob reassigned owner of Tyne" |
 
-1. Open **Customize** → **Manage Categories**
-2. Find the category (e.g., "Player Characters")
-3. Click **Edit**
-4. Uncheck: **"Players can claim entities of this type"**
-5. Save
-6. The claim button will no longer appear on characters in this category
-7. Its characters no longer appear in the Players box
+The new owner's ID and display name (or `cleared`) are stored with the entry
+but not shown in the feed.
 
-### Create a Custom Claimable Category
+## Disabling
 
-1. Open **Customize** → **Manage Categories**
-2. Use the add-category form at the top
-3. Name it (e.g., "Adventurers", "Company Members")
-4. When the addon is enabled, a checkbox appears: **"Players can claim entities of this type"**
-5. Check it to allow claiming for this new category
-6. Click **Add Category**
+Click **On** beside Player Character Claiming under **Game & features**. Then:
 
-## Audit & Accountability
+- Claim buttons, the Players button and box, and the category claim toggles are
+  hidden, and claim and reassign requests are refused.
+- A character that already has an owner still shows "Claimed by ...".
+- Ownership records are kept; re-enabling shows everything again.
 
-All claiming and ownership changes are recorded in the campaign's activity log
-(owner only; open **/campaigns/<id>/activity**):
-
-### Claiming Activity
-
-When a player claims a character:
-- **Action:** `entity.claimed`
-- **Label:** "claimed"
-- **Entry:** "Alice claimed Tyne"
-- **Visible in:** The activity log
-
-### Ownership Reassignment
-
-When a GM reassigns ownership:
-- **Action:** `entity.owner_changed`
-- **Label:** "reassigned owner of"
-- **Entry:** "GM Bob reassigned owner of Tyne"
-- **Visible in:** The activity log
-- **Details:** The new owner's ID and display name (or `cleared`) are stored
-  with the entry but not shown in the feed
-
-## Disabling the Feature
-
-### Temporarily Hide Claiming UI
-
-If you disable the addon:
-1. Go to **Game & features** for the campaign
-2. Click **On** beside Player Character Claiming
-3. The claiming controls disappear:
-   - Claim buttons on character pages are hidden
-   - The Players button and box on the Characters page are hidden
-   - Claiming toggles disappear from category settings
-   - The claim and reassign requests are refused
-   - A character that already has an owner still shows "Claimed by ..."
-
-4. Existing ownership records are preserved
-5. Re-enabling the addon shows everything again
-
-**Note:** Toggling off does NOT delete ownership data. Owners remain linked
-to their characters; the UI just hides until you re-enable the addon.
-
-### Permanently Remove Claiming
-
-If you want to clear all ownership links (not recommended):
-1. Open the Players box on the Characters page
-2. Click the **x** on each character chip to unclaim it
-3. Then disable the addon (the box is hidden once it is off)
-
-There is no bulk-clear screen; the server administrator can clear the
-`owner_user_id` column of the `entities` table directly.
+There is no bulk-clear screen. To clear ownership, click **x** on each chip in
+the Players box before disabling, or have the server administrator clear
+`entities.owner_user_id` directly.
 
 ## Troubleshooting
 
-### "Only character entities can be claimed"
+| Message or symptom | Cause and fix |
+|---|---|
+| "only character entities can be claimed" | The entity's type is not claimable. Check the category's claim checkbox. |
+| "entity is already claimed by another player" | Ask a Scribe or the owner to reassign it from the Players box. |
+| "player character claiming is not enabled for this campaign" | The addon is off. |
+| No claim button | Check, in order: addon shows **On**; the category's claim checkbox; the character is not already claimed (the banner shows the owner); the player can see the page. |
+| Owner shows as "a player" | The owner's account was deleted or left the campaign; the user ID has no name. Reassign from the Players box. |
 
-You're trying to claim a non-character entity (e.g., a Location or Item).
-Only entity types marked as claimable can be claimed. Check the category
-settings under Customize → Manage Categories.
+Enable the addon at campaign start so players are not surprised by new UI, and
+keep PCs in a dedicated category apart from NPCs and Companions.
 
-### "Entity is already claimed by another player"
+## See also
 
-The character is already owned by someone else. Only the GM can reassign it.
-Ask the GM to reassign it from the Players box on the Characters page.
-
-### Claim button doesn't appear
-
-1. **Is the addon enabled?** Open Game & features and check Player Character
-   Claiming shows **On**.
-2. **Is the entity type claimable?** Open Customize → Manage Categories and
-   check the "Players can claim" toggle for the category.
-3. **Is the character already claimed?** If so, the banner shows who owns it
-   instead of the button.
-4. **Can the player see the page?** A player can't claim a page hidden from them.
-
-### Owner shows as "a player" instead of a name
-
-The owner's account was deleted or is no longer in the campaign. The character
-still has a link to a user ID, but the display name couldn't be resolved.
-The GM can reassign the character to an active player from the Players box on the Characters page.
-
-## Best Practices
-
-1. **Enable once at campaign start** — Enabling mid-campaign can surprise
-   players with new UI. Enable during setup if you plan to use the feature.
-
-2. **Create dedicated categories** — Use "Player Characters" for PCs and
-   "NPCs" or "Companions" for non-claimed entities. This keeps the UI clear.
-
-3. **Use the audit trail** — Check the activity log to see who claimed what
-   and when. It's useful for accountability and debugging.
-
-4. **Educate your players** — Let them know they can self-claim characters.
-   Not all campaigns expect this workflow; make the feature explicit.
-
-## See Also
-
-- **Architecture & Design:** `.ai/decisions.md` (ADR-039)
-- **Technical Details:** `internal/plugins/entities/.ai.md` §"Player Character Claiming"
-- **Routes** (under `/campaigns/:id`): `POST /entities/:eid/claim` (any
-  member who can see the page) and `PUT /entities/:eid/owner` (Scribe and up;
+- Design: `.ai/decisions.md` (ADR-039). Technical details:
+  `internal/plugins/entities/.ai.md` §"Player Character Claiming".
+- Routes (under `/campaigns/:id`): `POST /entities/:eid/claim` (Player and up,
+  must be able to see the page) and `PUT /entities/:eid/owner` (Scribe and up;
   body `{"owner_user_id": "<user id>" | null}`). They are campaign page routes,
   not part of the public API in `docs/api/openapi.yaml`.

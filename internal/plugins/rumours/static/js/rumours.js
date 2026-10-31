@@ -197,11 +197,19 @@
   }
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+  // jsonOf reads the block's data from data-json. A script tag would be
+  // stripped by a boosted swap; one is still read for older markup.
+  function jsonOf(root) {
+    var raw = root.getAttribute('data-json');
+    if (raw != null) return raw;
+    var s = root.querySelector('script[type="application/json"]');
+    return s ? s.textContent : '{}';
+  }
+
   function stateOf(root) {
     if (!root.__rm) {
       var data = { rumours: [] };
-      var s = root.querySelector('script[type="application/json"]');
-      try { data = JSON.parse(s ? s.textContent : '{}') || data; } catch (e) { /* an unreadable block shows nothing to change */ }
+      try { data = JSON.parse(jsonOf(root)) || data; } catch (e) { /* an unreadable block shows nothing to change */ }
       var dm = root.getAttribute('data-dm') === '1';
       var mark = root.getAttribute('data-mark') === '1';
       root.__rm = {

@@ -146,8 +146,8 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockItemLook(ctx.CC, ctx.Entity, ctx.CSRFToken)
 	})
 
-	// The "permissions" block was removed per ADR-057: editing now lives
-	// only in edit mode via form.templ's inline widget mount. A stored
+	// The "permissions" block is retired (ADR-057): editing lives only in
+	// edit mode via form.templ's inline widget mount. A stored
 	// layout may still reference the unregistered type; RenderBlock drops
 	// an unregistered block type silently, so no migration is needed. See
 	// TestStoredRowPermRendersWithoutPermissionsBlock.
@@ -168,7 +168,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockTransactionLog(ctx.CC, ctx.Entity)
 	})
 
-	// Page pieces that used to be drawn under every layout; see page_extras.go.
+	// Page pieces drawn under every layout; see page_extras.go.
 	r.Register(BlockMeta{
 		Type: BlockSubPages, Label: "Sub-pages", Icon: "fa-sitemap",
 		Description: "This page's sub-pages, with a button to add one",
@@ -333,7 +333,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "pinned_pages", Label: "Pinned Pages", Icon: "fa-thumbtack",
-		Description: "Hand-picked entity cards",
+		Description: "Pages pinned for everyone; on a campaign home, each viewer's starred pages too",
 		Contexts:    []string{"dashboard"},
 	}, nil)
 

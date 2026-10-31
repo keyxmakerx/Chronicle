@@ -26,6 +26,18 @@ func TestOccurrenceDates(t *testing.T) {
 			"2026-10-01", "2026-10-31", []string{"2026-10-02", "2026-10-23"}},
 		{"monthly", Session{ScheduledDate: strp("2026-08-15"), IsRecurring: true, RecurrenceType: strp(RecurrenceMonthly)},
 			"2026-10-01", "2026-10-31", []string{"2026-10-15"}},
+		// Series that began long before the window: the walk jumps to the
+		// window instead of stepping from the start and giving up.
+		{"weekly that began decades ago", Session{ScheduledDate: strp("2000-01-06"), IsRecurring: true, RecurrenceType: strp(RecurrenceWeekly)},
+			"2026-10-01", "2026-10-31", []string{"2026-10-01", "2026-10-08", "2026-10-15", "2026-10-22", "2026-10-29"}},
+		{"biweekly that began decades ago", Session{ScheduledDate: strp("1980-03-07"), IsRecurring: true, RecurrenceType: strp(RecurrenceBiWeekly)},
+			"2026-10-01", "2026-10-31", []string{"2026-10-02", "2026-10-16", "2026-10-30"}},
+		{"weekly that began centuries ago", Session{ScheduledDate: strp("1700-01-01"), IsRecurring: true, RecurrenceType: strp(RecurrenceWeekly)},
+			"2026-10-01", "2026-10-14", []string{"2026-10-02", "2026-10-09"}},
+		{"monthly on the 31st that began decades ago", Session{ScheduledDate: strp("1990-01-31"), IsRecurring: true, RecurrenceType: strp(RecurrenceMonthly)},
+			"2026-09-01", "2026-10-31", []string{"2026-09-30", "2026-10-31"}},
+		{"custom every 3 weeks that began decades ago", Session{ScheduledDate: strp("2001-01-05"), IsRecurring: true, RecurrenceType: strp(RecurrenceCustom), RecurrenceInterval: 3},
+			"2026-10-01", "2026-10-31", customEveryThreeWeeks("2001-01-05", "2026-10-01", "2026-10-31")},
 		{"unknown recurrence keeps the first night only", Session{ScheduledDate: strp("2026-10-05"), IsRecurring: true, RecurrenceType: strp("fortnightly-ish")},
 			"2026-10-01", "2026-10-31", []string{"2026-10-05"}},
 	}
@@ -33,6 +45,40 @@ func TestOccurrenceDates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := occurrenceDates(tt.s, tt.from, tt.to); !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// customEveryThreeWeeks lists the dates 21 days apart from start that fall
+// in [from, to], by plain stepping, as the reference for the jump.
+func customEveryThreeWeeks(start, from, to string) []string {
+	cur, _ := time.Parse("2006-01-02", start)
+	var out []string
+	for d := cur.Format("2006-01-02"); d <= to; cur = cur.AddDate(0, 0, 21) {
+		d = cur.Format("2006-01-02")
+		if d >= from && d <= to {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+func TestNextUpcomingOccurrenceDateLongSeries(t *testing.T) {
+	tests := []struct {
+		name, start, typ, today, want string
+	}{
+		{"weekly from 2000", "2000-01-06", RecurrenceWeekly, "2026-10-30", "2026-11-05"},
+		{"weekly from 2000, today is a night", "2000-01-06", RecurrenceWeekly, "2026-10-29", "2026-10-29"},
+		{"biweekly from 1980", "1980-03-07", RecurrenceBiWeekly, "2026-10-17", "2026-10-30"},
+		{"monthly on the 31st from 1990", "1990-01-31", RecurrenceMonthly, "2026-11-01", "2026-11-30"},
+		{"start still ahead", "2027-01-01", RecurrenceWeekly, "2026-10-30", "2027-01-01"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &Session{ScheduledDate: strp(tt.start), IsRecurring: true, RecurrenceType: strp(tt.typ)}
+			if got := nextUpcomingOccurrenceDate(s, tt.today); got != tt.want {
+				t.Fatalf("got %s, want %s", got, tt.want)
 			}
 		})
 	}

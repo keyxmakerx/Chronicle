@@ -20,6 +20,12 @@ type Repository interface {
 	Replace(ctx context.Context, c *Connection) (int64, error)
 	// RevokeAll revokes every connection of the campaign that is not revoked.
 	RevokeAll(ctx context.Context, campaignID string, at time.Time) error
+	// RevokeMadeBy revokes every connection userID made in the campaign
+	// that is not revoked.
+	RevokeMadeBy(ctx context.Context, campaignID, userID string, at time.Time) error
+	// RevokeAllMadeBy revokes every connection userID made, in every
+	// campaign, that is not revoked.
+	RevokeAllMadeBy(ctx context.Context, userID string, at time.Time) error
 	// SetPaused pauses (at set) or resumes (nil) the campaign's connection id
 	// while it is not revoked.
 	SetPaused(ctx context.Context, campaignID string, id int64, at *time.Time) error
@@ -143,6 +149,24 @@ func (r *repository) RevokeAll(ctx context.Context, campaignID string, at time.T
 	if _, err := r.db.ExecContext(ctx,
 		`UPDATE ai_connections SET revoked_at = ? WHERE campaign_id = ? AND revoked_at IS NULL`,
 		at.UTC(), campaignID); err != nil {
+		return dbError("revoking connections", err)
+	}
+	return nil
+}
+
+func (r *repository) RevokeMadeBy(ctx context.Context, campaignID, userID string, at time.Time) error {
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE ai_connections SET revoked_at = ? WHERE campaign_id = ? AND user_id = ? AND revoked_at IS NULL`,
+		at.UTC(), campaignID, userID); err != nil {
+		return dbError("revoking connections", err)
+	}
+	return nil
+}
+
+func (r *repository) RevokeAllMadeBy(ctx context.Context, userID string, at time.Time) error {
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE ai_connections SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`,
+		at.UTC(), userID); err != nil {
 		return dbError("revoking connections", err)
 	}
 	return nil

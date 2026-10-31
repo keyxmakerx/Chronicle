@@ -207,7 +207,7 @@
         // The link opens the Journal at the new note.
         var journalUrl = '/campaigns/' + encodeURIComponent(cid) + '/journal' +
           (note && note.id ? '/' + encodeURIComponent(note.id) : '');
-        Chronicle.notify('Note created — <a href="' + journalUrl + '" style="color:inherit;text-decoration:underline;font-weight:500;">View in Journal</a>', 'success', { duration: 6000, html: true });
+        Chronicle.notify('Note created.', 'success', { duration: 6000, action: { label: 'View in Journal', href: journalUrl } });
         // Dispatch event so the notes widget can refresh its list.
         window.dispatchEvent(new CustomEvent('chronicle:note-created'));
       })

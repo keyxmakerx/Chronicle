@@ -15,13 +15,17 @@ func TestCondOn(t *testing.T) {
 		Rolled:  map[string]string{"Omens": "Ill"},
 		Weather: "Storm",
 		Season:  "Winter",
+		Time:    "night",
 	}
-	tower, none := "Tower lab", ""
+	clock := *day
+	clock.Time = ""
+	tower, none := &Worked{Bench: "Tower lab"}, &Worked{}
+	herbalist := &Worked{Skills: map[string]bool{"alchemy": true}}
 	cases := []struct {
 		name  string
 		day   *Day
 		cond  Cond
-		bench *string
+		bench *Worked
 		want  tri
 	}{
 		{"always", nil, Cond{Kind: "always"}, nil, on},
@@ -41,10 +45,17 @@ func TestCondOn(t *testing.T) {
 		{"weather", day, Cond{Kind: "weather", Weather: "Storm"}, nil, on},
 		{"season", day, Cond{Kind: "season", Season: "Summer"}, nil, off},
 		{"bench before the roll", day, Cond{Kind: "bench", Bench: "Tower lab"}, nil, maybe},
-		{"at the bench", day, Cond{Kind: "bench", Bench: "Tower lab"}, &tower, on},
-		{"at no bench", day, Cond{Kind: "bench", Bench: "Tower lab"}, &none, off},
-		{"time of day is never known", day, Cond{Kind: "time", Time: "night"}, &tower, maybe},
-		{"ingredient marks are never known", day, Cond{Kind: "ingredient", Mark: "fresh"}, &tower, maybe},
+		{"at the bench", day, Cond{Kind: "bench", Bench: "Tower lab"}, tower, on},
+		{"at no bench", day, Cond{Kind: "bench", Bench: "Tower lab"}, none, off},
+		{"at night", day, Cond{Kind: "time", Time: "night"}, tower, on},
+		{"not dawn", day, Cond{Kind: "time", Time: "dawn"}, tower, off},
+		{"a calendar without a clock", &clock, Cond{Kind: "time", Time: "night"}, tower, maybe},
+		{"no calendar, no time", nil, Cond{Kind: "time", Time: "night"}, tower, off},
+		{"a skill the maker has", day, Cond{Kind: "maker", Skill: " Alchemy"}, herbalist, on},
+		{"a skill the maker lacks", day, Cond{Kind: "maker", Skill: "Smithing"}, herbalist, off},
+		{"a sheet with no skills", day, Cond{Kind: "maker", Skill: "Alchemy"}, tower, maybe},
+		{"skills before the roll", day, Cond{Kind: "maker", Skill: "Alchemy"}, nil, maybe},
+		{"ingredient marks are never known", day, Cond{Kind: "ingredient", Mark: "fresh"}, tower, maybe},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -56,16 +56,33 @@ type TagService interface {
 	// GetEntityTagsBatch returns tags for multiple entities in a single query.
 	// When includeDmOnly is false, dm_only tags are excluded.
 	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]Tag, error)
+
+	// SetHookDispatcher wires the extension hook dispatcher. Optional.
+	SetHookDispatcher(d TagHookDispatcher)
+}
+
+// TagHookDispatcher tells extension (WASM) plugins that a tag was put on or
+// taken off a page. The context carries the write's origin so the dispatcher
+// can skip a plugin's own writes.
+type TagHookDispatcher interface {
+	TagAdded(ctx context.Context, campaignID, entityID string, tag Tag)
+	TagRemoved(ctx context.Context, campaignID, entityID string, tag Tag)
 }
 
 // tagService implements TagService with validation and slug generation.
 type tagService struct {
-	repo TagRepository
+	repo  TagRepository
+	hooks TagHookDispatcher // nil: extension plugins are not told
 }
 
 // NewTagService creates a new TagService backed by the given repository.
 func NewTagService(repo TagRepository) TagService {
 	return &tagService{repo: repo}
+}
+
+// SetHookDispatcher wires the extension hook dispatcher.
+func (s *tagService) SetHookDispatcher(d TagHookDispatcher) {
+	s.hooks = d
 }
 
 // Create validates the tag name and color, generates a URL-safe slug, and
@@ -178,19 +195,19 @@ func (s *tagService) SetEntityTags(ctx context.Context, entityID string, campaig
 func (s *tagService) SetEntityTagsVisible(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error {
 	// Validate that all provided tag IDs belong to the correct campaign.
 	// This prevents users from assigning tags from other campaigns.
+	validIDs := make(map[int]Tag)
 	if len(tagIDs) > 0 {
 		campaignTags, err := s.repo.ListByCampaign(ctx, campaignID, includeDmOnly)
 		if err != nil {
 			return fmt.Errorf("listing campaign tags for validation: %w", err)
 		}
 
-		validIDs := make(map[int]bool, len(campaignTags))
 		for _, t := range campaignTags {
-			validIDs[t.ID] = true
+			validIDs[t.ID] = t
 		}
 
 		for _, id := range tagIDs {
-			if !validIDs[id] {
+			if _, ok := validIDs[id]; !ok {
 				return apperror.NewBadRequest(fmt.Sprintf("tag ID %d does not belong to this campaign", id))
 			}
 		}
@@ -219,6 +236,9 @@ func (s *tagService) SetEntityTagsVisible(ctx context.Context, entityID string, 
 			if err := s.repo.RemoveTagFromEntity(ctx, entityID, t.ID); err != nil {
 				return fmt.Errorf("removing tag %d from entity: %w", t.ID, err)
 			}
+			if s.hooks != nil {
+				s.hooks.TagRemoved(ctx, campaignID, entityID, t)
+			}
 		}
 	}
 
@@ -227,6 +247,9 @@ func (s *tagService) SetEntityTagsVisible(ctx context.Context, entityID string, 
 		if !currentSet[id] {
 			if err := s.repo.AddTagToEntity(ctx, entityID, id); err != nil {
 				return fmt.Errorf("adding tag %d to entity: %w", id, err)
+			}
+			if s.hooks != nil {
+				s.hooks.TagAdded(ctx, campaignID, entityID, validIDs[id])
 			}
 		}
 	}

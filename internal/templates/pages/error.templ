@@ -8,101 +8,88 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// ErrorPage renders an error page appropriate to the status code.
-// Shows a contextual title, the error message, and helpful navigation links.
+// ErrorPage renders an error page appropriate to the status code: a quiet
+// heading, one sentence on what happened and what to do, and the ways out as
+// quiet words. Signing in is the one real command, so it is the one button.
 templ ErrorPage(statusCode int, message string) {
 	@layouts.Base(fmt.Sprintf("Error %d", statusCode)) {
-		<div class="min-h-screen flex items-center justify-center bg-page px-4">
-			<div class="max-w-md w-full text-center">
-				<!-- Status code badge -->
-				<div class={ "inline-flex items-center justify-center w-20 h-20 rounded-full mb-6", errorBadgeColor(statusCode) }>
-					<span class="text-2xl font-bold text-white">
-						{ fmt.Sprintf("%d", statusCode) }
-					</span>
-				</div>
-
-				<!-- Title -->
-				<h1 class="text-2xl font-bold text-fg mb-3">
+		<main id="main-content" class="min-h-screen flex items-center justify-center bg-page px-4">
+			<div class="max-w-md w-full">
+				<p class="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-2">
+					{ fmt.Sprintf("Error %d", statusCode) }
+				</p>
+				<h1 class="text-2xl font-semibold text-fg mb-3">
 					{ errorTitle(statusCode) }
 				</h1>
-
-				<!-- Message -->
-				<p class="text-fg-body mb-8 leading-relaxed">
-					{ message }
+				<p class="text-fg-body leading-relaxed mb-2">
+					{ errorMessage(statusCode, message) }
 				</p>
-
-				<!-- Navigation links -->
-				<div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+				if hint := errorHint(statusCode); hint != "" {
+					<p class="text-sm text-fg-muted leading-relaxed">{ hint }</p>
+				}
+				<div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-8 pt-4 border-t border-edge">
 					if statusCode == 401 {
-						<a href="/login" class="btn-primary">Log In</a>
-						<a href="/register" class="btn-secondary">Create Account</a>
-					} else if statusCode == 403 {
-						<a href="/campaigns" class="btn-primary">My Campaigns</a>
-						<a href="javascript:history.back()" class="btn-secondary">Go Back</a>
-					} else if statusCode == 404 {
-						<a href="javascript:history.back()" class="btn-primary">Go Back</a>
-						<a href="/campaigns" class="btn-secondary">My Campaigns</a>
+						<a href="/login" class="btn-primary">Sign in</a>
+						<a href="/register" class="quiet-word">Create an account</a>
 					} else {
-						<a href="/" class="btn-primary">Go Home</a>
-						<a href="javascript:history.back()" class="btn-secondary">Go Back</a>
+						<a href="javascript:history.back()" class="quiet-word">Go back</a>
+						<a href="/campaigns" class="quiet-word">Your campaigns</a>
 					}
 				</div>
-
-				<!-- Subtle help text -->
-				<p class="mt-8 text-xs text-fg-muted">
-					if statusCode >= 500 {
-						If this keeps happening, please contact the server administrator.
-					} else if statusCode == 404 {
-						The page you're looking for doesn't exist or has been moved.
-					} else if statusCode == 403 {
-						You don't have the required role to access this resource.
-					} else if statusCode == 401 {
-						You need to be logged in to view this page.
-					}
-				</p>
 			</div>
-		</div>
+		</main>
 	}
+}
+
+// errorMessage is the page's main sentence. A not-found page never repeats
+// the error's own text: a page hidden from someone answers exactly like a
+// missing one, and the wording covers both without saying which.
+func errorMessage(code int, message string) string {
+	if code == 404 {
+		return "This page isn't shared with you, or doesn't exist."
+	}
+	return message
+}
+
+// errorHint says what the reader can do next, where there is something.
+func errorHint(code int) string {
+	switch {
+	case code >= 500:
+		return "Try again in a moment. If it keeps happening, tell whoever runs this site."
+	case code == 404:
+		return "If someone sent you the link, ask them to check it."
+	case code == 403:
+		return "If you think you should have it, ask the campaign's owner or whoever runs this site."
+	case code == 401:
+		return "Sign in to see this page."
+	}
+	return ""
 }
 
 // errorTitle returns a human-friendly title for the error code.
 func errorTitle(code int) string {
 	switch code {
 	case 400:
-		return "Bad Request"
+		return "Something in the request was wrong"
 	case 401:
-		return "Authentication Required"
+		return "Sign in first"
 	case 403:
-		return "Access Denied"
+		return "Not open to you"
 	case 404:
-		return "Page Not Found"
+		return "Nothing to show here"
 	case 409:
 		return "Conflict"
 	case 422:
-		return "Validation Error"
+		return "Something needs fixing"
 	case 429:
-		return "Too Many Requests"
+		return "Too many tries at once"
 	case 500:
-		return "Something Went Wrong"
+		return "Something went wrong"
 	case 502:
-		return "Bad Gateway"
+		return "The site didn't answer"
 	case 503:
-		return "Service Unavailable"
+		return "The site is busy"
 	default:
 		return fmt.Sprintf("Error %d", code)
-	}
-}
-
-// errorBadgeColor returns a Tailwind background color class for the status code badge.
-func errorBadgeColor(code int) string {
-	switch {
-	case code == 401 || code == 403:
-		return "bg-amber-500"
-	case code == 404:
-		return "bg-blue-500"
-	case code >= 400 && code < 500:
-		return "bg-orange-500"
-	default:
-		return "bg-red-500"
 	}
 }

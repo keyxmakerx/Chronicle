@@ -20,7 +20,7 @@ templ NPCSpotlightButton(v NPCSpotlightView) {
 	>
 		<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
 		<button type="submit" class="btn-ghost btn-sm" title="Glide everyone's Foundry camera to this NPC's token, if they can see it">
-			<i class="fa-solid fa-star mr-1"></i> Show in Foundry
+			<i class="fa-solid fa-star"></i> Show in Foundry
 		</button>
 		if v.Status != "" {
 			<span

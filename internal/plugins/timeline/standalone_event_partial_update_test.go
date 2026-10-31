@@ -136,9 +136,9 @@ func TestStandaloneEvent_EmptyInputChangesNothing(t *testing.T) {
 // operator EMPTIED, because absent now means preserve — otherwise a cleared
 // description silently comes back.
 func TestEditModalClient_SendsNullForEmptiedFields(t *testing.T) {
-	src, err := os.ReadFile("timeline.templ")
+	src, err := os.ReadFile("static/js/timeline_page.js")
 	if err != nil {
-		t.Fatalf("read timeline.templ: %v", err)
+		t.Fatalf("read timeline_page.js: %v", err)
 	}
 	for _, want := range []string{
 		"body.description = self.description || null;",
@@ -147,7 +147,7 @@ func TestEditModalClient_SendsNullForEmptiedFields(t *testing.T) {
 		"body.label = self.label || null;",
 	} {
 		if !strings.Contains(string(src), want) {
-			t.Errorf("timeline.templ no longer sends %q — under absent-means-preserve, an emptied field that is simply omitted can never be cleared", want)
+			t.Errorf("timeline_page.js no longer sends %q — under absent-means-preserve, an emptied field that is simply omitted can never be cleared", want)
 		}
 	}
 	// …and it must NOT have grown a description_html key: routing raw TipTap

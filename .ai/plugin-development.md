@@ -7,8 +7,8 @@ Plugins run in a sandboxed environment powered by Extism/wazero, with
 capability-based security controlling which host functions are available.
 
 Plugins can:
-- Declare hooks for entity, calendar, tag and campaign events (only
-  `campaign.deleted` fires today, see "Hooks" below)
+- Hear page, tag and campaign events through hooks (calendar hooks are
+  declared but do not fire yet, see "Hooks" below)
 - Read and write entities, tags, calendar events, and relations
 - Store per-plugin data in a key-value store
 - Send messages to other plugins
@@ -53,29 +53,23 @@ Plugins can:
 }
 ```
 
-**Calendar host functions are not wired to the calendar (#741).** The
-`calendar_read` / `calendar_write` host functions and the three
-`calendar.event_*` hooks stay declared and registered, but the read/write
-functions return an error instead of data and the hooks never fire, until
-they are rewired to the calendar service.
+**Calendar is not wired (#741).** `calendar_read` / `calendar_write` stay
+declared, but their host functions return an error ("calendar is being rebuilt
+(V5)") and the `calendar.event_*` hooks never fire.
 
-**Plugins load when a campaign enables their extension, not at startup
-(#1325).** After a server restart every call answers "plugin not loaded", and
-admin reload fails for the same reason, until the campaign owner turns the
-extension off and on again.
+**When plugins load.** A plugin loads when a campaign enables its extension,
+and again at every server start for each active extension that at least one
+campaign has enabled.
 
 ## Capabilities
-
-Plugins must declare required capabilities. Only matching host functions are
-exposed to the WASM runtime.
 
 | Capability | Host Functions | Description |
 |---|---|---|
 | `log` | `chronicle_log` | Server-side logging |
 | `entity_read` | `get_entity`, `search_entities`, `list_entity_types` | Read entity data |
 | `entity_write` | `update_entity_fields` | Modify entity custom fields |
-| `calendar_read` | `get_calendar`, `list_events` | Read calendar data (currently returns an error — see note below) |
-| `calendar_write` | `create_event` | Create calendar events (currently returns an error — see note below) |
+| `calendar_read` | `get_calendar`, `list_events` | Read calendar data (errors, see above) |
+| `calendar_write` | `create_event` | Create calendar events (errors, see above) |
 | `tag_read` | `list_tags` | Read campaign tags |
 | `tag_write` | `set_entity_tags`, `get_entity_tags` | Read/write entity tags |
 | `relation_write` | `create_relation` | Create entity relations |
@@ -84,10 +78,15 @@ exposed to the WASM runtime.
 
 ## Host Function Reference
 
+Every host function that returns something answers with an envelope:
+`{"data": <result>}` on success or `{"error": "..."}` on failure. The outputs
+below are what sits inside `data`.
+
 ### chronicle_log
 Log a message to the Chronicle server log.
-- Input: `string` (max 4096 chars, truncated if longer)
-- Output: `"ok"`
+- Input: `{"level": "info|warn|error", "message": "..."}` (message truncated
+  past 1024 characters)
+- Output: none (the import returns nothing)
 
 ### get_entity
 Get entity details by ID.
@@ -114,24 +113,20 @@ Update custom fields on an entity.
 Get calendar configuration for a campaign.
 - Input: `{"campaign_id": "..."}`
 - Output: Calendar config JSON
-- **Currently always errors.** The host function stays registered and
-  declared, but its adapter (`internal/app/routes.go`, `wasmCalendarReader`)
-  is not wired to the calendar service and returns "calendar is being rebuilt
-  (V5) and is unavailable to extensions" rather than data.
+- Always errors until the calendar is rewired (#741).
 
 ### list_events
 List upcoming events for a campaign's calendar.
 - Input: `{"campaign_id": "...", "limit": 50}`
 - Output: JSON array of events
-- **Currently always errors**, same reason as `get_calendar` above.
+- Always errors, as `get_calendar`.
 
 ### create_event
 Create a calendar event.
 - Input: `{"name": "...", "year": 1492, "month": 6, "day": 15, ...}`
 - Output: Created event JSON with ID
 - Max input: 64 KB
-- **Currently always errors**, same reason as `get_calendar` above (its
-  adapter is `wasmHostEnv.SetCalendarWriter` in `internal/app/routes.go`).
+- Always errors, as `get_calendar`.
 
 ### list_tags
 List all tags for a campaign.
@@ -157,13 +152,15 @@ Create a relation between two entities.
 ### kv_get
 Read a value from the plugin's KV store.
 - Input: `{"key": "..."}`
-- Output: `{"value": "..."}` or `{"value": null}` if not found
+- Output: the stored JSON value, or `null` if not found
 
 ### kv_set
 Write a value to the plugin's KV store.
-- Input: `{"key": "...", "value": "..."}`
+- Input: `{"key": "...", "value": <any JSON>}`
 - Output: `{"ok": true}`
 - Max value: 64 KB
+- Send the value as JSON, not as a string holding JSON: `kv_get` returns
+  exactly what was stored.
 
 ### kv_delete
 Delete a key from the plugin's KV store.
@@ -191,23 +188,25 @@ When an event fires, Chronicle calls the plugin's `on_hook` export with:
 }
 ```
 
-Event details (an entity id, for instance) are inside `payload`, not at the
-top level.
+Event details (an entity id, for instance) are inside `payload`, not top level.
 
-| Hook | Fires When |
-|---|---|
-| `entity.created` | New entity created (dormant: nothing calls the dispatcher, #1325) |
-| `entity.updated` | Entity modified (dormant, #1325) |
-| `entity.deleted` | Entity deleted (dormant, #1325) |
-| `calendar.event_created` | Calendar event created (currently dormant — nothing calls the dispatcher, see the note above) |
-| `calendar.event_updated` | Calendar event modified (currently dormant) |
-| `calendar.event_deleted` | Calendar event deleted (currently dormant) |
-| `tag.added` | Tag applied to entity (dormant, #1325) |
-| `tag.removed` | Tag removed from entity (dormant, #1325) |
-| `campaign.deleted` | Campaign deleted (the one hook that fires today) |
+| Hook | Fires when | `payload` |
+|---|---|---|
+| `entity.created` | A page is created | `{"entity_id", "name", "entity_type_id"}` |
+| `entity.updated` | A page changes (words, fields, picture, visibility, …) | same |
+| `entity.deleted` | A page is deleted or moved to Trash, once per page in the subtree | same |
+| `tag.added` | A tag is put on a page | `{"entity_id", "tag_id", "tag_name"}` |
+| `tag.removed` | A tag is taken off a page | same |
+| `campaign.deleted` | A campaign is deleted | `{}` |
+| `calendar.event_*` | Never yet: the calendar is being rebuilt (see the note above) | — |
 
 Hook dispatch is async (fire-and-forget). The hook handler's return value is
 logged but does not affect the triggering operation.
+
+A write a plugin makes through a host function (`update_entity_fields`,
+`set_entity_tags`) is not announced as a hook, to any plugin. Without that, a
+plugin that updates a page on `entity.updated` would hear its own write and
+loop.
 
 ## Building Plugins
 
@@ -234,7 +233,7 @@ target = "wasm32-unknown-unknown"
 cargo build --release
 ```
 
-See `extensions/example-wasm-rust/` for a complete example.
+`extensions/example-wasm-rust/` shows the shape but does not build or match the host contract yet (#1878).
 
 ### Go / TinyGo
 
@@ -255,9 +254,8 @@ Host imports must match the host's signatures exactly: `chronicle_log` takes
 one offset and returns nothing, so a Go declaration with a result fails to
 instantiate.
 
-`extensions/example-wasm-go/` shows the shape but does not load as written:
-its `chronicle_log` import declares a result and it reads `entity_id` at the
-top level of the hook input (#1325).
+See `extensions/example-wasm-go/` for a complete example that loads, hears
+page hooks and keeps a log in its KV store.
 
 ### Other Languages
 
@@ -295,8 +293,7 @@ The [Extism CLI](https://github.com/extism/cli) can invoke WASM plugins directly
 extism call dist/plugin.wasm roll --input '{"expression":"2d6+3"}'
 ```
 
-Note: Host functions won't be available when testing with the CLI directly.
-Use the Go SDK mock for integration testing of host function calls.
+The CLI has no host functions; use the Go SDK mock to test host calls.
 
 ## Limits
 
@@ -305,7 +302,7 @@ Use the Go SDK mock for integration testing of host function calls.
 | Memory | 16 MB | 256 MB |
 | Timeout | 30s | 300s |
 | KV value size | — | 64 KB |
-| Log message | — | 4096 chars |
+| Log message | — | 1024 chars |
 | Write payloads | — | 64-256 KB |
 
 ## API Endpoints

@@ -100,6 +100,9 @@
 
     container = document.createElement('div');
     container.id = 'chronicle-toasts';
+    // A live region, so a screen reader reads each message as it arrives.
+    container.setAttribute('role', 'status');
+    container.setAttribute('aria-live', 'polite');
     container.style.cssText = [
       'position: fixed',
       'top: 16px',
@@ -122,6 +125,8 @@
    * @param {string} [type='info'] - Type: 'success', 'error', 'info', 'warning'.
    * @param {Object} [opts] - Options.
    * @param {number} [opts.duration=4000] - Auto-dismiss duration in ms. 0 = manual.
+   * @param {Object} [opts.action] - After the text: a button {label, onClick(button)}
+   *   or a link {label, href}.
    */
   Chronicle.notify = function (message, type, opts) {
     type = type || 'info';
@@ -145,6 +150,8 @@
     var toast = document.createElement('div');
     toast.className = 'chronicle-toast';
     toast.dataset.toastId = id;
+    // An error interrupts; everything else waits for a pause.
+    if (type === 'error') toast.setAttribute('role', 'alert');
     toast.style.cssText = [
       'pointer-events: auto',
       'display: flex',
@@ -170,13 +177,25 @@
     icon.style.cssText = 'color:' + config.text + ';font-size:16px;margin-top:1px;flex-shrink:0;';
     toast.appendChild(icon);
 
-    // Message. Supports HTML when opts.html is true (use only with trusted content).
+    // Message. Always text: a toast never parses its message as HTML, so no
+    // caller's text can carry markup into the page. Links and buttons go in
+    // opts.action and are built as nodes.
     var msg = document.createElement('span');
     msg.style.cssText = 'flex:1;';
-    if (opts.html) {
-      msg.innerHTML = message;
-    } else {
-      msg.textContent = message;
+    msg.textContent = message;
+    if (opts.action && (opts.action.href || typeof opts.action.onClick === 'function')) {
+      var act = document.createElement(opts.action.href ? 'a' : 'button');
+      if (opts.action.href) {
+        act.href = opts.action.href;
+      } else {
+        act.type = 'button';
+        act.addEventListener('click', function () { opts.action.onClick(act); });
+      }
+      act.className = 'underline font-medium ml-1';
+      act.style.color = 'inherit';
+      act.textContent = opts.action.label || 'Undo';
+      msg.appendChild(document.createTextNode(' '));
+      msg.appendChild(act);
     }
     toast.appendChild(msg);
 
@@ -187,6 +206,7 @@
     close.type = 'button';
     close.style.cssText = 'border:none;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;padding:0;font-size:14px;flex-shrink:0;line-height:1;';
     close.innerHTML = '&times;';
+    close.setAttribute('aria-label', 'Dismiss');
     close.addEventListener('click', function () {
       if (record.timer) clearTimeout(record.timer);
       dismissToast(toast, id);

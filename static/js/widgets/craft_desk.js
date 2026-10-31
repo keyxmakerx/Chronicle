@@ -582,7 +582,10 @@ window.CraftDesk = (function () {
         '<rect x="-12" y="-28" width="24" height="56" rx="9" fill="#3f8a26" fill-opacity=".85"/><rect x="-12" y="-28" width="24" height="56" rx="9" fill="url(#d-glassh)" stroke="#d8f5c8" stroke-opacity=".35" stroke-width="1.4"/>'+
         '<path d="M-8,0 q8,-8 16,0 q-8,10 -16,0" fill="#1f4a12" opacity=".7"/><rect x="-10" y="-40" width="20" height="13" rx="3" fill="#8a1a1a"/><rect x="-10" y="-40" width="20" height="13" rx="3" fill="url(#d-cyl)"/><path d="M-6,-28 q0,8 3,10 q2,-4 1,-10 Z" fill="#8a1a1a"/>'+
         '<line x1="7" y1="-20" x2="7" y2="20" stroke="#fff4dc" stroke-opacity=".7" stroke-width="2" stroke-linecap="round"/>';
-      // Any other ingredient: a corked vial of its own colour, until the shared kit draws it
+      // A real material wears the picture chosen for it (craft_pictures.js), in the desk's shadow
+      var CP=window.CraftPictures;
+      if(CP&&it&&it.picture&&CP.has(it.picture))return '<ellipse cx="-6" cy="30" rx="30" ry="6" fill="url(#d-shadow)"/><g class="cpx-touch"><svg class="'+CP.cls(it.picture)+'" x="-38" y="-46" width="76" height="76" viewBox="0 0 40 40" overflow="visible">'+CP.inner(it.picture,it.color)+'</svg></g>';
+      // With no picture: a corked vial of its own colour
       var vc=(it&&it.color)||'#8a8a8a';
       return '<ellipse cx="-8" cy="32" rx="28" ry="6" fill="url(#d-shadow)"/><ellipse cx="0" cy="4" rx="24" ry="30" fill="'+vc+'" opacity=".2" filter="url(#d-blur8)"/>'+
         '<path d="M-14,-18 L14,-18 L16,26 Q16,32 10,32 L-10,32 Q-16,32 -16,26 Z" fill="'+vc+'" fill-opacity=".8"/>'+

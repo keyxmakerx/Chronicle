@@ -5,7 +5,7 @@
 // entries, too many for a usable dropdown, so this is a curated subset plus
 // whatever zone the browser detects or the user already has stored.
 //
-// The list must never drop a zone a surface could previously offer, since a
+// The list must never drop a zone a surface already offers, since a
 // calendar or availability row may already be stored against it (pinned by
 // zones_test.go).
 package timeutil

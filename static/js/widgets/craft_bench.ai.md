@@ -21,6 +21,7 @@ A bench is five scripts, loaded together on sight (`coreWidgets` in
 | `craft_scene.js` | Play: the steps, grading, the project roll, hover cards, the right-click menu, particles, sound | `CraftScene` |
 | `craft_desk.js` | One skin: the candlelit desk's art, light, sky window and ambiance, and what each piece is | `CraftDesk` |
 | `craft_journal.js` | The other skin: the crafter's paper journal open on a desk, its ink, quill, blots, page turn and wax seal | `CraftJournal` |
+| `craft_pictures.js` | The material pictures every crafting surface draws (the Materials tab, recipe editor, Crafting block and both skins): one drawing per picture key, lit and shaded over one tint, moving only while the thing holding it (`cpx-touch`) is pointed at, focused or held, and never under Calm, Off or reduced motion. Keys match `Pictures` in the crafting plugin's `library.go` | `CraftPictures` |
 | `craft_bench_editor.js` | Build mode, for any skin that fills in the editor tables below | `CraftBenchEditor` |
 | `craft_bench.js` | The widget glue: reads the mount's attributes, injects the bench's CSS once, hands each part its data | registers `craft_bench` |
 

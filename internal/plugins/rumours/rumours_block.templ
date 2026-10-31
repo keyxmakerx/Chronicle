@@ -29,9 +29,9 @@ templ BlockRumours(campaignID, entityID string, v *View) {
 		data-dm={ digit(v.IsDM) }
 		data-add={ digit(v.CanAdd) }
 		data-mark={ digit(v.CanMark) }
+		data-json={ templ.JSONString(v) }
 		aria-label="Rumours"
 	>
-		@templ.JSONScript("rm-data-"+entityID, v)
 		<div class="rm-h">
 			<h2 class="cb-head rm-title">
 				<i class="fa-solid fa-ear-listen" aria-hidden="true"></i>

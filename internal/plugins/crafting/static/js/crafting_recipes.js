@@ -15,25 +15,14 @@ window.CraftingRecipes = (function () {
 
   /* Material art is one small shape per crafting tag, tinted, so a new item
      never needs a new picture. */
-  var TAG_SHAPE = {herb: 'herb', liquid: 'liquid', metal: 'metal', hide: 'hide', bone: 'bone', magic_essence: 'essence', remnant_part: 'essence', body_part: 'hide', magic_item: 'mineral'};
-  var TAG_COLOR = L.TAG_COLOR, BENCH_COLORS = L.BENCH_COLORS;
-  function shape(kind, c, sz) {
-    var s = sz || 32, k = 'stroke="rgb(0 0 0 / .38)" stroke-width="1.4" stroke-linejoin="round"', d;
-    if (kind === 'herb') d = '<path d="M20 4C31 11 33 25 20 36C7 25 9 11 20 4Z" fill="' + c + '" ' + k + '/><path d="M20 9V33M20 17l-5-4M20 23l6-5M20 28l-5-3" stroke="rgb(0 0 0 / .32)" stroke-width="1.2" fill="none"/>';
-    else if (kind === 'liquid') d = '<path d="M16 5h8v8l7 12a6 6 0 0 1-5 9H14a6 6 0 0 1-5-9l7-12z" fill="rgb(255 255 255 / .55)" ' + k + '/><path d="M11.5 23h17l2 3a5 5 0 0 1-4.6 7H14a5 5 0 0 1-4.5-7z" fill="' + c + '"/><rect x="15" y="3" width="10" height="3.5" rx="1" fill="#8a6a44"/>';
-    else if (kind === 'mineral') d = '<path d="M20 3l9 9-3 22H14L11 12z" fill="' + c + '" ' + k + '/><path d="M11 12h18M20 3v31M14 34l6-22 6 22" stroke="rgb(255 255 255 / .45)" stroke-width="1" fill="none"/>';
-    else if (kind === 'metal') d = '<path d="M5 28l6-12h18l6 12z" fill="' + c + '" ' + k + '/><path d="M11 16l3 4h12l3-4" stroke="rgb(255 255 255 / .5)" fill="none" stroke-width="1.2"/>';
-    else if (kind === 'hide') d = '<path d="M8 8c4 2 8 1 12-2 4 3 8 4 12 2-2 5 0 10 2 13-3 4-3 9-1 12-5-1-9 0-13 2-4-2-8-3-13-2 2-3 2-8-1-12 2-3 4-8 2-13z" fill="' + c + '" ' + k + '/>';
-    else if (kind === 'bone') d = '<path d="M12 6c-4 0-6 4-4 7l14 17c2 4 7 4 9 1 3 0 5-3 3-6-1-1-2-2-3-2L17 9c0-2-2-3-5-3z" fill="' + c + '" ' + k + '/>';
-    else if (kind === 'essence') d = '<circle cx="20" cy="22" r="13" fill="' + c + '" opacity=".25"/><path d="M20 6c6 8 9 13 9 17a9 9 0 0 1-18 0c0-4 3-9 9-17z" fill="' + c + '" ' + k + '/><circle cx="17" cy="22" r="2.4" fill="rgb(255 255 255 / .7)"/>';
-    else if (kind === 'potion') d = '<rect x="16" y="3" width="8" height="4" rx="1" fill="#8a6a44"/><path d="M16.5 7h7v6a11 11 0 1 1-7 0z" fill="rgb(255 255 255 / .5)" ' + k + '/><path d="M9.6 24a10.5 10.5 0 0 0 20.8 0z" fill="' + c + '"/><circle cx="16" cy="20" r="2" fill="rgb(255 255 255 / .7)"/>';
-    else d = '<circle cx="20" cy="20" r="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3"/><text x="20" y="25" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">?</text>';
-    return '<svg class="cra-ico" viewBox="0 0 40 40" width="' + s + '" height="' + s + '" aria-hidden="true">' + d + '</svg>';
-  }
-  function matIcon(m, items, sz) {
-    var tags = L.matTags(m, items), t = tags[0];
-    if (!t) return shape('', '', sz);
-    return m.tag ? '<span class="cra-slot">' + shape(TAG_SHAPE[t], 'rgb(0 0 0 / .12)', sz) + '</span>' : shape(TAG_SHAPE[t], TAG_COLOR[t], sz);
+  var BENCH_COLORS = L.BENCH_COLORS, CP = window.CraftPictures;
+  /* A picture from the shared library (craft_pictures.js); an unknown or
+     empty key draws the dashed "?" of a material with no kind yet. */
+  function shape(pic, c, sz) { return CP.svg(pic, c, sz || 32); }
+  function matIcon(lib, m, items, sz) {
+    var p = L.matPicture(lib, m, items);
+    if (!p.picture) return shape('', '', sz);
+    return m.tag ? '<span class="cra-slot">' + shape(p.picture, 'rgb(0 0 0 / .12)', sz) + '</span>' : shape(p.picture, p.tint, sz);
   }
   var I = {
     x: '<svg viewBox="0 0 16 16" width="14" height="14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
@@ -73,13 +62,13 @@ window.CraftingRecipes = (function () {
       var send;
       clearTimeout(q.timer);
       if (q.form) { q.form = false; send = app.api('PUT', '/recipes/' + encodeURIComponent(r.id), L.input(r), keep); }
-      else if (q.rules) { var d = q.rules; q.rules = null; send = app.api('PUT', '/recipes/' + encodeURIComponent(r.id) + '/rules', {rules: d.rules, looks: d.looks, version: r.version}, keep); }
+      else if (q.rules) { var d = q.rules; q.rules = null; send = app.api('PUT', '/recipes/' + encodeURIComponent(r.id) + '/rules', {rules: d.rules, looks: d.looks, extras: d.extras, version: r.version}, keep); }
       else { app.status('saved'); return; }
       q.busy = true;
       send.then(function (got) {
         q.busy = false;
         r.version = got.version;
-        r.rules = got.rules; r.looks = got.looks;
+        r.rules = got.rules; r.looks = got.looks; r.extras = got.extras;
         if (!dead && r === cur()) { renderPreview(); renderChecks(); }
         if (q.form || q.rules) flush(r, keep); else app.status('saved');
       }, function (err) { q.busy = false; failed(err); });
@@ -156,7 +145,7 @@ window.CraftingRecipes = (function () {
       h += '<div class="cra-fsec"><h4>Materials</h4>' + (r.materials.length ? '' : '<p class="cra-empty">No materials yet.</p>') + '<ul class="cra-mats">';
       r.materials.forEach(function (m, i) {
         var tags = L.matTags(m, app.items);
-        h += '<li class="cra-mat" data-i="' + i + '">' + matIcon(m, app.items, 30) + '<select class="cra-in" data-f="mat" aria-label="Material ' + (i + 1) + '">' + matSelect(m) + '</select>' +
+        h += '<li class="cra-mat" data-i="' + i + '">' + matIcon(lib, m, app.items, 30) + '<select class="cra-in" data-f="mat" aria-label="Material ' + (i + 1) + '">' + matSelect(m) + '</select>' +
           '<span class="cra-tag">' + esc(tags.length ? tags.map(function (t) { return L.tagLabel(lib, t); }).join(', ') : 'no tag') + '</span>' + qty(m.qty, 'mq', 'One') +
           '<button type="button" class="cra-ib" data-act="rm-mat" aria-label="Remove ' + esc(L.matName(lib, m, app.items)) + '">' + I.x + '</button></li>';
       });
@@ -242,6 +231,11 @@ window.CraftingRecipes = (function () {
       rulesFor = null;
       $('.cra-rules').hidden = true;
     }
+    function tableRows() {
+      var out = {};
+      app.tables.forEach(function (t) { out[t.name] = t.rows || []; });
+      return out;
+    }
     function openRules() {
       var r = cur(), box = $('.cra-rules');
       closeRules();
@@ -254,9 +248,10 @@ window.CraftingRecipes = (function () {
       rulesEl.setAttribute('data-calendar-id', app.calendarId);
       rulesEl._craftApp = {
         recipe: {id: r.id, name: r.name, ings: r.materials.map(function (m) { return [m.qty, L.matName(lib, m, app.items)]; }), goal: r.goal, roll: L.rollWords(lib, r.stat),
-          liquid: (r.colors && r.colors.final) || BENCH_COLORS.final, rules: r.rules, looks: r.looks},
-        lists: {benches: app.benches.map(function (b) { return b.name; }), skills: [], items: app.itemList.map(function (it) { return it.name; }), marks: [],
-          recipes: R.filter(function (x) { return x !== r; }).map(function (x) { return x.name; }), tables: []},
+          liquid: (r.colors && r.colors.final) || BENCH_COLORS.final, rules: r.rules, looks: r.looks, extras: r.extras},
+        lists: {benches: app.benches.map(function (b) { return b.name; }), skills: app.skills, items: app.itemList.map(function (it) { return it.name; }), marks: [],
+          recipes: R.filter(function (x) { return x !== r; }).map(function (x) { return x.name; }), tags: lib.tags,
+          tables: app.tables.map(function (t) { return t.name; }), tableRows: tableRows()},
         save: function (data) { want(r, 'rules', data); }
       };
       box.appendChild(rulesEl);
@@ -419,5 +414,5 @@ window.CraftingRecipes = (function () {
       }
     };
   }
-  return {mount: mount, shape: shape, TAG_SHAPE: TAG_SHAPE, TAG_COLOR: TAG_COLOR, BENCH_COLORS: BENCH_COLORS};
+  return {mount: mount, shape: shape, BENCH_COLORS: BENCH_COLORS};
 })();

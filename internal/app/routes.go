@@ -47,6 +47,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
@@ -58,6 +59,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rumours"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -922,9 +924,9 @@ func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campa
 // none, matching CalendarEventLister's existing picker convention above):
 // this is STRICTER than the deleted JOIN's own `ce.visibility = 'everyone'`
 // check, never looser, since it also runs a calendar event's own
-// visibility_rules and redacts a hidden linked entity, both of which the old
-// SQL never touched.
-// One batch read serves every id, so cost no longer grows with link count.
+// visibility_rules and redacts a hidden linked entity, both of which a plain
+// SQL join cannot. One batch read serves every id, so cost does not grow with
+// link count.
 func (a *calendarEventLinkListerAdapter) EventsByIDs(ctx context.Context, calendarID, campaignID string, eventIDs []string, role int) ([]timeline.CalendarEventRef, error) {
 	if calendarID == "" || len(eventIDs) == 0 {
 		return nil, nil
@@ -1015,6 +1017,43 @@ func (a *wsCampaignRoleAdapter) GetUserCampaignRole(ctx context.Context, campaig
 // dm_only visibility via CampaignSettings.DmGrantIDs.
 func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID, userID string) (bool, error) {
 	return a.svc.IsUserDmGranted(ctx, campaignID, userID)
+}
+
+// connectedNoteApps shows a person's notes grants on their account page as
+// connected apps, each named after the campaign it reads.
+type connectedNoteApps struct {
+	grants    notes.AppGrantService
+	campaigns campaigns.CampaignService
+}
+
+func (a *connectedNoteApps) ListForUser(ctx context.Context, userID string) ([]auth.ConnectedApp, error) {
+	gs, err := a.grants.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]string{}
+	out := make([]auth.ConnectedApp, 0, len(gs))
+	for _, g := range gs {
+		name, ok := names[g.CampaignID]
+		if !ok {
+			// A campaign that can't be read is still listed, so the
+			// grant can be ended; it just goes unnamed.
+			if c, err := a.campaigns.GetByID(ctx, g.CampaignID); err == nil {
+				name = c.Name
+			}
+			names[g.CampaignID] = name
+		}
+		last := g.CreatedAt
+		if g.LastUsedAt != nil && g.LastUsedAt.After(last) {
+			last = *g.LastUsedAt
+		}
+		out = append(out, auth.ConnectedApp{ID: g.ID, Name: "Foundry (notes and calendar)", Place: name, Origin: g.Origin, LastUsed: last})
+	}
+	return out, nil
+}
+
+func (a *connectedNoteApps) DisconnectForUser(ctx context.Context, userID, appID string) error {
+	return a.grants.RevokeForUser(ctx, userID, appID)
 }
 
 // wsNotesGrantAdapter checks a notes grant for a WebSocket upgrade the same
@@ -1141,6 +1180,7 @@ func (a *entityEventPublisherAdapter) PublishEntityTypeEvent(eventType, campaign
 	// A DM-only category's existence is itself hidden from players, so its
 	// events never reach a socket below the DM team.
 	msg.RequiresDM = entityType.DMOnly()
+	msg.Public = !entityType.DMOnly()
 	a.bus.Publish(msg)
 }
 
@@ -1288,6 +1328,7 @@ func (a *noteEventPublisherAdapter) PublishNoteEvent(ev notes.NoteEvent) {
 	}
 	msg := ws.NewMessage(msgType, ev.CampaignID, ev.NoteID, payload)
 	msg.AllowedUsers, msg.StrictAudience = noteAudience(ev.Audience)
+	msg.Public = ev.Audience.Everyone
 	a.bus.Publish(msg)
 }
 
@@ -1353,6 +1394,7 @@ func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note
 		"noteId":   note.ID,
 	})
 	msg.AllowedUsers, msg.StrictAudience, msg.AdmitScribes = entityNoteAudience(note)
+	msg.Public = note.Audience == entity_notes.AudienceEveryone
 	h.bus.Publish(msg)
 }
 
@@ -1572,7 +1614,9 @@ func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, v
 	if len(partyPath) > 0 {
 		payload["party_path"] = partyPath
 	}
-	a.bus.Publish(ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload))
+	msg := ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload)
+	msg.Public = true
+	a.bus.Publish(msg)
 }
 
 // Kinds carried by PublishItemsChanged; the viewer maps each to a refetch.
@@ -1604,6 +1648,7 @@ func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind s
 		"kind":   kind,
 	})
 	msg.RequiresDM = dmOnly
+	msg.Public = !dmOnly
 	if rules != nil {
 		msg.AllowedUsers = rules.AllowedUsers
 		msg.DeniedUsers = rules.DeniedUsers
@@ -1625,6 +1670,7 @@ func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind s
 func (a *mapEventPublisherAdapter) publishWithAudience(msgType ws.MessageType, campaignID, resourceID string, payload any, dmOnly bool, rules *maps.VisibilityRules) {
 	msg := ws.NewMessage(msgType, campaignID, resourceID, payload)
 	msg.RequiresDM = dmOnly
+	msg.Public = !dmOnly
 	if rules != nil {
 		msg.AllowedUsers = rules.AllowedUsers
 		msg.DeniedUsers = rules.DeniedUsers
@@ -1736,7 +1782,9 @@ func (a *mapEventPublisherAdapter) PublishLayerEvent(eventType string, campaignI
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, layer.ID, layer))
+	msg := ws.NewMessage(msgType, campaignID, layer.ID, layer)
+	msg.Public = true
+	a.bus.Publish(msg)
 }
 
 // PublishFogEvent broadcasts a fog-of-war event via WebSocket. All fog
@@ -2595,6 +2643,26 @@ func (a *mapMediaVerifierAdapter) ImageInCampaign(ctx context.Context, mediaID, 
 	return strings.HasPrefix(f.MimeType, "image/"), nil
 }
 
+// MediaCampaign names the campaign a media file belongs to, for the boot
+// sweep that clears map pictures naming another campaign's file.
+func (a *mapMediaVerifierAdapter) MediaCampaign(ctx context.Context, mediaID string) (string, bool, error) {
+	f, err := a.svc.GetByID(ctx, mediaID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	if f == nil {
+		return "", false, nil
+	}
+	if f.CampaignID == nil {
+		return "", true, nil
+	}
+	return *f.CampaignID, true, nil
+}
+
 // armoryBuyerAccessAdapter wraps entities.EntityService to implement
 // armory.BuyerAccessChecker. Used by the transaction service to verify
 // the calling user can act on the buyer entity (own / shared / Owner /
@@ -2701,9 +2769,16 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 	}, nil
 }
 
-// loadSystemsFromPackages scans installed system packages and loads them into
-// the system registry. Package-managed systems override bundled ones.
-func (a *App) loadSystemsFromPackages(pkgService packages.PackageService) {
+// packageLister is the part of the package catalog the system loader reads.
+type packageLister interface {
+	ListPackages(ctx context.Context) ([]packages.Package, error)
+}
+
+// loadSystemsFromPackages loads the installed version of every approved system
+// package into the system registry. The catalog, not the folders on disk,
+// decides what is served: a removed or unapproved package's leftover folders
+// never load.
+func (a *App) loadSystemsFromPackages(pkgService packageLister) {
 	pkgs, err := pkgService.ListPackages(context.Background())
 	if err != nil {
 		slog.Warn("failed to list packages for system loading", slog.Any("error", err))
@@ -2793,6 +2868,7 @@ func (a *App) RegisterRoutes() {
 	}
 	e.GET("/healthz", healthHandler)
 	e.GET("/health", healthHandler)
+	e.POST(middleware.CSPReportPath, middleware.CSPReportHandler(), middleware.RateLimit(120, time.Minute))
 
 	// wsRevoker is wired into syncapi, addons and campaigns below, well
 	// before wsHub is constructed further down — see wsRevokerHolder.
@@ -2837,11 +2913,12 @@ func (a *App) RegisterRoutes() {
 	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
 	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
 
-	// Pages saved before search_text stopped indexing GM-only content still
+	// Pages saved before search_text stopped indexing what not every reader
+	// may see (GM-only text, mention names, restricted field values) still
 	// carry it until edited; recompute those rows. Idempotent, so it is a
 	// no-op on later boots; detached so a large campaign can't stall startup.
 	go func() {
-		n, err := entities.ReindexSecretSearchText(a.ShutdownCtx, entityRepo)
+		n, err := entities.ReindexSearchText(a.ShutdownCtx, entityRepo, entityTypeRepo, 0)
 		if err != nil {
 			slog.Warn("entities: search_text reindex stopped", slog.Any("error", err), slog.Int("rewritten", n))
 			return
@@ -2898,7 +2975,10 @@ func (a *App) RegisterRoutes() {
 	// Drops a user's live sockets when their co-DM grant is pulled, so a
 	// stale IsDmGranted resolved at connect time can't outlive the grant.
 	// See wsRevokerHolder — wsHub itself is constructed further down.
-	campaignService.SetConnectionRevoker(wsRevoker)
+	// The same changes end AI connector keys; aiKeys.svc is set where the
+	// connector is wired.
+	aiKeys := &aiKeyKeeper{}
+	campaignService.SetConnectionRevoker(campaignRevokers{wsRevoker, aiKeys})
 
 	// One-time, idempotent boot reconciler: convert any campaign still on the
 	// legacy sidebar model onto the unified items model. Runs synchronously
@@ -2920,6 +3000,11 @@ func (a *App) RegisterRoutes() {
 	// setting is applied on top of the saved sidebar.
 	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))
 	groupRepo := campaigns.NewGroupRepository(a.DB)
+	if n, err := groupRepo.PruneNonMemberGroupRows(context.Background()); err != nil {
+		slog.Error("pruning group rows of removed members failed", slog.Any("error", err))
+	} else if n > 0 {
+		slog.Info("pruned group rows of removed members", slog.Int64("rows", n))
+	}
 	groupService := campaigns.NewGroupService(groupRepo)
 	campaignHandler.SetGroupService(groupService)
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
@@ -2965,7 +3050,7 @@ func (a *App) RegisterRoutes() {
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
-	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo)
+	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo, entities.NewChildOrderRepository(a.DB))
 	entityHandler.SetFolderService(folderService)
 	entityHandler.SetFavoriteRepo(favoriteRepo)
 	entityHandler.SetSavedFilterRepo(entities.NewSavedFilterRepository(a.DB))
@@ -2975,7 +3060,8 @@ func (a *App) RegisterRoutes() {
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
 	// mini→full launch enhancement, and the scripts below, each loaded on
 	// sight: the Contents block's, Standing's, the Family tree's and the
-	// Characters page's hero builder, and the chip naming a page's layout).
+	// Characters page's hero builder, the chip naming a page's layout, and
+	// the search page's Alpine component).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
@@ -2985,6 +3071,7 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
 			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
+			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
 		},
 	})
 
@@ -3271,6 +3358,7 @@ func (a *App) RegisterRoutes() {
 	// Auto-register discovered game systems as addons so new systems
 	// (from internal/systems/, package manager, or GitHub) appear in the
 	// addon UI without hardcoded definitions.
+	a.loadSystemsFromPackages(packages.NewPackageRepository(a.DB))
 	sysAddonInfos := systems.AddonInfos()
 	slog.Info("registering system addons at startup", slog.Int("count", len(sysAddonInfos)))
 	for _, info := range sysAddonInfos {
@@ -3358,7 +3446,7 @@ func (a *App) RegisterRoutes() {
 		// Taken before the rescan swaps manifests, to tell which sheet fields
 		// this install introduces.
 		presetsBefore := snapshotPresetFieldKeys()
-		systems.ScanPackageDir(filepath.Join(a.Config.Upload.MediaPath, "packages", "systems"))
+		a.loadSystemsFromPackages(pkgService)
 		// Force-load the exact dir that was just installed. The rescan
 		// above applies "highest version wins", which silently ignores a
 		// deliberate rollback to an OLDER version; an explicit install is
@@ -3400,12 +3488,29 @@ func (a *App) RegisterRoutes() {
 		// using the system; background since it walks every such campaign.
 		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), presetsBefore)
 	})
+	// A removed or archived system package stops being served now, and its
+	// page renderers go with it.
+	packages.SetOnSystemUnload(pkgService, func(packageRoot string) {
+		dropped := systems.UnloadPackageDirsUnder(packageRoot)
+		slog.Info("unloaded package systems", slog.String("dir", packageRoot), slog.Any("systems", dropped))
+		freshRegistry := entities.NewEntityShowRendererRegistry()
+		registerManifestRenderers(freshRegistry)
+		entities.SetGlobalEntityShowRendererRegistry(freshRegistry)
+	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	// Fail-loud installs: run the FULL loader-grade manifest validation at
 	// install time for system packages, so a manifest the boot scan would
 	// reject (content caps, slugs, renderer bindings…) fails the install
 	// with the real error instead of installing "green" and shadow-failing
 	// at load while the old version keeps serving.
+	packages.SetSystemDirProvider(pkgService, func(systemID string) string {
+		for _, sh := range systems.LoadedHealth() {
+			if sh.ID == systemID && sh.Source == "package" {
+				return sh.Dir
+			}
+		}
+		return ""
+	})
 	packages.SetManifestValidator(pkgService, func(manifestPath string) error {
 		_, err := systems.LoadManifest(manifestPath)
 		return err
@@ -3514,11 +3619,6 @@ func (a *App) RegisterRoutes() {
 	pkgHandler := packages.NewHandler(pkgService)
 	pkgHandler.SetActivityRecorder(adminActivity)
 	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)
-	// Public package file serving — always available so Foundry VTT can
-	// fetch module.json even when the admin UI is degraded.
-	pkgServeHandler := packages.NewServeHandler(pkgService, a.Config.BaseURL)
-	packages.SetOnServeInvalidate(pkgService, pkgServeHandler.InvalidateCache)
-	packages.RegisterPublicRoutes(e, pkgServeHandler, middleware.RateLimit(300, time.Minute))
 
 	if a.PluginHealth.IsHealthy("packages") {
 		packages.RegisterRoutes(adminGroup, pkgHandler, auth.RequireReauth(authService))
@@ -3526,10 +3626,6 @@ func (a *App) RegisterRoutes() {
 		// Owner-facing submission routes (authenticated, not admin-only).
 		ownerGroup := e.Group("", auth.RequireAuth(authService))
 		packages.RegisterOwnerRoutes(ownerGroup, pkgOwnerHandler)
-
-		// Load systems from package manager install paths so externally
-		// managed system packs override the bundled fallbacks.
-		a.loadSystemsFromPackages(pkgService)
 
 		// Store package service reference.
 		a.pkgService = pkgService
@@ -3851,6 +3947,11 @@ func (a *App) RegisterRoutes() {
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
 	calendarWeatherRepo := calendar.NewWeatherRepository(a.DB)
 	calendarService := calendar.NewCalendarService(calendarRepo, calendarEventRepo, calendarKindRepo, calendarWeatherRepo)
+	// The players' weather forecast is blurred under a key from the site
+	// secret, so the blur cannot be replayed and stays put across restarts.
+	if keyed, ok := calendarService.(interface{ SetForecastSecret(string) }); ok {
+		keyed.SetForecastSecret(a.Config.Auth.SecretKey)
+	}
 	// Pages by era and moon lore pages: the calendar owns eras, moons and
 	// each page's era versions; the entity page draws them.
 	eraVersionService := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
@@ -3917,23 +4018,15 @@ func (a *App) RegisterRoutes() {
 	// both paths deliver the same scripts; each re-inits on
 	// htmx:afterSettle/htmx:load and no-ops when its mount is absent.
 	//
-	// The calendar's page scripts: calendar_era_blend.js (loaded first)
-	// paints the era colours for calendar_view.js and for the structure
-	// editor's Era look part (calendar_era_look.js, which mounts on that
-	// page's data-widget="calendar_era_look"); calendar_view.js mounts on
-	// data-widget="calendar_view" (the calendar's own page, however it was
-	// reached) and opens calendar_game_night.js's game night editor,
-	// calendar_editor.js self-gates on that
-	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
-	// event editor and calendar_weather_sheet.js's weather calendar (both
-	// loaded first so they exist when the editor binds; the drawer's
-	// repeat-by-rule logic is calendar_rule.js, loaded before it; its Roll
-	// section is the on-sight widget calendar_event_roll), and
-	// calendar_open.js peeks and opens the Calendars page's cards. rulebook.js
-	// mounts on the Rules page's data-widget="rulebook" when a system ships a
-	// book, and rulebook_editor.js on the editor page's
-	// data-widget="rulebook-editor". All are no-ops on every other page, same
-	// as every entry here.
+	// Calendar scripts: calendar_era_blend.js loads first (era colours for
+	// calendar_view.js and calendar_era_look.js); calendar_view.js mounts on
+	// data-widget="calendar_view" and opens calendar_game_night.js;
+	// calendar_editor.js self-gates on data-can-edit="true" and opens
+	// calendar_event_drawer.js and calendar_weather_sheet.js (both loaded
+	// first; the drawer's repeat logic is calendar_rule.js, loaded before it);
+	// calendar_open.js opens the Calendars page's cards. rulebook.js and
+	// rulebook_editor.js mount on their data-widget pages. Every script
+	// no-ops when its mount is absent.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
@@ -4108,6 +4201,7 @@ func (a *App) RegisterRoutes() {
 	}
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
+	sessionsHandler.SetMentionHider(entityService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
 	// People's notification choices (Account settings) filter the bell and
 	// the game-night emails.
@@ -4118,15 +4212,16 @@ func (a *App) RegisterRoutes() {
 	sightingService := sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
 		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
 	sessionsHandler.SetSightingService(sightingService)
-	// The Last seen block's and the Game nights list's scripts load on sight
-	// (ADR-063); the block itself is registered with the other page blocks
-	// below.
+	// The Last seen block's, the Game nights list's and the session edit
+	// dialog's scripts load on sight (ADR-063); the block itself is
+	// registered with the other page blocks below.
 	a.registerPlugin(PluginRegistration{
 		Slug:     sessions.PluginSlug,
 		StaticFS: echo.MustSubFS(sessions.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "last-seen", Scripts: []string{"js/last_seen.js"}},
 			{Name: "game-nights", Scripts: []string{"js/game_nights.js"}},
+			{Name: "session-edit", Scripts: []string{"js/session_edit.js"}},
 		},
 	})
 	// Game-night links open the real-world calendar; with the calendar plugin
@@ -4222,6 +4317,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "timeline-river", Scripts: []string{"js/timeline_river.js"}},
 			{Name: "timeline-viz", Scripts: []string{"js/timeline_viz.js"}},
 			{Name: "timeline-widget", Scripts: []string{"js/timeline_widget.js"}},
+			{Name: "timeline-page", Scripts: []string{"js/timeline_page.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy("timeline") {
@@ -4251,6 +4347,7 @@ func (a *App) RegisterRoutes() {
 	// Entity-privacy gate: the public posts list must respect entity
 	// visibility + campaign binding, like the entity page.
 	postHandler.SetEntityGate(&entityAccessAdapter{svc: entityService})
+	postHandler.SetMentionHider(entityService)
 	posts.RegisterRoutes(e, postHandler, campaignService, authService)
 
 	// Player Notes (entity_notes) widget: per-user, per-entity notes
@@ -4512,6 +4609,7 @@ func (a *App) RegisterRoutes() {
 	noteGrants := notes.NewAppGrantService(notes.NewAppGrantRepository(a.DB))
 	// See wsRevokerHolder: wsHub itself is constructed further down.
 	noteGrants.SetConnectionRevoker(wsRevoker)
+	go notes.StartAppGrantPruner(a.ShutdownCtx, noteGrants)
 	noteGrantHandler := notes.NewAppGrantHandler(noteGrants, &notesOriginAllower{baseURL: a.Config.BaseURL, settings: settingsService})
 	// Pictures and voice memos in the frames load through member-checked
 	// signed links, as Foundry's media does.
@@ -4523,6 +4621,8 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// The account page lists those grants beside the person's browsers.
+	authHandler.SetConnectedApps(&connectedNoteApps{grants: noteGrants, campaigns: campaignService})
 	// Deleting your own account: the campaign side runs first and refuses
 	// while the person still owns a campaign; once the account is emptied,
 	// the rest of what other plugins hold about the person goes.
@@ -4669,6 +4769,15 @@ func (a *App) RegisterRoutes() {
 	} else {
 		slog.Warn("page layout tables degraded — each category has only its main layout")
 	}
+
+	// The home's Pinned Pages widget: each member's starred pages always, and
+	// the Director's pins for everyone while their table migrated.
+	pinsHealthy := a.PluginHealth.IsHealthy(pinschema.PluginSlug)
+	if !pinsHealthy {
+		slog.Warn("page pins table degraded — the Pinned Pages widget shows only each member's starred pages")
+	}
+	pagePinService := entities.NewPagePinService(entities.NewPagePinRepository(a.DB), entityService, pinsHealthy)
+	entities.RegisterPagePinRoutes(e, entities.NewPagePinHandler(pagePinService), campaignService, authService)
 
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
@@ -5067,6 +5176,7 @@ func (a *App) RegisterRoutes() {
 		relService,
 		tagService,
 	)
+	aiWorkspaceRenderer.Pages = entityService
 	aiWorkspaceHandler := ai_workspace.NewHandler(aiWorkspaceRenderer)
 	aiWorkspaceHandler.SetAuditLogger(&aiWorkspaceAuditAdapter{svc: auditService})
 
@@ -5135,6 +5245,14 @@ func (a *App) RegisterRoutes() {
 			return timeutil.LoadLocation(*u.Timezone)
 		})
 		aiAsks = aiConnectorSvc
+		aiKeys.svc = aiConnectorSvc
+		// A key ends whenever its maker's sign-ins do (password reset or
+		// change, force sign-out), in every campaign.
+		auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {
+			if err := aiConnectorSvc.EndAllKeysMadeBy(ctx, userID); err != nil {
+				slog.Error("ending AI keys failed", slog.String("user_id", userID), slog.Any("error", err))
+			}
+		})
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)
@@ -5178,7 +5296,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
-	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
+	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService, users: authService})
 	exportSvc.SetNoteImporter(&noteImportAdapter{svc: noteSvc})
 	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonService})
 	exportSvc.SetGroupExporter(&groupExportAdapter{svc: groupService})
@@ -5217,6 +5335,7 @@ func (a *App) RegisterRoutes() {
 			return t.ID, nil
 		}),
 	)
+	extApplier.SetPackEntityCreator(extensionPackPages{svc: entityService})
 	extService.SetApplier(extApplier)
 
 	// --- WASM Runtime (Layer 3 Logic Extensions) ---
@@ -5316,6 +5435,7 @@ func (a *App) RegisterRoutes() {
 			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
 				return err
 			}
+			ctx = changesource.With(ctx, changesource.Source{Kind: changesource.KindExtension})
 			return tagService.SetEntityTags(ctx, entityID, campaignID, tagIDs)
 		},
 		// get_entity_tags: return tags as JSON (include DM-only for WASM plugins).
@@ -5372,6 +5492,14 @@ func (a *App) RegisterRoutes() {
 	// with WASM plugins automatically loads them into the plugin manager.
 	extApplier.SetWASMLoader(wasmPluginMgr)
 
+	// Plugins live only in memory: load the enabled ones again after a
+	// restart, in the background so a slow compile does not hold up startup.
+	go func() {
+		if n := extService.LoadEnabledPlugins(a.ShutdownCtx, wasmPluginMgr); n > 0 {
+			slog.Info("loaded WASM plugins", slog.Int("count", n))
+		}
+	}()
+
 	// Store references for graceful shutdown and auto-loading.
 	a.WASMPluginManager = wasmPluginMgr
 	a.WASMHookDispatcher = wasmHookDispatcher
@@ -5379,6 +5507,8 @@ func (a *App) RegisterRoutes() {
 	// Wire campaign deletion cleanup: media files and WASM hooks.
 	campaignService.SetMediaCleaner(mediaService)
 	campaignService.SetHookDispatcher(wasmHookDispatcher)
+	entityService.SetHookDispatcher(wasmEntityHooks{d: wasmHookDispatcher})
+	tagService.SetHookDispatcher(wasmTagHooks{d: wasmHookDispatcher})
 
 	// --- Game Systems ---
 	// System reference pages and tooltip API, gated by per-campaign addon checks.
@@ -6143,6 +6273,26 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
 
+	// Rolls: the campaign's roll log behind the header's Table tab. Rolls
+	// made at the Table, reported by Foundry, or made by crafting go live to
+	// the people each roll's mode lets see it.
+	a.registerPlugin(PluginRegistration{
+		Slug:     rolls.PluginSlug,
+		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/table.js"}},
+		},
+	})
+	var rollLog crafting.RollLog // nil while the roll log is degraded
+	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
+		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus})
+		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
+		syncAPIHandler.SetRolls(&rollsSyncAdapter{svc: rollsSvc}, foundryPlayerRepo)
+		rollLog = &craftingRollLog{svc: rollsSvc}
+	} else {
+		slog.Warn("rolls plugin degraded — the Table tab's roll log is not available")
+	}
+
 	// Crafting: recipes, crafting tags on Armory items, benches, the
 	// campaign's crafting settings, and heroes' projects, which pay and
 	// deliver through the Armory. The app, its routes and the character
@@ -6151,8 +6301,8 @@ func (a *App) RegisterRoutes() {
 		Slug:     crafting.PluginSlug,
 		StaticFS: echo.MustSubFS(crafting.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "crafting", Scripts: []string{"js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
-			{Name: "crafting-block", Scripts: []string{"js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_block.js"}},
+			{Name: "crafting", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_upgrades.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
+			{Name: "crafting-block", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_block.js"}},
 		},
 	})
 	craftingOn := func(ctx context.Context, campaignID string) bool {
@@ -6163,6 +6313,7 @@ func (a *App) RegisterRoutes() {
 	craftingRespites := &craftingRespiteHook{}
 	var craftingListener respiteListener // nil while crafting is degraded
 	var craftingFights encounters.FightListener
+	var aiCrafting records.CraftingAPI // nil while crafting is degraded
 	if a.PluginHealth.IsHealthy(crafting.PluginSlug) {
 		craftingRepo := crafting.NewRepository(a.DB)
 		craftingSvc := crafting.NewService(craftingRepo,
@@ -6173,15 +6324,18 @@ func (a *App) RegisterRoutes() {
 				Spoils:   craftingRepo.(crafting.SpoilStore),
 				Pages:    &craftingPagesAdapter{entities: entityService},
 				Sheets:   &craftingSheetsAdapter{entities: entityService},
+				Tables:   craftingTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))},
 				Days:     &craftingDaysAdapter{cal: calendarService},
 				Calendar: &craftingCalendarAdapter{cal: calendarService},
 				Respite:  craftingRespites,
+				Rolls:    rollLog,
 			})
 		crafting.RegisterRoutes(e, crafting.NewHandler(craftingSvc, &craftingCalendarAdapter{cal: calendarService}),
 			campaignService, authService, addonService)
 		registerCraftingBlock(blockRegistry, craftingSvc)
 		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
 		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
+		aiCrafting = aiCraftingAdapter{svc: craftingSvc, addons: addonService}
 	} else {
 		slog.Warn("crafting plugin degraded — the Crafting app is not available")
 	}
@@ -6333,6 +6487,7 @@ func (a *App) RegisterRoutes() {
 		AIAsks:          aiAsks,
 		ArmoryRequests:  dmSources.Requests,
 		ItemLooks:       aiItemLooks,
+		Crafting:        aiCrafting,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
@@ -6378,6 +6533,14 @@ func (a *App) RegisterRoutes() {
 		return m.ImageWidth, m.ImageHeight, nil
 	})
 	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
+	mapsService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
+	// Idempotent boot sweep: a map picture stored before the write paths
+	// checked the file's campaign is cleared if it names another campaign's.
+	if n, err := maps.ClearForeignPictures(context.Background(), maps.NewPictureRefStore(a.DB), &mapMediaVerifierAdapter{svc: mediaService}); err != nil {
+		slog.Error("maps: foreign picture sweep failed; some map pictures may still name another campaign's file", slog.Any("error", err))
+	} else if n > 0 {
+		slog.Warn("maps: foreign picture sweep cleared pictures", slog.Int("cleared", n))
+	}
 	mapsService.SetEventPublisher(mapEvents)
 	wireHexFog(mapsService, drawingService, mapEvents, hexService)
 	hexService.SetPictures(maps.NewHexPictures(drawingService))
@@ -6436,6 +6599,9 @@ var coreWidgets = []PluginWidget{
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
 	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
+	{Name: "ai-import-review", Scripts: []string{"/static/js/widgets/ai_import_review.js"}},
+	{Name: "mini-bar-chart", Scripts: []string{"/static/js/widgets/mini_bar_chart.js"}},
+	{Name: "surface-demo", Scripts: []string{"/static/js/widgets/surface_demo.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
 	{Name: "attributes", Scripts: []string{"/static/js/widgets/attributes.js"}},
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
@@ -6456,8 +6622,8 @@ var coreWidgets = []PluginWidget{
 	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
 	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room.js"}},
-	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_bench.js"}},
-	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules.js"}},
+	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_bench.js"}},
+	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules_more.js", "/static/js/widgets/craft_rules.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

@@ -8,6 +8,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -62,6 +63,7 @@ type aiDeps struct {
 	AIAsks          aiAskLister                      // nil while the AI connector's tables are degraded
 	ArmoryRequests  dmscreen.RequestSource           // stash and buy requests, as the DM Screen lists them
 	ItemLooks       records.ItemLooksAPI             // nil while the item looks table is degraded
+	Crafting        records.CraftingAPI              // nil while crafting is degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
@@ -145,7 +147,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Notes:    d.Notes,
 		Rules:    d.HouseRules,
 		Entries:  aiSystemEntriesAdapter{choices: d.CharacterChoice},
-		Party:    &aiPartyAdapter{screen: d.DMScreen, nights: d.Sessions, members: d.Campaigns},
+		Party:    &aiPartyAdapter{screen: d.DMScreen, types: d.Entities, nights: d.Sessions, members: d.Campaigns},
 		Tags:     d.Tags,
 		Tiers:    d.Campaigns,
 		Nights:   d.Nights,
@@ -177,6 +179,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	}
 	if d.Quests != nil && d.Boards != nil {
 		l.Quests = aiQuestsAdapter{quests: d.Quests, boards: d.Boards, types: d.Entities}
+	}
+	if d.Crafting != nil {
+		l.Crafting = d.Crafting
 	}
 	return l
 }
@@ -275,9 +280,9 @@ type aiAddonChecker interface {
 
 // aiFeatureGate names, by kind, the features a campaign has switched off,
 // using the same add-ons their pages are gated on: the calendar and what is
-// written onto it, game nights (which need the calendar too), and maps. A
-// failed check counts the feature as on, so a lookup error never blocks an
-// import; the feature's own routes still gate it.
+// written onto it, game nights (which need the calendar too), maps, Player
+// Notes and Crafting. A failed check counts the feature as on, so a lookup
+// error never blocks an import; the feature's own routes still gate it.
 func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID string) records.OffFeatures {
 	return func(ctx context.Context, campaignID string) records.OffFeatures {
 		off := func(slug string) bool {
@@ -298,6 +303,11 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 		}
 		if off(entity_notes.AddonSlug) {
 			out[records.KindPlayerNote] = "Player Notes"
+		}
+		if off(crafting.AddonSlug) {
+			for _, k := range []string{"recipe", "material", "drops"} {
+				out[k] = "Crafting"
+			}
 		}
 		return out
 	}

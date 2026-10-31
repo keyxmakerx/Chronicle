@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -177,5 +178,31 @@ func TestCraftingRespiteListener(t *testing.T) {
 	// With Homebrew degraded a respite from the Crafting app still logs.
 	if err := (&craftingRespiteHook{}).RespiteLogged(ctx, "camp", crafting.Viewer{UserID: "dm", Director: true}); err != nil {
 		t.Errorf("no Homebrew: %v", err)
+	}
+}
+
+func TestSheetSkills(t *testing.T) {
+	cases := []struct {
+		name   string
+		fields map[string]any
+		want   string
+	}{
+		{"nothing", map[string]any{}, ""},
+		{"a list of names", map[string]any{"skills_json": `["Alchemy", " Herbalism "]`}, "Alchemy|Herbalism"},
+		{"a list of named skills", map[string]any{"skills_json": `[{"name":"Alchemy","group":"lore"},{"group":"x"}]`}, "Alchemy"},
+		{"broken json is skipped", map[string]any{"skills_json": `[`, "skills": "Alchemy"}, "Alchemy"},
+		{"written out", map[string]any{"skills": "Alchemy, Herbalism;\nSneak,,"}, "Alchemy|Herbalism|Sneak"},
+		{"both", map[string]any{"skills_json": `["Alchemy"]`, "skills": "Sneak"}, "Alchemy|Sneak"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok, err := sheetSkills(tc.fields)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(got, "|") != tc.want || ok != (tc.want != "") {
+				t.Fatalf("sheetSkills = %q %v, want %q", got, ok, tc.want)
+			}
+		})
 	}
 }
