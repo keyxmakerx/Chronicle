@@ -24,7 +24,7 @@
   function mount(el, cfg) {
     var cid = String(cfg.campaignId || ''), base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
     var app = {cid: cid, base: base, director: cfg.director === true || cfg.director === 'true', calendarId: cfg.calendarId ? String(cfg.calendarId) : '', el: el,
-      lib: null, items: {}, itemList: [], characters: [], truncated: false, recipes: [], benches: [], parts: {}};
+      lib: null, items: {}, itemList: [], characters: [], tables: [], skills: [], truncated: false, recipes: [], benches: [], parts: {}};
     // The end of a fight links to #spoils, so the tray opens first.
     var dead = false, toastT = 0, tab = window.location.hash === '#spoils' ? 'spoils' : 'recipes';
 
@@ -193,6 +193,8 @@
         if (!app.director || !app.lib.director) { CraftingBook.mount(el, app, got[1] || []); return; }
         app.setItems(got[1].items || []);
         app.characters = got[1].characters || [];
+        app.tables = got[1].tables || [];
+        app.skills = got[1].skills || [];
         app.truncated = !!got[1].truncated;
         app.recipes = got[2] || [];
         app.benches = got[3] || [];

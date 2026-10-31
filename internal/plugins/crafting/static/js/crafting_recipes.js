@@ -73,13 +73,13 @@ window.CraftingRecipes = (function () {
       var send;
       clearTimeout(q.timer);
       if (q.form) { q.form = false; send = app.api('PUT', '/recipes/' + encodeURIComponent(r.id), L.input(r), keep); }
-      else if (q.rules) { var d = q.rules; q.rules = null; send = app.api('PUT', '/recipes/' + encodeURIComponent(r.id) + '/rules', {rules: d.rules, looks: d.looks, version: r.version}, keep); }
+      else if (q.rules) { var d = q.rules; q.rules = null; send = app.api('PUT', '/recipes/' + encodeURIComponent(r.id) + '/rules', {rules: d.rules, looks: d.looks, extras: d.extras, version: r.version}, keep); }
       else { app.status('saved'); return; }
       q.busy = true;
       send.then(function (got) {
         q.busy = false;
         r.version = got.version;
-        r.rules = got.rules; r.looks = got.looks;
+        r.rules = got.rules; r.looks = got.looks; r.extras = got.extras;
         if (!dead && r === cur()) { renderPreview(); renderChecks(); }
         if (q.form || q.rules) flush(r, keep); else app.status('saved');
       }, function (err) { q.busy = false; failed(err); });
@@ -242,6 +242,11 @@ window.CraftingRecipes = (function () {
       rulesFor = null;
       $('.cra-rules').hidden = true;
     }
+    function tableRows() {
+      var out = {};
+      app.tables.forEach(function (t) { out[t.name] = t.rows || []; });
+      return out;
+    }
     function openRules() {
       var r = cur(), box = $('.cra-rules');
       closeRules();
@@ -254,9 +259,10 @@ window.CraftingRecipes = (function () {
       rulesEl.setAttribute('data-calendar-id', app.calendarId);
       rulesEl._craftApp = {
         recipe: {id: r.id, name: r.name, ings: r.materials.map(function (m) { return [m.qty, L.matName(lib, m, app.items)]; }), goal: r.goal, roll: L.rollWords(lib, r.stat),
-          liquid: (r.colors && r.colors.final) || BENCH_COLORS.final, rules: r.rules, looks: r.looks},
-        lists: {benches: app.benches.map(function (b) { return b.name; }), skills: [], items: app.itemList.map(function (it) { return it.name; }), marks: [],
-          recipes: R.filter(function (x) { return x !== r; }).map(function (x) { return x.name; }), tables: []},
+          liquid: (r.colors && r.colors.final) || BENCH_COLORS.final, rules: r.rules, looks: r.looks, extras: r.extras},
+        lists: {benches: app.benches.map(function (b) { return b.name; }), skills: app.skills, items: app.itemList.map(function (it) { return it.name; }), marks: [],
+          recipes: R.filter(function (x) { return x !== r; }).map(function (x) { return x.name; }), tags: lib.tags,
+          tables: app.tables.map(function (t) { return t.name; }), tableRows: tableRows()},
         save: function (data) { want(r, 'rules', data); }
       };
       box.appendChild(rulesEl);

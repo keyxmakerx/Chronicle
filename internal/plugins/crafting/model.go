@@ -101,6 +101,7 @@ type Recipe struct {
 	Colors       Colors           `json:"colors"`
 	Rules        []Rule           `json:"rules"`
 	Looks        map[string]*Look `json:"looks"`
+	Extras       Extras           `json:"extras"`
 	Draft        bool             `json:"draft"`
 	DraftPrompt  string           `json:"draftPrompt,omitempty"`
 	SortOrder    int              `json:"sortOrder"`
@@ -130,10 +131,12 @@ type RecipeInput struct {
 	Version      int        `json:"version"`
 }
 
-// RulesInput saves a recipe's rules and moment looks.
+// RulesInput saves a recipe's rules, moment looks and extras. Extras left
+// out keep what the recipe has.
 type RulesInput struct {
 	Rules   json.RawMessage `json:"rules"`
 	Looks   json.RawMessage `json:"looks"`
+	Extras  json.RawMessage `json:"extras,omitempty"`
 	Version int             `json:"version"`
 }
 
@@ -145,6 +148,7 @@ type Bench struct {
 	Kind      string          `json:"kind"`
 	Desk      json.RawMessage `json:"desk"`
 	Journal   json.RawMessage `json:"journal"`
+	Upgrades  Upgrades        `json:"upgrades"`
 	SortOrder int             `json:"sortOrder"`
 	Version   int             `json:"version"`
 }
@@ -154,6 +158,12 @@ type BenchInput struct {
 	Name    string `json:"name"`
 	Kind    string `json:"kind"`
 	Version int    `json:"version"`
+}
+
+// UpgradesInput saves a bench's upgrade ladders.
+type UpgradesInput struct {
+	Upgrades json.RawMessage `json:"upgrades"`
+	Version  int             `json:"version"`
 }
 
 // ArrangementInput saves one look's arrangement of a bench.
@@ -178,12 +188,22 @@ type Named struct {
 }
 
 // Catalog is what the Director's editors pick from: the campaign's Armory
-// items with their tags, and its characters. Truncated says a list was cut
-// short, never silently.
+// items with their tags, its characters, its Rolling Tables by name and the
+// skills its characters' sheets list. Truncated says a list was cut short,
+// never silently.
 type Catalog struct {
 	Items      []MaterialItem `json:"items"`
 	Characters []Named        `json:"characters"`
+	Tables     []CatalogTable `json:"tables"`
+	Skills     []string       `json:"skills"`
 	Truncated  bool           `json:"truncated"`
+}
+
+// CatalogTable is one Rolling Table with its rows' words, so the rules
+// editor can show and try what a quirk or mishap table holds.
+type CatalogTable struct {
+	Name string   `json:"name"`
+	Rows []string `json:"rows"`
 }
 
 // Library is the fixed lists and the campaign's settings and system rules,

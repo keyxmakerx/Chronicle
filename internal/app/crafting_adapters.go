@@ -18,6 +18,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -173,6 +174,100 @@ func (a *craftingSheetsAdapter) Stat(ctx context.Context, campaignID, characterI
 	return sheetNumber(e.FieldsData[key])
 }
 
+// Skills lists the skills a character's sheet names. Systems keep them as
+// text ("Alchemy, Herbalism") in a "skills" field, or as data in
+// "skills_json" (a list of names, or of objects with a name); ok is false
+// when the sheet has neither.
+func (a *craftingSheetsAdapter) Skills(ctx context.Context, campaignID, characterID string) ([]string, bool, error) {
+	e, err := a.entities.GetByID(ctx, characterID)
+	if err != nil {
+		if apperror.SafeCode(err) == http.StatusNotFound {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	if e == nil || e.CampaignID != campaignID {
+		return nil, false, nil
+	}
+	return sheetSkills(e.FieldsData)
+}
+
+// sheetSkills reads the skills out of a sheet's fields.
+func sheetSkills(fields map[string]any) ([]string, bool, error) {
+	var out []string
+	if raw, ok := fields["skills_json"].(string); ok && strings.TrimSpace(raw) != "" {
+		var list []any
+		if json.Unmarshal([]byte(raw), &list) == nil {
+			for _, v := range list {
+				switch x := v.(type) {
+				case string:
+					out = append(out, x)
+				case map[string]any:
+					if n, ok := x["name"].(string); ok {
+						out = append(out, n)
+					}
+				}
+			}
+		}
+	}
+	if text, ok := fields["skills"].(string); ok {
+		out = append(out, strings.FieldsFunc(text, func(r rune) bool { return r == ',' || r == ';' || r == '\n' })...)
+	}
+	clean := out[:0]
+	for _, k := range out {
+		if k = strings.TrimSpace(k); k != "" {
+			clean = append(clean, k)
+		}
+	}
+	return clean, len(clean) > 0, nil
+}
+
+// craftingTablesAdapter is the campaign's Rolling Tables as crafting reads
+// them, by name, so the crafting plugin never imports rolltables.
+type craftingTablesAdapter struct{ svc rolltables.Service }
+
+func (a craftingTablesAdapter) All(ctx context.Context, campaignID string) ([]crafting.CatalogTable, error) {
+	doc, err := a.svc.Get(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]crafting.CatalogTable, 0, len(doc.Tables))
+	for _, t := range doc.Tables {
+		ct := crafting.CatalogTable{Name: t.Name, Rows: make([]string, 0, len(t.Entries))}
+		for _, e := range t.Entries {
+			ct.Rows = append(ct.Rows, tableRowText(e.Name, e.Brief))
+		}
+		out = append(out, ct)
+	}
+	return out, nil
+}
+
+// tableRowText is a row as crafting shows it: its name, then its brief.
+func tableRowText(name, brief string) string {
+	if brief != "" {
+		return name + ". " + brief
+	}
+	return name
+}
+
+func (a craftingTablesAdapter) Rows(ctx context.Context, campaignID, name string) ([]crafting.TableRow, bool, error) {
+	doc, err := a.svc.Get(ctx, campaignID)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, t := range doc.Tables {
+		if !strings.EqualFold(strings.TrimSpace(t.Name), strings.TrimSpace(name)) {
+			continue
+		}
+		rows := make([]crafting.TableRow, 0, len(t.Entries))
+		for _, e := range t.Entries {
+			rows = append(rows, crafting.TableRow{Text: tableRowText(e.Name, e.Brief), Weight: e.Weight})
+		}
+		return rows, true, nil
+	}
+	return nil, false, nil
+}
+
 // sheetNumber reads a sheet value as a whole number: a number, or text
 // holding one ("+2" counts).
 func sheetNumber(v any) (int, bool, error) {
@@ -234,7 +329,8 @@ func (a *craftingDaysAdapter) Today(ctx context.Context, campaignID string) (*cr
 		return nil, nil
 	}
 	y, m, d := c.CurrentYear, c.CurrentMonth, c.CurrentDay
-	day := &crafting.Day{Label: strconv.Itoa(d) + " " + c.MonthName(m), Rolled: map[string]string{}}
+	day := &crafting.Day{Label: strconv.Itoa(d) + " " + c.MonthName(m), Rolled: map[string]string{},
+		Time: c.DayPart(y, m, d, c.CurrentHour, c.CurrentMinute)}
 	abs := c.CurrentDayIndex()
 	for i := range c.Moons {
 		mo := &c.Moons[i]

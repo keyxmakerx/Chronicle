@@ -269,8 +269,18 @@ func CleanLooks(raw json.RawMessage) map[string]*Look {
 			out[k] = cleanLook(lm)
 		}
 	}
+	// A mishap's moment is its row on the mishap table, by place.
+	for i := 0; i < maxMishapMoments; i++ {
+		k := "mishap:" + strconv.Itoa(i)
+		if lm, ok := m[k].(map[string]any); ok {
+			out[k] = cleanLook(lm)
+		}
+	}
 	return out
 }
+
+// maxMishapMoments is how many of a mishap table's rows get a moment.
+const maxMishapMoments = 20
 
 // str is the editor's str(): a string trimmed, then cut to max characters,
 // or "" for anything that is not a string.

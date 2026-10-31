@@ -8,7 +8,8 @@
  * pieces, their words and right-click actions. The build editor hands every
  * change here through el._craftApp.onChange, and it saves a moment later
  * with the bench's version, so two Directors never silently overwrite each
- * other. "Try it as a player" plays the campaign's own recipes.
+ * other. "Try it as a player" plays the campaign's own recipes. Under the
+ * bench, its upgrade ladders (crafting_upgrades.js) save through the same queue.
  */
 window.CraftingBenches = (function () {
   'use strict';
@@ -57,12 +58,12 @@ window.CraftingBenches = (function () {
       else app.status('error', cap(err.message));
     }
     function queue(b) {
-      if (!q || q.id !== b.id) q = {id: b.id, b: b, timer: 0, busy: false, name: false, looks: {}};
+      if (!q || q.id !== b.id) q = {id: b.id, b: b, timer: 0, busy: false, name: false, up: false, looks: {}};
       return q;
     }
     function want(b, what, data) {
       var w = queue(b);
-      if (what === 'name') w.name = true; else w.looks[what] = data;
+      if (what === 'name') w.name = true; else if (what === 'upgrades') w.up = true; else w.looks[what] = data;
       clearTimeout(w.timer);
       w.timer = setTimeout(function () { flush(w); }, 600);
       app.status('saving');
@@ -74,6 +75,7 @@ window.CraftingBenches = (function () {
       var b = w.b, path = '/benches/' + encodeURIComponent(b.id), send, skinKey = Object.keys(w.looks)[0];
       clearTimeout(w.timer);
       if (w.name) { w.name = false; send = app.api('PUT', path, {name: b.name, kind: b.kind, version: b.version}, keep); }
+      else if (w.up) { w.up = false; send = app.api('PUT', path + '/upgrades', {upgrades: b.upgrades, version: b.version}, keep); }
       else if (skinKey) { var st = w.looks[skinKey]; delete w.looks[skinKey]; send = app.api('PUT', path + '/look/' + skinKey, {state: st, version: b.version}, keep); }
       else { app.status('saved'); edStatus('All changes saved'); return Promise.resolve(); }
       w.busy = true;
@@ -138,9 +140,10 @@ window.CraftingBenches = (function () {
         }).join('') : opt('', 'A sample recipe', true)) + '</select><em>' + (keys.length ? 'Played by “Try it as a player”.' : 'Your ' + esc(kind ? kind.name.toLowerCase() : 'bench') + ' recipes appear here once they have steps.') + '</em></label>' +
         '<div class="cra-bend"><button type="button" class="btn btn-danger btn-sm" data-act="delete">Delete bench</button></div></div>' +
         '<p class="cra-fine">Players craft a recipe at any bench of its kind' + (kind ? ': this is ' + esc(a(kind.name.toLowerCase())) : '') + '.</p>' +
-        '<div class="cra-bmount"></div>';
+        '<div class="cra-bmount"></div><section class="cra-upmount" aria-label="Upgrades"></section>';
       el.innerHTML = h;
       mountBench();
+      window.CraftingUpgrades.mount($('.cra-upmount'), b, {skills: app.skills, toast: app.toast, onChange: function () { want(b, 'upgrades'); }});
     }
     function menuOpen(v) {
       var m = $('.cra-menu'), b = $('[data-act="new-menu"]');
@@ -192,7 +195,7 @@ window.CraftingBenches = (function () {
     });
     el.addEventListener('click', function (e) {
       var b = e.target.closest('button');
-      if (!b || !el.contains(b) || b.closest('.cra-bmount')) return;
+      if (!b || !el.contains(b) || b.closest('.cra-bmount, .cra-upmount')) return;
       if (b.hasAttribute('data-b')) { var i = +b.getAttribute('data-b'); if (i !== sel) then(function () { sel = i; render(); }); return; }
       if (b.hasAttribute('data-new')) { menuOpen(false); create(b.getAttribute('data-new')); return; }
       if (b.hasAttribute('data-skin')) {

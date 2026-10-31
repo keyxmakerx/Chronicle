@@ -49,6 +49,12 @@
       .map(function (it) { return {id: it.itemId, name: it.name, qty: it.qty - reserved(r, it.itemId)}; })
       .filter(function (x) { return x.qty > 0; });
   }
+  /* What may stand in for a named material: carried items with its
+     substitute's tag, other than the material itself. */
+  function standIns(pack, r, m) {
+    return m.sub ? tagged(pack, r, m.sub.tag).filter(function (x) { return x.id !== m.itemId && x.qty >= m.qty; }) : [];
+  }
+  var SUB_COST = {bane: 'at a bane on every roll', points: 'at −2 on every roll', none: 'at no cost'};
   /* The cost in words, against the hero's way of paying. */
   function costText(r, pack) {
     if (!r.cost) return '';
@@ -71,7 +77,7 @@
         if (named[m.itemId]) return;
         named[m.itemId] = 1;
         var want = reserved(r, m.itemId), have = held(pack, m.itemId);
-        if (have < want) out.push('Needs ' + want + ' × ' + m.name + '. ' + hero + ' has ' + (have || 'none') + '.');
+        if (have < want && !standIns(pack, r, m).length) out.push('Needs ' + want + ' × ' + m.name + '. ' + hero + ' has ' + (have || 'none') + '.');
       } else {
         var n = tagged(pack, r, m.tag).reduce(function (a, x) { return a + x.qty; }, 0);
         if (n < m.qty) out.push('Needs ' + m.qty + ' ' + m.name + '. ' + hero + ' has ' + (n || 'none') + '.');
@@ -85,6 +91,16 @@
       }
     }
     return out;
+  }
+  /* What befell the work on a roll, beside its points: a breakthrough, a
+     mishap, ingredients lost to a botch, and what the item came out as. */
+  function befell(R, name, hero) {
+    var h = '', came = (R.project && R.project.came) || [];
+    if (R.breakthrough) h += '<div class="crp-made crp-befell">' + ICON.check + '<span><b>A breakthrough.</b> The dice came up high, so they were rolled again and added.</span></div>';
+    if (R.mishap) h += '<div class="crp-made is-warn crp-befell"><span><b>A mishap mid-brew:</b> ' + esc(R.mishap.text) + '</span></div>';
+    if (R.lost) h += '<div class="crp-made is-warn crp-befell"><span><b>The botch ruined the ingredients.</b> ' + esc(hero) + ' has to start ' + esc(name) + ' again.</span></div>';
+    if (R.finished && came.length) h += '<p class="cra-fine crp-came">It came out: ' + came.map(esc).join(' · ') + '</p>';
+    return h;
   }
   /* A ready roll held by the recipe's rule, said in full. */
   function waitText(p, today) {
@@ -168,6 +184,13 @@
 
     function startFold(r) {
       var who = esc(hero()), lines = r.needs.map(function (m, i) {
+        if (m.itemId && m.sub) {
+          var real = held(D.pack, m.itemId) >= reserved(r, m.itemId), subs = standIns(D.pack, r, m);
+          if (pick[i] == null || (pick[i] && !subs.some(function (o) { return o.id === pick[i]; })) || (!pick[i] && !real)) pick[i] = real ? '' : subs[0] && subs[0].id;
+          return '<li><span class="crp-k">' + m.qty + ' × ' + esc(m.name) + '<small><label for="crk-pick-' + i + '">Or something in its place, ' + esc(SUB_COST[m.sub.costs] || '') + '</label></small></span><span class="crp-v">' +
+            '<select class="cra-in cra-sm" id="crk-pick-' + i + '" data-pick="' + i + '">' + (real ? '<option value=""' + (!pick[i] ? ' selected' : '') + '>' + esc(m.name) + ' (' + held(D.pack, m.itemId) + ')</option>' : '') +
+            subs.map(function (o) { return '<option value="' + esc(o.id) + '"' + (o.id === pick[i] ? ' selected' : '') + '>' + esc(o.name) + ' (' + o.qty + '), in its place</option>'; }).join('') + '</select></span></li>';
+        }
         if (m.itemId) return '<li><span class="crp-k">' + m.qty + ' × ' + esc(m.name) + '<small>from ' + who + '’s pack, which has ' + held(D.pack, m.itemId) + '</small></span><span class="crp-v is-ok">' + ICON.check + '</span></li>';
         var opts = tagged(D.pack, r, m.tag);
         if (!pick[i] || !opts.some(function (o) { return o.id === pick[i]; })) pick[i] = opts[0] && opts[0].id;
@@ -203,9 +226,10 @@
         '<ul class="crp-terms">' + rows.map(function (t) { return '<li><span>' + esc(t.text) + '</span><span>' + esc(t.n) + '</span></li>'; }).join('') +
         '<li class="is-tot"><span>Project points</span><span>+' + R.total + '</span></li></ul>' +
         '<div class="crp-outcome">' + progress(R.to, p.goal, R.from + ' → ' + R.to, p.name);
+      h += befell(R, p.name, hero());
       if (R.finished && R.made) h += '<div class="crp-made">' + ICON.check + '<span>' + esc(p.name) + ' is made. ' + esc(R.made) + ' is in ' + esc(hero()) + '’s pack.</span></div>';
       else if (R.finished) h += '<div class="crp-made is-warn"><span>' + esc(p.name) + ' is made.</span></div>';
-      else h += '<p class="cra-fine">' + (p.goal - R.to) + ' more to go. ' + (p.rollsReady > 0 ? 'You have another roll ready.' : 'The next roll comes with the next respite.') + '</p>';
+      else if (!R.lost) h += '<p class="cra-fine">' + (p.goal - R.to) + ' more to go. ' + (p.rollsReady > 0 ? 'You have another roll ready.' : 'The next roll comes with the next respite.') + '</p>';
       return h + '</div></div><div class="crp-foot"><p class="cra-fine">' + esc(R.notes.join(' ')) + '</p>' +
         '<button type="button" class="btn btn-secondary btn-sm" data-act="close" data-id="' + esc(p.id) + '">Done</button></div></div>';
     }
@@ -353,7 +377,7 @@
       var r = recipe(rid);
       if (!r || busy) return;
       var picks = {};
-      r.needs.forEach(function (m, i) { if (!m.itemId && pick[i]) picks[i] = pick[i]; });
+      r.needs.forEach(function (m, i) { if ((!m.itemId || m.sub) && pick[i]) picks[i] = pick[i]; });
       busy = true;
       render();
       api('POST', '/characters/' + encodeURIComponent(eid) + '/projects', {recipeId: rid, picks: picks}).then(function (pv) {
@@ -429,5 +453,5 @@
     }
   });
 
-  window.CraftingBlock = {held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: T.terms, costText: costText};
+  window.CraftingBlock = {held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: T.terms, costText: costText, befell: befell, standIns: standIns};
 })();

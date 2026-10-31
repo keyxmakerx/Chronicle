@@ -250,6 +250,40 @@ html[data-motion="off"] .cra-drawer { transition: none; }
 .cra-bempty { max-width: 560px; }
 .cra-bempty p { margin-top: 6px; }
 
+/* Upgrades: each piece is a card with its ladder; reached steps are green. */
+.cra-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.cra-upmount { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--cra-line); }
+.cra-uphd .cra-fine { max-width: 72ch; }
+.cra-uphd .cra-ph { margin-bottom: 4px; }
+.cra-upc { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 16px; border: 1px solid var(--cra-line); border-radius: var(--cra-r); background: var(--cra-panel); box-shadow: var(--cra-elev); }
+.cra-uhd { display: flex; align-items: center; gap: 10px; }
+.cra-uhd .cra-uname { flex: 0 1 260px; font-weight: 700; border-color: transparent; background: transparent; }
+.cra-uhd .cra-uname:hover { border-color: var(--cra-field-line); }
+.cra-uhd small { flex: 1; font-size: 12.5px; color: var(--cra-muted); }
+.cra-ladder { display: flex; align-items: flex-start; overflow-x: auto; padding: 4px 2px 2px; }
+.cra-lstep { font: inherit; position: relative; flex: 1 1 0; min-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 4px; border: 0; background: none;
+  color: var(--cra-body); text-align: center; cursor: pointer; }
+.cra-lstep::before { content: ""; position: absolute; top: 17px; left: -50%; right: 50%; height: 3px; background: var(--cra-line); }
+.cra-lstep:first-child::before { display: none; }
+.cra-lstep.got::before { background: var(--cra-ok); }
+.cra-dot { position: relative; z-index: 1; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 3px solid var(--cra-line);
+  background: var(--cra-panel); color: var(--cra-muted); font-weight: 800; transition: transform var(--dur-standard, .2s), border-color var(--dur-standard, .2s); }
+.cra-lstep.got .cra-dot { border-color: var(--cra-ok); background: var(--cra-ok); color: #fff; }
+.cra-lstep[aria-pressed="true"] .cra-dot { transform: scale(1.12); border-color: var(--cra-acc); box-shadow: 0 0 0 4px color-mix(in srgb, var(--cra-acc) 18%, transparent); }
+.cra-lstep b { font-size: 13px; line-height: 1.25; color: var(--cra-ink); }
+.cra-lstep small { font-size: 12px; line-height: 1.3; color: var(--cra-muted); }
+.cra-ladd .cra-dot { border-style: dashed; }
+.cra-ladd::before { background: none; border-top: 3px dashed var(--cra-line); height: 0; }
+.cra-ulv { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--cra-line); max-width: 640px; }
+.cra-urule { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.cra-urule > select, .cra-urule > .cra-ustep { justify-self: start; }
+.cra-uw { font-size: 13px; font-weight: 600; color: var(--cra-ink); }
+.cra-urule select + .cra-ustep { grid-column: 2; }
+.cra-ustep { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--cra-field-line); border-radius: var(--cra-r-sm); }
+.cra-ustep output { min-width: 36px; text-align: center; font-weight: 700; color: var(--cra-ink); }
+.cra-usent { color: var(--cra-body); }
+html[data-motion="off"] .cra-dot { transition: none; }
+
 /* ---------- A player's recipe book ---------- */
 .cra-bk { display: grid; grid-template-columns: 240px minmax(0, 560px); gap: 28px; align-items: start; }
 .cra-bk .cra-search { margin-bottom: 10px; min-width: 0; }
@@ -368,6 +402,8 @@ html[data-motion="off"] .cra-drawer { transition: none; }
   color: var(--cra-ok); background: rgb(var(--color-ok-rgb, 22 163 74) / .12); }
 .crp-made.is-warn { color: var(--cra-dm); background: rgb(var(--color-warn-rgb, 217 119 6) / .12); }
 .crp-made svg { flex: none; }
+.crp-made b { font-weight: 700; }
+.crp-befell { margin-bottom: 8px; }
 .crp-confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--cra-line);
   background: rgb(var(--color-bad-rgb, 220 38 38) / .1); }
 .crp-confirm p { flex: 1 1 240px; margin-right: auto; color: var(--cra-ink); font-size: 13.5px; }

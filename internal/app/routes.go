@@ -6249,7 +6249,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     crafting.PluginSlug,
 		StaticFS: echo.MustSubFS(crafting.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "crafting", Scripts: []string{"js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
+			{Name: "crafting", Scripts: []string{"js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_upgrades.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
 			{Name: "crafting-block", Scripts: []string{"js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_block.js"}},
 		},
 	})
@@ -6272,6 +6272,7 @@ func (a *App) RegisterRoutes() {
 				Spoils:   craftingRepo.(crafting.SpoilStore),
 				Pages:    &craftingPagesAdapter{entities: entityService},
 				Sheets:   &craftingSheetsAdapter{entities: entityService},
+				Tables:   craftingTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))},
 				Days:     &craftingDaysAdapter{cal: calendarService},
 				Calendar: &craftingCalendarAdapter{cal: calendarService},
 				Respite:  craftingRespites,
@@ -6569,7 +6570,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
 	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_bench.js"}},
-	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules.js"}},
+	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules_more.js", "/static/js/widgets/craft_rules.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the
