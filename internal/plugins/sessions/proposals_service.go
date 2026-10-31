@@ -361,27 +361,19 @@ func (s *sessionService) ApplyProposalToken(ctx context.Context, tokenStr string
 }
 
 // ConfirmProposalWinner is the confirm-winner flow (Scribe+): mark the chosen
-// option the winner + close the proposal (atomically), then create a planned
-// session from the winning UTC instant. The instant is materialized into the
-// confirmer's zone as the zone-less wall-clock date + "HH:MM" the group plays
-// at — mirroring the zone-less scheduled_date manual sessions already use.
-// The proposal is closed BEFORE the session is created so a retry can never
-// mint a duplicate session (a re-confirm hits the closed guard); on the rare
-// create-after-close failure the winner is still marked and the operator can
-// add the session manually. Returns the new session so the handler can
-// invite members + notify responders (both handler concerns — the service
-// stays campaigns-free).
-// ConfirmProposalWinner additionally returns the user ids who voted "yes" on
-// the WINNING option (operator server-change #3): the confirmer becomes
-// Going immediately, but a plain yes vote on the option that got confirmed is
-// not automatically a Going for anyone else — they still owe an explicit
-// confirm, carried as RSVPCarriedYes. The handler (which alone has the
-// member roster — this service stays campaigns-free, per this method's
-// existing division of labor) is the one that actually sets every
-// attendee's starting status, INCLUDING the confirmer's own — this method
-// only reports who voted yes so the handler can special-case them, rather
-// than writing an attendee row here that a handler-side InviteAll would
-// then immediately overwrite back to "invited".
+// option the winner and close the proposal (atomically), then create a planned
+// session from the winning UTC instant, materialized into the confirmer's zone
+// as the zone-less wall-clock date + "HH:MM" manual sessions already use.
+// The proposal closes BEFORE the session is created so a retry cannot mint a
+// duplicate (a re-confirm hits the closed guard); if create fails after close,
+// the winner stays marked and the operator adds the session manually.
+//
+// It also returns the user ids who voted "yes" on the winning option. A plain
+// yes vote is not automatically Going for anyone but the confirmer; the rest
+// still owe an explicit confirm, carried as RSVPCarriedYes. The handler, which
+// alone has the member roster (the service stays campaigns-free), invites
+// members, notifies responders and sets every attendee's starting status,
+// the confirmer's included; this method only reports who voted yes.
 func (s *sessionService) ConfirmProposalWinner(ctx context.Context, campaignID, proposalID, optionID, confirmedBy, confirmerTZ string) (*Session, []string, error) {
 	p, opts, err := s.repo.GetProposal(ctx, campaignID, proposalID)
 	if err != nil {

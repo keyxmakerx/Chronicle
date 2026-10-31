@@ -693,7 +693,7 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 		// enforces at boot (content caps, slugs, field types, renderer
 		// bindings…), injected from the app layer. Without this, a
 		// manifest the loader will reject installs "green" and then
-		// shadow-fails at load while the old version keeps serving. Runs
+		// fails at load. Runs
 		// after the version rewrite so it validates exactly the bytes
 		// that will be served.
 		if s.manifestValidator != nil {

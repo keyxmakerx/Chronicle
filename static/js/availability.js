@@ -467,8 +467,8 @@
         if (data.tz) { self.tz = data.tz; var sel = $('.avail-toolbar select', self.root); if (sel) sel.value = data.tz; }
 
         // Blocks are distributed into their own cadence LAYER. A block with no
-        // weekCadence (or 0) is an every-week block, which is what every block
-        // written before this feature existed is.
+        // weekCadence (or 0) is an every-week block, which covers
+        // blocks saved without the field.
         (data.blocks || []).forEach(function (b) {
           var col = DISPLAY_DOW.indexOf(b.dayOfWeek);
           if (col < 0) return;

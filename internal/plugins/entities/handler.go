@@ -894,8 +894,8 @@ func (h *Handler) Update(c echo.Context) error {
 
 	fieldsData := h.parseFieldsFromForm(c, cc.Campaign.ID, entity.EntityTypeID)
 
-	// IsPrivate intentionally omitted: the form no longer carries this
-	// field (the permissions card owns it now via /permissions). A nil
+	// IsPrivate intentionally omitted: the form doesn't carry it (the
+	// permissions card owns it via /permissions). A nil
 	// IsPrivate means the service preserves the entity's current value
 	// instead of resetting it to false on every save. See model.go
 	// UpdateEntityInput for the rationale.
@@ -3734,9 +3734,9 @@ func (h *Handler) GetAliasesAPI(c echo.Context) error {
 	entityID := c.Param("eid")
 
 	// Load the entity to enforce campaign scope + privacy, mirroring
-	// GetEntry/GetFieldsAPI — previously this read aliases by id with no IDOR
-	// or privacy gate (cordinator#39 finding 3). Required before exposing the
-	// route to public-campaign visitors.
+	// GetEntry/GetFieldsAPI. Without this gate aliases are readable by id
+	// across campaigns and privacy levels (IDOR); required for public-campaign
+	// visitors.
 	entity, err := h.service.GetByID(c.Request().Context(), entityID)
 	if err != nil {
 		return err

@@ -116,12 +116,12 @@ func (r *timelineRepo) GetByID(ctx context.Context, id string) (*Timeline, error
 // Owners see dm_only timelines; others see only 'everyone'.
 //
 // EventCount here covers STANDALONE events only: the linked-event half
-// (timeline_event_links -> calendar_events) can no longer be counted in SQL
+// (timeline_event_links -> calendar_events) cannot be counted in SQL
 // — calendar_events is not this plugin's table to JOIN (rule 8) — so it
 // can't apply a dm_only predicate here either. The service layer restores
 // the linked count, WITH its own visibility filter, for every viewer,
-// Owner included (timelineService.recountEventsForViewer, which now always
-// runs — see its doc comment): the two are restored together on purpose, so
+// Owner included (timelineService.recountEventsForViewer, which always
+// runs): the two are restored together on purpose, so
 // a viewer can never see a count that includes events their own list omits.
 func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([]Timeline, error) {
 	visFilter := "AND t.visibility = 'everyone'"
@@ -299,17 +299,13 @@ func scanEventLinkOwn(scanner interface{ Scan(...any) error }) (*EventLink, erro
 // metadata only (event id, display order, the link's own visibility
 // override/rules, label, color override), not the calendar event data those
 // ids point at, which the calendar plugin owns (rule 8). role is accepted
-// but unused at this layer: the deleted `ce.visibility` filter needed
-// calendar_events, so that half of the role gate now happens in the service
-// layer instead, where CalendarEventLinkLister resolves each event through
-// the calendar plugin's own role-filtered read. Every caller still passes
-// role so a future SQL-only filter on this table's OWN columns (if one is
-// ever needed) has nothing else to change.
+// but unused here: the calendar-event half of the role gate happens in the
+// service layer, where CalendarEventLinkLister resolves each event through
+// the calendar plugin's own role-filtered read. Callers still pass role so a
+// future filter on this table's own columns needs no signature change.
 //
-// Ordered by display_order only — the caller's real ordering (by the linked
-// event's in-world date) happens after enrichment, in
-// service.go's sortEventLinks, since this repo has no date to sort by until
-// then.
+// Ordered by display_order only; the real ordering (by the linked event's
+// in-world date) happens after enrichment, in service.go's sortEventLinks.
 func (r *timelineRepo) ListEventLinks(ctx context.Context, timelineID string, role int) ([]EventLink, error) {
 	_ = role
 	rows, err := r.db.QueryContext(ctx,

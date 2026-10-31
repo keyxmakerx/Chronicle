@@ -40,11 +40,9 @@ templ CategoryBlockSwitch(cc *campaigns.CampaignContext, et *EntityType, block c
 			@catTimelinePreview(cc, block.Config)
 		default:
 			@renderExtraCategoryBlock(cc, et, block.Type)
-		// map_preview was removed in favor of the per-entity map_editor
-		// block (see internal/plugins/maps/entity_map_block.templ). The
-		// old type silently drops at render — existing category layouts
-		// keep the JSON entry but no UI shows. Scribe+ can re-add via
-		// the new block in the layout editor.
+		// map_preview is not a block type: layouts still holding it keep the
+		// JSON entry but render nothing. The per-entity map_editor block
+		// replaces it.
 	}
 }
 

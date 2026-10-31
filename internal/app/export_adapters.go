@@ -1718,16 +1718,11 @@ func (a *calendarImportAdapter) importPageVersions(ctx context.Context, campaign
 // (see ExportImportService.Import's doc comment) — a partially-restored
 // calendar beats none.
 //
-// data.EndMonth/EndDay-less eras and CreateEventKind's own icon-shape
-// validation are the two places a PRE-V5 backup's calendar section is most
-// likely to partially fail: V4's ExportCalendarEra carried year-only
-// boundaries (no month/day — see ExportCalendarEra's doc comment) and V4's
-// default event kinds used emoji icons, which V5's CreateEventKind rejects
-// (Font Awesome class names only, enforced at creation, not merely at
-// display). Both degrade gracefully here — an era gets month/day defaults
-// (see eraStartMonthDay below), and an event whose category's kind failed to
-// import still gets created, just with no KindID — rather than losing the
-// era or the event outright.
+// A pre-V5 backup's calendar section is the likeliest to partially fail: V4
+// eras carried year-only boundaries (they get month/day defaults, see
+// eraStartMonthDay) and V4 event kinds used emoji icons, which
+// CreateEventKind rejects (Font Awesome class names only). An event whose
+// kind failed to import is still created, with no KindID.
 func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	kindIDBySlug, err := a.importOne(ctx, campaignID, data, idMap, report, true, nil)
 	if err != nil {

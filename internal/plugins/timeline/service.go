@@ -97,19 +97,13 @@ type CalendarEventRef struct {
 
 // CalendarEventLinkLister resolves calendar_events details for a timeline's
 // OWN timeline_event_links rows, plus a timeline's calendar_id display name
-// — restoring the two dark spots repository.go's CALV5-PLACEHOLDER comments
-// name (the GetByID calendar-name join, and the event-link read path).
-//
-// This is a DIFFERENT, newly-added interface from CalendarLister/
-// CalendarEventLister/CalendarEraLister above: those three (plus
-// timelineForCalendarAdapter and six others toward the calendar) are their
-// own separate restoration, explicitly deferred past this one — see the
-// CALV5-PLACEHOLDER doc comment on NewTimelineService's call site in
-// app/routes.go. Implemented by a new adapter there,
-// calendarEventLinkListerAdapter, wired through SetCalendarEventLinkLister.
+// — the calendar-name read and the event-link read path, both of which cross
+// the plugin boundary. Implemented by calendarEventLinkListerAdapter in
+// app/routes.go, wired through SetCalendarEventLinkLister; separate from
+// CalendarLister/CalendarEventLister/CalendarEraLister above.
 // Optional: nil (never wired) means no calendar event can be resolved, so a
-// timeline shows standalone events only — degraded, not broken, the same
-// "dark means safe" reasoning the deletion commit used.
+// timeline shows standalone events only — degraded, not broken ("dark means
+// safe").
 type CalendarEventLinkLister interface {
 	// CalendarName returns calendarID's display name in campaignID, or ""
 	// if it doesn't exist OR role may not see it (a dm_only calendar's real
@@ -388,7 +382,7 @@ func (s *timelineService) GetTimelineForViewer(ctx context.Context, timelineID, 
 }
 
 // fillCalendarName sets t.CalendarName from calEventLinkLister — repository
-// reads no longer join the calendar's own `calendars` table for it (plugin
+// reads never join the calendar's own `calendars` table (plugin
 // isolation rule 8). A no-op when the timeline has no bound calendar, or
 // when the lister is unset (never wired): CalendarName then stays "", which
 // every template already renders as "no calendar bound" rather than
@@ -426,14 +420,11 @@ func (s *timelineService) ListTimelines(ctx context.Context, campaignID string, 
 // seams, #778, restores the linked half of that count alongside this filter,
 // per issue #741's own item — see timelineEventLinks/enrichLinkedEvents).
 //
-// This now runs for EVERY viewer, including Owners/co-DMs and system
-// callers: repository.go's List/ListByCalendar can no longer JOIN
-// calendar_events to count linked events in SQL (plugin isolation rule 8 —
-// the calendar's tables are not this plugin's to read), so their SQL count
-// covers standalone events only. Recounting in Go via
-// CalendarEventLinkLister is the only path that can add the linked half back
-// for ANY viewer now, not just the ones already paying for per-user
-// filtering. filterEventLinksByUser is a no-op passthrough for a viewer that
+// This runs for EVERY viewer, including Owners/co-DMs and system callers:
+// the repository's List/ListByCalendar cannot JOIN calendar_events (plugin
+// isolation rule 8 — the calendar's tables are not this plugin's to read),
+// so their SQL count covers standalone events only. Recounting in Go via
+// CalendarEventLinkLister is the only path that adds the linked half back. filterEventLinksByUser is a no-op passthrough for a viewer that
 // SkipsPerUserRules, so this costs those viewers nothing beyond the extra
 // reads themselves.
 func (s *timelineService) recountEventsForViewer(ctx context.Context, timelines []Timeline, v permissions.Viewer) error {
@@ -733,11 +724,11 @@ func (s *timelineService) timelineEventLinks(ctx context.Context, timelineID str
 
 // enrichLinkedEvents fills each raw timeline_event_links row's Event* fields
 // (name, dates, category, visibility, entity) from the calendar plugin via
-// calEventLinkLister, since repository.go's ListEventLinks can no longer
-// JOIN calendar_events for them (plugin isolation rule 8). A link whose
+// calEventLinkLister, since the repository's ListEventLinks cannot JOIN
+// calendar_events (plugin isolation rule 8). A link whose
 // event the given role may not see is DROPPED here — never returned with
-// its content blanked — mirroring the deleted `JOIN calendar_events ce ...
-// WHERE ce.visibility = 'everyone'`'s row-level exclusion.
+// its content blanked — the same row-level exclusion a visibility = 'everyone'
+// filter would give.
 //
 // calEventLinkLister == nil (never wired) or a timeline with no bound
 // calendar both degrade to "no linked events resolved" rather than an

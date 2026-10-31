@@ -101,7 +101,7 @@ if [[ -n "${violations}" ]]; then
   echo
   echo "${violations}"
   echo
-  echo "Per cordinator/decisions/2026-05-28-cal-timeline-v2-design.md §B2:"
+  echo "Motion rules:"
   echo "  - Only \`transform\` + \`opacity\` ever animated"
   echo "  - NEVER \`transition: all\` (explicitly list properties)"
   echo "  - Reach for \`transition-transform\`, \`transition-opacity\`,"

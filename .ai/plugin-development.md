@@ -53,11 +53,9 @@ Plugins can:
 }
 ```
 
-**Calendar host functions are not wired to the calendar (#741).** The
-`calendar_read` / `calendar_write` host functions and the three
-`calendar.event_*` hooks stay declared and registered, but the read/write
-functions return an error instead of data and the hooks never fire, until
-they are rewired to the calendar service.
+**Calendar is not wired (#741).** `calendar_read` / `calendar_write` stay
+declared, but their host functions return an error ("calendar is being rebuilt
+(V5)") and the `calendar.event_*` hooks never fire.
 
 **When plugins load.** A plugin loads when a campaign enables its extension,
 and again at every server start for each active extension that at least one
@@ -65,16 +63,13 @@ campaign has enabled.
 
 ## Capabilities
 
-Plugins must declare required capabilities. Only matching host functions are
-exposed to the WASM runtime.
-
 | Capability | Host Functions | Description |
 |---|---|---|
 | `log` | `chronicle_log` | Server-side logging |
 | `entity_read` | `get_entity`, `search_entities`, `list_entity_types` | Read entity data |
 | `entity_write` | `update_entity_fields` | Modify entity custom fields |
-| `calendar_read` | `get_calendar`, `list_events` | Read calendar data (currently returns an error — see note below) |
-| `calendar_write` | `create_event` | Create calendar events (currently returns an error — see note below) |
+| `calendar_read` | `get_calendar`, `list_events` | Read calendar data (errors, see above) |
+| `calendar_write` | `create_event` | Create calendar events (errors, see above) |
 | `tag_read` | `list_tags` | Read campaign tags |
 | `tag_write` | `set_entity_tags`, `get_entity_tags` | Read/write entity tags |
 | `relation_write` | `create_relation` | Create entity relations |
@@ -118,24 +113,20 @@ Update custom fields on an entity.
 Get calendar configuration for a campaign.
 - Input: `{"campaign_id": "..."}`
 - Output: Calendar config JSON
-- **Currently always errors.** The host function stays registered and
-  declared, but its adapter (`internal/app/routes.go`, `wasmCalendarReader`)
-  is not wired to the calendar service and returns "calendar is being rebuilt
-  (V5) and is unavailable to extensions" rather than data.
+- Always errors until the calendar is rewired (#741).
 
 ### list_events
 List upcoming events for a campaign's calendar.
 - Input: `{"campaign_id": "...", "limit": 50}`
 - Output: JSON array of events
-- **Currently always errors**, same reason as `get_calendar` above.
+- Always errors, as `get_calendar`.
 
 ### create_event
 Create a calendar event.
 - Input: `{"name": "...", "year": 1492, "month": 6, "day": 15, ...}`
 - Output: Created event JSON with ID
 - Max input: 64 KB
-- **Currently always errors**, same reason as `get_calendar` above (its
-  adapter is `wasmHostEnv.SetCalendarWriter` in `internal/app/routes.go`).
+- Always errors, as `get_calendar`.
 
 ### list_tags
 List all tags for a campaign.
@@ -197,8 +188,7 @@ When an event fires, Chronicle calls the plugin's `on_hook` export with:
 }
 ```
 
-Event details (an entity id, for instance) are inside `payload`, not at the
-top level.
+Event details (an entity id, for instance) are inside `payload`, not top level.
 
 | Hook | Fires when | `payload` |
 |---|---|---|
@@ -303,8 +293,7 @@ The [Extism CLI](https://github.com/extism/cli) can invoke WASM plugins directly
 extism call dist/plugin.wasm roll --input '{"expression":"2d6+3"}'
 ```
 
-Note: Host functions won't be available when testing with the CLI directly.
-Use the Go SDK mock for integration testing of host function calls.
+The CLI has no host functions; use the Go SDK mock to test host calls.
 
 ## Limits
 

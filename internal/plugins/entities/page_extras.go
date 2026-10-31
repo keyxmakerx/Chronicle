@@ -163,7 +163,7 @@ type PageExtrasPlan struct {
 	CharacterItems bool // the items-and-money panel after the layout
 }
 
-// placePageExtras adds the blocks that used to be drawn outside a layout and
+// placePageExtras adds the blocks drawn outside a layout and
 // reports whether anything changed. Each block is added only when the layout
 // does not already place it, so running it again changes nothing.
 func placePageExtras(layout EntityTypeLayout, plan PageExtrasPlan) (EntityTypeLayout, bool) {
@@ -192,7 +192,7 @@ func placePageExtras(layout EntityTypeLayout, plan PageExtrasPlan) (EntityTypeLa
 }
 
 // insertAfterTitle puts a block right after the first top-level title block,
-// where the panels used to sit, or in a row of its own at the top.
+// where the panels sit, or in a row of its own at the top.
 func insertAfterTitle(layout EntityTypeLayout, b TemplateBlock) EntityTypeLayout {
 	for r := range layout.Rows {
 		for c := range layout.Rows[r].Columns {
@@ -243,9 +243,8 @@ func fullWidthRow(id string, blocks ...TemplateBlock) TemplateRow {
 	return TemplateRow{ID: id, Columns: []TemplateColumn{{ID: id + "-col", Width: 12, Blocks: blocks}}}
 }
 
-// PlacePageExtras places the page pieces that used to be drawn outside the
-// layout into every entity type of a campaign, so its pages look as they did
-// before those pieces became blocks. plans is keyed by entity type id. Types
+// PlacePageExtras places the page pieces drawn outside the layout into every
+// entity type of a campaign, so existing pages keep their look. plans is keyed by entity type id. Types
 // whose layout already places everything are left untouched. Returns the
 // number of layouts changed.
 func (s *entityService) PlacePageExtras(ctx context.Context, campaignID string, plans map[int]PageExtrasPlan) (int, error) {

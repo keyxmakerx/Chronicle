@@ -1,5 +1,3 @@
-// Package database provides connection setup for MariaDB and Redis.
-//
 // plugin_migration_safety.go guards execPluginMigration against MariaDB
 // having no transactional DDL: every CREATE/ALTER/DROP/RENAME commits
 // implicitly, so a multi-statement migration that fails partway leaves
@@ -18,6 +16,7 @@
 // migration's text is byte-identical to what produced it, since migrations
 // are append-only (ADR-044) and a resume that skipped the wrong statements
 // would be worse than the crash-loop it replaces.
+
 package database
 
 import (

@@ -286,9 +286,8 @@ func (h *MapAPIHandler) ListDrawings(c echo.Context) error {
 	role := h.viewRole(c)
 
 	// Resolve user ID from API key for per-player visibility_rules
-	// filtering (S1 — matches ListMarkers above; ListDrawings previously
-	// ignored caller identity entirely, so a drawing's rules had no
-	// effect over this API either).
+	// filtering, matching ListMarkers above; without the caller identity a
+	// drawing's rules would have no effect over this API.
 	userID := ""
 	if key := GetAPIKey(c); key != nil {
 		userID = key.UserID

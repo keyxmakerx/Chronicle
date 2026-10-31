@@ -1546,31 +1546,16 @@ func (s *calendarService) GetPrimaryCalendarForViewer(ctx context.Context, campa
 // ir.Warnings records which ones so the caller can tell the owner.
 //
 // Every recreated event is forced to visibility="dm_only", ignoring
-// ee.Visibility entirely — fail closed, not a round-trip of the source's
-// own value. ExportEvent.Visibility DOES carry the source event's base
-// visibility, but VisibilityRules (a per-event allow-list, e.g. "only
-// these three players") is deliberately NOT part of the export format
-// (export/import stays out of scope for that — the fix here is sized to
-// the risk, not to adding visibility_rules portability): an event that was
-// "everyone" at the base level but restricted to a handful of players via
-// visibility_rules would export as plain "everyone" with the allow-list
-// silently dropped, and reimporting it verbatim would hand it to every
-// player. Since there's no way to tell, from the export alone, whether a
-// given event's true audience was narrower than its base Visibility says,
-// every imported event defaults to the most restrictive setting instead —
-// the owner can loosen individual events afterward once they've reviewed
-// them. One summary warning covers this for the whole import, not one per
-// event.
+// ee.Visibility: fail closed. The export carries the base Visibility but not
+// VisibilityRules (per-event allow-lists), so an event restricted to a few
+// players would otherwise reimport as plain "everyone". The owner loosens
+// events after review; one summary warning covers the whole import.
 //
-// Building and inserting goes through buildValidatedEvent — the same
-// validation and description_html sanitization CreateEvent applies to a
-// hand-created event — so an imported description_html can't carry
-// unsanitized markup into storage, and the same field-length/format checks
-// apply. An event that FAILS validation is skipped with its own warning
-// (#741: warn, don't abort); a genuine DB error (a malformed payload, a
-// color that still doesn't fit after normalization) aborts the whole
-// import instead, since that signals something CreateCalendarFromImport's
-// caller should see rather than silently limp past.
+// Building and inserting goes through buildValidatedEvent, the same
+// validation and description_html sanitization as CreateEvent, so imported
+// markup cannot reach storage unsanitized. An event that fails validation
+// is skipped with its own warning (#741: warn, don't abort); a genuine DB
+// error aborts the import.
 func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, campaignID string, ir *ImportResult) error {
 	if len(ir.Events) == 0 {
 		return nil

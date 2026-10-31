@@ -212,7 +212,7 @@ func (r *eventRepo) EntitiesForCalendar(ctx context.Context, calendarID string, 
 // info, gated by entityVisibilityFilter and guarded to the event's own
 // campaign (JOIN calendars c ... AND e.campaign_id = c.campaign_id), so a
 // stale or hand-inserted cross-campaign tie can never surface here even
-// though LinkEntityEvent itself no longer creates one. Ordered by entity name.
+// though LinkEntityEvent never creates one. Ordered by entity name.
 func (r *eventRepo) EntitiesForEvent(ctx context.Context, eventID string, role int, userID string) ([]EntityTieRef, error) {
 	visFilter, visArgs := entityVisibilityFilter(role, userID)
 	args := append([]any{eventID}, visArgs...)

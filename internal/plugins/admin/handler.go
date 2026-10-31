@@ -56,7 +56,7 @@ type Handler struct {
 	// resolveMaxUploadSize returns the live max-upload-size from the
 	// settings service. Used by the storage admin page so the displayed
 	// "Max upload" matches what /media/upload's body-limit actually
-	// enforces — was previously the env-var value frozen at startup.
+	// enforces (read live, not frozen at startup).
 	resolveMaxUploadSize func() int64
 	settingsService      settings.SettingsService
 	addonCounter         AddonCounter

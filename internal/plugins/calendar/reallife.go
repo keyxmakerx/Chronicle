@@ -102,27 +102,16 @@ func gregorianMoon() MoonInput {
 // zone, "today follows the real date" flag and — when that flag is off — an
 // explicit date come from the browser).
 //
-// Settings.Mode is ModeRealLife; TracksRealTime/RealTimeZone are left unset
-// here for the caller (WizardCreate) to fill in from the owner's actual
-// choice. Today.Year defaults to the real current year (Month/Day stay nil,
-// same "never invent a day-level default" rule #741 already applies to
-// every other source) — sensible for both branches: the wall-clock branch
-// overwrites all three, and the manual branch starts the year/month/day
-// pickers somewhere plausible instead of year zero.
-// Seasons/Hemisphere default to the northern set: defaultRealLifeSeasons's
-// four reference dates (Mar 20/Jun 21/Sep 23/Dec 21) are hemisphere-neutral
-// and only the NAMES flip, so "northern" here is a starting guess, not a
-// geography check — nothing about the owner's campaign says which
-// hemisphere their table is in. Hemisphere is set alongside the seasons
-// (not left nil) so the two stay coherent from the very first read; an
-// owner in the southern hemisphere flips it after creation via
-// UpdateCalendar's existing Hemisphere field, exactly the same control an
-// imported real-life calendar already uses for this — but the same control
-// only AUTO-reseeds when the calendar has no seasons yet (its own doc
-// comment), so seeding seasons here means a later flip renames nothing on
-// its own; the owner would delete/redo them by hand. Worth a decision (open
-// item on #741 — "should a new real-world calendar start with seasons"),
-// not a call this package makes unilaterally.
+// Settings.Mode is ModeRealLife; TracksRealTime/RealTimeZone are left for
+// the caller (WizardCreate) to fill from the owner's choice. Today.Year
+// defaults to the real current year (Month/Day stay nil: no invented
+// day-level default); the wall-clock branch overwrites all three.
+// Seasons/Hemisphere default to the northern set: the four reference dates
+// are hemisphere-neutral and only the names flip, so this is a starting
+// guess. A later hemisphere flip via UpdateCalendar only auto-reseeds when
+// the calendar has no seasons, so a southern owner must redo them by hand;
+// whether a new real-world calendar should start with seasons is an open
+// question on #741.
 func realWorldDefaultHemisphere() string { return HemisphereNorth }
 
 func GregorianImportResult() (*ImportResult, error) {

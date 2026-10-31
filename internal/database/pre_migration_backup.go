@@ -1,4 +1,4 @@
-// Package database — pre_migration_backup.go captures a full snapshot of
+// pre_migration_backup.go captures a full snapshot of
 // chronicle's persistent state immediately before migrations apply. Three
 // artifact families plus a manifest:
 //
@@ -21,6 +21,7 @@
 // finalized if any artifact is zero-byte or fails checksum. Output files are
 // 0600 (the dump contains all data) and atomic-renamed from a .partial
 // suffix so a half-written file never persists.
+
 package database
 
 import (

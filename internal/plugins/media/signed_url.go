@@ -236,7 +236,7 @@ const (
 	// concern.
 	SecretFromEnv SigningSecretSource = "env"
 
-	// SecretFromFile — secret was previously generated and persisted;
+	// SecretFromFile — secret was generated earlier and persisted;
 	// this boot read the persisted value. Restart-stable.
 	SecretFromFile SigningSecretSource = "file"
 

@@ -384,11 +384,9 @@ func IsSupportedRecurrenceType(t string) bool {
 // Real-time (Gregorian) calendars use the proleptic-Gregorian Julian Day
 // Number, a true day counter that advances by exactly one across a leap day.
 // A positive year delegates to AbsoluteDay, the same leap-aware closed-form
-// counter moon-phase math already uses — this used to be a separate,
-// leap-naive constant-length sum (year*YearLength()) that diverged from
-// AbsoluteDay by one day per elapsed leap year for positive years;
-// reconciled so recurrence, weekday placement and moon phase can never drift
-// apart there.
+// counter moon-phase math already uses, so recurrence, weekday placement and
+// moon phase cannot drift apart (a leap-naive year*YearLength() sum would
+// diverge by one day per leap year).
 //
 // year <= 0 stays on the linear formula: it is leap-unaware but strictly
 // monotonic across zero and negative years, which is what recurrence and

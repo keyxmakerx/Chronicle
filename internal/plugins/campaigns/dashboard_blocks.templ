@@ -43,10 +43,8 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashCalendarPreview(cc, block.Config)
 		case "timeline_preview":
 			@dashTimelinePreview(cc, block.Config)
-		// map_preview was removed in favor of the per-entity map_editor
-		// block on entity templates, and map_full continues to cover the
-		// "show a specific map on the dashboard" case. Existing dashboard
-		// layouts with map_preview silently drop the block at render.
+		// map_preview is not a block type: layouts still holding it drop it at
+		// render. map_full shows a specific map.
 		case "relations_graph":
 			@dashRelationsGraph(cc, block.Config)
 		case "calendar_full":

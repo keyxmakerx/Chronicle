@@ -924,9 +924,9 @@ func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campa
 // none, matching CalendarEventLister's existing picker convention above):
 // this is STRICTER than the deleted JOIN's own `ce.visibility = 'everyone'`
 // check, never looser, since it also runs a calendar event's own
-// visibility_rules and redacts a hidden linked entity, both of which the old
-// SQL never touched.
-// One batch read serves every id, so cost no longer grows with link count.
+// visibility_rules and redacts a hidden linked entity, both of which a plain
+// SQL join cannot. One batch read serves every id, so cost does not grow with
+// link count.
 func (a *calendarEventLinkListerAdapter) EventsByIDs(ctx context.Context, calendarID, campaignID string, eventIDs []string, role int) ([]timeline.CalendarEventRef, error) {
 	if calendarID == "" || len(eventIDs) == 0 {
 		return nil, nil
@@ -3981,23 +3981,15 @@ func (a *App) RegisterRoutes() {
 	// both paths deliver the same scripts; each re-inits on
 	// htmx:afterSettle/htmx:load and no-ops when its mount is absent.
 	//
-	// The calendar's page scripts: calendar_era_blend.js (loaded first)
-	// paints the era colours for calendar_view.js and for the structure
-	// editor's Era look part (calendar_era_look.js, which mounts on that
-	// page's data-widget="calendar_era_look"); calendar_view.js mounts on
-	// data-widget="calendar_view" (the calendar's own page, however it was
-	// reached) and opens calendar_game_night.js's game night editor,
-	// calendar_editor.js self-gates on that
-	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
-	// event editor and calendar_weather_sheet.js's weather calendar (both
-	// loaded first so they exist when the editor binds; the drawer's
-	// repeat-by-rule logic is calendar_rule.js, loaded before it; its Roll
-	// section is the on-sight widget calendar_event_roll), and
-	// calendar_open.js peeks and opens the Calendars page's cards. rulebook.js
-	// mounts on the Rules page's data-widget="rulebook" when a system ships a
-	// book, and rulebook_editor.js on the editor page's
-	// data-widget="rulebook-editor". All are no-ops on every other page, same
-	// as every entry here.
+	// Calendar scripts: calendar_era_blend.js loads first (era colours for
+	// calendar_view.js and calendar_era_look.js); calendar_view.js mounts on
+	// data-widget="calendar_view" and opens calendar_game_night.js;
+	// calendar_editor.js self-gates on data-can-edit="true" and opens
+	// calendar_event_drawer.js and calendar_weather_sheet.js (both loaded
+	// first; the drawer's repeat logic is calendar_rule.js, loaded before it);
+	// calendar_open.js opens the Calendars page's cards. rulebook.js and
+	// rulebook_editor.js mount on their data-widget pages. Every script
+	// no-ops when its mount is absent.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",

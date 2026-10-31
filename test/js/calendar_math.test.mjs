@@ -3,12 +3,10 @@
 // math, kept so a recurring event's occurrence days, the weekday grid column
 // and moon phases can never disagree with the server) actually agree with the
 // Go implementation on shared fixture calendars — including across an elapsed
-// leap year and on a MonthStartsNewWeek calendar with an intercalary month,
-// the two cases dayIndex/weekdayCol previously got wrong (see calendar_view.js's
-// CalDate module comment: dayIndex now mirrors Calendar.absDayIndex exactly —
-// leap-aware for every year > 0 — and weekdayCol mirrors WeekdayIndex's
-// MonthStartsNewWeek branch, including its -1 "outside the week cycle"
-// signal for an intercalary month).
+// leap year and on a MonthStartsNewWeek calendar with an intercalary month.
+// dayIndex mirrors Calendar.absDayIndex (leap-aware for every year > 0);
+// weekdayCol mirrors WeekdayIndex's MonthStartsNewWeek branch, including its
+// -1 "outside the week cycle" signal for an intercalary month.
 //
 // Every expected number below is copied verbatim from a throwaway `go test`
 // run against internal/plugins/calendar's real Calendar/Event/Moon methods on
