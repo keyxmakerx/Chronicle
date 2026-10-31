@@ -1,0 +1,44 @@
+package admin
+
+// releaseNoticeID is the notice's element id; Later swaps it away.
+const releaseNoticeID = "release-notice"
+
+// releaseNoticeCard tells a site admin that a newer Chronicle is out. It
+// links to the upgrade steps rather than offering an Update button, because
+// Chronicle can't replace its own container. Later hides this version for
+// this admin until a newer one appears.
+templ releaseNoticeCard(n *ReleaseNotice) {
+	if n != nil {
+		<section id={ releaseNoticeID } class="card border-l-[3px] border-l-accent" role="status" aria-label="New Chronicle version">
+			<div class="flex items-start gap-3">
+				<i class="fa-regular fa-bell text-fg-muted mt-0.5" aria-hidden="true"></i>
+				<div class="min-w-0 flex-1 space-y-1.5 text-sm">
+					<p class="text-fg">
+						<b>Chronicle { n.Version } is out.</b>
+						You&rsquo;re on { n.Running }.
+						if n.Security {
+							It includes security fixes.
+						} else {
+							Its notes list no security fixes.
+						}
+					</p>
+					if n.WhatsNew != "" {
+						<p class="text-fg-secondary break-words">What&rsquo;s new: { n.WhatsNew }</p>
+					}
+					<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+						<a href={ templ.SafeURL(n.GuideURL) } target="_blank" rel="noopener noreferrer" class="text-accent underline underline-offset-2">How to update</a>
+						<a href={ templ.SafeURL(n.NotesURL) } target="_blank" rel="noopener noreferrer" class="text-accent underline underline-offset-2">Release notes</a>
+						<button
+							type="button"
+							class="btn-secondary btn-sm ml-auto"
+							hx-post="/admin/release-notice/later"
+							hx-vals={ releaseLaterVals(n.Version) }
+							hx-target={ "#" + releaseNoticeID }
+							hx-swap="outerHTML"
+						>Later</button>
+					</div>
+				</div>
+			</div>
+		</section>
+	}
+}

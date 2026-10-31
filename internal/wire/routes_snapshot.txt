@@ -123,6 +123,7 @@ DELETE	/admin/packages/prune	site-admin	plugins/packages.(*Handler).PruneExecute
 GET	/admin/packages/prune	site-admin	plugins/packages.(*Handler).PrunePreview	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/packages/settings	site-admin	plugins/packages.(*Handler).GetSecuritySettings	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/packages/settings	site-admin	plugins/packages.(*Handler).SaveSecuritySettings	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
+POST	/admin/release-notice/later	site-admin	plugins/admin.(*Handler).ReleaseNoticeLater	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/restore	site-admin	plugins/restore.(*Handler).Page	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/restore/run	site-admin	plugins/restore.(*Handler).Run	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth > middleware.RateLimit
 GET	/admin/security	site-admin	plugins/admin.(*Handler).Security	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
@@ -130,6 +131,7 @@ POST	/admin/security/registration	site-admin	plugins/admin.(*Handler).UpdateRegi
 DELETE	/admin/security/sessions/:hash	site-admin	plugins/admin.(*Handler).TerminateSession	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 POST	/admin/security/sign-in-provider	site-admin	plugins/admin.(*Handler).SaveSignInProvider	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 POST	/admin/security/sign-in-provider/test	site-admin	plugins/admin.(*Handler).TestSignInProvider	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
+POST	/admin/security/update-check	site-admin	plugins/admin.(*Handler).SaveUpdateCheck	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 PUT	/admin/security/users/:id/disable	site-admin	plugins/admin.(*Handler).DisableUser	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 PUT	/admin/security/users/:id/enable	site-admin	plugins/admin.(*Handler).EnableUser	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 POST	/admin/security/users/:id/force-logout	site-admin	plugins/admin.(*Handler).ForceLogoutUser	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth

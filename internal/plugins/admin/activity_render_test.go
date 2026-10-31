@@ -32,7 +32,7 @@ func TestAdminDashboard_NeedsYouAndRecent(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			c := AdminDashboardPage(buildHomeGroups(homeInput{Users: 1, Now: time.Now()}), tc.needs, tc.recent)
+			c := AdminDashboardPage(buildHomeGroups(homeInput{Users: 1, Now: time.Now()}), tc.needs, tc.recent, nil)
 			if err := c.Render(context.Background(), &buf); err != nil {
 				t.Fatalf("render failed: %v", err)
 			}
