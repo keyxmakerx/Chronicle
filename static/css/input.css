@@ -5896,6 +5896,9 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .hp-tile.is-stack { box-shadow: 3px 3px 0 -1px var(--color-card-bg), 3px 3px 0 0 var(--color-border), var(--elev-resting, 0 1px 2px rgba(0,0,0,.08)); }
 .hp-tile.is-stack[aria-expanded="true"] { box-shadow: 3px 3px 0 -1px var(--color-card-bg), 3px 3px 0 0 var(--color-border), inset 0 0 0 2px var(--color-accent); }
 .hp-pic { flex: 1; display: grid; place-items: center; font-size: 18px; color: var(--color-text-muted); }
+.hp-look svg { width: 28px; height: 28px; display: block; }
+.hp-card-pic { flex: none; width: 48px; height: 48px; }
+.hp-card-pic svg { width: 48px; height: 48px; display: block; }
 .hp-name { max-width: 100%; overflow-wrap: anywhere; }
 .hp-ct { position: absolute; top: 3px; right: 6px; font-size: 11px; font-weight: 700; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 .hp-empty { margin: 0; font-size: 12px; color: var(--color-text-muted); }

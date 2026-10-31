@@ -16,7 +16,31 @@
 (function () {
   'use strict';
 
-  if (window.Chronicle && Chronicle.register) Chronicle.register('hero-pack', { init: function () {} });
+  // drawLooks swaps the plain cube for a crafted copy's picture, drawn from
+  // the look the server printed (tints and a picture key, never names). A
+  // copy with no look, or a page without the picture script, keeps the cube.
+  function drawLooks(root) {
+    if (!window.CraftResults || !CraftResults.svg) return;
+    var panel = root.closest('section') || root;
+    panel.querySelectorAll('[data-craft-look]').forEach(function (el) {
+      if (el.hasAttribute('data-craft-drawn')) return;
+      var look;
+      try { look = JSON.parse(el.getAttribute('data-craft-look')); } catch (e) { return; }
+      var tile = el.hasAttribute('data-hp-tile');
+      var svg;
+      try { svg = CraftResults.svg(look, tile ? 28 : 48); } catch (e) { return; }
+      if (!svg) return;
+      var pic = document.createElement('span');
+      pic.className = tile ? 'hp-pic hp-look' : 'hp-card-pic';
+      pic.setAttribute('aria-hidden', 'true');
+      if (typeof svg === 'string') pic.innerHTML = svg; else pic.appendChild(svg);
+      var old = tile && el.querySelector('i.hp-pic');
+      if (old) old.replaceWith(pic); else el.insertBefore(pic, el.firstChild);
+      el.setAttribute('data-craft-drawn', '');
+    });
+  }
+
+  if (window.Chronicle && Chronicle.register) Chronicle.register('hero-pack', { init: function (el) { drawLooks(el); } });
   if (window.__heroPackBound) return;
   window.__heroPackBound = true;
 
