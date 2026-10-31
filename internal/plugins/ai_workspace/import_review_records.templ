@@ -47,7 +47,7 @@ func (r RecordRow) title() string {
 // reviewRecordRow is one record the AI asks to add, change or remove, in
 // the same shape as a page row. Records the server refused never reach the
 // list; they sit in the problems box instead.
-templ reviewRecordRow(campaignID string, r RecordRow) {
+templ reviewRecordRow(campaignID string, r RecordRow, fromAI bool) {
 	<div
 		role="listitem"
 		tabindex="-1"
@@ -100,7 +100,7 @@ templ reviewRecordRow(campaignID string, r RecordRow) {
 				</ul>
 			}
 		</div>
-		@yesNo(fmt.Sprintf("rec_%d_include", r.Index), recordStartsYes(r), fmt.Sprintf("%s %s", r.actionWord(), r.title()))
+		@yesNo(fmt.Sprintf("rec_%d_include", r.Index), recordStartsYes(r, fromAI), fmt.Sprintf("%s %s", r.actionWord(), r.title()))
 	</div>
 }
 

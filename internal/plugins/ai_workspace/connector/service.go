@@ -142,6 +142,20 @@ func (s *Service) Disconnect(ctx context.Context, campaignID string) error {
 	return s.repo.RevokeAll(ctx, campaignID, s.now().UTC().Truncate(time.Second))
 }
 
+// EndKeysMadeBy revokes the keys userID made in the campaign. It runs when
+// the person's access there drops, an ownership handover included, so a key
+// can't come back to life if ownership returns to them.
+func (s *Service) EndKeysMadeBy(ctx context.Context, campaignID, userID string) error {
+	return s.repo.RevokeMadeBy(ctx, campaignID, userID, s.now().UTC().Truncate(time.Second))
+}
+
+// EndAllKeysMadeBy revokes every key userID made, in every campaign. It runs
+// whenever all their sign-ins are ended (a password reset or change, a forced
+// sign-out): a key made by whoever held the account must end with them.
+func (s *Service) EndAllKeysMadeBy(ctx context.Context, userID string) error {
+	return s.repo.RevokeAllMadeBy(ctx, userID, s.now().UTC().Truncate(time.Second))
+}
+
 // Authenticate checks a key against the campaign in the address. It returns
 // the connection and the campaign's name, or ErrBadKey, ErrKeyEnded,
 // ErrOwnerGone or ErrKeyPaused. It reads the connection on every call, so a

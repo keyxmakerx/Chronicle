@@ -4,8 +4,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
+	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 )
 
@@ -20,6 +22,22 @@ func IconColumns() []database.IconColumn {
 		addons.IconColumns,
 		maps.IconColumns,
 		timeline.IconColumns,
+	} {
+		cols = append(cols, f()...)
+	}
+	return cols
+}
+
+// PublicTextColumns gathers every plugin's rich-text columns that are served
+// as stored to all their readers, for the boot-time reconciler that removes
+// GM-only parts (database.ReconcilePublicTextColumns). A plugin that adds
+// one adds it to its own PublicTextColumns and to this list.
+func PublicTextColumns() []database.PublicTextColumn {
+	var cols []database.PublicTextColumn
+	for _, f := range []func() []database.PublicTextColumn{
+		calendar.PublicTextColumns,
+		timeline.PublicTextColumns,
+		sessions.PublicTextColumns,
 	} {
 		cols = append(cols, f()...)
 	}

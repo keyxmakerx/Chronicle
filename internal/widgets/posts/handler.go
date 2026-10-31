@@ -11,6 +11,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // EntityGate is the narrow cross-plugin seam the posts widget uses to honor
@@ -29,6 +30,7 @@ type EntityGate interface {
 type Handler struct {
 	service    PostService
 	entityGate EntityGate
+	mentions   sanitize.MentionHider
 }
 
 // NewHandler creates a new post handler backed by the given service.
@@ -40,6 +42,12 @@ func NewHandler(service PostService) *Handler {
 // When set, the public list endpoint enforces entity privacy + campaign binding.
 func (h *Handler) SetEntityGate(gate EntityGate) {
 	h.entityGate = gate
+}
+
+// SetMentionHider injects the check that hides mentions of pages a reader
+// can't open. Unset, every mention in a served post is hidden.
+func (h *Handler) SetMentionHider(m sanitize.MentionHider) {
+	h.mentions = m
 }
 
 // requireViewableEntity mirrors the entity Show page gate: the entity must
@@ -95,7 +103,7 @@ func (h *Handler) ListPosts(c echo.Context) error {
 		posts = []Post{}
 	}
 	if !cc.CanAuthorDmOnly() {
-		stripPostSecrets(posts)
+		h.servePosts(c, cc, posts)
 	}
 
 	return c.JSON(http.StatusOK, posts)
@@ -167,7 +175,7 @@ func (h *Handler) UpdatePost(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 	textChange := req.Entry != nil || req.EntryHTML != nil
-	if err := requirePostWrite(cc, existing, textChange); err != nil {
+	if err := h.requirePostWrite(c, cc, existing, textChange); err != nil {
 		return err
 	}
 	if req.IsPrivate != nil && *req.IsPrivate && !cc.CanAuthorDmOnly() {
@@ -207,7 +215,7 @@ func (h *Handler) DeletePost(c echo.Context) error {
 	if existing.CampaignID != cc.Campaign.ID || existing.EntityID != entityID {
 		return apperror.NewNotFound("post not found")
 	}
-	if err := requirePostWrite(cc, existing, true); err != nil {
+	if err := h.requirePostWrite(c, cc, existing, true); err != nil {
 		return err
 	}
 

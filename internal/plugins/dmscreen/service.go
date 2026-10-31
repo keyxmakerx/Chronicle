@@ -24,6 +24,11 @@ const hiddenLimit = 8
 // Service builds the DM Screen and performs its few actions.
 type Service interface {
 	Build(ctx context.Context, campaignID string, v Viewer) (*View, error)
+	// Party is the screen's party panel on its own, each hero's sheet values
+	// first passed through narrow (nil keeps them as stored), so a reader who
+	// may not see some fields gets meters, subtitle and conditions built only
+	// from the rest. Owner and Co-DM only, like Build.
+	Party(ctx context.Context, campaignID string, v Viewer, narrow FieldNarrower) ([]HeroView, error)
 	Reveal(ctx context.Context, entityID, campaignID string, v Viewer) (string, error)
 	// UndoReveal hides again a character Reveal showed, for the owner and
 	// co-DMs, who can hide any page from its visibility control anyway.
@@ -60,6 +65,59 @@ type service struct {
 // NewService returns a Service reading from src.
 func NewService(src Sources) Service {
 	return &service{src: src}
+}
+
+// FieldNarrower returns the sheet values of h a reader may see.
+type FieldNarrower func(h Hero) map[string]any
+
+// Party implements Service.
+func (s *service) Party(ctx context.Context, campaignID string, v Viewer, narrow FieldNarrower) ([]HeroView, error) {
+	if !v.IsOwner() {
+		return nil, apperror.NewForbidden("the DM Screen is for the people running this campaign")
+	}
+	if s.src.Party == nil {
+		return nil, nil
+	}
+	heroes, err := s.src.Party.Heroes(ctx, campaignID, v)
+	if err != nil {
+		return nil, err
+	}
+	var def *systems.DMScreenDef
+	if s.src.System != nil {
+		if sys := s.src.System.EnabledSystem(ctx, campaignID); sys != nil {
+			if info := sys.Info(); info != nil {
+				def = info.DMScreen
+			}
+		}
+	}
+	return heroViews(def, heroes, nil, narrow), nil
+}
+
+// heroViews builds the party panel's rows from each hero's sheet values, as
+// narrow leaves them when it is set.
+func heroViews(def *systems.DMScreenDef, heroes []Hero, presence map[string]bool, narrow FieldNarrower) []HeroView {
+	var meters []systems.DMScreenMeter
+	if def != nil {
+		meters = def.Party
+	}
+	var out []HeroView
+	for _, h := range heroes {
+		fields := h.Fields
+		if narrow != nil {
+			fields = narrow(h)
+		}
+		hv := HeroView{
+			ID: h.ID, Name: h.Name, PlayerName: h.PlayerName,
+			PlayerUserID: h.PlayerUserID, PlayerHere: h.PlayerUserID != "" && presence[h.PlayerUserID],
+			Meters: buildMeters(meters, fields),
+		}
+		if def != nil {
+			hv.Subtitle, _ = fieldText(fields, def.HeroSubtitle)
+			hv.Conditions = heroConditions(fields[def.HeroConditions])
+		}
+		out = append(out, hv)
+	}
+	return out
 }
 
 // Build assembles the screen. A failing source is logged and its section
@@ -152,23 +210,8 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		if err != nil {
 			warn("party", err)
 		}
-		var meters []systems.DMScreenMeter
-		if def != nil {
-			meters = def.Party
-		}
-		view.PartyFilled = len(meters) > 0
-		for _, h := range heroes {
-			hv := HeroView{
-				ID: h.ID, Name: h.Name, PlayerName: h.PlayerName,
-				PlayerUserID: h.PlayerUserID, PlayerHere: h.PlayerUserID != "" && presence[h.PlayerUserID],
-				Meters: buildMeters(meters, h.Fields),
-			}
-			if def != nil {
-				hv.Subtitle, _ = fieldText(h.Fields, def.HeroSubtitle)
-				hv.Conditions = heroConditions(h.Fields[def.HeroConditions])
-			}
-			view.Party = append(view.Party, hv)
-		}
+		view.PartyFilled = def != nil && len(def.Party) > 0
+		view.Party = heroViews(def, heroes, presence, nil)
 	}
 
 	if s.src.Hidden != nil {

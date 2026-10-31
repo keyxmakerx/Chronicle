@@ -151,6 +151,15 @@ func main() {
 		slog.Info("icon reconcile: repaired stored icons", slog.Int("rows", n))
 	}
 
+	// Remove GM-only parts from text every reader is served as stored (event
+	// and timeline descriptions, recaps) that was saved before those writes
+	// stripped them. Same placement and failure rule as the icon reconcile.
+	if n, err := database.ReconcilePublicTextColumns(context.Background(), db, app.PublicTextColumns()); err != nil {
+		slog.Error("public text reconcile failed", slog.Any("error", err), slog.Int("rows_fixed", n))
+	} else if n > 0 {
+		slog.Info("public text reconcile: removed GM-only parts", slog.Int("rows", n))
+	}
+
 	// --- Connect to Redis ---
 	rdb, err := database.NewRedis(cfg.Redis)
 	if err != nil {

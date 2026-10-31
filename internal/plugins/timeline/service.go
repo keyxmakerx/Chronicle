@@ -339,7 +339,7 @@ func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string,
 		CampaignID:  campaignID,
 		CalendarID:  calendarID,
 		Name:        input.Name,
-		Description: input.Description,
+		Description: publicDescription(input.Description),
 		Color:       input.Color,
 		Icon:        input.Icon,
 		Visibility:  input.Visibility,
@@ -548,10 +548,10 @@ func (s *timelineService) UpdateTimeline(ctx context.Context, timelineID string,
 	}
 
 	t.Name = name
-	t.Description = input.Description.Ptr(t.Description)
+	t.Description = publicDescription(input.Description.Ptr(t.Description))
 	if input.DescriptionHTML.Present() {
 		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
-			sanitized := sanitize.HTML(v)
+			sanitized := publicHTML(v)
 			t.DescriptionHTML = &sanitized
 		} else {
 			t.DescriptionHTML = nil
@@ -930,7 +930,7 @@ func (s *timelineService) CreateStandaloneEvent(ctx context.Context, timelineID 
 	// Sanitize HTML if provided (rich text descriptions from TipTap editor).
 	var descHTML *string
 	if input.DescriptionHTML != nil && *input.DescriptionHTML != "" {
-		sanitized := sanitize.HTML(*input.DescriptionHTML)
+		sanitized := publicHTML(*input.DescriptionHTML)
 		descHTML = &sanitized
 	}
 
@@ -945,7 +945,7 @@ func (s *timelineService) CreateStandaloneEvent(ctx context.Context, timelineID 
 		TimelineID:      timelineID,
 		EntityID:        input.EntityID,
 		Name:            input.Name,
-		Description:     input.Description,
+		Description:     publicDescription(input.Description),
 		DescriptionHTML: descHTML,
 		Year:            input.Year,
 		Month:           input.Month,
@@ -1029,7 +1029,7 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID,
 	// before.
 	if input.DescriptionHTML.Present() {
 		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
-			sanitized := sanitize.HTML(v)
+			sanitized := publicHTML(v)
 			e.DescriptionHTML = &sanitized
 		} else {
 			e.DescriptionHTML = nil
@@ -1038,7 +1038,7 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID,
 
 	e.EntityID = input.EntityID.Ptr(e.EntityID)
 	e.Name = name
-	e.Description = input.Description.Ptr(e.Description)
+	e.Description = publicDescription(input.Description.Ptr(e.Description))
 	e.Year = input.Year.Val(e.Year)
 	e.Month = input.Month.Val(e.Month)
 	e.Day = input.Day.Val(e.Day)
@@ -1424,4 +1424,22 @@ func visibleConnections(conns []EventConnection, events []EventLink) []EventConn
 		}
 	}
 	return out
+}
+
+// publicHTML sanitizes a timeline or standalone event description. It is
+// served as stored to everyone who sees its timeline or event (their own
+// visibility is what hides them), so GM-only parts that arrive through the
+// API or an import are dropped.
+func publicHTML(in string) string {
+	return sanitize.StripSecretsHTML(sanitize.HTML(in))
+}
+
+// publicDescription drops GM-only parts from a ProseMirror description, for
+// the same reason as publicHTML. Plain text comes back as it is.
+func publicDescription(desc *string) *string {
+	if desc == nil || !sanitize.HasSecrets(*desc, "") {
+		return desc
+	}
+	s := sanitize.StripSecretsJSON(*desc)
+	return &s
 }

@@ -117,6 +117,12 @@ type Options struct {
 	// roller in a page's text is written with the name of its table. Only
 	// the director's modes write rollers; nil writes each by its id.
 	RollTableNames map[string]string
+
+	// VisiblePages, in Safe mode, holds the mentioned pages the player view
+	// may open; a mention of any other page is written as "a hidden page",
+	// since its stored text is that page's name. nil hides every mention.
+	// Filled by Service.Generate; ignored in the director's modes.
+	VisiblePages map[string]bool
 }
 
 // EnabledCategories returns the canonical render order, filtered to

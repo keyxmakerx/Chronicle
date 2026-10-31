@@ -6,6 +6,8 @@ package entities
 // can see, and a save of theirs must never erase what their copy left out.
 
 import (
+	"log/slog"
+
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -43,11 +45,38 @@ func (h *Handler) requirePageWrite(next echo.HandlerFunc) echo.HandlerFunc {
 // textLocked reports whether this writer may not save over the stored text:
 // they are served a copy with the hidden parts taken out, so their save
 // would delete those parts.
-func textLocked(cc *campaigns.CampaignContext, stored, storedHTML *string) bool {
+func (h *Handler) textLocked(c echo.Context, cc *campaigns.CampaignContext, stored, storedHTML *string) bool {
+	_, _, hidden := h.servedText(c, cc, stored, storedHTML)
+	return hidden
+}
+
+// servedText is stored editor text as this viewer is served it. For anyone
+// but the owner and Co-DMs, GM-only parts are removed and each mention of a
+// page they can't open reads "a hidden page", since the stored link carries
+// that page's name. hidden reports whether the copy left anything out, so a
+// save from it would erase what it left out. The stored text is not changed.
+func (h *Handler) servedText(c echo.Context, cc *campaigns.CampaignContext, entry, entryHTML *string) (*string, *string, bool) {
 	if cc.CanAuthorDmOnly() {
-		return false
+		return entry, entryHTML, false
 	}
-	return sanitize.HasSecrets(deref(stored), deref(storedHTML))
+	hidden := sanitize.HasSecrets(deref(entry), deref(entryHTML))
+	if entry != nil {
+		s := sanitize.StripSecretsJSON(*entry)
+		entry = &s
+	}
+	if entryHTML != nil {
+		s := sanitize.StripSecretsHTML(*entryHTML)
+		entryHTML = &s
+	}
+	if len(sanitize.MentionIDs(deref(entry))) > 0 || len(sanitize.MentionIDs(deref(entryHTML))) > 0 {
+		n, err := h.service.HideUnviewableMentions(c.Request().Context(), cc.Campaign.ID, int(cc.VisibilityRole()), auth.GetUserID(c), entry, entryHTML)
+		if err != nil {
+			slog.Warn("checking which mentioned pages a reader can open failed; all are hidden",
+				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		}
+		hidden = hidden || n > 0
+	}
+	return entry, entryHTML, hidden
 }
 
 func deref(s *string) string {
@@ -117,29 +146,15 @@ func dropRestrictedFields(patch map[string]any, keys map[string]struct{}) map[st
 }
 
 // servedCopy is the page as this viewer is served it: for anyone but the
-// owner and Co-DMs, the text without its hidden parts and the fields without
+// owner and Co-DMs, the text as servedText gives it and the fields without
 // the restricted values. The stored entity is not changed.
-func servedCopy(cc *campaigns.CampaignContext, entity *Entity, et *EntityType, userID string) *Entity {
+func (h *Handler) servedCopy(c echo.Context, cc *campaigns.CampaignContext, entity *Entity, et *EntityType, userID string) *Entity {
 	if entity == nil || cc.CanAuthorDmOnly() {
 		return entity
 	}
 	cp := *entity
-	if cp.Entry != nil {
-		s := sanitize.StripSecretsJSON(*cp.Entry)
-		cp.Entry = &s
-	}
-	if cp.EntryHTML != nil {
-		s := sanitize.StripSecretsHTML(*cp.EntryHTML)
-		cp.EntryHTML = &s
-	}
-	if cp.PlayerNotes != nil {
-		s := sanitize.StripSecretsJSON(*cp.PlayerNotes)
-		cp.PlayerNotes = &s
-	}
-	if cp.PlayerNotesHTML != nil {
-		s := sanitize.StripSecretsHTML(*cp.PlayerNotesHTML)
-		cp.PlayerNotesHTML = &s
-	}
+	cp.Entry, cp.EntryHTML, _ = h.servedText(c, cc, cp.Entry, cp.EntryHTML)
+	cp.PlayerNotes, cp.PlayerNotesHTML, _ = h.servedText(c, cc, cp.PlayerNotes, cp.PlayerNotesHTML)
 	if et != nil {
 		cp.FieldsData = FilterRestrictedFields(cp.FieldsData, et.Fields, false, cp.IsOwnedBy(userID))
 	}

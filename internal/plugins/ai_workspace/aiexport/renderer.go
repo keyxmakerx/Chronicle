@@ -100,6 +100,17 @@ func substituteTokenCount(doc string, count int) string {
 		1)
 }
 
+// served is stored text as this export's reader may read it. Safe mode is a
+// player's view, so GM-only parts go and mentions of pages players can't
+// open lose their names; the director's modes keep the text as stored.
+func (o Options) served(p *string) *string {
+	if o.Privacy != PrivacyModeSafe || p == nil {
+		return p
+	}
+	out, _ := sanitize.HideMentions(sanitize.StripSecretsHTML(*p), func(id string) bool { return o.VisiblePages[id] })
+	return &out
+}
+
 // ----------------------------------------------------------------------------
 // Entities
 // ----------------------------------------------------------------------------
@@ -293,11 +304,7 @@ func renderEntity(
 	// whole export.
 	// Safe mode is a player's view, so GM-only spans and pictures in the
 	// page text go too, as they do for players on the page itself.
-	entry := e.EntryHTML
-	if opts.Privacy == PrivacyModeSafe && entry != nil {
-		stripped := sanitize.StripSecretsHTML(*entry)
-		entry = &stripped
-	}
+	entry := opts.served(e.EntryHTML)
 	// The director's modes write GM-only passages as markers so a round-trip
 	// keeps them; safe mode already stripped them above.
 	var body string
@@ -746,7 +753,7 @@ func renderCalendarEvent(b *strings.Builder, e *calendar.Event, opts Options) er
 		b.WriteString("\n\n")
 	}
 
-	body, err := htmlToMarkdown(e.DescriptionHTML)
+	body, err := htmlToMarkdown(opts.served(e.DescriptionHTML))
 	body = bodyOrSkip("calendar event", e.Name, body, err)
 	if body != "" {
 		b.WriteString(body)
@@ -836,7 +843,7 @@ func renderSession(
 	}
 
 	if s.RecapHTML != nil {
-		recap, err := htmlToMarkdown(s.RecapHTML)
+		recap, err := htmlToMarkdown(opts.served(s.RecapHTML))
 		recap = bodyOrSkip("session recap", s.Name, recap, err)
 		if recap != "" {
 			b.WriteString("### Recap\n\n")
@@ -937,7 +944,7 @@ func RenderTimelines(
 func renderTimeline(b *strings.Builder, tl *timeline.Timeline, events []timeline.EventLink, opts Options) error {
 	fmt.Fprintf(b, "## Timeline: %s {#timeline-%s}\n\n", tl.Name, slugify(tl.Name))
 
-	desc, err := htmlToMarkdown(tl.DescriptionHTML)
+	desc, err := htmlToMarkdown(opts.served(tl.DescriptionHTML))
 	desc = bodyOrSkip("timeline description", tl.Name, desc, err)
 	if desc != "" {
 		b.WriteString(desc)
@@ -990,7 +997,7 @@ func renderTimeline(b *strings.Builder, tl *timeline.Timeline, events []timeline
 		// schema change to HTML on this field gets the egress
 		// invariant for free.
 		if ev.EventDescription != nil && *ev.EventDescription != "" {
-			body, err := htmlToMarkdown(ev.EventDescription)
+			body, err := htmlToMarkdown(opts.served(ev.EventDescription))
 			body = bodyOrSkip("timeline event", label, body, err)
 			if body != "" {
 				b.WriteString(body)

@@ -27,7 +27,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -905,7 +904,7 @@ func (h *Handler) Update(c echo.Context) error {
 	// with hidden parts is left alone, and hidden fields keep their values.
 	userID := auth.GetUserID(c)
 	if !cc.CanAuthorDmOnly() {
-		if textLocked(cc, entity.Entry, entity.EntryHTML) {
+		if h.textLocked(c, cc, entity.Entry, entity.EntryHTML) {
 			input.Entry = patch.Absent[string]()
 		}
 		if et, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID); err == nil {
@@ -918,7 +917,7 @@ func (h *Handler) Update(c echo.Context) error {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 		entityTypes = TypesForViewer(entityTypes, cc.VisibilityRole())
 		entityType, _ := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
-		entity = servedCopy(cc, entity, entityType, userID)
+		entity = h.servedCopy(c, cc, entity, entityType, userID)
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to update entity")
 		// Fetch parent for re-rendering form.
@@ -1989,18 +1988,7 @@ func (h *Handler) GetEntry(c echo.Context) error {
 	// Strip inline secrets for everyone but the owner and Co-DMs, so players
 	// and Scribes never receive GM-only text. The owner and Co-DMs see
 	// secrets with a visual indicator.
-	entry := entity.Entry
-	entryHTML := entity.EntryHTML
-	if !cc.CanAuthorDmOnly() {
-		if entry != nil {
-			stripped := sanitize.StripSecretsJSON(*entry)
-			entry = &stripped
-		}
-		if entryHTML != nil {
-			stripped := sanitize.StripSecretsHTML(*entryHTML)
-			entryHTML = &stripped
-		}
-	}
+	entry, entryHTML, hidden := h.servedText(c, cc, entity.Entry, entity.EntryHTML)
 
 	response := map[string]any{
 		"entry":      entry,
@@ -2013,7 +2001,7 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		if rev, err := h.service.EntryRev(c.Request().Context(), entity.ID); err == nil {
 			response["rev"] = rev
 		}
-		if textLocked(cc, entity.Entry, entity.EntryHTML) {
+		if hidden {
 			response["locked"] = true
 		}
 	}
@@ -2052,7 +2040,7 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	if !access.CanEdit && !owner {
 		return apperror.NewForbidden("you can't edit this page")
 	}
-	if textLocked(cc, entity.Entry, entity.EntryHTML) {
+	if h.textLocked(c, cc, entity.Entry, entity.EntryHTML) {
 		return apperror.NewForbidden(entryLockedMessage)
 	}
 
@@ -2077,11 +2065,13 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 		return err
 	}
 	if conflict != nil {
+		// The newer text goes back to this writer, so it is served like a read.
+		theirs, theirsHTML, _ := h.servedText(c, cc, conflict.Entry, conflict.EntryHTML)
 		return c.JSON(http.StatusConflict, map[string]any{
 			"error":      "edit_conflict",
 			"rev":        conflict.Rev,
-			"entry":      conflict.Entry,
-			"entry_html": conflict.EntryHTML,
+			"entry":      theirs,
+			"entry_html": theirsHTML,
 			"by_name":    conflict.ByName,
 			"at":         conflict.At,
 		})
@@ -2123,25 +2113,15 @@ func (h *Handler) GetPlayerNotes(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	notes, notesHTML := entity.PlayerNotes, entity.PlayerNotesHTML
-	if !cc.CanAuthorDmOnly() {
-		// Player notes are meant for players, but the API accepts any editor
-		// content, so GM-only parts are removed the same way as for the entry.
-		if notes != nil {
-			stripped := sanitize.StripSecretsJSON(*notes)
-			notes = &stripped
-		}
-		if notesHTML != nil {
-			stripped := sanitize.StripSecretsHTML(*notesHTML)
-			notesHTML = &stripped
-		}
-	}
+	// Player notes are meant for players, but the API accepts any editor
+	// content, so they are served the same way as the entry.
+	notes, notesHTML, hidden := h.servedText(c, cc, entity.PlayerNotes, entity.PlayerNotesHTML)
 
 	resp := map[string]any{
 		"player_notes":      notes,
 		"player_notes_html": notesHTML,
 	}
-	if cc.MemberRole >= campaigns.RoleScribe && textLocked(cc, entity.PlayerNotes, entity.PlayerNotesHTML) {
+	if cc.MemberRole >= campaigns.RoleScribe && hidden {
 		resp["locked"] = true
 	}
 	return c.JSON(http.StatusOK, resp)
@@ -2163,7 +2143,7 @@ func (h *Handler) UpdatePlayerNotesAPI(c echo.Context) error {
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
 	}
-	if textLocked(cc, entity.PlayerNotes, entity.PlayerNotesHTML) {
+	if h.textLocked(c, cc, entity.PlayerNotes, entity.PlayerNotesHTML) {
 		return apperror.NewForbidden(entryLockedMessage)
 	}
 
@@ -2540,7 +2520,8 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 
 	var entryExcerpt string
 	if cfg.ShowEntry && entity.EntryHTML != nil {
-		entryExcerpt = previewExcerpt(*entity.EntryHTML, cc.CanAuthorDmOnly())
+		_, served, _ := h.servedText(c, cc, nil, entity.EntryHTML)
+		entryExcerpt = previewExcerpt(*served)
 	}
 
 	// Resolve image path when popup config allows it.

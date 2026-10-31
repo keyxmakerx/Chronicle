@@ -145,7 +145,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Notes:    d.Notes,
 		Rules:    d.HouseRules,
 		Entries:  aiSystemEntriesAdapter{choices: d.CharacterChoice},
-		Party:    &aiPartyAdapter{screen: d.DMScreen, nights: d.Sessions, members: d.Campaigns},
+		Party:    &aiPartyAdapter{screen: d.DMScreen, types: d.Entities, nights: d.Sessions, members: d.Campaigns},
 		Tags:     d.Tags,
 		Tiers:    d.Campaigns,
 		Nights:   d.Nights,

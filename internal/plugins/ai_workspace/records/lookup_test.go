@@ -180,7 +180,9 @@ func TestLookups_Answers(t *testing.T) {
 		{"a note stays out in Safe", lookup("note", map[string]any{"name": "Who poisoned the duke?"}), player, nil, nil, "your notes are left out"},
 		{"notes stay out in Safe", lookup("notes", nil), player, nil, nil, "your notes are left out"},
 		{"players, live", lookup("players", nil), owner, []string{"Ser Aldric (Mira): Level 3 Fury. Stamina 31 of 42. Carries Rope x2, The Rusty Anchor. Coming to the next game night.", "The Ghost (Sam)", "Next game night: Session 12"}, nil, ""},
-		{"players in Safe leave out the DM Screen's figures", lookup("players", nil), player, []string{"Ser Aldric (Mira): Level 3 Fury. Carries Rope x2. Coming to the next game night."}, []string{"The Ghost", "Stamina"}, ""},
+		// The party source narrows each hero's sheet values to the view (the
+		// app adapter's test pins that); the lookup drops hidden heroes.
+		{"players in Safe list only heroes players can see", lookup("players", nil), player, []string{"Ser Aldric (Mira): Level 3 Fury. Stamina 31 of 42. Carries Rope x2. Coming to the next game night."}, []string{"The Ghost"}, ""},
 		{"game-system entry fields not wired", lookup("system-entries", nil), owner, nil, nil, "can't be looked up on this server yet"},
 		{"game-system entries not wired", lookup("system-entries", map[string]any{"field": "ancestry"}), owner, nil, nil, "can't be looked up on this server yet"},
 		{"unknown what", lookup("secrets", nil), owner, nil, nil, "not something Chronicle can look up"},

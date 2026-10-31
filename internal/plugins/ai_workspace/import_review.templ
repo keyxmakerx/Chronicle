@@ -178,7 +178,7 @@ templ ImportReview(d ImportReviewData) {
 							<span class="air-small">{ strconv.Itoa(len(g.Rows)) }</span>
 						</div>
 						for _, r := range g.Rows {
-							@reviewRecordRow(d.CampaignID, r)
+							@reviewRecordRow(d.CampaignID, r, d.fromAI())
 						}
 					}
 				</div>
@@ -487,7 +487,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 				}
 			</details>
 		</div>
-		@yesNo(fmt.Sprintf("page_%d_include", idx), pageStartsYes(page, cls) && repeat == "", fmt.Sprintf("%s %s", pageWhatLead(page), page.Name))
+		@yesNo(fmt.Sprintf("page_%d_include", idx), pageStartsYes(page, cls, data.fromAI()) && repeat == "", fmt.Sprintf("%s %s", pageWhatLead(page), page.Name))
 	</div>
 }
 

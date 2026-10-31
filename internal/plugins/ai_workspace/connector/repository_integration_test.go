@@ -154,6 +154,36 @@ func TestRepoIntegration_ConnectionsAndCalls(t *testing.T) {
 		t.Errorf("a disconnected campaign still has a connection: %+v", cur)
 	}
 
+	// Ending one maker's keys in a campaign, or everywhere, leaves other
+	// makers' keys alone.
+	h4, h5 := fmt.Sprintf("%064d", 4), fmt.Sprintf("%064d", 5)
+	mk(other, otherUser, h4)
+	if err := repo.RevokeMadeBy(ctx, other, user, now); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := repo.FindByHash(ctx, h4); c == nil || c.RevokedAt != nil {
+		t.Errorf("another maker's key was revoked: %+v", c)
+	}
+	if err := repo.RevokeMadeBy(ctx, other, otherUser, now); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := repo.FindByHash(ctx, h4); c == nil || c.RevokedAt == nil {
+		t.Errorf("the maker's key stayed live: %+v", c)
+	}
+	mk(other, otherUser, h5)
+	if err := repo.RevokeAllMadeBy(ctx, user, now); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := repo.FindByHash(ctx, h5); c == nil || c.RevokedAt != nil {
+		t.Errorf("another maker's key was revoked: %+v", c)
+	}
+	if c, _ := repo.FindByHash(ctx, h2); c == nil || c.RevokedAt == nil {
+		t.Errorf("the maker's key stayed live: %+v", c)
+	}
+	if _, err := db.Exec(`UPDATE ai_connections SET revoked_at = NULL WHERE key_hash = ?`, h2); err != nil {
+		t.Fatal(err)
+	}
+
 	// A disabled account's keys are not found.
 	if _, err := db.Exec(`UPDATE users SET is_disabled = TRUE WHERE id = ?`, user); err != nil {
 		t.Fatal(err)
