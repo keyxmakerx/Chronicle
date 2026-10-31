@@ -32,13 +32,7 @@
     var steps = Array.isArray(pending.undo) ? pending.undo : [];
     if (!steps.length) { Chronicle.notify(pending.message, 'success'); return; }
 
-    var btnId = 'undo-bulk-' + Date.now();
-    Chronicle.notify(Chronicle.escapeHtml(pending.message) +
-      ' <button type="button" id="' + btnId + '" class="underline font-medium ml-1">Undo</button>',
-      'success', { html: true, duration: 10000 });
-    var btn = document.getElementById(btnId);
-    if (!btn) return;
-    btn.addEventListener('click', function () {
+    Chronicle.notify(pending.message, 'success', { duration: 10000, action: { label: 'Undo', onClick: function (btn) {
       btn.disabled = true;
       steps.reduce(function (chain, step) {
         return chain.then(function () {
@@ -52,7 +46,7 @@
         btn.disabled = false;
         Chronicle.notify('Some of it couldn\u2019t be put back. Check the pages, or the Trash.', 'error');
       });
-    });
+    } } });
   }
 
   Chronicle.register('bulk-actions', {

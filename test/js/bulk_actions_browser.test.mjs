@@ -35,6 +35,11 @@ const STUB = `
     notify: (msg, type, opts) => {
       const d = document.createElement('div'); d.className = 'toast ' + type;
       if (opts && opts.html) d.innerHTML = msg; else d.textContent = msg;
+      if (opts && opts.action) {
+        const b = document.createElement('button'); b.textContent = opts.action.label;
+        b.addEventListener('click', () => opts.action.onClick(b));
+        d.appendChild(b);
+      }
       document.getElementById('toasts').appendChild(d);
     },
     apiFetch: (url, opts) => {
