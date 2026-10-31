@@ -128,3 +128,18 @@ test('leaving shrinks the room back into the door under full motion', { skip }, 
   await p.waitForFunction(() => !document.querySelector('.shr-dlg').open, null, { timeout: 2000 });
   assert.equal(await p.evaluate(() => document.querySelector('.shr-front').classList.contains('opening')), false, 'the door swings shut');
 });
+
+test('a redraw keeps the flames and glows going rather than starting them over', { skip }, async (t) => {
+  const p = await page(t);
+  await p.click('.shr-front');
+  await p.waitForFunction(() => document.querySelector('.shr-dlg').open, null, { timeout: 3000 });
+  await p.waitForTimeout(1200);
+  const loops = () => p.evaluate(() => document.querySelector('.shr-iso').getAnimations({ subtree: true })
+    .filter((a) => a.effect.getComputedTiming().iterations === Infinity).map((a) => a.currentTime));
+  const before = await loops();
+  assert.ok(before.length > 0, 'the lit room has looping animations');
+  // Picking the same effects level redraws the whole room.
+  await p.click('.shr-fx button[data-fx="full"]');
+  const after = await loops();
+  assert.ok(Math.min(...after) >= Math.min(...before), 'loops carry on from where they were: ' + Math.min(...before) + ' then ' + Math.min(...after));
+});
