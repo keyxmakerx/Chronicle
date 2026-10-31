@@ -126,6 +126,10 @@ func CSRF() echo.MiddlewareFunc {
 			if strings.HasPrefix(req.URL.Path, "/api/") || req.URL.Path == "/ws" {
 				return next(c)
 			}
+			// Browsers send CSP reports with no token; the endpoint only logs.
+			if req.URL.Path == CSPReportPath && req.Method == http.MethodPost {
+				return next(c)
+			}
 
 			isSecure := schemeIsSecure(req)
 

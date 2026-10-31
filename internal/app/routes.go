@@ -2800,6 +2800,7 @@ func (a *App) RegisterRoutes() {
 	}
 	e.GET("/healthz", healthHandler)
 	e.GET("/health", healthHandler)
+	e.POST(middleware.CSPReportPath, middleware.CSPReportHandler(), middleware.RateLimit(120, time.Minute))
 
 	// wsRevoker is wired into syncapi, addons and campaigns below, well
 	// before wsHub is constructed further down — see wsRevokerHolder.

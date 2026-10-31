@@ -1170,6 +1170,7 @@ GET	/campaigns/import	session	plugins/campaigns.(*ExportHandler).ImportCampaignF
 POST	/campaigns/import	session	plugins/campaigns.(*ExportHandler).ImportCampaign	plugins/auth.RequireAuth > middleware.RateLimit
 GET	/campaigns/new	session	plugins/campaigns.(*Handler).NewForm	plugins/auth.RequireAuth
 GET	/campaigns/picker	session	plugins/campaigns.(*Handler).Picker	plugins/auth.RequireAuth
+POST	/csp-report	none	middleware.CSPReportHandler	middleware.RateLimit
 GET	/dashboard	session	app.(*App).RegisterRoutes	plugins/auth.RequireAuth
 GET	/embed/campaigns/:id/notes/:mode	none	widgets/notes.(*AppGrantHandler).ShowEmbed	-
 GET	/extensions/:extID/assets/*	none	extensions.(*Handler).ServeAsset	-
