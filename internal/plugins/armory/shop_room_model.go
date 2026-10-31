@@ -34,6 +34,11 @@ type ShopRoomLayout struct {
 	Items    map[string]ShopRoomItemLook `json:"items"`
 	Portrait *ShopRoomPortrait           `json:"portrait"`
 	Lines    []string                    `json:"lines"`
+	// Manner is the keeper's manner, which supplies starting lines for each
+	// moment of a visit; empty means none. Moments holds the GM's own lines
+	// per moment (keys in shopRoomMoments), which win over the manner's.
+	Manner  string              `json:"manner,omitempty"`
+	Moments map[string][]string `json:"moments,omitempty"`
 }
 
 // ShopRoomEffects is the room's atmosphere. The int fields are percentages of

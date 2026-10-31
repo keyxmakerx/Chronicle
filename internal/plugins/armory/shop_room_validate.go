@@ -13,17 +13,19 @@ import (
 )
 
 const (
-	maxShopRoomPieces  = 80
-	maxShopRoomDecor   = 120
-	maxShopRoomSpot    = 63
-	maxShopRoomItems   = 500
-	maxShopRoomLines   = 10
-	maxShopRoomLine    = 200
-	maxShopRoomSeed    = 1_000_000_000
-	maxShopRoomPieceID = 100_000
-	maxShopRoomRelID   = 2_147_483_647
-	shopRoomCoordMin   = -1.0
-	shopRoomCoordMax   = 20.0
+	maxShopRoomPieces = 80
+	maxShopRoomDecor  = 120
+	maxShopRoomSpot   = 63
+	maxShopRoomItems  = 500
+	maxShopRoomLines  = 10
+	maxShopRoomLine   = 200
+	// Lines per moment of a visit; a handful is enough for variety.
+	maxShopRoomMomentLines = 5
+	maxShopRoomSeed        = 1_000_000_000
+	maxShopRoomPieceID     = 100_000
+	maxShopRoomRelID       = 2_147_483_647
+	shopRoomCoordMin       = -1.0
+	shopRoomCoordMax       = 20.0
 	// Effect levels are percentages of the default look; 250 leaves room to
 	// exaggerate without letting a client store an absurd value.
 	maxShopRoomEffect = 250
@@ -48,7 +50,10 @@ var (
 	shopRoomMoods       = setOf("", "cozy", "eldritch", "candy", "haunted", "festive", "underwater", "fey", "desert", "dwarven")
 	shopRoomWeathers    = setOf("", "rain", "snow")
 	shopRoomTimes       = setOf("", "dawn", "dusk", "night")
-	shopRoomKinds       = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack",
+	// Must match MANNERS and MOMENTS in static/js/widgets/shop_room_keeper.js.
+	shopRoomManners = setOf("", "warm", "gruff", "shrewd", "nervous", "grand")
+	shopRoomMoments = setOf("hello", "look", "buy", "poor", "bye", "refuse")
+	shopRoomKinds   = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack",
 		"tentacle", "monolith", "circle", "cane", "gumdrop", "lolly", "ghost", "coffin", "gift", "pine", "coral", "kelp", "mushroom", "bloom", "urn", "palm", "pillar", "brazier")
 	shopRoomWalls   = setOf("Y", "X", "")
 	shopRoomColors  = setOf("steel", "iron", "gold", "silver", "red", "green", "teal", "blue", "violet", "leather", "paper", "cloth", "wood", "dark", "bone", "honey", "")
@@ -103,6 +108,7 @@ func (l *ShopRoomLayout) validate() error {
 		{"palette", l.Palette, shopRoomPalettes},
 		{"look", l.Look, shopRoomLooks},
 		{"mood", l.Mood, shopRoomMoods},
+		{"manner", l.Manner, shopRoomManners},
 	}
 	for _, e := range enums {
 		if !e.set[e.val] {
@@ -218,6 +224,36 @@ func (l *ShopRoomLayout) validate() error {
 		return fmt.Errorf("too many lines")
 	}
 	l.Lines = lines
+
+	// Moments with no lines left after trimming are dropped, so an emptied
+	// moment falls back to the manner instead of silencing the keeper.
+	var moments map[string][]string
+	for k, ls := range l.Moments {
+		if !shopRoomMoments[k] {
+			return fmt.Errorf("invalid moment")
+		}
+		kept := make([]string, 0, len(ls))
+		for _, s := range ls {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			if utf8.RuneCountInString(s) > maxShopRoomLine {
+				return fmt.Errorf("line is too long")
+			}
+			kept = append(kept, s)
+		}
+		if len(kept) > maxShopRoomMomentLines {
+			return fmt.Errorf("too many lines for a moment")
+		}
+		if len(kept) > 0 {
+			if moments == nil {
+				moments = make(map[string][]string, len(l.Moments))
+			}
+			moments[k] = kept
+		}
+	}
+	l.Moments = moments
 	return nil
 }
 
