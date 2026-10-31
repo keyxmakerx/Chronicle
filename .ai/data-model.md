@@ -431,6 +431,8 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 |---|---|---|
 | `armory_item_shares` | Remembers which view grants on a hidden item came from a holder sharing it with the party, so un-sharing takes back only what sharing added | `PRIMARY KEY (character_id, item_entity_id, user_id)`; `made_grant` = the share added the grant; FKs to `campaigns` and `entities` (`ON DELETE CASCADE`) |
 | `armory_item_looks` | A page's look, usually an item's: how it glows, sounds and strikes (the Look block); `madeFrom` inside names the page whose look it carries | PK `item_entity_id` FK→`entities` CASCADE; `look` TEXT (a normalized JSON document of fixed-list values, including looks placed on stage spots); `updated_by` |
+| `armory_item_copies` | Part of a holder's count of an item that remembers marks, a quality, a quirk, its maker or harvester, and when it goes off; the rest of the count is plain | PK `id`; `holder_kind` `character`/`stash` + `holder_id` (not FKs: two tables); `quantity`; `memory` TEXT (JSON the service cleans); FKs to `campaigns` and `entities` (`ON DELETE CASCADE`) |
+| `armory_move_picks` | The copy a waiting move request asked for, so it is still the one that goes when approved | PK `move_id` FK→`item_moves` CASCADE; `copy_id` FK→`armory_item_copies` CASCADE |
 
 ### rolltables (`internal/plugins/rolltables/migrations/`)
 

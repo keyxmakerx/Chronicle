@@ -13,8 +13,7 @@ import (
 // recipe's rules (fine, a mark, a quirk, made as something else), mishaps
 // mid-brew, discoveries, and the recipe's "If it goes wrong" and "Extras"
 // settings that the roll can carry out (botch costs, breakthroughs,
-// mastery, substitutes). Settings that need an item to remember something
-// of its own stay with the editor until the Armory can (TODO(#1883)).
+// mastery, substitutes, and what the made item remembers).
 
 // skills reads the maker's skills from their sheet, lowercased; nil when
 // the sheet lists none or can't be read, so a rule about a skill stays

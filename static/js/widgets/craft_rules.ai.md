@@ -171,7 +171,4 @@ can read as drafts. "Show what the AI writes" shows each rule's data under it.
 
 ## Not here yet
 
-- TODO(#1883): ingredient marks at a project roll. The server's reading
-  (`internal/plugins/crafting/verdict.go`) leaves them "maybe", as the
-  preview does.
 - TODO(#1824): the recipe editor's fold-out over the crafting widget.
