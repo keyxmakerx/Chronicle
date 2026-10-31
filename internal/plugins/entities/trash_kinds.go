@@ -57,14 +57,26 @@ func (p *pageSafetyService) ListOtherTrash(ctx context.Context, campaignID strin
 	return out
 }
 
-// RestoreOther restores one item of a registered kind.
-func (p *pageSafetyService) RestoreOther(ctx context.Context, campaignID, kind, id string) (string, error) {
+// RestoreOther restores one item of a registered kind. It reads the item
+// from the kind's Trash listing first, so the activity log can name it.
+func (p *pageSafetyService) RestoreOther(ctx context.Context, campaignID, kind, id string) (TrashedThing, string, error) {
 	for _, k := range p.kinds {
-		if k.TrashKind() == kind {
-			return k.RestoreTrashed(ctx, campaignID, id)
+		if k.TrashKind() != kind {
+			continue
 		}
+		list, err := k.ListTrashed(ctx, campaignID)
+		if err != nil {
+			return TrashedThing{}, "", err
+		}
+		for _, it := range list {
+			if it.ID == id {
+				link, err := k.RestoreTrashed(ctx, campaignID, id)
+				return it, link, err
+			}
+		}
+		break
 	}
-	return "", apperror.NewNotFound("nothing like that is in the Trash")
+	return TrashedThing{}, "", apperror.NewNotFound("nothing like that is in the Trash")
 }
 
 // purgeKinds runs each kind's purge with the pages' cutoff.

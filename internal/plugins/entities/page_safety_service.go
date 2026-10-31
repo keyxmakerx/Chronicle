@@ -180,8 +180,8 @@ type PageSafetyService interface {
 	// ListOtherTrash lists the registered kinds' trashed items, newest first.
 	ListOtherTrash(ctx context.Context, campaignID string) []TrashedThing
 	// RestoreOther brings back one item of a registered kind and returns
-	// the link to it.
-	RestoreOther(ctx context.Context, campaignID, kind, id string) (string, error)
+	// what it was and the link to it.
+	RestoreOther(ctx context.Context, campaignID, kind, id string) (TrashedThing, string, error)
 	// StartPurger deletes for good, hourly, pages and registered kinds'
 	// items that have waited out the retention. It returns when ctx ends.
 	StartPurger(ctx context.Context)

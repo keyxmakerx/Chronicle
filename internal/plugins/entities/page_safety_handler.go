@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -20,6 +22,29 @@ type PageSafetyHandler struct {
 	svc      PageSafetyService
 	entities EntityService
 	members  MemberLister
+	audit    audit.AuditService
+}
+
+// SetAuditService records each restore from the Trash in the campaign's
+// activity log. nil leaves restores unrecorded.
+func (h *PageSafetyHandler) SetAuditService(svc audit.AuditService) { h.audit = svc }
+
+// logRestore writes one restore to the activity log; a failure never undoes
+// the restore.
+func (h *PageSafetyHandler) logRestore(c echo.Context, campaignID, kind, id, name string) {
+	if h.audit == nil {
+		return
+	}
+	if err := h.audit.Log(c.Request().Context(), &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     auth.GetUserID(c),
+		Action:     audit.ActionTrashRestored,
+		EntityType: kind,
+		EntityID:   id,
+		EntityName: name,
+	}); err != nil {
+		slog.Warn("audit log failed", slog.String("action", audit.ActionTrashRestored), slog.Any("error", err))
+	}
 }
 
 // NewPageSafetyHandler creates the History/Trash handler. members may be nil;
@@ -165,6 +190,7 @@ func (h *PageSafetyHandler) RestoreFromTrash(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.logRestore(c, cc.Campaign.ID, "entity", item.ID, item.Name)
 	pageURL := "/campaigns/" + cc.Campaign.ID + "/entities/" + item.ID
 	if middleware.IsHTMX(c) {
 		return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/trash?restored="+item.ID)
@@ -180,10 +206,11 @@ func (h *PageSafetyHandler) RestoreOtherFromTrash(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	link, err := h.svc.RestoreOther(c.Request().Context(), cc.Campaign.ID, c.Param("kind"), c.Param("tid"))
+	item, link, err := h.svc.RestoreOther(c.Request().Context(), cc.Campaign.ID, c.Param("kind"), c.Param("tid"))
 	if err != nil {
 		return err
 	}
+	h.logRestore(c, cc.Campaign.ID, item.Kind, item.ID, item.Name)
 	// The link comes from the kind's own adapter; anything that isn't a
 	// path in this campaign falls back to the Trash rather than redirecting
 	// somewhere else.

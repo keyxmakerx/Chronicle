@@ -6,12 +6,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -59,12 +61,15 @@ func TestTrashKinds_ListRestorePurge(t *testing.T) {
 		t.Errorf("listed %v, want newest first across kinds, without the broken kind", ids)
 	}
 
-	link, err := p.RestoreOther(context.Background(), "c1", "game-night", "n1")
-	if err != nil || link != "/campaigns/c1/sessions/n1" || strings.Join(nights.restored, ",") != "n1" {
-		t.Errorf("restore: link=%q err=%v restored=%v", link, err, nights.restored)
+	item, link, err := p.RestoreOther(context.Background(), "c1", "game-night", "n1")
+	if err != nil || item.ID != "n1" || link != "/campaigns/c1/sessions/n1" || strings.Join(nights.restored, ",") != "n1" {
+		t.Errorf("restore: item=%v link=%q err=%v restored=%v", item, link, err, nights.restored)
 	}
-	if _, err := p.RestoreOther(context.Background(), "c1", "spaceship", "x"); err == nil {
+	if _, _, err := p.RestoreOther(context.Background(), "c1", "spaceship", "x"); err == nil {
 		t.Error("an unknown kind must be not found")
+	}
+	if _, _, err := p.RestoreOther(context.Background(), "c1", "game-night", "not-in-trash"); err == nil || len(nights.restored) != 1 {
+		t.Errorf("an id the kind's Trash doesn't list must be not found without restoring (err=%v, restored=%v)", err, nights.restored)
 	}
 
 	cutoff := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
@@ -82,8 +87,8 @@ type trashLinkSvc struct {
 	link string
 }
 
-func (s trashLinkSvc) RestoreOther(context.Context, string, string, string) (string, error) {
-	return s.link, nil
+func (s trashLinkSvc) RestoreOther(_ context.Context, _, kind, id string) (TrashedThing, string, error) {
+	return TrashedThing{Kind: kind, ID: id, Name: "Session 15"}, s.link, nil
 }
 
 func TestRestoreOtherFromTrash_StaysInTheCampaign(t *testing.T) {
@@ -110,6 +115,36 @@ func TestRestoreOtherFromTrash_StaysInTheCampaign(t *testing.T) {
 				t.Errorf("body = %s, want url %s", rec.Body.String(), tc.want)
 			}
 		})
+	}
+}
+
+// loggedAudit keeps the entries a handler logs.
+type loggedAudit struct {
+	audit.AuditService
+	entries []audit.AuditEntry
+}
+
+func (l *loggedAudit) Log(_ context.Context, e *audit.AuditEntry) error {
+	l.entries = append(l.entries, *e)
+	return nil
+}
+
+func TestRestoreOtherFromTrash_WritesTheActivityLog(t *testing.T) {
+	h := NewPageSafetyHandler(trashLinkSvc{link: "/campaigns/c1/sessions/n1"}, nil, nil)
+	log := &loggedAudit{}
+	h.SetAuditService(log)
+	e := echo.New()
+	c := e.NewContext(httptest.NewRequest(http.MethodPost, "/", nil), httptest.NewRecorder())
+	c.SetParamNames("id", "kind", "tid")
+	c.SetParamValues("c1", "game-night", "n1")
+	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleOwner})
+	c.Set("auth_user_id", "u-owner")
+	if err := h.RestoreOtherFromTrash(c); err != nil {
+		t.Fatal(err)
+	}
+	want := audit.AuditEntry{CampaignID: "c1", UserID: "u-owner", Action: audit.ActionTrashRestored, EntityType: "game-night", EntityID: "n1", EntityName: "Session 15"}
+	if len(log.entries) != 1 || !reflect.DeepEqual(log.entries[0], want) {
+		t.Errorf("logged %+v, want %+v", log.entries, want)
 	}
 }
 

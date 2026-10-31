@@ -4748,7 +4748,9 @@ func (a *App) RegisterRoutes() {
 	pageSafetyService.AddTrashKind(gameNightTrash{svc: sessionsService})
 	pageSafetyService.AddTrashKind(pictureTrash{svc: mediaService})
 	pageSafetyService.AddTrashKind(mapTrash{svc: mapsService})
-	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
+	pageSafetyHandler := entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService)
+	pageSafetyHandler.SetAuditService(auditService)
+	entities.RegisterPageSafetyRoutes(e, pageSafetyHandler, campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
 
 	// --- Extra places in the page tree ---

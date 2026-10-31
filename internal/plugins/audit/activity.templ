@@ -37,6 +37,8 @@ func actionLabel(action string) string {
 		return "created tag"
 	case ActionTagDeleted:
 		return "deleted tag"
+	case ActionTrashRestored:
+		return "restored from the Trash"
 	default:
 		return action
 	}
@@ -67,6 +69,8 @@ func actionColor(action string) string {
 		return "bg-teal-400 dark:bg-teal-500"
 	case ActionTagDeleted:
 		return "bg-rose-400 dark:bg-rose-500"
+	case ActionTrashRestored:
+		return "bg-emerald-400 dark:bg-emerald-500"
 	default:
 		return "bg-gray-400 dark:bg-gray-500"
 	}
