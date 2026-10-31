@@ -227,6 +227,7 @@ func TestEventReads_HideNotYetKnowableEvents(t *testing.T) {
 var eventReadExempt = map[string]string{
 	"ListAllEventsForCalendar": "system callers only (refuses any other viewer)",
 	"ListOccurrenceOverrides":  "system callers only (refuses any other viewer)",
+	"EventRollsForBackup":      "owner and granted co-DM only (requireBackupViewer)",
 }
 
 // eventStoreReads are the EventRepository methods that return events.

@@ -23,6 +23,7 @@ func (p *rollsPublisher) RollMade(campaignID string, v rolls.View, a rolls.Audie
 	msg := ws.NewMessage(ws.MsgRollMade, campaignID, v.ID, v)
 	switch {
 	case a.Everyone:
+		msg.Public = true
 	case a.DirectorsOnly:
 		msg.RequiresDM = true
 	case len(a.Users) > 0:
