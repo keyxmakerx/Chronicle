@@ -1,0 +1,27 @@
+package armory
+
+import (
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// ShopStreetMount is the Shops street: the shop pages the viewer can see,
+// drawn as storefronts by the shop_street widget. canDress shows the GM's
+// storefront icon; the save route checks the Owner role itself. Nothing is
+// drawn while the armory addon is off, since its routes are gated by it.
+templ ShopStreetMount(campaignID string, canDress bool, memberRole int) {
+	if layouts.IsAddonEnabled(ctx, AddonSlug) {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/shop_street.css") }/>
+		<section
+			class="mb-6"
+			data-widget="shop_street"
+			data-campaign-id={ campaignID }
+			data-member-role={ strconv.Itoa(memberRole) }
+			if canDress {
+				data-can-dress="true"
+			}
+			aria-label="Shops"
+		></section>
+	}
+}
