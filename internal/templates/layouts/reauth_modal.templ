@@ -18,7 +18,7 @@ templ ReauthModal() {
 	>
 		<div
 			class="bg-surface rounded-lg shadow-xl p-6 w-full max-w-sm mx-4"
-			@click.outside="show = false"
+			@click.outside="if (show) { show = false; window.dispatchEvent(new CustomEvent('reauth-cancelled')); }"
 		>
 			<h3 class="text-lg font-semibold text-fg mb-2">
 				Confirm Your Identity
@@ -42,6 +42,9 @@ templ ReauthModal() {
 						$refs.reauthPassword.value = '';
 						// boot.js re-sends the refused request on this event.
 						window.dispatchEvent(new CustomEvent('reauth-confirmed'));
+					} else if (r.status === 429) {
+						errEl.textContent = 'Too many wrong passwords. Try again in 15 minutes.';
+						errEl.classList.remove('hidden');
 					} else {
 						errEl.textContent = 'Incorrect password. Please try again.';
 						errEl.classList.remove('hidden');

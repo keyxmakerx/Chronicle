@@ -181,7 +181,7 @@ type Service interface {
 
 	// ForcePinAllToVersion is the mass variant of ForcePinCampaign.
 	// Partial failures don't abort — each campaign is independent.
-	ForcePinAllToVersion(ctx context.Context, version, actorID, actorIP, actorUA string) (pinned int, err error)
+	ForcePinAllToVersion(ctx context.Context, version, actorID, actorIP, actorUA string) (pinned []string, err error)
 
 	// AutoPinOnInstall runs after a foundry-module package installs:
 	// each auto-tracking campaign in "preserve" pin_mode is explicit-
@@ -816,21 +816,21 @@ func (s *service) NotifyOlderCampaigns(ctx context.Context, version, actorID, ac
 
 // ForcePinAllToVersion is the mass force-update variant. Iterates
 // every campaign whose pin is strictly older than the target and
-// repins them. Returns the count of campaigns successfully repinned.
+// repins them. Returns the campaigns successfully repinned.
 // Partial failures don't abort — see NotifyOlderCampaigns rationale.
-func (s *service) ForcePinAllToVersion(ctx context.Context, version, actorID, actorIP, actorUA string) (int, error) {
+func (s *service) ForcePinAllToVersion(ctx context.Context, version, actorID, actorIP, actorUA string) ([]string, error) {
 	older, err := s.repo.CampaignsOlderThan(ctx, version, semverLess)
 	if err != nil {
-		return 0, ErrInternal("campaigns_older_than", err)
+		return nil, ErrInternal("campaigns_older_than", err)
 	}
-	count := 0
+	var pinned []string
 	for _, c := range older {
 		if err := s.ForcePinCampaign(ctx, c.CampaignID, version, actorID, actorIP, actorUA); err != nil {
 			continue
 		}
-		count++
+		pinned = append(pinned, c.CampaignID)
 	}
-	return count, nil
+	return pinned, nil
 }
 
 // AutoPinOnInstall is the install-time auto-pin path. previousVersion is

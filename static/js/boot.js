@@ -874,6 +874,46 @@
     return fetch(url, fetchOpts);
   };
 
+  /**
+   * apiAction sends a write through apiFetch and settles on its outcome, for
+   * buttons that report a result: it resolves with the JSON body ({} when there
+   * is none) on a 2xx and rejects with the server's message otherwise. A 403
+   * asking for the password opens the password modal and re-sends the request
+   * once the password is confirmed; cancelling rejects.
+   *
+   * @param {string} url - Request URL.
+   * @param {Object} [opts] - apiFetch options.
+   * @returns {Promise<Object>} The parsed response body.
+   */
+  Chronicle.apiAction = function (url, opts) {
+    return Chronicle.apiFetch(url, opts).then(function (resp) {
+      var trigger = (resp.headers && resp.headers.get('HX-Trigger')) || '';
+      if (resp.status === 403 && trigger.indexOf('reauth-required') !== -1) {
+        return new Promise(function (resolve, reject) {
+          function stop() {
+            window.removeEventListener('reauth-confirmed', onConfirmed);
+            window.removeEventListener('reauth-cancelled', onCancelled);
+          }
+          function onConfirmed() { stop(); resolve(Chronicle.apiAction(url, opts)); }
+          function onCancelled() { stop(); reject(new Error('password not confirmed')); }
+          window.addEventListener('reauth-confirmed', onConfirmed);
+          window.addEventListener('reauth-cancelled', onCancelled);
+          window.dispatchEvent(new CustomEvent('reauth-required'));
+        });
+      }
+      return resp.text().then(function (text) {
+        var data = {};
+        if (text) {
+          try { data = JSON.parse(text); } catch (e) { data = {}; }
+        }
+        if (!resp.ok) {
+          throw new Error((data && (data.message || data.error)) || ('request failed (' + resp.status + ')'));
+        }
+        return data;
+      });
+    });
+  };
+
   // Local words for one page, per visit: what the page's place or the
   // current era calls a word (a coin, a rank). Keyed by the lower-cased usual
   // word; {} when there are none or the read fails.

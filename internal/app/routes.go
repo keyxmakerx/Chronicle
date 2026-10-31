@@ -2730,9 +2730,16 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 	}, nil
 }
 
-// loadSystemsFromPackages scans installed system packages and loads them into
-// the system registry. Package-managed systems override bundled ones.
-func (a *App) loadSystemsFromPackages(pkgService packages.PackageService) {
+// packageLister is the part of the package catalog the system loader reads.
+type packageLister interface {
+	ListPackages(ctx context.Context) ([]packages.Package, error)
+}
+
+// loadSystemsFromPackages loads the installed version of every approved system
+// package into the system registry. The catalog, not the folders on disk,
+// decides what is served: a removed or unapproved package's leftover folders
+// never load.
+func (a *App) loadSystemsFromPackages(pkgService packageLister) {
 	pkgs, err := pkgService.ListPackages(context.Background())
 	if err != nil {
 		slog.Warn("failed to list packages for system loading", slog.Any("error", err))
@@ -2822,6 +2829,7 @@ func (a *App) RegisterRoutes() {
 	}
 	e.GET("/healthz", healthHandler)
 	e.GET("/health", healthHandler)
+	e.POST(middleware.CSPReportPath, middleware.CSPReportHandler(), middleware.RateLimit(120, time.Minute))
 
 	// wsRevoker is wired into syncapi, addons and campaigns below, well
 	// before wsHub is constructed further down — see wsRevokerHolder.
@@ -2953,6 +2961,11 @@ func (a *App) RegisterRoutes() {
 	// setting is applied on top of the saved sidebar.
 	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))
 	groupRepo := campaigns.NewGroupRepository(a.DB)
+	if n, err := groupRepo.PruneNonMemberGroupRows(context.Background()); err != nil {
+		slog.Error("pruning group rows of removed members failed", slog.Any("error", err))
+	} else if n > 0 {
+		slog.Info("pruned group rows of removed members", slog.Int64("rows", n))
+	}
 	groupService := campaigns.NewGroupService(groupRepo)
 	campaignHandler.SetGroupService(groupService)
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
@@ -3304,6 +3317,7 @@ func (a *App) RegisterRoutes() {
 	// Auto-register discovered game systems as addons so new systems
 	// (from internal/systems/, package manager, or GitHub) appear in the
 	// addon UI without hardcoded definitions.
+	a.loadSystemsFromPackages(packages.NewPackageRepository(a.DB))
 	sysAddonInfos := systems.AddonInfos()
 	slog.Info("registering system addons at startup", slog.Int("count", len(sysAddonInfos)))
 	for _, info := range sysAddonInfos {
@@ -3391,7 +3405,7 @@ func (a *App) RegisterRoutes() {
 		// Taken before the rescan swaps manifests, to tell which sheet fields
 		// this install introduces.
 		presetsBefore := snapshotPresetFieldKeys()
-		systems.ScanPackageDir(filepath.Join(a.Config.Upload.MediaPath, "packages", "systems"))
+		a.loadSystemsFromPackages(pkgService)
 		// Force-load the exact dir that was just installed. The rescan
 		// above applies "highest version wins", which silently ignores a
 		// deliberate rollback to an OLDER version; an explicit install is
@@ -3433,12 +3447,29 @@ func (a *App) RegisterRoutes() {
 		// using the system; background since it walks every such campaign.
 		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), presetsBefore)
 	})
+	// A removed or archived system package stops being served now, and its
+	// page renderers go with it.
+	packages.SetOnSystemUnload(pkgService, func(packageRoot string) {
+		dropped := systems.UnloadPackageDirsUnder(packageRoot)
+		slog.Info("unloaded package systems", slog.String("dir", packageRoot), slog.Any("systems", dropped))
+		freshRegistry := entities.NewEntityShowRendererRegistry()
+		registerManifestRenderers(freshRegistry)
+		entities.SetGlobalEntityShowRendererRegistry(freshRegistry)
+	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	// Fail-loud installs: run the FULL loader-grade manifest validation at
 	// install time for system packages, so a manifest the boot scan would
 	// reject (content caps, slugs, renderer bindings…) fails the install
 	// with the real error instead of installing "green" and shadow-failing
 	// at load while the old version keeps serving.
+	packages.SetSystemDirProvider(pkgService, func(systemID string) string {
+		for _, sh := range systems.LoadedHealth() {
+			if sh.ID == systemID && sh.Source == "package" {
+				return sh.Dir
+			}
+		}
+		return ""
+	})
 	packages.SetManifestValidator(pkgService, func(manifestPath string) error {
 		_, err := systems.LoadManifest(manifestPath)
 		return err
@@ -3547,11 +3578,6 @@ func (a *App) RegisterRoutes() {
 	pkgHandler := packages.NewHandler(pkgService)
 	pkgHandler.SetActivityRecorder(adminActivity)
 	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)
-	// Public package file serving — always available so Foundry VTT can
-	// fetch module.json even when the admin UI is degraded.
-	pkgServeHandler := packages.NewServeHandler(pkgService, a.Config.BaseURL)
-	packages.SetOnServeInvalidate(pkgService, pkgServeHandler.InvalidateCache)
-	packages.RegisterPublicRoutes(e, pkgServeHandler, middleware.RateLimit(300, time.Minute))
 
 	if a.PluginHealth.IsHealthy("packages") {
 		packages.RegisterRoutes(adminGroup, pkgHandler, auth.RequireReauth(authService))
@@ -3559,10 +3585,6 @@ func (a *App) RegisterRoutes() {
 		// Owner-facing submission routes (authenticated, not admin-only).
 		ownerGroup := e.Group("", auth.RequireAuth(authService))
 		packages.RegisterOwnerRoutes(ownerGroup, pkgOwnerHandler)
-
-		// Load systems from package manager install paths so externally
-		// managed system packs override the bundled fallbacks.
-		a.loadSystemsFromPackages(pkgService)
 
 		// Store package service reference.
 		a.pkgService = pkgService
@@ -4552,6 +4574,7 @@ func (a *App) RegisterRoutes() {
 	noteGrants := notes.NewAppGrantService(notes.NewAppGrantRepository(a.DB))
 	// See wsRevokerHolder: wsHub itself is constructed further down.
 	noteGrants.SetConnectionRevoker(wsRevoker)
+	go notes.StartAppGrantPruner(a.ShutdownCtx, noteGrants)
 	noteGrantHandler := notes.NewAppGrantHandler(noteGrants, &notesOriginAllower{baseURL: a.Config.BaseURL, settings: settingsService})
 	// Pictures and voice memos in the frames load through member-checked
 	// signed links, as Foundry's media does.

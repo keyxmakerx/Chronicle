@@ -19,9 +19,13 @@ import (
 // strings and JSEscapeString-escape interpolated values, never a literal
 // double quote.
 //
+// Writes go through Chronicle.apiAction, which rejects on a non-2xx answer
+// and opens the password prompt on a re-confirmation 403, so a button never
+// reports success for a refused request.
+//
 // onclick_handlers_test.go pins the contract: every helper's output starts
-// with `(function(`, contains no literal `"`, and never references
-// `__templ_`.
+// with `(function(`, contains no literal `"`, never references `__templ_`,
+// and never calls apiFetch directly.
 
 // inlineOnClick wraps a JS body in a ComponentScript with empty
 // Function (no <script> tag emitted) so the body renders directly
@@ -60,7 +64,7 @@ func notifyCampaignOnClick(campaignID, version string) templ.ComponentScript {
 	body := fmt.Sprintf(
 		`(function(){`+
 			`if(!window.confirm('Notify campaign owner that '+%s+' is available?'))return;`+
-			`Chronicle.apiFetch('/admin/foundry-vtt/version/'+encodeURIComponent(%s)+'/notify/'+encodeURIComponent(%s),{method:'POST'})`+
+			`Chronicle.apiAction('/admin/foundry-vtt/version/'+encodeURIComponent(%s)+'/notify/'+encodeURIComponent(%s),{method:'POST'})`+
 			`.then(function(){window.Chronicle.notify('Notified campaign '+%s,'success');})`+
 			`.catch(function(err){window.Chronicle.notify('Notify failed: '+((err&&err.message)||''),'error');});`+
 			`})()`,
@@ -82,7 +86,7 @@ func forcePinCampaignOnClick(campaignID, version string) templ.ComponentScript {
 			// Backslash is literal in Go raw strings, so the output
 			// contains \' which JS interprets as a literal '.
 			`if(!window.confirm('Force-update campaign '+%s+' to '+%s+'? This overrides the owner\'s current pin.'))return;`+
-			`Chronicle.apiFetch('/admin/foundry-vtt/version/'+encodeURIComponent(%s)+'/force-pin/'+encodeURIComponent(%s),{method:'POST'})`+
+			`Chronicle.apiAction('/admin/foundry-vtt/version/'+encodeURIComponent(%s)+'/force-pin/'+encodeURIComponent(%s),{method:'POST'})`+
 			`.then(function(){window.Chronicle.notify('Force-updated to '+%s,'success');setTimeout(function(){window.location.reload();},600);})`+
 			`.catch(function(err){window.Chronicle.notify('Force-update failed: '+((err&&err.message)||''),'error');});`+
 			`})()`,
@@ -97,7 +101,7 @@ func notifyOlderOnClick(version string) templ.ComponentScript {
 	body := fmt.Sprintf(
 		`(function(){`+
 			`if(!window.confirm('Notify EVERY campaign with a pin older than '+%s+'?'))return;`+
-			`Chronicle.apiFetch('/admin/foundry-vtt/version/'+encodeURIComponent(%s)+'/notify-older',{method:'POST'})`+
+			`Chronicle.apiAction('/admin/foundry-vtt/version/'+encodeURIComponent(%s)+'/notify-older',{method:'POST'})`+
 			`.then(function(resp){var n=(resp&&typeof resp.notified==='number')?resp.notified:0;window.Chronicle.notify('Notified '+n+' campaign(s).','success');})`+
 			`.catch(function(err){window.Chronicle.notify('Mass-notify failed: '+((err&&err.message)||''),'error');});`+
 			`})()`,
@@ -112,7 +116,7 @@ func forcePinOlderOnClick(version string) templ.ComponentScript {
 	body := fmt.Sprintf(
 		`(function(){`+
 			`if(!window.confirm('Force-update EVERY campaign with a pin older than '+%s+'? This overrides every affected owner\'s pin. Confirm only if rolling out a critical update.'))return;`+
-			`Chronicle.apiFetch('/admin/foundry-vtt/version/'+encodeURIComponent(%s)+'/force-pin-older',{method:'POST'})`+
+			`Chronicle.apiAction('/admin/foundry-vtt/version/'+encodeURIComponent(%s)+'/force-pin-older',{method:'POST'})`+
 			`.then(function(resp){var n=(resp&&typeof resp.pinned==='number')?resp.pinned:0;window.Chronicle.notify('Force-updated '+n+' campaign(s) to '+%s,'success');setTimeout(function(){window.location.reload();},600);})`+
 			`.catch(function(err){window.Chronicle.notify('Mass force-update failed: '+((err&&err.message)||''),'error');});`+
 			`})()`,
@@ -128,7 +132,7 @@ func rotateTokenOnClick(campaignID string) templ.ComponentScript {
 	body := fmt.Sprintf(
 		`(function(){`+
 			`if(!window.confirm('Rotate the install URL? The one saved in Foundry stops working until you reinstall the module there with the new URL. Players are not affected.'))return;`+
-			`Chronicle.apiFetch('/campaigns/'+encodeURIComponent(%s)+'/foundry-vtt/token/rotate',{method:'POST'})`+
+			`Chronicle.apiAction('/campaigns/'+encodeURIComponent(%s)+'/foundry-vtt/token/rotate',{method:'POST'})`+
 			`.then(function(){window.Chronicle.notify('Install URL rotated. Reinstall the module in Foundry with the new URL.','success');setTimeout(function(){window.location.reload();},600);})`+
 			`.catch(function(err){window.Chronicle.notify('Rotate failed: '+((err&&err.message)||''),'error');});`+
 			`})()`,
@@ -141,7 +145,7 @@ func rotateTokenOnClick(campaignID string) templ.ComponentScript {
 // banner DOM element.
 func dismissAutoPinBannerOnClick() templ.ComponentScript {
 	body := `(function(){` +
-		`Chronicle.apiFetch('/admin/foundry-vtt/autopin-banner/dismiss',{method:'POST'})` +
+		`Chronicle.apiAction('/admin/foundry-vtt/autopin-banner/dismiss',{method:'POST'})` +
 		`.then(function(){var b=document.getElementById('fvtt-autopin-banner');if(b)b.style.display='none';})` +
 		`.catch(function(err){window.Chronicle.notify('Dismiss failed: '+((err&&err.message)||''),'error');});` +
 		`})()`

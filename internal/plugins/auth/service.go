@@ -175,8 +175,8 @@ type AuthService interface {
 	EndCampaignGuests(ctx context.Context, campaignID string)
 
 	// Re-authentication for sensitive operations.
-	ConfirmReauth(ctx context.Context, userID, password string) error
-	IsReauthValid(ctx context.Context, userID string) (bool, error)
+	ConfirmReauth(ctx context.Context, userID, sessionToken, password string) error
+	IsReauthValid(ctx context.Context, userID, sessionToken string) (bool, error)
 
 	// NoteSeen records that someone used Chronicle by another route than a
 	// browser session, such as a sync key.
@@ -1549,18 +1549,54 @@ func errorAs(err error, target **apperror.AppError) bool {
 // --- Re-Authentication for Sensitive Operations ---
 
 // reauthKeyPrefix is the Redis key prefix for re-authentication confirmations.
-// Keys are short-lived (5 minutes) and set after the admin re-enters their password.
+// A confirmation belongs to the session that made it, so another session of
+// the same account (a stolen cookie, say) can't ride it.
 const reauthKeyPrefix = "reauth_confirmed:"
+
+// reauthFailuresKeyPrefix counts wrong re-confirmation passwords per account,
+// across every session and address, so a signed-in session can't be used to
+// guess the password.
+const reauthFailuresKeyPrefix = "reauth_failures:"
 
 // reauthWindow is how long a re-authentication confirmation remains valid.
 // After this window, the admin must re-enter their password for the next
 // sensitive operation.
 const reauthWindow = 5 * time.Minute
 
-// ConfirmReauth validates the admin's password and sets a short-lived Redis key
-// that allows sensitive operations for the reauthWindow duration. Returns an
-// error if the password is incorrect.
-func (s *authService) ConfirmReauth(ctx context.Context, userID, password string) error {
+// reauthMaxFailures wrong passwords within reauthLockWindow pause the
+// account's re-confirmations until the window runs out.
+const (
+	reauthMaxFailures = 5
+	reauthLockWindow  = 15 * time.Minute
+)
+
+// reauthKey names the confirmation for one session. The token is hashed so
+// the raw session token never appears in a key name.
+func reauthKey(userID, sessionToken string) string {
+	return reauthKeyPrefix + userID + ":" + hashToken(sessionToken)
+}
+
+// ConfirmReauth validates the user's password and marks this session as
+// re-confirmed for the reauthWindow. Each attempt takes its number before the
+// password is checked, so parallel guesses can't slip past the limit and the
+// expensive hash isn't run once the account is paused.
+func (s *authService) ConfirmReauth(ctx context.Context, userID, sessionToken, password string) error {
+	if sessionToken == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	failKey := reauthFailuresKeyPrefix + userID
+	var attempt *redis.IntCmd
+	if _, err := s.redis.TxPipelined(ctx, func(p redis.Pipeliner) error {
+		attempt = p.Incr(ctx, failKey)
+		p.Expire(ctx, failKey, reauthLockWindow)
+		return nil
+	}); err != nil {
+		return apperror.NewInternal(fmt.Errorf("counting reauth attempts: %w", err))
+	}
+	if attempt.Val() > reauthMaxFailures {
+		return apperror.NewTooManyRequests("too many wrong passwords; try again in 15 minutes")
+	}
+
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("finding user for reauth: %w", err))
@@ -1569,22 +1605,22 @@ func (s *authService) ConfirmReauth(ctx context.Context, userID, password string
 	if !verifyPassword(password, user.PasswordHash) {
 		return apperror.NewUnauthorized("incorrect password")
 	}
+	s.redis.Del(ctx, failKey)
 
-	// Set the reauth confirmation key in Redis with short TTL.
-	key := reauthKeyPrefix + userID
-	if err := s.redis.Set(ctx, key, "1", reauthWindow).Err(); err != nil {
+	if err := s.redis.Set(ctx, reauthKey(userID, sessionToken), "1", reauthWindow).Err(); err != nil {
 		return apperror.NewInternal(fmt.Errorf("storing reauth confirmation: %w", err))
 	}
 
 	return nil
 }
 
-// IsReauthValid checks whether the user has recently confirmed their password
-// for sensitive operations. Returns true if a valid reauth confirmation exists
-// in Redis within the reauthWindow.
-func (s *authService) IsReauthValid(ctx context.Context, userID string) (bool, error) {
-	key := reauthKeyPrefix + userID
-	exists, err := s.redis.Exists(ctx, key).Result()
+// IsReauthValid reports whether this session re-confirmed its password
+// within the reauthWindow.
+func (s *authService) IsReauthValid(ctx context.Context, userID, sessionToken string) (bool, error) {
+	if sessionToken == "" {
+		return false, nil
+	}
+	exists, err := s.redis.Exists(ctx, reauthKey(userID, sessionToken)).Result()
 	if err != nil {
 		return false, apperror.NewInternal(fmt.Errorf("checking reauth status: %w", err))
 	}

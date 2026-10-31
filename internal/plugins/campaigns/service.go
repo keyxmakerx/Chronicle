@@ -1,6 +1,7 @@
 package campaigns
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -332,6 +333,37 @@ func (s *campaignService) SetCharacterListSeeder(seeder CharacterListSeeder) {
 	s.characterSeeder = seeder
 }
 
+// saveSettingsChanges writes the top-level settings keys whose value differs
+// between what campaign held when it was read and settingsJSON, and nothing
+// else. Each writer reads the campaign, edits a field and saves; writing the
+// whole object back would undo any other setting changed in between, such as
+// an admin's mass module pin landing while an owner saves a colour.
+func (s *campaignService) saveSettingsChanges(ctx context.Context, campaign *Campaign, campaignID string, settingsJSON []byte) error {
+	beforeJSON, err := json.Marshal(campaign.ParseSettings())
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	var before, after map[string]json.RawMessage
+	if err := json.Unmarshal(beforeJSON, &before); err != nil {
+		return apperror.NewInternal(fmt.Errorf("reading settings: %w", err))
+	}
+	if err := json.Unmarshal(settingsJSON, &after); err != nil {
+		return apperror.NewInternal(fmt.Errorf("reading settings: %w", err))
+	}
+	changed := map[string]json.RawMessage{}
+	for k, v := range after {
+		if old, ok := before[k]; !ok || !bytes.Equal(old, v) {
+			changed[k] = v
+		}
+	}
+	for k := range before {
+		if _, ok := after[k]; !ok {
+			changed[k] = nil
+		}
+	}
+	return s.repo.UpdateSettingsKeys(ctx, campaignID, changed)
+}
+
 // UpdateCharacterLists replaces both lists in the settings JSON, leaving every
 // other setting as it was. A nil slice is stored as an empty list so the
 // campaign counts as having chosen.
@@ -356,7 +388,7 @@ func (s *campaignService) UpdateCharacterLists(ctx context.Context, campaignID s
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // ClearCharacterLists drops both lists from the settings JSON, leaving every
@@ -379,7 +411,7 @@ func (s *campaignService) ClearCharacterLists(ctx context.Context, campaignID st
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // SetMediaCleaner sets the media cleaner for campaign deletion cleanup.
@@ -971,7 +1003,7 @@ func (s *campaignService) revokeDmGrant(ctx context.Context, campaignID, userID 
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
-	if err := s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON)); err != nil {
+	if err := s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON); err != nil {
 		return apperror.NewInternal(fmt.Errorf("revoking dm grant: %w", err))
 	}
 
@@ -1215,7 +1247,7 @@ func (s *campaignService) UpdateBranding(ctx context.Context, campaignID, brandN
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
 
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // normalizeNavIcons clears any navigation icon that fails the shared icon
@@ -1301,7 +1333,7 @@ func (s *campaignService) SetFoundryModulePin(ctx context.Context, campaignID, v
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // GetFoundryModulePin returns the campaign's current pin string, or
@@ -1338,7 +1370,7 @@ func (s *campaignService) SetFoundryModulePinMode(ctx context.Context, campaignI
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // GetFoundryModulePinMode returns the campaign's pin_mode setting, or
@@ -1428,7 +1460,7 @@ func (s *campaignService) UpdateDmGrants(ctx context.Context, campaignID string,
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
 
-	if err := s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON)); err != nil {
+	if err := s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON); err != nil {
 		return err
 	}
 
@@ -1548,7 +1580,7 @@ func (s *campaignService) SetEventTierDefinitions(ctx context.Context, campaignI
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // UpdateWelcomeMessage sets the campaign's MOTD banner message.
@@ -1571,7 +1603,7 @@ func (s *campaignService) UpdateWelcomeMessage(ctx context.Context, campaignID, 
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
 
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // validDefaultVisibilities defines the allowed default visibility values.
@@ -1601,7 +1633,7 @@ func (s *campaignService) UpdateDefaultVisibility(ctx context.Context, campaignI
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
 
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // UpdateSidebarConfig applies a partial update to the stored sidebar config via
@@ -2111,7 +2143,7 @@ func (s *campaignService) UpdateSystemID(ctx context.Context, campaignID, system
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
 
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // isValidEmail performs a basic format check on an email address.

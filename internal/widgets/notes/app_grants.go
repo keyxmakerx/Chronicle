@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -68,6 +69,9 @@ type AppGrantRepository interface {
 	Revoke(ctx context.Context, id string, at time.Time) error
 	Touch(ctx context.Context, id string, at time.Time) error
 	RevokeAllForUser(ctx context.Context, userID string, at time.Time) error
+	// DeleteDead deletes every grant that can never authenticate again:
+	// revoked, or unused since idleBefore.
+	DeleteDead(ctx context.Context, idleBefore time.Time) (int64, error)
 }
 
 // AppGrantService issues, checks and revokes app grants.
@@ -96,6 +100,10 @@ type AppGrantService interface {
 	// Runs when the user is removed from it, so being invited back does not
 	// bring an old grant back to life.
 	RevokeAllInCampaign(ctx context.Context, campaignID, userID string) error
+
+	// PruneDead deletes the grants that can never authenticate again, so a
+	// revoked or expired token's row doesn't stay in the table forever.
+	PruneDead(ctx context.Context) (int64, error)
 
 	// SetConnectionRevoker wires the live-socket drop that makes a revoke
 	// take effect on an open notes frame at once.
@@ -259,6 +267,36 @@ func (s *appGrantService) RevokeAllInCampaign(ctx context.Context, campaignID, u
 	return nil
 }
 
+func (s *appGrantService) PruneDead(ctx context.Context) (int64, error) {
+	return s.repo.DeleteDead(ctx, s.now().UTC().Add(-appGrantIdleLimit))
+}
+
+// appGrantPruneEvery is how often StartAppGrantPruner clears dead grants.
+const appGrantPruneEvery = 24 * time.Hour
+
+// StartAppGrantPruner deletes dead grants now and then once a day until ctx
+// ends.
+func StartAppGrantPruner(ctx context.Context, svc AppGrantService) {
+	prune := func() {
+		if n, err := svc.PruneDead(ctx); err != nil {
+			slog.Error("pruning notes app grants failed", slog.Any("error", err))
+		} else if n > 0 {
+			slog.Info("pruned notes app grants", slog.Int64("deleted", n))
+		}
+	}
+	prune()
+	t := time.NewTicker(appGrantPruneEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			prune()
+		}
+	}
+}
+
 func (s *appGrantService) RevokeAllForUser(ctx context.Context, userID string) error {
 	if userID == "" {
 		return nil
@@ -367,6 +405,18 @@ func (r *appGrantRepository) Touch(ctx context.Context, id string, at time.Time)
 		return fmt.Errorf("touching notes app grant: %w", err)
 	}
 	return nil
+}
+
+func (r *appGrantRepository) DeleteDead(ctx context.Context, idleBefore time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM notes_app_grants
+		  WHERE revoked_at IS NOT NULL
+		     OR GREATEST(created_at, COALESCE(last_used_at, created_at)) < ?`, idleBefore)
+	if err != nil {
+		return 0, fmt.Errorf("deleting dead notes app grants: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 func (r *appGrantRepository) RevokeAllForUser(ctx context.Context, userID string, at time.Time) error {

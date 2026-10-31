@@ -96,6 +96,10 @@ func (r *mockGroupRepo) RemoveGroupMember(_ context.Context, groupID int, userID
 	return nil
 }
 
+func (r *mockGroupRepo) PruneNonMemberGroupRows(_ context.Context) (int64, error) {
+	return 0, nil
+}
+
 func (r *mockGroupRepo) ListGroupMembers(_ context.Context, groupID int) ([]GroupMemberInfo, error) {
 	return r.members[groupID], nil
 }

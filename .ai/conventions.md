@@ -321,6 +321,8 @@ Double-submit cookie via `internal/middleware/csrf.go` (`__Host-` prefix on HTTP
 
 CSP allows `'unsafe-inline'` + `'unsafe-eval'` (the Alpine.js trade-off), mitigated by `sanitize.HTML` on every user-controlled HTML field (see "Sanitization invariant" below).
 
+A second, report-only policy (`script-src 'self'`, no inline code or eval) rides on every page; browsers report what it would block to `POST /csp-report`, which logs each distinct violation once (`internal/middleware/csp_report.go`). New code should not add inline scripts or handlers, so the switch to enforcing it (#1907) gets smaller, not larger.
+
 ### Signed URLs — HMAC-SHA256 with `crypto/subtle`
 
 Two families:

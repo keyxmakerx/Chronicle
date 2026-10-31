@@ -45,6 +45,10 @@ type MediaService interface {
 	ThumbnailPath(file *MediaFile, size string) string
 	SetStorageLimiter(limiter StorageLimiter)
 
+	// MaxUploadBytes is the largest single file this user may upload into
+	// the campaign now, or 0 for no limit.
+	MaxUploadBytes(ctx context.Context, userID, campaignID string) int64
+
 	// SetMemberChecker and SetEntityVisibilityFilter wire the ADR-058
 	// decision 5 merge-eligibility machinery (see canMergeWithExisting) —
 	// the same seams Handler wires for the decision 1 read-path check, but
@@ -526,6 +530,20 @@ func (s *mediaService) mergeCheckForNoMatch(ctx context.Context, campaignID, upl
 // upload an unbounded number of avatar-sized files against the same shared
 // disk-space floor every other upload competes for.
 const defaultCampaignlessStorageBytes int64 = 25 * 1024 * 1024
+
+// MaxUploadBytes resolves the per-file limit Upload applies: the live setting
+// when the limiter is wired, else the static ceiling. A failed lookup falls
+// back to the static ceiling rather than to no limit.
+func (s *mediaService) MaxUploadBytes(ctx context.Context, userID, campaignID string) int64 {
+	if s.limiter == nil {
+		return s.maxSize
+	}
+	maxUpload, _, _, err := s.limiter.GetEffectiveLimits(ctx, userID, campaignID)
+	if err != nil {
+		return s.maxSize
+	}
+	return maxUpload
+}
 
 // checkQuotas enforces dynamic storage limits from the settings plugin.
 // Checks per-file size, campaign storage total, and campaign file count.

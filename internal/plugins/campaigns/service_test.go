@@ -308,6 +308,33 @@ func (m *mockCampaignRepo) UpdateSettings(ctx context.Context, campaignID, setti
 	return nil
 }
 
+// UpdateSettingsKeys applies the keys to the settings findByIDFn serves and
+// hands the result to updateSettingsFn, so tests keep asserting on the whole
+// stored object.
+func (m *mockCampaignRepo) UpdateSettingsKeys(ctx context.Context, campaignID string, keys map[string]json.RawMessage) error {
+	if m.updateSettingsFn == nil {
+		return nil
+	}
+	stored := map[string]json.RawMessage{}
+	if m.findByIDFn != nil {
+		if c, err := m.findByIDFn(ctx, campaignID); err == nil && c != nil && c.Settings != "" {
+			_ = json.Unmarshal([]byte(c.Settings), &stored)
+		}
+	}
+	for k, v := range keys {
+		if v == nil {
+			delete(stored, k)
+		} else {
+			stored[k] = v
+		}
+	}
+	out, err := json.Marshal(stored)
+	if err != nil {
+		return err
+	}
+	return m.updateSettingsFn(ctx, campaignID, string(out))
+}
+
 func (m *mockCampaignRepo) TransferOwnership(ctx context.Context, campaignID, fromUserID, toUserID string) error {
 	if m.transferOwnershipFn != nil {
 		return m.transferOwnershipFn(ctx, campaignID, fromUserID, toUserID)

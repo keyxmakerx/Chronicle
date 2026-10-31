@@ -10,8 +10,6 @@ package systems
 import (
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 
 	"github.com/keyxmakerx/chronicle/internal/semver"
 )
@@ -64,67 +62,14 @@ func Init(modulesDir string) error {
 	return nil
 }
 
-// ScanPackageDir scans the package manager's systems directory for installed
-// systems and adds them to the registry. Structure: dir/{slug}/{version}/manifest.json.
-// Finds the latest version directory for each slug and loads it.
-func ScanPackageDir(dir string) {
+// UnloadPackageDirsUnder drops every package-loaded system whose folder is
+// root or inside it, so a removed package stops being served at once rather
+// than at the next restart. It returns the ids it dropped.
+func UnloadPackageDirsUnder(root string) []string {
 	if globalLoader == nil {
-		return
+		return nil
 	}
-	slog.Info("scanning package systems directory", slog.String("dir", dir))
-	slugDirs, err := os.ReadDir(dir)
-	if err != nil {
-		slog.Warn("cannot read package systems directory — no installed systems will load",
-			slog.String("dir", dir), slog.Any("error", err))
-		return
-	}
-	slog.Info("found system package slugs", slog.Int("count", len(slugDirs)))
-	for _, slugDir := range slugDirs {
-		if !slugDir.IsDir() {
-			continue
-		}
-		slugPath := filepath.Join(dir, slugDir.Name())
-		// Find the latest version subdirectory.
-		versionDirs, err := os.ReadDir(slugPath)
-		if err != nil {
-			continue
-		}
-		// Pick the highest SEMVER version directory. os.ReadDir returns names
-		// sorted as strings, where "0.10.0" sorts BEFORE "0.0.9" — so taking the
-		// last alphabetical name silently loads the wrong (older) package once a
-		// double-digit component appears. Compare numerically instead.
-		var latestVersion string
-		for _, vDir := range versionDirs {
-			if !vDir.IsDir() {
-				continue
-			}
-			if latestVersion == "" || versionLess(latestVersion, vDir.Name()) {
-				latestVersion = vDir.Name()
-			}
-		}
-		if latestVersion == "" {
-			continue
-		}
-		versionPath := filepath.Join(slugPath, latestVersion)
-		if err := globalLoader.DiscoverDir(versionPath); err != nil {
-			slog.Warn("failed to load package system",
-				slog.String("slug", slugDir.Name()),
-				slog.String("version", latestVersion),
-				slog.Any("error", err),
-			)
-			RecordEvent(LoadEvent{
-				SystemID: slugDir.Name(),
-				Kind:     EventFailed,
-				Source:   "package",
-				Error:    err.Error(),
-				Dir:      versionPath,
-			})
-		}
-	}
-	slog.Info("scanned package systems directory",
-		slog.String("dir", dir),
-		slog.Int("total_count", globalLoader.Count()),
-	)
+	return globalLoader.unloadPackageDirsUnder(root)
 }
 
 // versionLess reports whether version a is lower than version b, comparing

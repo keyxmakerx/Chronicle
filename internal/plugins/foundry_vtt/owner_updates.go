@@ -72,6 +72,11 @@ type OwnerUpdates interface {
 	// SetMode changes how new versions reach the campaign. An admin hold
 	// refuses it, as it refuses every other owner move.
 	SetMode(ctx context.Context, campaignID, mode string, actor packages.ActorInfo) error
+
+	// Hold turns on the site admin's hold, which keeps the campaign on its
+	// version until the admin lets go. A force-update sets it, so the owner
+	// can't move straight back to the version the admin moved them off.
+	Hold(ctx context.Context, campaignID string, actor packages.ActorInfo) error
 }
 
 type ownerUpdates struct {
@@ -194,5 +199,17 @@ func (o *ownerUpdates) SetMode(ctx context.Context, campaignID, mode string, act
 	// "Stay on one version" stays on the version running now; the version
 	// list is for Use another version.
 	_, err = o.updates.SetMode(ctx, packages.SetUpdateModeInput{CampaignID: campaignID, PackageID: pkg.ID, Mode: mode}, actor)
+	return err
+}
+
+func (o *ownerUpdates) Hold(ctx context.Context, campaignID string, actor packages.ActorInfo) error {
+	pkg, err := o.modulePackage(ctx)
+	if err != nil {
+		return err
+	}
+	if pkg == nil {
+		return apperror.NewNotFound("the Foundry module is not installed")
+	}
+	_, err = o.updates.SetAdminHold(ctx, campaignID, pkg.ID, true, actor)
 	return err
 }

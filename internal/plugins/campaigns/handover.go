@@ -66,7 +66,7 @@ func (s *campaignService) SetHandoverAfter(ctx context.Context, campaignID strin
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 
 // HandoverStatuses returns the hand-over status of each listed campaign.

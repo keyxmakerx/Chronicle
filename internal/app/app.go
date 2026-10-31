@@ -199,8 +199,7 @@ func (a *App) setupMiddleware() {
 	settingsRepo := settings.NewSettingsRepository(a.DB)
 	settingsSvc := settings.NewSettingsService(settingsRepo)
 	a.Echo.Use(middleware.CORS(middleware.CORSConfig{
-		AllowedOrigins:   []string{a.Config.BaseURL},
-		AllowCredentials: true,
+		AllowedOrigins: []string{a.Config.BaseURL},
 		DynamicOrigins: func() []string {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()

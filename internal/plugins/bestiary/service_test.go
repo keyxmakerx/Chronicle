@@ -939,7 +939,7 @@ func TestRate_TruncatesLongReview(t *testing.T) {
 	var gotReview *string
 	repo := &mockBestiaryRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
-			return &Publication{ID: "p1", CreatorID: "owner-1"}, nil
+			return &Publication{ID: "p1", Visibility: VisibilityPublished, CreatorID: "owner-1"}, nil
 		},
 		ratePublicationFn: func(_ context.Context, _, _ string, _ int, reviewText *string) (bool, error) {
 			gotReview = reviewText
@@ -963,7 +963,7 @@ func TestRate_TruncatesLongReview(t *testing.T) {
 func TestRate_AllowsOtherUsersRating(t *testing.T) {
 	repo := &mockBestiaryRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
-			return &Publication{ID: "p1", CreatorID: "owner-1"}, nil
+			return &Publication{ID: "p1", Visibility: VisibilityPublished, CreatorID: "owner-1"}, nil
 		},
 	}
 	svc := newTestBestiaryService(repo)
@@ -994,7 +994,7 @@ func TestToggleFavorite_VerifiesPublicationExistsFirst(t *testing.T) {
 func TestToggleFavorite_Success(t *testing.T) {
 	repo := &mockBestiaryRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
-			return &Publication{ID: "p1"}, nil
+			return &Publication{ID: "p1", Visibility: VisibilityPublished}, nil
 		},
 		toggleFavoriteWithCountFn: func(_ context.Context, _, _ string) (bool, error) {
 			return true, nil
@@ -1167,7 +1167,7 @@ func TestFlag_PassesThresholdToRepo(t *testing.T) {
 	var gotThreshold int
 	repo := &mockBestiaryRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
-			return &Publication{ID: "p1", CreatorID: "owner-1"}, nil
+			return &Publication{ID: "p1", Visibility: VisibilityPublished, CreatorID: "owner-1"}, nil
 		},
 		flagPublicationAtomicFn: func(_ context.Context, _, _ string, _ *string, threshold int) error {
 			gotThreshold = threshold
@@ -1286,5 +1286,99 @@ func TestGetCreatorProfile_WorksWithoutUserFetcher(t *testing.T) {
 	}
 	if profile.DisplayName != "" {
 		t.Errorf("expected no display name without a UserFetcher, got %q", profile.DisplayName)
+	}
+}
+
+// TestCreatorCannotUndoModeration pins that a moderation decision stays with
+// the moderators: a creator can neither archive nor re-publish a flagged
+// publication, nor change one a moderator archived, while their own archive
+// stays theirs to undo.
+func TestCreatorCannotUndoModeration(t *testing.T) {
+	tests := []struct {
+		name       string
+		visibility string
+		lastAction string
+		wantLocked bool
+	}{
+		{"flagged", VisibilityFlagged, "", true},
+		{"archived by a moderator", VisibilityArchived, "archive", true},
+		{"archived by the creator", VisibilityArchived, "", false},
+		{"restored after a moderator archive", VisibilityArchived, "restore", false},
+		{"published", VisibilityPublished, "archive", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writes := 0
+			repo := &mockBestiaryRepo{
+				getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
+					return &Publication{ID: "p1", CreatorID: "user-1", Visibility: tt.visibility}, nil
+				},
+				getModerationLogFn: func(_ context.Context, _ string) ([]ModerationLogEntry, error) {
+					if tt.lastAction == "" {
+						return nil, nil
+					}
+					return []ModerationLogEntry{{Action: tt.lastAction}}, nil
+				},
+				archivePublicationFn: func(_ context.Context, _ string) error { writes++; return nil },
+				updateVisibilityFn:   func(_ context.Context, _, _ string) error { writes++; return nil },
+			}
+			svc := newTestBestiaryService(repo)
+			errs := []error{
+				svc.Archive(context.Background(), "user-1", "p1"),
+				svc.ChangeVisibility(context.Background(), "user-1", "p1", VisibilityPublished),
+			}
+			for _, err := range errs {
+				var appErr *apperror.AppError
+				locked := errors.As(err, &appErr) && appErr.Type == "forbidden"
+				if locked != tt.wantLocked {
+					t.Fatalf("locked = %v (err %v), want %v", locked, err, tt.wantLocked)
+				}
+			}
+			if tt.wantLocked && writes != 0 {
+				t.Fatalf("a locked publication was written %d times", writes)
+			}
+		})
+	}
+}
+
+// TestByIDRoutesHideUnpublished pins that reviews, ratings, favourites and
+// flags reach only a publication its Show page would show: a draft is the
+// creator's alone, so to anyone else it answers like a missing one.
+func TestByIDRoutesHideUnpublished(t *testing.T) {
+	for _, vis := range []string{VisibilityDraft, VisibilityArchived, VisibilityFlagged} {
+		t.Run(vis, func(t *testing.T) {
+			reads := 0
+			repo := &mockBestiaryRepo{
+				getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
+					return &Publication{ID: "p1", CreatorID: "owner-1", Visibility: vis}, nil
+				},
+				listReviewsFn: func(_ context.Context, _ string, _, _ int) ([]Rating, int, error) {
+					reads++
+					return nil, 0, nil
+				},
+			}
+			svc := newTestBestiaryService(repo)
+			ctx := context.Background()
+			_, errReviews := svc.ListReviews(ctx, "stranger", "p1", 1, 20)
+			_, errFav := svc.ToggleFavorite(ctx, "stranger", "p1")
+			errs := []error{
+				errReviews,
+				svc.Rate(ctx, "stranger", "p1", 5, nil),
+				errFav,
+				svc.Flag(ctx, "stranger", "p1", nil),
+			}
+			for i, err := range errs {
+				var appErr *apperror.AppError
+				if !errors.As(err, &appErr) || appErr.Code != 404 {
+					t.Fatalf("call %d: got %v, want not found", i, err)
+				}
+			}
+			if reads != 0 {
+				t.Fatal("reviews of an unpublished publication were read for a stranger")
+			}
+			if _, err := svc.ListReviews(ctx, "owner-1", "p1", 1, 20); err != nil || reads != 1 {
+				t.Fatalf("the creator's own read: err %v, reads %d", err, reads)
+			}
+		})
 	}
 }
