@@ -1,0 +1,209 @@
+// diagnostics_picker.templ holds the AI helper's two ways to pick checks: the
+// everyday questions, each a fold with its checks and blanks, and the whole
+// catalog in folded groups behind "Pick checks yourself". Both post to the
+// compose route, which builds the same request an AI would paste.
+// static/js/widgets/diag_picker.js does the folding, Find and the tray.
+package admin
+
+import (
+	"fmt"
+	"strings"
+	"github.com/keyxmakerx/chronicle/internal/systems"
+)
+
+// diagnosticsCheckCount is the number of checks across the groups.
+func diagnosticsCheckCount(groups []systems.PickerGroup) int {
+	n := 0
+	for _, g := range groups {
+		n += len(g.Checks)
+	}
+	return n
+}
+
+// diagnosticsChecksLabel says "1 check" or "N checks".
+func diagnosticsChecksLabel(n int) string {
+	if n == 1 {
+		return "1 check"
+	}
+	return fmt.Sprintf("%d checks", n)
+}
+
+// sentencePart is a run of a question's sentence: plain text, or a blank.
+type sentencePart struct {
+	Text  string
+	Blank string // "campaign", "page" or ""
+}
+
+// splitSentence cuts a question's sentence at its {campaign} and {page} blanks.
+func splitSentence(s string) []sentencePart {
+	var out []sentencePart
+	for s != "" {
+		i := strings.Index(s, "{")
+		j := strings.Index(s, "}")
+		if i < 0 || j < i {
+			out = append(out, sentencePart{Text: s})
+			break
+		}
+		if i > 0 {
+			out = append(out, sentencePart{Text: s[:i]})
+		}
+		out = append(out, sentencePart{Blank: s[i+1 : j]})
+		s = s[j+1:]
+	}
+	return out
+}
+
+// diagnosticsQuestions is the list of everyday questions; one opens at a time.
+templ diagnosticsQuestions(data DiagnosticsWorkspaceData) {
+	<div class="dw-questions">
+		for _, q := range data.Questions {
+			<form
+				class="dw-q"
+				data-dw-q
+				hx-post="/admin/diagnostics/workspace/compose"
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+				hx-target="#dw-review"
+				hx-swap="innerHTML"
+			>
+				<input type="hidden" name="note" value={ q.Title }/>
+				<button type="button" class="dw-qh" data-dw-fold aria-expanded="false" aria-controls={ "dw-q-" + q.ID }>
+					<span class="dw-qic"><i class={ "fa-solid " + q.Icon } aria-hidden="true"></i></span>
+					<span class="dw-qt">{ q.Title }<span class="dw-qd">{ q.Desc }</span></span>
+					<span class="dw-pill">{ diagnosticsChecksLabel(len(q.Calls)) }</span>
+				</button>
+				<div id={ "dw-q-" + q.ID } class="dw-drape">
+					<div>
+						<div class="dw-qbody">
+							<p class="dw-sentence">
+								for _, part := range splitSentence(q.Sentence) {
+									switch part.Blank {
+										case "campaign":
+											@diagnosticsCampaignBlank(data.Campaigns, "dw-camp-"+q.ID, true)
+										case "page":
+											<input id={ "dw-page-" + q.ID } name="page" type="text" class="dw-blank" placeholder="page name" aria-label="Page name, slug or id" required autocomplete="off"/>
+										default:
+											{ part.Text }
+									}
+								}
+							</p>
+							<ul class="dw-calls">
+								for _, name := range q.Calls {
+									<li>
+										<label><input type="checkbox" name="call" value={ name } checked/> { systems.DiagnosticCheckTitle(name) }</label>
+										<span class="dw-id">{ name }</span>
+									</li>
+								}
+							</ul>
+							<div class="dw-foot">
+								<button type="submit" class="btn-primary btn-sm" data-dw-go>Review { diagnosticsChecksLabel(len(q.Calls)) }</button>
+								<span class="dw-need" data-dw-need hidden>Fill the blank first</span>
+							</div>
+						</div>
+					</div>
+				</div>
+			</form>
+		}
+	</div>
+}
+
+// diagnosticsCampaignBlank is the campaign picker drawn as a blank. A question
+// needs it filled; the tray may leave it for the review step to ask.
+templ diagnosticsCampaignBlank(campaigns []CampaignOption, id string, required bool) {
+	<select id={ id } name="campaign" class="dw-blank" aria-label="Campaign" required?={ required }>
+		<option value="">campaign</option>
+		for _, c := range campaigns {
+			<option value={ c.ID }>{ c.Name }</option>
+		}
+	</select>
+}
+
+// diagnosticsOwnPick is every check in folded groups, with Find and a tray
+// that is the request.
+templ diagnosticsOwnPick(data DiagnosticsWorkspaceData) {
+	<form
+		id="dw-own"
+		class="dw-drape"
+		data-dw-own
+		hx-post="/admin/diagnostics/workspace/compose"
+		hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+		hx-target="#dw-review"
+		hx-swap="innerHTML"
+	>
+		<div>
+			<div class="dw-own">
+				<div class="dw-list">
+					<label class="dw-find">
+						<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+						<input type="search" class="dw-field" data-dw-find placeholder="Find a check, like deploy, sync or blank" aria-label="Find a check" autocomplete="off"/>
+						<kbd class="dw-kbd" aria-hidden="true">/</kbd>
+					</label>
+					for _, g := range data.Groups {
+						<div class="dw-g" data-dw-group>
+							<button type="button" class="dw-gh" data-dw-fold aria-expanded="false" aria-controls={ "dw-g-" + g.ID }>
+								<i class="fa-solid fa-chevron-right dw-chev" aria-hidden="true"></i>
+								<span class="dw-gt">{ g.Title }</span>
+								<span class="dw-gd">{ g.Desc }</span>
+								<span class="dw-pill dw-pill-on" data-dw-picked hidden></span>
+								<span class="dw-pill" data-dw-count data-total={ fmt.Sprintf("%d", len(g.Checks)) }>{ fmt.Sprintf("%d", len(g.Checks)) }</span>
+							</button>
+							<div id={ "dw-g-" + g.ID } class="dw-drape">
+								<div>
+									for _, c := range g.Checks {
+										<label class="dw-item" data-dw-item data-dw-text={ strings.ToLower(c.Title + " " + c.Name + " " + g.Title) }>
+											<input type="checkbox" name="call" value={ c.Name } data-dw-kind={ string(c.Kind) }/>
+											<span class="dw-it" data-dw-title={ c.Title }>{ c.Title }</span>
+											if c.FullDump {
+												<span class="dw-pill dw-pill-large" title="A large result; picking it allows it">large</span>
+											}
+											<span class="dw-id">{ c.Name }</span>
+										</label>
+										if c.Kind == systems.ArgText || c.Kind == systems.ArgCampaignText {
+											<span class="dw-arg-home" data-dw-arg-home={ c.Name }>
+												<input
+													name={ "arg:" + c.Name }
+													type="text"
+													class="dw-blank dw-blank-text"
+													placeholder={ diagnosticsArgPlaceholder(c) }
+													aria-label={ c.Title + ": " + diagnosticsArgPlaceholder(c) }
+													autocomplete="off"
+												/>
+											</span>
+										}
+									}
+								</div>
+							</div>
+						</div>
+					}
+					<p class="dw-none" data-dw-none hidden></p>
+				</div>
+				<aside class="dw-tray" aria-label="Your request">
+					<h3 class="dw-tray-h"><span>Your request</span><span class="dw-pill" data-dw-tray-n>0</span></h3>
+					<p class="dw-empty" data-dw-empty>Tick a check to add it here.</p>
+					<ol class="dw-tray-list" data-dw-tray></ol>
+					<div class="dw-shared" data-dw-needs="campaign" hidden>
+						@diagnosticsCampaignBlank(data.Campaigns, "dw-own-camp", false)
+					</div>
+					<div class="dw-shared" data-dw-needs="page" hidden>
+						<input id="dw-own-page" name="page" type="text" class="dw-blank" placeholder="page name" aria-label="Page name, slug or id" autocomplete="off"/>
+					</div>
+					<button type="submit" class="btn-primary btn-sm" data-dw-go disabled>Review checks</button>
+				</aside>
+			</div>
+		</div>
+	</form>
+}
+
+// diagnosticsArgPlaceholder names what a free-text blank wants, in words.
+func diagnosticsArgPlaceholder(c systems.PickerCheck) string {
+	switch c.Name {
+	case "entity.find":
+		return "page name"
+	case "entity.field-coverage":
+		return "category"
+	}
+	plain := strings.NewReplacer("<", "", ">", "", "[", "", "]", "").Replace(c.Hint)
+	if c.Optional {
+		return "optional " + plain
+	}
+	return plain
+}

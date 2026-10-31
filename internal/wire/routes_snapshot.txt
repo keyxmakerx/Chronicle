@@ -74,6 +74,7 @@ GET	/admin/database/status	site-admin	plugins/admin.(*Handler).DatabaseStatusAPI
 GET	/admin/design-lab	site-admin	plugins/designlab.(*Handler).DesignLab	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/diagnostics	site-admin	systems.(*SystemHandler).OperatorDiagnosticsAPI	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/diagnostics/workspace	site-admin	plugins/admin.(*Handler).DiagnosticsWorkspace	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/diagnostics/workspace/compose	site-admin	plugins/admin.(*Handler).DiagnosticsWorkspaceCompose	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/diagnostics/workspace/parse	site-admin	plugins/admin.(*Handler).DiagnosticsWorkspaceParse	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/diagnostics/workspace/run	site-admin	plugins/admin.(*Handler).DiagnosticsWorkspaceRun	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/extensions	site-admin	extensions.(*Handler).ListExtensions	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin

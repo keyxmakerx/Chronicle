@@ -1,13 +1,14 @@
-// diagnostics_workspace.templ is the in-app "Operator AI Workspace" for
-// READ-ONLY diagnostics, admin-scoped:
+// diagnostics_workspace.templ is the Site admin "AI helper": READ-ONLY,
+// secret-redacted diagnostics behind a human-approval gate.
 //
-//  1. Functions list (copyable JSON) — the operator feeds it to an external AI.
-//  2. The AI composes ONE batch-request object; the operator pastes it here.
-//  3. "Parse & review" validates it against the catalog and shows exactly what
-//     will run (prompt-injection containment: a human approves before execution;
-//     unknown names and heavy full-dump requests are flagged).
-//  4. "Approve & run" executes the read-only diagnostics server-side and returns
-//     ONE compact, secret-redacted result the operator copies back to the AI.
+//  1. The operator picks checks on the page: one of the everyday questions,
+//     or by hand from the folded list (diagnostics_picker.templ). Or they copy
+//     the checks list to an outside AI and paste back the request it composes.
+//  2. Either way the request goes through ParseBatch, and the review step shows
+//     exactly what will run (prompt-injection containment: a human approves
+//     before execution; unknown names and full-dump requests are flagged).
+//  3. "Approve & run" re-parses server-side, runs, and returns ONE compact,
+//     redacted result the operator can copy back to the AI.
 package admin
 
 import (
@@ -25,13 +26,15 @@ type CampaignOption struct {
 	Slug string
 }
 
-// DiagnosticsWorkspaceData backs the landing page: the functions spec to copy,
-// the CSRF token, and the campaign reference list (so the operator can hand ids
-// to the AI without URL-spelunking).
+// DiagnosticsWorkspaceData backs the landing page: the questions and folded
+// checks to pick from, the functions spec to copy for an outside AI, the CSRF
+// token, and the campaigns the blanks choose from.
 type DiagnosticsWorkspaceData struct {
 	FunctionsJSON string
 	CSRFToken     string
 	Campaigns     []CampaignOption
+	Questions     []systems.DiagnosticQuestion
+	Groups        []systems.PickerGroup
 }
 
 // DiagnosticsReviewData backs the review fragment: the validated plan plus the
@@ -52,100 +55,61 @@ type DiagnosticsResultData struct {
 	Result string
 }
 
-// DiagnosticsWorkspacePage is the full admin page.
+// DiagnosticsWorkspacePage is the full admin page. The review step opens as a
+// sheet pinned to the foot of the window, over the questions, with its close.
 templ DiagnosticsWorkspacePage(data DiagnosticsWorkspaceData) {
 	@layouts.App("AI helper") {
-		<div class="max-w-5xl mx-auto space-y-6">
+		<div class="dw max-w-5xl mx-auto space-y-5" data-widget="diag-picker">
 			@components.AdminGroupHeading(components.AdminTabsHealth, "/admin/diagnostics/workspace")
-			<p class="text-sm text-fg-secondary">
-				Read-only, secret-redacted operator diagnostics with a human-approval gate.
-				Copy the functions list to your AI, paste back the single request object it
-				composes, review what it wants to run, then approve. Results come back compact —
-				the full dump is gated behind an explicit opt-in.
+			<div class="dw-head">
+				<p class="text-sm text-fg-secondary">Pick what you are trying to find out. Chronicle picks the checks, shows you what will run, and runs nothing until you say so. Every check only reads, and secrets are removed from the result.</p>
+				<div class="dw-handoff">
+					<span data-widget="ai-export">
+						<button type="button" class="quiet-word" data-ai-export-copy data-dw-copy>Copy checks for your AI</button>
+						<pre data-ai-export-body hidden>{ data.FunctionsJSON }</pre>
+					</span>
+					<button type="button" class="quiet-word" data-dw-toggle="dw-paste" aria-expanded="false" aria-controls="dw-paste">Paste an AI's request</button>
+				</div>
+			</div>
+			<div id="dw-paste" class="dw-drape">
+				<div>
+					<div class="dw-paste">
+						<label for="dw-batch-input" class="dw-label">The request your AI composed (a fenced <code>```json</code> block is fine)</label>
+						<textarea
+							id="dw-batch-input"
+							name="batch"
+							rows="7"
+							placeholder={ "{\n  \"v\": 1,\n  \"note\": \"why does the old sheet render\",\n  \"calls\": [ {\"name\": \"system.versions\"} ]\n}" }
+							class="dw-field font-mono text-xs"
+						></textarea>
+						<div class="flex items-center gap-4">
+							<button
+								type="button"
+								class="btn-primary btn-sm"
+								hx-post="/admin/diagnostics/workspace/parse"
+								hx-include="#dw-batch-input"
+								hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+								hx-target="#dw-review"
+								hx-swap="innerHTML"
+							>Review the request</button>
+							<a href="/admin/diagnostics" target="_blank" class="quiet-word">Raw catalog</a>
+						</div>
+					</div>
+				</div>
+			</div>
+			@diagnosticsQuestions(data)
+			<p class="dw-more">
+				Not here?
+				<button type="button" class="quiet-word" data-dw-toggle="dw-own" aria-expanded="false" aria-controls="dw-own">Pick checks yourself</button>
+				from all { fmt.Sprintf("%d", diagnosticsCheckCount(data.Groups)) }.
 			</p>
-
-			<!-- Step 1: functions list to feed the AI -->
-			<div class="card space-y-3" data-widget="ai-export">
-				<div class="flex items-center justify-between">
-					<h2 class="text-lg font-semibold text-fg">
-						<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent/10 text-accent text-xs font-bold mr-2">1</span>
-						Functions list
-					</h2>
-					<button
-						type="button"
-						class="btn-primary text-xs px-3 py-1.5"
-						data-ai-export-copy
-						x-data="{ copied: false }"
-						@click="copied = true; setTimeout(() => copied = false, 2000)"
-					>
-						<span x-show="!copied"><i class="fa-solid fa-copy mr-1"></i> Copy functions list</span>
-						<span x-show="copied" x-cloak><i class="fa-solid fa-check mr-1"></i> Copied</span>
-					</button>
-				</div>
-				<p class="text-xs text-fg-muted">
-					Hand this to your AI. It describes every read-only diagnostic and the exact
-					request shape to reply with.
-				</p>
-				<pre
-					data-ai-export-body
-					class="select-all whitespace-pre-wrap break-words text-xs font-mono text-fg leading-relaxed bg-surface-alt p-4 rounded border border-edge max-h-72 overflow-auto"
-				>{ data.FunctionsJSON }</pre>
+			@diagnosticsOwnPick(data)
+			<div class="dw-sheet" data-dw-sheet hidden>
+				<button type="button" class="dw-icon dw-sheet-close" data-dw-sheet-close aria-label="Close the review">
+					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+				</button>
+				<div id="dw-review" aria-live="polite"></div>
 			</div>
-
-			<!-- Campaign reference: ids the entity.* diagnostics need -->
-			if len(data.Campaigns) > 0 {
-				<details class="card">
-					<summary class="text-sm font-medium text-fg-secondary cursor-pointer">
-						<i class="fa-solid fa-book-open mr-1 text-accent"></i> Campaign ids ({ fmt.Sprintf("%d", len(data.Campaigns)) }) — for <code>entity.*</code> calls
-					</summary>
-					<p class="text-xs text-fg-muted mt-2">The entity diagnostics need a campaign id. Copy one here, or just paste a placeholder like <code>&lt;campaignId&gt;</code> and pick it at the review step.</p>
-					<ul class="mt-2 space-y-1">
-						for _, c := range data.Campaigns {
-							<li class="text-xs font-mono flex items-center gap-2">
-								<span class="select-all text-fg">{ c.ID }</span>
-								<span class="text-fg-muted">{ c.Name }</span>
-							</li>
-						}
-					</ul>
-				</details>
-			}
-
-			<!-- Step 2: paste the AI's request object -->
-			<div class="card space-y-3">
-				<h2 class="text-lg font-semibold text-fg">
-					<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent/10 text-accent text-xs font-bold mr-2">2</span>
-					Paste the AI's request
-				</h2>
-				<p class="text-xs text-fg-muted">
-					Paste the single batch object the AI composed (a fenced <code>```json</code> block is fine).
-				</p>
-				<textarea
-					id="dw-batch-input"
-					name="batch"
-					rows="8"
-					placeholder={ "{\n  \"v\": 1,\n  \"note\": \"why does the old sheet render\",\n  \"calls\": [ {\"name\": \"system.versions\"}, {\"name\": \"packages.installed-vs-loaded\"} ]\n}" }
-					class="w-full font-mono text-xs bg-surface-alt border border-edge rounded p-3 text-fg focus:outline-none focus:ring-2 focus:ring-accent/40"
-				></textarea>
-				<div class="flex items-center gap-3">
-					<button
-						type="button"
-						class="btn-primary text-sm px-4 py-2"
-						hx-post="/admin/diagnostics/workspace/parse"
-						hx-include="#dw-batch-input"
-						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
-						hx-target="#dw-review"
-						hx-swap="innerHTML"
-					>
-						<i class="fa-solid fa-list-check"></i> Parse &amp; review
-					</button>
-					<a href="/admin/diagnostics" target="_blank" class="text-xs text-fg-muted hover:text-accent">
-						<i class="fa-solid fa-code mr-1"></i> Raw catalog (markdown) <i class="fa-solid fa-arrow-up-right-from-square text-[8px]"></i>
-					</a>
-				</div>
-			</div>
-
-			<!-- Step 3: review + result get swapped in here -->
-			<div id="dw-review"></div>
 		</div>
 	}
 }
@@ -159,7 +123,7 @@ templ DiagnosticsBatchReview(data DiagnosticsReviewData) {
 				<i class="fa-solid fa-triangle-exclamation mr-1"></i> Couldn't read that request
 			</h3>
 			<p class="text-sm text-fg-secondary">{ data.Err }</p>
-			<p class="text-xs text-fg-muted">Ask the AI to re-emit the object using the functions list above.</p>
+			<p class="text-xs text-fg-muted">Ask the AI to send the request again, using the checks list from "Copy checks for your AI".</p>
 		</div>
 	} else {
 		<div class="card space-y-4">

@@ -6853,3 +6853,136 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .tt-n[hidden] { display: none; }
 .tt-n.tt-grow { animation: tt-grow var(--dur-large) var(--ease-out); }
 @keyframes tt-grow { from { transform: scale(0.7); } to { transform: scale(1); } }
+
+/* The AI helper (Site admin > Health): everyday questions that unroll their
+   checks, the whole catalog in folds behind "Pick checks yourself", and the
+   review sheet pinned to the foot of the window over the work. Folds drape
+   down from their row; Calm and Off just show them. */
+.dw-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+.dw-head > p { max-width: 70ch; }
+.dw-handoff { display: flex; gap: 16px; flex-wrap: wrap; }
+.dw-drape { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--dur-standard) var(--ease-standard), visibility 0s var(--dur-standard); }
+.dw-drape > * { overflow: hidden; min-height: 0; }
+.dw-drape.is-open { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows var(--dur-standard) var(--ease-standard); }
+html[data-motion] .dw-drape, html[data-motion] .dw-chev { transition: none; }
+@media (prefers-reduced-motion: reduce) { .dw-drape, .dw-chev { transition: none; } }
+.dw-paste { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 8px; }
+.dw-label { font-size: 0.8rem; color: var(--color-text-secondary); }
+.dw-field {
+  width: 100%; background: var(--color-input-bg); border: 1px solid var(--color-input-border); border-radius: 6px;
+  padding: 8px 10px; color: var(--color-text-primary);
+}
+.dw-field:focus { outline: none; border-color: var(--color-accent); }
+.dw-pill {
+  font-family: theme('fontFamily.mono'); font-size: 11px; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+  background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-variant-numeric: tabular-nums;
+}
+.dw-pill[hidden] { display: none; }
+.dw-pill-on { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent-link, var(--color-accent)); }
+.dw-pill-large { background: rgb(var(--color-warn-rgb) / 0.14); color: rgb(var(--color-warn-rgb)); }
+.dw-id { font-family: theme('fontFamily.mono'); font-size: 11.5px; color: var(--color-text-muted); }
+.dw-icon {
+  display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; flex: none;
+  border: 1px solid transparent; background: none; color: var(--color-text-secondary); cursor: pointer;
+}
+.dw-icon:hover, .dw-icon:focus-visible { border-color: var(--color-border-light); color: var(--color-text-primary); outline: none; }
+
+/* A blank in a sentence or the tray: a dashed accent line that goes solid once filled. */
+.dw-blank {
+  background: none; border: 0; border-bottom: 1px dashed var(--color-accent); border-radius: 0; padding: 0 2px;
+  color: var(--color-accent-link, var(--color-accent)); font-family: theme('fontFamily.mono'); font-size: 0.8rem;
+  min-width: 7ch; max-width: 100%;
+}
+select.dw-blank { appearance: none; padding-right: 14px; cursor: pointer;
+  background: linear-gradient(45deg, transparent 50%, currentColor 50%) right 5px center / 4px 4px no-repeat,
+              linear-gradient(-45deg, transparent 50%, currentColor 50%) right 1px center / 4px 4px no-repeat; }
+select.dw-blank option { color: var(--color-text-primary); background: var(--color-bg-secondary); }
+.dw-blank:focus { outline: none; border-bottom-color: var(--color-accent); border-bottom-style: solid; }
+.dw-blank.is-filled { border-bottom-style: solid; color: var(--color-text-primary); }
+.dw-blank-text { width: 100%; }
+
+/* Everyday questions */
+.dw-questions { display: flex; flex-direction: column; }
+.dw-q { border-bottom: 1px solid var(--color-border); border-left: 2px solid transparent; }
+.dw-q.is-open { border-left-color: var(--color-accent); background: linear-gradient(90deg, rgb(var(--color-accent-rgb) / 0.07), transparent 60%); }
+.dw-qh {
+  width: 100%; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  background: none; border: 0; padding: 12px 10px; cursor: pointer; text-align: left;
+}
+.dw-qh:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.dw-qic { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-size: 13px; }
+.dw-q.is-open .dw-qic { color: var(--color-accent); }
+.dw-qt { color: var(--color-text-primary); font-weight: 500; }
+.dw-qd { display: block; font-size: 0.8rem; font-weight: 400; color: var(--color-text-secondary); }
+.dw-qbody { padding: 0 12px 14px 54px; display: flex; flex-direction: column; gap: 10px; }
+.dw-sentence { font-size: 0.875rem; line-height: 2; color: var(--color-text-body); }
+.dw-calls { display: grid; gap: 4px; }
+.dw-calls li { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; color: var(--color-text-primary); }
+.dw-calls label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.dw-calls .dw-id { margin-left: auto; }
+.dw-foot { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.dw-need { font-family: theme('fontFamily.mono'); font-size: 11.5px; color: var(--color-text-muted); }
+.dw-more { font-size: 0.85rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dw-more .quiet-word { min-height: 0; }
+
+/* Picking by hand: folds beside the tray */
+.dw-own { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 20px; align-items: start; padding: 4px 0 8px; }
+.dw-list { display: flex; flex-direction: column; min-width: 0; }
+.dw-find { position: relative; display: block; margin-bottom: 6px; }
+.dw-find .dw-field { padding-left: 32px; padding-right: 40px; font-size: 0.875rem; }
+.dw-find > i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); font-size: 12px; }
+.dw-kbd {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-family: theme('fontFamily.mono'); font-size: 11px;
+  border: 1px solid var(--color-border-light); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--color-text-muted);
+}
+.dw-g { border-bottom: 1px solid var(--color-border); }
+.dw-g[hidden] { display: none; }
+.dw-gh { width: 100%; display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 10px 2px; min-height: 44px; cursor: pointer; text-align: left; }
+.dw-gh:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.dw-chev { font-size: 10px; color: var(--color-text-muted); transition: transform var(--dur-standard) var(--ease-standard); }
+.dw-g.is-open .dw-chev { transform: rotate(90deg); }
+.dw-gt { color: var(--color-text-primary); font-weight: 500; flex: none; }
+.dw-gd { color: var(--color-text-secondary); font-size: 0.8rem; flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dw-item { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 2px 8px; align-items: baseline; padding: 7px 6px 7px 22px; cursor: pointer; border-left: 2px solid transparent; }
+.dw-item[hidden] { display: none; }
+.dw-item:hover { background: var(--color-bg-secondary); }
+.dw-item.is-on { border-left-color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.08); }
+.dw-item .dw-it { color: var(--color-text-primary); font-size: 0.85rem; }
+.dw-item .dw-id { grid-column: 2 / -1; }
+.dw-item mark { background: none; color: var(--color-accent-link, var(--color-accent)); font-weight: 600; }
+.dw-arg-home { display: none; }
+.dw-none { color: var(--color-text-secondary); font-size: 0.85rem; padding: 14px 2px; }
+.dw-tray {
+  position: sticky; top: 12px; background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 8px;
+  padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--elev-resting);
+}
+.dw-tray-h { display: flex; justify-content: space-between; align-items: center; font-family: theme('fontFamily.mono'); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-secondary); }
+.dw-empty { border: 1px dashed var(--color-border-light); border-radius: 6px; padding: 14px; text-align: center; color: var(--color-text-muted); font-size: 0.8rem; }
+.dw-empty[hidden] { display: none; }
+.dw-tray-list { display: grid; gap: 6px; }
+.dw-tray-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 6px; font-size: 0.8rem; color: var(--color-text-primary); }
+.dw-tray-list li > .dw-blank { grid-column: 1; }
+.dw-shared[hidden] { display: none; }
+@media (max-width: 860px) {
+  .dw-own { grid-template-columns: minmax(0, 1fr); }
+  .dw-tray { position: static; }
+  .dw-gd { display: none; }
+  .dw-gt { flex: 1 1 auto; }
+  .dw-qbody { padding-left: 12px; }
+}
+
+/* The review sheet lies over the questions at the foot of the window. */
+.dw-sheet {
+  position: sticky; bottom: 12px; z-index: 20; max-height: 72vh; overflow: auto;
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border-light); border-radius: 10px;
+  box-shadow: var(--elev-dragged); padding: 4px; transform-origin: bottom center;
+  animation: dw-sheet-in var(--dur-standard) var(--ease-standard);
+}
+.dw-sheet[hidden] { display: none; }
+.dw-sheet > #dw-review > .card { border: 0; box-shadow: none; background: transparent; }
+.dw-sheet-close { position: absolute; top: 8px; right: 8px; z-index: 1; }
+@keyframes dw-sheet-in { from { opacity: 0; transform: translateY(8px) scaleY(0.97); } }
+html[data-motion] .dw-sheet { animation: none; }
+@media (prefers-reduced-motion: reduce) { .dw-sheet { animation: none; } }
+.dw-sheet > #dw-review > .card { padding-right: 48px; }
+.dw > .dw-drape:not(.is-open) { margin-top: 0; }
