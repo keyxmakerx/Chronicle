@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
@@ -18,6 +19,13 @@ type MapRepository interface {
 	UpdateMap(ctx context.Context, m *Map) error
 	DeleteMap(ctx context.Context, id string) error
 	ListMaps(ctx context.Context, campaignID string) ([]Map, error)
+
+	// The campaign Trash (map_trash_repository.go). Every read above leaves
+	// a trashed map out; DeleteMap is the purge's final delete.
+	TrashMap(ctx context.Context, campaignID, id string, at time.Time) error
+	RestoreMap(ctx context.Context, campaignID, id string) error
+	ListTrashedMaps(ctx context.Context, campaignID string) ([]TrashedMap, error)
+	ListMapsTrashedBefore(ctx context.Context, cutoff time.Time) ([]TrashedMap, error)
 	SearchMaps(ctx context.Context, campaignID, query string) ([]Map, error)
 
 	// Campaign-wide map look. GetCampaignFrame returns "" when the campaign has
@@ -106,7 +114,7 @@ func (r *mapRepo) CreateMap(ctx context.Context, m *Map) error {
 // GetMap returns a single map by ID.
 func (r *mapRepo) GetMap(ctx context.Context, id string) (*Map, error) {
 	return scanMap(r.db.QueryRowContext(ctx,
-		`SELECT `+mapCols+` FROM maps WHERE id = ?`, id))
+		`SELECT `+mapCols+` FROM maps WHERE id = ? AND deleted_at IS NULL`, id))
 }
 
 // UpdateMap modifies an existing map.
@@ -146,7 +154,7 @@ func (r *mapRepo) SetCampaignFrame(ctx context.Context, campaignID, frame string
 	return err
 }
 
-// DeleteMap removes a map and all its markers (cascaded by FK).
+// DeleteMap removes a map and all its markers (cascaded by FK) for good.
 func (r *mapRepo) DeleteMap(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM maps WHERE id = ?`, id)
 	return err
@@ -155,7 +163,7 @@ func (r *mapRepo) DeleteMap(ctx context.Context, id string) error {
 // ListMaps returns all maps for a campaign, ordered by sort_order.
 func (r *mapRepo) ListMaps(ctx context.Context, campaignID string) ([]Map, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+mapCols+` FROM maps WHERE campaign_id = ? ORDER BY sort_order, name`,
+		`SELECT `+mapCols+` FROM maps WHERE campaign_id = ? AND deleted_at IS NULL ORDER BY sort_order, name`,
 		campaignID)
 	if err != nil {
 		return nil, err
@@ -184,8 +192,10 @@ const markerCols = `m.id, m.map_id, m.name, m.description,
 // linked map and the linked page are joined only within the pin's own
 // campaign, and the map id is read from that join, so a link that somehow
 // named another campaign's map or page reads as no link at all rather than
-// carrying its name out.
-const markerJoins = `JOIN maps src ON src.id = m.map_id
+// carrying its name out. A map in the Trash has unreachable pins, but a pin
+// opening it keeps its link: editing that pin must not drop the link a
+// Restore would bring back.
+const markerJoins = `JOIN maps src ON src.id = m.map_id AND src.deleted_at IS NULL
      LEFT JOIN entities ent ON ent.id = m.entity_id AND ent.campaign_id = src.campaign_id AND ent.deleted_at IS NULL
      LEFT JOIN entity_types et ON et.id = ent.entity_type_id
      LEFT JOIN maps lm ON lm.id = m.linked_map_id AND lm.campaign_id = src.campaign_id`
@@ -319,7 +329,7 @@ func (r *mapRepo) ListLinkSourceMaps(ctx context.Context, campaignID string) ([]
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT DISTINCT m.map_id
 		 FROM map_markers m
-		 JOIN maps src ON src.id = m.map_id
+		 JOIN maps src ON src.id = m.map_id AND src.deleted_at IS NULL
 		 WHERE src.campaign_id = ? AND m.linked_map_id IS NOT NULL`, campaignID)
 	if err != nil {
 		return nil, fmt.Errorf("list linking maps: %w", err)
@@ -341,7 +351,7 @@ func (r *mapRepo) ListMapsPinningEntity(ctx context.Context, campaignID, entityI
 	return r.mapIDs(ctx, "pinning entity",
 		`SELECT DISTINCT src.id, src.sort_order, src.name
 		 FROM map_markers m
-		 JOIN maps src ON src.id = m.map_id
+		 JOIN maps src ON src.id = m.map_id AND src.deleted_at IS NULL
 		 WHERE src.campaign_id = ? AND m.entity_id = ?
 		 ORDER BY src.sort_order, src.name, src.id`, campaignID, entityID)
 }
@@ -351,7 +361,7 @@ func (r *mapRepo) ListMapsLinkingTo(ctx context.Context, campaignID, mapID strin
 	return r.mapIDs(ctx, "linking to map",
 		`SELECT DISTINCT src.id, src.sort_order, src.name
 		 FROM map_markers m
-		 JOIN maps src ON src.id = m.map_id
+		 JOIN maps src ON src.id = m.map_id AND src.deleted_at IS NULL
 		 WHERE src.campaign_id = ? AND m.linked_map_id = ?
 		 ORDER BY src.sort_order, src.name, src.id`, campaignID, mapID)
 }
@@ -379,7 +389,7 @@ func (r *mapRepo) mapIDs(ctx context.Context, what, query string, args ...any) (
 func (r *mapRepo) SearchMaps(ctx context.Context, campaignID, query string) ([]Map, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT `+mapCols+` FROM maps
-		 WHERE campaign_id = ? AND name LIKE ?
+		 WHERE campaign_id = ? AND name LIKE ? AND deleted_at IS NULL
 		 ORDER BY name LIMIT 10`,
 		campaignID, "%"+strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)+"%")
 	if err != nil {

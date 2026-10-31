@@ -235,7 +235,7 @@ its two siblings are one-way (`docs/deployment.md` §6). `sessions` and
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `maps` | A campaign map image + viewer config | `image_id` FK→`media_files` SET NULL; `grid_*`/`background_color`/`initial_view_*`/`initial_zoom`; `foundry_scene_id` (Foundry sync); `display_settings` JSON nullable (frame/pins/kinds/grid/opening view/draw gate, validated in the service, NULL = all defaults; migration 007) |
+| `maps` | A campaign map image + viewer config | `image_id` FK→`media_files` SET NULL; `grid_*`/`background_color`/`initial_view_*`/`initial_zoom`; `foundry_scene_id` (Foundry sync); `display_settings` JSON nullable (frame/pins/kinds/grid/opening view/draw gate, validated in the service, NULL = all defaults; migration 007); `deleted_at` (migration 011: set while the map sits in its campaign's Trash; every map read leaves it out) |
 | `map_campaign_settings` | Campaign-wide default map frame | `campaign_id` PK, FK→`campaigns` CASCADE; `frame_style` (no row = `atlas`) |
 | `map_markers` | Pins on a map | `x`/`y` percentage 0–100; `entity_id` FK→`entities` SET NULL; `linked_map_id` FK→`maps` SET NULL (the map the pin opens; same campaign, never its own map, checked in the service; migration 010); `pin_category`; `visibility`/`visibility_rules`; `foundry_id` |
 | `map_layers` | Ordered drawing/token/fog layers | `layer_type`; `is_visible`/`is_locked`/`opacity` |

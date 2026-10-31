@@ -351,7 +351,7 @@ func (h *Handler) UpdateMapAPI(c echo.Context) error {
 	})
 }
 
-// DeleteMapAPI deletes a map and all its markers.
+// DeleteMapAPI moves a map, with its pins, to the campaign Trash.
 // DELETE /campaigns/:id/maps/:mid
 func (h *Handler) DeleteMapAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)

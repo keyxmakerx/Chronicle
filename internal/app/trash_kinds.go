@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 )
@@ -78,4 +79,37 @@ func (p pictureTrash) RestoreTrashed(ctx context.Context, campaignID, id string)
 
 func (p pictureTrash) PurgeTrashedBefore(ctx context.Context, cutoff time.Time) (int, error) {
 	return p.svc.PurgeTrashedPictures(ctx, cutoff)
+}
+
+// mapTrash puts deleted maps, with their pins, in the campaign Trash.
+type mapTrash struct {
+	svc maps.MapService
+}
+
+func (m mapTrash) TrashKind() string { return "map" }
+
+func (m mapTrash) ListTrashed(ctx context.Context, campaignID string) ([]entities.TrashedThing, error) {
+	list, err := m.svc.ListTrashedMaps(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]entities.TrashedThing, 0, len(list))
+	for _, t := range list {
+		out = append(out, entities.TrashedThing{
+			Kind: "map", Label: "Map", Icon: "fa-map",
+			ID: t.ID, Name: t.Name, DeletedAt: t.DeletedAt,
+		})
+	}
+	return out, nil
+}
+
+func (m mapTrash) RestoreTrashed(ctx context.Context, campaignID, id string) (string, error) {
+	if err := m.svc.RestoreMap(ctx, campaignID, id); err != nil {
+		return "", err
+	}
+	return "/campaigns/" + campaignID + "/maps/" + id, nil
+}
+
+func (m mapTrash) PurgeTrashedBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	return m.svc.PurgeTrashedMaps(ctx, cutoff)
 }

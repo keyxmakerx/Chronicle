@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/a-h/templ"
 
@@ -44,6 +45,13 @@ func TestMapWidgetType_InstanceExists(t *testing.T) {
 	}
 	if ok, err := wt.InstanceExists(ctx, "camp-1", "missing"); err != nil || ok {
 		t.Errorf("not-found should be (false,nil) so it's sweepable; ok=%v err=%v", ok, err)
+	}
+
+	// A map in this campaign's Trash is not swept: Restore must find its
+	// bindings. The same id in another campaign's Trash changes nothing.
+	repo.trashedMaps = []TrashedMap{{ID: "in-trash", CampaignID: "camp-1"}}
+	if ok, err := wt.InstanceExists(ctx, "camp-1", "in-trash"); ok || err == nil {
+		t.Errorf("a trashed map must report (false, err) so its bindings stay; ok=%v err=%v", ok, err)
 	}
 
 	// Transient (non-404) error → (false, err) so the resolver won't sweep.
@@ -210,12 +218,13 @@ func (c *recordingCleaner) OnInstanceDeleted(_ context.Context, _ string, widget
 	return 0, nil
 }
 
-func TestDeleteMap_FiresDeleteHook(t *testing.T) {
+func TestDeleteMap_KeepsBindingsUntilThePurge(t *testing.T) {
 	repo := &mockMapRepo{
 		getMapFn: func(_ context.Context, id string) (*Map, error) {
 			return &Map{ID: id, CampaignID: "camp-1"}, nil
 		},
-		deleteMapFn: func(_ context.Context, _ string) error { return nil },
+		deleteMapFn:   func(_ context.Context, _ string) error { return nil },
+		trashedBefore: []TrashedMap{{ID: "m-1", CampaignID: "camp-1"}},
 	}
 	svc := newTestMapService(repo)
 	cleaner := &recordingCleaner{}
@@ -224,7 +233,13 @@ func TestDeleteMap_FiresDeleteHook(t *testing.T) {
 	if err := svc.DeleteMap(context.Background(), "m-1", nil); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
+	if len(cleaner.calls) != 0 {
+		t.Errorf("moving a map to the Trash swept its bindings: %v", cleaner.calls)
+	}
+	if n, err := svc.PurgeTrashedMaps(context.Background(), time.Now()); err != nil || n != 1 {
+		t.Fatalf("purge: %d %v", n, err)
+	}
 	if len(cleaner.calls) != 1 || cleaner.calls[0][0] != WidgetTypeMap || cleaner.calls[0][1] != "m-1" {
-		t.Errorf("expected one map delete-hook for m-1; got %v", cleaner.calls)
+		t.Errorf("expected one map delete-hook for m-1 at the purge; got %v", cleaner.calls)
 	}
 }

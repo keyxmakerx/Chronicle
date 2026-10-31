@@ -46,20 +46,36 @@ func (w *mapWidgetType) Slug() string { return WidgetTypeMap }
 // InstanceExists is the orphan guard + campaign-scope security check: a map
 // validates only if it exists AND belongs to the campaign. Genuine not-found →
 // (false, nil) so the dead binding is sweepable; any other error → (false, err)
-// so a transient DB blip does NOT sweep.
+// so a transient DB blip does NOT sweep. A map in this campaign's Trash is an
+// error too: its bindings must still be there if it is restored.
 func (w *mapWidgetType) InstanceExists(ctx context.Context, campaignID, instanceID string) (bool, error) {
 	m, err := w.svc.GetMap(ctx, instanceID)
-	if err != nil {
-		if isNotFound(err) {
-			return false, nil
-		}
+	if err != nil && !isNotFound(err) {
 		return false, err
 	}
 	if m == nil {
-		return false, nil
+		return false, w.trashedHere(ctx, campaignID, instanceID)
 	}
 	// SECURITY: cross-campaign maps must not validate.
 	return m.CampaignID == campaignID, nil
+}
+
+// errMapInTrash keeps the orphan guard from sweeping a trashed map's bindings.
+var errMapInTrash = errors.New("map is in the Trash")
+
+// trashedHere reports errMapInTrash when instanceID is in the campaign's
+// Trash, and nil when it is truly gone.
+func (w *mapWidgetType) trashedHere(ctx context.Context, campaignID, instanceID string) error {
+	list, err := w.svc.ListTrashedMaps(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	for _, t := range list {
+		if t.ID == instanceID {
+			return errMapInTrash
+		}
+	}
+	return nil
 }
 
 // DefaultInstance: maps has NO campaign-level default. The per-entity legacy
