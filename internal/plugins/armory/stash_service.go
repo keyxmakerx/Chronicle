@@ -93,6 +93,9 @@ type StashDeps struct {
 	// Copies keeps what single copies remember (copies.go); nil (the armory
 	// plugin's own table did not migrate) leaves every item plain.
 	Copies CopyStore
+	// Places keeps which container a hero carries each item in (places.go);
+	// nil leaves everything in the backpack and the page can't rearrange.
+	Places PlaceStore
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's
@@ -156,6 +159,9 @@ type StashService interface {
 	// character's items and money (not a character, or not theirs).
 	CharacterPanel(ctx context.Context, campaignID string, a Actor, characterID string) (*CharacterPanelView, error)
 	CharacterHistory(ctx context.Context, campaignID string, a Actor, characterID string) ([]MoveLine, error)
+	// SetPlace puts an item the character holds in one of their containers.
+	// The character's player or a GM only; it changes no count.
+	SetPlace(ctx context.Context, campaignID string, a Actor, characterID, itemID string, p Place) error
 	StashHistory(ctx context.Context, campaignID string, a Actor, stashID int) ([]MoveLine, error)
 
 	// CraftPack reads what a character carries and how they pay, for a
@@ -824,6 +830,23 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 	}
 	s.markMaps(ctx, campaignID, held)
 	s.markShares(ctx, campaignID, a, ref, held)
+	if s.Places != nil {
+		placed, err := s.Places.List(ctx, campaignID, ref.ID)
+		if err != nil {
+			return nil, err
+		}
+		for i := range held {
+			if p, ok := placed[held[i].ItemID]; ok {
+				held[i].Place = p
+			}
+		}
+		view.CanPlace = true
+	}
+	for i := range held {
+		if held[i].Place == "" {
+			held[i].Place = PlacePack
+		}
+	}
 	view.Items = held
 
 	if ref.MoneyKey != "" {
@@ -856,4 +879,26 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 	}
 	view.History = lines
 	return view, nil
+}
+
+// SetPlace puts a held item in one of the character's containers.
+func (s *stashService) SetPlace(ctx context.Context, campaignID string, a Actor, characterID, itemID string, p Place) error {
+	if s.Places == nil {
+		return apperror.NewBadRequest("Items can't be rearranged right now.")
+	}
+	ok, err := s.canAct(ctx, campaignID, a, characterID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return forbidden()
+	}
+	rel, err := s.hasItem(ctx, campaignID, characterID, itemID, a.SeesDmOnly())
+	if err != nil {
+		return err
+	}
+	if rel == nil {
+		return notFound("item")
+	}
+	return s.Places.Set(ctx, campaignID, characterID, itemID, p)
 }
