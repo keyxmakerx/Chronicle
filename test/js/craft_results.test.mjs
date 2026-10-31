@@ -88,6 +88,19 @@ test('the lifelike style is the default, and the illustrated one stays', () => {
   assert.ok(!plain(R.styles()).includes('half'));
 });
 
+test("the campaign's Customize choice picks the style", () => {
+  for (const [attr, filtered] of [['illustrated', false], ['lifelike', true], [null, true], ['bogus', true]]) {
+    // getElementById answers so CraftPictures sees its stylesheet as already in.
+    const window = {}, document = { getElementById: () => ({}), documentElement: { getAttribute: (k) => (k === 'data-craft-art' ? attr : null) } };
+    const ctx = vm.createContext({ window, document });
+    for (const f of ['craft_pictures.js', 'craft_results.js', 'craft_results_real.js']) {
+      vm.runInContext(readFileSync(join(widgets, f), 'utf8'), ctx);
+    }
+    const svg = window.CraftResults.svg({ shape: 'ring' }, 40);
+    assert.equal(svg.includes('feSpecularLighting'), filtered, String(attr));
+  }
+});
+
 test('materials colour a look in recipe order', () => {
   const l = R.fromMaterials('potion', [
     { picture: 'moss', tint: '#c3223a' }, { picture: 'leaf', tint: '#9fc7e8' }, { picture: 'salt', tint: '#e8f2f6' }, { picture: 'root', tint: '#000000' }

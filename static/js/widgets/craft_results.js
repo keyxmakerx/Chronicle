@@ -258,9 +258,12 @@ window.CraftResults = (function () {
     for (var k in SHAPES) if (typeof shapes[k] !== 'function') return;
     STYLES[name] = shapes;
   }
+  /* The campaign's Customize choice rides on <html data-craft-art>, in
+     the owner's words; the styles here keep their own names. */
+  var ART_ATTR = {illustrated: 'drawn', lifelike: 'real'};
   function styleOf(o) {
     var want = o && o.style;
-    if (!want && typeof document !== 'undefined') want = document.documentElement.getAttribute('data-craft-art');
+    if (!want && typeof document !== 'undefined') want = ART_ATTR[document.documentElement.getAttribute('data-craft-art')];
     if (want && Object.prototype.hasOwnProperty.call(STYLES, want)) return STYLES[want];
     return STYLES.real || SHAPES;
   }

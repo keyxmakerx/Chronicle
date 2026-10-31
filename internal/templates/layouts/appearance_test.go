@@ -57,6 +57,8 @@ func TestAppearanceAttrs(t *testing.T) {
 		{"sheet empty", AppearanceData{SheetStyle: ""}, map[string]string{}},
 		{"sheet modern", AppearanceData{SheetStyle: "modern"}, map[string]string{}},
 		{"sheet brass", AppearanceData{SheetStyle: "brass"}, map[string]string{"data-cz-sheet": "brass"}},
+		{"made items lifelike", AppearanceData{CraftArt: "lifelike"}, map[string]string{}},
+		{"made items illustrated", AppearanceData{CraftArt: "illustrated"}, map[string]string{"data-craft-art": "illustrated"}},
 		{"page standard", AppearanceData{PageLook: "standard"}, map[string]string{}},
 		{"page annals", AppearanceData{PageLook: "annals"}, map[string]string{"data-cz-page": "annals"}},
 		{"time line popup classic", AppearanceData{TimelinePopup: "classic"}, map[string]string{}},

@@ -5729,6 +5729,7 @@ func (a *App) RegisterRoutes() {
 					HoverCard: ap.HoverCard,
 
 					SheetStyle:    ap.SheetStyle,
+					CraftArt:      ap.CraftArt,
 					PageLook:      ap.PageLook,
 					StyleKit:      ap.StyleKit,
 					DmScreenKit:   ap.DmScreenKit,
