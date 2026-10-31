@@ -1539,6 +1539,18 @@
         if (counter && dlg.open) window.ShopRoomCounter.render(cel, counterModel(), counterHooks);
         else if (!counter && window.ShopRoomCounter) window.ShopRoomCounter.destroy(cel);
         markGhost();
+        keepTime();
+      }
+      /* A redraw makes every flame, ember and glow afresh, and fresh CSS loops
+         start from their first frame, so each drag step or purchase made them
+         all jump. Setting every loop to one shared clock lets a new drawing
+         carry on where the old one was. */
+      function keepTime() {
+        if (!svg.getAnimations) return;
+        var now = window.MotionRest ? window.MotionRest.now() * 1000 : performance.now();
+        svg.getAnimations({ subtree: true }).concat(pel.getAnimations({ subtree: true })).forEach(function (a) {
+          if (a.effect && a.effect.getComputedTiming().iterations === Infinity && Math.abs(a.currentTime - now) > 1) a.currentTime = now;
+        });
       }
       function paperOn() { return S.look === 'paper' && !!window.ShopRoomPaper; }
       function counterOn() { return S.look === 'counter' && !!window.ShopRoomCounter; }
@@ -2208,7 +2220,9 @@
           var MR = window.MotionRest, sp = MR ? MR.speed() : 1;
           svg.getAnimations({ subtree: true }).concat(pel.getAnimations({ subtree: true }), cel.getAnimations({ subtree: true })).forEach(function (a) {
             if (sp === 0) { if (a.playState === 'running') a.pause(); return; }
-            a.playbackRate = Math.max(.02, sp); if (a.playState === 'paused') a.play();
+            // Setting a rate restarts the animation's timing in some browsers, so only when it changes.
+            var r = Math.max(.02, sp); if (a.playbackRate !== r) a.playbackRate = r;
+            if (a.playState === 'paused') a.play();
           });
         }, 250);
       }

@@ -1410,8 +1410,11 @@
       raf = requestAnimationFrame(loop);
       var t = now / 1000, raw = last ? t - last : 0, dt = Math.min(.05, raw); last = t;
       if (!view || !R.svg) return;
-      // Every lamp's light breathes together with its flame.
-      flare = Math.max(0, flare - .012); n1 += (Math.random() - .5) * .25; n1 *= .92;
+      /* Every lamp's light breathes together with its flame. The flicker is
+         tuned per sixtieth of a second and scaled by the frame's length, so a
+         120 or 144 Hz screen does not flicker twice as fast. */
+      var k = dt * 60;
+      flare = Math.max(0, flare - .012 * k); n1 += (Math.random() - .5) * .25 * Math.sqrt(k); n1 *= Math.pow(.92, k);
       var f = R.calm ? 1 : (.9 + n1 * .25 + Math.sin(t * 7.3) * .03 + Math.sin(t * 13.1) * .02) * (1 + flare * .8);
       flick = flick || R.svg.querySelectorAll('[data-flick]');
       for (var i = 0; i < flick.length; i++) { var e = flick[i]; if (!e.isConnected) { flick = null; break; } e.setAttribute('opacity', Math.min(1, +e.getAttribute('data-flick') * f).toFixed(3)); }
