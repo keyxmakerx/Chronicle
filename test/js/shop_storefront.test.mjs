@@ -50,7 +50,7 @@ test('a stored value never reaches the drawing as markup', () => {
     trim: 'red;fill:url(x)', awning: 'stripe', awningColour: '#12345g', sign: 'banner', wares: ['gem', '<x>'],
     closed: 'board', closedNote: '<b>shut</b>', refuseNote: '<i>no</i>',
   });
-  assert.doesNotMatch(svg, /<script|<img|<b>|<i>|<x>|url\(x\)|#12345g/);
+  assert.doesNotMatch(svg, /<script|<img|<b>|<i>|<x>|url\(x\)|#12345g/i);
   assert.match(svg, /^<svg[\s\S]*<\/svg>$/);
 });
 
