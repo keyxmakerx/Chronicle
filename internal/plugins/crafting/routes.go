@@ -37,9 +37,23 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/crafting/recipes/:rid/approve", h.Approve, member)
 	cg.DELETE("/crafting/recipes/:rid", h.DeleteRecipe, member)
 
+	cg.POST("/crafting/materials", h.CreateMaterial, member)
 	cg.PUT("/crafting/materials/:eid", h.SetTags, member)
 	cg.PUT("/crafting/materials/:eid/picture", h.SetItemPicture, member)
 	cg.PUT("/crafting/pictures", h.SetKindPictures, member)
+
+	cg.GET("/crafting/items/:eid", h.ItemCrafting, member)
+	cg.GET("/crafting/item-block", h.ItemBlock, member)
+	cg.POST("/crafting/item-block", h.PlaceItemBlock, member)
+	cg.POST("/crafting/generate", h.Generate, member)
+	cg.GET("/crafting/packs", h.ListPacks, member)
+	cg.POST("/crafting/packs", h.SavePack, member)
+	cg.POST("/crafting/packs/file", h.UploadPack, member)
+	cg.GET("/crafting/packs/:pid", h.PackDetail, member)
+	cg.PUT("/crafting/packs/:pid", h.UpdatePack, member)
+	cg.DELETE("/crafting/packs/:pid", h.DeletePack, member)
+	cg.GET("/crafting/packs/:pid/file", h.PackFile, member)
+	cg.POST("/crafting/packs/:pid/import", h.ImportPack, member)
 
 	cg.GET("/crafting/benches", h.ListBenches, member)
 	cg.POST("/crafting/benches", h.CreateBench, member)

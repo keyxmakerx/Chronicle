@@ -110,6 +110,32 @@ type Service interface {
 	// follow its kind.
 	SetKindPictures(ctx context.Context, campaignID string, v Viewer, in KindPicturesInput) ([]Tag, error)
 	SetItemPicture(ctx context.Context, campaignID, itemID string, v Viewer, in *MaterialPicture) (*MaterialPicture, error)
+
+	// ItemCrafting is what an Armory item's page shows: how it is made and
+	// where it is used, as the viewer may read it.
+	ItemCrafting(ctx context.Context, campaignID, itemID string, v Viewer) (*ItemCrafting, error)
+	// CreateMaterial makes a Director-only Armory item with crafting kinds.
+	CreateMaterial(ctx context.Context, campaignID string, v Viewer, in MaterialInput) (*MaterialItem, error)
+	// ItemBlock and PlaceItemBlock say whether item pages show "How it's
+	// made" and put it there when the Director asks.
+	ItemBlock(ctx context.Context, campaignID string, v Viewer) (bool, error)
+	PlaceItemBlock(ctx context.Context, campaignID string, v Viewer) (int, error)
+	// TeachParty and KnownRecipes are the Homebrew Workshop's: a rule
+	// teaching a recipe to the party, and a part's recipe list checked.
+	TeachParty(ctx context.Context, campaignID string, v Viewer, name string) (string, error)
+	KnownRecipes(ctx context.Context, campaignID string, v Viewer, ids []string) ([]string, error)
+	// Generate writes recipes from the campaign's materials without saving.
+	Generate(ctx context.Context, campaignID string, v Viewer, in GenerateInput) (*GenerateResult, error)
+
+	// Recipe packs: saved sets of recipes other campaigns bring in.
+	ListPacks(ctx context.Context, campaignID string, v Viewer) ([]PackView, error)
+	PackDetail(ctx context.Context, campaignID, id string, v Viewer) (*PackDetail, error)
+	SavePack(ctx context.Context, campaignID string, v Viewer, in SavePackInput) (*PackView, error)
+	UploadPack(ctx context.Context, campaignID string, v Viewer, raw []byte) (*PackView, error)
+	UpdatePack(ctx context.Context, campaignID, id string, v Viewer, in PackChange) (*PackView, error)
+	DeletePack(ctx context.Context, campaignID, id string, v Viewer) error
+	PackFile(ctx context.Context, campaignID, id string, v Viewer) ([]byte, string, error)
+	ImportPack(ctx context.Context, campaignID, id string, v Viewer, in ImportInput) (*ImportResult, error)
 }
 
 type service struct {
@@ -154,7 +180,7 @@ func (s *service) Library(ctx context.Context, campaignID string, v Viewer) (*Li
 	}
 	rules, name := s.systemRules(ctx, campaignID)
 	return &Library{Tags: book.tags(), TagGroups: TagGroups, Pictures: Pictures, Tools: Tools, Steps: StepKinds, BenchKinds: BenchKinds, Templates: Templates, Skins: Skins,
-		Difficulties: Difficulties, Moments: Moments, Rules: rules, System: name, Settings: set, Director: v.Director}, nil
+		Difficulties: Difficulties, Moments: Moments, Rules: rules, System: name, Settings: set, Director: v.Director, Makes: MakeKinds}, nil
 }
 
 func (s *service) Catalog(ctx context.Context, campaignID string, v Viewer) (*Catalog, error) {
@@ -336,7 +362,7 @@ func (s *service) CreateRecipe(ctx context.Context, campaignID string, v Viewer,
 	if err != nil {
 		return nil, err
 	}
-	r.ID = s.newID()
+	r.ID, r.Draft = s.newID(), in.Draft
 	r.Rules, r.Looks = []Rule{}, map[string]*Look{}
 	if err := s.repo.CreateRecipe(ctx, campaignID, v.UserID, r); err != nil {
 		if errors.Is(err, errDuplicate) {

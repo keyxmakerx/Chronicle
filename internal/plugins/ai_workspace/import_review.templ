@@ -47,6 +47,20 @@ type ImportReviewData struct {
 	Host      string
 }
 
+// WorkshopReviewHost is the element the Homebrew Workshop's "Write with your
+// AI" door holds a review in. A review there leaves the page's address
+// alone, since the Director is still in the Workshop.
+const WorkshopReviewHost = "hbw-ai-review-host"
+
+// reviewHistoryURL is where a commit moves the address bar: the Your AI
+// page, except in the Workshop.
+func reviewHistoryURL(d ImportReviewData) string {
+	if d.Host == WorkshopReviewHost {
+		return "false"
+	}
+	return fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)
+}
+
 // reviewHost is the id of the element a review sits in.
 func reviewHost(d ImportReviewData) string {
 	if d.Host != "" {
@@ -106,7 +120,7 @@ templ ImportReview(d ImportReviewData) {
 		hx-target={ "#" + reviewHost(d) }
 		hx-swap="innerHTML"
 		hx-indicator="#ai-import-committing"
-		hx-push-url={ fmt.Sprintf("/campaigns/%s/ai", d.CampaignID) }
+		hx-push-url={ reviewHistoryURL(d) }
 		x-data={ fmt.Sprintf("aiImportReview(%d)", startYes) }
 		@change="onChange($event)"
 		@keydown.window="onKey($event)"

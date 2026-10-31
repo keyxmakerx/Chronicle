@@ -24,7 +24,12 @@ type PartKind struct {
 	// Preview, when PreviewShape, says data is a trackers shape, so the
 	// Workshop's live preview can show the part as a number it can change.
 	Preview string
-	Check   CheckFunc
+	// Widget, when set, names a widget the owner registered in the browser
+	// that draws and edits the part's data, so the Workshop shows the
+	// owner's own editor without knowing what it holds. See the
+	// plugin's .ai.md, "Owner-drawn parts".
+	Widget string
+	Check  CheckFunc
 	// Sync, when set, keeps records the owner holds for this kind's parts
 	// in step with the recipes that hold them.
 	Sync *PartSync
@@ -228,6 +233,9 @@ func (r *Registry) RegisterPart(k PartKind) error {
 	if k.Preview != "" && k.Preview != PreviewShape {
 		return fmt.Errorf("homebrew: part kind %q has an unknown preview %q", k.Name, k.Preview)
 	}
+	if k.Widget != "" && !nameRe.MatchString(k.Widget) {
+		return fmt.Errorf("homebrew: part kind %q names a widget %q that isn't a plain name", k.Name, k.Widget)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, dup := r.parts[k.Name]; dup {
@@ -348,6 +356,7 @@ type CatalogEntry struct {
 	Name      string   `json:"name"`
 	Label     string   `json:"label"`
 	ForceSee  string   `json:"forceSee,omitempty"`
+	Widget    string   `json:"widget,omitempty"`
 	PartKinds []string `json:"partKinds,omitempty"`
 	ClientRun bool     `json:"clientRun,omitempty"`
 	Fields    []Field  `json:"fields,omitempty"`
@@ -362,7 +371,7 @@ func (r *Registry) Catalog() Catalog {
 	defer r.mu.RUnlock()
 	c := Catalog{Parts: []CatalogEntry{}, Events: []CatalogEntry{}, Actions: []CatalogEntry{}}
 	for _, k := range r.parts {
-		e := CatalogEntry{Name: k.Name, Label: k.Label, ForceSee: k.ForceSee}
+		e := CatalogEntry{Name: k.Name, Label: k.Label, ForceSee: k.ForceSee, Widget: k.Widget}
 		if k.Preview != "" {
 			e.Preview = k.Preview
 		}

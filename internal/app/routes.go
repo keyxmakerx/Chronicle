@@ -6309,6 +6309,8 @@ func (a *App) RegisterRoutes() {
 		Widgets: []PluginWidget{
 			{Name: "crafting", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_upgrades.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
 			{Name: "crafting-block", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_turns.js", "js/crafting_block.js"}},
+			{Name: "crafting-item", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_pick.js", "js/crafting_item.js"}},
+			{Name: "crafting-recipes-part", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_pick.js", "js/crafting_part_more.js", "js/crafting_part.js"}},
 		},
 	})
 	craftingOn := func(ctx context.Context, campaignID string) bool {
@@ -6319,26 +6321,33 @@ func (a *App) RegisterRoutes() {
 	craftingRespites := &craftingRespiteHook{}
 	var craftingListener respiteListener // nil while crafting is degraded
 	var craftingFights encounters.FightListener
-	var aiCrafting records.CraftingAPI // nil while crafting is degraded
+	var aiCrafting records.CraftingAPI    // nil while crafting is degraded
+	var craftingWorkshop crafting.Service // nil while crafting is degraded
 	if a.PluginHealth.IsHealthy(crafting.PluginSlug) {
 		craftingRepo := crafting.NewRepository(a.DB)
 		craftingSvc := crafting.NewService(craftingRepo,
 			&craftingDirectoryAdapter{dir: stashDirectory}, &craftingRulesAdapter{sys: systemHandler},
 			crafting.ProjectDeps{
-				Store:    craftingRepo.(crafting.ProjectStore),
-				Armory:   &craftingArmoryAdapter{stash: stashSvc},
-				Spoils:   craftingRepo.(crafting.SpoilStore),
-				Pages:    &craftingPagesAdapter{entities: entityService},
-				Sheets:   &craftingSheetsAdapter{entities: entityService},
-				Tables:   craftingTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))},
-				Days:     &craftingDaysAdapter{cal: calendarService},
-				Calendar: &craftingCalendarAdapter{cal: calendarService},
-				Respite:  craftingRespites,
-				Rolls:    rollLog,
+				Store:     craftingRepo.(crafting.ProjectStore),
+				Armory:    &craftingArmoryAdapter{stash: stashSvc},
+				Spoils:    craftingRepo.(crafting.SpoilStore),
+				Pages:     &craftingPagesAdapter{entities: entityService},
+				Sheets:    &craftingSheetsAdapter{entities: entityService},
+				Tables:    craftingTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))},
+				Days:      &craftingDaysAdapter{cal: calendarService},
+				Calendar:  &craftingCalendarAdapter{cal: calendarService},
+				Respite:   craftingRespites,
+				Rolls:     rollLog,
+				Items:     &craftingItemMaker{dir: stashDirectory, svc: entityService},
+				Layouts:   &craftingLayoutPlacer{svc: entityService},
+				Campaigns: &craftingCampaigns{svc: campaignService},
+				Packs:     crafting.NewPackStore(a.DB),
 			})
 		crafting.RegisterRoutes(e, crafting.NewHandler(craftingSvc, &craftingCalendarAdapter{cal: calendarService}),
 			campaignService, authService, addonService)
 		registerCraftingBlock(blockRegistry, craftingSvc)
+		registerCraftingItemBlock(blockRegistry)
+		craftingWorkshop = craftingSvc
 		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
 		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
 		aiCrafting = aiCraftingAdapter{svc: craftingSvc, addons: addonService}
@@ -6384,6 +6393,7 @@ func (a *App) RegisterRoutes() {
 		Systems:        systemHandler,
 		Trackers:       trackersSvc,
 		Respites:       craftingListener,
+		Crafting:       craftingWorkshop,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,

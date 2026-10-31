@@ -21,3 +21,20 @@ templ BlockMount(campaignID, entityID, csrfToken string) {
 		<p class="text-sm text-fg-muted" role="status">Loading crafting…</p>
 	</div>
 }
+
+// ItemBlockMount is the mount point of "How it's made" on an Armory item's
+// page. The widget reads what crafting says about the item; the service
+// decides what the viewer is told, so the markup carries no crafting data.
+templ ItemBlockMount(campaignID, entityID, csrfToken string, director bool) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/crafting.css") }/>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/making.css") }/>
+	<div
+		data-widget="crafting-item"
+		data-campaign-id={ campaignID }
+		data-entity-id={ entityID }
+		data-csrf-token={ csrfToken }
+		if director {
+			data-director="true"
+		}
+	></div>
+}
