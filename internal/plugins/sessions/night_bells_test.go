@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -229,4 +230,71 @@ func TestSendBells_AfterTheNight(t *testing.T) {
 			t.Errorf("sent %+v", got)
 		}
 	})
+}
+
+// fakeBellRoster answers ListGameNights with one night's list.
+type fakeBellRoster struct {
+	night GameNight
+	today string
+}
+
+func (f *fakeBellRoster) ListGameNights(_ context.Context, _, _, _, today string, _ []NightMember) ([]GameNight, error) {
+	f.today = today
+	return []GameNight{f.night}, nil
+}
+
+func TestSendBells_Unanswered(t *testing.T) {
+	night := GameNight{SessionID: "s1", Date: "2026-10-10", OrganizerID: "dm1", Roster: []NightAnswer{
+		{UserID: "dm1", Answer: NightNoAnswer},
+		{UserID: "p1", Answer: NightNoAnswer},
+		{UserID: "p2", Answer: NightYes},
+		{UserID: "p3", Answer: NightNoAnswer, Excluded: true},
+	}}
+	tests := []struct {
+		name  string
+		now   time.Time
+		past  bool
+		other string
+		want  []string
+	}{
+		{"the day before, only an open answer is asked", time.Date(2026, 10, 9, 9, 5, 0, 0, time.UTC), false, "", []string{"p1"}},
+		{"not before 9:00 the day before", time.Date(2026, 10, 9, 8, 59, 0, 0, time.UTC), false, "", nil},
+		{"a night already over asks no one", time.Date(2026, 10, 10, 9, 0, 0, 0, time.UTC), true, "", nil},
+		{"another night's list is ignored", time.Date(2026, 10, 9, 9, 5, 0, 0, time.UTC), false, "s2", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newBellRig(t)
+			n := night
+			n.Past = tc.past
+			if tc.other != "" {
+				n.SessionID = tc.other
+			}
+			roster := &fakeBellRoster{night: n}
+			r.svc.SetBellRoster(roster)
+			var asked []string
+			for _, b := range r.send(t, tc.now) {
+				if b.ntype != NotifNightReminder {
+					continue
+				}
+				asked = append(asked, b.user)
+				if b.msg != "Game night 14 is tomorrow at 7:00 PM. Can you make it?" || b.link != r.nightURL {
+					t.Errorf("bell %+v", b)
+				}
+			}
+			if strings.Join(asked, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("asked %v, want %v", asked, tc.want)
+			}
+			if len(tc.want) > 0 {
+				if roster.today != "2026-10-09" {
+					t.Errorf("today = %q, want the night's own date for now", roster.today)
+				}
+				for _, b := range r.send(t, tc.now.Add(10*time.Minute)) {
+					if b.ntype == NotifNightReminder {
+						t.Errorf("asked twice: %+v", b)
+					}
+				}
+			}
+		})
+	}
 }

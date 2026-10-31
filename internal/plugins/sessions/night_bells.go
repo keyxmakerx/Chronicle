@@ -12,7 +12,8 @@ import (
 )
 
 // Game-night entries put three items in the bell. The day before a night,
-// each member hears that their entry is ready. Once the night is over, the
+// each member hears that their entry is ready, and anyone who hasn't said
+// whether they are coming is asked to. Once the night is over, the
 // DM is asked to check in when the entries named anyone, and a player whose
 // entry the DM can't read is told that sharing it gets the people they met
 // counted. A background loop sends them; session_night_bells makes each one
@@ -30,6 +31,8 @@ const (
 	bellBefore  = "before"
 	bellCheckIn = "checkin"
 	bellShare   = "share"
+	// bellUnanswered is the day-before nudge to say whether you're coming.
+	bellUnanswered = "unanswered"
 )
 
 const (
@@ -68,6 +71,12 @@ type NightBellSessions interface {
 	GetSession(ctx context.Context, id string) (*Session, error)
 }
 
+// NightBellRoster reads who has answered a night, the same list the
+// calendar shows.
+type NightBellRoster interface {
+	ListGameNights(ctx context.Context, campaignID, from, to, today string, members []NightMember) ([]GameNight, error)
+}
+
 // NightBellNotifier writes bell items, honouring people's choices.
 type NightBellNotifier interface {
 	NotifyUsersWithDetail(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, link string) error
@@ -78,6 +87,10 @@ type NightBellNotifier interface {
 func (s *nightEntryService) SetBells(campaigns NightBellCampaigns, sessions NightBellSessions, notify NightBellNotifier) {
 	s.bellCampaigns, s.bellSessions, s.notify = campaigns, sessions, notify
 }
+
+// SetBellRoster gives the service the answers the unanswered nudge reads.
+// Without it that nudge is skipped and the other bells still go out.
+func (s *nightEntryService) SetBellRoster(roster NightBellRoster) { s.roster = roster }
 
 // StartNightBells sends due bell items now and then every bellTick until ctx
 // ends.
@@ -176,6 +189,9 @@ func (s *nightEntryService) campaignBells(ctx context.Context, campaignID string
 			var err error
 			if before {
 				err = s.bellsBefore(ctx, sess, date, start, now, members)
+				if err == nil {
+					err = s.bellsUnanswered(ctx, sess, date, start, now, members)
+				}
 			} else {
 				err = s.bellsAfter(ctx, sess, date, now, members)
 			}
@@ -254,6 +270,49 @@ func (s *nightEntryService) bellsBefore(ctx context.Context, sess Session, date 
 		}
 		if err := s.notify.NotifyUsersWithDetail(ctx, []string{m.UserID}, sess.CampaignID, NotifNightEntryReady, msg, "", link); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// bellsUnanswered asks each member on the night's list who hasn't answered,
+// and hasn't left themselves out of the count, to say whether they are
+// coming. The organizer is never asked about their own night. It files
+// under the same notification row as the organizer's own Remind.
+func (s *nightEntryService) bellsUnanswered(ctx context.Context, sess Session, date string, start, now time.Time, members []NightBellMember) error {
+	if s.roster == nil {
+		return nil
+	}
+	list := make([]NightMember, 0, len(members))
+	for _, m := range members {
+		if m.UserID != "" {
+			list = append(list, NightMember{UserID: m.UserID})
+		}
+	}
+	today := now.In(start.Location()).Format("2006-01-02")
+	nights, err := s.roster.ListGameNights(ctx, sess.CampaignID, date, date, today, list)
+	if err != nil {
+		return err
+	}
+	for _, n := range nights {
+		if n.SessionID != sess.ID || n.Date != date || n.Past {
+			continue
+		}
+		for _, a := range n.Roster {
+			if a.UserID == "" || a.UserID == n.OrganizerID || a.Excluded || a.Answer != NightNoAnswer {
+				continue
+			}
+			claimed, err := s.entries.ClaimNightBell(ctx, sess.ID, date, a.UserID, bellUnanswered)
+			if err != nil {
+				return err
+			}
+			if !claimed {
+				continue
+			}
+			msg := nightName(sess.Name) + " is " + bellDayWords(start, now) + ". Can you make it?"
+			if err := s.notify.NotifyUsersWithDetail(ctx, []string{a.UserID}, sess.CampaignID, NotifNightReminder, msg, "", nightsLink(sess.CampaignID, sess.ID, date)); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -104,6 +104,14 @@ type MediaRepository interface {
 	RestoreTrashedFiles(ctx context.Context, batchID string) (int, error)
 	// ListTrashedFileIDs returns the ids of the files in a batch.
 	ListTrashedFileIDs(ctx context.Context, batchID string) ([]string, error)
+
+	// TrashCampaignPicture, RestoreCampaignPicture, ListTrashedPictures and
+	// ListPicturesTrashedBefore keep a campaign's pictures in its Trash
+	// (picture_trash_repository.go).
+	TrashCampaignPicture(ctx context.Context, campaignID, id string, at time.Time) error
+	RestoreCampaignPicture(ctx context.Context, campaignID, id string) error
+	ListTrashedPictures(ctx context.Context, campaignID string) ([]TrashedPicture, error)
+	ListPicturesTrashedBefore(ctx context.Context, cutoff time.Time) ([]string, error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -197,6 +205,8 @@ func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, 
 // same bytes, nor adopted by a page whose readers the note rule does not know. Page
 // files never match either: a file attached to a GM-only handout must not be
 // handed to someone who uploads the same bytes elsewhere.
+// A picture in the campaign Trash never matches: it would be purged under
+// the new upload.
 func (r *mediaRepository) FindByContentHash(ctx context.Context, campaignID, hash string) (*MediaFile, error) {
 	if campaignID == "" || hash == "" {
 		return nil, nil
@@ -207,6 +217,7 @@ func (r *mediaRepository) FindByContentHash(ctx context.Context, campaignID, has
 	          FROM media_files m
 	          LEFT JOIN campaigns c ON m.campaign_id = c.id
 	          WHERE m.campaign_id = ? AND m.content_hash = ? AND m.usage_type NOT IN (?, ?)
+	            AND m.deleted_at IS NULL
 	          LIMIT 1`
 
 	file := &MediaFile{}
@@ -309,10 +320,11 @@ func (r *mediaRepository) Delete(ctx context.Context, id string) error {
 // pictures and page files are left out: this feeds the media browser, the
 // picker, the sync API and the campaign export, none of which may name a file
 // that only its note's or page's readers can open.
+// Pictures in the campaign Trash are left out too.
 func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error) {
 	var total int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?)`, campaignID, UsageNoteImage, UsagePageFile,
+		`SELECT COUNT(*) FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?) AND deleted_at IS NULL`, campaignID, UsageNoteImage, UsagePageFile,
 	).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("counting media files: %w", err)
@@ -320,7 +332,7 @@ func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string,
 
 	query := `SELECT id, campaign_id, uploaded_by, filename, original_name,
 	                 mime_type, file_size, content_hash, usage_type, thumbnail_paths, created_at
-	          FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?)
+	          FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?) AND deleted_at IS NULL
 	          ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID, UsageNoteImage, UsagePageFile, limit, offset)

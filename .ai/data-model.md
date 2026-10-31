@@ -175,7 +175,7 @@ tracked in `golang-migrate`'s `schema_migrations` table.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type`; `trash_batch_id` (migration 48: set while the file sits in a Trash file clean-up batch; the file stays on disk until the batch is purged) |
+| `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type`; `trash_batch_id` (migration 48: set while the file sits in a Trash file clean-up batch; the file stays on disk until the batch is purged); `deleted_at` (migration 60: set while a campaign picture sits in its campaign's Trash; it still opens until the purge) |
 | `page_files` | Which page a `page_file` media file is attached to (migration 46) | `media_id` PK FK→`media_files` CASCADE; `entity_id` FK→`entities` CASCADE; `campaign_id`; `gm_only` |
 | `entity_places` | Extra places a page is listed in the page tree (migration 49); `entities.parent_id` stays the page's one real home | PK `(entity_id, parent_entity_id)`, both FK→`entities` CASCADE; `campaign_id`; `sort_order`; `created_by` (no FK) |
 | `addons` | Registry of installable features (systems/widgets/integrations/plugins) | `slug` UNIQUE; `category` enum; `status` enum(`active`,`planned`,`deprecated`); seeded by the baseline migration so the registry exists even if a plugin's own schema migration fails |
@@ -235,7 +235,7 @@ its two siblings are one-way (`docs/deployment.md` §6). `sessions` and
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `maps` | A campaign map image + viewer config | `image_id` FK→`media_files` SET NULL; `grid_*`/`background_color`/`initial_view_*`/`initial_zoom`; `foundry_scene_id` (Foundry sync); `display_settings` JSON nullable (frame/pins/kinds/grid/opening view/draw gate, validated in the service, NULL = all defaults; migration 007) |
+| `maps` | A campaign map image + viewer config | `image_id` FK→`media_files` SET NULL; `grid_*`/`background_color`/`initial_view_*`/`initial_zoom`; `foundry_scene_id` (Foundry sync); `display_settings` JSON nullable (frame/pins/kinds/grid/opening view/draw gate, validated in the service, NULL = all defaults; migration 007); `deleted_at` (migration 011: set while the map sits in its campaign's Trash; every map read leaves it out) |
 | `map_campaign_settings` | Campaign-wide default map frame | `campaign_id` PK, FK→`campaigns` CASCADE; `frame_style` (no row = `atlas`) |
 | `map_markers` | Pins on a map | `x`/`y` percentage 0–100; `entity_id` FK→`entities` SET NULL; `linked_map_id` FK→`maps` SET NULL (the map the pin opens; same campaign, never its own map, checked in the service; migration 010); `pin_category`; `visibility`/`visibility_rules`; `foundry_id` |
 | `map_layers` | Ordered drawing/token/fog layers | `layer_type`; `is_visible`/`is_locked`/`opacity` |

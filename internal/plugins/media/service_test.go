@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,8 @@ type mockMediaRepo struct {
 	listAllFilenamesFn         func(ctx context.Context) (map[string]bool, error)
 	listFilesByCampaignFn      func(ctx context.Context, campaignID string) ([]MediaFile, error)
 	listUnboundFn              func(ctx context.Context, olderThan time.Time) ([]string, error)
+	trashed                    []string // ids TrashCampaignPicture marked
+	trashedBefore              []string // ids ListPicturesTrashedBefore returns
 }
 
 func (m *mockMediaRepo) Create(ctx context.Context, file *MediaFile) error {
@@ -143,6 +146,23 @@ func (m *mockMediaRepo) RestoreTrashedFiles(ctx context.Context, batchID string)
 
 func (m *mockMediaRepo) ListTrashedFileIDs(ctx context.Context, batchID string) ([]string, error) {
 	return nil, nil
+}
+
+func (m *mockMediaRepo) TrashCampaignPicture(ctx context.Context, campaignID, id string, at time.Time) error {
+	m.trashed = append(m.trashed, id)
+	return nil
+}
+
+func (m *mockMediaRepo) RestoreCampaignPicture(ctx context.Context, campaignID, id string) error {
+	return nil
+}
+
+func (m *mockMediaRepo) ListTrashedPictures(ctx context.Context, campaignID string) ([]TrashedPicture, error) {
+	return nil, nil
+}
+
+func (m *mockMediaRepo) ListPicturesTrashedBefore(ctx context.Context, cutoff time.Time) ([]string, error) {
+	return m.trashedBefore, nil
 }
 
 func (m *mockMediaRepo) ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error) {
@@ -281,7 +301,7 @@ func TestDelete_RepoDeleteError(t *testing.T) {
 
 // --- DeleteCampaignMedia Tests ---
 
-func TestDeleteCampaignMedia_Success(t *testing.T) {
+func TestDeleteCampaignMedia_MovesToTrash(t *testing.T) {
 	campaignID := "camp-1"
 	file := &MediaFile{
 		ID:         "file-1",
@@ -289,11 +309,13 @@ func TestDeleteCampaignMedia_Success(t *testing.T) {
 		Filename:   "2024/01/file-1.jpg",
 	}
 
+	deleted := false
 	repo := &mockMediaRepo{
 		findByIDFn: func(ctx context.Context, id string) (*MediaFile, error) {
 			return file, nil
 		},
 		deleteFn: func(ctx context.Context, id string) error {
+			deleted = true
 			return nil
 		},
 	}
@@ -302,6 +324,31 @@ func TestDeleteCampaignMedia_Success(t *testing.T) {
 	err := svc.DeleteCampaignMedia(context.Background(), "camp-1", "file-1")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
+	}
+	if deleted || len(repo.trashed) != 1 || repo.trashed[0] != "file-1" {
+		t.Errorf("want the picture marked trashed and kept (deleted=%v, trashed=%v)", deleted, repo.trashed)
+	}
+}
+
+func TestPurgeTrashedPictures_DeletesEachAndSkipsFailures(t *testing.T) {
+	campaignID := "camp-1"
+	var deleted []string
+	repo := &mockMediaRepo{
+		trashedBefore: []string{"old-1", "gone", "old-2"},
+		findByIDFn: func(ctx context.Context, id string) (*MediaFile, error) {
+			if id == "gone" {
+				return nil, apperror.NewNotFound("media file not found")
+			}
+			return &MediaFile{ID: id, CampaignID: &campaignID, Filename: id + ".png"}, nil
+		},
+		deleteFn: func(ctx context.Context, id string) error {
+			deleted = append(deleted, id)
+			return nil
+		},
+	}
+	n, err := newTestMediaService(repo).PurgeTrashedPictures(context.Background(), time.Now())
+	if err != nil || n != 2 || strings.Join(deleted, ",") != "old-1,old-2" {
+		t.Errorf("purged %d (%v), deleted %v; want the two that exist", n, err, deleted)
 	}
 }
 

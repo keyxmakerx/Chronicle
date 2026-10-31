@@ -4602,6 +4602,7 @@ func (a *App) RegisterRoutes() {
 	// The day before each night, and after it, the entries put items in the
 	// bell; a loop sends them.
 	nightEntries.SetBells(&nightBellCampaignsAdapter{campaigns: campaignService, addons: addonService}, sessionsService, sessionsService)
+	nightEntries.SetBellRoster(sessionsService)
 	go sessions.StartNightBells(a.ShutdownCtx, nightEntries)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 	// A player can allow the Foundry notebook to use their notes. Grants go
@@ -4743,7 +4744,13 @@ func (a *App) RegisterRoutes() {
 	// how many notes go with a page; without the wiring they just stay quiet.
 	pageSafetyService.SetNoteCounter(entityNotesService)
 	entityHandler.SetTrashNoteCounter(pageSafetyService)
-	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
+	// Game nights, pictures and maps share the campaign Trash with pages.
+	pageSafetyService.AddTrashKind(gameNightTrash{svc: sessionsService})
+	pageSafetyService.AddTrashKind(pictureTrash{svc: mediaService})
+	pageSafetyService.AddTrashKind(mapTrash{svc: mapsService})
+	pageSafetyHandler := entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService)
+	pageSafetyHandler.SetAuditService(auditService)
+	entities.RegisterPageSafetyRoutes(e, pageSafetyHandler, campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
 
 	// --- Extra places in the page tree ---

@@ -1,6 +1,6 @@
-// page_write_scope_test.go pins that the alias and bulk-tag writes only reach
-// pages in the URL's campaign that the caller can see: the entity ids come
-// from the request, and the services write by id alone.
+// page_write_scope_test.go pins that the alias, bulk-tag and bulk-move writes
+// only reach pages in the URL's campaign that the caller can see: the entity
+// ids come from the request, and the services write by id alone.
 package entities
 
 import (
@@ -12,6 +12,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -118,6 +119,51 @@ func TestBulkTagsAPI_SkipsPagesOutsideCampaign(t *testing.T) {
 			// from pages the caller could change.
 			if action == "add" && !strings.Contains(rec.Body.String(), `"added":{"own-ent":[1]}`) {
 				t.Errorf("body = %s, want added own-ent [1]", rec.Body.String())
+			}
+		})
+	}
+}
+
+// scopeMoveSvc records which pages bulk move reparented, and refuses one move
+// the way a cycle check would.
+type scopeMoveSvc struct {
+	visFakeEntitySvc
+	moved  *[]string
+	refuse string
+}
+
+func (s scopeMoveSvc) ReorderEntity(_ context.Context, _, entityID string, _ *string, _ *string, _ int) error {
+	if entityID == s.refuse {
+		return apperror.NewBadRequest("cycle")
+	}
+	*s.moved = append(*s.moved, entityID)
+	return nil
+}
+
+func TestBulkMoveAPI_ReportsWhatMovedForUndo(t *testing.T) {
+	tests := []struct {
+		name      string
+		refuse    string
+		wantMoved []string
+		wantBody  string
+	}{
+		{"only the caller's pages in this campaign move", "", []string{"own-ent"}, `"previous":{"own-ent":{"parentId":null,"parentNodeId":null}}`},
+		{"a refused move is not reported", "own-ent", nil, `"previous":{}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var moved []string
+			h := NewHandler(scopeMoveSvc{visFakeEntitySvc: scopeFakeEntities(), moved: &moved, refuse: tc.refuse})
+			body := `{"entity_ids":["own-ent","hidden-ent","foreign-ent","missing-ent"],"parent_id":null}`
+			c, rec := scopeContext(http.MethodPost, "/campaigns/camp-1/entities/bulk-move", body, "")
+			if err := h.BulkMoveAPI(c); err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			if strings.Join(moved, ",") != strings.Join(tc.wantMoved, ",") {
+				t.Errorf("moved %v, want %v", moved, tc.wantMoved)
+			}
+			if !strings.Contains(rec.Body.String(), tc.wantBody) {
+				t.Errorf("body = %s, want %s", rec.Body.String(), tc.wantBody)
 			}
 		})
 	}

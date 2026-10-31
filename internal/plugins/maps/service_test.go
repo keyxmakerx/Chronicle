@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -32,6 +33,25 @@ type mockMapRepo struct {
 	campaignFrame    string
 	getFrameErr      error
 	setCampaignFrame func(ctx context.Context, campaignID, frame string) error
+
+	trashed       []string     // ids TrashMap marked
+	trashedMaps   []TrashedMap // what both trash listings return
+	trashedBefore []TrashedMap
+}
+
+func (m *mockMapRepo) TrashMap(ctx context.Context, campaignID, id string, at time.Time) error {
+	m.trashed = append(m.trashed, id)
+	return nil
+}
+
+func (m *mockMapRepo) RestoreMap(ctx context.Context, campaignID, id string) error { return nil }
+
+func (m *mockMapRepo) ListTrashedMaps(ctx context.Context, campaignID string) ([]TrashedMap, error) {
+	return m.trashedMaps, nil
+}
+
+func (m *mockMapRepo) ListMapsTrashedBefore(ctx context.Context, cutoff time.Time) ([]TrashedMap, error) {
+	return m.trashedBefore, nil
 }
 
 func (m *mockMapRepo) GetCampaignFrame(context.Context, string) (string, error) {
@@ -333,7 +353,7 @@ func TestUpdateMap_EmptyName(t *testing.T) {
 
 // --- DeleteMap Tests ---
 
-func TestDeleteMap_Success(t *testing.T) {
+func TestDeleteMap_MovesToTrash(t *testing.T) {
 	deleted := false
 	repo := &mockMapRepo{
 		getMapFn: func(_ context.Context, _ string) (*Map, error) {
@@ -341,9 +361,6 @@ func TestDeleteMap_Success(t *testing.T) {
 		},
 		deleteMapFn: func(_ context.Context, id string) error {
 			deleted = true
-			if id != "map-1" {
-				t.Errorf("expected delete ID 'map-1', got %q", id)
-			}
 			return nil
 		},
 	}
@@ -353,8 +370,8 @@ func TestDeleteMap_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !deleted {
-		t.Error("expected DeleteMap to be called on repo")
+	if deleted || len(repo.trashed) != 1 || repo.trashed[0] != "map-1" {
+		t.Errorf("want the map marked trashed and kept (deleted=%v, trashed=%v)", deleted, repo.trashed)
 	}
 }
 

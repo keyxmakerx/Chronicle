@@ -16,3 +16,9 @@ test('the toast stack is announced', () => {
   assert.match(src, /if \(type === 'error'\) toast\.setAttribute\('role', 'alert'\)/);
   assert.match(src, /close\.setAttribute\('aria-label', 'Dismiss'\)/);
 });
+
+test('a toast action is a built button, so the message never needs html', () => {
+  assert.match(src, /act\.textContent = opts\.action\.label/);
+  const bulk = readFileSync(join(root, 'static/js/widgets/bulk_actions.js'), 'utf8');
+  assert.doesNotMatch(bulk, /html:\s*true/);
+});
