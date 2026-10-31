@@ -20,7 +20,7 @@ func TestDB_PictureTrash(t *testing.T) {
 	camp, owner := seedADR058Campaign(t, db)
 	other, _ := seedADR058Campaign(t, db)
 	pic := seedADR058MediaFile(t, db, camp, owner)
-	mustADR058Exec(t, db, `UPDATE media_files SET content_hash = ? WHERE id = ?`, "ab12", pic)
+	mustADR058Exec(t, db, `UPDATE media_files SET content_hash = ?, thumbnail_paths = '{}' WHERE id = ?`, "ab12", pic)
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, pic+".png"), []byte("png"), 0o600); err != nil {
