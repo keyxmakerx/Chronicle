@@ -510,3 +510,21 @@ func (h *StashHandler) CharacterHistory(c echo.Context) error {
 	}
 	return middleware.Render(c, http.StatusOK, MoveHistoryList(lines))
 }
+
+// SetPlace handles POST /armory/characters/:eid/items/:iid/place: the hero
+// page's containers, when an item is dragged or sent to another one. The page
+// has already drawn the item there, so the answer is empty.
+func (h *StashHandler) SetPlace(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	p, ok := ParsePlace(c.FormValue("place"))
+	if !ok {
+		return apperror.NewBadRequest("Pick in hand, worn, belt pouch or backpack.")
+	}
+	if err := h.svc.SetPlace(c.Request().Context(), cc.Campaign.ID, a, c.Param("eid"), c.Param("iid"), p); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}

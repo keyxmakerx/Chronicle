@@ -4396,11 +4396,13 @@ func (a *App) RegisterRoutes() {
 	// activity log is bound once the audit service exists, further down.
 	var shareStore armory.ShareStore
 	var copyStore armory.CopyStore
+	var placeStore armory.PlaceStore
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
 		shareStore = armory.NewShareRepository(a.DB)
 		copyStore = armory.NewCopyRepository(a.DB)
+		placeStore = armory.NewPlaceRepository(a.DB)
 	} else {
-		slog.Warn("armory plugin schema degraded — item sharing and remembered copies are off")
+		slog.Warn("armory plugin schema degraded — item sharing, remembered copies and item places are off")
 	}
 	shareAudit := &armoryShareAuditAdapter{}
 	stashRepo := armory.NewStashRepository(a.DB)
@@ -4422,6 +4424,7 @@ func (a *App) RegisterRoutes() {
 		Shares:     shareStore,
 		Auditor:    shareAudit,
 		Copies:     copyStore,
+		Places:     placeStore,
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.
@@ -6623,6 +6626,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
+	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/hero_pack.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
 	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
