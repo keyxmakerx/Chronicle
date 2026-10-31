@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -64,9 +65,9 @@ func (h *Handler) GameNightsLink(c echo.Context) error {
 	sessionID := c.QueryParam("session")
 	if cc.MemberRole < campaigns.RolePlayer {
 		if sessionID != "" {
-			return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, "", sessionID, ""))
+			return middleware.HTMXRedirect(c, keepTrashNotice(c, gameNightsTarget(cc.Campaign.ID, "", sessionID, "")))
 		}
-		return middleware.HTMXRedirect(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID))
+		return middleware.HTMXRedirect(c, keepTrashNotice(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID)))
 	}
 	calID, found := h.realWorldCalendar(c)
 	if calID == "" && found && sessionID == "" && cc.MemberRole >= campaigns.RoleOwner {
@@ -74,9 +75,29 @@ func (h *Handler) GameNightsLink(c echo.Context) error {
 		// one (a single press on the calendar wizard's review step) instead
 		// of being sent to an empty calendar. The step opens over the
 		// calendars page; the step's own URL is a dialog fragment.
-		return middleware.HTMXRedirect(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID)+"/calendars?wizard=reallife")
+		return middleware.HTMXRedirect(c, keepTrashNotice(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID)+"/calendars?wizard=reallife"))
 	}
-	return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, calID, sessionID, c.QueryParam("date")))
+	return middleware.HTMXRedirect(c, keepTrashNotice(c, gameNightsTarget(cc.Campaign.ID, calID, sessionID, c.QueryParam("date"))))
+}
+
+// keepTrashNotice carries ?trashed= and &kind= through the redirect, so a
+// night moved to the Trash still gets page_safety.js's "Moved to Trash" and
+// Undo on whichever campaign page it lands.
+func keepTrashNotice(c echo.Context, target string) string {
+	id := c.QueryParam("trashed")
+	if id == "" {
+		return target
+	}
+	q := url.Values{}
+	q.Set("trashed", id)
+	if kind := c.QueryParam("kind"); kind != "" {
+		q.Set("kind", kind)
+	}
+	sep := "?"
+	if strings.Contains(target, "?") {
+		sep = "&"
+	}
+	return target + sep + q.Encode()
 }
 
 // realWorldCalendar is the calendar game nights are answered in for this

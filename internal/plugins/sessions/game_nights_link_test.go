@@ -75,6 +75,8 @@ func TestGameNightsLink_NoRealWorldCalendar(t *testing.T) {
 		{"a visitor goes to the campaign", "k1", "", campaigns.RoleNone, "/campaigns/c1"},
 		{"a visitor's named session opens its own page", "k1", "?session=s1&date=2026-10-08", campaigns.RoleNone, "/campaigns/c1/sessions/s1"},
 		{"the old list address opens the calendar", "k1", "", campaigns.RolePlayer, "/campaigns/c1/calendars/k1/view"},
+		{"a trashed night's Undo notice rides along", "k1", "?trashed=s1&kind=game-night", campaigns.RolePlayer, "/campaigns/c1/calendars/k1/view?kind=game-night&trashed=s1"},
+		{"and onto a target that already has a query", "", "?trashed=s1&kind=game-night", campaigns.RoleOwner, "/campaigns/c1/calendars?wizard=reallife&kind=game-night&trashed=s1"},
 		{"a named session still opens its own page", "", "?session=s1&date=2026-10-08", campaigns.RoleOwner, "/campaigns/c1/sessions/s1"},
 		{"with a calendar, the calendar", "k1", "", campaigns.RoleOwner, "/campaigns/c1/calendars/k1/view"},
 	}
