@@ -125,7 +125,8 @@
    * @param {string} [type='info'] - Type: 'success', 'error', 'info', 'warning'.
    * @param {Object} [opts] - Options.
    * @param {number} [opts.duration=4000] - Auto-dismiss duration in ms. 0 = manual.
-   * @param {Object} [opts.action] - A button after the text: {label, onClick(button)}.
+   * @param {Object} [opts.action] - After the text: a button {label, onClick(button)}
+   *   or a link {label, href}.
    */
   Chronicle.notify = function (message, type, opts) {
     type = type || 'info';
@@ -176,27 +177,27 @@
     icon.style.cssText = 'color:' + config.text + ';font-size:16px;margin-top:1px;flex-shrink:0;';
     toast.appendChild(icon);
 
-    // Message. Supports HTML when opts.html is true (use only with trusted content).
+    // Message. Always text: a toast never parses its message as HTML, so no
+    // caller's text can carry markup into the page. Links and buttons go in
+    // opts.action and are built as nodes.
     var msg = document.createElement('span');
     msg.style.cssText = 'flex:1;';
-    if (opts.html) {
-      msg.innerHTML = message;
-    } else {
-      msg.textContent = message;
-    }
-    toast.appendChild(msg);
-
-    // The action button is built as a node, so callers never need opts.html
-    // to put a button beside text they don't control.
-    if (opts.action && typeof opts.action.onClick === 'function') {
-      var act = document.createElement('button');
-      act.type = 'button';
+    msg.textContent = message;
+    if (opts.action && (opts.action.href || typeof opts.action.onClick === 'function')) {
+      var act = document.createElement(opts.action.href ? 'a' : 'button');
+      if (opts.action.href) {
+        act.href = opts.action.href;
+      } else {
+        act.type = 'button';
+        act.addEventListener('click', function () { opts.action.onClick(act); });
+      }
       act.className = 'underline font-medium ml-1';
+      act.style.color = 'inherit';
       act.textContent = opts.action.label || 'Undo';
-      act.addEventListener('click', function () { opts.action.onClick(act); });
       msg.appendChild(document.createTextNode(' '));
       msg.appendChild(act);
     }
+    toast.appendChild(msg);
 
     var record = { id: id, el: toast, message: message, type: type, count: 1, msgEl: msg, badgeEl: null, timer: null, duration: duration };
 

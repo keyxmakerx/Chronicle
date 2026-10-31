@@ -34,7 +34,7 @@ const STUB = `
     escapeHtml: (s) => String(s).replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';'),
     notify: (msg, type, opts) => {
       const d = document.createElement('div'); d.className = 'toast ' + type;
-      if (opts && opts.html) d.innerHTML = msg; else d.textContent = msg;
+      d.textContent = msg;
       if (opts && opts.action) {
         const b = document.createElement('button'); b.textContent = opts.action.label;
         b.addEventListener('click', () => opts.action.onClick(b));

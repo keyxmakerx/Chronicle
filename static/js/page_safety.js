@@ -54,15 +54,7 @@
     var rest = params.toString();
     history.replaceState(history.state, '', window.location.pathname + (rest ? '?' + rest : ''));
 
-    var btnId = 'undo-trash-' + Date.now();
-    Chronicle.notify(
-      'Moved to Trash' + withNotes + '. <button type="button" id="' + btnId + '" class="underline font-medium ml-1">Undo</button>',
-      'success',
-      { html: true, duration: 10000 }
-    );
-    var btn = document.getElementById(btnId);
-    if (!btn) return;
-    btn.addEventListener('click', function () {
+    Chronicle.notify('Moved to Trash' + withNotes + '.', 'success', { duration: 10000, action: { label: 'Undo', onClick: function (btn) {
       btn.disabled = true;
       Chronicle.apiFetch('/campaigns/' + encodeURIComponent(m[1]) + '/trash/' + encodeURIComponent(id) + '/restore', {
         method: 'POST',
@@ -78,7 +70,7 @@
           btn.disabled = false;
           Chronicle.notify('Could not restore the page. It is still in Manage > Trash.', 'error');
         });
-    });
+    } } });
   }
 
   function init() {

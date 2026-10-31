@@ -21,7 +21,7 @@ It creates `window.Chronicle` if it does not exist yet.
 |---|---|
 | `type` | `success`, `error`, `info`, `warning`; unknown falls back to `info` |
 | `opts.duration` | Auto-dismiss ms, default 4000; `0` keeps it until closed |
-| `opts.html` | Treat `message` as HTML; trusted content only |
+| `opts.action` | A button `{label, onClick(button)}` or link `{label, href}` after the text; the message itself is always text |
 
 A repeat of an on-screen toast (same message and type) does not stack: it adds
 a `×N` badge and restarts the timer. The badge bump animation is skipped under
