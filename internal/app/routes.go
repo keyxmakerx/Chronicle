@@ -1019,6 +1019,43 @@ func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID,
 	return a.svc.IsUserDmGranted(ctx, campaignID, userID)
 }
 
+// connectedNoteApps shows a person's notes grants on their account page as
+// connected apps, each named after the campaign it reads.
+type connectedNoteApps struct {
+	grants    notes.AppGrantService
+	campaigns campaigns.CampaignService
+}
+
+func (a *connectedNoteApps) ListForUser(ctx context.Context, userID string) ([]auth.ConnectedApp, error) {
+	gs, err := a.grants.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]string{}
+	out := make([]auth.ConnectedApp, 0, len(gs))
+	for _, g := range gs {
+		name, ok := names[g.CampaignID]
+		if !ok {
+			// A campaign that can't be read is still listed, so the
+			// grant can be ended; it just goes unnamed.
+			if c, err := a.campaigns.GetByID(ctx, g.CampaignID); err == nil {
+				name = c.Name
+			}
+			names[g.CampaignID] = name
+		}
+		last := g.CreatedAt
+		if g.LastUsedAt != nil && g.LastUsedAt.After(last) {
+			last = *g.LastUsedAt
+		}
+		out = append(out, auth.ConnectedApp{ID: g.ID, Name: "Foundry (notes and calendar)", Place: name, Origin: g.Origin, LastUsed: last})
+	}
+	return out, nil
+}
+
+func (a *connectedNoteApps) DisconnectForUser(ctx context.Context, userID, appID string) error {
+	return a.grants.RevokeForUser(ctx, userID, appID)
+}
+
 // wsNotesGrantAdapter checks a notes grant for a WebSocket upgrade the same
 // way notes.RequireAppGrant checks it for a request: a live grant, in a
 // campaign whose outside apps are on.
@@ -4584,6 +4621,8 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// The account page lists those grants beside the person's browsers.
+	authHandler.SetConnectedApps(&connectedNoteApps{grants: noteGrants, campaigns: campaignService})
 	// Deleting your own account: the campaign side runs first and refuses
 	// while the person still owns a campaign; once the account is emptied,
 	// the rest of what other plugins hold about the person goes.
