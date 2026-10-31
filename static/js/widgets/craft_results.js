@@ -250,11 +250,26 @@ window.CraftResults = (function () {
   };
   DEFAULTS.bundle = ['#7a6a9a', '#c9a54a', '#efe6d2'];
 
+  /* The ways of drawing the same shapes: "drawn" is the illustrated set
+     above, and craft_results_real.js adds the lifelike "real" set, which is
+     the default once it is loaded. A style must draw every shape. */
+  var STYLES = {drawn: SHAPES};
+  function addStyle(name, shapes) {
+    for (var k in SHAPES) if (typeof shapes[k] !== 'function') return;
+    STYLES[name] = shapes;
+  }
+  function styleOf(o) {
+    var want = o && o.style;
+    if (!want && typeof document !== 'undefined') want = document.documentElement.getAttribute('data-craft-art');
+    if (want && Object.prototype.hasOwnProperty.call(STYLES, want)) return STYLES[want];
+    return STYLES.real || SHAPES;
+  }
+
   /* spec: {shape, body, trim, detail, mark: {picture, tint}}. Tints are hex. */
-  function draw(spec) {
+  function draw(spec, opts) {
     var s = clean(spec);
     U = 'crx' + (++seq) + '-';
-    return SHAPES[s.shape](s);
+    return styleOf(opts)[s.shape](s);
   }
   /* Every look is someone's data (a stored copy, an AI's recipe), and the
      markup is inserted as HTML: only a known shape, #rrggbb colours and a
@@ -272,7 +287,7 @@ window.CraftResults = (function () {
   function svg(spec, size, opts) {
     var z = size || 64, o = opts || {};
     return '<svg class="crx' + (o.cls ? ' ' + o.cls : '') + '" viewBox="0 0 120 120" width="' + z + '" height="' + z + '"' +
-      (o.label ? ' role="img" aria-label="' + String(o.label).replace(/[&<>"]/g, '') + '"' : ' aria-hidden="true"') + '>' + draw(spec) + '</svg>';
+      (o.label ? ' role="img" aria-label="' + String(o.label).replace(/[&<>"]/g, '') + '"' : ' aria-hidden="true"') + '>' + draw(spec, o) + '</svg>';
   }
 
   /* From a result shape and the materials in recipe order to a spec: the
@@ -289,5 +304,6 @@ window.CraftResults = (function () {
     };
   }
 
-  return {svg: svg, draw: draw, clean: clean, fromMaterials: fromMaterials, shapes: function () { return Object.keys(SHAPES); }, _shapes: SHAPES, _defaults: DEFAULTS, _mix: mix, _h: {id: id, url: url, grad: grad, rgrad: rgrad, blur: blur, floor: floor, mark: mark}};
+  return {svg: svg, draw: draw, clean: clean, fromMaterials: fromMaterials, addStyle: addStyle,
+    shapes: function () { return Object.keys(SHAPES); }, styles: function () { return Object.keys(STYLES); }, _shapes: SHAPES, _defaults: DEFAULTS, _mix: mix, _h: {id: id, url: url, grad: grad, rgrad: rgrad, blur: blur, floor: floor, mark: mark}};
 })();

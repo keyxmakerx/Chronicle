@@ -107,7 +107,7 @@ test('a crafted copy shows its own picture on the tile and the card', { skip }, 
   await p.evaluate(() => {
     window.Chronicle = { register: (name, w) => { window.mounted = w; } };
   });
-  for (const f of ['craft_pictures.js', 'craft_results.js']) await p.addScriptTag({ content: readFileSync(join(root, 'static/js/widgets', f), 'utf8') });
+  for (const f of ['craft_pictures.js', 'craft_results.js', 'craft_results_real.js']) await p.addScriptTag({ content: readFileSync(join(root, 'static/js/widgets', f), 'utf8') });
   await p.addScriptTag({ content: JS });
   await p.evaluate(() => window.mounted.init(document.querySelector('[data-hero-pack]')));
   const got = await p.evaluate(() => ({

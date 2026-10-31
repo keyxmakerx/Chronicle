@@ -1,5 +1,6 @@
 // craft_results.test.mjs — the pictures of made things:
-// static/js/widgets/craft_results.js.
+// static/js/widgets/craft_results.js and its lifelike style,
+// craft_results_real.js.
 //
 // Pins that every look is cleaned before it is drawn (the pack inserts the
 // markup as HTML, and a look is stored data), that each shape draws with its
@@ -22,6 +23,7 @@ function load() {
   const ctx = vm.createContext({ window });
   vm.runInContext(readFileSync(join(widgets, 'craft_pictures.js'), 'utf8'), ctx);
   vm.runInContext(readFileSync(join(widgets, 'craft_results.js'), 'utf8'), ctx);
+  vm.runInContext(readFileSync(join(widgets, 'craft_results_real.js'), 'utf8'), ctx);
   return window.CraftResults;
 }
 const R = load();
@@ -30,10 +32,11 @@ const plain = (v) => JSON.parse(JSON.stringify(v));
 
 test('every shape draws, and unknown shapes fall back to the bundle', () => {
   assert.deepEqual(plain(R.shapes()).sort(), ['blade', 'bundle', 'potion', 'ring', 'shield', 'vial']);
-  for (const shape of R.shapes()) {
-    const svg = R.svg({ shape, body: '#336699', trim: '#aa8844', detail: '#eeeeee', mark: { picture: 'leaf', tint: '#62903a' } }, 48);
+  for (const style of ['real', 'drawn']) for (const shape of R.shapes()) {
+    const svg = R.svg({ shape, body: '#336699', trim: '#aa8844', detail: '#eeeeee', mark: { picture: 'leaf', tint: '#62903a' } }, 48, { style });
     assert.match(svg, /^<svg class="crx" viewBox="0 0 120 120" width="48" height="48" aria-hidden="true">/);
     assert.ok(svg.endsWith('</svg>'));
+    assert.ok(svg.length > 2000, style + ' ' + shape + ' draws something');
   }
   assert.equal(R.clean({ shape: 'castle' }).shape, 'bundle');
   assert.equal(R.clean({ shape: 'constructor' }).shape, 'bundle');
@@ -46,8 +49,12 @@ test('nothing from a look reaches the markup unchecked', () => {
   };
   const c = R.clean(bad);
   assert.deepEqual(plain(c), { shape: 'bundle', body: '#7a6a9a', trim: '#c9a54a', detail: '#efe6d2', mark: null });
-  const svg = R.svg(bad, 40);
-  for (const s of ['onload', 'onmouseover', 'javascript', '<script', 'alert']) assert.ok(!svg.includes(s), s);
+  for (const style of ['real', 'drawn']) {
+    for (const shape of R.shapes()) {
+      const svg = R.svg({ ...bad, shape }, 40, { style });
+      for (const s of ['onload', 'onmouseover', 'javascript', '<script', 'alert']) assert.ok(!svg.includes(s), style + ' ' + shape + ' ' + s);
+    }
+  }
   assert.equal(R.clean(null).shape, 'bundle');
   assert.equal(R.clean('potion').shape, 'bundle');
   // A mark whose picture the library doesn't have is dropped on its own.
@@ -56,15 +63,29 @@ test('nothing from a look reaches the markup unchecked', () => {
 });
 
 test('two pictures on one page never share an id', () => {
-  const a = R.svg({ shape: 'potion' }, 40), b = R.svg({ shape: 'potion' }, 40);
   const ids = (s) => [...s.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(ids(a).length > 3);
-  for (const id of ids(a)) assert.ok(!ids(b).includes(id), id);
-  // Every url(#…) a drawing uses is one it defines.
-  for (const svg of R.shapes().map((shape) => R.svg({ shape, mark: { picture: 'leaf', tint: '#62903a' } }, 40))) {
-    const have = new Set(ids(svg));
-    for (const m of svg.matchAll(/url\(#([^)]+)\)/g)) assert.ok(have.has(m[1]), m[1]);
+  for (const style of ['real', 'drawn']) {
+    const a = R.svg({ shape: 'potion' }, 40, { style }), b = R.svg({ shape: 'potion' }, 40, { style });
+    assert.ok(ids(a).length > 3);
+    for (const id of ids(a)) assert.ok(!ids(b).includes(id), id);
+    // Every url(#…) a drawing uses is one it defines, and no id is written twice.
+    for (const svg of R.shapes().map((shape) => R.svg({ shape, mark: { picture: 'leaf', tint: '#62903a' } }, 40, { style }))) {
+      const have = ids(svg);
+      assert.equal(new Set(have).size, have.length, style + ' duplicate id');
+      for (const m of svg.matchAll(/url\(#([^)]+)\)/g)) assert.ok(have.includes(m[1]), style + ' ' + m[1]);
+    }
   }
+});
+
+test('the lifelike style is the default, and the illustrated one stays', () => {
+  assert.deepEqual(plain(R.styles()).sort(), ['drawn', 'real']);
+  const drawn = R.svg({ shape: 'ring' }, 40, { style: 'drawn' }), real = R.svg({ shape: 'ring' }, 40);
+  assert.ok(real.includes('feTurbulence') || real.includes('feSpecularLighting'), 'real is the default');
+  assert.ok(!drawn.includes('feSpecularLighting'));
+  // An unknown style name draws the default; a style missing a shape is refused.
+  assert.ok(R.svg({ shape: 'ring' }, 40, { style: 'nope' }).includes('feSpecularLighting'));
+  R.addStyle('half', { potion: () => '' });
+  assert.ok(!plain(R.styles()).includes('half'));
 });
 
 test('materials colour a look in recipe order', () => {
