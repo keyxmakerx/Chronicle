@@ -4602,6 +4602,7 @@ func (a *App) RegisterRoutes() {
 	// The day before each night, and after it, the entries put items in the
 	// bell; a loop sends them.
 	nightEntries.SetBells(&nightBellCampaignsAdapter{campaigns: campaignService, addons: addonService}, sessionsService, sessionsService)
+	nightEntries.SetBellRoster(sessionsService)
 	go sessions.StartNightBells(a.ShutdownCtx, nightEntries)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 	// A player can allow the Foundry notebook to use their notes. Grants go
