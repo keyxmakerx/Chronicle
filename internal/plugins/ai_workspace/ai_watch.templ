@@ -1,0 +1,55 @@
+package ai_workspace
+
+import (
+	"fmt"
+	"strconv"
+)
+
+// aiWatch is the top of the page while something needs the owner: AI being
+// stopped in the campaign, and each open warning about their key, with what
+// they can do about it.
+templ aiWatch(v ConnectView) {
+	if v.CutOff != nil {
+		<div class="aic-alert" data-tone="stopped" role="status">
+			<i class="fa-solid fa-circle-stop" aria-hidden="true"></i>
+			<p><b>AI is stopped in this campaign</b> since { agoText(v.Now, *v.CutOff) }. Every key is refused until you turn it back on; nothing is lost.</p>
+			<button
+				type="button"
+				class="quiet-word"
+				hx-post={ fmt.Sprintf("/campaigns/%s/ai/cut-off", v.CampaignID) }
+				hx-vals={ `{"on":"0"}` }
+				hx-target="#ai-connect"
+				hx-swap="outerHTML"
+				hx-disabled-elt="this"
+			>Turn AI back on</button>
+		</div>
+	}
+	for _, a := range v.Alerts {
+		<div class="aic-alert" role="alert">
+			<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+			<p><b>{ alertTitle(a) }</b> { agoText(v.Now, a.UpdatedAt) }. { alertDetail(a) }</p>
+			<span class="aic-alert-acts">
+				<button
+					type="button"
+					class="quiet-word"
+					hx-post={ fmt.Sprintf("/campaigns/%s/ai/alerts/%s", v.CampaignID, strconv.FormatInt(a.ID, 10)) }
+					hx-vals={ `{"how":"mine"}` }
+					hx-target="#ai-connect"
+					hx-swap="outerHTML"
+					hx-disabled-elt="this"
+				>That was me</button>
+				if a.ConnectionID != 0 {
+					<button
+						type="button"
+						class="quiet-word text-bad"
+						hx-post={ fmt.Sprintf("/campaigns/%s/ai/alerts/%s", v.CampaignID, strconv.FormatInt(a.ID, 10)) }
+						hx-vals={ `{"how":"paused"}` }
+						hx-target="#ai-connect"
+						hx-swap="outerHTML"
+						hx-disabled-elt="this"
+					>Pause the key</button>
+				}
+			</span>
+		</div>
+	}
+}

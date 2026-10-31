@@ -58,6 +58,18 @@ func (r *memRepo) RevokeMadeBy(_ context.Context, campaignID, userID string, at 
 	return nil
 }
 
+func (r *memRepo) RevokeOne(_ context.Context, campaignID string, id int64, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.conns {
+		if c.CampaignID == campaignID && c.ID == id && c.RevokedAt == nil {
+			t := at
+			c.RevokedAt = &t
+		}
+	}
+	return nil
+}
+
 func (r *memRepo) RevokeAllMadeBy(_ context.Context, userID string, at time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

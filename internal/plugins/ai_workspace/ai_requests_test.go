@@ -30,6 +30,7 @@ type reqRepo struct {
 func (r *reqRepo) Replace(context.Context, *connector.Connection) (int64, error) { return 1, nil }
 func (r *reqRepo) RevokeAll(context.Context, string, time.Time) error            { return nil }
 func (r *reqRepo) RevokeMadeBy(context.Context, string, string, time.Time) error { return nil }
+func (r *reqRepo) RevokeOne(context.Context, string, int64, time.Time) error { return nil }
 func (r *reqRepo) RevokeAllMadeBy(context.Context, string, time.Time) error      { return nil }
 func (r *reqRepo) Current(_ context.Context, campaignID string) (*connector.Connection, error) {
 	r.mu.Lock()
@@ -313,10 +314,14 @@ func TestRequest_StayAfterDisconnect(t *testing.T) {
 	}
 }
 
-// auditLog keeps the events the page logs.
+// auditLog keeps the events the page logs. The audit service drops an entry
+// with no user, so one logged without the user shows up as a mismatch.
 type auditLog struct{ events []string }
 
-func (a *auditLog) LogCampaignEvent(_ context.Context, _ string, action string, details map[string]any) {
+func (a *auditLog) LogCampaignEvent(_ context.Context, _, userID string, action string, details map[string]any) {
+	if userID == "" {
+		action = "(no user, would be dropped) " + action
+	}
 	a.events = append(a.events, action+" "+fmtDetails(details))
 }
 

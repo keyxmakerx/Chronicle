@@ -38,6 +38,12 @@ type ConnectView struct {
 	Calls    []connector.Call
 	// Requests are what the AI asked for, waiting for the owner.
 	Requests []connector.Request
+	// Alerts is the campaign's open warnings about its keys; CutOff is set
+	// while the owner has stopped every AI here. Watching is false when the
+	// watch isn't wired, and both stay empty.
+	Alerts   []connector.Alert
+	CutOff   *time.Time
+	Watching bool
 	// Sittings group Calls; Shown is how many the page lists.
 	Sittings []connector.Sitting
 	Shown    int
@@ -110,6 +116,17 @@ func (h *Handler) connectView(c echo.Context, cc *campaigns.CampaignContext) (Co
 	if v.Requests, err = h.connector.Waiting(ctx, cc.Campaign.ID); err != nil {
 		return v, err
 	}
+	if h.connector.Watching() {
+		v.Watching = true
+		if v.Alerts, err = h.connector.Alerts(ctx, cc.Campaign.ID); err != nil {
+			return v, err
+		}
+		sw, err := h.connector.CampaignSwitches(ctx, cc.Campaign.ID)
+		if err != nil {
+			return v, err
+		}
+		v.CutOff = sw.CutOffAt
+	}
 	if v.Notes != nil && conn != nil && conn.Privacy == aiexport.PrivacyModeSafe {
 		v.Notes.Shut = true
 	}
@@ -156,7 +173,7 @@ func (h *Handler) ChangeNoteAccess(c echo.Context) error {
 		return err
 	}
 	if h.audit != nil && was != to {
-		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, "campaign.ai_note_access.changed", map[string]any{
+		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_note_access.changed", map[string]any{
 			"co_dms_from": was.CoDMs, "co_dms_to": to.CoDMs,
 			"scribes_from": was.Scribes, "scribes_to": to.Scribes,
 		})
@@ -244,7 +261,7 @@ func (h *Handler) TurnDownRequest(c echo.Context) error {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_request.turned_down", map[string]any{"request_id": id})
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_request.turned_down", map[string]any{"request_id": id})
 	}
 	v, err := h.connectView(c, cc)
 	if err != nil {
@@ -302,7 +319,7 @@ func (h *Handler) ConnectAI(c echo.Context) error {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_connection.created",
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_connection.created",
 			map[string]any{"privacy": privacy.String(), "can_ask": canAsk, "expires_at": conn.ExpiresAt.Format(time.RFC3339)})
 	}
 	v, err := h.connectView(c, cc)
@@ -376,7 +393,7 @@ func (h *Handler) setPaused(c echo.Context, pause bool) error {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, event, map[string]any{"connection_id": id})
+		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, auth.GetUserID(c), event, map[string]any{"connection_id": id})
 	}
 	v, err := h.connectView(c, cc)
 	if err != nil {
@@ -417,7 +434,7 @@ func (h *Handler) ChangeAIAccess(c echo.Context) error {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, "campaign.ai_connection.changed", map[string]any{
+		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_connection.changed", map[string]any{
 			"connection_id": id,
 			"privacy_from":  was.Privacy.String(), "privacy_to": privacy.String(),
 			"can_ask_from": was.CanAsk, "can_ask_to": canAsk,
@@ -448,7 +465,7 @@ func (h *Handler) DisconnectAI(c echo.Context) error {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_connection.disconnected", nil)
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_connection.disconnected", nil)
 	}
 	v, err := h.connectView(c, cc)
 	if err != nil {

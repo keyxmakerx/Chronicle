@@ -43,6 +43,7 @@ templ aiConnectSection(v ConnectView) {
 		if hasKey(v) {
 			<div class="aic-grid">
 				<div class="aic-area-req space-y-4">
+					@aiWatch(v)
 					<div id={ requestResultHost }></div>
 					@aiRequests(v, false)
 					<div x-show="renew" x-cloak x-collapse.duration.200ms>
@@ -51,6 +52,9 @@ templ aiConnectSection(v ConnectView) {
 				</div>
 				<div class="aic-area-side space-y-4">
 					@aiStatus(v)
+					if v.Watching {
+						@aiCutOffPanel(v)
+					}
 					if v.Notes != nil {
 						@aiNotesPanel(*v.Notes)
 					}
@@ -63,6 +67,7 @@ templ aiConnectSection(v ConnectView) {
 		} else {
 			<div class="space-y-8">
 				<div class="space-y-4">
+					@aiWatch(v)
 					<div id={ requestResultHost }></div>
 					@aiRequests(v, false)
 				</div>

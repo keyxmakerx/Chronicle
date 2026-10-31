@@ -30,6 +30,10 @@ GET	/admin/addons	site-admin	plugins/addons.(*Handler).AdminAddonsPage	plugins/a
 POST	/admin/addons	site-admin	plugins/addons.(*Handler).CreateAddon	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 DELETE	/admin/addons/:addonID	site-admin	plugins/addons.(*Handler).DeleteAddon	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 PUT	/admin/addons/:addonID/status	site-admin	plugins/addons.(*Handler).UpdateAddonStatus	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+GET	/admin/ai	site-admin	plugins/ai_workspace.(*AdminAIHandler).Page	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/ai/access	site-admin	plugins/ai_workspace.(*AdminAIHandler).SetAccess	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
+POST	/admin/ai/alerts/:aid/settle	site-admin	plugins/ai_workspace.(*AdminAIHandler).Settle	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/ai/keys/:kid/:act	site-admin	plugins/ai_workspace.(*AdminAIHandler).Key	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 GET	/admin/api	site-admin	plugins/syncapi.(*Handler).AdminDashboard	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/api/cors	site-admin	plugins/settings.(*Handler).GetCORSOrigins	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/api/cors	site-admin	plugins/settings.(*Handler).UpdateCORSOrigins	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
@@ -434,11 +438,13 @@ POST	/campaigns/:id/ai-workspace/import/tray/clear	session	plugins/ai_workspace.
 GET	/campaigns/:id/ai-workspace/prompt/generate	session	plugins/ai_workspace.(*Handler).GeneratePrompt	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai-workspace/prompt/instructions	session	plugins/ai_workspace.(*Handler).PromptInstructions	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/activity	session	plugins/ai_workspace.(*Handler).AIActivity	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/alerts/:aid	session	plugins/ai_workspace.(*Handler).AnswerAIAlert	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection	session	plugins/ai_workspace.(*Handler).ConnectAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/access	session	plugins/ai_workspace.(*Handler).ChangeAIAccess	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/disconnect	session	plugins/ai_workspace.(*Handler).DisconnectAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/pause	session	plugins/ai_workspace.(*Handler).PauseAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/resume	session	plugins/ai_workspace.(*Handler).ResumeAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/cut-off	session	plugins/ai_workspace.(*Handler).CutOffAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/notes	session	plugins/ai_workspace.(*Handler).ChangeNoteAccess	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/requests	session	plugins/ai_workspace.(*Handler).AIRequests	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/requests/:rid/turn-down	session	plugins/ai_workspace.(*Handler).TurnDownRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

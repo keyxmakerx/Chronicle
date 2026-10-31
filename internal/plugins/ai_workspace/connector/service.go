@@ -67,6 +67,10 @@ type Service struct {
 	limits *limiter
 	calls  atomic.Int64
 	check  ChangesCheck
+	// watchRepo and watch are the switches and warnings (watch.go);
+	// watchRepo is nil until SetWatch.
+	watchRepo WatchRepository
+	watch     *watcher
 }
 
 // ChangesCheck looks at what an AI asks for against the campaign and returns
@@ -79,7 +83,7 @@ func (s *Service) SetCheck(f ChangesCheck) { s.check = f }
 
 // NewService creates the connector service.
 func NewService(repo Repository, owners Owners) *Service {
-	return &Service{repo: repo, owners: owners, now: time.Now, limits: newLimiter()}
+	return &Service{repo: repo, owners: owners, now: time.Now, limits: newLimiter(), watch: newWatcher(time.Now())}
 }
 
 // hashKey is the stored form of a key.
@@ -158,8 +162,9 @@ func (s *Service) EndAllKeysMadeBy(ctx context.Context, userID string) error {
 
 // Authenticate checks a key against the campaign in the address. It returns
 // the connection and the campaign's name, or ErrBadKey, ErrKeyEnded,
-// ErrOwnerGone or ErrKeyPaused. It reads the connection on every call, so a
-// pause or a change of what the key may do applies from the next call.
+// ErrOwnerGone, ErrKeyPaused, ErrAIOff or ErrCutOff. It reads the connection
+// and the switches on every call, so a pause, a switch or a change of what
+// the key may do applies from the next call.
 func (s *Service) Authenticate(ctx context.Context, campaignID, raw string) (*Connection, string, error) {
 	raw = strings.TrimSpace(raw)
 	if len(raw) != keyLen || !strings.HasPrefix(raw, keyPrefix) || campaignID == "" {
@@ -185,6 +190,9 @@ func (s *Service) Authenticate(ctx context.Context, campaignID, raw string) (*Co
 	}
 	if c.PausedAt != nil {
 		return nil, "", ErrKeyPaused
+	}
+	if err := s.checkSwitches(ctx, c.CampaignID); err != nil {
+		return nil, "", err
 	}
 	return c, name, nil
 }

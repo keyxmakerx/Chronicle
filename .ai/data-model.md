@@ -462,9 +462,12 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `ai_connections` | One key an owner made so an AI app can read the campaign and ask for changes | `key_hash` CHAR(64) UNIQUE (SHA-256; the key itself is never stored); `key_hint` (last 4); `privacy` (`safe` or `permitted`, the owner may change it); `can_ask` (the Change setting; FALSE is Only look); `expires_at`, `revoked_at`, `last_used_at`; `paused_at` (set while the owner has paused the key); `client_name`; FK→`campaigns` CASCADE |
+| `ai_connections` | One key an owner made so an AI app can read the campaign and ask for changes | `key_hash` CHAR(64) UNIQUE (SHA-256; the key itself is never stored); `key_hint` (last 4); `privacy` (`safe` or `permitted`, the owner may change it); `can_ask` (the Change setting; FALSE is Only look); `expires_at`, `revoked_at`, `last_used_at`; `paused_at` (set while the owner or site admin has paused the key); `client_name`; `seen_apps` (every app name the key connected as, comma-separated, 255 chars); FK→`campaigns` CASCADE |
 | `ai_connection_calls` | "What it did": one row per tool call, never the answer | `(campaign_id, id)` index; `tool`, `summary`, `note`, `ok`; FK→`ai_connections` CASCADE; 500 kept per campaign |
 | `ai_connection_requests` | What an AI asked for, waiting for the owner's review; nothing in it is applied until they press Apply | `(campaign_id, status, id)` index; `body` MEDIUMTEXT (the blocks, paste format, at most 256 KB); `summary` (the AI's line), `counts`, `blocks`, `app_name`; `status` (`waiting`, `answered`, `turned_down`), `outcome`, `decided_at`; FK→`campaigns` CASCADE; 20 waiting at most, 100 answered kept per campaign |
+| `ai_connection_alerts` | Warnings about AI keys for the owner and site admin: a new app, repeated limit hits, a flood of wrong keys | `kind` (`new_app`, `limit`, `wrong_keys`); `campaign_id` and `connection_id` NULL for a flood (FK CASCADE otherwise); `address`, `detail`, `hits`; `settled_at`, `settled_how` (`mine`, `paused`, `ended`, `lifted`, `seen`); open warnings indexed |
+| `ai_campaign_access` | The owner's "Stop all AI here" | `campaign_id` PK FK→`campaigns` CASCADE; `cut_off_at` (NULL = AI allowed); `players_allowed` |
+| `ai_server_access` | The site admin's AI switches, one row (`id` = 1) | `ai_off`; `players_allowed`; `updated_by` |
 
 ## MariaDB-specific notes
 

@@ -106,7 +106,7 @@ type Handler struct {
 // adapter). Optional — nil disables audit emission, which is the
 // default in test fixtures.
 type AuditLogger interface {
-	LogCampaignEvent(ctx context.Context, campaignID, action string, details map[string]any)
+	LogCampaignEvent(ctx context.Context, campaignID, userID, action string, details map[string]any)
 }
 
 // NewHandler constructs the Handler. A nil renderer produces a
@@ -269,7 +269,7 @@ func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, b
 				failed++
 			}
 		}
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_lookup.answered",
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_lookup.answered",
 			map[string]any{
 				"lookups":           len(answers),
 				"unanswered":        failed,
@@ -486,7 +486,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 
 	if h.audit != nil {
 		h.audit.LogCampaignEvent(c.Request().Context(),
-			cc.Campaign.ID, "campaign.ai_import.parsed",
+			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_import.parsed",
 			map[string]any{
 				"total_pages":     summary.Total,
 				"selectable":      summary.Selectable,
@@ -667,7 +667,7 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	if h.audit != nil {
 		// Counts only — no names, no body content.
 		h.audit.LogCampaignEvent(c.Request().Context(),
-			cc.Campaign.ID, "campaign.ai_import.committed",
+			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_import.committed",
 			map[string]any{
 				"created":                result.Created,
 				"renamed":                result.Renamed,
@@ -987,7 +987,7 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 
 	if h.audit != nil {
 		h.audit.LogCampaignEvent(c.Request().Context(),
-			cc.Campaign.ID, "campaign.ai_prompt.generated",
+			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_prompt.generated",
 			map[string]any{
 				"content_mode":        in.ContentMode,
 				"privacy":             c.QueryParam("privacy"),
@@ -1023,7 +1023,7 @@ func (h *Handler) PromptInstructions(c echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_prompt.instructions_copied",
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_prompt.instructions_copied",
 			map[string]any{"prompt_byte_count": len(out)})
 	}
 	c.Response().Header().Set("Cache-Control", "no-store")
@@ -1191,7 +1191,7 @@ func (h *Handler) GenerateAIExport(c echo.Context) error {
 
 	if h.audit != nil {
 		h.audit.LogCampaignEvent(c.Request().Context(),
-			cc.Campaign.ID, "campaign.ai_export.generated",
+			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_export.generated",
 			map[string]any{
 				"privacy":             c.QueryParam("privacy"),
 				"category_count":      len(opts.Categories),

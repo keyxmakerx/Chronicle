@@ -1,0 +1,114 @@
+package ai_workspace
+
+import (
+	"fmt"
+	"strconv"
+)
+
+// adminAIBody is the page under its heading, swapped whole by every action
+// so the counts never disagree with the table.
+templ adminAIBody(v *AdminAIView) {
+	<div id="admin-ai" class="space-y-6">
+		if v.Note != "" {
+			<p class="text-sm text-fg" role="status">{ v.Note }</p>
+		}
+		<div class="aia-tiles">
+			<div class="aia-tile"><span class="aia-l">Live keys</span><span class="aia-v">{ strconv.Itoa(v.liveKeys()) }</span><span class="aia-s">not ended or run out</span></div>
+			<div class="aia-tile"><span class="aia-l">Calls today</span><span class="aia-v">{ strconv.Itoa(v.Today.Calls) }</span><span class="aia-s">each key may make 2,000 a day</span></div>
+			<div class="aia-tile" data-hot?={ v.Today.Refused > 0 }><span class="aia-l">Refused</span><span class="aia-v">{ strconv.Itoa(v.Today.Refused) }</span><span class="aia-s">wrong or ended keys, { v.sinceText() }</span></div>
+			<div class="aia-tile" data-hot?={ v.needsALook() > 0 }><span class="aia-l">Needs a look</span><span class="aia-v">{ strconv.Itoa(v.needsALook()) }</span><span class="aia-s">keys and addresses with a warning nobody has looked at</span></div>
+		</div>
+		<form class="aia-switches" hx-post="/admin/ai/access" hx-target="#admin-ai" hx-swap="outerHTML" hx-trigger="change">
+			<label class="aia-switch">
+				<input type="checkbox" name="ai_off" value="1" checked?={ v.Access.AIOff }/>
+				<span><b>Turn off AI on this server</b><br/><span class="text-fg-muted">Every key is refused from its next call. Campaign pages keep working, and nothing waiting is lost.</span></span>
+			</label>
+			<label class="aia-switch">
+				<input type="checkbox" name="players" value="1" checked?={ !v.Access.PlayersBlocked }/>
+				<span><b>Owners may let players use AI</b><br/><span class="text-fg-muted">Off hides the players switch in every campaign.</span></span>
+			</label>
+		</form>
+		for _, a := range v.Floods {
+			<div class="aia-flood" role="alert">
+				<i class="fa-solid fa-ban" aria-hidden="true"></i>
+				<p><b>{ a.Address }</b>: { a.Detail } { countOf(a.Hits, "wrong key", "wrong keys") } so far, last at { v.clock(a.UpdatedAt) }.</p>
+				<button type="button" class="quiet-word" hx-post={ fmt.Sprintf("/admin/ai/alerts/%d/settle", a.ID) } hx-target="#admin-ai" hx-swap="outerHTML" hx-disabled-elt="this">Stop turning it away</button>
+			</div>
+		}
+		<div class="flex flex-wrap items-center gap-3">
+			<h2 class="text-lg font-semibold text-fg">Keys</h2>
+			<span class="grow"></span>
+			if v.Only {
+				<a class="quiet-word" href="/admin/ai" hx-get="/admin/ai" hx-target="#admin-ai" hx-swap="outerHTML" hx-push-url="true">Show every key</a>
+			} else {
+				<a class="quiet-word" href="/admin/ai?only=flagged" hx-get="/admin/ai?only=flagged" hx-target="#admin-ai" hx-swap="outerHTML" hx-push-url="true">Only ones that need a look</a>
+			}
+		</div>
+		if len(v.shownKeys()) == 0 {
+			<p class="text-sm text-fg-muted">
+				if v.Only {
+					No key needs a look right now.
+				} else {
+					No AI keys on this server yet. Owners make them on a campaign's Your AI page.
+				}
+			</p>
+		} else {
+			<div class="aia-table-wrap">
+				<table class="aia-table">
+					<thead>
+						<tr><th scope="col">Campaign</th><th scope="col">App</th><th scope="col">Last used</th><th scope="col" class="aia-n">Calls today</th><th scope="col">What looks wrong</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
+					</thead>
+					<tbody>
+						for _, k := range v.shownKeys() {
+							<tr data-flag?={ len(v.Alerts[k.ID]) > 0 }>
+								<td><span class="aia-who">{ k.CampaignName }</span><br/><span class="aia-sub">{ keyWho(k) } · key ends { k.KeyHint }</span></td>
+								<td>{ keyApp(k) }</td>
+								<td class="aia-mono">{ v.lastUsed(k) }</td>
+								<td class="aia-n">{ strconv.Itoa(k.CallsToday) }</td>
+								<td>
+									if keyState(k) != "" {
+										<span class="aia-sub">{ keyState(k) }. </span>
+									}
+									if len(v.Alerts[k.ID]) == 0 {
+										<span class="aia-sub">Nothing unusual</span>
+									}
+									// Each warning carries its own "Looked at", so it is clear which one it clears.
+									for _, a := range v.Alerts[k.ID] {
+										<span class="aia-flag">
+											{ a.Detail }{ hitsSuffix(a) }
+											<button type="button" class="quiet-word aia-seen" hx-post={ fmt.Sprintf("/admin/ai/alerts/%d/settle", a.ID) } hx-target="#admin-ai" hx-swap="outerHTML" hx-disabled-elt="this">Looked at</button>
+										</span>
+									}
+								</td>
+								<td>
+									<span class="aia-acts">
+										if k.PausedAt != nil {
+											<button type="button" class="quiet-word" hx-post={ fmt.Sprintf("/admin/ai/keys/%d/resume", k.ID) } hx-target="#admin-ai" hx-swap="outerHTML" hx-disabled-elt="this">Resume</button>
+										} else {
+											<button type="button" class="quiet-word" hx-post={ fmt.Sprintf("/admin/ai/keys/%d/pause", k.ID) } hx-target="#admin-ai" hx-swap="outerHTML" hx-disabled-elt="this">Pause</button>
+										}
+										<span x-data="{ sure: false }" class="aia-acts">
+											<button type="button" class="quiet-word text-bad" x-show="!sure" @click="sure = true">End key</button>
+											<button type="button" class="quiet-word" x-show="sure" x-cloak @click="sure = false">Keep it</button>
+											<button type="button" class="btn-danger" x-show="sure" x-cloak hx-post={ fmt.Sprintf("/admin/ai/keys/%d/end", k.ID) } hx-target="#admin-ai" hx-swap="outerHTML" hx-disabled-elt="this">End it for good</button>
+										</span>
+									</span>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+		<h2 class="text-lg font-semibold text-fg">The last day, as it happened</h2>
+		if len(v.Feed) == 0 {
+			<p class="text-sm text-fg-muted">Nothing unusual in the last day.</p>
+		} else {
+			<ol class="aia-feed">
+				for _, a := range v.Feed {
+					<li><span class="aia-mono">{ v.clock(a.UpdatedAt) }</span><span>{ feedLine(a) }</span></li>
+				}
+			</ol>
+		}
+	</div>
+}

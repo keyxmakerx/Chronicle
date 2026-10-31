@@ -1,0 +1,20 @@
+package ai_workspace
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AdminAIPage is Site admin ▸ API & access ▸ AI apps.
+templ AdminAIPage(v *AdminAIView) {
+	@layouts.App("AI apps - Admin") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
+		<div class="max-w-7xl mx-auto space-y-6">
+			<div>
+				@components.AdminGroupHeading(components.AdminTabsAPI, "/admin/ai")
+				<p class="text-sm text-fg-secondary mt-1">Every AI key on this server: how busy each one is, what looks wrong, and switches to stop them.</p>
+			</div>
+			@adminAIBody(v)
+		</div>
+	}
+}

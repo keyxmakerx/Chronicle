@@ -5287,6 +5287,20 @@ func (a *App) RegisterRoutes() {
 				slog.Error("ending AI keys failed", slog.String("user_id", userID), slog.Any("error", err))
 			}
 		})
+		// The watch: the server's and each campaign's AI switches, and
+		// warnings about keys used in a way that looks wrong, shown to the
+		// owner and on Site admin ▸ API & access ▸ AI apps.
+		aiConnectorSvc.SetWatch(connector.NewWatchRepository(a.DB))
+		aiAdminHandler := ai_workspace.NewAdminAIHandler(aiConnectorSvc)
+		aiAdminHandler.SetActivityRecorder(adminActivity)
+		aiAdminHandler.SetZone(func(c echo.Context) *time.Location {
+			u, err := authService.GetUser(c.Request().Context(), auth.GetUserID(c))
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		})
+		ai_workspace.RegisterAdminRoutes(adminGroup, aiAdminHandler, auth.RequireReauth(authService))
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)
@@ -7324,10 +7338,13 @@ type aiWorkspaceAuditAdapter struct {
 	svc audit.AuditService
 }
 
-func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaignID, action string, details map[string]any) {
+// The audit service refuses an entry without a user, so userID must be set
+// or the event is lost.
+func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaignID, userID, action string, details map[string]any) {
 	// Fire-and-forget; audit failures must not break the response.
 	_ = a.svc.Log(ctx, &audit.AuditEntry{
 		CampaignID: campaignID,
+		UserID:     userID,
 		Action:     action,
 		Details:    details,
 	})
