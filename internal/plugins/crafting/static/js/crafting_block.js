@@ -56,6 +56,23 @@
   }
   var SUB_COST = {bane: 'at a bane on every roll', points: 'at −2 on every roll', none: 'at no cost'};
   /* The cost in words, against the hero's way of paying. */
+  /* The remembered copies of an item in the pack that can still go in. */
+  function keptOf(pack, id) {
+    var out = [];
+    (pack.items || []).forEach(function (it) {
+      if (it.itemId === id) (it.kept || []).forEach(function (k) { if (!k.off) out.push(k); });
+    });
+    return out;
+  }
+  /* What a remembered copy is called in the start fold: "Fine", "Moonlit". */
+  function keptName(k) {
+    var w = [];
+    if (k.quality === 'fine') w.push('Fine');
+    if (k.quality === 'poor') w.push('Poor');
+    (k.marks || []).forEach(function (m) { w.push(m.charAt(0).toUpperCase() + m.slice(1)); });
+    return w.join(', ') || 'Remembered';
+  }
+
   function costText(r, pack) {
     if (!r.cost) return '';
     if (pack.payKind === 'wealth') return 'Wealth ' + num(r.charge);
@@ -119,7 +136,7 @@
   function mount(el, cfg) {
     var cid = String(cfg.campaignId || ''), eid = String(cfg.entityId || '');
     var base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
-    var D = null, open = null, pick = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0;
+    var D = null, open = null, pick = {}, use = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0;
 
     /* JSON in and out; a refusal rejects with the server's own words. */
     function api(method, path, body) {
@@ -182,8 +199,42 @@
       return h + '</li>';
     }
 
+    /* The item a material line takes: its own, or the one picked in its place. */
+    function lineItem(m, i) { return (m.itemId && !(m.sub && pick[i])) ? m.itemId : pick[i]; }
+    /* How many remembered copies line i already asks for, besides copy id. */
+    function asked(i, but) {
+      var n = 0, u = use[i] || {};
+      Object.keys(u).forEach(function (id) { if (id !== String(but)) n += u[id]; });
+      return n;
+    }
+    /* Under a material line, a stepper for each remembered kind of it in
+       the pack; plain ones fill the rest. */
+    function keptRows(m, i) {
+      var id = lineItem(m, i), ks = id ? keptOf(D.pack, id) : [];
+      if (!ks.length) { delete use[i]; return ''; }
+      var u = use[i] = use[i] || {}, plain = Math.max(0, m.qty - asked(i, ''));
+      return ks.map(function (k) {
+        var n = u[k.id] || 0, max = Math.min(k.qty, m.qty - asked(i, k.id)), key = i + ':' + k.id;
+        return '<li class="crp-kept"><span class="crp-k">' + esc(keptName(k)) + '<small>' + k.qty + ' held' + (k.by ? ' · ' + (k.how === 'harvested' ? 'harvested' : 'made') + ' by ' + esc(k.by) : '') + '</small></span>' +
+          '<span class="crp-v crp-kstep"><button type="button" class="btn btn-secondary btn-sm" data-act="kless" data-id="' + key + '" aria-label="One fewer ' + esc(keptName(k)) + '"' + (n <= 0 ? ' disabled' : '') + '>−</button>' +
+          '<span aria-live="polite">' + n + '</span>' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-act="kmore" data-id="' + key + '" aria-label="One more ' + esc(keptName(k)) + '"' + (n >= max ? ' disabled' : '') + '>+</button></span></li>';
+      }).join('') + '<li class="crp-kept"><span class="crp-k">Plain<small>the rest of the ' + m.qty + ' are plain ones, which go first</small></span><span class="crp-v">' + plain + '</span></li>';
+    }
+    function step(key, d) {
+      var at = key.indexOf(':'), i = key.slice(0, at), id = key.slice(at + 1), r = recipe(open && open.id);
+      if (!r) return;
+      var m = r.needs[i], k = keptOf(D.pack, lineItem(m, i)).filter(function (x) { return String(x.id) === id; })[0];
+      if (!k) return;
+      var u = use[i] = use[i] || {}, n = (u[id] || 0) + d;
+      u[id] = Math.max(0, Math.min(n, k.qty, m.qty - asked(i, id)));
+      render();
+      focus('[data-act="' + (d > 0 ? 'kmore' : 'kless') + '"][data-id="' + key + '"]');
+    }
+
     function startFold(r) {
-      var who = esc(hero()), lines = r.needs.map(function (m, i) {
+      var who = esc(hero()), lines = r.needs.map(function (m, i) { return line(m, i) + keptRows(m, i); }).join('');
+      function line(m, i) {
         if (m.itemId && m.sub) {
           var real = held(D.pack, m.itemId) >= reserved(r, m.itemId), subs = standIns(D.pack, r, m);
           if (pick[i] == null || (pick[i] && !subs.some(function (o) { return o.id === pick[i]; })) || (!pick[i] && !real)) pick[i] = real ? '' : subs[0] && subs[0].id;
@@ -198,7 +249,7 @@
           '<select class="cra-in cra-sm" id="crk-pick-' + i + '" data-pick="' + i + '">' + opts.map(function (o) {
             return '<option value="' + esc(o.id) + '"' + (o.id === pick[i] ? ' selected' : '') + '>' + esc(o.name) + ' (' + o.qty + ')</option>';
           }).join('') + '</select></span></li>';
-      }).join('');
+      }
       var pk = D.pack.payKind;
       if (r.cost && pk === 'wealth') lines += '<li><span class="crp-k">Cost<small>Wealth is a threshold, as at a shop, so nothing is spent</small></span><span class="crp-v">Wealth ' + num(r.charge) + ' <span class="is-ok">· ' + who + ' has ' + num(D.pack.have) + '</span></span></li>';
       else if (r.cost) lines += '<li><span class="crp-k">Cost<small>' + who + ' has ' + num(D.pack.have) + ' ' + esc(unit(r, D.pack)) + ', so ' + num(D.pack.have - r.charge) + ' ' + esc(unit(r, D.pack)) + ' will be left</small></span><span class="crp-v">' + esc(L.money(r.cost)) + '</span></li>';
@@ -220,6 +271,17 @@
         '<button type="button" class="btn btn-secondary btn-sm" data-act="close" data-id="' + esc(p.id) + '">Put it away</button></div></div>';
     }
 
+    /* What the made item carries into the pack: the maker's mark and when it
+       goes off. Fine, marks and quirks are already in what befell. */
+    function carries(k) {
+      if (!k) return '';
+      var rows = [];
+      if (k.how === 'made' && k.by) rows.push(['Maker’s mark', 'Made by ' + k.by + (k.on ? ', ' + k.on : '')]);
+      if (k.offOn) rows.push(['Goes off', 'On ' + k.offOn + (k.becomes ? '. Then it becomes ' + k.becomes + '.' : '.')]);
+      if (!rows.length) return '';
+      return '<ul class="crp-lines crp-carries">' + rows.map(function (r) { return '<li><span class="crp-k">' + esc(r[0]) + '</span><span class="crp-v">' + esc(r[1]) + '</span></li>'; }).join('') + '</ul>';
+    }
+
     function resultFold(p) {
       var R = last, rows = T.terms(R), h = '<div class="crp-fold" aria-live="polite"><h4>Project roll: ' + esc(p.name) + '</h4><div class="crp-result">' +
         (R.dice.length ? '<div class="crp-dice" aria-label="The dice show ' + esc(R.dice.join(' and ')) + '">' + R.dice.map(function (d) { return '<span class="crp-die">' + d + '</span>'; }).join('') + '</div>' : '<div></div>') +
@@ -228,6 +290,7 @@
         '<div class="crp-outcome">' + progress(R.to, p.goal, R.from + ' → ' + R.to, p.name);
       h += befell(R, p.name, hero());
       if (R.finished && R.made) h += '<div class="crp-made">' + ICON.check + '<span>' + esc(p.name) + ' is made. ' + esc(R.made) + ' is in ' + esc(hero()) + '’s pack.</span></div>';
+      if (R.finished && R.made) h += carries(R.item);
       else if (R.finished) h += '<div class="crp-made is-warn"><span>' + esc(p.name) + ' is made.</span></div>';
       else if (!R.lost) h += '<p class="cra-fine">' + (p.goal - R.to) + ' more to go. ' + (p.rollsReady > 0 ? 'You have another roll ready.' : 'The next roll comes with the next respite.') + '</p>';
       return h + '</div></div><div class="crp-foot"><p class="cra-fine">' + esc(R.notes.join(' ')) + '</p>' +
@@ -378,9 +441,14 @@
       if (!r || busy) return;
       var picks = {};
       r.needs.forEach(function (m, i) { if ((!m.itemId || m.sub) && pick[i]) picks[i] = pick[i]; });
+      var chosen = {};
+      Object.keys(use).forEach(function (i) {
+        var list = Object.keys(use[i]).filter(function (id) { return use[i][id] > 0; }).map(function (id) { return {id: Number(id), n: use[i][id]}; });
+        if (list.length) chosen[i] = list;
+      });
       busy = true;
       render();
-      api('POST', '/characters/' + encodeURIComponent(eid) + '/projects', {recipeId: rid, picks: picks}).then(function (pv) {
+      api('POST', '/characters/' + encodeURIComponent(eid) + '/projects', {recipeId: rid, picks: picks, use: chosen}).then(function (pv) {
         busy = false;
         return load().then(function () {
           toast(r.name + ' started. ' + (pv.took ? pv.took + ' left ' + hero() + '’s pack.' : '') + (r.cost && D.pack.payKind === 'wealth' ? ' Wealth is never spent.' : ''));
@@ -409,8 +477,10 @@
       var act = b.getAttribute('data-act'), id = b.getAttribute('data-id');
       switch (act) {
         case 'menu': open = isOpen('menu', id) ? null : {kind: 'menu', id: id}; render(); focus('.crp-menu button'); break;
-        case 'start': open = isOpen('start', id) ? null : {kind: 'start', id: id}; pick = {}; render(); focus('[data-act="begin"]'); break;
+        case 'start': open = isOpen('start', id) ? null : {kind: 'start', id: id}; pick = {}; use = {}; render(); focus('[data-act="begin"]'); break;
         case 'begin': begin(id); break;
+        case 'kmore': step(id, 1); break;
+        case 'kless': step(id, -1); break;
         case 'bench': open = isOpen('bench', id) ? null : {kind: 'bench', id: id}; render(); break;
         case 'plain': roll(id, 'skipped', ''); break;
         case 'close': close(id); break;
@@ -422,7 +492,7 @@
     }
     function onChange(e) {
       var s = e.target.closest('[data-pick]');
-      if (s) pick[s.getAttribute('data-pick')] = s.value;
+      if (s) { var i = s.getAttribute('data-pick'); pick[i] = s.value; delete use[i]; render(); focus('#crk-pick-' + i); }
     }
     function outside(e) {
       if (open && open.kind === 'menu' && !e.target.closest('.crp-menu, [data-act="menu"]')) { open = null; render(); }
@@ -453,5 +523,5 @@
     }
   });
 
-  window.CraftingBlock = {held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: T.terms, costText: costText, befell: befell, standIns: standIns};
+  window.CraftingBlock = {keptOf: keptOf, keptName: keptName, held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: T.terms, costText: costText, befell: befell, standIns: standIns};
 })();

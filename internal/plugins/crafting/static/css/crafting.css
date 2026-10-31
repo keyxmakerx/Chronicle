@@ -453,6 +453,10 @@ html[data-motion="off"] .cra-dot { transition: none; }
 .crp-lines { display: flex; flex-direction: column; }
 .crp-lines li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--cra-line); }
 .crp-lines li:last-child { border-bottom: 0; }
+/* A remembered kind of a material, under its line in the start fold. */
+.crp-lines li.crp-kept { padding: 4px 0 4px 14px; border-bottom: 0; border-left: 2px solid var(--cra-line); margin-left: 4px; }
+.crp-kstep { display: inline-flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+.crp-kstep .btn { min-width: 28px; padding-left: 0; padding-right: 0; justify-content: center; }
 .crp-k { color: var(--cra-ink); min-width: 0; }
 .crp-k small { display: block; font-size: 12.5px; color: var(--cra-muted); }
 .crp-v { text-align: right; font-variant-numeric: tabular-nums; }
