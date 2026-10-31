@@ -266,6 +266,10 @@
 .erun-who { flex: 1 1 9em; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
 .erun-nm { font-weight: 600; overflow-wrap: anywhere; }
 .erun-x { font-size: 12.5px; color: var(--erun-muted); }
+/* What a creature's page leaves when it is down, from Crafting's drop lists. */
+.erun-drop { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; white-space: nowrap;
+  color: var(--erun-muted); background: color-mix(in srgb, var(--erun-ink) 6%, transparent); }
+.erun-drop.erun-has { color: var(--erun-acc); background: color-mix(in srgb, var(--erun-acc) 12%, transparent); }
 .erun-cond {
   all: unset; box-sizing: border-box; cursor: pointer; position: relative; display: inline-flex; align-items: center; gap: 4px; min-height: 24px;
   font-size: 11px; padding: 0 8px; border-radius: 999px;
@@ -296,6 +300,13 @@
 .erun-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .erun-confirm p { flex-basis: 100%; margin: 0; font-size: 12.5px; }
 .erun-status { font-size: 12.5px; color: var(--erun-muted); min-height: 1em; }
+/* The report of a fight just ended, above the encounters ready to run. */
+.erun-ended { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--erun-edge);
+  border-left: 3px solid var(--erun-acc); border-radius: 8px; }
+.erun-ended ul { margin: 0; padding-left: 1.1em; font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; }
+.erun-ended-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.erun-ended-foot .erun-note { flex: 1 1 12em; }
+a.erun-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .erun [hidden] { display: none !important; }
 @media (pointer: coarse) {
   .erun-btn, .erun-init, .erun-box, .erun-max, .erun-condin { min-height: 44px; }

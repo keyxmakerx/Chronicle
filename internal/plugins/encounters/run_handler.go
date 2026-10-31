@@ -75,14 +75,16 @@ func (h *RunHandler) Save(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-// End handles DELETE /campaigns/:id/encounter-run.
+// End handles DELETE /campaigns/:id/encounter-run, answering with what the
+// fight left.
 func (h *RunHandler) End(c echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
 	}
-	if err := h.svc.End(c.Request().Context(), cid, v); err != nil {
+	out, err := h.svc.End(c.Request().Context(), cid, v)
+	if err != nil {
 		return err
 	}
-	return c.NoContent(http.StatusNoContent)
+	return c.JSON(http.StatusOK, out)
 }

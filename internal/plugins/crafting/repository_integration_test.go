@@ -20,6 +20,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -376,5 +377,132 @@ func TestRepoIntegration_Projects(t *testing.T) {
 	_ = f.db.QueryRow(`SELECT COUNT(*) FROM crafting_rolls`).Scan(&rolls)
 	if left != 0 || rolls != 0 {
 		t.Fatalf("a deleted hero left %d projects and %d rolls", left, rolls)
+	}
+}
+
+func TestRepoIntegration_Spoils(t *testing.T) {
+	f := newRepoFixture(t)
+	ctx := context.Background()
+	store := f.repo.(SpoilStore)
+	troll, remnant, hide, tooth, mira := f.entity(t, "Troll"), f.entity(t, "Troll Remnant"), f.entity(t, "Troll hide"), f.entity(t, "Troll tooth"), f.entity(t, "Mira")
+
+	// A drop list: new at version 1, a second new one refused, an edit
+	// needs the version it read.
+	d := DropList{PageID: troll, Lines: []DropLine{{ItemID: tooth, Mode: DropTake, Qty: 2}, {ItemID: hide, Mode: DropHarvest, Stat: "agility", Yields: []int{1, 2, 3}}}}
+	if ok, err := store.SaveDrops(ctx, f.campaign, d, f.user, 0); err != nil || !ok {
+		t.Fatalf("create drops: %v %v", ok, err)
+	}
+	if ok, _ := store.SaveDrops(ctx, f.campaign, d, f.user, 0); ok {
+		t.Fatal("a second new list for one page was kept")
+	}
+	r := DropList{PageID: remnant, Also: troll, Lines: []DropLine{}}
+	if ok, err := store.SaveDrops(ctx, f.campaign, r, f.user, 0); err != nil || !ok {
+		t.Fatalf("create remnant drops: %v %v", ok, err)
+	}
+	r.Lines = []DropLine{{ItemID: hide, Mode: DropTake, Qty: 1}}
+	if ok, err := store.SaveDrops(ctx, f.campaign, r, f.user, 1); err != nil || !ok {
+		t.Fatalf("edit: %v %v", ok, err)
+	}
+	if ok, _ := store.SaveDrops(ctx, f.campaign, r, f.user, 1); ok {
+		t.Fatal("a stale edit was kept")
+	}
+	got, ok, err := store.GetDrops(ctx, f.campaign, remnant)
+	if err != nil || !ok || got.Version != 2 || got.Also != troll || len(got.Lines) != 1 {
+		t.Fatalf("get drops: %+v %v %v", got, ok, err)
+	}
+	if _, ok, _ := store.GetDrops(ctx, f.other, remnant); ok {
+		t.Fatal("drops read through another campaign")
+	}
+	byPage, err := store.DropsFor(ctx, f.campaign, []string{troll, remnant, mira})
+	if err != nil || len(byPage) != 2 || !reflect.DeepEqual(byPage[troll].Lines, d.Lines) {
+		t.Fatalf("drops for: %+v %v", byPage, err)
+	}
+	if all, err := store.ListDrops(ctx, f.campaign, 10); err != nil || len(all) != 2 {
+		t.Fatalf("list drops: %+v %v", all, err)
+	}
+
+	// Two trolls drop; the tray lists them oldest first with their lines.
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	lines := []SpoilLine{{ItemID: tooth, ItemName: "Troll tooth", Mode: DropTake, Qty: 2},
+		{ItemID: hide, ItemName: "Troll hide", Mode: DropHarvest, Stat: "agility", Yields: [3]int{1, 2, 3}}}
+	s1 := Spoil{ID: newUUID(t), PageID: troll, PageName: "Troll", Copy: 1, Copies: 2, Origin: "Bridge ambush", CreatedBy: f.user, CreatedAt: at, Lines: lines}
+	s2 := s1
+	s2.ID, s2.Copy = newUUID(t), 2
+	if err := store.AddSpoils(ctx, f.campaign, []Spoil{s1, s2}); err != nil {
+		t.Fatalf("add spoils: %v", err)
+	}
+	if n, _ := store.CountWaiting(ctx, f.campaign); n != 4 {
+		t.Fatalf("waiting %d, want 4", n)
+	}
+	tray, err := store.ListTray(ctx, f.campaign)
+	if err != nil || len(tray) != 2 || tray[0].ID != s1.ID || tray[1].Copy != 2 || len(tray[0].Lines) != 2 {
+		t.Fatalf("tray: %+v %v", tray, err)
+	}
+	h := tray[0].Lines[1]
+	if h.Mode != DropHarvest || h.Yields != [3]int{1, 2, 3} || h.Stat != "agility" || h.Status != SpoilWaiting {
+		t.Fatalf("harvest line: %+v", h)
+	}
+	if other, _ := store.ListTray(ctx, f.other); len(other) != 0 {
+		t.Fatal("the tray was read through another campaign")
+	}
+
+	// A claim wins once; a release puts it back; the history lists it.
+	rolled := 13
+	if ok, err := store.ClaimLine(ctx, f.campaign, h.ID, mira, f.user, 2, &rolled, at.Add(time.Hour)); err != nil || !ok {
+		t.Fatalf("claim: %v %v", ok, err)
+	}
+	if ok, _ := store.ClaimLine(ctx, f.campaign, h.ID, mira, f.user, 2, &rolled, at); ok {
+		t.Fatal("a line was claimed twice")
+	}
+	if ok, _ := store.ClaimLine(ctx, f.other, tray[0].Lines[0].ID, mira, f.user, 2, nil, at); ok {
+		t.Fatal("a line was claimed through another campaign")
+	}
+	taken, err := store.ListTaken(ctx, f.campaign, 5)
+	if err != nil || len(taken) != 1 || taken[0].CharacterID != mira || *taken[0].Rolled != 13 || taken[0].TakenQty != 2 {
+		t.Fatalf("taken: %+v %v", taken, err)
+	}
+	if err := store.ReleaseLine(ctx, f.campaign, h.ID); err != nil {
+		t.Fatal(err)
+	}
+	if l, _, _ := store.GetLine(ctx, f.campaign, h.ID); l.Status != SpoilWaiting || l.Rolled != nil || l.CharacterID != "" {
+		t.Fatalf("released line: %+v", l)
+	}
+
+	// Clearing: a line, a spoil, the tray; each counts what it cleared.
+	if n, err := store.ClearLine(ctx, f.campaign, h.ID); err != nil || n != 1 {
+		t.Fatalf("clear line: %d %v", n, err)
+	}
+	if n, _ := store.ClearLine(ctx, f.campaign, h.ID); n != 0 {
+		t.Fatal("a cleared line cleared again")
+	}
+	if n, err := store.ClearSpoil(ctx, f.campaign, s1.ID); err != nil || n != 1 {
+		t.Fatalf("clear spoil: %d %v", n, err)
+	}
+	if n, err := store.ClearTray(ctx, f.other); err != nil || n != 0 {
+		t.Fatalf("clear another campaign's tray: %d %v", n, err)
+	}
+	if n, err := store.ClearTray(ctx, f.campaign); err != nil || n != 2 {
+		t.Fatalf("clear tray: %d %v", n, err)
+	}
+	if tray, _ := store.ListTray(ctx, f.campaign); len(tray) != 0 {
+		t.Fatalf("tray after clearing: %+v", tray)
+	}
+
+	// Deleting the troll's page takes its list, keeps the spoils' names,
+	// and leaves the Remnant's "also" empty.
+	if _, err := f.db.ExecContext(ctx, `DELETE FROM entities WHERE id = ?`, troll); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := store.GetDrops(ctx, f.campaign, troll); ok {
+		t.Fatal("a deleted page's drop list stayed")
+	}
+	if got, _, _ := store.GetDrops(ctx, f.campaign, remnant); got.Also != "" {
+		t.Fatalf("remnant still drops a deleted page: %+v", got)
+	}
+	if err := store.DeleteDrops(ctx, f.campaign, remnant); err != nil {
+		t.Fatal(err)
+	}
+	if all, _ := store.ListDrops(ctx, f.campaign, 10); len(all) != 0 {
+		t.Fatalf("drops after delete: %+v", all)
 	}
 }

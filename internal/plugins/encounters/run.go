@@ -1,6 +1,7 @@
 package encounters
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -74,6 +75,70 @@ type RunView struct {
 	Version    int         `json:"version"`
 	Ready      []Summary   `json:"ready"`
 	StatBlocks []StatBlock `json:"statBlocks"`
+	// Leaves says, by page, what a creature will leave when the fight ends
+	// ("Has a drop list"), as the fight listener tells it; empty without one.
+	Leaves map[string]string `json:"leaves,omitempty"`
+}
+
+// EndedFight is a fight as it stood when the DM ended it.
+type EndedFight struct {
+	Name      string
+	Creatures []EndedCreature
+}
+
+// EndedCreature is one creature row of an ended fight: its page ("" for a
+// row with none), how many copies it had and how many were at 0 hit points
+// or less, read as the Fight tab draws a box down (an untouched copy is at
+// its full hit points). A creature still waiting to come in was never down.
+type EndedCreature struct {
+	EntityID string
+	Name     string
+	Copies   int
+	Down     int
+}
+
+// EndReport is what the Fight tab shows once a fight is over: a line per
+// creature from the fight listener, and where to go to see what was left.
+type EndReport struct {
+	Name     string   `json:"name"`
+	Lines    []string `json:"lines"`
+	Link     string   `json:"link,omitempty"`
+	LinkText string   `json:"linkText,omitempty"`
+	Note     string   `json:"note,omitempty"`
+}
+
+// FightListener hears about fights for another app: what each creature's
+// page will leave, and a fight that ended. It is implemented in
+// internal/app, so encounters never imports the app that listens.
+type FightListener interface {
+	// Leaves gives a short note per page, nil when there is nothing to
+	// say. A note beginning "No " says the page leaves nothing, and the tab
+	// draws it plain rather than marked.
+	Leaves(ctx context.Context, campaignID string, v Viewer, pageIDs []string) (map[string]string, error)
+	FightEnded(ctx context.Context, campaignID string, v Viewer, f EndedFight) (*EndReport, error)
+}
+
+// endedFight reads which creatures were down when the fight ended.
+func endedFight(run *Run) EndedFight {
+	f := EndedFight{Name: run.Name, Creatures: []EndedCreature{}}
+	for _, l := range run.Lines {
+		if l.Kind != LineCreature {
+			continue
+		}
+		c := EndedCreature{EntityID: l.EntityID, Name: l.Name, Copies: len(l.HP)}
+		if !l.Waiting {
+			for _, hp := range l.HP {
+				if hp == nil {
+					hp = l.Max
+				}
+				if hp != nil && *hp <= 0 {
+					c.Down++
+				}
+			}
+		}
+		f.Creatures = append(f.Creatures, c)
+	}
+	return f
 }
 
 // RunSave is a save body: the whole run and the version it was read at.

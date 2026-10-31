@@ -13,14 +13,18 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
-// ProjectDeps are what projects need beyond recipes: where they are kept,
-// the Armory, the hero's sheet, the calendar, who hears of a respite and the
-// roll log. Store and Armory are required for projects; Sheets, Days, Respite
-// and Rolls may be nil (no characteristic is added, no calendar rule is on,
-// no Homebrew rule runs, no roll reaches the log). Roll and Now are for tests.
+// ProjectDeps are what projects and spoils need beyond recipes: where they
+// are kept, the Armory, the campaign's pages, the hero's sheet, the
+// calendar, who hears of a respite and the roll log. Store and Armory are
+// required for projects, Spoils, Armory and Pages for spoils; Sheets, Days,
+// Respite and Rolls may be nil (no characteristic is added, no calendar rule
+// is on, no Homebrew rule runs, no roll reaches the log). Roll and Now are
+// for tests.
 type ProjectDeps struct {
 	Store  ProjectStore
 	Armory Armory
+	Spoils SpoilStore
+	Pages  Pages
 	Sheets Sheets
 	Days   Days
 	// Calendar names the default calendar as the viewer sees it, which
@@ -297,6 +301,11 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 	}
 	for _, b := range benches {
 		out.Benches = append(out.Benches, BenchPlay{ID: b.ID, Name: b.Name, Kind: b.Kind, Desk: rawOrNil(b.Desk), Journal: rawOrNil(b.Journal)})
+	}
+	if s.spoilsReady() == nil {
+		if out.Spoils, err = s.trayViews(ctx, campaignID, v, names, tags, rules); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }

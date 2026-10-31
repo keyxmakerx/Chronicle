@@ -1,8 +1,10 @@
 /**
  * crafting_block.js -- the Crafting block on a character page (data-widget="crafting-block")
  *
- * The hero's projects in progress and the recipes they know, laid out as the
- * signed Crafting projects mockup. Starting a project, working it and every
+ * The party's spoils tray, the hero's projects in progress and the recipes
+ * they know, laid out as the signed Crafting projects and Crafting Spoils
+ * mockups. Taking or harvesting a spoil goes to the server, which rolls a
+ * harvest's test and puts what it pays in the hero's pack. Starting a project, working it and every
  * roll go to the server, which takes the materials and cost through the
  * Armory, rolls the dice and reads the recipe's rules; the block shows what
  * it answered, and throws Chronicle's dice on the server's numbers. The
@@ -14,7 +16,7 @@
  */
 (function () {
   'use strict';
-  var L = window.CraftingLib, esc = L.esc, progress = L.progress;
+  var L = window.CraftingLib, T = window.CraftingTray, esc = L.esc, progress = L.progress;
   // What the server says in place of a secret rule (verdict.go ruleWords).
   var HIDDEN = 'A rule the Director keeps hidden';
   var ICON = {
@@ -91,9 +93,6 @@
     return w + ' (the recipe’s rule). ' + (today ? 'Today is ' + today + ', so the roll waits.' : 'So the roll waits.');
   }
   /* What a roll's terms are, as the result lists them. */
-  function termRows(res) {
-    return res.terms.map(function (t, i) { return {text: t.text, n: i === 0 || t.n === 0 ? String(t.n) : signed(t.n)}; });
-  }
 
   /* ---------- The block ---------- */
 
@@ -104,7 +103,7 @@
   function mount(el, cfg) {
     var cid = String(cfg.campaignId || ''), eid = String(cfg.entityId || '');
     var base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
-    var D = null, open = null, pick = {}, last = null, busy = false, dead = false, benchEl = null, toastT = 0;
+    var D = null, open = null, pick = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0;
 
     /* JSON in and out; a refusal rejects with the server's own words. */
     function api(method, path, body) {
@@ -199,7 +198,7 @@
     }
 
     function resultFold(p) {
-      var R = last, rows = termRows(R), h = '<div class="crp-fold" aria-live="polite"><h4>Project roll: ' + esc(p.name) + '</h4><div class="crp-result">' +
+      var R = last, rows = T.terms(R), h = '<div class="crp-fold" aria-live="polite"><h4>Project roll: ' + esc(p.name) + '</h4><div class="crp-result">' +
         (R.dice.length ? '<div class="crp-dice" aria-label="The dice show ' + esc(R.dice.join(' and ')) + '">' + R.dice.map(function (d) { return '<span class="crp-die">' + d + '</span>'; }).join('') + '</div>' : '<div></div>') +
         '<ul class="crp-terms">' + rows.map(function (t) { return '<li><span>' + esc(t.text) + '</span><span>' + esc(t.n) + '</span></li>'; }).join('') +
         '<li class="is-tot"><span>Project points</span><span>+' + R.total + '</span></li></ul>' +
@@ -211,12 +210,35 @@
         '<button type="button" class="btn btn-secondary btn-sm" data-act="close" data-id="' + esc(p.id) + '">Done</button></div></div>';
     }
 
+    /* ---------- The spoils tray ---------- */
+
+    function spoilActs(l) {
+      if (got && isOpen('harvest', String(l.id))) return '<span class="crp-pill is-ok">Harvested</span>';
+      var harvest = l.mode === 'harvest';
+      return '<button type="button" class="btn ' + (harvest ? 'btn-primary' : 'btn-secondary') + ' btn-sm" data-act="take" data-id="' + l.id + '"' + (busy ? ' disabled' : '') +
+        ' aria-label="' + esc((harvest ? 'Harvest ' : 'Take ') + l.name + ' for ' + hero()) + '">' + (harvest ? 'Harvest' : 'Take') + '</button>';
+    }
+
+    function harvestFold(l) {
+      return got && isOpen('harvest', String(l.id)) ? T.result(got, l.id, 'Harvest: ' + got.item) : '';
+    }
+
+    function spoils() {
+      if (!D.spoils || !D.spoils.length) return '';
+      return '<p class="cra-fine">Spoils from the party’s fights wait here until someone takes them. Take a thing as it is, or harvest it with a test that adds a characteristic from ' +
+        esc(hero()) + '’s sheet: the better the roll, the more ' + esc(hero()) + ' gets.</p><h4 class="crp-sub">Spoils to take</h4><div class="crs-tray">' +
+        D.spoils.map(function (sp) {
+          return T.card(sp, {acts: spoilActs, fold: harvestFold, hit: function (l) { return got && isOpen('harvest', String(l.id)) ? got.tier || 0 : -1; }});
+        }).join('') + '</div>';
+    }
+
     function render() {
       unmountBench();
-      var ready = 0;
+      var ready = 0, waiting = T.count(D.spoils);
       D.projects.forEach(function (p) { if (p.status === 'active' && !p.waits) ready += p.rollsReady; });
       var h = '<div class="cra crp"><div class="crp-head"><h3 class="cb-head"><i class="fa-solid fa-flask" aria-hidden="true"></i> Crafting</h3>' +
-        (ready ? '<span class="crp-pill is-ok">' + plural(ready, 'roll', 'rolls') + ' ready</span>' : '') + '</div>' +
+        (waiting ? '<span class="crp-pill">' + waiting + ' to take</span>' : '') +
+        (ready ? '<span class="crp-pill is-ok">' + plural(ready, 'roll', 'rolls') + ' ready</span>' : '') + '</div>' + spoils() +
         '<p class="cra-fine">Each project gets one roll for every respite the Director logs.' + (D.today ? ' Today is ' + esc(D.today) + '.' : '') + '</p>' +
         '<h4 class="crp-sub">In progress</h4><ul class="crp-rows">' +
         (D.projects.length ? D.projects.map(projectRow).join('') : '<li class="crp-empty">No projects yet. Start one from a recipe below.</li>') + '</ul>' +
@@ -272,23 +294,8 @@
       Chronicle.mountWidget(benchEl);
     }
 
-    /* The server's dice, thrown on screen: the terms and what they did wait
-       until the dice land, and show anyway if the throw can't happen. */
-    function throwDice(res, name) {
-      var dice = window.Chronicle && Chronicle.dice, fold = el.querySelector('.crp-result');
-      if (!fold || !res.dice.length || !dice || typeof dice.roll !== 'function') return;
-      var parts = fold.querySelectorAll('.crp-dice, .crp-terms, .crp-outcome'), shown = false;
-      function show() { if (shown) return; shown = true; Array.prototype.forEach.call(parts, function (x) { x.style.visibility = ''; }); }
-      Array.prototype.forEach.call(parts, function (x) { x.style.visibility = 'hidden'; });
-      setTimeout(show, 8000);
-      Promise.resolve().then(function () {
-        return dice.roll([{label: name, dice: res.dice.map(function (v) { return {sides: res.sides, value: v, crit: 'none'}; })}], {
-          from: fold,
-          describe: function (g, values) { return name + ': ' + (values || []).join(' and ') + ', ' + res.total + ' project points.'; },
-          onSettle: show
-        });
-      }).then(show, show);
-    }
+    /* The server's dice, thrown on screen (CraftingTray.throwDice). */
+    function throwDice(res, name, said) { T.throwDice(el.querySelector('.crp-result'), res, name, said); }
 
     function focus(sel) { setTimeout(function () { var f = el.querySelector(sel); if (f) f.focus(); }, 0); }
 
@@ -314,6 +321,31 @@
         // A held roll or a stale project: show where things stand now.
         if (err.status === 409) load().catch(fail);
         else if (benchEl && benchEl._crb && benchEl._crb.retry) benchEl._crb.retry();
+      });
+    }
+
+    /* Takes a spoil for this hero; a harvest shows its test where the line
+       was until Done, then the tray reloads. */
+    function take(lid) {
+      if (busy) return;
+      busy = true;
+      render();
+      api('POST', '/spoil-lines/' + encodeURIComponent(lid) + '/take', {characterId: eid}).then(function (res) {
+        busy = false;
+        if (dead) return;
+        if (!res.dice || !res.dice.length) {
+          return load().then(function () { toast(res.got === 'nothing' ? 'That paid nothing.' : res.got + ' went to ' + res.hero + '’s pack.'); });
+        }
+        got = res;
+        open = {kind: 'harvest', id: String(lid)};
+        render();
+        throwDice(res, 'Harvest: ' + res.item, 'a test of ' + res.total);
+        focus('[data-act="sdone"]');
+      }, function (err) {
+        busy = false;
+        if (dead) return;
+        toast(err.message);
+        load().catch(fail);
       });
     }
 
@@ -360,6 +392,8 @@
         case 'close': close(id); break;
         case 'askcancel': open = {kind: 'confirm', id: id}; render(); focus('[data-act="cancel"]'); break;
         case 'cancel': open = null; cancel(id); break;
+        case 'take': take(id); break;
+        case 'sdone': open = null; got = null; load().catch(fail); break;
       }
     }
     function onChange(e) {
@@ -384,7 +418,7 @@
 
   Chronicle.register('crafting-block', {
     init: function (el, cfg) {
-      if (!window.CraftingLib) {
+      if (!window.CraftingLib || !window.CraftingTray) {
         el.innerHTML = '<p class="text-sm text-fg-muted" role="status">Crafting couldn’t load. Reload the page to try again.</p>';
         return;
       }
@@ -395,5 +429,5 @@
     }
   });
 
-  window.CraftingBlock = {held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: termRows, costText: costText};
+  window.CraftingBlock = {held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: T.terms, costText: costText};
 })();

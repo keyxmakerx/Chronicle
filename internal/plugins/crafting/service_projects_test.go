@@ -3,6 +3,7 @@ package crafting
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -89,6 +90,7 @@ type fakeArmory struct {
 	gold     int64
 	spent    [][]PackItem
 	given    map[string]int
+	spoils   []string
 	failGive bool
 }
 
@@ -134,6 +136,13 @@ func (a *fakeArmory) Give(_ context.Context, _ string, _ Viewer, _, itemID strin
 		return errors.New("pack is gone")
 	}
 	a.given[itemID] += qty
+	return nil
+}
+func (a *fakeArmory) GiveSpoil(_ context.Context, _ string, _ Viewer, characterID, itemID string, qty int, harvested bool) error {
+	if a.failGive {
+		return errors.New("pack is gone")
+	}
+	a.spoils = append(a.spoils, fmt.Sprintf("%s %s %d %v", characterID, itemID, qty, harvested))
 	return nil
 }
 

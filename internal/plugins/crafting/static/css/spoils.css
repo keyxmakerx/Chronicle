@@ -1,0 +1,70 @@
+/* spoils.css: the spoils tray on the Crafting block and the Director's
+ * Spoils tab (crafting_block.js, crafting_spoils.js), as the signed Crafting
+ * Spoils mockup. It reuses crafting.css's tokens: a card per thing that
+ * dropped, a line per item, and a harvest's three tiers as chips, the one it
+ * landed in lit green. */
+
+/* A tray is a card per thing that dropped; each card lists its lines. */
+.crs-tray { display: flex; flex-direction: column; gap: 10px; }
+.crs-spoil { border: 1px solid var(--cra-line); border-radius: var(--cra-r); background: var(--cra-panel); min-width: 0; }
+.crs-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--cra-line);
+  background: var(--cra-tint); border-radius: var(--cra-r) var(--cra-r) 0 0; }
+.crs-head b { color: var(--cra-ink); font-weight: 600; font-size: 14.5px; }
+.crs-head b small { font-size: 12.5px; font-weight: 500; color: var(--cra-muted); margin-left: 4px; }
+.crs-head .cra-fine { margin-right: auto; }
+.crs-head .crp-acts { flex-wrap: nowrap; }
+/* The card's menu opens leftward from its button at the card's right edge,
+   on a phone too. */
+.crs-head .crp-menu { left: auto; right: 0; }
+.crs-lines > li + li { border-top: 1px solid var(--cra-line); }
+.crs-line { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.5fr) auto; gap: 8px 16px; align-items: center; padding: 10px 14px; }
+.crs-it { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.crs-it b { color: var(--cra-ink); font-weight: 500; }
+.crs-it .is-unseen { font-style: italic; font-weight: 400; }
+.crs-how { font-size: 12.5px; color: var(--cra-muted); min-width: 0; }
+.crs-line .crp-acts { flex-wrap: wrap; }
+.crs-line .crp-acts select { max-width: 180px; }
+.crs-tiers { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; }
+.crs-tier { display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--cra-line);
+  font-size: 12px; color: var(--cra-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.crs-tier b { color: var(--cra-ink); font-weight: 600; }
+.crs-tier.is-hit { border-color: var(--cra-ok); background: rgb(var(--color-ok-rgb, 22 163 74) / .12); color: var(--cra-ok); }
+.crs-tier.is-hit b { color: var(--cra-ok); }
+.crs-gone { padding: 10px 14px; font-size: 12.5px; color: var(--cra-muted); font-style: italic; }
+
+/* The Director's tab: putting spoils in by hand, the drop lists and their
+   editor, unfolded under its row. */
+.crs-put { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 14px 16px; border: 1px dashed var(--cra-field-line);
+  border-radius: var(--cra-r); background: var(--cra-panel); }
+.crs-put label { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--cra-ink); }
+.crs-put .num { width: 72px; }
+.crs-put .cra-fine { flex: 1 1 100%; }
+.crs-confirm { border: 1px solid var(--cra-line); border-radius: var(--cra-r); }
+.crs-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--cra-line); border-radius: var(--cra-r); background: var(--cra-panel); }
+.crs-card > .crp-head h3 { font-size: 15px; font-weight: 600; color: var(--cra-ink); margin-right: auto; }
+.crs-add { position: relative; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.crs-add .cra-in { flex: 1 1 240px; max-width: 360px; }
+.crs-found { position: absolute; left: 0; top: calc(100% + 4px); z-index: 25; min-width: 260px; max-width: 100%; max-height: 260px; overflow-y: auto; padding: 6px;
+  display: flex; flex-direction: column; background: var(--cra-panel); border: 1px solid var(--cra-line); border-radius: var(--cra-r); box-shadow: var(--cra-lift); }
+.crs-found[hidden] { display: none; }
+.crs-found button { display: flex; justify-content: space-between; gap: 12px; min-height: 36px; padding: 8px 10px; border: 0; border-radius: 6px; background: none;
+  font: inherit; font-size: 13.5px; text-align: left; color: var(--cra-ink); cursor: pointer; }
+.crs-found button:hover, .crs-found button:focus-visible { background: var(--cra-tint); outline: none; }
+.crs-found button small { color: var(--cra-muted); }
+.crs-found p { padding: 8px 10px; }
+.crs-dl { display: flex; flex-direction: column; gap: 12px; padding: 14px; background: var(--cra-tint); }
+.crs-dl-row { display: grid; grid-template-columns: minmax(150px, 1.3fr) minmax(130px, auto) minmax(0, 2fr) auto; gap: 8px 12px; align-items: center;
+  padding: 10px 12px; border: 1px solid var(--cra-line); border-radius: var(--cra-r); background: var(--cra-panel); }
+.crs-yields { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; }
+.crs-yields label { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--cra-muted); }
+.crs-ytiers { display: flex; gap: 8px 12px; flex-wrap: wrap; }
+.crs-dl-row .num { width: 64px; }
+.crs-also { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--cra-ink); }
+.crs-dl-foot { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.crs-dl-foot .cra-fine { margin-right: auto; }
+
+@media (max-width: 720px) {
+  .crs-line, .crs-dl-row { grid-template-columns: minmax(0, 1fr); }
+  .crs-line .crp-acts { justify-content: flex-start; flex-wrap: nowrap; }
+  .crs-line .crp-acts select { min-width: 0; flex: 1 1 auto; }
+}

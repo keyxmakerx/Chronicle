@@ -12,6 +12,7 @@ import (
 templ CraftingPage(cc *campaigns.CampaignContext, director bool, calendarID string) {
 	@layouts.App(cc.Campaign.Name + " - Crafting") {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/crafting.css") }/>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/spoils.css") }/>
 		<div class="mb-4">
 			<h1 class="text-2xl font-bold text-fg">
 				<i class="fa-solid fa-flask mr-2 text-fg-muted" aria-hidden="true"></i>Crafting

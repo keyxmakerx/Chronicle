@@ -149,6 +149,10 @@ func (a *craftingArmoryAdapter) Give(ctx context.Context, campaignID string, v c
 	return a.stash.CraftGive(ctx, campaignID, craftingActor(v), characterID, itemID, qty, label)
 }
 
+func (a *craftingArmoryAdapter) GiveSpoil(ctx context.Context, campaignID string, v crafting.Viewer, characterID, itemID string, qty int, harvested bool) error {
+	return a.stash.SpoilGive(ctx, campaignID, craftingActor(v), characterID, itemID, qty, harvested)
+}
+
 // craftingSheetsAdapter reads a characteristic from a character's sheet
 // fields, only for a page of the campaign asked about.
 type craftingSheetsAdapter struct {
