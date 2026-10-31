@@ -333,7 +333,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "pinned_pages", Label: "Pinned Pages", Icon: "fa-thumbtack",
-		Description: "Hand-picked entity cards",
+		Description: "Pages pinned for everyone; on a campaign home, each viewer's starred pages too",
 		Contexts:    []string{"dashboard"},
 	}, nil)
 

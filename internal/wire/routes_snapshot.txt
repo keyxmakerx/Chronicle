@@ -742,6 +742,8 @@ PUT	/campaigns/:id/entities/:eid/owner	session	plugins/entities.(*Handler).Assig
 GET	/campaigns/:id/entities/:eid/peek	public-capable	plugins/entities.(*Handler).Peek	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/entities/:eid/permissions	session	plugins/entities.(*Handler).GetPermissionsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireCapability
 PUT	/campaigns/:id/entities/:eid/permissions	session	plugins/entities.(*Handler).SetPermissionsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireCapability
+GET	/campaigns/:id/entities/:eid/pin	session	plugins/entities.(*PagePinHandler).PinButton	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+POST	/campaigns/:id/entities/:eid/pin	session	plugins/entities.(*PagePinHandler).SetPin	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 POST	/campaigns/:id/entities/:eid/places	session	plugins/entities.(*Handler).AddPlaceAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole > plugins/entities.(*Handler).requirePageWrite
 DELETE	/campaigns/:id/entities/:eid/places/:pid	session	plugins/entities.(*Handler).RemovePlaceAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole > plugins/entities.(*Handler).requirePageWrite
 GET	/campaigns/:id/entities/:eid/player-notes	session	plugins/entities.(*Handler).GetPlayerNotes	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
@@ -1013,6 +1015,9 @@ GET	/campaigns/:id/pages/:eid/encounters	session	plugins/encounters.(*Handler).L
 POST	/campaigns/:id/pages/:eid/encounters	session	plugins/encounters.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+GET	/campaigns/:id/pinned-pages	public-capable	plugins/entities.(*PagePinHandler).Widget	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
+DELETE	/campaigns/:id/pinned-pages/everyone/:eid	session	plugins/entities.(*PagePinHandler).UnpinShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+DELETE	/campaigns/:id/pinned-pages/mine/:eid	session	plugins/entities.(*PagePinHandler).UnpinOwn	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/plugins	session	plugins/campaigns.(*Handler).PluginHub	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/plugins/fragment	session	plugins/campaigns.(*Handler).PluginHubFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/proposals	session	plugins/sessions.(*Handler).ListProposals	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole

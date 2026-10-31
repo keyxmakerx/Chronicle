@@ -7,8 +7,8 @@ Plugins run in a sandboxed environment powered by Extism/wazero, with
 capability-based security controlling which host functions are available.
 
 Plugins can:
-- Declare hooks for entity, calendar, tag and campaign events (only
-  `campaign.deleted` fires today, see "Hooks" below)
+- Hear page, tag and campaign events through hooks (calendar hooks are
+  declared but do not fire yet, see "Hooks" below)
 - Read and write entities, tags, calendar events, and relations
 - Store per-plugin data in a key-value store
 - Send messages to other plugins
@@ -59,10 +59,9 @@ Plugins can:
 functions return an error instead of data and the hooks never fire, until
 they are rewired to the calendar service.
 
-**Plugins load when a campaign enables their extension, not at startup
-(#1325).** After a server restart every call answers "plugin not loaded", and
-admin reload fails for the same reason, until the campaign owner turns the
-extension off and on again.
+**When plugins load.** A plugin loads when a campaign enables its extension,
+and again at every server start for each active extension that at least one
+campaign has enabled.
 
 ## Capabilities
 
@@ -84,10 +83,15 @@ exposed to the WASM runtime.
 
 ## Host Function Reference
 
+Every host function that returns something answers with an envelope:
+`{"data": <result>}` on success or `{"error": "..."}` on failure. The outputs
+below are what sits inside `data`.
+
 ### chronicle_log
 Log a message to the Chronicle server log.
-- Input: `string` (max 4096 chars, truncated if longer)
-- Output: `"ok"`
+- Input: `{"level": "info|warn|error", "message": "..."}` (message truncated
+  past 1024 characters)
+- Output: none (the import returns nothing)
 
 ### get_entity
 Get entity details by ID.
@@ -157,13 +161,15 @@ Create a relation between two entities.
 ### kv_get
 Read a value from the plugin's KV store.
 - Input: `{"key": "..."}`
-- Output: `{"value": "..."}` or `{"value": null}` if not found
+- Output: the stored JSON value, or `null` if not found
 
 ### kv_set
 Write a value to the plugin's KV store.
-- Input: `{"key": "...", "value": "..."}`
+- Input: `{"key": "...", "value": <any JSON>}`
 - Output: `{"ok": true}`
 - Max value: 64 KB
+- Send the value as JSON, not as a string holding JSON: `kv_get` returns
+  exactly what was stored.
 
 ### kv_delete
 Delete a key from the plugin's KV store.
@@ -194,20 +200,23 @@ When an event fires, Chronicle calls the plugin's `on_hook` export with:
 Event details (an entity id, for instance) are inside `payload`, not at the
 top level.
 
-| Hook | Fires When |
-|---|---|
-| `entity.created` | New entity created (dormant: nothing calls the dispatcher, #1325) |
-| `entity.updated` | Entity modified (dormant, #1325) |
-| `entity.deleted` | Entity deleted (dormant, #1325) |
-| `calendar.event_created` | Calendar event created (currently dormant — nothing calls the dispatcher, see the note above) |
-| `calendar.event_updated` | Calendar event modified (currently dormant) |
-| `calendar.event_deleted` | Calendar event deleted (currently dormant) |
-| `tag.added` | Tag applied to entity (dormant, #1325) |
-| `tag.removed` | Tag removed from entity (dormant, #1325) |
-| `campaign.deleted` | Campaign deleted (the one hook that fires today) |
+| Hook | Fires when | `payload` |
+|---|---|---|
+| `entity.created` | A page is created | `{"entity_id", "name", "entity_type_id"}` |
+| `entity.updated` | A page changes (words, fields, picture, visibility, …) | same |
+| `entity.deleted` | A page is deleted or moved to Trash, once per page in the subtree | same |
+| `tag.added` | A tag is put on a page | `{"entity_id", "tag_id", "tag_name"}` |
+| `tag.removed` | A tag is taken off a page | same |
+| `campaign.deleted` | A campaign is deleted | `{}` |
+| `calendar.event_*` | Never yet: the calendar is being rebuilt (see the note above) | — |
 
 Hook dispatch is async (fire-and-forget). The hook handler's return value is
 logged but does not affect the triggering operation.
+
+A write a plugin makes through a host function (`update_entity_fields`,
+`set_entity_tags`) is not announced as a hook, to any plugin. Without that, a
+plugin that updates a page on `entity.updated` would hear its own write and
+loop.
 
 ## Building Plugins
 
@@ -234,7 +243,7 @@ target = "wasm32-unknown-unknown"
 cargo build --release
 ```
 
-See `extensions/example-wasm-rust/` for a complete example.
+`extensions/example-wasm-rust/` shows the shape but does not build or match the host contract yet (#1878).
 
 ### Go / TinyGo
 
@@ -255,9 +264,8 @@ Host imports must match the host's signatures exactly: `chronicle_log` takes
 one offset and returns nothing, so a Go declaration with a result fails to
 instantiate.
 
-`extensions/example-wasm-go/` shows the shape but does not load as written:
-its `chronicle_log` import declares a result and it reads `entity_id` at the
-top level of the hook input (#1325).
+See `extensions/example-wasm-go/` for a complete example that loads, hears
+page hooks and keeps a log in its KV store.
 
 ### Other Languages
 
@@ -305,7 +313,7 @@ Use the Go SDK mock for integration testing of host function calls.
 | Memory | 16 MB | 256 MB |
 | Timeout | 30s | 300s |
 | KV value size | — | 64 KB |
-| Log message | — | 4096 chars |
+| Log message | — | 1024 chars |
 | Write payloads | — | 64-256 KB |
 
 ## API Endpoints

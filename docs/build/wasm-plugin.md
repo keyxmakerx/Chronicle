@@ -57,7 +57,7 @@ func greet() int32 {
 		pdk.SetError(err)
 		return 1
 	}
-	msg := pdk.AllocateString("greeting " + in.Name)
+	msg := pdk.AllocateString(`{"level":"info","message":"greeted someone"}`)
 	chronicleLog(msg.Offset())
 	_ = pdk.OutputJSON(map[string]string{"message": "Hello, " + in.Name})
 	return 0
@@ -75,12 +75,14 @@ GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o dist/hello.wasm .
 
 Without `-buildmode=c-shared` the plugin loads but every call fails with
 `runtime.notInitialized`. This example was built with Go 1.27 and called
-through Chronicle's plugin manager. The repo's `extensions/example-wasm-go`
-does not load as shipped (#1325).
+through Chronicle's plugin manager. `extensions/example-wasm-go` is a fuller
+one (hooks and the KV store) checked the same way.
 
-Every other host function takes a pointer to JSON and returns a pointer to
-JSON (`func getEntity(offset uint64) uint64`); read the result with
-`pdk.FindMemory(ptr).ReadBytes()`.
+`chronicle_log` takes JSON `{"level", "message"}`. Every other host function
+takes a pointer to JSON and returns a pointer to JSON
+(`func getEntity(offset uint64) uint64`); read the result with
+`pdk.FindMemory(ptr).ReadBytes()`. It is `{"data": …}` on success and
+`{"error": "…"}` on failure.
 
 ## Capabilities
 
@@ -101,9 +103,11 @@ Input and output shapes per function: [`.ai/plugin-development.md`](../../.ai/pl
 ## Hooks
 
 List event names in `hooks` and export `on_hook`; it receives
-`{"type", "campaign_id", "payload", "timestamp"}`. Today only
-`campaign.deleted` is ever sent; `entity.*` and `tag.*` are accepted but not
-dispatched yet (#1325).
+`{"type", "campaign_id", "payload", "timestamp"}`. `entity.*` and `tag.*` fire
+on every page and tag change, `campaign.deleted` when a campaign goes;
+`calendar.*` waits for the calendar rebuild (#778). A write the plugin makes
+itself through a host function is not sent back to it, or to any plugin.
+Payloads: [`.ai/plugin-development.md`](../../.ai/plugin-development.md#hooks).
 
 ## Install, call and test
 
@@ -122,5 +126,5 @@ dispatched yet (#1325).
    loaded is a 500, and a pack the campaign hasn't turned on is a 403.
 3. Admin view: `GET /admin/extensions/wasm/plugins` lists loaded plugins.
 
-After a server restart a plugin stays unloaded until the owner turns the pack
-off and on again (#1325).
+After a server restart Chronicle loads again every plugin whose pack at least
+one campaign has turned on.

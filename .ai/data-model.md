@@ -369,6 +369,12 @@ Foundry module repo for the wire contract.
 | `entity_type_page_layouts` | A category's named layouts besides its main one: PK `entity_type_id`, `doc` is the JSON `PageLayouts` (`mainName`, `claimed`, `extra` of `{key, name, layout}`), checked by `PageLayouts.Check` and `ValidateLayout`; FK cascade to `entity_types` and `campaigns` |
 | `entity_page_layouts` | The layout a page chose: PK `entity_id`, `layout_key` (a named layout's key or `main`); no row means it follows its category; FK cascade to `entities` and `campaigns` |
 
+### page pins (`internal/plugins/entities/pinschema/migrations/`, registry slug `page_pins`)
+
+| Table | Notes |
+|---|---|
+| `page_pins` | Pages the Director pins for everyone on the campaign home's Pinned Pages widget: PK `(campaign_id, entity_id)`, `created_at` is the pin order, at most 12 live pins a campaign (checked by the service); reads join the live page, so a trashed page drops off and comes back if restored; FK cascade to `entities` and `campaigns`; `pinned_by` carries no FK. Each member's own pins are their stars, `entity_favorites` |
+
 ### pageblocks (`internal/plugins/pageblocks/migrations/`)
 
 | Table | Purpose |

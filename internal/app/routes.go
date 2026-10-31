@@ -47,6 +47,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
@@ -4737,6 +4738,15 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("page layout tables degraded — each category has only its main layout")
 	}
 
+	// The home's Pinned Pages widget: each member's starred pages always, and
+	// the Director's pins for everyone while their table migrated.
+	pinsHealthy := a.PluginHealth.IsHealthy(pinschema.PluginSlug)
+	if !pinsHealthy {
+		slog.Warn("page pins table degraded — the Pinned Pages widget shows only each member's starred pages")
+	}
+	pagePinService := entities.NewPagePinService(entities.NewPagePinRepository(a.DB), entityService, pinsHealthy)
+	entities.RegisterPagePinRoutes(e, entities.NewPagePinHandler(pagePinService), campaignService, authService)
+
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
 	// This drives validation, rendering, and the template editor palette.
@@ -5293,6 +5303,7 @@ func (a *App) RegisterRoutes() {
 			return t.ID, nil
 		}),
 	)
+	extApplier.SetPackEntityCreator(extensionPackPages{svc: entityService})
 	extService.SetApplier(extApplier)
 
 	// --- WASM Runtime (Layer 3 Logic Extensions) ---
@@ -5392,6 +5403,7 @@ func (a *App) RegisterRoutes() {
 			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
 				return err
 			}
+			ctx = changesource.With(ctx, changesource.Source{Kind: changesource.KindExtension})
 			return tagService.SetEntityTags(ctx, entityID, campaignID, tagIDs)
 		},
 		// get_entity_tags: return tags as JSON (include DM-only for WASM plugins).
@@ -5448,6 +5460,14 @@ func (a *App) RegisterRoutes() {
 	// with WASM plugins automatically loads them into the plugin manager.
 	extApplier.SetWASMLoader(wasmPluginMgr)
 
+	// Plugins live only in memory: load the enabled ones again after a
+	// restart, in the background so a slow compile does not hold up startup.
+	go func() {
+		if n := extService.LoadEnabledPlugins(a.ShutdownCtx, wasmPluginMgr); n > 0 {
+			slog.Info("loaded WASM plugins", slog.Int("count", n))
+		}
+	}()
+
 	// Store references for graceful shutdown and auto-loading.
 	a.WASMPluginManager = wasmPluginMgr
 	a.WASMHookDispatcher = wasmHookDispatcher
@@ -5455,6 +5475,8 @@ func (a *App) RegisterRoutes() {
 	// Wire campaign deletion cleanup: media files and WASM hooks.
 	campaignService.SetMediaCleaner(mediaService)
 	campaignService.SetHookDispatcher(wasmHookDispatcher)
+	entityService.SetHookDispatcher(wasmEntityHooks{d: wasmHookDispatcher})
+	tagService.SetHookDispatcher(wasmTagHooks{d: wasmHookDispatcher})
 
 	// --- Game Systems ---
 	// System reference pages and tooltip API, gated by per-campaign addon checks.
