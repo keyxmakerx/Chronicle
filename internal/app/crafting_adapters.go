@@ -174,12 +174,12 @@ func (a *craftingArmoryAdapter) GoOff(ctx context.Context, campaignID string, v 
 func keptOf(c armory.Copy) crafting.Kept {
 	m := c.Memory
 	return crafting.Kept{ID: c.ID, Qty: c.Quantity, Marks: m.Marks, Quality: m.Quality, Quirk: m.Quirk,
-		How: m.How, By: m.By, On: m.On, OffDay: m.OffDay, OffOn: m.OffOn, Becomes: m.Becomes}
+		How: m.How, By: m.By, On: m.On, OffDay: m.OffDay, OffOn: m.OffOn, Becomes: m.Becomes, BecomesName: m.BecomesName, Off: m.Off}
 }
 
 func memoryOf(k crafting.Kept) armory.Memory {
 	return armory.Memory{Marks: k.Marks, Quality: k.Quality, Quirk: k.Quirk, How: k.How, By: k.By, On: k.On,
-		OffDay: k.OffDay, OffOn: k.OffOn, Becomes: k.Becomes}
+		OffDay: k.OffDay, OffOn: k.OffOn, Becomes: k.Becomes, BecomesName: k.BecomesName, Off: k.Off}
 }
 
 // craftingSheetsAdapter reads a characteristic from a character's sheet

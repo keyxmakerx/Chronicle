@@ -210,6 +210,11 @@ templ stashCard(v *StashesPageView, st StashView, csrfToken string) {
 							aria-expanded="false"
 							onclick={ moveOpenOnClick(moveDialogURL(v.CampaignID, "item", self, it.ItemID)) }
 						>Move&hellip;</button>
+						if len(it.Copies) > 0 {
+							<div class="basis-full">
+								@heldCopies(it.Copies, it.Quantity)
+							</div>
+						}
 						<div class="ag-fold basis-full" data-move-fold></div>
 					</li>
 				}

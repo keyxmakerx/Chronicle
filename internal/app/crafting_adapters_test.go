@@ -215,7 +215,7 @@ func TestSheetSkills(t *testing.T) {
 
 func TestCraftingKeptCrossesThePluginLine(t *testing.T) {
 	k := crafting.Kept{ID: 4, Qty: 2, Marks: []string{"moonlit"}, Quality: "fine", Quirk: "Hums", How: "made", By: "Mira",
-		On: "3 Frostmoot", OffDay: 107, OffOn: "10 Frostmoot", Becomes: "murky"}
+		On: "3 Frostmoot", OffDay: 107, OffOn: "10 Frostmoot", Becomes: "murky", BecomesName: "Murky potion"}
 	back := keptOf(armory.Copy{ID: 4, Quantity: 2, Memory: memoryOf(k)})
 	if !reflect.DeepEqual(back, k) {
 		t.Errorf("round trip = %+v, want %+v", back, k)

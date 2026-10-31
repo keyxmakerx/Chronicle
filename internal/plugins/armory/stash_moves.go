@@ -861,6 +861,9 @@ func (s *stashService) MoveDialog(ctx context.Context, campaignID string, a Acto
 			return nil, err
 		}
 		view.Max = max
+		if view.Copies, err = s.copiesAt(ctx, campaignID, from, ref.ID, max); err != nil {
+			return nil, err
+		}
 	} else {
 		bal, err := s.heldMoney(ctx, campaignID, from, fromRef)
 		if err != nil {

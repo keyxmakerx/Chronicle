@@ -553,6 +553,17 @@ func (s *stashService) StashesPage(ctx context.Context, campaignID string, a Act
 			}
 			sv.Viewers = append(sv.Viewers, NamedRef{ID: cid, Name: name})
 		}
+		// One read of the stash's remembered copies, fitted per item below.
+		remembered := map[string][]Copy{}
+		if s.Copies != nil {
+			cs, err := s.Copies.List(ctx, campaignID, HolderStash, StashEndpoint(st.ID).ID, "")
+			if err != nil {
+				return nil, err
+			}
+			for _, c := range cs {
+				remembered[c.ItemID] = append(remembered[c.ItemID], c)
+			}
+		}
 		for _, r := range items[st.ID] {
 			if visibleItems != nil && !visibleItems[r.ItemEntityID] {
 				continue
@@ -561,7 +572,7 @@ func (s *stashService) StashesPage(ctx context.Context, campaignID string, a Act
 			if !ok {
 				continue
 			}
-			sv.Items = append(sv.Items, StashItemView{ItemID: r.ItemEntityID, Name: name, Quantity: r.Quantity})
+			sv.Items = append(sv.Items, StashItemView{ItemID: r.ItemEntityID, Name: name, Quantity: r.Quantity, Copies: fitCopies(remembered[r.ItemEntityID], r.Quantity)})
 		}
 		sort.Slice(sv.Items, func(i, j int) bool { return strings.ToLower(sv.Items[i].Name) < strings.ToLower(sv.Items[j].Name) })
 		view.Stashes = append(view.Stashes, sv)

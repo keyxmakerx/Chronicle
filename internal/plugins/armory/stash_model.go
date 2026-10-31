@@ -333,6 +333,8 @@ type StashItemView struct {
 	ItemID   string
 	Name     string
 	Quantity int
+	// Copies are the ones that remember something, oldest first.
+	Copies []Copy
 }
 
 // StashView is a stash as one viewer sees it.
@@ -382,6 +384,9 @@ type MoveDialogView struct {
 	MaxMoney     Cents // Most money that can be moved.
 	Destinations []MoveDestination
 	Immediate    bool // True when the move happens at once.
+	// Copies are the source's copies of the item that remember something;
+	// with any, the box asks which ones go.
+	Copies []Copy
 }
 
 // MoveOutcome reports what Move did.

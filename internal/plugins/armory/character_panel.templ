@@ -78,6 +78,9 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 								>Move&hellip;</button>
 							</span>
 						</div>
+						if len(it.Copies) > 0 {
+							@heldCopies(it.Copies, it.Quantity)
+						}
 						if len(it.SharedWith) > 0 {
 							<div class="ag-shared"><i class="fa-solid fa-user-group"></i>Shared with { strings.Join(it.SharedWith, ", ") }</div>
 						}
@@ -143,4 +146,33 @@ templ downtimePill(open bool) {
 	} else {
 		<span class="badge-gray">Not in downtime</span>
 	}
+}
+
+// heldCopies lists, under an item's line, the copies that remember
+// something and how many of the rest are plain.
+templ heldCopies(copies []Copy, total int) {
+	<ul class="ag-copies" data-copies>
+		for _, c := range copies {
+			<li data-copy-id={ fmt.Sprintf("%d", c.ID) }>
+				<span class="ag-copy-n">
+					if c.Quantity == 1 && total == 1 {
+						This one
+					} else if c.Quantity == 1 {
+						1 of them
+					} else {
+						{ fmt.Sprintf("%d of them", c.Quantity) }
+					}
+				</span>
+				for _, tg := range c.Memory.Tags() {
+					<span class={ "ag-tag", templ.KV("is-poor", tg.Kind == "poor"), templ.KV("is-off", tg.Kind == "off") }>{ tg.Label }</span>
+				}
+				if w := c.Memory.Words(); w != "" {
+					<span>{ w }</span>
+				}
+			</li>
+		}
+		if n := PlainCount(total, copies); n > 0 {
+			<li><span class="ag-copy-n">{ fmt.Sprintf("%d plain", n) }</span></li>
+		}
+	</ul>
 }

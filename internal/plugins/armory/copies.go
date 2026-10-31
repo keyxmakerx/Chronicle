@@ -8,6 +8,7 @@ package armory
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -44,9 +45,13 @@ type Memory struct {
 	On  string `json:"on,omitempty"`
 	// OffDay is the calendar day (its absolute count) it goes off, 0 never;
 	// OffOn names it in words, and Becomes is the item it turns into then.
-	OffDay  int64  `json:"offDay,omitempty"`
-	OffOn   string `json:"offOn,omitempty"`
-	Becomes string `json:"becomes,omitempty"`
+	OffDay      int64  `json:"offDay,omitempty"`
+	OffOn       string `json:"offOn,omitempty"`
+	Becomes     string `json:"becomes,omitempty"`
+	BecomesName string `json:"becomesName,omitempty"`
+	// Off is set at the respite after OffDay for a copy that becomes
+	// nothing: it stays in the pack, marked gone off.
+	Off bool `json:"off,omitempty"`
 }
 
 // Copy is a number of copies of one item, at one holder, that remember the
@@ -90,6 +95,10 @@ func (m Memory) Clean() Memory {
 	}
 	if m.OffDay > 0 {
 		out.OffDay, out.OffOn, out.Becomes = m.OffDay, clip(m.OffOn, maxCopyWords), strings.TrimSpace(m.Becomes)
+		if out.Becomes != "" {
+			out.BecomesName = clip(m.BecomesName, maxCopyWords)
+		}
+		out.Off = m.Off
 	}
 	return out
 }
@@ -209,4 +218,94 @@ func planTake(copies []Copy, total, take int, pick []CopyPick) (leaving []Copy) 
 // sortCopies orders copies oldest first, the order every plan reads them in.
 func sortCopies(copies []Copy) {
 	sort.SliceStable(copies, func(i, j int) bool { return copies[i].ID < copies[j].ID })
+}
+
+// CopyTag is one word a copy wears in the pack: its quality, a mark, or
+// that it has gone off. Kind picks the tag's colour ("", "poor", "off").
+type CopyTag struct {
+	Label string
+	Kind  string
+}
+
+// Tags are the words a copy wears, quality first.
+func (m Memory) Tags() []CopyTag {
+	var out []CopyTag
+	switch m.Quality {
+	case QualityFine:
+		out = append(out, CopyTag{Label: "Fine"})
+	case QualityPoor:
+		out = append(out, CopyTag{Label: "Poor", Kind: "poor"})
+	}
+	for _, k := range m.Marks {
+		out = append(out, CopyTag{Label: strings.ToUpper(k[:1]) + k[1:]})
+	}
+	if m.Off {
+		out = append(out, CopyTag{Label: "Gone off", Kind: "off"})
+	}
+	return out
+}
+
+// Words say what else a copy remembers, in a line: who made or harvested
+// it and when, its quirk, and when it goes off.
+func (m Memory) Words() string {
+	var parts []string
+	if m.How != "" && m.By != "" {
+		w := "Made by "
+		if m.How == "harvested" {
+			w = "Harvested by "
+		}
+		w += m.By
+		if m.On != "" {
+			w += ", " + m.On
+		}
+		parts = append(parts, w)
+	}
+	if m.Quirk != "" {
+		parts = append(parts, "A quirk: "+m.Quirk)
+	}
+	switch {
+	case m.Off && m.OffOn != "":
+		parts = append(parts, "at the respite after "+m.OffOn)
+	case m.OffOn != "":
+		w := "goes off on " + m.OffOn
+		if m.BecomesName != "" {
+			w += ", then becomes " + m.BecomesName
+		}
+		parts = append(parts, w)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// PlainCount is how many of a holder's total remember nothing.
+func PlainCount(total int, copies []Copy) int {
+	for _, c := range copies {
+		total -= c.Quantity
+	}
+	return max(total, 0)
+}
+
+// copyChoice names a copy in the Move box: "The Fine one, made by Orrin",
+// "The 2 Moonlit ones".
+func copyChoice(c Copy) string {
+	var words []string
+	for _, t := range c.Memory.Tags() {
+		words = append(words, t.Label)
+	}
+	name := "The " + strings.Join(words, ", ") + " one"
+	if len(words) == 0 {
+		name = "The remembered one"
+	}
+	if c.Quantity > 1 {
+		name = fmt.Sprintf("The %d %s ones", c.Quantity, strings.Join(words, ", "))
+		if len(words) == 0 {
+			name = fmt.Sprintf("The %d remembered ones", c.Quantity)
+		}
+	}
+	switch {
+	case c.Memory.How == "made" && c.Memory.By != "":
+		name += ", made by " + c.Memory.By
+	case c.Memory.How == "harvested" && c.Memory.By != "":
+		name += ", harvested by " + c.Memory.By
+	}
+	return name
 }

@@ -67,6 +67,9 @@ templ MoveDialog(v *MoveDialogView, csrfToken string) {
 					@moveDestinationGroup(v, "Characters")
 				</div>
 				if v.Kind == "item" {
+					if len(v.Copies) > 0 {
+						@moveWhichOnes(v)
+					}
 					if v.Max > 1 {
 						<div class="ag-foot">
 							<span class="ag-qty">
@@ -106,6 +109,12 @@ templ MoveDialog(v *MoveDialogView, csrfToken string) {
 						<span>Not in downtime. Your { layouts.GMTerm(ctx) } has to approve this; the item stays with you until then.</span>
 					}
 				</div>
+				if len(v.Copies) > 0 {
+					<div class="ag-hint">
+						<i class="fa-solid fa-circle-info"></i>
+						<span>A copy keeps what it remembers when it goes to another hero or a party stash. Selling it to a shop, or using it up, ends it.</span>
+					</div>
+				}
 				<div class="ag-foot">
 					<span class="ag-sp"></span>
 					<button type="button" class="btn-secondary btn-sm" data-close onclick={ giveBoxCall("cancel") }>Cancel</button>
@@ -152,4 +161,28 @@ func destinationsIn(v *MoveDialogView, group string) int {
 		}
 	}
 	return n
+}
+
+// moveWhichOnes asks which of the item's copies go: the plain ones first,
+// or one that remembers something.
+templ moveWhichOnes(v *MoveDialogView) {
+	<div class="ag-lbl" style="margin:12px 0 4px">Which ones</div>
+	<div class="ag-list" role="radiogroup" aria-label="Which ones" style="margin-top:0">
+		<label class="ag-row">
+			<input type="radio" name="ag-which" value="" checked/>
+			<span class="ag-name">Plain ones first</span>
+			if n := PlainCount(v.Max, v.Copies); n > 0 {
+				<span class="ag-lbl" style="margin-left:auto">{ fmt.Sprintf("%d plain", n) }</span>
+			}
+		</label>
+		for _, c := range v.Copies {
+			<label class="ag-row">
+				<input type="radio" name="ag-which" value={ fmt.Sprintf("%d", c.ID) }/>
+				<span class="ag-name">{ copyChoice(c) }</span>
+				if c.Memory.OffOn != "" && !c.Memory.Off {
+					<span class="ag-lbl" style="margin-left:auto">goes off { c.Memory.OffOn }</span>
+				}
+			</label>
+		}
+	</div>
 }

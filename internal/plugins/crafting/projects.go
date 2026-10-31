@@ -136,6 +136,8 @@ type Kept struct {
 	Becomes string   `json:"-"`
 	// BecomesName names Becomes for the block.
 	BecomesName string `json:"becomes,omitempty"`
+	// Off marks a copy that has gone off.
+	Off bool `json:"off,omitempty"`
 }
 
 // Empty reports copies that remember nothing.

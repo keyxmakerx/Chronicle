@@ -132,7 +132,7 @@ func (s *stashService) pickedFor(ctx context.Context, m *Move) []CopyPick {
 // GoOff turns every copy due to go off by day into what it becomes: at its
 // holder, that many of the item become that many of the other item, and the
 // copy ends, with a line in the holder's history. A copy that becomes
-// nothing stays and reads as gone off. Only the Director may, since it
+// nothing stays, marked gone off. Only the Director may, since it
 // changes every hero's pack at once; it returns how many copies turned.
 func (s *stashService) GoOff(ctx context.Context, campaignID string, a Actor, day int64) (int, error) {
 	if !a.IsOwner() {
@@ -153,7 +153,15 @@ func (s *stashService) GoOff(ctx context.Context, campaignID string, a Actor, da
 	}
 	turned := 0
 	for _, c := range due {
+		if c.Memory.Off {
+			continue
+		}
 		if c.Memory.Becomes == "" || c.Memory.Becomes == c.ItemID {
+			m := c.Memory
+			m.Off = true
+			if err := s.Copies.Remember(mctx, campaignID, c.ID, m); err != nil {
+				return turned, err
+			}
 			continue
 		}
 		at := Endpoint{Kind: c.HolderKind, ID: c.HolderID}

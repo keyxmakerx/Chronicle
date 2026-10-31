@@ -3,6 +3,7 @@ package armory
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -256,8 +257,8 @@ func TestGoOff(t *testing.T) {
 		if n, err := f.svc.GoOff(ctx, "camp", gm, 10); err != nil || n != 0 {
 			t.Fatalf("%d, %v", n, err)
 		}
-		if f.carried("c1", "i1") != 3 || len(cs.rows) != 3 {
-			t.Errorf("carried %d, copies %d", f.carried("c1", "i1"), len(cs.rows))
+		if f.carried("c1", "i1") != 3 || len(cs.rows) != 3 || !cs.rows[2].Memory.Off {
+			t.Errorf("carried %d, copies %+v", f.carried("c1", "i1"), cs.rows)
 		}
 	})
 	t.Run("a copy the count no longer covers ends", func(t *testing.T) {
@@ -293,4 +294,55 @@ func TestGoOff(t *testing.T) {
 			t.Errorf("the chest holds %v", held)
 		}
 	})
+}
+
+func TestMemoryWords(t *testing.T) {
+	tests := []struct {
+		name  string
+		m     Memory
+		tags  []CopyTag
+		words string
+	}{
+		{"made, fine, keeps", Memory{Quality: QualityFine, How: "made", By: "Orrin", On: "3 Frostmoot", OffDay: 9, OffOn: "10 Frostmoot", Becomes: "i2", BecomesName: "Murky potion"},
+			[]CopyTag{{Label: "Fine"}}, "Made by Orrin, 3 Frostmoot · goes off on 10 Frostmoot, then becomes Murky potion"},
+		{"harvested, marked", Memory{Marks: []string{"moonlit"}, How: "harvested", By: "Orrin", On: "1 Frostmoot"},
+			[]CopyTag{{Label: "Moonlit"}}, "Harvested by Orrin, 1 Frostmoot"},
+		{"poor with a quirk", Memory{Quality: QualityPoor, Quirk: "Hums"}, []CopyTag{{Label: "Poor", Kind: "poor"}}, "A quirk: Hums"},
+		{"gone off", Memory{OffDay: 9, OffOn: "28 Hearthmoot", Off: true}, []CopyTag{{Label: "Gone off", Kind: "off"}}, "at the respite after 28 Hearthmoot"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := tt.m.Clean()
+			if got := m.Tags(); !reflect.DeepEqual(got, tt.tags) {
+				t.Errorf("tags %+v, want %+v", got, tt.tags)
+			}
+			if got := m.Words(); got != tt.words {
+				t.Errorf("words %q, want %q", got, tt.words)
+			}
+		})
+	}
+	if PlainCount(3, []Copy{{Quantity: 1}}) != 2 || PlainCount(1, []Copy{{Quantity: 2}}) != 0 {
+		t.Error("PlainCount")
+	}
+}
+
+func TestHeldCopiesAndChoices(t *testing.T) {
+	fine := Copy{ID: 7, Quantity: 1, Memory: Memory{Quality: QualityFine, How: "made", By: "Orrin"}}
+	moon := Copy{ID: 8, Quantity: 2, Memory: Memory{Marks: []string{"moonlit"}}}
+	var b strings.Builder
+	if err := heldCopies([]Copy{fine, moon}, 4).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	html := b.String()
+	for _, want := range []string{`data-copy-id="7"`, "1 of them", `class="ag-tag"`, "Made by Orrin", "2 of them", "Moonlit", "1 plain"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("pack lines lack %q:\n%s", want, html)
+		}
+	}
+	if got := copyChoice(fine); got != "The Fine one, made by Orrin" {
+		t.Errorf("choice %q", got)
+	}
+	if got := copyChoice(moon); got != "The 2 Moonlit ones" {
+		t.Errorf("choice %q", got)
+	}
 }
