@@ -59,6 +59,28 @@ func TestMergeDisplaySettings(t *testing.T) {
 			}(),
 		},
 		{
+			name:     "keeping a map blank is stored beside the other groups",
+			current:  storedDisplay(),
+			incoming: `{"picture":{"blank":true}}`,
+			want: func() *DisplaySettings {
+				d := storedDisplay()
+				d.Picture = &PictureDisplay{Blank: true}
+				return d
+			}(),
+		},
+		{
+			name:     "blank false is the default and clears the stored answer",
+			current:  &DisplaySettings{Picture: &PictureDisplay{Blank: true}},
+			incoming: `{"picture":{"blank":false}}`,
+			want:     nil,
+		},
+		{
+			name:     "a picture group that is not an object is refused",
+			current:  nil,
+			incoming: `{"picture":"blank"}`,
+			wantErr:  true,
+		},
+		{
 			name:     "clearing the last group leaves nothing (NULL column)",
 			current:  &DisplaySettings{Draw: &DrawDisplay{Who: DrawWhoOwners}},
 			incoming: `{"draw":null}`,
@@ -310,6 +332,15 @@ func TestResolveDisplay(t *testing.T) {
 		m := &Map{Display: &DisplaySettings{Frame: &FrameDisplay{Style: "old"}}}
 		if got := ResolveDisplay(m, "gilded"); got.Frame != "old" || got.FrameSource != "map" || got.CampaignFrame != "gilded" {
 			t.Errorf("want map old over campaign gilded, got %+v", got)
+		}
+	})
+	t.Run("keep blank is off until the owner answers Not now", func(t *testing.T) {
+		if ResolveDisplay(&Map{}, "").KeepBlank {
+			t.Error("a new map must still ask for a picture")
+		}
+		m := &Map{Display: &DisplaySettings{Picture: &PictureDisplay{Blank: true}}}
+		if !ResolveDisplay(m, "").KeepBlank {
+			t.Error("a map kept blank must not ask again")
 		}
 	})
 	t.Run("an unknown campaign frame falls back to atlas", func(t *testing.T) {
