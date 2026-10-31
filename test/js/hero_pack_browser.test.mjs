@@ -87,3 +87,36 @@ test('a refusal puts the tile back and says why', { skip }, async (t) => {
   assert.equal(await p.evaluate(() => window.told), 'No.');
   assert.equal(await p.getAttribute('[data-hp-detail="rope"] [data-hp-carry="pack"]', 'aria-pressed'), 'true');
 });
+
+// A crafted copy's picture replaces the cube, at 28 on the tile and 48 on
+// its card, drawn by the real craft_results.js; a look that is not JSON, or
+// a copy with none, keeps what it had.
+test('a crafted copy shows its own picture on the tile and the card', { skip }, async (t) => {
+  const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const p = await browser.newPage();
+  const errors = [];
+  p.on('pageerror', (e) => errors.push(e.message));
+  t.after(() => assert.deepEqual(errors, []));
+  const look = JSON.stringify({ shape: 'potion', body: '#c3223a', trim: '#9a7650', detail: '#f4ecd6', mark: { picture: 'leaf', tint: '#9fc7e8' } }).replace(/"/g, '&quot;');
+  await p.setContent('<!doctype html><html><body><section><div data-hero-pack>' +
+    '<ul data-hp-tiles><li data-hp-tile data-item-id="potion" data-craft-look="' + look + '"><i class="fa-solid fa-cube hp-pic"></i>Potion</li>' +
+    '<li data-hp-tile data-item-id="rope"><i class="fa-solid fa-cube hp-pic"></i>Rope</li>' +
+    '<li data-hp-tile data-item-id="odd" data-craft-look="{not json"><i class="fa-solid fa-cube hp-pic"></i>Odd</li></ul></div>' +
+    '<ul class="hp-cards"><li class="hp-card" data-copy-id="1" data-craft-look="' + look + '"><span class="hp-card-n">1</span></li></ul></section></body></html>');
+  await p.evaluate(() => {
+    window.Chronicle = { register: (name, w) => { window.mounted = w; } };
+  });
+  for (const f of ['craft_pictures.js', 'craft_results.js']) await p.addScriptTag({ content: readFileSync(join(root, 'static/js/widgets', f), 'utf8') });
+  await p.addScriptTag({ content: JS });
+  await p.evaluate(() => window.mounted.init(document.querySelector('[data-hero-pack]')));
+  const got = await p.evaluate(() => ({
+    tile: document.querySelector('[data-item-id="potion"] .hp-look svg')?.getAttribute('width'),
+    cube: !!document.querySelector('[data-item-id="potion"] i.hp-pic'),
+    card: document.querySelector('.hp-card .hp-card-pic svg')?.getAttribute('width'),
+    first: document.querySelector('.hp-card').firstElementChild.className,
+    rope: !!document.querySelector('[data-item-id="rope"] i.fa-cube'),
+    odd: !!document.querySelector('[data-item-id="odd"] i.fa-cube')
+  }));
+  assert.deepEqual(got, { tile: '28', cube: false, card: '48', first: 'hp-card-pic', rope: true, odd: true });
+});
