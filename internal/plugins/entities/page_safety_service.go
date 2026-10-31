@@ -174,8 +174,16 @@ type PageSafetyService interface {
 	// SetNoteCounter wires the Player Notes count; nil leaves counts off.
 	SetNoteCounter(nc NoteCounter)
 	RetentionDays(ctx context.Context) int
-	// StartPurger deletes for good, hourly, pages that have waited out the
-	// retention. It returns when ctx ends.
+	// AddTrashKind lets another plugin's things share the Trash; see
+	// trash_kinds.go.
+	AddTrashKind(k TrashKind)
+	// ListOtherTrash lists the registered kinds' trashed items, newest first.
+	ListOtherTrash(ctx context.Context, campaignID string) []TrashedThing
+	// RestoreOther brings back one item of a registered kind and returns
+	// the link to it.
+	RestoreOther(ctx context.Context, campaignID, kind, id string) (string, error)
+	// StartPurger deletes for good, hourly, pages and registered kinds'
+	// items that have waited out the retention. It returns when ctx ends.
 	StartPurger(ctx context.Context)
 }
 
@@ -194,6 +202,7 @@ type pageSafetyService struct {
 	svc       *entityService
 	retention TrashRetention
 	notes     NoteCounter // nil: the Trash and delete say nothing about notes
+	kinds     []TrashKind // other plugins' things that share the Trash
 }
 
 // NewPageSafetyService builds the History/Trash service. svc must be the
@@ -417,11 +426,10 @@ func (p *pageSafetyService) purgeOnce(ctx context.Context) {
 	n, err := p.repo.PurgeTrashedBefore(ctx, cutoff)
 	if err != nil {
 		slog.Error("trash purge failed", slog.Any("error", err))
-		return
-	}
-	if n > 0 {
+	} else if n > 0 {
 		slog.Info("trash purged", slog.Int("pages", n), slog.Time("cutoff", cutoff))
 	}
+	p.purgeKinds(ctx, cutoff)
 }
 
 func (p *pageSafetyService) StartPurger(ctx context.Context) {

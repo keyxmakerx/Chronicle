@@ -1179,6 +1179,7 @@ GET	/campaigns/:id/transfer	session	plugins/campaigns.(*Handler).TransferForm	pl
 POST	/campaigns/:id/transfer	session	plugins/campaigns.(*Handler).Transfer	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/trash	session	plugins/entities.(*PageSafetyHandler).Trash	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/trash/:eid/restore	session	plugins/entities.(*PageSafetyHandler).RestoreFromTrash	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
+POST	/campaigns/:id/trash/:kind/:tid/restore	session	plugins/entities.(*PageSafetyHandler).RestoreOtherFromTrash	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/unarchive	session	plugins/campaigns.(*Handler).UnarchiveCampaign	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccessEvenIfArchived > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/welcome-message	session	plugins/campaigns.(*Handler).UpdateWelcomeMessageAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/worldbuilding-prompts	session	plugins/entities.(*WorldbuildingPromptHandler).ListAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

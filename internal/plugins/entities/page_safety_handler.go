@@ -2,6 +2,7 @@ package entities
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -40,6 +41,7 @@ func RegisterPageSafetyRoutes(e *echo.Echo, h *PageSafetyHandler, campaignSvc ca
 	cg.POST("/entities/:eid/history/:vid/restore", h.RestoreVersion, scribe)
 	cg.GET("/trash", h.Trash, owner)
 	cg.POST("/trash/:eid/restore", h.RestoreFromTrash, owner)
+	cg.POST("/trash/:kind/:tid/restore", h.RestoreOtherFromTrash, owner)
 }
 
 // pageInCampaign loads a live page the caller may see, so an id from another
@@ -146,6 +148,7 @@ func (h *PageSafetyHandler) Trash(c echo.Context) error {
 		ViewerID:   auth.GetUserID(c),
 		Now:        time.Now(),
 		Restored:   c.QueryParam("restored"),
+		Others:     h.svc.ListOtherTrash(ctx, cc.Campaign.ID),
 	}
 	return middleware.Render(c, http.StatusOK, TrashPage(cc, data))
 }
@@ -167,4 +170,28 @@ func (h *PageSafetyHandler) RestoreFromTrash(c echo.Context) error {
 		return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/trash?restored="+item.ID)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "id": item.ID, "name": item.Name, "url": pageURL})
+}
+
+// RestoreOtherFromTrash brings back a picture, game night or map
+// (POST /campaigns/:id/trash/:kind/:tid/restore). The Undo toast gets JSON
+// with the link; the Trash page's button opens the restored thing.
+func (h *PageSafetyHandler) RestoreOtherFromTrash(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	link, err := h.svc.RestoreOther(c.Request().Context(), cc.Campaign.ID, c.Param("kind"), c.Param("tid"))
+	if err != nil {
+		return err
+	}
+	// The link comes from the kind's own adapter; anything that isn't a
+	// path in this campaign falls back to the Trash rather than redirecting
+	// somewhere else.
+	if !strings.HasPrefix(link, "/campaigns/"+cc.Campaign.ID+"/") {
+		link = "/campaigns/" + cc.Campaign.ID + "/trash"
+	}
+	if middleware.IsHTMX(c) {
+		return middleware.HTMXRedirect(c, link)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "id": c.Param("tid"), "url": link})
 }
