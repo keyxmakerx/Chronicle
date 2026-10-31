@@ -3860,6 +3860,11 @@ func (a *App) RegisterRoutes() {
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
 	calendarWeatherRepo := calendar.NewWeatherRepository(a.DB)
 	calendarService := calendar.NewCalendarService(calendarRepo, calendarEventRepo, calendarKindRepo, calendarWeatherRepo)
+	// The players' weather forecast is blurred under a key from the site
+	// secret, so the blur cannot be replayed and stays put across restarts.
+	if keyed, ok := calendarService.(interface{ SetForecastSecret(string) }); ok {
+		keyed.SetForecastSecret(a.Config.Auth.SecretKey)
+	}
 	// Pages by era and moon lore pages: the calendar owns eras, moons and
 	// each page's era versions; the entity page draws them.
 	eraVersionService := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)

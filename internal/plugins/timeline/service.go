@@ -192,7 +192,11 @@ type TimelineService interface {
 	// Event connections.
 	CreateConnection(ctx context.Context, timelineID string, input CreateConnectionInput) (*EventConnection, error)
 	DeleteConnection(ctx context.Context, timelineID string, connectionID int) error
-	ListConnections(ctx context.Context, timelineID string) ([]EventConnection, error)
+	// ListConnections returns the timeline's connections whose two ends are
+	// both in among, the event list ListTimelineEvents gave the caller's
+	// viewer. There is no unfiltered read: a connection names its ends and
+	// carries a free-text label, so it is only shown alongside both events.
+	ListConnections(ctx context.Context, timelineID string, among []EventLink) ([]EventConnection, error)
 
 	// Search. Takes userID alongside role so the per-user visibility layer
 	// can build the same permissions.Viewer ListTimelines builds — role
@@ -1394,17 +1398,21 @@ func (s *timelineService) DeleteConnection(ctx context.Context, timelineID strin
 	return s.repo.DeleteConnection(ctx, connectionID, timelineID)
 }
 
-// ListConnections returns all connections for a timeline.
-func (s *timelineService) ListConnections(ctx context.Context, timelineID string) ([]EventConnection, error) {
-	return s.repo.ListConnections(ctx, timelineID)
+// ListConnections: see the TimelineService interface.
+func (s *timelineService) ListConnections(ctx context.Context, timelineID string, among []EventLink) ([]EventConnection, error) {
+	conns, err := s.repo.ListConnections(ctx, timelineID)
+	if err != nil {
+		return nil, err
+	}
+	return visibleConnections(conns, among), nil
 }
 
-// VisibleConnections keeps only the connections whose two ends are both in
+// visibleConnections keeps only the connections whose two ends are both in
 // events, the list already filtered for this viewer. A connection row carries
 // its ends' ids and a free-text label, so one touching a hidden event would
 // otherwise tell a player the hidden event exists and, through the label,
 // what it is.
-func VisibleConnections(conns []EventConnection, events []EventLink) []EventConnection {
+func visibleConnections(conns []EventConnection, events []EventLink) []EventConnection {
 	seen := make(map[string]bool, len(events))
 	for _, e := range events {
 		seen[e.Source+":"+e.EventID] = true

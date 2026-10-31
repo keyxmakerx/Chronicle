@@ -679,7 +679,7 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 		}
 
 		// Export connections between exported events.
-		connections, err := a.svc.ListConnections(ctx, tl.ID)
+		connections, err := a.svc.ListConnections(ctx, tl.ID, events)
 		if err == nil {
 			for _, c := range connections {
 				srcIdx, srcOK := eventIDToIndex[c.SourceID]
