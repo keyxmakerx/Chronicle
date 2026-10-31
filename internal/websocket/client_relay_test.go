@@ -59,7 +59,7 @@ func TestReadPump_DoesNotRelayClientMessage(t *testing.T) {
 	// A real, server-emitted broadcast must still get through — this is
 	// the over-correction guard: the fix must not blackhole legitimate
 	// events along with the forged one.
-	h.Broadcast(NewMessage(MsgMarkerCreated, "camp-1", "real-marker", nil))
+	h.Broadcast(publicMessage(MsgMarkerCreated, "camp-1", "real-marker", nil))
 
 	got, arrived, err := readOneMessage(victimB, 2*time.Second)
 	if err != nil {

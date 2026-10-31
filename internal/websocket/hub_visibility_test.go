@@ -112,6 +112,7 @@ func TestHubBroadcast_DeniedPlayerReceivesNothing(t *testing.T) {
 	// visibility_rules {"denied_users":["user-denied"]}.
 	msg := NewMessage(MsgMarkerUpdated, campaignID, "marker-1", map[string]string{"name": "Hidden Cache"})
 	msg.DeniedUsers = []string{"user-denied"}
+	msg.Public = true
 
 	h.Broadcast(msg)
 	settleBroadcast()
@@ -175,6 +176,7 @@ func TestHubBroadcast_DrawingRuleDeniesPlayer(t *testing.T) {
 
 	msg := NewMessage(MsgDrawingUpdated, campaignID, "drawing-1", map[string]string{"drawing_type": "polygon"})
 	msg.DeniedUsers = []string{"user-denied"}
+	msg.Public = true
 
 	h.Broadcast(msg)
 	settleBroadcast()

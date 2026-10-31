@@ -90,3 +90,63 @@ func TestMessage_RequiresDMJSONOmitted(t *testing.T) {
 		t.Errorf("RequiresDM=false should omit the field; got %s", got)
 	}
 }
+
+// publicMessage is a message whose publisher chose "every member", as a
+// publisher of player-visible content must.
+func publicMessage(msgType MessageType, campaignID, resourceID string, payload any) *Message {
+	m := NewMessage(msgType, campaignID, resourceID, payload)
+	m.Public = true
+	return m
+}
+
+// TestDeliversTo_AudienceMustBeChosen pins the hub's default: a message
+// whose publisher set no audience reaches DM-equivalent sockets only. A new
+// publisher that forgets to decide must never send stored rows to players.
+func TestDeliversTo_AudienceMustBeChosen(t *testing.T) {
+	owner := &Client{UserID: "u-owner", Role: permissions.RoleOwner}
+	granted := &Client{UserID: "u-granted", Role: permissions.RolePlayer, IsDmGranted: true}
+	scribe := &Client{UserID: "u-scribe", Role: permissions.RoleScribe}
+	player := &Client{UserID: "u-player", Role: permissions.RolePlayer}
+
+	unset := func() *Message { return NewMessage(MsgEntityUpdated, "c", "e", map[string]string{"entry": "secret"}) }
+	public := func() *Message { return publicMessage(MsgEntityUpdated, "c", "e", nil) }
+	denyOnly := func() *Message {
+		m := NewMessage(MsgMarkerUpdated, "c", "m", nil)
+		m.DeniedUsers = []string{"u-other"}
+		return m
+	}
+	named := func() *Message {
+		m := NewMessage(MsgNoteUpdated, "c", "n", nil)
+		m.AllowedUsers = []string{"u-player"}
+		return m
+	}
+	publicDM := func() *Message {
+		m := public()
+		m.RequiresDM = true
+		return m
+	}
+
+	cases := []struct {
+		name   string
+		msg    func() *Message
+		client *Client
+		want   bool
+	}{
+		{"unset reaches owner", unset, owner, true},
+		{"unset reaches DM-granted", unset, granted, true},
+		{"unset never reaches scribe", unset, scribe, false},
+		{"unset never reaches player", unset, player, false},
+		{"deny list alone is not an audience", denyOnly, player, false},
+		{"public reaches player", public, player, true},
+		{"named user is an audience", named, player, true},
+		{"named list excludes others", named, scribe, false},
+		{"RequiresDM beats Public", publicDM, player, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.msg().DeliversTo(tc.client); got != tc.want {
+				t.Errorf("DeliversTo = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
