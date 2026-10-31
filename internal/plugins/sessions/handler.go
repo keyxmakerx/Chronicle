@@ -88,48 +88,6 @@ func (h *Handler) SetMailSender(ms MailSender, baseURL string) {
 	h.baseURL = baseURL
 }
 
-// ListSessions renders the session list page.
-// GET /campaigns/:id/sessions
-func (h *Handler) ListSessions(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	ctx := c.Request().Context()
-
-	sessionList, err := h.svc.ListSessions(ctx, cc.Campaign.ID)
-	if err != nil {
-		return err
-	}
-
-	csrfToken := middleware.GetCSRFToken(c)
-	isOwner := cc.MemberRole >= campaigns.RoleOwner
-	isScribe := cc.MemberRole >= campaigns.RoleScribe
-	userID := auth.GetUserID(c)
-	// The calendar's "Plan it" lands here with the slot it suggested.
-	var plan SessionPlan
-	if isScribe {
-		plan = sessionPlanFrom(c.QueryParam("plan_date"), c.QueryParam("plan_time"), c.QueryParam("plan_tz"))
-	}
-
-	// Past nights are judged by the viewer's own date, so tonight's game
-	// stays upcoming until their midnight.
-	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
-	groups := groupSessions(sessionList, today)
-	viewerTZ := h.storedTZ(c.Request().Context(), userID)
-
-	// "Add to your calendar" is a member's, and only while the owner's feed
-	// switch is on. A failed read hides it rather than failing the list.
-	feed := false
-	if cc.IsMember && userID != "" {
-		feed, _ = h.svc.IsCalendarFeedEnabled(ctx, cc.Campaign.ID)
-	}
-
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK,
-			SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
-	}
-	return middleware.Render(c, http.StatusOK,
-		SessionListPage(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
-}
-
 // ShowSession renders a session detail page.
 // GET /campaigns/:id/sessions/:sid
 func (h *Handler) ShowSession(c echo.Context) error {
@@ -413,7 +371,7 @@ func (h *Handler) DeleteSessionAPI(c echo.Context) error {
 	}
 	if len(responded) > 0 {
 		msg := "\"" + sess.Name + "\" was cancelled."
-		link := "/campaigns/" + cc.Campaign.ID + "/sessions"
+		link := "/campaigns/" + cc.Campaign.ID + "/game-nights"
 		if nErr := h.svc.NotifyUsers(c.Request().Context(), responded, cc.Campaign.ID, NotifSessionCancelled, msg, link); nErr != nil {
 			slog.Error("notifying responded members of a cancelled session", slog.String("error", nErr.Error()))
 		}
@@ -421,7 +379,7 @@ func (h *Handler) DeleteSessionAPI(c echo.Context) error {
 
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect",
-			"/campaigns/"+cc.Campaign.ID+"/sessions")
+			"/campaigns/"+cc.Campaign.ID+"/game-nights")
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})

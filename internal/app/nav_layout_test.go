@@ -185,7 +185,7 @@ func TestBuildNavSections_AppsFollowAccess(t *testing.T) {
 		{
 			name: "a public visitor",
 			cc:   navTestContext(nil, campaigns.RoleNone, false, true),
-			want: map[string]bool{"app:notes": false, "app:" + calendar.PluginSlug: false, "app:maps": true, "app:characters": true, "app:rulebook": false, "app:sessions": true},
+			want: map[string]bool{"app:notes": false, "app:" + calendar.PluginSlug: false, "app:maps": true, "app:characters": true, "app:rulebook": false, "app:sessions": false},
 		},
 		{
 			// /apps/calendar and /systems/:mod sit behind RequireCampaignAccess,

@@ -70,8 +70,8 @@ type nightPageLink struct {
 }
 
 // NightPageAPI returns a game night's recap and linked pages for its page in
-// the calendar. Linked pages go through the same visibility filter as the
-// Sessions page (ADR-055 rule 3): a page the viewer can't open is absent,
+// the calendar. Linked pages go through the same visibility filter as a
+// night's own page (ADR-055 rule 3): a page the viewer can't open is absent,
 // not named.
 // With ?date= (one of the session's nights) it adds the night's Journal
 // entries the viewer can read and, for the DM, the check-in.
