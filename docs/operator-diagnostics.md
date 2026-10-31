@@ -7,10 +7,11 @@ v0.13.0, so why does the old widget render?" without shell access.
 
 They are a catalog of small named checks. Run one at a time and paste the
 result to an AI assistant, or use the in-app
-[AI Workspace](#the-in-app-ai-workspace-batch) for a batched round-trip.
+[AI helper](#the-in-app-ai-helper-batch) to pick several and run them as one batch.
 
-Source: `internal/systems/health.go`, `operator_diag*.go`, `operator_batch.go`;
-workspace UI in `internal/plugins/admin/diagnostics_workspace.templ`; routes in
+Source: `internal/systems/health.go`, `operator_diag*.go`, `operator_batch.go`,
+`operator_picker.go`; page in `internal/plugins/admin/diagnostics_workspace.templ`
+and `diagnostics_picker.templ`; routes in
 `internal/app/routes.go` and `internal/plugins/admin/routes.go`.
 
 ## What it catches
@@ -272,20 +273,33 @@ it. Go cheapest first; paste back only the step that surprises you.
    `chronicle-logs` shows the loader's own account; `image-digest` rules out a
    stale backend image.
 
-## The in-app AI Workspace (batch)
+## The in-app AI helper (batch)
 
-`GET /admin/diagnostics/workspace` turns "request a diagnostic, run it, paste
-it back" into one batch round-trip with a human approval gate:
+`GET /admin/diagnostics/workspace` (Site admin ▸ Health ▸ AI helper) turns
+"request a diagnostic, run it, paste it back" into one batch round-trip with a
+human approval gate. A request comes from one of three places:
 
-1. **Copy the functions list**: a machine-readable JSON spec of every read-only
-   diagnostic and the request shape. Hand it to your AI.
-2. **Paste the AI's request**: one batch object (a fenced ` ```json ` block is
-   accepted).
-3. **Review and approve**: *Parse & review* validates against the catalog and
-   shows one row per call, flagging unknown names and full-dump requests.
-   Nothing runs until *Approve & run*; a human reads the toolset first, which is
-   the prompt-injection boundary.
-4. **Copy the result**: one secret-redacted document (manifest of what ran or
+- **An everyday question.** Six questions ("Did my deploy land?", "A sheet or
+  page shows blank", …) each unroll a sentence of what Chronicle will look at,
+  with a campaign or page blank where needed, and the checks they run, each
+  untickable. `DiagnosticQuestions` in `internal/systems/operator_picker.go`.
+- **Picked by hand.** "Pick checks yourself" opens every check in plain-word
+  folds (`DiagnosticGroups`), with Find ("/" outside a text field) and a tray
+  that holds the request and its blanks. A blank left empty becomes the
+  placeholder the review step asks about.
+- **An outside AI.** "Copy checks for your AI" copies the machine-readable
+  functions list; "Paste an AI's request" takes the one batch object it
+  composes (a fenced ` ```json ` block is accepted).
+
+The first two post to `/compose`, where `ComposeBatch` writes the same batch
+object an AI would, so every source meets the same checks:
+
+1. **Review and approve**: the request is validated against the catalog and
+   shows one row per call, flagging unknown names and full-dump requests, in a
+   sheet at the foot of the window. Nothing runs until *Approve & run*; a human
+   reads the toolset first, which is the prompt-injection boundary. Ticking a
+   check marked "large" is the full-dump opt-in.
+2. **Copy the result**: one secret-redacted document (manifest of what ran or
    was skipped, each result, byte-count footer).
 
 Request format:
@@ -314,7 +328,7 @@ Rules:
 
 - **Bounded toolset.** Only live-catalog names run; unknown names show as
   skipped. Unknown top-level keys are rejected. Caps: 50 calls, 64 KB paste.
-- **Re-validated on run.** Approve re-parses the original pasted text and
+- **Re-validated on run.** Approve re-parses the original request text and
   re-derives runnability and deduplication from the live catalog, so a forged
   client plan cannot smuggle in a gated call.
 - **Deduplicated.** Identical `(name, arg)` calls run once; repeats show as
@@ -329,7 +343,9 @@ Rules:
 
 Routes (admin-gated, `internal/plugins/admin/routes.go`): `GET
 /admin/diagnostics/workspace` (page), `POST /admin/diagnostics/workspace/parse`
-(review), `POST /admin/diagnostics/workspace/run` (result). Logic:
+(review a pasted request), `POST /admin/diagnostics/workspace/compose` (review
+a picked one), `POST /admin/diagnostics/workspace/run` (result). Logic:
 `FunctionsSpecJSON`, `ParseBatch`, `RunBatch` in
-`internal/systems/operator_batch.go`. Per-route rate limiting is not
+`internal/systems/operator_batch.go`; `ComposeBatch` and the questions and
+groups in `operator_picker.go`. Per-route rate limiting is not
 implemented.
