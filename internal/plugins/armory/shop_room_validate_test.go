@@ -147,6 +147,12 @@ func TestNormalizeShopRoomLayout_Rejects(t *testing.T) {
 		})},
 		{"line too long", mutate(func(m map[string]any) { m["lines"] = []any{strings.Repeat("a", 201)} })},
 		{"line too long runes", mutate(func(m map[string]any) { m["lines"] = []any{strings.Repeat("é", 201)} })},
+		{"unknown manner", mutate(func(m map[string]any) { m["manner"] = "sly" })},
+		{"unknown moment", mutate(func(m map[string]any) { m["moments"] = map[string]any{"haggle": []any{"No."}} })},
+		{"too many moment lines", mutate(func(m map[string]any) {
+			m["moments"] = map[string]any{"hello": []any{"a", "b", "c", "d", "e", "f"}}
+		})},
+		{"moment line too long", mutate(func(m map[string]any) { m["moments"] = map[string]any{"bye": []any{strings.Repeat("é", 201)}} })},
 		{"size cap", append([]byte(`{"pad":"`), append([]byte(strings.Repeat("a", 64<<10)), []byte(`"}`)...)...)},
 	}
 	for _, tc := range cases {
@@ -242,6 +248,19 @@ func TestNormalizeShopRoomLayout_Accepts(t *testing.T) {
 		}), func(t *testing.T, l ShopRoomLayout) {
 			if len(l.Decor) != 1 || l.Decor[0] != (ShopRoomDecor{Piece: 1, Spot: 63, Icon: "gem"}) {
 				t.Errorf("decor: %+v", l.Decor)
+			}
+		}},
+		{"manner and moments kept, emptied moments dropped", mutate(func(m map[string]any) {
+			m["manner"] = "gruff"
+			m["moments"] = map[string]any{"hello": []any{"  Well?  ", ""}, "bye": []any{"   "}, "poor": []any{"a", "b", "c", "d", strings.Repeat("é", 200)}}
+		}), func(t *testing.T, l ShopRoomLayout) {
+			if l.Manner != "gruff" || len(l.Moments) != 2 || l.Moments["hello"][0] != "Well?" || len(l.Moments["poor"]) != 5 {
+				t.Errorf("manner/moments: %q %q", l.Manner, l.Moments)
+			}
+		}},
+		{"no manner or moments stays absent", mutate(func(m map[string]any) { m["moments"] = map[string]any{"look": []any{""}} }), func(t *testing.T, l ShopRoomLayout) {
+			if l.Manner != "" || l.Moments != nil {
+				t.Errorf("manner/moments: %q %q", l.Manner, l.Moments)
 			}
 		}},
 		{"unknown fields are dropped", mutate(func(m map[string]any) { m["extra"] = "<script>" }), func(t *testing.T, l ShopRoomLayout) {}},
