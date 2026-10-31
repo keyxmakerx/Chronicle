@@ -1,4 +1,4 @@
--- 006_crafting_turns: the once-a-respite turns a hero spends outside their
+-- 007_crafting_turns: the once-a-respite turns a hero spends outside their
 -- own projects: an experiment ('try') and a hand on a party member's project
 -- ('help', with the project it went to).
 --
