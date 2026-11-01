@@ -287,11 +287,9 @@ func (s *Service) NoteLimited(ctx context.Context, c *Connection) {
 	if s.watchRepo == nil || n < limitAlertAt || (n != limitAlertAt && n%25 != 0) {
 		return
 	}
-	hits := 1
+	hits := 25
 	if n == limitAlertAt {
 		hits = limitAlertAt
-	} else {
-		hits = 25
 	}
 	s.raise(ctx, &Alert{
 		CampaignID: c.CampaignID, ConnectionID: c.ID, Kind: AlertLimit, Hits: hits,

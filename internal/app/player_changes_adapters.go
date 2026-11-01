@@ -233,9 +233,10 @@ func textDiff(older, newer string) (removed, added string) {
 	op := byte(' ')
 	flush := func() {
 		if t := strings.Join(strings.Fields(run.String()), " "); t != "" {
-			if op == '-' {
+			switch op {
+			case '-':
 				gone = append(gone, t)
-			} else if op == '+' {
+			case '+':
 				came = append(came, t)
 			}
 		}

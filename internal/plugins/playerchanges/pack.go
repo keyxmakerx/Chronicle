@@ -34,7 +34,7 @@ func unpack(body []byte) ([]Change, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unpacking changes: %w", err)
 	}
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(zr, maxUnpacked+1))
 	if err != nil {
 		return nil, fmt.Errorf("unpacking changes: %w", err)

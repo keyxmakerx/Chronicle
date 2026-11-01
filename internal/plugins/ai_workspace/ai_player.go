@@ -434,12 +434,9 @@ func playerPageName(c PlayerChange) string {
 
 // playerAppliedLine says what Apply did.
 func playerAppliedLine(applied, failed int, names []string) string {
-	var line string
-	switch {
-	case applied == 0:
+	line := "Changed " + strings.Join(names, ", ") + "."
+	if applied == 0 {
 		line = "Nothing changed."
-	default:
-		line = "Changed " + strings.Join(names, ", ") + "."
 	}
 	if failed > 0 {
 		line += fmt.Sprintf(" %s couldn't be made; try reviewing again.", countOf(failed, "change", "changes"))

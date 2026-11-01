@@ -12,12 +12,12 @@ import (
 
 // monthsLabel names the long range: "6 months", "1 year".
 func monthsLabel(m int) string {
-	switch {
-	case m == 12:
+	switch m {
+	case 12:
 		return "1 year"
-	case m == 24:
+	case 24:
 		return "2 years"
-	case m == 1:
+	case 1:
 		return "1 month"
 	}
 	return fmt.Sprintf("%d months", m)
