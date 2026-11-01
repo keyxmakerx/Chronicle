@@ -36,6 +36,9 @@ go.work.local
 # --- Tailwind CSS (generated output) ---
 static/css/app.css
 
+# --- The token maker's smart cutout (fetched by tools/fetch_cutout.py) ---
+static/vendor/cutout/
+
 # --- Environment & Secrets ---
 .env
 .env.*

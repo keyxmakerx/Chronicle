@@ -88,6 +88,13 @@ html.tkm-lock { overflow: hidden; }
 .tkm-bgd-l, .tkm-bgd-k { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: rgb(238 240 246 / 0.66); }
 .tkm-bgd-k { margin: 12px 0 6px; }
 .tkm-bgd-s { margin: 4px 0 10px; color: rgb(238 240 246 / 0.9); }
+.tkm-bgd-s.is-error { color: #fca5a5; }
+.tkm-smart { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgb(255 255 255 / 0.1); }
+.tkm-smart[hidden], .tkm-bgd-n[hidden], .tkm-bar[hidden], .tkm-smart .fa-spin[hidden] { display: none; }
+.tkm-smart .tkm-nb:disabled { opacity: .7; cursor: default; box-shadow: none; }
+.tkm-bgd-n { margin: 6px 0 0; font-size: 12.5px; color: rgb(238 240 246 / 0.72); }
+.tkm-bar { height: 6px; margin-top: 8px; border-radius: 999px; background: rgb(255 255 255 / 0.14); overflow: hidden; }
+.tkm-bar i { display: block; height: 100%; width: 0; background: #fff; transition: width var(--dur-micro, 120ms) linear; }
 .tkm-bgd-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .tkm-dseg { display: flex; padding: 2px; border-radius: 8px; background: rgb(255 255 255 / 0.07); border: 1px solid rgb(255 255 255 / 0.1); }
 .tkm-dseg button {
@@ -102,7 +109,7 @@ html.tkm-lock { overflow: hidden; }
 .tkm-dsize input { flex: 1; min-width: 0; accent-color: #fff; }
 .tkm-dsize:has(input:disabled) { opacity: .45; }
 /* While a brush is out the drawer folds to the brushes, so the picture is free to paint. */
-.tkm-bgd.is-brushing :is(.tkm-bgd-s, .tkm-bgd-row, [data-tkm-str], #tkm-str-l) { display: none; }
+.tkm-bgd.is-brushing :is(.tkm-bgd-s, .tkm-bgd-row, .tkm-smart, [data-tkm-str], #tkm-str-l) { display: none; }
 .tkm-bgd.is-brushing { padding: 8px 10px 10px; }
 .tkm-bgd.is-brushing :is(.tkm-bgd-l, #tkm-brush-l) { display: none; }
 .tkm-bgd.is-brushing .tkm-bgd-top { position: absolute; top: 8px; right: 6px; }
@@ -145,7 +152,7 @@ html.tkm-lock { overflow: hidden; }
 .tkm.is-calm .tkm-bgd { clip-path: none; opacity: 0; transition: opacity var(--dur-standard, 200ms) var(--ease-out, ease-out); }
 .tkm.is-calm .tkm-bgd.is-on { opacity: 1; }
 .tkm.is-calm .tkm-offer { transform: none; }
-.tkm.is-still :is(.tkm-bgd, .tkm-offer) { transition: none; }
+.tkm.is-still :is(.tkm-bgd, .tkm-offer, .tkm-bar i) { transition: none; }
 .tkm.is-still .tkm-bgd { clip-path: none; }
 .tkm.is-still .tkm-offer { opacity: 1; transform: none; }
 
