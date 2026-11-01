@@ -30,8 +30,7 @@ import (
 //
 // Catalog source is the same `AddonLister.ListForPluginHub` the
 // Features tab + the older /plugins page use; the
-// `addonListerAdapter` populates the new HasDashboard / HasEntitySetup
-// capability flags from `HasExtensionDashboard` / `HasExtensionEntitySetup`
+// `addonListerAdapter` sets HasDashboard from `HasExtensionDashboard`
 // (see extensions_hub.go).
 //
 // The Content Packs card is sourced from the extensions plugin via
@@ -150,51 +149,4 @@ func (h *Handler) ExtensionsHubFragmentAPI(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK,
 		ExtensionsHubFragment(cc, addons, csrfToken))
-}
-
-// ExtensionDashboardFragmentAPI returns the inline dashboard for a
-// single extension slug as an HTMX fragment.
-//
-// Resolution rules — all paths render without panicking and without
-// surfacing a 4xx to the operator:
-//
-//   - Unknown slug      → extensionDashboardMissing placeholder
-//   - Disabled in store → extensionDashboardDisabled placeholder
-//   - Enabled + known   → registered Content from the factory
-//
-// Owner-only by route gating; per-request enable state is fetched
-// via the injected ExtensionEnableChecker. A nil checker renders as
-// `enabled` (test fixtures + early init); the production checker is
-// wired from internal/app/routes.go.
-func (h *Handler) ExtensionDashboardFragmentAPI(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	slug := c.Param("slug")
-	if slug == "" {
-		return apperror.NewBadRequest("slug is required")
-	}
-
-	dashboards := h.BuildExtensionDashboards(cc)
-
-	enabled := true
-	if h.extensionEnableChecker != nil {
-		got, err := h.extensionEnableChecker.IsEnabledForCampaign(c.Request().Context(), cc.Campaign.ID, slug)
-		if err != nil {
-			slog.Warn("extension dashboard: enable check failed",
-				slog.String("slug", slug),
-				slog.String("campaign_id", cc.Campaign.ID),
-				slog.Any("error", err),
-			)
-			// Fail-open so a transient store error doesn't blank the
-			// operator's view; the catalog toggle is the real gate.
-			enabled = true
-		} else {
-			enabled = got
-		}
-	}
-
-	return middleware.Render(c, http.StatusOK,
-		extensionDashboardSwitch(cc, slug, enabled, dashboards))
 }

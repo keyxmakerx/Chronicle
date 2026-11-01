@@ -97,10 +97,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.POST("/extensions/foundry/connect-line", h.NewFoundryConnectLine, RequireRole(RoleOwner))
 	// The owner's Foundry page: checks, connection, module version, install.
 	cg.GET("/foundry", h.FoundryPage, RequireRole(RoleOwner))
-	// Per-extension inline dashboard fragment: hub cards with
-	// HasDashboard=true hx-get this on expand. Disabled / unknown-slug
-	// paths render safe placeholders, never a 4xx.
-	cg.GET("/extensions/:slug/dashboard", h.ExtensionDashboardFragmentAPI, RequireRole(RoleOwner))
 
 	// Sidebar config API (Owner only).
 	cg.GET("/sidebar-config", h.GetSidebarConfig, RequireRole(RoleOwner))

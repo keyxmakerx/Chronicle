@@ -158,6 +158,9 @@ type Lookups struct {
 	// Crafting answers the rest of `what: crafting`; nil says crafting
 	// can't be looked up.
 	Crafting CraftingAPI
+	// Shops adds a shop's room and storefront to the `stock` answer, as
+	// blocks; nil leaves them out.
+	Shops ShopLooksAPI
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -181,7 +184,7 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"table", "optional `name`", "rolling tables, or one table's entries"},
 	{"pins", "optional `map`", "maps, or one map's pins"},
 	{"scenes", "optional `name` (part of a scene's name or folder)", "the scenes in the campaign's Foundry world, as Foundry last reported them, which says which maps already exist there (owner and co-DM only)"},
-	{"stock", "`shop`", "what a shop sells"},
+	{"stock", "`shop`", "what a shop sells, with its room and storefront as blocks"},
 	{"inventory", "`character`", "what a character carries"},
 	{"notes", "none", "my Journal notes, my jots on pages and the notes other members shared with me (game night entries among them): titles, folders, nights and who they are shared with"},
 	{"note", "`name` (its title); optional `page` (for a jot) and `by` (the writer)", "one note's full text"},
@@ -852,7 +855,40 @@ func (run *lookupRun) links(owner, relType, label string) (LookupAnswer, error) 
 		b.WriteString("Nothing yet.\n")
 	}
 	writeLines(&b, lines)
+	if relType == "sells" {
+		run.shopLooks(&b, e)
+	}
 	return LookupAnswer{Chip: ans.Chip, Text: b.String()}, nil
+}
+
+// shopLooks adds the shop's room and storefront as blocks the AI can send
+// back changed. The room reads as the Actor may see the shop; a part that
+// can't be read is left out rather than failing the stock answer.
+func (run *lookupRun) shopLooks(b *strings.Builder, e *entities.Entity) {
+	if run.l.Shops == nil || e.TypeSlug != "shop" {
+		return
+	}
+	room, err := run.l.Shops.Room(run.ctx, run.campaignID, e.ID, run.a)
+	switch {
+	case err != nil:
+	case room == nil:
+		b.WriteString("\n### The shop's room\n\nNobody has arranged it yet, so it opens as a general shop. A `shop-room` block sets what kind of shop it is, its mood and what the keeper says.\n")
+	default:
+		if blk := roomBlock(e.Name, room); blk != "" {
+			b.WriteString("\n### The shop's room\n\n```\n" + blk + "```\n")
+		}
+	}
+	front, saved, err := run.l.Shops.Front(run.ctx, run.campaignID, e.ID, run.a)
+	if err != nil {
+		return
+	}
+	if blk := frontBlock(e.Name, front); blk != "" {
+		head := "\n### Its storefront on the Shops street\n\n"
+		if !saved {
+			head += "Not dressed yet, so it shows the street's default front:\n\n"
+		}
+		b.WriteString(head + "```\n" + blk + "```\n")
+	}
 }
 
 // linkMeta renders a stock or inventory link's numbers: ": 1 gp, 5 in

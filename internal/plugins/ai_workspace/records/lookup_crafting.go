@@ -237,12 +237,19 @@ func (run *lookupRun) craftOverview(c *Crafting) (LookupAnswer, error) {
 	}
 	lines = nil
 	for _, be := range c.Benches {
-		lines = append(lines, be.Name+" ("+be.Kind+")")
+		lines = append(lines, be.Name+" ("+be.KindLabel+")")
 	}
 	listLines(&b, lines, "the rest are on Crafting's Benches tab")
+	if len(c.BenchKinds) > 0 {
+		var ks []string
+		for _, k := range c.BenchKinds {
+			ks = append(ks, "`"+k.Key+"` ("+k.Label+")")
+		}
+		b.WriteString("Kinds of bench: " + strings.Join(ks, ", ") + ".\n")
+	}
 
 	b.WriteString("\nAsk again with `part: recipes`, `part: materials`, `part: drops` or `part: looks` (and `name` for one) for blocks you can send back changed. " +
-		"The tray, projects, benches and each recipe's \"When… then…\" rules are changed in Crafting, not by blocks.\n")
+		"A recipe block carries its \"When… then…\" rules; a `bench` block adds or renames a bench. The tray, projects and where things stand on a bench are changed in Crafting, not by blocks.\n")
 	ans := LookupAnswer{Chip: "Crafting · " + plural(len(c.Recipes), "recipe", "recipes"), Text: b.String()}
 	return ans, nil
 }

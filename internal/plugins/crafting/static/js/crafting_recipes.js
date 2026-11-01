@@ -39,6 +39,10 @@ window.CraftingRecipes = (function () {
   }
   function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
 
+  /* The server's limits (validate.go), so the editor stops where a save
+     would be refused. */
+  var MAX = {materials: 12, steps: 24};
+
   function mount(el, app) {
     var lib = app.lib, R = app.recipes, sel = 0, dragFrom = null, queue = {}, rulesEl = null, rulesFor = null, dead = false;
     function cur() { return R[sel]; }
@@ -59,10 +63,10 @@ window.CraftingRecipes = (function () {
     function flush(r, keep) {
       var q = queue[r.id];
       if (!q || q.busy) return;
-      var send;
+      var send, sentForm = q.form, d = null;
       clearTimeout(q.timer);
       if (q.form) { q.form = false; send = app.api('PUT', '/recipes/' + encodeURIComponent(r.id), L.input(r), keep); }
-      else if (q.rules) { var d = q.rules; q.rules = null; send = app.api('PUT', '/recipes/' + encodeURIComponent(r.id) + '/rules', {rules: d.rules, looks: d.looks, extras: d.extras, version: r.version}, keep); }
+      else if (q.rules) { d = q.rules; q.rules = null; send = app.api('PUT', '/recipes/' + encodeURIComponent(r.id) + '/rules', {rules: d.rules, looks: d.looks, extras: d.extras, version: r.version}, keep); }
       else { app.status('saved'); return; }
       q.busy = true;
       send.then(function (got) {
@@ -71,7 +75,13 @@ window.CraftingRecipes = (function () {
         r.rules = got.rules; r.looks = got.looks; r.extras = got.extras;
         if (!dead && r === cur()) { renderPreview(); renderChecks(); }
         if (q.form || q.rules) flush(r, keep); else app.status('saved');
-      }, function (err) { q.busy = false; failed(err); });
+      }, function (err) {
+        // A refused save stays owed, so the next unrelated save can't
+        // report "saved" over it and the change goes with the next try.
+        q.busy = false;
+        if (sentForm) q.form = true; else if (d && !q.rules) q.rules = d;
+        failed(err);
+      });
     }
     function touch() { want(cur(), 'form'); renderList(); renderPreview(); renderChecks(); }
     function changed() { want(cur(), 'form'); renderAll(); }
@@ -149,12 +159,13 @@ window.CraftingRecipes = (function () {
           '<span class="cra-tag">' + esc(tags.length ? tags.map(function (t) { return L.tagLabel(lib, t); }).join(', ') : 'no tag') + '</span>' + qty(m.qty, 'mq', 'One') +
           '<button type="button" class="cra-ib" data-act="rm-mat" aria-label="Remove ' + esc(L.matName(lib, m, app.items)) + '">' + I.x + '</button></li>';
       });
-      h += '</ul><div class="cra-row"><button type="button" class="btn btn-secondary btn-sm" data-act="add-mat">Add an item</button><button type="button" class="btn btn-secondary btn-sm" data-act="add-slot">Add “any herb”</button></div>' +
+      h += '</ul><div class="cra-row"><button type="button" class="btn btn-secondary btn-sm" data-act="add-mat"' + (r.materials.length >= MAX.materials ? ' disabled' : '') + '>Add an item</button><button type="button" class="btn btn-secondary btn-sm" data-act="add-slot"' + (r.materials.length >= MAX.materials ? ' disabled' : '') + '>Add “any herb”</button></div>' +
+        (r.materials.length >= MAX.materials ? '<p class="cra-fine">A recipe takes at most ' + MAX.materials + ' materials.</p>' : '') +
         (app.itemList.length ? '' : '<p class="cra-fine">The Armory has no items yet. Add items there, then tag them under Materials.</p>') + '</div>';
 
       h += '<div class="cra-fsec"><h4>Steps <small>in order: drag a row, or use the arrows</small></h4>' + (r.steps.length ? '' : '<p class="cra-empty">No steps yet. Pick a template above, or add steps one by one.</p>') + '<ol class="cra-steps">';
       r.steps.forEach(function (s, i) { h += stepRow(r, s, i, fixes); });
-      h += '</ol><div class="cra-addwrap"><button type="button" class="btn btn-secondary btn-sm" data-act="add-step" aria-expanded="false" aria-haspopup="menu">Add a step</button><div class="cra-menu" role="menu" hidden>';
+      h += '</ol><div class="cra-addwrap"><button type="button" class="btn btn-secondary btn-sm" data-act="add-step" aria-expanded="false" aria-haspopup="menu"' + (r.steps.length >= MAX.steps ? ' disabled title="A recipe has at most ' + MAX.steps + ' steps."' : '') + '>Add a step</button><div class="cra-menu" role="menu" hidden>';
       var B = L.benchKind(lib, r.bench);
       lib.steps.forEach(function (k) {
         var off = k.tool && B && B.tools.indexOf(k.tool) < 0;
@@ -354,15 +365,16 @@ window.CraftingRecipes = (function () {
         return;
       }
       if (b.hasAttribute('data-who')) { r.who = b.getAttribute('data-who'); changed(); return; }
-      if (b.hasAttribute('data-k')) { r.steps.push(L.newStep(lib, r, b.getAttribute('data-k'), app.items)); changed(); return; }
+      if (b.hasAttribute('data-k')) { if (r.steps.length >= MAX.steps) return; r.steps.push(L.newStep(lib, r, b.getAttribute('data-k'), app.items)); changed(); return; }
       switch (act) {
         case 'add-step': menuOpen($('.cra-menu').hidden); return;
         case 'add-mat':
+          if (r.materials.length >= MAX.materials) return;
           if (!app.itemList.length) { app.toast('The Armory has no items yet.'); return; }
           var used = {}; r.materials.forEach(function (m) { if (m.itemId) used[m.itemId] = 1; });
           var next = app.itemList.filter(function (it) { return !used[it.id]; })[0] || app.itemList[0];
           r.materials.push({itemId: next.id, qty: 1}); break;
-        case 'add-slot': r.materials.push({tag: 'herb', qty: 1}); break;
+        case 'add-slot': if (r.materials.length >= MAX.materials) return; r.materials.push({tag: 'herb', qty: 1}); break;
         case 'rm-mat': L.removeMaterial(r, i); break;
         case 'mq-': case 'mq+': r.materials[i].qty = bump(r.materials[i].qty, act === 'mq+' ? 1 : -1, 1, 99); break;
         case 'rq-': case 'rq+': r.result.qty = bump(r.result.qty, act === 'rq+' ? 1 : -1, 1, 99); break;

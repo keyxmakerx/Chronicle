@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -27,6 +28,20 @@ type RelationsAPI interface {
 	Delete(ctx context.Context, id int) error
 }
 
+// CarriedAPI keeps a character's count of an Armory item through the
+// Armory itself, so a change the owner approves is a give or a take in the
+// item history, with the player's bell and remembered copies handled the way
+// every Armory move handles them. Implemented in internal/app; nil leaves
+// every count a plain edit of the relation, as the inventory widget makes.
+type CarriedAPI interface {
+	// Counts reports whether the Armory keeps this count for a: the page is
+	// a character, the item an Armory item, and a may give (Owner or co-DM).
+	Counts(ctx context.Context, campaignID string, a Actor, characterID, itemID string) bool
+	// SetCarried makes the character hold qty of the item; 0 takes the line
+	// away.
+	SetCarried(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int) error
+}
+
 // linkKind is a page-to-page relation with numeric metadata: a shop's stock
 // ("sells") or what a character carries ("Has Item"). The relation types
 // and metadata keys are the ones the armory and shop widgets read.
@@ -39,6 +54,8 @@ type linkKind struct {
 	strs                 []string
 	Entities             EntityLookup
 	Rels                 RelationsAPI
+	// Armory, on carried items only, writes counts through the Armory.
+	Armory CarriedAPI
 }
 
 // ShopStockKind is what a shop sells and for how much.
@@ -53,13 +70,13 @@ func ShopStockKind(e EntityLookup, r RelationsAPI) Kind {
 }
 
 // CarriedItemKind is an item in a character's inventory.
-func CarriedItemKind(e EntityLookup, r RelationsAPI) Kind {
+func CarriedItemKind(e EntityLookup, r RelationsAPI, armory CarriedAPI) Kind {
 	return &linkKind{
 		name: "carried-item", label: "Carried item", ownerKey: "character", joiner: "for", qtyWord: "carried",
 		relType: "Has Item", reverseType: "In Inventory Of",
 		numbers: []string{"quantity"}, strs: []string{"notes"},
-		Entities: e, Rels: r,
-		doc: "An item in a character's inventory. Keys: `character` (the character's page name), `item` (the item's page name), `quantity` (default 1), `notes`. `action: delete` takes it away.\n\n```\n---\nkind: carried-item\ncharacter: Ser Aldric\nitem: Potion of Healing\nquantity: 2\n---\n```",
+		Entities: e, Rels: r, Armory: armory,
+		doc: "An item in a character's inventory. Keys: `character` (the character's page name), `item` (the item's page name), `quantity` (how many they hold in all; default 1), `notes`. `action: delete` takes it away. For an Armory item the change is a give or a take in the character's item history, and lowering a count takes plain copies before remembered ones.\n\n```\n---\nkind: carried-item\ncharacter: Ser Aldric\nitem: Potion of Healing\nquantity: 2\n---\n```",
 	}
 }
 
@@ -155,6 +172,12 @@ func (k *linkKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 		p.Warnings = append(p.Warnings, "No page called "+quote(missing)+" yet; it must be created in this import")
 		return p
 	}
+	armory := k.armoryCounts(ctx, campaignID, a, src, item)
+	if armory && r.Has("quantity") {
+		if f, _, _ := r.Float("quantity"); f != math.Trunc(f) || f > maxCarried {
+			return Plan{Error: "quantity is a whole number up to 1,000,000"}
+		}
+	}
 	switch r.Action {
 	case ActionCreate:
 		if link != nil {
@@ -170,7 +193,64 @@ func (k *linkKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 		}
 		p.Summary = "removes " + item.Name + " from " + src.Name
 	}
+	if armory {
+		p.Summary = k.armorySummary(r, link, p.Summary)
+	}
 	return p
+}
+
+// maxCarried is the Armory's largest count.
+const maxCarried = 1000000
+
+// armoryCounts reports whether this carried item's count goes through the
+// Armory.
+func (k *linkKind) armoryCounts(ctx context.Context, campaignID string, a Actor, src, item *entities.Entity) bool {
+	return k.Armory != nil && src != nil && item != nil && k.Armory.Counts(ctx, campaignID, a, src.ID, item.ID)
+}
+
+// carriedTarget is the count a carried-item record asks for, and false when
+// it leaves the count alone (a change of notes on a line already there).
+func carriedTarget(r Record, link *relations.Relation) (int, bool) {
+	if r.Action == ActionDelete {
+		return 0, true
+	}
+	if f, ok, _ := r.Float("quantity"); ok {
+		return int(f), true
+	}
+	if link == nil {
+		return 1, true
+	}
+	return 0, false
+}
+
+// heldOn reads the count stored on a carried line; a line without one holds 1.
+func heldOn(link *relations.Relation) int {
+	if link == nil {
+		return 0
+	}
+	var m struct {
+		Quantity *float64 `json:"quantity"`
+	}
+	if json.Unmarshal(link.Metadata, &m) != nil || m.Quantity == nil {
+		return 1
+	}
+	return int(*m.Quantity)
+}
+
+// armorySummary says what the Armory will write in the item history.
+func (k *linkKind) armorySummary(r Record, link *relations.Relation, plain string) string {
+	want, ok := carriedTarget(r, link)
+	held := heldOn(link)
+	switch {
+	case !ok || want == held:
+		return plain
+	case want > held:
+		return fmt.Sprintf("gives %d (holds %d after) · in the item history", want-held, want)
+	case want == 0:
+		return fmt.Sprintf("takes all %d away · in the item history", held)
+	default:
+		return fmt.Sprintf("takes %d away (holds %d after) · in the item history", held-want, want)
+	}
 }
 
 // meta merges the record's keys into existing metadata, keeping keys the
@@ -212,6 +292,9 @@ func (k *linkKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if r.Action != ActionCreate && link == nil {
 		return apperror.NewBadRequest("it changed while you were reviewing; check it again")
 	}
+	if k.armoryCounts(ctx, campaignID, a, src, item) {
+		return k.applyThroughArmory(ctx, campaignID, a, r, src, item, link)
+	}
 	if r.Action == ActionDelete {
 		return k.Rels.Delete(ctx, link.ID)
 	}
@@ -228,6 +311,35 @@ func (k *linkKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	}
 	_, err = k.Rels.Create(ctx, campaignID, src.ID, item.ID, k.relType, k.reverseType, a.UserID, md)
 	return err
+}
+
+// applyThroughArmory sets the count with the Armory, then writes the notes
+// onto the line it leaves, keeping every other field the Armory and the
+// inventory widget keep there (equipped, attuned…).
+func (k *linkKind) applyThroughArmory(ctx context.Context, campaignID string, a Actor, r Record, src, item *entities.Entity, link *relations.Relation) error {
+	if want, ok := carriedTarget(r, link); ok {
+		if err := k.Armory.SetCarried(ctx, campaignID, a, src.ID, item.ID, want); err != nil {
+			return err
+		}
+	}
+	notes := r.Str("notes")
+	if notes == "" || r.Action == ActionDelete {
+		return nil
+	}
+	_, _, link, err := k.resolve(ctx, campaignID, r)
+	if err != nil || link == nil {
+		return err
+	}
+	m := map[string]any{}
+	if len(link.Metadata) > 0 {
+		_ = json.Unmarshal(link.Metadata, &m)
+	}
+	m["notes"] = notes
+	md, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return k.Rels.UpdateMetadata(ctx, link.ID, md)
 }
 
 // Export is empty: the page export already lists each page's relations,

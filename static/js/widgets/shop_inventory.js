@@ -85,6 +85,20 @@ Chronicle.register('shop_inventory', {
         loading.className = 'shop-inv-empty';
         loading.textContent = 'Loading inventory...';
         wrapper.appendChild(loading);
+      } else if (state.failed) {
+        // A failed read is not an empty shop: saying "no items" would invite
+        // a Scribe to stock it again.
+        var bad = document.createElement('div');
+        bad.className = 'shop-inv-empty';
+        bad.setAttribute('role', 'alert');
+        bad.textContent = 'The inventory couldn’t be loaded. ';
+        var again = document.createElement('button');
+        again.type = 'button';
+        again.className = 'shop-inv-link';
+        again.textContent = 'Try again';
+        again.onclick = function () { state.loading = true; state.failed = false; render(); loadInventory(); };
+        bad.appendChild(again);
+        wrapper.appendChild(bad);
       } else if (state.items.length === 0) {
         var empty = document.createElement('div');
         empty.className = 'shop-inv-empty';
@@ -488,7 +502,9 @@ Chronicle.register('shop_inventory', {
         })
         .then(function (data) {
           // Filter to only "sells" relations.
-          state.items = (data || []).filter(function (r) {
+          state.failed = false;
+          var list = Array.isArray(data) ? data : (data && data.data) || [];
+          state.items = list.filter(function (r) {
             return r.relationType === 'sells';
           }).map(function (r) {
             // Parse metadata if it's a string.
@@ -504,6 +520,7 @@ Chronicle.register('shop_inventory', {
         .catch(function (err) {
           console.error('Shop inventory: failed to load', err);
           state.loading = false;
+          state.failed = true;
           render();
         });
     }

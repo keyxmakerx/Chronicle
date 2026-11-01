@@ -229,3 +229,43 @@ func closeKnown(s string, n int) bool {
 	}
 	return false
 }
+
+// FollowMaterials keeps a recipe's substitutes on the material they were
+// written for when the materials list changes. A substitute names its
+// material by index, so without this an edit that removes or reorders
+// materials leaves it standing in for a different line. A substitute whose
+// material is gone is dropped.
+func FollowMaterials(x Extras, before, after []Material) Extras {
+	if len(x.Substitutes) == 0 {
+		x.Substitutes = []Substitute{}
+		return x
+	}
+	key := func(m Material) string {
+		if m.ItemID != "" {
+			return "i:" + m.ItemID
+		}
+		return "t:" + m.Tag
+	}
+	at := map[string]int{}
+	for i, m := range after {
+		if _, dup := at[key(m)]; !dup {
+			at[key(m)] = i
+		}
+	}
+	out := make([]Substitute, 0, len(x.Substitutes))
+	seen := map[int]bool{}
+	for _, sub := range x.Substitutes {
+		if sub.For < 0 || sub.For >= len(before) {
+			continue
+		}
+		i, ok := at[key(before[sub.For])]
+		if !ok || seen[i] {
+			continue
+		}
+		seen[i] = true
+		sub.For = i
+		out = append(out, sub)
+	}
+	x.Substitutes = out
+	return x
+}

@@ -131,7 +131,8 @@
       });
       return h + '</div>';
     }
-    root.innerHTML = '<div class="crr-pane crr-fxpane"><div class="crr-sech"><h4>How it looks</h4><small>Pick a moment, press play, then drag effects onto the bench. They’re the same effects as item looks.</small></div>' +
+    // TODO(#1989): a rule's moment plays for players too.
+    root.innerHTML = '<div class="crr-pane crr-fxpane"><div class="crr-sech"><h4>How it looks</h4><small>Pick a moment, press play, then drag effects onto the bench. They’re the same effects as item looks. A player sees the brew and mishap moments on their Crafting block as they happen; your rules’ moments show only here for now.</small></div>' +
       '<div class="crr-fxgrid"><nav class="crr-orail" aria-label="Moments"></nav><div class="crr-fxmain"><div class="crr-stage"><canvas role="img" aria-label="The bench, playing the chosen moment"></canvas>' +
       '<span class="crr-stg-tag"></span><span class="crr-stg-cap"></span><div class="crr-spots"></div><div class="crr-fxtoast" role="status" hidden></div></div>' +
       '<div class="crr-fxbar"><button type="button" class="btn btn-primary" data-act="play">' + fa('play') + '<span>Play it</span></button>' +

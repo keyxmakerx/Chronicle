@@ -4,17 +4,16 @@
 // The Extensions hub is the operator's top-level entry point to every
 // per-campaign feature ("extension"): one card per addon, owner-gated
 // enable/disable via the existing addons-store toggle
-// (`PUT /campaigns/:id/addons/:addonID/toggle`), and an inline-expandable
-// dashboard panel slot per card. Content Packs (per-campaign installable
+// (`PUT /campaigns/:id/addons/:addonID/toggle`), and an "Open dashboard"
+// link for apps with a dashboard page. Content Packs (per-campaign installable
 // packs from the admin install surface) is one card inside the hub
 // instead of a standalone page.
 //
-// The capability flags (HasDashboard / HasEntitySetup) live on
+// The HasDashboard flag lives on
 // `PluginHubAddon` (via `AddonLister.ListForPluginHub`), not on the
 // admin-side `PluginInfo` registry, which feeds the admin Plugins page
 // and over-includes infrastructure plugins (auth, audit, syncapi, ...).
-// They are populated by the addons-side adapter from the slug tables
-// below.
+// It is populated by the addons-side adapter from the table below.
 
 package campaigns
 
@@ -25,33 +24,15 @@ import (
 	"github.com/a-h/templ"
 )
 
-// extensionDashboardSlugs marks which extension slugs ship an inline
-// dashboard fragment, registered via `RegisterExtensionDashboard`.
-// Today only calendar.
-var extensionDashboardSlugs = map[string]bool{
-	"calendar": true,
-}
-
-// extensionEntitySetupSlugs marks which extension slugs ship a
-// per-entity setup card. Today only calendar; maps already has its own
-// setup card outside this mechanism.
-var extensionEntitySetupSlugs = map[string]bool{
-	"calendar": true,
-}
-
-// extensionDashboardPages maps an addon slug to a DEDICATED dashboard page
-// (a full route), as opposed to the inline-panel fragment. When an entry
-// exists, the hub's "Open dashboard" affordance navigates to the page
-// instead of HTMX-swapping the inline panel. Other apps keep the inline
-// panel until they gain a dedicated page. The value is a path template
-// taking the campaign ID. See ExtensionDashboardPageURL.
+// extensionDashboardPages maps an addon slug to its dashboard page; the
+// value is a path template taking the campaign ID. An app missing here
+// has no "Open dashboard" link.
 var extensionDashboardPages = map[string]string{
 	"calendar": "/campaigns/%s/apps/calendar",
 }
 
 // ExtensionDashboardPageURL returns the dedicated dashboard-page URL for a
-// slug (and true) when one exists, else ("", false) — in which case the hub
-// falls back to the inline-panel fragment affordance.
+// slug (and true) when one exists, else ("", false).
 func ExtensionDashboardPageURL(slug, campaignID string) (string, bool) {
 	tmpl, ok := extensionDashboardPages[slug]
 	if !ok {
@@ -60,19 +41,12 @@ func ExtensionDashboardPageURL(slug, campaignID string) (string, bool) {
 	return fmt.Sprintf(tmpl, campaignID), true
 }
 
-// HasExtensionDashboard reports whether the given addon slug exposes
-// an inline dashboard fragment for the Extensions hub. Called by the
-// addons-side lister adapter (`internal/app/routes.go`'s
-// `addonListerAdapter.ListForPluginHub`) to populate
-// `PluginHubAddon.HasDashboard`.
+// HasExtensionDashboard reports whether the given addon slug has a
+// dashboard page. Read by addonListerAdapter in internal/app/routes.go to
+// set PluginHubAddon.HasDashboard.
 func HasExtensionDashboard(slug string) bool {
-	return extensionDashboardSlugs[slug]
-}
-
-// HasExtensionEntitySetup reports whether the given addon slug exposes
-// a per-entity setup card. Same wiring path as HasExtensionDashboard.
-func HasExtensionEntitySetup(slug string) bool {
-	return extensionEntitySetupSlugs[slug]
+	_, ok := extensionDashboardPages[slug]
+	return ok
 }
 
 // ContentPacksCardRenderer is the inversion of the campaigns ↔

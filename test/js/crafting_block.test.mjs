@@ -143,3 +143,16 @@ test('remembered copies of a material are offered by name, gone-off ones never',
   assert.deepEqual(plain(B.keptOf(p, 'leaf')), []);
   assert.deepEqual(plain(kept.slice(0, 3).map(B.keptName)), ['Moonlit', 'Poor', 'Fine, Fresh']);
 });
+
+test('the bench opens as the journal on a phone and the Director’s look wider, and a player’s switch wins', () => {
+  const cases = [
+    { saved: '', narrow: true, director: 'desk', want: 'journal' },
+    { saved: '', narrow: false, director: 'desk', want: 'desk' },
+    { saved: '', narrow: false, director: 'journal', want: 'journal' },
+    { saved: '', narrow: false, director: '', want: 'desk' },
+    { saved: 'desk', narrow: true, director: 'journal', want: 'desk' },
+    { saved: 'journal', narrow: false, director: 'desk', want: 'journal' },
+    { saved: 'nonsense', narrow: false, director: 'desk', want: 'desk' },
+  ];
+  for (const c of cases) assert.equal(B.pickSkin(c.saved, c.narrow, c.director), c.want, JSON.stringify(c));
+});

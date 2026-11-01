@@ -47,6 +47,16 @@ window.CraftingBenches = (function () {
   }
   function engineKey(id) { return 'r' + String(id).replace(/[^a-zA-Z0-9]/g, ''); }
 
+  /* A bench whose scripts never arrive would say "Loading the bench…"
+     forever; after a while it says so and offers another try. */
+  function watchBench(node, retry) {
+    setTimeout(function () {
+      if (!node.isConnected || !node.querySelector(':scope > p[role="status"]')) return;
+      node.innerHTML = '<p class="cra-fine cra-bad" role="alert">The bench didn’t load. <button type="button" class="cra-link">Try again</button></p>';
+      node.querySelector('button').addEventListener('click', retry);
+    }, 20000);
+  }
+
   function mount(el, app) {
     var lib = app.lib, B = app.benches, sel = 0, skin = lib.settings.skin || 'desk', tryId = '', benchEl = null, q = null, seen = false;
     function cur() { return B[sel]; }
@@ -74,8 +84,9 @@ window.CraftingBenches = (function () {
       if (w.busy) return w.p;
       var b = w.b, path = '/benches/' + encodeURIComponent(b.id), send, skinKey = Object.keys(w.looks)[0];
       clearTimeout(w.timer);
-      if (w.name) { w.name = false; send = app.api('PUT', path, {name: b.name, kind: b.kind, version: b.version}, keep); }
-      else if (w.up) { w.up = false; send = app.api('PUT', path + '/upgrades', {upgrades: b.upgrades, version: b.version}, keep); }
+      var sent = null;
+      if (w.name) { w.name = false; sent = 'name'; send = app.api('PUT', path, {name: b.name, kind: b.kind, version: b.version}, keep); }
+      else if (w.up) { w.up = false; sent = 'up'; send = app.api('PUT', path + '/upgrades', {upgrades: b.upgrades, version: b.version}, keep); }
       else if (skinKey) { var st = w.looks[skinKey]; delete w.looks[skinKey]; send = app.api('PUT', path + '/look/' + skinKey, {state: st, version: b.version}, keep); }
       else { app.status('saved'); edStatus('All changes saved'); return Promise.resolve(); }
       w.busy = true;
@@ -86,7 +97,13 @@ window.CraftingBenches = (function () {
         if (!w.looks.desk) b.desk = got.desk;
         if (!w.looks.journal) b.journal = got.journal;
         return flush(w, keep);
-      }, function (err) { w.busy = false; failed(err); edStatus('Not saved'); });
+      }, function (err) {
+        // A refused save stays owed, so a later save can't say "All
+        // changes saved" over it.
+        w.busy = false;
+        if (sent) w[sent] = true; else if (!w.looks[skinKey]) w.looks[skinKey] = st;
+        failed(err); edStatus('Not saved');
+      });
       return w.p;
     }
     function edStatus(t) { if (benchEl && benchEl._crb && benchEl._crb.status) benchEl._crb.status(t); }
@@ -112,6 +129,7 @@ window.CraftingBenches = (function () {
         onChange: function (state) { b[which] = state; want(b, which, state); }};
       box.appendChild(benchEl);
       Chronicle.mountWidget(benchEl);
+      watchBench(benchEl, mountBench);
     }
 
     /* ---------- Drawing ---------- */

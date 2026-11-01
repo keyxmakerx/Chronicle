@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -133,7 +134,7 @@ func TestAICraftingAdapterReadAsTheDirector(t *testing.T) {
 		t.Fatal("no steady method")
 	}
 	asLaid := crafting.Recipe{ID: "r1", Name: "Tonic", Template: "steady", Bench: laid.Bench, Materials: laid.Materials, Steps: laid.Steps,
-		Rules: []crafting.Rule{{}}, Result: crafting.Result{ItemID: "moss", Qty: 2}, Cost: crafting.Cost{Amount: 5, Currency: "gp"}, Draft: true}
+		Rules: []crafting.Rule{{When: []crafting.Cond{{Kind: "always"}}, Then: crafting.Effect{Kind: "edge"}, Players: "book"}}, Result: crafting.Result{ItemID: "moss", Qty: 2}, Cost: crafting.Cost{Amount: 5, Currency: "gp"}, Draft: true}
 	changed := asLaid
 	changed.ID, changed.Name = "r2", "Strong tonic"
 	changed.Steps = append([]crafting.Step(nil), laid.Steps...)
@@ -152,7 +153,7 @@ func TestAICraftingAdapterReadAsTheDirector(t *testing.T) {
 		t.Fatalf("recipes %+v", c.Recipes)
 	}
 	r := c.Recipes[0]
-	if r.ByHand || r.Method != "steady" || r.Steps != len(laid.Steps) || r.Rules != 1 || !r.Draft || r.Cost != 5 || r.Currency != "gp" || r.ResultQty != 2 {
+	if r.ByHand || r.Method != "steady" || r.Steps != len(laid.Steps) || len(r.Rules) != 1 || !strings.HasPrefix(r.Rules[0], `{"when":[`) || !r.Draft || r.Cost != 5 || r.Currency != "gp" || r.ResultQty != 2 {
 		t.Errorf("as laid %+v", r)
 	}
 	if !c.Recipes[1].ByHand {
@@ -164,7 +165,7 @@ func TestAICraftingAdapterReadAsTheDirector(t *testing.T) {
 	if len(c.Projects) != 1 || c.Projects[0].Rolls != 1 {
 		t.Errorf("projects %+v", c.Projects)
 	}
-	if len(c.Benches) != 1 || c.Benches[0].Kind != "Apothecary bench" {
+	if len(c.Benches) != 1 || c.Benches[0].Kind != "apothecary" || c.Benches[0].KindLabel != "Apothecary bench" || len(c.BenchKinds) == 0 {
 		t.Errorf("benches %+v", c.Benches)
 	}
 	if len(c.Methods) != len(crafting.Templates) || c.Methods[0].Label != "Steady brew" {

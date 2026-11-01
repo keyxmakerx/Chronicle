@@ -565,11 +565,65 @@ window.CraftPictures = (function () {
   var BY = {}, LIST = [];
   P.forEach(function (p) { BY[p[0]] = p; LIST.push({key: p[0], label: p[1], motion: p[2]}); });
 
-  /* The drawing's insides, for a skin that places it in its own SVG. */
-  function inner(key, color) {
-    var p = BY[key];
+  /* ---------- The ink style ----------
+     The paper looks draw the same pictures as a pen sketch: brown ink lines,
+     a pale wash of the colour, and the shading as hatching. Nothing is drawn
+     twice: the shaded drawing is rewritten as it comes out. Each light-to-dark
+     gradient becomes a mask on the hatching that keeps only its dark side, so
+     the hatching sits where the shadow was. At shelf size (small) the hatching
+     would turn to mud, so the line gets bolder, the shadow becomes a flat
+     tone, and the wobble goes. */
+  var PEN = '#3b2a1a', SHEET = [246, 238, 219];
+  function hex3(h) {
+    h = String(h).replace('#', '');
+    if (h.length === 3) h = h.replace(/./g, '$&$&');
+    var n = parseInt(h, 16);
+    return isNaN(n) || h.length !== 6 ? null : [n >> 16 & 255, n >> 8 & 255, n & 255];
+  }
+  // A colour as a watercolour wash on the sheet: lighter, and a little warm.
+  function washed(h, k) {
+    var c = hex3(h);
+    if (!c) return h;
+    return '#' + c.map(function (v, i) { return ('0' + Math.round(v + (SHEET[i] - v) * k).toString(16)).slice(-2); }).join('');
+  }
+  // The dark side of a shading gradient, as a mask's white.
+  function darkSide(g) {
+    return GRADS[g].replace(/id="@(\w)"/, 'id="@k$1"').replace(/<stop offset="([\d.]+)" stop-color="(#fff|#000)" stop-opacity="([\d.]+)"\/>/g, function (m, off, col, op) {
+      return '<stop offset="' + off + '" stop-color="#fff" stop-opacity="' + (col === '#000' ? Math.min(1, op * 2.6).toFixed(2) : 0) + '"/>';
+    });
+  }
+  function inked(art, small) {
+    var used = {}, defs = '';
+    art = art
+      .replace(new RegExp('fill="url\\(#' + U + '([vthr])\\)"', 'g'), function (m, g) { used[g] = 1; return 'fill="url(#' + U + 'k)" mask="url(#' + U + 'm' + g + ')"'; })
+      .replace(new RegExp('<[a-z]+ [^>]*fill="url\\(#' + U + 'g\\)"[^>]*/>', 'g'), '')
+      .replace(/fill="(#[0-9a-fA-F]{3,6})"/g, function (m, h) { return 'fill="' + washed(h, small ? 0.45 : 0.55) + '"'; })
+      .replace(/fill="rgb\(0 0 0 \/ ([\d.]+)\)"/g, function (m, o) { return 'fill="url(#' + U + 'k)" opacity="' + Math.min(1, o * 3.2).toFixed(2) + '"'; })
+      .replace(/fill="rgb\(255 255 255 \/ ([\d.]+)\)"/g, function (m, o) { return 'fill="#fffaf0" opacity="' + (o * 0.7).toFixed(2) + '"'; })
+      .replace(/stroke="rgb\(0 0 0 \/ ([\d.]+)\)"/g, function (m, o) { return 'stroke="' + PEN + '" stroke-opacity="' + Math.min(1, o * 2.2).toFixed(2) + '"'; });
+    defs += small ? '<pattern id="' + U + 'k" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="' + PEN + '" opacity=".26"/></pattern>'
+      : '<pattern id="' + U + 'k" width="1.7" height="1.7" patternUnits="userSpaceOnUse" patternTransform="rotate(38)"><path d="M0 0v1.7" stroke="' + PEN + '" stroke-width=".5" opacity=".8"/></pattern>' +
+        '<filter id="' + U + 'w" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".35" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale=".7"/></filter>';
+    Object.keys(used).forEach(function (g) {
+      defs += darkSide(g).replace(/@/g, U) + '<mask id="' + U + 'm' + g + '" maskContentUnits="objectBoundingBox"><rect width="1" height="1" fill="url(#' + U + 'k' + g + ')"/></mask>';
+    });
+    if (art.indexOf('url(#' + U + 'b)') >= 0) defs += GRADS.b.replace(/@/g, U);
+    return '<defs>' + defs + '</defs>' + (small ? art : '<g filter="url(#' + U + 'w)">' + art + '</g>');
+  }
+
+  /* The drawing's insides, for a skin that places it in its own SVG.
+     opts.style 'ink' draws it as a pen sketch; opts.small with it is the
+     bolder version for shelf and pack sizes. */
+  function inner(key, color, opts) {
+    var p = BY[key], o = opts || {};
     if (!p) return '<circle cx="20" cy="20" r="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3"/><text x="20" y="25" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">?</text>';
     C = color || '#8a8a8a'; U = 'cpx' + (++seq) + '-';
+    if (o.style === 'ink') {
+      var keepInk = INK, keepK = K;
+      INK = PEN;
+      K = 'stroke="' + PEN + '" stroke-width="' + (o.small ? 2 : 1.25) + '" stroke-linejoin="round" stroke-linecap="round"';
+      try { return inked(p[3](), !!o.small); } finally { INK = keepInk; K = keepK; }
+    }
     var art = p[3](), defs = '';
     Object.keys(GRADS).forEach(function (g) { if (art.indexOf('url(#' + U + g + ')') >= 0) defs += GRADS[g].replace(/@/g, U); });
     return (defs ? '<defs>' + defs + '</defs>' : '') + art;
@@ -580,7 +634,7 @@ window.CraftPictures = (function () {
   function svg(key, color, size, opts) {
     var s = size || 32, o = opts || {};
     return '<svg class="cra-ico ' + cls(key) + (o.cls ? ' ' + o.cls : '') + '" viewBox="0 0 40 40" width="' + s + '" height="' + s + '"' +
-      (o.label ? ' role="img" aria-label="' + String(o.label).replace(/[&<>"]/g, '') + '"' : ' aria-hidden="true"') + '>' + inner(key, color) + '</svg>';
+      (o.label ? ' role="img" aria-label="' + String(o.label).replace(/[&<>"]/g, '') + '"' : ' aria-hidden="true"') + '>' + inner(key, color, o) + '</svg>';
   }
   function has(key) { return !!BY[key]; }
   function motion(key) { return BY[key] ? BY[key][2] : 'none'; }

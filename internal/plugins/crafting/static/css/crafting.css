@@ -465,6 +465,10 @@ html[data-motion="off"] .cra-dot { transition: none; }
 .crp-foot { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .crp-foot .cra-fine { margin-right: auto; max-width: 60ch; }
 .crp-bench { border-radius: var(--cra-r); overflow: hidden; border: 1px solid var(--cra-line); min-height: 120px; }
+.crp-look { margin: 6px 0 0; text-align: right; font-size: 0.8rem; }
+.crp-said { margin: 8px 0 0; font-style: italic; color: var(--color-text-primary); }
+.crp-look .cra-link { display: inline-block; min-height: 32px; padding: 6px 2px; }
+@media (pointer: coarse) { .crp-look .cra-link { min-height: 44px; padding: 12px 4px; } }
 
 .crp-result { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 22px; align-items: start; }
 .crp-dice { display: flex; gap: 10px; }

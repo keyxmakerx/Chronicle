@@ -301,6 +301,9 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 			}
 			cr.Needs = append(cr.Needs, n)
 		}
+		if r.Extras.Mastery != nil && r.Extras.Mastery.Gives == "skip" {
+			cr.Skip = s.mastered(ctx, campaignID, Project{CharacterID: e.ID, RecipeID: r.ID}, r.Extras)
+		}
 		if r.Result.ItemID != "" {
 			cr.Makes = materialName(Material{ItemID: r.Result.ItemID}, names)
 			cr.MakesID, cr.Salvage = r.Result.ItemID, salvageText(r.Extras)
@@ -713,7 +716,31 @@ func (s *service) rollOn(ctx context.Context, campaignID string, p Project, e, h
 		})
 	}
 	res.Project = s.view(next, e.Name, recipe, day, sys, names, v.Director)
+	res.Moment = rollMoment(res, in.Work, x)
+	if recipe != nil {
+		if l := recipe.Looks[res.Moment]; l != nil && (len(l.Spots) > 0 || l.Words != "") {
+			res.Look = l
+		}
+	}
 	return res, nil
+}
+
+// rollMoment is which of the How it looks moments a roll was: a mishap from
+// the recipe's own mishap table is its row's moment, then a breakthrough,
+// then success when it finished, failure for botched, spoiled or lost work,
+// and progress otherwise.
+func rollMoment(res *RollResult, work string, x Extras) string {
+	switch {
+	case res.Mishap != nil && x.Mishaps != nil && res.Mishap.Table == x.Mishaps.Table && res.Mishap.Row >= 0 && res.Mishap.Row < maxMishapMoments:
+		return "mishap:" + strconv.Itoa(res.Mishap.Row)
+	case res.Breakthrough:
+		return "breakthrough"
+	case res.Finished:
+		return "success"
+	case work == WorkBotched || res.Spoiled || res.Lost:
+		return "failure"
+	}
+	return "progress"
 }
 
 // addUp rolls the dice and adds every term to res, returning how many more
@@ -986,40 +1013,47 @@ func (s *service) Projects(ctx context.Context, campaignID string, v Viewer) (*P
 // LogRespite is the Crafting app's button: every project in progress gets
 // one roll, and Homebrew rules set off by a respite run as from the drawer.
 func (s *service) LogRespite(ctx context.Context, campaignID string, v Viewer) (*RespiteResult, error) {
-	n, err := s.logRespite(ctx, campaignID, v)
+	n, warn, err := s.logRespite(ctx, campaignID, v)
 	if err != nil {
 		return nil, err
+	}
+	out := &RespiteResult{Projects: n}
+	if warn != "" {
+		out.Warnings = append(out.Warnings, warn)
 	}
 	if s.projects.Respite != nil {
 		if err := s.projects.Respite.RespiteLogged(ctx, campaignID, v); err != nil {
 			slog.Warn("crafting: the respite's Homebrew rules did not run", slog.String("campaign_id", campaignID), slog.Any("error", err))
+			out.Warnings = append(out.Warnings, "The Homebrew rules a respite sets off didn't run.")
 		}
 	}
-	return &RespiteResult{Projects: n}, nil
+	return out, nil
 }
 
 // RespitePressed records a respite logged from the Homebrew drawer, whose
 // own rules are already running.
 func (s *service) RespitePressed(ctx context.Context, campaignID string, v Viewer) error {
-	_, err := s.logRespite(ctx, campaignID, v)
+	_, _, err := s.logRespite(ctx, campaignID, v)
 	return err
 }
 
-func (s *service) logRespite(ctx context.Context, campaignID string, v Viewer) (int, error) {
+// logRespite logs the respite and turns what is due to go off. warn names
+// a go-off that failed; it never undoes the respite.
+func (s *service) logRespite(ctx context.Context, campaignID string, v Viewer) (n int, warn string, err error) {
 	if err := directorOnly(v); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if err := s.projectsReady(); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	label := ""
 	d := s.today(ctx, campaignID)
 	if d != nil {
 		label = d.Label
 	}
-	n, err := s.projects.Store.LogRespite(ctx, campaignID, v.UserID, label)
+	n, err = s.projects.Store.LogRespite(ctx, campaignID, v.UserID, label)
 	if err != nil {
-		return 0, errInternal(err)
+		return 0, "", errInternal(err)
 	}
 	// A respite is when brews that keep only so long go off: whatever is
 	// due by today turns into what it becomes. A failure here never undoes
@@ -1027,9 +1061,10 @@ func (s *service) logRespite(ctx context.Context, campaignID string, v Viewer) (
 	if d != nil && d.Abs > 0 {
 		if _, err := s.projects.Armory.GoOff(ctx, campaignID, v, d.Abs); err != nil {
 			slog.Warn("crafting: the respite could not turn what went off", slog.String("campaign_id", campaignID), slog.Any("error", err))
+			warn = "Brews due to go off today didn’t turn yet; they turn at the next respite."
 		}
 	}
-	return n, nil
+	return n, warn, nil
 }
 
 // directorProject loads any project in progress for a Director.

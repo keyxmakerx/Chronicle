@@ -4,6 +4,8 @@
 // front with every card facing the viewer, price tags lean back to face the
 // viewer, pointers map back onto the floor, and moving
 // one of the room's own decorations never moves the goods.
+// Wares with a crafting drawing show it as an ink sketch when the pictures
+// are on the page, and keep their silhouette when they are not.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -124,4 +126,23 @@ test('a long shop name goes onto two readable lines on both signs', () => {
   S.look = 'lit';
   const lit = room.draw().svg;
   assert.match(lit, /<tspan x="0" y="-5">The Gilded<\/tspan><tspan x="0" y="5">Griffin Emporium<\/tspan>/);
+});
+
+test('wares with a crafting drawing show it in ink, and keep the silhouette without the pictures', () => {
+  const its = [{ id: 'a', n: 'Gem', ic: 'gem', c: '#60a5fa', price: '1 gp' }, { id: 'b', n: 'Hammer', ic: 'hammer', c: '#a3a3a3', price: '2 gp' }];
+  const draw = () => {
+    const S = state({ roomType: 'jeweler', its });
+    const room = SR.createRoom(S);
+    room.generate();
+    return Paper.html({ view: room.draw(), its, name: 'Shop', icons: room.ICONS, fx: 'full' }).html;
+  };
+  assert.equal(count(draw(), /srp-ink/g), 0, 'no pictures on the page: silhouettes only');
+  vm.runInContext(readFileSync(join(dir, 'craft_pictures.js'), 'utf8'), sandbox);
+  try {
+    const html = draw();
+    const goodsShown = count(html, / data-i="0"/g);
+    assert.ok(goodsShown > 0, 'the gem is on show');
+    assert.equal(count(html, /class="srp-ic srp-ink"/g), goodsShown, 'the gem is drawn in ink, the hammer is not');
+    assert.match(html, /stroke="#3b2a1a" stroke-width="2"/, 'at shelf size, with the bolder line');
+  } finally { delete sandbox.CraftPictures; }
 });

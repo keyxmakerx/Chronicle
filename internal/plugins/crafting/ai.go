@@ -2,6 +2,7 @@ package crafting
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,7 +12,9 @@ import (
 // connection resolves the AI's names first. Method is a template key that
 // lays the steps over the materials, as the editor's template picker does;
 // "" keeps a stored recipe's steps (each still pointing at the same
-// material) and gives a new one none. Rules, looks and colours are the
+// material) and gives a new one none. Rules, when set, is the whole list of
+// "When… then…" rules, merged by MergeAIRules so a new or changed rule
+// waits as a draft; nil keeps the stored ones. Looks and colours are the
 // Director's, so an AI save keeps them.
 type AIRecipe struct {
 	// ID is the recipe to change; "" makes a new one.
@@ -27,6 +30,7 @@ type AIRecipe struct {
 	Cost         Cost
 	Who          string
 	Known        []string
+	Rules        json.RawMessage
 }
 
 // SaveAIRecipe checks a recipe an AI wrote and, unless check is set, saves
@@ -70,12 +74,27 @@ func (s *service) SaveAIRecipe(ctx context.Context, campaignID string, v Viewer,
 	if err != nil {
 		return nil, err
 	}
+	var rules *RulesChange
+	if in.Rules != nil {
+		var was []Rule
+		if stored != nil {
+			was = stored.Rules
+		}
+		rc, err := MergeAIRules(was, in.Rules)
+		if err != nil {
+			return nil, err
+		}
+		rules = &rc
+	}
 	if check {
 		return nil, s.nameFree(ctx, campaignID, in.ID, r.Name)
 	}
 	if stored == nil {
 		r.ID, r.Draft = s.newID(), true
 		r.Rules, r.Looks = []Rule{}, map[string]*Look{}
+		if rules != nil {
+			r.Rules = rules.Rules
+		}
 		if err := s.repo.CreateRecipe(ctx, campaignID, v.UserID, r); err != nil {
 			if errors.Is(err, errDuplicate) {
 				return nil, errNameTaken("recipe")
@@ -85,6 +104,7 @@ func (s *service) SaveAIRecipe(ctx context.Context, campaignID string, v Viewer,
 		return s.load(ctx, campaignID, r.ID)
 	}
 	r.ID = stored.ID
+	r.Extras = FollowMaterials(stored.Extras, stored.Materials, r.Materials)
 	ok, err := s.repo.UpdateRecipe(ctx, campaignID, v.UserID, r, stored.Version)
 	if err != nil {
 		if errors.Is(err, errDuplicate) {
@@ -94,6 +114,18 @@ func (s *service) SaveAIRecipe(ctx context.Context, campaignID string, v Viewer,
 	}
 	if !ok {
 		return nil, errConflict()
+	}
+	// The rules have their own write, as in the editor; it expects the
+	// version the recipe's write just made, so an edit in between is a
+	// conflict rather than lost.
+	if rules != nil {
+		ok, err := s.repo.UpdateRules(ctx, campaignID, stored.ID, rules.Rules, stored.Looks, stored.Extras, stored.Version+1)
+		if err != nil {
+			return nil, errInternal(err)
+		}
+		if !ok {
+			return nil, errConflict()
+		}
 	}
 	return s.load(ctx, campaignID, stored.ID)
 }

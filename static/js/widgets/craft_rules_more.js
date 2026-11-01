@@ -31,6 +31,14 @@
       return '<button type="button" class="crr-cx" data-x="' + esc(path) + '" data-v="' + esc(v) + '" aria-pressed="' + (String(val) === String(v)) + '">' + esc(l) + '</button>';
     }).join('') + '</span>';
   }
+  /* What a brew turns into when it goes off: any item, or nothing. A list
+     of every item, not a row of chips, so a long Armory fits and nothing is
+     picked for the Director. */
+  function becomesSelect(items, cur) {
+    return '<select class="crr-in" data-xt="keeps.thenBecomes" aria-label="What it becomes">' +
+      '<option value=""' + (cur ? '' : ' selected') + '>just goes off</option>' +
+      withCur(items, cur).map(function (n) { return '<option value="' + esc(n) + '"' + (n === cur ? ' selected' : '') + '>becomes ' + esc(n) + '</option>'; }).join('') + '</select>';
+  }
   function sw(path, on, label) {
     return '<label class="crr-sw"><input type="checkbox" data-sw="' + esc(path) + '"' + (on ? ' checked' : '') + ' aria-label="' + esc(label) + '"></label>';
   }
@@ -47,7 +55,7 @@
       case 'quality': return {fine: 'edge', poor: 'bane'};
       case 'mastery': return {afterCleanBrews: 3, gives: 'skip'};
       case 'discover': return {closeWhen: n > 1 ? '1 of ' + n : '', learnedBy: 'maker', failedTry: 'used'};
-      case 'keeps': return {days: 30, thenBecomes: (S.W.lists.items || [])[0] || ''};
+      case 'keeps': return {days: 30, thenBecomes: ''};
       case 'salvage': return [{item: (S.rec().ings[0] || [0, ''])[1], qty: 1}];
     }
     return x[k];
@@ -55,6 +63,7 @@
 
   function mount(root, S, which) {
     var dead = false, tm = null;
+    function becomes(cur) { return becomesSelect(S.W.lists.items || [], cur); }
     function rec() { return S.rec(); }
     function rows(name) { return ((S.W.lists.tableRows || {})[name]) || null; }
     function table(name, mishap) {
@@ -118,7 +127,7 @@
         '<p class="crr-hint">Each hero gets one try at each respite. With this off, no one can find it by experimenting.</p>' : '');
       h += card('keeps', !!x.keeps, 'crr-risk', 'hourglass-half', 'It goes off', 'Counted on the campaign calendar, so long journeys matter.', x.keeps ? '<p class="crr-sent">It keeps for <span class="crr-stepper">' +
         '<button type="button" data-step="keeps.days" data-v="-1" aria-label="One day fewer">' + fa('minus') + '</button><output>' + x.keeps.days + '</output><button type="button" data-step="keeps.days" data-v="1" aria-label="One day more">' + fa('plus') +
-        '</button></span> days, then becomes ' + chips('keeps.thenBecomes', withCur((S.W.lists.items || []).slice(0, 12), x.keeps.thenBecomes), x.keeps.thenBecomes) + '</p>' : '', NOTYET);
+        '</button></span> days, then ' + becomes(x.keeps.thenBecomes) + '</p>' : '', NOTYET);
       h += card('makersMark', x.makersMark, 'crr-change', 'signature', 'Maker’s mark', 'The item says who made it, and when.', '<p class="crr-hint">“Made by the hero who brewed it, on the calendar’s date.”</p>', NOTYET);
       h += card('salvage', x.salvage.length > 0, 'crr-change', 'recycle', 'Breaking it down', 'They can take it apart for something back.', x.salvage.length ? '<p class="crr-sent">It gives back ' +
         chips('salvage.0.qty', ['1', '2'], String(x.salvage[0].qty)) + ' × ' + chips('salvage.0.item', r.ings.map(function (g) { return g[1]; }), x.salvage[0].item) + '</p>' : '');

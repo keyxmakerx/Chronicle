@@ -612,6 +612,278 @@
     "salvage": [],
     "othersCanHelp": false
    }
+  },
+  {
+   "name": "every material kind can stand in (1 of 3)",
+   "input": {
+    "substitutes": [
+     {
+      "for": 0,
+      "use": "metal",
+      "costs": "bane"
+     },
+     {
+      "for": 1,
+      "use": "remnant_part",
+      "costs": "bane"
+     },
+     {
+      "for": 2,
+      "use": "body_part",
+      "costs": "bane"
+     },
+     {
+      "for": 3,
+      "use": "bone",
+      "costs": "bane"
+     },
+     {
+      "for": 4,
+      "use": "hide",
+      "costs": "bane"
+     },
+     {
+      "for": 5,
+      "use": "liquid",
+      "costs": "bane"
+     },
+     {
+      "for": 6,
+      "use": "herb",
+      "costs": "bane"
+     },
+     {
+      "for": 7,
+      "use": "magic_item",
+      "costs": "bane"
+     }
+    ]
+   },
+   "materials": 8,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [
+     {
+      "for": 0,
+      "use": "metal",
+      "costs": "bane"
+     },
+     {
+      "for": 1,
+      "use": "remnant_part",
+      "costs": "bane"
+     },
+     {
+      "for": 2,
+      "use": "body_part",
+      "costs": "bane"
+     },
+     {
+      "for": 3,
+      "use": "bone",
+      "costs": "bane"
+     },
+     {
+      "for": 4,
+      "use": "hide",
+      "costs": "bane"
+     },
+     {
+      "for": 5,
+      "use": "liquid",
+      "costs": "bane"
+     },
+     {
+      "for": 6,
+      "use": "herb",
+      "costs": "bane"
+     },
+     {
+      "for": 7,
+      "use": "magic_item",
+      "costs": "bane"
+     }
+    ],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "every material kind can stand in (2 of 3)",
+   "input": {
+    "substitutes": [
+     {
+      "for": 0,
+      "use": "magic_essence",
+      "costs": "bane"
+     },
+     {
+      "for": 1,
+      "use": "fungus",
+      "costs": "bane"
+     },
+     {
+      "for": 2,
+      "use": "wood",
+      "costs": "bane"
+     },
+     {
+      "for": 3,
+      "use": "resin",
+      "costs": "bane"
+     },
+     {
+      "for": 4,
+      "use": "scale",
+      "costs": "bane"
+     },
+     {
+      "for": 5,
+      "use": "feather",
+      "costs": "bane"
+     },
+     {
+      "for": 6,
+      "use": "venom",
+      "costs": "bane"
+     },
+     {
+      "for": 7,
+      "use": "gem",
+      "costs": "bane"
+     }
+    ]
+   },
+   "materials": 8,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [
+     {
+      "for": 0,
+      "use": "magic_essence",
+      "costs": "bane"
+     },
+     {
+      "for": 1,
+      "use": "fungus",
+      "costs": "bane"
+     },
+     {
+      "for": 2,
+      "use": "wood",
+      "costs": "bane"
+     },
+     {
+      "for": 3,
+      "use": "resin",
+      "costs": "bane"
+     },
+     {
+      "for": 4,
+      "use": "scale",
+      "costs": "bane"
+     },
+     {
+      "for": 5,
+      "use": "feather",
+      "costs": "bane"
+     },
+     {
+      "for": 6,
+      "use": "venom",
+      "costs": "bane"
+     },
+     {
+      "for": 7,
+      "use": "gem",
+      "costs": "bane"
+     }
+    ],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
+  },
+  {
+   "name": "every material kind can stand in (3 of 3)",
+   "input": {
+    "substitutes": [
+     {
+      "for": 0,
+      "use": "stone",
+      "costs": "bane"
+     },
+     {
+      "for": 1,
+      "use": "powder",
+      "costs": "bane"
+     },
+     {
+      "for": 2,
+      "use": "cloth",
+      "costs": "bane"
+     },
+     {
+      "for": 3,
+      "use": "paper",
+      "costs": "bane"
+     }
+    ]
+   },
+   "materials": 8,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [
+     {
+      "for": 0,
+      "use": "stone",
+      "costs": "bane"
+     },
+     {
+      "for": 1,
+      "use": "powder",
+      "costs": "bane"
+     },
+     {
+      "for": 2,
+      "use": "cloth",
+      "costs": "bane"
+     },
+     {
+      "for": 3,
+      "use": "paper",
+      "costs": "bane"
+     }
+    ],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false
+   }
   }
  ]
 }

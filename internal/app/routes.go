@@ -418,10 +418,8 @@ type addonListerAdapter struct {
 }
 
 // ListForPluginHub returns all addons formatted for the plugin hub page and
-// the top-level Extensions hub. HasDashboard / HasEntitySetup are sourced
-// from the campaigns plugin's slug-keyed capability tables (see
-// internal/plugins/campaigns/extensions_hub.go) so the hub catalog carries a
-// single source of truth.
+// the top-level Extensions hub. HasDashboard comes from the campaigns
+// plugin's dashboard-page table (internal/plugins/campaigns/extensions_hub.go).
 func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID string) ([]campaigns.PluginHubAddon, error) {
 	addonList, err := a.svc.ListForCampaign(ctx, campaignID)
 	if err != nil {
@@ -448,7 +446,6 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 			Enabled:        ca.Enabled,
 			Installed:      ca.Installed,
 			HasDashboard:   campaigns.HasExtensionDashboard(ca.AddonSlug),
-			HasEntitySetup: campaigns.HasExtensionEntitySetup(ca.AddonSlug),
 			HasSetup:       hasSetup,
 			NeedsSetup:     needsSetup,
 		}
@@ -4702,9 +4699,8 @@ func (a *App) RegisterRoutes() {
 	// Wire audit logging into mutation handlers so CRUD actions are recorded.
 	entityHandler.SetAuditService(auditService)
 	// CALV5-PLACEHOLDER: V5 must restore the calendar's remaining wiring —
-	// SetAuditService, SetTierDefinitionsLister, RegisterExtensionDashboard,
-	// SetTimelineLister, and the block spine (calendar.NewBlockService +
-	// RealTimeSeam + SyncLinkProbe + calendar.InstallBlockSpine). Keep the
+	// SetAuditService, SetTierDefinitionsLister, SetTimelineLister, and
+	// the block spine (calendar.NewBlockService + RealTimeSeam + SyncLinkProbe + calendar.InstallBlockSpine). Keep the
 	// spine's repository a narrow read surface over *sql.DB rather than a
 	// wide CalendarRepository interface — the old plugin's 60-method
 	// interface was itself a reason it became hard to change. TODO(#778)
@@ -6559,6 +6555,10 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
 		aiItemLooks = aiItemLooksAdapter{svc: itemLookService, names: lookPages}
 	}
+	var aiShopLooks records.ShopLooksAPI
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		aiShopLooks = aiShopLooksAdapter{rooms: shopRoomService, fronts: shopStreetService}
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -6593,6 +6593,8 @@ func (a *App) RegisterRoutes() {
 		ArmoryRequests:  dmSources.Requests,
 		ItemLooks:       aiItemLooks,
 		Crafting:        aiCrafting,
+		ShopLooks:       aiShopLooks,
+		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
@@ -6730,7 +6732,8 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules_more.js", "/static/js/widgets/craft_rules.js"}},
 }
