@@ -144,7 +144,8 @@ An optional top-level block saying how the game rolls and counts a crafting proj
   "edge": 2,
   "bane": -2,
   "tiers": [11, 16],
-  "labels": {"goal": "Project goal", "prerequisite": "Item prerequisite", "source": "Project source"}
+  "labels": {"goal": "Project goal", "prerequisite": "Item prerequisite", "source": "Project source"},
+  "goals": [{"echelon": 1, "for": "consumable", "goal": 45}, {"echelon": 1, "goal": 90}]
 }
 ```
 
@@ -155,6 +156,7 @@ An optional top-level block saying how the game rolls and counts a crafting proj
 | `edge`, `bane` | What clean and botched work add to the roll, -10 to 10 |
 | `tiers` | The highest totals of the first and second outcome of a tiered test such as harvesting, rising: `[11, 16]` makes 11 or less the first tier, 12 to 16 the second, 17 or more the third |
 | `labels` | The game's words for a project's `goal`, the item it needs first (`prerequisite`) and where the knowledge comes from (`source`), each up to 40 plain characters |
+| `goals` | The project goals the game publishes, up to 64, each an `echelon` (1 to 4), a `goal` (1 to 999) and optionally `for`, what is made (`consumable`, `weapon`, `gear`). The recipe generator uses them, the entry for what it makes first, then the one with no `for`; with none it leaves goals to the Director |
 
 Every key is optional; a missing one, or a system with no block, takes the default (2d10, no characteristic, +2 and -2, `[11, 16]`, "Goal", "Item prerequisite", "Project source"). A block that breaks these rules fails manifest validation, so the system does not load.
 

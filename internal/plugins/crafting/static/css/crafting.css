@@ -527,3 +527,4 @@ html[data-motion="off"] .cra-dot { transition: none; }
 .crp-book { font-style: italic; padding: 10px 12px; border-left: 3px solid var(--cra-acc); border-radius: var(--cra-r-sm);
   background: color-mix(in srgb, var(--cra-acc) 6%, transparent); color: var(--cra-body); }
 .crp-tried { padding: 6px 0; }
+.cra-itemblock { margin-top: 8px; font-size: 13px; color: var(--color-text-muted); }

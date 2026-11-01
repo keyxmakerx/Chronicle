@@ -129,6 +129,9 @@ type RecipeInput struct {
 	Known        []string   `json:"known"`
 	Colors       Colors     `json:"colors"`
 	Version      int        `json:"version"`
+	// Draft makes a new recipe a draft players never see until a Director
+	// approves it. It is read only on create; approving is its own call.
+	Draft bool `json:"draft,omitempty"`
 }
 
 // RulesInput saves a recipe's rules, moment looks and extras. Extras left
@@ -241,6 +244,11 @@ type Library struct {
 	System   string   `json:"system"`
 	Settings Settings `json:"settings"`
 	Director bool     `json:"director"`
+	// Makes are what the recipe generator can write.
+	Makes []MakeKind `json:"makes"`
+	// Owner says the viewer owns the campaign, which the AI connection's
+	// copy and paste needs; set by the handler.
+	Owner bool `json:"owner"`
 }
 
 // BookPage is a recipe as a player reads it in their recipe book: what it

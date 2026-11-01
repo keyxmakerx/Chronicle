@@ -81,6 +81,9 @@ func (h *Handler) Library(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// The AI connection's copy and paste is the Owner's alone, like its
+	// routes.
+	out.Owner = cc.MemberRole >= campaigns.RoleOwner
 	return c.JSON(http.StatusOK, out)
 }
 

@@ -295,6 +295,16 @@ window.CraftingRecipes = (function () {
       '<div class="cra-rform"></div><aside class="cra-rprev"><h3 class="cra-ph">What players see</h3><div class="cra-book"></div><h3 class="cra-ph">Checks</h3><ul class="cra-checks"></ul></aside></div>' +
       '<section class="cra-rules" hidden></section>';
 
+    // Item pages carry "How it's made" only once the Director puts it there,
+    // since nothing joins a page's layout by itself.
+    app.api('GET', '/item-block').then(function (got) {
+      if (dead || !got || got.placed) return;
+      var p = document.createElement('p');
+      p.className = 'cra-itemblock';
+      p.innerHTML = '<button type="button" class="cra-link" data-act="item-block">Show “How it’s made” on item pages</button>';
+      $('.cra-rlist').appendChild(p);
+    }, function () {});
+
     el.addEventListener('input', function (e) {
       var t = e.target, k = t.getAttribute('data-f'), r = cur();
       if (!r) return;
@@ -327,6 +337,13 @@ window.CraftingRecipes = (function () {
       if (!b || !el.contains(b) || b.closest('.cra-rules [data-widget]')) return;
       var r = cur(), li = b.closest('[data-i]'), i = li ? +li.getAttribute('data-i') : -1, act = b.getAttribute('data-act');
       if (act === 'new') { create(); return; }
+      if (act === 'item-block') {
+        b.disabled = true;
+        app.api('POST', '/item-block').then(function (got) {
+          b.parentNode.textContent = got && got.changed ? 'Item pages show “How it’s made” now.' : 'Item pages already show it.';
+        }, function (err) { b.disabled = false; failed(err); });
+        return;
+      }
       if (act === 'rules-close') { closeRules(); renderForm(); return; }
       if (!r) return;
       if (b.hasAttribute('data-tpl')) {
@@ -404,6 +421,12 @@ window.CraftingRecipes = (function () {
     return {
       // Tags and benches change on the other tabs; the checks read both
       shown: function () { if (R.length) renderAll(); },
+      // A link from an item's page or the Workshop opens one recipe, and
+      // with rules its "When… then…" panel too.
+      open: function (rid, rules) {
+        for (var i = 0; i < R.length; i++) if (R[i].id === rid) { sel = i; renderAll(); if (rules) openRules(); return true; }
+        return false;
+      },
       destroy: function () {
         closeRules();
         document.removeEventListener('click', outside);

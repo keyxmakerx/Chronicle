@@ -26,6 +26,18 @@ type CraftingRules struct {
 	Tiers []int `json:"tiers,omitempty"`
 	// Labels name the project's fields in the system's own words.
 	Labels CraftingLabels `json:"labels"`
+	// Goals are the project goals the system publishes, by echelon and by
+	// what is made. Chronicle's recipe generator uses only these; with none
+	// it says the goal is the Director's to set.
+	Goals []CraftingGoal `json:"goals,omitempty"`
+}
+
+// CraftingGoal is one published project goal: what a project of this kind
+// (a "consumable", a "weapon"; empty for any) at this echelon needs.
+type CraftingGoal struct {
+	Echelon int    `json:"echelon"`
+	For     string `json:"for,omitempty"`
+	Goal    int    `json:"goal"`
 }
 
 // CraftingStat is one characteristic a project roll can add.
@@ -61,6 +73,7 @@ func (m *SystemManifest) CraftingRules() CraftingRules {
 	}
 	r := *m.Crafting
 	r.Characteristics = append([]CraftingStat(nil), r.Characteristics...)
+	r.Goals = append([]CraftingGoal(nil), r.Goals...)
 	if r.Dice == "" {
 		r.Dice = def.Dice
 	}
@@ -84,6 +97,8 @@ const (
 	maxCraftingStats = 12
 	maxCraftingLabel = 40
 	maxCraftingBonus = 10
+	maxCraftingGoals = 64
+	maxCraftingGoal  = 999
 )
 
 // diceRe is a small dice pool: one to four dice of a common size.
@@ -141,6 +156,20 @@ func validateCrafting(c *CraftingRules) error {
 	for _, l := range []string{c.Labels.Goal, c.Labels.Prerequisite, c.Labels.Source} {
 		if err := checkCraftingLabel(l); err != nil {
 			return fmt.Errorf("labels: %w", err)
+		}
+	}
+	if len(c.Goals) > maxCraftingGoals {
+		return fmt.Errorf("too many goals (%d, max %d)", len(c.Goals), maxCraftingGoals)
+	}
+	for i, g := range c.Goals {
+		if g.Echelon < 1 || g.Echelon > 4 {
+			return fmt.Errorf("goal %d: echelon must be 1 to 4", i)
+		}
+		if g.Goal < 1 || g.Goal > maxCraftingGoal {
+			return fmt.Errorf("goal %d: goal must be 1 to %d", i, maxCraftingGoal)
+		}
+		if g.For != "" && !slugPattern.MatchString(g.For) {
+			return fmt.Errorf("goal %d: for %q must contain only lowercase letters, numbers, hyphens, and underscores", i, g.For)
 		}
 	}
 	return nil

@@ -34,8 +34,16 @@ type ProjectDeps struct {
 	Respite  RespiteHook
 	// Rolls, when set, adds each project roll to the campaign's roll log.
 	Rolls RollLog
-	Roll  func(n int) int
-	Now   func() time.Time
+	// Items makes Armory items for a recipe's result or a pack's missing
+	// material; Layouts places the item block; Campaigns and Packs share
+	// recipe packs between campaigns. Each is nil until wired, and what
+	// needs it answers that it is not set up.
+	Items     ItemMaker
+	Layouts   LayoutPlacer
+	Campaigns CampaignDirectory
+	Packs     PackStore
+	Roll      func(n int) int
+	Now       func() time.Time
 }
 
 func (s *service) projectsReady() error {
