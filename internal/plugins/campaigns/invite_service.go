@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	mailbody "github.com/keyxmakerx/chronicle/internal/email"
 )
 
 // InviteMailer sends invite emails. Subset of smtp.MailService to avoid
@@ -118,25 +119,22 @@ func (s *inviteService) CreateInvite(ctx context.Context, campaignID, createdBy 
 		}
 
 		subject := fmt.Sprintf("You're invited to %s — Chronicle", campaign.Name)
-
-		plainBody := fmt.Sprintf(
-			"You've been invited to join \"%s\" as a %s on Chronicle.\n\n"+
-				"Click the link below to accept:\n%s\n\n"+
-				"This invitation expires in %d days.\n\n"+
-				"If you don't have an account, you'll be able to create one when you accept.",
-			campaign.Name, roleName, acceptURL, inviteExpiryDays)
-
-		htmlBody := fmt.Sprintf(`<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
-<h2 style="color:#111827">You're invited to join "%s"</h2>
-<p style="color:#374151;font-size:16px">You've been invited as a <strong>%s</strong>.</p>
-<p style="margin:24px 0">
-  <a href="%s" style="display:inline-block;padding:12px 24px;background:#6366f1;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Accept Invitation</a>
-</p>
-<p style="color:#6b7280;font-size:14px">This invitation expires in %d days.</p>
-<p style="color:#6b7280;font-size:14px">If you don't have an account, you'll be able to create one when you accept.</p>
-</div>`, campaign.Name, roleName, acceptURL, inviteExpiryDays)
-
-		if err := s.mailer.SendHTMLMail(ctx, []string{email}, subject, plainBody, htmlBody); err != nil {
+		// No preferences footer: the reader isn't a member yet, so there is
+		// nothing for them to switch off.
+		plainBody, htmlBody, err := mailbody.Render(mailbody.DefaultLayout, mailbody.Message{
+			Campaign: campaign.Name,
+			Accent:   campaign.ParseSettings().AccentColor,
+			Title:    fmt.Sprintf("You're invited to join %s", campaign.Name),
+			Lines: []string{
+				fmt.Sprintf("You've been invited as a %s.", roleName),
+				"If you don't have an account yet, you can make one when you accept.",
+			},
+			Answers: []mailbody.Answer{{Label: "Accept the invitation", URL: acceptURL}},
+			Small:   fmt.Sprintf("This invitation expires in %d days.", inviteExpiryDays),
+		})
+		if err != nil {
+			slog.Warn("failed to build invite email", slog.String("campaign", campaignID), slog.String("error", err.Error()))
+		} else if err := s.mailer.SendHTMLMail(ctx, []string{email}, subject, plainBody, htmlBody); err != nil {
 			slog.Warn("failed to send invite email",
 				slog.String("email", email),
 				slog.String("campaign", campaignID),

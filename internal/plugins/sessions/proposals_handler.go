@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
 	"log/slog"
 	"net/http"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/email"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -93,7 +93,7 @@ func (h *Handler) CreateProposalAPI(c echo.Context) error {
 	// Fan out to members (notifications + email) off the request path.
 	if h.memberLister != nil {
 		if members, mErr := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID); mErr == nil {
-			go h.fanoutProposalCreated(context.Background(), cc.Campaign.ID, cc.Campaign.Name, proposal, userID, members)
+			go h.fanoutProposalCreated(context.Background(), mailCampaignOf(cc.Campaign), proposal, userID, members)
 		}
 	}
 
@@ -251,7 +251,7 @@ func (h *Handler) ConfirmProposalAPI(c echo.Context) error {
 			}
 			_ = h.svc.InviteAllWithStatus(c.Request().Context(), session.ID, []string{userID}, RSVPAccepted)
 			if h.mailer != nil && h.mailer.IsConfigured(c.Request().Context()) {
-				go h.sendRSVPEmails(context.Background(), session, cc.Campaign.Name, members)
+				go h.sendRSVPEmails(context.Background(), session, mailCampaignOf(cc.Campaign), members)
 			}
 		}
 	}
@@ -340,7 +340,7 @@ func (h *Handler) resolveDisplayName(ctx context.Context, userID string) string 
 
 // fanoutProposalCreated writes in-app notifications to every member (except the
 // creator) and sends one-click email invites where the mailer is configured.
-func (h *Handler) fanoutProposalCreated(ctx context.Context, campaignID, campaignName string, proposal *SlotProposal, creatorID string, members []campaigns.CampaignMember) {
+func (h *Handler) fanoutProposalCreated(ctx context.Context, mc mailCampaign, proposal *SlotProposal, creatorID string, members []campaigns.CampaignMember) {
 	recipients := make([]string, 0, len(members))
 	for _, m := range members {
 		if m.UserID == creatorID {
@@ -348,7 +348,7 @@ func (h *Handler) fanoutProposalCreated(ctx context.Context, campaignID, campaig
 		}
 		recipients = append(recipients, m.UserID)
 	}
-	if err := h.svc.NotifyProposalCreated(ctx, campaignID, proposal.ID, proposal.Title, recipients); err != nil {
+	if err := h.svc.NotifyProposalCreated(ctx, mc.ID, proposal.ID, proposal.Title, recipients); err != nil {
 		slog.Warn("failed to write proposal notifications", slog.Any("error", err))
 	}
 
@@ -356,7 +356,7 @@ func (h *Handler) fanoutProposalCreated(ctx context.Context, campaignID, campaig
 		return
 	}
 	// Options are needed to build per-option one-click tokens for the email.
-	_, options, err := h.getProposalForEmail(ctx, campaignID, proposal.ID)
+	_, options, err := h.getProposalForEmail(ctx, mc.ID, proposal.ID)
 	if err != nil {
 		slog.Warn("failed to load proposal for email", slog.Any("error", err))
 		return
@@ -365,7 +365,7 @@ func (h *Handler) fanoutProposalCreated(ctx context.Context, campaignID, campaig
 		if m.UserID == creatorID || m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.GameNightInvites) {
 			continue
 		}
-		h.sendProposalEmail(ctx, campaignID, campaignName, proposal, options, m)
+		h.sendProposalEmail(ctx, mc, proposal, options, m)
 	}
 }
 
@@ -379,17 +379,18 @@ func (h *Handler) getProposalForEmail(ctx context.Context, campaignID, proposalI
 	return view, view.Options, nil
 }
 
-// sendProposalEmail sends one member a scheduling-proposal invite: each option
-// gets three one-click buttons (Yes / Maybe / No), each backed by a token keyed
-// (option, user, response) so the response records with no login. Slots are
-// rendered in the member's own stored zone.
-func (h *Handler) sendProposalEmail(ctx context.Context, campaignID, campaignName string, proposal *SlotProposal, options []ProposalOptionView, m campaigns.CampaignMember) {
+// sendProposalEmail sends one member a date poll: each time gets its own
+// one-press Yes, Maybe and No, each backed by a token keyed (option, user,
+// response) so the answer records with no login. Times are written in the
+// member's own stored zone.
+func (h *Handler) sendProposalEmail(ctx context.Context, mc mailCampaign, proposal *SlotProposal, options []ProposalOptionView, m campaigns.CampaignMember) {
 	// Always go through tokenUserTZ, never a raw nil check on the field: it
 	// rejects an empty-string (not NULL) users.timezone that would otherwise
 	// print a blank zone here while renderLocalSlotForTZ falls back to UTC.
 	memberTZ := h.tokenUserTZ(ctx, m.UserID)
 
-	var optionsHTML, optionsText string
+	msg := h.message(mc, notifyprefs.GameNightInvites, proposal.Title)
+	msg.Lines = []string{"Which of these work for you? All times in " + memberTZ + "."}
 	for _, ov := range options {
 		tokens, err := h.svc.CreateProposalTokens(ctx, ov.Option.ID, m.UserID)
 		if err != nil {
@@ -397,41 +398,21 @@ func (h *Handler) sendProposalEmail(ctx context.Context, campaignID, campaignNam
 			continue
 		}
 		local := renderLocalSlotForTZ(ov.Option, memberTZ)
-		yesURL := fmt.Sprintf("%s/proposals/respond/%s", h.baseURL, tokens[ResponseYes])
-		maybeURL := fmt.Sprintf("%s/proposals/respond/%s", h.baseURL, tokens[ResponseMaybe])
-		noURL := fmt.Sprintf("%s/proposals/respond/%s", h.baseURL, tokens[ResponseNo])
-
-		optionsHTML += fmt.Sprintf(`<div style="background:#f8f9fa;border-radius:8px;padding:14px 16px;margin-bottom:12px">
-  <div style="font-weight:600;font-size:14px;margin-bottom:8px">%s<br><span style="color:#666;font-weight:400">%s</span></div>
-  <a href="%s" style="display:inline-block;padding:8px 16px;background:#22c55e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;margin-right:6px">✓ Yes</a>
-  <a href="%s" style="display:inline-block;padding:8px 16px;background:#eab308;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;margin-right:6px">~ Maybe</a>
-  <a href="%s" style="display:inline-block;padding:8px 16px;background:#ef4444;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px">✗ No</a>
-</div>`, local.DateLabel, local.TimeLabel, yesURL, maybeURL, noURL)
-
-		optionsText += fmt.Sprintf("%s, %s\n  Yes: %s\n  Maybe: %s\n  No: %s\n\n",
-			local.DateLabel, local.TimeLabel, yesURL, maybeURL, noURL)
+		respond := h.baseURL + "/proposals/respond/"
+		msg.Groups = append(msg.Groups, email.Group{
+			Title:  local.DateLabel,
+			Detail: local.TimeLabel,
+			Answers: []email.Answer{
+				{Label: "Yes", URL: respond + tokens[ResponseYes]},
+				{Label: "Maybe", URL: respond + tokens[ResponseMaybe]},
+				{Label: "No", URL: respond + tokens[ResponseNo]},
+			},
+		})
 	}
+	msg.Small = linksExpire
 
-	subject := fmt.Sprintf("When can you play? — %s", campaignName)
-	// Plain-text body: no markup, so the raw values are safe as-is.
-	footPlain, footHTML := h.prefsFooter()
-	plainBody := fmt.Sprintf("You've been asked to weigh in on session times for %s.\n\nProposal: %s\nTimes shown in %s.\n\n%sThese links expire in 7 days.\n",
-		campaignName, proposal.Title, memberTZ, optionsText) + footPlain
-	// HTML body: escape every interpolated data value (campaign name, operator-
-	// authored proposal title, zone) so a title like `<img onerror=…>` can't
-	// inject markup into the email. optionsHTML is our own server-built markup
-	// (date/time labels + token URLs), so it is NOT escaped.
-	htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;padding:20px;color:#333">
-<div style="text-align:center;margin-bottom:20px"><div style="font-size:32px;margin-bottom:8px">📅</div>
-<h1 style="font-size:20px;margin:0">When can you play?</h1>
-<p style="color:#666;font-size:14px;margin:6px 0 0">%s · times in %s</p></div>
-<h2 style="font-size:16px;margin:0 0 12px">%s</h2>
-%s
-<p style="text-align:center;color:#999;font-size:12px;margin-top:20px">These links expire in 7 days.</p>
-%s
-</body></html>`, html.EscapeString(campaignName), html.EscapeString(memberTZ), html.EscapeString(proposal.Title), optionsHTML, footHTML)
-
-	if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plainBody, htmlBody); err != nil {
+	subject := fmt.Sprintf("When can you play? — %s", mc.Name)
+	if err := h.sendMessage(ctx, m.Email, subject, msg); err != nil {
 		slog.Warn("failed to send proposal email", slog.Any("error", err), slog.String("to", m.Email))
 	}
 }

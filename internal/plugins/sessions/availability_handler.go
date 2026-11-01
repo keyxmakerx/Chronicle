@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/email"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -169,7 +169,7 @@ func (h *Handler) NudgeAvailabilityAPI(c echo.Context) error {
 		asker := h.resolveDisplayName(ctx, userID)
 		res, asked, err = h.svc.AskAllToConfirm(ctx, cc.Campaign.ID, userID, asker, link, members)
 		if err == nil && len(asked) > 0 {
-			go h.sendConfirmEmails(context.Background(), cc.Campaign.ID, cc.Campaign.Name, askerLabel(asker), asked)
+			go h.sendConfirmEmails(context.Background(), mailCampaignOf(cc.Campaign), askerLabel(asker), asked)
 		}
 	case req.Ask == "":
 		res, err = h.svc.NudgeUnansweredAvailability(ctx, cc.Campaign.ID, fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID), members)
@@ -185,11 +185,11 @@ func (h *Handler) NudgeAvailabilityAPI(c echo.Context) error {
 // sendConfirmEmails emails the "confirm your times" ask to the members who
 // were asked on the site. Best-effort, off the request path: without mail
 // configured, or for a member with no address, the bell alone carries it.
-func (h *Handler) sendConfirmEmails(ctx context.Context, campaignID, campaignName, asker string, userIDs []string) {
+func (h *Handler) sendConfirmEmails(ctx context.Context, mc mailCampaign, asker string, userIDs []string) {
 	if h.mailer == nil || h.memberLister == nil || !h.mailer.IsConfigured(ctx) {
 		return
 	}
-	members, err := h.memberLister.ListMembers(ctx, campaignID)
+	members, err := h.memberLister.ListMembers(ctx, mc.ID)
 	if err != nil {
 		slog.Warn("confirm-times email: listing members failed", slog.Any("error", err))
 		return
@@ -198,22 +198,18 @@ func (h *Handler) sendConfirmEmails(ctx context.Context, campaignID, campaignNam
 	for _, id := range userIDs {
 		asked[id] = true
 	}
-	link := fmt.Sprintf("%s/campaigns/%s/game-nights", h.baseURL, campaignID)
-	footPlain, footHTML := h.prefsFooter()
-	subject := fmt.Sprintf("Are your times still right? — %s", campaignName)
-	plain := fmt.Sprintf("%s asked everyone in %s to check the times they can play.\n\nOpen the calendar and press Who's free, then either confirm your times or change them:\n%s\n", asker, campaignName, link) + footPlain
-	htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:20px;color:#333">
-<h1 style="font-size:18px;margin:0 0 12px">Are your times still right?</h1>
-<p style="font-size:14px;line-height:1.5;margin:0 0 16px">%s asked everyone in <strong>%s</strong> to check the times they can play.</p>
-<p style="margin:0 0 20px"><a href="%s" style="display:inline-block;padding:10px 20px;background:#1f2937;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Check my times</a></p>
-<p style="font-size:12px;color:#777;margin:0">In the calendar, press Who&rsquo;s free, then confirm your times or change them.</p>
-%s
-</body></html>`, html.EscapeString(asker), html.EscapeString(campaignName), link, footHTML)
+	msg := h.message(mc, notifyprefs.AvailabilityAsks, "Are your times still right?")
+	msg.Lines = []string{
+		fmt.Sprintf("%s asked everyone in %s to check the times they can play.", asker, mc.Name),
+		"On the calendar, press Who's free, then confirm your times or change them.",
+	}
+	msg.Answers = []email.Answer{{Label: "Check my times", URL: fmt.Sprintf("%s/campaigns/%s/game-nights", h.baseURL, mc.ID)}}
+	subject := fmt.Sprintf("Are your times still right? — %s", mc.Name)
 	for _, m := range members {
 		if !asked[m.UserID] || m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.AvailabilityAsks) {
 			continue
 		}
-		if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plain, htmlBody); err != nil {
+		if err := h.sendMessage(ctx, m.Email, subject, msg); err != nil {
 			slog.Warn("confirm-times email failed", slog.Any("error", err), slog.String("user_id", m.UserID))
 		}
 	}

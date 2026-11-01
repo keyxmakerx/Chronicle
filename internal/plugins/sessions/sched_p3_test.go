@@ -393,7 +393,7 @@ func TestProposalEmail_EscapesTitleAndCampaign(t *testing.T) {
 
 	proposal := &SlotProposal{ID: "p1", Title: `<script>alert(1)</script>`}
 	options := []ProposalOptionView{{Option: SlotProposalOption{ID: "o1", StartsAtUTC: time.Now().UTC(), EndsAtUTC: time.Now().UTC().Add(time.Hour)}}}
-	h.sendProposalEmail(context.Background(), "c1", `<b>Evil Campaign</b>`, proposal, options, campaigns.CampaignMember{UserID: "u1", Email: "a@b.test"})
+	h.sendProposalEmail(context.Background(), mailCampaign{ID: "c1", Name: `<b>Evil Campaign</b>`}, proposal, options, campaigns.CampaignMember{UserID: "u1", Email: "a@b.test"})
 
 	if strings.Contains(mailer.lastHTML, "<script>alert(1)</script>") {
 		t.Error("raw proposal title leaked into the email HTML (XSS)")
@@ -415,7 +415,7 @@ func TestRSVPEmail_EscapesSessionName(t *testing.T) {
 
 	date := "2026-07-18"
 	session := &Session{ID: "s1", Name: `<img src=x onerror=alert(1)>`, ScheduledDate: &date}
-	h.sendRSVPEmails(context.Background(), session, `<b>Camp</b>`, []campaigns.CampaignMember{{UserID: "u1", Email: "a@b.test"}})
+	h.sendRSVPEmails(context.Background(), session, mailCampaign{Name: `<b>Camp</b>`}, []campaigns.CampaignMember{{UserID: "u1", Email: "a@b.test"}})
 
 	if strings.Contains(mailer.lastHTML, "<img src=x onerror=alert(1)>") {
 		t.Error("raw session name leaked into the RSVP email HTML (XSS)")
@@ -446,7 +446,7 @@ func TestRSVPEmail_IncludesSuggestLink(t *testing.T) {
 
 	date := "2026-07-18"
 	session := &Session{ID: "s1", Name: "Session Zero", ScheduledDate: &date}
-	h.sendRSVPEmails(context.Background(), session, "Camp", []campaigns.CampaignMember{{UserID: "u1", Email: "a@b.test"}})
+	h.sendRSVPEmails(context.Background(), session, mailCampaign{Name: "Camp"}, []campaigns.CampaignMember{{UserID: "u1", Email: "a@b.test"}})
 
 	if suggestToken == "" {
 		t.Fatal("expected a suggest-another-time token to be minted alongside accept/decline")
@@ -484,7 +484,7 @@ func TestProposalEmail_NeverPrintsABlankZone(t *testing.T) {
 			proposal := &SlotProposal{ID: "p1", Title: "Session times"}
 			options := []ProposalOptionView{{Option: SlotProposalOption{ID: "o1",
 				StartsAtUTC: time.Now().UTC(), EndsAtUTC: time.Now().UTC().Add(time.Hour)}}}
-			h.sendProposalEmail(context.Background(), "c1", "Vale of Ash", proposal, options,
+			h.sendProposalEmail(context.Background(), mailCampaign{ID: "c1", Name: "Vale of Ash"}, proposal, options,
 				campaigns.CampaignMember{UserID: "u1", Email: "a@b.test"})
 
 			if strings.Contains(mailer.lastHTML, "times in </p>") {
@@ -559,7 +559,7 @@ func TestRSVPEmail_LabelsTheZone(t *testing.T) {
 	h := &Handler{svc: NewSessionService(repo, nil, nil), mailer: mailer, baseURL: "https://x.test"}
 	date, at, tz := "2026-07-18", "19:00", "America/Chicago"
 	session := &Session{ID: "s1", Name: "Night", ScheduledDate: &date, ScheduledTime: &at, ScheduledTZ: &tz}
-	h.sendRSVPEmails(context.Background(), session, "Camp", []campaigns.CampaignMember{{UserID: "u1", Email: "a@b.test"}})
+	h.sendRSVPEmails(context.Background(), session, mailCampaign{Name: "Camp"}, []campaigns.CampaignMember{{UserID: "u1", Email: "a@b.test"}})
 	for _, body := range []string{mailer.lastPlain, mailer.lastHTML} {
 		if !strings.Contains(body, "7:00 PM CDT") {
 			t.Errorf("invite email should label the time with its zone; body=%s", body)

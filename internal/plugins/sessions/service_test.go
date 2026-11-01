@@ -1774,8 +1774,8 @@ func TestCreateRSVPTokens_Success(t *testing.T) {
 			if token.UserID != "user-1" {
 				t.Errorf("expected user_id 'user-1', got %q", token.UserID)
 			}
-			if token.Action != RSVPAccepted && token.Action != RSVPDeclined && token.Action != RSVPActionSuggest {
-				t.Errorf("expected action 'accepted', 'declined', or 'suggest', got %q", token.Action)
+			if token.Action != RSVPAccepted && token.Action != RSVPTentative && token.Action != RSVPDeclined && token.Action != RSVPActionSuggest {
+				t.Errorf("expected action 'accepted', 'tentative', 'declined', or 'suggest', got %q", token.Action)
 			}
 			if token.Token == "" {
 				t.Error("expected non-empty token")
@@ -1790,24 +1790,22 @@ func TestCreateRSVPTokens_Success(t *testing.T) {
 	}
 	svc := newTestSessionService(repo)
 
-	acceptToken, declineToken, suggestToken, err := svc.CreateRSVPTokens(context.Background(), "sess-1", "user-1")
+	toks, err := svc.CreateRSVPTokens(context.Background(), "sess-1", "user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if acceptToken == "" {
-		t.Error("expected non-empty accept token")
+	seen := map[string]bool{}
+	for name, tok := range map[string]string{"accept": toks.Accept, "maybe": toks.Maybe, "decline": toks.Decline, "suggest": toks.Suggest} {
+		if tok == "" {
+			t.Errorf("expected non-empty %s token", name)
+		}
+		if seen[tok] {
+			t.Errorf("the %s token repeats another", name)
+		}
+		seen[tok] = true
 	}
-	if declineToken == "" {
-		t.Error("expected non-empty decline token")
-	}
-	if suggestToken == "" {
-		t.Error("expected non-empty suggest-another-time token")
-	}
-	if acceptToken == declineToken || acceptToken == suggestToken || declineToken == suggestToken {
-		t.Error("accept, decline, and suggest tokens should all be different")
-	}
-	if tokensCreated != 3 {
-		t.Errorf("expected 3 tokens created (accept, decline, suggest), got %d", tokensCreated)
+	if tokensCreated != 4 {
+		t.Errorf("expected 4 tokens created (accept, maybe, decline, suggest), got %d", tokensCreated)
 	}
 }
 
@@ -1818,7 +1816,7 @@ func TestCreateRSVPTokens_RepoError(t *testing.T) {
 		},
 	}
 	svc := newTestSessionService(repo)
-	_, _, _, err := svc.CreateRSVPTokens(context.Background(), "sess-1", "user-1")
+	_, err := svc.CreateRSVPTokens(context.Background(), "sess-1", "user-1")
 	assertAppError(t, err, 500)
 }
 
