@@ -6559,6 +6559,10 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
 		aiItemLooks = aiItemLooksAdapter{svc: itemLookService, names: lookPages}
 	}
+	var aiShopLooks records.ShopLooksAPI
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		aiShopLooks = aiShopLooksAdapter{rooms: shopRoomService, fronts: shopStreetService}
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -6593,6 +6597,7 @@ func (a *App) RegisterRoutes() {
 		ArmoryRequests:  dmSources.Requests,
 		ItemLooks:       aiItemLooks,
 		Crafting:        aiCrafting,
+		ShopLooks:       aiShopLooks,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

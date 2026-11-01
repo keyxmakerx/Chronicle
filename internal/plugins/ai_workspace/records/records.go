@@ -243,6 +243,8 @@ var briefs = map[string]string{
 	"material":       "which kinds of crafting material an Armory item is (herb, bone, Remnant part and the rest), so recipes asking for \"any\" of a kind take it",
 	"recipe":         "crafting recipes: the item made, its materials, the method its steps follow, the project goal, characteristic, cost, who may make it, and its \"When… then…\" rules (new recipes and new rules arrive as drafts for the Director to approve)",
 	"bench":          "the campaign's crafting benches, by name and kind, which a recipe's rules can name",
+	"shop-room":      "the room players step into from a shop: what kind of shop it is, its look and mood, the keeper's manner and their own lines for each moment of a visit",
+	"storefront":     "how a shop's front looks on the Shops street: building, colours, awning, sign, window wares, lamp and its closed look",
 	"drops":          "a creature's or other page's drop list: what it leaves in the spoils tray when defeated or searched, taken as it is or harvested with a test",
 	"roll_night":     "one night of an event's yearly roll: roll it again, lock it, or choose whether players are told",
 	"moon":           "a moon the Director moves by hand: the day it turns full, dark or vanished, and what players see",

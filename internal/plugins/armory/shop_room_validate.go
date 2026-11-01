@@ -53,6 +53,7 @@ var (
 	// Must match MANNERS and MOMENTS in static/js/widgets/shop_room_keeper.js.
 	shopRoomManners = setOf("", "warm", "gruff", "shrewd", "nervous", "grand")
 	shopRoomMoments = setOf("hello", "look", "buy", "poor", "bye", "refuse")
+	shopRoomFurnish = setOf("", "room", "mood")
 	shopRoomKinds   = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack",
 		"tentacle", "monolith", "circle", "cane", "gumdrop", "lolly", "ghost", "coffin", "gift", "pine", "coral", "kelp", "mushroom", "bloom", "urn", "palm", "pillar", "brazier")
 	shopRoomWalls   = setOf("Y", "X", "")
@@ -109,6 +110,7 @@ func (l *ShopRoomLayout) validate() error {
 		{"look", l.Look, shopRoomLooks},
 		{"mood", l.Mood, shopRoomMoods},
 		{"manner", l.Manner, shopRoomManners},
+		{"furnish", l.Furnish, shopRoomFurnish},
 	}
 	for _, e := range enums {
 		if !e.set[e.val] {

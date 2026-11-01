@@ -6,6 +6,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
+	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
@@ -45,7 +46,7 @@ type aiDeps struct {
 	Notes           notes.NoteService
 	PlayerNotes     entity_notes.Service
 	NoteAccess      records.NoteAccessAPI // nil while the plugin's own tables are degraded
-	Addons          aiAddonChecker // which add-ons a campaign has on
+	Addons          aiAddonChecker        // which add-ons a campaign has on
 	PageBlocks      pageblocks.Service
 	Quests          quests.QuestService // nil while the quests plugin is degraded
 	Boards          quests.BoardService
@@ -64,6 +65,7 @@ type aiDeps struct {
 	ArmoryRequests  dmscreen.RequestSource           // stash and buy requests, as the DM Screen lists them
 	ItemLooks       records.ItemLooksAPI             // nil while the item looks table is degraded
 	Crafting        records.CraftingAPI              // nil while crafting is degraded
+	ShopLooks       records.ShopLooksAPI             // nil while the armory is degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
@@ -182,6 +184,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	}
 	if d.Crafting != nil {
 		l.Crafting = d.Crafting
+	}
+	if d.ShopLooks != nil {
+		l.Shops = d.ShopLooks
 	}
 	return l
 }
@@ -305,8 +310,13 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 			out[records.KindPlayerNote] = "Player Notes"
 		}
 		if off(crafting.AddonSlug) {
-			for _, k := range []string{"recipe", "material", "drops"} {
+			for _, k := range []string{"recipe", "material", "drops", "bench"} {
 				out[k] = "Crafting"
+			}
+		}
+		if off(armory.AddonSlug) {
+			for _, k := range []string{"shop-room", "storefront", "item-look"} {
+				out[k] = "Armory"
 			}
 		}
 		return out

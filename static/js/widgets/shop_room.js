@@ -1106,6 +1106,13 @@
     var out = {}; Object.keys(m || {}).forEach(function (k) { if (m[k] && m[k].length) out[k] = m[k].slice(); });
     return out;
   }
+  // A room with no saved layout, or one the AI connection changed, has its
+  // furniture laid out on opening; any other draws as it was saved.
+  function openRoom(S, room, L) {
+    if (!fromLayout(S, L) || S.furnish === 'room') room.generate();
+    else if (S.furnish === 'mood') room.applyMood();
+    else room.geometry();
+  }
   function fromLayout(S, L) {
     if (!L) return false;
     S.roomType = L.roomType || S.roomType; S.setting = L.setting || 'room'; S.size = L.size || 'm'; S.full = L.furniture || 'normal';
@@ -1134,6 +1141,9 @@
     var KP = window.ShopRoomKeeper;
     S.manner = KP && KP.MANNERS[L.manner] ? L.manner : '';
     S.moments = keptMoments(L.moments);
+    // Set when the AI connection changed what the room is: lay out the
+    // furniture for it on opening. toLayout never writes it back.
+    S.furnish = L.furnish === 'room' || L.furnish === 'mood' ? L.furnish : '';
     return true;
   }
 
@@ -1217,7 +1227,7 @@
     };
   }
 
-  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, shopItems: shopItems, basketSummary: basketSummary, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, basketSummary: basketSummary, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -2367,7 +2377,7 @@
         loadBuyers(),
         window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, eid).then(function (w) { words = w || {}; }) : null
       ]).then(function (res) {
-        if (fromLayout(S, res[0] && res[0].layout)) room.geometry(); else room.generate();
+        openRoom(S, room, res[0] && res[0].layout);
         savedLayout = toLayout(S);
         el.hidden = false;
         draw(); renderList();
