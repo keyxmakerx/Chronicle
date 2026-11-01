@@ -69,6 +69,11 @@ type SessionRepository interface {
 	// state, matching this file's existing same-state-resubmit convention.
 	SoftDeleteSession(ctx context.Context, id string) error
 	RestoreSession(ctx context.Context, id string) error
+	// ListDeleted lists a campaign's soft-deleted sessions, newest first,
+	// for the campaign Trash.
+	ListDeleted(ctx context.Context, campaignID string) ([]TrashedSession, error)
+	// PurgeDeletedBefore hard-deletes sessions soft-deleted before cutoff.
+	PurgeDeletedBefore(ctx context.Context, cutoff time.Time) (int, error)
 
 	// Per-occurrence RSVPs for a RECURRING session (session_occurrence_rsvps).
 	// See occurrence_rsvp_repository.go.

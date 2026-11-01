@@ -14,6 +14,7 @@ package sessions
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -81,6 +82,46 @@ func (s *sessionService) RestoreSession(ctx context.Context, id string) (*Sessio
 		return nil, nil, err
 	}
 	return session, responded, nil
+}
+
+// RestoreAndAnnounce restores a deleted session of this campaign and tells
+// everyone who had answered before it was cancelled that it's back on, so a
+// stale "cancelled" notification isn't the last word they saw.
+func (s *sessionService) RestoreAndAnnounce(ctx context.Context, campaignID, id string) (*Session, error) {
+	// FindByID filters deleted sessions out, so the campaign check reads
+	// through the one path that can see them.
+	existing, err := s.repo.FindByIDIncludingDeleted(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if existing.CampaignID != campaignID {
+		return nil, apperror.NewNotFound("session not found")
+	}
+	if _, err := s.repo.FindByID(ctx, id); err == nil {
+		return nil, apperror.NewNotFound("that game night isn't in the Trash")
+	}
+	sess, responded, err := s.RestoreSession(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(responded) > 0 {
+		msg := "\"" + sess.Name + "\" is back on."
+		link := "/campaigns/" + campaignID + "/sessions/" + sess.ID
+		if nErr := s.NotifyUsers(ctx, responded, campaignID, NotifSessionRestored, msg, link); nErr != nil {
+			slog.Error("notifying responded members of a restored session", slog.String("error", nErr.Error()))
+		}
+	}
+	return sess, nil
+}
+
+// ListTrashedSessions lists the campaign's deleted sessions for the Trash.
+func (s *sessionService) ListTrashedSessions(ctx context.Context, campaignID string) ([]TrashedSession, error) {
+	return s.repo.ListDeleted(ctx, campaignID)
+}
+
+// PurgeTrashedSessions removes for good sessions deleted before cutoff.
+func (s *sessionService) PurgeTrashedSessions(ctx context.Context, cutoff time.Time) (int, error) {
+	return s.repo.PurgeDeletedBefore(ctx, cutoff)
 }
 
 // MoveSession performs UpdateSession's exact partial update, then — only when

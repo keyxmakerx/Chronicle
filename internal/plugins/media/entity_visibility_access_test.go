@@ -68,6 +68,13 @@ func (f *fakeAccessMediaService) GetCampaignStats(ctx context.Context, campaignI
 func (f *fakeAccessMediaService) DeleteCampaignMedia(ctx context.Context, campaignID, mediaID string) error {
 	return nil
 }
+func (f *fakeAccessMediaService) RestoreCampaignPicture(ctx context.Context, campaignID, mediaID string) error {
+	return nil
+}
+func (f *fakeAccessMediaService) ListTrashedPictures(ctx context.Context, campaignID string) ([]TrashedPicture, error) {
+	return nil, nil
+}
+func (f *fakeAccessMediaService) PurgeTrashedPictures(ctx context.Context, cutoff time.Time) (int, error) { return 0, nil }
 func (f *fakeAccessMediaService) DeleteCampaignFiles(ctx context.Context, campaignID string) (int, error) {
 	return 0, nil
 }

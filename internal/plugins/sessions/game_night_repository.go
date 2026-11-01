@@ -46,6 +46,48 @@ func (r *sessionRepository) RestoreSession(ctx context.Context, id string) error
 	return nil
 }
 
+// ListDeleted lists a campaign's soft-deleted sessions, newest first.
+func (r *sessionRepository) ListDeleted(ctx context.Context, campaignID string) ([]TrashedSession, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, name, deleted_at FROM sessions
+		 WHERE campaign_id = ? AND deleted_at IS NOT NULL
+		 ORDER BY deleted_at DESC`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("listing deleted sessions: %w", err)
+	}
+	defer rows.Close()
+	var out []TrashedSession
+	for rows.Next() {
+		var t TrashedSession
+		if err := rows.Scan(&t.ID, &t.Name, &t.DeletedAt); err != nil {
+			return nil, fmt.Errorf("scanning deleted session: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// purgeBatch keeps each purge statement short so it never holds locks long.
+const purgeBatch = 200
+
+// PurgeDeletedBefore hard-deletes sessions soft-deleted before cutoff, in
+// batches. Their answers, entries and bells go with them by foreign key.
+func (r *sessionRepository) PurgeDeletedBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	total := 0
+	for {
+		res, err := r.db.ExecContext(ctx,
+			`DELETE FROM sessions WHERE deleted_at IS NOT NULL AND deleted_at < ? LIMIT ?`, cutoff, purgeBatch)
+		if err != nil {
+			return total, fmt.Errorf("purging deleted sessions: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+		if n < purgeBatch {
+			return total, nil
+		}
+	}
+}
+
 // --- session_attendees: note, exclusion, needs-recheck ------------------
 
 // SetAttendeeNote sets or clears one attendee's note. An UPSERT rather than a

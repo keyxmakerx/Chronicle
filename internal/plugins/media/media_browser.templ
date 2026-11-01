@@ -1,7 +1,7 @@
 // media_browser.templ renders the campaign-scoped media browser page.
 // Allows campaign owners to browse, manage, and delete their uploads.
 // Shows a grid of thumbnails with file info, "referenced by" lookup, and
-// delete with warnings.
+// a delete that moves the picture to the campaign Trash.
 
 package media
 
@@ -234,10 +234,10 @@ templ mediaCard(cc *campaigns.CampaignContext, f MediaFile, csrfToken string) {
 			<!-- Delete -->
 			<button
 				hx-delete={ fmt.Sprintf("/campaigns/%s/media/%s", cc.Campaign.ID, f.ID) }
-				hx-confirm={ fmt.Sprintf("Delete '%s'? This cannot be undone. Any pages using this image will show a broken image.", f.OriginalName) }
 				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 				class="w-6 h-6 rounded bg-red-600/70 hover:bg-red-600 text-white flex items-center justify-center text-[10px] pointer-events-auto"
-				title="Delete file"
+				title="Move to Trash"
+				aria-label={ fmt.Sprintf("Move %s to the Trash", f.OriginalName) }
 			>
 				<i class="fa-solid fa-trash"></i>
 			</button>

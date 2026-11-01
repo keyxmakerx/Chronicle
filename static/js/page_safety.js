@@ -8,6 +8,9 @@
  *    ?trashed=<id>; this shows "Moved to Trash" with an Undo button that
  *    restores it, and drops the parameter so a reload doesn't repeat it.
  *    ?notes=<n> (set when the page had Player Notes) adds "with its n notes".
+ *    Another kind of thing (a game night) adds &kind=<kind>, on whichever
+ *    campaign page its delete lands, and restores through the Trash's
+ *    route for that kind.
  */
 (function () {
   'use strict';
@@ -44,19 +47,25 @@
   function offerUndo() {
     var params = new URLSearchParams(window.location.search);
     var id = params.get('trashed');
-    var m = window.location.pathname.match(/^\/campaigns\/([^/]+)\/entities\/?$/);
+    var kind = params.get('kind') || '';
+    var m = kind
+      ? window.location.pathname.match(/^\/campaigns\/([^/]+)\//)
+      : window.location.pathname.match(/^\/campaigns\/([^/]+)\/entities\/?$/);
     if (!id || !m || !window.Chronicle || !Chronicle.notify) return;
+    if (kind && !/^[a-z-]+$/.test(kind)) return;
 
     var notes = parseInt(params.get('notes'), 10);
     var withNotes = notes > 0 ? ' with its ' + notes + (notes === 1 ? ' note' : ' notes') : '';
     params.delete('trashed');
     params.delete('notes');
+    params.delete('kind');
     var rest = params.toString();
     history.replaceState(history.state, '', window.location.pathname + (rest ? '?' + rest : ''));
 
     Chronicle.notify('Moved to Trash' + withNotes + '.', 'success', { duration: 10000, action: { label: 'Undo', onClick: function (btn) {
       btn.disabled = true;
-      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(m[1]) + '/trash/' + encodeURIComponent(id) + '/restore', {
+      var path = '/campaigns/' + encodeURIComponent(m[1]) + '/trash/' + (kind ? kind + '/' : '') + encodeURIComponent(id) + '/restore';
+      Chronicle.apiFetch(path, {
         method: 'POST',
       })
         .then(function (res) {
@@ -68,7 +77,7 @@
         })
         .catch(function () {
           btn.disabled = false;
-          Chronicle.notify('Could not restore the page. It is still in Manage > Trash.', 'error');
+          Chronicle.notify('Could not put it back. It is still in Manage > Trash.', 'error');
         });
     } } });
   }

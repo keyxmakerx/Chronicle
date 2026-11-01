@@ -64,6 +64,11 @@ const (
 	// ActionTagDeleted is logged when a tag is removed from a campaign.
 	ActionTagDeleted = "tag.deleted"
 
+	// ActionTrashRestored is logged when the owner brings something back
+	// from the campaign Trash. EntityType names the kind ("entity" for a
+	// page, or the Trash kind such as "map").
+	ActionTrashRestored = "trash.restored"
+
 	// --- Calendar plugin ---
 	// Naming: snake_case verb suffix after the resource. Counts-only
 	// payload discipline — bulk Set* events log before/after counts in

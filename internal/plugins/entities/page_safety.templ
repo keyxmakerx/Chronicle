@@ -2,6 +2,7 @@ package entities
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -27,6 +28,29 @@ type TrashPageData struct {
 	ViewerID   string
 	Now        time.Time
 	Restored   string // id of a page just restored, for the "Open it" link
+	// Others are other plugins' things in the Trash: pictures, game nights
+	// and maps.
+	Others []TrashedThing
+}
+
+// trashRow is one line of the Trash: a page or another kind of thing.
+type trashRow struct {
+	Page  *TrashItem
+	Other *TrashedThing
+	At    time.Time
+}
+
+// trashRows puts pages and other things in one list, newest first.
+func trashRows(d TrashPageData) []trashRow {
+	rows := make([]trashRow, 0, len(d.Items)+len(d.Others))
+	for i := range d.Items {
+		rows = append(rows, trashRow{Page: &d.Items[i], At: d.Items[i].DeletedAt})
+	}
+	for i := range d.Others {
+		rows = append(rows, trashRow{Other: &d.Others[i], At: d.Others[i].DeletedAt})
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].At.After(rows[j].At) })
+	return rows
 }
 
 // whenLabel is the server's fallback for a time; page_safety.js rewrites it
@@ -118,8 +142,8 @@ func trashWho(t TrashItem, viewerID string) string {
 	return "deleted"
 }
 
-func daysLeftLabel(t TrashItem, retention int, now time.Time) string {
-	n := DaysLeft(t.DeletedAt, retention, now)
+func daysLeftLabel(deletedAt time.Time, retention int, now time.Time) string {
+	n := DaysLeft(deletedAt, retention, now)
 	switch n {
 	case 0:
 		return "going today"
@@ -221,7 +245,7 @@ templ TrashPage(cc *campaigns.CampaignContext, d TrashPageData) {
 		<div class="max-w-4xl mx-auto">
 			@layouts.ManageHeader("Trash")
 			<p class="text-sm text-fg-secondary mb-4">
-				Deleted pages wait here for { fmt.Sprint(d.Retention) } days, then are gone for good.
+				Deleted pages, pictures, game nights and maps wait here for { fmt.Sprint(d.Retention) } days, then are gone for good.
 				Restoring a page brings back its sub-pages, links and pictures with it. Players never see the Trash.
 			</p>
 			if d.Restored != "" {
@@ -229,38 +253,68 @@ templ TrashPage(cc *campaigns.CampaignContext, d TrashPageData) {
 					Page restored. <a class="text-accent hover:underline" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", d.CampaignID, d.Restored)) }>Open it</a>
 				</div>
 			}
-			if len(d.Items) == 0 {
+			if len(d.Items) == 0 && len(d.Others) == 0 {
 				<div class="card p-6 text-center text-sm text-fg-muted">The Trash is empty.</div>
 			} else {
 				<ul class="card divide-y divide-edge">
-					for _, t := range d.Items {
-						<li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-							<span class="min-w-0">
-								<i class={ "fa-solid " + t.TypeIcon + " text-fg-muted mr-1" } aria-hidden="true"></i>
-								<span class="font-medium text-fg">{ t.Name }</span>
-								<span class="text-fg-muted">({ t.TypeName })</span>
-								&middot; <span class="text-fg-secondary">{ trashWho(t, d.ViewerID) }</span>
-								if t.SubPages > 0 {
-									<span class="text-fg-muted"> &middot; with { fmt.Sprint(t.SubPages) } { plural(t.SubPages, "sub-page", "sub-pages") }</span>
-								}
-								if line := trashNotesLine(t, d.Retention); line != "" {
-									<span class="block text-xs text-fg-muted mt-0.5">{ line }</span>
-								}
-							</span>
-							<span class="flex items-center gap-3">
-								<span class="text-xs text-fg-muted">{ daysLeftLabel(t, d.Retention, d.Now) }</span>
-								<button
-									type="button"
-									class="btn-secondary btn-sm"
-									hx-post={ fmt.Sprintf("/campaigns/%s/trash/%s/restore", d.CampaignID, t.ID) }
-								>
-									Restore
-								</button>
-							</span>
-						</li>
+					for _, r := range trashRows(d) {
+						if r.Other != nil {
+							@trashOtherRow(d, *r.Other)
+						} else {
+							@trashPageRow(d, *r.Page)
+						}
 					}
 				</ul>
 			}
 		</div>
 	}
+}
+
+// trashPageRow is a deleted page, with the sub-pages that went with it.
+templ trashPageRow(d TrashPageData, t TrashItem) {
+	<li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+		<span class="min-w-0">
+			<i class={ "fa-solid " + t.TypeIcon + " text-fg-muted mr-1" } aria-hidden="true"></i>
+			<span class="font-medium text-fg">{ t.Name }</span>
+			<span class="text-fg-muted">({ t.TypeName })</span>
+			&middot; <span class="text-fg-secondary">{ trashWho(t, d.ViewerID) }</span>
+			if t.SubPages > 0 {
+				<span class="text-fg-muted">{ " " }&middot; with { fmt.Sprint(t.SubPages) } { plural(t.SubPages, "sub-page", "sub-pages") }</span>
+			}
+			if line := trashNotesLine(t, d.Retention); line != "" {
+				<span class="block text-xs text-fg-muted mt-0.5">{ line }</span>
+			}
+		</span>
+		<span class="flex items-center gap-3">
+			<span class="text-xs text-fg-muted">{ daysLeftLabel(t.DeletedAt, d.Retention, d.Now) }</span>
+			<button
+				type="button"
+				class="btn-secondary btn-sm"
+				hx-post={ fmt.Sprintf("/campaigns/%s/trash/%s/restore", d.CampaignID, t.ID) }
+			>
+				Restore
+			</button>
+		</span>
+	</li>
+}
+
+// trashOtherRow is a picture, game night or map; restoring it opens it.
+templ trashOtherRow(d TrashPageData, t TrashedThing) {
+	<li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+		<span class="min-w-0">
+			<i class={ "fa-solid " + t.Icon + " text-fg-muted mr-1" } aria-hidden="true"></i>
+			<span class="font-medium text-fg">{ t.Name }</span>
+			<span class="text-fg-muted">({ t.Label })</span>
+		</span>
+		<span class="flex items-center gap-3">
+			<span class="text-xs text-fg-muted">{ daysLeftLabel(t.DeletedAt, d.Retention, d.Now) }</span>
+			<button
+				type="button"
+				class="btn-secondary btn-sm"
+				hx-post={ fmt.Sprintf("/campaigns/%s/trash/%s/%s/restore", d.CampaignID, t.Kind, t.ID) }
+			>
+				Restore
+			</button>
+		</span>
+	</li>
 }

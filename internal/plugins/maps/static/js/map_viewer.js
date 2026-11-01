@@ -1801,10 +1801,10 @@
 		$id('ms-save').addEventListener('click', saveSheet);
 
 		$id('ms-delete').addEventListener('click', async function() {
-			if (!confirm('Delete this map and all its markers? This cannot be undone.')) return;
+			// The map goes to the Trash; the maps list offers Undo.
 			try {
 				var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, { method: 'DELETE' });
-				if (resp.ok) { window.location.href = '/campaigns/' + campaignID + '/maps'; return; }
+				if (resp.ok) { window.location.href = '/campaigns/' + campaignID + '/maps?trashed=' + encodeURIComponent(mapID) + '&kind=map'; return; }
 				var delData = await resp.json().catch(function() { return {}; });
 				Chronicle.notify(delData.message || ('Failed to delete map (HTTP ' + resp.status + ')'), 'error');
 			} catch (err) {

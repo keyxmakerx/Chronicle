@@ -28,6 +28,8 @@ const STUB = `
     '/campaigns/c1/entities/bulk-tags': { processed: 2, added: { e1: [7] } },
     '/campaigns/c1/entities/bulk-delete': { deleted: 2, deletedIds: ['e1', 'e2'] },
     '/campaigns/c1/tags': [{ id: 7, name: 'smugglers' }],
+    '/campaigns/c1/entities/search?q=har': { results: [{ id: 'e3', name: 'Harbour ward' }, { id: 'p9', name: 'Harrow', type_name: 'Place' }] },
+    '/campaigns/c1/entities/bulk-move': { moved: 2, previous: { e1: { parentId: null, parentNodeId: 'f3' }, e3: { parentId: 'p1', parentNodeId: null } } },
   };
   window.Chronicle = {
     register: (name, w) => { window.widget = w; },
@@ -109,6 +111,30 @@ test('a tag is found by name, and Undo takes it off only where it was added', { 
   assert.deepEqual(tagCalls, [
     { entity_ids: ['e1', 'e2'], tag_ids: [7], action: 'add' },
     { entity_ids: ['e1'], tag_ids: [7], action: 'remove' },
+  ]);
+});
+
+test('Move searches for the new parent, skips the picked pages, and Undo puts each back', { skip }, async (t) => {
+  const p = await open(t);
+  await tick(p, 'e1'); await tick(p, 'e3');
+  await p.click('[data-bulk-action="move"]');
+  assert.match(await p.textContent('.bulk-picker'), /Top level/);
+  await p.fill('.bulk-picker input', 'har');
+  await p.waitForFunction(() => /Harrow/.test(document.querySelector('.bulk-picker').textContent));
+  assert.doesNotMatch(await p.textContent('.bulk-picker'), /Harbour/, 'a picked page is not offered as its own parent');
+  await p.click('.bulk-picker [role="option"]:has-text("Harrow")');
+  await p.waitForFunction(() => window.reloads === 1);
+  const move = await p.evaluate(() => window.calls.find((c) => c.url.endsWith('bulk-move')));
+  assert.deepEqual(move.body, { entity_ids: ['e1', 'e3'], parent_id: 'p9' });
+
+  await remount(p);
+  assert.match(await p.textContent('#toasts'), /Moved 2 pages under Harrow\./);
+  await p.click('#toasts button');
+  await p.waitForFunction(() => window.reloads === 2);
+  const undo = await p.evaluate(() => window.calls.filter((c) => c.url.endsWith('bulk-move')).slice(1).map((c) => c.body));
+  assert.deepEqual(undo.sort((a, b) => a.entity_ids[0].localeCompare(b.entity_ids[0])), [
+    { entity_ids: ['e1'], parent_id: null, parent_node_id: 'f3' },
+    { entity_ids: ['e3'], parent_id: 'p1', parent_node_id: null },
   ]);
 });
 

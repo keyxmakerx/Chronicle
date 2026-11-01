@@ -53,6 +53,13 @@ const (
 	EntityRoleKey         = "key"
 )
 
+// TrashedSession is a deleted game night as the campaign Trash lists it.
+type TrashedSession struct {
+	ID        string
+	Name      string
+	DeletedAt time.Time
+}
+
 // Session represents a game session for a campaign.
 type Session struct {
 	ID            string  `json:"id"`
