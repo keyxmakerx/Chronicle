@@ -90,6 +90,9 @@
     app.setItems = function (list) {
       app.itemList = list.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
       app.items = {};
+      // A missing item may only be past the end of a cut-short list, so the
+      // checks don't call it deleted (crafting_lib.js gone).
+      Object.defineProperty(app.items, 'truncated', {value: !!app.truncated});
       app.itemList.forEach(function (it) { app.items[it.id] = it; });
     };
     app.show = function (k, then) { if (then) then(app.parts[k]); showTab(k); };
@@ -115,7 +118,7 @@
       var stats = (R.characteristics || []).map(function (c) { return c.label; }).join(', ');
       return '<div class="cra-dhead"><h3>Crafting settings</h3><button type="button" class="cra-ib" data-close aria-label="Close">' + fa('xmark') + '</button></div>' +
         '<div class="cra-dbody"><div class="cra-dsec"><h4>The bench</h4>' +
-        '<div class="cra-ctl"><span>Players start at</span>' + seg('skin', app.lib.skins) + '<em>Players can switch between the desk and the journal.</em></div>' +
+        '<div class="cra-ctl"><span>Players work at</span>' + seg('skin', app.lib.skins) + '<em>Every player sees the bench in this look.</em></div>' +
         '<div class="cra-ctl"><span>Timing</span>' + seg('difficulty', app.lib.difficulties) + '<em>How tight the gold bands are on the graded steps.</em></div>' +
         sw('bane', 'Botched work gives a bane') + sw('skip', 'Players may skip the steps and just roll') + '</div>' +
         '<div class="cra-dsec"><h4>The project roll</h4><p class="cra-fine">' + esc(R.dice) + (stats ? ' plus one of ' + esc(stats) : '') +
@@ -201,11 +204,11 @@
         if (dead) return;
         app.lib = got[0];
         if (!app.director || !app.lib.director) { CraftingBook.mount(el, app, got[1] || []); return; }
+        app.truncated = !!got[1].truncated;
         app.setItems(got[1].items || []);
         app.characters = got[1].characters || [];
         app.tables = got[1].tables || [];
         app.skills = got[1].skills || [];
-        app.truncated = !!got[1].truncated;
         app.recipes = got[2] || [];
         app.benches = got[3] || [];
         workshop();

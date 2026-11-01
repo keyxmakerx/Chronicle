@@ -309,11 +309,11 @@ func (r *sqlRepository) UpdateRecipe(ctx context.Context, campaignID, userID str
 	res, err := tx.ExecContext(ctx,
 		`UPDATE crafting_recipes SET name = ?, template = ?, bench_kind = ?, result_item_id = ?, result_qty = ?, goal = ?, stat = ?,
 			prerequisite = ?, source = ?, cost_cents = ?, cost_currency = ?, who = ?, materials = ?, steps = ?, colors = ?,
-			version = version + 1
+			extras = ?, version = version + 1
 		 WHERE campaign_id = ? AND id = ? AND version = ?`,
 		rec.Name, rec.Template, rec.Bench, nullString(rec.Result.ItemID), rec.Result.Qty, rec.Goal, rec.Stat,
 		rec.Prerequisite, rec.Source, costCents(rec.Cost), rec.Cost.Currency, rec.Who, mustJSON(rec.Materials), mustJSON(rec.Steps),
-		colorsJSON(rec.Colors), campaignID, rec.ID, expected)
+		colorsJSON(rec.Colors), mustJSON(rec.Extras), campaignID, rec.ID, expected)
 	if isDuplicate(err) {
 		return false, errDuplicate
 	}

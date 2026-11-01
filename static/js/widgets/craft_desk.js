@@ -858,7 +858,8 @@ window.CraftDesk = (function () {
   function thumb(key,v){return opts.thumbs?opts.thumbs+encodeURIComponent(key+'-'+v)+'.jpg':'';}
 
   var skin={label:'An apothecary bench at night, lit by a candle',layout:L,defs:defs,background:background,foreground:foreground,shade:shade,art:art,book:book,fx:fx,ambient:ambient,light:light,sound:'desk',info:INFO,act:act,
-    itemSpot:function(k,i){return L.items[k]||L.slots[i%L.slots.length];},
+    // Past the bench's three spots, materials fan out from them so a fourth never hides the first.
+    itemSpot:function(k,i){if(L.items[k])return L.items[k];var h=L.slots[i%L.slots.length],n=Math.floor(i/L.slots.length);return n?[h[0]-26*n,h[1]-20*n]:h;},
     bind:function(a){host=a;},
     opts:O,setOpt:function(k,v){if(k==='ldx'||k==='ldy'||k==='kit'||CHOICES[k]){var o={};o[k]=v;setLook(o);if(LOOK[k])dirty=1;}},
     looks:LOOKS,look:function(id){var Lk=LOOKS[id];if(!Lk)return;setLook(Lk.o);dirty=1;},

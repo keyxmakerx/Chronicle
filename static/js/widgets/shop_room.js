@@ -1662,7 +1662,10 @@
         });
       }
       function loadGoods() {
-        return Chronicle.apiFetch(ds.relationsEndpoint).then(function (r) { if (r.ok) { relsOk = true; return r.json(); } return []; }).catch(function () { return []; }).then(function (j) {
+        // A failed read keeps the wares already shown and says so, rather
+        // than drawing an empty shop the player can't tell from a sold-out one.
+        return Chronicle.apiFetch(ds.relationsEndpoint).then(function (r) { if (r.ok) { relsOk = true; return r.json(); } return null; }).catch(function () { return null; }).then(function (j) {
+          if (j === null) { note = (note ? note + ' ' : '') + 'The wares couldn’t be loaded just now. Close the shop and open it again to try again.'; return; }
           rels = (Array.isArray(j) ? j : (j && j.data) || []).filter(function (r) { return r.relationType === 'sells'; }).map(function (r) {
             if (typeof r.metadata === 'string') { try { r.metadata = JSON.parse(r.metadata); } catch (e) { r.metadata = {}; } }
             r.metadata = r.metadata || {}; return r;
@@ -1692,7 +1695,11 @@
             if (j.status !== 'requested') bought = true;
             return Promise.all([loadGoods(), loadBuyers()]);
           });
-        }).catch(function (e) { note = e.message; }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); });
+        }).catch(function (e) {
+          // A network failure's own text ("Failed to fetch") means nothing
+          // to a player; the server's refusals are already in plain words.
+          note = e instanceof TypeError ? 'The shop couldn’t be reached. Nothing was bought; try again.' : e.message;
+        }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); });
       }
       // The basket's count, and its peek: what's in it and the total, or how to start.
       function renderPeek() {

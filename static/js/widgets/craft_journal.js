@@ -89,7 +89,8 @@ window.CraftJournal = (function () {
   };
   // Where each ingredient's card was taped, so its tape stays on the page once it is used
   var SPOT={},ITEMC={};
-  function itemSpot(k,i){var h=L.slots[i%L.slots.length];SPOT[k]=h;return h;}
+  // Past the page's three spots, cards fan out from them so a fourth never hides the first.
+  function itemSpot(k,i){var b=L.slots[i%L.slots.length],n=Math.floor(i/L.slots.length),h=n?[b[0]+30*n,b[1]-26*n]:b;SPOT[k]=h;return h;}
 
   /* A tiny seeded random, so the baked stains and fibres land in the same
      place every time the page is drawn. */

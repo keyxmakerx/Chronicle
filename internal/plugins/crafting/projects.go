@@ -213,6 +213,9 @@ type CraftRecipe struct {
 	Goal     int         `json:"goal"`
 	Stat     string      `json:"stat"`
 	Roll     string      `json:"roll"`
+	// Skip says this hero has mastered the recipe and its mastery lets
+	// them skip the bench steps, whatever the campaign's setting.
+	Skip bool `json:"skip,omitempty"`
 	// StatValue is the hero's characteristic from their sheet; nil when the
 	// recipe names none or the sheet has no number there.
 	StatValue *int   `json:"statValue,omitempty"`
@@ -344,6 +347,10 @@ type Respite struct {
 // RespiteResult says how many projects a respite gave a roll.
 type RespiteResult struct {
 	Projects int `json:"projects"`
+	// Warnings name the parts of the respite that didn't happen (rules that
+	// didn't run, brews that didn't go off), so the page doesn't report
+	// success over them. The respite itself is logged either way.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // SetPointsInput sets a project's points, below its goal.

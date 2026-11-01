@@ -6720,6 +6720,7 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .shop-inv-add-btn { font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background: #f97316; color: #fff; border: none; cursor: pointer; }
 .shop-inv-add-btn:hover { background: #ea580c; }
 .shop-inv-empty { color: #9ca3af; font-style: italic; padding: 1rem; text-align: center; }
+.shop-inv-link { background: none; border: 0; padding: 0; color: var(--color-accent); text-decoration: underline; font: inherit; font-style: normal; cursor: pointer; }
 .shop-inv-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .shop-inv-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; border-radius: 0.375rem; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border, #e5e7eb); }
 .dark .shop-inv-item { background: #1f2937; border-color: #374151; }
