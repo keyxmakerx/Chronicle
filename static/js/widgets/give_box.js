@@ -342,7 +342,8 @@
       host = btn.closest('[data-move-host]');
       f = host && host.querySelector('[data-move-fold]');
     } else if (btn.hasAttribute('data-share')) {
-      f = btn.closest('li') && btn.closest('li').querySelector('[data-share-fold]');
+      host = btn.closest('[data-move-host]') || btn.closest('li');
+      f = host && host.querySelector('[data-share-fold]');
     } else {
       f = btn.closest('section') && btn.closest('section').querySelector('[data-give-fold]');
     }

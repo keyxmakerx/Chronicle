@@ -105,4 +105,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	// service lets only the holder's player or Owner visibility through.
 	cg.GET("/armory/characters/:eid/items/:iid/share", sh.ShareBox, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/characters/:eid/items/:iid/share", sh.Share, campaigns.RequireRole(campaigns.RolePlayer))
+	// Which container a hero carries an item in: Player+ at the route; the
+	// service lets only the character's player or a GM through.
+	cg.POST("/armory/characters/:eid/items/:iid/place", sh.SetPlace, campaigns.RequireRole(campaigns.RolePlayer))
 }

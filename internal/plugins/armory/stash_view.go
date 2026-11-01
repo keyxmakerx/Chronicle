@@ -271,3 +271,38 @@ func shareHint(v *ShareBoxView) string {
 	}
 	return "They can open its page. It stays on " + v.Character.Name + "."
 }
+
+// placeURLBase is where the hero page posts an item's new container; the
+// item id and "/place" follow.
+func placeURLBase(campaignID, characterID string) string {
+	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/items/"
+}
+
+// placeIcon is a container's icon.
+func placeIcon(p Place) string {
+	switch p {
+	case PlaceHand:
+		return "fa-hand"
+	case PlaceWorn:
+		return "fa-shirt"
+	case PlaceBelt:
+		return "fa-wallet"
+	}
+	return "fa-suitcase"
+}
+
+// itemCount reads "1 item" or "N items".
+func itemCount(n int) string {
+	if n == 1 {
+		return "1 item"
+	}
+	return fmt.Sprintf("%d items", n)
+}
+
+// boolStr is an aria value.
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}

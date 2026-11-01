@@ -45,52 +45,23 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 		if len(v.Items) == 0 {
 			<p class="text-xs text-fg-muted mb-3">No items carried.</p>
 		} else {
-			<ul class="divide-y divide-border mb-3" data-items>
-				for _, it := range v.Items {
-					<li class="py-1.5" data-item-id={ it.ItemID } data-holder={ destValue(self) } data-move-host>
-						<div class="flex items-center justify-between gap-2 text-sm">
-							<span class="text-fg truncate">
-								if it.IsMap {
-									<i class="fa-solid fa-map text-fg-muted mr-1.5 text-xs"></i>{ it.Name }
-								} else {
-									{ it.Name }
-								}
-								if it.Quantity > 1 {
-									<span class="text-fg-muted">&times; { fmt.Sprintf("%d", it.Quantity) }</span>
-								}
-							</span>
-							<span class="flex items-center gap-3">
-								if it.CanShare {
-									<button
-										type="button"
-										class="text-xs text-accent hover:underline shrink-0"
-										data-share
-										aria-expanded="false"
-										onclick={ shareOpenOnClick(shareURL(v.CampaignID, v.Character.ID, it.ItemID)) }
-									>Share&hellip;</button>
-								}
-								<button
-									type="button"
-									class="text-xs text-accent hover:underline shrink-0"
-									data-move
-									aria-expanded="false"
-									onclick={ moveOpenOnClick(moveDialogURL(v.CampaignID, "item", self, it.ItemID)) }
-								>Move&hellip;</button>
-							</span>
-						</div>
-						if len(it.Copies) > 0 {
-							@heldCopies(it.Copies, it.Quantity)
-						}
-						if len(it.SharedWith) > 0 {
-							<div class="ag-shared"><i class="fa-solid fa-user-group"></i>Shared with { strings.Join(it.SharedWith, ", ") }</div>
-						}
-						if it.CanShare {
-							<div class="ag-fold" data-share-fold></div>
-						}
-						<div class="ag-fold" data-move-fold></div>
-					</li>
+			<div
+				class="hp-boxes"
+				data-widget="hero-pack"
+				data-hero-pack
+				if v.CanPlace {
+					data-place-url={ placeURLBase(v.CampaignID, v.Character.ID) }
 				}
-			</ul>
+			>
+				for _, pl := range Places {
+					@placeBox(v, self, pl)
+				}
+			</div>
+			<div class="hp-details" data-hp-details>
+				for _, it := range v.Items {
+					@heldDetail(v, self, it)
+				}
+			</div>
 		}
 
 		<div data-money-row data-holder={ destValue(self) } data-move-host>
@@ -139,6 +110,138 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 	</section>
 }
 
+// placeBox is one of the hero's containers: its items as tiles, dragged
+// between boxes when the viewer may rearrange them (hero_pack.js).
+templ placeBox(v *CharacterPanelView, self Endpoint, pl Place) {
+	{{ n := 0 }}
+	for _, it := range v.Items {
+		if it.Place == pl {
+			{{ n += it.Quantity }}
+		}
+	}
+	<div class="hp-box" data-hp-box={ string(pl) } aria-label={ pl.Label() } role="group">
+		<div class="hp-box-h">
+			<span><i class={ "fa-solid", placeIcon(pl) } aria-hidden="true"></i>{ pl.Label() }</span>
+			<span class="hp-n" data-hp-n>
+				if n > 0 {
+					{ itemCount(n) }
+				}
+			</span>
+		</div>
+		<ul class="hp-tiles" data-hp-tiles>
+			for _, it := range v.Items {
+				if it.Place == pl {
+					<li
+						class={ "hp-tile", templ.KV("is-stack", len(it.Copies) > 0) }
+						data-item-id={ it.ItemID }
+						data-holder={ destValue(self) }
+						data-hp-tile
+						tabindex="0"
+						role="button"
+						aria-expanded="false"
+						aria-controls={ "hp-d-" + it.ItemID }
+						if v.CanPlace {
+							draggable="true"
+						}
+						title={ it.Name }
+					>
+						if it.Quantity > 1 {
+							<span class="hp-ct">{ fmt.Sprintf("%d", it.Quantity) }</span>
+						}
+						<i class={ "fa-solid", templ.KV("fa-map", it.IsMap), templ.KV("fa-cube", !it.IsMap), "hp-pic" } aria-hidden="true"></i>
+						<span class="hp-name">{ it.Name }</span>
+					</li>
+				}
+			}
+		</ul>
+		<p class="hp-empty" data-hp-empty
+			if n > 0 {
+				hidden
+			}
+		>Nothing here</p>
+	</div>
+}
+
+// heldDetail is what a pressed tile opens under the boxes: the copies spread
+// out one card each, Move and Share, and where the hero carries it.
+templ heldDetail(v *CharacterPanelView, self Endpoint, it HeldItem) {
+	<div class="hp-detail" id={ "hp-d-" + it.ItemID } data-hp-detail={ it.ItemID } data-move-host hidden>
+		<div class="hp-detail-h">
+			<h4>{ it.Name }
+				if it.Quantity > 1 {
+					<span class="text-fg-muted font-normal">&times; { fmt.Sprintf("%d", it.Quantity) }</span>
+				}
+			</h4>
+			<span class="flex items-center gap-3">
+				if it.CanShare {
+					<button
+						type="button"
+						class="text-xs text-accent hover:underline shrink-0"
+						data-share
+						aria-expanded="false"
+						onclick={ shareOpenOnClick(shareURL(v.CampaignID, v.Character.ID, it.ItemID)) }
+					>Share&hellip;</button>
+				}
+				<button
+					type="button"
+					class="text-xs text-accent hover:underline shrink-0"
+					data-move
+					aria-expanded="false"
+					onclick={ moveOpenOnClick(moveDialogURL(v.CampaignID, "item", self, it.ItemID)) }
+				>Move&hellip;</button>
+				<button type="button" class="hp-x" data-hp-close aria-label={ "Close " + it.Name }><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+			</span>
+		</div>
+		if len(it.Copies) > 0 {
+			@spreadCopies(it)
+		}
+		if len(it.SharedWith) > 0 {
+			<div class="ag-shared"><i class="fa-solid fa-user-group"></i>Shared with { strings.Join(it.SharedWith, ", ") }</div>
+		}
+		if v.CanPlace {
+			<div class="hp-carry" role="group" aria-label={ "Where " + v.Character.Name + " carries it" }>
+				<span>Carried</span>
+				for _, pl := range Places {
+					<button type="button" data-hp-carry={ string(pl) } aria-pressed={ boolStr(it.Place == pl) }>{ pl.Label() }</button>
+				}
+			</div>
+		}
+		if it.CanShare {
+			<div class="ag-fold" data-share-fold></div>
+		}
+		<div class="ag-fold" data-move-fold></div>
+	</div>
+}
+
+// spreadCopies lays the copies that remember something out one card each,
+// then the plain ones as one card.
+templ spreadCopies(it HeldItem) {
+	<ul class="hp-cards" data-copies>
+		for _, c := range it.Copies {
+			<li class="hp-card" data-copy-id={ fmt.Sprintf("%d", c.ID) }>
+				<span class="hp-card-n">
+					if c.Quantity == 1 && it.Quantity == 1 {
+						This one
+					} else if c.Quantity == 1 {
+						1 of them
+					} else {
+						{ fmt.Sprintf("%d of them", c.Quantity) }
+					}
+				</span>
+				for _, tg := range c.Memory.Tags() {
+					<span class={ "ag-tag", templ.KV("is-poor", tg.Kind == "poor"), templ.KV("is-off", tg.Kind == "off") }>{ tg.Label }</span>
+				}
+				if w := c.Memory.Words(); w != "" {
+					<span class="hp-card-w">{ w }</span>
+				}
+			</li>
+		}
+		if n := PlainCount(it.Quantity, it.Copies); n > 0 {
+			<li class="hp-card is-plain"><span class="hp-card-n">{ fmt.Sprintf("%d plain", n) }</span></li>
+		}
+	</ul>
+}
+
 // downtimePill says whether moves apply at once or wait for the GM.
 templ downtimePill(open bool) {
 	if open {
@@ -147,7 +250,6 @@ templ downtimePill(open bool) {
 		<span class="badge-gray">Not in downtime</span>
 	}
 }
-
 // heldCopies lists, under an item's line, the copies that remember
 // something and how many of the rest are plain.
 templ heldCopies(copies []Copy, total int) {

@@ -302,6 +302,8 @@ type HeldItem struct {
 	// Copies are the ones that remember something (copies.go), oldest
 	// first; the rest of Quantity is plain.
 	Copies []Copy
+	// Place is the container the hero carries it in.
+	Place Place
 }
 
 // CharacterPanelView feeds the "Items and money" panel on a character page.
@@ -311,7 +313,9 @@ type CharacterPanelView struct {
 	DowntimeOpen bool
 	// CanGive is true for Owner visibility, who may hand the character items
 	// and maps.
-	CanGive     bool
+	CanGive bool
+	// CanPlace lets the viewer drag items between the hero's containers.
+	CanPlace    bool
 	Items       []HeldItem
 	HasMoney    bool
 	Money       Cents
