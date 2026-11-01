@@ -672,11 +672,17 @@ func (s *service) FightEnded(ctx context.Context, campaignID string, v Viewer, f
 		if n == 0 {
 			continue
 		}
+		// The count says how many were down, and the line says when fewer
+		// than that left spoils, so a cap never reads as the whole fight.
 		who := c.Name
-		if n > 1 {
-			who = fmt.Sprintf("%s (%d down)", c.Name, n)
+		if c.Down > 1 {
+			who = fmt.Sprintf("%s (%d down)", c.Name, c.Down)
 		}
-		out.Lines = append(out.Lines, fmt.Sprintf("%s left spoils in the tray: %s.", who, dropSummary(copied)))
+		line := fmt.Sprintf("%s left spoils in the tray: %s.", who, dropSummary(copied))
+		if n < c.Down {
+			line += fmt.Sprintf(" Only %d of them left spoils.", n)
+		}
+		out.Lines = append(out.Lines, line)
 	}
 	if full {
 		out.Lines = append(out.Lines, trayFull)

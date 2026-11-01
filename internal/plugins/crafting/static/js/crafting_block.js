@@ -135,6 +135,16 @@
     return '<button type="button" class="crp-ib" data-act="menu" data-id="' + esc(id) + '" aria-haspopup="menu" aria-expanded="' + isOpen + '" aria-label="More for this project">' + ICON.more + '</button>';
   }
 
+  /* A bench whose scripts never arrive would say "Loading the bench…"
+     forever; after a while it says so and offers another try. */
+  function watchBench(node, retry) {
+    setTimeout(function () {
+      if (!node.isConnected || !node.querySelector(':scope > p[role="status"]')) return;
+      node.innerHTML = '<p class="cra-fine cra-bad" role="alert">The bench didn’t load. <button type="button" class="cra-link">Try again</button></p>';
+      node.querySelector('button').addEventListener('click', retry);
+    }, 20000);
+  }
+
   function mount(el, cfg) {
     var cid = String(cfg.campaignId || ''), eid = String(cfg.entityId || '');
     var base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
@@ -157,6 +167,19 @@
           }
           return data;
         });
+      }, function (e) {
+        // The browser's own words for a dropped connection ("Failed to
+        // fetch", "Load failed") mean nothing to a player.
+        if (e && e.status) throw e;
+        throw new Error('Chronicle couldn’t be reached. Check your connection and try again.');
+      });
+    }
+    /* While a roll or a cancel is out, its project's buttons say so and
+       can't be pressed twice. */
+    function holdButtons(pid, on) {
+      el.querySelectorAll('[data-id="' + pid + '"][data-act="plain"], [data-id="' + pid + '"][data-act="cancel"]').forEach(function (b) {
+        b.disabled = on;
+        if (on) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy');
       });
     }
     /* The message is kept, not just shown: a render right after it would
@@ -179,7 +202,7 @@
     function bench(kind) { for (var i = 0; i < D.benches.length; i++) if (D.benches[i].kind === kind) return D.benches[i]; return null; }
     /* Skipping the steps is the campaign's call for a player; a recipe with
        no steps is only ever rolled. */
-    function canSkip(r) { return !r || !r.steps.length || D.settings.skip || D.director; }
+    function canSkip(r) { return !r || !r.steps.length || D.settings.skip || D.director || !!r.skip; }
 
     function projectRow(p) {
       var r = recipe(p.recipeId), acts, id = p.id;
@@ -424,6 +447,7 @@
         onWorked: function (work) { roll(pid, work, b ? b.id : ''); }};
       box.appendChild(benchEl);
       Chronicle.mountWidget(benchEl);
+      watchBench(benchEl, function () { unmountBench(); mountBench(pid); });
     }
 
     /* Motion at the bench: off under Calm, Off or reduced motion, where the
@@ -486,6 +510,7 @@
       var p = project(pid);
       if (!p || busy) return;
       busy = true;
+      holdButtons(pid, true);
       api('POST', '/projects/' + encodeURIComponent(pid) + '/roll', {work: work, bench: benchId || '', version: p.version}).then(function (res) {
         busy = false;
         if (dead) return;
@@ -500,6 +525,7 @@
       }, function (err) {
         busy = false;
         if (dead) return;
+        holdButtons(pid, false);
         toast(err.message);
         // A held roll or a stale project: show where things stand now.
         if (err.status === 409) load().catch(fail);
@@ -668,10 +694,13 @@
 
     function cancel(pid) {
       var p = project(pid);
-      if (!p) return;
+      if (!p || busy) return;
+      busy = true;
+      holdButtons(pid, true);
       api('DELETE', '/projects/' + encodeURIComponent(pid)).then(function () {
+        busy = false;
         return load().then(function () { toast(p.name + ' was cancelled. What it took stays spent.'); });
-      }, function (err) { toast(err.message); load().catch(fail); });
+      }, function (err) { busy = false; holdButtons(pid, false); toast(err.message); load().catch(fail); });
     }
 
     function close(id) {

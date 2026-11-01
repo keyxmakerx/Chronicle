@@ -85,6 +85,7 @@ func (s *service) SaveAIRecipe(ctx context.Context, campaignID string, v Viewer,
 		return s.load(ctx, campaignID, r.ID)
 	}
 	r.ID = stored.ID
+	r.Extras = FollowMaterials(stored.Extras, stored.Materials, r.Materials)
 	ok, err := s.repo.UpdateRecipe(ctx, campaignID, v.UserID, r, stored.Version)
 	if err != nil {
 		if errors.Is(err, errDuplicate) {

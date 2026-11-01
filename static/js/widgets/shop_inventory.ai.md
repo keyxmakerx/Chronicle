@@ -45,6 +45,6 @@ None emitted or listened to.
 
 - Item data lives in the relation's `metadata` (price, quantity, in_stock); a
   custom item without a linked page stores its name there too.
-- A failed inventory load is swallowed, leaving the widget on its loading
-  state.
+- A failed inventory load shows an error with Try again, never the empty
+  "no items" state.
 - Shop-room and transaction-log widgets are separate mounts on the same page.
