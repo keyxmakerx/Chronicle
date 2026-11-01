@@ -76,13 +76,14 @@ func TestPanel(t *testing.T) {
 		{
 			name:    "no homebrew leaves the drawer and its button out",
 			view:    View{CampaignID: "c1"},
-			notWant: []string{"data-dms-brew", "fa-beer-mug-empty"},
+			notWant: []string{"data-dms-brew", "fa-beer-mug-empty", "/campaigns/c1/homebrew"},
 		},
 		{
 			name: "homebrew adds the tankard button and a closed drawer around its content",
 			view: View{CampaignID: "c1", Homebrew: templ.Raw(`<div data-widget="homebrew-drawer"></div>`)},
 			want: []string{`data-dms-brew aria-controls="dms-brew" aria-expanded="false" aria-label="Homebrew"`, "fa-beer-mug-empty",
-				`id="dms-brew" data-dms-brew-pane`, `hidden`, "data-dms-brew-pv", `<div data-widget="homebrew-drawer"></div>`},
+				`id="dms-brew" data-dms-brew-pane`, `hidden`, "data-dms-brew-pv", `<div data-widget="homebrew-drawer"></div>`,
+				`href="/campaigns/c1/homebrew" data-dms-brew-workshop`},
 		},
 		{
 			name:    "no fight source leaves the Fight tab out",
