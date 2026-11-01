@@ -301,6 +301,13 @@ func TestDropsKind_Plan(t *testing.T) {
 		{"also a missing page", craftRec("drops", ActionCreate, "", map[string]any{"page": "Dire wolf", "also": "Nowhere"}), "", "also: no page called"},
 		{"no such page", craftRec("drops", ActionCreate, "", map[string]any{"page": "Nowhere", "lines": []any{"1 Troll tooth"}}), "", "no page called"},
 		{"an unknown item", craftRec("drops", ActionCreate, "", map[string]any{"page": "Dire wolf", "lines": []any{"2 Wolf pelt"}}), "", "no Armory item called \"Wolf pelt\""},
+		{"finds to study first, written in a line, after a YAML map's harvest, and as a map", craftRec("drops", ActionCreate, "", map[string]any{"page": "Dire wolf", "lines": []any{
+			"2 Troll tooth; study with Reason", map[string]any{"harvest Troll hide with Might": "1/2/4; study, one chance"},
+			map[string]any{"item": "Bloodmoss", "study": "reason", "once": true}, map[string]any{"item": "Troll tooth", "study": true}, map[string]any{"item": "Troll hide", "study": "none"}}}),
+			"drops 2 × Troll tooth, studied first (2d10 + Reason); harvest Troll hide (2d10 + Might: 1, 2 or 4), studied first (2d10, one chance); " +
+				"1 × Bloodmoss, studied first (2d10 + Reason, one chance); 1 × Troll tooth, studied first (2d10); 1 × Troll hide", ""},
+		{"a study mark it can't read", craftRec("drops", ActionCreate, "", map[string]any{"page": "Dire wolf", "lines": []any{"2 Troll tooth; studied"}}), "", "after `;` write `study with Reason`"},
+		{"a study with no such characteristic", craftRec("drops", ActionCreate, "", map[string]any{"page": "Dire wolf", "lines": []any{"2 Troll tooth; study with Charm"}}), "", "\"Charm\" is not one of the system's characteristics"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -381,6 +388,19 @@ func TestCraftingBlocksGoBackUnchanged(t *testing.T) {
 	}
 	if got := f.drops["troll"]; !reflect.DeepEqual(got.Lines, c.Drops[0].Lines) {
 		t.Fatalf("the drops block read back as %+v", got.Lines)
+	}
+
+	// A study mark goes back unchanged too.
+	c.Drops[0].Lines = []CraftDropLine{{ItemID: "tooth", Qty: 2, Study: true, StudyStat: "reason"}, {ItemID: "hide", Harvest: true, Stat: "might", Yields: [3]int{1, 2, 4}, Study: true, Once: true}}
+	block := dropsBlock(c, c.Drops[0])
+	if !strings.Contains(block, `  - "2 Troll tooth; study with Reason"`+"\n"+`  - "harvest Troll hide with Might: 1/2/4; study, one chance"`+"\n") {
+		t.Fatalf("the drops block with study marks:\n%s", block)
+	}
+	if err := k.Apply(ctx, camp, owner, blockRecord(t, block, ActionUpdate)); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.drops["troll"]; !reflect.DeepEqual(got.Lines, c.Drops[0].Lines) {
+		t.Fatalf("the drops block with study marks read back as %+v", got.Lines)
 	}
 
 	mat := blockRecord(t, materialBlock(c, c.Items[0]), ActionUpdate)

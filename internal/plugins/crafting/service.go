@@ -90,6 +90,10 @@ type Service interface {
 	ClearSpoil(ctx context.Context, campaignID, id string, v Viewer) error
 	ClearSpoilLine(ctx context.Context, campaignID string, id int64, v Viewer) error
 	TakeSpoil(ctx context.Context, campaignID string, lineID int64, v Viewer, in TakeInput) (*TakeResult, error)
+	// StudySpoil rolls a hero's study of a find that needs one;
+	// RevealSpoil names its item to the party without a roll.
+	StudySpoil(ctx context.Context, campaignID string, lineID int64, v Viewer, in TakeInput) (*StudyResult, error)
+	RevealSpoil(ctx context.Context, campaignID string, lineID int64, v Viewer) error
 	// FightEnded puts what a fight's defeated creatures drop in the tray.
 	FightEnded(ctx context.Context, campaignID string, v Viewer, f Fight) (*FightSpoils, error)
 	// DropNotes says which of a fight's pages have a drop list.

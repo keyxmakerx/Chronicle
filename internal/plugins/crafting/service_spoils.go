@@ -64,8 +64,9 @@ func tiersOf(yields [3]int, labels []string) []Tier {
 
 // cleanDrops checks a drop list against the campaign: every line an Armory
 // item, a taken line's count, a harvest's characteristic and yields (the
-// first tier pays at least one, so even a poor test gets something), and an
-// "also drops" page that exists and isn't the page itself.
+// first tier pays at least one, so even a poor test gets something), a
+// study's characteristic, and an "also drops" page that exists and isn't
+// the page itself. One chance means nothing without a study.
 func (s *service) cleanDrops(ctx context.Context, campaignID, pageID string, in DropInput, rules systems.CraftingRules) (DropList, error) {
 	d := DropList{PageID: pageID, Lines: []DropLine{}}
 	if len(in.Lines) > maxDropLines {
@@ -121,6 +122,13 @@ func (s *service) cleanDrops(ctx context.Context, campaignID, pageID string, in 
 			out.Stat, out.Yields = stat, []int{l.Yields[0], l.Yields[1], l.Yields[2]}
 		default:
 			return d, errInvalid(fmt.Sprintf("line %d: say whether it is taken as it is or harvested", n))
+		}
+		if l.Study {
+			stat, err := cleanStat(l.StudyStat, rules)
+			if err != nil {
+				return d, errInvalid(fmt.Sprintf("line %d: %s", n, err.Error()))
+			}
+			out.Study, out.StudyStat, out.Once = true, stat, l.Once
 		}
 		d.Lines = append(d.Lines, out)
 	}
@@ -211,7 +219,7 @@ func (s *service) Spoils(ctx context.Context, campaignID string, v Viewer) (*Spo
 	for _, it := range cat.Items {
 		names[it.ID], tags[it.ID] = it.Name, it.Tags
 	}
-	if out.Tray, err = s.trayViews(ctx, campaignID, v, names, tags, rules); err != nil {
+	if out.Tray, err = s.trayViews(ctx, campaignID, v, "", names, tags, rules); err != nil {
 		return nil, err
 	}
 	taken, err := s.projects.Spoils.ListTaken(ctx, campaignID, recentTaken)
@@ -241,6 +249,28 @@ func (s *service) Spoils(ctx context.Context, campaignID string, v Viewer) (*Spo
 		}
 		out.Taken = append(out.Taken, tv)
 	}
+	studies, err := s.projects.Spoils.RecentStudies(ctx, campaignID, recentTaken)
+	if err != nil {
+		return nil, errInternal(err)
+	}
+	for _, st := range studies {
+		hero, ok := heroes[st.CharacterID]
+		if !ok {
+			hero = "A deleted character"
+		}
+		item := names[st.ItemID]
+		if item == "" {
+			item = "an item no longer in the Armory"
+			if it, err := s.dir.Entity(ctx, campaignID, st.ItemID); err == nil && it != nil {
+				item = it.Name
+			}
+		}
+		out.Taken = append(out.Taken, TakenView{Text: studyText(st, hero, item), At: st.At})
+	}
+	sort.SliceStable(out.Taken, func(i, j int) bool { return out.Taken[i].At.After(out.Taken[j].At) })
+	if len(out.Taken) > recentTaken {
+		out.Taken = out.Taken[:recentTaken]
+	}
 	drops, err := s.projects.Spoils.ListDrops(ctx, campaignID, maxDropLists)
 	if err != nil {
 		return nil, errInternal(err)
@@ -262,8 +292,11 @@ func (s *service) Spoils(ctx context.Context, campaignID string, v Viewer) (*Spo
 // trayViews builds the tray as the viewer may see it. names and tags are
 // the items the viewer can see; any other item reads as unseen, and a
 // player who can't see where a spoil dropped reads "Something the party
-// found".
-func (s *service) trayViews(ctx context.Context, campaignID string, v Viewer, names map[string]string, tags map[string][]string, rules systems.CraftingRules) ([]SpoilView, error) {
+// found". A find that needs study reads "Something unidentified" to players
+// until the party knows its item, which then reads by name and kinds for
+// everyone. heroID is the hero whose page shows the tray, "" for the
+// Director's tab: it says whether that hero may study now.
+func (s *service) trayViews(ctx context.Context, campaignID string, v Viewer, heroID string, names map[string]string, tags map[string][]string, rules systems.CraftingRules) ([]SpoilView, error) {
 	tray, err := s.projects.Spoils.ListTray(ctx, campaignID)
 	if err != nil {
 		return nil, errInternal(err)
@@ -287,6 +320,10 @@ func (s *service) trayViews(ctx context.Context, campaignID string, v Viewer, na
 		seen[pageID] = ok
 		return ok, nil
 	}
+	st, err := s.studyState(ctx, campaignID, v, heroID, tray, tags)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]SpoilView, 0, len(tray))
 	for _, sp := range tray {
 		sv := SpoilView{ID: sp.ID, Source: sp.PageName, Copy: sp.Copy, Copies: sp.Copies, Origin: sp.Origin, ByHand: sp.Origin == "", At: sp.CreatedAt, Lines: []SpoilLineView{}}
@@ -300,29 +337,174 @@ func (s *service) trayViews(ctx context.Context, campaignID string, v Viewer, na
 			sv.Source, sv.Copy, sv.Copies, sv.Origin, sv.ByHand = unseenSource, 1, 1, "", false
 		}
 		for _, l := range sp.Lines {
-			lv := SpoilLineView{ID: l.ID, Mode: l.Mode, Tags: []string{}}
-			if n, ok := names[l.ItemID]; ok {
-				lv.ItemID, lv.Name, lv.Tags = l.ItemID, n, knownTags(tags[l.ItemID])
-				words := make([]string, len(lv.Tags))
-				for i, t := range lv.Tags {
-					words[i] = tagLabel(t)
-				}
-				lv.Kinds = strings.Join(words, ", ")
-			} else if v.Director {
+			k, known := st.known[l.ItemID]
+			locked := l.Study && !known
+			lv := SpoilLineView{ID: l.ID, Mode: l.Mode, Tags: []string{}, Locked: locked}
+			n, visible := names[l.ItemID]
+			switch {
+			case locked && !v.Director:
+				lv.Name = unidentified
+			case visible:
+				lv.ItemID, lv.Name = l.ItemID, n
+				lv.Tags, lv.Kinds = kindsOf(tags[l.ItemID])
+			case v.Director:
 				lv.ItemID, lv.Name = l.ItemID, l.ItemName
-			} else {
+			case known:
+				// Identified, though its page stays hidden: the name and
+				// kinds, not the page.
+				lv.Name = st.itemName(ctx, s, campaignID, l)
+				lv.Tags, lv.Kinds = kindsOf(tags[l.ItemID])
+			default:
 				lv.Name, lv.Unseen = unseenItem, true
 			}
-			if l.Mode == DropHarvest {
+			switch {
+			case locked && !v.Director && l.Mode == DropHarvest:
+				// The harvest's test waits behind the study.
+			case l.Mode == DropHarvest:
 				lv.Roll, lv.Tiers = rollWords(l.Stat, rules), tiersOf(l.Yields, labels)
-			} else {
+			default:
 				lv.Qty = l.Qty
+			}
+			if locked {
+				lv.Study = &StudyView{Roll: rollWords(l.StudyStat, rules), Tiers: labels, Says: studySays(l.Once), Once: l.Once,
+					Tried: st.tried[l.ItemID], Wait: st.wait[l.ItemID]}
+				if l.Mode == DropHarvest && !v.Director {
+					lv.Qty = 0
+				}
+			}
+			if known && l.Study {
+				lv.Identified = st.identified(ctx, s, campaignID, v, k)
+				if k.Recipes {
+					lv.UsedIn = st.uses[l.ItemID]
+				}
 			}
 			sv.Lines = append(sv.Lines, lv)
 		}
 		out = append(out, sv)
 	}
 	return out, nil
+}
+
+// trayStudy is what the tray's finds that need study show: what the party
+// knows, who tried since the last respite, and the names that go with it.
+type trayStudy struct {
+	known  map[string]KnownItem
+	tried  map[string][]string
+	wait   map[string]string
+	uses   map[string][]string
+	heroes map[string]string
+	names  map[string]string
+}
+
+// studyState reads, once for the whole tray, what its finds that need
+// study show. A player reads only the names of heroes they may see.
+func (s *service) studyState(ctx context.Context, campaignID string, v Viewer, heroID string, tray []Spoil, tags map[string][]string) (*trayStudy, error) {
+	st := &trayStudy{known: map[string]KnownItem{}, tried: map[string][]string{}, wait: map[string]string{}, uses: map[string][]string{},
+		heroes: map[string]string{}, names: map[string]string{}}
+	var items []string
+	have := map[string]bool{}
+	for _, sp := range tray {
+		for _, l := range sp.Lines {
+			if !have[l.ItemID] {
+				have[l.ItemID] = true
+				items = append(items, l.ItemID)
+			}
+		}
+	}
+	if len(items) == 0 {
+		return st, nil
+	}
+	known, err := s.projects.Spoils.KnownItems(ctx, campaignID, items)
+	if err != nil {
+		return nil, errInternal(err)
+	}
+	st.known = known
+	var locked []string
+	want := map[string][]string{}
+	for _, sp := range tray {
+		for _, l := range sp.Lines {
+			k, ok := known[l.ItemID]
+			if l.Study && !ok {
+				locked = append(locked, l.ItemID)
+			}
+			if l.Study && ok && k.Recipes {
+				want[l.ItemID] = tags[l.ItemID]
+			}
+		}
+	}
+	if st.uses, err = s.usedIn(ctx, campaignID, v, heroID, want); err != nil {
+		return nil, err
+	}
+	if len(locked) == 0 {
+		return st, nil
+	}
+	tries, err := s.projects.Spoils.TriesSinceRespite(ctx, campaignID, locked)
+	if err != nil {
+		return nil, errInternal(err)
+	}
+	for _, t := range tries {
+		if t.Outcome != StudyMiss {
+			continue
+		}
+		who := st.hero(ctx, s, campaignID, v, t.CharacterID)
+		if t.Rolled != nil {
+			st.tried[t.ItemID] = append(st.tried[t.ItemID], fmt.Sprintf("%s rolled %d", who, *t.Rolled))
+		}
+	}
+	if heroID == "" {
+		return st, nil
+	}
+	// The hero in view is the viewer's own, so always named.
+	name := "This hero"
+	if e, err := s.dir.Entity(ctx, campaignID, heroID); err == nil && e != nil {
+		name = e.Name
+	}
+	for _, t := range tries {
+		if t.CharacterID == heroID {
+			st.wait[t.ItemID] = name + " tries again after the next respite"
+		}
+	}
+	return st, nil
+}
+
+// hero is a hero's name as the viewer may read it.
+func (st *trayStudy) hero(ctx context.Context, s *service, campaignID string, v Viewer, id string) string {
+	if n, ok := st.heroes[id]; ok {
+		return n
+	}
+	n := "Another hero"
+	if e, err := s.dir.Entity(ctx, campaignID, id); err == nil && e != nil {
+		ok := v.Director
+		if !ok {
+			ok, _ = s.projects.Pages.CanSee(ctx, campaignID, id, v.VisibilityRole, v.UserID)
+		}
+		if ok {
+			n = e.Name
+		}
+	}
+	st.heroes[id] = n
+	return n
+}
+
+// identified says who identified an item, in words for its line.
+func (st *trayStudy) identified(ctx context.Context, s *service, campaignID string, v Viewer, k KnownItem) string {
+	if k.CharacterID == "" {
+		return "revealed by the Director"
+	}
+	return "identified by " + strings.Replace(st.hero(ctx, s, campaignID, v, k.CharacterID), "Another hero", "another hero", 1)
+}
+
+// itemName is an identified item's name now, or as it was when it dropped.
+func (st *trayStudy) itemName(ctx context.Context, s *service, campaignID string, l SpoilLine) string {
+	if n, ok := st.names[l.ItemID]; ok {
+		return n
+	}
+	n := l.ItemName
+	if it, err := s.dir.Entity(ctx, campaignID, l.ItemID); err == nil && it != nil {
+		n = it.Name
+	}
+	st.names[l.ItemID] = n
+	return n
 }
 
 // ---------- Filling the tray ----------
@@ -383,7 +565,7 @@ func (s *service) spoilLines(ctx context.Context, campaignID string, lines []Dro
 		if it == nil || !it.IsItem {
 			continue
 		}
-		sl := SpoilLine{ItemID: it.ID, ItemName: it.Name, Mode: l.Mode, Qty: l.Qty, Stat: l.Stat}
+		sl := SpoilLine{ItemID: it.ID, ItemName: it.Name, Mode: l.Mode, Qty: l.Qty, Stat: l.Stat, Study: l.Study, StudyStat: l.StudyStat, Once: l.Study && l.Once}
 		if l.Mode == DropHarvest && len(l.Yields) == 3 {
 			sl.Qty = 0
 			sl.Yields = [3]int{l.Yields[0], l.Yields[1], l.Yields[2]}
@@ -650,6 +832,17 @@ func (s *service) TakeSpoil(ctx context.Context, campaignID string, lineID int64
 	if l.Status != SpoilWaiting {
 		return nil, errConflictMsg("someone took that first")
 	}
+	// A find that needs study waits for one; only the Director may hand
+	// it out before.
+	if l.Study && !v.Director {
+		known, err := s.projects.Spoils.KnownItems(ctx, campaignID, []string{l.ItemID})
+		if err != nil {
+			return nil, errInternal(err)
+		}
+		if _, ok := known[l.ItemID]; !ok {
+			return nil, errInvalid("nobody knows what that is yet: study it first")
+		}
+	}
 	item, err := s.dir.Entity(ctx, campaignID, l.ItemID)
 	if err != nil {
 		return nil, errInternal(err)
@@ -694,29 +887,9 @@ func (s *service) TakeSpoil(ctx context.Context, campaignID string, lineID int64
 // harvest rolls a harvest's test: the system's dice and the line's
 // characteristic from the hero's sheet, paying the tier the total lands in.
 func (s *service) harvest(ctx context.Context, campaignID string, e *EntityInfo, l SpoilLine, rules systems.CraftingRules, res *TakeResult) {
-	count, size, ok := systems.ParseDice(rules.Dice)
-	if !ok {
-		count, size = 2, 10
-	}
-	sum := 0
-	for i := 0; i < count; i++ {
-		d := s.roll(size)
-		res.Dice = append(res.Dice, d)
-		sum += d
-	}
-	res.Sides = size
-	res.Terms = append(res.Terms, Term{Text: fmt.Sprintf("%dd%d", count, size), N: sum})
-	if l.Stat != "" {
-		label := statLabel(l.Stat, rules)
-		if n := s.sheetStat(ctx, campaignID, e.ID, l.Stat); n != nil {
-			res.Terms = append(res.Terms, Term{Text: label + ", from " + e.Name + "’s sheet", N: *n})
-		} else {
-			res.Notes = append(res.Notes, label+" isn’t a number on "+e.Name+"’s sheet, so it added nothing.")
-		}
-	}
-	for _, t := range res.Terms {
-		res.Total += t.N
-	}
+	t := s.rollTest(ctx, campaignID, e, l.Stat, rules)
+	res.Dice, res.Sides, res.Terms, res.Total = t.Dice, t.Sides, t.Terms, t.Total
+	res.Notes = append(res.Notes, t.Notes...)
 	res.Tier = tierOf(res.Total, rules.Tiers)
 	res.Tiers = tiersOf(l.Yields, TierLabels(rules.Tiers))
 	res.Qty = l.Yields[res.Tier]
