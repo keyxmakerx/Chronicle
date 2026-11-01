@@ -29,6 +29,12 @@ type SettingsService interface {
 	// UpdateSiteTrashRetentionDays saves it; only SiteTrashRetentionChoices pass.
 	UpdateSiteTrashRetentionDays(ctx context.Context, days int) error
 
+	// LongTermTrashMonths is how long removed pages and players' old values
+	// stay packed after the Trash; 0 is off.
+	LongTermTrashMonths(ctx context.Context) int
+	// UpdateLongTermTrashMonths saves it; only LongTermTrashChoices pass.
+	UpdateLongTermTrashMonths(ctx context.Context, months int) error
+
 	// GetStorageLimits returns the parsed global storage limits.
 	GetStorageLimits(ctx context.Context) (*GlobalStorageLimits, error)
 
@@ -539,6 +545,40 @@ func (s *settingsService) UpdateSiteTrashRetentionDays(ctx context.Context, days
 		return apperror.NewBadRequest("trash retention must be 7, 14, 30 or 90 days")
 	}
 	return s.repo.Set(ctx, KeySiteTrashRetentionDays, strconv.Itoa(days))
+}
+
+// LongTermTrashMonths returns the Long-term trash length. An unset,
+// unreadable or unexpected value gives the default. Each pack's end date is
+// fixed when it is made, so a wrong read never removes anything early; it
+// only decides how long the next month's pack is kept.
+func (s *settingsService) LongTermTrashMonths(ctx context.Context) int {
+	raw, err := s.repo.Get(ctx, KeyLongTermTrashMonths)
+	if err != nil {
+		return DefaultLongTermTrashMonths
+	}
+	m, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || !IsValidLongTermTrash(m) {
+		return DefaultLongTermTrashMonths
+	}
+	return m
+}
+
+// UpdateLongTermTrashMonths validates and saves the Long-term trash length.
+func (s *settingsService) UpdateLongTermTrashMonths(ctx context.Context, months int) error {
+	if !IsValidLongTermTrash(months) {
+		return apperror.NewBadRequest("long-term trash must be off, 3, 6, 12 or 24 months")
+	}
+	return s.repo.Set(ctx, KeyLongTermTrashMonths, strconv.Itoa(months))
+}
+
+// IsValidLongTermTrash reports whether months is one of the offered choices.
+func IsValidLongTermTrash(months int) bool {
+	for _, m := range LongTermTrashChoices {
+		if m == months {
+			return true
+		}
+	}
+	return false
 }
 
 // IsValidSiteTrashRetention reports whether days is one of the offered choices.

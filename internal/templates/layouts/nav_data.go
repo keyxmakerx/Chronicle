@@ -130,6 +130,8 @@ func NavManageRows(ctx context.Context) []NavRowView {
 	rows := []NavRowView{
 		{Key: "manage:dashboard", Label: "Overview", Icon: "fa-gauge", URL: base + "/dashboard"},
 		{Key: "manage:members", Label: "People", Icon: "fa-users", URL: base + "/members"},
+		// Every change a player made to a page, searchable and undoable.
+		{Key: "manage:player-changes", Label: "What players changed", Icon: "fa-clock-rotate-left", URL: base + "/players/changes"},
 	}
 	if IsAddonEnabled(ctx, "media-gallery") {
 		rows = append(rows, NavRowView{Key: "manage:media", Label: "Media", Icon: "fa-photo-film", URL: base + "/media"})

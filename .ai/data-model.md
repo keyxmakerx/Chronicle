@@ -469,6 +469,14 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 | `ai_campaign_access` | The owner's "Stop all AI here" | `campaign_id` PK FK→`campaigns` CASCADE; `cut_off_at` (NULL = AI allowed); `players_allowed` (the owner lets players use their own AI) |
 | `ai_server_access` | The site admin's AI switches, one row (`id` = 1) | `ai_off`; `players_allowed` (FALSE blocks players' AI in every campaign); `updated_by` |
 
+### player_changes (`internal/plugins/playerchanges/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `player_changes` | The last month of what Players changed on pages (a sheet field, a page's name or text, a page removed), for the owner's "What players changed" | `kind` (`field`, `text`, `removed`); `old_text`/`new_text` as shown (2000 chars), `old_json`/`new_json` as stored, for Undo (dropped past 64 KB; a page text keeps its whole plain text there to work out the words); `source` (`web`, `ai`), `app`; `undone_at`/`undone_by`; `entity_id`, `user_id` carry no FK so the history outlives both; FK→`campaigns` CASCADE |
+| `player_change_packs` | Older months, one gzip'd JSON array per campaign and month | PK `(campaign_id, month)`; `body` MEDIUMBLOB; `keep_until` fixed when packed from the Long-term trash length, so shortening it never removes anything early; FK→`campaigns` CASCADE |
+| `player_change_kept_pages` | Pages a player removed that the campaign Trash keeps past its days (Long-term trash) | PK `(campaign_id, entity_id)`; `keep_until`; FK→`campaigns` CASCADE |
+
 ## MariaDB-specific notes
 
 - **JSON columns:** MariaDB validates JSON on write. Prefer loading full JSON

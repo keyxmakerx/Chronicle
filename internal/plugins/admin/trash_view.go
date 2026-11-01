@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
@@ -50,4 +51,23 @@ func trashUndoURL(e TrashEntry) string {
 		return "/admin/trash/campaigns/" + e.ID + "/undo"
 	}
 	return "/admin/trash/batches/" + e.ID + "/undo"
+}
+
+// longTermLabel names a Long-term trash choice, with its rough size once
+// the site has packed anything to go by.
+func longTermLabel(months int, v LongTermView) string {
+	if months == 0 {
+		return "Off"
+	}
+	label := fmt.Sprintf("%d months", months)
+	switch months {
+	case 12:
+		label = "1 year"
+	case 24:
+		label = "2 years"
+	}
+	if v.Known {
+		label += " (about " + formatBytes(v.MonthlyBytes*int64(months)) + ")"
+	}
+	return label
 }

@@ -48,6 +48,7 @@ supplies tooltip data for `@mentions` of game content.
 - `packages/`
 - `pageblocks/`
 - `pagetests/`
+- `playerchanges/`
 - `quests/`
 - `restore/`
 - `rolls/`

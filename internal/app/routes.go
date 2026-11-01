@@ -58,6 +58,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
+	"github.com/keyxmakerx/chronicle/internal/plugins/playerchanges"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
@@ -4435,14 +4436,15 @@ func (a *App) RegisterRoutes() {
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.
-	entityService.SetFieldChangeObserver(&armoryMoneyObserver{history: armory.NewMoneyHistory(
+	armoryObserver := &armoryMoneyObserver{history: armory.NewMoneyHistory(
 		stashRepo, stashDirectory,
 		func(ctx context.Context, campaignID string) bool {
 			on, err := addonService.IsEnabledForCampaign(ctx, campaignID, "armory")
 			return err == nil && on
 		},
 		stashEvents,
-	)})
+	)}
+	entityService.SetFieldChangeObserver(armoryObserver)
 	stashAPI := armory.NewStashAPI(stashSvc, &armoryMemberDirectoryAdapter{svc: campaignService})
 	stashAPIHandler := syncapi.NewStashAPIHandler(
 		&syncStashAPIAdapter{api: stashAPI},
@@ -4773,6 +4775,41 @@ func (a *App) RegisterRoutes() {
 	pageSafetyHandler.SetAuditService(auditService)
 	entities.RegisterPageSafetyRoutes(e, pageSafetyHandler, campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
+
+	// What players changed: every change a Player makes to a page, by hand or
+	// through their AI, for the owner to search and undo. It hears about
+	// writes beside the Armory's money history; without its tables, writes
+	// go on exactly as before.
+	a.registerPlugin(PluginRegistration{
+		Slug:     playerchanges.PluginSlug,
+		StaticFS: echo.MustSubFS(playerchanges.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "player-changes", Scripts: []string{"js/player_changes.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(playerchanges.PluginSlug) {
+		keepMonths := func(ctx context.Context) int { return settingsService.LongTermTrashMonths(ctx) }
+		playerChangesSvc := playerchanges.NewService(playerchanges.NewRepository(a.DB),
+			&playerChangePages{entities: entityService, safety: pageSafetyService}, keepMonths)
+		entityService.SetFieldChangeObserver(fieldObservers{armoryObserver,
+			&playerChangeRecorder{svc: playerChangesSvc, members: campaignService, types: entityService}})
+		playerchanges.RegisterRoutes(e, playerchanges.NewHandler(playerChangesSvc,
+			func(c echo.Context) int { return keepMonths(c.Request().Context()) },
+			func(c echo.Context) *time.Location {
+				u, err := authService.GetUser(c.Request().Context(), auth.GetUserID(c))
+				if err != nil || u == nil || u.Timezone == nil {
+					return nil
+				}
+				return timeutil.LoadLocation(*u.Timezone)
+			}), campaignService, authService)
+		// Pages a player removed stay whole past the Trash's days, for the
+		// Long-term trash's length, so the owner can still bring them back.
+		pageSafetyService.SetLongTermTrash(playerChangesSvc)
+		adminHandler.SetLongTermTrashSizer(playerChangesSvc)
+		go playerChangesSvc.StartPacker(a.ShutdownCtx)
+	} else {
+		slog.Warn("player changes plugin degraded — What players changed is not available")
+	}
 
 	// --- Extra places in the page tree ---
 	// One page listed under more than one parent. The service is also the

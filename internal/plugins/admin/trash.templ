@@ -17,6 +17,17 @@ type TrashPageData struct {
 	// LoadFailed is set when the Trash could not be read, so an empty list is
 	// not mistaken for an empty Trash.
 	LoadFailed bool
+	// LongTerm is the Long-term trash setting and its size estimate.
+	LongTerm LongTermView
+}
+
+// LongTermView is the Long-term trash setting as the page shows it.
+type LongTermView struct {
+	Months int
+	// MonthlyBytes is about how much one month of packed changes takes on
+	// this site; Known is false when there is nothing yet to go by.
+	MonthlyBytes int64
+	Known        bool
 }
 
 // AdminTrashPage renders the Trash: what is waiting, Undo for each, the
@@ -89,6 +100,26 @@ templ TrashRegion(data TrashPageData) {
 				<p class="text-xs text-fg-muted">
 					After this long an item is removed for good, at the next hourly check.
 					Choosing a shorter time also removes things that have already waited longer.
+				</p>
+			</form>
+			<form hx-post="/admin/trash/long-term" class="border-t border-edge pt-4 space-y-2">
+				<label for="long-term-trash" class="block text-sm font-medium text-fg">Long-term trash</label>
+				<p class="text-sm text-fg-secondary max-w-prose">
+					When a campaign's Trash lets them go, pages a player removed and the old values on "What players changed" are packed away for this long instead, so the campaign owner can still bring them back.
+				</p>
+				<div class="flex flex-wrap items-center gap-3">
+					<select id="long-term-trash" name="long_term_months" class="input text-sm w-auto pr-8">
+						for _, m := range settings.LongTermTrashChoices {
+							<option value={ fmt.Sprint(m) } selected?={ m == data.LongTerm.Months }>{ longTermLabel(m, data.LongTerm) }</option>
+						}
+					</select>
+					<button type="submit" class="btn btn-primary btn-sm">Save</button>
+				</div>
+				<p class="text-xs text-fg-muted">
+					if data.LongTerm.Known {
+						Sizes are estimates from what this site packs in a month.
+					}
+					Shortening it never removes anything early: what is already packed keeps the date it was given.
 				</p>
 			</form>
 			<div class="border-t border-edge pt-4 flex flex-wrap items-center justify-between gap-3">
