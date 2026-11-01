@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 
@@ -39,6 +40,9 @@ type Session struct {
 	Conn         *Connection
 	CampaignName string
 	Actor        records.Actor
+	// AllowCall spends one of the connection's tool calls, or says how long
+	// until the next; nil allows every call.
+	AllowCall func() (bool, time.Duration)
 }
 
 // Outcome is what one request did, for the endpoint to send and log.
@@ -51,6 +55,8 @@ type Outcome struct {
 	Initialized bool
 	// Called is set by tools/call: the line for "What it did".
 	Called *CallLine
+	// Limited is set when a tool call was over the connection's pace.
+	Limited bool
 }
 
 // CallLine is one tool call as the log records it.
@@ -207,6 +213,13 @@ func (s *Server) call(ctx context.Context, m rpcMessage, sess Session) Outcome {
 	if t == nil {
 		return replyError(m.ID, codeInvalidParams, "there is no tool called "+oneLine(p.Name, 60))
 	}
+	if sess.AllowCall != nil {
+		if ok, wait := sess.AllowCall(); !ok {
+			out := toolResult(m.ID, waitText(t.Name, wait), true)
+			out.Limited = true
+			return out
+		}
+	}
 	args, err := t.readArgs(p.Arguments)
 	if err != nil {
 		out := toolResult(m.ID, "Not answered: "+err.Error()+".", true)
@@ -300,6 +313,25 @@ func plural(n int, one, many string) string {
 func isAppError(err error) bool {
 	var ae *apperror.AppError
 	return errors.As(err, &ae)
+}
+
+// waitText tells the AI how long to wait before calling the tool again. It
+// is a tool result, not an HTTP error, so the AI reads it and can retry
+// instead of reporting a failure.
+func waitText(tool string, wait time.Duration) string {
+	secs := int((wait + time.Second - 1) / time.Second)
+	if secs < 1 {
+		secs = 1
+	}
+	if secs > 3600 {
+		h := (secs + 3599) / 3600
+		return fmt.Sprintf("Not answered: this connection has used its %d tool calls for today. Try again in about %d hours.", callsPerDay, h)
+	}
+	unit := "seconds"
+	if secs == 1 {
+		unit = "second"
+	}
+	return fmt.Sprintf("Not answered yet: Chronicle is pacing this connection's tool calls. Wait %d %s, then call %s again with the same arguments.", secs, unit, tool)
 }
 
 func toolResult(id json.RawMessage, text string, isError bool) Outcome {

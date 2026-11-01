@@ -14,7 +14,7 @@ const (
 
 // craftingParts are the parts `what: crafting` takes, each written as the
 // blocks that change it.
-var craftingParts = []string{"recipes", "materials", "drops", "looks"}
+var craftingParts = []string{"recipes", "materials", "drops", "benches", "looks"}
 
 // crafting answers `what: crafting`. With no `part` it is the overview:
 // the rules, and for a Director every recipe, material, drop list, the
@@ -25,13 +25,15 @@ func (run *lookupRun) crafting(part, name string) (LookupAnswer, error) {
 	ans := LookupAnswer{Chip: "Crafting"}
 	part = strings.ToLower(strings.TrimSpace(part))
 	switch part {
-	case "", "recipes", "materials", "drops", "looks":
+	case "", "recipes", "materials", "drops", "benches", "looks":
 	case "recipe":
 		part = "recipes"
 	case "material":
 		part = "materials"
 	case "drop-lists", "drop lists", "drop":
 		part = "drops"
+	case "bench":
+		part = "benches"
 	case "item-looks", "look":
 		part = "looks"
 	default:
@@ -61,6 +63,8 @@ func (run *lookupRun) crafting(part, name string) (LookupAnswer, error) {
 		return craftMaterials(c, name)
 	case "drops":
 		return craftDrops(c, name)
+	case "benches":
+		return craftBenches(c, name)
 	}
 	if name != "" {
 		if c.recipe(name) != nil {
@@ -248,7 +252,7 @@ func (run *lookupRun) craftOverview(c *Crafting) (LookupAnswer, error) {
 		b.WriteString("Kinds of bench: " + strings.Join(ks, ", ") + ".\n")
 	}
 
-	b.WriteString("\nAsk again with `part: recipes`, `part: materials`, `part: drops` or `part: looks` (and `name` for one) for blocks you can send back changed. " +
+	b.WriteString("\nAsk again with `part: recipes`, `part: materials`, `part: drops`, `part: benches` or `part: looks` (and `name` for one) for blocks you can send back changed. " +
 		"A recipe block carries its \"When… then…\" rules; a `bench` block adds or renames a bench. The tray, projects and where things stand on a bench are changed in Crafting, not by blocks.\n")
 	ans := LookupAnswer{Chip: "Crafting · " + plural(len(c.Recipes), "recipe", "recipes"), Text: b.String()}
 	return ans, nil
@@ -269,51 +273,82 @@ func materialLine(c *Crafting, it CraftItem) string {
 
 func craftRecipes(c *Crafting, name string) (LookupAnswer, error) {
 	var b strings.Builder
-	b.WriteString("## Recipes\n\nSend a block back changed (`action: update`) to change a recipe; a key you leave out keeps what is there.\n")
-	shown := 0
+	b.WriteString("## Recipes\n\nSend a block back changed (`action: update`) to change a recipe; a key you leave out keeps what is there.\n\n")
+	var parts []namedPart
 	for _, rec := range c.Recipes {
 		if name != "" && !sameName(rec.Name, name) {
 			continue
 		}
-		shown++
-		b.WriteString("\n")
+		var t strings.Builder
 		if notes := recipeNotes(c, rec); len(notes) > 0 {
-			b.WriteString(rec.Name + ": " + strings.Join(notes, "; ") + ".\n\n")
+			t.WriteString(rec.Name + ": " + strings.Join(notes, "; ") + ".\n\n")
 		}
-		b.WriteString("```\n" + recipeBlock(c, rec) + "```\n")
+		t.WriteString("```\n" + recipeBlock(c, rec) + "```\n\n")
+		parts = append(parts, namedPart{rec.Name, t.String()})
 	}
-	if name != "" && shown == 0 {
+	if name != "" && len(parts) == 0 {
 		return LookupAnswer{Chip: "Recipes"}, badRequestf("no recipe called %s", quote(name))
 	}
-	if shown == 0 {
-		b.WriteString("\nNo recipes yet.\n")
+	if len(parts) == 0 {
+		b.WriteString("No recipes yet.\n")
 	}
-	return LookupAnswer{Chip: "Recipes · " + plural(shown, "recipe", "recipes"), Text: b.String()}, nil
+	fitParts(&b, parts, "", "recipe", "recipes")
+	return LookupAnswer{Chip: "Recipes · " + plural(len(parts), "recipe", "recipes"), Text: b.String()}, nil
 }
 
 func craftMaterials(c *Crafting, name string) (LookupAnswer, error) {
 	var b strings.Builder
 	b.WriteString("## Materials\n\nEach Armory item that is a material, where it comes from and what uses it, then its block.\n\n")
-	var blocks []string
+	var parts []namedPart
 	for _, it := range c.Items {
 		if len(it.Tags) == 0 || (name != "" && !sameName(it.Name, name)) {
 			continue
 		}
-		b.WriteString("- " + materialLine(c, it) + "\n")
-		blocks = append(blocks, materialBlock(c, it))
+		parts = append(parts, namedPart{it.Name, "- " + materialLine(c, it) + "\n\n```\n" + materialBlock(c, it) + "```\n\n"})
 	}
-	if len(blocks) == 0 {
+	blocks := parts
+	if len(parts) == 0 {
 		if name != "" {
 			return LookupAnswer{Chip: "Materials"}, badRequestf("%s is not a material, or no Armory item has that name", quote(name))
 		}
 		b.WriteString("No Armory item is a material yet.\n")
-	} else {
-		b.WriteString("\n```\n" + strings.Join(blocks, "") + "```\n")
 	}
+	tail := ""
 	if c.ItemsCut {
-		b.WriteString("\n(The campaign has more items than were read.)\n")
+		tail = "\n(The campaign has more items than were read.)\n"
 	}
+	fitParts(&b, parts, tail, "material", "materials")
 	return LookupAnswer{Chip: "Materials · " + plural(len(blocks), "item", "items"), Text: b.String()}, nil
+}
+
+// craftBenches writes each bench as the block that renames it or changes
+// its kind, then the kinds a bench may be.
+func craftBenches(c *Crafting, name string) (LookupAnswer, error) {
+	var b strings.Builder
+	b.WriteString("## Benches\n\nEach bench a hero can work at, as the block that renames it or changes its kind. Where its tools stand and its upgrades are arranged in Crafting; a block keeps them.\n\n")
+	var blocks []string
+	for _, be := range c.Benches {
+		if name != "" && !sameName(be.Name, name) {
+			continue
+		}
+		blocks = append(blocks, "---\nkind: bench\nname: "+quote(be.Name)+"\nkind_of_bench: "+be.Kind+"\n---\n")
+	}
+	if len(blocks) == 0 {
+		if name != "" {
+			return LookupAnswer{Chip: "Benches"}, badRequestf("there is no bench called %s", quote(name))
+		}
+		b.WriteString("No benches yet.\n")
+	} else {
+		b.WriteString("```\n" + strings.Join(blocks, "") + "```\n")
+	}
+	if len(c.BenchKinds) > 0 {
+		var ks []string
+		for _, k := range c.BenchKinds {
+			ks = append(ks, "`"+k.Key+"` ("+k.Label+")")
+		}
+		b.WriteString("\nKinds of bench: " + strings.Join(ks, ", ") + ".\n")
+	}
+	return LookupAnswer{Chip: "Benches · " + plural(len(blocks), "bench", "benches"), Text: b.String()}, nil
 }
 
 func craftDrops(c *Crafting, name string) (LookupAnswer, error) {
@@ -322,21 +357,20 @@ func craftDrops(c *Crafting, name string) (LookupAnswer, error) {
 	}
 	var b strings.Builder
 	b.WriteString("## Drop lists\n\nWhat each page leaves in the spoils tray when it is defeated or searched.\n\n")
-	var blocks []string
+	var blocks []namedPart
 	for _, d := range c.Drops {
 		if name != "" && !sameName(d.Page, name) {
 			continue
 		}
-		blocks = append(blocks, dropsBlock(c, d))
+		blocks = append(blocks, namedPart{d.Page, "```\n" + dropsBlock(c, d) + "```\n\n"})
 	}
 	if len(blocks) == 0 {
 		if name != "" {
 			return LookupAnswer{Chip: "Drop lists"}, badRequestf("%s has no drop list", quote(name))
 		}
 		b.WriteString("No page has a drop list yet.\n")
-	} else {
-		b.WriteString("```\n" + strings.Join(blocks, "") + "```\n")
 	}
+	fitParts(&b, blocks, "", "drop list", "drop lists")
 	return LookupAnswer{Chip: "Drop lists · " + plural(len(blocks), "page", "pages"), Text: b.String()}, nil
 }
 

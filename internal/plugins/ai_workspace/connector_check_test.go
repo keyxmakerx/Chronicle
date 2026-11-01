@@ -6,7 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
@@ -83,6 +86,71 @@ func TestConnectorCheck(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %q\nwant %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// benchKindStub refuses a bench whose kind it doesn't know and records the
+// role it was planned as.
+type benchKindStub struct{ roles *[]int }
+
+func (benchKindStub) Name() string  { return "bench" }
+func (benchKindStub) Label() string { return "Bench" }
+func (benchKindStub) Doc() string   { return "" }
+func (k benchKindStub) Plan(_ context.Context, _ string, a records.Actor, r records.Record) records.Plan {
+	*k.roles = append(*k.roles, a.Role)
+	if r.Str("kind_of_bench") != "forge" {
+		return records.Plan{Error: `kind_of_bench: "teleporter" is not a kind of bench`}
+	}
+	return records.Plan{Summary: "a new bench"}
+}
+func (benchKindStub) Apply(context.Context, string, records.Actor, records.Record) error { return nil }
+func (benchKindStub) Export(context.Context, string, records.Actor) (string, error)      { return "", nil }
+
+// A block the review would mark unusable is refused when it is asked for,
+// with the review's reason, for a key that reads as the owner. A Safe key
+// reads as a player and isn't told, so a reason can't reveal hidden pages.
+func TestConnectorCheckPlansRecords(t *testing.T) {
+	bench := func(kind string) string {
+		return "---\nkind: bench\nname: Lab\nkind_of_bench: " + kind + "\n---\n"
+	}
+	tests := []struct {
+		name    string
+		privacy aiexport.PrivacyMode
+		off     bool
+		changes string
+		want    []string
+	}{
+		{"broken block", aiexport.PrivacyModePermitted, false, bench("teleporter"),
+			[]string{`block 1 (bench Lab): kind_of_bench: "teleporter" is not a kind of bench`}},
+		{"good block", aiexport.PrivacyModePermitted, false, bench("forge"), nil},
+		{"feature switched off", aiexport.PrivacyModePermitted, true, bench("forge"),
+			[]string{"block 1 (bench Lab): " + records.OffFeatureReason("Crafting")}},
+		{"a Safe key isn't told", aiexport.PrivacyModeSafe, false, bench("teleporter"), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var roles []int
+			h := &Handler{importLookup: typesNoPages{t}, importFolders: foldersIn{}}
+			h.SetRecords(records.NewRegistry(benchKindStub{&roles}))
+			if tt.off {
+				h.featureGate = func(context.Context, string) records.OffFeatures { return records.OffFeatures{"bench": "Crafting"} }
+			}
+			got, err := h.ConnectorCheck(context.Background(), &connector.Connection{CampaignID: "camp-1", UserID: "owner-1", Privacy: tt.privacy}, tt.changes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) == 0 {
+				got = nil
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %q\nwant %q", got, tt.want)
+			}
+			for _, r := range roles {
+				if r != int(campaigns.RoleOwner) {
+					t.Errorf("planned as role %d, want the owner", r)
+				}
 			}
 		})
 	}

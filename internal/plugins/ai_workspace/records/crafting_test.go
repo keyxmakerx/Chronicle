@@ -511,6 +511,8 @@ func TestLookup_Crafting(t *testing.T) {
 		lookup("crafting", map[string]any{"name": "Troll"}),
 		lookup("crafting", map[string]any{"part": "stations"}),
 		lookup("crafting", map[string]any{"part": "recipes", "name": "Elixir"}),
+		lookup("crafting", map[string]any{"part": "benches"}),
+		lookup("benches", map[string]any{"name": "Nowhere"}),
 	})
 	wants := []string{
 		"Healing potion: a draft, which players don't see until a Director approves it in Crafting; 1 rule is still waiting for a Director's approval in Crafting; an update without `rules` keeps the rules; one with `rules` replaces the list, keeping each rule sent back unchanged.\n\n```\n---\nkind: recipe\nname: \"Healing potion\"",
@@ -529,8 +531,15 @@ func TestLookup_Crafting(t *testing.T) {
 	if !strings.Contains(parts[0].Text, "rules:\n  - {\"when\":[{\"kind\":\"moon\",\"moon\":\"The Lantern\",\"phase\":\"full\"}],\"then\":{\"kind\":\"edge\"},\"players\":\"book\"}\n") {
 		t.Fatalf("the recipe block misses its rules:\n%s", parts[0].Text)
 	}
-	if !strings.Contains(parts[5].Error, "the parts are recipes, materials, drops, looks") || !strings.Contains(parts[6].Error, "no recipe called") {
+	if !strings.Contains(parts[5].Error, "the parts are recipes, materials, drops, benches, looks") || !strings.Contains(parts[6].Error, "no recipe called") {
 		t.Fatalf("refusals: %q, %q", parts[5].Error, parts[6].Error)
+	}
+	if parts[7].Error != "" || !strings.Contains(parts[7].Text, "---\nkind: bench\nname: \"Mira's kitchen\"\nkind_of_bench: apothecary\n---\n") ||
+		!strings.Contains(parts[7].Text, "Kinds of bench:") || parts[7].Chip != "Benches · 1 bench" {
+		t.Fatalf("benches: %+v", parts[7])
+	}
+	if !strings.Contains(parts[8].Error, "no bench called") {
+		t.Fatalf("a missing bench: %+v", parts[8])
 	}
 
 	// What players see: the book and the looks they may see, and no part.

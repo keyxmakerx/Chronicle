@@ -3,6 +3,7 @@ package records
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -347,5 +348,59 @@ func TestHouseRule_Delete(t *testing.T) {
 	}
 	if err := k.Apply(ctx, "c1", owner, del); err != nil || len(repo.chapters) != 0 || len(repo.pages) != 0 {
 		t.Errorf("after delete: %v, %+v", err, repo.chapters)
+	}
+}
+
+// The house-rules lookup counts chapters, not the lines of their YAML.
+func TestHouseRuleLookupCountsChapters(t *testing.T) {
+	ctx := context.Background()
+	k, _ := newHouseRules(t)
+	for _, name := range []string{"Table rules", "Travel rules"} {
+		fm := strings.Replace(tableRulesFM, "name: Table rules", "name: "+name, 1)
+		if err := k.Apply(ctx, "c1", owner, houseRecord(t, ActionCreate, fm, "")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := &Lookups{Rules: &k}
+	ans := l.Answer(ctx, "c1", owner, []Record{lookup("house-rules", nil)})[0]
+	if ans.Error != "" || ans.Chip != "House rules · 2 chapters" || !strings.HasPrefix(ans.Text, "## House-rules chapters (2)\n") {
+		t.Fatalf("chip %q, text:\n%s", ans.Chip, ans.Text)
+	}
+}
+
+// A rulebook too long for one answer lists every title, writes what fits and
+// reads any chapter by name, so nothing hides behind the size cap.
+func TestHouseRuleLookupLongRulebook(t *testing.T) {
+	ctx := context.Background()
+	k, _ := newHouseRules(t)
+	long := strings.Repeat("A long rule about camping in the wilds. ", 60)
+	var names []string
+	for i := 0; i < 20; i++ {
+		name := fmt.Sprintf("Chapter %02d", i+1)
+		names = append(names, name)
+		fm := "name: " + name + "\nintro: " + long + "\npages:\n  - title: P\n    blocks:\n      - text: " + long + "\n"
+		if err := k.Apply(ctx, "c1", owner, houseRecord(t, ActionCreate, fm, "")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := &Lookups{Rules: &k}
+	ans := l.Answer(ctx, "c1", owner, []Record{lookup("house-rules", nil), {Kind: KindLookup, Name: "Chapter 20", Fields: map[string]any{"what": "house-rules"}}, {Kind: KindLookup, Name: "Nope", Fields: map[string]any{"what": "house-rules"}}})
+	all := ans[0]
+	if all.Error != "" || all.Chip != "House rules · 20 chapters" || strings.Contains(all.Text, "…cut here") || len(all.Text) > maxAnswerBytes {
+		t.Fatalf("chip %q, %d bytes:\n%s", all.Chip, len(all.Text), all.Text)
+	}
+	for _, n := range names {
+		if !strings.Contains(all.Text, "- "+n+"\n") {
+			t.Fatalf("%s is not listed", n)
+		}
+	}
+	if !strings.Contains(all.Text, `left out above:`) || !strings.Contains(all.Text, `"Chapter 20"`) {
+		t.Fatalf("no closing line naming what is left out:\n%s", all.Text[len(all.Text)-400:])
+	}
+	if one := ans[1]; one.Error != "" || !strings.HasPrefix(one.Text, "## House-rules chapter\n\n### Chapter 20\n") || !strings.HasSuffix(one.Text, "```\n\n") {
+		t.Fatalf("one chapter: %+v", one)
+	}
+	if !strings.Contains(ans[2].Error, "no house-rules chapter called") {
+		t.Fatalf("a missing chapter: %+v", ans[2])
 	}
 }
