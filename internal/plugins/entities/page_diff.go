@@ -113,11 +113,7 @@ func lcsOps(a, b []string) []DiffPart {
 			}
 		}
 	}
-	room := n + m
-	if room > 2*maxDiffCells {
-		room = 0
-	}
-	ops := make([]DiffPart, 0, room)
+	ops := make([]DiffPart, 0, max(n, m))
 	i, j := 0, 0
 	for i < n && j < m {
 		switch {
