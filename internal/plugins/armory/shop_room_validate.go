@@ -51,9 +51,10 @@ var (
 	shopRoomWeathers    = setOf("", "rain", "snow")
 	shopRoomTimes       = setOf("", "dawn", "dusk", "night")
 	// Must match MANNERS and MOMENTS in static/js/widgets/shop_room_keeper.js.
-	shopRoomManners = setOf("", "warm", "gruff", "shrewd", "nervous", "grand")
-	shopRoomMoments = setOf("hello", "look", "buy", "poor", "bye", "refuse")
-	shopRoomKinds   = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack",
+	shopRoomManners     = setOf("", "warm", "gruff", "shrewd", "nervous", "grand")
+	shopRoomKeeperSpots = setOf("", "left", "middle", "right")
+	shopRoomMoments     = setOf("hello", "look", "buy", "poor", "bye", "refuse")
+	shopRoomKinds       = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack",
 		"tentacle", "monolith", "circle", "cane", "gumdrop", "lolly", "ghost", "coffin", "gift", "pine", "coral", "kelp", "mushroom", "bloom", "urn", "palm", "pillar", "brazier")
 	shopRoomWalls   = setOf("Y", "X", "")
 	shopRoomColors  = setOf("steel", "iron", "gold", "silver", "red", "green", "teal", "blue", "violet", "leather", "paper", "cloth", "wood", "dark", "bone", "honey", "")
@@ -109,6 +110,7 @@ func (l *ShopRoomLayout) validate() error {
 		{"look", l.Look, shopRoomLooks},
 		{"mood", l.Mood, shopRoomMoods},
 		{"manner", l.Manner, shopRoomManners},
+		{"keeperSpot", l.KeeperSpot, shopRoomKeeperSpots},
 	}
 	for _, e := range enums {
 		if !e.set[e.val] {

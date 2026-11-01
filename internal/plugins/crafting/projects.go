@@ -318,6 +318,12 @@ type RollResult struct {
 	// Lost says botched work cost the ingredients: the project is over.
 	Lost  bool     `json:"lost,omitempty"`
 	Notes []string `json:"notes"`
+	// Moment is which of the recipe's moments this roll was (rollMoment),
+	// and Look how the Director dressed it in How it looks, nil when they
+	// didn't. Only the moment that happened is sent, so a player never sees
+	// the looks, or the words, of mishaps that didn't strike.
+	Moment string `json:"moment,omitempty"`
+	Look   *Look  `json:"look,omitempty"`
 }
 
 // Mishap is a row of a mishap table that struck on a roll.

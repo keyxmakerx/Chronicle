@@ -1020,7 +1020,8 @@
       out.sort(function (a, b) { return key(a) - key(b); });
       var lights = [], s = defs() + (sq ? shell(N) : shellShape(N)) + sign(N) + wallDecor(N, rec, rng(S.seeds.deco * 3301 + S.key * 7), level, function (l) { lights.push(l); });
       function piece(o) {
-        var p = o.p, g = '<g class="piece' + (p.pinned ? ' pinned' : '') + '" data-p="' + p.id + '"><g class="body">' + o.d.pre + '</g>';
+        var p = o.p, g = '<g class="piece' + (p.pinned ? ' pinned' : '') + '" data-p="' + p.id + '"' +
+          (S.mode === 'arr' ? ' tabindex="0" role="button" aria-label="' + (KIND_LABEL[p.kind] || p.kind) + '. Arrow keys move it."' : '') + '><g class="body">' + o.d.pre + '</g>';
         o.decos.forEach(function (d) { g += '<g class="udeco" data-up="' + p.id + '" data-ua="' + d[0] + '">' + decoSvg(o.d.a[d[0]], d[1]) + '</g>'; });
         o.goods.forEach(function (gd) { g += itemSvg(o.d.a[gd[0]], gd[1]); });
         g += '<g class="body">' + o.d.post + '</g>';
@@ -1084,6 +1085,9 @@
   // A stable number from the shop id, so two shops with the same seeds still differ.
   function keyOf(id) { var h = 7; for (var i = 0; i < String(id).length; i++) h = (h * 31 + String(id).charCodeAt(i)) | 0; return Math.abs(h) % 100000; }
 
+  // Where the paper keeper can stand behind the counter. Must match
+  // shopRoomKeeperSpots in internal/plugins/armory/shop_room_validate.go.
+  var KEEPER_SPOTS = { left: 1, middle: 1, right: 1 };
   // The layout as saved on the server, from the room state, and back.
   function toLayout(S) {
     return {
@@ -1098,7 +1102,7 @@
       }),
       decor: (S.decor || []).filter(function (d) { return S.pieces.some(function (p) { return p.id === d.piece; }); }).map(function (d) { return { piece: d.piece, spot: d.spot, icon: d.icon }; }),
       items: S.ov, portrait: S.portrait ? { left: S.portrait[0], top: S.portrait[1] } : null, lines: S.lines.slice(),
-      manner: S.manner || '', moments: keptMoments(S.moments)
+      manner: S.manner || '', moments: keptMoments(S.moments), keeperSpot: KEEPER_SPOTS[S.keeperSpot] ? S.keeperSpot : ''
     };
   }
   // Only moments with lines are saved; an empty one falls back to the manner.
@@ -1134,6 +1138,7 @@
     var KP = window.ShopRoomKeeper;
     S.manner = KP && KP.MANNERS[L.manner] ? L.manner : '';
     S.moments = keptMoments(L.moments);
+    S.keeperSpot = KEEPER_SPOTS[L.keeperSpot] ? L.keeperSpot : '';
     return true;
   }
 
@@ -1278,6 +1283,9 @@
     '.shr-grain svg{display:block}',
     '.shr.fxlight .shr-grain{display:none}',
     '.shr.arr .piece{cursor:grab}',
+    // Finger-sized on touch screens; the room's own controls are smaller for a mouse.
+    '@media (pointer:coarse){.shr-out,.shr-cart,.shr-x,.shr-ib{width:44px;height:44px}}',
+    '.shr .piece:focus{outline:none}.shr .piece:focus-visible .body{filter:drop-shadow(0 0 2px var(--shr-acc)) drop-shadow(0 0 2px var(--shr-acc))}',
     '.shr.arr .piece:hover>.body{filter:brightness(1.12)}',
     '.shr .it{cursor:pointer}.shr .it:focus{outline:none}',
     '.shr .it:hover use,.shr .it:focus-visible use{filter:brightness(1.25)}',
@@ -1325,7 +1333,7 @@
     '.shr-panel.nag .shr-warn{box-shadow:inset 0 0 0 2px var(--color-warning,#d97706)}',
     '.shr-ph{display:flex;align-items:center;gap:8px;padding:12px 14px 10px;border-bottom:1px dashed var(--color-border,#e5e7eb)}',
     '.shr-ph h3{flex:1;margin:0;font-size:.66rem;font-weight:700;line-height:1;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-secondary,#6b7280)}',
-    '.shr-x{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);cursor:pointer;width:28px;height:28px;border-radius:6px;font-size:1rem;line-height:1}',
+    '.shr-x{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);cursor:pointer;width:32px;height:32px;border-radius:6px;font-size:1rem;line-height:1}',
     '.shr-x:hover{background:var(--color-bg-tertiary,#f3f4f6);color:var(--color-text-primary,#111827)}',
     '.shr-pb{flex:1;min-height:0;overflow:auto;padding:12px 14px 6px;display:grid;gap:10px;align-content:start}',
     '.shr-pf{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid var(--color-border,#e5e7eb)}',
@@ -1369,7 +1377,7 @@
     '.shr.arr .shr-bin{left:calc((100% - min(320px,100%)) / 2)}',
     '.shr.dragging .shr-bin{transform:translate(-50%,0);opacity:1}.shr-bin.hot{background:#b91c1c;transform:translate(-50%,0) scale(1.08)}',
     '.shr.arr .udeco{cursor:grab}',
-    '.shr-ib{width:30px;height:30px;border:0;border-radius:8px;display:inline-grid;place-items:center;background:transparent;color:var(--color-text-body,#374151);cursor:pointer;transition:background .15s,color .15s}',
+    '.shr-ib{width:32px;height:32px;border:0;border-radius:8px;display:inline-grid;place-items:center;background:transparent;color:var(--color-text-body,#374151);cursor:pointer;transition:background .15s,color .15s}',
     '.shr-ib:hover:not(:disabled){background:var(--color-bg-tertiary,#f3f4f6);color:var(--color-text-primary,#111827)}',
     '.shr-ib:disabled{opacity:.35;cursor:default}',
     '.shr-ib[aria-pressed="true"]{color:oklch(.62 .12 75);background:oklch(.9 .07 85/.45)}',
@@ -1541,7 +1549,7 @@
         // which stays underneath to keep the scene's size.
         var paper = paperOn();
         root.classList.toggle('paper', paper);
-        if (paper) window.ShopRoomPaper.render(pel, { view: view, its: S.its, name: S.name, image: ds.shopImage, icons: ICONS, fx: S.fx, mood: view.mood, efx: view.efx, arr: S.mode === 'arr', shut: root.classList.contains('cold') });
+        if (paper) window.ShopRoomPaper.render(pel, { view: view, its: S.its, name: S.name, image: ds.shopImage, icons: ICONS, fx: S.fx, mood: view.mood, efx: view.efx, arr: S.mode === 'arr', keeperSpot: S.keeperSpot, kindLabel: KIND_LABEL, shut: root.classList.contains('cold') });
         else pel.innerHTML = '';
         // The counter look draws only while the shop is open: lighting it bakes images.
         var counter = counterOn();
@@ -1841,7 +1849,7 @@
       function onPaperDown(e) {
         if (S.mode !== 'arr') return;
         var h = window.ShopRoomPaper.hit(pel, e.clientX, e.clientY) || e.target;
-        if (h.closest('.it,.srp-keeper')) return;
+        if (h.closest('.it,.srp-keeper,.srp-kspot')) return;
         var dc = h.closest('.srp-deco');
         if (dc) { pickDeco(e, +dc.getAttribute('data-up'), +dc.getAttribute('data-ua')); return; }
         var g = e.target.closest('.srp-pc'), p = g && byId(+g.getAttribute('data-p')), f = p && floorFrom(e);
@@ -1860,8 +1868,18 @@
         moveTo(p, nx, ny);
       }
       function onPaperClick(e) {
+        var ks = e.target.closest('.srp-kspot') || (window.ShopRoomPaper.hit(pel, e.clientX, e.clientY) || e.target).closest('.srp-kspot');
+        if (ks) { setKeeperSpot(ks.getAttribute('data-ks')); return; }
         var h = window.ShopRoomPaper.hit(pel, e.clientX, e.clientY) || e.target, g = h.closest('.it'); if (g) { useItem(g); return; }
         if (h.closest('.srp-keeper')) onKeeperClick();
+      }
+      // Arranging the paper look, a mark on the counter moves the keeper there.
+      function setKeeperSpot(v) {
+        if (S.mode !== 'arr' || !KEEPER_SPOTS[v]) return;
+        S.keeperSpot = v === 'middle' ? '' : v;
+        draw(); save();
+        var b = pel.querySelector('.srp-kspot[data-ks="' + v + '"]'); if (b) b.focus();
+        status('The keeper now stands ' + (v === 'middle' ? 'in the middle of' : 'at the ' + v + ' of') + ' the counter.');
       }
       function onPaperKey(e) { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('.srp-keeper')) { e.preventDefault(); onKeeperClick(); return; } onSvgKey(e); }
       function moveTo(p, nx, ny) {
@@ -1964,7 +1982,27 @@
         var g = e.target.closest('.it'); if (!g) return;
         useItem(g);
       }
-      function onSvgKey(e) { var g = e.target.closest('.it'); if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); useItem(g); } }
+      // Arranging by keyboard: Tab to a piece, arrows nudge it a quarter
+      // square, Shift with an arrow a whole one. The keys come from the focused
+      // piece itself, so they never fire while typing in the panel.
+      var ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      function nudge(e) {
+        var g = e.target.closest('[data-p]'), d = ARROWS[e.key];
+        if (S.mode !== 'arr' || !g || !d || e.altKey || e.ctrlKey || e.metaKey) return false;
+        var p = byId(+g.getAttribute('data-p')); if (!p) return false;
+        e.preventDefault();
+        var st = e.shiftKey ? 1 : .25, dx = d[0] * st, dy = d[1] * st, was = { x: p.x, y: p.y, off: p.off };
+        // A wall piece slides along its wall with any arrow, the same way a drag moves it.
+        if (room.isWall(p.kind)) { if (p.wall === 'Y') { dx = dx || dy; dy = 0; } else { dy = dy || (paperOn() ? dx : -dx); dx = 0; } }
+        p.x = room.snap(p.x + dx); p.y = room.snap(p.y + dy);
+        var out = (room.isWall(p.kind) && !room.hug(p)) || room.clashes(p, [], room.size()), blocked = !out && room.clashes(p, S.pieces, room.size());
+        if (out || blocked) { p.x = was.x; p.y = was.y; p.off = was.off; status(out ? 'It can’t go further that way.' : 'Something is in the way.'); return true; }
+        p.pinned = true;
+        draw(); save();
+        var again = root.querySelector((paperOn() ? '.srp-pc' : '.piece') + '[data-p="' + p.id + '"]'); if (again) again.focus({ preventScroll: true });
+        return true;
+      }
+      function onSvgKey(e) { if (nudge(e)) return; var g = e.target.closest('.it'); if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); useItem(g); } }
       function onSvgOver(e) { var g = e.target.closest('.it'); if (g) showTip(g); }
       function onSvgOut(e) { if (e.target.closest('.it')) tip.classList.remove('on'); }
       function useItem(g) {
@@ -2004,6 +2042,7 @@
         // on Escape) listening further up never sees it.
         e.stopPropagation();
         if (picking !== null) { closePicker(); return; }
+        var fp = document.activeElement; if (S.mode === 'arr' && fp && root.contains(fp) && fp.matches('[data-p]')) { fp.blur(); return; }
         say.classList.remove('on');
         if (S.mode === 'arr') { tryLeave(); return; }
         if (open) { setOpen(false); cartBtn.focus({ preventScroll: true }); return; }
@@ -2099,7 +2138,7 @@
             : '<div class="shr-field"><span>Colours</span><span class="shr-chips">' + room.PALS.map(function (p) { return '<button type="button" class="shr-chip" data-k="pal" data-v="' + p[0] + '" aria-pressed="' + (S.pal === p[0]) + '"><span class="shr-sw" style="background:' + p[2] + '"></span>' + p[1] + '</button>'; }).join('') + '</span></div>');
         var add1 = '<span class="shr-seg" role="group" style="display:grid"><button type="button" data-addtab="m" aria-pressed="' + (addTab === 'm') + '">Mood pieces</button><button type="button" data-addtab="f" aria-pressed="' + (addTab === 'f') + '">Furniture</button><button type="button" data-addtab="d" aria-pressed="' + (addTab === 'd') + '">Decorations</button></span>' +
           '<div class="shr-addl' + (addTab === 'd' ? ' dec' : '') + '">' + addTiles() + '</div>' +
-          '<small class="shr-hint">' + (addTab === 'd' ? 'Drop a decoration on a shelf, table or wall spot.' : 'Drag a piece onto the floor.') + ' Drag anything in the room onto the bin to remove it.</small>';
+          '<small class="shr-hint">' + (addTab === 'd' ? 'Drop a decoration on a shelf, table or wall spot.' : 'Drag a piece onto the floor.') + ' Drag anything in the room onto the bin to remove it. With a keyboard, Tab to a piece and move it with the arrow keys; Shift moves it further.' + (S.look === 'paper' ? ' The marks over the counter choose where the keeper stands.' : '') + '</small>';
         var rng = function (k, label) { return '<label class="shr-rng"><span>' + label + '</span><input type="range" min="0" max="250" step="5" data-efx="' + k + '" value="' + e[k] + '"><output>' + e[k] + '%</output></label>'; };
         var tg = function (k, label) { return '<button type="button" data-eft="' + k + '" aria-pressed="' + !!e[k] + '">' + label + '</button>'; };
         var es = function (k, opts) { return '<span class="shr-seg" role="group" style="display:grid">' + opts.map(function (o) { return '<button type="button" data-efs="' + k + '" data-v="' + o[0] + '" aria-pressed="' + (e[k] === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</span>'; };
@@ -2120,7 +2159,7 @@
           sec('fine', 'fa-sliders', 'Fine-tune', fineSum, fine1) +
           sec('gen', 'fa-dice', 'Generate', 'Reroll parts', gen1) +
           sec('keeper', 'fa-comment', 'Keeper', keeperSum(), keeperBody()) +
-          '<span class="shr-status" aria-live="polite">' + (S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
+          '<span class="shr-status" aria-live="polite">' + (S.look === 'paper' ? (S.keeperSpot ? 'The keeper stands at the ' + S.keeperSpot + ' of the counter.' : '') : S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
           '<div class="shr-warn" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>Not saved yet</span><button type="button" data-discard="1">Discard</button></div>' +
           '<div class="shr-pf"><button type="button" data-discard="1">Cancel</button><button type="button" class="shr-save" data-saveroom="1"' + (dirty ? '' : ' disabled') + '>Save room</button></div>';
         panel.querySelector('[data-lines]').value = S.lines.join('\n');

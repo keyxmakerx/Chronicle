@@ -148,6 +148,7 @@ func TestNormalizeShopRoomLayout_Rejects(t *testing.T) {
 		{"line too long", mutate(func(m map[string]any) { m["lines"] = []any{strings.Repeat("a", 201)} })},
 		{"line too long runes", mutate(func(m map[string]any) { m["lines"] = []any{strings.Repeat("é", 201)} })},
 		{"unknown manner", mutate(func(m map[string]any) { m["manner"] = "sly" })},
+		{"unknown keeper spot", mutate(func(m map[string]any) { m["keeperSpot"] = "under" })},
 		{"unknown moment", mutate(func(m map[string]any) { m["moments"] = map[string]any{"haggle": []any{"No."}} })},
 		{"too many moment lines", mutate(func(m map[string]any) {
 			m["moments"] = map[string]any{"hello": []any{"a", "b", "c", "d", "e", "f"}}
@@ -261,6 +262,11 @@ func TestNormalizeShopRoomLayout_Accepts(t *testing.T) {
 		{"no manner or moments stays absent", mutate(func(m map[string]any) { m["moments"] = map[string]any{"look": []any{""}} }), func(t *testing.T, l ShopRoomLayout) {
 			if l.Manner != "" || l.Moments != nil {
 				t.Errorf("manner/moments: %q %q", l.Manner, l.Moments)
+			}
+		}},
+		{"keeper spot kept", mutate(func(m map[string]any) { m["keeperSpot"] = "left" }), func(t *testing.T, l ShopRoomLayout) {
+			if l.KeeperSpot != "left" {
+				t.Errorf("keeperSpot: %q", l.KeeperSpot)
 			}
 		}},
 		{"unknown fields are dropped", mutate(func(m map[string]any) { m["extra"] = "<script>" }), func(t *testing.T, l ShopRoomLayout) {}},

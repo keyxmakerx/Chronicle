@@ -39,6 +39,9 @@ type ShopRoomLayout struct {
 	// per moment (keys in shopRoomMoments), which win over the manner's.
 	Manner  string              `json:"manner,omitempty"`
 	Moments map[string][]string `json:"moments,omitempty"`
+	// KeeperSpot is where the paper look's keeper stands behind the counter:
+	// "left", "middle" or "right". Empty is the middle, as before there was a choice.
+	KeeperSpot string `json:"keeperSpot,omitempty"`
 }
 
 // ShopRoomEffects is the room's atmosphere. The int fields are percentages of

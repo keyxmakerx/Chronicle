@@ -716,7 +716,31 @@ func (s *service) rollOn(ctx context.Context, campaignID string, p Project, e, h
 		})
 	}
 	res.Project = s.view(next, e.Name, recipe, day, sys, names, v.Director)
+	res.Moment = rollMoment(res, in.Work, x)
+	if recipe != nil {
+		if l := recipe.Looks[res.Moment]; l != nil && (len(l.Spots) > 0 || l.Words != "") {
+			res.Look = l
+		}
+	}
 	return res, nil
+}
+
+// rollMoment is which of the How it looks moments a roll was: a mishap from
+// the recipe's own mishap table is its row's moment, then a breakthrough,
+// then success when it finished, failure for botched, spoiled or lost work,
+// and progress otherwise.
+func rollMoment(res *RollResult, work string, x Extras) string {
+	switch {
+	case res.Mishap != nil && x.Mishaps != nil && res.Mishap.Table == x.Mishaps.Table && res.Mishap.Row >= 0 && res.Mishap.Row < maxMishapMoments:
+		return "mishap:" + strconv.Itoa(res.Mishap.Row)
+	case res.Breakthrough:
+		return "breakthrough"
+	case res.Finished:
+		return "success"
+	case work == WorkBotched || res.Spoiled || res.Lost:
+		return "failure"
+	}
+	return "progress"
 }
 
 // addUp rolls the dice and adds every term to res, returning how many more
