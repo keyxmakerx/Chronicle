@@ -1645,11 +1645,22 @@
     }
   };
 
+  // The leaf turns when the ribbon's roll-up ends. A timer of BM_MS alone can
+  // fire a frame early, turning over a ribbon still a pixel short; the longer
+  // timer covers a roll-up that never runs.
   Rulebook.prototype.bmPick = function (n) {
-    var self = this;
+    var self = this, roll = this.bmRoll, done = false;
+    function go() {
+      if (done) return;
+      done = true;
+      if (roll) roll.removeEventListener('transitionend', onEnd);
+      if (!self.dead) self.goItem(n);
+    }
+    function onEnd(e) { if (e.target === roll && e.propertyName === 'height') go(); }
     this.bmSet(false, true);
-    var id = setTimeout(function () { if (!self.dead) self.goItem(n); }, reduced() ? 0 : BM_MS);
-    this.timers.push(id);
+    if (reduced() || !roll) { this.timers.push(setTimeout(go, 0)); return; }
+    roll.addEventListener('transitionend', onEnd);
+    this.timers.push(setTimeout(go, BM_MS * 2));
   };
 
   // --- Contents drawer -------------------------------------------------------
