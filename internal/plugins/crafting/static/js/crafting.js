@@ -118,7 +118,7 @@
       var stats = (R.characteristics || []).map(function (c) { return c.label; }).join(', ');
       return '<div class="cra-dhead"><h3>Crafting settings</h3><button type="button" class="cra-ib" data-close aria-label="Close">' + fa('xmark') + '</button></div>' +
         '<div class="cra-dbody"><div class="cra-dsec"><h4>The bench</h4>' +
-        '<div class="cra-ctl"><span>Players work at</span>' + seg('skin', app.lib.skins) + '<em>Every player sees the bench in this look.</em></div>' +
+        '<div class="cra-ctl"><span>Players work at</span>' + seg('skin', app.lib.skins) + '<em>Players start in this look and can switch at their bench.</em></div>' +
         '<div class="cra-ctl"><span>Timing</span>' + seg('difficulty', app.lib.difficulties) + '<em>How tight the gold bands are on the graded steps.</em></div>' +
         sw('bane', 'Botched work gives a bane') + sw('skip', 'Players may skip the steps and just roll') + '</div>' +
         '<div class="cra-dsec"><h4>The project roll</h4><p class="cra-fine">' + esc(R.dice) + (stats ? ' plus one of ' + esc(stats) : '') +
