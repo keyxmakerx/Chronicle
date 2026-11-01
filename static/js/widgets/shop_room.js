@@ -1097,8 +1097,14 @@
         return o;
       }),
       decor: (S.decor || []).filter(function (d) { return S.pieces.some(function (p) { return p.id === d.piece; }); }).map(function (d) { return { piece: d.piece, spot: d.spot, icon: d.icon }; }),
-      items: S.ov, portrait: S.portrait ? { left: S.portrait[0], top: S.portrait[1] } : null, lines: S.lines.slice()
+      items: S.ov, portrait: S.portrait ? { left: S.portrait[0], top: S.portrait[1] } : null, lines: S.lines.slice(),
+      manner: S.manner || '', moments: keptMoments(S.moments)
     };
+  }
+  // Only moments with lines are saved; an empty one falls back to the manner.
+  function keptMoments(m) {
+    var out = {}; Object.keys(m || {}).forEach(function (k) { if (m[k] && m[k].length) out[k] = m[k].slice(); });
+    return out;
   }
   function fromLayout(S, L) {
     if (!L) return false;
@@ -1125,6 +1131,9 @@
     S.ov = L.items || {};
     S.portrait = L.portrait ? [L.portrait.left, L.portrait.top] : null;
     S.lines = (L.lines || []).slice();
+    var KP = window.ShopRoomKeeper;
+    S.manner = KP && KP.MANNERS[L.manner] ? L.manner : '';
+    S.moments = keptMoments(L.moments);
     return true;
   }
 
@@ -1403,6 +1412,7 @@
     '.shr-front:hover::before,.shr-front.opening::before{opacity:1}',
     '.shr-front:hover .shr-dr{transform:scale(1.05)}',
     '.shr-front .nm{font-family:var(--font-heading,Georgia,serif);font-size:1.15rem;font-weight:600;max-width:28rem;overflow-wrap:anywhere}',
+    '.shr-front .hint.bye{font:italic .85rem/1.35 Georgia,serif;letter-spacing:0;text-transform:none;max-width:22rem}',
     '.shr-front .hint{font-size:.68rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-secondary,#a49c8e)}',
     '.shr-dr{position:relative;flex:none;width:96px;height:144px;perspective:520px;transform-origin:50% 55%;transition:transform .5s cubic-bezier(.3,.7,.3,1)}.shr-dr>span{position:absolute;inset:0}.shr-dr svg{display:block;width:100%;height:100%}',
     '.shr-dr .lf{transform-origin:7% 50%;transition:transform .65s cubic-bezier(.45,.05,.3,1)}.shr-front.opening .lf{transform:rotateY(-110deg)}',
@@ -1477,7 +1487,7 @@
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
       var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy');
       var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
-        seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], mode: 'shop', its: [],
+        seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], manner: '', moments: {}, mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
       var campaignId = (campaignUrl.match(/\/campaigns\/([^/]+)/) || [])[1] || '', words = {};
       var room = createRoom(S), ICONS = room.ICONS, rels = [], relsOk = false, buy = null, basket = {}, payer = '', busy = false, note = '', tab = 'All', open = false, line = 0, dirty = false, busySave = false, savedLayout = null, partKeep = { room: false, goods: false, deco: false };
@@ -1557,7 +1567,7 @@
       var counterHooks = {
         canAdd: function (id) { return !addable(id); },
         why: addable,
-        add: function (id) { if (addable(id)) return false; basket[String(id)] = (basket[String(id)] || 0) + 1; note = ''; renderList(); return true; },
+        add: function (id) { if (addable(id)) return false; basket[String(id)] = (basket[String(id)] || 0) + 1; note = ''; renderList(); picked(); return true; },
         remove: function (id) { var k = String(id); if (!basket[k]) return; if (!--basket[k]) delete basket[k]; note = ''; renderList(); },
         basketEl: function () { return cartBtn; },
         openList: function () { setOpen(true); },
@@ -1652,6 +1662,7 @@
         var items = S.its.filter(function (it) { return basket[String(it.id)] && !it.out; }).map(function (it) { return { relationId: it.id, quantity: basket[String(it.id)] }; });
         if (!items.length || busy) return;
         busy = true; note = ''; renderBasket();
+        var bought = false;
         Chronicle.apiFetch(buyEndpoint, { method: 'POST', body: { buyerEntityId: payer, items: items }, csrfToken: ds.csrfToken }).then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
             if (!r.ok) throw new Error((j && (j.message || j.error)) || 'That didn’t go through. Try again.');
@@ -1666,9 +1677,10 @@
               note = 'Bought ' + what + ' for ' + j.spent + ' ' + localCoin(words, j.currency).text + '. ' + name + ' has ' + left + ' left.' + (j.change ? ' Change: ' + j.change + '.' : '');
             }
             basket = {};
+            if (j.status !== 'requested') bought = true;
             return Promise.all([loadGoods(), loadBuyers()]);
           });
-        }).catch(function (e) { note = e.message; }).then(function () { busy = false; draw(); renderList(); });
+        }).catch(function (e) { note = e.message; }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); });
       }
       // The basket's count, and its peek: what's in it and the total, or how to start.
       function renderPeek() {
@@ -1698,10 +1710,10 @@
         tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + 'px';
       }
       var typeT = 0, sayT = 0;
-      function talk(anchor) {
-        if (!S.lines.length) return;
-        var kEl = anchor || (paperOn() && pel.querySelector('.srp-keeper')) || keeper, kc = kEl.querySelector('.srp-cd') || kEl;
-        var text = S.lines[line++ % S.lines.length], n = 0, r = kc.getBoundingClientRect();
+      function talk(anchor, said) {
+        if (!said && !S.lines.length) return;
+        var kEl = anchor || keeperEl(), kc = kEl.querySelector('.srp-cd') || kEl;
+        var text = said || S.lines[line++ % S.lines.length], n = 0, r = kc.getBoundingClientRect();
         kEl.classList.remove('talk'); void kEl.offsetWidth; kEl.classList.add('talk');
         clearInterval(typeT); clearTimeout(sayT);
         say.textContent = '“' + text + '”'; say.classList.add('on');
@@ -1713,6 +1725,20 @@
         }
         sayT = setTimeout(function () { say.classList.remove('on'); }, 4000);
       }
+
+      // Where the keeper stands in the look on show.
+      function keeperEl() { return (counterOn() && cel.querySelector('[data-k="keeper"]')) || (paperOn() && pel.querySelector('.srp-keeper')) || keeper; }
+      // The keeper's line for a moment of the visit (shop_room_keeper.js), never while arranging.
+      // Picking things says something at most every few seconds, so a full basket isn't a monologue.
+      var lookAt = 0;
+      function speak(moment) {
+        var KP = window.ShopRoomKeeper; if (!KP || S.mode === 'arr' || !dlg.open) return;
+        if (moment === 'look' || moment === 'poor') { var now = Date.now(); if (now - lookAt < 8000) return; lookAt = now; }
+        var text = KP.pick(S.manner, S.moments, moment);
+        if (text) talk(null, text);
+      }
+      // After something goes on the pile: the keeper remarks on it, or on the purse coming up short.
+      function picked() { speak(basketSummary(basket, S.its, buyer()).short ? 'poor' : 'look'); }
 
       // ---- Saving (owners only). Changes in Arrange wait for "Save room";
       // Cancel or Discard puts the room back as it was last saved. ----
@@ -2017,6 +2043,26 @@
         }
         return room.KINDS.filter(function (k) { return !MOOD_KIND[k]; }).map(tile).join('');
       }
+      // The Keeper section: a manner, the lines for each moment of a visit, and the lines said when pressed.
+      var momTab = 'hello';
+      function keeperSum() {
+        var KP = window.ShopRoomKeeper, m = KP && KP.MANNERS[S.manner];
+        var own = Object.keys(S.moments).length, n = S.lines.length;
+        var parts = [m ? m.name : '', own ? own + (own === 1 ? ' moment' : ' moments') + ' in your words' : '', n ? n + (n === 1 ? ' line' : ' lines') : ''].filter(Boolean);
+        return parts.length ? parts.join(' · ') : 'No lines yet';
+      }
+      function keeperBody() {
+        var KP = window.ShopRoomKeeper, h = '';
+        if (KP) {
+          var mans = [['', 'None']].concat(KP.ORDER.map(function (k) { return [k, KP.MANNERS[k].name]; }));
+          h += '<div class="shr-field"><span>Manner</span><span class="shr-chips" role="group" aria-label="The keeper’s manner">' + mans.map(function (m) { return '<button type="button" class="shr-chip" data-manner="' + m[0] + '" aria-pressed="' + (S.manner === m[0]) + '">' + esc(m[1]) + '</button>'; }).join('') + '</span></div>';
+          h += '<div class="shr-field"><span>When</span><span class="shr-chips" role="group" aria-label="Moment of the visit">' + KP.MOMENTS.map(function (m) { return '<button type="button" class="shr-chip" data-moment="' + m[0] + '" aria-pressed="' + (momTab === m[0]) + '">' + esc(m[1]) + (S.moments[m[0]] ? ' ·' : '') + '</button>'; }).join('') + '</span></div>';
+          var start = KP.linesFor(S.manner, null, momTab);
+          h += '<label class="shr-field"><span>What the keeper says then (one line each, up to five)</span><textarea rows="3" data-moment-lines="1" maxlength="1100" placeholder="' + esc(start.length ? start.join('\n') : 'Pick a manner for lines to start from, or write your own.') + '"></textarea></label>' +
+            '<small class="shr-hint">' + (start.length ? 'Leave it empty and the keeper uses the manner’s lines, shown faintly above.' : 'Leave it empty and the keeper says nothing then.') + '</small>';
+        }
+        return h + '<label class="shr-field"><span>When someone presses the keeper (one line each)</span><textarea rows="3" data-lines="1" maxlength="2200"></textarea></label>';
+      }
       function renderPanel() {
         if (!panel) return;
         var pins = S.pieces.filter(function (p) { return p.pinned; }).length, mood = MOODS[S.mood] ? S.mood : 'cozy', M = MOODS[mood], e = efxNow();
@@ -2054,11 +2100,12 @@
           sec('add', 'fa-plus', 'Add pieces', 'Drag into the room', add1) +
           sec('fine', 'fa-sliders', 'Fine-tune', fineSum, fine1) +
           sec('gen', 'fa-dice', 'Generate', 'Reroll parts', gen1) +
-          sec('keeper', 'fa-comment', 'Keeper', S.lines.length ? S.lines.length + (S.lines.length === 1 ? ' line' : ' lines') : 'No lines yet', '<label class="shr-field"><span>What the keeper says (one line each)</span><textarea rows="3" data-lines="1" maxlength="2200"></textarea></label>') +
+          sec('keeper', 'fa-comment', 'Keeper', keeperSum(), keeperBody()) +
           '<span class="shr-status" aria-live="polite">' + (S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
           '<div class="shr-warn" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>Not saved yet</span><button type="button" data-discard="1">Discard</button></div>' +
           '<div class="shr-pf"><button type="button" data-discard="1">Cancel</button><button type="button" class="shr-save" data-saveroom="1"' + (dirty ? '' : ' disabled') + '>Save room</button></div>';
         panel.querySelector('[data-lines]').value = S.lines.join('\n');
+        var ml = panel.querySelector('[data-moment-lines]'); if (ml) ml.value = (S.moments[momTab] || []).join('\n');
       }
       // Fold: animate to the body's real height, then let it size itself; Calm and Off open at once.
       function fold(id) {
@@ -2079,6 +2126,8 @@
         var b = e.target.closest('button'); if (!b) return;
         if (b.dataset.enter) { enter(); return; }
         if (b.dataset.addtab) { addTab = b.dataset.addtab; renderPanel(); return; }
+        if (b.dataset.manner !== undefined) { S.manner = b.dataset.manner; renderPanel(); save(); return; }
+        if (b.dataset.moment) { momTab = b.dataset.moment; renderPanel(); return; }
         if (b.dataset.sec) { fold(b.dataset.sec); return; }
         if (b.dataset.mode) { if (b.dataset.mode === 'shop') tryLeave(); else if (S.mode !== 'arr') { S.mode = 'arr'; setMode(); } return; }
         if (b.dataset.leave) { tryLeave(); return; }
@@ -2088,7 +2137,7 @@
         if (b.dataset.saveroom) { saveRoom(); return; }
         if (b.dataset.fx) { S.fx = b.dataset.fx; saveFx(S.fx); root.classList.toggle('fxlight', S.fx !== 'full'); draw(); renderList(); return; }
         if (b.dataset.tab) { tab = b.dataset.tab; renderList(); return; }
-        if (b.dataset.add) { basket[b.dataset.add] = (basket[b.dataset.add] || 0) + 1; note = ''; renderList(); return; }
+        if (b.dataset.add) { basket[b.dataset.add] = (basket[b.dataset.add] || 0) + 1; note = ''; renderList(); picked(); return; }
         if (b.dataset.empty) { basket = {}; note = ''; renderList(); return; }
         if (b.dataset.buy) { doBuy(); return; }
         if (b === keeper) { onKeeperClick(); return; }
@@ -2120,6 +2169,11 @@
         if (t.dataset.efx) { renderPanel(); return; }
         if (t.dataset.payer) { payer = t.value; note = ''; renderBasket(); return; }
         if (t.dataset.sel) { S[t.dataset.sel] = t.value; if (t.dataset.sel === 'setting') S.portrait = null; room.generate(); draw(); renderPanel(); save(); }
+        else if (t.dataset.momentLines) {
+          var ls = t.value.split('\n').map(function (x) { return x.trim().slice(0, 200); }).filter(Boolean).slice(0, 5);
+          if (ls.length) S.moments[momTab] = ls; else delete S.moments[momTab];
+          renderPanel(); save();
+        }
         else if (t.dataset.lines) { S.lines = t.value.split('\n').map(function (s) { return s.trim().slice(0, 200); }).filter(Boolean).slice(0, 10); save(); }
       }
       function setMode() {
@@ -2136,7 +2190,7 @@
       }
       // ---- Opening and closing ----
       var front = root.querySelector('.shr-front'), dark = root.querySelector('.shr-dark');
-      var walkT = 0, hole = null;
+      var walkT = 0, hole = null, greet = false;
       // Calm, Off and a device asking for less motion skip the walk; the room is simply there.
       function still() { return matchMedia('(prefers-reduced-motion: reduce)').matches || /^(calm|off)$/.test(document.documentElement.getAttribute('data-motion') || ''); }
       function showRoom() {
@@ -2149,7 +2203,8 @@
       function enter() {
         if (!root.classList.contains('closed') || front.classList.contains('opening')) return;
         front.setAttribute('aria-expanded', 'true');
-        if (still()) { showRoom(); return; }
+        greet = true;
+        if (still()) { showRoom(); greet = false; setTimeout(function () { speak('hello'); }, 50); return; }
         front.classList.add('opening');
         walkT = setTimeout(walkIn, 650);
       }
@@ -2179,9 +2234,22 @@
       function settle() {
         root.classList.remove('cold'); dropHole(); dark.className = 'shr-dark';
         placeKeeper();
+        if (greet) { greet = false; speak('hello'); }
+      }
+      // The keeper's farewell is said under the door, since the room has gone by
+      // the time it could be read; the door's own hint comes back after it.
+      var byeT = 0;
+      function farewell() {
+        var KP = window.ShopRoomKeeper, hint = front.querySelector('.hint');
+        if (!KP || !hint || S.mode === 'arr') return;
+        var text = KP.pick(S.manner, S.moments, 'bye'); if (!text) return;
+        if (!hint.dataset.usual) hint.dataset.usual = hint.textContent;
+        clearTimeout(byeT); hint.classList.add('bye'); hint.textContent = '“' + text + '”';
+        byeT = setTimeout(function () { hint.classList.remove('bye'); hint.textContent = hint.dataset.usual; }, 4500);
       }
       // Leaving shrinks the room back into the doorway it came out of, and the door swings shut.
       function leave() {
+        greet = false; farewell();
         clearTimeout(walkT); settle(); alive(false); tilt(0, 0); setOpen(false); peek(false);
         var shut = function () {
           if (dlg.open) dlg.close();
