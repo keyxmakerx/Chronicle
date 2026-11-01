@@ -170,7 +170,6 @@ func main() {
 
 	// --- Initialize Game Systems ---
 	// Discover and load system manifests + data from internal/systems/.
-	// Systems register their factories via init() (blank imports above).
 	if err := systems.Init("internal/systems"); err != nil {
 		slog.Warn("system initialization failed", slog.Any("error", err))
 	}

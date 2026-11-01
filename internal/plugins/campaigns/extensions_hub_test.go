@@ -1,6 +1,5 @@
 // extensions_hub_test.go covers the Extensions hub:
-//   - HasExtensionDashboard / HasExtensionEntitySetup slug tables
-//     (the capability lookup the addonListerAdapter calls).
+//   - HasExtensionDashboard (the lookup the addonListerAdapter calls).
 //   - ExtensionsHubFragment render: 1-element-array case, zero
 //     state, mixed enabled/disabled cards. The render is exercised
 //     against an in-memory buffer using the generated templ.go to
@@ -33,7 +32,7 @@ func TestHasExtensionDashboard_KnownSlugs(t *testing.T) {
 	}{
 		{"calendar", true},
 		{"maps", false},
-		{"timeline", false}, // joins after C-TIMELINE-V2 lands
+		{"timeline", false},
 		{"notes", false},
 		{"unknown-slug", false},
 		{"", false},
@@ -41,23 +40,6 @@ func TestHasExtensionDashboard_KnownSlugs(t *testing.T) {
 	for _, c := range cases {
 		if got := HasExtensionDashboard(c.slug); got != c.want {
 			t.Errorf("HasExtensionDashboard(%q) = %v, want %v", c.slug, got, c.want)
-		}
-	}
-}
-
-func TestHasExtensionEntitySetup_KnownSlugs(t *testing.T) {
-	cases := []struct {
-		slug string
-		want bool
-	}{
-		{"calendar", true},
-		{"timeline", false}, // Phase 4 calendar-only this wave
-		{"maps", false},     // maps has its own setup card outside this mechanism
-		{"", false},
-	}
-	for _, c := range cases {
-		if got := HasExtensionEntitySetup(c.slug); got != c.want {
-			t.Errorf("HasExtensionEntitySetup(%q) = %v, want %v", c.slug, got, c.want)
 		}
 	}
 }
@@ -114,18 +96,12 @@ func TestExtensionsHubFragment_SingleElementArray(t *testing.T) {
 	if !strings.Contains(html, `data-extension-enabled="true"`) {
 		t.Errorf("enabled-state attr missing for enabled card; got:\n%s", html)
 	}
-	// Calendar has a dedicated dashboard page, so its "Open dashboard"
-	// affordance navigates there instead of HTMX-swapping the inline panel.
-	// Apps without a dedicated page keep the inline-panel affordance
-	// (covered by ExtensionDashboardPageURL).
+	// Calendar's "Open dashboard" link goes to its dashboard page.
 	if !strings.Contains(html, `data-extension-dashboard-page`) {
 		t.Errorf("calendar should use the dedicated-page affordance; got:\n%s", html)
 	}
 	if !strings.Contains(html, `href="/campaigns/camp-1/apps/calendar"`) {
 		t.Errorf("calendar dashboard link should point at the dedicated page; got:\n%s", html)
-	}
-	if strings.Contains(html, `hx-get="/campaigns/camp-1/extensions/calendar/dashboard"`) {
-		t.Errorf("calendar should no longer use the inline-panel hx-get affordance; got:\n%s", html)
 	}
 	if !strings.Contains(html, "Open dashboard") {
 		t.Errorf("affordance copy should read 'Open dashboard'; got:\n%s", html)
@@ -161,14 +137,9 @@ func TestExtensionsHubFragment_MixedEnabledDisabledAndNotInstalled(t *testing.T)
 	if !strings.Contains(html, "Soon</span>") {
 		t.Errorf("uninstalled addon should render Soon badge; got:\n%s", html)
 	}
-	// Only the HasDashboard=true card (calendar) carries a dashboard
-	// affordance. Calendar has a dedicated page (E1), so it's the
-	// dedicated-page link, not the inline-panel expand button.
+	// Only the HasDashboard=true card (calendar) carries a dashboard link.
 	if c := strings.Count(html, "data-extension-dashboard-page"); c != 1 {
 		t.Errorf("dashboard-page affordance count = %d, want 1 (calendar only); got:\n%s", c, html)
-	}
-	if strings.Contains(html, "data-extension-dashboard-expand") {
-		t.Errorf("no card should use the inline-panel expand affordance now (calendar has a dedicated page); got:\n%s", html)
 	}
 }
 

@@ -88,8 +88,8 @@ one flat package (loader, manifest parser, registry, generic content handler);
 there are no per-system subdirectories. A package (manifest plus data files)
 is installed per campaign via Admin > Packages; its manifest declares
 categories, fields and metadata, and its data lives in the package's own
-on-disk version directory. Custom tooltip formatting registers through
-`systems.RegisterFactory()` from an `init()`.
+on-disk version directory. Systems carry no Go code: stat blocks and
+tooltips come from the manifest's field definitions.
 
 ## Widgets
 

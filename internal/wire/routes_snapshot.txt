@@ -873,7 +873,6 @@ GET	/campaigns/:id/extensions	session	plugins/campaigns.(*Handler).ExtensionsHub
 POST	/campaigns/:id/extensions/:extID/disable	session	extensions.(*Handler).DisableExtension	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/extensions/:extID/enable	session	extensions.(*Handler).EnableExtension	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/extensions/:extID/preview	session	extensions.(*Handler).PreviewExtension	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
-GET	/campaigns/:id/extensions/:slug/dashboard	session	plugins/campaigns.(*Handler).ExtensionDashboardFragmentAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/extensions/:slug/settings	session	plugins/addons.(*Handler).ExtensionSettings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/extensions/:slug/settings/apply	session	plugins/addons.(*Handler).ApplyExtensionSettings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/extensions/:slug/settings/dismiss	session	plugins/addons.(*Handler).DismissExtensionSetup	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
