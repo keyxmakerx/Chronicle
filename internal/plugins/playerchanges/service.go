@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sort"
 	"strings"
@@ -378,7 +379,7 @@ func quoteValue(s string) string {
 	if s == "" {
 		return "nothing"
 	}
-	// Straight quotes: the message reaches the page in a response header,
-	// which carries only plain ASCII punctuation safely.
-	return `"` + clip(s, 80) + `"`
+	// %q escapes any quote inside the value, and its straight quotes reach
+	// the page safely through the error's response header.
+	return fmt.Sprintf("%q", clip(s, 80))
 }
