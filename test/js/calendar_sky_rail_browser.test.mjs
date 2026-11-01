@@ -116,8 +116,10 @@ test('folding the sky carries the menu up with it', { skip }, async (t) => {
   await settle(p);
   const before = await p.$eval('#cal5-skyrail .srin', (e) => e.getBoundingClientRect().top);
   await p.click('#cal5-skybtn');
+  // The fold is a spring stepped each frame, not a CSS animation, so settle()
+  // can't see it; the card wears .moving until the spring comes to rest.
+  await p.waitForFunction(() => !document.querySelector('#cal5-cal.moving'));
   await settle(p);
-  await p.waitForTimeout(100);
   const after = await p.$eval('#cal5-skyrail .srin', (e) => e.getBoundingClientRect().top);
   const btn = await p.$eval('#cal5-moonbtn', (b) => b.getBoundingClientRect().bottom);
   assert.ok(after < before - 40, `the menu rose with the sky (${before} -> ${after})`);
