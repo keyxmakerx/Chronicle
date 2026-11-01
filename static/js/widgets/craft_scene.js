@@ -34,7 +34,7 @@ window.CraftScene = (function () {
   function mix(a,b,t){var x=hex(a),y=hex(b);return '#'+[0,1,2].map(function(i){var v=Math.round(lerp(x[i],y[i],clamp(t,0,1)));return (v<16?'0':'')+v.toString(16);}).join('');}
   function rgb(c){return hex(c).join(',');}
   function rnd(a,b){return a+Math.random()*(b-a);}
-  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function esc(s) { return Chronicle.escapeHtml(s); }
 
   /* What each step asks of the player. A recipe is a list of these, so one
      recipe kind plays differently from another by its steps alone. */

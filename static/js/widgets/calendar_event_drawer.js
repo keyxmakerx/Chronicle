@@ -34,11 +34,7 @@
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 
   // The same plain-text rules as the compact form in calendar_editor.js: a

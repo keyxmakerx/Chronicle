@@ -22,11 +22,7 @@
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
   function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   function isIso(s) { return /^\d{4}-\d{2}-\d{2}$/.test(s || ''); }

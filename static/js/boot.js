@@ -801,8 +801,10 @@
    * @param {string} str - Raw string to escape.
    * @returns {string} Attribute-safe string.
    */
+  // null, undefined and false print as nothing; 0 and other values print as
+  // themselves, so a count of 0 still shows.
   Chronicle.escapeAttr = function (str) {
-    return String(str || '')
+    return String(str == null || str === false ? '' : str)
       .replace(/&/g, '&amp;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;')
@@ -824,9 +826,7 @@
   // "s". The server allows only letters, so escaping changes nothing; it keeps
   // the term safe in the HTML strings widgets build even if that check slips.
   Chronicle.gmTerm = function () {
-    return String(document.documentElement.getAttribute('data-gm-term') || 'GM')
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return Chronicle.escapeHtml(document.documentElement.getAttribute('data-gm-term') || 'GM');
   };
 
   /**

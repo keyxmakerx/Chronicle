@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
+import { escapeHtml } from './_escape.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const widgets = path.join(here, '..', '..', 'static', 'js', 'widgets');
@@ -24,7 +25,7 @@ const cal = {
 function loadAll() {
   const sandbox = {
     module: { exports: {} }, console,
-    Chronicle: { register(n, def) { if (n === 'calendar_view') sandbox.def = def; } },
+    Chronicle: { escapeHtml, register(n, def) { if (n === 'calendar_view') sandbox.def = def; } },
     document: { activeElement: null, querySelector: () => null, addEventListener() {} },
     window: {},
   };

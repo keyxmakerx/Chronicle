@@ -25,7 +25,7 @@
   var NS = 'http://www.w3.org/2000/svg', W = 1200, H = 700;
 
   function rng(s) { s = s % 2147483647 || 1; return function () { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
-  function esc(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function esc(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
   function stops(a) { return a.map(function (s) { return '<stop offset="' + s[0] + '" stop-color="' + s[1] + '"' + (s[2] != null ? ' stop-opacity="' + s[2] + '"' : '') + '/>'; }).join(''); }
   function lin(id, v, a, o) { return '<linearGradient id="' + id + '" x1="0" y1="0" x2="' + (v ? 0 : 1) + '" y2="' + (v ? 1 : 0) + '"' + (o || '') + '>' + stops(a) + '</linearGradient>'; }
   function rad(id, a, o) { return '<radialGradient id="' + id + '"' + (o || '') + '>' + stops(a) + '</radialGradient>'; }

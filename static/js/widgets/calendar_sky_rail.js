@@ -26,9 +26,7 @@
   var DEFAULT_STRENGTH = 0.4;
   var HEX6 = /^#[0-9a-fA-F]{6}$/;
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function kindColor(k) {
     var kd = window.SkyWorld && SkyWorld.SUN_KINDS && SkyWorld.SUN_KINDS[k];
     return kd ? kd[0] : '#fff1c9';

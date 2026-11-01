@@ -30,12 +30,7 @@
 
   var DIRTY = 'own-entry';
 
-  function esc(v) {
-    var s = (v == null) ? '' : String(v);
-    return s.replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(v) { return Chronicle.escapeHtml(v); }
   function words(key) {
     var s = String(key).replace(/_display$/, '').replace(/[_-]+/g, ' ').trim();
     return s.charAt(0).toUpperCase() + s.slice(1);

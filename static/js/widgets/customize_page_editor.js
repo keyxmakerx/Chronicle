@@ -51,11 +51,7 @@
     try { var v = JSON.parse(s || ''); return v == null ? dflt : v; } catch (e) { return dflt; }
   }
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function fa(cls) { return /^fa-[a-z0-9-]+$/.test(String(cls || '')) ? cls : 'fa-cube'; }
   function ic(cls) { return '<i class="fa-solid ' + fa(cls) + '" aria-hidden="true"></i>'; }
   function humanize(t) { t = String(t || '').replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); }

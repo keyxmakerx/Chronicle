@@ -36,11 +36,7 @@
   function parse(s, dflt) {
     try { var v = JSON.parse(s || ''); return v == null ? dflt : v; } catch (e) { return dflt; }
   }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function typing(t) {
     if (!t || !t.closest) return false;
     return !!t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]');

@@ -40,11 +40,7 @@
 
   var LOOKS = [['lit', 'Lamp-lit'], ['plain', 'Plain'], ['parchment', 'Parchment'], ['midnight', 'Midnight']];
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
 
   // Server error bodies carry a human message; anything else gets a plain one.
   function apiCall(url, method, body, csrf) {
