@@ -215,3 +215,14 @@ func TestStockLookupShowsTheShopsLooks(t *testing.T) {
 		}
 	}
 }
+
+// A room saved with no mood or manner leaves those fields out, so "none" on
+// them is no change, and the furniture isn't laid out again.
+func TestShopRoomKindNoneOnAMissingField(t *testing.T) {
+	k, _, f := shopKinds()
+	f.rooms["forge"] = json.RawMessage(`{"version":1,"roomType":"forge","setting":"room","size":"m","furniture":"normal","decorations":"some","palette":"ember","look":"lit","seeds":{"room":3,"goods":1,"deco":1},"pieces":[],"decor":[],"items":{}}`)
+	p := k.Plan(context.Background(), camp, owner, craftRec("shop-room", ActionUpdate, "", map[string]any{"shop": "Ember Forge", "mood": "none", "manner": "none"}))
+	if p.Error != "" || !strings.HasPrefix(p.Summary, "changes nothing") || len(p.Warnings) > 0 {
+		t.Fatalf("plan = %+v", p)
+	}
+}
