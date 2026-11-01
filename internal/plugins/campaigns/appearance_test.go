@@ -108,6 +108,7 @@ func appearanceFieldCases() []fieldCase {
 		{"menu corner", func(in *AppearanceInput, v string) { in.Sidebar.Corner = v }, func(a *Appearance) string { return a.SidebarCorner }, "subtitle"},
 		{"hover card", func(in *AppearanceInput, v string) { in.Hover.Look = v }, func(a *Appearance) string { return a.HoverCard }, "night"},
 		{"character sheet style", func(in *AppearanceInput, v string) { in.Sheet.Style = v }, func(a *Appearance) string { return a.SheetStyle }, "brass"},
+		{"made item pictures", func(in *AppearanceInput, v string) { in.Sheet.CraftArt = v }, func(a *Appearance) string { return a.CraftArt }, "illustrated"},
 		{"page look", func(in *AppearanceInput, v string) { in.Page.Look = v }, func(a *Appearance) string { return a.PageLook }, "annals"},
 		{"time line popup", func(in *AppearanceInput, v string) { in.Hover.TimelinePopup = v }, func(a *Appearance) string { return a.TimelinePopup }, "corner"},
 		{"style kit", func(in *AppearanceInput, v string) { in.Page.Kit = v }, func(a *Appearance) string { return a.StyleKit }, "ornate"},
@@ -198,7 +199,7 @@ func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 		"nav page name": AppearanceNavPageNames, "page tone": AppearancePageTones, "contrast": AppearanceContrasts,
 		"body font": AppearanceBodyFonts, "heading font": AppearanceHeadingFonts, "type scale": AppearanceTypeScales,
 		"button style": AppearanceButtonStyles, "elevation": AppearanceElevations, "motion speed": AppearanceSpeeds,
-		"hover card": AppearanceHoverCards, "character sheet style": AppearanceSheetStyles,
+		"hover card": AppearanceHoverCards, "character sheet style": AppearanceSheetStyles, "made item pictures": AppearanceCraftArts,
 		"page look": AppearancePageLooks, "style kit": AppearanceStyleKits, "time line popup": AppearanceTimelinePopups,
 	}
 	for _, fc := range appearanceFieldCases() {

@@ -138,11 +138,13 @@ type Kept struct {
 	BecomesName string `json:"becomes,omitempty"`
 	// Off marks a copy that has gone off.
 	Off bool `json:"off,omitempty"`
+	// Look is a made copy's picture (result_look.go).
+	Look *ItemLook `json:"look,omitempty"`
 }
 
 // Empty reports copies that remember nothing.
 func (k Kept) Empty() bool {
-	return len(k.Marks) == 0 && k.Quality == "" && k.Quirk == "" && k.How == "" && k.OffDay == 0
+	return len(k.Marks) == 0 && k.Quality == "" && k.Quirk == "" && k.How == "" && k.OffDay == 0 && k.Look == nil
 }
 
 // KeptPick asks for N copies of one remembered row.

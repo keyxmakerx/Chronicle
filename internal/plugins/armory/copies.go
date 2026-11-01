@@ -9,6 +9,7 @@ package armory
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -51,6 +52,70 @@ type Memory struct {
 	// Off is set at the respite after OffDay for a copy that becomes
 	// nothing: it stays in the pack, marked gone off.
 	Off bool `json:"off,omitempty"`
+	// Look is how a made copy is drawn (static/js/widgets/craft_results.js),
+	// taken from what went into it. It holds a shape, colours and a picture
+	// key only, never what the materials were, because what a project took
+	// is the Director's.
+	Look *CraftLook `json:"look,omitempty"`
+}
+
+// CraftLook is a made copy's picture: a result shape and its tints.
+type CraftLook struct {
+	Shape  string     `json:"shape"`
+	Body   string     `json:"body"`
+	Trim   string     `json:"trim"`
+	Detail string     `json:"detail"`
+	Mark   *CraftMark `json:"mark,omitempty"`
+}
+
+// CraftMark is the one material picture a look shows on its label or boss.
+type CraftMark struct {
+	Picture string `json:"picture"`
+	Tint    string `json:"tint"`
+}
+
+// LookJSON is a look as the pack's tile and card carry it for
+// craft_results.js, "" for none.
+func LookJSON(l *CraftLook) string {
+	if l = l.clean(); l == nil {
+		return ""
+	}
+	b, err := json.Marshal(l)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// FirstLookJSON is the first copy's look that has one: a tile stacking
+// several made copies shows the oldest.
+func FirstLookJSON(copies []Copy) string {
+	for _, c := range copies {
+		if l := LookJSON(c.Memory.Look); l != "" {
+			return l
+		}
+	}
+	return ""
+}
+
+// LookShapes are the shapes craft_results.js draws.
+var LookShapes = map[string]bool{"potion": true, "vial": true, "blade": true, "shield": true, "ring": true, "bundle": true}
+
+var lookColour = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+var lookPicture = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,23}$`)
+
+// clean keeps a look only when every part of it is drawable: a known shape
+// and #rrggbb colours. A bad mark is dropped on its own; anything else bad
+// drops the whole look, and the copy shows the plain icon.
+func (l *CraftLook) clean() *CraftLook {
+	if l == nil || !LookShapes[l.Shape] || !lookColour.MatchString(l.Body) || !lookColour.MatchString(l.Trim) || !lookColour.MatchString(l.Detail) {
+		return nil
+	}
+	out := &CraftLook{Shape: l.Shape, Body: strings.ToLower(l.Body), Trim: strings.ToLower(l.Trim), Detail: strings.ToLower(l.Detail)}
+	if l.Mark != nil && lookPicture.MatchString(l.Mark.Picture) && lookColour.MatchString(l.Mark.Tint) {
+		out.Mark = &CraftMark{Picture: l.Mark.Picture, Tint: strings.ToLower(l.Mark.Tint)}
+	}
+	return out
 }
 
 // Copy is a number of copies of one item, at one holder, that remember the
@@ -99,12 +164,13 @@ func (m Memory) Clean() Memory {
 		}
 		out.Off = m.Off
 	}
+	out.Look = m.Look.clean()
 	return out
 }
 
 // Empty reports a memory with nothing in it: a plain copy.
 func (m Memory) Empty() bool {
-	return len(m.Marks) == 0 && m.Quality == "" && m.Quirk == "" && m.How == "" && m.OffDay == 0
+	return len(m.Marks) == 0 && m.Quality == "" && m.Quirk == "" && m.How == "" && m.OffDay == 0 && m.Look == nil
 }
 
 // HasMark reports whether the copy carries mark, case-blind.

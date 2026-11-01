@@ -144,6 +144,9 @@ templ placeBox(v *CharacterPanelView, self Endpoint, pl Place) {
 							draggable="true"
 						}
 						title={ it.Name }
+						if l := FirstLookJSON(it.Copies); l != "" {
+							data-craft-look={ l }
+						}
 					>
 						if it.Quantity > 1 {
 							<span class="hp-ct">{ fmt.Sprintf("%d", it.Quantity) }</span>
@@ -218,7 +221,13 @@ templ heldDetail(v *CharacterPanelView, self Endpoint, it HeldItem) {
 templ spreadCopies(it HeldItem) {
 	<ul class="hp-cards" data-copies>
 		for _, c := range it.Copies {
-			<li class="hp-card" data-copy-id={ fmt.Sprintf("%d", c.ID) }>
+			<li
+				class="hp-card"
+				data-copy-id={ fmt.Sprintf("%d", c.ID) }
+				if l := LookJSON(c.Memory.Look); l != "" {
+					data-craft-look={ l }
+				}
+			>
 				<span class="hp-card-n">
 					if c.Quantity == 1 && it.Quantity == 1 {
 						This one

@@ -214,12 +214,38 @@ func (a *craftingArmoryAdapter) GoOff(ctx context.Context, campaignID string, v 
 func keptOf(c armory.Copy) crafting.Kept {
 	m := c.Memory
 	return crafting.Kept{ID: c.ID, Qty: c.Quantity, Marks: m.Marks, Quality: m.Quality, Quirk: m.Quirk,
-		How: m.How, By: m.By, On: m.On, OffDay: m.OffDay, OffOn: m.OffOn, Becomes: m.Becomes, BecomesName: m.BecomesName, Off: m.Off}
+		How: m.How, By: m.By, On: m.On, OffDay: m.OffDay, OffOn: m.OffOn, Becomes: m.Becomes, BecomesName: m.BecomesName, Off: m.Off,
+		Look: itemLookOf(m.Look)}
 }
 
 func memoryOf(k crafting.Kept) armory.Memory {
 	return armory.Memory{Marks: k.Marks, Quality: k.Quality, Quirk: k.Quirk, How: k.How, By: k.By, On: k.On,
-		OffDay: k.OffDay, OffOn: k.OffOn, Becomes: k.Becomes, BecomesName: k.BecomesName, Off: k.Off}
+		OffDay: k.OffDay, OffOn: k.OffOn, Becomes: k.Becomes, BecomesName: k.BecomesName, Off: k.Off,
+		Look: craftLookOf(k.Look)}
+}
+
+// itemLookOf and craftLookOf carry a made copy's picture across; the
+// Armory cleans it again when it stores it.
+func itemLookOf(l *armory.CraftLook) *crafting.ItemLook {
+	if l == nil {
+		return nil
+	}
+	out := &crafting.ItemLook{Shape: l.Shape, Body: l.Body, Trim: l.Trim, Detail: l.Detail}
+	if l.Mark != nil {
+		out.Mark = &crafting.LookMark{Picture: l.Mark.Picture, Tint: l.Mark.Tint}
+	}
+	return out
+}
+
+func craftLookOf(l *crafting.ItemLook) *armory.CraftLook {
+	if l == nil {
+		return nil
+	}
+	out := &armory.CraftLook{Shape: l.Shape, Body: l.Body, Trim: l.Trim, Detail: l.Detail}
+	if l.Mark != nil {
+		out.Mark = &armory.CraftMark{Picture: l.Mark.Picture, Tint: l.Mark.Tint}
+	}
+	return out
 }
 
 // craftingSheetsAdapter reads a characteristic from a character's sheet

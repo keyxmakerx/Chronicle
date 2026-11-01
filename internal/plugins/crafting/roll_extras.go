@@ -284,6 +284,7 @@ func (s *service) madeKept(ctx context.Context, p *Project, e *EntityInfo, x Ext
 	if p.Details.Item != nil {
 		k = *p.Details.Item
 	}
+	k.Look = s.madeLook(ctx, p)
 	if x.MakersMark {
 		k.How, k.By = "made", e.Name
 		if day != nil {
