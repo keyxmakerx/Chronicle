@@ -89,13 +89,17 @@ func tokenize(s string) []string {
 // '-' only in a, '+' only in b, in reading order.
 func lcsOps(a, b []string) []DiffPart {
 	n, m := len(a), len(b)
-	// Callers keep n*m under maxDiffCells; checking it here as well keeps the
-	// table's size bounded where it is allocated, so it can never overflow.
-	if n > maxDiffCells || m > maxDiffCells || (n+1)*(m+1) > 3*maxDiffCells {
+	// Callers keep n*m under maxDiffCells; checking the table's size here as
+	// well bounds it where it is allocated, so it can never overflow.
+	if n > maxDiffCells || m > maxDiffCells {
+		return []DiffPart{{'-', strings.Join(a, "")}, {'+', strings.Join(b, "")}}
+	}
+	size := (n + 1) * (m + 1)
+	if size > 3*maxDiffCells {
 		return []DiffPart{{'-', strings.Join(a, "")}, {'+', strings.Join(b, "")}}
 	}
 	// dp[i*(m+1)+j] = LCS length of a[i:], b[j:].
-	dp := make([]int32, (n+1)*(m+1))
+	dp := make([]int32, size)
 	at := func(i, j int) int32 { return dp[i*(m+1)+j] }
 	for i := n - 1; i >= 0; i-- {
 		for j := m - 1; j >= 0; j-- {
@@ -109,7 +113,11 @@ func lcsOps(a, b []string) []DiffPart {
 			}
 		}
 	}
-	ops := make([]DiffPart, 0, n+m)
+	room := n + m
+	if room > 2*maxDiffCells {
+		room = 0
+	}
+	ops := make([]DiffPart, 0, room)
 	i, j := 0, 0
 	for i < n && j < m {
 		switch {
