@@ -67,6 +67,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// Game nights with every member's answer and note, for the calendar's
 	// day card. Members only: the roster and notes stay inside the table.
 	cg.GET("/sessions/nights", h.ListGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// Every night and series, grouped, for the calendar's "All game nights".
+	cg.GET("/sessions/all", h.AllGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// A night's recap and visible linked pages, for its page in the calendar.
 	cg.GET("/sessions/:sid/page", h.NightPageAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Who the party saw on which night. Any member may read a page's
@@ -133,7 +135,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 		addons.RequireAddon(addonSvc, "calendar"),
 		addons.RequireAddon(addonSvc, SessionsAddonSlug),
 	)
-	pub.GET("/sessions", h.ListSessions, campaigns.RequireViewAccess())
+	// Game nights have no list page; the old address opens the calendar.
+	pub.GET("/sessions", h.GameNightsLink, campaigns.RequireViewAccess())
 	pub.GET("/sessions/:sid", h.ShowSession, campaigns.RequireViewAccess())
 	pub.GET("/sessions/embed", h.EmbedSessions, campaigns.RequireViewAccess())
 	pub.GET("/game-nights", h.GameNightsLink, campaigns.RequireViewAccess())
