@@ -136,6 +136,9 @@ type StashService interface {
 	GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID, query string) (*GiveDialogView, error)
 	// Give hands a character an Armory item or a map. Owner visibility only.
 	Give(ctx context.Context, campaignID string, a Actor, in GiveInput) (*GiveOutcome, error)
+	// SetCarried sets how many of an Armory item a character carries, as a
+	// give or a take with its history line. Owner visibility only.
+	SetCarried(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int) (*CarriedCount, error)
 	// Pay adds coins to a character's sheet. Owner visibility only.
 	Pay(ctx context.Context, campaignID string, a Actor, in PayInput) (*PayOutcome, error)
 

@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -12,6 +13,16 @@ import (
 // How a material ties the parts of crafting together, said once in every
 // crafting kind's doc so an AI never invents a link Chronicle doesn't keep.
 const craftingTies = "A material is an Armory item with one or more kinds (`kind: material`). A recipe asks for it by the item's name (`2 Troll tooth`) or for any item of a kind (`1 any herb`), which whatever the hero carries of that kind fills. A creature, Remnant, place or magic source gives it through its drop list (`kind: drops`): when a fight ends, each defeated copy drops its list into the party's spoils tray, where heroes take or harvest it. `what: crafting` shows all of it."
+
+// craftingRulesDoc is the rule format, the rules editor's "What the AI
+// writes" (craft_rules.ai.md), with the words each kind takes.
+const craftingRulesDoc = "A rule is `when` (up to 3 conditions, all must hold; \"or\" is two rules) and `then` (one effect), as the rules editor shows under \"What the AI writes\". " +
+	"Conditions, by `kind`: `moon` (`moon`, `phase`: new, waxing crescent, first quarter, waxing gibbous, full, waning gibbous, last quarter, waning crescent, waxing, waning, or a hand-set moon's full, half, crescent, dark, vanished), " +
+	"`event` (`event`), `rolled` (`event`, `result`), `weather` (`weather`), `season` (`season`), `time` (dawn, day, dusk, night), `bench` (`bench`, a bench's name), `ingredient` (`mark`, a mark on a material used), `maker` (`skill`), `always`. " +
+	"Names are the calendar's own, as `what: calendar` spells them; a name the calendar doesn't have keeps the rule off. " +
+	"Effects, by `kind`: `only` (it can be made only then), `cannot`, `edge`, `bane`, `points` (`amount` -10 to 10), `extra` (`amount` 1 to 3 more rolls), `fine`, `becomes` (`item`), `mark` (`mark`), `quirk` and `mishap` (`table`, a rolling table), `discover` (`recipe`), `say` (`text`). " +
+	"Optional: `chance` (1 in 2, 3, 4, 6, 10 or 20; leave it out for always), `players` (`book`, the default, prints it in the recipe book with an optional `bookLine`; `whenItHappens` shows it on the bench when it fires; `secret` is the Director's alone). " +
+	"A rule you write arrives as a draft that changes nothing until the Director approves it in Crafting; a rule sent back exactly as `what: crafting` printed it stays as it is, approved or not, with its look. A rule left out of the list is removed."
 
 // ---- recipe ----
 
@@ -27,10 +38,11 @@ func (RecipeKind) Doc() string {
 		"`materials` (a list, one line each: `2 Troll tooth` for an item, `1 any herb` for any item of a kind), " +
 		"`method` (the steps a hero plays at the bench: `steady`, a brew that ends on the heat, or `volatile`, one that ends on a timing bar; it adds an `any` line for a step that has no material to use), " +
 		"`goal` (the project's points, required on create), `characteristic` (what the project roll adds; `what: crafting` lists the system's), `prerequisite` and `source` (the system's words for what the item needs and where its knowledge comes from), " +
-		"`cost` (coins on top of the materials, like `25 gp`; a hero who keeps Wealth needs it instead), `who` (`everyone`, the default, or `learned`) and `known_by` (the characters who learned it; naming them makes it `learned`), `rename_to`. " +
-		"A new recipe arrives as a draft players don't see until the Director approves it in Crafting. On update, a key you leave out keeps what is there; `materials` and `known_by` replace the whole list, and without `method` the steps stay as they are, each on the same material. " +
-		"The \"When… then…\" rules, the bench colours and the exact steps are set in Crafting and an update keeps them. Removing a recipe leaves heroes' projects from it going.\n\n" + craftingTies + "\n\n" +
-		"```\n---\nkind: recipe\nname: Troll-blood tonic\nmakes: 1 Troll-blood tonic\nmaterials:\n  - 2 Troll tooth\n  - 1 any liquid\nmethod: steady\ngoal: 30\ncharacteristic: Reason\ncost: 25 gp\nwho: learned\nknown_by: [Mira]\n---\n```"
+		"`cost` (coins on top of the materials, like `25 gp`; a hero who keeps Wealth needs it instead), `who` (`everyone`, the default, or `learned`) and `known_by` (the characters who learned it; naming them makes it `learned`), `rename_to`, " +
+		"and `rules`, the recipe's \"When… then…\" rules (below). " +
+		"A new recipe arrives as a draft players don't see until the Director approves it in Crafting. On update, a key you leave out keeps what is there; `materials`, `known_by` and `rules` replace the whole list, and without `method` the steps stay as they are, each on the same material. " +
+		"The bench colours, each moment's look and the exact steps are set in Crafting and an update keeps them. Removing a recipe leaves heroes' projects from it going.\n\n" + craftingRulesDoc + "\n\n" + craftingTies + "\n\n" +
+		"```\n---\nkind: recipe\nname: Troll-blood tonic\nmakes: 1 Troll-blood tonic\nmaterials:\n  - 2 Troll tooth\n  - 1 any liquid\nmethod: steady\ngoal: 30\ncharacteristic: Reason\ncost: 25 gp\nwho: learned\nknown_by: [Mira]\nrules:\n  - {when: [{kind: moon, moon: The Lantern, phase: full}], then: {kind: edge}, players: book, bookLine: Brewed under a full Lantern}\n  - {when: [{kind: weather, weather: Storm}], then: {kind: cannot}, players: whenItHappens}\n---\n```"
 }
 
 // input reads the block as a whole recipe: the stored one with the written
@@ -136,6 +148,13 @@ func (k RecipeKind) input(c *Crafting, r Record, cur *CraftRecipe) (CraftRecipeI
 			return in, nil, badRequestf("who: %q is everyone or learned", w)
 		}
 	}
+	if r.Has("rules") {
+		raw, err := rulesJSON(r)
+		if err != nil {
+			return in, nil, err
+		}
+		in.Rules = raw
+	}
 	if r.Has("known_by") {
 		in.Known = nil
 		for _, raw := range r.List("known_by") {
@@ -150,6 +169,23 @@ func (k RecipeKind) input(c *Crafting, r Record, cur *CraftRecipe) (CraftRecipeI
 		}
 	}
 	return in, pending, nil
+}
+
+// rulesJSON is the block's `rules` list as the JSON the crafting service
+// reads; `none` or an empty list clears every rule.
+func rulesJSON(r Record) (json.RawMessage, error) {
+	if isNone(r.Str("rules")) {
+		return json.RawMessage("[]"), nil
+	}
+	list := r.List("rules")
+	if list == nil {
+		return nil, badRequestf("rules: write a list, one rule each (`- {when: [...], then: {...}}`)")
+	}
+	raw, err := json.Marshal(list)
+	if err != nil {
+		return nil, badRequestf("rules: write each rule as `when` and `then`")
+	}
+	return raw, nil
 }
 
 func choiceKeys(list []CraftChoice) string {
@@ -207,6 +243,25 @@ func recipeWords(c *Crafting, in CraftRecipeInput, pending []string) string {
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, "; ")
+}
+
+// rulesWords says what a rules list does: "2 rules kept, 1 new rule waiting
+// for your approval in Crafting, 1 rule removed".
+func rulesWords(rc CraftRulesChange) string {
+	var parts []string
+	if rc.Kept > 0 {
+		parts = append(parts, plural(rc.Kept, "rule", "rules")+" kept unchanged")
+	}
+	if rc.New > 0 {
+		parts = append(parts, plural(rc.New, "new rule", "new rules")+" waiting for your approval in Crafting")
+	}
+	if rc.Gone > 0 {
+		parts = append(parts, plural(rc.Gone, "rule", "rules")+" removed")
+	}
+	if len(parts) == 0 {
+		return "no rules"
+	}
+	return strings.Join(parts, ", ")
 }
 
 // joinAnd lists words as people write them: "a, b and c".
@@ -282,6 +337,17 @@ func (k RecipeKind) plan(ctx context.Context, campaignID string, a Actor, r Reco
 		}
 	}
 	p.Summary = recipeWords(c, in, pending)
+	if in.Rules != nil {
+		id := ""
+		if cur != nil {
+			id = cur.ID
+		}
+		rc, err := k.Svc.RulesChange(ctx, campaignID, id, a, in.Rules)
+		if err != nil {
+			return Plan{Error: planError(err)}, cur, in, nil
+		}
+		p.Summary += "; " + rulesWords(rc)
+	}
 	if cur == nil {
 		p.Summary = "a draft players see once you approve it in Crafting: " + p.Summary
 		if in.Method == "" {
@@ -379,6 +445,12 @@ func recipeBlock(c *Crafting, rec CraftRecipe) string {
 			b.WriteString("known_by: [" + strings.Join(who, ", ") + "]\n")
 		}
 	}
+	if len(rec.Rules) > 0 {
+		b.WriteString("rules:\n")
+		for _, rule := range rec.Rules {
+			b.WriteString("  - " + rule + "\n")
+		}
+	}
 	b.WriteString("---\n")
 	return b.String()
 }
@@ -395,8 +467,17 @@ func recipeNotes(c *Crafting, rec CraftRecipe) []string {
 	} else if rec.Method == "" && rec.Steps > 0 {
 		out = append(out, fmt.Sprintf("its %s were set by hand in Crafting, and an update without `method` keeps them", plural(rec.Steps, "step", "steps")))
 	}
-	if rec.Rules > 0 {
-		out = append(out, fmt.Sprintf("%s in Crafting's rules editor, which an update keeps", plural(rec.Rules, "rule", "rules")))
+	drafts := 0
+	for _, rule := range rec.Rules {
+		if strings.Contains(rule, `"draft":true`) {
+			drafts++
+		}
+	}
+	if drafts > 0 {
+		out = append(out, fmt.Sprintf("%s still waiting for a Director's approval in Crafting", plural(drafts, "rule is", "rules are")))
+	}
+	if len(rec.Rules) > 0 {
+		out = append(out, "an update without `rules` keeps the rules; one with `rules` replaces the list, keeping each rule sent back unchanged")
 	}
 	gone := 0
 	for _, m := range rec.Materials {
@@ -805,4 +886,121 @@ func dropsBlock(c *Crafting, d CraftDrops) string {
 	}
 	b.WriteString("---\n")
 	return b.String()
+}
+
+// ---- bench ----
+
+// BenchKind names the campaign's benches, matched by name. Where things
+// stand on a bench is arranged by hand in Crafting's build mode, and its
+// upgrades are set there, so a block never touches either.
+type BenchKind struct{ Svc CraftingAPI }
+
+func (BenchKind) Name() string  { return "bench" }
+func (BenchKind) Label() string { return "Bench" }
+func (BenchKind) Doc() string {
+	return "A crafting bench, matched by `name`: a named place heroes work at, like `Mira's still room`. Keys: `kind_of_bench` (`what: crafting` lists the kinds; left out, a new bench is the first kind), `rename_to`. " +
+		"A recipe's rule can name a bench (`when: [{kind: bench, bench: Mira's still room}]`). Where the tools stand and the bench's upgrades are arranged in Crafting and an update keeps them. Benches are removed in Crafting, not by a block.\n\n" +
+		"```\n---\nkind: bench\nname: Mira's still room\nkind_of_bench: apothecary\n---\n```"
+}
+
+// Title names the review row: "Bench Mira's still room".
+func (BenchKind) Title(r Record) string { return "Bench " + strings.TrimSpace(r.Name) }
+
+func (k BenchKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
+	p, _ := k.plan(ctx, campaignID, a, r)
+	return p
+}
+
+func (k BenchKind) plan(ctx context.Context, campaignID string, a Actor, r Record) (Plan, CraftBench) {
+	if e := directorsOnly(a, "benches"); e != "" {
+		return Plan{Error: e}, CraftBench{}
+	}
+	name := strings.TrimSpace(r.Name)
+	if name == "" {
+		return Plan{Error: "a bench needs `name`"}, CraftBench{}
+	}
+	if r.Action == ActionDelete {
+		return Plan{Error: "benches are removed in Crafting, on the Benches tab, not by a block"}, CraftBench{}
+	}
+	c, err := k.Svc.Read(ctx, campaignID, a)
+	if err != nil {
+		return Plan{Error: planError(err)}, CraftBench{}
+	}
+	var cur *CraftBench
+	for i := range c.Benches {
+		if sameName(c.Benches[i].Name, name) {
+			cur = &c.Benches[i]
+		}
+	}
+	switch {
+	case r.Action == ActionCreate && cur != nil:
+		return Plan{Error: "there is already a bench called " + quote(cur.Name) + "; use action: update"}, CraftBench{}
+	case r.Action != ActionCreate && cur == nil:
+		return Plan{Error: "there is no bench called " + quote(name)}, CraftBench{}
+	}
+	in := CraftBench{Name: name}
+	if cur != nil {
+		in = *cur
+	}
+	if r.Action == ActionUpdate && r.Has("rename_to") {
+		in.Name = strings.TrimSpace(r.Str("rename_to"))
+		if in.Name == "" {
+			return Plan{Error: "rename_to: write the bench's new name"}, CraftBench{}
+		}
+		for _, b := range c.Benches {
+			if b.ID != in.ID && sameName(b.Name, in.Name) {
+				return Plan{Error: "there is already a bench called " + quote(b.Name)}, CraftBench{}
+			}
+		}
+	}
+	// `kind` is the block's own key, so the bench's kind is `kind_of_bench`
+	// (`bench_kind` reads the same).
+	want := r.Str("kind_of_bench")
+	if want == "" {
+		want = r.Str("bench_kind")
+	}
+	switch {
+	case want != "":
+		ch, ok := choice(c.BenchKinds, want)
+		if !ok {
+			return Plan{Error: fmt.Sprintf("kind_of_bench: %q is not a kind of bench; the kinds are %s", want, choiceKeys(c.BenchKinds))}, CraftBench{}
+		}
+		in.Kind, in.KindLabel = ch.Key, ch.Label
+	case in.Kind == "" && len(c.BenchKinds) > 0:
+		in.Kind, in.KindLabel = c.BenchKinds[0].Key, c.BenchKinds[0].Label
+	case in.Kind == "":
+		return Plan{Error: "this server has no kinds of bench to make"}, CraftBench{}
+	}
+	what := quote(in.Name) + ", " + strings.ToLower(in.KindLabel)
+	switch {
+	case cur == nil:
+		return Plan{Summary: "a new bench: " + what + "; arrange it in Crafting's build mode"}, in
+	case in.Name != cur.Name:
+		return Plan{Summary: "renamed " + what + "; its arrangement and upgrades stay"}, in
+	}
+	return Plan{Summary: "now " + what + "; its arrangement and upgrades stay"}, in
+}
+
+func (k BenchKind) Apply(ctx context.Context, campaignID string, a Actor, r Record) error {
+	p, in := k.plan(ctx, campaignID, a, r)
+	if p.Error != "" {
+		return apperror.NewBadRequest(p.Error)
+	}
+	return k.Svc.SaveBench(ctx, campaignID, a, in)
+}
+
+// Export lists the benches as blocks, for a Director.
+func (k BenchKind) Export(ctx context.Context, campaignID string, a Actor) (string, error) {
+	if !a.CanAuthorDmOnly() {
+		return "", nil
+	}
+	c, err := k.Svc.Read(ctx, campaignID, a)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	for _, be := range c.Benches {
+		b.WriteString("---\nkind: bench\nname: " + quote(be.Name) + "\nkind_of_bench: " + be.Kind + "\n---\n")
+	}
+	return b.String(), nil
 }

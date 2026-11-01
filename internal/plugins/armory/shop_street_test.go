@@ -145,4 +145,19 @@ func TestShopStreetService(t *testing.T) {
 			t.Fatalf("err = %v, upserts = %d", err, repo.upserts)
 		}
 	})
+
+	t.Run("one shop's front, or the default while it has none", func(t *testing.T) {
+		if f, ok, err := svc.Front(context.Background(), "c1", "s2"); err != nil || !ok || string(f) != string(saved) {
+			t.Fatalf("saved front: %s, %v, %v", f, ok, err)
+		}
+		fresh := NewShopStreetService(&fakeFrontRepo{fronts: map[string]json.RawMessage{}}, fakeShops{shops: map[string]string{"s1": "c1"}}, lister, nil)
+		f, ok, err := fresh.Front(context.Background(), "c1", "s1")
+		var def ShopFront
+		if err != nil || ok || json.Unmarshal(f, &def) != nil || def.Style != DefaultShopFront().Style {
+			t.Fatalf("default front: %s, %v, %v", f, ok, err)
+		}
+		if _, _, err := svc.Front(context.Background(), "c2", "s1"); !isStatus(err, http.StatusNotFound) {
+			t.Fatalf("a shop of another campaign: %v", err)
+		}
+	})
 }

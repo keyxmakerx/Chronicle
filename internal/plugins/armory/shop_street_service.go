@@ -53,6 +53,10 @@ type ShopStreetService interface {
 	// SaveFront validates raw and stores it as the shop's storefront. Who may
 	// save is decided by the route (Owner).
 	SaveFront(ctx context.Context, campaignID, shopEntityID, userID string, raw []byte) (json.RawMessage, error)
+	// Front is one shop's storefront, or DefaultShopFront with saved false
+	// while it has none. A page that is not a shop of the campaign is
+	// NotFound. Callers check who may read it, as the AI connection does.
+	Front(ctx context.Context, campaignID, shopEntityID string) (front json.RawMessage, saved bool, err error)
 }
 
 type shopStreetService struct {
@@ -99,6 +103,24 @@ func (s *shopStreetService) Street(ctx context.Context, campaignID string, role 
 		v.Shops = append(v.Shops, StreetFront{StreetShop: sh, Front: f, Saved: ok})
 	}
 	return v, nil
+}
+
+func (s *shopStreetService) Front(ctx context.Context, campaignID, shopEntityID string) (json.RawMessage, bool, error) {
+	if err := requireShopInCampaign(ctx, s.shops, campaignID, shopEntityID); err != nil {
+		return nil, false, err
+	}
+	f, err := s.repo.Get(ctx, campaignID, shopEntityID)
+	if err != nil {
+		return nil, false, err
+	}
+	if f != nil {
+		return f, true, nil
+	}
+	def, err := json.Marshal(DefaultShopFront())
+	if err != nil {
+		return nil, false, apperror.NewInternal(err)
+	}
+	return def, false, nil
 }
 
 func (s *shopStreetService) SaveFront(ctx context.Context, campaignID, shopEntityID, userID string, raw []byte) (json.RawMessage, error) {

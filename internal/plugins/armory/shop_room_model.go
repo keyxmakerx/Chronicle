@@ -42,6 +42,12 @@ type ShopRoomLayout struct {
 	// KeeperSpot is where the paper look's keeper stands behind the counter:
 	// "left", "middle" or "right". Empty is the middle, as before there was a choice.
 	KeeperSpot string `json:"keeperSpot,omitempty"`
+	// Furnish asks the widget to lay out the furniture when the room opens,
+	// because something other than Arrange changed what the room is (the AI
+	// connection): "room" rebuilds it around pieces moved by hand, as
+	// rerolling the room does, and "mood" swaps the mood's pieces only. The
+	// widget never sends it, so the owner's next save in Arrange clears it.
+	Furnish string `json:"furnish,omitempty"`
 }
 
 // ShopRoomEffects is the room's atmosphere. The int fields are percentages of

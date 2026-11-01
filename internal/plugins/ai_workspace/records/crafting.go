@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -29,7 +30,16 @@ type CraftingAPI interface {
 	// SaveDrops checks a page's drop list and, unless check, saves it.
 	SaveDrops(ctx context.Context, campaignID, pageID string, a Actor, in CraftDropsInput, check bool) error
 	DeleteDrops(ctx context.Context, campaignID, pageID string, a Actor) error
+	// RulesChange reads a whole list of "When… then…" rules against the
+	// recipe's stored ones (recipeID "" for a new recipe) without saving:
+	// how many it keeps, adds as drafts and drops, or why one can't be read.
+	RulesChange(ctx context.Context, campaignID, recipeID string, a Actor, rules json.RawMessage) (CraftRulesChange, error)
+	// SaveBench makes a bench (ID "") or renames it and changes its kind.
+	SaveBench(ctx context.Context, campaignID string, a Actor, in CraftBench) error
 }
+
+// CraftRulesChange is what a list of rules does to a recipe's.
+type CraftRulesChange struct{ Kept, New, Gone int }
 
 // Crafting is what the crafting lookup prints and the crafting kinds check
 // against, with every id the Actor may see named.
@@ -66,6 +76,8 @@ type Crafting struct {
 	Tray     []CraftSpoil
 	Projects []CraftProject
 	Benches  []CraftBench
+	// BenchKinds are the kinds of bench the app can draw.
+	BenchKinds []CraftChoice
 }
 
 // CraftChoice is one entry of a fixed list: a key and its words.
@@ -105,8 +117,9 @@ type CraftRecipe struct {
 	Method   string
 	ByHand   bool
 	Steps    int
-	// Rules counts the editor's "When… then…" rules, which an AI keeps.
-	Rules                      int
+	// Rules are the recipe's "When… then…" rules, each as the JSON the
+	// rules editor shows as "What the AI writes".
+	Rules                      []string
 	Materials                  []CraftMaterial
 	ResultID                   string
 	ResultQty                  int
@@ -132,6 +145,8 @@ type CraftRecipeInput struct {
 	Currency                   string
 	Who                        string
 	Known                      []string
+	// Rules, when set, is the whole list of rules as JSON; nil keeps them.
+	Rules json.RawMessage
 }
 
 // CraftDropLine is one line of a drop list: taken as it is (Qty), or
@@ -180,8 +195,9 @@ type CraftProject struct {
 	Points, Goal, Rolls              int
 }
 
-// CraftBench is a bench and the kind of bench it is.
-type CraftBench struct{ Name, Kind string }
+// CraftBench is a bench and the kind of bench it is (its key in Kind, its
+// words in KindLabel).
+type CraftBench struct{ ID, Name, Kind, KindLabel string }
 
 // CraftBookPage is a recipe as a player reads it in their recipe book.
 type CraftBookPage struct {
