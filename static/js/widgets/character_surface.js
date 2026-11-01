@@ -19,13 +19,7 @@
   if (typeof window === 'undefined' || !window.Chronicle || !Chronicle.surface) return;
   var surface = Chronicle.surface;
 
-  function esc(v) {
-    var s = (v == null) ? '' : String(v);
-    return Chronicle.escapeHtml ? Chronicle.escapeHtml(s)
-      : s.replace(/[&<>"']/g, function (c) {
-          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-        });
-  }
+  function esc(v) { return Chronicle.escapeHtml(v); }
 
   // Identity: portrait + type. The entity name rides the box title bar, so the
   // body shows the portrait and type only (no duplicate name). When the viewer

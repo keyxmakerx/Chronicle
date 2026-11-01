@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
+import { escapeHtml } from './_escape.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(path.join(here, '..', '..', 'static', 'js', 'widgets', 'calendar_view.js'), 'utf8');
@@ -30,7 +31,7 @@ function load(o = {}) {
     // A plain function, so `new Intl.DateTimeFormat(...)` still works.
     Intl: o.zone ? { DateTimeFormat: function (loc, opts) { return new RealDTF(loc, { timeZone: o.zone, ...(opts || {}) }); } } : Intl,
     window: { location: { search: o.search || '' } },
-    Chronicle: {
+    Chronicle: { escapeHtml,
       gmTerm: () => 'GM',
       register(name, def) { defs[name] = def; },
       apiFetch(url, opts) {

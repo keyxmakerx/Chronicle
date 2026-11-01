@@ -9,9 +9,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { escapeHtml } from './_escape.mjs';
 
 const src = readFileSync(new URL('../../static/js/widgets/calendar_view.js', import.meta.url), 'utf8');
-const sandbox = { module: { exports: {} }, Chronicle: { register: function () {} }, console };
+const sandbox = { module: { exports: {} }, Chronicle: { escapeHtml, register: function () {} }, console };
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox);
 const iconHTML = sandbox.Chronicle.calendarIcon;

@@ -59,11 +59,7 @@
     setTimeout(function () { t.remove(); }, 3200);
   }
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
 
   function reduced() {
     return matchMedia('(prefers-reduced-motion: reduce)').matches ||

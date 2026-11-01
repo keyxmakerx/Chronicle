@@ -142,6 +142,10 @@ jobs:
         # may only shrink. Needs no git history; self-tests on every run.
         run: ./tools/check-widget-mounts.sh
 
+      - name: Escape helpers guard
+        # Scripts escape HTML through Chronicle.escapeHtml, not their own copies.
+        run: ./tools/check-escape-helpers.sh
+
       - name: Customize surface discipline guard
         # Fixed-file-list check on the Customize -> Appearance surface: no
         # setTimeout-driven page reload, no JS-constructed data-mode/file-

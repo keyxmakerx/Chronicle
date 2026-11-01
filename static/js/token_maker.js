@@ -128,9 +128,7 @@
   function clock() { return window.MotionRest ? window.MotionRest.now() : performance.now() / 1000; }
   function resting() { return !!(window.MotionRest && window.MotionRest.still()); }
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function design(id) {
     for (var i = 0; i < F.designs.length; i++) if (F.designs[i].id === id) return F.designs[i];
     return F.designs[F.designs.length - 1];

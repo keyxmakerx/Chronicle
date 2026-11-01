@@ -16,7 +16,7 @@
 var uidN=0;
 function hx(c){c=c.replace('#','');return[parseInt(c.slice(0,2),16),parseInt(c.slice(2,4),16),parseInt(c.slice(4,6),16)]}
 function mix(a,b,t){var A=hx(a),B=hx(b);return'#'+A.map(function(v,i){var c=Math.round(v+(B[i]-v)*t);return(c<16?'0':'')+c.toString(16)}).join('')}
-function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function esc(s) { return Chronicle.escapeHtml(s); }
 var WARE={
  bottle:function(x,y){return '<rect x="'+(x-3)+'" y="'+(y-22)+'" width="6" height="8" rx="1"/><path d="M'+(x-9)+' '+(y-10)+'q9 -6 18 0v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3z"/>'},
  sword:function(x,y){return '<rect x="'+(x-1.5)+'" y="'+(y-32)+'" width="3" height="26"/><rect x="'+(x-8)+'" y="'+(y-7)+'" width="16" height="3" rx="1"/><rect x="'+(x-1.8)+'" y="'+(y-4)+'" width="3.6" height="8"/>'},

@@ -17,11 +17,7 @@
 
   var EYE = '<i class="fa-solid fa-eye-slash" aria-hidden="true"></i>';
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function hexOr(c, d) { return /^#[0-9a-f]{6}$/i.test(c || '') ? c : /^#[0-9a-f]{3}$/i.test(c || '') ? '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3] : d; }
   function grad(e) { var a = hexOr(e.color, '#888888'); return 'linear-gradient(90deg,' + a + ',' + hexOr(e.color_2, a) + ')'; }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }

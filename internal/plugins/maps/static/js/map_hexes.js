@@ -585,11 +585,7 @@
     return { c0: c0, c1: c1, r0: r0, r1: r1 };
   }
 
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {

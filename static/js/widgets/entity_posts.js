@@ -419,9 +419,7 @@
         return null;
       }
 
-      function esc(s) {
-        return Chronicle.escapeHtml ? Chronicle.escapeHtml(s || '') : (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      }
+      function esc(s) { return Chronicle.escapeHtml(s); }
 
       // --- Init ---
       loadPosts();

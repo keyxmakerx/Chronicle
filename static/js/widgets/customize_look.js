@@ -80,7 +80,7 @@
     /* ---------- Helpers ---------- */
     var $ = function(s, r){ return (r || ROOT).querySelector(s); };
     var $$ = function(s, r){ return Array.prototype.slice.call((r || ROOT).querySelectorAll(s)); };
-    function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); }
+    function esc(s) { return Chronicle.escapeHtml(s); }
     function IC(id, cls){ return '<svg class="i' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#cz-' + id + '"/></svg>'; }
     function clone(o){ return JSON.parse(JSON.stringify(o)); }
     function same(a, b){ return JSON.stringify(a) === JSON.stringify(b); }

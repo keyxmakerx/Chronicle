@@ -44,13 +44,7 @@
   };
 
   // esc — coerce + HTML-escape (Chronicle.escapeHtml expects a string).
-  function esc(v) {
-    var s = (v == null) ? '' : String(v);
-    return (window.Chronicle && Chronicle.escapeHtml) ? Chronicle.escapeHtml(s)
-      : s.replace(/[&<>"']/g, function (c) {
-          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-        });
-  }
+  function esc(v) { return Chronicle.escapeHtml(v); }
 
   function signed(n) { return (n >= 0 ? '+' : '') + n; }
 

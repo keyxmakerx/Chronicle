@@ -42,11 +42,7 @@
     return 'full';
   }
 
-  function escHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  function escHtml(s) { return Chronicle.escapeHtml(s); }
   function esc(s) { return Chronicle.escapeHtml ? Chronicle.escapeHtml(s == null ? '' : String(s)) : escHtml(s); }
 
   function initials(name) {
