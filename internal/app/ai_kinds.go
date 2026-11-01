@@ -66,6 +66,7 @@ type aiDeps struct {
 	ItemLooks       records.ItemLooksAPI             // nil while the item looks table is degraded
 	Crafting        records.CraftingAPI              // nil while crafting is degraded
 	ShopLooks       records.ShopLooksAPI             // nil while the armory is degraded
+	Carried         records.CarriedAPI               // the Armory's give and take for carried items; nil writes relations
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
@@ -224,7 +225,7 @@ func init() {
 	addAIKinds(70, func(d *aiDeps) []records.Kind {
 		kinds := []records.Kind{
 			records.ShopStockKind(d.Entities, d.Relations),
-			records.CarriedItemKind(d.Entities, d.Relations),
+			records.CarriedItemKind(d.Entities, d.Relations, d.Carried),
 			records.PinKind{Svc: aiMapsAdapter{d.Maps}, Entities: d.Entities},
 			records.MapSketchKind{Svc: aiMapSketchAdapter{maps: d.Maps, drawings: d.Drawings}, Pins: aiMapsAdapter{d.Maps}},
 			records.NoteKind{Svc: d.Notes, Entities: d.Entities, Access: d.NoteAccess},

@@ -6598,6 +6598,7 @@ func (a *App) RegisterRoutes() {
 		ItemLooks:       aiItemLooks,
 		Crafting:        aiCrafting,
 		ShopLooks:       aiShopLooks,
+		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

@@ -435,8 +435,8 @@ func TestLinkKinds_ReviewWording(t *testing.T) {
 	}{
 		{ShopStockKind(nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope", "price": 1, "quantity": 5}, "Rope at The Rusty Anchor", "1 gp · 5 in stock"},
 		{ShopStockKind(nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope"}, "Rope at The Rusty Anchor", "no price or quantity given"},
-		{CarriedItemKind(nil, nil), map[string]any{"character": "Ser Aldric", "item": "Potion", "quantity": 2}, "Potion for Ser Aldric", "2 carried"},
-		{CarriedItemKind(nil, nil), map[string]any{"character": "Ser Aldric", "item": "Potion"}, "Potion for Ser Aldric", "1 carried"},
+		{CarriedItemKind(nil, nil, nil), map[string]any{"character": "Ser Aldric", "item": "Potion", "quantity": 2}, "Potion for Ser Aldric", "2 carried"},
+		{CarriedItemKind(nil, nil, nil), map[string]any{"character": "Ser Aldric", "item": "Potion"}, "Potion for Ser Aldric", "1 carried"},
 	}
 	for _, c := range cases {
 		lk := c.kind.(*linkKind)
