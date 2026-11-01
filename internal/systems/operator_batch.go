@@ -151,7 +151,7 @@ func buildFunctionsSpec() FunctionsSpec {
 		// reach for this tool, so it must name BOTH axes: a marker found in
 		// the build proves it SHIPPED, never that it RENDERS.
 		Purpose:  "Read-only Chronicle operator diagnostics, on two axes. WHICH CODE IS RUNNING: what the server is ACTUALLY serving (build identity, file hashes, install-vs-loaded state) — for deploy/serve mismatches. WHY THIS CAMPAIGN LOOKS LIKE THIS: the campaign.* functions read one campaign's own routes and placed blocks. A marker found in the build proves it SHIPPED, never that it RENDERS — for the second question use campaign.config / campaign.surfaces.",
-		HowToUse: "Compose ONE request_format object naming the functions you want, then tell the operator to paste it into Admin ▸ Diagnostics ▸ AI Workspace. It is reviewed and approved by a human, executed read-only and secret-redacted, and the compact result pasted back to you. Heavy/full-dump functions require \"full_dump\": true — request that only when a targeted function won't do.",
+		HowToUse: "Compose ONE request_format object naming the functions you want, then tell the operator to paste it into Site admin ▸ Health ▸ AI helper ▸ \"Paste an AI's request\". It is reviewed and approved by a human, executed read-only and secret-redacted, and the compact result pasted back to you. Heavy/full-dump functions require \"full_dump\": true — request that only when a targeted function won't do.",
 		Request: BatchRequest{
 			V:        batchSpecVersion,
 			Note:     "what you're investigating (optional)",

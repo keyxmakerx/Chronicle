@@ -6,8 +6,9 @@
 // Save uploads a PNG and writes the page's token field; closing with unsaved
 // work asks first; Calm and Off open it without growing and hold frames still;
 // the page's Attributes form keeps the new token; nothing breaks while the
-// frames are still loading; and the sprite is still one tile per design, in
-// the engine's order.
+// frames are still loading; the sprite is still one tile per design, in the
+// engine's order; and a painted checkerboard behind the picture is offered
+// for removal once, and can be cleared and touched up by hand.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -27,22 +28,34 @@ const MEDIA_ID = '0b7d5c1e-3f0a-4c55-9a4e-2f1f7c9d8e21';
 const CSS = ':root{--dur-slide:360ms;--ease-slide:ease;--dur-standard:200ms;--dur-micro:120ms;--ease-out:ease}' +
   read('static/css/input.css').split('\n').filter((l) => l.includes('ask-slip')).join('\n');
 
-const HTML = (motion) => `<!doctype html><html${motion ? ` data-motion="${motion}" data-view-motion="calm"` : ''}><head><meta charset="utf-8">
+// The smart cutout's files, when a test installs a stand-in for it.
+const SMART = ' data-smart-worker="/static/test/worker.js" data-smart-ort="/static/test/ort.js" data-smart-mjs="/static/test/ort.mjs"' +
+  ' data-smart-wasm="/static/test/ort.wasm" data-smart-model="/static/test/model.onnx"';
+const HTML = (motion, smart) => `<!doctype html><html${motion ? ` data-motion="${motion}" data-view-motion="calm"` : ''}><head><meta charset="utf-8">
 <style>${CSS}html,body{margin:0}.pic{position:relative;width:320px;height:224px;margin:40px}</style></head><body>
 <div class="pic"><img src="/media/pic.svg" alt="" style="width:100%;height:100%;object-fit:cover">
 <button type="button" id="chip" data-token-maker data-campaign-id="c1" data-entity-id="e1" data-name="Brother Ansel" data-art="/media/pic.svg">Make token</button></div>
-<template id="chronicle-token-maker-src" data-src="/static/js/token_maker.js?v=t" data-engine="/static/js/token_frames.js?v=t" data-css="/static/css/token_maker.css?v=t" data-previews="/static/img/token_frames.webp?v=t"></template>
+<template id="chronicle-token-maker-src" data-src="/static/js/token_maker.js?v=t" data-engine="/static/js/token_frames.js?v=t" data-css="/static/css/token_maker.css?v=t" data-previews="/static/img/token_frames.webp?v=t" data-cutout="/static/js/token_cutout.js?v=t"${smart ? SMART : ''}></template>
 <script src="/static/js/theme.js"></script><script src="/static/js/motion_rest.js"></script>
 <script src="/static/vendor/htmx.min.js" defer></script><script src="/static/js/boot.js" defer></script>
 </body></html>`;
 
-// A painted figure the maker can frame: same origin, so the canvas stays readable.
-const PIC = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#6d8fb3"/>' +
+// A painted figure the maker can frame: same origin, so the canvas stays
+// readable. Its backdrop is a gradient, as a painted scene's is, so nothing
+// offers to remove it.
+const PIC = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><defs><linearGradient id="g" x2="1" y2="1">' +
+  '<stop offset="0" stop-color="#2d4b6e"/><stop offset=".5" stop-color="#6d8fb3"/><stop offset="1" stop-color="#b9763f"/></linearGradient></defs>' +
+  '<rect width="600" height="800" fill="url(#g)"/>' +
+  '<circle cx="300" cy="260" r="120" fill="#e8c39e"/><rect x="150" y="380" width="300" height="420" rx="60" fill="#8a2f2f"/></svg>';
+// The same figure on the checkerboard an art tool paints for "no background".
+const CHECKER = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><defs><pattern id="c" width="32" height="32" patternUnits="userSpaceOnUse">' +
+  '<rect width="32" height="32" fill="#fff"/><rect width="16" height="16" fill="#d0d0d0"/><rect x="16" y="16" width="16" height="16" fill="#d0d0d0"/></pattern></defs>' +
+  '<rect width="600" height="800" fill="url(#c)"/>' +
   '<circle cx="300" cy="260" r="120" fill="#e8c39e"/><rect x="150" y="380" width="300" height="420" rx="60" fill="#8a2f2f"/></svg>';
 
 const TYPES = { '.js': 'application/javascript', '.css': 'text/css', '.webp': 'image/webp' };
 
-async function page(t, motion, viewport = { width: 1280, height: 860 }) {
+async function page(t, motion, viewport = { width: 1280, height: 860 }, smart = null) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport });
@@ -53,8 +66,10 @@ async function page(t, motion, viewport = { width: 1280, height: 860 }) {
   await p.route('**/*', async (route) => {
     const req = route.request(), u = new URL(req.url());
     if (u.pathname === '/static/js/token_frames.js' && p.gate) await p.gate;
-    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: HTML(motion) });
+    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: HTML(motion, !!smart) });
+    if (smart && u.pathname.startsWith('/static/test/')) return smart(route, u.pathname);
     if (u.pathname === '/media/pic.svg') return route.fulfill({ contentType: 'image/svg+xml', body: PIC });
+    if (u.pathname === '/media/checker.svg') return route.fulfill({ contentType: 'image/svg+xml', body: CHECKER });
     if (u.pathname === '/media/upload' && req.method() === 'POST') {
       p.uploads.push({ type: req.headers()['content-type'] || '', body: req.postDataBuffer() });
       return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: MEDIA_ID, url: '/media/' + MEDIA_ID }) });
@@ -83,11 +98,11 @@ async function openMaker(p) {
 
 test('nothing of the maker loads with the page; the first open fetches it all', { skip }, async (t) => {
   const p = await page(t, 'off');
-  const maker = (f) => /token_(maker|frames)/.test(f);
+  const maker = (f) => /token_(maker|frames|cutout)/.test(f);
   assert.deepEqual(p.fetched.filter(maker), []);
   await openMaker(p);
-  await p.waitForFunction(() => performance.getEntriesByType('resource').some((r) => r.name.includes('token_frames.webp')));
-  assert.deepEqual(p.fetched.filter(maker).sort(), ['/static/css/token_maker.css', '/static/img/token_frames.webp', '/static/js/token_frames.js', '/static/js/token_maker.js']);
+  await p.waitForFunction(() => performance.getEntriesByType('resource').some((r) => r.name.includes('token_frames.webp')) && window.ChronicleTokenCutout);
+  assert.deepEqual(p.fetched.filter(maker).sort(), ['/static/css/token_maker.css', '/static/img/token_frames.webp', '/static/js/token_cutout.js', '/static/js/token_frames.js', '/static/js/token_maker.js']);
   const head = await p.evaluate(() => ({ title: document.getElementById('tkm-title').textContent, dialog: document.querySelector('.tkm').getAttribute('role'), modal: document.querySelector('.tkm').getAttribute('aria-modal') }));
   assert.deepEqual(head, { title: 'Token for Brother Ansel', dialog: 'dialog', modal: 'true' });
 });
@@ -297,4 +312,180 @@ test('the previews sprite has one tile per design, in the engine\'s order', { sk
   assert.equal(out.tile, 128);
   assert.deepEqual(out.size, out.want, 'run node tools/token_frames_previews.mjs');
   assert.deepEqual(out.nearest, out.ids, 'run node tools/token_frames_previews.mjs');
+});
+
+/* ---------- The background remover ---------- */
+
+async function openOn(p, art) {
+  await p.evaluate((a) => { document.getElementById('chip').dataset.art = a; }, art);
+  await openMaker(p);
+  await p.waitForSelector('.tkm [data-tkm-wand]:not([hidden])', { timeout: 30000 });
+}
+async function saveToken(p) {
+  await p.click('[data-tkm-save]');
+  await p.waitForFunction(() => !document.querySelector('.tkm'), null, { timeout: 30000 });
+  const body = p.uploads[p.uploads.length - 1].body, start = body.indexOf(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  return body.subarray(start, body.indexOf(Buffer.from('IEND')) + 8);
+}
+// The saved token's alpha at each point.
+function alphas(p, png, pts) {
+  return p.evaluate(async ([b64, pts]) => {
+    const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode();
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    return pts.map(([x, y]) => g.getImageData(x, y, 1, 1).data[3]);
+  }, [png.toString('base64'), pts]);
+}
+// Left of the figure, inside the plain circle, and on the figure.
+const BACKDROP = [60, 256], BODY = [256, 440];
+
+test('a painted checkerboard is offered for removal, and the saved token is see-through there', { skip }, async (t) => {
+  const p = await page(t, 'off');
+  await openOn(p, '/media/checker.svg');
+  await p.waitForSelector('.tkm [data-tkm-offer].is-on [data-tkm-yes]');
+  assert.match(await p.textContent('[data-tkm-offer-t]'), /painted checkerboard behind it/);
+  assert.equal(await p.evaluate(() => Chronicle.isDirty()), false, 'the offer alone is not an edit');
+  await p.click('[data-tkm-yes]');
+  await p.waitForSelector('[data-tkm-did]:not([hidden]) [data-tkm-undo]');
+  assert.equal(await p.textContent('[data-tkm-offer-t]'), 'Background removed.');
+  assert.ok(await p.$('[data-tkm-wand].is-on'));
+  await p.click('.tkm-fr[data-v="none"]');
+  const png = await saveToken(p);
+  assert.deepEqual(await alphas(p, png, [BACKDROP, BODY]), [0, 255]);
+  // The answer is kept: opening the same picture clears it again and says so.
+  await openOn(p, '/media/checker.svg');
+  await p.waitForSelector('[data-tkm-offer].is-on [data-tkm-undo]');
+  assert.equal(await p.textContent('[data-tkm-offer-t]'), 'Background removed, as you chose last time.');
+  await p.click('[data-tkm-undo]');
+  await p.waitForFunction(() => !document.querySelector('[data-tkm-wand].is-on') && document.querySelector('[data-tkm-offer]').hidden);
+  await p.click('.tkm-fr[data-v="none"]');
+  assert.deepEqual(await alphas(p, await saveToken(p), [BACKDROP, BODY]), [255, 255], 'Undo puts the backdrop back');
+});
+
+test('Keep it is asked once, and a painted scene is not offered at all', { skip }, async (t) => {
+  const p = await page(t, 'off');
+  await openOn(p, '/media/pic.svg');
+  await p.waitForTimeout(200);
+  assert.equal(await p.$eval('[data-tkm-offer]', (n) => n.hidden), true, 'a gradient backdrop is a scene');
+  await p.keyboard.press('Escape');
+  await p.waitForFunction(() => !document.querySelector('.tkm'));
+  await openOn(p, '/media/checker.svg');
+  await p.click('[data-tkm-offer].is-on [data-tkm-no]');
+  assert.equal(await p.$eval('[data-tkm-offer]', (n) => n.hidden), true);
+  await p.keyboard.press('Escape');
+  await p.waitForFunction(() => !document.querySelector('.tkm'), null, { timeout: 5000 });
+  await openOn(p, '/media/checker.svg');
+  await p.waitForTimeout(200);
+  assert.equal(await p.$eval('[data-tkm-offer]', (n) => n.hidden), true, 'not asked again');
+  // The wand still clears it by hand, at any strength, and puts it back.
+  await p.click('[data-tkm-wand]');
+  await p.waitForSelector('[data-tkm-bgd]:not([hidden])');
+  assert.equal(await p.getAttribute('[data-tkm-wand]', 'aria-expanded'), 'true');
+  assert.equal(await p.$eval('[data-tkm-str] [data-v="strong"]', (b) => b.disabled), true, 'no strength until it is cleared');
+  await p.click('[data-tkm-bgrm]');
+  await p.click('[data-tkm-str] [data-v="strong"]');
+  assert.equal(await p.getAttribute('[data-tkm-str] [data-v="strong"]', 'aria-pressed'), 'true');
+  assert.match(await p.textContent('[data-tkm-bgs]'), /^Cleared the painted checkerboard/);
+  await p.click('[data-tkm-bgback]');
+  assert.equal(await p.$eval('[data-tkm-wand]', (b) => b.classList.contains('is-on')), false);
+});
+
+test('Erase paints the picture away, and Escape closes only the drawer', { skip }, async (t) => {
+  const p = await page(t, 'off');
+  await openOn(p, '/media/pic.svg');
+  await p.click('.tkm-fr[data-v="none"]');
+  await p.click('[data-tkm-wand]');
+  await p.click('[data-tkm-brush] [data-v="erase"]');
+  assert.match(await p.textContent('[data-tkm-hint]'), /^Paint over what should go/);
+  const r = await p.$eval('.tkm-surface', (c) => { const b = c.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; });
+  await p.mouse.move(r.x + r.w * 0.2, r.y + r.h / 2);
+  await p.mouse.down();
+  await p.mouse.move(r.x + r.w * 0.8, r.y + r.h / 2, { steps: 12 });
+  await p.mouse.up();
+  assert.ok(await p.$('[data-tkm-wand].is-on'), 'the brush counts as a change to the picture');
+  await p.keyboard.press('Escape');
+  await p.waitForSelector('[data-tkm-bgd][hidden]', { state: 'attached' });
+  assert.ok(await p.$('.tkm.is-open'), 'the maker is still open');
+  assert.equal(await p.evaluate(() => document.activeElement.matches('[data-tkm-wand]')), true, 'focus goes back to the wand');
+  assert.doesNotMatch(await p.textContent('[data-tkm-hint]'), /Paint over/, 'closing the drawer goes back to moving');
+  const cleared = await p.evaluate(async (b64) => {
+    const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode();
+    const c = document.createElement('canvas'); c.width = c.height = 512;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, 512, 512).data;
+    let n = 0, all = 0;
+    for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) if ((x - 256) ** 2 + (y - 256) ** 2 < 230 * 230) { all++; if (d[(y * 512 + x) * 4 + 3] === 0) n++; }
+    return n / all;
+  }, (await saveToken(p)).toString('base64'));
+  assert.ok(cleared > 0.03 && cleared < 0.5, `a band of the token is see-through (${cleared.toFixed(3)})`);
+});
+
+test('on a phone the wand, its drawer and the offer stay inside the stage', { skip }, async (t) => {
+  const p = await page(t, 'off', { width: 390, height: 800 });
+  await openOn(p, '/media/checker.svg');
+  await p.waitForSelector('[data-tkm-offer].is-on');
+  await p.click('[data-tkm-wand]');
+  const out = await p.evaluate(() => {
+    const s = document.querySelector('.tkm-stage').getBoundingClientRect();
+    const inside = (sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return r.left >= s.left && r.right <= s.right + 0.5 && r.top >= s.top && r.width > 0; };
+    return { wand: inside('[data-tkm-wand]'), drawer: inside('[data-tkm-bgd]'), wide: document.documentElement.scrollWidth > innerWidth };
+  });
+  assert.deepEqual(out, { wand: true, drawer: true, wide: false });
+});
+
+/* ---------- The smart cutout ---------- */
+
+// A stand-in for the model's worker: the real model is fetched by the Docker
+// build, not kept in git. It keeps all but the picture's left 30%, which is
+// enough to see the mask reach the saved token.
+const FAKE_WORKER = `self.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === 'init') { self.postMessage(m.model.byteLength > 0 && m.wasm.byteLength > 0 ? { type: 'ready' } : { type: 'error', message: 'empty' }); return; }
+  const mask = new Uint8Array(1024 * 1024);
+  for (let i = 0; i < mask.length; i++) mask[i] = i % 1024 < 307 ? 0 : 255;
+  self.postMessage({ type: 'mask', mask }, [mask.buffer]);
+};`;
+function smartFiles(opts = {}) {
+  return (route, path) => {
+    if (path === '/static/test/worker.js') return route.fulfill({ contentType: 'application/javascript', body: FAKE_WORKER });
+    if (path === '/static/test/model.onnx') return opts.modelMissing ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ contentType: 'application/octet-stream', body: Buffer.alloc(3 << 20, 1) });
+    if (path === '/static/test/ort.wasm') return route.fulfill({ contentType: 'application/wasm', body: Buffer.alloc(1 << 20, 1) });
+    return route.fulfill({ status: 404, body: '' });
+  };
+}
+
+test('the smart cutout downloads once, cuts the figure out, and the saved token is see-through round it', { skip }, async (t) => {
+  const p = await page(t, 'off', undefined, smartFiles());
+  await openOn(p, '/media/pic.svg');
+  await p.click('[data-tkm-wand]');
+  assert.match(await p.textContent('[data-tkm-smart-n]'), /about 60 MB/, 'it says what it downloads');
+  assert.match(await p.textContent('[data-tkm-bgs]'), /^No plain backdrop was found\. Cut out the figure/);
+  await p.click('[data-tkm-smart-go]');
+  await p.waitForSelector('[data-tkm-smart][hidden]', { state: 'attached', timeout: 30000 });
+  assert.equal(await p.textContent('[data-tkm-bgs]'), 'Cut out by the smart cutout. Erase or Restore to touch up the edge.');
+  assert.ok(await p.$('[data-tkm-wand].is-on'));
+  assert.deepEqual(await p.$$eval('[data-tkm-str] button', (bs) => bs.map((b) => b.getAttribute('aria-pressed'))), ['false', 'false', 'false']);
+  assert.equal(p.fetched.filter((f) => f.startsWith('/static/test/')).length, 0, 'the stand-in files are not from disk');
+  await p.click('.tkm-fr[data-v="none"]');
+  assert.deepEqual(await alphas(p, await saveToken(p), [BACKDROP, [300, 256]]), [0, 255]);
+});
+
+test('a failed download says so and the cutout can be tried again', { skip }, async (t) => {
+  const p = await page(t, 'off', undefined, smartFiles({ modelMissing: true }));
+  await openOn(p, '/media/pic.svg');
+  await p.click('[data-tkm-wand]');
+  await p.click('[data-tkm-smart-go]');
+  await p.waitForSelector('[data-tkm-bgs].is-error');
+  assert.match(await p.textContent('[data-tkm-bgs]'), /could not be downloaded/);
+  assert.equal(await p.$eval('[data-tkm-smart-go]', (b) => b.disabled), false);
+  assert.equal(await p.textContent('[data-tkm-smart-l]'), 'Cut out the figure');
+  assert.equal(await p.$eval('[data-tkm-wand]', (b) => b.classList.contains('is-on')), false, 'the picture is untouched');
+});
+
+test('with no smart cutout installed, the drawer does not offer one', { skip }, async (t) => {
+  const p = await page(t, 'off');
+  await openOn(p, '/media/pic.svg');
+  await p.click('[data-tkm-wand]');
+  assert.equal(await p.$eval('[data-tkm-smart]', (n) => n.hidden), true);
+  assert.match(await p.textContent('[data-tkm-bgs]'), /^No plain backdrop was found\. Clearing takes/);
 });

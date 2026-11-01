@@ -11,6 +11,7 @@ package maps
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -160,24 +161,32 @@ func TestLinks_TreeFiltersPerViewer_Integration(t *testing.T) {
 		t.Errorf("a cross-campaign link read back as %v %q, want none", got.LinkedMapID, got.LinkedMapName)
 	}
 
-	// Deleting a map leaves the pins that opened it as plain pins.
+	// Deleting a map keeps the pins that opened it linked while it waits in
+	// the Trash, so a Restore finds them; the purge leaves them plain pins.
 	if err := svc.DeleteMap(ctx, f.barrow, nil); err != nil {
 		t.Fatal(err)
 	}
-	ownerPins, err := svc.ListMarkers(ctx, f.campaign, f.world, int(permissions.RoleOwner), owner)
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, m := range ownerPins {
-		if m.Name == "To the barrow" {
-			found = true
-			if m.LinkedMapID != nil {
-				t.Errorf("the pin still opens the deleted map %s", *m.LinkedMapID)
+	barrowPin := func() *Marker {
+		t.Helper()
+		ownerPins, err := svc.ListMarkers(ctx, f.campaign, f.world, int(permissions.RoleOwner), owner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range ownerPins {
+			if ownerPins[i].Name == "To the barrow" {
+				return &ownerPins[i]
 			}
 		}
+		t.Fatal("deleting the target map removed the pin that opened it")
+		return nil
 	}
-	if !found {
-		t.Error("deleting the target map removed the pin that opened it")
+	if m := barrowPin(); m.LinkedMapID == nil || *m.LinkedMapID != f.barrow {
+		t.Errorf("the pin lost its link while the map is in the Trash: %v", m.LinkedMapID)
+	}
+	if _, err := svc.PurgeTrashedMaps(ctx, time.Now().UTC().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if m := barrowPin(); m.LinkedMapID != nil {
+		t.Errorf("the pin still opens the purged map %s", *m.LinkedMapID)
 	}
 }

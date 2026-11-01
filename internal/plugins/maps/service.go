@@ -60,8 +60,15 @@ type MapService interface {
 	CreateMap(ctx context.Context, input CreateMapInput) (*Map, error)
 	GetMap(ctx context.Context, id string) (*Map, error)
 	UpdateMap(ctx context.Context, id string, input UpdateMapInput) error
+	// DeleteMap moves a map, with its pins, to the campaign Trash.
 	DeleteMap(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
 	ListMaps(ctx context.Context, campaignID string) ([]Map, error)
+
+	// RestoreMap, ListTrashedMaps and PurgeTrashedMaps are the maps side of
+	// the campaign Trash.
+	RestoreMap(ctx context.Context, campaignID, id string) error
+	ListTrashedMaps(ctx context.Context, campaignID string) ([]TrashedMap, error)
+	PurgeTrashedMaps(ctx context.Context, cutoff time.Time) (int, error)
 	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
 	// Map look. GetCampaignFrame returns the campaign-wide frame (the default
@@ -542,7 +549,9 @@ func (s *mapService) ResolveDisplay(ctx context.Context, m *Map) (ResolvedDispla
 	return ResolveDisplay(m, frame), nil
 }
 
-// DeleteMap removes a map and its markers.
+// DeleteMap moves a map to the campaign Trash. Its pins, drawings and
+// bindings stay as they are, so Restore brings everything back; the purge
+// removes them.
 func (s *mapService) DeleteMap(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
 	m, err := s.repo.GetMap(ctx, id)
 	if err != nil {
@@ -554,19 +563,50 @@ func (s *mapService) DeleteMap(ctx context.Context, id string, expectedUpdatedAt
 	if err := concurrency.Check(m.UpdatedAt, expectedUpdatedAt, "map"); err != nil {
 		return err
 	}
-	if err := s.repo.DeleteMap(ctx, id); err != nil {
-		return fmt.Errorf("delete map: %w", err)
+	if err := s.repo.TrashMap(ctx, m.CampaignID, id, time.Now().UTC()); err != nil {
+		return err
 	}
 	s.InvalidateMapPictures(m.CampaignID)
-	// Widget-binding delete hook: sweep this map's widget_bindings rows.
-	// Best-effort — Resolve's render-time orphan guard
-	// skips and deletes any binding this misses. The
-	// legacy entity.map_id is independently SET-NULLed by the
-	// fk_entities_map_id ON DELETE SET NULL constraint.
-	if s.bindingCleaner != nil {
-		_, _ = s.bindingCleaner.OnInstanceDeleted(ctx, m.CampaignID, WidgetTypeMap, id)
-	}
 	return nil
+}
+
+// RestoreMap takes a map out of the campaign Trash.
+func (s *mapService) RestoreMap(ctx context.Context, campaignID, id string) error {
+	if err := s.repo.RestoreMap(ctx, campaignID, id); err != nil {
+		return err
+	}
+	s.InvalidateMapPictures(campaignID)
+	return nil
+}
+
+// ListTrashedMaps lists the campaign's trashed maps, newest first.
+func (s *mapService) ListTrashedMaps(ctx context.Context, campaignID string) ([]TrashedMap, error) {
+	return s.repo.ListTrashedMaps(ctx, campaignID)
+}
+
+// PurgeTrashedMaps removes for good every map trashed before cutoff. The
+// foreign keys take its pins, drawings, tokens and fog, and set pins that
+// opened it and pages that named it back to none. One map that fails is
+// logged and left for the next run.
+func (s *mapService) PurgeTrashedMaps(ctx context.Context, cutoff time.Time) (int, error) {
+	list, err := s.repo.ListMapsTrashedBefore(ctx, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	purged := 0
+	for _, m := range list {
+		if err := s.repo.DeleteMap(ctx, m.ID); err != nil {
+			slog.Warn("trash purge: could not delete map", slog.String("map_id", m.ID), slog.Any("error", err))
+			continue
+		}
+		purged++
+		// Best-effort: Resolve's render-time orphan guard sweeps any binding
+		// this misses.
+		if s.bindingCleaner != nil {
+			_, _ = s.bindingCleaner.OnInstanceDeleted(ctx, m.CampaignID, WidgetTypeMap, m.ID)
+		}
+	}
+	return purged, nil
 }
 
 // ListMaps returns all maps for a campaign.

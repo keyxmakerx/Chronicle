@@ -44,13 +44,16 @@ type CheckupStore interface {
 // CheckupDeps is what the check-up reads. Registration and EmailReady come
 // from the settings and SMTP services the admin handler already holds.
 type CheckupDeps struct {
-	Store        CheckupStore
-	Backup       CheckupBackup
-	Chronicle    ChronicleVersionChecker // nil: Chronicle's version is not checked
-	Packages     PackageUpdateSource     // nil: game systems are not checked
-	Backups      BackupLister
-	Registration func(ctx context.Context) (string, error)
-	EmailReady   func(ctx context.Context) bool
+	Store     CheckupStore
+	Backup    CheckupBackup
+	Chronicle ChronicleVersionChecker // nil: Chronicle's version is not checked
+	// ChronicleCheckOn is the admin's switch for asking GitHub about
+	// Chronicle's version; nil counts as on.
+	ChronicleCheckOn func(ctx context.Context) bool
+	Packages         PackageUpdateSource // nil: game systems are not checked
+	Backups          BackupLister
+	Registration     func(ctx context.Context) (string, error)
+	EmailReady       func(ctx context.Context) bool
 }
 
 // Site-setting keys. Per-admin keys end in the user's id.
@@ -117,6 +120,12 @@ func (s *CheckupService) View(ctx context.Context, userID string, signedInAt tim
 // read leaves its row out or neutral; the check-up never fails a page.
 func (s *CheckupService) inputs(ctx context.Context, now time.Time) checkupInputs {
 	in := checkupInputs{Now: now, Running: s.Running(), Record: s.LastRecord(ctx), PackageUpdates: -1}
+	if in.Record != nil && in.Record.Chronicle != nil && !s.chronicleCheckOn(ctx) {
+		// A result from before the check was turned off is no longer kept up.
+		rec := *in.Record
+		rec.Chronicle = nil
+		in.Record = &rec
+	}
 	if s.deps.Backups != nil {
 		if bi, err := s.deps.Backups.BackupInfo(ctx); err == nil && bi.ScheduleKnown {
 			in.BackupKnown, in.DailyOn, in.LastRunFailed = true, bi.ScheduleOn, bi.LastRunFailed
@@ -136,6 +145,10 @@ func (s *CheckupService) inputs(ctx context.Context, now time.Time) checkupInput
 		}
 	}
 	return in
+}
+
+func (s *CheckupService) chronicleCheckOn(ctx context.Context) bool {
+	return s.deps.ChronicleCheckOn == nil || s.deps.ChronicleCheckOn(ctx)
 }
 
 // Running reports whether a full check-up is in progress.
@@ -190,7 +203,7 @@ func (s *CheckupService) run(ctx context.Context) (*CheckupRecord, error) {
 		}
 		rec.Backup = &res
 	}
-	if s.deps.Chronicle != nil {
+	if s.deps.Chronicle != nil && s.chronicleCheckOn(ctx) {
 		v := s.deps.Chronicle.CheckChronicle(ctx)
 		rec.Chronicle = &v
 	}
@@ -294,17 +307,22 @@ func (s *CheckupService) saveTime(ctx context.Context, key string, t time.Time) 
 	}
 }
 
-// get reads one setting; unset and unreadable both come back as not found,
-// since a check-up that can't read its own state should stay quiet.
+// get reads one setting; see readSetting.
 func (s *CheckupService) get(ctx context.Context, key string) (string, bool) {
-	if s.deps.Store == nil {
+	return readSetting(ctx, s.deps.Store, key)
+}
+
+// readSetting reads one site setting; unset and unreadable both come back as
+// not found, since a notice that can't read its own state should stay quiet.
+func readSetting(ctx context.Context, store CheckupStore, key string) (string, bool) {
+	if store == nil {
 		return "", false
 	}
-	v, err := s.deps.Store.Get(ctx, key)
+	v, err := store.Get(ctx, key)
 	if err != nil {
 		var ae *apperror.AppError
 		if !errors.As(err, &ae) || ae.Code != http.StatusNotFound {
-			slog.Warn("site check-up: could not read", slog.String("key", key), slog.Any("error", err))
+			slog.Warn("admin setting: could not read", slog.String("key", key), slog.Any("error", err))
 		}
 		return "", false
 	}

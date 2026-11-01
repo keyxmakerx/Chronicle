@@ -342,7 +342,8 @@
       host = btn.closest('[data-move-host]');
       f = host && host.querySelector('[data-move-fold]');
     } else if (btn.hasAttribute('data-share')) {
-      f = btn.closest('li') && btn.closest('li').querySelector('[data-share-fold]');
+      host = btn.closest('[data-move-host]') || btn.closest('li');
+      f = host && host.querySelector('[data-share-fold]');
     } else {
       f = btn.closest('section') && btn.closest('section').querySelector('[data-give-fold]');
     }
@@ -437,6 +438,8 @@
     } else {
       var q = box.querySelector('#ag-q');
       fd.append('quantity', q ? String(clampQty(q.value)) : '1');
+      var w = box.querySelector('input[name=ag-which]:checked');
+      if (w && w.value) fd.append('pick', w.value);
     }
     var errBar = box.querySelector('.ag-warn[data-err]'); if (errBar) errBar.classList.remove('is-on');
     var label = go.getAttribute('data-label') || 'Move';

@@ -199,7 +199,24 @@ templ securityOverviewTab(data SecurityPageData) {
 			Sign-ups are <strong>{ registrationModeSentence(data.RegistrationMode) }</strong>.
 			<a href={ templ.SafeURL(securityTabHref(SecurityTabSignup)) } class="text-accent hover:underline">Change it on "Who can sign up"</a>.
 		</p>
+		if data.UpdateCheckShown {
+			@updateCheckCard(data.UpdateCheckOn, data.CSRFToken)
+		}
 	</div>
+}
+
+// updateCheckCard is the switch for asking GitHub about new Chronicle
+// versions, for servers that must not call out. Saving is reauth-gated.
+templ updateCheckCard(on bool, csrfToken string) {
+	<section class="card p-6 space-y-4" aria-labelledby="update-check">
+		<h2 id="update-check" class="text-lg font-semibold text-fg">New Chronicle versions</h2>
+		<form hx-post="/admin/security/update-check" hx-swap="none" class="space-y-3">
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			@providerSwitch("update_check", "Check GitHub for new Chronicle versions",
+				"Once a day, Chronicle asks GitHub for its newest release and tells site admins on Home when this server is behind. Turn it off if this server must not contact other sites; you then learn about security fixes only from GitHub.", on)
+			<button type="submit" class="btn-secondary btn-sm">Save</button>
+		</form>
+	</section>
 }
 
 // securityLogTab is the filterable, paged sign-in and admin event log.

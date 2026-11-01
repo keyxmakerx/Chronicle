@@ -132,6 +132,14 @@ func (m *mockSessionRepo) SoftDeleteSession(ctx context.Context, id string) erro
 	return nil
 }
 
+func (m *mockSessionRepo) ListDeleted(ctx context.Context, campaignID string) ([]TrashedSession, error) {
+	return nil, nil
+}
+
+func (m *mockSessionRepo) PurgeDeletedBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	return 0, nil
+}
+
 func (m *mockSessionRepo) RestoreSession(ctx context.Context, id string) error {
 	if m.restoreSessionFn != nil {
 		return m.restoreSessionFn(ctx, id)

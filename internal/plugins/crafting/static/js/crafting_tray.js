@@ -5,12 +5,14 @@
  * per thing that dropped and a line per item, as the signed Crafting Spoils
  * mockup; only the buttons on each line differ, so each caller hands those
  * in. Everything shown comes from the server, which already put "An item you
- * haven't seen" or "Something the party found" where a player may not look.
+ * haven't seen", "Something the party found" or "Something unidentified"
+ * where a player may not look.
  */
 window.CraftingTray = (function () {
   'use strict';
   var esc = window.CraftingLib.esc;
   var CHECK = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 10.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var EYE = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="10" r="2.2" fill="currentColor"/><path d="M3.5 16.5l13-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
   function signed(n) { return n < 0 ? '−' + (-n) : '+' + n; }
@@ -39,22 +41,41 @@ window.CraftingTray = (function () {
     return (tray || []).reduce(function (n, s) { return n + s.lines.length; }, 0);
   }
 
-  /* A harvest's three tiers as chips, the one the test landed in lit. */
-  function tiers(l, hit) {
-    return '<div class="crs-tiers">' + (l.tiers || []).map(function (t, i) {
-      return '<span class="crs-tier' + (i === hit ? ' is-hit' : '') + '">' + esc(t.label) + ' <b>' + t.qty + '</b></span>';
+  /* Outcomes as chips, the one the test landed in lit; a study's lowest is
+     a miss, so it lights in the warning colour. */
+  function chips(labels, values, hit, miss) {
+    return '<div class="crs-tiers">' + labels.map(function (t, i) {
+      return '<span class="crs-tier' + (i === hit ? ' is-hit' + (miss && !i ? ' is-miss' : '') : '') + '">' + esc(t) + ' <b>' + esc(values[i]) + '</b></span>';
     }).join('') + '</div>';
   }
 
+  /* A harvest's three tiers, with what each pays. */
+  function tiers(l, hit) {
+    var ts = l.tiers || [];
+    return chips(ts.map(function (t) { return t.label; }), ts.map(function (t) { return t.qty; }), hit);
+  }
+
+  /* A line waiting for a study shows the study's test instead of how it is
+     taken; the Director, who sees the item, is told the party doesn't. */
   function how(l, hit) {
+    var st = l.study;
+    if (l.locked && st) {
+      return '<div class="crs-how is-study"><span>Study: ' + esc(st.roll) + (st.once ? ' · one chance' : '') + (l.itemId ? ' · <span class="crp-pill is-warn">Not identified yet</span>' : '') + '</span>' +
+        chips(st.tiers || [], st.says || [], hit, true) + (st.tried && st.tried.length ? '<span class="crs-tried">' + esc(st.tried.join(', ')) + ', so not yet</span>' : '') + '</div>';
+    }
     if (l.mode !== 'harvest') return '<div class="crs-how">Take as it is</div>';
     return '<div class="crs-how">Harvest: ' + esc(l.roll) + tiers(l, hit) + '</div>';
   }
 
   function item(l) {
-    var qty = l.mode === 'harvest' ? '' : ' × ' + l.qty;
+    var qty = l.mode === 'harvest' || !l.qty ? '' : ' × ' + l.qty;
+    if (l.locked && !l.itemId) {
+      return '<div class="crs-it"><b class="is-unknown">' + esc(l.name) + qty + '</b><span class="cra-fine">' + (l.study && l.study.once ? 'One chance: a miss loses it' : 'Study it to learn what it is') + '</span></div>';
+    }
     if (l.unseen) return '<div class="crs-it"><b class="is-unseen">' + esc(l.name) + qty + '</b><span class="cra-fine">Whoever takes it gets to see it</span></div>';
-    return '<div class="crs-it"><b>' + esc(l.name) + qty + '</b>' + (l.kinds ? '<span class="cra-fine">' + esc(l.kinds) + '</span>' : '') + '</div>';
+    return '<div class="crs-it"><b>' + esc(l.name) + qty + '</b>' + (l.kinds ? '<span class="cra-fine">' + esc(l.kinds) + '</span>' : '') +
+      (l.identified ? '<span class="cra-fine crs-knew">' + CHECK + esc(l.identified) + '</span>' : '') +
+      (l.usedIn && l.usedIn.length ? '<span class="cra-fine">Used in ' + esc(l.usedIn.join(', ')) + '</span>' : '') + '</div>';
   }
 
   /* One card. o.acts(line) gives a line's buttons, o.fold(line) anything
@@ -66,7 +87,7 @@ window.CraftingTray = (function () {
     return '<div class="crs-spoil" data-spoil="' + esc(s.id) + '"><div class="crs-head">' + name + '<span class="cra-fine">' + esc(from(s, o.now)) + '</span>' +
       (o.head ? o.head(s) : '') + '</div>' + (o.under ? o.under(s) : '') + '<ul class="crs-lines">' + s.lines.map(function (l) {
         var hit = o.hit ? o.hit(l) : -1;
-        return '<li data-line="' + l.id + '"><div class="crs-line">' + item(l) + how(l, hit) + '<div class="crp-acts">' + o.acts(l, s) + '</div></div>' + (o.fold ? o.fold(l, s) : '') + '</li>';
+        return '<li data-line="' + l.id + '"><div class="crs-line' + (l.locked && !l.itemId ? ' is-locked' : '') + '">' + item(l) + how(l, hit) + '<div class="crp-acts">' + o.acts(l, s) + '</div></div>' + (o.fold ? o.fold(l, s) : '') + '</li>';
       }).join('') + '</ul></div>';
   }
 
@@ -90,6 +111,28 @@ window.CraftingTray = (function () {
       '<button type="button" class="btn btn-secondary btn-sm" data-act="sdone" data-id="' + esc(String(lineId)) + '">Done</button></div></div>';
   }
 
+  /* A study as the server rolled it, unfolded under its line until Done:
+     the dice, the terms, and whether the party knows the item now. */
+  function studied(R, lineId) {
+    var tier = (R.tiers || [])[R.tier || 0], out;
+    if (R.known) {
+      var uses = R.usedIn || [];
+      out = '<div class="crp-made">' + CHECK + '<span>' + esc(R.hero) + ' knows it: ' + esc(R.item) + (R.kinds ? ' (' + esc(R.kinds) + ')' : '') + '.<small>Every player sees it now, and it can be ' +
+        (R.mode === 'harvest' ? 'harvested' : 'taken') + '.' + (uses.length ? ' It’s used in ' + esc(uses.join(', ')) + (uses.length === 1 ? ', a recipe the party knows.' : ', recipes the party knows.') :
+          R.tier === 2 ? ' No recipe the party knows uses it.' : '') + '</small></span></div>';
+    } else if (R.lost) {
+      out = '<div class="crp-made is-warn">' + EYE + '<span>' + esc(R.hero) + ' can’t make it out, and that was its one chance. The party leaves it behind.<small>Nobody will learn what it was. It leaves the tray for everyone.</small></span></div>';
+    } else {
+      out = '<div class="crp-made is-warn">' + EYE + '<span>' + esc(R.hero) + ' can’t make it out. It stays unidentified.<small>Another hero can still try, and ' + esc(R.hero) + ' can try again after the next respite.</small></span></div>';
+    }
+    return '<div class="crp-fold" aria-live="polite"><h4>Study</h4><div class="crp-result">' +
+      '<div class="crp-dice" aria-label="The dice show ' + esc(R.dice.join(' and ')) + '">' + R.dice.map(function (d) { return '<span class="crp-die">' + d + '</span>'; }).join('') + '</div>' +
+      '<ul class="crp-terms">' + terms(R).map(function (t) { return '<li><span>' + esc(t.text) + '</span><span>' + esc(t.n) + '</span></li>'; }).join('') +
+      '<li class="is-tot"><span>The test</span><span>' + R.total + '</span></li></ul><div class="crp-outcome"><p class="cra-fine">' + esc(tier || '') + '.</p>' + out + '</div></div>' +
+      '<div class="crp-foot"><p class="cra-fine">' + esc((R.notes || []).concat(['Rolled on Chronicle’s server, and listed in the Director’s Taken lately.']).join(' ')) + '</p>' +
+      '<button type="button" class="btn btn-secondary btn-sm" data-act="sdone" data-id="' + esc(String(lineId)) + '">Done</button></div></div>';
+  }
+
   /* The server's dice, thrown on screen over fold (a .crp-result): the terms
      and what they did wait until the dice land, and show anyway if the throw
      can't happen. */
@@ -109,5 +152,10 @@ window.CraftingTray = (function () {
     }).then(show, show);
   }
 
-  return {ago: ago, from: from, count: count, tiers: tiers, card: card, terms: terms, result: result, throwDice: throwDice};
+  /* How many lines wait for a study. */
+  function locked(tray) {
+    return (tray || []).reduce(function (n, s) { return n + s.lines.filter(function (l) { return l.locked; }).length; }, 0);
+  }
+
+  return {ago: ago, from: from, count: count, locked: locked, tiers: tiers, card: card, terms: terms, result: result, studied: studied, throwDice: throwDice};
 })();

@@ -71,7 +71,8 @@ type customizeDraft struct {
 		TimelinePopup string `json:"timelinePopup"` // "classic" or "corner".
 	} `json:"hover"`
 	Sheet struct {
-		Style string `json:"style"`
+		Style    string `json:"style"`
+		CraftArt string `json:"craftArt"` // "lifelike" or "illustrated".
 	} `json:"sheet"`
 	Page struct {
 		Look  string `json:"look"`
@@ -238,6 +239,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	d.Motion.ReduceAll = a.ReduceMotion
 	d.Hover.Look = orDefault(a.HoverCard, AppearanceHoverCards)
 	d.Sheet.Style = orDefault(a.SheetStyle, AppearanceSheetStyles)
+	d.Sheet.CraftArt = orDefault(a.CraftArt, AppearanceCraftArts)
 	// Unset means the owner never chose a page look, and stays unset until
 	// they do (pageLookChoice); the editor shows it as Standard, which is how
 	// such a campaign draws.

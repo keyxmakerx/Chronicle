@@ -44,6 +44,27 @@ type SpoilStore interface {
 	ClearTray(ctx context.Context, campaignID string) (int, error)
 	// ListTaken lists lines taken lately, newest first.
 	ListTaken(ctx context.Context, campaignID string, limit int) ([]SpoilLine, error)
+
+	// KnownItems returns which of the given items the party has identified.
+	KnownItems(ctx context.Context, campaignID string, itemIDs []string) (map[string]KnownItem, error)
+	// MarkKnown records an identified item; an item already known keeps who
+	// identified it and gains Recipes if this study showed them.
+	MarkKnown(ctx context.Context, campaignID string, k KnownItem) error
+	// StartStudy writes a study's row before its roll, unless the hero
+	// already studied that item since the last respite; ok is false then.
+	StartStudy(ctx context.Context, campaignID string, st Study) (id int64, ok bool, err error)
+	// FinishStudy records a study's outcome and roll.
+	FinishStudy(ctx context.Context, campaignID string, id int64, outcome string, rolled int) error
+	// LogStudy writes a finished row, such as a reveal.
+	LogStudy(ctx context.Context, campaignID string, st Study) error
+	// TriesSinceRespite lists the heroes' studies of the given items since
+	// the last respite, oldest first.
+	TriesSinceRespite(ctx context.Context, campaignID string, itemIDs []string) ([]Study, error)
+	// RecentStudies lists studies and reveals, newest first.
+	RecentStudies(ctx context.Context, campaignID string, limit int) ([]Study, error)
+	// LoseLine marks a waiting line lost on its one chance; ok is false
+	// when the line was no longer waiting.
+	LoseLine(ctx context.Context, campaignID string, id int64, characterID, by string, rolled int, at time.Time) (ok bool, err error)
 }
 
 // ---------- Drop lists ----------
@@ -178,9 +199,10 @@ func (r *sqlRepository) AddSpoils(ctx context.Context, campaignID string, spoils
 		}
 		for _, l := range s.Lines {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO crafting_spoil_lines (spoil_id, campaign_id, item_id, item_name, mode, qty, stat, yield_low, yield_mid, yield_high)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				s.ID, campaignID, l.ItemID, clipText(l.ItemName, maxPageName), l.Mode, l.Qty, l.Stat, l.Yields[0], l.Yields[1], l.Yields[2]); err != nil {
+				`INSERT INTO crafting_spoil_lines (spoil_id, campaign_id, item_id, item_name, mode, qty, stat, yield_low, yield_mid, yield_high, study, study_stat, study_once)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				s.ID, campaignID, l.ItemID, clipText(l.ItemName, maxPageName), l.Mode, l.Qty, l.Stat, l.Yields[0], l.Yields[1], l.Yields[2],
+				l.Study, l.StudyStat, l.Once); err != nil {
 				return fmt.Errorf("add crafting spoil line: %w", err)
 			}
 		}
@@ -201,7 +223,7 @@ func (r *sqlRepository) CountWaiting(ctx context.Context, campaignID string) (in
 }
 
 const lineColumns = `l.id, l.spoil_id, l.item_id, l.item_name, l.mode, l.qty, l.stat, l.yield_low, l.yield_mid, l.yield_high,
-	l.status, COALESCE(l.character_id, ''), COALESCE(l.taken_by, ''), l.taken_qty, l.rolled, l.taken_at`
+	l.study, l.study_stat, l.study_once, l.status, COALESCE(l.character_id, ''), COALESCE(l.taken_by, ''), l.taken_qty, l.rolled, l.taken_at`
 
 func scanLine(s rowScanner, extra ...any) (SpoilLine, error) {
 	var (
@@ -210,7 +232,7 @@ func scanLine(s rowScanner, extra ...any) (SpoilLine, error) {
 		at     sql.NullTime
 	)
 	dest := append([]any{&l.ID, &l.SpoilID, &l.ItemID, &l.ItemName, &l.Mode, &l.Qty, &l.Stat, &l.Yields[0], &l.Yields[1], &l.Yields[2],
-		&l.Status, &l.CharacterID, &l.TakenBy, &l.TakenQty, &rolled, &at}, extra...)
+		&l.Study, &l.StudyStat, &l.Once, &l.Status, &l.CharacterID, &l.TakenBy, &l.TakenQty, &rolled, &at}, extra...)
 	if err := s.Scan(dest...); err != nil {
 		return l, err
 	}
@@ -341,4 +363,173 @@ func (r *sqlRepository) ListTaken(ctx context.Context, campaignID string, limit 
 		return nil, fmt.Errorf("list crafting spoils taken: %w", err)
 	}
 	return out, nil
+}
+
+// ---------- Studies ----------
+
+// inList is "(?, ?, …)" for n values.
+func inList(n int) string { return "(?" + strings.Repeat(", ?", n-1) + ")" }
+
+func (r *sqlRepository) KnownItems(ctx context.Context, campaignID string, itemIDs []string) (map[string]KnownItem, error) {
+	out := map[string]KnownItem{}
+	if len(itemIDs) == 0 {
+		return out, nil
+	}
+	args := []any{campaignID}
+	for _, id := range itemIDs {
+		args = append(args, id)
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT item_id, COALESCE(character_id, ''), recipes, COALESCE(learned_by, '') FROM crafting_known_items
+		 WHERE campaign_id = ? AND item_id IN `+inList(len(itemIDs)), args...)
+	if err != nil {
+		return nil, fmt.Errorf("crafting known items: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k KnownItem
+		if err := rows.Scan(&k.ItemID, &k.CharacterID, &k.Recipes, &k.LearnedBy); err != nil {
+			return nil, fmt.Errorf("scan crafting known item: %w", err)
+		}
+		out[k.ItemID] = k
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("crafting known items: %w", err)
+	}
+	return out, nil
+}
+
+func (r *sqlRepository) MarkKnown(ctx context.Context, campaignID string, k KnownItem) error {
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO crafting_known_items (campaign_id, item_id, character_id, recipes, learned_by) VALUES (?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE recipes = GREATEST(recipes, VALUES(recipes))`,
+		campaignID, k.ItemID, nullString(k.CharacterID), k.Recipes, nullString(k.LearnedBy)); err != nil {
+		return fmt.Errorf("mark crafting item known: %w", err)
+	}
+	return nil
+}
+
+// lastRespite is the SQL for the campaign's last respite's id, 0 before the
+// first; it takes the campaign id. A studies row aliased t written since
+// then carries it (sinceRespite).
+const (
+	lastRespite  = `(SELECT COALESCE(MAX(r.id), 0) FROM crafting_respites r WHERE r.campaign_id = ?)`
+	sinceRespite = `t.respite_id = ` + lastRespite
+)
+
+func (r *sqlRepository) StartStudy(ctx context.Context, campaignID string, st Study) (int64, bool, error) {
+	var line any
+	if st.LineID > 0 {
+		line = st.LineID
+	}
+	res, err := r.db.ExecContext(ctx,
+		`INSERT INTO crafting_studies (campaign_id, item_id, line_id, character_id, created_by, respite_id)
+		 SELECT ?, ?, ?, ?, ?, `+lastRespite+` FROM DUAL WHERE NOT EXISTS (
+		   SELECT 1 FROM crafting_studies t WHERE t.campaign_id = ? AND t.item_id = ? AND t.character_id = ? AND `+sinceRespite+`)`,
+		campaignID, st.ItemID, line, st.CharacterID, nullString(st.CreatedBy), campaignID, campaignID, st.ItemID, st.CharacterID, campaignID)
+	if err != nil {
+		return 0, false, fmt.Errorf("start crafting study: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, false, fmt.Errorf("start crafting study: %w", err)
+	}
+	if n != 1 {
+		return 0, false, nil
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, false, fmt.Errorf("start crafting study: %w", err)
+	}
+	return id, true, nil
+}
+
+func (r *sqlRepository) FinishStudy(ctx context.Context, campaignID string, id int64, outcome string, rolled int) error {
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE crafting_studies SET outcome = ?, rolled = ? WHERE campaign_id = ? AND id = ?`, outcome, rolled, campaignID, id); err != nil {
+		return fmt.Errorf("finish crafting study: %w", err)
+	}
+	return nil
+}
+
+func (r *sqlRepository) LogStudy(ctx context.Context, campaignID string, st Study) error {
+	var line, rolled any
+	if st.LineID > 0 {
+		line = st.LineID
+	}
+	if st.Rolled != nil {
+		rolled = *st.Rolled
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO crafting_studies (campaign_id, item_id, line_id, character_id, outcome, rolled, created_by, respite_id)
+		 SELECT ?, ?, ?, ?, ?, ?, ?, `+lastRespite+` FROM DUAL`,
+		campaignID, st.ItemID, line, nullString(st.CharacterID), st.Outcome, rolled, nullString(st.CreatedBy), campaignID); err != nil {
+		return fmt.Errorf("log crafting study: %w", err)
+	}
+	return nil
+}
+
+const studyColumns = `t.id, t.item_id, COALESCE(t.line_id, 0), COALESCE(t.character_id, ''), t.outcome, t.rolled, COALESCE(t.created_by, ''), t.created_at`
+
+func (r *sqlRepository) studies(ctx context.Context, q string, args ...any) ([]Study, error) {
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list crafting studies: %w", err)
+	}
+	defer rows.Close()
+	out := []Study{}
+	for rows.Next() {
+		var (
+			st     Study
+			rolled sql.NullInt64
+		)
+		if err := rows.Scan(&st.ID, &st.ItemID, &st.LineID, &st.CharacterID, &st.Outcome, &rolled, &st.CreatedBy, &st.At); err != nil {
+			return nil, fmt.Errorf("scan crafting study: %w", err)
+		}
+		if rolled.Valid {
+			n := int(rolled.Int64)
+			st.Rolled = &n
+		}
+		out = append(out, st)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list crafting studies: %w", err)
+	}
+	return out, nil
+}
+
+func (r *sqlRepository) TriesSinceRespite(ctx context.Context, campaignID string, itemIDs []string) ([]Study, error) {
+	if len(itemIDs) == 0 {
+		return []Study{}, nil
+	}
+	args := []any{campaignID}
+	for _, id := range itemIDs {
+		args = append(args, id)
+	}
+	args = append(args, campaignID)
+	return r.studies(ctx,
+		`SELECT `+studyColumns+` FROM crafting_studies t
+		 WHERE t.campaign_id = ? AND t.item_id IN `+inList(len(itemIDs))+` AND t.character_id IS NOT NULL AND `+sinceRespite+`
+		 ORDER BY t.id`, args...)
+}
+
+func (r *sqlRepository) RecentStudies(ctx context.Context, campaignID string, limit int) ([]Study, error) {
+	return r.studies(ctx,
+		`SELECT `+studyColumns+` FROM crafting_studies t WHERE t.campaign_id = ? AND t.outcome <> '' ORDER BY t.created_at DESC, t.id DESC LIMIT ?`,
+		campaignID, limit)
+}
+
+func (r *sqlRepository) LoseLine(ctx context.Context, campaignID string, id int64, characterID, by string, rolled int, at time.Time) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE crafting_spoil_lines SET status = ?, character_id = ?, taken_by = ?, taken_qty = 0, rolled = ?, taken_at = ?
+		 WHERE campaign_id = ? AND id = ? AND status = ?`,
+		SpoilLost, characterID, nullString(by), rolled, at, campaignID, id, SpoilWaiting)
+	if err != nil {
+		return false, fmt.Errorf("lose crafting spoil line: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("lose crafting spoil line: %w", err)
+	}
+	return n == 1, nil
 }

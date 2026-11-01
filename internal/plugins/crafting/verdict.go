@@ -12,10 +12,10 @@ import (
 // roll, with any "only then" rule at least one must be on, and an edge and
 // a bane cancel. The roll knows what the preview cannot: the bench it was
 // worked at, the maker's skills, the time of day by the calendar's clock,
-// and the chance, which is rolled here. Ingredient marks are still unknown,
-// because an item in a pack keeps nothing of its own, so a rule needing one
-// stays "maybe", as in the preview: it never holds a roll and never adds to
-// one. TODO(#1883)
+// the marks the ingredients that went in carried, and the chance, which is
+// rolled here. A project started before copies remembered anything can't
+// say what its ingredients carried, so a rule about one stays "maybe", as in
+// the preview: it never holds a roll and never adds to one.
 
 // tri is a condition's answer on the day.
 type tri int
@@ -58,6 +58,9 @@ func (d *Day) moon(name string) *DayMoon {
 type Worked struct {
 	Bench  string
 	Skills map[string]bool
+	// Marks are the marks the ingredients that went in carried, lowercased;
+	// nil when the project can't say.
+	Marks map[string]bool
 }
 
 // condOn answers one condition on the day, as worked. With no calendar
@@ -121,6 +124,11 @@ func condOn(d *Day, c Cond, w *Worked) tri {
 			return maybe
 		}
 		return yes(w.Skills[strings.ToLower(strings.TrimSpace(c.Skill))])
+	case "ingredient":
+		if w == nil || w.Marks == nil {
+			return maybe
+		}
+		return yes(w.Marks[strings.ToLower(strings.TrimSpace(c.Mark))])
 	}
 	return maybe
 }

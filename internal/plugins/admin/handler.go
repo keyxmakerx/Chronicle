@@ -76,6 +76,8 @@ type Handler struct {
 	siteLook SiteLookService
 	// trash is the site Trash; nil until wired.
 	trash TrashService
+	// releaseNotice is the new-version notice on Home; nil shows none.
+	releaseNotice *ReleaseNoticeService
 	// checkup is the site check-up behind the top bar's shield; nil until wired.
 	checkup       *CheckupService
 	checkupRunCtx context.Context
@@ -446,7 +448,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		}
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, recent))
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, recent, h.releaseNotice.Notice(ctx, auth.GetUserID(c))))
 }
 
 // StatusFigures are the live figures on the Site admin status strip.
@@ -1019,6 +1021,10 @@ func (h *Handler) Security(c echo.Context) error {
 		EventsFailed:     eventsErr != nil,
 		SessionsFailed:   sessionsErr != nil,
 	}
+	if h.releaseNotice != nil {
+		data.UpdateCheckShown = true
+		data.UpdateCheckOn = h.releaseNotice.CheckOn(ctx)
+	}
 
 	return middleware.Render(c, http.StatusOK, AdminSecurityPage(data))
 }
@@ -1433,13 +1439,16 @@ func (h *Handler) diagnosticsCampaigns(ctx context.Context) []CampaignOption {
 	return out
 }
 
-// DiagnosticsWorkspace renders the in-app operator AI workspace: the copyable
-// functions list + a paste box for the AI's batch request. Read-only.
+// DiagnosticsWorkspace renders the in-app operator AI workspace: the everyday
+// questions, the checks in folds for picking by hand, and the hand-off to an
+// outside AI. Read-only.
 func (h *Handler) DiagnosticsWorkspace(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, DiagnosticsWorkspacePage(DiagnosticsWorkspaceData{
 		FunctionsJSON: systems.FunctionsSpecJSON(),
 		CSRFToken:     middleware.GetCSRFToken(c),
 		Campaigns:     h.diagnosticsCampaigns(c.Request().Context()),
+		Questions:     systems.DiagnosticQuestions(),
+		Groups:        systems.DiagnosticGroups(),
 	}))
 }
 
@@ -1448,7 +1457,34 @@ func (h *Handler) DiagnosticsWorkspace(c echo.Context) error {
 // A malformed request is not an error response — it renders an inline message so
 // the operator can fix the paste. POST /admin/diagnostics/workspace/parse.
 func (h *Handler) DiagnosticsWorkspaceParse(c echo.Context) error {
-	raw := c.FormValue("batch")
+	return h.renderBatchReview(c, c.FormValue("batch"))
+}
+
+// DiagnosticsWorkspaceCompose turns the checks picked on the page into the same
+// batch request an AI would paste, and shows the same review step for it.
+// POST /admin/diagnostics/workspace/compose.
+func (h *Handler) DiagnosticsWorkspaceCompose(c echo.Context) error {
+	form, err := c.FormParams()
+	if err != nil {
+		return h.renderBatchReview(c, "")
+	}
+	in := systems.ComposeInput{
+		Note:     form.Get("note"),
+		Calls:    form["call"],
+		Campaign: form.Get("campaign"),
+		Page:     form.Get("page"),
+		Args:     map[string]string{},
+	}
+	for _, name := range in.Calls {
+		if v := form.Get("arg:" + name); v != "" {
+			in.Args[name] = v
+		}
+	}
+	return h.renderBatchReview(c, systems.ComposeBatch(in))
+}
+
+// renderBatchReview validates a batch request and renders the review fragment.
+func (h *Handler) renderBatchReview(c echo.Context, raw string) error {
 	data := DiagnosticsReviewData{Raw: raw, CSRFToken: middleware.GetCSRFToken(c)}
 	plan, err := systems.ParseBatch(raw)
 	if err != nil {
@@ -1536,4 +1572,7 @@ type SecurityPageData struct {
 	StatsFailed    bool
 	EventsFailed   bool
 	SessionsFailed bool
+	// UpdateCheckShown shows the new-version check switch; UpdateCheckOn is
+	// its state.
+	UpdateCheckShown, UpdateCheckOn bool
 }

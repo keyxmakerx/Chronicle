@@ -9,8 +9,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
-// NotifNightReminder is the person running a game night asking a player to
-// answer whether they are coming.
+// NotifNightReminder asks a player to answer whether they are coming: the
+// person running the night pressing Remind, or the bell the day before.
 const NotifNightReminder = "game_night_reminder"
 
 // NightReminder is who RemindNight reached: their names for the page, and

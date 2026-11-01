@@ -22,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
+	"github.com/keyxmakerx/chronicle/internal/hostinfo"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -1275,7 +1276,7 @@ type navAppDef struct {
 var navAppCatalog = []navAppDef{
 	{slug: "notes", label: "Journal", icon: "fa-book-open", path: "/journal", addons: []string{"notes"}, access: campaigns.NavAccessMember, pinned: true},
 	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessMemberOrAdmin, pinned: true},
-	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{"sessions"}, needs: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
+	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{"sessions"}, needs: []string{calendar.PluginSlug}, access: campaigns.NavAccessMember},
 	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
 	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone},
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
@@ -3688,16 +3689,23 @@ func (a *App) RegisterRoutes() {
 	adminBackups := &adminBackupLister{backups: backupSvc, restores: restoreSvc, settings: settingsRepo, backupDir: a.Config.BackupDir}
 	adminHandler.SetBackupLister(adminBackups)
 
+	// The new-version notice on Home checks GitHub's releases once a day; its
+	// off switch also stops the check-up's Chronicle comparison.
+	releaseNotice := admin.NewReleaseNoticeService(settingsRepo, newChronicleReleaseSource(), hostinfo.Version)
+	adminHandler.SetReleaseNoticeService(releaseNotice)
+	go releaseNotice.RunScheduler(a.ShutdownCtx)
+
 	// The site check-up behind the admin top bar's shield: a weekly backup
 	// read-back, sign-up, password reset and updates. Admin reaches the
 	// backup plugin and GitHub only through these adapters.
 	checkupDeps := admin.CheckupDeps{
-		Store:        settingsRepo,
-		Backup:       checkupBackup{svc: backupSvc, store: settingsRepo},
-		Chronicle:    newChronicleVersionChecker(),
-		Backups:      adminBackups,
-		Registration: settingsService.GetRegistrationMode,
-		EmailReady:   smtpService.IsConfigured,
+		Store:            settingsRepo,
+		ChronicleCheckOn: releaseNotice.CheckOn,
+		Backup:           checkupBackup{svc: backupSvc, store: settingsRepo},
+		Chronicle:        newChronicleVersionChecker(),
+		Backups:          adminBackups,
+		Registration:     settingsService.GetRegistrationMode,
+		EmailReady:       smtpService.IsConfigured,
 	}
 	if a.pkgService != nil {
 		checkupDeps.Packages = a.pkgService
@@ -4212,20 +4220,19 @@ func (a *App) RegisterRoutes() {
 	sightingService := sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
 		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
 	sessionsHandler.SetSightingService(sightingService)
-	// The Last seen block's, the Game nights list's and the session edit
-	// dialog's scripts load on sight (ADR-063); the block itself is
+	// The Last seen block's and the session edit dialog's scripts load on
+	// sight (ADR-063); the block itself is
 	// registered with the other page blocks below.
 	a.registerPlugin(PluginRegistration{
 		Slug:     sessions.PluginSlug,
 		StaticFS: echo.MustSubFS(sessions.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "last-seen", Scripts: []string{"js/last_seen.js"}},
-			{Name: "game-nights", Scripts: []string{"js/game_nights.js"}},
 			{Name: "session-edit", Scripts: []string{"js/session_edit.js"}},
 		},
 	})
 	// Game-night links open the real-world calendar; with the calendar plugin
-	// down they keep going to the Sessions page.
+	// down they go to the Calendar app.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 		sessionsHandler.SetCalendarFinder(&realWorldCalendarFinderAdapter{svc: calendarService})
 	}
@@ -4395,10 +4402,14 @@ func (a *App) RegisterRoutes() {
 	// failed the plugin is degraded and sharing is simply not offered. The
 	// activity log is bound once the audit service exists, further down.
 	var shareStore armory.ShareStore
+	var copyStore armory.CopyStore
+	var placeStore armory.PlaceStore
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
 		shareStore = armory.NewShareRepository(a.DB)
+		copyStore = armory.NewCopyRepository(a.DB)
+		placeStore = armory.NewPlaceRepository(a.DB)
 	} else {
-		slog.Warn("armory plugin schema degraded — item sharing is off")
+		slog.Warn("armory plugin schema degraded — item sharing, remembered copies and item places are off")
 	}
 	shareAudit := &armoryShareAuditAdapter{}
 	stashRepo := armory.NewStashRepository(a.DB)
@@ -4419,6 +4430,8 @@ func (a *App) RegisterRoutes() {
 		Notifier:   &armoryGiveNotifierAdapter{svc: sessionsService},
 		Shares:     shareStore,
 		Auditor:    shareAudit,
+		Copies:     copyStore,
+		Places:     placeStore,
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.
@@ -4577,6 +4590,14 @@ func (a *App) RegisterRoutes() {
 	)
 	itemLookHandler := armory.NewItemLookHandler(itemLookService)
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, itemLookHandler, shopBuyHandler, campaignService, authService, addonService)
+	// The Shops street: every shop page the viewer can see, drawn as storefronts.
+	shopStreetService := armory.NewShopStreetService(
+		armory.NewShopFrontRepository(a.DB),
+		&armoryShopCheckerAdapter{svc: entityService},
+		&armoryShopListerAdapter{svc: entityService},
+		stashSvc,
+	)
+	armory.RegisterStreetRoutes(e, armory.NewShopStreetHandler(shopStreetService), campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).
@@ -4602,6 +4623,7 @@ func (a *App) RegisterRoutes() {
 	// The day before each night, and after it, the entries put items in the
 	// bell; a loop sends them.
 	nightEntries.SetBells(&nightBellCampaignsAdapter{campaigns: campaignService, addons: addonService}, sessionsService, sessionsService)
+	nightEntries.SetBellRoster(sessionsService)
 	go sessions.StartNightBells(a.ShutdownCtx, nightEntries)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 	// A player can allow the Foundry notebook to use their notes. Grants go
@@ -4743,7 +4765,13 @@ func (a *App) RegisterRoutes() {
 	// how many notes go with a page; without the wiring they just stay quiet.
 	pageSafetyService.SetNoteCounter(entityNotesService)
 	entityHandler.SetTrashNoteCounter(pageSafetyService)
-	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
+	// Game nights, pictures and maps share the campaign Trash with pages.
+	pageSafetyService.AddTrashKind(gameNightTrash{svc: sessionsService})
+	pageSafetyService.AddTrashKind(pictureTrash{svc: mediaService})
+	pageSafetyService.AddTrashKind(mapTrash{svc: mapsService})
+	pageSafetyHandler := entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService)
+	pageSafetyHandler.SetAuditService(auditService)
+	entities.RegisterPageSafetyRoutes(e, pageSafetyHandler, campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
 
 	// --- Extra places in the page tree ---
@@ -4978,6 +5006,12 @@ func (a *App) RegisterRoutes() {
 	})
 	// The same block on a category dashboard: its boards belong to the
 	// category, not to a page.
+	// The Shops street on the shop category's landing page, and as a block a
+	// GM can place on any category home.
+	entities.RegisterCategoryBlock("shop_street", func(cc *campaigns.CampaignContext, et *entities.EntityType) templ.Component {
+		return armory.ShopStreetMount(cc.Campaign.ID, cc.MemberRole >= campaigns.RoleOwner, int(cc.MemberRole))
+	})
+	entities.RegisterCategoryLead("shop", "shop_street")
 	entities.RegisterCategoryBlock("notice_boards", func(cc *campaigns.CampaignContext, et *entities.EntityType) templ.Component {
 		return quests.CategoryBoardsMount(cc.Campaign.ID, et.ID, cc.CanControlWorldState(), int(cc.MemberRole))
 	})
@@ -5723,6 +5757,7 @@ func (a *App) RegisterRoutes() {
 					HoverCard: ap.HoverCard,
 
 					SheetStyle:    ap.SheetStyle,
+					CraftArt:      ap.CraftArt,
 					PageLook:      ap.PageLook,
 					StyleKit:      ap.StyleKit,
 					DmScreenKit:   ap.DmScreenKit,
@@ -6302,7 +6337,9 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(crafting.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "crafting", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_upgrades.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
-			{Name: "crafting-block", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_block.js"}},
+			{Name: "crafting-block", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_turns.js", "js/crafting_block.js"}},
+			{Name: "crafting-item", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_pick.js", "js/crafting_item.js"}},
+			{Name: "crafting-recipes-part", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_pick.js", "js/crafting_part_more.js", "js/crafting_part.js"}},
 		},
 	})
 	craftingOn := func(ctx context.Context, campaignID string) bool {
@@ -6313,26 +6350,33 @@ func (a *App) RegisterRoutes() {
 	craftingRespites := &craftingRespiteHook{}
 	var craftingListener respiteListener // nil while crafting is degraded
 	var craftingFights encounters.FightListener
-	var aiCrafting records.CraftingAPI // nil while crafting is degraded
+	var aiCrafting records.CraftingAPI    // nil while crafting is degraded
+	var craftingWorkshop crafting.Service // nil while crafting is degraded
 	if a.PluginHealth.IsHealthy(crafting.PluginSlug) {
 		craftingRepo := crafting.NewRepository(a.DB)
 		craftingSvc := crafting.NewService(craftingRepo,
 			&craftingDirectoryAdapter{dir: stashDirectory}, &craftingRulesAdapter{sys: systemHandler},
 			crafting.ProjectDeps{
-				Store:    craftingRepo.(crafting.ProjectStore),
-				Armory:   &craftingArmoryAdapter{stash: stashSvc},
-				Spoils:   craftingRepo.(crafting.SpoilStore),
-				Pages:    &craftingPagesAdapter{entities: entityService},
-				Sheets:   &craftingSheetsAdapter{entities: entityService},
-				Tables:   craftingTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))},
-				Days:     &craftingDaysAdapter{cal: calendarService},
-				Calendar: &craftingCalendarAdapter{cal: calendarService},
-				Respite:  craftingRespites,
-				Rolls:    rollLog,
+				Store:     craftingRepo.(crafting.ProjectStore),
+				Armory:    &craftingArmoryAdapter{stash: stashSvc},
+				Spoils:    craftingRepo.(crafting.SpoilStore),
+				Pages:     &craftingPagesAdapter{entities: entityService},
+				Sheets:    &craftingSheetsAdapter{entities: entityService},
+				Tables:    craftingTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))},
+				Days:      &craftingDaysAdapter{cal: calendarService},
+				Calendar:  &craftingCalendarAdapter{cal: calendarService},
+				Respite:   craftingRespites,
+				Rolls:     rollLog,
+				Items:     &craftingItemMaker{dir: stashDirectory, svc: entityService},
+				Layouts:   &craftingLayoutPlacer{svc: entityService},
+				Campaigns: &craftingCampaigns{svc: campaignService},
+				Packs:     crafting.NewPackStore(a.DB),
 			})
 		crafting.RegisterRoutes(e, crafting.NewHandler(craftingSvc, &craftingCalendarAdapter{cal: calendarService}),
 			campaignService, authService, addonService)
 		registerCraftingBlock(blockRegistry, craftingSvc)
+		registerCraftingItemBlock(blockRegistry)
+		craftingWorkshop = craftingSvc
 		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
 		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
 		aiCrafting = aiCraftingAdapter{svc: craftingSvc, addons: addonService}
@@ -6378,6 +6422,7 @@ func (a *App) RegisterRoutes() {
 		Systems:        systemHandler,
 		Trackers:       trackersSvc,
 		Respites:       craftingListener,
+		Crafting:       craftingWorkshop,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
@@ -6598,6 +6643,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "entity_manager", Scripts: []string{"/static/js/widgets/entity_manager.js"}},
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
+	{Name: "diag-picker", Scripts: []string{"/static/js/widgets/diag_picker.js"}},
 	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
 	{Name: "ai-import-review", Scripts: []string{"/static/js/widgets/ai_import_review.js"}},
 	{Name: "mini-bar-chart", Scripts: []string{"/static/js/widgets/mini_bar_chart.js"}},
@@ -6620,9 +6666,11 @@ var coreWidgets = []PluginWidget{
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
+	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
+	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room.js"}},
-	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_bench.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules_more.js", "/static/js/widgets/craft_rules.js"}},
 }
 

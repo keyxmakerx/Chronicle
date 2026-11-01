@@ -1,0 +1,165 @@
+/* making.css: making crafting recipes where the work is, in the Material
+ * look of .ai/ui-standard.md. "How it's made" on an item's page
+ * (crafting_item.js) is reading content: no card, a small-capitals heading
+ * on a hairline, quiet words for what opens, rows split by hairlines. The
+ * Workshop's Crafting recipes part (crafting_part.js) is a tool: a table
+ * on a sheet with a field edge only where you type. Colours come from the
+ * theme tokens and the accent from --annals-acc; amber marks drafts, which
+ * only the Director sees. The typing pull-down lies over the page like a
+ * sheet, with the next level's shadow. */
+[data-widget="crafting-item"], [data-widget="crafting-recipes-part"], .crm {
+  --crm-ink: var(--color-text-primary); --crm-body: var(--color-text-body, var(--color-text-primary)); --crm-mut: var(--color-text-muted);
+  --crm-line: var(--color-border); --crm-tint: var(--color-bg-tertiary); --crm-panel: var(--color-card-bg, var(--color-bg-primary));
+  --crm-field: var(--color-input-bg, var(--color-bg-primary)); --crm-field-line: var(--color-input-border, var(--color-border));
+  --crm-acc: var(--annals-acc, var(--color-accent)); --crm-link: var(--color-accent-link, var(--crm-acc));
+  --crm-dm: rgb(var(--color-warn-rgb, 217 119 6)); --crm-ok: rgb(var(--color-ok-rgb, 22 163 74)); --crm-bad: rgb(var(--color-bad-rgb, 220 38 38));
+  --crm-lift: var(--elev-raised, 0 10px 24px rgb(0 0 0 / .16), 0 2px 6px rgb(0 0 0 / .08));
+  --crm-r: var(--kit-radius, 8px);
+  color: var(--crm-body); font-size: 14px;
+}
+.crm { position: relative; margin: 8px 0 4px; }
+.crm *, .crm *::before, .crm *::after { box-sizing: border-box; }
+.crm :focus-visible { outline: 2px solid var(--crm-acc); outline-offset: 2px; }
+.crm h3, .crm p, .crm ol, .crm ul, .crm dl, .crm dd { margin: 0; }
+.crm ol, .crm ul { padding: 0; list-style: none; }
+.crm-sec + .crm-sec { margin-top: 22px; }
+
+/* A heading on a hairline, with quiet words at its end. */
+.crm-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding-bottom: 8px; border-bottom: 1px solid var(--crm-line); }
+.crm-h { font-size: 12.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--crm-ink); margin-right: auto; }
+.crm-words { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+.crm-q { font: inherit; font-size: 13.5px; padding: 6px 0; min-height: 32px; border: 0; background: none; color: var(--crm-link); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.crm-q:hover { text-decoration: underline; text-underline-offset: 3px; }
+.crm-q:disabled { color: var(--crm-mut); cursor: default; text-decoration: none; }
+.crm-q[aria-expanded="true"], .crm-q[aria-pressed="true"] { color: var(--crm-ink); text-decoration: underline; text-underline-offset: 3px; }
+.crm-link { color: var(--crm-link); text-decoration: none; }
+.crm-link:hover { text-decoration: underline; }
+.crm-mut { color: var(--crm-mut); font-size: 13px; }
+.crm-none { padding: 12px 0; color: var(--crm-mut); }
+.crm-bad { color: var(--crm-bad); }
+.crm-pill { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.crm-pill.is-ok { color: var(--crm-ok); background: rgb(var(--color-ok-rgb, 22 163 74) / .12); }
+.crm-pill.is-draft { color: var(--crm-dm); background: rgb(var(--color-warn-rgb, 217 119 6) / .12); }
+.crm-status { min-height: 18px; margin-top: 8px; font-size: 12.5px; color: var(--crm-mut); }
+.crm-status.is-bad { color: var(--crm-bad); }
+
+/* Index tabs when several recipes make the item. */
+.crm-tabs { display: flex; gap: 18px; margin-top: 8px; }
+.crm-tabs [role="tab"] { font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: 6px 0; min-height: 32px; border: 0; background: none;
+  color: var(--crm-mut); border-bottom: 1px solid transparent; cursor: pointer; }
+.crm-tabs [aria-selected="true"] { color: var(--crm-ink); border-bottom-color: var(--crm-ink); }
+
+/* Rows: a small label, then the content; hairlines between. */
+.crm-grid { display: grid; gap: 18px; }
+.crm-grid.has-peek { grid-template-columns: minmax(0, 1fr) minmax(0, 300px); }
+@media (max-width: 760px) { .crm-grid.has-peek { grid-template-columns: 1fr; } }
+.crm-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--crm-line); }
+.crm-row-top { align-items: start; }
+.crm-lab { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--crm-mut); padding-top: 2px; }
+@media (max-width: 520px) { .crm-row { grid-template-columns: 1fr; } }
+.crm-dl { display: grid; grid-template-columns: 96px 1fr; gap: 8px 12px; padding: 10px 0; }
+.crm-dl dt { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--crm-mut); }
+
+/* Materials as chips, each with its picture, a play mark and a remove. */
+.crm-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.crm-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 2px 4px 2px 8px; border-radius: 999px; background: var(--crm-tint); color: var(--crm-ink); }
+.crm-chip .cra-ico, .crm-opt .cra-ico { flex: none; }
+.crm-nopic { width: 20px; height: 20px; border-radius: 50%; outline: 1.5px dashed var(--crm-line); outline-offset: -1px; display: inline-block; flex: none; }
+.crm-play, .crm-x, .crm-ib { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 0; background: none; color: var(--crm-mut); cursor: pointer; text-decoration: none; font-size: 12px; position: relative; }
+.crm-play::after, .crm-x::after, .crm-ib::after { content: ""; position: absolute; inset: -3px; }
+.crm-play:hover, .crm-x:hover, .crm-ib:hover { color: var(--crm-ink); box-shadow: inset 0 0 0 1px var(--crm-line); }
+.crm-ib:disabled { opacity: .35; cursor: default; box-shadow: none; }
+.crm-type { position: relative; flex: 1 1 160px; min-width: 140px; }
+.crm-in { font: inherit; font-size: 14px; width: 100%; min-height: 34px; padding: 4px 2px; color: var(--crm-ink); background: transparent; border: 0; border-bottom: 1px solid var(--crm-field-line); border-radius: 0; }
+.crm-in:focus { outline: none; border-bottom-color: var(--crm-acc); }
+.crm-in::placeholder { color: var(--crm-mut); font-style: italic; }
+
+/* The typing pull-down: a sheet over the page. */
+.crm-pull { position: absolute; z-index: 30; left: 0; top: calc(100% + 4px); min-width: 260px; max-width: min(360px, 92vw); padding: 4px; background: var(--crm-panel);
+  border: 1px solid var(--crm-line); border-radius: var(--crm-r); box-shadow: var(--crm-lift); }
+.crm-opt { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 8px; border-radius: 6px; cursor: pointer; color: var(--crm-ink); }
+.crm-opt[aria-selected="true"], .crm-opt:hover { background: var(--crm-tint); }
+.crm-opt-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-opt-h { font-size: 12px; color: var(--crm-mut); white-space: nowrap; }
+.crm-pull-hint, .crm-pull-none { padding: 6px 8px 4px; font-size: 12px; color: var(--crm-mut); }
+.crm-pull-none { color: var(--crm-body); }
+
+/* Steps: number, kind, sentence, and the row's end icons. */
+.crm-steps { display: grid; }
+.crm-step { display: grid; grid-template-columns: 22px 64px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 42px; border-bottom: 1px solid var(--crm-line); }
+.crm-step:last-child { border-bottom: 0; }
+.crm-step-new { grid-template-columns: 22px minmax(0, 1fr); }
+.crm-n { color: var(--crm-mut); font-variant-numeric: tabular-nums; }
+.crm-k { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--crm-mut); }
+.crm-t { color: var(--crm-ink); min-width: 0; }
+.crm-t em { display: block; font-style: normal; font-size: 12.5px; color: var(--crm-dm); }
+.crm-ends { display: flex; gap: 2px; opacity: .55; }
+.crm-step:hover .crm-ends, .crm-step:focus-within .crm-ends { opacity: 1; }
+@media (hover: none) { .crm-ends { opacity: 1; } }
+
+/* The recipe's numbers along the foot. */
+.crm-foot { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; padding: 12px 0 4px; color: var(--crm-body); }
+.crm-foot b { color: var(--crm-ink); font-weight: 600; margin-right: 4px; }
+.crm-num { font: inherit; width: 58px; min-height: 30px; padding: 2px 2px; text-align: center; background: transparent; color: var(--crm-ink); border: 0; border-bottom: 1px solid var(--crm-field-line); }
+.crm-num:focus { outline: none; border-bottom-color: var(--crm-acc); }
+.crm-sel { font: inherit; min-height: 30px; background: transparent; color: var(--crm-ink); border: 0; border-bottom: 1px solid var(--crm-field-line); }
+.crm-checks { margin-top: 8px; display: grid; gap: 4px; font-size: 12.5px; color: var(--crm-dm); }
+.crm-checks li { display: flex; gap: 6px; align-items: baseline; }
+.crm-book .cra-page { margin-top: 10px; }
+
+/* ---------- The Workshop part: a sheet holding a table ---------- */
+.crm-part { background: var(--crm-panel); border: 1px solid var(--crm-line); border-radius: var(--crm-r); padding: 14px 16px; }
+.crm-part .crm-head { border-bottom: 0; padding-bottom: 10px; }
+.crm-count { font-size: 12px; color: var(--crm-mut); background: var(--crm-tint); border-radius: 999px; padding: 1px 8px; }
+.crm-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.crm-table th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--crm-mut); padding: 8px 8px; border-bottom: 1px solid var(--crm-line); }
+.crm-table td { padding: 8px 8px; border-bottom: 1px solid var(--crm-line); vertical-align: middle; color: var(--crm-ink); }
+.crm-table tr:focus-within td { background: rgb(0 0 0 / .02); }
+.crm-table td.crm-name { display: flex; align-items: center; gap: 8px; }
+.crm-table .crm-in { min-height: 30px; }
+.crm-table .crm-chip { min-height: 28px; font-size: 13px; }
+.crm-tablewrap { overflow-x: auto; }
+.crm-help { margin-top: 10px; font-size: 12.5px; color: var(--crm-mut); line-height: 1.5; }
+.crm-tick { width: 18px; height: 18px; accent-color: var(--crm-acc); }
+.crm-seed { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--crm-mut); background: var(--crm-tint); border-radius: 999px; padding: 1px 8px; }
+.crm-pre { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.55; background: var(--crm-tint);
+  border-radius: var(--crm-r); padding: 12px 14px; margin: 6px 0 4px; color: var(--crm-ink); max-height: 280px; overflow: auto; }
+.crm-paste { font: inherit; font-size: 13px; width: 100%; min-height: 110px; padding: 8px 10px; color: var(--crm-ink); background: var(--crm-field); border: 1px solid var(--crm-field-line); border-radius: var(--crm-r); }
+.crm-paste:focus { outline: 2px solid var(--crm-acc); outline-offset: 0; border-color: transparent; }
+.crm-step-h { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--crm-acc); margin: 14px 0 4px; }
+.crm-packs { display: grid; }
+.crm-pack { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 6px; border-bottom: 1px solid var(--crm-line); }
+.crm-pack.is-open { box-shadow: inset 2px 0 0 var(--crm-acc); background: var(--crm-tint); }
+.crm-pack-pics { display: flex; flex-wrap: wrap; gap: 2px; }
+.crm-pack b { color: var(--crm-ink); font-weight: 600; }
+.crm-btn { font: inherit; font-size: 13.5px; font-weight: 600; min-height: 34px; padding: 6px 14px; border-radius: var(--crm-r); border: 1px solid transparent; cursor: pointer;
+  background: var(--crm-acc); color: #fff; box-shadow: var(--elev-resting, 0 1px 2px rgb(0 0 0 / .08)); }
+.crm-btn:disabled { opacity: .55; cursor: default; }
+.crm-btn-2 { background: var(--crm-panel); color: var(--crm-ink); border-color: var(--crm-line); }
+
+/* The part's settings in the Workshop's inspector. */
+.crm-insp { display: grid; gap: 14px; }
+.crm-insp-h { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--crm-acc); }
+.crm-insp p { color: var(--crm-body); font-size: 13.5px; line-height: 1.5; }
+.crm-seg { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.crm-seg button { font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: 6px 0; min-height: 32px; border: 0; background: none;
+  color: var(--crm-mut); border-bottom: 1px solid transparent; cursor: pointer; }
+.crm-seg button[aria-pressed="true"] { color: var(--crm-ink); border-bottom-color: var(--crm-ink); }
+.crm-field { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 6px 12px; align-items: center; }
+.crm-field > span:first-child { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--crm-mut); }
+.crm-match { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.2fr); gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--crm-line); }
+.crm-match select { font: inherit; font-size: 13px; min-height: 32px; width: 100%; background: var(--crm-field); color: var(--crm-ink); border: 1px solid var(--crm-field-line); border-radius: 6px; }
+.crm-table .crm-ends { opacity: 1; }
+.crm-table td.crm-name .crm-in { min-width: 120px; }
+.crm-newrow td { border-bottom: 0; }
+.crm-newrow .crm-type { display: block; max-width: 360px; }
+.crm-pull[hidden] { display: none; }
+.crm-chip-t { font: inherit; padding: 2px 10px; cursor: pointer; color: var(--crm-mut); background: none; border: 1px solid var(--crm-line); }
+.crm-chip-t[aria-pressed="true"] { color: var(--crm-ink); background: var(--crm-tint); border-color: transparent; font-weight: 600; }
+.crm-picklist { display: grid; gap: 2px; padding: 4px 6px 10px 56px; border-bottom: 1px solid var(--crm-line); }
+.crm-pickrow { display: flex; align-items: center; gap: 8px; min-height: 32px; color: var(--crm-ink); }
+.crm-file { cursor: pointer; }
+.crm-file:focus-within { outline: 2px solid var(--crm-acc); outline-offset: 2px; }
+.crm-savepack { margin-top: 12px; }
+.crm-savepack .crm-in { max-width: 240px; }
+.crm-insp .crm-field { grid-template-columns: 80px minmax(0, 1fr); }

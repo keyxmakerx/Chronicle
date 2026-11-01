@@ -507,6 +507,14 @@
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
   }
   // "Thu Oct 8" for a YYYY-MM-DD real date.
+  // The full address a calendar app subscribes to. The server answers a
+  // path; anything else (an absolute or protocol-relative URL) is refused,
+  // so the field only ever holds this site's own link.
+  function gnFeedURL(origin, path) {
+    if (typeof path !== 'string' || !/^\/sessions\/feed\/[A-Za-z0-9_-]+\.ics$/.test(path)) return '';
+    return String(origin || '').replace(/\/+$/, '') + path;
+  }
+
   function realDateWords(iso) {
     try {
       return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '');
@@ -2201,6 +2209,9 @@
 
     // The header's "Game nights": the nights coming up, from today through
     // the next two months, and the last one played, each opening its day.
+    // Game nights have no page of their own, so the panel also holds every
+    // night ("All game nights") and the member's own calendar link ("Add to
+    // your calendar", only while the owner's feed switch is on).
     gnListOpen: function () {
       var pop = $('#cal5-gnpop', this.el);
       return !!pop && !pop.hidden;
@@ -2218,9 +2229,16 @@
         months.push({ y: y, m: m });
         if (++m > 12) { m = 1; y++; }
       }
-      Promise.all(months.map(function (o) { return self.fetchNights(o.y, o.m); })).then(function (lists) {
+      if (!this._gnFeedPromise) {
+        this._gnFeedPromise = Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/feed-settings')
+          .then(function (r) { return r.ok ? r.json() : {}; })
+          .then(function (b) { return !!(b && b.enabled); }, function () { return false; });
+      }
+      Promise.all([Promise.all(months.map(function (o) { return self.fetchNights(o.y, o.m); })), this._gnFeedPromise]).then(function (got) {
         if (pop.hidden) return;
-        pop.innerHTML = self._gnListHTML([].concat.apply([], lists));
+        self._gnFeedOn = got[1];
+        self._gnNext = [].concat.apply([], got[0]);
+        pop.innerHTML = self._gnListHTML(self._gnNext);
         var first = $('.wrow', pop);
         if (first) first.focus();
       }).catch(function () { pop.innerHTML = '<p class="gnempty">Could not load the game nights. Try again.</p>'; });
@@ -2256,7 +2274,113 @@
       h += next.length ? '<ul class="wlist">' + next.map(row).join('') + '</ul>'
         : '<p class="gnempty">' + (this.role >= 2 ? 'Nothing planned yet. Open a day to plan a game night.' : 'Nothing planned yet.') + '</p>';
       if (played) h += '<div class="gnhead">Last played</div><ul class="wlist">' + row(played) + '</ul>';
-      return h + '<div class="gnfoot"><a class="lnk" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions">All game nights</a></div>';
+      return h + this._gnFootHTML(false);
+    },
+
+    // The panel's foot: "Add to your calendar" and the switch between the
+    // nights coming up and all of them.
+    _gnFootHTML: function (all) {
+      return '<div class="gnfoot">' +
+        (this._gnFeedOn ? '<button type="button" class="lnk" data-gn-feed aria-expanded="false" aria-controls="cal5-gnfeed"><i class="fa-regular fa-calendar-plus" aria-hidden="true"></i> Add to your calendar</button>' : '') +
+        (all ? '<button type="button" class="lnk" data-gn-next>Coming up</button>' : '<button type="button" class="lnk" data-gn-all>All game nights</button>') +
+        '</div>' + (this._gnFeedOn ? this._gnFeedHTML() : '');
+    },
+
+    // Every night and series, as the server groups them: Upcoming, Played,
+    // Completed, Cancelled. Planned nights open on their day; the rest are
+    // not on the grid, so they open their own page.
+    showAllNights: function () {
+      var self = this, pop = $('#cal5-gnpop', this.el);
+      if (!pop || pop.hidden) return;
+      pop.innerHTML = '<p class="gnempty">Loading game nights…</p>';
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/all')
+        .then(function (r) { if (!r.ok) throw new Error('all ' + r.status); return r.json(); })
+        .then(function (groups) {
+          if (pop.hidden) return;
+          pop.innerHTML = self._gnAllHTML(Array.isArray(groups) ? groups : []);
+          var first = $('.wrow', pop);
+          if (first) first.focus();
+        })
+        .catch(function () { if (!pop.hidden) pop.innerHTML = '<p class="gnempty">Could not load the game nights. Try again.</p>' + self._gnFootHTML(true); });
+    },
+
+    _gnAllHTML: function (groups) {
+      var self = this, word = { played: 'Played', completed: 'Completed', cancelled: 'Cancelled' };
+      var row = function (n, key) {
+        // A series shows its next night, not the day it started.
+        var day = n.date || n.day, dt = day ? new Date(day + 'T12:00:00Z') : null;
+        var mon = !dt || isNaN(dt) ? '' : dt.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+        var sub = (n.repeat && n.date ? ['Next ' + realDateWords(n.date), n.repeat] : [n.when]).filter(Boolean).join(' · ');
+        var inner = '<span class="wtile" aria-hidden="true"><small>' + esc(mon) + '</small><b>' + esc(day ? String(+day.slice(8)) : '–') + '</b></span>' +
+          '<span class="wmain"><span class="wt">' + esc(n.name) + '</span><span class="ws">' + esc(sub) + '</span></span>' +
+          (word[key] ? '<span class="gnans">' + esc(word[key]) + '</span>' : '');
+        return '<li>' + (n.date
+          ? '<button type="button" class="wrow" data-gn-go="' + esc(n.sessionId) + '" data-gn-date="' + esc(n.date) + '">' + inner + '</button>'
+          : '<a class="wrow" href="' + esc(n.href || '#') + '">' + inner + '</a>') + '</li>';
+      };
+      var h = '';
+      groups.forEach(function (g) {
+        if (!g || !Array.isArray(g.nights) || !g.nights.length) return;
+        h += '<div class="gnhead">' + esc(g.label) + '</div><ul class="wlist">' + g.nights.map(function (n) { return row(n, g.key); }).join('') + '</ul>';
+      });
+      if (!h) h = '<p class="gnempty">' + (self.role >= 2 ? 'No game nights yet. Open a day to plan one.' : 'No game nights yet.') + '</p>';
+      return h + this._gnFootHTML(true);
+    },
+
+    // The member's private calendar link, made the first time it is shown,
+    // with Copy and Replace link behind an inline confirm.
+    _gnFeedHTML: function () {
+      return '<div class="gnfeed" id="cal5-gnfeed" role="region" aria-label="Your game nights in your calendar" hidden>' +
+        '<p>Add this link to your phone or computer calendar. New nights appear on their own, and a moved or cancelled night updates too.</p>' +
+        '<div class="gnlinkrow"><input type="text" readonly data-gn-feed-url aria-label="Your private calendar link"' + (this._gnFeedLink ? ' value="' + esc(this._gnFeedLink) + '"' : '') + '>' +
+        '<button type="button" class="btn sm" data-gn-copy>Copy</button></div>' +
+        '<p class="gnfine"><i class="fa-solid fa-lock" aria-hidden="true"></i> Only you have this link. Anyone with it can see this campaign’s game night dates. <button type="button" class="lnk" data-gn-replace>Replace link</button></p>' +
+        '<div class="gnconfirm" data-gn-confirm hidden><p>Replacing stops the old link at once, so any calendar using it stops updating until you add the new one.</p>' +
+        '<button type="button" class="btn sm" data-gn-replace-yes>Replace it</button> <button type="button" class="lnk" data-gn-replace-no>Keep this link</button></div></div>';
+    },
+
+    toggleGnFeed: function (btn) {
+      var pop = $('#cal5-gnpop', this.el), box = $('#cal5-gnfeed', pop);
+      if (!box) return;
+      var on = box.hidden;
+      box.hidden = !on;
+      btn.setAttribute('aria-expanded', String(on));
+      if (!on) { $('[data-gn-confirm]', box).hidden = true; return; }
+      if (!this._gnFeedLink) this._loadGnFeed(box, false);
+    },
+
+    _loadGnFeed: function (box, replace) {
+      var self = this, field = $('[data-gn-feed-url]', box);
+      if (this._gnFeedBusy) return;
+      this._gnFeedBusy = true;
+      if (!replace) field.placeholder = 'Making your link…';
+      var fail = 'Your calendar link could not be made. Try again.';
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/feed/token' + (replace ? '/replace' : ''), { method: 'POST', body: {} })
+        .then(function (r) { if (!r.ok) throw new Error(fail); return r.json(); })
+        .then(function (b) {
+          var full = gnFeedURL(window.location.origin, b && b.url);
+          if (!full) throw new Error(fail);
+          self._gnFeedLink = full;
+          field.value = full;
+          if (replace) self.say('New link made. The old one no longer works.');
+        })
+        .catch(function (err) { field.placeholder = ''; self.say((err && err.message) || fail); })
+        .then(function () { self._gnFeedBusy = false; });
+    },
+
+    _copyGnFeed: function (btn, field) {
+      var self = this;
+      if (!field.value) return;
+      var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1500); };
+      var fallback = function () {
+        field.focus();
+        field.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        if (ok) done(); else self.say('Press and hold the link to copy it.');
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(field.value).then(done, fallback);
+      else fallback();
     },
 
     // A game night's id in the grid and the cards: "gn:" + session + date,
@@ -2680,8 +2804,8 @@
       else if (act === 'cancel') { this._gnRecapFor = null; this._gnRedrawExtra(sid, '[data-gn-recap="edit"]'); }
       else if (act === 'save') {
         var text = box.querySelector('[data-gn-recap-input]').value;
-        // The same shape the Sessions page saves: the text, and each line as
-        // a paragraph.
+        // The same shape a night's own page saves: the text, and each line
+        // as a paragraph.
         var html = text.split('\n').filter(function (l) { return l.trim(); }).map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
         $$('button, textarea', box).forEach(function (c) { c.disabled = true; });
         Chronicle.apiFetch(base + '/recap', { method: 'PUT', body: { recap: text, recap_html: html } })
@@ -3055,8 +3179,7 @@
         '<p class="gperr" role="alert" hidden></p></form>';
     },
 
-    // What a planned night sends: the New Session form's own fields, so the
-    // server path is the one the Sessions page already uses.
+    // What a planned night sends: the create route's own form fields.
     _planFields: function (iso, f) {
       var out = { name: (f.name || '').trim(), scheduled_date: iso, scheduled_time: f.time || '' };
       if (this.calZone && out.scheduled_time) out.scheduled_tz = this.calZone;
@@ -5065,7 +5188,17 @@
           if (self.gnListOpen()) self.closeGnList(); else self.openGnList();
         });
         $('#cal5-gnpop', this.el).addEventListener('click', function (e) {
-          var row = e.target.closest('[data-gn-go]');
+          var pop = e.currentTarget, t = e.target;
+          if (t.closest('[data-gn-all]')) { self.showAllNights(); return; }
+          if (t.closest('[data-gn-next]')) { pop.innerHTML = self._gnListHTML(self._gnNext || []); return; }
+          var fb = t.closest('[data-gn-feed]');
+          if (fb) { self.toggleGnFeed(fb); return; }
+          var box = $('#cal5-gnfeed', pop);
+          if (box && t.closest('[data-gn-copy]')) { self._copyGnFeed(t.closest('[data-gn-copy]'), $('[data-gn-feed-url]', box)); return; }
+          if (box && t.closest('[data-gn-replace]')) { $('[data-gn-confirm]', box).hidden = false; return; }
+          if (box && t.closest('[data-gn-replace-no]')) { $('[data-gn-confirm]', box).hidden = true; return; }
+          if (box && t.closest('[data-gn-replace-yes]')) { $('[data-gn-confirm]', box).hidden = true; self._loadGnFeed(box, true); return; }
+          var row = t.closest('[data-gn-go]');
           if (!row) return;
           self.closeGnList();
           self._openNight({ sessionId: row.getAttribute('data-gn-go'), date: row.getAttribute('data-gn-date') });
@@ -6272,6 +6405,6 @@
   // Go model's own values without a browser DOM. `module` is undefined when
   // loaded via <script>, so this is a no-op in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, forecastMarkHTML: forecastMarkHTML, forecastFactHTML: forecastFactHTML, forecastDetailText: forecastDetailText, playersSeeHTML: playersSeeHTML, weatherIcon: weatherIcon, awayStretches: awayStretches };
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, forecastMarkHTML: forecastMarkHTML, forecastFactHTML: forecastFactHTML, forecastDetailText: forecastDetailText, playersSeeHTML: playersSeeHTML, weatherIcon: weatherIcon, awayStretches: awayStretches, gnFeedURL: gnFeedURL };
   }
 })();

@@ -54,6 +54,57 @@ func (h *Handler) RollProject(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// Experiment handles POST /campaigns/:id/crafting/characters/:eid/experiment.
+func (h *Handler) Experiment(c echo.Context) error {
+	cc, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	var in TryInput
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.Experiment(c.Request().Context(), cc.Campaign.ID, c.Param("eid"), v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// BreakDown handles POST /campaigns/:id/crafting/characters/:eid/break-down.
+func (h *Handler) BreakDown(c echo.Context) error {
+	cc, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	var in BreakInput
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.BreakDown(c.Request().Context(), cc.Campaign.ID, c.Param("eid"), v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// Help handles POST /campaigns/:id/crafting/projects/:pid/help.
+func (h *Handler) Help(c echo.Context) error {
+	cc, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	var in HelpInput
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.Help(c.Request().Context(), cc.Campaign.ID, c.Param("pid"), v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 // CancelProject handles DELETE /campaigns/:id/crafting/projects/:pid.
 func (h *Handler) CancelProject(c echo.Context) error {
 	cc, v, err := viewerFrom(c)

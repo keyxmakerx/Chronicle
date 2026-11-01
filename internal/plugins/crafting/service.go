@@ -34,6 +34,8 @@ type Directory interface {
 	ListCharacters(ctx context.Context, campaignID string, role int, userID string) ([]Named, bool, error)
 	// OwnedCharacterIDs lists the characters the user has claimed.
 	OwnedCharacterIDs(ctx context.Context, campaignID, userID string) (map[string]bool, error)
+	// Party lists the claimed characters the role and user may see.
+	Party(ctx context.Context, campaignID string, role int, userID string) ([]Named, error)
 }
 
 // RulesSource gives the crafting rules of the campaign's enabled system,
@@ -74,6 +76,9 @@ type Service interface {
 	Character(ctx context.Context, campaignID, characterID string, v Viewer) (*CharacterCrafting, error)
 	StartProject(ctx context.Context, campaignID, characterID string, v Viewer, in StartInput) (*ProjectView, error)
 	RollProject(ctx context.Context, campaignID, id string, v Viewer, in RollInput) (*RollResult, error)
+	Experiment(ctx context.Context, campaignID, characterID string, v Viewer, in TryInput) (*TryResult, error)
+	BreakDown(ctx context.Context, campaignID, characterID string, v Viewer, in BreakInput) (*BreakResult, error)
+	Help(ctx context.Context, campaignID, projectID string, v Viewer, in HelpInput) (*RollResult, error)
 	CancelProject(ctx context.Context, campaignID, id string, v Viewer) error
 
 	Projects(ctx context.Context, campaignID string, v Viewer) (*ProjectsPage, error)
@@ -90,6 +95,10 @@ type Service interface {
 	ClearSpoil(ctx context.Context, campaignID, id string, v Viewer) error
 	ClearSpoilLine(ctx context.Context, campaignID string, id int64, v Viewer) error
 	TakeSpoil(ctx context.Context, campaignID string, lineID int64, v Viewer, in TakeInput) (*TakeResult, error)
+	// StudySpoil rolls a hero's study of a find that needs one;
+	// RevealSpoil names its item to the party without a roll.
+	StudySpoil(ctx context.Context, campaignID string, lineID int64, v Viewer, in TakeInput) (*StudyResult, error)
+	RevealSpoil(ctx context.Context, campaignID string, lineID int64, v Viewer) error
 	// FightEnded puts what a fight's defeated creatures drop in the tray.
 	FightEnded(ctx context.Context, campaignID string, v Viewer, f Fight) (*FightSpoils, error)
 	// DropNotes says which of a fight's pages have a drop list.
@@ -105,6 +114,32 @@ type Service interface {
 	// follow its kind.
 	SetKindPictures(ctx context.Context, campaignID string, v Viewer, in KindPicturesInput) ([]Tag, error)
 	SetItemPicture(ctx context.Context, campaignID, itemID string, v Viewer, in *MaterialPicture) (*MaterialPicture, error)
+
+	// ItemCrafting is what an Armory item's page shows: how it is made and
+	// where it is used, as the viewer may read it.
+	ItemCrafting(ctx context.Context, campaignID, itemID string, v Viewer) (*ItemCrafting, error)
+	// CreateMaterial makes a Director-only Armory item with crafting kinds.
+	CreateMaterial(ctx context.Context, campaignID string, v Viewer, in MaterialInput) (*MaterialItem, error)
+	// ItemBlock and PlaceItemBlock say whether item pages show "How it's
+	// made" and put it there when the Director asks.
+	ItemBlock(ctx context.Context, campaignID string, v Viewer) (bool, error)
+	PlaceItemBlock(ctx context.Context, campaignID string, v Viewer) (int, error)
+	// TeachParty and KnownRecipes are the Homebrew Workshop's: a rule
+	// teaching a recipe to the party, and a part's recipe list checked.
+	TeachParty(ctx context.Context, campaignID string, v Viewer, name string) (string, error)
+	KnownRecipes(ctx context.Context, campaignID string, v Viewer, ids []string) ([]string, error)
+	// Generate writes recipes from the campaign's materials without saving.
+	Generate(ctx context.Context, campaignID string, v Viewer, in GenerateInput) (*GenerateResult, error)
+
+	// Recipe packs: saved sets of recipes other campaigns bring in.
+	ListPacks(ctx context.Context, campaignID string, v Viewer) ([]PackView, error)
+	PackDetail(ctx context.Context, campaignID, id string, v Viewer) (*PackDetail, error)
+	SavePack(ctx context.Context, campaignID string, v Viewer, in SavePackInput) (*PackView, error)
+	UploadPack(ctx context.Context, campaignID string, v Viewer, raw []byte) (*PackView, error)
+	UpdatePack(ctx context.Context, campaignID, id string, v Viewer, in PackChange) (*PackView, error)
+	DeletePack(ctx context.Context, campaignID, id string, v Viewer) error
+	PackFile(ctx context.Context, campaignID, id string, v Viewer) ([]byte, string, error)
+	ImportPack(ctx context.Context, campaignID, id string, v Viewer, in ImportInput) (*ImportResult, error)
 }
 
 type service struct {
@@ -149,7 +184,7 @@ func (s *service) Library(ctx context.Context, campaignID string, v Viewer) (*Li
 	}
 	rules, name := s.systemRules(ctx, campaignID)
 	return &Library{Tags: book.tags(), TagGroups: TagGroups, Pictures: Pictures, Tools: Tools, Steps: StepKinds, BenchKinds: BenchKinds, Templates: Templates, Skins: Skins,
-		Difficulties: Difficulties, Moments: Moments, Rules: rules, System: name, Settings: set, Director: v.Director}, nil
+		Difficulties: Difficulties, Moments: Moments, Rules: rules, System: name, Settings: set, Director: v.Director, Makes: MakeKinds}, nil
 }
 
 func (s *service) Catalog(ctx context.Context, campaignID string, v Viewer) (*Catalog, error) {
@@ -331,7 +366,7 @@ func (s *service) CreateRecipe(ctx context.Context, campaignID string, v Viewer,
 	if err != nil {
 		return nil, err
 	}
-	r.ID = s.newID()
+	r.ID, r.Draft = s.newID(), in.Draft
 	r.Rules, r.Looks = []Rule{}, map[string]*Look{}
 	if err := s.repo.CreateRecipe(ctx, campaignID, v.UserID, r); err != nil {
 		if errors.Is(err, errDuplicate) {

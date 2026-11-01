@@ -191,7 +191,7 @@
     // A night keeps the zone its start time was set in; a new one uses the
     // calendar's.
     var zone = (night && night.tz) || view.calZone || '';
-    this.state = { night: night, form: s, before: stateFor(night, iso), zone: zone, back: back, confirmDel: false, busy: false };
+    this.state = { night: night, form: s, before: stateFor(night, iso), zone: zone, back: back, busy: false };
     this.el.innerHTML = this._html();
     void this.el.offsetWidth;
     this.el.classList.add('open');
@@ -230,7 +230,7 @@
       (isNew ? '<p class="dnote">Everyone in the campaign is asked if they can come.</p>' : '') + '</section></div>';
     // The server lets the owner and co-Directors cancel a game night.
     var canDel = !isNew && view.canAuthorDmOnly;
-    return h + '<div class="efoot">' + (canDel ? '<button type="button" class="btn danger" data-gn-del><i class="fa-solid fa-trash"></i> ' + (S.confirmDel ? 'Press again to cancel it' : 'Cancel this game night') + '</button>' : '') +
+    return h + '<div class="efoot">' + (canDel ? '<button type="button" class="btn danger" data-gn-del><i class="fa-solid fa-trash"></i> ' + 'Cancel this game night' + '</button>' : '') +
       '<span class="sp"></span><button type="button" class="btn quiet" data-close>Close</button><button type="button" class="btn primary" data-gn-save>' + (isNew ? 'Plan it' : 'Save') + '</button></div>';
   };
 
@@ -329,23 +329,27 @@
     });
   };
 
-  // Cancelling takes two presses, so a stray click can't cancel a game
-  // night everyone has answered.
+  // Cancelling moves the night to the Trash, so it doesn't ask first: the
+  // message offers Undo, and Manage > Trash keeps it for the retention.
   Drawer.prototype._delete = function () {
     var self = this, S = this.state, view = this.view;
     if (!S || !S.night || S.busy) return;
-    if (!S.confirmDel) {
-      S.confirmDel = true;
-      var b = $('[data-gn-del]', this.el);
-      if (b) b.innerHTML = '<i class="fa-solid fa-trash"></i> Press again to cancel it';
-      return;
-    }
+    var base = '/campaigns/' + encodeURIComponent(view.campaignId);
+    var id = S.night.sessionId;
     this._busy(true);
-    Chronicle.apiFetch('/campaigns/' + encodeURIComponent(view.campaignId) + '/sessions/' + encodeURIComponent(S.night.sessionId), { method: 'DELETE' })
+    Chronicle.apiFetch(base + '/sessions/' + encodeURIComponent(id), { method: 'DELETE' })
       .then(function (resp) {
         if (!resp.ok) return resp.json().catch(function () { return {}; }).then(function (j) { return Promise.reject(j && j.error); });
         self.close(true);
-        view.say('Game night cancelled. Anyone who had answered has been told.');
+        view.say('Game night cancelled and moved to the Trash. Anyone who had answered has been told.', { label: 'Undo', run: function () {
+          Chronicle.apiFetch(base + '/sessions/' + encodeURIComponent(id) + '/restore', { method: 'POST' })
+            .then(function (r) {
+              if (!r.ok) throw new Error('restore ' + r.status);
+              view.say('Game night is back on. Anyone who had answered has been told.');
+              return view.reloadNights();
+            })
+            .catch(function () { view.say('It couldn’t be put back. It is still in Manage > Trash.'); });
+        } });
         return view.reloadNights();
       })
       .catch(function (msg) {

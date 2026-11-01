@@ -19,10 +19,15 @@ type fakeSpoils struct {
 	lines  map[int64]*SpoilLine
 	order  []int64
 	next   int64
+	known  map[string]KnownItem
+	// studies are kept in order; respite is how many came before the last
+	// respite.
+	studies []Study
+	respite int
 }
 
 func newFakeSpoils() *fakeSpoils {
-	return &fakeSpoils{drops: map[string]DropList{}, lines: map[int64]*SpoilLine{}}
+	return &fakeSpoils{drops: map[string]DropList{}, lines: map[int64]*SpoilLine{}, known: map[string]KnownItem{}}
 }
 
 func (f *fakeSpoils) GetDrops(_ context.Context, _, pageID string) (DropList, bool, error) {
@@ -147,8 +152,78 @@ func (f *fakeSpoils) ListTaken(context.Context, string, int) ([]SpoilLine, error
 	return out, nil
 }
 
+func (f *fakeSpoils) KnownItems(_ context.Context, _ string, ids []string) (map[string]KnownItem, error) {
+	out := map[string]KnownItem{}
+	for _, id := range ids {
+		if k, ok := f.known[id]; ok {
+			out[id] = k
+		}
+	}
+	return out, nil
+}
+func (f *fakeSpoils) MarkKnown(_ context.Context, _ string, k KnownItem) error {
+	if old, ok := f.known[k.ItemID]; ok {
+		old.Recipes = old.Recipes || k.Recipes
+		f.known[k.ItemID] = old
+		return nil
+	}
+	f.known[k.ItemID] = k
+	return nil
+}
+func (f *fakeSpoils) StartStudy(_ context.Context, _ string, st Study) (int64, bool, error) {
+	for _, t := range f.studies[f.respite:] {
+		if t.ItemID == st.ItemID && t.CharacterID == st.CharacterID {
+			return 0, false, nil
+		}
+	}
+	return f.addStudy(st), true, nil
+}
+func (f *fakeSpoils) addStudy(st Study) int64 {
+	st.ID = int64(len(f.studies) + 1)
+	st.At = time.Date(2026, 1, 3, 0, 0, len(f.studies), 0, time.UTC)
+	f.studies = append(f.studies, st)
+	return st.ID
+}
+func (f *fakeSpoils) FinishStudy(_ context.Context, _ string, id int64, outcome string, rolled int) error {
+	f.studies[id-1].Outcome, f.studies[id-1].Rolled = outcome, &rolled
+	return nil
+}
+func (f *fakeSpoils) LogStudy(_ context.Context, _ string, st Study) error {
+	f.addStudy(st)
+	return nil
+}
+func (f *fakeSpoils) TriesSinceRespite(_ context.Context, _ string, ids []string) ([]Study, error) {
+	out := []Study{}
+	for _, t := range f.studies[f.respite:] {
+		for _, id := range ids {
+			if t.ItemID == id && t.CharacterID != "" {
+				out = append(out, t)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+func (f *fakeSpoils) RecentStudies(_ context.Context, _ string, limit int) ([]Study, error) {
+	out := []Study{}
+	for i := len(f.studies) - 1; i >= 0 && len(out) < limit; i-- {
+		if f.studies[i].Outcome != "" {
+			out = append(out, f.studies[i])
+		}
+	}
+	return out, nil
+}
+func (f *fakeSpoils) LoseLine(_ context.Context, _ string, id int64, characterID, by string, rolled int, at time.Time) (bool, error) {
+	l, ok := f.lines[id]
+	if !ok || l.Status != SpoilWaiting {
+		return false, nil
+	}
+	l.Status, l.CharacterID, l.TakenBy, l.Rolled, l.TakenAt = SpoilLost, characterID, by, &rolled, &at
+	return true, nil
+}
+
 // fakePages is the campaign's pages for drop lists. Players can't see the
-// shrine.
+// shrine; every hero is seen.
 type fakePages struct{ hidden map[string]bool }
 
 var spoilPages = map[string]PageInfo{
@@ -165,6 +240,9 @@ func (p *fakePages) Page(_ context.Context, _, id string) (*PageInfo, error) {
 	return nil, nil
 }
 func (p *fakePages) CanSee(_ context.Context, _, id string, role int, _ string) (bool, error) {
+	if id == "mira" || id == "tobin" {
+		return !p.hidden[id], nil
+	}
 	_, ok := spoilPages[id]
 	return ok && (role >= 3 || !p.hidden[id]), nil
 }

@@ -114,14 +114,16 @@
         (close.length ? '<p class="crr-sent">They come close with ' + chips('discover.closeWhen', close, x.discover.closeWhen) + ' ingredients right. Then the book says:</p>' : '') +
         '<input class="crr-in" data-xt="discover.hint" maxlength="' + R.EXTRAS.limits.hint + '" value="' + esc(x.discover.hint || '') + '" placeholder="A hint, in the book’s voice" aria-label="The hint">' +
         '<p class="crr-sent">When they find it, ' + chips('discover.learnedBy', [['maker', 'the maker learns it'], ['party', 'the whole party learns it']], x.discover.learnedBy) + '</p>' +
-        '<p class="crr-sent">A try that finds nothing ' + chips('discover.failedTry', [['used', 'uses up what they put in'], ['half', 'uses up half'], ['kept', 'keeps everything']], x.discover.failedTry) + '</p>' : '', NOTYET);
+        '<p class="crr-sent">A try that finds nothing ' + chips('discover.failedTry', [['used', 'uses up what they put in'], ['half', 'uses up half'], ['kept', 'keeps everything']], x.discover.failedTry) + '</p>' +
+        '<p class="crr-hint">Each hero gets one try at each respite. With this off, no one can find it by experimenting.</p>' : '');
       h += card('keeps', !!x.keeps, 'crr-risk', 'hourglass-half', 'It goes off', 'Counted on the campaign calendar, so long journeys matter.', x.keeps ? '<p class="crr-sent">It keeps for <span class="crr-stepper">' +
         '<button type="button" data-step="keeps.days" data-v="-1" aria-label="One day fewer">' + fa('minus') + '</button><output>' + x.keeps.days + '</output><button type="button" data-step="keeps.days" data-v="1" aria-label="One day more">' + fa('plus') +
         '</button></span> days, then becomes ' + chips('keeps.thenBecomes', withCur((S.W.lists.items || []).slice(0, 12), x.keeps.thenBecomes), x.keeps.thenBecomes) + '</p>' : '', NOTYET);
       h += card('makersMark', x.makersMark, 'crr-change', 'signature', 'Maker’s mark', 'The item says who made it, and when.', '<p class="crr-hint">“Made by the hero who brewed it, on the calendar’s date.”</p>', NOTYET);
       h += card('salvage', x.salvage.length > 0, 'crr-change', 'recycle', 'Breaking it down', 'They can take it apart for something back.', x.salvage.length ? '<p class="crr-sent">It gives back ' +
-        chips('salvage.0.qty', ['1', '2'], String(x.salvage[0].qty)) + ' × ' + chips('salvage.0.item', r.ings.map(function (g) { return g[1]; }), x.salvage[0].item) + '</p>' : '', NOTYET);
-      h += card('othersCanHelp', x.othersCanHelp, 'crr-when', 'people-group', 'Others can help', 'Several heroes work on it at the same bench.', '', NOTYET);
+        chips('salvage.0.qty', ['1', '2'], String(x.salvage[0].qty)) + ' × ' + chips('salvage.0.item', r.ings.map(function (g) { return g[1]; }), x.salvage[0].item) + '</p>' : '');
+      h += card('othersCanHelp', x.othersCanHelp, 'crr-when', 'people-group', 'Others can help', 'Party members can lend a hand on it.',
+        x.othersCanHelp ? '<p class="crr-hint">Each party member can add one extra roll to a hero’s project at each respite, with their own characteristic.</p>' : '');
       return h + '</div><p class="crr-hint">Who knows the recipe is set on the recipe form, beside its ingredients.</p><div class="crr-aicap crr-block">What the AI writes</div><pre class="crr-aij crr-block">' + hl(data('extras')) + '</pre></div>';
     }
     function data(k) {

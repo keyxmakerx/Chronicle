@@ -97,7 +97,7 @@ test('a good comes to the cloth and goes on the pile only when you say so', { sk
 test('turning round shows the shop floor, where a good is held until you add it', { skip }, async (t) => {
   const p = await shop(t);
   await p.keyboard.press('ArrowLeft'); await p.waitForFunction(() => /shop floor/.test(document.querySelector('.src-svg').getAttribute('aria-label')));
-  const floor = await p.evaluate(() => Array.from(document.querySelectorAll('#srcf-wares [data-k], #srcf-barrels [data-k^="ware:"]'), (e) => e.getAttribute('data-k')));
+  const floor = await p.evaluate(() => Array.from(document.querySelectorAll('.src-svg #srcf-wares [data-k], .src-svg #srcf-barrels [data-k^="ware:"]'), (e) => e.getAttribute('data-k')));
   assert.deepEqual(floor.sort(), ['ware:13', 'ware:15'], 'the tea in a barrel, the toolbox in the cabinet');
   await press(p, 'ware:15');
   await p.waitForSelector('[data-k="held:15"]');
@@ -112,7 +112,7 @@ test('turning round shows the shop floor, where a good is held until you add it'
 test('the case opens from the counter and Escape closes it', { skip }, async (t) => {
   const p = await shop(t);
   await press(p, 'case'); await p.waitForFunction(() => /case/.test(document.querySelector('.src-svg').getAttribute('aria-label')));
-  const inCase = await p.evaluate(() => Array.from(document.querySelectorAll('#srcc-wares [data-k]'), (e) => e.getAttribute('data-k')).sort());
+  const inCase = await p.evaluate(() => Array.from(document.querySelectorAll('.src-svg #srcc-wares [data-k]'), (e) => e.getAttribute('data-k')).sort());
   assert.deepEqual(inCase, ['ware:16', 'ware:17']);
   await press(p, 'ware:16'); await settle(p);
   await take(p, '1');

@@ -4583,6 +4583,7 @@
 
   /* ---------- The set ---------- */
   function plainBack(ctx, G) {
+    if (S.clear) return; // the shadow is under the picture; with no background it would show as a grey disc
     ctx.save(); ctx.filter = 'blur(' + Math.max(1, G.bs * 0.012) + 'px)'; ctx.fillStyle = 'rgba(0,0,0,.4)';
     ctx.translate(G.ox + G.bs * 0.006, G.oy + G.bs * 0.012); shapePath(ctx, G.bw, G.bh, G.bs * 0.012, G.isRound); ctx.fill(); ctx.restore();
   }
@@ -4691,7 +4692,9 @@
     // separately leaves a dark hairline at the cut, and fading inside a clip leaves a ring of the clip's soft edge.
     var pc = featherCanvas(outW, outH), px = pc.getContext('2d');
     px.globalCompositeOperation = 'source-over'; px.clearRect(0, 0, outW, outH);
-    px.fillStyle = '#0c0c0d'; px.fillRect(0, 0, outW, outH); art(px, S.img, p, k);
+    // A picture whose background was removed keeps it see-through: no backing.
+    if (!S.clear) { px.fillStyle = '#0c0c0d'; px.fillRect(0, 0, outW, outH); }
+    art(px, S.img, p, k);
     if (D.feather) { // smoke is see-through, so the picture fades into it instead of ending at a hard circle
       var Rin = bs / 2 - inset, fg = px.createRadialGradient(outW / 2, outH / 2, Rin - bs * D.feather, outW / 2, outH / 2, Rin);
       fg.addColorStop(0, '#000'); fg.addColorStop(1, 'rgba(0,0,0,0)');
@@ -4729,10 +4732,11 @@
     // render draws one token into ctx, w by h pixels. o: img (the picture),
     // place (from place, as moved), frame (a design id), colour ('' or
     // '#rrggbb'), shape ('round' or 'square'), flip, name (the storybook's
-    // banner), t (seconds) and still (draw a moving design as its still picture).
+    // banner), t (seconds), still (draw a moving design as its still picture)
+    // and clear (the picture's background was removed, so nothing is put behind it).
     render: function (ctx, w, h, o) {
       if (!o || !o.img || !o.place) return;
-      S.img = o.img; S.flip = !!o.flip; S.shape = o.shape === 'square' ? 'square' : 'round'; S.token = o.place; S.mode = 'token'; S.name = o.name || '';
+      S.img = o.img; S.flip = !!o.flip; S.clear = !!o.clear; S.shape = o.shape === 'square' ? 'square' : 'round'; S.token = o.place; S.mode = 'token'; S.name = o.name || '';
       render(ctx, w, h, 'token', BY[o.frame] ? o.frame : 'none', o.t || 0, !!o.still, o.colour || '');
     },
     motion: function (on) { playing = !!on; },

@@ -112,6 +112,12 @@ dice-vendor: ## Rebuild the dice's three.js bundle and copy cannon-es (pinned in
 	npx esbuild static/vendor/three-dice.src.js --bundle --minify --format=esm --legal-comments=eof --outfile=static/vendor/three-dice.min.js
 	cp node_modules/cannon-es/dist/cannon-es.js static/vendor/cannon-es.js
 
+.PHONY: cutout
+cutout: ## Fetch the token maker's smart cutout into static/vendor/cutout (about 60 MB, not in git)
+	python3 -m venv bin/cutout-venv
+	bin/cutout-venv/bin/pip install -q onnxruntime==1.31.1 onnx==1.23.2
+	bin/cutout-venv/bin/python -I tools/fetch_cutout.py static/vendor/cutout
+
 .PHONY: test-js
 test-js: ## Run JS runtime tests (sidebar, availability, widgets — node --test)
 	node --test test/js/*.test.mjs

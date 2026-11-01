@@ -608,6 +608,8 @@ window.CraftDesk = (function () {
       s+='<g transform="translate(24,'+(y-4)+')">'+(done?(g&&g.grade==='miss'?CROSS:TICK):(i===c.i?'<circle r="5" class="bk-now"/>':'<circle r="3.5" class="bk-dot"/>'))+'</g>'+
         '<text class="bk-s'+(i===c.i&&c.phase==='step'?' is-now':'')+(done?' is-done':'')+'" x="40" y="'+y+'">'+esc(c.name(st))+'</text>'+
         (g?'<text class="bk-g is-'+g.grade+'" x="40" y="'+(y+13)+'">'+(g.grade==='perfect'?'perfect':g.grade==='good'?'good':'a slip')+'</text>':'');});
+    // A moment that isn't a project (an experiment, a breakdown) leaves the right page blank.
+    if(r.noProject)return s+'</g>';
     s+='</g><g transform="'+BOOK.r+'"><text class="bk-h2" x="14" y="36">The project</text>'+
       '<text class="bk-t" x="14" y="60">Goal '+r.goal+' points</text><text class="bk-t" x="14" y="78">Roll 2d10 + '+esc(r.stat)+'</text>';
     var k=S.points/r.goal;s+='<rect x="14" y="94" width="172" height="12" class="bk-bar"/><rect x="15" y="95" width="'+(170*k).toFixed(1)+'" height="10" class="bk-fill"/>'+
@@ -749,7 +751,7 @@ window.CraftDesk = (function () {
      in the room together, and the dark corners breathe with it. Only the
      falloff layer uses a blend mode; glows are plain translucent paint,
      which looks the same over a dark room and repaints far cheaper. */
-  var n1=0,n2=0,ox=0,oy=0,tx=0,ty=0,far=null,dirty=0,gen=0,liqCol=null,perf={t:0,n:0,last:0};
+  var n1=0,n2=0,lastT=0,ox=0,oy=0,tx=0,ty=0,far=null,dirty=0,gen=0,liqCol=null,perf={t:0,n:0,last:0};
   /* A slow device drops the depth blur and the grain after a few seconds,
      and repaints the window's sky less often, rather than stutter; the
      lighting and textures stay. */
@@ -763,7 +765,9 @@ window.CraftDesk = (function () {
     else watch(svg);
     skyFrame(svg,t);
     if(!host.calm){ox+=(tx-ox)*.05;oy+=(ty-oy)*.05;far=far||svg.querySelector('.d-far');if(far)far.setAttribute('transform','translate('+(-ox*9).toFixed(2)+','+(-oy*5).toFixed(2)+')');}
-    flare=Math.max(0,flare-.012);n1+=(Math.random()-.5)*.25;n1*=.92;n2=Math.sin(t*7.3)*.03+Math.sin(t*13.1)*.02;var f=(.9+n1*.25+n2)*(1+flare*.9);
+    // Flicker steps are tuned per sixtieth of a second and scaled by the frame's length, so a fast screen does not flicker faster.
+    var k=Math.min(3,Math.max(0,t-lastT)*60);lastT=t;
+    flare=Math.max(0,flare-.012*k);n1+=(Math.random()-.5)*.25*Math.sqrt(k);n1*=Math.pow(.92,k);n2=Math.sin(t*7.3)*.03+Math.sin(t*13.1)*.02;var f=(.9+n1*.25+n2)*(1+flare*.9);
     function op(q,v){var e=svg.querySelector(q);if(e)e.setAttribute('opacity',v.toFixed(3));}
     op('.d-wallglow',.3*f);op('.d-deskglow',.2*f);op('.d-bloom1',Math.min(1,.8*f));op('.d-bloom2',.45*f);op('.d-refl',.32*f);
     op('.d-shade',Math.max(.55,Math.min(1,1.02-(f-.9)*.6)));

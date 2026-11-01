@@ -271,7 +271,7 @@ func (a *StashAPI) View(ctx context.Context, campaignID, keyUserID, actingUserID
 	for _, st := range page.Stashes {
 		items := make([]APIItem, 0, len(st.Items))
 		for _, it := range st.Items {
-			items = append(items, APIItem(it))
+			items = append(items, APIItem{ItemID: it.ItemID, Name: it.Name, Quantity: it.Quantity})
 		}
 		view.Stashes = append(view.Stashes, APIStash{
 			ID: strconv.Itoa(st.ID), Name: st.Name, Money: units(st.Money), Items: items,

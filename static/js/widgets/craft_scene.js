@@ -103,7 +103,7 @@ window.CraftScene = (function () {
   function cleanRecipes(src){var o={};Object.keys(src||{}).forEach(function(k){var r=src[k]||{};
     o[k]={name:String(r.name||k),kind:String(r.kind||''),who:String(r.who||''),stat:String(r.stat||''),mod:clamp(Math.round(+r.mod||0),-10,10),
       goal:clamp(Math.round(+r.goal||10),1,999),start:clamp(Math.round(+r.start||0),0,999),
-      base:hexOr(r.base,'#cfe3f2'),paste:hexOr(r.paste,'#7e1a2a'),mid:hexOr(r.mid,'#a63a4a'),final:hexOr(r.final,'#ff4d6d'),steps:Array.isArray(r.steps)?r.steps:[]};});return o;}
+      base:hexOr(r.base,'#cfe3f2'),paste:hexOr(r.paste,'#7e1a2a'),mid:hexOr(r.mid,'#a63a4a'),final:hexOr(r.final,'#ff4d6d'),steps:Array.isArray(r.steps)?r.steps:[],noProject:r.noProject===true};});return o;}
   /* Every id a skin draws is made unique to its scene, so two scenes on one
      page never borrow each other's gradients, filters or clip paths. */
   function scoper(p){return function(html){return String(html).replace(/(\s)id="/g,'$1id="'+p).replace(/url\(#/g,'url(#'+p).replace(/href="#/g,'href="#'+p);};}
@@ -462,9 +462,12 @@ window.CraftScene = (function () {
     function place2(x,y,el){var r=stage.getBoundingClientRect(),w=el.offsetWidth,h=el.offsetHeight,lx=x-r.left+14,ly=y-r.top+16;
       if(lx+w>r.width-8)lx=x-r.left-w-14;if(ly+h>r.height-8)ly=y-r.top-h-12;el.style.left=Math.max(8,lx)+'px';el.style.top=Math.max(8,ly)+'px';}
     function cardHTML(inf,more){return '<b>'+esc(inf.name)+'</b>'+(inf.meta?'<span class="cr-meta">'+esc(inf.meta)+'</span>':'')+(inf.text||more?'<p>'+esc(more||inf.text)+'</p>':'')+(inf.now?'<p class="cr-now">'+esc(inf.now)+'</p>':'')+(more?'':'<p class="cr-foot">Right-click for more</p>');}
-    function hover(e){if(pinned)return;var t=targetAt(e.target);if(!t){hideCard();return;}
+    /* The card opens a moment after the pointer arrives, where the pointer is
+       then: placed where it first came in, it showed there for a frame and jumped. */
+    var hovX=0,hovY=0;
+    function hover(e){if(pinned)return;hovX=e.clientX;hovY=e.clientY;var t=targetAt(e.target);if(!t){hideCard();return;}
       if(hovEl!==t.el){if(hovEl)hovEl.classList.remove('cr-hov');hovEl=t.el;hovEl.classList.add('cr-hov');}
-      if(t.id!==hovId){hovId=t.id;card.classList.remove('show');cancel(hovT);var cx=e.clientX,cy=e.clientY;hovT=later(function(){card.innerHTML=cardHTML(infoFor(t.id));place2(cx,cy,card);card.classList.add('show');},250);}
+      if(t.id!==hovId){hovId=t.id;card.classList.remove('show');cancel(hovT);hovT=later(function(){card.innerHTML=cardHTML(infoFor(t.id));place2(hovX,hovY,card);card.classList.add('show');},250);}
       else if(card.classList.contains('show'))place2(e.clientX,e.clientY,card);}
     function hideCard(){cancel(hovT);hovId=null;if(hovEl){hovEl.classList.remove('cr-hov');hovEl=null;}if(!pinned)card.classList.remove('show');}
     function pin(html,x,y){pinned=true;card.innerHTML=html+'<button class="cr-x" type="button" aria-label="Close">×</button>';card.classList.add('show','pinned');place2(x,y,card);
@@ -537,8 +540,12 @@ window.CraftScene = (function () {
        over once the scene's elements exist and before the first recipe. */
     if(skin.mounted)skin.mounted({P:P,svg:svg,stage:stage,root:root,calm:calm,state:function(){return S;},tween:tween,later:later,
       say:setSay,sfx:Sound.fx,rain:Sound.rain,rerender:function(){if(S)renderBook();}});
-    reset(opts.recipe);kick();
-    return {reset:reset,settings:set,apply:function(){reset(S.rk);},sound:function(v){soundOn=!!v;Sound.set(v,skin.sound);},
+    reset(opts.recipe);
+    // A moment (an experiment, a breakdown, a hand on a project) plays its
+    // own cue at the bench, so there are no steps to work.
+    if(opts.moment){S.phase='moment';gUI.innerHTML='';say.textContent='';acts.innerHTML='';hot();renderBook();}
+    kick();
+    return {reset:reset,cue:{P:P,fx:skin.fx,L:L,say:setSay,sfx:Sound.fx,later:later,calm:calm},settings:set,apply:function(){reset(S.rk);},sound:function(v){soundOn=!!v;Sound.set(v,skin.sound);},
       skip:function(){if(!set.skip||S.phase!=='step')return;S.res=[];S.phase='roll';S.verdict=verdict([],set);S.verdict.why='Steps skipped';S.liq=S.r.final;enterStep();emitChange();},
       retry:function(){if(S.phase==='worked'){S.phase='roll';enterStep();}},
       on:on,state:function(){return S;},stage:stage,svg:svg,skin:skin,rerender:function(){renderBook();},destroy:destroy};

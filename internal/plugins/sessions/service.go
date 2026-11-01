@@ -78,6 +78,14 @@ type SessionService interface {
 	// the same "who had responded" list DeleteSession returned, for a
 	// symmetrical re-notify.
 	RestoreSession(ctx context.Context, id string) (*Session, []string, error)
+	// RestoreAndAnnounce restores a deleted session of this campaign and
+	// tells everyone who had answered that it is back on. A session of
+	// another campaign, or one not deleted, is not found.
+	RestoreAndAnnounce(ctx context.Context, campaignID, id string) (*Session, error)
+	// ListTrashedSessions lists the campaign's deleted sessions for the Trash.
+	ListTrashedSessions(ctx context.Context, campaignID string) ([]TrashedSession, error)
+	// PurgeTrashedSessions removes for good sessions deleted before cutoff.
+	PurgeTrashedSessions(ctx context.Context, cutoff time.Time) (int, error)
 	UpdateSessionRecap(ctx context.Context, id string, recap, recapHTML *string) error
 	// LastNightToWriteUp is the latest one-off night of the past week that
 	// has no recap, for home's "Last night: write it up"; nil when none.

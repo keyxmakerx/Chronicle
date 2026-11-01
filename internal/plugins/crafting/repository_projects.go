@@ -34,6 +34,7 @@ type ProjectStore interface {
 	// reached.
 	LogRespite(ctx context.Context, campaignID, loggedBy, dayLabel string) (int, error)
 	LastRespite(ctx context.Context, campaignID string) (*Respite, error)
+	TurnStore
 }
 
 const projectColumns = `id, campaign_id, character_id, COALESCE(recipe_id, ''), recipe_name, goal, stat, COALESCE(result_item_id, ''),
@@ -226,4 +227,56 @@ func clipText(s string, max int) string {
 		return s
 	}
 	return string(r[:max-1]) + "…"
+}
+
+func (r *sqlRepository) TakeTurn(ctx context.Context, campaignID, characterID, kind, projectID string, respiteID int64) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`INSERT IGNORE INTO crafting_turns (campaign_id, character_id, respite_id, kind, project_id) VALUES (?, ?, ?, ?, ?)`,
+		campaignID, characterID, respiteID, kind, projectID)
+	if err != nil {
+		return false, fmt.Errorf("take turn: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("take turn: %w", err)
+	}
+	return n == 1, nil
+}
+
+func (r *sqlRepository) ReturnTurn(ctx context.Context, campaignID, characterID, kind, projectID string, respiteID int64) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM crafting_turns WHERE campaign_id = ? AND character_id = ? AND respite_id = ? AND kind = ? AND project_id = ?`,
+		campaignID, characterID, respiteID, kind, projectID)
+	if err != nil {
+		return fmt.Errorf("return turn: %w", err)
+	}
+	return nil
+}
+
+func (r *sqlRepository) TurnsTaken(ctx context.Context, campaignID, characterID string, respiteID int64) (map[string]bool, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT kind, project_id FROM crafting_turns WHERE campaign_id = ? AND character_id = ? AND respite_id = ?`,
+		campaignID, characterID, respiteID)
+	if err != nil {
+		return nil, fmt.Errorf("turns taken: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var kind, project string
+		if err := rows.Scan(&kind, &project); err != nil {
+			return nil, fmt.Errorf("turns taken: %w", err)
+		}
+		out[kind+":"+project] = true
+	}
+	return out, rows.Err()
+}
+
+func (r *sqlRepository) RespiteID(ctx context.Context, campaignID string) (int64, error) {
+	var id int64
+	err := r.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(id), 0) FROM crafting_respites WHERE campaign_id = ?`, campaignID).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("respite id: %w", err)
+	}
+	return id, nil
 }

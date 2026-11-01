@@ -35,6 +35,18 @@ test('the sheet style is part of Save, Discard and Reset', () => {
   assert.match(src, /data-k="sheet\.style"|'sheet\.style', 'sh-style-l'/, 'a control must bind sheet.style');
 });
 
+// The made-item picture style sits in the same section: the owner picks it
+// beside the sheet style, from the server's own list, and it saves with it.
+test('the made-item picture choice matches the server and saves with the sheet', () => {
+  const c = src.indexOf('var CRAFT_ARTS = [');
+  const arts = JSON.parse(vm.runInNewContext(src.slice(c, src.indexOf('];', c) + 2) + ';JSON.stringify(CRAFT_ARTS)'));
+  const m = go.match(/AppearanceCraftArts\s*=\s*\[\]string\{([^}]*)\}/);
+  assert.ok(m, 'AppearanceCraftArts not found in appearance.go');
+  assert.deepEqual(arts.map((x) => x[0]), [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]));
+  assert.match(src, /'sheet\.craftArt', 'sh-craft-l', CRAFT_ARTS/, 'a control must bind sheet.craftArt');
+  assert.match(src, /if \(!d\.sheet\.craftArt\) d\.sheet\.craftArt = 'lifelike'/, 'fromServer must default to lifelike');
+});
+
 test('the preview has a character sheet page drawn in the draft style', () => {
   const templ = readFileSync(join(root, 'internal', 'plugins', 'campaigns', 'customize_look.templ'), 'utf8');
   assert.match(templ, /name="dpage" value="sheet" id="dp-sheet"/, 'the page picker must offer the sheet');

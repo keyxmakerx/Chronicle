@@ -63,8 +63,29 @@
 .crs-dl-foot { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .crs-dl-foot .cra-fine { margin-right: auto; }
 
+/* A find that waits for a study: players read "Something unidentified". */
+.crs-line.is-locked { background: linear-gradient(90deg, rgb(var(--color-warn-rgb, 217 119 6) / .1), transparent 55%); }
+.crs-it .is-unknown { font-style: italic; }
+.crs-how.is-study { display: flex; flex-direction: column; gap: 2px; }
+.crs-tried { font-size: 12px; color: var(--cra-muted); }
+/* The reason a hero waits wraps beside the button; the button keeps its words on one line. */
+.crs-line .crp-acts .btn { flex: none; }
+.crs-tier.is-hit.is-miss { border-color: var(--cra-dm); background: rgb(var(--color-warn-rgb, 217 119 6) / .12); color: var(--cra-dm); }
+.crs-tier.is-hit.is-miss b { color: var(--cra-dm); }
+.crs-knew { display: inline-flex; align-items: center; gap: 4px; color: var(--cra-ok); }
+.crs-knew svg { width: 12px; height: 12px; flex: none; }
+.crp-made small { display: block; font-weight: 400; margin-top: 2px; }
+.crp-made:has(small) { align-items: flex-start; }
+.crs-dl-study { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding-top: 8px; border-top: 1px dashed var(--cra-line); }
+.crs-dl-study > label:not(.cra-sw) { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--cra-muted); }
+.crs-dl-study .cra-sw { font-size: 13.5px; color: var(--cra-ink); }
+.crs-dl-study .cra-fine { flex: 1 1 220px; }
+
 @media (max-width: 720px) {
   .crs-line, .crs-dl-row { grid-template-columns: minmax(0, 1fr); }
   .crs-line .crp-acts { justify-content: flex-start; flex-wrap: nowrap; }
   .crs-line .crp-acts select { min-width: 0; flex: 1 1 auto; }
+  /* With Reveal as well there is no room for the hero picker: Reveal drops to its own row. */
+  .crs-line .crp-acts:has([data-act="reveal"]) { flex-wrap: wrap; }
+  .crs-line .crp-acts:has([data-act="reveal"]) select { flex-basis: 140px; }
 }

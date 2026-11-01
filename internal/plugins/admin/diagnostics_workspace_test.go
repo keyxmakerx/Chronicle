@@ -3,8 +3,13 @@ package admin
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
@@ -98,5 +103,84 @@ func TestDiagnosticsBatchResult_Render(t *testing.T) {
 	}
 	if !strings.Contains(html, "batch result") {
 		t.Error("result fragment should contain the rendered output")
+	}
+}
+
+// TestDiagnosticsWorkspacePage_Render checks the page offers the questions and
+// the hand-picking list, both posting to compose, with the checks list kept
+// only behind the copy control. DW_PREVIEW=path also writes the page there.
+func TestDiagnosticsWorkspacePage_Render(t *testing.T) {
+	data := DiagnosticsWorkspaceData{
+		FunctionsJSON: systems.FunctionsSpecJSON(),
+		CSRFToken:     "tok",
+		Campaigns:     []CampaignOption{{ID: "c1", Name: "Shattered Heroes", Slug: "heroes"}},
+		Questions:     systems.DiagnosticQuestions(),
+		Groups:        systems.DiagnosticGroups(),
+	}
+	var buf bytes.Buffer
+	if err := DiagnosticsWorkspacePage(data).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render page: %v", err)
+	}
+	html := buf.String()
+	if p := os.Getenv("DW_PREVIEW"); p != "" {
+		_ = os.WriteFile(p, buf.Bytes(), 0o644)
+	}
+	for _, q := range data.Questions {
+		if !strings.Contains(html, q.Title) {
+			t.Errorf("page is missing the question %q", q.Title)
+		}
+	}
+	for _, want := range []string{
+		`data-widget="diag-picker"`,
+		`hx-post="/admin/diagnostics/workspace/compose"`,
+		`hx-post="/admin/diagnostics/workspace/parse"`,
+		"Pick checks yourself",
+		"Copy checks for your AI",
+		`name="arg:host.errors"`,
+		`<option value="c1">Shattered Heroes</option>`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("page HTML missing %q", want)
+		}
+	}
+	if got := strings.Count(html, `name="call" value=`); got < diagnosticsCheckCount(data.Groups) {
+		t.Errorf("found %d check boxes, want at least the %d catalog checks", got, diagnosticsCheckCount(data.Groups))
+	}
+}
+
+func TestSplitSentence(t *testing.T) {
+	got := splitSentence("In {campaign}, look up {page}.")
+	want := []sentencePart{{Text: "In "}, {Blank: "campaign"}, {Text: ", look up "}, {Blank: "page"}, {Text: "."}}
+	if len(got) != len(want) {
+		t.Fatalf("got %d parts, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("part %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// The compose route reads the page's field names (call, arg:<check>) and
+// answers with the review step, for site admins only.
+func TestDiagnosticsCompose_Route(t *testing.T) {
+	e := echo.New()
+	RegisterRoutes(e, NewHandler(nil, nil, nil), sessionAuth{}, nil)
+	form := url.Values{"call": {"host.errors", "sync.recent"}, "arg:host.errors": {"5"}, "note": {"Something broke"}}.Encode()
+
+	rec := doReq(e, http.MethodPost, "/admin/diagnostics/workspace/compose", "admin-token", "application/x-www-form-urlencoded", []byte(form))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin compose: status %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"2 of 2 call(s) will run", "Something broke", "host.errors", "sync.recent", "&#34;arg&#34;: &#34;5&#34;"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("review is missing %q", want)
+		}
+	}
+
+	rec = doReq(e, http.MethodPost, "/admin/diagnostics/workspace/compose", "player-token", "application/x-www-form-urlencoded", []byte(form))
+	if rec.Code == http.StatusOK {
+		t.Error("a player reached the compose route")
 	}
 }

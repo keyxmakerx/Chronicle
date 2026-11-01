@@ -20,6 +20,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -629,7 +630,11 @@ func TestRestoreSessionAPI_SoftDeletedSessionIsReachable(t *testing.T) {
 			restored = true
 			return nil
 		},
+		// FindByID can't see a soft-deleted session until it is restored.
 		findByIDFn: func(_ context.Context, id string) (*Session, error) {
+			if !restored {
+				return nil, apperror.NewNotFound("session not found")
+			}
 			return &Session{ID: id, CampaignID: "camp-1", Name: "Weekly Game"}, nil
 		},
 	}
@@ -654,10 +659,9 @@ func TestRestoreSessionAPI_SoftDeletedSessionIsReachable(t *testing.T) {
 }
 
 // TestRestoreSessionAPI_CrossCampaign404s pins the IDOR check
-// RestoreSessionAPI re-implements by hand (it can't reuse
-// requireSessionInCampaign/GetSession, which filters deleted_at IS NULL —
-// see the handler's own comment): a session belonging to a DIFFERENT
-// campaign than the one in the URL must 404, never be restored.
+// RestoreAndAnnounce makes by hand (it can't reuse GetSession, which filters
+// deleted_at IS NULL): a session belonging to a DIFFERENT campaign than the
+// one in the URL must 404, never be restored.
 func TestRestoreSessionAPI_CrossCampaign404s(t *testing.T) {
 	var restored bool
 	repo := &mockSessionRepo{
@@ -682,5 +686,52 @@ func TestRestoreSessionAPI_CrossCampaign404s(t *testing.T) {
 	assertAppError(t, err, http.StatusNotFound)
 	if restored {
 		t.Error("a session belonging to another campaign must not be restored")
+	}
+}
+
+// TestRestoreAndAnnounce_OnlyATrashedSession pins that a restore through the
+// Trash or Undo touches only a deleted session of this campaign.
+func TestRestoreAndAnnounce_OnlyATrashedSession(t *testing.T) {
+	tests := []struct {
+		name     string
+		campaign string
+		deleted  bool
+		wantErr  bool
+	}{
+		{"a deleted night of this campaign comes back", "camp-1", true, false},
+		{"a night that isn't deleted is not found", "camp-1", false, true},
+		{"another campaign's night is not found", "camp-2", true, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			restored := false
+			repo := &mockSessionRepo{
+				findByIDIncludingDeletedFn: func(_ context.Context, id string) (*Session, error) {
+					return &Session{ID: id, CampaignID: tc.campaign, Name: "Weekly Game"}, nil
+				},
+				findByIDFn: func(_ context.Context, id string) (*Session, error) {
+					if tc.deleted && !restored {
+						return nil, apperror.NewNotFound("session not found")
+					}
+					return &Session{ID: id, CampaignID: tc.campaign, Name: "Weekly Game"}, nil
+				},
+				restoreSessionFn: func(_ context.Context, _ string) error {
+					restored = true
+					return nil
+				},
+			}
+			svc := NewSessionService(repo, nil, nil)
+			sess, err := svc.RestoreAndAnnounce(context.Background(), "camp-1", "s1")
+			if tc.wantErr {
+				assertAppError(t, err, http.StatusNotFound)
+				if restored {
+					t.Error("restored a session it should have refused")
+				}
+				return
+			}
+			if err != nil || sess == nil || !restored {
+				t.Fatalf("err=%v sess=%v restored=%v", err, sess, restored)
+			}
+		})
 	}
 }

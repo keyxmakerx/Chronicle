@@ -504,6 +504,8 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	host := pasteReviewHost
 	if requestID != 0 {
 		host = requestHost(requestID)
+	} else if c.FormValue("review_host") == WorkshopReviewHost {
+		host = WorkshopReviewHost
 	}
 	return middleware.Render(c, http.StatusOK, reviewIn(ImportReviewData{
 		RequestID:      requestID,

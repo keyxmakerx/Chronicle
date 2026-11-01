@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
@@ -29,6 +30,9 @@ type workshopDeps struct {
 	// Respites hears a respite pressed in the Homebrew drawer; nil while
 	// crafting is degraded.
 	Respites respiteListener
+	// Crafting holds the Crafting recipes part's recipes; nil while
+	// crafting is degraded.
+	Crafting crafting.Service
 }
 
 // respiteListener is told of a respite the Director pressed.

@@ -139,3 +139,42 @@ func (h *Handler) TakeSpoil(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, out)
 }
+
+// StudySpoil handles POST /campaigns/:id/crafting/spoil-lines/:lid/study:
+// a hero's study of a find that needs one.
+func (h *Handler) StudySpoil(c echo.Context) error {
+	cc, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	id, err := lineID(c)
+	if err != nil {
+		return err
+	}
+	var in TakeInput
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.StudySpoil(c.Request().Context(), cc.Campaign.ID, id, v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// RevealSpoil handles POST /campaigns/:id/crafting/spoil-lines/:lid/reveal:
+// the Director naming a find's item to the party.
+func (h *Handler) RevealSpoil(c echo.Context) error {
+	cc, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	id, err := lineID(c)
+	if err != nil {
+		return err
+	}
+	if err := h.svc.RevealSpoil(c.Request().Context(), cc.Campaign.ID, id, v); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}

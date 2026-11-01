@@ -18,9 +18,41 @@ type fakeStore struct {
 	rolls    int
 	works    []string
 	respites []Respite
+	turns    map[string]bool
 }
 
-func newFakeStore() *fakeStore { return &fakeStore{projects: map[string]Project{}} }
+func newFakeStore() *fakeStore {
+	return &fakeStore{projects: map[string]Project{}, turns: map[string]bool{}}
+}
+
+func turnKey(characterID, kind, projectID string, respiteID int64) string {
+	return fmt.Sprintf("%s|%d|%s:%s", characterID, respiteID, kind, projectID)
+}
+func (f *fakeStore) TakeTurn(_ context.Context, _, characterID, kind, projectID string, respiteID int64) (bool, error) {
+	k := turnKey(characterID, kind, projectID, respiteID)
+	if f.turns[k] {
+		return false, nil
+	}
+	f.turns[k] = true
+	return true, nil
+}
+func (f *fakeStore) ReturnTurn(_ context.Context, _, characterID, kind, projectID string, respiteID int64) error {
+	delete(f.turns, turnKey(characterID, kind, projectID, respiteID))
+	return nil
+}
+func (f *fakeStore) TurnsTaken(_ context.Context, _, characterID string, respiteID int64) (map[string]bool, error) {
+	out := map[string]bool{}
+	pre := fmt.Sprintf("%s|%d|", characterID, respiteID)
+	for k := range f.turns {
+		if strings.HasPrefix(k, pre) {
+			out[strings.TrimPrefix(k, pre)] = true
+		}
+	}
+	return out, nil
+}
+func (f *fakeStore) RespiteID(context.Context, string) (int64, error) {
+	return int64(len(f.respites)), nil
+}
 
 func (f *fakeStore) CreateProject(_ context.Context, p Project) error {
 	p.Version = 1
@@ -109,6 +141,17 @@ type fakeArmory struct {
 	given    map[string]int
 	spoils   []string
 	failGive bool
+	// used is what Spend says the remembered copies taken remembered; made
+	// and spoilKept are what Give and GiveSpoil were asked to remember, and
+	// offDays the days GoOff was called for.
+	used      []Kept
+	made      []Kept
+	spoilKept []Kept
+	offDays   []int64
+	// whys is what each Use was for; gaveFor each GiveFor, as
+	// "actingFor>character: why".
+	whys    []string
+	gaveFor []string
 }
 
 func newFakeArmory() *fakeArmory {
@@ -117,7 +160,7 @@ func newFakeArmory() *fakeArmory {
 
 func (a *fakeArmory) Pack(context.Context, string, Viewer, string) (*Pack, error) {
 	p := &Pack{Name: "Mira", PayKind: "coins", Have: a.gold, MoneyLabel: "Gold"}
-	for _, id := range []string{"moss", "water"} {
+	for _, id := range []string{"moss", "water", "potion"} {
 		if a.have[id] > 0 {
 			p.Items = append(p.Items, PackItem{ItemID: id, Name: dirEntities[id].Name, Qty: a.have[id]})
 		}
@@ -125,18 +168,18 @@ func (a *fakeArmory) Pack(context.Context, string, Viewer, string) (*Pack, error
 	return p, nil
 }
 func (a *fakeArmory) Charge(_ *Pack, c Cost) int64 { return int64(c.Amount * 100) }
-func (a *fakeArmory) Spend(_ context.Context, _ string, _ Viewer, _ string, items []PackItem, c Cost, _ string) (string, error) {
+func (a *fakeArmory) Spend(_ context.Context, _ string, _ Viewer, _ string, items []PackItem, c Cost, _ string) (string, []Kept, error) {
 	need := map[string]int{}
 	for _, it := range items {
 		need[it.ItemID] += it.Qty
 	}
 	for id, n := range need {
 		if a.have[id] < n {
-			return "", errInvalid("Mira doesn't carry enough " + dirEntities[id].Name)
+			return "", nil, errInvalid("Mira doesn't carry enough " + dirEntities[id].Name)
 		}
 	}
 	if int64(c.Amount*100) > a.gold {
-		return "", errInvalid("Mira can't pay")
+		return "", nil, errInvalid("Mira can't pay")
 	}
 	for id, n := range need {
 		a.have[id] -= n
@@ -144,23 +187,45 @@ func (a *fakeArmory) Spend(_ context.Context, _ string, _ Viewer, _ string, item
 	a.gold -= int64(c.Amount * 100)
 	a.spent = append(a.spent, items)
 	if c.Amount > 0 {
-		return "25 gp", nil
+		return "25 gp", a.used, nil
 	}
-	return "", nil
+	return "", a.used, nil
 }
-func (a *fakeArmory) Give(_ context.Context, _ string, _ Viewer, _, itemID string, qty int, _ string) error {
+func (a *fakeArmory) Give(_ context.Context, _ string, _ Viewer, _, itemID string, qty int, _ string, k Kept) error {
 	if a.failGive {
 		return errors.New("pack is gone")
 	}
 	a.given[itemID] += qty
+	a.made = append(a.made, k)
 	return nil
 }
-func (a *fakeArmory) GiveSpoil(_ context.Context, _ string, _ Viewer, characterID, itemID string, qty int, harvested bool) error {
+func (a *fakeArmory) Use(ctx context.Context, campaignID string, v Viewer, characterID string, items []PackItem, why string) ([]Kept, error) {
+	_, used, err := a.Spend(ctx, campaignID, v, characterID, items, Cost{}, "")
+	if err == nil {
+		a.whys = append(a.whys, why)
+	}
+	return used, err
+}
+func (a *fakeArmory) GiveFor(_ context.Context, _ string, _ Viewer, actingFor, characterID, itemID string, qty int, why string, k Kept) error {
+	if a.failGive {
+		return errors.New("pack is gone")
+	}
+	a.given[itemID] += qty
+	a.made = append(a.made, k)
+	a.gaveFor = append(a.gaveFor, actingFor+">"+characterID+": "+why)
+	return nil
+}
+func (a *fakeArmory) GiveSpoil(_ context.Context, _ string, _ Viewer, characterID, itemID string, qty int, harvested bool, k Kept) error {
 	if a.failGive {
 		return errors.New("pack is gone")
 	}
 	a.spoils = append(a.spoils, fmt.Sprintf("%s %s %d %v", characterID, itemID, qty, harvested))
+	a.spoilKept = append(a.spoilKept, k)
 	return nil
+}
+func (a *fakeArmory) GoOff(_ context.Context, _ string, _ Viewer, day int64) (int, error) {
+	a.offDays = append(a.offDays, day)
+	return 0, nil
 }
 
 type fakeSheets map[string]int

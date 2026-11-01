@@ -7,6 +7,7 @@ import (
 	"html"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -86,48 +87,6 @@ func (h *Handler) SetMemberLister(ml campaigns.MemberLister) {
 func (h *Handler) SetMailSender(ms MailSender, baseURL string) {
 	h.mailer = ms
 	h.baseURL = baseURL
-}
-
-// ListSessions renders the session list page.
-// GET /campaigns/:id/sessions
-func (h *Handler) ListSessions(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	ctx := c.Request().Context()
-
-	sessionList, err := h.svc.ListSessions(ctx, cc.Campaign.ID)
-	if err != nil {
-		return err
-	}
-
-	csrfToken := middleware.GetCSRFToken(c)
-	isOwner := cc.MemberRole >= campaigns.RoleOwner
-	isScribe := cc.MemberRole >= campaigns.RoleScribe
-	userID := auth.GetUserID(c)
-	// The calendar's "Plan it" lands here with the slot it suggested.
-	var plan SessionPlan
-	if isScribe {
-		plan = sessionPlanFrom(c.QueryParam("plan_date"), c.QueryParam("plan_time"), c.QueryParam("plan_tz"))
-	}
-
-	// Past nights are judged by the viewer's own date, so tonight's game
-	// stays upcoming until their midnight.
-	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
-	groups := groupSessions(sessionList, today)
-	viewerTZ := h.storedTZ(c.Request().Context(), userID)
-
-	// "Add to your calendar" is a member's, and only while the owner's feed
-	// switch is on. A failed read hides it rather than failing the list.
-	feed := false
-	if cc.IsMember && userID != "" {
-		feed, _ = h.svc.IsCalendarFeedEnabled(ctx, cc.Campaign.ID)
-	}
-
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK,
-			SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
-	}
-	return middleware.Render(c, http.StatusOK,
-		SessionListPage(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
 }
 
 // ShowSession renders a session detail page.
@@ -413,15 +372,16 @@ func (h *Handler) DeleteSessionAPI(c echo.Context) error {
 	}
 	if len(responded) > 0 {
 		msg := "\"" + sess.Name + "\" was cancelled."
-		link := "/campaigns/" + cc.Campaign.ID + "/sessions"
+		link := "/campaigns/" + cc.Campaign.ID + "/game-nights"
 		if nErr := h.svc.NotifyUsers(c.Request().Context(), responded, cc.Campaign.ID, NotifSessionCancelled, msg, link); nErr != nil {
 			slog.Error("notifying responded members of a cancelled session", slog.String("error", nErr.Error()))
 		}
 	}
 
 	if middleware.IsHTMX(c) {
+		// The list offers Undo for the night that just went to the Trash.
 		c.Response().Header().Set("HX-Redirect",
-			"/campaigns/"+cc.Campaign.ID+"/sessions")
+			"/campaigns/"+cc.Campaign.ID+"/game-nights?trashed="+url.QueryEscape(sessionID)+"&kind=game-night")
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -429,38 +389,14 @@ func (h *Handler) DeleteSessionAPI(c echo.Context) error {
 
 // RestoreSessionAPI undoes a soft delete (co-Director/Owner — see routes.go)
 // and tells everyone who had answered before it was cancelled that it's back
-// on, so a stale "cancelled" notification doesn't stay the last word they saw.
+// on. The campaign Trash restores through the same service call.
 // POST /campaigns/:id/sessions/:sid/restore
 func (h *Handler) RestoreSessionAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	sessionID := c.Param("sid")
-
-	// requireSessionInCampaign goes through GetSession -> FindByID, which
-	// filters deleted_at IS NULL — a session to be RESTORED is by definition
-	// still soft-deleted at this point, so that check would always 404 here.
-	// GetSessionIncludingDeleted is the one read path built to see it; the
-	// campaign-id comparison below is the same IDOR scoping
-	// requireSessionInCampaign would otherwise have done.
-	existing, err := h.svc.GetSessionIncludingDeleted(c.Request().Context(), sessionID)
+	sess, err := h.svc.RestoreAndAnnounce(c.Request().Context(), cc.Campaign.ID, c.Param("sid"))
 	if err != nil {
 		return err
 	}
-	if existing.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("session not found")
-	}
-
-	sess, responded, err := h.svc.RestoreSession(c.Request().Context(), sessionID)
-	if err != nil {
-		return err
-	}
-	if len(responded) > 0 {
-		msg := "\"" + sess.Name + "\" is back on."
-		link := "/campaigns/" + cc.Campaign.ID + "/sessions/" + sess.ID
-		if nErr := h.svc.NotifyUsers(c.Request().Context(), responded, cc.Campaign.ID, NotifSessionRestored, msg, link); nErr != nil {
-			slog.Error("notifying responded members of a restored session", slog.String("error", nErr.Error()))
-		}
-	}
-
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect",
 			"/campaigns/"+cc.Campaign.ID+"/sessions/"+sess.ID)

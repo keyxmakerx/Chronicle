@@ -28,7 +28,7 @@ type SightingNights struct {
 // NightsFor reads the campaign's sessions and expands each into its played
 // nights (dated on or before today). Cancelled sessions and sessions with no
 // date have no night to answer for, so they are left out. It returns only
-// names and dates, which every member already sees on the Sessions page;
+// names and dates, which every member already sees on the calendar;
 // nothing here is DM-only, so it takes no viewer.
 func (s *sightingService) NightsFor(ctx context.Context, campaignID, today string) (*SightingNights, error) {
 	list, err := s.sessions.ListByCampaign(ctx, campaignID)

@@ -249,12 +249,15 @@ templ Panel(v *View, csrf string) {
 // brewDrawer is the Homebrew drawer beside the leaves: the frame is the
 // screen's, what fills it is homebrew's. "See it as a player" sets
 // data-player-view on the drawer, which the homebrew styles read to hide
-// what players don't get.
+// what players don't get. The wrench opens the Workshop where the recipes
+// are built: whoever may open the screen passes the Workshop's own check,
+// and the rulebook's link is missing when the campaign has no game system.
 templ brewDrawer(v *View) {
 	<aside class="dms-brew" id="dms-brew" data-dms-brew-pane aria-labelledby="dms-brew-title" hidden>
 		<div class="dms-brew-head">
 			<i class="fa-solid fa-beer-mug-empty dms-brew-mark" aria-hidden="true"></i>
 			<h3 id="dms-brew-title">Homebrew</h3>
+			<a class="dms-close" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/homebrew", v.CampaignID)) } data-dms-brew-workshop aria-label="Open the Homebrew workshop" title="Homebrew workshop"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i></a>
 			<button type="button" class="dms-close" data-dms-brew-pv aria-pressed="false" aria-label="See it as a player" title="See it as a player"><i class="fa-solid fa-users" aria-hidden="true"></i></button>
 			<button type="button" class="dms-close" data-dms-brew aria-label="Close Homebrew" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
 		</div>

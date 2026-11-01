@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -45,10 +46,10 @@ func (f *fakeUploadService) FilePath(file *MediaFile) string             { retur
 func (f *fakeUploadService) ThumbnailPath(file *MediaFile, size string) string {
 	return ""
 }
-func (f *fakeUploadService) SetStorageLimiter(limiter StorageLimiter) {}
+func (f *fakeUploadService) SetStorageLimiter(limiter StorageLimiter)             {}
 func (f *fakeUploadService) MaxUploadBytes(context.Context, string, string) int64 { return 0 }
-func (f *fakeUploadService) SetMemberChecker(checker MemberChecker)   {}
-func (f *fakeUploadService) SetEntityVisibilityFilter(v EntityVisibilityFilter) {}
+func (f *fakeUploadService) SetMemberChecker(checker MemberChecker)               {}
+func (f *fakeUploadService) SetEntityVisibilityFilter(v EntityVisibilityFilter)   {}
 func (f *fakeUploadService) ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error) {
 	return nil, 0, nil
 }
@@ -61,6 +62,15 @@ func (f *fakeUploadService) FindReferences(ctx context.Context, campaignID, medi
 func (f *fakeUploadService) DeleteCampaignMedia(ctx context.Context, campaignID, mediaID string) error {
 	return nil
 }
+func (f *fakeUploadService) RestoreCampaignPicture(ctx context.Context, campaignID, mediaID string) error {
+	return nil
+}
+func (f *fakeUploadService) ListTrashedPictures(ctx context.Context, campaignID string) ([]TrashedPicture, error) {
+	return nil, nil
+}
+func (f *fakeUploadService) PurgeTrashedPictures(ctx context.Context, cutoff time.Time) (int, error) {
+	return 0, nil
+}
 func (f *fakeUploadService) DeleteCampaignFiles(ctx context.Context, campaignID string) (int, error) {
 	return 0, nil
 }
@@ -68,11 +78,15 @@ func (f *fakeUploadService) CleanupOrphans(ctx context.Context) (int, error) { r
 func (f *fakeUploadService) TrashFiles(ctx context.Context, batchID string, ids []string) (int, int64, error) {
 	return 0, 0, nil
 }
-func (f *fakeUploadService) RestoreTrashedFiles(ctx context.Context, batchID string) (int, error) { return 0, nil }
+func (f *fakeUploadService) RestoreTrashedFiles(ctx context.Context, batchID string) (int, error) {
+	return 0, nil
+}
 func (f *fakeUploadService) ListTrashedFileIDs(ctx context.Context, batchID string) ([]string, error) {
 	return nil, nil
 }
-func (f *fakeUploadService) PurgeTrashedFile(ctx context.Context, batchID, fileID string) error { return nil }
+func (f *fakeUploadService) PurgeTrashedFile(ctx context.Context, batchID, fileID string) error {
+	return nil
+}
 func (f *fakeUploadService) BackfillContentHashes(ctx context.Context, batchSize int) (int, error) {
 	return 0, nil
 }

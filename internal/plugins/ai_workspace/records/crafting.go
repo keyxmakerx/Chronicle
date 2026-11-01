@@ -135,13 +135,18 @@ type CraftRecipeInput struct {
 }
 
 // CraftDropLine is one line of a drop list: taken as it is (Qty), or
-// harvested with a test adding Stat that pays Yields by tier.
+// harvested with a test adding Stat that pays Yields by tier. Study marks a
+// find players see as "Something unidentified" until a study adding
+// StudyStat lands; Once loses it on the first miss.
 type CraftDropLine struct {
-	ItemID  string
-	Harvest bool
-	Qty     int
-	Stat    string
-	Yields  [3]int
+	ItemID    string
+	Harvest   bool
+	Qty       int
+	Stat      string
+	Yields    [3]int
+	Study     bool
+	StudyStat string
+	Once      bool
 }
 
 // CraftDrops is a page's drop list. AlsoID names a page whose list drops
@@ -395,6 +400,7 @@ func (c *Crafting) usedBy(itemID string, tags []string) []string {
 var (
 	craftCountRe = regexp.MustCompile(`^(\d+)\s*[x×]?\s+(.+)$`)
 	harvestRe    = regexp.MustCompile(`(?i)^harvest\s+(.+?)(?:\s+with\s+(.+?))?\s*:\s*(\d+)\s*/\s*(\d+)\s*/\s*(\d+)$`)
+	studyRe      = regexp.MustCompile(`(?i)^study(?:\s+with\s+(.+?))?(?:\s*,\s*(one chance))?$`)
 )
 
 // countName splits "2 Troll tooth" into 2 and the name; no number is 1.
@@ -483,7 +489,13 @@ func (c *Crafting) dropLine(raw any, made map[string]bool) (CraftDropLine, error
 	if raw == nil {
 		return l, badRequestf("lines: a line is empty")
 	}
-	text := strings.TrimSpace(fmt.Sprint(raw))
+	text, mark, marked := strings.Cut(strings.TrimSpace(fmt.Sprint(raw)), ";")
+	text = strings.TrimSpace(text)
+	if marked {
+		if err := c.studyMark(&l, mark); err != nil {
+			return l, err
+		}
+	}
 	if m := harvestRe.FindStringSubmatch(text); m != nil {
 		l.Harvest = true
 		for i := 0; i < 3; i++ {
@@ -509,13 +521,43 @@ func (c *Crafting) dropLine(raw any, made map[string]bool) (CraftDropLine, error
 	return l, err
 }
 
+// studyMark reads what follows a line's `;`: "study with Reason", and
+// ", one chance" when the first miss loses the find.
+func (c *Crafting) studyMark(l *CraftDropLine, s string) error {
+	m := studyRe.FindStringSubmatch(strings.TrimSpace(s))
+	if m == nil {
+		return badRequestf("lines: after `;` write `study with Reason`, and `, one chance` if the first failed study loses it")
+	}
+	var err error
+	l.Study, l.Once = true, m[2] != ""
+	l.StudyStat, err = c.stat("lines", m[1])
+	return err
+}
+
 // dropLineMap reads {item, qty} or {item, harvest, pays: [1, 2, 4]}, where
-// harvest names the characteristic (or none).
+// harvest names the characteristic (or none); `study` (a characteristic,
+// or yes) and `once` mark a find to study first.
 func (c *Crafting) dropLineMap(t map[string]any, made map[string]bool) (CraftDropLine, error) {
 	var l CraftDropLine
 	name := strings.TrimSpace(fmt.Sprint(t["item"]))
 	if t["item"] == nil || name == "" {
 		return l, badRequestf("lines: a line needs `item`")
+	}
+	if st, ok := t["study"]; ok && st != nil && st != false {
+		mark := "study"
+		if s, isStr := st.(string); isStr && !isNone(s) && !strings.EqualFold(s, "yes") {
+			mark += " with " + s
+		} else if isStr && isNone(s) {
+			mark = ""
+		}
+		if once, _ := t["once"].(bool); once {
+			mark += ", one chance"
+		}
+		if mark != "" {
+			if err := c.studyMark(&l, mark); err != nil {
+				return l, err
+			}
+		}
 	}
 	if h, ok := t["harvest"]; ok {
 		l.Harvest = true

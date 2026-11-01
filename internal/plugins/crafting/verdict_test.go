@@ -55,7 +55,9 @@ func TestCondOn(t *testing.T) {
 		{"a skill the maker lacks", day, Cond{Kind: "maker", Skill: "Smithing"}, herbalist, off},
 		{"a sheet with no skills", day, Cond{Kind: "maker", Skill: "Alchemy"}, tower, maybe},
 		{"skills before the roll", day, Cond{Kind: "maker", Skill: "Alchemy"}, nil, maybe},
-		{"ingredient marks are never known", day, Cond{Kind: "ingredient", Mark: "fresh"}, tower, maybe},
+		{"ingredient marks from before copies remembered", day, Cond{Kind: "ingredient", Mark: "fresh"}, tower, maybe},
+		{"a fresh ingredient went in", day, Cond{Kind: "ingredient", Mark: " Fresh"}, &Worked{Marks: map[string]bool{"fresh": true}}, on},
+		{"no fresh ingredient went in", day, Cond{Kind: "ingredient", Mark: "fresh"}, &Worked{Marks: map[string]bool{}}, off},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

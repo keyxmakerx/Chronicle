@@ -104,8 +104,7 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 				</div>
 			}
 		</div>
-
-
+		@renderCategoryLead(cc, et)
 		<!-- Tag filter bar + View toggle -->
 		<div class="flex items-center justify-between mb-4 border-b border-edge pb-3">
 			<div class="flex items-center gap-2 overflow-x-auto">

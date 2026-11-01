@@ -11,6 +11,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
@@ -109,6 +110,11 @@ func TestCraftingDaysToday(t *testing.T) {
 		if day.Label != "12 Frostmoot" || !reflect.DeepEqual(day.Events, []string{"Market day"}) || day.Weather != "Snow" || day.Season != "Winter" {
 			t.Errorf("today = %+v", day)
 		}
+		// What keeps a week goes off on the calendar's own day count, across
+		// the month's end.
+		if off, on := day.After(20); day.Abs <= 0 || off != day.Abs+20 || on != "2 Deepwinter" {
+			t.Errorf("20 days after day %d = %d, %q", day.Abs, off, on)
+		}
 		// The recipe's rules are the Director's, so the day is read with
 		// the Director's sight whoever rolls.
 		if len(f.viewers) != 1 || f.viewers[0].Role() < permissions.RoleOwner {
@@ -204,5 +210,14 @@ func TestSheetSkills(t *testing.T) {
 				t.Fatalf("sheetSkills = %q %v, want %q", got, ok, tc.want)
 			}
 		})
+	}
+}
+
+func TestCraftingKeptCrossesThePluginLine(t *testing.T) {
+	k := crafting.Kept{ID: 4, Qty: 2, Marks: []string{"moonlit"}, Quality: "fine", Quirk: "Hums", How: "made", By: "Mira",
+		On: "3 Frostmoot", OffDay: 107, OffOn: "10 Frostmoot", Becomes: "murky", BecomesName: "Murky potion"}
+	back := keptOf(armory.Copy{ID: 4, Quantity: 2, Memory: memoryOf(k)})
+	if !reflect.DeepEqual(back, k) {
+		t.Errorf("round trip = %+v, want %+v", back, k)
 	}
 }

@@ -127,6 +127,16 @@ func (s *stashService) carried(ctx context.Context, campaignID string, a Actor, 
 			return nil, err
 		}
 	}
+	remembered := map[string][]Copy{}
+	if s.Copies != nil {
+		cs, err := s.Copies.List(ctx, campaignID, HolderCharacter, characterID, "")
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range cs {
+			remembered[c.ItemID] = append(remembered[c.ItemID], c)
+		}
+	}
 	var out []HeldItem
 	for _, r := range rels {
 		if r.DmOnly && !a.SeesDmOnly() {
@@ -139,7 +149,7 @@ func (s *stashService) carried(ctx context.Context, campaignID string, a Actor, 
 		if q < 1 {
 			continue
 		}
-		out = append(out, HeldItem{ItemID: r.ItemEntityID, Name: r.ItemName, Quantity: q})
+		out = append(out, HeldItem{ItemID: r.ItemEntityID, Name: r.ItemName, Quantity: q, Copies: fitCopies(remembered[r.ItemEntityID], q)})
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out, nil
@@ -439,6 +449,12 @@ func (s *stashService) run(ctx context.Context, m *Move, refs moveRefs) (status,
 	if m.IsGive() {
 		return MoveFailed, giveReplayReason
 	}
+	// What the source held before, so its remembered copies can follow the
+	// count (copies_service.go).
+	before := 0
+	if m.Kind == MoveKindItem && s.Copies != nil {
+		before, _ = s.heldCount(ctx, m.CampaignID, m.From, m.ItemEntityID)
+	}
 	ok, err := s.debit(ctx, m, m.From, refs.from)
 	if err != nil {
 		slog.Error("stash move: debit failed", slog.Int64("move_id", m.ID), slog.Any("error", err))
@@ -456,6 +472,10 @@ func (s *stashService) run(ctx context.Context, m *Move, refs moveRefs) (status,
 				slog.String("campaign_id", m.CampaignID), slog.Any("error", rerr))
 		}
 		return MoveFailed, creditFailReason
+	}
+	if m.Kind == MoveKindItem {
+		to := m.To
+		s.takeCopies(ctx, m.CampaignID, m.From, &to, m.ItemEntityID, before, m.Quantity, s.pickedFor(ctx, m))
 	}
 	if m.Kind == MoveKindItem && m.From.Kind == EndpointCharacter {
 		s.dropEmptyCarried(ctx, m.CampaignID, m.From.ID, m.ItemEntityID)
@@ -476,7 +496,7 @@ func insufficientMessage(m *Move) string {
 // Nothing here changes any data.
 func (s *stashService) validate(ctx context.Context, campaignID string, a Actor, in MoveInput) (*Move, moveRefs, error) {
 	var refs moveRefs
-	m := &Move{CampaignID: campaignID, Kind: in.Kind, From: in.From, To: in.To, RequestedBy: a.UserID, seesDmOnly: a.SeesDmOnly()}
+	m := &Move{CampaignID: campaignID, Kind: in.Kind, From: in.From, To: in.To, RequestedBy: a.UserID, seesDmOnly: a.SeesDmOnly(), pick: in.Pick}
 
 	if !in.From.Valid() || !in.To.Valid() {
 		return nil, refs, apperror.NewBadRequest("Choose where it is going.")
@@ -644,6 +664,11 @@ func (s *stashService) Move(ctx context.Context, campaignID string, a Actor, in 
 	m.Status = MovePending
 	if err := s.Repo.InsertMove(ctx, m); err != nil {
 		return nil, err
+	}
+	if m.pick > 0 && s.Copies != nil {
+		if err := s.Copies.Pick(ctx, m.ID, m.pick); err != nil {
+			slog.Warn("stash move: a request's picked copy was not kept; plain copies go first", slog.Int64("move_id", m.ID), slog.Any("error", err))
+		}
 	}
 	ev.requested(m)
 	return &MoveOutcome{Move: *m}, nil
@@ -836,6 +861,9 @@ func (s *stashService) MoveDialog(ctx context.Context, campaignID string, a Acto
 			return nil, err
 		}
 		view.Max = max
+		if view.Copies, err = s.copiesAt(ctx, campaignID, from, ref.ID, max); err != nil {
+			return nil, err
+		}
 	} else {
 		bal, err := s.heldMoney(ctx, campaignID, from, fromRef)
 		if err != nil {

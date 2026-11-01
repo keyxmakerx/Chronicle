@@ -36,6 +36,12 @@ func TestValidateCrafting(t *testing.T) {
 		{"tier below one", &CraftingRules{Tiers: []int{0, 16}}, "tiers"},
 		{"label with spaces round it", &CraftingRules{Labels: CraftingLabels{Source: " Source"}}, "labels"},
 		{"label too long", &CraftingRules{Labels: CraftingLabels{Goal: strings.Repeat("a", 41)}}, "labels"},
+		{"published goals", &CraftingRules{Goals: []CraftingGoal{{Echelon: 1, Goal: 45}, {Echelon: 2, For: "weapon", Goal: 300}}}, ""},
+		{"goal echelon five", &CraftingRules{Goals: []CraftingGoal{{Echelon: 5, Goal: 45}}}, "echelon"},
+		{"goal of nothing", &CraftingRules{Goals: []CraftingGoal{{Echelon: 1}}}, "goal must be"},
+		{"goal too big", &CraftingRules{Goals: []CraftingGoal{{Echelon: 1, Goal: 1000}}}, "goal must be"},
+		{"goal for a sentence", &CraftingRules{Goals: []CraftingGoal{{Echelon: 1, For: "Big Weapons", Goal: 9}}}, "for"},
+		{"too many goals", &CraftingRules{Goals: make([]CraftingGoal, 65)}, "too many goals"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

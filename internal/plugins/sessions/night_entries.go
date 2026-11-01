@@ -116,6 +116,9 @@ type NightEntryService interface {
 	Tags(ctx context.Context, campaignID string, noteIDs []string, now time.Time) (map[string]NightTag, error)
 	// SetBells wires the game-night bell items; see night_bells.go.
 	SetBells(campaigns NightBellCampaigns, sessions NightBellSessions, notify NightBellNotifier)
+	// SetBellRoster adds the day-before nudge to members who haven't said
+	// whether they are coming; see night_bells.go.
+	SetBellRoster(roster NightBellRoster)
 	// SendBells sends the bell items due at now that haven't gone out.
 	SendBells(ctx context.Context, now time.Time) error
 }
@@ -130,6 +133,7 @@ type nightEntryService struct {
 	bellCampaigns NightBellCampaigns
 	bellSessions  NightBellSessions
 	notify        NightBellNotifier
+	roster        NightBellRoster
 }
 
 // NewNightEntryService creates the service. All five are required.
