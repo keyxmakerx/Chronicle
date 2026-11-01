@@ -29,6 +29,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.POST("/checkup/run", h.RunCheckup)
 	admin.POST("/checkup/snooze", h.SnoozeCheckup)
 
+	// The new-version notice on Home: Later hides one version for this admin.
+	admin.POST("/release-notice/later", h.ReleaseNoticeLater)
+
 	// Reauth middleware for sensitive operations: requires a password
 	// re-confirmation within the last 5 minutes, so a hijacked admin session
 	// alone cannot grant admin, lock people out or destroy data.
@@ -74,6 +77,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// Security dashboard.
 	admin.GET("/security", h.Security)
 	admin.POST("/security/registration", h.UpdateRegistrationMode, reauth)
+	admin.POST("/security/update-check", h.SaveUpdateCheck, reauth)
 	admin.POST("/security/sign-in-provider", h.SaveSignInProvider, reauth)
 	admin.POST("/security/sign-in-provider/test", h.TestSignInProvider, reauth)
 	admin.DELETE("/security/sessions/:hash", h.TerminateSession, reauth)

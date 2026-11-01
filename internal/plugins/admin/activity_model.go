@@ -47,6 +47,7 @@ var activityPhrases = map[string]string{
 	"campaign.handed_over":            "handed over the campaign %s",
 	"media.deleted":                   "deleted the file %s",
 	"registration.mode_changed":       "changed who can sign up to %s",
+	"updates.check_changed":           "turned checking for new Chronicle versions %s",
 	"hygiene.purged":                  "cleaned up %s",
 	"migrations.applied":              "applied pending database updates",
 	"package.added":                   "added the package source %s",
