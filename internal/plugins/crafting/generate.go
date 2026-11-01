@@ -185,7 +185,13 @@ func cleanGenerate(in GenerateInput) (GenerateInput, *MakeKind, error) {
 	if in.Count == 0 {
 		in.Count = defaultGenSize
 	}
-	in.Count = clamp(in.Count, 1, maxGenerate)
+	// Compared here rather than through clamp so the bound sits beside the
+	// allocations below, where code scanning can see it.
+	if in.Count < 1 {
+		in.Count = 1
+	} else if in.Count > maxGenerate {
+		in.Count = maxGenerate
+	}
 	in.Echelon = clamp(in.Echelon, 1, 4)
 	in.Seed = strings.TrimSpace(in.Seed)
 	if len(in.Seed) > maxSeedLen || hasControl(in.Seed) {
