@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -35,6 +36,7 @@ func init() {
 			records.MaterialKind{Svc: d.Crafting},
 			records.RecipeKind{Svc: d.Crafting},
 			records.DropsKind{Svc: d.Crafting, Entities: d.Entities},
+			records.BenchKind{Svc: d.Crafting},
 		}
 	})
 }
@@ -121,13 +123,16 @@ func (c aiCraftingAdapter) Read(ctx context.Context, campaignID string, a record
 		return nil, err
 	}
 	for _, b := range benches {
-		kind := b.Kind
+		label := b.Kind
 		for _, k := range crafting.BenchKinds {
 			if k.Key == b.Kind {
-				kind = k.Name
+				label = k.Name
 			}
 		}
-		out.Benches = append(out.Benches, records.CraftBench{Name: b.Name, Kind: kind})
+		out.Benches = append(out.Benches, records.CraftBench{ID: b.ID, Name: b.Name, Kind: b.Kind, KindLabel: label})
+	}
+	for _, k := range crafting.BenchKinds {
+		out.BenchKinds = append(out.BenchKinds, records.CraftChoice{Key: k.Key, Label: k.Name})
 	}
 	return out, nil
 }
@@ -172,11 +177,14 @@ func craftingRules(lib *crafting.Library) *records.Crafting {
 // steps are no longer what its method lays, so sending `method` again
 // would undo changes made in the editor.
 func craftRecipe(r *crafting.Recipe, tags map[string][]string) records.CraftRecipe {
-	out := records.CraftRecipe{ID: r.ID, Name: r.Name, Draft: r.Draft, Method: r.Template, Steps: len(r.Steps), Rules: len(r.Rules),
+	out := records.CraftRecipe{ID: r.ID, Name: r.Name, Draft: r.Draft, Method: r.Template, Steps: len(r.Steps),
 		ResultID: r.Result.ItemID, ResultQty: r.Result.Qty, Goal: r.Goal, Stat: r.Stat, Prerequisite: r.Prerequisite, Source: r.Source,
 		Cost: r.Cost.Amount, Currency: r.Cost.Currency, Who: r.Who, Known: r.Known}
 	for _, m := range r.Materials {
 		out.Materials = append(out.Materials, records.CraftMaterial{ItemID: m.ItemID, Tag: m.Tag, Qty: m.Qty})
+	}
+	for _, rule := range r.Rules {
+		out.Rules = append(out.Rules, string(crafting.AIRuleData(rule)))
 	}
 	if r.Template != "" {
 		laid, ok := crafting.LayTemplate(crafting.RecipeInput{Materials: r.Materials}, r.Template, tags)
@@ -244,11 +252,44 @@ func bookPage(p crafting.BookPage) records.CraftBookPage {
 func (c aiCraftingAdapter) SaveRecipe(ctx context.Context, campaignID string, a records.Actor, in records.CraftRecipeInput, check bool) error {
 	r := crafting.AIRecipe{ID: in.ID, Name: in.Name, Method: in.Method, Result: crafting.Result{ItemID: in.ResultID, Qty: in.ResultQty},
 		Goal: in.Goal, Stat: in.Stat, Prerequisite: in.Prerequisite, Source: in.Source,
-		Cost: crafting.Cost{Amount: in.Cost, Currency: in.Currency}, Who: in.Who, Known: in.Known}
+		Cost: crafting.Cost{Amount: in.Cost, Currency: in.Currency}, Who: in.Who, Known: in.Known, Rules: in.Rules}
 	for _, m := range in.Materials {
 		r.Materials = append(r.Materials, crafting.Material{ItemID: m.ItemID, Tag: m.Tag, Qty: m.Qty})
 	}
 	_, err := c.svc.SaveAIRecipe(ctx, campaignID, craftViewer(a), r, check)
+	return err
+}
+
+func (c aiCraftingAdapter) RulesChange(ctx context.Context, campaignID, recipeID string, a records.Actor, rules json.RawMessage) (records.CraftRulesChange, error) {
+	var stored []crafting.Rule
+	if recipeID != "" {
+		r, err := c.svc.GetRecipe(ctx, campaignID, recipeID, craftViewer(a))
+		if err != nil {
+			return records.CraftRulesChange{}, err
+		}
+		stored = r.Rules
+	}
+	rc, err := crafting.MergeAIRules(stored, rules)
+	if err != nil {
+		return records.CraftRulesChange{}, err
+	}
+	return records.CraftRulesChange{Kept: rc.Kept, New: rc.New, Gone: rc.Gone}, nil
+}
+
+// SaveBench makes a bench or changes its name and kind through the same
+// calls as the Benches tab, so the version check keeps a change made there
+// meanwhile.
+func (c aiCraftingAdapter) SaveBench(ctx context.Context, campaignID string, a records.Actor, in records.CraftBench) error {
+	v := craftViewer(a)
+	if in.ID == "" {
+		_, err := c.svc.CreateBench(ctx, campaignID, v, crafting.BenchInput{Name: in.Name, Kind: in.Kind})
+		return err
+	}
+	cur, err := c.svc.GetBench(ctx, campaignID, in.ID, v)
+	if err != nil {
+		return err
+	}
+	_, err = c.svc.UpdateBench(ctx, campaignID, in.ID, v, crafting.BenchInput{Name: in.Name, Kind: in.Kind, Version: cur.Version})
 	return err
 }
 
