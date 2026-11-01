@@ -418,10 +418,8 @@ type addonListerAdapter struct {
 }
 
 // ListForPluginHub returns all addons formatted for the plugin hub page and
-// the top-level Extensions hub. HasDashboard / HasEntitySetup are sourced
-// from the campaigns plugin's slug-keyed capability tables (see
-// internal/plugins/campaigns/extensions_hub.go) so the hub catalog carries a
-// single source of truth.
+// the top-level Extensions hub. HasDashboard comes from the campaigns
+// plugin's dashboard-page table (internal/plugins/campaigns/extensions_hub.go).
 func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID string) ([]campaigns.PluginHubAddon, error) {
 	addonList, err := a.svc.ListForCampaign(ctx, campaignID)
 	if err != nil {
@@ -448,7 +446,6 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 			Enabled:        ca.Enabled,
 			Installed:      ca.Installed,
 			HasDashboard:   campaigns.HasExtensionDashboard(ca.AddonSlug),
-			HasEntitySetup: campaigns.HasExtensionEntitySetup(ca.AddonSlug),
 			HasSetup:       hasSetup,
 			NeedsSetup:     needsSetup,
 		}
@@ -4702,9 +4699,8 @@ func (a *App) RegisterRoutes() {
 	// Wire audit logging into mutation handlers so CRUD actions are recorded.
 	entityHandler.SetAuditService(auditService)
 	// CALV5-PLACEHOLDER: V5 must restore the calendar's remaining wiring —
-	// SetAuditService, SetTierDefinitionsLister, RegisterExtensionDashboard,
-	// SetTimelineLister, and the block spine (calendar.NewBlockService +
-	// RealTimeSeam + SyncLinkProbe + calendar.InstallBlockSpine). Keep the
+	// SetAuditService, SetTierDefinitionsLister, SetTimelineLister, and
+	// the block spine (calendar.NewBlockService + RealTimeSeam + SyncLinkProbe + calendar.InstallBlockSpine). Keep the
 	// spine's repository a narrow read surface over *sql.DB rather than a
 	// wide CalendarRepository interface — the old plugin's 60-method
 	// interface was itself a reason it became hard to change. TODO(#778)

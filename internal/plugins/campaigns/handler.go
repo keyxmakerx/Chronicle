@@ -64,13 +64,9 @@ type AuditLogger interface {
 // PluginHubAddon is a minimal addon representation for the plugin hub page
 // and the top-level Extensions hub.
 //
-// HasDashboard / HasEntitySetup are populated by addonListerAdapter from a
-// slug-keyed capability table in extensions_hub.go. HasDashboard=true cards
-// gain an "Open dashboard" expand button. HasEntitySetup is surfaced in the
-// catalog for a per-entity binding card that isn't built yet.
-//
-// The older /campaigns/:id/plugins page also consumes PluginHubAddon; for
-// that surface the new flags are unused and safely zero.
+// HasDashboard is set by addonListerAdapter for apps with a dedicated
+// dashboard page (extensions_hub.go); those cards gain an "Open
+// dashboard" link.
 type PluginHubAddon struct {
 	AddonID int
 	Slug    string
@@ -84,7 +80,6 @@ type PluginHubAddon struct {
 	Enabled        bool
 	Installed      bool // Whether backing code exists (for showing Coming Soon vs toggle).
 	HasDashboard   bool
-	HasEntitySetup bool
 	// HasSetup is true when the addon has a registered SetupProvider (an
 	// extension settings/onboarding page). NeedsSetup is true when that page has
 	// outstanding, actionable checks for this campaign — the card shows a "Setup"
@@ -168,7 +163,6 @@ type Handler struct {
 	// Per-extension inline dashboard registry + enable-state check.
 	// Both nil-tolerant; the hub fragment route renders safe
 	// placeholders when either is unwired.
-	extensionDashboardFactories []func(*CampaignContext) ExtensionDashboard
 	extensionEnableChecker      ExtensionEnableChecker
 	sheetChecker                SheetChecker
 }

@@ -189,7 +189,8 @@ jobs:
   # behind one another. Every file lands in some group by its name.
   js:
     name: JS tests (${{ matrix.group }})
-    # Pinned: Playwright 1.56.1 has no Chromium build for ubuntu-latest (26.04).
+    # Pinned: Playwright 1.56.1 has no Chromium build for the newer
+    # ubuntu-latest image. Move both together when Playwright is upgraded.
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -438,7 +439,8 @@ jobs:
   # --- Browser tests ---
   e2e:
     name: Browser tests
-    # Pinned: Playwright 1.56.1 has no Chromium build for ubuntu-latest (26.04).
+    # Pinned: Playwright 1.56.1 has no Chromium build for the newer
+    # ubuntu-latest image. Move both together when Playwright is upgraded.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
