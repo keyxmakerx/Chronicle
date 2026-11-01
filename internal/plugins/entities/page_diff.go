@@ -89,6 +89,11 @@ func tokenize(s string) []string {
 // '-' only in a, '+' only in b, in reading order.
 func lcsOps(a, b []string) []DiffPart {
 	n, m := len(a), len(b)
+	// Callers keep n*m under maxDiffCells; checking it here as well keeps the
+	// table's size bounded where it is allocated, so it can never overflow.
+	if n > maxDiffCells || m > maxDiffCells || (n+1)*(m+1) > 3*maxDiffCells {
+		return []DiffPart{{'-', strings.Join(a, "")}, {'+', strings.Join(b, "")}}
+	}
 	// dp[i*(m+1)+j] = LCS length of a[i:], b[j:].
 	dp := make([]int32, (n+1)*(m+1))
 	at := func(i, j int) int32 { return dp[i*(m+1)+j] }
