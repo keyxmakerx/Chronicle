@@ -32,7 +32,7 @@ func TestHasExtensionDashboard_KnownSlugs(t *testing.T) {
 	}{
 		{"calendar", true},
 		{"maps", false},
-		{"timeline", false},
+		{"timeline", false}, // joins after C-TIMELINE-V2 lands
 		{"notes", false},
 		{"unknown-slug", false},
 		{"", false},
