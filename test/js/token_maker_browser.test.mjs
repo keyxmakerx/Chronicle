@@ -28,11 +28,14 @@ const MEDIA_ID = '0b7d5c1e-3f0a-4c55-9a4e-2f1f7c9d8e21';
 const CSS = ':root{--dur-slide:360ms;--ease-slide:ease;--dur-standard:200ms;--dur-micro:120ms;--ease-out:ease}' +
   read('static/css/input.css').split('\n').filter((l) => l.includes('ask-slip')).join('\n');
 
-const HTML = (motion) => `<!doctype html><html${motion ? ` data-motion="${motion}" data-view-motion="calm"` : ''}><head><meta charset="utf-8">
+// The smart cutout's files, when a test installs a stand-in for it.
+const SMART = ' data-smart-worker="/static/test/worker.js" data-smart-ort="/static/test/ort.js" data-smart-mjs="/static/test/ort.mjs"' +
+  ' data-smart-wasm="/static/test/ort.wasm" data-smart-model="/static/test/model.onnx"';
+const HTML = (motion, smart) => `<!doctype html><html${motion ? ` data-motion="${motion}" data-view-motion="calm"` : ''}><head><meta charset="utf-8">
 <style>${CSS}html,body{margin:0}.pic{position:relative;width:320px;height:224px;margin:40px}</style></head><body>
 <div class="pic"><img src="/media/pic.svg" alt="" style="width:100%;height:100%;object-fit:cover">
 <button type="button" id="chip" data-token-maker data-campaign-id="c1" data-entity-id="e1" data-name="Brother Ansel" data-art="/media/pic.svg">Make token</button></div>
-<template id="chronicle-token-maker-src" data-src="/static/js/token_maker.js?v=t" data-engine="/static/js/token_frames.js?v=t" data-css="/static/css/token_maker.css?v=t" data-previews="/static/img/token_frames.webp?v=t" data-cutout="/static/js/token_cutout.js?v=t"></template>
+<template id="chronicle-token-maker-src" data-src="/static/js/token_maker.js?v=t" data-engine="/static/js/token_frames.js?v=t" data-css="/static/css/token_maker.css?v=t" data-previews="/static/img/token_frames.webp?v=t" data-cutout="/static/js/token_cutout.js?v=t"${smart ? SMART : ''}></template>
 <script src="/static/js/theme.js"></script><script src="/static/js/motion_rest.js"></script>
 <script src="/static/vendor/htmx.min.js" defer></script><script src="/static/js/boot.js" defer></script>
 </body></html>`;
@@ -52,7 +55,7 @@ const CHECKER = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800
 
 const TYPES = { '.js': 'application/javascript', '.css': 'text/css', '.webp': 'image/webp' };
 
-async function page(t, motion, viewport = { width: 1280, height: 860 }) {
+async function page(t, motion, viewport = { width: 1280, height: 860 }, smart = null) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport });
@@ -63,7 +66,8 @@ async function page(t, motion, viewport = { width: 1280, height: 860 }) {
   await p.route('**/*', async (route) => {
     const req = route.request(), u = new URL(req.url());
     if (u.pathname === '/static/js/token_frames.js' && p.gate) await p.gate;
-    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: HTML(motion) });
+    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: HTML(motion, !!smart) });
+    if (smart && u.pathname.startsWith('/static/test/')) return smart(route, u.pathname);
     if (u.pathname === '/media/pic.svg') return route.fulfill({ contentType: 'image/svg+xml', body: PIC });
     if (u.pathname === '/media/checker.svg') return route.fulfill({ contentType: 'image/svg+xml', body: CHECKER });
     if (u.pathname === '/media/upload' && req.method() === 'POST') {
@@ -427,4 +431,61 @@ test('on a phone the wand, its drawer and the offer stay inside the stage', { sk
     return { wand: inside('[data-tkm-wand]'), drawer: inside('[data-tkm-bgd]'), wide: document.documentElement.scrollWidth > innerWidth };
   });
   assert.deepEqual(out, { wand: true, drawer: true, wide: false });
+});
+
+/* ---------- The smart cutout ---------- */
+
+// A stand-in for the model's worker: the real model is fetched by the Docker
+// build, not kept in git. It keeps all but the picture's left 30%, which is
+// enough to see the mask reach the saved token.
+const FAKE_WORKER = `self.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === 'init') { self.postMessage(m.model.byteLength > 0 && m.wasm.byteLength > 0 ? { type: 'ready' } : { type: 'error', message: 'empty' }); return; }
+  const mask = new Uint8Array(1024 * 1024);
+  for (let i = 0; i < mask.length; i++) mask[i] = i % 1024 < 307 ? 0 : 255;
+  self.postMessage({ type: 'mask', mask }, [mask.buffer]);
+};`;
+function smartFiles(opts = {}) {
+  return (route, path) => {
+    if (path === '/static/test/worker.js') return route.fulfill({ contentType: 'application/javascript', body: FAKE_WORKER });
+    if (path === '/static/test/model.onnx') return opts.modelMissing ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ contentType: 'application/octet-stream', body: Buffer.alloc(3 << 20, 1) });
+    if (path === '/static/test/ort.wasm') return route.fulfill({ contentType: 'application/wasm', body: Buffer.alloc(1 << 20, 1) });
+    return route.fulfill({ status: 404, body: '' });
+  };
+}
+
+test('the smart cutout downloads once, cuts the figure out, and the saved token is see-through round it', { skip }, async (t) => {
+  const p = await page(t, 'off', undefined, smartFiles());
+  await openOn(p, '/media/pic.svg');
+  await p.click('[data-tkm-wand]');
+  assert.match(await p.textContent('[data-tkm-smart-n]'), /about 60 MB/, 'it says what it downloads');
+  assert.match(await p.textContent('[data-tkm-bgs]'), /^No plain backdrop was found\. Cut out the figure/);
+  await p.click('[data-tkm-smart-go]');
+  await p.waitForSelector('[data-tkm-smart][hidden]', { state: 'attached', timeout: 30000 });
+  assert.equal(await p.textContent('[data-tkm-bgs]'), 'Cut out by the smart cutout. Erase or Restore to touch up the edge.');
+  assert.ok(await p.$('[data-tkm-wand].is-on'));
+  assert.deepEqual(await p.$$eval('[data-tkm-str] button', (bs) => bs.map((b) => b.getAttribute('aria-pressed'))), ['false', 'false', 'false']);
+  assert.equal(p.fetched.filter((f) => f.startsWith('/static/test/')).length, 0, 'the stand-in files are not from disk');
+  await p.click('.tkm-fr[data-v="none"]');
+  assert.deepEqual(await alphas(p, await saveToken(p), [BACKDROP, [300, 256]]), [0, 255]);
+});
+
+test('a failed download says so and the cutout can be tried again', { skip }, async (t) => {
+  const p = await page(t, 'off', undefined, smartFiles({ modelMissing: true }));
+  await openOn(p, '/media/pic.svg');
+  await p.click('[data-tkm-wand]');
+  await p.click('[data-tkm-smart-go]');
+  await p.waitForSelector('[data-tkm-bgs].is-error');
+  assert.match(await p.textContent('[data-tkm-bgs]'), /could not be downloaded/);
+  assert.equal(await p.$eval('[data-tkm-smart-go]', (b) => b.disabled), false);
+  assert.equal(await p.textContent('[data-tkm-smart-l]'), 'Cut out the figure');
+  assert.equal(await p.$eval('[data-tkm-wand]', (b) => b.classList.contains('is-on')), false, 'the picture is untouched');
+});
+
+test('with no smart cutout installed, the drawer does not offer one', { skip }, async (t) => {
+  const p = await page(t, 'off');
+  await openOn(p, '/media/pic.svg');
+  await p.click('[data-tkm-wand]');
+  assert.equal(await p.$eval('[data-tkm-smart]', (n) => n.hidden), true);
+  assert.match(await p.textContent('[data-tkm-bgs]'), /^No plain backdrop was found\. Clearing takes/);
 });

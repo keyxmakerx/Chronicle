@@ -55,6 +55,21 @@ that sits on the checkerboard's own squares is cleared too (a bright glow is
 not). The cleared copy is drawn with `clear: true`, so the frames put no dark
 backing behind it. `test/js/token_cutout.test.mjs` pins the pixel work.
 
+**Smart cutout.** "Cut out the figure" in the drawer finds the creature in any
+picture, painted scene included, with IS-Net (Apache-2.0) run in the browser by
+onnxruntime-web (MIT, single-threaded WASM, since the page is not cross-origin
+isolated). Nothing leaves the browser and nothing is fetched from outside
+Chronicle (`connect-src 'self'`). The first press downloads the model (about
+46 MB) and the runtime (about 13 MB) from `/static/vendor/cutout/`, with a
+progress bar; `token_cutout_worker.js` opens the model off the page's thread
+and turns a 1024 px copy into a mask, which Erase and Restore then touch up.
+The files are not in git: the Docker build's `cutout` stage runs
+`tools/fetch_cutout.py`, which downloads pinned copies, checks their SHA-256,
+quantises the model to int8 and checks the result's SHA-256 too. For a local
+checkout run `make cutout`. The layout names the files only when all four are
+on disk (`layouts.CutoutReady`), so without them the button is simply absent.
+`test/js/token_maker_browser.test.mjs` drives it with a stand-in worker.
+
 **Saving.** Save draws the token 512 px square as a PNG and uploads it
 (`POST /media/upload`, `usage_type=entity_image`): the media sanitiser keeps a
 PNG's transparency, while a WebP comes back as a JPEG with dark corners. A

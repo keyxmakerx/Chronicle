@@ -1,10 +1,21 @@
 # ============================================================================
 # Chronicle Dockerfile -- Multi-Stage Build
 # ============================================================================
+# Stage 0: Fetch the token maker's smart cutout (model and browser runtime)
 # Stage 1: Build Tailwind CSS (standalone binary, no Node.js)
 # Stage 2: Generate Templ Go files + compile Go binary
 # Stage 3: Minimal runtime image (~30MB)
 # ============================================================================
+
+# --- Stage 0: Smart cutout ---
+# The token maker's cutout model (IS-Net) and onnxruntime-web are fetched at
+# build time and never kept in git. tools/fetch_cutout.py pins and checks every
+# file, and the int8 model it makes must match its pinned checksum, which
+# depends on these package versions (keep them in step with REQUIREMENTS there).
+FROM python:3.13-slim AS cutout
+RUN pip install --no-cache-dir onnxruntime==1.31.1 onnx==1.23.2
+COPY tools/fetch_cutout.py /fetch_cutout.py
+RUN python3 /fetch_cutout.py /cutout
 
 # --- Stage 1: Tailwind CSS ---
 FROM alpine:3.24 AS tailwind
@@ -85,6 +96,7 @@ COPY --from=builder /chronicle /usr/local/bin/chronicle
 
 # Copy static assets (CSS, JS, vendor libs, fonts, images).
 COPY --from=builder /src/static /app/static
+COPY --from=cutout /cutout /app/static/vendor/cutout
 
 # Copy database migrations for auto-migration on startup.
 COPY --from=builder /src/db/migrations /app/db/migrations

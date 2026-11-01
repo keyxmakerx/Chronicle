@@ -13,7 +13,10 @@
  * tools often give for "no background") is noticed on open, and the maker
  * offers to clear it (token_cutout.js does the pixel work). The wand on the
  * stage holds the same clearing by hand: a strength and Erase and Restore
- * brushes. The cleared copy is what the token is drawn from.
+ * brushes, and the smart cutout: a small model, served by Chronicle and run in
+ * the browser (token_cutout_worker.js), that finds the figure in any picture.
+ * It is downloaded only when someone asks for a cutout. The cleared copy is
+ * what the token is drawn from.
  *
  * Save draws the token at TOKEN_PX as a PNG: the media sanitiser keeps a PNG's
  * transparency, while a WebP comes back as a JPEG with dark corners. A moving
@@ -38,7 +41,7 @@
   // The background is worked out on a copy at most this many pixels across;
   // the token is 512, so nothing it needs is lost.
   var CUT_PX = 1600;
-  var STATIC_URL = /^\/static\/[A-Za-z0-9_.\-\/]+\.(js|css|webp|png)(\?v=[A-Za-z0-9._\-]+)?$/;
+  var STATIC_URL = /^\/static\/[A-Za-z0-9_.\-\/]+\.(js|mjs|css|webp|png|wasm|onnx)(\?v=[A-Za-z0-9._\-]+)?$/;
   var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
   var COLOURS = [['', 'Original'], ['#b02a24', 'Red'], ['#e07a1c', 'Orange'], ['#d4a62a', 'Gold'], ['#3c9a4a', 'Green'], ['#2a8f9a', 'Teal'],
     ['#2f5fc8', 'Blue'], ['#7a3fb8', 'Purple'], ['#c8408a', 'Pink'], ['#ecebe6', 'White'], ['#26262a', 'Black']];
@@ -51,7 +54,7 @@
 
   function assets() {
     var t = document.getElementById('chronicle-token-maker-src'), a = {};
-    ['engine', 'css', 'previews', 'cutout'].forEach(function (k) {
+    ['engine', 'css', 'previews', 'cutout', 'smart-worker', 'smart-ort', 'smart-mjs', 'smart-wasm', 'smart-model'].forEach(function (k) {
       var v = t && t.getAttribute('data-' + k);
       a[k] = v && STATIC_URL.test(v) && v.indexOf('..') === -1 ? v : '';
     });
@@ -169,6 +172,11 @@
                 '<p class="tkm-bgd-s" data-tkm-bgs></p>' +
                 '<div class="tkm-bgd-row"><button type="button" class="tkm-nb is-go" data-tkm-bgrm>Clear the background</button>' +
                   '<button type="button" class="tkm-nq" data-tkm-bgback hidden>Put it all back</button></div>' +
+                '<div class="tkm-smart" data-tkm-smart hidden>' +
+                  '<button type="button" class="tkm-nb" data-tkm-smart-go><i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true" data-tkm-smart-spin hidden></i> <span data-tkm-smart-l>Cut out the figure</span></button>' +
+                  '<p class="tkm-bgd-n" data-tkm-smart-n>Finds the creature in any picture. The first time, it downloads the cutout tool from Chronicle, about 60 MB.</p>' +
+                  '<div class="tkm-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-tkm-bar hidden><i></i></div>' +
+                '</div>' +
                 '<p class="tkm-bgd-k" id="tkm-str-l">Strength</p>' +
                 '<div class="tkm-dseg" role="group" aria-labelledby="tkm-str-l" data-tkm-str>' +
                   '<button type="button" data-v="light" aria-pressed="false">Light</button><button type="button" data-v="medium" aria-pressed="true">Medium</button><button type="button" data-v="strong" aria-pressed="false">Strong</button></div>' +
@@ -518,14 +526,16 @@
   function bgRemember(st) {
     if (!st.bgKey) return;
     var all = bgAnswers().filter(function (a) { return a && a.k !== st.bgKey; });
-    all.unshift(st.cut.auto ? { k: st.bgKey, a: 'remove', s: st.cut.strength } : { k: st.bgKey, a: 'keep' });
+    // A smart cutout is not repeated on open (it needs the download), so it
+    // counts as an answer that stops the offer.
+    all.unshift(st.cut.auto && st.cut.mode === 'edge' ? { k: st.bgKey, a: 'remove', s: st.cut.strength } : { k: st.bgKey, a: 'keep' });
     try { localStorage.setItem(STORE_BG, JSON.stringify(all.slice(0, 100))); } catch (e) { /* private window */ }
   }
   function pictureKey(url) {
     try { var u = new URL(url, location.href); return u.pathname; } catch (e) { return ''; }
   }
 
-  function freshCut() { return { auto: false, strength: 'medium', paint: null, painted: false, canvas: null, out: null }; }
+  function freshCut() { return { auto: false, mode: 'edge', strength: 'medium', smart: null, paint: null, painted: false, canvas: null, out: null }; }
 
   // The maker draws whichever picture is current; swapping keeps the framing,
   // since the copy may be smaller than the picture.
@@ -576,8 +586,8 @@
     if (x0 === undefined) { x0 = 0; y0 = 0; x1 = w; y1 = h; }
     x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(w, x1); y1 = Math.min(h, y1);
     if (x1 <= x0 || y1 <= y0) return;
-    var auto = cut.auto ? W.T.mask(W.px, st.bg, cut.strength) : null;
-    W.T.compose(W.px, st.bg, auto, cut.paint, cut.out, x0, y0, x1, y1);
+    var smart = cut.auto && cut.mode === 'smart', auto = !cut.auto ? null : smart ? cut.smart : W.T.mask(W.px, st.bg, cut.strength);
+    W.T.compose(W.px, smart ? null : st.bg, auto, cut.paint, cut.out, x0, y0, x1, y1);
     cut.canvas.getContext('2d').putImageData(cut.out, 0, 0, x0, y0, x1 - x0, y1 - y0);
     swapImg(st, cut.canvas, W.k);
   }
@@ -598,7 +608,7 @@
   function setAuto(st, on, strength, quiet) {
     if (!st.work || st.bg.kind === 'clear') return;
     if (!quiet) fadeFrom(st);
-    st.cut.auto = !!on;
+    st.cut.auto = !!on; st.cut.mode = 'edge';
     if (strength) st.cut.strength = strength;
     recompose(st);
     syncBg(st);
@@ -606,7 +616,7 @@
   }
   function putBack(st) {
     fadeFrom(st);
-    st.cut.auto = false; st.cut.paint = null; st.cut.painted = false;
+    st.cut.auto = false; st.cut.mode = 'edge'; st.cut.paint = null; st.cut.painted = false;
     recompose(st);
     syncBg(st); bgRemember(st); changed(st);
   }
@@ -634,6 +644,135 @@
     if (x1 > x0) recompose(st, x0, y0, x1, y1);
   }
 
+  /* The smart cutout: downloaded once per page, on first use, then run in a worker. */
+
+  // Fetches a file, reporting bytes as they arrive.
+  function fetchCounted(url, tally) {
+    return fetch(url, { credentials: 'same-origin' }).then(function (r) {
+      if (!r.ok || !r.body) throw new Error('download');
+      var total = Number(r.headers.get('Content-Length')) || 0, got = 0, parts = [], reader = r.body.getReader();
+      tally(url, 0, total);
+      function pump() {
+        return reader.read().then(function (c) {
+          if (c.done) {
+            var all = new Uint8Array(got), at = 0;
+            parts.forEach(function (p) { all.set(p, at); at += p.length; });
+            return all.buffer;
+          }
+          parts.push(c.value); got += c.value.length; tally(url, got, total);
+          return pump();
+        });
+      }
+      return pump();
+    });
+  }
+
+  var smartLoad = null, smartTick = null;
+  function smartWorker() {
+    if (smartLoad) return smartLoad;
+    var a = assets(), seen = {}, load;
+    // A failed download's other file can still be arriving; it must not
+    // move the bar of a later try.
+    function tally(url, got, total) {
+      if (smartLoad !== load) return;
+      seen[url] = [got, total];
+      var g = 0, t = 0;
+      Object.keys(seen).forEach(function (k) { g += seen[k][0]; t += seen[k][1]; });
+      if (smartTick) smartTick(g, t);
+    }
+    load = smartLoad = Promise.all([fetchCounted(a['smart-model'], tally), fetchCounted(a['smart-wasm'], tally)]).then(function (r) {
+      return new Promise(function (resolve, reject) {
+        var w = new Worker(a['smart-worker']);
+        w.onmessage = function (e) {
+          var m = e.data || {};
+          if (m.type === 'ready') { w.onmessage = null; resolve(w); }
+          else if (m.type === 'error') { w.terminate(); reject(new Error('start')); }
+        };
+        w.onerror = function () { w.terminate(); reject(new Error('start')); };
+        w.postMessage({ type: 'init', ort: a['smart-ort'], mjs: a['smart-mjs'], wasm: r[1], model: r[0] }, [r[0], r[1]]);
+      });
+    });
+    smartLoad.catch(function () { smartLoad = null; });
+    return smartLoad;
+  }
+  function smartAvailable() {
+    var a = assets();
+    return !!(a['smart-worker'] && a['smart-ort'] && a['smart-mjs'] && a['smart-wasm'] && a['smart-model'] && window.Worker && window.fetch);
+  }
+
+  // The model's mask, 1024 square, scaled to the working copy and given a
+  // firmer edge, since the model leaves a faint haze where it is unsure.
+  function maskToWork(mask, w, h) {
+    var S = 1024, a = document.createElement('canvas'), b = document.createElement('canvas');
+    a.width = a.height = S; b.width = w; b.height = h;
+    var ga = a.getContext('2d'), id = ga.createImageData(S, S);
+    for (var i = 0; i < S * S; i++) id.data[i * 4 + 3] = mask[i];
+    ga.putImageData(id, 0, 0);
+    var gb = b.getContext('2d', { willReadFrequently: true });
+    gb.imageSmoothingQuality = 'high'; gb.drawImage(a, 0, 0, w, h);
+    var d = gb.getImageData(0, 0, w, h).data, out = new Uint8Array(w * h);
+    for (var k = 0; k < out.length; k++) out[k] = Math.max(0, Math.min(255, Math.round((d[k * 4 + 3] - 24) * 255 / 206)));
+    return out;
+  }
+
+  function smartUI(st, state, got, total) {
+    var el = st.el, btn = el.querySelector('[data-tkm-smart-go]'), label = el.querySelector('[data-tkm-smart-l]'), bar = el.querySelector('[data-tkm-bar]');
+    btn.disabled = state !== 'idle';
+    btn.classList.toggle('is-busy', state !== 'idle');
+    label.textContent = state === 'download' ? 'Getting the cutout tool ready\u2026' : state === 'run' ? 'Cutting out\u2026' : 'Cut out the figure';
+    bar.hidden = state !== 'download';
+    el.querySelector('[data-tkm-smart-spin]').hidden = state === 'idle';
+    if (state === 'download') {
+      var f = total ? got / total : 0;
+      bar.firstChild.style.width = Math.round(f * 100) + '%';
+      bar.setAttribute('aria-valuenow', String(Math.round(f * 100)));
+      bar.setAttribute('aria-valuetext', total ? Math.round(got / 1048576) + ' of ' + Math.round(total / 1048576) + ' MB' : 'Starting');
+    }
+    if (state === 'idle') el.querySelector('[data-tkm-smart-n]').hidden = !!smartLoad;
+    else el.querySelector('[data-tkm-smart-n]').textContent = state === 'run' ? 'This takes a few seconds.' : 'Downloading once, about 60 MB.';
+  }
+
+  function smartRun(st) {
+    var W = st.work;
+    if (!W || st.smartBusy) return;
+    st.smartBusy = true; st.smartError = '';
+    smartTick = function (g, t) { if (cur === st && st.smartBusy) smartUI(st, 'download', g, t); };
+    smartUI(st, smartLoad ? 'run' : 'download', 0, 0);
+    syncBg(st);
+    smartWorker().then(function (w) {
+      if (cur !== st) return null;
+      smartUI(st, 'run');
+      var S = 1024, c = document.createElement('canvas');
+      c.width = c.height = S;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(st.orig, 0, 0, S, S);
+      var px = g.getImageData(0, 0, S, S).data;
+      return new Promise(function (resolve, reject) {
+        w.onmessage = function (e) {
+          var m = e.data || {};
+          w.onmessage = null;
+          if (m.type === 'mask') resolve(m.mask); else reject(new Error('run'));
+        };
+        w.postMessage({ type: 'run', pixels: px }, [px.buffer]);
+      }).catch(function () { throw new Error('run'); });
+    }).then(function (mask) {
+      st.smartBusy = false;
+      if (cur !== st) return;
+      if (!mask || st.work !== W) { smartUI(st, 'idle'); syncBg(st); return; }
+      fadeFrom(st);
+      st.cut.smart = maskToWork(mask, W.px.width, W.px.height);
+      st.cut.auto = true; st.cut.mode = 'smart';
+      recompose(st);
+      smartUI(st, 'idle'); syncBg(st); bgRemember(st); changed(st);
+    }).catch(function (e) {
+      st.smartBusy = false;
+      if (cur !== st) return;
+      st.smartError = e && e.message === 'run' ? 'The cutout did not work on this picture. Clear the background or use the brushes instead.' :
+        'The cutout tool could not be downloaded. Check your connection and try again.';
+      smartUI(st, 'idle'); syncBg(st);
+    });
+  }
+
   var OFFER_TEXT = {
     checker: 'This picture has a painted checkerboard behind it, so it won’t be see-through on the map.',
     flat: 'This picture has a plain backdrop behind it, so it won’t be see-through on the map.',
@@ -659,17 +798,24 @@
   var KIND_NAME = { checker: 'the painted checkerboard', flat: 'the plain backdrop', busy: 'the colour round the edge' };
   function syncBg(st) {
     var el = st.el, cut = st.cut, bg = st.bg || { kind: 'busy' }, line;
-    if (cut.auto) line = 'Cleared ' + (KIND_NAME[bg.kind] || KIND_NAME.busy) + '. Erase or Restore to touch up the edge.';
+    if (st.smartError) line = st.smartError;
+    else if (cut.auto && cut.mode === 'smart') line = 'Cut out by the smart cutout. Erase or Restore to touch up the edge.';
+    else if (cut.auto) line = 'Cleared ' + (KIND_NAME[bg.kind] || KIND_NAME.busy) + '. Erase or Restore to touch up the edge.';
     else if (bg.kind === 'clear') line = 'This picture is already see-through round its edge. Erase paints away anything else.';
-    else if (bg.kind === 'checker') line = 'There is a painted checkerboard behind this picture.';
-    else if (bg.kind === 'flat') line = 'There is a plain backdrop behind this picture.';
+    else if (bg.sure && bg.kind === 'checker') line = 'There is a painted checkerboard behind this picture.';
+    else if (bg.sure) line = 'There is a plain backdrop behind this picture.';
+    else if (st.smartOK) line = 'No plain backdrop was found. Cut out the figure finds the creature in any picture; Clear takes only what matches the colour round the edge.';
     else line = 'No plain backdrop was found. Clearing takes what matches the colour round the edge.';
-    el.querySelector('[data-tkm-bgs]').textContent = line;
+    var sl = el.querySelector('[data-tkm-bgs]');
+    sl.textContent = line;
+    sl.classList.toggle('is-error', !!st.smartError);
+    el.querySelector('[data-tkm-smart]').hidden = !st.smartOK || (cut.auto && cut.mode === 'smart');
     var rm = el.querySelector('[data-tkm-bgrm]');
     rm.hidden = cut.auto || bg.kind === 'clear';
+    rm.disabled = !!st.smartBusy;
     el.querySelector('[data-tkm-bgback]').hidden = !cutActive(st);
     Array.prototype.forEach.call(el.querySelectorAll('[data-tkm-str] button'), function (b) {
-      b.disabled = !cut.auto; b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === cut.strength));
+      b.disabled = !cut.auto || !!st.smartBusy; b.setAttribute('aria-pressed', String(cut.mode === 'edge' && b.getAttribute('data-v') === cut.strength));
     });
     Array.prototype.forEach.call(el.querySelectorAll('[data-tkm-brush] button'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === st.brush)); });
     el.querySelector('[data-tkm-bsize]').disabled = !st.brush;
@@ -742,9 +888,10 @@
       if (t.closest('[data-tkm-offer-x]')) { showOffer(st, ''); st.surface.focus({ preventScroll: true }); return; }
       if (t.closest('[data-tkm-wand]')) { bgDrawer(st, st.el.querySelector('[data-tkm-bgd]').hidden); return; }
       if (t.closest('[data-tkm-bgd-close]')) { bgDrawer(st, false); st.el.querySelector('[data-tkm-wand]').focus({ preventScroll: true }); return; }
-      if (t.closest('[data-tkm-bgrm]')) { setAuto(st, true); return; }
+      if (t.closest('[data-tkm-bgrm]')) { st.smartError = ''; setAuto(st, true); return; }
+      if (t.closest('[data-tkm-smart-go]')) { smartRun(st); return; }
       if (t.closest('[data-tkm-bgback]')) { putBack(st); return; }
-      if ((b = t.closest('[data-tkm-str] button'))) { setAuto(st, true, b.getAttribute('data-v')); return; }
+      if ((b = t.closest('[data-tkm-str] button'))) { st.smartError = ''; setAuto(st, true, b.getAttribute('data-v')); return; }
       if ((b = t.closest('[data-tkm-brush] button'))) { setBrush(st, b.getAttribute('data-v')); return; }
       if (t.closest('[data-tkm-fill]')) { fill(st); changed(st); return; }
       if ((b = t.closest('[data-tkm-flip]'))) { st.flip = !st.flip; b.setAttribute('aria-pressed', String(st.flip)); changed(st); return; }
@@ -800,7 +947,7 @@
   // moment, so the wait note is painted before it starts.
   function usePicture(st, img, key) {
     st.img = st.orig = img; st.imgK = 1;
-    st.work = null; st.bg = null; st.bgKey = ''; st.cut = freshCut(); st.brush = ''; st.brushAt = null;
+    st.work = null; st.bg = null; st.bgKey = ''; st.cut = freshCut(); st.brush = ''; st.brushAt = null; st.smartError = '';
     showOffer(st, '');
     if (!st.el.querySelector('[data-tkm-bgd]').hidden) bgDrawer(st, false);
     st.el.querySelector('[data-tkm-wand]').hidden = true;
@@ -867,7 +1014,7 @@
       hc.className = 'tkm-hot';
       var st = cur = {
         o: o, el: el, panel: panel, from: from, surface: el.querySelector('.tkm-surface'), tmp: document.createElement('canvas'), hotCanvas: hc,
-        img: null, orig: null, imgK: 1, work: null, bg: null, bgKey: '', cut: freshCut(), offer: '', brush: '', brushAt: null, brushR: 26,
+        img: null, orig: null, imgK: 1, work: null, smartOK: smartAvailable(), smartBusy: false, smartError: '', bg: null, bgKey: '', cut: freshCut(), offer: '', brush: '', brushAt: null, brushR: 26,
         place: null, url: '', group: '', hot: null, hotTimer: 0, frame: 'none', colour: '', shape: 'round', flip: false, name: o.name || '',
         playing: motionOK(), ready: false, dirty: false, saving: false, closing: false, raf: 0, ticks: 0, nextTick: 0, inert: []
       };
