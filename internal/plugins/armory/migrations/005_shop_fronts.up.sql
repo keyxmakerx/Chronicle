@@ -1,4 +1,4 @@
--- 003_shop_fronts: how a shop's storefront is drawn on the Shops street.
+-- 005_shop_fronts: how a shop's storefront is drawn on the Shops street.
 --
 -- One row per shop: a small normalized JSON document (building style,
 -- colours, awning, sign, window wares, and the look it takes when closed).
