@@ -185,13 +185,7 @@ func cleanGenerate(in GenerateInput) (GenerateInput, *MakeKind, error) {
 	if in.Count == 0 {
 		in.Count = defaultGenSize
 	}
-	// Compared here rather than through clamp so the bound sits beside the
-	// allocations below, where code scanning can see it.
-	if in.Count < 1 {
-		in.Count = 1
-	} else if in.Count > maxGenerate {
-		in.Count = maxGenerate
-	}
+	in.Count = clamp(in.Count, 1, maxGenerate)
 	in.Echelon = clamp(in.Echelon, 1, 4)
 	in.Seed = strings.TrimSpace(in.Seed)
 	if len(in.Seed) > maxSeedLen || hasControl(in.Seed) {
@@ -200,11 +194,15 @@ func cleanGenerate(in GenerateInput) (GenerateInput, *MakeKind, error) {
 	if in.Seed == "" {
 		return in, nil, errInvalid("the generator needs a seed")
 	}
-	rr := make([]int, in.Count)
-	for i := range rr {
+	// Sized by the constant cap, not the request, so no request value sets
+	// an allocation's size.
+	rr := make([]int, 0, maxGenerate)
+	for i := 0; i < in.Count; i++ {
+		n := 0
 		if i < len(in.Rerolls) {
-			rr[i] = clamp(in.Rerolls[i], 0, maxRerolls)
+			n = clamp(in.Rerolls[i], 0, maxRerolls)
 		}
+		rr = append(rr, n)
 	}
 	in.Rerolls = rr
 	return in, mk, nil
@@ -224,7 +222,7 @@ func rowRand(seed string, row, reroll int) *rand.Rand {
 }
 
 func generateRows(in GenerateInput, mk *MakeKind, f genFacts) []GeneratedRecipe {
-	rows := make([]GeneratedRecipe, 0, in.Count)
+	rows := make([]GeneratedRecipe, 0, maxGenerate)
 	used := map[string]bool{}
 	for i := 0; i < in.Count; i++ {
 		rows = append(rows, generateRow(rowRand(in.Seed, i, in.Rerolls[i]), in, mk, f, used))
