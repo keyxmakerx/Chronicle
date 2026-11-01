@@ -462,9 +462,12 @@ window.CraftScene = (function () {
     function place2(x,y,el){var r=stage.getBoundingClientRect(),w=el.offsetWidth,h=el.offsetHeight,lx=x-r.left+14,ly=y-r.top+16;
       if(lx+w>r.width-8)lx=x-r.left-w-14;if(ly+h>r.height-8)ly=y-r.top-h-12;el.style.left=Math.max(8,lx)+'px';el.style.top=Math.max(8,ly)+'px';}
     function cardHTML(inf,more){return '<b>'+esc(inf.name)+'</b>'+(inf.meta?'<span class="cr-meta">'+esc(inf.meta)+'</span>':'')+(inf.text||more?'<p>'+esc(more||inf.text)+'</p>':'')+(inf.now?'<p class="cr-now">'+esc(inf.now)+'</p>':'')+(more?'':'<p class="cr-foot">Right-click for more</p>');}
-    function hover(e){if(pinned)return;var t=targetAt(e.target);if(!t){hideCard();return;}
+    /* The card opens a moment after the pointer arrives, where the pointer is
+       then: placed where it first came in, it showed there for a frame and jumped. */
+    var hovX=0,hovY=0;
+    function hover(e){if(pinned)return;hovX=e.clientX;hovY=e.clientY;var t=targetAt(e.target);if(!t){hideCard();return;}
       if(hovEl!==t.el){if(hovEl)hovEl.classList.remove('cr-hov');hovEl=t.el;hovEl.classList.add('cr-hov');}
-      if(t.id!==hovId){hovId=t.id;card.classList.remove('show');cancel(hovT);var cx=e.clientX,cy=e.clientY;hovT=later(function(){card.innerHTML=cardHTML(infoFor(t.id));place2(cx,cy,card);card.classList.add('show');},250);}
+      if(t.id!==hovId){hovId=t.id;card.classList.remove('show');cancel(hovT);hovT=later(function(){card.innerHTML=cardHTML(infoFor(t.id));place2(hovX,hovY,card);card.classList.add('show');},250);}
       else if(card.classList.contains('show'))place2(e.clientX,e.clientY,card);}
     function hideCard(){cancel(hovT);hovId=null;if(hovEl){hovEl.classList.remove('cr-hov');hovEl=null;}if(!pinned)card.classList.remove('show');}
     function pin(html,x,y){pinned=true;card.innerHTML=html+'<button class="cr-x" type="button" aria-label="Close">×</button>';card.classList.add('show','pinned');place2(x,y,card);
