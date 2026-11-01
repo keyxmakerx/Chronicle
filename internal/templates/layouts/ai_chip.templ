@@ -1,0 +1,33 @@
+package layouts
+
+// aiChip is the AI button in the top bar and the panel it opens over any
+// campaign page (signed option D, and D for players). The layout knows
+// nothing about AI: the ai-chip widget asks the ai_workspace plugin for the
+// counts (<base>/chip) and the panel (<base>/panel), and takes Ctrl+V with an
+// AI's answer copied on any page. base is "ai" for the owner and "ai/me" for
+// anyone else in the campaign; a player's button starts hidden and shows
+// only once the plugin says players may use AI here.
+templ aiChip(base string, player bool) {
+	<div class="ai-chip-host" data-widget="ai-chip" data-campaign-id={ GetCampaignID(ctx) } data-ai-base={ base } hidden?={ player }>
+		<button
+			type="button"
+			class="btn-ghost btn-icon ai-chip"
+			data-ai-chip
+			aria-haspopup="dialog"
+			aria-expanded="false"
+			aria-controls="ai-panel"
+			title="Your AI"
+		>
+			<i class="fa-solid fa-wand-magic-sparkles text-xs" aria-hidden="true"></i>
+			<span class="sr-only" data-ai-chip-label>Your AI</span>
+			<span class="ai-chip-n" data-ai-chip-n hidden></span>
+		</button>
+		<div class="ai-chip-note" data-ai-note role="status" aria-live="polite" hidden></div>
+		<div class="ai-panel-scrim" data-ai-scrim hidden></div>
+		<div id="ai-panel" class="ai-panel" role="dialog" aria-modal="true" aria-labelledby="ai-panel-heading" tabindex="-1" hidden>
+			<div class="ai-panel-body" data-ai-panel-body>
+				<p class="ai-panel-loading"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Opening…</p>
+			</div>
+		</div>
+	</div>
+}

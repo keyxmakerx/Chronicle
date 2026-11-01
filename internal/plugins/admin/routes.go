@@ -59,6 +59,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.POST("/trash/campaigns/:id/undo", h.UndoTrashedCampaign)
 	admin.POST("/trash/batches/:id/undo", h.UndoTrashedBatch)
 	admin.POST("/trash/retention", h.SaveTrashRetention, reauth)
+	admin.POST("/trash/long-term", h.SaveLongTermTrash)
 	admin.DELETE("/trash", h.EmptyTrash, reauth)
 
 	// Site look: name, logo, look and sign-in background for pages outside a

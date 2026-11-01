@@ -462,9 +462,20 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `ai_connections` | One key an owner made so an AI app can read the campaign and ask for changes | `key_hash` CHAR(64) UNIQUE (SHA-256; the key itself is never stored); `key_hint` (last 4); `privacy` (`safe` or `permitted`, the owner may change it); `can_ask` (the Change setting; FALSE is Only look); `expires_at`, `revoked_at`, `last_used_at`; `paused_at` (set while the owner has paused the key); `client_name`; FK→`campaigns` CASCADE |
-| `ai_connection_calls` | "What it did": one row per tool call, never the answer | `(campaign_id, id)` index; `tool`, `summary`, `note`, `ok`; FK→`ai_connections` CASCADE; 500 kept per campaign |
-| `ai_connection_requests` | What an AI asked for, waiting for the owner's review; nothing in it is applied until they press Apply | `(campaign_id, status, id)` index; `body` MEDIUMTEXT (the blocks, paste format, at most 256 KB); `summary` (the AI's line), `counts`, `blocks`, `app_name`; `status` (`waiting`, `answered`, `turned_down`), `outcome`, `decided_at`; FK→`campaigns` CASCADE; 20 waiting at most, 100 answered kept per campaign |
+| `ai_connections` | One key a person made so an AI app can read the campaign and ask for changes; one live key per person per campaign | `key_hash` CHAR(64) UNIQUE (SHA-256; the key itself is never stored); `key_hint` (last 4); `privacy` (`safe` or `permitted`, the owner may change it); `can_ask` (the Change setting; FALSE is Only look); `expires_at`, `revoked_at`, `last_used_at`; `paused_at` (set while the owner or site admin has paused the key); `client_name`; `seen_apps` (every app name the key connected as, comma-separated, 255 chars); `for_player` (set when the key is made by someone other than the owner; it then acts as that player, and its rights never change with the maker's role); FK→`campaigns` CASCADE |
+| `ai_connection_calls` | "What it did": one row per tool call, never the answer | `(campaign_id, id)` index; `tool`, `summary`, `note`, `ok`; FK→`ai_connections` CASCADE; 500 kept per person per campaign |
+| `ai_connection_requests` | What an AI asked for, waiting for the review of the person whose key it came with; nothing in it is applied until they press Apply | `(campaign_id, status, id)` index; `body` MEDIUMTEXT (the blocks, paste format, at most 256 KB); `summary` (the AI's line), `counts`, `blocks`, `app_name`; `status` (`waiting`, `answered`, `turned_down`), `outcome`, `decided_at`; FK→`campaigns` CASCADE; 20 waiting at most, 100 answered kept, per person per campaign |
+| `ai_connection_alerts` | Warnings about AI keys for the owner and site admin: a new app, repeated limit hits, a flood of wrong keys | `kind` (`new_app`, `limit`, `wrong_keys`); `campaign_id` and `connection_id` NULL for a flood (FK CASCADE otherwise); `address`, `detail`, `hits`; `settled_at`, `settled_how` (`mine`, `paused`, `ended`, `lifted`, `seen`); open warnings indexed |
+| `ai_campaign_access` | The owner's "Stop all AI here" | `campaign_id` PK FK→`campaigns` CASCADE; `cut_off_at` (NULL = AI allowed); `players_allowed` (the owner lets players use their own AI) |
+| `ai_server_access` | The site admin's AI switches, one row (`id` = 1) | `ai_off`; `players_allowed` (FALSE blocks players' AI in every campaign); `updated_by` |
+
+### player_changes (`internal/plugins/playerchanges/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `player_changes` | The last month of what Players changed on pages (a sheet field, a page's name or text, a page removed), for the owner's "What players changed" | `kind` (`field`, `text`, `removed`); `old_text`/`new_text` as shown (2000 chars), `old_json`/`new_json` as stored, for Undo (dropped past 64 KB; a page text keeps its whole plain text there to work out the words); `source` (`web`, `ai`), `app`; `undone_at`/`undone_by`; `entity_id`, `user_id` carry no FK so the history outlives both; FK→`campaigns` CASCADE |
+| `player_change_packs` | Older months, one gzip'd JSON array per campaign and month | PK `(campaign_id, month)`; `body` MEDIUMBLOB; `keep_until` fixed when packed from the Long-term trash length, so shortening it never removes anything early; FK→`campaigns` CASCADE |
+| `player_change_kept_pages` | Pages a player removed that the campaign Trash keeps past its days (Long-term trash) | PK `(campaign_id, entity_id)`; `keep_until`; FK→`campaigns` CASCADE |
 
 ## MariaDB-specific notes
 

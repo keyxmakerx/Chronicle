@@ -50,5 +50,5 @@ type EditorJSON func(html string) (string, error)
 
 // AuditLogger records that an import ran. Optional.
 type AuditLogger interface {
-	LogCampaignEvent(ctx context.Context, campaignID, action string, details map[string]any)
+	LogCampaignEvent(ctx context.Context, campaignID, userID, action string, details map[string]any)
 }

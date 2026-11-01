@@ -58,6 +58,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
+	"github.com/keyxmakerx/chronicle/internal/plugins/playerchanges"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
@@ -4435,14 +4436,15 @@ func (a *App) RegisterRoutes() {
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.
-	entityService.SetFieldChangeObserver(&armoryMoneyObserver{history: armory.NewMoneyHistory(
+	armoryObserver := &armoryMoneyObserver{history: armory.NewMoneyHistory(
 		stashRepo, stashDirectory,
 		func(ctx context.Context, campaignID string) bool {
 			on, err := addonService.IsEnabledForCampaign(ctx, campaignID, "armory")
 			return err == nil && on
 		},
 		stashEvents,
-	)})
+	)}
+	entityService.SetFieldChangeObserver(armoryObserver)
 	stashAPI := armory.NewStashAPI(stashSvc, &armoryMemberDirectoryAdapter{svc: campaignService})
 	stashAPIHandler := syncapi.NewStashAPIHandler(
 		&syncStashAPIAdapter{api: stashAPI},
@@ -4776,6 +4778,41 @@ func (a *App) RegisterRoutes() {
 	pageSafetyHandler.SetAuditService(auditService)
 	entities.RegisterPageSafetyRoutes(e, pageSafetyHandler, campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
+
+	// What players changed: every change a Player makes to a page, by hand or
+	// through their AI, for the owner to search and undo. It hears about
+	// writes beside the Armory's money history; without its tables, writes
+	// go on exactly as before.
+	a.registerPlugin(PluginRegistration{
+		Slug:     playerchanges.PluginSlug,
+		StaticFS: echo.MustSubFS(playerchanges.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "player-changes", Scripts: []string{"js/player_changes.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(playerchanges.PluginSlug) {
+		keepMonths := func(ctx context.Context) int { return settingsService.LongTermTrashMonths(ctx) }
+		playerChangesSvc := playerchanges.NewService(playerchanges.NewRepository(a.DB),
+			&playerChangePages{entities: entityService, safety: pageSafetyService}, keepMonths)
+		entityService.SetFieldChangeObserver(fieldObservers{armoryObserver,
+			&playerChangeRecorder{svc: playerChangesSvc, members: campaignService, types: entityService}})
+		playerchanges.RegisterRoutes(e, playerchanges.NewHandler(playerChangesSvc,
+			func(c echo.Context) int { return keepMonths(c.Request().Context()) },
+			func(c echo.Context) *time.Location {
+				u, err := authService.GetUser(c.Request().Context(), auth.GetUserID(c))
+				if err != nil || u == nil || u.Timezone == nil {
+					return nil
+				}
+				return timeutil.LoadLocation(*u.Timezone)
+			}), campaignService, authService)
+		// Pages a player removed stay whole past the Trash's days, for the
+		// Long-term trash's length, so the owner can still bring them back.
+		pageSafetyService.SetLongTermTrash(playerChangesSvc)
+		adminHandler.SetLongTermTrashSizer(playerChangesSvc)
+		go playerChangesSvc.StartPacker(a.ShutdownCtx)
+	} else {
+		slog.Warn("player changes plugin degraded — What players changed is not available")
+	}
 
 	// --- Extra places in the page tree ---
 	// One page listed under more than one parent. The service is also the
@@ -5290,6 +5327,20 @@ func (a *App) RegisterRoutes() {
 				slog.Error("ending AI keys failed", slog.String("user_id", userID), slog.Any("error", err))
 			}
 		})
+		// The watch: the server's and each campaign's AI switches, and
+		// warnings about keys used in a way that looks wrong, shown to the
+		// owner and on Site admin ▸ API & access ▸ AI apps.
+		aiConnectorSvc.SetWatch(connector.NewWatchRepository(a.DB))
+		aiAdminHandler := ai_workspace.NewAdminAIHandler(aiConnectorSvc)
+		aiAdminHandler.SetActivityRecorder(adminActivity)
+		aiAdminHandler.SetZone(func(c echo.Context) *time.Location {
+			u, err := authService.GetUser(c.Request().Context(), auth.GetUserID(c))
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		})
+		ai_workspace.RegisterAdminRoutes(adminGroup, aiAdminHandler, auth.RequireReauth(authService))
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)
@@ -5301,6 +5352,8 @@ func (a *App) RegisterRoutes() {
 	)
 	ai_workspace.RegisterOwnerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
 		campaigns.RequireRole(campaigns.RoleOwner))
+	ai_workspace.RegisterPlayerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
+		campaigns.RequireRole(campaigns.RolePlayer))
 
 	// --- Import from Obsidian or Markdown (Settings > Import) ---
 	// Pages, pictures and page files are reached through the narrow adapters in
@@ -5587,6 +5640,9 @@ func (a *App) RegisterRoutes() {
 	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	// A player's AI changes only that player's own character, through the
+	// same claimed-owner checks and hero builder plan as the sheet editor.
+	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc}})
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the
 	// version + files each system loader is ACTUALLY serving, to catch the
@@ -6650,6 +6706,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "diag-picker", Scripts: []string{"/static/js/widgets/diag_picker.js"}},
 	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
 	{Name: "ai-import-review", Scripts: []string{"/static/js/widgets/ai_import_review.js"}},
+	{Name: "ai-chip", Scripts: []string{"/static/js/widgets/ai_chip.js"}},
 	{Name: "mini-bar-chart", Scripts: []string{"/static/js/widgets/mini_bar_chart.js"}},
 	{Name: "surface-demo", Scripts: []string{"/static/js/widgets/surface_demo.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
@@ -7328,10 +7385,13 @@ type aiWorkspaceAuditAdapter struct {
 	svc audit.AuditService
 }
 
-func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaignID, action string, details map[string]any) {
+// The audit service refuses an entry without a user, so userID must be set
+// or the event is lost.
+func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaignID, userID, action string, details map[string]any) {
 	// Fire-and-forget; audit failures must not break the response.
 	_ = a.svc.Log(ctx, &audit.AuditEntry{
 		CampaignID: campaignID,
+		UserID:     userID,
 		Action:     action,
 		Details:    details,
 	})

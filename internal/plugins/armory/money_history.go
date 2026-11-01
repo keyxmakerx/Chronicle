@@ -55,6 +55,8 @@ func sourcePhrase(src changesource.Source) (string, bool) {
 		return "at a shop", true
 	case changesource.KindCraft:
 		return "for crafting", true
+	case changesource.KindAI:
+		return "by their AI", true
 	}
 	return "", false
 }

@@ -138,7 +138,7 @@ func TestServe_LogsWhatItDid(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Gem") {
 		t.Fatalf("call: %d %s", rec.Code, rec.Body)
 	}
-	calls, _ := r.svc.Activity(context.Background(), "camp-1")
+	calls, _ := r.svc.Activity(context.Background(), "camp-1", "owner-1")
 	if len(calls) != 2 {
 		t.Fatalf("logged %d calls: %+v", len(calls), calls)
 	}
@@ -148,7 +148,7 @@ func TestServe_LogsWhatItDid(t *testing.T) {
 	if calls[0].Tool != "rolling_tables" || calls[0].Summary != "Read rolling tables: “Loot”" || !calls[0].OK {
 		t.Errorf("call line = %+v", calls[0])
 	}
-	conn, _ := r.svc.Current(context.Background(), "camp-1")
+	conn, _ := r.svc.Current(context.Background(), "camp-1", "owner-1")
 	if conn.LastUsedAt == nil || conn.ClientName != "Claude b" {
 		t.Errorf("connection = %+v", conn)
 	}

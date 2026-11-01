@@ -70,10 +70,11 @@ func RegisterRoutes(ech *echo.Echo, ep *Endpoint) {
 }
 
 // actorFor is who a connection's answers are read as: its maker, as a player
-// in Safe mode (the copy-and-paste lookups' exportActor rule).
+// in Safe mode (the copy-and-paste lookups' exportActor rule). A player's key
+// always reads as that player, whatever its stored privacy says.
 func actorFor(c *Connection) records.Actor {
 	role := int(campaigns.RoleOwner)
-	if c.Privacy == aiexport.PrivacyModeSafe {
+	if c.ForPlayer || c.Privacy == aiexport.PrivacyModeSafe {
 		role = int(campaigns.RolePlayer)
 	}
 	return records.Actor{UserID: c.UserID, Role: role}
@@ -111,13 +112,28 @@ func (e *Endpoint) Serve(c echo.Context) error {
 	}
 	campaignID := c.Param("id")
 	conn, name, err := e.svc.Authenticate(req.Context(), campaignID, keyFrom(req))
-	if errors.Is(err, ErrKeyPaused) {
+	switch {
+	case errors.Is(err, ErrKeyPaused):
 		// The key is right, so this is no failed guess to count.
-		return refuse(c, http.StatusForbidden, "This key is paused. The campaign's owner can resume it on the Your AI page.")
+		return refuse(c, http.StatusForbidden, "This key is paused. It can be resumed on the Your AI page in Chronicle.")
+	case errors.Is(err, ErrPlayersOff), errors.Is(err, ErrPlayersBlocked):
+		return refuse(c, http.StatusForbidden, "Players can't use AI in this campaign right now: "+err.Error()+".")
+	case errors.Is(err, ErrCutOff):
+		return refuse(c, http.StatusForbidden, "The campaign's owner has stopped AI in this campaign for now. They can turn it back on on the Your AI page.")
+	case errors.Is(err, ErrAIOff):
+		c.Response().Header().Set("Retry-After", "3600")
+		return refuse(c, http.StatusServiceUnavailable, "AI is turned off on this server for now. Ask the server's admin.")
 	}
 	if err != nil {
 		ip := c.RealIP()
+		if e.svc.TurnedAway(ip) {
+			// This address flooded wrong keys earlier: answer at once and
+			// count nothing, so a flood costs a log line once, not each time.
+			c.Response().Header().Set("Retry-After", "3600")
+			return refuse(c, http.StatusTooManyRequests, "Too many wrong keys came from this address. Wrong keys from it are turned away for a day.")
+		}
 		n := e.failures.add(ip, time.Now())
+		e.svc.NoteRefused(req.Context(), ip, oneLine(campaignID, 40), n > failuresPerMinute)
 		if n > failuresPerMinute {
 			c.Response().Header().Set("Retry-After", "60")
 			return refuse(c, http.StatusTooManyRequests, "Too many wrong keys from this address. Wait a minute.")
@@ -133,10 +149,13 @@ func (e *Endpoint) Serve(c echo.Context) error {
 			return refuse(c, http.StatusUnauthorized, "This key was disconnected or has run out. Make a new one on the campaign's Your AI page.")
 		case errors.Is(err, ErrOwnerGone):
 			return refuse(c, http.StatusForbidden, "Whoever made this key no longer owns the campaign. The owner can make a new one on the Your AI page.")
+		case errors.Is(err, ErrPlayerGone):
+			return refuse(c, http.StatusForbidden, "Whoever made this key is no longer in the campaign.")
 		}
 		return refuse(c, http.StatusServiceUnavailable, "Chronicle couldn't check the key just now. Try again in a moment.")
 	}
 	if ok, wait := e.svc.Allow(conn.ID); !ok {
+		e.svc.NoteLimited(req.Context(), conn)
 		secs := int(wait.Round(time.Second) / time.Second)
 		if secs < 1 {
 			secs = 1
@@ -156,6 +175,7 @@ func (e *Endpoint) Serve(c echo.Context) error {
 	switch {
 	case out.Initialized:
 		e.svc.Seen(req.Context(), conn, out.ClientName)
+		e.svc.NoteConnect(req.Context(), conn, out.ClientName, c.RealIP())
 		if conn.LastUsedAt == nil {
 			e.svc.Record(req.Context(), conn, toolConnect, "Connected", cleanClientName(out.ClientName), true)
 		}

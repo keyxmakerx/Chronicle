@@ -312,6 +312,16 @@ type FieldChangeObserver interface {
 	FieldsChanged(ctx context.Context, e *Entity, oldFields, newFields map[string]any) error
 }
 
+// PageChangeObserver is told after a page's title or text was saved and
+// after a page went to the Trash. The field change observer may also
+// implement it; nothing else is needed to wire it. userID is the person
+// whose request made the change, "" when none applies. Errors are logged
+// and never fail the change.
+type PageChangeObserver interface {
+	TextChanged(ctx context.Context, before, after *Entity, userID string) error
+	PageTrashed(ctx context.Context, e *Entity, userID string) error
+}
+
 // EntityEventPublisher emits domain events when entities or entity types change.
 // Implemented by the WebSocket EventBus adapter in routes.go.
 type EntityEventPublisher interface {
@@ -479,6 +489,18 @@ func (s *entityService) notifyFieldsChanged(ctx context.Context, e *Entity, oldF
 	if err := s.fieldObserver.FieldsChanged(ctx, e, oldFields, newFields); err != nil {
 		slog.Warn("entity field observer failed",
 			slog.String("entity_id", e.ID), slog.Any("error", err))
+	}
+}
+
+// notifyTextChanged tells the observer, when it wants to know, that a
+// page's title or text was saved.
+func (s *entityService) notifyTextChanged(ctx context.Context, before, after *Entity) {
+	po, ok := s.fieldObserver.(PageChangeObserver)
+	if !ok || before == nil || after == nil {
+		return
+	}
+	if err := po.TextChanged(ctx, before, after, actorFrom(ctx)); err != nil {
+		slog.Warn("page observer failed", slog.String("entity_id", after.ID), slog.Any("error", err))
 	}
 }
 
@@ -1316,6 +1338,11 @@ func (s *entityService) Delete(ctx context.Context, entityID string) error {
 			return err
 		}
 		slog.Info("entity moved to trash", slog.String("entity_id", entityID), slog.Int("pages", len(ids)))
+		if po, ok := s.fieldObserver.(PageChangeObserver); ok {
+			if err := po.PageTrashed(ctx, entity, actorFrom(ctx)); err != nil {
+				slog.Warn("page observer failed", slog.String("entity_id", entityID), slog.Any("error", err))
+			}
+		}
 		s.publishEntity(ctx, "deleted", entity.CampaignID, entityID, entity)
 		for _, id := range ids[1:] {
 			s.publishEntity(ctx, "deleted", entity.CampaignID, id, &Entity{ID: id, CampaignID: entity.CampaignID})

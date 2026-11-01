@@ -14,6 +14,9 @@ const (
 	KindShop      = "shop"
 	KindCraft     = "craft"
 	KindExtension = "extension"
+	// KindAI is a change a person's AI asked for and that person applied
+	// from the AI panel. UserID is that person; Label names the AI app.
+	KindAI = "ai"
 )
 
 // Source says where a write came from.

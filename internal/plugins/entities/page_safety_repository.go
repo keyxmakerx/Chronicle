@@ -53,8 +53,9 @@ type PageSafetyRepository interface {
 	FindTrashItem(ctx context.Context, campaignID, rootID string) (*TrashItem, error)
 	// RestoreTrashItem brings a Trash item's pages back, and returns how many.
 	RestoreTrashItem(ctx context.Context, campaignID, rootID string) (int, error)
-	// PurgeTrashedBefore deletes for good the pages trashed before cutoff.
-	PurgeTrashedBefore(ctx context.Context, cutoff time.Time) (int, error)
+	// PurgeTrashedBefore deletes for good the pages trashed before cutoff,
+	// except the Trash items whose root is in keep (Long-term trash).
+	PurgeTrashedBefore(ctx context.Context, cutoff time.Time, keep []string) (int, error)
 }
 
 type pageSafetyRepository struct {
@@ -386,11 +387,19 @@ func (r *pageSafetyRepository) RestoreTrashItem(ctx context.Context, campaignID,
 // purgeBatch keeps each purge statement short so it never holds locks long.
 const purgeBatch = 200
 
-func (r *pageSafetyRepository) PurgeTrashedBefore(ctx context.Context, cutoff time.Time) (int, error) {
+func (r *pageSafetyRepository) PurgeTrashedBefore(ctx context.Context, cutoff time.Time, keep []string) (int, error) {
+	query := `DELETE FROM entities WHERE deleted_at IS NOT NULL AND deleted_at < ?`
+	args := []any{cutoff}
+	if len(keep) > 0 {
+		query += ` AND (trash_root_id IS NULL OR trash_root_id NOT IN (` + sqlPlaceholders(len(keep)) + `))`
+		for _, id := range keep {
+			args = append(args, id)
+		}
+	}
+	args = append(args, purgeBatch)
 	total := 0
 	for {
-		res, err := r.db.ExecContext(ctx, `DELETE FROM entities
-			WHERE deleted_at IS NOT NULL AND deleted_at < ? LIMIT ?`, cutoff, purgeBatch)
+		res, err := r.db.ExecContext(ctx, query+` LIMIT ?`, args...)
 		if err != nil {
 			return total, fmt.Errorf("purging trash: %w", err)
 		}

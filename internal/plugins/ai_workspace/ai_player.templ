@@ -1,0 +1,267 @@
+// ai_player.templ is a player's AI panel (signed option D for players): the
+// changes their AI asked for, answered in place, what was left out and why,
+// and a small menu to connect their own AI or copy for one.
+
+package ai_workspace
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// playerPanelBody is a player's panel, loaded each time it opens. The paste
+// box keeps the owner's id, so Ctrl+V on any page fills it the same way.
+templ playerPanelBody(v PlayerAIView) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
+	<div class="aip-body" x-data={ fmt.Sprintf("{ menu: %t }", v.Menu || v.NewKey != "") }>
+		<header class="aip-head">
+			<h2 id="ai-panel-heading" class="aip-title">Your AI</h2>
+			if v.Why == "" {
+				<button type="button" class="quiet-word" @click="menu = !menu" :aria-expanded="menu" aria-controls="ai-player-menu">
+					if playerConnected(v) {
+						Connected
+					} else {
+						Connect or copy
+					}
+				</button>
+			}
+			<button type="button" class="aic-icon" data-ai-close aria-label="Close the AI panel">
+				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+			</button>
+		</header>
+		if v.Why != "" {
+			<p class="aic-hint">{ v.Why } When it's turned on, your AI can help with your character here.</p>
+		} else {
+			<div id="ai-player-menu" x-show="menu" x-cloak x-collapse.duration.200ms>
+				@playerMenu(v)
+			</div>
+			if v.Done != "" {
+				<p class="aic-done aic-done-line" role="status">
+					<i class="fa-solid fa-check mr-1.5" aria-hidden="true"></i>
+					{ v.Done }
+				</p>
+			}
+			<section class="space-y-3" aria-label="Waiting for you">
+				@playerRequests(v, false)
+				<p class="aip-empty">Nothing waiting. When your AI asks to change your character, it shows up here on any page.</p>
+			</section>
+			@playerPasteBox(v)
+		}
+	</div>
+}
+
+// playerMenu connects the player's own AI app, or copies what an AI app
+// needs for copy and paste.
+templ playerMenu(v PlayerAIView) {
+	<div class="aic-panel space-y-3">
+		if v.NewKey != "" {
+			<div class="space-y-3" x-data="{ app: 'claude', copied: '' }">
+				<div>
+					<h3 class="aic-h">Your key is ready</h3>
+					<p class="aic-hint">Copy it now: Chronicle shows it only this once. Your AI sees only what you can see here, and asks before changing your character.</p>
+				</div>
+				@aiCopyField("addr", "Address", v.Endpoint)
+				@aiCopyField("key", "Key", v.NewKey)
+				<p class="aic-hint">In your AI app, add a custom connector (some apps say MCP server), paste the address, and add the header <code>Authorization</code> with the value <code>Bearer</code>, a space and the key.</p>
+				<span class="sr-only" aria-live="polite" x-text="copied ? 'Copied' : ''"></span>
+			</div>
+		} else if playerConnected(v) {
+			<p class="text-sm text-fg flex items-center gap-2">
+				<span class="aic-dot" data-state={ playerConnState(v) } aria-hidden="true"></span>
+				<span>{ playerConnLine(v) }</span>
+			</p>
+		} else {
+			<div class="space-y-1">
+				<h3 class="aic-h">Connect your AI app</h3>
+				<p class="aic-hint">Gives you a key for Claude or another AI app. It reads only what you can see in this campaign.</p>
+			</div>
+		}
+		<div class="flex flex-wrap items-center gap-2" x-data="{ asking: false }">
+			if !playerConnected(v) {
+				<button
+					type="button"
+					class="btn-primary"
+					hx-post={ fmt.Sprintf("/campaigns/%s/ai/me/key", v.CampaignID) }
+					hx-target="closest [data-ai-panel-body]"
+					hx-swap="innerHTML"
+					hx-disabled-elt="this"
+				>
+					<span class="aic-idle"><i class="fa-solid fa-key mr-1.5" aria-hidden="true"></i>Make my key</span>
+					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Making…</span>
+				</button>
+			} else if v.NewKey == "" {
+				<button type="button" class="quiet-word text-bad" x-show="!asking" @click="asking = true">Disconnect</button>
+				<div class="aic-ask" x-show="asking" x-cloak>
+					<p>Disconnect your AI? Its key stops working at once. You can make a new one.</p>
+					<button type="button" class="btn-secondary" @click="asking = false">Keep it</button>
+					<button
+						type="button"
+						class="btn-danger"
+						hx-post={ fmt.Sprintf("/campaigns/%s/ai/me/key/disconnect", v.CampaignID) }
+						hx-target="closest [data-ai-panel-body]"
+						hx-swap="innerHTML"
+						hx-disabled-elt="this"
+					>Disconnect</button>
+				</div>
+			}
+		</div>
+		<div class="border-t border-edge pt-3 space-y-1" x-data="{ copied: false, failed: false }">
+			<h3 class="aic-h">Or copy and paste</h3>
+			<p class="aic-hint">Copies your character and what your AI may change, ready for any AI app. Press Ctrl+V on any page to bring its answer back here.</p>
+			<button
+				type="button"
+				class="btn-secondary mt-1"
+				data-copy-url={ fmt.Sprintf("/campaigns/%s/ai/me/copy", v.CampaignID) }
+				@click="failed = false; Chronicle.apiFetch($el.dataset.copyUrl).then((r) => r.ok ? r.text() : Promise.reject()).then((t) => navigator.clipboard.writeText(t)).then(() => { copied = true; setTimeout(() => copied = false, 2000) }).catch(() => failed = true)"
+			>
+				<span x-show="!copied"><i class="fa-regular fa-copy mr-1.5" aria-hidden="true"></i>Copy for an AI app</span>
+				<span x-show="copied" x-cloak><i class="fa-solid fa-check mr-1.5" aria-hidden="true"></i>Copied</span>
+			</button>
+			<p class="text-sm text-bad" x-show="failed" x-cloak role="alert">Couldn't copy just now. Try again.</p>
+		</div>
+	</div>
+}
+
+// playerRequests is the player's AI's waiting requests.
+templ playerRequests(v PlayerAIView, oob bool) {
+	<div
+		id="ai-requests"
+		class="space-y-3"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		for _, q := range v.Requests {
+			@playerRequestCard(v, q)
+		}
+	</div>
+}
+
+// playerRequestCard is one waiting request, opened with Review.
+templ playerRequestCard(v PlayerAIView, q connector.Request) {
+	<section class="aic-panel aic-request" aria-labelledby={ fmt.Sprintf("ai-request-%d", q.ID) }>
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-3">
+			<div class="flex-1 min-w-[12rem]">
+				<span class="aic-label">Your AI asks</span>
+				<h3 id={ fmt.Sprintf("ai-request-%d", q.ID) } class="aic-h">{ requestHeading(q) }</h3>
+				<p class="aic-hint">{ playerRequestLine(v, q) }</p>
+			</div>
+			<button
+				type="button"
+				class="btn-primary"
+				hx-get={ fmt.Sprintf("/campaigns/%s/ai/me/requests/%d", v.CampaignID, q.ID) }
+				hx-target={ "#" + requestHost(q.ID) }
+				hx-swap="innerHTML"
+				hx-disabled-elt="this"
+			>
+				<span class="aic-idle">Review</span>
+				<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Reading it…</span>
+			</button>
+		</div>
+		<div id={ requestHost(q.ID) } class="aic-req-review"></div>
+	</section>
+}
+
+// playerPasteBox takes an answer an AI app gave the player.
+templ playerPasteBox(v PlayerAIView) {
+	<section class="space-y-2" aria-labelledby="ai-player-paste-heading">
+		<h3 id="ai-player-paste-heading" class="aic-h">Paste your AI's answer</h3>
+		<form
+			hx-post={ fmt.Sprintf("/campaigns/%s/ai/me/paste", v.CampaignID) }
+			hx-target="#ai-player-paste-review"
+			hx-swap="innerHTML"
+			hx-disabled-elt="find button"
+			class="space-y-2"
+		>
+			<label for="ai-import-paste-area" class="sr-only">Your AI's answer</label>
+			<textarea id="ai-import-paste-area" name="text" rows="4" class="input w-full font-mono text-xs" placeholder="Paste what your AI gave you, or press Ctrl+V on any page"></textarea>
+			<button type="submit" class="btn-secondary">
+				<span class="aic-idle">Review</span>
+				<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Reading it…</span>
+			</button>
+		</form>
+		<div id="ai-player-paste-review" class="aic-req-review"></div>
+	</section>
+}
+
+// playerReview is what a request or paste would change: each change with
+// Yes and No, what was left out and why, and Apply. Turning down a request
+// is No to every change, then Apply.
+templ playerReview(r PlayerReview) {
+	<form
+		class="aic-panel space-y-3 mt-2"
+		hx-post={ fmt.Sprintf("/campaigns/%s/ai/me/apply", r.CampaignID) }
+		hx-target="closest [data-ai-panel-body]"
+		hx-swap="innerHTML"
+		hx-disabled-elt="find button[type=submit]"
+		x-data={ fmt.Sprintf("{ yes: %d }", len(r.Kept())) }
+		aria-label="Review your AI's changes"
+	>
+		<input type="hidden" name="request" value={ strconv.FormatInt(r.RequestID, 10) }/>
+		if r.RequestID == 0 {
+			<textarea name="text" hidden aria-hidden="true">{ r.Text }</textarea>
+		}
+		if len(r.Kept()) == 0 {
+			<p class="text-sm text-fg">Nothing here is something your AI may change.</p>
+		}
+		for _, ch := range r.Kept() {
+			<fieldset class="space-y-1 border-b border-edge pb-3 last:border-0">
+				<legend class="aic-h">{ ch.Page } <span class="aic-hint font-normal">your character</span></legend>
+				if ch.Reason != "" {
+					<p class="aic-hint">“{ ch.Reason }”</p>
+				}
+				<dl class="text-sm grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+					for _, l := range ch.Lines {
+						<dt class="text-fg-secondary">{ l.Key }</dt>
+						<dd class="text-fg break-words">
+							if l.From != "" {
+								<span class="line-through text-fg-secondary">{ l.From }</span>
+								<i class="fa-solid fa-arrow-right text-xs mx-1" aria-hidden="true"></i>
+							}
+							<span>{ playerValue(l.To) }</span>
+						</dd>
+					}
+				</dl>
+				<label class="aic-choice">
+					<input type="checkbox" name="yes" value={ strconv.Itoa(ch.Block) } checked @change="yes += $event.target.checked ? 1 : -1"/>
+					<span>Yes, change it</span>
+				</label>
+			</fieldset>
+		}
+		if len(r.LeftOut()) > 0 {
+			<div class="space-y-1">
+				<p class="aic-label aic-label-muted">Left out, so you never see them as choices</p>
+				<ul class="text-sm space-y-0.5">
+					for _, ch := range r.LeftOut() {
+						<li><b class="text-fg">{ playerPageName(ch) }</b>: <span class="text-fg-secondary">{ ch.Held }.</span></li>
+					}
+				</ul>
+			</div>
+		}
+		<div class="flex flex-wrap items-center gap-3 pt-1">
+			if len(r.Kept()) > 0 {
+				<span class="aic-hint flex-1" x-text={ fmt.Sprintf("yes + ' of %d will happen'", len(r.Kept())) }>{ fmt.Sprintf("%d of %d will happen", len(r.Kept()), len(r.Kept())) }</span>
+			} else {
+				<span class="flex-1"></span>
+			}
+			if r.RequestID > 0 {
+				<button
+					type="button"
+					class="quiet-word text-bad"
+					hx-post={ fmt.Sprintf("/campaigns/%s/ai/me/requests/%d/turn-down", r.CampaignID, r.RequestID) }
+					hx-target="#ai-requests"
+					hx-swap="outerHTML"
+				>No to all</button>
+			}
+			if len(r.Kept()) > 0 {
+				<button type="submit" class="btn-primary">
+					<span class="aic-idle">Apply</span>
+					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Applying…</span>
+				</button>
+			}
+		</div>
+	</form>
+}

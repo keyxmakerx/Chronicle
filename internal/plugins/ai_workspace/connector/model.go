@@ -25,7 +25,8 @@ import (
 type Connection struct {
 	ID         int64
 	CampaignID string
-	// UserID is the owner who made the key. Answers are read as them.
+	// UserID is who made the key: the owner, or a player (ForPlayer).
+	// Answers are read as them.
 	UserID string
 	// KeyHash is the hex SHA-256 of the key; the key itself is never kept.
 	KeyHash string
@@ -46,6 +47,9 @@ type Connection struct {
 	// PausedAt is set while the owner has paused the key; it is refused
 	// until they resume it.
 	PausedAt *time.Time
+	// ForPlayer marks a key a player made: it reads as that player, works
+	// only while players may use AI, and its requests wait for the player.
+	ForPlayer bool
 }
 
 // Expired reports whether the key has run out at now.

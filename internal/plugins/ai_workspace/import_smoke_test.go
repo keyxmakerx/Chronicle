@@ -47,6 +47,7 @@ func (s *stubLookup) GetEntityTypes(_ context.Context, _ string) ([]entities.Ent
 // RequireCampaignAccess middleware does in production.
 func fakeContext(c echo.Context, cc *campaigns.CampaignContext) {
 	c.Set("campaign_context", cc)
+	c.Set("auth_user_id", "user-1") // what auth.GetUserID reads
 }
 
 // TestImport_ParseAndReview_MixedStates sends a 5-page fixture

@@ -30,6 +30,10 @@ GET	/admin/addons	site-admin	plugins/addons.(*Handler).AdminAddonsPage	plugins/a
 POST	/admin/addons	site-admin	plugins/addons.(*Handler).CreateAddon	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 DELETE	/admin/addons/:addonID	site-admin	plugins/addons.(*Handler).DeleteAddon	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 PUT	/admin/addons/:addonID/status	site-admin	plugins/addons.(*Handler).UpdateAddonStatus	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+GET	/admin/ai	site-admin	plugins/ai_workspace.(*AdminAIHandler).Page	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/ai/access	site-admin	plugins/ai_workspace.(*AdminAIHandler).SetAccess	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
+POST	/admin/ai/alerts/:aid/settle	site-admin	plugins/ai_workspace.(*AdminAIHandler).Settle	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/ai/keys/:kid/:act	site-admin	plugins/ai_workspace.(*AdminAIHandler).Key	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 GET	/admin/api	site-admin	plugins/syncapi.(*Handler).AdminDashboard	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/api/cors	site-admin	plugins/settings.(*Handler).GetCORSOrigins	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/api/cors	site-admin	plugins/settings.(*Handler).UpdateCORSOrigins	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
@@ -153,6 +157,7 @@ DELETE	/admin/trash	site-admin	plugins/admin.(*Handler).EmptyTrash	plugins/auth.
 GET	/admin/trash	site-admin	plugins/admin.(*Handler).Trash	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/trash/batches/:id/undo	site-admin	plugins/admin.(*Handler).UndoTrashedBatch	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/trash/campaigns/:id/undo	site-admin	plugins/admin.(*Handler).UndoTrashedCampaign	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/trash/long-term	site-admin	plugins/admin.(*Handler).SaveLongTermTrash	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/trash/retention	site-admin	plugins/admin.(*Handler).SaveTrashRetention	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 GET	/admin/users	site-admin	plugins/admin.(*Handler).Users	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 PUT	/admin/users/:id/admin	site-admin	plugins/admin.(*Handler).ToggleAdmin	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
@@ -442,12 +447,27 @@ POST	/campaigns/:id/ai-workspace/import/tray/clear	session	plugins/ai_workspace.
 GET	/campaigns/:id/ai-workspace/prompt/generate	session	plugins/ai_workspace.(*Handler).GeneratePrompt	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai-workspace/prompt/instructions	session	plugins/ai_workspace.(*Handler).PromptInstructions	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/activity	session	plugins/ai_workspace.(*Handler).AIActivity	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/alerts/:aid	session	plugins/ai_workspace.(*Handler).AnswerAIAlert	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/chip	session	plugins/ai_workspace.(*Handler).AIChip	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection	session	plugins/ai_workspace.(*Handler).ConnectAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/access	session	plugins/ai_workspace.(*Handler).ChangeAIAccess	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/disconnect	session	plugins/ai_workspace.(*Handler).DisconnectAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/pause	session	plugins/ai_workspace.(*Handler).PauseAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/resume	session	plugins/ai_workspace.(*Handler).ResumeAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/cut-off	session	plugins/ai_workspace.(*Handler).CutOffAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/me/apply	session	plugins/ai_workspace.(*Handler).PlayerApply	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/me/chip	session	plugins/ai_workspace.(*Handler).PlayerChip	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/me/copy	session	plugins/ai_workspace.(*Handler).PlayerCopy	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/me/key	session	plugins/ai_workspace.(*Handler).PlayerConnect	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/me/key/disconnect	session	plugins/ai_workspace.(*Handler).PlayerDisconnect	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/me/panel	session	plugins/ai_workspace.(*Handler).PlayerPanel	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/me/paste	session	plugins/ai_workspace.(*Handler).PlayerPaste	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/me/requests/:rid	session	plugins/ai_workspace.(*Handler).PlayerReviewRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/me/requests/:rid/turn-down	session	plugins/ai_workspace.(*Handler).PlayerTurnDown	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/notes	session	plugins/ai_workspace.(*Handler).ChangeNoteAccess	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/panel	session	plugins/ai_workspace.(*Handler).AIPanel	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/players	session	plugins/ai_workspace.(*Handler).SetPlayersAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/players/:kid	session	plugins/ai_workspace.(*Handler).PlayerKeyAction	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/requests	session	plugins/ai_workspace.(*Handler).AIRequests	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/requests/:rid/turn-down	session	plugins/ai_workspace.(*Handler).TurnDownRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).KeysPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1057,6 +1077,9 @@ POST	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).Create
 GET	/campaigns/:id/pinned-pages	public-capable	plugins/entities.(*PagePinHandler).Widget	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 DELETE	/campaigns/:id/pinned-pages/everyone/:eid	session	plugins/entities.(*PagePinHandler).UnpinShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 DELETE	/campaigns/:id/pinned-pages/mine/:eid	session	plugins/entities.(*PagePinHandler).UnpinOwn	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/players/changes	session	plugins/playerchanges.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/players/changes/:cid/undo	session	plugins/playerchanges.(*Handler).Undo	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/players/changes/results	session	plugins/playerchanges.(*Handler).Results	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/plugins	session	plugins/campaigns.(*Handler).PluginHub	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/plugins/fragment	session	plugins/campaigns.(*Handler).PluginHubFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/proposals	session	plugins/sessions.(*Handler).ListProposals	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
@@ -1269,6 +1292,7 @@ GET	/static/plugins/homebrew*	none	github.com/labstack/echo/v4.StaticDirectoryHa
 GET	/static/plugins/maps*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/page_tests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/pageblocks*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
+GET	/static/plugins/player_changes*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/quests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/rolls*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/rumours*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-

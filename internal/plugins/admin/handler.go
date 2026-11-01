@@ -76,6 +76,8 @@ type Handler struct {
 	siteLook SiteLookService
 	// trash is the site Trash; nil until wired.
 	trash TrashService
+	// longTerm estimates the Long-term trash sizes; nil shows none.
+	longTerm LongTermTrashSizer
 	// releaseNotice is the new-version notice on Home; nil shows none.
 	releaseNotice *ReleaseNoticeService
 	// checkup is the site check-up behind the top bar's shield; nil until wired.

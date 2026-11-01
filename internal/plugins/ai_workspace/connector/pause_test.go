@@ -58,7 +58,8 @@ func TestPauseAndChange_Refusals(t *testing.T) {
 		privacy  aiexport.PrivacyMode
 		wantCode int
 	}{
-		{"not the owner", "camp-1", "player-1", func(_, s int64) int64 { return s }, nil, aiexport.PrivacyModeSafe, 403},
+		// A player has no key of their own here, so the owner's is not found.
+		{"a player", "camp-1", "player-1", func(_, s int64) int64 { return s }, nil, aiexport.PrivacyModeSafe, 404},
 		{"another campaign's owner", "camp-1", "owner-2", func(_, s int64) int64 { return s }, nil, aiexport.PrivacyModeSafe, 403},
 		{"another campaign's key", "camp-2", "owner-2", func(_, s int64) int64 { return s }, nil, aiexport.PrivacyModeSafe, 404},
 		{"an earlier key", "camp-1", "owner-1", func(f, _ int64) int64 { return f }, nil, aiexport.PrivacyModeSafe, 404},

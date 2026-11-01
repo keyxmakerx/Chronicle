@@ -79,7 +79,7 @@ func TestHandle_ToolsListIsReadOnly(t *testing.T) {
 	if err := json.Unmarshal(decode(t, out).Result, &res); err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != len(toolsFor(nil)) || len(res.Tools) == len(tools) || res.Tools[0].Name != "campaign_outline" {
+	if len(res.Tools) != len(toolsFor(&Connection{})) || len(res.Tools) == len(tools) || res.Tools[0].Name != "campaign_outline" {
 		t.Fatalf("got %d tools, first %q", len(res.Tools), res.Tools[0].Name)
 	}
 	seen := map[string]bool{}

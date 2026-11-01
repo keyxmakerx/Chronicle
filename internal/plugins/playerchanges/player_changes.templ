@@ -1,0 +1,167 @@
+package playerchanges
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// PlayerChangesPage is "What players changed": one box that turns words
+// into tags, a time switch, and the answer below as cards per page. The
+// script (player_changes.js) owns the tags and asks the server for results;
+// the server decides what matches and what may be undone.
+templ PlayerChangesPage(v View) {
+	@layouts.App("What players changed") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/player_changes.css") }/>
+		<div
+			class="max-w-6xl mx-auto px-4 py-6"
+			data-widget="player-changes"
+			data-results-url={ fmt.Sprintf("/campaigns/%s/players/changes/results", v.CampaignID) }
+			data-suggestions={ suggestionsJSON(v.Suggestions) }
+		>
+			@layouts.ManageHeader("What players changed")
+			<p class="-mt-4 mb-5 text-sm text-fg-secondary max-w-prose">
+				Every change a player made to a page, by hand or through their AI. Type a name, a field or a kind of change and it becomes a tag.
+			</p>
+			<div class="pcx-ask" data-pcx-ask>
+				<span class="pcx-toks" data-pcx-toks></span>
+				<label class="sr-only" for="pcx-input">Search what players changed</label>
+				<input id="pcx-input" type="search" autocomplete="off" placeholder="Try: Tyne stamina, or by an AI" data-pcx-input/>
+			</div>
+			<div class="pcx-suggest" data-pcx-suggest aria-label="Add a tag"></div>
+			<div class="pcx-bar">
+				<div class="pcx-range" role="group" aria-label="How far back">
+					<button type="button" aria-pressed="true" data-pcx-range="month">This month</button>
+					if v.KeepMonths > 0 {
+						<button type="button" aria-pressed="false" data-pcx-range="long">{ monthsLabel(v.KeepMonths) }</button>
+					}
+				</div>
+				if v.KeepMonths > 0 {
+					<p class="pcx-hint">Older changes are packed away to save space, so looking back further takes a few seconds.</p>
+				} else {
+					<p class="pcx-hint">Changes are kept for a month on this site.</p>
+				}
+			</div>
+			<div id="pcx-results" aria-live="polite" aria-busy="true" data-pcx-results>
+				@resultsSkeleton()
+			</div>
+		</div>
+	}
+}
+
+// PlayerChangesResults is one search's answer.
+templ PlayerChangesResults(v ResultsView) {
+	<p class="pcx-count">
+		{ countLine(v) }
+		if v.Truncated {
+			· showing the newest { fmt.Sprint(MaxResults) }; add a tag to narrow it
+		}
+	</p>
+	if v.Count == 0 {
+		<p class="pcx-empty">
+			if v.Range == RangeLong || v.KeepMonths == 0 {
+				Nothing matches. Take a tag away.
+			} else {
+				Nothing matches. Take a tag away, or look back { monthsLabel(v.KeepMonths) }.
+			}
+		</p>
+	} else {
+		<div class="pcx-cards">
+			for _, g := range v.Groups {
+				<section class="pcx-card" aria-label={ g.Name }>
+					<h2>
+						<span class="pcx-av" aria-hidden="true" style={ avatarStyle(g.EntityID) }>{ initial(g.Name) }</span>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", v.CampaignID, g.EntityID)) }>{ g.Name }</a>
+						<span class="pcx-n">· { fmt.Sprint(len(g.Changes)) }</span>
+					</h2>
+					<ul>
+						for _, ch := range g.Changes {
+							@changeLine(v.CampaignID, ch, v.Zone, v.Words, v.Now)
+						}
+					</ul>
+				</section>
+			}
+		</div>
+	}
+}
+
+// changeLine is one change: what it was, who and when, and what can be done.
+templ changeLine(campaignID string, ch Change, zone *time.Location, words []string, now time.Time) {
+	<li class="pcx-line" id={ fmt.Sprintf("pcx-c-%d", ch.ID) } data-undone?={ ch.UndoneAt != nil }>
+		<div class="pcx-what">
+			<b>@templ.Raw(mark(ch.What(), words))</b>
+			switch ch.Kind {
+				case KindRemoved:
+				case KindText:
+					if ch.FieldKey == "name" {
+						: <del>@templ.Raw(mark(ch.OldText, words))</del> → <ins>@templ.Raw(mark(ch.NewText, words))</ins>
+					} else {
+						if ch.OldText != "" {
+							<span class="pcx-snip">Took out <del>@templ.Raw(mark(ch.OldText, words))</del></span>
+						}
+						if ch.NewText != "" {
+							<span class="pcx-snip">Added <ins>@templ.Raw(mark(ch.NewText, words))</ins></span>
+						}
+					}
+				default:
+					if ch.OldText != "" {
+						: <del>@templ.Raw(mark(ch.OldText, words))</del> → <ins>@templ.Raw(mark(blankAs(ch.NewText), words))</ins>
+					} else {
+						: <ins>@templ.Raw(mark(blankAs(ch.NewText), words))</ins>
+					}
+			}
+		</div>
+		<div class="pcx-meta">
+			<span>{ dayLine(ch.CreatedAt, zone, now) }</span>
+			<span>· { byLine(ch) }</span>
+			if ch.ByAI() {
+				<span class="pcx-pill">AI</span>
+			}
+			if ch.Packed {
+				<span class="pcx-pill pcx-old">older</span>
+			}
+			<span class="pcx-act">
+				if ch.UndoneAt != nil {
+					<span class="pcx-done">Undone</span>
+				} else if ch.Kind == KindText {
+					<a class="quiet-word" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/history", campaignID, ch.EntityID)) }>Page history</a>
+				} else if ch.Kind == KindField && ch.OldJSON == "" {
+					<span class="pcx-done" title="Too large to undo from here">Can't undo here</span>
+				} else {
+					<button
+						type="button"
+						class="quiet-word"
+						hx-post={ fmt.Sprintf("/campaigns/%s/players/changes/%d/undo", campaignID, ch.ID) }
+						hx-target={ fmt.Sprintf("#pcx-c-%d", ch.ID) }
+						hx-swap="outerHTML"
+						hx-disabled-elt="this"
+					>
+						if ch.Kind == KindRemoved {
+							Bring it back
+						} else {
+							Undo
+						}
+					</button>
+				}
+			</span>
+		</div>
+	</li>
+}
+
+templ resultsSkeleton() {
+	<div class="pcx-cards" aria-hidden="true">
+		<div class="pcx-skel"></div>
+		<div class="pcx-skel"></div>
+		<div class="pcx-skel"></div>
+	</div>
+}
+
+func suggestionsJSON(s []Suggestion) string {
+	if s == nil {
+		s = []Suggestion{}
+	}
+	b, _ := json.Marshal(s)
+	return string(b)
+}

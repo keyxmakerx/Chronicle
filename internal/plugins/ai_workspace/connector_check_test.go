@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
@@ -73,7 +74,7 @@ func TestConnectorCheck(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := &Handler{importLookup: typesNoPages{t}, importFolders: foldersIn{}}
-			got, err := h.ConnectorCheck(context.Background(), "camp-1", tt.changes)
+			got, err := h.ConnectorCheck(context.Background(), &connector.Connection{CampaignID: "camp-1", UserID: "owner-1"}, tt.changes)
 			if err != nil {
 				t.Fatal(err)
 			}

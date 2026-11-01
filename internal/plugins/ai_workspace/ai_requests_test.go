@@ -30,11 +30,12 @@ type reqRepo struct {
 func (r *reqRepo) Replace(context.Context, *connector.Connection) (int64, error) { return 1, nil }
 func (r *reqRepo) RevokeAll(context.Context, string, time.Time) error            { return nil }
 func (r *reqRepo) RevokeMadeBy(context.Context, string, string, time.Time) error { return nil }
+func (r *reqRepo) RevokeOne(context.Context, string, int64, time.Time) error     { return nil }
 func (r *reqRepo) RevokeAllMadeBy(context.Context, string, time.Time) error      { return nil }
-func (r *reqRepo) Current(_ context.Context, campaignID string) (*connector.Connection, error) {
+func (r *reqRepo) Current(_ context.Context, campaignID, userID string) (*connector.Connection, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.conn == nil || r.conn.CampaignID != campaignID {
+	if r.conn == nil || r.conn.CampaignID != campaignID || r.conn.UserID != userID {
 		return nil, nil
 	}
 	cp := *r.conn
@@ -61,11 +62,22 @@ func (r *reqRepo) FindByHash(context.Context, string) (*connector.Connection, er
 }
 func (r *reqRepo) MarkUsed(context.Context, int64, time.Time, string) error { return nil }
 func (r *reqRepo) AddCall(context.Context, *connector.Call) error           { return nil }
-func (r *reqRepo) RecentCalls(context.Context, string, int) ([]connector.Call, error) {
+func (r *reqRepo) RecentCalls(context.Context, string, string, int) ([]connector.Call, error) {
 	return nil, nil
 }
-func (r *reqRepo) PruneCalls(context.Context, string, int) error    { return nil }
-func (r *reqRepo) PruneRequests(context.Context, string, int) error { return nil }
+func (r *reqRepo) PruneCalls(context.Context, string, string, int) error    { return nil }
+func (r *reqRepo) PruneRequests(context.Context, string, string, int) error { return nil }
+func (r *reqRepo) PlayerKeys(context.Context, string, time.Time, time.Time) ([]connector.KeyRow, error) {
+	return nil, nil
+}
+
+// owner is who the fake's requests belong to: the one connection's maker.
+func (r *reqRepo) owner() string {
+	if r.conn == nil {
+		return "user-1"
+	}
+	return r.conn.UserID
+}
 
 func (r *reqRepo) AddRequest(_ context.Context, q *connector.Request, _ int) (int64, error) {
 	r.mu.Lock()
@@ -76,23 +88,23 @@ func (r *reqRepo) AddRequest(_ context.Context, q *connector.Request, _ int) (in
 	return cp.ID, nil
 }
 
-func (r *reqRepo) Requests(_ context.Context, campaignID, status string, _ int) ([]connector.Request, error) {
+func (r *reqRepo) Requests(_ context.Context, campaignID, userID, status string, _ int) ([]connector.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []connector.Request
 	for i := len(r.reqs) - 1; i >= 0; i-- {
-		if q := r.reqs[i]; q.CampaignID == campaignID && q.Status == status {
+		if q := r.reqs[i]; q.CampaignID == campaignID && q.Status == status && userID == r.owner() {
 			out = append(out, *q)
 		}
 	}
 	return out, nil
 }
 
-func (r *reqRepo) Request(_ context.Context, campaignID string, id int64) (*connector.Request, error) {
+func (r *reqRepo) Request(_ context.Context, campaignID, userID string, id int64) (*connector.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, q := range r.reqs {
-		if q.ID == id && q.CampaignID == campaignID {
+		if q.ID == id && q.CampaignID == campaignID && userID == r.owner() {
 			cp := *q
 			return &cp, nil
 		}
@@ -100,11 +112,11 @@ func (r *reqRepo) Request(_ context.Context, campaignID string, id int64) (*conn
 	return nil, nil
 }
 
-func (r *reqRepo) FinishRequest(_ context.Context, campaignID string, id int64, status, outcome string, _ time.Time) (bool, error) {
+func (r *reqRepo) FinishRequest(_ context.Context, campaignID, userID string, id int64, status, outcome string, _ time.Time) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, q := range r.reqs {
-		if q.ID == id && q.CampaignID == campaignID && q.Status == connector.RequestWaiting {
+		if q.ID == id && q.CampaignID == campaignID && userID == r.owner() && q.Status == connector.RequestWaiting {
 			q.Status, q.Outcome = status, outcome
 			return true, nil
 		}
@@ -115,6 +127,9 @@ func (r *reqRepo) FinishRequest(_ context.Context, campaignID string, id int64, 
 type anyOwner struct{}
 
 func (anyOwner) Check(context.Context, string, string) (string, error) { return "Ashfall", nil }
+func (anyOwner) CheckMember(context.Context, string, string) (string, error) {
+	return "Ashfall", nil
+}
 
 const askedTable = "---\nkind: table\nname: Tavern names\n---\n- The Rusty Anchor\n- The Drowned Rat\n"
 
@@ -298,7 +313,7 @@ func TestAIPage_ChangeChoice(t *testing.T) {
 func TestRequest_StayAfterDisconnect(t *testing.T) {
 	h, _, _, _ := requestRig(t)
 	rec := post(t, h.DisconnectAI, "/x", nil)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Claude asks for 1 change") {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "1 request waits for you") {
 		t.Errorf("after disconnect: %d %s", rec.Code, rec.Body)
 	}
 	const stays = "What it already asked for stays here"
@@ -313,10 +328,14 @@ func TestRequest_StayAfterDisconnect(t *testing.T) {
 	}
 }
 
-// auditLog keeps the events the page logs.
+// auditLog keeps the events the page logs. The audit service drops an entry
+// with no user, so one logged without the user shows up as a mismatch.
 type auditLog struct{ events []string }
 
-func (a *auditLog) LogCampaignEvent(_ context.Context, _ string, action string, details map[string]any) {
+func (a *auditLog) LogCampaignEvent(_ context.Context, _, userID string, action string, details map[string]any) {
+	if userID == "" {
+		action = "(no user, would be dropped) " + action
+	}
 	a.events = append(a.events, action+" "+fmtDetails(details))
 }
 
@@ -339,7 +358,7 @@ func fmtDetails(d map[string]any) string {
 func TestConnection_PauseAndChange(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 	used := time.Now()
-	repo := &reqRepo{conn: &connector.Connection{ID: 7, CampaignID: "camp-1", ClientName: "Claude", CanAsk: true,
+	repo := &reqRepo{conn: &connector.Connection{ID: 7, CampaignID: "camp-1", UserID: "user-1", ClientName: "Claude", CanAsk: true,
 		Privacy: aiexport.PrivacyModeSafe, CreatedAt: used, ExpiresAt: future, LastUsedAt: &used}}
 	h := recordsHandler(&memTables{})
 	log := &auditLog{}

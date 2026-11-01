@@ -1,0 +1,51 @@
+/* What players changed: one ask box that turns words into tags, a time
+ * switch, and the answer as cards per page. A workshop page, so it sits on
+ * the theme tokens, never paper. */
+
+.pcx-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); }
+.pcx-ask:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0.15); }
+.pcx-ask input { flex: 1 1 160px; min-width: 0; border: 0; background: none; padding: 4px; outline: none; color: var(--color-text-primary); font-size: 0.875rem; }
+.pcx-toks { display: contents; }
+.pcx-tok { display: inline-flex; gap: 4px; align-items: center; padding: 2px 4px 2px 10px; border-radius: 9999px; background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); font-size: 0.75rem; font-weight: 600; }
+.pcx-tok button { border: 0; background: none; padding: 0 4px; color: inherit; cursor: pointer; font-size: 0.875rem; line-height: 1; }
+
+.pcx-suggest { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.pcx-suggest button { border: 1px dashed var(--color-border); background: none; border-radius: 9999px; padding: 2px 10px; font-size: 0.75rem; color: var(--color-text-secondary); cursor: pointer; transition: border-color var(--dur-micro) var(--ease-standard), color var(--dur-micro) var(--ease-standard); }
+.pcx-suggest button:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+.pcx-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 16px; }
+.pcx-range { display: inline-flex; border: 1px solid var(--color-border); border-radius: 9999px; overflow: hidden; }
+.pcx-range button { border: 0; background: var(--color-card-bg); padding: 4px 14px; font-size: 0.75rem; font-weight: 600; color: var(--color-text-secondary); cursor: pointer; }
+.pcx-range button[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
+.pcx-hint { font-size: 0.8125rem; color: var(--color-text-secondary); }
+
+.pcx-count { font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 8px; }
+.pcx-empty { padding: 24px 4px; color: var(--color-text-secondary); font-size: 0.875rem; }
+
+.pcx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: start; }
+.pcx-card { border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); box-shadow: var(--elev-resting); padding: 10px 14px; }
+.pcx-card h2 { display: flex; gap: 8px; align-items: center; margin: 0 0 4px; font-size: 0.875rem; font-weight: 600; color: var(--color-text-primary); }
+.pcx-card h2 a { color: inherit; }
+.pcx-card h2 a:hover { text-decoration: underline; }
+.pcx-n { color: var(--color-text-muted); font-weight: 400; }
+.pcx-av { width: 22px; height: 22px; flex: none; border-radius: 50%; display: inline-grid; place-items: center; font-size: 0.6875rem; font-weight: 700; color: #fff; }
+.pcx-card ul { list-style: none; margin: 0; padding: 0; }
+
+.pcx-line { padding: 8px 0; border-top: 1px solid var(--color-border-light); font-size: 0.8125rem; color: var(--color-text-body); }
+.pcx-line:first-child { border-top: 0; }
+.pcx-line[data-undone] .pcx-what { opacity: 0.6; }
+.pcx-what b { color: var(--color-text-primary); font-weight: 600; }
+.pcx-what del { background: rgb(var(--color-bad-rgb) / 0.12); text-decoration: line-through; border-radius: 3px; padding: 0 2px; overflow-wrap: anywhere; }
+.pcx-what ins { background: rgb(var(--color-ok-rgb) / 0.14); text-decoration: none; border-radius: 3px; padding: 0 2px; overflow-wrap: anywhere; }
+.pcx-snip { display: block; color: var(--color-text-secondary); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pcx-line mark { background: rgb(250 204 21 / 0.35); color: inherit; border-radius: 2px; }
+.pcx-meta { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: center; margin-top: 2px; font-size: 0.75rem; color: var(--color-text-secondary); }
+.pcx-pill { display: inline-flex; font-size: 0.6875rem; font-weight: 600; padding: 0 7px; border-radius: 9999px; background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); }
+.pcx-pill.pcx-old { background: var(--color-bg-secondary); color: var(--color-text-muted); }
+.pcx-act { margin-left: auto; }
+.pcx-done { color: var(--color-text-muted); }
+
+.pcx-skel { height: 96px; border-radius: 12px; background: linear-gradient(90deg, var(--color-bg-secondary), var(--color-card-bg), var(--color-bg-secondary)); background-size: 200% 100%; animation: pcx-sk 1.2s linear infinite; }
+@keyframes pcx-sk { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .pcx-skel { animation: none; } }
+html[data-motion="off"] .pcx-skel { animation: none; }

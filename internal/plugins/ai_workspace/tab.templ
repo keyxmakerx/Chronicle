@@ -34,28 +34,12 @@ templ aiCopyPasteSection(cc *campaigns.CampaignContext) {
 				} catch (e) {}
 				this.$watch('sees', (v) => { try { localStorage.setItem(this.storeKey, v); } catch (e) {} });
 			},
-			pasteAnywhere(e) {
-				const t = e.target;
-				if (t && (t.closest('input, textarea, select') || t.isContentEditable)) return;
-				// A review already open, here or of a request, keeps the paste.
-				if (document.querySelector('#ai-import-review-host form, .aic-req-review form')) return;
-				const text = e.clipboardData && e.clipboardData.getData('text/plain');
-				const area = document.getElementById('ai-import-paste-area');
-				if (!text || !text.trim() || !area) return;
-				e.preventDefault();
-				this.open = 'paste';
-				if (location.hash !== '#copy-and-paste') location.hash = 'copy-and-paste';
-				area.value = text;
-				area.dispatchEvent(new Event('input', { bubbles: true }));
-				area.form.requestSubmit();
-			},
 		}`, cc.Campaign.ID) }
-		@paste.window="pasteAnywhere($event)"
 	>
 		<div>
 			<h2 id="ai-copy-heading" class="text-base font-semibold text-fg pr-10">Copy and paste</h2>
 			<p class="text-sm text-fg-secondary mt-0.5 max-w-prose">
-				For any AI, and for asking it to make or change things: copy a request here, paste it into your AI, then paste its answer back. Nothing changes until you say yes to each change. You can paste anywhere on this page with Ctrl+V.
+				For any AI, and for asking it to make or change things: copy a request here, paste it into your AI, then paste its answer back. Nothing changes until you say yes to each change. You can also press Ctrl+V on any page with the answer copied.
 			</p>
 		</div>
 		<fieldset class="aic-panel">

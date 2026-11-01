@@ -1,5 +1,6 @@
-// ai_page.templ is the campaign's Your AI page: connect an AI app, answer
-// what it asks for, see what it did, or use copy and paste.
+// ai_page.templ is the campaign's Your AI page: connect an AI app, its
+// warnings and what it did. The requests and copy and paste live in the AI
+// panel (ai_panel.templ).
 
 package ai_workspace
 
@@ -19,42 +20,47 @@ import (
 templ AIPageView(cc *campaigns.CampaignContext, v ConnectView) {
 	@layouts.App(cc.Campaign.Name + " - Your AI") {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
-		<div class="max-w-6xl mx-auto px-4 py-6" data-ai-page x-data @htmx:before-request={ aiPageReviews }>
+		<div class="max-w-6xl mx-auto px-4 py-6" data-ai-page>
 			@layouts.ManageHeader("Your AI")
 			<p class="-mt-4 mb-6 text-sm text-fg-secondary max-w-prose">
-				Connect your AI app once. It reads what you allow and asks for changes here, and you say yes or no to each one. No copying back and forth.
+				Connect your AI app once. It reads what you allow and asks for changes, and you say yes or no to each one from the AI button at the top of any page.
 			</p>
 			@aiConnectSection(v)
-			@aiCopyPasteOverlay(cc)
 		</div>
 	}
 }
 
 // aiPageReviews empties every other request's review when a review starts
-// loading, here or in copy and paste.
+// loading, in a request or in copy and paste (the AI panel).
 const aiPageReviews = `const t = $event.detail.target; if (t && (t.id === 'ai-import-review-host' || t.classList.contains('aic-req-review'))) document.querySelectorAll('.aic-req-review').forEach((h) => { if (h !== t) h.innerHTML = '' })`
 
 // aiConnectSection is the part the connect, pause, change, new-key and
 // disconnect requests swap. With a working key, setup sits in the side
-// column; without one, making a key takes the main column. The requests and
-// the history stay after a disconnect, since they are the owner's.
+// column; without one, making a key takes the main column. Requests and copy
+// and paste are in the AI panel (aiPanelBody), not here; the history stays
+// after a disconnect, since it is the owner's.
 templ aiConnectSection(v ConnectView) {
 	<div id="ai-connect" x-data="{ renew: false }">
 		if hasKey(v) {
 			<div class="aic-grid">
 				<div class="aic-area-req space-y-4">
-					<div id={ requestResultHost }></div>
-					@aiRequests(v, false)
+					@aiWatch(v)
+					@aiPanelCard(v)
 					<div x-show="renew" x-cloak x-collapse.duration.200ms>
 						@aiConnectForm(v, true)
 					</div>
 				</div>
 				<div class="aic-area-side space-y-4">
 					@aiStatus(v)
+					if v.Watching {
+						@aiCutOffPanel(v)
+					}
+					if v.Players != nil {
+						@aiPlayersPanel(*v.Players)
+					}
 					if v.Notes != nil {
 						@aiNotesPanel(*v.Notes)
 					}
-					@aiCopyCard()
 				</div>
 				<div class="aic-area-hist">
 					@aiActivityList(v)
@@ -63,8 +69,8 @@ templ aiConnectSection(v ConnectView) {
 		} else {
 			<div class="space-y-8">
 				<div class="space-y-4">
-					<div id={ requestResultHost }></div>
-					@aiRequests(v, false)
+					@aiWatch(v)
+					@aiPanelCard(v)
 				</div>
 				if !v.Available {
 					<section class="aic-panel">
@@ -78,7 +84,9 @@ templ aiConnectSection(v ConnectView) {
 				if v.Notes != nil {
 					@aiNotesPanel(*v.Notes)
 				}
-				@aiCopyCard()
+				if v.Players != nil {
+					@aiPlayersPanel(*v.Players)
+				}
 				if v.Available && len(v.Sittings) > 0 {
 					@aiActivityList(v)
 				}
@@ -87,61 +95,23 @@ templ aiConnectSection(v ConnectView) {
 	</div>
 }
 
-// aiCopyCard opens copy and paste over the page.
-templ aiCopyCard() {
-	<section class="aic-panel space-y-1" aria-labelledby="ai-copy-card-heading">
-		<h2 id="ai-copy-card-heading" class="aic-h">Copy and paste</h2>
-		<p class="aic-hint">For any AI that can't connect. Copy what it needs, paste its answer back, and review it here.</p>
-		<a href="#copy-and-paste" class="inline-block pt-1 text-sm font-semibold text-accent hover:underline">Open copy and paste ›</a>
-	</section>
-}
-
-// aiCopyPasteOverlay holds the copy-and-paste tool over the page. The
-// address's #copy-and-paste opens it, so a reload or the back button keeps
-// or closes it as expected. Its own pop-ups sit above it, and Escape closes
-// those first.
-templ aiCopyPasteOverlay(cc *campaigns.CampaignContext) {
-	<div
-		x-data="{
-			cp: false,
-			back: null,
-			sync() {
-				const open = location.hash === '#copy-and-paste';
-				if (open && !this.cp) { this.back = document.activeElement; setTimeout(() => this.$refs.close.focus(), 30); }
-				if (!open && this.cp && this.back) { this.$nextTick(() => this.back.focus && this.back.focus()); }
-				this.cp = open;
-			},
-			close() {
-				if (location.hash === '#copy-and-paste') history.replaceState(null, '', location.pathname + location.search);
-				this.sync();
-			},
-			popupOpen() {
-				return [...this.$el.querySelectorAll('[role=dialog]')].some((d) => d !== this.$refs.sheet && d.offsetParent !== null);
-			},
-		}"
-		x-init="sync()"
-		@hashchange.window="sync()"
-		x-effect="document.documentElement.classList.toggle('overflow-hidden', cp)"
-	>
-		<div
-			x-show="cp"
-			x-cloak
-			x-transition:enter="aic-ov-enter"
-			x-transition:enter-start="aic-ov-from"
-			x-transition:leave="aic-ov-leave"
-			x-transition:leave-end="aic-ov-from"
-			class="aic-overlay"
-			@click.self="close()"
-			@keydown.escape.window.capture="if (cp && !popupOpen()) close()"
-		>
-			<div x-ref="sheet" class="aic-sheet" role="dialog" aria-modal="true" aria-labelledby="ai-copy-heading">
-				<button type="button" x-ref="close" class="aic-icon aic-sheet-close" @click="close()" aria-label="Close copy and paste">
-					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
-				</button>
-				@aiCopyPasteSection(cc)
-			</div>
+// aiPanelCard points to the AI panel, where the AI's requests are answered
+// and copy and paste lives, and opens it (ai_chip.js listens for
+// data-ai-open anywhere).
+templ aiPanelCard(v ConnectView) {
+	<section class="aic-panel aip-card" aria-labelledby="ai-panel-card-heading">
+		<div class="flex-1 min-w-[14rem]">
+			<h2 id="ai-panel-card-heading" class="aic-h">
+				if len(v.Requests) > 0 {
+					<span>{ countOf(len(v.Requests), "request waits", "requests wait") + " for you" }</span>
+				} else {
+					Requests and copy and paste
+				}
+			</h2>
+			<p class="aic-hint">They are in the AI panel on every page: the <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> button at the top, or Ctrl+V with an AI's answer copied.</p>
 		</div>
-	</div>
+		<button type="button" class="btn-secondary" data-ai-open>Open the AI panel</button>
+	</section>
 }
 
 // aiConnectForm is the choice of what the AI may see and how connecting
