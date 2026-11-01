@@ -106,3 +106,31 @@ func TestSaveAIRecipeRules(t *testing.T) {
 		t.Fatalf("kept rules: %+v, %v", got, err)
 	}
 }
+
+// An update that changes the materials and sends rules keeps the substitutes
+// following their materials: the rules' own write must not put back the
+// stored, unfollowed extras.
+func TestSaveAIRecipeRulesKeepFollowedSubstitutes(t *testing.T) {
+	s, repo, _ := newTestService()
+	ctx := context.Background()
+	in := AIRecipe{Name: "Spring tonic", Materials: []Material{{ItemID: "moss", Qty: 1}, {ItemID: "water", Qty: 1}}, Result: Result{ItemID: "potion", Qty: 1}, Goal: 10}
+	r, err := s.SaveAIRecipe(ctx, "c", director, in, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := repo.recipes[r.ID]
+	stored.Extras.Substitutes = []Substitute{{For: 1, Use: "rainwater"}}
+	repo.recipes[r.ID] = stored
+
+	up := in
+	up.ID = r.ID
+	up.Materials = []Material{{ItemID: "water", Qty: 1}}
+	up.Rules = json.RawMessage(`[{"when": [{"kind": "season", "season": "Winter"}], "then": {"kind": "cannot"}}]`)
+	if _, err := s.SaveAIRecipe(ctx, "c", director, up, false); err != nil {
+		t.Fatal(err)
+	}
+	subs := repo.recipes[r.ID].Extras.Substitutes
+	if len(subs) != 1 || subs[0].For != 0 || subs[0].Use != "rainwater" {
+		t.Fatalf("substitutes after materials and rules changed together: %+v", subs)
+	}
+}
