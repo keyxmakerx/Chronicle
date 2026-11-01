@@ -57,6 +57,98 @@ html.tkm-lock { overflow: hidden; }
   color: rgb(255 255 255 / 0.82); font-size: 14px; line-height: 1.45; background: rgb(20 22 27 / 0.6);
 }
 .tkm-wait[hidden] { display: none; }
+/* The background tools: the wand on the stage's edge, the drawer that hangs
+   from it, and the note over the stage. They sit on the always-dark stage,
+   so they are dark glass in either theme. */
+.tkm-ghost { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; transition: opacity 260ms var(--ease-out, ease-out); }
+.tkm-ghost.is-gone { opacity: 0; }
+.tkm-wand {
+  position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 8px; background: transparent; color: rgb(255 255 255 / 0.8); font-size: 17px; cursor: pointer;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.85));
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out), box-shadow var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.tkm-wand:hover, .tkm-wand[aria-expanded="true"] { background: rgb(17 19 26 / 0.72); color: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22); filter: none; }
+.tkm-wand:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.5); }
+.tkm-wand.is-on { color: #fff; }
+.tkm-wand.is-on::after { content: ""; position: absolute; top: 8px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tkm-wand[hidden], .tkm-bgd[hidden], .tkm-offer[hidden], .tkm-offer-b[hidden], .tkm-nb[hidden], .tkm-nq[hidden] { display: none; }
+
+.tkm-bgd, .tkm-offer {
+  position: absolute; color: #eef0f6; font-size: 13px; line-height: 1.4;
+  background: rgb(17 19 26 / 0.9); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border: 1px solid rgb(255 255 255 / 0.1); border-radius: 12px; box-shadow: 0 10px 30px -8px rgb(0 0 0 / 0.6);
+}
+.tkm-bgd {
+  top: 54px; right: 10px; width: min(288px, calc(100% - 20px)); max-height: calc(100% - 64px); overflow: auto; padding: 10px 12px 14px 14px;
+  clip-path: inset(0 0 100% 0 round 12px); transition: clip-path var(--dur-standard, 200ms) var(--ease-out, ease-out);
+}
+.tkm-bgd.is-on { clip-path: inset(0 0 0 0 round 12px); }
+.tkm-bgd-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tkm-bgd-l, .tkm-bgd-k { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: rgb(238 240 246 / 0.66); }
+.tkm-bgd-k { margin: 12px 0 6px; }
+.tkm-bgd-s { margin: 4px 0 10px; color: rgb(238 240 246 / 0.9); }
+.tkm-bgd-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tkm-dseg { display: flex; padding: 2px; border-radius: 8px; background: rgb(255 255 255 / 0.07); border: 1px solid rgb(255 255 255 / 0.1); }
+.tkm-dseg button {
+  flex: 1; font: inherit; font-size: 13px; min-height: 32px; border: 0; border-radius: 6px; background: none; color: rgb(238 240 246 / 0.82); cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.tkm-dseg button:hover:not(:disabled) { background: rgb(255 255 255 / 0.1); color: #fff; }
+.tkm-dseg button:active:not(:disabled) { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.4); }
+.tkm-dseg button[aria-pressed="true"] { background: rgb(255 255 255 / 0.18); color: #fff; font-weight: 600; }
+.tkm-dseg button:disabled { opacity: .45; cursor: default; }
+.tkm-dsize { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; color: rgb(238 240 246 / 0.82); }
+.tkm-dsize input { flex: 1; min-width: 0; accent-color: #fff; }
+.tkm-dsize:has(input:disabled) { opacity: .45; }
+/* While a brush is out the drawer folds to the brushes, so the picture is free to paint. */
+.tkm-bgd.is-brushing :is(.tkm-bgd-s, .tkm-bgd-row, [data-tkm-str], #tkm-str-l) { display: none; }
+.tkm-bgd.is-brushing { padding: 8px 10px 10px; }
+.tkm-bgd.is-brushing :is(.tkm-bgd-l, #tkm-brush-l) { display: none; }
+.tkm-bgd.is-brushing .tkm-bgd-top { position: absolute; top: 8px; right: 6px; }
+.tkm-bgd.is-brushing [data-tkm-brush] { margin-right: 36px; }
+.tkm-bgd.is-brushing .tkm-dsize { margin-top: 8px; }
+
+.tkm-offer {
+  left: 12px; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 10px 10px 14px;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity var(--dur-micro, 120ms) var(--ease-out, ease-out), transform var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.tkm-offer.is-on { opacity: 1; transform: none; }
+.tkm-offer-t { flex: 1 1 200px; margin: 0; }
+.tkm-offer-b { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.tkm-nb {
+  font: inherit; font-size: 13px; font-weight: 600; min-height: 34px; padding: 0 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgb(255 255 255 / 0.16); background: #2a2e3a; color: #eef0f6; box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), box-shadow 200ms var(--ease-out, ease-out);
+}
+.tkm-nb:hover { background: #353a48; box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.5); }
+.tkm-nb:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.5); }
+.tkm-nb.is-go {
+  border-color: transparent; color: var(--color-accent-on-fill, #fff);
+  background: var(--color-accent-fill, rgb(var(--color-accent-action-rgb, var(--color-accent-rgb, 99 102 241))));
+}
+.tkm-nb.is-go:hover { background: var(--color-accent-fill-hover, rgb(var(--color-accent-action-hover-rgb, var(--color-accent-hover-rgb, 79 70 229)))); }
+.tkm-nq { min-height: 32px; padding: 0 4px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: 13px; font-weight: 500; color: #c7ccff; cursor: pointer; }
+.tkm-nq:hover { text-decoration: underline; }
+.tkm-nq:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.4); }
+.tkm-ico {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: none;
+  color: rgb(238 240 246 / 0.7); cursor: pointer; transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.tkm-ico:hover { background: rgb(255 255 255 / 0.1); color: #fff; }
+.tkm-ico:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.4); }
+.tkm-stage :is(.tkm-wand, .tkm-nb, .tkm-nq, .tkm-ico, .tkm-dseg button):focus-visible, .tkm-dsize input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* Calm fades the drawer and the note in place; Off shows them at once. */
+.tkm.is-calm .tkm-bgd { clip-path: none; opacity: 0; transition: opacity var(--dur-standard, 200ms) var(--ease-out, ease-out); }
+.tkm.is-calm .tkm-bgd.is-on { opacity: 1; }
+.tkm.is-calm .tkm-offer { transform: none; }
+.tkm.is-still :is(.tkm-bgd, .tkm-offer) { transition: none; }
+.tkm.is-still .tkm-bgd { clip-path: none; }
+.tkm.is-still .tkm-offer { opacity: 1; transform: none; }
+
 .tkm-hint { margin: 0; max-width: 560px; text-align: center; font-size: 12.5px; line-height: 1.45; color: var(--color-text-muted, #6b7280); }
 .tkm-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; }
 .tkm-slide { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-text-secondary, #4b5563); }
@@ -172,4 +264,9 @@ html.tkm-lock { overflow: hidden; }
 }
 @media (prefers-reduced-motion: reduce) {
   .tkm-bg, .tkm-p { transition: none; clip-path: none; }
+}
+
+/* On a phone the stage is small, so the folded brushes sit along its foot instead. */
+@media (max-width: 640px) {
+  .tkm-bgd.is-brushing { top: auto; bottom: 10px; left: 10px; right: 10px; width: auto; }
 }

@@ -1,4 +1,4 @@
-# token_maker.js and token_frames.js
+# token_maker.js, token_frames.js and token_cutout.js
 
 The token maker (`window.Chronicle.tokenMaker`): a creature's map token made
 from its picture, in one of thirty frames drawn in code, in any colour.
@@ -23,9 +23,10 @@ Chronicle.tokenMaker.open({
 page and opens it for any `[data-token-maker]` control. The first open fetches
 `token_maker.js` from the layout's `#chronicle-token-maker-src`, and that file
 fetches the frames (`token_frames.js`, about 350 KB), its styles
-(`static/css/token_maker.css`) and the picker's previews
-(`static/img/token_frames.webp`) from the same element. A page pays for none of
-it until someone makes a token.
+(`static/css/token_maker.css`), the picker's previews
+(`static/img/token_frames.webp`) and the background remover
+(`token_cutout.js`, once the picture is up) from the same element. A page pays
+for none of it until someone makes a token.
 
 **Previews are stills.** The picker never draws thirty frames live: each tile
 is one 128 px cell of the previews sprite, in the engine's design order, eight
@@ -35,6 +36,24 @@ After adding, removing, reordering or restyling a design, run
 `node tools/token_frames_previews.mjs`. `test/js/token_maker_browser.test.mjs`
 fails when the sprite's size or tile order no longer matches the engine; it
 compares each tile with a fresh drawing, so a small restyle can slip past it.
+
+**Background.** Art tools asked for "no background" often paint a checkerboard
+instead, so the token would not be see-through on the map. Once the picture is
+up, `ChronicleTokenCutout.detect` looks at a copy of it (at most 1600 px across)
+and, for a painted checkerboard or flat backdrop, a note over the stage offers
+"Remove it / Keep it", then "Background removed" with Undo and Adjust. It is
+offered only when Medium would leave a clean cut, so a dark painted scene is
+not. The answer is kept per picture in `localStorage`
+(`chronicle.tokenMaker.bg`, newest hundred): Keep is not asked again, and
+Remove clears it again on the next open and says so, without counting as an
+unsaved change. The wand on the stage's corner opens a drawer with the same
+clearing by hand: Clear, Light / Medium / Strong, Erase and Restore brushes
+(the drawer folds to the brushes while one is out) and "Put it all back".
+Clearing takes what touches the edge and is near the backdrop's colours; a
+checkerboard also shows through gaps inside the figure, so an enclosed patch
+that sits on the checkerboard's own squares is cleared too (a bright glow is
+not). The cleared copy is drawn with `clear: true`, so the frames put no dark
+backing behind it. `test/js/token_cutout.test.mjs` pins the pixel work.
 
 **Saving.** Save draws the token 512 px square as a PNG and uploads it
 (`POST /media/upload`, `usage_type=entity_image`): the media sanitiser keeps a

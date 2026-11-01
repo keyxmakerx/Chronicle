@@ -9,6 +9,12 @@
  * The picker shows still previews made ahead of time (one sprite), so only the
  * frame being edited is drawn live.
  *
+ * A picture with a painted checkerboard or flat backdrop behind it (what art
+ * tools often give for "no background") is noticed on open, and the maker
+ * offers to clear it (token_cutout.js does the pixel work). The wand on the
+ * stage holds the same clearing by hand: a strength and Erase and Restore
+ * brushes. The cleared copy is what the token is drawn from.
+ *
  * Save draws the token at TOKEN_PX as a PNG: the media sanitiser keeps a PNG's
  * transparency, while a WebP comes back as a JPEG with dark corners. A moving
  * frame is saved as its still picture. The page's own picture is never
@@ -28,11 +34,15 @@
   'use strict';
 
   var C = (window.Chronicle = window.Chronicle || {});
-  var TOKEN_PX = 512, TOKEN_FIELD = 'token_image', STORE = 'chronicle.tokenMaker';
+  var TOKEN_PX = 512, TOKEN_FIELD = 'token_image', STORE = 'chronicle.tokenMaker', STORE_BG = 'chronicle.tokenMaker.bg';
+  // The background is worked out on a copy at most this many pixels across;
+  // the token is 512, so nothing it needs is lost.
+  var CUT_PX = 1600;
   var STATIC_URL = /^\/static\/[A-Za-z0-9_.\-\/]+\.(js|css|webp|png)(\?v=[A-Za-z0-9._\-]+)?$/;
   var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
   var COLOURS = [['', 'Original'], ['#b02a24', 'Red'], ['#e07a1c', 'Orange'], ['#d4a62a', 'Gold'], ['#3c9a4a', 'Green'], ['#2a8f9a', 'Teal'],
     ['#2f5fc8', 'Blue'], ['#7a3fb8', 'Purple'], ['#c8408a', 'Pink'], ['#ecebe6', 'White'], ['#26262a', 'Black']];
+  var HINT = 'Inside the frame: move it. Frame corners: resize it. Outside: move the picture. Picture corners or the wheel: resize the picture.';
   // The previews sprite: tiles of PV_TILE pixels, PV_COLS to a row, in the engine's design order.
   var PV_COLS = 8;
 
@@ -41,7 +51,7 @@
 
   function assets() {
     var t = document.getElementById('chronicle-token-maker-src'), a = {};
-    ['engine', 'css', 'previews'].forEach(function (k) {
+    ['engine', 'css', 'previews', 'cutout'].forEach(function (k) {
       var v = t && t.getAttribute('data-' + k);
       a[k] = v && STATIC_URL.test(v) && v.indexOf('..') === -1 ? v : '';
     });
@@ -61,6 +71,21 @@
     });
     engineLoad.catch(function () { engineLoad = null; });
     return engineLoad;
+  }
+
+  var cutoutLoad = null;
+  function loadCutout() {
+    if (window.ChronicleTokenCutout) return Promise.resolve(window.ChronicleTokenCutout);
+    cutoutLoad = cutoutLoad || new Promise(function (resolve, reject) {
+      var url = assets().cutout, s = document.createElement('script');
+      if (!url) { reject(new Error('no cutout source')); return; }
+      s.src = url;
+      s.onload = function () { if (window.ChronicleTokenCutout) resolve(window.ChronicleTokenCutout); else reject(new Error('cutout did not register')); };
+      s.onerror = function () { reject(new Error('could not load the cutout')); };
+      document.head.appendChild(s);
+    });
+    cutoutLoad.catch(function () { cutoutLoad = null; });
+    return cutoutLoad;
   }
 
   // The maker opens once its styles are in, so it never shows unstyled; a
@@ -136,8 +161,30 @@
             '<div class="tkm-stage">' +
               '<canvas class="tkm-surface" width="1100" height="1100" tabindex="0" aria-label="Work surface. Drag the frame or the picture; arrow keys move the frame, plus and minus resize it."></canvas>' +
               '<p class="tkm-wait" data-tkm-wait><i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i> Getting the frames ready…</p>' +
+              '<button type="button" class="tkm-wand" data-tkm-wand aria-expanded="false" aria-controls="tkm-bgd" aria-label="Background: clear it or touch it up" title="Background" hidden>' +
+                '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></button>' +
+              '<div class="tkm-bgd" id="tkm-bgd" role="group" aria-labelledby="tkm-bgd-l" data-tkm-bgd hidden>' +
+                '<div class="tkm-bgd-top"><p class="tkm-bgd-l" id="tkm-bgd-l">Background</p>' +
+                  '<button type="button" class="tkm-ico" data-tkm-bgd-close aria-label="Close the background tools"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>' +
+                '<p class="tkm-bgd-s" data-tkm-bgs></p>' +
+                '<div class="tkm-bgd-row"><button type="button" class="tkm-nb is-go" data-tkm-bgrm>Clear the background</button>' +
+                  '<button type="button" class="tkm-nq" data-tkm-bgback hidden>Put it all back</button></div>' +
+                '<p class="tkm-bgd-k" id="tkm-str-l">Strength</p>' +
+                '<div class="tkm-dseg" role="group" aria-labelledby="tkm-str-l" data-tkm-str>' +
+                  '<button type="button" data-v="light" aria-pressed="false">Light</button><button type="button" data-v="medium" aria-pressed="true">Medium</button><button type="button" data-v="strong" aria-pressed="false">Strong</button></div>' +
+                '<p class="tkm-bgd-k" id="tkm-brush-l">Touch up</p>' +
+                '<div class="tkm-dseg" role="group" aria-labelledby="tkm-brush-l" data-tkm-brush>' +
+                  '<button type="button" data-v="" aria-pressed="true">Move</button><button type="button" data-v="erase" aria-pressed="false">Erase</button><button type="button" data-v="restore" aria-pressed="false">Restore</button></div>' +
+                '<label class="tkm-dsize">Brush size <input type="range" min="8" max="90" step="1" value="26" data-tkm-bsize disabled></label>' +
+              '</div>' +
+              '<div class="tkm-offer" role="group" aria-label="Background" data-tkm-offer hidden>' +
+                '<p class="tkm-offer-t" data-tkm-offer-t></p>' +
+                '<div class="tkm-offer-b" data-tkm-ask><button type="button" class="tkm-nb is-go" data-tkm-yes>Remove it</button><button type="button" class="tkm-nb" data-tkm-no>Keep it</button></div>' +
+                '<div class="tkm-offer-b" data-tkm-did hidden><button type="button" class="tkm-nq" data-tkm-undo>Undo</button><button type="button" class="tkm-nq" data-tkm-adjust>Adjust</button>' +
+                  '<button type="button" class="tkm-ico" data-tkm-offer-x aria-label="Hide this note"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>' +
+              '</div>' +
             '</div>' +
-            '<p class="tkm-hint">Inside the frame: move it. Frame corners: resize it. Outside: move the picture. Picture corners or the wheel: resize the picture.</p>' +
+            '<p class="tkm-hint" data-tkm-hint>' + HINT + '</p>' +
             '<div class="tkm-tools">' +
               '<label class="tkm-slide">Picture <input type="range" min="10" max="400" step="1" value="100" data-tkm-zoom data-tkm-pic disabled></label>' +
               '<button type="button" class="btn-secondary btn-sm" data-tkm-fill data-tkm-pic disabled>Fill the frame</button>' +
@@ -218,7 +265,7 @@
   function baseScale(st) { return Math.min(F.W * 0.9 / iw(st), F.W * 0.9 / ih(st)); }
 
   function opts(st, t, still) {
-    return { img: st.img, place: st.place, frame: st.frame, colour: st.colour, shape: st.shape, flip: st.flip, name: st.name, t: t, still: still };
+    return { img: st.img, place: st.place, frame: st.frame, colour: st.colour, shape: st.shape, flip: st.flip, name: st.name, t: t, still: still, clear: st.img !== st.orig };
   }
   function still(st) { return !st.playing || !design(st.frame).anim; }
 
@@ -251,6 +298,11 @@
       g.beginPath(); g.arc(p[0], p[1], 9, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill();
       g.lineWidth = 2; g.strokeStyle = 'rgba(0,0,0,.5)'; g.stroke();
     });
+    if (st.brush && st.brushAt) {
+      g.save(); g.beginPath(); g.arc(st.brushAt.x, st.brushAt.y, st.brushR, 0, Math.PI * 2);
+      g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.55)'; g.stroke();
+      g.lineWidth = 2; g.strokeStyle = st.brush === 'erase' ? '#fff' : 'rgba(170,220,255,.95)'; g.stroke(); g.restore();
+    }
   }
   function drawMap(st) {
     var t = clock(), s = still(st);
@@ -326,6 +378,13 @@
     c.addEventListener('pointermove', function (e) {
       if (!st.img) return;
       var pt = toWork(st, e);
+      if (st.brush && !pinch) {
+        if (drag) pts.set(e.pointerId, pt);
+        st.brushAt = pt;
+        if (drag && drag.kind === 'paint') { paintStroke(st, drag.last, pt); drag.last = pt; changed(st); }
+        else { c.style.cursor = 'none'; drawWork(st); }
+        return;
+      }
       if (!drag) { c.style.cursor = CURSOR[grab(st, pt)]; return; }
       pts.set(e.pointerId, pt);
       var p = st.place;
@@ -345,11 +404,18 @@
       c.setPointerCapture(e.pointerId);
       var pt = toWork(st, e); pts.set(e.pointerId, pt);
       if (pts.size === 2) { var a = Array.from(pts.values()); pinch = { d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), s: st.place.img.s }; return; }
+      hideDone(st);
+      if (st.brush && st.work) {
+        drag = { kind: 'paint', last: pt }; st.brushAt = pt;
+        paintStroke(st, pt, pt); changed(st);
+        return;
+      }
       drag = { kind: grab(st, pt), last: pt };
       if (drag.kind === 'pic-move') c.style.cursor = 'grabbing';
     });
     function up(e) { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) drag = null; }
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+    c.addEventListener('pointerleave', function () { if (st.brushAt && !drag) { st.brushAt = null; drawWork(st); } });
     // Zoom is gentle: one wheel tick is a small step.
     c.addEventListener('wheel', function (e) {
       if (!st.img) return;
@@ -437,6 +503,205 @@
     if (st.hotCanvas.parentNode) st.hotCanvas.parentNode.removeChild(st.hotCanvas);
   }
 
+  /* ---------- Background: noticed, cleared and touched up ---------- */
+
+  // Whether each picture's offer was answered, so it is asked once: the
+  // newest hundred, by picture.
+  function bgAnswers() {
+    try { var v = JSON.parse(localStorage.getItem(STORE_BG) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+  }
+  function bgAnswer(key) {
+    var all = bgAnswers();
+    for (var i = 0; i < all.length; i++) if (all[i] && all[i].k === key) return all[i];
+    return null;
+  }
+  function bgRemember(st) {
+    if (!st.bgKey) return;
+    var all = bgAnswers().filter(function (a) { return a && a.k !== st.bgKey; });
+    all.unshift(st.cut.auto ? { k: st.bgKey, a: 'remove', s: st.cut.strength } : { k: st.bgKey, a: 'keep' });
+    try { localStorage.setItem(STORE_BG, JSON.stringify(all.slice(0, 100))); } catch (e) { /* private window */ }
+  }
+  function pictureKey(url) {
+    try { var u = new URL(url, location.href); return u.pathname; } catch (e) { return ''; }
+  }
+
+  function freshCut() { return { auto: false, strength: 'medium', paint: null, painted: false, canvas: null, out: null }; }
+
+  // The maker draws whichever picture is current; swapping keeps the framing,
+  // since the copy may be smaller than the picture.
+  function swapImg(st, img, k) {
+    if (st.img === img) return;
+    st.place.img.s *= st.imgK / k;
+    st.img = img; st.imgK = k;
+  }
+
+  // A working copy of the picture, read once, for the cutout to look at. A
+  // picture whose pixels cannot be read leaves the wand off.
+  function prepCutout(st, img, key) {
+    loadCutout().then(function (T) {
+      if (cur !== st || st.orig !== img) return;
+      var w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height, k = Math.min(1, CUT_PX / Math.max(w0, h0));
+      var c = document.createElement('canvas'), w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k)), px;
+      c.width = w; c.height = h;
+      try { var g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0, w, h); px = g.getImageData(0, 0, w, h); } catch (e) { return; }
+      st.work = { px: px, k: w / w0, T: T };
+      st.bg = T.detect(px);
+      st.bgKey = key || '';
+      st.el.querySelector('[data-tkm-wand]').hidden = false;
+      var was = key ? bgAnswer(key) : null;
+      if (was && was.a === 'remove' && st.bg.kind !== 'clear') {
+        setAuto(st, true, T.strengths.indexOf(was.s) >= 0 ? was.s : 'medium', true);
+        showOffer(st, 'again');
+      } else if (!was && st.bg.sure) {
+        showOffer(st, 'ask');
+      }
+      syncBg(st);
+    }).catch(function () { /* the wand stays off; the maker works as before */ });
+  }
+
+  function cutActive(st) { return st.cut.auto || st.cut.painted; }
+
+  // Draws the cleared copy for a rectangle of it (all of it by default) and
+  // makes it, or the untouched picture, the one the token is drawn from.
+  function recompose(st, x0, y0, x1, y1) {
+    var W = st.work, cut = st.cut;
+    if (!W) return;
+    if (!cutActive(st)) { swapImg(st, st.orig, 1); return; }
+    var w = W.px.width, h = W.px.height;
+    if (!cut.canvas) {
+      cut.canvas = document.createElement('canvas'); cut.canvas.width = w; cut.canvas.height = h;
+      cut.out = cut.canvas.getContext('2d').createImageData(w, h);
+      x0 = undefined;
+    }
+    if (x0 === undefined) { x0 = 0; y0 = 0; x1 = w; y1 = h; }
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(w, x1); y1 = Math.min(h, y1);
+    if (x1 <= x0 || y1 <= y0) return;
+    var auto = cut.auto ? W.T.mask(W.px, st.bg, cut.strength) : null;
+    W.T.compose(W.px, st.bg, auto, cut.paint, cut.out, x0, y0, x1, y1);
+    cut.canvas.getContext('2d').putImageData(cut.out, 0, 0, x0, y0, x1 - x0, y1 - y0);
+    swapImg(st, cut.canvas, W.k);
+  }
+
+  // A change to the whole picture fades in over the old one, unless motion is Off.
+  function fadeFrom(st) {
+    if (st.el.classList.contains('is-still') || motionLevel() === 'off') return;
+    var c = st.surface, ghost = document.createElement('canvas');
+    ghost.width = c.width; ghost.height = c.height; ghost.className = 'tkm-ghost';
+    ghost.getContext('2d').drawImage(c, 0, 0);
+    c.parentNode.insertBefore(ghost, c.nextSibling);
+    requestAnimationFrame(function () { requestAnimationFrame(function () { ghost.classList.add('is-gone'); }); });
+    setTimeout(function () { ghost.remove(); }, 400);
+  }
+
+  // Clears the backdrop (or puts it back) at a strength. quiet is for
+  // repeating the person's earlier answer on open, which is not a new edit.
+  function setAuto(st, on, strength, quiet) {
+    if (!st.work || st.bg.kind === 'clear') return;
+    if (!quiet) fadeFrom(st);
+    st.cut.auto = !!on;
+    if (strength) st.cut.strength = strength;
+    recompose(st);
+    syncBg(st);
+    if (quiet) draw(st); else { bgRemember(st); changed(st); }
+  }
+  function putBack(st) {
+    fadeFrom(st);
+    st.cut.auto = false; st.cut.paint = null; st.cut.painted = false;
+    recompose(st);
+    syncBg(st); bgRemember(st); changed(st);
+  }
+
+  // Erase or Restore along a stroke, in the copy's pixels.
+  function paintStroke(st, a, b) {
+    var W = st.work, cut = st.cut;
+    if (!W) return;
+    var w = W.px.width, h = W.px.height;
+    if (!cut.paint) cut.paint = new Uint8Array(w * h);
+    if (!cut.painted) { cut.painted = true; recompose(st); syncBg(st); }
+    var p = st.place.img, s = p.s, v = st.brush === 'erase' ? 1 : 2, r = Math.max(1, st.brushR / s);
+    function src(pt) { var dx = (pt.x - p.x) / s; return { x: (st.flip ? -dx : dx) + w / 2, y: (pt.y - p.y) / s + h / 2 }; }
+    var A = src(a), B = src(b), len = Math.hypot(B.x - A.x, B.y - A.y), n = Math.max(1, Math.ceil(len / (r / 3)));
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (var k = 0; k <= n; k++) {
+      var cx = A.x + (B.x - A.x) * k / n, cy = A.y + (B.y - A.y) * k / n;
+      var ya = Math.max(0, Math.floor(cy - r)), yb = Math.min(h - 1, Math.ceil(cy + r)), xa = Math.max(0, Math.floor(cx - r)), xb = Math.min(w - 1, Math.ceil(cx + r));
+      for (var y = ya; y <= yb; y++) for (var x = xa; x <= xb; x++) {
+        var dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+        if (dx * dx + dy * dy <= r * r) cut.paint[y * w + x] = v;
+      }
+      if (xa <= xb && ya <= yb) { x0 = Math.min(x0, xa); y0 = Math.min(y0, ya); x1 = Math.max(x1, xb + 1); y1 = Math.max(y1, yb + 1); }
+    }
+    if (x1 > x0) recompose(st, x0, y0, x1, y1);
+  }
+
+  var OFFER_TEXT = {
+    checker: 'This picture has a painted checkerboard behind it, so it won’t be see-through on the map.',
+    flat: 'This picture has a plain backdrop behind it, so it won’t be see-through on the map.',
+    done: 'Background removed.',
+    again: 'Background removed, as you chose last time.'
+  };
+  // The note over the stage: the offer, then what was done with Undo, which
+  // stays until the person moves on to framing or opens the wand.
+  function showOffer(st, mode) {
+    var box = st.el.querySelector('[data-tkm-offer]');
+    st.offer = mode;
+    if (!mode) { box.classList.remove('is-on'); box.hidden = true; return; }
+    st.el.querySelector('[data-tkm-offer-t]').textContent = mode === 'ask' ? OFFER_TEXT[st.bg.kind] || OFFER_TEXT.flat : OFFER_TEXT[mode];
+    st.el.querySelector('[data-tkm-ask]').hidden = mode !== 'ask';
+    st.el.querySelector('[data-tkm-did]').hidden = mode === 'ask';
+    if (box.hidden) {
+      box.hidden = false;
+      requestAnimationFrame(function () { requestAnimationFrame(function () { box.classList.add('is-on'); }); });
+    }
+  }
+  function hideDone(st) { if (st.offer === 'done' || st.offer === 'again') showOffer(st, ''); }
+
+  var KIND_NAME = { checker: 'the painted checkerboard', flat: 'the plain backdrop', busy: 'the colour round the edge' };
+  function syncBg(st) {
+    var el = st.el, cut = st.cut, bg = st.bg || { kind: 'busy' }, line;
+    if (cut.auto) line = 'Cleared ' + (KIND_NAME[bg.kind] || KIND_NAME.busy) + '. Erase or Restore to touch up the edge.';
+    else if (bg.kind === 'clear') line = 'This picture is already see-through round its edge. Erase paints away anything else.';
+    else if (bg.kind === 'checker') line = 'There is a painted checkerboard behind this picture.';
+    else if (bg.kind === 'flat') line = 'There is a plain backdrop behind this picture.';
+    else line = 'No plain backdrop was found. Clearing takes what matches the colour round the edge.';
+    el.querySelector('[data-tkm-bgs]').textContent = line;
+    var rm = el.querySelector('[data-tkm-bgrm]');
+    rm.hidden = cut.auto || bg.kind === 'clear';
+    el.querySelector('[data-tkm-bgback]').hidden = !cutActive(st);
+    Array.prototype.forEach.call(el.querySelectorAll('[data-tkm-str] button'), function (b) {
+      b.disabled = !cut.auto; b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === cut.strength));
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-tkm-brush] button'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === st.brush)); });
+    el.querySelector('[data-tkm-bsize]').disabled = !st.brush;
+    el.querySelector('[data-tkm-bgd]').classList.toggle('is-brushing', !!st.brush);
+    el.querySelector('[data-tkm-wand]').classList.toggle('is-on', cutActive(st));
+    el.querySelector('[data-tkm-hint]').textContent = st.brush ?
+      (st.brush === 'erase' ? 'Paint over what should go. ' : 'Paint over what should come back. ') + 'Choose Move to frame the token again.' : HINT;
+    st.surface.style.cursor = st.brush ? 'none' : '';
+  }
+  function setBrush(st, v) {
+    st.brush = v === 'erase' || v === 'restore' ? v : '';
+    if (!st.brush) st.brushAt = null;
+    syncBg(st); if (st.img) drawWork(st);
+  }
+
+  // The wand's drawer hangs from the wand, over the top of the stage.
+  function bgDrawer(st, open) {
+    var d = st.el.querySelector('[data-tkm-bgd]'), wand = st.el.querySelector('[data-tkm-wand]');
+    if (open === !d.hidden) return;
+    wand.setAttribute('aria-expanded', String(open));
+    if (open) {
+      hideDone(st);
+      d.hidden = false;
+      requestAnimationFrame(function () { requestAnimationFrame(function () { d.classList.add('is-on'); }); });
+      var f = d.querySelector('button:not([hidden]):not([disabled])');
+      if (f) f.focus({ preventScroll: true });
+    } else {
+      d.classList.remove('is-on'); d.hidden = true;
+      setBrush(st, '');
+    }
+  }
+
   /* ---------- Controls ---------- */
 
   function setColour(st, value, name) {
@@ -470,6 +735,17 @@
       if ((b = t.closest('[data-tkm-shape] button'))) { setShape(st, b.getAttribute('data-v')); syncFrame(st); changed(st); return; }
       if ((b = t.closest('[data-tkm-colour]'))) { setColour(st, b.getAttribute('data-tkm-colour'), b.getAttribute('data-n')); changed(st); return; }
       if (!st.img) return;
+      if (t.closest('[data-tkm-yes]')) { setAuto(st, true); showOffer(st, 'done'); return; }
+      if (t.closest('[data-tkm-no]')) { showOffer(st, ''); bgRemember(st); st.surface.focus({ preventScroll: true }); return; }
+      if (t.closest('[data-tkm-undo]')) { putBack(st); showOffer(st, ''); st.surface.focus({ preventScroll: true }); return; }
+      if (t.closest('[data-tkm-adjust]')) { bgDrawer(st, true); return; }
+      if (t.closest('[data-tkm-offer-x]')) { showOffer(st, ''); st.surface.focus({ preventScroll: true }); return; }
+      if (t.closest('[data-tkm-wand]')) { bgDrawer(st, st.el.querySelector('[data-tkm-bgd]').hidden); return; }
+      if (t.closest('[data-tkm-bgd-close]')) { bgDrawer(st, false); st.el.querySelector('[data-tkm-wand]').focus({ preventScroll: true }); return; }
+      if (t.closest('[data-tkm-bgrm]')) { setAuto(st, true); return; }
+      if (t.closest('[data-tkm-bgback]')) { putBack(st); return; }
+      if ((b = t.closest('[data-tkm-str] button'))) { setAuto(st, true, b.getAttribute('data-v')); return; }
+      if ((b = t.closest('[data-tkm-brush] button'))) { setBrush(st, b.getAttribute('data-v')); return; }
       if (t.closest('[data-tkm-fill]')) { fill(st); changed(st); return; }
       if ((b = t.closest('[data-tkm-flip]'))) { st.flip = !st.flip; b.setAttribute('aria-pressed', String(st.flip)); changed(st); return; }
       if (t.closest('[data-tkm-motion]')) {
@@ -483,6 +759,11 @@
       if (!st.img) return;
       st.place.img.s = baseScale(st) * Number(e.target.value) / 100; changed(st);
     });
+    el.querySelector('[data-tkm-bsize]').addEventListener('input', function (e) {
+      st.brushR = Number(e.target.value) || 26;
+      var c = st.surface;
+      if (st.img) { st.brushAt = st.brushAt || { x: c.width / 2, y: c.height / 2 }; drawWork(st); }
+    });
     el.querySelector('[data-tkm-file]').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0];
       e.target.value = '';
@@ -493,7 +774,7 @@
         if (cur !== st) { URL.revokeObjectURL(url); return; }
         if (st.url) URL.revokeObjectURL(st.url);
         st.url = url;
-        usePicture(st, img); changed(st);
+        usePicture(st, img, 'file:' + f.name + ':' + f.size + ':' + f.lastModified); changed(st);
         msg('');
       }).catch(function () {
         URL.revokeObjectURL(url);
@@ -517,8 +798,12 @@
 
   // The first drawing of a material works it out at full size, which takes a
   // moment, so the wait note is painted before it starts.
-  function usePicture(st, img) {
-    st.img = img;
+  function usePicture(st, img, key) {
+    st.img = st.orig = img; st.imgK = 1;
+    st.work = null; st.bg = null; st.bgKey = ''; st.cut = freshCut(); st.brush = ''; st.brushAt = null;
+    showOffer(st, '');
+    if (!st.el.querySelector('[data-tkm-bgd]').hidden) bgDrawer(st, false);
+    st.el.querySelector('[data-tkm-wand]').hidden = true;
     st.place = F.place(img);
     keepFrameIn(st);
     st.el.querySelector('[data-tkm-filel]').textContent = 'Another picture';
@@ -529,6 +814,7 @@
       st.el.querySelector('[data-tkm-wait]').hidden = true;
       st.el.querySelector('[data-tkm-save]').disabled = false;
       play(st);
+      prepCutout(st, img, key);
     }, 30);
   }
   function noPicture(st, text) {
@@ -554,6 +840,12 @@
     if (e.key !== 'Escape' || !cur || e.defaultPrevented) return;
     e.preventDefault();
     e.stopImmediatePropagation();
+    var d = cur.el.querySelector('[data-tkm-bgd]');
+    if (d && !d.hidden && !cur.el.querySelector('.ask-slip.is-on')) {
+      bgDrawer(cur, false);
+      cur.el.querySelector('[data-tkm-wand]').focus({ preventScroll: true });
+      return;
+    }
     close();
   }
   function onFocusIn(e) {
@@ -575,7 +867,8 @@
       hc.className = 'tkm-hot';
       var st = cur = {
         o: o, el: el, panel: panel, from: from, surface: el.querySelector('.tkm-surface'), tmp: document.createElement('canvas'), hotCanvas: hc,
-        img: null, place: null, url: '', group: '', hot: null, hotTimer: 0, frame: 'none', colour: '', shape: 'round', flip: false, name: o.name || '',
+        img: null, orig: null, imgK: 1, work: null, bg: null, bgKey: '', cut: freshCut(), offer: '', brush: '', brushAt: null, brushR: 26,
+        place: null, url: '', group: '', hot: null, hotTimer: 0, frame: 'none', colour: '', shape: 'round', flip: false, name: o.name || '',
         playing: motionOK(), ready: false, dirty: false, saving: false, closing: false, raf: 0, ticks: 0, nextTick: 0, inert: []
       };
       document.body.appendChild(el);
@@ -611,7 +904,7 @@
         var first = F.designs[0] ? F.designs[0].id : 'none';
         chooseFrame(st, known(mem.frame) ? mem.frame : first);
         if (!st.group) showGroup(st, F.groups[0].id);
-        if (r[1]) usePicture(st, r[1]);
+        if (r[1]) usePicture(st, r[1], pictureKey(art));
         else noPicture(st, art ? 'The page picture could not be opened. Choose a picture to make the token from.' : 'This page has no picture yet. Choose one to make the token from.');
       }).catch(function () {
         if (cur !== st) return;
