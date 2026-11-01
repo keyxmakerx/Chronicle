@@ -103,7 +103,7 @@ window.CraftScene = (function () {
   function cleanRecipes(src){var o={};Object.keys(src||{}).forEach(function(k){var r=src[k]||{};
     o[k]={name:String(r.name||k),kind:String(r.kind||''),who:String(r.who||''),stat:String(r.stat||''),mod:clamp(Math.round(+r.mod||0),-10,10),
       goal:clamp(Math.round(+r.goal||10),1,999),start:clamp(Math.round(+r.start||0),0,999),
-      base:hexOr(r.base,'#cfe3f2'),paste:hexOr(r.paste,'#7e1a2a'),mid:hexOr(r.mid,'#a63a4a'),final:hexOr(r.final,'#ff4d6d'),steps:Array.isArray(r.steps)?r.steps:[]};});return o;}
+      base:hexOr(r.base,'#cfe3f2'),paste:hexOr(r.paste,'#7e1a2a'),mid:hexOr(r.mid,'#a63a4a'),final:hexOr(r.final,'#ff4d6d'),steps:Array.isArray(r.steps)?r.steps:[],noProject:r.noProject===true};});return o;}
   /* Every id a skin draws is made unique to its scene, so two scenes on one
      page never borrow each other's gradients, filters or clip paths. */
   function scoper(p){return function(html){return String(html).replace(/(\s)id="/g,'$1id="'+p).replace(/url\(#/g,'url(#'+p).replace(/href="#/g,'href="#'+p);};}
@@ -537,8 +537,12 @@ window.CraftScene = (function () {
        over once the scene's elements exist and before the first recipe. */
     if(skin.mounted)skin.mounted({P:P,svg:svg,stage:stage,root:root,calm:calm,state:function(){return S;},tween:tween,later:later,
       say:setSay,sfx:Sound.fx,rain:Sound.rain,rerender:function(){if(S)renderBook();}});
-    reset(opts.recipe);kick();
-    return {reset:reset,settings:set,apply:function(){reset(S.rk);},sound:function(v){soundOn=!!v;Sound.set(v,skin.sound);},
+    reset(opts.recipe);
+    // A moment (an experiment, a breakdown, a hand on a project) plays its
+    // own cue at the bench, so there are no steps to work.
+    if(opts.moment){S.phase='moment';gUI.innerHTML='';say.textContent='';acts.innerHTML='';hot();renderBook();}
+    kick();
+    return {reset:reset,cue:{P:P,fx:skin.fx,L:L,say:setSay,sfx:Sound.fx,later:later,calm:calm},settings:set,apply:function(){reset(S.rk);},sound:function(v){soundOn=!!v;Sound.set(v,skin.sound);},
       skip:function(){if(!set.skip||S.phase!=='step')return;S.res=[];S.phase='roll';S.verdict=verdict([],set);S.verdict.why='Steps skipped';S.liq=S.r.final;enterStep();emitChange();},
       retry:function(){if(S.phase==='worked'){S.phase='roll';enterStep();}},
       on:on,state:function(){return S;},stage:stage,svg:svg,skin:skin,rerender:function(){renderBook();},destroy:destroy};

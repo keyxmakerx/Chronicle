@@ -374,6 +374,13 @@ func (h *StashHandler) Move(c echo.Context) error {
 			return apperror.NewBadRequest("Enter a quantity of at least 1.")
 		}
 		in.Quantity = q
+		// The remembered copy to send first, when the mover picked one; an id
+		// that isn't one of the source's copies of this item is ignored.
+		if v := strings.TrimSpace(c.FormValue("pick")); v != "" {
+			if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
+				in.Pick = id
+			}
+		}
 	}
 	out, err := h.svc.Move(c.Request().Context(), cc.Campaign.ID, a, in)
 	if err != nil {

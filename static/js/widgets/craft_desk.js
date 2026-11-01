@@ -608,6 +608,8 @@ window.CraftDesk = (function () {
       s+='<g transform="translate(24,'+(y-4)+')">'+(done?(g&&g.grade==='miss'?CROSS:TICK):(i===c.i?'<circle r="5" class="bk-now"/>':'<circle r="3.5" class="bk-dot"/>'))+'</g>'+
         '<text class="bk-s'+(i===c.i&&c.phase==='step'?' is-now':'')+(done?' is-done':'')+'" x="40" y="'+y+'">'+esc(c.name(st))+'</text>'+
         (g?'<text class="bk-g is-'+g.grade+'" x="40" y="'+(y+13)+'">'+(g.grade==='perfect'?'perfect':g.grade==='good'?'good':'a slip')+'</text>':'');});
+    // A moment that isn't a project (an experiment, a breakdown) leaves the right page blank.
+    if(r.noProject)return s+'</g>';
     s+='</g><g transform="'+BOOK.r+'"><text class="bk-h2" x="14" y="36">The project</text>'+
       '<text class="bk-t" x="14" y="60">Goal '+r.goal+' points</text><text class="bk-t" x="14" y="78">Roll 2d10 + '+esc(r.stat)+'</text>';
     var k=S.points/r.goal;s+='<rect x="14" y="94" width="172" height="12" class="bk-bar"/><rect x="15" y="95" width="'+(170*k).toFixed(1)+'" height="10" class="bk-fill"/>'+

@@ -137,6 +137,8 @@ test('rolling everything left saves once, and Undo clears what it set', { skip }
   assert.match(await sentence(p), /^Tess’s ancestry is Human, class is (Fury|Tactician) and career is Career \d+\.$/);
   await p.click('.hb-toast [data-undo]');
   await p.waitForFunction(() => document.querySelectorAll('.hb-blank.is-empty').length === 2);
+  // The blanks clear before the save goes out, so wait for the request too.
+  for (let i = 0; sent.length < 2 && i < 100; i++) await p.waitForTimeout(20);
   assert.deepEqual(sent[1].body, { fields_patch: { class: null, career: null } });
 });
 

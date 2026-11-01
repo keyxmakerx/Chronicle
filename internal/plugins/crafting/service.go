@@ -34,6 +34,8 @@ type Directory interface {
 	ListCharacters(ctx context.Context, campaignID string, role int, userID string) ([]Named, bool, error)
 	// OwnedCharacterIDs lists the characters the user has claimed.
 	OwnedCharacterIDs(ctx context.Context, campaignID, userID string) (map[string]bool, error)
+	// Party lists the claimed characters the role and user may see.
+	Party(ctx context.Context, campaignID string, role int, userID string) ([]Named, error)
 }
 
 // RulesSource gives the crafting rules of the campaign's enabled system,
@@ -74,6 +76,9 @@ type Service interface {
 	Character(ctx context.Context, campaignID, characterID string, v Viewer) (*CharacterCrafting, error)
 	StartProject(ctx context.Context, campaignID, characterID string, v Viewer, in StartInput) (*ProjectView, error)
 	RollProject(ctx context.Context, campaignID, id string, v Viewer, in RollInput) (*RollResult, error)
+	Experiment(ctx context.Context, campaignID, characterID string, v Viewer, in TryInput) (*TryResult, error)
+	BreakDown(ctx context.Context, campaignID, characterID string, v Viewer, in BreakInput) (*BreakResult, error)
+	Help(ctx context.Context, campaignID, projectID string, v Viewer, in HelpInput) (*RollResult, error)
 	CancelProject(ctx context.Context, campaignID, id string, v Viewer) error
 
 	Projects(ctx context.Context, campaignID string, v Viewer) (*ProjectsPage, error)
