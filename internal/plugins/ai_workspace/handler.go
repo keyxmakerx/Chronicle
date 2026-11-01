@@ -1073,10 +1073,16 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Con
 }
 
 // ConnectorCheck is what a connected AI is told about the changes it asks
-// for before they wait for the owner: for now, new pages filed in a folder
-// their category doesn't have. The AI can fix its own request, where the
-// owner would have to work out the right category at review. It looks up
-// categories and folders only, never pages.
+// for before they wait for the owner: new pages filed in a folder their
+// category doesn't have, and every other block the review screen would mark
+// as unusable, with the review's own reason. The AI can fix its own request,
+// where the owner would otherwise find a broken row at review.
+//
+// The other blocks are planned as the owner, as the review plans them, so a
+// reason can name what the owner can see. That is only told to a key that
+// already reads as the owner (any privacy but Safe); a Safe key, which reads as a
+// player, gets the folder check alone, so a refusal never tells it a hidden
+// page exists.
 func (h *Handler) ConnectorCheck(ctx context.Context, conn *connector.Connection, changes string) ([]string, error) {
 	if conn.ForPlayer {
 		return h.playerCheck(ctx, conn, changes)
@@ -1096,7 +1102,51 @@ func (h *Handler) ConnectorCheck(ctx context.Context, conn *connector.Connection
 	for _, s := range slips {
 		out = append(out, folderSlipLine(s))
 	}
+	if conn.Privacy != aiexport.PrivacyModeSafe {
+		out = append(out, h.recordProblems(ctx, campaignID, conn.UserID, pages, recs)...)
+	}
 	return out, nil
+}
+
+// recordProblems plans the request's record blocks as the review screen
+// will and returns one line for each it would mark unusable.
+func (h *Handler) recordProblems(ctx context.Context, campaignID, userID string, pages, recs []importer.ParsedPage) []string {
+	if h.records == nil || len(recs) == 0 {
+		return nil
+	}
+	made := importer.PasteSlugs(pages)
+	all := make([]records.Record, len(recs))
+	for i, p := range recs {
+		all[i] = toRecord(i, p, nil)
+		all[i].Made = made
+	}
+	owner := records.Actor{UserID: userID, Role: int(campaigns.RoleOwner)}
+	kinds, plans := h.records.PlanAll(ctx, campaignID, owner, all)
+	off := h.offFeatures(ctx, campaignID)
+	var out []string
+	for i, plan := range plans {
+		reason := plan.Error
+		if f := off.For(all[i]); f != "" && reason == "" {
+			reason = records.OffFeatureReason(f)
+		}
+		if reason == "" {
+			continue
+		}
+		label := all[i].Kind
+		if k := kinds[i]; k != nil {
+			label = k.Name()
+		}
+		name := all[i].Name
+		if t, ok := kinds[i].(records.Titled); ok && name == "" {
+			name = t.Title(all[i])
+		}
+		what := label
+		if name != "" {
+			what += " " + oneLineText(name, 60)
+		}
+		out = append(out, fmt.Sprintf("block %d (%s): %s", recs[i].SourceIndex+1, what, reason))
+	}
+	return out
 }
 
 // playerCheck tells a player's AI about every block that would be held

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -69,12 +70,13 @@ type Owners interface {
 
 // Service makes, checks and revokes connection keys and keeps the call log.
 type Service struct {
-	repo   Repository
-	owners Owners
-	now    func() time.Time
-	limits *limiter
-	calls  atomic.Int64
-	check  ChangesCheck
+	repo       Repository
+	owners     Owners
+	now        func() time.Time
+	limits     *limiter // every request
+	callLimits *limiter // tool calls
+	calls      atomic.Int64
+	check      ChangesCheck
 	// watchRepo and watch are the switches and warnings (watch.go);
 	// watchRepo is nil until SetWatch.
 	watchRepo WatchRepository
@@ -92,7 +94,7 @@ func (s *Service) SetCheck(f ChangesCheck) { s.check = f }
 
 // NewService creates the connector service.
 func NewService(repo Repository, owners Owners) *Service {
-	return &Service{repo: repo, owners: owners, now: time.Now, limits: newLimiter(), watch: newWatcher(time.Now())}
+	return &Service{repo: repo, owners: owners, now: time.Now, limits: newLimiter(requestsBurst, requestsRefill, 0), callLimits: newLimiter(callsBurst, callRefill, callsPerDay), watch: newWatcher(time.Now())}
 }
 
 // hashKey is the stored form of a key.
@@ -296,9 +298,15 @@ func (s *Service) ownCurrent(ctx context.Context, campaignID, userID string, id 
 	return c, nil
 }
 
-// Allow spends one call of the connection's budget, or says how long to wait.
+// Allow spends one of the connection's requests, or says how long to wait.
 func (s *Service) Allow(connID int64) (bool, time.Duration) {
 	return s.limits.allow(connID, s.now())
+}
+
+// AllowCall spends one of the connection's tool calls, or says how long to
+// wait for the next.
+func (s *Service) AllowCall(connID int64) (bool, time.Duration) {
+	return s.callLimits.allow(connID, s.now())
 }
 
 // Seen stamps the connection as used, with the name the AI app gave itself
@@ -535,49 +543,59 @@ func oneLine(s string, n int) string {
 	return s[:cut] + "…"
 }
 
-// limiter is a per-connection budget of calls per minute and per day, kept in
-// memory: a restart forgets it, which only ever gives a connection a fresh
-// budget, never more than one window's worth at once.
+// limiter is a per-connection bucket of calls that refills at a steady
+// pace, with an optional cap per day, kept in memory: a restart forgets it,
+// which only ever gives a connection a full bucket, never more.
 type limiter struct {
 	mu      sync.Mutex
+	burst   int
+	refill  time.Duration
+	daily   int // 0: no day cap
 	windows map[int64]*window
 }
 
 type window struct {
-	minuteStart, dayStart time.Time
-	minute, day           int
+	tokens   float64
+	last     time.Time
+	dayStart time.Time
+	day      int
 }
 
-func newLimiter() *limiter { return &limiter{windows: map[int64]*window{}} }
+func newLimiter(burst int, refill time.Duration, daily int) *limiter {
+	return &limiter{burst: burst, refill: refill, daily: daily, windows: map[int64]*window{}}
+}
 
+// allow spends one call from the connection's bucket, or says how long
+// until the next one is there.
 func (l *limiter) allow(id int64, now time.Time) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if len(l.windows) > 10000 {
 		for k, w := range l.windows {
-			if now.Sub(w.dayStart) > 24*time.Hour {
+			if now.Sub(w.last) > 24*time.Hour {
 				delete(l.windows, k)
 			}
 		}
 	}
 	w := l.windows[id]
 	if w == nil {
-		w = &window{minuteStart: now, dayStart: now}
+		w = &window{tokens: float64(l.burst), last: now, dayStart: now}
 		l.windows[id] = w
 	}
-	if now.Sub(w.minuteStart) >= time.Minute {
-		w.minuteStart, w.minute = now, 0
+	if now.After(w.last) {
+		w.tokens = math.Min(float64(l.burst), w.tokens+float64(now.Sub(w.last))/float64(l.refill))
+		w.last = now
 	}
 	if now.Sub(w.dayStart) >= 24*time.Hour {
 		w.dayStart, w.day = now, 0
 	}
-	if w.day >= callsPerDay {
+	if l.daily > 0 && w.day >= l.daily {
 		return false, w.dayStart.Add(24 * time.Hour).Sub(now)
 	}
-	if w.minute >= callsPerMinute {
-		return false, w.minuteStart.Add(time.Minute).Sub(now)
+	if w.tokens < 1 {
+		return false, time.Duration((1 - w.tokens) * float64(l.refill))
 	}
-	w.minute++
+	w.tokens--
 	w.day++
 	return true, 0
 }

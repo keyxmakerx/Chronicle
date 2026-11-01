@@ -188,14 +188,14 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"inventory", "`character`", "what a character carries"},
 	{"notes", "none", "my Journal notes, my jots on pages and the notes other members shared with me (game night entries among them): titles, folders, nights and who they are shared with"},
 	{"note", "`name` (its title); optional `page` (for a jot) and `by` (the writer)", "one note's full text"},
-	{"house-rules", "none", "the house-rules chapters"},
-	{"system-entries", "optional `field` (e.g. ancestry, kit, race)", "the game system's entries for a character field; without `field`, the fields that have entries"},
+	{"house-rules", "optional `name` (one chapter's title)", "the house-rules chapters, whole while they fit in one answer; a longer rulebook lists every title, and `name` reads any one chapter"},
+	{"system-entries", "optional `field` (e.g. ancestry, kit, race) and `name` (part of an entry's name)", "the game system's entries for a character field, narrowed to those whose name holds `name`; without `field`, the fields that have entries"},
 	{"game-nights", "none", "the campaign's game nights: name, date, time, status and summary (owner and co-DM only)"},
 	{"encounters", "optional `page`", "the fights planned on pages, written as encounter blocks, with the version that plays now and any creature Foundry can't place (owner and co-DM only)"},
 	{"tests", "optional `page`", "the montages and other tests on pages, their results and the one recorded, which pick encounter versions (owner and co-DM only)"},
 	{"foundry-monsters", "optional `name` (part of a name), `level` and `role`", "the monsters Foundry can place: its world's actors and its compendiums', with level, role and EV (owner and co-DM only)"},
 	{"waiting", "none", "what is waiting for a Director's review: the changes this AI asked for (and how the owner answered the latest), entries players wrote and handed in, and players' stash moves and requests to buy (owner and co-DM only)"},
-	{"crafting", "optional `part` (recipes, materials, drops or looks) and `name` (one recipe, material or page)", "crafting: the system's rules, every recipe, material (with the pages that drop it and the recipes that use it), drop list, the spoils tray, heroes' projects and benches; a `part` writes that part as blocks to send back changed, and `looks` lists every item look. A connection that sees what players see reads the recipe book"},
+	{"crafting", "optional `part` (recipes, materials, drops, benches or looks) and `name` (one recipe, material, bench or page)", "crafting: the system's rules, every recipe, material (with the pages that drop it and the recipes that use it), drop list, the spoils tray, heroes' projects and benches; a `part` writes that part as blocks to send back changed, and `looks` lists every item look. A connection that sees what players see reads the recipe book"},
 	{"players", "none", "each player's character right now: level and class, meters, conditions, what they carry, and whether they are coming to the next game night"},
 	{lookupWhatFormat, "`block`, the kind to explain (e.g. `block: calendar`)", "how to write one kind of block: every key, the rules and an example"},
 }
@@ -311,9 +311,9 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 	case "note":
 		ans, err = run.note(r)
 	case "house-rules", "house-rule":
-		ans, err = run.houseRules()
+		ans, err = run.houseRules(firstNonEmpty(r.Name, r.Str("chapter")))
 	case "system-entries", "entries":
-		ans, err = run.systemEntries(firstNonEmpty(r.Str("field"), r.Str("category")))
+		ans, err = run.systemEntries(firstNonEmpty(r.Str("field"), r.Str("category")), r.Name)
 	case "tags":
 		ans, err = run.tagsLookup()
 	case "game-nights", "game-night":
@@ -328,17 +328,17 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.waiting()
 	case "players", "party":
 		ans, err = run.players()
-	case "crafting", "recipes", "materials", "drops", "drop-lists", "item-looks", "looks":
+	case "crafting", "recipes", "materials", "drops", "drop-lists", "benches", "item-looks", "looks":
 		part := r.Str("part")
 		switch what {
-		case "recipes", "materials", "drops", "looks":
+		case "recipes", "materials", "drops", "benches", "looks":
 			part = what
 		case "drop-lists":
 			part = "drops"
 		case "item-looks":
 			part = "looks"
 		}
-		ans, err = run.crafting(part, firstNonEmpty(r.Name, r.Str("recipe"), r.Str("page")))
+		ans, err = run.crafting(part, firstNonEmpty(r.Name, r.Str("recipe"), r.Str("page"), r.Str("bench")))
 	case lookupWhatFormat, "formats", "how-to":
 		ans, err = run.format(firstNonEmpty(r.Str("block"), r.Name))
 	case "":
@@ -933,7 +933,11 @@ func linkMeta(raw []byte, shop bool) string {
 
 // ---- notes, house rules, rolling tables, pins ----
 
-func (run *lookupRun) houseRules() (LookupAnswer, error) {
+// houseRules answers the house-rules chapters whole while they fit in one
+// answer. A longer rulebook lists every chapter's title and writes the
+// chapters that fit, and `name` reads any one of the rest, so no chapter is
+// out of reach behind the size cap.
+func (run *lookupRun) houseRules(name string) (LookupAnswer, error) {
 	ans := LookupAnswer{Chip: "House rules"}
 	if run.l.Rules == nil {
 		return ans, badRequestf("the rulebook can't be looked up on this server")
@@ -945,10 +949,59 @@ func (run *lookupRun) houseRules() (LookupAnswer, error) {
 	if err != nil {
 		return ans, err
 	}
-	n := strings.Count(s, "\n")
-	ans.Chip = fmt.Sprintf("House rules · %d", n)
-	ans.Text = fmt.Sprintf("## House-rules chapters (%d)\n\n%s", n, firstNonEmpty(s, "None yet.\n"))
+	chapters, tail := splitChapters(s)
+	n := len(chapters)
+	ans.Chip = fmt.Sprintf("House rules · %s", plural(n, "chapter", "chapters"))
+	if name = strings.TrimSpace(name); name != "" {
+		for _, ch := range chapters {
+			if sameName(ch.title, name) {
+				ans.Chip = "House rules · " + ch.title
+				ans.Text = "## House-rules chapter\n\n" + ch.text
+				return ans, nil
+			}
+		}
+		titles := make([]string, n)
+		for i, ch := range chapters {
+			titles[i] = quote(ch.title)
+		}
+		return ans, badRequestf("there is no house-rules chapter called %s; the chapters are %s", quote(name), firstNonEmpty(strings.Join(titles, ", "), "none yet"))
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "## House-rules chapters (%d)\n\n", n)
+	if n == 0 && tail == "" {
+		b.WriteString("None yet.\n")
+	}
+	parts := make([]namedPart, n)
+	for i, ch := range chapters {
+		parts[i] = namedPart{ch.title, ch.text}
+	}
+	fitParts(&b, parts, tail, "chapter", "chapters")
+	ans.Text = b.String()
 	return ans, nil
+}
+
+// houseChapter is one chapter of the house-rules export: its title and its
+// whole section, heading included.
+type houseChapter struct{ title, text string }
+
+// splitChapters cuts the house-rules export at each "### " heading; tail is
+// what follows the last chapter's block (the note on Director-only parts).
+func splitChapters(s string) (chapters []houseChapter, tail string) {
+	rest := s
+	for strings.HasPrefix(rest, "### ") {
+		// The closing fence is the only unindented one; YAML inside is
+		// indented.
+		end := strings.Index(rest, "\n```\n\n")
+		if end < 0 {
+			break
+		}
+		end += len("\n```\n\n")
+		sec := rest[:end]
+		title := strings.TrimPrefix(sec[:strings.Index(sec, "\n")], "### ")
+		chapters = append(chapters, houseChapter{title: title, text: sec})
+		rest = rest[end:]
+	}
+	return chapters, rest
 }
 
 func (run *lookupRun) table(name string) (LookupAnswer, error) {
@@ -1044,7 +1097,10 @@ func (run *lookupRun) pins(mapName string) (LookupAnswer, error) {
 
 // ---- game-system entries and players ----
 
-func (run *lookupRun) systemEntries(field string) (LookupAnswer, error) {
+// systemEntries lists a field's entries. name keeps the entries whose name
+// or slug holds it. A list too long for one answer is written as names and
+// slugs only, with how to narrow it, rather than cut partway.
+func (run *lookupRun) systemEntries(field, name string) (LookupAnswer, error) {
 	ans := LookupAnswer{Chip: "Game-system entries"}
 	if field == "" {
 		return run.systemEntryFields()
@@ -1057,6 +1113,18 @@ func (run *lookupRun) systemEntries(field string) (LookupAnswer, error) {
 	if err != nil {
 		return ans, err
 	}
+	if q := strings.ToLower(strings.TrimSpace(name)); q != "" {
+		var keep []SystemEntry
+		for _, e := range list {
+			if strings.Contains(strings.ToLower(e.Name), q) || strings.Contains(strings.ToLower(e.Slug), q) {
+				keep = append(keep, e)
+			}
+		}
+		if len(keep) == 0 {
+			return ans, badRequestf("no %s entry's name holds %s; leave out `name` to list them all", field, quote(name))
+		}
+		list = keep
+	}
 	ans.Chip = fmt.Sprintf("%s · %d", ans.Chip, len(list))
 	var b strings.Builder
 	head := ans.Chip[:strings.Index(ans.Chip, " · ")]
@@ -1065,6 +1133,7 @@ func (run *lookupRun) systemEntries(field string) (LookupAnswer, error) {
 	}
 	fmt.Fprintf(&b, "## %s, %d entries\n\n", head, len(list))
 	var lines []string
+	size := 0
 	for _, e := range list {
 		line := fmt.Sprintf("- %s (%s), %s", e.Name, e.Slug, firstNonEmpty(e.Source, "package"))
 		switch e.Status {
@@ -1077,9 +1146,26 @@ func (run *lookupRun) systemEntries(field string) (LookupAnswer, error) {
 			line += ": " + oneLine(s, 140)
 		}
 		lines = append(lines, line)
+		size += len(line) + 1
 	}
 	if len(lines) == 0 {
 		b.WriteString("None listed.\n")
+	}
+	if size > maxAnswerBytes-2048 || len(lines) > maxAnswerLines {
+		b.WriteString("Too many to describe in one answer, so these are names and slugs only. Ask again with `name` (part of an entry's name) for their sources and summaries.\n\n")
+		lines = lines[:0]
+		for _, e := range list {
+			lines = append(lines, "- "+e.Name+" ("+e.Slug+")")
+		}
+		for i, l := range lines {
+			if b.Len()+len(l) > maxAnswerBytes-256 {
+				fmt.Fprintf(&b, "…and %d more; ask with `name` to narrow the list.\n", len(lines)-i)
+				break
+			}
+			b.WriteString(l + "\n")
+		}
+		ans.Text = b.String()
+		return ans, nil
 	}
 	writeLines(&b, lines)
 	ans.Text = b.String()
@@ -1286,6 +1372,55 @@ func writeLines(b *strings.Builder, lines []string) {
 		}
 		b.WriteString(l + "\n")
 	}
+}
+
+// namedPart is one item of a long answer: the name `name` reads it by, and
+// its whole text.
+type namedPart struct{ name, text string }
+
+// fitParts writes the parts whole while they and tail fit in one answer
+// after what b holds. When they don't, it lists every name first, writes
+// whole parts while they fit, and names the rest to ask for one by one with
+// `name`, so no part is out of reach behind the size cap. noun is what a
+// part is ("recipe", "chapter").
+func fitParts(b *strings.Builder, parts []namedPart, tail, noun, plural string) {
+	total := b.Len() + len(tail)
+	for _, p := range parts {
+		total += len(p.text)
+	}
+	if total <= maxAnswerBytes {
+		for _, p := range parts {
+			b.WriteString(p.text)
+		}
+		b.WriteString(tail)
+		return
+	}
+	names := 0
+	fmt.Fprintf(b, "Every %s, by name:\n", noun)
+	for _, p := range parts {
+		b.WriteString("- " + p.name + "\n")
+		names += len(p.name) + 4
+	}
+	b.WriteString("\n")
+	// Room for the closing line, which may name every part.
+	room := maxAnswerBytes - b.Len() - len(tail) - names - 512
+	var left []string
+	for _, p := range parts {
+		if len(left) == 0 && len(p.text) <= room {
+			b.WriteString(p.text)
+			room -= len(p.text)
+			continue
+		}
+		left = append(left, quote(p.name))
+	}
+	b.WriteString(tail)
+	n := len(left)
+	word := noun
+	if n != 1 {
+		word = plural
+	}
+	fmt.Fprintf(b, "\nThis is too long for one answer, so %d %s %s left out above: %s. Ask again with `name` for each.\n",
+		n, word, wereWas(n), strings.Join(left, ", "))
 }
 
 // capText cuts s at a line boundary under n bytes and says it was cut.

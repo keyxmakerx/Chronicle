@@ -155,35 +155,60 @@ func TestAuthenticate(t *testing.T) {
 }
 
 func TestLimiter(t *testing.T) {
-	l := newLimiter()
+	l := newLimiter(callsBurst, callRefill, callsPerDay)
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
-	for i := 0; i < callsPerMinute; i++ {
+	for i := 0; i < callsBurst; i++ {
 		if ok, _ := l.allow(1, now); !ok {
-			t.Fatalf("call %d refused", i+1)
+			t.Fatalf("call %d of the burst refused", i+1)
 		}
 	}
-	ok, wait := l.allow(1, now.Add(10*time.Second))
-	if ok || wait != 50*time.Second {
-		t.Errorf("over the minute: ok=%v wait=%v", ok, wait)
+	if ok, wait := l.allow(1, now); ok || wait != callRefill {
+		t.Errorf("over the burst: ok=%v wait=%v", ok, wait)
+	}
+	if ok, wait := l.allow(1, now.Add(callRefill/4)); ok || wait != 3*callRefill/4 {
+		t.Errorf("part refilled: ok=%v wait=%v", ok, wait)
+	}
+	if ok, _ := l.allow(1, now.Add(callRefill)); !ok {
+		t.Error("a refilled call was refused")
 	}
 	if ok, _ := l.allow(2, now); !ok {
 		t.Error("one connection's budget stopped another")
 	}
-	// The day budget holds across minutes.
-	at := now
-	for spent := callsPerMinute; spent < callsPerDay; spent += callsPerMinute {
-		at = at.Add(time.Minute)
-		for i := 0; i < callsPerMinute && spent+i < callsPerDay; i++ {
-			if ok, _ := l.allow(1, at); !ok {
-				t.Fatalf("refused under the day budget at %d", spent+i)
-			}
+	// A steady pace of one call per refill goes on until the day cap.
+	at := now.Add(callRefill)
+	for spent := callsBurst + 1; spent < callsPerDay; spent++ {
+		at = at.Add(callRefill)
+		if ok, _ := l.allow(1, at); !ok {
+			t.Fatalf("refused under the day budget at %d", spent)
 		}
 	}
-	if ok, _ := l.allow(1, at.Add(time.Minute)); ok {
-		t.Error("allowed past the day budget")
+	if ok, wait := l.allow(1, at.Add(time.Hour)); ok || wait <= 0 {
+		t.Errorf("allowed past the day budget (wait %v)", wait)
 	}
 	if ok, _ := l.allow(1, now.Add(24*time.Hour)); !ok {
 		t.Error("the day budget didn't come back")
+	}
+	// A limiter with no day cap only paces.
+	free := newLimiter(2, time.Second, 0)
+	for i := 0; i < 5000; i++ {
+		if ok, _ := free.allow(1, now.Add(time.Duration(i)*time.Second)); !ok {
+			t.Fatalf("no day cap, refused at %d", i)
+		}
+	}
+}
+
+func TestWaitText(t *testing.T) {
+	for _, tc := range []struct {
+		wait time.Duration
+		want string
+	}{
+		{300 * time.Millisecond, "Wait 1 second, then call crafting again"},
+		{2500 * time.Millisecond, "Wait 3 seconds, then call crafting again"},
+		{5 * time.Hour, "used its 2000 tool calls for today. Try again in about 5 hours"},
+	} {
+		if got := waitText("crafting", tc.wait); !strings.Contains(got, tc.want) {
+			t.Errorf("%v: %q", tc.wait, got)
+		}
 	}
 }
 

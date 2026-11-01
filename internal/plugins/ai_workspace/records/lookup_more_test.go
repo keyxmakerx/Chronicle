@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -109,5 +110,41 @@ func TestDocs_PointAtNewLookups(t *testing.T) {
 	}
 	if !strings.Contains((EncounterKind{}).Doc(), "any page works") {
 		t.Error("encounter doc does not say heroes take any page")
+	}
+}
+
+type manyEntries []SystemEntry
+
+func (m manyEntries) Entries(context.Context, string, string, bool) (string, []SystemEntry, error) {
+	return "D&D", m, nil
+}
+func (manyEntries) Fields(context.Context, string, bool) (string, []SystemEntryField, error) {
+	return "", nil, nil
+}
+
+// A field with more entries than one answer holds lists every name, and
+// `name` narrows it to read their summaries.
+func TestLookups_SystemEntriesLongList(t *testing.T) {
+	var m manyEntries
+	for i := 0; i < 400; i++ {
+		m = append(m, SystemEntry{Name: fmt.Sprintf("Spell %03d", i), Slug: fmt.Sprintf("spell-%03d", i), Summary: strings.Repeat("A long summary. ", 10)})
+	}
+	l := &Lookups{Entries: m}
+	ans := l.Answer(context.Background(), camp, owner, []Record{
+		lookup("system-entries", map[string]any{"field": "spell"}),
+		{Kind: KindLookup, Name: "spell 39", Fields: map[string]any{"what": "system-entries", "field": "spell"}},
+		{Kind: KindLookup, Name: "nothing", Fields: map[string]any{"what": "system-entries", "field": "spell"}},
+	})
+	all := ans[0]
+	if all.Error != "" || strings.Contains(all.Text, "cut here") || !strings.Contains(all.Text, "names and slugs only") ||
+		!strings.Contains(all.Text, "- Spell 000 (spell-000)\n") || !strings.Contains(all.Text, "- Spell 399 (spell-399)\n") {
+		t.Fatalf("long list: %d bytes\n%s", len(all.Text), all.Text[:300])
+	}
+	one := ans[1]
+	if one.Error != "" || one.Chip != "Spell · 10" || !strings.Contains(one.Text, "A long summary.") {
+		t.Fatalf("narrowed: %+v", one)
+	}
+	if !strings.Contains(ans[2].Error, "no spell entry's name holds") {
+		t.Fatalf("no match: %+v", ans[2])
 	}
 }

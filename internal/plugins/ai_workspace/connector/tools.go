@@ -104,10 +104,10 @@ var tools = []tool{
 		Args: []arg{{Key: "character", Desc: "The character's page name", Required: true}}},
 	{Name: "crafting", Title: "Crafting", Did: "Looked at crafting", What: "crafting",
 		Desc: "The campaign's crafting: the game system's crafting rules, every recipe, every material (with the pages that drop it and the recipes that use it), every page's drop list, what waits in the spoils tray, heroes' projects and the benches. Each recipe comes with its \"When… then…\" rules. " +
-			"Give part to get recipes, materials or drop lists written as blocks you can send back changed, or looks for each item's look (how it shows its magic when used). A connection that sees what players see reads only the recipe book.",
+			"Give part to get recipes, materials, drop lists or benches written as blocks you can send back changed, or looks for each item's look (how it shows its magic when used). A connection that sees what players see reads only the recipe book.",
 		Args: []arg{
-			{Key: "part", Desc: "recipes, materials, drops or looks: that part, written as blocks"},
-			{Key: "name", Desc: "One recipe, material or page with a drop list"},
+			{Key: "part", Desc: "recipes, materials, drops, benches or looks: that part, written as blocks"},
+			{Key: "name", Desc: "One recipe, material, bench or page with a drop list"},
 		}},
 	{Name: "my_notes", Title: "My notes", Did: "Listed your notes", What: "notes",
 		Desc:       "The campaign owner's Journal notes, page jots and Player Notes on pages, and the ones other members shared with them, game night entries among them: titles, folders, pages, nights, who wrote each and who it is shared with. Use read_note for one note's text.",
@@ -120,10 +120,11 @@ var tools = []tool{
 			{Key: "by", Desc: "Who wrote it, when two notes share a title"},
 		}},
 	{Name: "house_rules", Title: "House rules", Did: "Read the house rules", What: "house-rules",
-		Desc: "The campaign's house rules, chapter by chapter."},
+		Desc: "The campaign's house rules, chapter by chapter. A rulebook too long for one answer lists every chapter's title; give name for any one chapter.",
+		Args: []arg{{Key: "name", Desc: "One chapter's title"}}},
 	{Name: "system_entries", Title: "Game system entries", Did: "Looked up game system entries", What: "system-entries",
 		Desc: "The game system's entries for a character field (ancestries, kits...). Without field, the fields that have entries.",
-		Args: []arg{{Key: "field", Desc: "A character field, for example \"ancestry\""}}},
+		Args: []arg{{Key: "field", Desc: "A character field, for example \"ancestry\""}, {Key: "name", Desc: "Part of an entry's name, to narrow a long list"}}},
 	{Name: "game_nights", Title: "Game nights", Did: "Listed the game nights", What: "game-nights",
 		Desc: "The campaign's game nights: name, date, time, status and summary."},
 	{Name: "waiting_for_review", Owner: true, Title: "Waiting for review", Did: "Looked at what is waiting for review", What: "waiting",
@@ -226,7 +227,36 @@ func (t *tool) describe(forPlayer bool) string {
 
 // readArgs keeps only the tool's own arguments, each a string within its
 // cap. A missing required one is an error the AI can fix.
+// takes reports whether the tool has an argument called key.
+func (t *tool) takes(key string) bool {
+	for _, a := range t.Args {
+		if a.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// argList names the tool's arguments: "part, name".
+func (t *tool) argList() string {
+	keys := make([]string, len(t.Args))
+	for i, a := range t.Args {
+		keys[i] = a.Key
+	}
+	return strings.Join(keys, ", ")
+}
+
 func (t *tool) readArgs(in map[string]any) (map[string]string, error) {
+	// An argument the tool doesn't take is refused, not dropped, so the AI
+	// never believes a filter or a part it made up was applied.
+	for k := range in {
+		if !t.takes(k) {
+			if len(t.Args) == 0 {
+				return nil, fmt.Errorf("%s takes no arguments, so %s can't be used", t.Name, oneLine(k, 40))
+			}
+			return nil, fmt.Errorf("%s doesn't take %s; it takes %s", t.Name, oneLine(k, 40), t.argList())
+		}
+	}
 	out := map[string]string{}
 	for _, a := range t.Args {
 		v, ok := in[a.Key]
