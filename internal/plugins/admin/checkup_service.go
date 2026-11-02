@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -62,6 +63,7 @@ const (
 	keyCheckupOpenSince  = "checkup.open_since"
 	keyCheckupSnoozePre  = "checkup.snooze."
 	keyCheckupPeekedPre  = "checkup.peeked."
+	keySignupKeptOpen    = "checkup.signup_kept_open"
 	checkupStripAfter    = 7 * 24 * time.Hour
 	checkupSnoozeFor     = 24 * time.Hour
 	checkupRunTimeout    = 30 * time.Minute
@@ -135,6 +137,9 @@ func (s *CheckupService) inputs(ctx context.Context, now time.Time) checkupInput
 		if mode, err := s.deps.Registration(ctx); err == nil {
 			in.Registration = mode
 		}
+	}
+	if v, ok := s.get(ctx, keySignupKeptOpen); ok {
+		in.SignupKeptOpen = v == "true"
 	}
 	if s.deps.EmailReady != nil {
 		in.EmailReady = s.deps.EmailReady(ctx)
@@ -246,6 +251,13 @@ func (s *CheckupService) RunScheduler(ctx context.Context) {
 			slog.Warn("site check-up: weekly run did not finish", slog.Any("error", err))
 		}
 	}
+}
+
+// SetSignupKeptOpen records whether open sign-up is the host's choice. An
+// admin saving "open" makes it one; saving any other mode clears it, so
+// reopening later asks again.
+func (s *CheckupService) SetSignupKeptOpen(ctx context.Context, kept bool) error {
+	return s.deps.Store.Set(ctx, keySignupKeptOpen, strconv.FormatBool(kept))
 }
 
 // Snooze hides the peek and the strip from userID until this time tomorrow.

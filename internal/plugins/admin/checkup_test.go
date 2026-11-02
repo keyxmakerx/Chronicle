@@ -55,6 +55,8 @@ func TestBuildCheckup(t *testing.T) {
 		{"a later backup failed", func(in *checkupInputs) { in.LastRunFailed = true }, "backup", CheckBad, checkupBackupHref, "last backup failed"},
 		{"a failure beats backups being off", func(in *checkupInputs) { in.LastRunFailed, in.DailyOn = true, false }, "backup", CheckBad, checkupBackupHref, ""},
 		{"open sign-up", func(in *checkupInputs) { in.Registration = "open" }, "signup", CheckWarn, checkupSignupPost, "Anyone"},
+		{"open sign-up kept on purpose", func(in *checkupInputs) { in.Registration, in.SignupKeptOpen = "open", true }, "signup", CheckOK, "", "Open on purpose"},
+		{"a stale keep-open choice means nothing once invite-only", func(in *checkupInputs) { in.SignupKeptOpen = true }, "signup", CheckOK, "", "Invite-only"},
 		{"closed sign-up", func(in *checkupInputs) { in.Registration = "closed" }, "signup", CheckOK, "", "Closed"},
 		{"no email", func(in *checkupInputs) { in.EmailReady = false }, "reset", CheckWarn, checkupEmailHref, "dead end"},
 		{"game-system updates", func(in *checkupInputs) { in.PackageUpdates = 2 }, "update", CheckWarn, checkupPackagesHref, "2 game-system updates"},
@@ -80,6 +82,42 @@ func TestBuildCheckup(t *testing.T) {
 				t.Errorf("detail %q should mention %q", it.Detail, tt.detailHas)
 			}
 		})
+	}
+}
+
+func TestBuildCheckup_OpenSignupOffersKeepingIt(t *testing.T) {
+	in := allGood()
+	in.Registration = "open"
+	it := item(t, buildCheckup(in), "signup")
+	if it.KeepLabel != "Keep it open" || it.KeepVals != `{"registration_mode":"open"}` {
+		t.Fatalf("keep = %q %q", it.KeepLabel, it.KeepVals)
+	}
+	in.SignupKeptOpen = true
+	if it := item(t, buildCheckup(in), "signup"); it.KeepLabel != "" || it.FixLabel != "" {
+		t.Fatalf("a kept-open row offers nothing more: %+v", it)
+	}
+}
+
+func TestCheckupService_SignupKeptOpen(t *testing.T) {
+	ctx := context.Background()
+	now := ckNow
+	store := ckStore{}
+	saveRecord(t, store, okRecord())
+	s := newCkService(store, "open", &now)
+	if item(t, s.View(ctx, "u1", now, true).Checkup, "signup").State != CheckWarn {
+		t.Fatal("open sign-up starts as a warning")
+	}
+	if err := s.SetSignupKeptOpen(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if it := item(t, s.View(ctx, "u1", now, true).Checkup, "signup"); it.State != CheckOK {
+		t.Fatalf("kept open should be ok, got %s %q", it.State, it.Detail)
+	}
+	if err := s.SetSignupKeptOpen(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if item(t, s.View(ctx, "u1", now, true).Checkup, "signup").State != CheckWarn {
+		t.Fatal("clearing the choice brings the warning back")
 	}
 }
 
@@ -287,4 +325,19 @@ func TestCheckupRun(t *testing.T) {
 		t.Fatal("only one run at a time")
 	}
 	s.release()
+}
+
+func TestCheckupRow_KeepItOpenRenders(t *testing.T) {
+	in := allGood()
+	in.Registration = "open"
+	var b strings.Builder
+	if err := CheckupShield(CheckupView{Checkup: buildCheckup(in)}).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	html := b.String()
+	for _, want := range []string{"Keep it open", `class="checkup-quiet checkup-keep"`, `{&#34;registration_mode&#34;:&#34;open&#34;}`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("sheet should contain %s", want)
+		}
+	}
 }

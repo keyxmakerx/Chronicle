@@ -1041,6 +1041,13 @@ func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
 	if err := h.settingsService.UpdateRegistrationMode(c.Request().Context(), mode); err != nil {
 		return err
 	}
+	// Saving "open" through this reauth-gated route is a deliberate choice,
+	// so the check-up stops warning about it; any other mode clears that.
+	if h.checkup != nil {
+		if err := h.checkup.SetSignupKeptOpen(c.Request().Context(), mode == settings.RegistrationOpen); err != nil {
+			slog.Warn("registration mode: could not record the check-up choice", slog.Any("error", err))
+		}
+	}
 	h.record(c, "registration.mode_changed", "setting", "registration_mode", registrationModeLabel(mode))
 	slog.Info("registration mode updated", slog.String("mode", mode))
 	c.Response().Header().Set("HX-Redirect", securityTabHref(SecurityTabSignup))
