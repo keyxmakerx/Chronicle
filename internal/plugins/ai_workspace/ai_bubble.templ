@@ -1,6 +1,8 @@
 // ai_bubble.templ is the small bubble the AI button drops: copy and paste
 // in one thin row at the top, then each waiting request with Review, which
-// opens the side sheet. ai_chip.js wires the data-ai-* buttons.
+// opens the side sheet. "Side panel" opens that sheet on all of them; the
+// footer link is the only way to the Your AI page. ai_chip.js wires the
+// data-ai-* buttons.
 
 package ai_workspace
 
@@ -35,9 +37,10 @@ templ aiBubbleBody(cc *campaigns.CampaignContext, v ConnectView) {
 			} else {
 				<h2 id="ai-bubble-heading" class="aib-title">Your AI</h2>
 			}
-			<a class="aic-icon" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", cc.Campaign.ID)) } data-ai-full title="Open Your AI" aria-label="Open the Your AI page">
-				<i class="fa-solid fa-up-right-and-down-left-from-center text-xs" aria-hidden="true"></i>
-			</a>
+			<button type="button" class="aib-side" data-ai-side title="Open the waiting requests in the side panel">
+				<i class="fa-solid fa-table-columns text-xs" aria-hidden="true"></i>
+				<span>Side panel</span>
+			</button>
 			<button type="button" class="aic-icon" data-ai-bubble-close aria-label="Close">
 				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 			</button>
@@ -68,7 +71,7 @@ templ aiBubbleBody(cc *campaigns.CampaignContext, v ConnectView) {
 				<button type="button" role="radio" :aria-checked="sees === 'permitted'" @click="sees = 'permitted'; picking = false">What you see</button>
 				<button type="button" role="radio" :aria-checked="sees === 'everything'" @click="sees = 'everything'; picking = false">Everything</button>
 			</div>
-			<a class="quiet-word aib-full" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", cc.Campaign.ID)) } data-ai-full>Your AI page</a>
+			<a class="quiet-word aib-full" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", cc.Campaign.ID)) } data-ai-full>Your AI page →</a>
 		</footer>
 		<div data-ai-bubble-warn></div>
 	</div>

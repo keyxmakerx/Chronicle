@@ -98,10 +98,13 @@ func TestAIBubble(t *testing.T) {
 	h, _, _, _ := requestRig(t)
 	html := getAs(t, h.AIBubble, "/campaigns/camp-1/ai/bubble").Body.String()
 	for _, want := range []string{`id="ai-bubble-heading"`, `data-ai-copy="/campaigns/camp-1/ai/copy"`, "data-ai-paste", "data-ai-tool",
-		"Waiting for you · 1", "Claude asks for 1 change", "data-ai-review=", "data-ai-full", `href="/campaigns/camp-1/ai"`, "ai-sees-camp-1"} {
+		"Waiting for you · 1", "Claude asks for 1 change", "data-ai-review=", "data-ai-full", "data-ai-side", "Side panel", `href="/campaigns/camp-1/ai"`, "ai-sees-camp-1"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("bubble missing %q", want)
 		}
+	}
+	if n := strings.Count(html, `href="/campaigns/camp-1/ai"`); n != 1 {
+		t.Errorf("the bubble links to the Your AI page %d times; only the footer link should", n)
 	}
 	if strings.Index(html, "data-ai-paste") > strings.Index(html, "data-ai-review=") {
 		t.Error("copy and paste should sit above the requests")

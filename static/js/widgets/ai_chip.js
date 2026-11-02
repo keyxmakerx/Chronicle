@@ -23,7 +23,7 @@
  *   box opens in the bubble instead. An AI's answer (text starting a block:
  *   a --- line, then "key:") opens the side sheet and reviews it, as Ctrl+V
  *   outside a text field does on any page. Other text is refused with a line.
- * - Review, "Write a request…" and anything with data-ai-open open the side
+ * - Review, Side panel, "Write a request…" and anything with data-ai-open open the side
  *   sheet (GET <base>/panel, tool=1 for the copy-and-paste tool), moved to
  *   <body> so the top bar never clips it. The old #copy-and-paste address
  *   opens the tool.
@@ -305,6 +305,7 @@
         if (t.closest('[data-ai-paste]')) { doPaste(); return; }
         if ((el = t.closest('[data-ai-review]'))) { openRequest(el.getAttribute('data-ai-review')); return; }
         if (t.closest('[data-ai-tool]')) { closeBubble(true); openPanel('tool'); return; }
+        if (t.closest('[data-ai-side]')) { closeBubble(true); openPanel(''); return; }
         if (t.closest('[data-ai-connect]')) { closeBubble(true); openPanel('menu'); return; }
         if ((el = t.closest('a[data-ai-full]'))) { e.preventDefault(); leaveFor(el.href); }
       }
