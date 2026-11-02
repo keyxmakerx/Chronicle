@@ -4702,6 +4702,7 @@ html.dark[data-site-admin] {
 .checkup-dot.is-warn { background: rgb(var(--color-warn-rgb) / 0.16); color: rgb(var(--color-warn-rgb)); }
 .checkup-dot.is-bad { background: rgb(var(--color-bad-rgb) / 0.16); color: rgb(var(--color-bad-rgb)); }
 .checkup-fix { white-space: nowrap; flex-shrink: 0; }
+.checkup-keep { display: block; margin-top: 2px; }
 .checkup-foot { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .checkup-quiet {
   font-size: 0.8rem; color: var(--color-text-secondary); background: none; border: 0; padding: 0; cursor: pointer;
