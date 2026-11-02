@@ -484,6 +484,31 @@ func isCreatureType(t EntityType) bool {
 	return t.Slug == "creature" || strings.HasSuffix(t.Slug, "-monster")
 }
 
+// PresetCategoryItem is the preset category of a game system's item types.
+const PresetCategoryItem = "item"
+
+// IsItemType reports whether a type is one of the Armory's item categories:
+// a game system's item preset, or the Items category every campaign starts
+// with (slug "item"), which no system marks because it was there first.
+func IsItemType(t EntityType) bool {
+	if t.PresetCategory != nil && *t.PresetCategory != "" {
+		return *t.PresetCategory == PresetCategoryItem
+	}
+	return t.Slug == "item"
+}
+
+// ItemTypes is the campaign's Armory item categories (see IsItemType), in
+// the order of types.
+func ItemTypes(types []EntityType) []EntityType {
+	var out []EntityType
+	for _, t := range types {
+		if IsItemType(t) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // CreatureTypeIDs is the enabled creature types and their enabled sub-types,
 // the pages a game system's creature panels go on. Unlike the NPC list it is
 // not a choice: a type is a creature type by what it is.

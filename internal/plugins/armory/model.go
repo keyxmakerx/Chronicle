@@ -1,6 +1,7 @@
 // Package armory provides a gallery/hub view for item-type entities in a
-// campaign. Items are entity types with preset_category "item" — their fields
-// come from system manifests (D&D items, PF2e equipment, Draw Steel kits).
+// campaign. Items are pages of an item category (entities.IsItemType): a
+// system preset with preset_category "item", or the campaign's own Items
+// category.
 // This plugin is a view layer on top of the entities system — it does not
 // own any database tables beyond the preset_category column on entity_types.
 package armory

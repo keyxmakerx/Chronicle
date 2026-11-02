@@ -103,10 +103,6 @@ func (a *armoryStashDirectoryAdapter) types(ctx context.Context, campaignID stri
 	if err != nil {
 		return nil, err
 	}
-	items, err := a.svc.GetEntityTypesByPresetCategory(ctx, campaignID, "item")
-	if err != nil {
-		return nil, err
-	}
 	ti := &stashTypeInfo{
 		expires:   time.Now().Add(5 * time.Second),
 		character: map[int]bool{},
@@ -123,7 +119,7 @@ func (a *armoryStashDirectoryAdapter) types(ctx context.Context, campaignID stri
 	for _, id := range ti.charIDs {
 		ti.character[id] = true
 	}
-	for _, et := range items {
+	for _, et := range entities.ItemTypes(all) {
 		ti.item[et.ID] = true
 		ti.itemIDs = append(ti.itemIDs, et.ID)
 	}
