@@ -147,8 +147,12 @@ var tools = []tool{
 		Desc: "How Chronicle writes one kind of block (an event, a calendar, a rolling table...).",
 		Args: []arg{{Key: "block", Desc: "The kind of block, for example \"event\"", Required: true}}},
 	{Name: toolHowTo, Title: "How to write changes", Did: "Read how to write changes", Asks: true,
-		Desc:       "Read this before ask_for_changes: how Chronicle writes pages and every other kind of block, and this campaign's kinds of pages with their sheet fields.",
-		PlayerDesc: "Read this before ask_for_changes: how to write a change to your own character's sheet, the sheets you may change, and the choices the hero builder offers."},
+		Desc:       "Read this before ask_for_changes: how Chronicle writes pages and every other kind of block. It comes in parts so each fits one read: without arguments the guide, then a category's sheet fields with category, and each kind of block's format from block_format.",
+		PlayerDesc: "Read this before ask_for_changes: how to write a change to your own character's sheet, the sheets you may change, and the choices the hero builder offers.",
+		Args: []arg{
+			{Key: "category", Desc: "A category's name, for example \"Creature\": its sheet fields"},
+			{Key: "part", Desc: "\"categories\" for every category's sheet fields at once"},
+		}},
 	{Name: toolAsk, Title: "Ask for changes", Did: "Asked for changes", Asks: true,
 		Desc: "Send changes for the campaign's owner to review: new pages, edits, removals, events and the other blocks how_to_write_changes describes. " +
 			"Nothing changes until the owner says yes to each one in Chronicle, so tell them it is waiting under the AI button in Chronicle; waiting_for_review shows later how they answered. Send one request per job, not one per block.",
