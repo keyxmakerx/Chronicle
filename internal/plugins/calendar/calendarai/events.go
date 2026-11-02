@@ -1,15 +1,12 @@
-package records
+package calendarai
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
-	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -73,24 +70,6 @@ func dateLabel(cal *calendar.Calendar, y, m, d int) string {
 	return fmt.Sprintf("%d-%d-%d", y, m, d)
 }
 
-func bodyHTML(body string, links *importer.PageLinks) (*string, error) {
-	if strings.TrimSpace(body) == "" {
-		return nil, nil
-	}
-	var opts []importer.RenderOption
-	if links != nil {
-		opts = append(opts, importer.WithPageLinks(links))
-	}
-	h, err := importer.MarkdownToHTML(body, opts...)
-	if errors.Is(err, importer.ErrSecretNotInText) {
-		return nil, apperror.NewBadRequest(importer.SecretNotInTextReason)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &h, nil
-}
-
 // ---- calendar events ----
 
 // EventKind adds, changes and removes calendar events, on the main calendar
@@ -104,7 +83,7 @@ type EventKind struct {
 	// Rolls stores `roll:`; without it the key is refused. Tables names a
 	// table roll's table.
 	Rolls  EventRollAPI
-	Tables RollTablesAPI
+	Tables RollTables
 }
 
 func (EventKind) Name() string  { return "event" }
@@ -279,7 +258,7 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if err != nil {
 		return err
 	}
-	desc, err := bodyHTML(r.Body, linksOf(r))
+	desc, err := bodyHTML(r, r.Body)
 	if err != nil {
 		return err
 	}

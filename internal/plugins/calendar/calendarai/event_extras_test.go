@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 type fakeTiers []campaigns.TierDefinition
@@ -141,7 +140,7 @@ func TestEventKind_PageFromSamePaste(t *testing.T) {
 		t.Fatalf("review of a page this paste makes: %+v", p)
 	}
 	// At commit the page is saved and Made is not set.
-	pages.pages["the-lastwell-contract"] = &entities.Entity{ID: "p-lastwell", Name: "The Lastwell Contract"}
+	pages.pages["the-lastwell-contract"] = &fakePage{ID: "p-lastwell", Name: "The Lastwell Contract"}
 	r.Made = nil
 	if err := k.Apply(context.Background(), camp, owner, r); err != nil {
 		t.Fatal(err)

@@ -119,6 +119,15 @@ type Briefed interface {
 	Brief() string
 }
 
+// Staged is a kind whose row makes something the rows after it in the same
+// paste may name: a calendar, a folder, a map. Commit applies rows in order,
+// so the engine plans each later row with the context Stage returns for a
+// row that planned without an error. Stage only notes what the row will
+// make, on the context; it never writes.
+type Staged interface {
+	Stage(ctx context.Context, campaignID string, a Actor, r Record) context.Context
+}
+
 // Titled is a kind whose records have no name of their own; Title gives
 // the review row's heading.
 type Titled interface {

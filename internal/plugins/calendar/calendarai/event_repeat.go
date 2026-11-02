@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"encoding/json"

@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -334,7 +335,7 @@ func TestEventKind_NeedsCalendarFirst(t *testing.T) {
 // calendar it will make; events before it still need one.
 func TestPlanAll_EventsAfterNewCalendar(t *testing.T) {
 	svc := fakeStructureCal{&fakeStructure{}, newCal()}
-	reg := NewRegistry(CalendarKind{Svc: svc.fakeStructure}, EventKind{Svc: svc})
+	reg := records.NewRegistry(CalendarKind{Svc: svc.fakeStructure}, EventKind{Svc: svc})
 	feast := rec("event", ActionCreate, "Feast", map[string]any{"year": 1492, "month": "Ches", "day": 3}, "")
 	cal := rec(KindCalendar, ActionCreate, "Harptos", newCalendarFields(), "")
 	_, plans := reg.PlanAll(context.Background(), camp, owner, []Record{feast, cal, feast})

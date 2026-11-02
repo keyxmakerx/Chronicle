@@ -52,10 +52,27 @@ func (FolderKind) Doc() string {
 // pendingFoldersKey carries the folders earlier rows of one paste will make.
 type pendingFoldersKey struct{}
 
-// withPendingFolders lets later rows be checked against folders that rows
-// before them create. Review only: at commit those rows have already run.
-func withPendingFolders(ctx context.Context) context.Context {
-	return context.WithValue(ctx, pendingFoldersKey{}, map[string]bool{})
+// withPendingFolder lets later rows be checked against a folder a row
+// before them creates. Review only: at commit that row has already run.
+// The set is copied, so a context handed out earlier never changes.
+func withPendingFolder(ctx context.Context, key string) context.Context {
+	m := map[string]bool{key: true}
+	for k := range pendingFolders(ctx) {
+		m[k] = true
+	}
+	return context.WithValue(ctx, pendingFoldersKey{}, m)
+}
+
+// Stage notes a folder this row creates, for the rows after it.
+func (k FolderKind) Stage(ctx context.Context, campaignID string, _ Actor, r Record) context.Context {
+	if r.Action != ActionCreate {
+		return ctx
+	}
+	t, err := k.resolve(ctx, campaignID, r)
+	if err != nil {
+		return ctx
+	}
+	return withPendingFolder(ctx, folderKey(t.cat.ID, r.Name))
 }
 
 func pendingFolders(ctx context.Context) map[string]bool {

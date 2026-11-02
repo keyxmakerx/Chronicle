@@ -1,10 +1,11 @@
-package records
+package calendarai
 
 import (
 	"context"
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -93,7 +94,7 @@ func TestCalendarKind_MakeMainRefusals(t *testing.T) {
 // against that calendar, not the old main or none.
 func TestPlanAll_EventsAfterMakeMain(t *testing.T) {
 	svc := fakeStructureCal{&fakeStructure{others: []calendar.Calendar{harptosCal("h")}}, newCal()}
-	reg := NewRegistry(CalendarKind{Svc: svc.fakeStructure}, EventKind{Svc: svc})
+	reg := records.NewRegistry(CalendarKind{Svc: svc.fakeStructure}, EventKind{Svc: svc})
 	feast := rec("event", ActionCreate, "Feast", map[string]any{"year": 1492, "month": "Ches", "day": 3}, "")
 	main := rec(KindCalendar, ActionUpdate, "Harptos", map[string]any{"main": true}, "")
 	_, plans := reg.PlanAll(context.Background(), camp, owner, []Record{feast, main, feast})
@@ -117,9 +118,9 @@ func TestLookups_NoMainCalendar(t *testing.T) {
 		what   string
 		want   []string
 	}{
-		{"calendars exist", []calendar.Calendar{harptosCal("h"), {ID: "o", Name: "Old"}}, lookupWhatCalendar,
+		{"calendars exist", []calendar.Calendar{harptosCal("h"), {ID: "o", Name: "Old"}}, WhatCalendar,
 			[]string{`2 calendars ("Harptos", "Old")`, "kind: calendar\naction: update\nname: \"Harptos\"\nmain: true"}},
-		{"no calendar", nil, lookupWhatCalendar, []string{"no calendar yet", "`action: create`", "`main: true` (update only)"}},
+		{"no calendar", nil, WhatCalendar, []string{"no calendar yet", "`action: create`", "`main: true` (update only)"}},
 		{"events point at the calendar lookup", nil, "events", []string{"no main calendar yet", "`what: calendar`"}},
 	}
 	for _, tt := range tests {
@@ -133,7 +134,7 @@ func TestLookups_NoMainCalendar(t *testing.T) {
 			if ans[0].Error != "" {
 				t.Fatalf("not answered: %s", ans[0].Error)
 			}
-			md := Markdown(ans)
+			md := ans[0].Text
 			for _, w := range tt.want {
 				if !strings.Contains(md, w) {
 					t.Errorf("answer lacks %q:\n%s", w, md)
@@ -146,59 +147,11 @@ func TestLookups_NoMainCalendar(t *testing.T) {
 	}
 }
 
-func TestLookups_Format(t *testing.T) {
-	l := &Lookups{Kinds: NewRegistry(CalendarKind{}, EventKind{})}
-	tests := []struct {
-		name, block, want, err string
-	}{
-		{"a kind's doc", KindCalendar, "`main: true` (update only)", ""},
-		{"normalised", " Event ", "## Format: kind: event", ""},
-		{"unknown lists the kinds", "dragon", "", "the kinds are calendar, event"},
-		{"missing", "", "", "it needs `block:`"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ans := l.Answer(context.Background(), camp, owner, []Record{lookup(lookupWhatFormat, map[string]any{"block": tt.block})})[0]
-			if tt.err != "" {
-				if !strings.Contains(ans.Error, tt.err) {
-					t.Fatalf("error %q, want %q", ans.Error, tt.err)
-				}
-				return
-			}
-			if ans.Error != "" || !strings.Contains(ans.Text, tt.want) {
-				t.Fatalf("answer %+v lacks %q", ans, tt.want)
-			}
-		})
-	}
-	if got := (&Lookups{}).Answer(context.Background(), camp, owner, []Record{lookup(lookupWhatFormat, map[string]any{"block": KindCalendar})})[0]; got.Error == "" {
-		t.Error("a server without the registry must say formats can't be looked up")
-	}
-}
-
-// Not answered lines never end in a doubled full stop.
-func TestMarkdown_NoDoubleStop(t *testing.T) {
-	md := Markdown([]LookupAnswer{{Chip: "X", Error: "choose one on the Calendars page."}})
-	if strings.Contains(md, "..") {
-		t.Errorf("%q", md)
-	}
-}
-
-func TestRegistry_DocsFor(t *testing.T) {
-	reg := NewRegistry(EventKind{}, CalendarKind{}, TableKind{})
-	got := reg.DocsFor(CalendarKinds...)
-	if !strings.Contains(got, "### kind: calendar") || !strings.Contains(got, "### kind: event") || strings.Contains(got, "kind: table") {
-		t.Errorf("docs: %s", got)
-	}
-	if strings.Index(got, "kind: calendar") > strings.Index(got, "kind: event") {
-		t.Error("docs must follow the order asked for")
-	}
-}
-
 // A calendar row after a switch is checked against the calendar the switch
 // made main, as commit will apply it.
 func TestPlanAll_CalendarRowAfterMakeMain(t *testing.T) {
 	f := &fakeStructure{others: []calendar.Calendar{harptosCal("h")}}
-	reg := NewRegistry(CalendarKind{Svc: f})
+	reg := records.NewRegistry(CalendarKind{Svc: f})
 	main := rec(KindCalendar, ActionUpdate, "Harptos", map[string]any{"main": true}, "")
 	label := rec(KindCalendar, ActionUpdate, "", map[string]any{"year_label": "DR"}, "")
 	again := rec(KindCalendar, ActionUpdate, "Harptos", map[string]any{"main": true, "year_label": "DR"}, "")

@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"context"
@@ -89,7 +89,7 @@ func TestEventKindRoll(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := newCal()
 			rolls := newFakeRolls()
-			k := EventKind{Svc: c, Rolls: rolls, Tables: &fakeTables{doc: TableDoc{Tables: []Table{{ID: "omens", Name: "Omens"}}}}}
+			k := EventKind{Svc: c, Rolls: rolls, Tables: &fakeTables{ids: map[string]string{"Omens": "omens"}}}
 			r := rec("event", tt.action, "Bloodnight", base(tt.roll), "")
 			p := k.Plan(context.Background(), camp, tt.actor, r)
 			if tt.wantErr != "" {
@@ -112,7 +112,7 @@ func TestEventKindRoll(t *testing.T) {
 
 	// The table is stored by its id, whatever name the AI used.
 	rolls := newFakeRolls()
-	k := EventKind{Svc: newCal(), Rolls: rolls, Tables: &fakeTables{doc: TableDoc{Tables: []Table{{ID: "omens", Name: "Omens"}}}}}
+	k := EventKind{Svc: newCal(), Rolls: rolls, Tables: &fakeTables{ids: map[string]string{"Omens": "omens"}}}
 	r := rec("event", ActionCreate, "Bloodnight", base(map[string]any{"table": "omens"}), "")
 	if err := k.Apply(context.Background(), camp, owner, r); err != nil || rolls.set[0].TableID != "omens" {
 		t.Fatalf("table roll %+v %v", rolls.set, err)

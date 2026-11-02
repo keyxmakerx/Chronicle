@@ -53,11 +53,16 @@ func (PinKind) Doc() string {
 
 type pendingMapsKey struct{}
 
-// withPendingMaps lets a pin be checked against a map a row before it makes,
+// withPendingMap lets a pin be checked against a map a row before it makes,
 // as pages and folders made earlier in a paste can be named later in it.
-// Review only: at commit the map row has already run.
-func withPendingMaps(ctx context.Context) context.Context {
-	return context.WithValue(ctx, pendingMapsKey{}, map[string]bool{})
+// Review only: at commit the map row has already run. The set is copied, so
+// a context handed out earlier never changes.
+func withPendingMap(ctx context.Context, key string) context.Context {
+	m := map[string]bool{key: true}
+	for k := range pendingMaps(ctx) {
+		m[k] = true
+	}
+	return context.WithValue(ctx, pendingMapsKey{}, m)
 }
 
 func pendingMaps(ctx context.Context) map[string]bool {

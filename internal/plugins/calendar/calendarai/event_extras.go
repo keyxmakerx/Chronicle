@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 // TierLister reads the campaign's event importance levels (its tier
@@ -193,7 +192,7 @@ func (k EventKind) readEventExtras(ctx context.Context, campaignID string, a Act
 			// A page this paste makes exists only by commit, when the
 			// event is planned again and links it.
 			if err := resolvePageRef(ctx, k.Pages, campaignID, a, &ref, "page"); err != nil {
-				if !r.Made[entities.Slugify(ref.name)] {
+				if k.Pages == nil || !r.Made[k.Pages.Slug(ref.name)] {
 					return x, err
 				}
 			} else {

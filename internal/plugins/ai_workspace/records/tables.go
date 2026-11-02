@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -190,9 +191,31 @@ func (k TableKind) put(ctx context.Context, campaignID string, a Actor, doc Tabl
 	return k.Svc.Put(ctx, campaignID, doc, a.UserID)
 }
 
-// appendEntries adds entries to a table, creating it when missing. Used by
-// the names generator.
-func (k TableKind) appendEntries(ctx context.Context, campaignID string, a Actor, name string, es []Entry) error {
+// FindTable is the id of the campaign's table with that name or id; "" when
+// there is none. The calendar's table rolls name tables through it.
+func (k TableKind) FindTable(ctx context.Context, campaignID, name string) (string, error) {
+	if k.Svc == nil {
+		return "", errors.New("records: rolling tables are not wired")
+	}
+	doc, err := k.Svc.Get(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	for _, t := range doc.Tables {
+		if sameName(t.Name, name) || t.ID == name {
+			return t.ID, nil
+		}
+	}
+	return "", nil
+}
+
+// AddNames adds names, each weighted 1, to a table, making it when missing.
+// The calendar's names generator writes through it.
+func (k TableKind) AddNames(ctx context.Context, campaignID string, a Actor, name string, names []string) error {
+	es := make([]Entry, 0, len(names))
+	for _, n := range names {
+		es = append(es, Entry{Name: n, Weight: 1})
+	}
 	doc, err := k.Svc.Get(ctx, campaignID)
 	if err != nil {
 		return err

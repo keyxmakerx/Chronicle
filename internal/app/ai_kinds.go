@@ -4,11 +4,11 @@ import (
 	"context"
 	"sort"
 
-	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar/calendarai"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
@@ -72,11 +72,12 @@ type aiDeps struct {
 	Carried         records.CarriedAPI               // the Armory's give and take for carried items; nil writes relations
 
 	// Derived once and shared by several kinds and the lookups.
-	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
+	Rolls      calendarai.EventRollAPI // the calendar's roll half; nil without one
 	Tables     records.TableKind
 	HouseRules *records.HouseRuleKind
 	Homebrew   records.HomebrewAPI    // nil while field rules are degraded
 	Nights     *sessions.AIGameNights // the game nights' own AI part
+	CalLookups *calendarai.Lookups    // the calendar's own lookups
 	PageMaps   records.PageMapsAPI    // nil while page blocks are degraded
 	Tests      records.TestsAPI       // nil without the Tests block
 	Monsters   records.FoundryMonstersAPI
@@ -100,6 +101,7 @@ func newAIDeps(d aiDeps) *aiDeps {
 		d.Homebrew = aiHomebrewAdapter{svc: d.FieldRules}
 	}
 	d.Nights = sessions.NewAIGameNights(d.Sessions, d.Campaigns)
+	d.CalLookups = &calendarai.Lookups{Cal: d.Calendar, Weather: d.Calendar, Rolls: d.Rolls, Tiers: d.Campaigns}
 	if d.PageBlocks != nil {
 		d.PageMaps = aiPageMapsAdapter{svc: d.PageBlocks}
 	}
@@ -144,9 +146,6 @@ func aiKinds(d *aiDeps) []records.Kind {
 func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	l := &records.Lookups{
 		Folders:  aiFolderNames{folders: d.Folders},
-		Cal:      d.Calendar,
-		Weather:  d.Calendar,
-		Rolls:    d.Rolls,
 		Maps:     aiMapsAdapter{d.Maps},
 		Pages:    d.Entities,
 		Rels:     d.Relations,
@@ -155,8 +154,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Entries:  aiSystemEntriesAdapter{choices: d.CharacterChoice},
 		Party:    &aiPartyAdapter{screen: d.DMScreen, types: d.Entities, nights: d.Sessions, members: d.Campaigns},
 		Tags:     d.Tags,
-		Tiers:    d.Campaigns,
-		Plugged:  []aiplug.Lookup{d.Nights},
+		Plugged:  append(d.CalLookups.All(), d.Nights),
 		Kinds:    reg,
 		PageMaps: d.PageMaps,
 		Menu:     aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities},
@@ -203,16 +201,16 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 func init() {
 	addAIKinds(10, func(d *aiDeps) []records.Kind {
 		return []records.Kind{
-			records.CalendarKind{Svc: d.Calendar, Pages: d.Entities},
-			records.EventKind{Svc: d.Calendar, Tiers: d.Campaigns, Pages: d.Entities, Rolls: d.Rolls, Tables: d.Tables.Svc},
-			records.WeatherKind{Svc: d.Calendar},
+			calendarai.CalendarKind{Svc: d.Calendar, Pages: aiCalendarPages{d.Entities}},
+			calendarai.EventKind{Svc: d.Calendar, Tiers: d.Campaigns, Pages: aiCalendarPages{d.Entities}, Rolls: d.Rolls, Tables: d.Tables},
+			calendarai.WeatherKind{Svc: d.Calendar},
 		}
 	})
 	addAIKinds(40, func(d *aiDeps) []records.Kind {
 		if d.Rolls == nil {
 			return nil
 		}
-		return []records.Kind{records.RollNightKind{Cal: d.Calendar, Rolls: d.Rolls}}
+		return []records.Kind{calendarai.RollNightKind{Cal: d.Calendar, Rolls: d.Rolls}}
 	})
 	// Moons set by hand: the calendar service's moon mark half.
 	addAIKinds(50, func(d *aiDeps) []records.Kind {
@@ -220,7 +218,7 @@ func init() {
 		if !ok {
 			return nil
 		}
-		return []records.Kind{records.MoonKind{Cal: d.Calendar, Marks: ms}}
+		return []records.Kind{calendarai.MoonKind{Cal: d.Calendar, Marks: ms}}
 	})
 	addAIKinds(60, func(d *aiDeps) []records.Kind {
 		if !d.Health.IsHealthy(rolltables.PluginSlug) {
@@ -281,7 +279,7 @@ func init() {
 		return []records.Kind{records.PageMapKind{Svc: d.PageMaps, Entities: d.Entities}}
 	})
 	addAIKinds(220, func(d *aiDeps) []records.Kind {
-		return []records.Kind{records.GeneratorKind{Cal: d.Calendar, Tables: d.Tables, Weather: d.Calendar, Rolls: d.Rolls}}
+		return []records.Kind{calendarai.GeneratorKind{Cal: d.Calendar, Tables: d.Tables, Weather: d.Calendar, Rolls: d.Rolls}}
 	})
 }
 
@@ -303,7 +301,7 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 		}
 		out := records.OffFeatures{}
 		if off(calendar.PluginSlug) {
-			for _, k := range []string{records.KindCalendar, "event", "weather", "roll-night", "moon", "game-night"} {
+			for _, k := range []string{calendarai.KindCalendar, "event", "weather", "roll-night", "moon", "game-night"} {
 				out[k] = "Calendar"
 			}
 		}

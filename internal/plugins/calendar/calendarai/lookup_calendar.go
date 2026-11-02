@@ -1,10 +1,11 @@
-package records
+package calendarai
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
@@ -221,7 +222,7 @@ func (run *lookupRun) events(r Record) (LookupAnswer, error) {
 	if len(lines) == 0 {
 		b.WriteString("None.\n")
 	}
-	writeLines(&b, lines)
+	aiplug.WriteLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
 }
@@ -261,7 +262,7 @@ func (run *lookupRun) weather(r Record) (LookupAnswer, error) {
 	if len(lines) == 0 {
 		b.WriteString("No day in this range has weather yet.\n")
 	}
-	writeLines(&b, lines)
+	aiplug.WriteLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
 }
@@ -281,21 +282,12 @@ func weatherText(d calendar.DayWeather) string {
 		parts = append(parts, "wind "+strconv.FormatFloat(*d.Wind.SpeedKPH, 'f', -1, 64)+" kph")
 	}
 	if len(parts) == 0 && d.Description != nil {
-		parts = append(parts, oneLine(*d.Description, 120))
+		parts = append(parts, aiplug.OneLine(*d.Description, 120))
 	}
 	if len(parts) == 0 {
 		return "set, no details"
 	}
 	return strings.Join(parts, ", ")
-}
-
-// decodeMeta reads a relation's JSON metadata; bad JSON reads as empty.
-func decodeMeta(raw json.RawMessage) map[string]any {
-	m := map[string]any{}
-	if len(raw) > 0 {
-		_ = json.Unmarshal(raw, &m)
-	}
-	return m
 }
 
 // rollLines are a month's rolled nights within [from, to], for the owner or

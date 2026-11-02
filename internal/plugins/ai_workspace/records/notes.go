@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/aiplug"
@@ -331,6 +332,26 @@ type bodyText struct{ links *importer.PageLinks }
 func BodyText(links *importer.PageLinks) aiplug.Text { return bodyText{links: links} }
 
 func (t bodyText) HTML(body string) (*string, error) { return bodyHTML(body, t.links) }
+
+// bodyHTML renders markdown as sanitized HTML with the paste's links; nil
+// for an empty body. A GM-only marker is refused, never stored.
+func bodyHTML(body string, links *importer.PageLinks) (*string, error) {
+	if strings.TrimSpace(body) == "" {
+		return nil, nil
+	}
+	var opts []importer.RenderOption
+	if links != nil {
+		opts = append(opts, importer.WithPageLinks(links))
+	}
+	h, err := importer.MarkdownToHTML(body, opts...)
+	if errors.Is(err, importer.ErrSecretNotInText) {
+		return nil, apperror.NewBadRequest(importer.SecretNotInTextReason)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &h, nil
+}
 
 func (t bodyText) Entry(body string) (*string, *string, error) { return entry(body, t.links) }
 

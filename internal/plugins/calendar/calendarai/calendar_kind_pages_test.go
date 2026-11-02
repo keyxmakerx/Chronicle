@@ -1,44 +1,36 @@
-package records
+package calendarai
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
-	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 // fakePageResolver knows pages by slug; hidden ones exist but the actor may
 // not open them.
 type fakePageResolver struct {
-	pages  map[string]*entities.Entity
+	pages  map[string]*fakePage
 	hidden map[string]bool
 }
 
-func (f fakePageResolver) GetBySlug(_ context.Context, c, slug string) (*entities.Entity, error) {
-	if e, ok := f.pages[slug]; ok {
-		cp := *e
-		cp.CampaignID = c
-		return &cp, nil
-	}
-	return nil, errors.New("not found")
+type fakePage struct{ ID, Name string }
+
+func (fakePageResolver) Slug(name string) string {
+	return strings.Join(strings.Fields(strings.ToLower(name)), "-")
 }
 
-func (f fakePageResolver) FilterViewableEntityIDs(_ context.Context, _ string, ids []string, _ int, _ string) (map[string]bool, error) {
-	out := map[string]bool{}
-	for _, id := range ids {
-		if !f.hidden[id] {
-			out[id] = true
-		}
+func (f fakePageResolver) OpenablePage(_ context.Context, _, name string, _ Actor) (string, error) {
+	if e, ok := f.pages[f.Slug(name)]; ok && !f.hidden[e.ID] {
+		return e.ID, nil
 	}
-	return out, nil
+	return "", nil
 }
 
 func pageWorld() fakePageResolver {
 	return fakePageResolver{
-		pages: map[string]*entities.Entity{
+		pages: map[string]*fakePage{
 			"selune-lore": {ID: "p-selune", Name: "Selune Lore"},
 			"age-of-ash":  {ID: "p-ash", Name: "Age of Ash"},
 			"secret":      {ID: "p-secret", Name: "Secret"},
@@ -228,7 +220,7 @@ func TestLookups_CalendarShowsPages(t *testing.T) {
 	c := l.Cal.(*fakeCal)
 	c.cal.Moons[0].LoreEntityName = "Selune Lore"
 	c.cal.Eras[0].LoreEntityName = "Age of Ash"
-	ans := l.Answer(context.Background(), camp, owner, []Record{lookup(lookupWhatCalendar, nil)})[0]
+	ans := l.Answer(context.Background(), camp, owner, []Record{lookup(WhatCalendar, nil)})[0]
 	for _, want := range []string{`lore page "Selune Lore"`, `lore page "Age of Ash"`} {
 		if !strings.Contains(ans.Text, want) {
 			t.Errorf("answer lacks %q:\n%s", want, ans.Text)
