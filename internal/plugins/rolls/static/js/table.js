@@ -56,7 +56,7 @@
   }
   // A single-key shortcut never fires while typing.
   function typing(t) {
-    return !!(t && t.closest && t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]'));
+    return !!(t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'))));
   }
 
   var X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
@@ -378,6 +378,7 @@
       this.header.appendChild(d);
     }
     d.innerHTML = this.drawerHTML();
+    if (!was && this.draft) { this.restoreForm(this.draft); this.draft = null; }
     if (!was && motion() !== 'off') {
       d.classList.add('tt-opening');
       d.addEventListener('animationend', function () { d.classList.remove('tt-opening'); }, { once: true });
@@ -387,9 +388,14 @@
     this.seen();
   };
 
-  Table.prototype.closeTable = function () {
+  // closeTable keeps a half-typed roll for next time, since a click off the
+  // drawer closes it too. refocus is false for that click, so focus stays
+  // where the person pressed.
+  Table.prototype.closeTable = function (refocus) {
     if (!this.open) return;
     var self = this, d = this.drawer();
+    var keep = this.keepForm();
+    this.draft = keep.fx || keep.mode ? { fx: keep.fx, mode: keep.mode } : null;
     var finish = function () {
       if (self.open) return;
       if (d) d.remove();
@@ -398,7 +404,7 @@
     this.closeMenus();
     this.tab.setAttribute('aria-expanded', 'false');
     if (d && motion() !== 'off') { d.classList.add('tt-closing'); setTimeout(finish, 120); } else finish();
-    this.tab.focus();
+    if (refocus !== false) this.tab.focus();
   };
 
   Table.prototype.saveLeaves = function () { store('leaves.' + this.key, this.leaves.join(',')); };
@@ -691,6 +697,16 @@
       }
     });
 
+    // The drawer and a roll's details are pull-downs: a press anywhere off
+    // them closes them, losing nothing. Pointerdown, not click, because a
+    // click inside redraws the drawer and its target is gone by then.
+    this.on(document, 'pointerdown', function (ev) {
+      var t = ev.target;
+      if (ev.button !== 0 || !t || !t.closest) return;
+      if (self.isl && self.isl.expanded && !t.closest('#tt-isl-detail, .tt-island')) self.collapse(self.isl);
+      if (self.open && !t.closest('#tt-drawer, [data-tt-tab], .tt-island, #tt-isl-detail')) self.closeTable(false);
+    }, true);
+
     this.on(document, 'submit', function (ev) {
       if (!ev.target.matches || !ev.target.matches('[data-tt-form]')) return;
       ev.preventDefault();
@@ -706,8 +722,17 @@
     });
 
     this.on(document, 'keydown', function (ev) {
+      var open = $('.tt-lmenu:not([hidden])');
+      if (open && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp' || ev.key === 'Home' || ev.key === 'End')) {
+        var items = $$('button', open), at = items.indexOf(document.activeElement);
+        var to = ev.key === 'Home' ? 0 : ev.key === 'End' ? items.length - 1 : (at + (ev.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        ev.preventDefault();
+        items[to].focus();
+        return;
+      }
       if (ev.key === 'Escape') {
-        var menu = $('.tt-lmenu:not([hidden])');
+        if (ev.defaultPrevented) return;
+        var menu = open;
         if (menu) { var op = $('.tt-lpick[aria-expanded="true"]'); self.closeMenus(); if (op) op.focus(); return; }
         if (self.isl && self.isl.expanded) { self.collapse(self.isl); return; }
         if (self.open) { self.closeTable(); }
