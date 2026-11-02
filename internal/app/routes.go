@@ -2481,15 +2481,24 @@ func (a *auditEntityViewGuardAdapter) ResolveEntityView(ctx context.Context, ent
 }
 
 // armoryItemTypeFinderAdapter wraps entities.EntityService to implement the
-// armory.ItemTypeFinder interface. Resolves item-category entity types using
-// the preset_category column.
+// armory.ItemTypeFinder interface over entities.ItemTypes.
 type armoryItemTypeFinderAdapter struct {
 	svc entities.EntityService
 }
 
-// FindItemTypeIDs returns the IDs of entity types with preset_category "item".
+// armoryItemTypes is the campaign's item categories, the one rule every
+// Armory, crafting and stash reader shares (entities.ItemTypes).
+func armoryItemTypes(ctx context.Context, svc entities.EntityService, campaignID string) ([]entities.EntityType, error) {
+	types, err := svc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return entities.ItemTypes(types), nil
+}
+
+// FindItemTypeIDs returns the IDs of the campaign's item categories.
 func (a *armoryItemTypeFinderAdapter) FindItemTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
-	types, err := a.svc.GetEntityTypesByPresetCategory(ctx, campaignID, "item")
+	types, err := armoryItemTypes(ctx, a.svc, campaignID)
 	if err != nil {
 		return nil, err
 	}
@@ -2502,7 +2511,7 @@ func (a *armoryItemTypeFinderAdapter) FindItemTypeIDs(ctx context.Context, campa
 
 // FindItemTypes returns item-category entity types for the Armory filter dropdown.
 func (a *armoryItemTypeFinderAdapter) FindItemTypes(ctx context.Context, campaignID string) ([]armory.ItemTypeInfo, error) {
-	types, err := a.svc.GetEntityTypesByPresetCategory(ctx, campaignID, "item")
+	types, err := armoryItemTypes(ctx, a.svc, campaignID)
 	if err != nil {
 		return nil, err
 	}
