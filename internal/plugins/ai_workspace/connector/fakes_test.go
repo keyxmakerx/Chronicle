@@ -197,6 +197,9 @@ func (r *memRepo) AddRequest(_ context.Context, q *Request, max int) (int64, err
 	who := r.userOf(q.ConnectionID)
 	for _, x := range r.reqs {
 		if x.CampaignID == q.CampaignID && x.Status == RequestWaiting && r.userOf(x.ConnectionID) == who {
+			if x.Body == q.Body {
+				return 0, ErrAlreadyWaiting
+			}
 			waiting++
 		}
 	}

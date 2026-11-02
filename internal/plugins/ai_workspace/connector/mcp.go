@@ -249,6 +249,15 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 		return out
 	}
 	q, err := s.Asks.Ask(ctx, sess.Conn, args["summary"], args["changes"])
+	if errors.Is(err, ErrAlreadyWaiting) {
+		// Not an error: what the AI wanted is done, so it is told so plainly
+		// and isn't nudged into a third try.
+		out := toolResult(id, "Already waiting: these exact changes were sent earlier and are still waiting for review in Chronicle, so nothing new was sent. "+
+			"Say it is waiting under the AI button at the top of any Chronicle page, and don't send it again.", false)
+		line.Note, line.OK = "already waiting, not sent again", true
+		out.Called = line
+		return out
+	}
 	if err != nil {
 		msg := err.Error()
 		switch {

@@ -207,6 +207,34 @@ func TestCommit_ActionUpdate_HappyPath(t *testing.T) {
 	}
 }
 
+// An update with no body changes only what its front matter names; it
+// never writes an empty text over the page's own.
+func TestCommit_ActionUpdate_NoBodyKeepsText(t *testing.T) {
+	for _, body := range []string{"", "  \n\n "} {
+		f := &fakeCreator{
+			types: []entities.EntityType{{ID: 1, Name: "Character", Slug: "character", Enabled: true}},
+			existing: map[string]*entities.Entity{
+				"lyra-vance": {ID: "ent-existing", Name: "Lyra Vance", Slug: "lyra-vance"},
+			},
+		}
+		p := pageWithAction("Lyra Vance", "character", body, ActionUpdate)
+		res, err := NewCommitter(f).Commit(context.Background(), "camp-1", CommitInput{
+			OwnerID:   "u-1",
+			Pages:     []ParsedPage{p},
+			Decisions: []RowDecision{decisionWithAction(true, "Lyra Vance", "character", "", "", ActionUpdate, false)},
+		})
+		if err != nil {
+			t.Fatalf("Commit: %v", err)
+		}
+		if res.Updated != 1 || res.Rows[0].Status != StatusUpdated {
+			t.Errorf("body %q: status %q (%s), updated %d", body, res.Rows[0].Status, res.Rows[0].Reason, res.Updated)
+		}
+		if len(f.updateEntries) != 0 {
+			t.Errorf("body %q: the page's text was written over %d times", body, len(f.updateEntries))
+		}
+	}
+}
+
 // TestCommit_ActionUpdate_TargetMissing — action=update with no
 // matching entity → StatusFailed; no Update call.
 func TestCommit_ActionUpdate_TargetMissing(t *testing.T) {
