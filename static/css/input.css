@@ -5102,124 +5102,170 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 
 /* ============================================================ */
 /* DM Screen (internal/plugins/dmscreen, static/js/widgets/dm_screen.js).
-   A full-window overlay; the panel is three leaves joined by hinges, like a
-   folding GM screen. It is a tool, so its colours are the theme tokens; the
-   --dms-* names below are only this block's aliases for them. Under the
-   Material page look with a style kit on, the screen wears the kit's palette,
-   faces, accent and corners (style_kits.css), so the owner's Customize
-   choices reach it too. The opening is driven from JS with the Web Animations
-   API, so the reduced-motion guard above doesn't cover it; the widget checks
-   prefers-reduced-motion itself. */
+   Docked at the right edge of the page, under the top bar: a 48px rail of
+   section icons on the edge and a column of section cards beside it. On a
+   wide window the page narrows to make room (html.dms-docked); on a narrow
+   one the dock lies over the page. It is a tool, so its colours are the
+   theme tokens; the --dms-* names below are only this block's aliases for
+   them. Under the Material page look with a style kit on, the dock wears the
+   kit's palette, faces, accent and corners (style_kits.css), so the owner's
+   Customize choices reach it too. The slide is driven from JS with the Web
+   Animations API, which checks Chronicle.reducedMotion itself. */
 @layer components {
-  .dms-overlay {
-    position: fixed; inset: 0; z-index: 60;
+  .dms-dock, .dms-tab {
     --dms-leaf: var(--surface-raised); --dms-leaf-edge: var(--surface-border);
     --dms-ink: var(--surface-text); --dms-ink-muted: var(--surface-text-muted);
     --dms-acc: var(--color-accent, #6366f1);
+    --dms-acc-soft: color-mix(in srgb, var(--dms-acc) 14%, transparent);
     --dms-hinge: color-mix(in srgb, var(--dms-ink) 30%, var(--dms-leaf));
     --dms-ok: rgb(var(--color-ok-rgb)); --dms-ok-soft: rgb(var(--color-ok-rgb) / .15);
     --dms-warn: rgb(var(--color-warn-rgb));
-    --dms-die: var(--dms-acc);
-    --dms-r: .75rem; --dms-shadow: var(--elev-dragged);
+    --dms-r: .75rem; --dms-shadow: 0 1px 2px rgb(0 0 0 / .06);
+  }
+  .dms-dock {
+    position: fixed; top: var(--dms-top, 3.5rem); right: 0; bottom: 0; z-index: 15;
+    width: 320px; max-width: 100vw; color: var(--dms-ink);
+    box-shadow: var(--elev-hover);
   }
   /* A kit's palette is set on <html> but only wears on Material pages; the
-     overlay sits on <body>, outside #main-content, so it takes it here. */
-  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-overlay,
-  [data-dms-kit]:not([data-dms-kit="material"]) .dms-overlay {
+     dock sits on <body>, outside #main-content, so it takes it here. */
+  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-dock,
+  [data-dms-kit]:not([data-dms-kit="material"]) .dms-dock {
     --surface-raised: var(--k-paper); --surface-alt: color-mix(in srgb, var(--k-ink) 6%, var(--k-paper));
     --surface-text: var(--k-ink); --surface-text-muted: var(--k-mut); --surface-border: var(--k-hair);
     --color-text-secondary: var(--k-mut); --color-accent: var(--kit-acc);
     font-family: var(--kit-bf, inherit);
   }
-  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-overlay :is(.dms-head h2, .dms-leaf h3),
-  [data-dms-kit]:not([data-dms-kit="material"]) .dms-overlay :is(.dms-head h2, .dms-leaf h3) { font-family: var(--kit-hf, inherit); letter-spacing: var(--cz-hls, .02em); }
-  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-overlay .dms-lbl,
-  [data-dms-kit]:not([data-dms-kit="material"]) .dms-overlay .dms-lbl { font-family: var(--kit-lf, inherit); }
+  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-dock .dms-sec-t,
+  [data-dms-kit]:not([data-dms-kit="material"]) .dms-dock .dms-sec-t { font-family: var(--kit-hf, inherit); }
+  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-dock .dms-lbl,
+  [data-dms-kit]:not([data-dms-kit="material"]) .dms-dock .dms-lbl { font-family: var(--kit-lf, inherit); }
   /* Each kit's boxes, from its row under ui-standard.md "Style kits". */
-  [data-cz-page="annals"][data-cz-kit="sharp"]:not([data-dms-kit]) .dms-overlay,
-  [data-dms-kit="sharp"] .dms-overlay { --dms-r: 0; --dms-shadow: none; --dms-leaf-edge: var(--k-ink); --dms-hinge: var(--k-ink); }
-  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-overlay,
-  [data-dms-kit="ornate"] .dms-overlay { --dms-leaf-edge: var(--k-gilt); --dms-hinge: var(--k-gilt); --dms-r: .2rem; }
-  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-overlay .dms-leaf,
-  [data-dms-kit="ornate"] .dms-overlay .dms-leaf { outline: 1px solid var(--k-gilt); outline-offset: -5px; }
-  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-overlay,
-  [data-dms-kit="flowing"] .dms-overlay { --dms-r: 1.6rem; --dms-leaf-edge: transparent; --dms-hinge: var(--k-hair); --dms-shadow: 0 14px 34px var(--k-shadow); }
-  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-overlay .dms-leaf,
-  [data-dms-kit="flowing"] .dms-overlay .dms-leaf { background: linear-gradient(180deg, var(--k-wash), var(--k-paper) 9rem); }
-  [data-cz-page="annals"][data-cz-kit="lumen"]:not([data-dms-kit]) .dms-overlay,
-  [data-dms-kit="lumen"] .dms-overlay { --dms-hinge: var(--k-hair); --dms-shadow: 0 0 0 1px var(--k-hair), 0 0 22px var(--k-glow), var(--elev-dragged); }
-  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-overlay,
-  [data-dms-kit="sketchbook"] .dms-overlay { --dms-leaf-edge: var(--k-line); --dms-hinge: var(--k-line); --dms-r: 1.1rem .4rem; --dms-shadow: 2px 3px 0 var(--k-hair); }
-  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-overlay .dms-leaf,
-  [data-dms-kit="sketchbook"] .dms-overlay .dms-leaf { border-width: 1.5px; }
-  .dms-dim { position: absolute; inset: 0; background: rgba(10,10,20,.5); }
-  .dms-stage {
-    position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start;
-    padding: 4.5rem 1rem 1rem; overflow-y: auto;
+  [data-cz-page="annals"][data-cz-kit="sharp"]:not([data-dms-kit]) .dms-dock,
+  [data-dms-kit="sharp"] .dms-dock { --dms-r: 0; --dms-shadow: none; --dms-leaf-edge: var(--k-ink); --dms-hinge: var(--k-ink); }
+  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-dock,
+  [data-dms-kit="ornate"] .dms-dock { --dms-leaf-edge: var(--k-gilt); --dms-hinge: var(--k-gilt); --dms-r: .2rem; }
+  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-dock .dms-sec,
+  [data-dms-kit="ornate"] .dms-dock .dms-sec { outline: 1px solid var(--k-gilt); outline-offset: -4px; }
+  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-dock,
+  [data-dms-kit="flowing"] .dms-dock { --dms-r: 1rem; --dms-leaf-edge: transparent; --dms-hinge: var(--k-hair); --dms-shadow: 0 6px 18px var(--k-shadow); }
+  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-dock .dms-sec,
+  [data-dms-kit="flowing"] .dms-dock .dms-sec { background: linear-gradient(180deg, var(--k-wash), var(--k-paper) 6rem); }
+  [data-cz-page="annals"][data-cz-kit="lumen"]:not([data-dms-kit]) .dms-dock,
+  [data-dms-kit="lumen"] .dms-dock { --dms-hinge: var(--k-hair); --dms-shadow: 0 0 0 1px var(--k-hair), 0 0 14px var(--k-glow); }
+  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-dock,
+  [data-dms-kit="sketchbook"] .dms-dock { --dms-leaf-edge: var(--k-line); --dms-hinge: var(--k-line); --dms-r: .9rem .35rem; --dms-shadow: 2px 3px 0 var(--k-hair); }
+  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-dock .dms-sec,
+  [data-dms-kit="sketchbook"] .dms-dock .dms-sec { border-width: 1.5px; }
+
+  /* The page, and the strips above it, make room for the dock on a wide window. */
+  @media (min-width: 701px) {
+    html.dms-docked :is(#beside-row, .cta-host, #checkup-strip) { margin-right: 320px; }
   }
-  .dms { width: min(980px, 100%); color: var(--dms-ink); }
-  /* The bar is a tool's title bar on the theme tokens, solid so the page
-     behind never shows through it, and the handle the window drags by. */
-  .dms-titlebar {
-    margin: 0; padding: .3rem .4rem .4rem .75rem; border-radius: var(--dms-r) var(--dms-r) 0 0; border-bottom: 0;
-    background: var(--surface-raised); color: var(--surface-text);
-    border: 1px solid var(--surface-border); box-shadow: var(--elev-hover);
+  @media (min-width: 701px) and (prefers-reduced-motion: no-preference) {
+    html:not([data-motion]):not(.nav-rm) :is(#beside-row, .cta-host, #checkup-strip) { transition: margin-right var(--dur-standard) var(--ease-standard); }
   }
-  .dms-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-  .dms-head h2 { display: flex; align-items: center; gap: .5rem; font-size: 1rem; font-weight: 700; letter-spacing: .04em; }
-  .dms-grip { font-size: .8rem; color: var(--surface-text-muted); }
-  .dms-close {
-    display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: .5rem;
-    color: var(--surface-text-muted); background: transparent; border: 1px solid transparent;
-    transition: background-color var(--dur-micro), color var(--dur-micro), border-color var(--dur-micro);
+
+  .dms-stage { height: 100%; }
+  /* Rail on the page edge, column beside it. */
+  .dms { display: flex; flex-direction: row-reverse; height: 100%; }
+  .dms-rail {
+    flex: none; width: 48px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 8px 0; overflow-y: auto; scrollbar-width: none;
+    background: var(--surface-raised); border-left: 1px solid var(--surface-border);
   }
-  .dms-close:hover { color: var(--surface-text); background: var(--surface-alt); border-color: var(--surface-border); }
-  .dms-close:focus-visible, .dms button:focus-visible, .dms a:focus-visible, .dms summary:focus-visible { outline: 2px solid var(--dms-acc); outline-offset: 2px; }
-  .dms-acts { display: flex; align-items: center; gap: .15rem; }
-  .dms-close[aria-expanded="true"], .dms-close[aria-pressed="true"] { color: var(--dms-acc); background: var(--surface-alt); }
-  /* The Homebrew drawer docks beside the leaves and widens the screen; on a
-     narrow window it drops below them. */
-  .dms-brew-open { width: min(1420px, 100%); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); column-gap: .75rem; align-items: start; }
-  .dms-brew-open > .dms-titlebar { grid-column: 1 / -1; }
-  @media (max-width: 900px) { .dms-brew-open { grid-template-columns: minmax(0, 1fr); row-gap: .75rem; } }
-  .dms-brew {
-    background: var(--surface-raised); color: var(--surface-text); border: 1px solid var(--surface-border);
-    border-radius: var(--dms-r); box-shadow: var(--elev-hover); max-height: calc(100vh - 7rem); overflow-y: auto;
+  .dms-rail hr { width: 24px; margin: 4px 0; border: 0; border-top: 1px solid var(--surface-border); }
+  .dms-ic {
+    position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px;
+    color: var(--dms-ink-muted); background: transparent;
+    transition: background-color var(--dur-micro), color var(--dur-micro);
   }
-  .dms-brew-head { display: flex; align-items: center; gap: .5rem; padding: .6rem .5rem .6rem .9rem; border-bottom: 1px solid var(--surface-border); }
-  .dms-brew-head h3 { flex: 1; font-size: 1rem; font-weight: 700; letter-spacing: .04em; }
-  .dms-brew-mark { color: var(--dms-acc); }
-  .dms-brew-pvbar { display: none; gap: .4rem; align-items: center; margin: .75rem .9rem 0; padding: .45rem .6rem; border-radius: .5rem; background: var(--dms-acc); color: #fff; font-size: .8rem; }
+  .dms-ic:hover { background: var(--surface-alt); color: var(--dms-ink); }
+  .dms-ic[aria-pressed="true"] { background: var(--dms-acc-soft); color: var(--dms-acc); }
+  /* An open section's icon carries a bar on the column side. */
+  .dms-rail .dms-ic[aria-pressed="true"]::before {
+    content: ""; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 3px; border-radius: 0 3px 3px 0; background: var(--dms-acc);
+  }
+  .dms-badge {
+    position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+    background: var(--dms-warn); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+    box-shadow: 0 0 0 2px var(--surface-raised);
+  }
+  .dms-dock :is(button, a, summary, textarea, input):focus-visible { outline: 2px solid var(--dms-acc); outline-offset: 2px; }
+
+  .dms-col {
+    flex: none; width: 272px; min-width: 0; display: flex; flex-direction: column; min-height: 0;
+    background: var(--surface-alt); border-left: 1px solid var(--surface-border);
+  }
+  .dms-colhead {
+    display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: 8px 12px;
+    font-size: .78rem; color: var(--dms-ink-muted); border-bottom: 1px solid var(--surface-border);
+  }
+  .dms-quiet { font-size: .78rem; color: var(--dms-acc); border-radius: 4px; }
+  .dms-quiet:hover { text-decoration: underline; text-underline-offset: 2px; }
+  .dms-strip {
+    display: flex; flex-wrap: wrap; gap: .15rem .75rem; align-items: center; padding: 8px 12px;
+    color: var(--color-text-secondary); font-size: .78rem; border-bottom: 1px solid var(--surface-border);
+  }
+  .dms-strip b { color: var(--dms-ink); font-weight: 600; }
+  .dms-empty { padding: 16px 12px; font-size: .85rem; color: var(--dms-ink-muted); }
+  .dms-cards { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; scrollbar-width: thin; }
+
+  /* A section card: the newest is whole, the older ones fold to one line
+     carrying their summary. */
+  .dms-sec {
+    flex: none; background: var(--dms-leaf); border: 1px solid var(--dms-leaf-edge); border-radius: var(--dms-r);
+    box-shadow: var(--dms-shadow);
+  }
+  .dms-sec-h { display: flex; align-items: center; gap: 2px; padding: 4px; }
+  .dms-sec-t {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px;
+    text-align: left; color: var(--dms-ink);
+  }
+  .dms-sec-t:hover { background: var(--surface-alt); }
+  .dms-sec-t > i { width: 1rem; text-align: center; font-size: .8rem; color: var(--dms-acc); }
+  .dms-sec-t > span:not(.dms-sec-sum) { flex: none; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .dms-sec-sum { display: none; }
+  .dms-folded .dms-sec-sum {
+    display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: .8rem; color: var(--dms-ink-muted);
+  }
+  .dms-folded .dms-sec-t > i { color: var(--dms-ink-muted); }
+  .dms-sec-x { width: 28px; height: 28px; }
+  .dms-sec-b { display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; padding: 4px 12px 12px; }
+
+  /* The tucked dock: a small tab on the edge, carrying the waiting count. */
+  .dms-tab {
+    position: fixed; right: 0; top: calc(var(--dms-top, 3.5rem) + 12px); z-index: 15;
+    display: flex; flex-direction: column; align-items: center; gap: 4px; width: 28px; padding: 8px 0;
+    border: 1px solid var(--surface-border); border-right: 0; border-radius: 8px 0 0 8px;
+    background: var(--surface-raised); color: var(--dms-ink-muted); box-shadow: var(--elev-hover);
+    transition: color var(--dur-micro), width var(--dur-micro);
+  }
+  .dms-tab:hover { color: var(--dms-ink); width: 32px; }
+  .dms-tab:focus-visible { outline: 2px solid var(--dms-acc); outline-offset: 2px; }
+  .dms-tab-n {
+    min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+    background: var(--dms-warn); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+  }
+  .dms-tab[hidden], .dms-dock[hidden], .dms-dock [hidden] { display: none; }
+
+  /* On a phone the dock covers the page; the top-bar icon alone brings it
+     back, so no tab sits over the page's text. */
+  @media (max-width: 700px) {
+    .dms-dock { width: min(100vw, 26rem); box-shadow: var(--elev-dragged); }
+    .dms-tab { display: none; }
+    .dms-col { flex: 1; width: auto; }
+  }
+
+  /* What fills the cards. */
+  .dms-brew { display: grid; gap: .5rem; }
+  .dms-brew-acts { display: flex; justify-content: flex-end; gap: 4px; }
+  .dms-brew-pvbar { display: none; gap: .4rem; align-items: center; padding: .45rem .6rem; border-radius: .5rem; background: var(--dms-acc); color: #fff; font-size: .8rem; }
   .dms-brew[data-player-view] .dms-brew-pvbar { display: flex; }
-  .dms-strip { display: flex; flex-wrap: wrap; gap: .2rem 1rem; align-items: center; color: var(--color-text-secondary); font-size: .85rem; }
-  .dms-strip b { color: var(--surface-text); font-weight: 600; }
-  /* The window state: nothing in the overlay catches clicks except the screen
-     itself, so the page behind stays usable. Close and Escape still close it. */
-  .dms-windowed { pointer-events: none; }
-  .dms-windowed .dms-dim, .dms-windowed .dms-stage { pointer-events: none; }
-  .dms-windowed .dms-stage { overflow: visible; }
-  .dms-windowed .dms { pointer-events: auto; max-height: calc(100vh - 2rem); overflow-y: auto; }
-  .dms-dimmed-off .dms-dim { display: none; }
-  .dms-windowed .dms-titlebar { cursor: grab; touch-action: none; user-select: none; }
-  .dms-windowed .dms-titlebar button { cursor: pointer; }
-  .dms-dragging, .dms-dragging .dms-titlebar { cursor: grabbing; }
-  .dms-dragging .dms-titlebar { box-shadow: var(--elev-dragged); }
-  .dms-grip { display: none; }
-  .dms-windowed .dms-grip { display: inline; }
-  .dms-settle { transition: translate .3s cubic-bezier(.2,.8,.2,1); }
   .dms-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; border: 1px solid currentColor; margin-right: .35rem; }
   .dms-dot-on { background: var(--dms-ok); border-color: var(--dms-ok); }
   .dms-dot-after { margin: 0 0 0 .3rem; vertical-align: middle; background: var(--dms-ok); border-color: var(--dms-ok); }
-  .dms-leaves { display: flex; perspective: 1400px; transform-style: preserve-3d; }
-  .dms-leaf {
-    flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; align-content: start; padding: .9rem;
-    background: var(--dms-leaf); border: 1px solid var(--dms-leaf-edge); min-height: 24rem;
-    box-shadow: var(--dms-shadow); backface-visibility: hidden;
-  }
-  .dms-leaf-l { border-radius: 0 0 0 var(--dms-r); transform-origin: right center; }
-  .dms-leaf-m { transform-origin: center bottom; border-left: 3px double var(--dms-hinge); border-right: 3px double var(--dms-hinge); }
-  .dms-leaf-r { border-radius: 0 0 var(--dms-r) 0; transform-origin: left center; }
-  .dms-leaf h3 { font-weight: 700; letter-spacing: .04em; border-bottom: 1px solid var(--dms-leaf-edge); padding-bottom: .25rem; }
   .dms-blk { display: grid; gap: .3rem; }
   .dms-lbl { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--dms-ink-muted); }
   .dms-small { font-size: .85rem; color: var(--dms-ink-muted); }
@@ -5265,11 +5311,6 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-bar > span { display: block; height: 100%; background: var(--dms-ok); }
   .dms-bar > span.dms-low { background: var(--dms-warn); }
   .dms-num { font-variant-numeric: tabular-nums; color: var(--dms-ink); }
-  /* The tabs wrap rather than push the leaf wider when they don't fit on
-     one line (five of them on a narrow leaf). */
-  .dms-tabs { display: flex; flex-wrap: wrap; gap: 0 .25rem; border-bottom: 1px solid var(--dms-leaf-edge); }
-  .dms-tabs button { padding: .25rem .55rem; font-size: .85rem; color: var(--dms-ink-muted); border-bottom: 2px solid transparent; }
-  .dms-tabs button[aria-selected="true"] { color: var(--dms-ink); border-bottom-color: var(--dms-acc); font-weight: 700; }
   .dms-search { width: 100%; font-size: .85rem; border: 1px solid var(--dms-leaf-edge); border-radius: .4rem; background: transparent; color: var(--dms-ink); padding: .3rem .5rem; }
   .dms-cond { border-top: 1px dashed var(--dms-leaf-edge); padding: .3rem 0; font-size: .88rem; }
   .dms-cond summary { cursor: pointer; font-weight: 600; }
@@ -5286,21 +5327,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-row .dms-req-yes { background: var(--dms-ok-soft); font-weight: 700; }
   .dms-done { font-size: .78rem; color: var(--dms-ok); }
   .dms-done-wrap { display: inline-flex; align-items: center; gap: .5rem; }
-  .dms-overlay [hidden], .dms-overlay[hidden] { display: none; }
-  .dms-skip { position: absolute; right: .75rem; bottom: .75rem; font-size: .85rem; color: #fff; background: rgba(0,0,0,.5); border-radius: .4rem; padding: .15rem .5rem; }
-  /* The burst's pieces are shards of light, not a second die: the thrown
-     rune die has already shown its 20. The glow is on the wrapper because a
-     clip-path would cut it off each piece. */
-  .dms-die { position: absolute; width: 90px; height: 90px; pointer-events: none; z-index: 2;
-    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--dms-die) 80%, #fff)); }
-  .dms-piece { position: absolute; inset: 0; will-change: transform, opacity;
-    background: linear-gradient(160deg, #fff 0, color-mix(in srgb, var(--dms-die) 45%, #fff) 35%, var(--dms-die) 100%); }
-  .dms-flash {
-    position: absolute; width: 160px; height: 160px; border-radius: 50%; pointer-events: none; z-index: 1;
-    background: radial-gradient(circle, rgb(255 255 255 / .95) 0, color-mix(in srgb, var(--dms-die) 70%, transparent) 38%, transparent 70%);
-  }
-  .dms-flash-page { position: fixed; z-index: 61; width: 120px; height: 120px; }
-  /* Adventures tab: pinned pages and loose notes as cards on a board (the same
+  /* Adventures card: pinned pages and loose notes as cards on a board (the same
      shape as the quest notice board), on the screen's tokens above. */
   .dms-loose { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .6rem; padding-top: .35rem; }
   .dms-note {
@@ -5383,12 +5410,6 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
   @media (max-width: 700px) {
     .dms-sheet-p { inset: 0; border-radius: 0; }
-    .dms-stage { padding-top: 3.75rem; }
-    .dms-leaves { flex-direction: column; }
-    .dms-leaf { flex: none; min-height: 0; }
-    .dms-leaf-l { border-radius: 0; transform-origin: center bottom; }
-    .dms-leaf-m { border-left: 1px solid var(--dms-leaf-edge); border-right: 1px solid var(--dms-leaf-edge); border-top: 3px double var(--dms-hinge); border-bottom: 3px double var(--dms-hinge); }
-    .dms-leaf-r { border-radius: 0 0 .6rem .6rem; transform-origin: center top; }
   }
 }
 
