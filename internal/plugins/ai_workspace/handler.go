@@ -948,6 +948,39 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	if in.ContentMode == "" {
 		in.ContentMode = "none"
 	}
+	h.fillPromptInput(c, cc, &in)
+
+	userID := auth.GetUserID(c)
+	out, err := h.promptBuilder.Build(c.Request().Context(),
+		cc.Campaign.Name, userID, cc.Campaign.ID, in)
+	if err != nil {
+		slog.Error("ai-workspace: prompt generate failed",
+			slog.String("campaign_id", cc.Campaign.ID),
+			slog.Any("error", err))
+		return middleware.Render(c, http.StatusOK,
+			PromptModal("", "Could not build the prompt. Try again in a moment."))
+	}
+
+	if h.audit != nil {
+		h.audit.LogCampaignEvent(c.Request().Context(),
+			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_prompt.generated",
+			map[string]any{
+				"content_mode":        in.ContentMode,
+				"privacy":             c.QueryParam("privacy"),
+				"schema_types":        in.IncludeEntityTypes,
+				"schema_categories":   in.IncludeCategoriesInUse,
+				"schema_front_matter": in.IncludeFrontMatterExample,
+				"include_gm_notes":    in.IncludeSessionGMNotes,
+				"prompt_byte_count":   len(out),
+			})
+	}
+
+	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
+}
+
+// fillPromptInput adds what every request carries: what the AI may make,
+// the lookups, the page index and today's dates, read as in.Privacy allows.
+func (h *Handler) fillPromptInput(c echo.Context, cc *campaigns.CampaignContext, in *prompt.Input) {
 	// A switched-off feature's kinds are left out, and named, so the AI
 	// doesn't write what the owner couldn't open.
 	off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
@@ -976,33 +1009,6 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 			in.RecordContext = reg.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		}
 	}
-
-	userID := auth.GetUserID(c)
-	out, err := h.promptBuilder.Build(c.Request().Context(),
-		cc.Campaign.Name, userID, cc.Campaign.ID, in)
-	if err != nil {
-		slog.Error("ai-workspace: prompt generate failed",
-			slog.String("campaign_id", cc.Campaign.ID),
-			slog.Any("error", err))
-		return middleware.Render(c, http.StatusOK,
-			PromptModal("", "Could not build the prompt. Try again in a moment."))
-	}
-
-	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(),
-			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_prompt.generated",
-			map[string]any{
-				"content_mode":        in.ContentMode,
-				"privacy":             c.QueryParam("privacy"),
-				"schema_types":        in.IncludeEntityTypes,
-				"schema_categories":   in.IncludeCategoriesInUse,
-				"schema_front_matter": in.IncludeFrontMatterExample,
-				"include_gm_notes":    in.IncludeSessionGMNotes,
-				"prompt_byte_count":   len(out),
-			})
-	}
-
-	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
 }
 
 // PromptInstructions returns the standing half of the prompt as plain text,

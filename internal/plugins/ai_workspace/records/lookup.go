@@ -701,11 +701,40 @@ func (l *Lookups) MenuOrder(ctx context.Context, campaignID string, a Actor) str
 }
 
 func (run *lookupRun) page(name string) (LookupAnswer, error) {
-	ans := LookupAnswer{Chip: "Page · " + name}
 	e, err := run.findPage(name)
 	if err != nil {
-		return ans, err
+		return LookupAnswer{Chip: "Page · " + name}, err
 	}
+	return run.pageOf(e)
+}
+
+// PageByID is one page, read as a lookup reads it, for the AI button's
+// "Copy this page". ok is false when a has no sight of the page, so a
+// hidden page reads the same as a missing one.
+func (l *Lookups) PageByID(ctx context.Context, campaignID string, a Actor, id string) (text string, ok bool, err error) {
+	if l == nil || l.Pages == nil || id == "" {
+		return "", false, nil
+	}
+	run := &lookupRun{l: l, ctx: ctx, campaignID: campaignID, a: a}
+	pages, err := run.visiblePages()
+	if err != nil {
+		return "", false, err
+	}
+	for i := range pages {
+		if pages[i].ID == id {
+			ans, err := run.pageOf(&pages[i])
+			if err != nil {
+				return "", false, err
+			}
+			return capText(ans.Text, maxAnswerBytes), true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// pageOf is the lookup answer for one page the Actor can see.
+func (run *lookupRun) pageOf(e *entities.Entity) (LookupAnswer, error) {
+	ans := LookupAnswer{Chip: "Page · " + e.Name}
 	rels, err := run.relationsOf(e)
 	if err != nil {
 		return ans, err

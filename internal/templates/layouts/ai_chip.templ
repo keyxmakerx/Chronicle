@@ -1,10 +1,11 @@
 package layouts
 
-// aiChip is the AI button in the top bar and the panel it opens over any
-// campaign page (signed option D, and D for players). The layout knows
-// nothing about AI: the ai-chip widget asks the ai_workspace plugin for the
-// counts (<base>/chip) and the panel (<base>/panel), and takes Ctrl+V with an
-// AI's answer copied on any page. base is "ai" for the owner and "ai/me" for
+// aiChip is the AI button in the top bar, the small bubble it drops, and the
+// side sheet a review opens in, over any campaign page (signed option D, D
+// for players, and the AI bubble). The layout knows nothing about AI: the
+// ai-chip widget asks the ai_workspace plugin for the counts (<base>/chip),
+// the bubble (<base>/bubble) and the sheet (<base>/panel), and takes Ctrl+V
+// with an AI's answer copied on any page. base is "ai" for the owner and "ai/me" for
 // anyone else in the campaign; a player's button starts hidden and shows
 // only once the plugin says players may use AI here.
 templ aiChip(base string, player bool) {
@@ -15,7 +16,7 @@ templ aiChip(base string, player bool) {
 			data-ai-chip
 			aria-haspopup="dialog"
 			aria-expanded="false"
-			aria-controls="ai-panel"
+			aria-controls="ai-bubble"
 			title="Your AI"
 		>
 			<i class="fa-solid fa-wand-magic-sparkles text-xs" aria-hidden="true"></i>
@@ -23,6 +24,7 @@ templ aiChip(base string, player bool) {
 			<span class="ai-chip-n" data-ai-chip-n hidden></span>
 		</button>
 		<div class="ai-chip-note" data-ai-note role="status" aria-live="polite" hidden></div>
+		<div id="ai-bubble" class="ai-bubble" role="dialog" aria-labelledby="ai-bubble-heading" tabindex="-1" data-ai-bubble hidden></div>
 		<div class="ai-panel-scrim" data-ai-scrim hidden></div>
 		<div id="ai-panel" class="ai-panel" role="dialog" aria-modal="true" aria-labelledby="ai-panel-heading" tabindex="-1" hidden>
 			<div class="ai-panel-body" data-ai-panel-body>

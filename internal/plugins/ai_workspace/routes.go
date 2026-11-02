@@ -25,6 +25,8 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.GET("/ai/activity", h.AIActivity, requireOwner)
 	cg.GET("/ai/chip", h.AIChip, requireOwner)
 	cg.GET("/ai/panel", h.AIPanel, requireOwner)
+	cg.GET("/ai/bubble", h.AIBubble, requireOwner)
+	cg.GET("/ai/copy", h.CopyForAI, requireOwner)
 	cg.POST("/ai/connection", h.ConnectAI, requireOwner)
 	cg.POST("/ai/connection/disconnect", h.DisconnectAI, requireOwner)
 	cg.POST("/ai/connection/pause", h.PauseAI, requireOwner)
@@ -54,6 +56,7 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 func RegisterPlayerRoutes(cg *echo.Group, h *Handler, requireMember echo.MiddlewareFunc) {
 	cg.GET("/ai/me/chip", h.PlayerChip, requireMember)
 	cg.GET("/ai/me/panel", h.PlayerPanel, requireMember)
+	cg.GET("/ai/me/bubble", h.PlayerBubble, requireMember)
 	cg.GET("/ai/me/copy", h.PlayerCopy, requireMember)
 	cg.POST("/ai/me/key", h.PlayerConnect, requireMember)
 	cg.POST("/ai/me/key/disconnect", h.PlayerDisconnect, requireMember)

@@ -148,8 +148,24 @@ func (h *Handler) PlayerPanel(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	v.Menu = v.Menu || c.QueryParam("menu") == "1"
 	c.Response().Header().Set("Cache-Control", "no-store")
 	return middleware.Render(c, http.StatusOK, playerPanelBody(v))
+}
+
+// PlayerBubble is the small bubble a player's AI button drops: copy and
+// paste in one thin row, then their AI's waiting requests.
+func (h *Handler) PlayerBubble(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	v, err := h.playerView(c, cc)
+	if err != nil {
+		return err
+	}
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return middleware.Render(c, http.StatusOK, playerBubbleBody(v))
 }
 
 // PlayerConnect makes the player's own key, revoking their earlier one, and
