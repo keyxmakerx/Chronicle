@@ -198,13 +198,13 @@ func TestSetPlayersAllowed_OwnerOnly(t *testing.T) {
 func TestPlayerKey_Tools(t *testing.T) {
 	c := &Connection{ID: 9, CampaignID: "camp-1", UserID: "player-1", ForPlayer: true, CanAsk: true, Privacy: aiexport.PrivacyModeSafe}
 	sess := Session{Conn: c, CampaignName: "Ashfall", Actor: actorFor(c)}
-	for _, tl := range toolsFor(c) {
+	for _, tl := range toolsFor(c, nil) {
 		if tl.Owner {
 			t.Errorf("player key lists %s", tl.Name)
 		}
 	}
 	for _, name := range []string{"players", "waiting_for_review", "encounters", "rolling_tables", "foundry_monsters"} {
-		if findTool(c, name) != nil {
+		if findTool(c, nil, name) != nil {
 			t.Errorf("player key can call %s", name)
 		}
 		var r rpcReply
@@ -212,7 +212,7 @@ func TestPlayerKey_Tools(t *testing.T) {
 			t.Errorf("%s answered a player's key: %+v %v", name, r, err)
 		}
 	}
-	if d := findTool(c, toolAsk).describe(true); !strings.Contains(d, "your own character") {
+	if d := findTool(c, nil, toolAsk).describe(true); !strings.Contains(d, "your own character") {
 		t.Errorf("ask_for_changes for a player says %q", d)
 	}
 	if got := instructions(sess); !strings.Contains(got, "what you, a player in it, can see") || strings.Contains(got, "secrets") {

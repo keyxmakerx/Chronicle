@@ -15,7 +15,9 @@ The plugin and widget lists are in `.ai/README.md`; each has its own `.ai.md`.
 
 Core lives under `internal/`: `app/` (App struct, DI, route aggregation),
 `config/`, `database/` (pools, migration runners, plugin health),
-`middleware/`, `apperror/`, `sanitize/`. Shared Templ is in
+`middleware/`, `apperror/`, `sanitize/`, and `aiplug/`, the contract a
+plugin implements to give the AI engine (`ai_workspace`) its own blocks and
+lookups (ADR-071). Shared Templ is in
 `internal/templates/` (`layouts/`, `components/`, `pages/`). `cmd/server/main.go`
 is the entry point; `db/migrations/` is the core schema.
 

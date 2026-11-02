@@ -134,7 +134,7 @@ func (s *Server) Handle(ctx context.Context, sess Session, body []byte) Outcome 
 	case "ping":
 		return reply(m.ID, map[string]any{})
 	case "tools/list":
-		list := toolsFor(sess.Conn)
+		list := toolsFor(sess.Conn, s.Lookups)
 		defs := make([]map[string]any, len(list))
 		for i, t := range list {
 			defs[i] = t.definition(sess.Conn != nil && sess.Conn.ForPlayer)
@@ -209,7 +209,7 @@ func (s *Server) call(ctx context.Context, m rpcMessage, sess Session) Outcome {
 	if err := json.Unmarshal(m.Params, &p); err != nil {
 		return replyError(m.ID, codeInvalidParams, "tools/call needs a name and arguments")
 	}
-	t := findTool(sess.Conn, p.Name)
+	t := findTool(sess.Conn, s.Lookups, p.Name)
 	if t == nil {
 		return replyError(m.ID, codeInvalidParams, "there is no tool called "+oneLine(p.Name, 60))
 	}

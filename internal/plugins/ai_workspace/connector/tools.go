@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
@@ -125,8 +126,6 @@ var tools = []tool{
 	{Name: "system_entries", Title: "Game system entries", Did: "Looked up game system entries", What: "system-entries",
 		Desc: "The game system's entries for a character field (ancestries, kits...). Without field, the fields that have entries.",
 		Args: []arg{{Key: "field", Desc: "A character field, for example \"ancestry\""}, {Key: "name", Desc: "Part of an entry's name, to narrow a long list"}}},
-	{Name: "game_nights", Title: "Game nights", Did: "Listed the game nights", What: "game-nights",
-		Desc: "The campaign's game nights: name, date, time, status and summary."},
 	{Name: "waiting_for_review", Owner: true, Title: "Waiting for review", Did: "Looked at what is waiting for review", What: "waiting",
 		Desc: "What is waiting for the owner's yes or no: the changes you asked for that are still waiting, how the owner answered your latest ones, entries players wrote and handed in, and players' stash moves and requests to buy. Read-only: only the owner can accept or turn these down, in Chronicle."},
 	{Name: "players", Owner: true, Title: "Players", Did: "Looked at the players", What: "players",
@@ -157,26 +156,52 @@ var tools = []tool{
 		}},
 }
 
-// toolsFor is the tools a connection may use, in order. A player's key
-// never lists the owner's tools, and one it isn't listed can't be called.
-func toolsFor(c *Connection) []*tool {
+// toolsFor is the tools a connection may use, in order: the built-in ones,
+// with the lookups features plug in (l.Plugged) before block_format. A
+// player's key never lists the owner's tools, and one it isn't listed
+// can't be called.
+func toolsFor(c *Connection, l *records.Lookups) []*tool {
 	out := make([]*tool, 0, len(tools))
-	for i := range tools {
-		t := &tools[i]
+	add := func(t *tool) {
 		if t.Asks && (c == nil || !c.CanAsk) {
-			continue
+			return
 		}
 		if t.Owner && (c == nil || c.ForPlayer) {
-			continue
+			return
 		}
 		out = append(out, t)
+	}
+	for i := range tools {
+		if tools[i].What == "format" && l != nil {
+			for _, p := range l.Plugged {
+				if t := pluggedTool(p.LookupInfo()); t != nil {
+					add(t)
+				}
+			}
+		}
+		add(&tools[i])
 	}
 	return out
 }
 
+// pluggedTool is a feature's lookup as a tool; nil when it lists none.
+func pluggedTool(in aiplug.LookupInfo) *tool {
+	if in.Tool.Name == "" {
+		return nil
+	}
+	t := &tool{
+		Name: in.Tool.Name, Title: in.Tool.Title, Did: in.Tool.Did, What: in.What,
+		Desc: in.Tool.Desc, PlayerDesc: in.Tool.PlayerDesc, Owner: in.Tool.Owner,
+	}
+	for _, a := range in.Tool.Args {
+		t.Args = append(t.Args, arg{Key: a.Key, Desc: a.Desc, Required: a.Required})
+	}
+	return t
+}
+
 // findTool is the connection's tool by name; one it may not use is not found.
-func findTool(c *Connection, name string) *tool {
-	for _, t := range toolsFor(c) {
+func findTool(c *Connection, l *records.Lookups, name string) *tool {
+	for _, t := range toolsFor(c, l) {
 		if t.Name == name {
 			return t
 		}

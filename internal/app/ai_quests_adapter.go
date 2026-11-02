@@ -232,3 +232,12 @@ func (q aiQuestsAdapter) AddItem(ctx context.Context, campaignID string, h recor
 func (q aiQuestsAdapter) RemoveItem(ctx context.Context, campaignID string, h records.BoardHome, boardID, itemID string, a records.Actor) error {
 	return q.boards.DeleteItem(ctx, campaignID, questHome(h), boardID, itemID, questViewer(a))
 }
+
+// setIfGiven leaves a key the AI did not write as it is; patch.FromPtr would
+// clear it instead.
+func setIfGiven(p *string) patch.Field[string] {
+	if p == nil {
+		return patch.Absent[string]()
+	}
+	return patch.Of(*p)
+}
