@@ -448,14 +448,17 @@ GET	/campaigns/:id/ai-workspace/prompt/generate	session	plugins/ai_workspace.(*H
 GET	/campaigns/:id/ai-workspace/prompt/instructions	session	plugins/ai_workspace.(*Handler).PromptInstructions	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/activity	session	plugins/ai_workspace.(*Handler).AIActivity	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/alerts/:aid	session	plugins/ai_workspace.(*Handler).AnswerAIAlert	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/bubble	session	plugins/ai_workspace.(*Handler).AIBubble	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/chip	session	plugins/ai_workspace.(*Handler).AIChip	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection	session	plugins/ai_workspace.(*Handler).ConnectAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/access	session	plugins/ai_workspace.(*Handler).ChangeAIAccess	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/disconnect	session	plugins/ai_workspace.(*Handler).DisconnectAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/pause	session	plugins/ai_workspace.(*Handler).PauseAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/resume	session	plugins/ai_workspace.(*Handler).ResumeAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/copy	session	plugins/ai_workspace.(*Handler).CopyForAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/cut-off	session	plugins/ai_workspace.(*Handler).CutOffAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/me/apply	session	plugins/ai_workspace.(*Handler).PlayerApply	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/me/bubble	session	plugins/ai_workspace.(*Handler).PlayerBubble	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/me/chip	session	plugins/ai_workspace.(*Handler).PlayerChip	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/me/copy	session	plugins/ai_workspace.(*Handler).PlayerCopy	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/me/key	session	plugins/ai_workspace.(*Handler).PlayerConnect	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

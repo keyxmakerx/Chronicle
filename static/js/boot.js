@@ -699,6 +699,14 @@
     return false;
   };
 
+  /**
+   * Forget every unsaved change, when the person chose to leave without
+   * saving, so the browser's own "Leave site?" doesn't ask a second time.
+   */
+  Chronicle.discardChanges = function () {
+    dirtySources = {};
+  };
+
   // Warn user before leaving the page with unsaved changes.
   window.addEventListener('beforeunload', function (e) {
     if (Chronicle.isDirty()) {

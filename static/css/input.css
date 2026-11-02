@@ -4992,9 +4992,10 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
   [data-cz-nav="tide"] .nav-ring::after { display: none; }
 }
 
-/* The owner's AI button and panel (layouts/ai_chip.templ, ai_chip.js). The
-   panel and scrim are moved to <body> by the widget, so the top bar's
-   stacking context never clips them. On a phone the panel is full width. */
+/* The AI button, its bubble and the side sheet a review opens in
+   (layouts/ai_chip.templ, ai_chip.js). The sheet and scrim are moved to
+   <body> by the widget, so the top bar's stacking context never clips them.
+   On a phone the sheet is full width. */
 .ai-chip-host { position: relative; display: flex; align-items: center; }
 .ai-chip-host[hidden] { display: none; }
 .ai-chip { position: relative; }
@@ -5015,6 +5016,21 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
 }
 .ai-chip-note[hidden] { display: none; }
 @keyframes ai-note-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+/* The bubble the button drops: a sheet that grows out of the button and
+   shrinks back into it, over the page below (its content in ai_page.css). */
+.ai-bubble {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: min(23rem, calc(100vw - 24px));
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--elev-dragged);
+  outline: none; transform-origin: top right; transform: scale(0.96); opacity: 0;
+  transition: transform var(--dur-standard) var(--ease-out), opacity var(--dur-standard) var(--ease-out);
+}
+.ai-bubble.is-open { transform: none; opacity: 1; }
+.ai-bubble[hidden] { display: none; }
+/* On a phone the button sits mid-bar, so the bubble pins to the screen's
+   edges instead of hanging off the button and running off the left. */
+@media (max-width: 639px) {
+  .ai-bubble { position: fixed; top: 56px; left: 12px; right: 12px; width: auto; transform-origin: top center; }
+}
 .ai-panel-scrim {
   position: fixed; inset: 0; z-index: 70; background: rgb(0 0 0 / 0.32);
   opacity: 0; transition: opacity var(--dur-standard) var(--ease-out);

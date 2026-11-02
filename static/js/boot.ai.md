@@ -30,7 +30,7 @@ sidebar active link highlighting, and shared utilities.
 |---------|-----------|
 | CSRF tokens | Reads the `__Host-chronicle_csrf` cookie (HTTPS), falling back to `chronicle_csrf` (HTTP dev), and attaches `X-CSRF-Token` on all HTMX requests |
 | Loading indicator | Tracks active HTMX requests, toggles `body.htmx-request` class |
-| Unsaved changes | `Chronicle.markDirty(id)` / `Chronicle.markClean(id)` with `beforeunload` prompt |
+| Unsaved changes | `Chronicle.markDirty(id)` / `Chronicle.markClean(id)` with `beforeunload` prompt; `Chronicle.discardChanges()` after the person chose to leave without saving |
 | Form tracking | Forms with `data-track-changes="<id>"` auto-mark dirty on input |
 | Sidebar highlighting | After `htmx:pushedIntoHistory`, updates sidebar `.active` via longest-prefix-match |
 | Form validation | Inline error hints below invalid `.input` fields |
