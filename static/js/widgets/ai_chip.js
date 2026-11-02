@@ -17,13 +17,13 @@
  *   answer in one thin row, then each waiting request with Review. Escape, a
  *   click outside and its close button shut it.
  * - Copy puts the text for an AI app on the clipboard: on an entity page the
- *   owner's copy is that page ("Copy this page"), read with the remembered
+ *   owner's copy is that page ("Copy page"), read with the remembered
  *   privacy choice (localStorage ai-sees-<campaign>).
  * - Paste answer reads the clipboard; if the browser refuses, a small paste
  *   box opens in the bubble instead. An AI's answer (text starting a block:
  *   a --- line, then "key:") opens the side sheet and reviews it, as Ctrl+V
  *   outside a text field does on any page. Other text is refused with a line.
- * - Review, "Write a request…" and anything with data-ai-open open the side
+ * - Review, Side panel, "Write a request…" and anything with data-ai-open open the side
  *   sheet (GET <base>/panel, tool=1 for the copy-and-paste tool), moved to
  *   <body> so the top bar never clips it. The old #copy-and-paste address
  *   opens the tool.
@@ -50,8 +50,9 @@
     try { sessionStorage.setItem(seenKey(cid), String(n)); } catch (e) { /* private window */ }
   }
 
-  // The page id on an entity's own page, for "Copy this page".
+  // The page id on an entity's own page, for "Copy page".
   var ENTITY_RE = /^\/campaigns\/[^/]+\/entities\/([^/]+)/;
+  var AI_PAGE_RE = /^\/campaigns\/[^/]+\/ai\/?$/;
   function currentPage() {
     var m = ENTITY_RE.exec(location.pathname);
     return m && m[1] !== 'new' && m[1] !== 'search' ? m[1] : '';
@@ -173,7 +174,11 @@
         htmx.ajax('GET', root + '/bubble', { target: bubble, swap: 'innerHTML' }).then(function () {
           if (!state.bubble) return;
           var copyLabel = bubble.querySelector('[data-ai-copy-label]');
-          if (owner && copyLabel && currentPage()) copyLabel.textContent = 'Copy this page';
+          if (owner && copyLabel && currentPage()) copyLabel.textContent = 'Copy page';
+          // On the Your AI page itself, a link to it would only reload it.
+          if (AI_PAGE_RE.test(location.pathname)) {
+            Array.prototype.forEach.call(bubble.querySelectorAll('[data-ai-full]'), function (a) { a.remove(); });
+          }
           var first = bubble.querySelector('[data-ai-copy]');
           if (first) first.focus(); else bubble.focus();
         }).catch(function () {
@@ -305,6 +310,7 @@
         if (t.closest('[data-ai-paste]')) { doPaste(); return; }
         if ((el = t.closest('[data-ai-review]'))) { openRequest(el.getAttribute('data-ai-review')); return; }
         if (t.closest('[data-ai-tool]')) { closeBubble(true); openPanel('tool'); return; }
+        if (t.closest('[data-ai-side]')) { closeBubble(true); openPanel(''); return; }
         if (t.closest('[data-ai-connect]')) { closeBubble(true); openPanel('menu'); return; }
         if ((el = t.closest('a[data-ai-full]'))) { e.preventDefault(); leaveFor(el.href); }
       }
@@ -392,7 +398,9 @@
       }
 
       function onClick(e) {
-        if (state.bubble && !host.contains(e.target)) closeBubble(true);
+        // The click's path, not host.contains: Look and Stay remove themselves
+        // from the page before this runs, which would read as a click outside.
+        if (state.bubble && e.composedPath().indexOf(host) < 0) closeBubble(true);
         if (e.target.closest('[data-ai-open]') && !host.hidden) { e.preventDefault(); openPanel(''); return; }
         if (state.open && e.target.closest('[data-ai-close]')) close();
       }

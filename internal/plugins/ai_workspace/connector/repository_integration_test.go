@@ -278,6 +278,9 @@ func TestRepoIntegration_Requests(t *testing.T) {
 	if _, err := add(camp, conn, "one too many"); !errors.Is(err, ErrTooManyWaiting) {
 		t.Errorf("the waiting cap: %v", err)
 	}
+	if _, err := add(camp, conn, "r0"); !errors.Is(err, ErrAlreadyWaiting) {
+		t.Errorf("the same changes stored twice: %v", err)
+	}
 	theirs, err := add(other, theirConn, "theirs")
 	if err != nil {
 		t.Fatalf("another campaign's cap is its own: %v", err)

@@ -12,88 +12,30 @@ package records
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
-	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 )
 
 // Actions a record may carry; the same verbs as page rows.
 const (
-	ActionCreate = "create"
-	ActionUpdate = "update"
-	ActionDelete = "delete"
+	ActionCreate = aiplug.ActionCreate
+	ActionUpdate = aiplug.ActionUpdate
+	ActionDelete = aiplug.ActionDelete
 )
 
-// Record is one non-page block from the pasted markdown.
-type Record struct {
-	Index  int
-	Kind   string
-	Action string
-	Name   string
-	Fields map[string]any // the whole front matter, keys lower-cased
-	Body   string         // markdown after the front matter
-	// Generated is the browser's generator output (JSON), set at commit
-	// for generator rows only. Untrusted: kinds validate it like any input.
-	Generated string
-	// Links resolves @[Page] in Body to page links. Nil leaves the text as
-	// written (e.g. when planning).
-	Links *importer.PageLinks
-	// Made holds the slugs of pages this paste creates or keeps, which
-	// exist by the time records commit (pages commit first). Set when
-	// planning, so a review doesn't warn about a page the paste makes.
-	Made map[string]bool
-}
-
-// Actor is the operator running the import.
-type Actor struct {
-	UserID string
-	Role   int // visibility role (campaigns.CampaignContext.VisibilityRole)
-}
-
-// Viewer is the operator as the services' permission model sees them.
-func (a Actor) Viewer() permissions.Viewer { return permissions.RequestViewer(a.Role, a.UserID) }
-
-// CanAuthorDmOnly mirrors the UI's Owner-or-co-DM rule for hidden content.
-func (a Actor) CanAuthorDmOnly() bool { return a.Viewer().SkipsPerUserRules() }
-
-// Titled is a kind whose records have no name of their own; Title gives
-// the review row's heading.
-type Titled interface {
-	Title(r Record) string
-}
-
-// Plan is what the review screen shows for one record before commit.
-type Plan struct {
-	Summary  string   // one plain line: what will happen
-	Error    string   // blocks the row
-	Warnings []string // shown, never block
-	// Client is JSON handed to the browser (generator rows only): what
-	// to run, and over which calendar.
-	Client string
-	// Preview is a rulebook Book (the JSON GET /book returns) of what the
-	// row writes, drawn on the review screen by the rulebook reader so it
-	// shows in the campaign's look. House rules only; "" for none.
-	Preview string
-}
-
-// Kind is one feature AI Import can write.
-type Kind interface {
-	Name() string  // front-matter value, e.g. "event"
-	Label() string // review-screen label, e.g. "Calendar event"
-	// Doc is the prompt's description of this kind's keys, with an example.
-	Doc() string
-	Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan
-	Apply(ctx context.Context, campaignID string, a Actor, r Record) error
-	// Export lists what exists today in the same format, so an AI can
-	// update or remove it by name. "" when there is nothing.
-	Export(ctx context.Context, campaignID string, a Actor) (string, error)
-}
+// The contract types live in aiplug so a feature can implement a kind
+// without importing this plugin; these names keep the engine's code short.
+type (
+	Record = aiplug.Record
+	Actor  = aiplug.Actor
+	Plan   = aiplug.Plan
+	Kind   = aiplug.Kind
+	Titled = aiplug.Titled
+)
 
 // Registry holds the kinds wired at startup, in prompt order.
 type Registry struct {
@@ -229,6 +171,8 @@ var briefs = map[string]string{
 	KindPlayerNote:   "my own Player Notes on pages only, never Player Notes anyone else wrote",
 	"house-rule":     "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",
 	"system-entry":   "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",
+	"test":           "montages, chases and other tests on a page: the totals that end one and its results, which an encounter's versions can name",
+	"tracker":        "counters, named steps and clocks kept on pages, such as a hero's secret count of a debt: make one, put it on a page or every page of a category, hide it from players, and change its number with a note",
 	"encounter":      "fights planned on a page for Foundry to load: the heroes, each creature's count, initiative group and whether it starts seen, hidden or arrives later",
 	"field-rule":     "rules that work a sheet field out from another, such as a guild rank from a level",
 	"local-word":     "what a place or an era calls a word, such as a coin or a rank, shown in shops and on sheets",
@@ -238,7 +182,6 @@ var briefs = map[string]string{
 	"menu-order":     "the order of the categories in the sidebar menu (owner only)",
 	"quest":          "a quest page's notice: its status, title, blurb, reward, due date and steps, and which steps players see",
 	"notice-board":   "notice boards on a place or category page: who may pin to them, which quests fill them by themselves, and the quests and notes pinned by hand",
-	"game-night":     "game nights (play sessions): the real-world date and time, a one-line summary, played or cancelled, and the recap every member reads",
 	"page-map":       "the small map drawn on a page, written as one marker or shape per line",
 	"material":       "which kinds of crafting material an Armory item is (herb, bone, Remnant part and the rest), so recipes asking for \"any\" of a kind take it",
 	"recipe":         "crafting recipes: the item made, its materials, the method its steps follow, the project goal, characteristic, cost, who may make it, and its \"When… then…\" rules (new recipes and new rules arrive as drafts for the Director to approve)",
@@ -246,7 +189,7 @@ var briefs = map[string]string{
 	"shop-room":      "the room players step into from a shop: what kind of shop it is, its look and mood, the keeper's manner and their own lines for each moment of a visit",
 	"storefront":     "how a shop's front looks on the Shops street: building, colours, awning, sign, window wares, lamp and its closed look",
 	"drops":          "a creature's or other page's drop list: what it leaves in the spoils tray when defeated or searched, taken as it is or harvested with a test",
-	"roll_night":     "one night of an event's yearly roll: roll it again, lock it, or choose whether players are told",
+	"roll_night":     "one night of an event's yearly roll: roll it again, give it a result by hand, lock it, or choose whether players are told",
 	"moon":           "a moon the Director moves by hand: the day it turns full, dark or vanished, and what players see",
 	"generator":      "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }
@@ -257,6 +200,9 @@ func (r *Registry) Capabilities() string {
 	var b strings.Builder
 	for _, k := range r.Kinds() {
 		brief := briefs[k.Name()]
+		if bk, ok := k.(aiplug.Briefed); ok {
+			brief = bk.Brief()
+		}
 		if brief == "" {
 			brief = k.Label()
 		}
@@ -313,131 +259,14 @@ func (r *Registry) ExportAll(ctx context.Context, campaignID string, a Actor) st
 	return b.String()
 }
 
-// ---- field helpers: front matter arrives as loosely typed YAML ----
-
-// Visibility is the record's `visibility:` in the words records use
-// (everyone or dm_only), also reading a page's words: public for everyone,
-// private for Directors only.
-func (r Record) Visibility() string {
-	switch v := r.Str("visibility"); v {
-	case "public":
-		return "everyone"
-	case "private":
-		return "dm_only"
-	default:
-		return v
-	}
-}
-
-// Str returns a string field ("" when absent).
-func (r Record) Str(key string) string {
-	v, ok := r.Fields[key]
-	if !ok || v == nil {
-		return ""
-	}
-	switch t := v.(type) {
-	case string:
-		return strings.TrimSpace(t)
-	case int:
-		return strconv.Itoa(t)
-	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
-	case bool:
-		return strconv.FormatBool(t)
-	}
-	return strings.TrimSpace(fmt.Sprint(v))
-}
-
-// Has reports whether the key was written at all.
-func (r Record) Has(key string) bool { _, ok := r.Fields[key]; return ok }
-
-// Int reads a whole number; ok is false when absent, and err when not a number.
-func (r Record) Int(key string) (n int, ok bool, err error) {
-	f, ok, err := r.Float(key)
-	if !ok || err != nil {
-		return 0, ok, err
-	}
-	if f != math.Trunc(f) {
-		return 0, true, badRequestf("%s: %v is not a whole number", key, f)
-	}
-	return int(f), true, nil
-}
-
-// Float reads a number; ok is false when absent, and err when not a number.
-func (r Record) Float(key string) (float64, bool, error) {
-	v, ok := r.Fields[key]
-	if !ok || v == nil {
-		return 0, false, nil
-	}
-	switch t := v.(type) {
-	case int:
-		return float64(t), true, nil
-	case int64:
-		return float64(t), true, nil
-	case uint64:
-		return float64(t), true, nil
-	case float64:
-		if math.IsNaN(t) || math.IsInf(t, 0) {
-			return 0, true, badRequestf("%s is not a number", key)
-		}
-		return t, true, nil
-	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(t), 64)
-		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
-			return 0, true, badRequestf("%s: %q is not a number", key, t)
-		}
-		return f, true, nil
-	}
-	return 0, true, badRequestf("%s is not a number", key)
-}
-
-// Bool reads yes/no; ok is false when absent.
-func (r Record) Bool(key string) (bool, bool) {
-	v, ok := r.Fields[key]
-	if !ok {
-		return false, false
-	}
-	switch t := v.(type) {
-	case bool:
-		return t, true
-	case string:
-		s := strings.ToLower(strings.TrimSpace(t))
-		return s == "true" || s == "yes" || s == "on", true
-	}
-	return false, true
-}
-
-// List reads a YAML list (or a single value) as items.
-func (r Record) List(key string) []any {
-	v, ok := r.Fields[key]
-	if !ok || v == nil {
-		return nil
-	}
-	if l, ok := v.([]any); ok {
-		return l
-	}
-	return []any{v}
-}
-
 // badRequestf is a refusal worded for the operator.
-func badRequestf(format string, args ...any) error {
-	return apperror.NewBadRequest(fmt.Sprintf(format, args...))
-}
+func badRequestf(format string, args ...any) error { return aiplug.BadRequestf(format, args...) }
 
 // sameName compares names the way people read them.
-func sameName(a, b string) bool {
-	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
-}
+func sameName(a, b string) bool { return aiplug.SameName(a, b) }
 
 // quote renders a YAML-safe scalar for exports.
-func quote(s string) string { return strconv.Quote(s) }
+func quote(s string) string { return aiplug.Quote(s) }
 
-// planError is the text a review row shows for err: an AppError's own
-// message (never its type prefix or internal cause), else a plain line.
-func planError(err error) string {
-	var ae *apperror.AppError
-	if errors.As(err, &ae) && ae.Code < 500 {
-		return ae.Message
-	}
-	return "could not be checked; try again in a moment"
-}
+// planError is the text a review row shows for err.
+func planError(err error) string { return aiplug.PlanError(err) }

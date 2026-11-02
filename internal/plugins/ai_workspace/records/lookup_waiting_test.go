@@ -52,7 +52,7 @@ func TestLookups_Waiting(t *testing.T) {
 			"Only a Director can say yes or no",
 			"### Changes your AI asked for, waiting on the owner (1)\n\n- \"Five characters for Coral Court\" (5 to add), sent 2026-10-26",
 			"- \"Rename the inn\", applied: 1 changed (2026-10-26)",
-			"- \"Drop the moon\", turned down, nothing changed (2026-10-26)",
+			"- \"Drop the moon\", turned down by the owner, nothing changed; that was their choice, not an error (2026-10-26)",
 			"### Entries players wrote (1 handed in, 1 still being written)",
 			"- \"Fairy\" (ancestry) by Sam, for Ash: handed in, waiting for a Director",
 			"- \"Gnome\" (ancestry) by Lee: still being written; the Director asked: \"Wings cost 3\"",
@@ -104,7 +104,7 @@ func TestLookups_Waiting(t *testing.T) {
 	if got := (&Lookups{}).Answer(context.Background(), camp, owner, []Record{lookup("pending", nil)})[0]; !strings.Contains(got.Error, "can't be looked up") {
 		t.Errorf("unwired: %+v", got)
 	}
-	if !strings.Contains(LookupDoc(), "`what: waiting`") {
+	if !strings.Contains((&Lookups{}).LookupDoc(), "`what: waiting`") {
 		t.Error("LookupDoc lacks waiting")
 	}
 }

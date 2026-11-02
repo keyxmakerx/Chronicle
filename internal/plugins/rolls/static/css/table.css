@@ -176,3 +176,9 @@ html[data-motion="off"] .tt-island { transform: none; }
   :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .tt-n) { animation: none !important; transition: none !important; }
   .tt-island { transform: none; }
 }
+
+/* ---------- Touch: every control answers over at least 44px ---------- */
+@media (pointer: coarse) {
+  :is(.tt-icon, .tt-quiet, .tt-dbtn, .tt-lpick, .tt-ptab, .tt-seg button, .tt-lmenu button, .tt-go, .tt-mode, .tt-field) { min-height: 44px; }
+  .tt-icon { width: 44px; }
+}

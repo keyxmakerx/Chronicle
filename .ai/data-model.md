@@ -224,7 +224,7 @@ its two siblings are one-way (`docs/deployment.md` §6). `sessions` and
 | `calendar_events` | Events | `kind_id`, `announced`, `payload` JSON; `recurrence_rule` JSON, the "repeats by rule" shape (migration 022) |
 | `calendar_event_overrides` | Skip or move one occurrence of a repeating event | PK `(event_id, occurrence_year, occurrence_month, occurrence_day)`; `action` enum(`skip`,`move`) with `new_*` date |
 | `calendar_event_rolls` | An event that rolls when it happens | PK `event_id`; `config` JSON (dice or rolling table, result bands, roll-on-arrival), validated in the service; FK→`calendar_events` CASCADE |
-| `calendar_event_roll_nights` | One stored result per occurrence date | PK `(event_id, year, month, day)`; `total`/`faces` (dice) or `entry` (table); `source`; `locked` keeps a re-roll from replacing it; `told` NULL = follow the result's own setting |
+| `calendar_event_roll_nights` | One stored result per occurrence date | PK `(event_id, year, month, day)`; `total`/`faces` (dice) or `entry` (a table's entry, or a dice result's name the Director picked); `source`; `locked` keeps a re-roll from replacing it; `told` NULL = follow the result's own setting |
 | `calendar_weather` | The calendar's current-weather snapshot | one row per calendar |
 | `calendar_weather_days` | Weather for one date, generated or set by hand | PK `(calendar_id, year, month, day)`; `source` (`manual` by default); `locked` keeps Generate from replacing it (migration 025) |
 | `calendar_weather_settings` | The world's climate and how long weather lasts | PK `calendar_id`; `climate`, `continuity`, `kinds` (the owner's own kinds of weather), `forecast_days` (migration 025) |
@@ -343,7 +343,7 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 
 | Table | Purpose |
 |-------|---------|
-| `dm_screen_board_items` | The DM Screen's Adventures tab: `kind` = page/note; a pin has `entity_id` (unique per campaign; FK cascade to `entities` and `campaigns`), a note has `body` (500 characters); `created_by` carries no FK |
+| `dm_screen_board_items` | The DM Screen's Adventures section: `kind` = page/note; a pin has `entity_id` (unique per campaign; FK cascade to `entities` and `campaigns`), a note has `body` (500 characters); `created_by` carries no FK |
 
 ### entities standing (`internal/plugins/entities/migrations/`, registry slug `entity_standing`)
 
@@ -426,7 +426,7 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 | Table | Purpose |
 |-------|---------|
 | `encounters` | Fights a DM plans on a page: `entity_id` is the page, `name` and `ready` are columns for Foundry's sorted, searchable list, `data` is the JSON of hero page ids and creature rows (`entityId`, `name`, `count`, `group` A to H, `start` seen/hidden/later), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
-| `encounter_runs` | The fight running on the DM Screen's Fight tab, one per campaign (`campaign_id` is the key): `data` is the JSON copy of the encounter's lines with initiative, hit point boxes and conditions, `version` for edit conflicts; no key to `encounters` (a fight in progress outlives its encounter); FK to `campaigns` cascades |
+| `encounter_runs` | The fight running on the DM Screen's Fight section, one per campaign (`campaign_id` is the key): `data` is the JSON copy of the encounter's lines with initiative, hit point boxes and conditions, `version` for edit conflicts; no key to `encounters` (a fight in progress outlives its encounter); FK to `campaigns` cascades |
 
 ### armory (`internal/plugins/armory/migrations/`)
 

@@ -2,13 +2,20 @@ package ai_workspace
 
 import "fmt"
 
-// aiCutOffPanel is the campaign's brake: one press stops every AI key here
-// until the owner turns it back on. It asks once before stopping.
+// aiCutOffPanel is the campaign's brake, the last row of Settings: one
+// press stops every AI key here until the owner turns it back on. It asks
+// once before stopping.
 templ aiCutOffPanel(v ConnectView) {
-	<section class="aic-panel space-y-2" aria-labelledby="ai-cutoff-heading" x-data="{ sure: false }">
-		<h2 id="ai-cutoff-heading" class="aic-h">Stop all AI here</h2>
+	<div class="aic-row" x-data="{ sure: false }">
+		<span class="aic-row-k">
+			<b>If something looks wrong</b>
+			if v.CutOff != nil {
+				<span class="aic-hint">Stopped { agoText(v.Now, *v.CutOff) }. Every key in this campaign is refused until you turn it back on.</span>
+			} else {
+				<span class="aic-hint">Refuses every AI key in the campaign, yours and players', from its next call. Nothing already answered changes, and nothing waiting is lost.</span>
+			}
+		</span>
 		if v.CutOff != nil {
-			<p class="aic-hint">Stopped { agoText(v.Now, *v.CutOff) }. Every key in this campaign is refused until you turn it back on.</p>
 			<button
 				type="button"
 				class="btn-secondary"
@@ -19,9 +26,11 @@ templ aiCutOffPanel(v ConnectView) {
 				hx-disabled-elt="this"
 			>Turn AI back on</button>
 		} else {
-			<p class="aic-hint">If something looks wrong, this refuses every AI key in the campaign at once, from its next call. Nothing already answered changes, and nothing waiting is lost.</p>
-			<button type="button" class="quiet-word text-bad" x-show="!sure" @click="sure = true">Stop all AI</button>
-			<div class="aic-ask" x-show="sure" x-cloak x-collapse.duration.200ms>
+			<button type="button" class="btn-secondary aic-bad" x-show="!sure" @click="sure = true">
+				<i class="fa-solid fa-circle-stop" aria-hidden="true"></i>
+				Stop all AI here
+			</button>
+			<div class="aic-ask aic-row-drawer" x-show="sure" x-cloak>
 				<p>Stop every AI in this campaign until you turn it back on?</p>
 				<button type="button" class="btn-secondary" @click="sure = false">Keep it on</button>
 				<button
@@ -35,5 +44,5 @@ templ aiCutOffPanel(v ConnectView) {
 				>Stop all AI</button>
 			</div>
 		}
-	</section>
+	</div>
 }

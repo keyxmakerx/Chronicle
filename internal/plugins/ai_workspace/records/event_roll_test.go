@@ -15,6 +15,10 @@ type fakeRolls struct {
 	rolled []calendar.RollNightsInput
 	locked []bool
 	told   []*bool
+	chosen []string
+	// calls is every write in order, to check a hand-set result is locked
+	// after it is stored.
+	calls []string
 }
 
 func newFakeRolls() *fakeRolls { return &fakeRolls{cfg: map[string]*calendar.RollConfig{}} }
@@ -36,7 +40,13 @@ func (f *fakeRolls) RollEventNights(_ context.Context, id, _, _ string, in calen
 }
 func (f *fakeRolls) LockEventRollNights(_ context.Context, _, _, _ string, _ []calendar.DayDate, locked bool, _ permissions.Viewer) (int, error) {
 	f.locked = append(f.locked, locked)
+	f.calls = append(f.calls, map[bool]string{true: "lock", false: "unlock"}[locked])
 	return 1, nil
+}
+func (f *fakeRolls) SetEventRollNight(_ context.Context, _, _, _ string, _ calendar.DayDate, result string, _ permissions.Viewer) error {
+	f.chosen = append(f.chosen, result)
+	f.calls = append(f.calls, "set "+result)
+	return nil
 }
 func (f *fakeRolls) TellEventRollNight(_ context.Context, _, _, _ string, _ calendar.DayDate, told *bool, _ permissions.Viewer) error {
 	f.told = append(f.told, told)
@@ -164,5 +174,57 @@ func TestRollNightKind(t *testing.T) {
 	empty := rec("roll_night", ActionUpdate, "Bloodnight", map[string]any{"year": 1492, "month": 2, "day": 3}, "")
 	if p := k.Plan(context.Background(), camp, owner, empty); p.Error == "" {
 		t.Fatal("a row that does nothing should be refused")
+	}
+}
+
+// A night given a result by hand is stored, then locked so a year's reroll
+// keeps it; locked: false leaves it open, and a reroll with a result is
+// refused as two answers to one question.
+func TestRollNightKind_Result(t *testing.T) {
+	c := newCal()
+	c.stored = []calendar.Event{{ID: "ev1", Name: "Bloodnight", Year: 1492, Month: 1, Day: 3}}
+	night := func(extra map[string]any) Record {
+		f := map[string]any{"year": 1492, "month": 2, "day": 3}
+		for k, v := range extra {
+			f[k] = v
+		}
+		return rec("roll_night", ActionUpdate, "Bloodnight", f, "")
+	}
+	tests := []struct {
+		name  string
+		extra map[string]any
+		calls []string
+		bad   bool
+	}{
+		{"locked by default", map[string]any{"result": "Red Tide"}, []string{"set Red Tide", "lock"}, false},
+		{"left unlocked", map[string]any{"result": "Red Tide", "locked": false}, []string{"unlock", "set Red Tide"}, false},
+		{"a total", map[string]any{"result": 14}, []string{"set 14", "lock"}, false},
+		{"reroll and result", map[string]any{"result": "Red Tide", "reroll": true}, nil, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rolls := newFakeRolls()
+			k := RollNightKind{Cal: c, Rolls: rolls}
+			r := night(tc.extra)
+			p := k.Plan(context.Background(), camp, owner, r)
+			if tc.bad {
+				if p.Error == "" {
+					t.Fatal("planned a row that should be refused")
+				}
+				return
+			}
+			if p.Error != "" {
+				t.Fatalf("plan: %s", p.Error)
+			}
+			if !strings.Contains(p.Summary, "Bloodnight") || !strings.Contains(p.Summary, "result") {
+				t.Fatalf("summary %q", p.Summary)
+			}
+			if err := k.Apply(context.Background(), camp, owner, r); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(rolls.calls, "|") != strings.Join(tc.calls, "|") {
+				t.Fatalf("calls %v, want %v", rolls.calls, tc.calls)
+			}
+		})
 	}
 }

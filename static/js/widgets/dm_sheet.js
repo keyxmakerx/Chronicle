@@ -27,7 +27,7 @@
   }
 
   function cards() {
-    var o = document.querySelector('.dms-overlay');
+    var o = document.querySelector('.dms-dock');
     return o ? Array.prototype.slice.call(o.querySelectorAll('[data-dms-sheet]')) : [];
   }
 
@@ -77,7 +77,7 @@
     var sheet = build();
     var panel = sheet.querySelector('.dms-sheet-p');
     var still = reduced();
-    var screen = document.querySelector('.dms-overlay');
+    var screen = document.querySelector('.dms-dock');
 
     cur = { el: sheet, panel: panel, id: btn.getAttribute('data-dms-sheet'), opener: btn, token: 0, screen: screen };
     document.body.appendChild(sheet);
@@ -171,7 +171,7 @@
       // The panel may have been redrawn while the sheet was open; look the card
       // up again, and fall back to the tab itself.
       var back = null;
-      var o = document.querySelector('.dms-overlay');
+      var o = document.querySelector('.dms-dock');
       if (o) {
         back = Array.prototype.filter.call(o.querySelectorAll('[data-dms-sheet]'), function (n) {
           return n.getAttribute('data-dms-sheet') === c.id;

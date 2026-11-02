@@ -1151,3 +1151,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - A new read path decides "can see hidden" with `CanAuthorDmOnly()` or an Owner visibility role, never `MemberRole >= RoleScribe`; that comparison now means "may write".
 - A new Scribe write route on a page needs `requirePageWrite`, and a new write of text or fields must keep what the Scribe was not served (`hidden_parts.go`).
+
+## ADR-071: The AI engine is a small core; each feature brings its own AI part
+
+**Status:** Accepted; operator sign-off on Sign-offs option B (#2012).
+
+**Context:** `ai_workspace` grew to about 32k lines, over half of it knowledge of other features (`records/`, plus `internal/app/ai_*.go` adapters). Every feature that an AI could read or change had to be written into the AI plugin, so it grew with each feature and imported plugins it should not know.
+
+**Decision:**
+1. `internal/aiplug` is the contract: `Kind` (a block an AI can ask to write), `Lookup` (a `what:` it can ask, which is also a tool on a connected AI app), `Record`, `Actor`, `Plan` and the shared field helpers. It imports no plugin.
+2. A feature's AI part lives in the feature's own plugin and implements `aiplug`. `internal/app` registers it (`addAIKinds`, `Lookups.Plugged`); the engine never imports the feature for it.
+3. The engine (`ai_workspace`) keeps what is AI itself: keys and the MCP endpoint, export, parsing, review, applying, privacy and size caps, and rendering a record's body (`aiplug.Text`).
+4. Features move one at a time; game nights first, then the calendar. A moved feature's kind, lookup and tool leave `records/` and `connector/tools.go`.
+
+**Consequences:**
+- A new feature's AI support is a file in that feature's plugin, never an edit to `ai_workspace`.
+- A plugged lookup is answered after the built-in ones and listed before `format`; a built-in `what:` always wins.
+- A kind's body reaches storage only through `Record.BodyEntry`, so links and GM-only markers stay the engine's job.
+

@@ -123,6 +123,9 @@ const (
 	// summaryMax and noteMax match the call log's columns.
 	summaryMax = 200
 	noteMax    = 120
+	// outcomeMax matches ai_connection_requests.outcome: the counts and each
+	// failed change's reason.
+	outcomeMax = 1000
 	// changesMax caps one request's size and blocksMax its blocks, which
 	// keeps what checking it costs small; requestsWaiting caps how many
 	// wait for the owner at once, so an AI can't bury them; requestsKept

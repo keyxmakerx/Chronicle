@@ -62,7 +62,7 @@ func TestRepoIntegration_PerPerson(t *testing.T) {
 	}
 
 	ask := func(conn int64, s string) (int64, error) {
-		return repo.AddRequest(ctx, &Request{CampaignID: camp, ConnectionID: conn, Summary: s, Counts: "1 to change", Blocks: 1, Body: "x", CreatedAt: now}, 1)
+		return repo.AddRequest(ctx, &Request{CampaignID: camp, ConnectionID: conn, Summary: s, Counts: "1 to change", Blocks: 1, Body: "x " + s, CreatedAt: now}, 1)
 	}
 	pq, err := ask(playerKey, "player's")
 	if err != nil {

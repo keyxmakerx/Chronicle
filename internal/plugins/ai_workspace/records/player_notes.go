@@ -121,7 +121,7 @@ func (k PlayerNoteKind) Apply(ctx context.Context, campaignID string, a Actor, r
 	if err != nil {
 		return err
 	}
-	j, h, err := entry(r.Body, r.Links)
+	j, h, err := entry(r.Body, linksOf(r))
 	if err != nil {
 		return err
 	}

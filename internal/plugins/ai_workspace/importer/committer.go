@@ -631,7 +631,10 @@ func (c *Committer) commitUpdate(
 	// Measured here, from the entity as it is now, so both update paths and
 	// a stale review screen get the same answer. Checked before any write,
 	// including the settings update below.
-	if gm := GMOnlyPartsAfter(existing, bodyHTML); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
+	// An update with no text changes only what its front matter names (a
+	// field, a folder, tags): writing its empty body would wipe the page.
+	keepText := strings.TrimSpace(page.Body) == ""
+	if gm := GMOnlyPartsAfter(existing, bodyHTML); !keepText && gm.Any() && !dec.ReplaceGMOnlyConfirmed {
 		out.Status = StatusSkipped
 		out.Reason = gm.SkipReason()
 		return out
@@ -696,10 +699,12 @@ func (c *Committer) commitUpdate(
 		out.Reason = parentReason(err, "Could not update the existing page's settings. The original page is unchanged.")
 		return out
 	}
-	if err := c.creator.UpdateEntry(ctx, existing.ID, bodyJSON, bodyHTML); err != nil {
-		out.Status = StatusFailed
-		out.Reason = "Updated the page's settings, but could not write the new body."
-		return out
+	if !keepText {
+		if err := c.creator.UpdateEntry(ctx, existing.ID, bodyJSON, bodyHTML); err != nil {
+			out.Status = StatusFailed
+			out.Reason = "Updated the page's settings, but could not write the new body."
+			return out
+		}
 	}
 	if len(fields) > 0 {
 		if err := c.creator.MergeFields(ctx, existing.ID, fields); err != nil {

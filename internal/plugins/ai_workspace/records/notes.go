@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
@@ -233,7 +234,7 @@ func (k NoteKind) Apply(ctx context.Context, campaignID string, a Actor, r Recor
 	if err != nil {
 		return err
 	}
-	j, h, err := entry(r.Body, r.Links)
+	j, h, err := entry(r.Body, linksOf(r))
 	if err != nil {
 		return err
 	}
@@ -320,3 +321,23 @@ func (k NoteKind) applyShared(ctx context.Context, campaignID string, a Actor, r
 // Export is empty: the Notes category of the export already lists the
 // operator's own notes.
 func (NoteKind) Export(context.Context, string, Actor) (string, error) { return "", nil }
+
+// bodyText is the engine's aiplug.Text: bodies rendered with the paste's
+// @[Page] links, GM-only markers refused.
+type bodyText struct{ links *importer.PageLinks }
+
+// BodyText is the Text a record applied from a paste carries; links may be
+// nil, which leaves @[Page] mentions as written.
+func BodyText(links *importer.PageLinks) aiplug.Text { return bodyText{links: links} }
+
+func (t bodyText) HTML(body string) (*string, error) { return bodyHTML(body, t.links) }
+
+func (t bodyText) Entry(body string) (*string, *string, error) { return entry(body, t.links) }
+
+// linksOf is the paste's link resolver behind a record's Text, if any.
+func linksOf(r Record) *importer.PageLinks {
+	if t, ok := r.Text.(bodyText); ok {
+		return t.links
+	}
+	return nil
+}

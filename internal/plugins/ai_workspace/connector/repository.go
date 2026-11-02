@@ -55,8 +55,9 @@ type Repository interface {
 	PruneCalls(ctx context.Context, campaignID, userID string, keep int) error
 
 	// AddRequest stores a request unless the key's maker already has max
-	// waiting, checked in one transaction holding the campaign's row. It
-	// returns the id, or ErrTooManyWaiting.
+	// waiting or the same changes (byte for byte) are already waiting,
+	// checked in one transaction holding the campaign's row. It returns the
+	// id, ErrAlreadyWaiting or ErrTooManyWaiting.
 	AddRequest(ctx context.Context, r *Request, max int) (int64, error)
 	// Requests lists what userID's AI asked for in the campaign, in one
 	// status, newest first, without the blocks. Each person's requests are
@@ -327,6 +328,11 @@ func (r *repository) PruneCalls(ctx context.Context, campaignID, userID string, 
 // as they may.
 var ErrTooManyWaiting = errors.New("too many requests are waiting for review")
 
+// ErrAlreadyWaiting: the key's maker already has these exact changes
+// waiting. An AI app that timed out and called again, or an AI that
+// resends to be sure, would otherwise leave the owner two copies to review.
+var ErrAlreadyWaiting = errors.New("these changes are already waiting for review")
+
 func (r *repository) AddRequest(ctx context.Context, req *Request, max int) (id int64, err error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -340,6 +346,18 @@ func (r *repository) AddRequest(ctx context.Context, req *Request, max int) (id 
 	var locked string
 	if err = tx.QueryRowContext(ctx, `SELECT id FROM campaigns WHERE id = ? FOR UPDATE`, req.CampaignID).Scan(&locked); err != nil {
 		return 0, dbError("locking campaign", err)
+	}
+	var same int
+	if err = tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM ai_connection_requests q JOIN ai_connections c ON c.id = q.connection_id
+		 WHERE q.campaign_id = ? AND q.status = ? AND q.body = ?
+		   AND c.user_id = (SELECT user_id FROM ai_connections WHERE id = ?)`,
+		req.CampaignID, RequestWaiting, req.Body, req.ConnectionID).Scan(&same); err != nil {
+		return 0, dbError("checking requests", err)
+	}
+	if same > 0 {
+		err = ErrAlreadyWaiting
+		return 0, err
 	}
 	var waiting int
 	if err = tx.QueryRowContext(ctx,

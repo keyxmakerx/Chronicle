@@ -134,7 +134,7 @@ func (s *Server) Handle(ctx context.Context, sess Session, body []byte) Outcome 
 	case "ping":
 		return reply(m.ID, map[string]any{})
 	case "tools/list":
-		list := toolsFor(sess.Conn)
+		list := toolsFor(sess.Conn, s.Lookups)
 		defs := make([]map[string]any, len(list))
 		for i, t := range list {
 			defs[i] = t.definition(sess.Conn != nil && sess.Conn.ForPlayer)
@@ -209,7 +209,7 @@ func (s *Server) call(ctx context.Context, m rpcMessage, sess Session) Outcome {
 	if err := json.Unmarshal(m.Params, &p); err != nil {
 		return replyError(m.ID, codeInvalidParams, "tools/call needs a name and arguments")
 	}
-	t := findTool(sess.Conn, p.Name)
+	t := findTool(sess.Conn, s.Lookups, p.Name)
 	if t == nil {
 		return replyError(m.ID, codeInvalidParams, "there is no tool called "+oneLine(p.Name, 60))
 	}
@@ -230,7 +230,7 @@ func (s *Server) call(ctx context.Context, m rpcMessage, sess Session) Outcome {
 	case toolAsk:
 		return s.ask(ctx, m.ID, sess, args)
 	case toolHowTo:
-		return s.howTo(ctx, m.ID, sess)
+		return s.howTo(ctx, m.ID, sess, args)
 	}
 	text, note, ok := t.answer(ctx, s.Lookups, sess.Conn.CampaignID, sess.CampaignName, sess.Actor, args)
 	out := toolResult(m.ID, text, !ok)
@@ -249,6 +249,15 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 		return out
 	}
 	q, err := s.Asks.Ask(ctx, sess.Conn, args["summary"], args["changes"])
+	if errors.Is(err, ErrAlreadyWaiting) {
+		// Not an error: what the AI wanted is done, so it is told so plainly
+		// and isn't nudged into a third try.
+		out := toolResult(id, "Already waiting: these exact changes were sent earlier and are still waiting for review in Chronicle, so nothing new was sent. "+
+			"Say it is waiting under the AI button at the top of any Chronicle page, and don't send it again.", false)
+		line.Note, line.OK = "already waiting, not sent again", true
+		out.Called = line
+		return out
+	}
 	if err != nil {
 		msg := err.Error()
 		switch {
@@ -275,10 +284,16 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 	return out
 }
 
-// howTo answers how_to_write_changes. The prompt was written for copy and
-// paste, so it is prefaced with what is different over a connection.
-func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session) Outcome {
+// howTo answers how_to_write_changes, in the part asked for (howToPart).
+// The prompt was written for copy and paste, so the guide is prefaced with
+// what is different over a connection.
+func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session, args map[string]string) Outcome {
 	line := &CallLine{Tool: toolHowTo, Summary: "Read how to write changes"}
+	if c := args["category"]; c != "" {
+		line.Summary = "Read the sheet fields of " + oneLine(c, 60)
+	} else if args["part"] != "" {
+		line.Summary = "Read how to write changes: " + oneLine(args["part"], 40)
+	}
 	if s.Instructions == nil {
 		out := toolResult(id, "Not answered: the instructions aren't available on this Chronicle site.", true)
 		line.Note = "not available"
@@ -292,9 +307,23 @@ func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session) Ou
 		out.Called = line
 		return out
 	}
+	part, ok, why := howToPart(text, args["part"], args["category"])
+	if !ok {
+		out := toolResult(id, "Not answered: "+why+".", true)
+		line.Note = why
+		out.Called = line
+		return out
+	}
+	if args["category"] != "" || strings.EqualFold(strings.TrimSpace(args["part"]), howToPartCategories) {
+		// The sheet fields are read on their own, so they need no preface.
+		out := toolResult(id, part, false)
+		line.Note, line.OK = fmt.Sprintf("%d KB", (len(part)+1023)/1024), true
+		out.Called = line
+		return out
+	}
 	text = "You are connected to Chronicle through tools, so two things differ from what follows. " +
 		"Where it says to write a `kind: lookup` block, use the lookup tools instead. " +
-		"Where it says to answer with blocks to paste, send them with " + toolAsk + " instead.\n\n" + strings.TrimSpace(text)
+		"Where it says to answer with blocks to paste, send them with " + toolAsk + " instead.\n\n" + strings.TrimSpace(part)
 	out := toolResult(id, text, false)
 	line.Note, line.OK = fmt.Sprintf("%d KB", (len(text)+1023)/1024), true
 	out.Called = line

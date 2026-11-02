@@ -44,12 +44,13 @@ func TestAdventuresPane_Render(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		`data-dms-tab="adventures"`,
-		`data-dms-pane="adventures"`,
+		`data-dms-open="adventures"`,
+		`data-dms-sec="adventures"`,
+		"2 cards",
 		`data-sheet-url="/campaigns/c1/entities/e1/sheet"`,
 		`data-url="/campaigns/c1/dm-screen/adventures/items/i1"`,
 		"Lastwell",
-		"Only the GM team sees this tab.",
+		"Only the GM team sees this card.",
 		"Bring the &lt;bell&gt;",
 	} {
 		if !strings.Contains(out, want) {

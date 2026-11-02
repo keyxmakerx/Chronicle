@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -27,7 +28,7 @@ const (
 	maxLookups      = 20
 	maxAnswerBytes  = 24 * 1024
 	maxAnswersBytes = 120 * 1024
-	maxAnswerLines  = 300
+	maxAnswerLines  = aiplug.MaxAnswerLines
 	maxCalMonths    = 24
 	maxPagesWalk    = 50 // pages of 100, as the AI export walks them
 )
@@ -122,8 +123,10 @@ type Lookups struct {
 	Tags TagsAPI
 	// Tiers adds the event importance levels to the calendar answer.
 	Tiers TierLister
-	// Nights answers `what: game-nights`.
-	Nights GameNightsAPI
+	// Plugged are the lookups features register themselves (aiplug),
+	// answered after the built-in ones; a `what:` both know is the
+	// built-in one's.
+	Plugged []aiplug.Lookup
 	// PageMaps adds a page's map lines to the `page` answer; nil leaves
 	// them out.
 	PageMaps PageMapsAPI
@@ -146,6 +149,8 @@ type Lookups struct {
 	Encounters EncountersAPI
 	Tests      TestsAPI
 	Monsters   FoundryMonstersAPI
+	// Trackers answers `what: trackers`; nil says it can't be looked up.
+	Trackers TrackersAPI
 	// Waiting answers `what: waiting`: what waits on a Director's review.
 	// Nil says it can't be looked up.
 	Waiting WaitingAPI
@@ -190,9 +195,9 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"note", "`name` (its title); optional `page` (for a jot) and `by` (the writer)", "one note's full text"},
 	{"house-rules", "optional `name` (one chapter's title)", "the house-rules chapters, whole while they fit in one answer; a longer rulebook lists every title, and `name` reads any one chapter"},
 	{"system-entries", "optional `field` (e.g. ancestry, kit, race) and `name` (part of an entry's name)", "the game system's entries for a character field, narrowed to those whose name holds `name`; without `field`, the fields that have entries"},
-	{"game-nights", "none", "the campaign's game nights: name, date, time, status and summary (owner and co-DM only)"},
 	{"encounters", "optional `page`", "the fights planned on pages, written as encounter blocks, with the version that plays now and any creature Foundry can't place (owner and co-DM only)"},
 	{"tests", "optional `page`", "the montages and other tests on pages, their results and the one recorded, which pick encounter versions (owner and co-DM only)"},
+	{"trackers", "optional `page`", "the counters, steps and clocks kept on pages, hidden ones included: each one's value, what it means now and its latest changes (owner and co-DM only)"},
 	{"foundry-monsters", "optional `name` (part of a name), `level` and `role`", "the monsters Foundry can place: its world's actors and its compendiums', with level, role and EV (owner and co-DM only)"},
 	{"waiting", "none", "what is waiting for a Director's review: the changes this AI asked for (and how the owner answered the latest), entries players wrote and handed in, and players' stash moves and requests to buy (owner and co-DM only)"},
 	{"crafting", "optional `part` (recipes, materials, drops, benches or looks) and `name` (one recipe, material, bench or page)", "crafting: the system's rules, every recipe, material (with the pages that drop it and the recipes that use it), drop list, the spoils tray, heroes' projects and benches; a `part` writes that part as blocks to send back changed, and `looks` lists every item look. A connection that sees what players see reads the recipe book"},
@@ -200,13 +205,44 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{lookupWhatFormat, "`block`, the kind to explain (e.g. `block: calendar`)", "how to write one kind of block: every key, the rules and an example"},
 }
 
-// LookupDoc is the prompt's description of lookup blocks.
-func LookupDoc() string {
+// LookupDoc is the prompt's description of lookup blocks: the built-in
+// ones, with the plugged ones before `format`, which closes the list.
+func (l *Lookups) LookupDoc() string {
 	var b strings.Builder
 	for _, w := range lookupWhats {
+		if w.what == lookupWhatFormat {
+			for _, p := range l.plugged() {
+				in := p.LookupInfo()
+				fmt.Fprintf(&b, "- `what: %s`: %s. Keys: %s.\n", in.What, in.Brief, in.Keys)
+			}
+		}
 		fmt.Fprintf(&b, "- `what: %s`: %s. Keys: %s.\n", w.what, w.brief, w.keys)
 	}
 	return b.String()
+}
+
+// plugged is the registered lookups; none on a nil Lookups.
+func (l *Lookups) plugged() []aiplug.Lookup {
+	if l == nil {
+		return nil
+	}
+	return l.Plugged
+}
+
+// pluggedFor is the registered lookup answering what, or nil.
+func (l *Lookups) pluggedFor(what string) aiplug.Lookup {
+	for _, p := range l.plugged() {
+		in := p.LookupInfo()
+		if normKind(in.What) == what {
+			return p
+		}
+		for _, a := range in.Aliases {
+			if normKind(a) == what {
+				return p
+			}
+		}
+	}
+	return nil
 }
 
 // lookupRun carries one paste's answers, caching the page walk they share.
@@ -316,12 +352,12 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.systemEntries(firstNonEmpty(r.Str("field"), r.Str("category")), r.Name)
 	case "tags":
 		ans, err = run.tagsLookup()
-	case "game-nights", "game-night":
-		ans, err = run.gameNights()
 	case "encounters", "encounter", "fights":
 		ans, err = run.encountersLookup(firstNonEmpty(r.Str("page"), r.Name))
 	case "tests", "test":
 		ans, err = run.testsLookup(firstNonEmpty(r.Str("page"), r.Name))
+	case "trackers", "tracker", "counters", "clocks":
+		ans, err = run.trackersLookup(firstNonEmpty(r.Str("page"), r.Name))
 	case "foundry-monsters", "monsters", "foundry-monster":
 		ans, err = run.foundryMonsters(r)
 	case "waiting", "pending", "queue", "review":
@@ -344,7 +380,11 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 	case "":
 		return LookupAnswer{Chip: "Lookup", Error: "it needs `what:`"}
 	default:
-		return LookupAnswer{Chip: what, Error: fmt.Sprintf("`what: %s` is not something Chronicle can look up", what)}
+		p := run.l.pluggedFor(what)
+		if p == nil {
+			return LookupAnswer{Chip: what, Error: fmt.Sprintf("`what: %s` is not something Chronicle can look up", what)}
+		}
+		ans.Chip, ans.Text, err = p.Answer(run.ctx, run.campaignID, run.a, r)
 	}
 	if isNoCalendar(err) {
 		return run.noCalendar(strings.SplitN(ans.Chip, " · ", 2)[0])
@@ -1235,50 +1275,6 @@ func (run *lookupRun) systemEntryFields() (LookupAnswer, error) {
 	return ans, nil
 }
 
-// gameNights answers `what: game-nights`. Game nights are Director
-// content, as the kind is, so players get a refusal.
-func (run *lookupRun) gameNights() (LookupAnswer, error) {
-	ans := LookupAnswer{Chip: "Game nights"}
-	if run.l.Nights == nil {
-		return ans, badRequestf("game nights can't be looked up on this server")
-	}
-	if !run.director() {
-		return ans, badRequestf("game nights are left out in Safe privacy; choose Permitted to include them")
-	}
-	list, err := run.l.Nights.List(run.ctx, run.campaignID)
-	if err != nil {
-		return ans, err
-	}
-	ans.Chip = fmt.Sprintf("Game nights · %d", len(list))
-	var b strings.Builder
-	fmt.Fprintf(&b, "## Game nights (%d)\n\n", len(list))
-	var lines []string
-	for _, n := range list {
-		line := "- " + n.Name
-		var parts []string
-		when := strings.TrimSpace(n.Date + " " + n.Time)
-		if when != "" {
-			parts = append(parts, when)
-		}
-		if w := nightWords[n.Status]; w != "" {
-			parts = append(parts, w)
-		}
-		if len(parts) > 0 {
-			line += ": " + strings.Join(parts, ", ")
-		}
-		if s := strings.TrimSpace(n.Summary); s != "" {
-			line += ". " + oneLine(s, 140)
-		}
-		lines = append(lines, line)
-	}
-	if len(lines) == 0 {
-		b.WriteString("None yet.\n")
-	}
-	writeLines(&b, lines)
-	ans.Text = b.String()
-	return ans, nil
-}
-
 func (run *lookupRun) players() (LookupAnswer, error) {
 	ans := LookupAnswer{Chip: "Players"}
 	if run.l.Party == nil {
@@ -1393,15 +1389,7 @@ func firstNonEmpty(ss ...string) string {
 }
 
 // writeLines writes up to maxAnswerLines lines, then says how many more.
-func writeLines(b *strings.Builder, lines []string) {
-	for i, l := range lines {
-		if i >= maxAnswerLines {
-			fmt.Fprintf(b, "…and %d more.\n", len(lines)-i)
-			return
-		}
-		b.WriteString(l + "\n")
-	}
-}
+func writeLines(b *strings.Builder, lines []string) { aiplug.WriteLines(b, lines) }
 
 // namedPart is one item of a long answer: the name `name` reads it by, and
 // its whole text.
@@ -1465,17 +1453,7 @@ func capText(s string, n int) string {
 }
 
 // oneLine flattens whitespace and shortens s to about n bytes.
-func oneLine(s string, n int) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if len(s) <= n {
-		return s
-	}
-	cut := strings.LastIndex(s[:n], " ")
-	if cut < n/2 {
-		cut = runeStart(s, n)
-	}
-	return s[:cut] + "…"
-}
+func oneLine(s string, n int) string { return aiplug.OneLine(s, n) }
 
 // runeStart backs i up to the start of a UTF-8 character, so a cut never
 // splits one.

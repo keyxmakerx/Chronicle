@@ -835,8 +835,8 @@ func TestDmScreenKitIsScopedToTheOverlay(t *testing.T) {
 	if attrs["data-cz-kit"] != "sharp" {
 		t.Errorf("the page keeps the campaign's kit, got %v", attrs["data-cz-kit"])
 	}
-	if css := AppearanceCSS(ctx); !strings.Contains(css, "[data-dms-kit] .dms-overlay{") {
-		t.Errorf("the overlay needs its own kit tokens, got %q", css)
+	if css := AppearanceCSS(ctx); !strings.Contains(css, "[data-dms-kit] .dms-dock{") {
+		t.Errorf("the dock needs its own kit tokens, got %q", css)
 	}
 
 	for _, kit := range []string{"", "bogus"} {

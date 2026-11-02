@@ -17,6 +17,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 )
 
 // reqRepo is just enough of the connector's repository for its requests and
@@ -223,6 +224,26 @@ func TestRequest_ReviewThenApply(t *testing.T) {
 	}
 }
 
+// A second Apply of the same request (a double click, or the review open in
+// two tabs) writes nothing: the request was already answered.
+func TestRequest_ApplyTwiceWritesOnce(t *testing.T) {
+	h, repo, m, id := requestRig(t)
+	form := url.Values{"markdown_source": {askedTable}, "rec_0_include": {"on"}, "ai_request": {"1"}}
+	if rec := post(t, h.CommitImport, "/x", form); rec.Code != http.StatusOK {
+		t.Fatalf("first apply: %d %s", rec.Code, rec.Body)
+	}
+	rec := post(t, h.CommitImport, "/x", form)
+	if rec.Code == http.StatusOK || !strings.Contains(rec.Body.String(), "already answered") {
+		t.Errorf("second apply: %d %s", rec.Code, rec.Body)
+	}
+	if len(m.doc.Tables) != 1 {
+		t.Errorf("tables = %d, want 1", len(m.doc.Tables))
+	}
+	if q := repo.reqs[id-1]; q.Outcome != "1 applied, 0 left out" {
+		t.Errorf("request = %+v", q)
+	}
+}
+
 // A request's page text is one fold away in its review, escaped; a paste's
 // isn't (the owner already has it).
 func TestRequest_ReviewShowsText(t *testing.T) {
@@ -293,10 +314,11 @@ func TestRequest_TurnDownAndList(t *testing.T) {
 	}
 }
 
-// The Change choice is part of making a key, defaulting to Ask as signed.
+// The level is part of making a key, starting on the safest one: what
+// players see, only looking.
 func TestAIPage_ChangeChoice(t *testing.T) {
 	html := renderConnect(t, ConnectView{CampaignID: "camp-1", Available: true, Now: time.Now()})
-	for _, want := range []string{`name="change" value="ask" checked`, `name="change" value="look"`, "ChatGPT Plus and Pro"} {
+	for _, want := range []string{`name="sees" value="players"`, `name="change" value="look"`, `lv: &#39;players&#39;`, "live: false", "ChatGPT Plus and Pro"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %q", want)
 		}
@@ -316,7 +338,7 @@ func TestRequest_StayAfterDisconnect(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "1 request waits for you") {
 		t.Errorf("after disconnect: %d %s", rec.Code, rec.Body)
 	}
-	const stays = "What it already asked for stays here"
+	const stays = "What it already asked for stays"
 	v := ConnectView{CampaignID: "camp-1", Available: true, Now: time.Now(),
 		Conn: &connector.Connection{CampaignID: "camp-1", CreatedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}}
 	if strings.Contains(renderConnect(t, v), stays) {
@@ -383,7 +405,7 @@ func TestConnection_PauseAndChange(t *testing.T) {
 		t.Errorf("widened without the confirmation: %d", rec.Code)
 	}
 	widen.Set("widen", "yes")
-	if rec := post(t, h.ChangeAIAccess, "/x", widen); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "sees what you see") {
+	if rec := post(t, h.ChangeAIAccess, "/x", widen); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "sees what you see") || !strings.Contains(rec.Body.String(), "Saved. Works from its next call.") {
 		t.Fatalf("change: %d %s", rec.Code, rec.Body)
 	}
 	if repo.conn.Privacy != aiexport.PrivacyModePermitted || repo.conn.CanAsk {
@@ -428,5 +450,31 @@ func TestAIActivity_RedrawsOnlyWhenNew(t *testing.T) {
 	// Asking for more than there are is cut to what exists, plus one step.
 	if rec := get("shown=999"); !strings.Contains(rec.Body.String(), "shown=8&amp;seen=0-8") {
 		t.Errorf("shown not clamped: %s", rec.Body)
+	}
+}
+
+// What the AI later reads about an applied request names each change that
+// failed or was held back and why, and leaves the owner's own No answers
+// as a count.
+func TestRequestOutcome(t *testing.T) {
+	tests := []struct {
+		name string
+		in   importer.CommitResult
+		want string
+	}{
+		{"all applied", importer.CommitResult{Updated: 2}, "2 applied, 0 left out"},
+		{"owner's no is only counted", importer.CommitResult{Created: 1, Skipped: 1, Rows: []importer.RowOutcome{
+			{Name: "Ash", Status: importer.StatusSkipped, Reason: "Excluded by operator"},
+		}}, "1 applied, 1 left out"},
+		{"failures say why", importer.CommitResult{Updated: 1, Failed: 1, Skipped: 1, Rows: []importer.RowOutcome{
+			{Name: "Therin", Status: importer.StatusFailed, Reason: "no folder called Harvest"},
+			{Name: "Vessmark", Status: importer.StatusSkipped, Reason: "it has GM-only parts"},
+			{Name: "Lastwell", Status: importer.StatusUpdated},
+		}}, `1 applied, 1 left out, 1 failed. "Therin" failed: no folder called Harvest; "Vessmark" held back: it has GM-only parts`},
+	}
+	for _, tt := range tests {
+		if got := requestOutcome(tt.in); got != tt.want {
+			t.Errorf("%s:\n got %q\nwant %q", tt.name, got, tt.want)
+		}
 	}
 }

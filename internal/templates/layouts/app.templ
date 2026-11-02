@@ -1025,10 +1025,10 @@ templ Topbar() {
 			if InCampaign(ctx) && (GetCampaignRole(ctx) >= 3 || IsDmGranted(ctx)) {
 				<!-- DM Screen: the control panel for the owner and members
 				     with DM access (dmscreen.CanOpen). The dm-screen
-				     widget fetches the panel and plays the opening; hidden
+				     widget docks the panel at the right edge; hidden
 				     under "view as player" because the role reads 1. -->
 				<div data-widget="dm-screen" data-url={ fmt.Sprintf("/campaigns/%s/dm-screen", GetCampaignID(ctx)) }>
-					<button type="button" class="btn-ghost btn-icon" data-dms-open title={ GMTerm(ctx) + " Screen" } aria-label={ "Open the " + GMTerm(ctx) + " Screen" } aria-haspopup="dialog">
+					<button type="button" class="btn-ghost btn-icon" data-dms-toggle title={ GMTerm(ctx) + " Screen" } aria-label={ "Show or tuck the " + GMTerm(ctx) + " Screen" } aria-expanded="false">
 						<svg class="w-5 h-5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
 							<!-- A standing GM screen: upright side panels and a flat front, so it reads apart from the slanted Maps fold. -->
 							<path d="M3 5l5 2v13l-5-2z"></path>

@@ -297,7 +297,7 @@ func toRecord(i int, p importer.ParsedPage, links *importer.PageLinks) records.R
 	}
 	return records.Record{
 		Index: i, Kind: p.FrontMatter.Kind, Action: p.FrontMatter.Action,
-		Name: p.Name, Fields: fields, Body: p.Body, Links: links,
+		Name: p.Name, Fields: fields, Body: p.Body, Text: records.BodyText(links),
 	}
 }
 
@@ -563,6 +563,14 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	if strings.TrimSpace(source) == "" {
 		return apperror.NewBadRequest("Your import session expired. Please paste your markdown again.")
 	}
+	// A connected AI's request is applied once: a second Apply (a double
+	// click, or the same review open in two tabs) would add its new pages and
+	// records again, so it is refused before anything is written.
+	if raw := c.FormValue("ai_request"); raw != "" && h.connector != nil {
+		if _, err := h.waitingRequest(c, cc, raw); err != nil {
+			return err
+		}
+	}
 
 	// Re-parse from scratch so the indexes match what the review
 	// templ rendered. The classifier-supplied dropdowns embedded
@@ -687,11 +695,7 @@ func (h *Handler) CommitImport(c echo.Context) error {
 
 	res := ImportResultData{CampaignID: cc.Campaign.ID, Result: result}
 	if id, perr := strconv.ParseInt(c.FormValue("ai_request"), 10, 64); perr == nil && id > 0 && h.connector != nil {
-		applied := result.Created + result.Renamed + result.Updated + result.Deleted
-		outcome := fmt.Sprintf("%d applied, %d left out", applied, result.Skipped)
-		if result.Failed > 0 {
-			outcome += fmt.Sprintf(", %d failed", result.Failed)
-		}
+		outcome := requestOutcome(result)
 		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id, outcome); err != nil {
 			slog.Warn("ai-workspace: marking request answered",
 				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
@@ -707,6 +711,34 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, requestReviewed(res, v))
 	}
 	return middleware.Render(c, http.StatusOK, ImportResult(res))
+}
+
+// requestOutcome is what applying a connected AI's request did, as the AI
+// reads it later: the counts, then each change that failed or was held back
+// with its reason, so the AI can fix it instead of guessing. Rows the owner
+// answered No are only counted; that was their choice, not a fault.
+func requestOutcome(result importer.CommitResult) string {
+	applied := result.Created + result.Renamed + result.Updated + result.Deleted
+	outcome := fmt.Sprintf("%d applied, %d left out", applied, result.Skipped)
+	if result.Failed > 0 {
+		outcome += fmt.Sprintf(", %d failed", result.Failed)
+	}
+	var why []string
+	for _, r := range result.Rows {
+		reason := strings.TrimSpace(r.Reason)
+		switch {
+		case reason == "", reason == "Excluded by operator":
+			continue
+		case r.Status == importer.StatusFailed:
+			why = append(why, fmt.Sprintf("%q failed: %s", r.Name, reason))
+		case r.Status == importer.StatusSkipped:
+			why = append(why, fmt.Sprintf("%q held back: %s", r.Name, reason))
+		}
+	}
+	if len(why) > 0 {
+		outcome += ". " + strings.Join(why, "; ")
+	}
+	return outcome
 }
 
 // waitingRequest is one of the campaign's waiting requests, by the id the
@@ -986,7 +1018,7 @@ func (h *Handler) fillPromptInput(c echo.Context, cc *campaigns.CampaignContext,
 	off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
 	in.Today = time.Now().Format("Monday 2 January 2006")
 	if h.lookups != nil {
-		in.Lookups = records.LookupDoc()
+		in.Lookups = h.lookups.LookupDoc()
 		in.PageIndex = h.lookups.PageIndex(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		if off[records.KindCalendar] == "" {
 			in.WorldToday = h.lookups.WorldToday(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
@@ -1049,7 +1081,7 @@ func (h *Handler) instructionsInput() prompt.Input {
 		Instructions:              prompt.InstructionsOnly,
 	}
 	if h.lookups != nil {
-		in.Lookups = records.LookupDoc()
+		in.Lookups = h.lookups.LookupDoc()
 	}
 	if h.records != nil {
 		in.Capabilities = h.records.Capabilities()
