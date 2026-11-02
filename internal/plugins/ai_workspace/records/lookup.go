@@ -146,6 +146,8 @@ type Lookups struct {
 	Encounters EncountersAPI
 	Tests      TestsAPI
 	Monsters   FoundryMonstersAPI
+	// Trackers answers `what: trackers`; nil says it can't be looked up.
+	Trackers TrackersAPI
 	// Waiting answers `what: waiting`: what waits on a Director's review.
 	// Nil says it can't be looked up.
 	Waiting WaitingAPI
@@ -193,6 +195,7 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"game-nights", "none", "the campaign's game nights: name, date, time, status and summary (owner and co-DM only)"},
 	{"encounters", "optional `page`", "the fights planned on pages, written as encounter blocks, with the version that plays now and any creature Foundry can't place (owner and co-DM only)"},
 	{"tests", "optional `page`", "the montages and other tests on pages, their results and the one recorded, which pick encounter versions (owner and co-DM only)"},
+	{"trackers", "optional `page`", "the counters, steps and clocks kept on pages, hidden ones included: each one's value, what it means now and its latest changes (owner and co-DM only)"},
 	{"foundry-monsters", "optional `name` (part of a name), `level` and `role`", "the monsters Foundry can place: its world's actors and its compendiums', with level, role and EV (owner and co-DM only)"},
 	{"waiting", "none", "what is waiting for a Director's review: the changes this AI asked for (and how the owner answered the latest), entries players wrote and handed in, and players' stash moves and requests to buy (owner and co-DM only)"},
 	{"crafting", "optional `part` (recipes, materials, drops, benches or looks) and `name` (one recipe, material, bench or page)", "crafting: the system's rules, every recipe, material (with the pages that drop it and the recipes that use it), drop list, the spoils tray, heroes' projects and benches; a `part` writes that part as blocks to send back changed, and `looks` lists every item look. A connection that sees what players see reads the recipe book"},
@@ -322,6 +325,8 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.encountersLookup(firstNonEmpty(r.Str("page"), r.Name))
 	case "tests", "test":
 		ans, err = run.testsLookup(firstNonEmpty(r.Str("page"), r.Name))
+	case "trackers", "tracker", "counters", "clocks":
+		ans, err = run.trackersLookup(firstNonEmpty(r.Str("page"), r.Name))
 	case "foundry-monsters", "monsters", "foundry-monster":
 		ans, err = run.foundryMonsters(r)
 	case "waiting", "pending", "queue", "review":

@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -58,6 +59,7 @@ type aiDeps struct {
 	Tags            tags.TagService
 	PageLayouts     entities.PageLayoutService       // nil while its tables are degraded
 	PageTests       pagetests.Service                // nil while the Tests block is degraded
+	Trackers        trackers.Service                 // nil while the Trackers block is degraded
 	FoundryMonsters syncapi.FoundryMonsterRepository // nil while syncapi's tables are degraded
 	FoundryMatcher  *syncapi.FoundryMatcher          // with FoundryMonsters; nil leaves matches out
 	FoundryScenes   records.FoundryScenesAPI         // nil while the sync API is degraded
@@ -159,6 +161,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Menu:     aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities},
 		Tests:    d.Tests,
 		Monsters: d.Monsters,
+	}
+	if d.Trackers != nil {
+		l.Trackers = aiTrackersAdapter{svc: d.Trackers, ents: d.Entities}
 	}
 	if d.Encounters != nil {
 		l.Encounters = aiEncountersAdapter{svc: d.Encounters}

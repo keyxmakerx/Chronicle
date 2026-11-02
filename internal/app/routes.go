@@ -6595,6 +6595,7 @@ func (a *App) RegisterRoutes() {
 		Tags:            tagService,
 		PageLayouts:     pageLayoutService,
 		PageTests:       pageTests,
+		Trackers:        trackersSvc,
 		FoundryMonsters: aiFoundryMonsters,
 		FoundryMatcher:  aiFoundryMatcher,
 		FoundryScenes:   aiFoundryScenes,

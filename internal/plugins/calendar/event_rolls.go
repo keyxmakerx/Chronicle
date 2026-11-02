@@ -265,6 +265,55 @@ func (c *RollConfig) bandFor(total int) int {
 	return -1
 }
 
+// bandNamed returns the index of the band called name, -1 for none.
+func (c *RollConfig) bandNamed(name string) int {
+	for i, b := range c.Results {
+		if strings.EqualFold(b.Name, name) {
+			return i
+		}
+	}
+	return -1
+}
+
+// chosenNight is the night the Director picked a result for. A dice roll
+// takes a result's name, stored as that name with no total so the night
+// never shows a number nobody threw, or a total; a table roll takes one of
+// the table's entries.
+func (c *RollConfig) chosenNight(d DayDate, result string, table *RollTable) (RollNight, error) {
+	n := RollNight{Year: d.Year, Month: d.Month, Day: d.Day, Source: RollNightManual}
+	result = strings.TrimSpace(result)
+	if result == "" {
+		return n, apperror.NewValidation("say which result the night has")
+	}
+	switch c.Source {
+	case RollSourceDice:
+		if i := c.bandNamed(result); i >= 0 {
+			n.Entry = c.Results[i].Name
+			return n, nil
+		}
+		if total, err := strconv.Atoi(result); err == nil {
+			n.Total = &total
+			return n, nil
+		}
+		names := make([]string, len(c.Results))
+		for i, b := range c.Results {
+			names[i] = b.Name
+		}
+		return n, apperror.NewValidation(fmt.Sprintf("the roll has no result called %q; its results are %s, or give a total", result, strings.Join(names, ", ")))
+	case RollSourceTable:
+		if table != nil {
+			for _, e := range table.Entries {
+				if strings.EqualFold(e.Name, result) {
+					n.Entry = e.Name
+					return n, nil
+				}
+			}
+		}
+		return n, apperror.NewValidation(fmt.Sprintf("the rolling table has no entry called %q", result))
+	}
+	return n, apperror.NewValidation("this roll can't take a result by hand")
+}
+
 // view shapes a stored night for a viewer. director sees everything; a
 // player gets the name and player text of a told night, and nothing for any
 // other (ok is false, and the caller leaves the night out).
@@ -273,6 +322,15 @@ func (c *RollConfig) view(n RollNight, director bool) (v RollNightView, ok bool)
 	band := -1
 	tellDefault := false
 	switch {
+	case n.Entry != "" && c.Source == RollSourceDice:
+		// A result the Director picked by name: the band it names, or just
+		// the name when that band was renamed or removed since.
+		v.Result = n.Entry
+		if band = c.bandNamed(n.Entry); band >= 0 {
+			b := c.Results[band]
+			v.Result, v.Players, v.Director = b.Name, b.Players, b.Director
+			tellDefault = b.TellPlayers
+		}
 	case n.Entry != "":
 		v.Result = n.Entry
 		v.Players = n.Entry

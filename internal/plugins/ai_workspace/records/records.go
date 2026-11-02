@@ -229,6 +229,8 @@ var briefs = map[string]string{
 	KindPlayerNote:   "my own Player Notes on pages only, never Player Notes anyone else wrote",
 	"house-rule":     "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",
 	"system-entry":   "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",
+	"test":           "montages, chases and other tests on a page: the totals that end one and its results, which an encounter's versions can name",
+	"tracker":        "counters, named steps and clocks kept on pages, such as a hero's secret count of a debt: make one, put it on a page or every page of a category, hide it from players, and change its number with a note",
 	"encounter":      "fights planned on a page for Foundry to load: the heroes, each creature's count, initiative group and whether it starts seen, hidden or arrives later",
 	"field-rule":     "rules that work a sheet field out from another, such as a guild rank from a level",
 	"local-word":     "what a place or an era calls a word, such as a coin or a rank, shown in shops and on sheets",
@@ -246,7 +248,7 @@ var briefs = map[string]string{
 	"shop-room":      "the room players step into from a shop: what kind of shop it is, its look and mood, the keeper's manner and their own lines for each moment of a visit",
 	"storefront":     "how a shop's front looks on the Shops street: building, colours, awning, sign, window wares, lamp and its closed look",
 	"drops":          "a creature's or other page's drop list: what it leaves in the spoils tray when defeated or searched, taken as it is or harvested with a test",
-	"roll_night":     "one night of an event's yearly roll: roll it again, lock it, or choose whether players are told",
+	"roll_night":     "one night of an event's yearly roll: roll it again, give it a result by hand, lock it, or choose whether players are told",
 	"moon":           "a moon the Director moves by hand: the day it turns full, dark or vanished, and what players see",
 	"generator":      "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }

@@ -20,6 +20,7 @@ type EventRollAPI interface {
 	RollEventNights(ctx context.Context, eventID, calendarID, campaignID string, in calendar.RollNightsInput, v permissions.Viewer) (*calendar.EventRollView, error)
 	LockEventRollNights(ctx context.Context, eventID, calendarID, campaignID string, dates []calendar.DayDate, locked bool, v permissions.Viewer) (int, error)
 	TellEventRollNight(ctx context.Context, eventID, calendarID, campaignID string, date calendar.DayDate, told *bool, v permissions.Viewer) error
+	SetEventRollNight(ctx context.Context, eventID, calendarID, campaignID string, date calendar.DayDate, result string, v permissions.Viewer) error
 }
 
 // rollDoc is the `roll:` part of the event kind's doc.
@@ -187,8 +188,8 @@ func rollEvent(ctx context.Context, svc CalendarAPI, cal *calendar.Calendar, cam
 	return hit, nil
 }
 
-// RollNightKind changes one night of an event's roll: reroll it, lock or
-// unlock it, tell players or stop telling them.
+// RollNightKind changes one night of an event's roll: reroll it, give it a
+// result by hand, lock or unlock it, tell players or stop telling them.
 type RollNightKind struct {
 	Cal   CalendarAPI
 	Rolls EventRollAPI
@@ -197,8 +198,8 @@ type RollNightKind struct {
 func (RollNightKind) Name() string  { return "roll_night" }
 func (RollNightKind) Label() string { return "Rolled night" }
 func (RollNightKind) Doc() string {
-	return "One night of an event's roll (owner or co-DM only), matched by the event's `name` and the night's `year`, `month`, `day`. Use `action: update` with any of `reroll: true` (a locked night is refused), `locked` (true/false: a locked night keeps its result when the year is rolled again) and `tell_players` (true/false, or `default` for what its result says). Ask `what: events` for the results so far.\n\n" +
-		"```\n---\nkind: roll_night\naction: update\nname: Bloodnight\nyear: 1043\nmonth: 3\nday: 17\nreroll: true\nlocked: true\n---\n```"
+	return "One night of an event's roll (owner or co-DM only), matched by the event's `name` and the night's `year`, `month`, `day`. Use `action: update` with any of `reroll: true` (a locked night is refused), `result` (the result the night has instead of a roll: one of the roll's results by name, a dice total, or a rolling table's entry; the night is then locked so rolling the year again keeps it, unless you add `locked: false`), `locked` (true/false: a locked night keeps its result when the year is rolled again) and `tell_players` (true/false, or `default` for what its result says). Ask `what: events` for the results so far.\n\n" +
+		"```\n---\nkind: roll_night\naction: update\nname: Bloodnight\nyear: 1043\nmonth: 3\nday: 17\nresult: Red Tide\ntell_players: true\n---\n```"
 }
 
 type rollNightPlan struct {
@@ -206,6 +207,7 @@ type rollNightPlan struct {
 	ev     *calendar.Event
 	date   calendar.DayDate
 	reroll bool
+	result string // set by hand instead of rolled
 	lock   *bool
 	tell   *bool
 	tellOn bool // tell_players was written
@@ -243,6 +245,16 @@ func (k RollNightKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		p.reroll = true
 		did = append(did, "rerolls")
 	}
+	if p.result = r.Str("result"); p.result != "" {
+		if p.reroll {
+			return p, "", apperror.NewBadRequest("a night is either rerolled or given a result")
+		}
+		did = append(did, "gives it the result "+quote(p.result))
+		if !r.Has("locked") {
+			t := true
+			p.lock = &t
+		}
+	}
 	if r.Has("locked") {
 		v, _ := r.Bool("locked")
 		p.lock = &v
@@ -259,9 +271,9 @@ func (k RollNightKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		}
 	}
 	if len(did) == 0 {
-		return p, "", apperror.NewBadRequest("say what to do: reroll, locked or tell_players")
+		return p, "", apperror.NewBadRequest("say what to do: reroll, result, locked or tell_players")
 	}
-	return p, strings.Join(did, ", ") + " " + ev.Name + " on " + dateLabel(cal, y, m, d), nil
+	return p, ev.Name + " on " + dateLabel(cal, y, m, d) + ": " + strings.Join(did, ", "), nil
 }
 
 func (k RollNightKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
@@ -279,7 +291,8 @@ func (k RollNightKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 	}
 	v := a.Viewer()
 	// Unlock first so "reroll: true, locked: false" rerolls, and lock last
-	// so "reroll: true, locked: true" keeps the new result.
+	// so "reroll: true, locked: true" keeps the new result. A result set by
+	// hand is locked last for the same reason.
 	if p.lock != nil && !*p.lock {
 		if _, err := k.Rolls.LockEventRollNights(ctx, p.ev.ID, p.cal.ID, campaignID, []calendar.DayDate{p.date}, false, v); err != nil {
 			return err
@@ -287,6 +300,11 @@ func (k RollNightKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 	}
 	if p.reroll {
 		if _, err := k.Rolls.RollEventNights(ctx, p.ev.ID, p.cal.ID, campaignID, calendar.RollNightsInput{Dates: []calendar.DayDate{p.date}}, v); err != nil {
+			return err
+		}
+	}
+	if p.result != "" {
+		if err := k.Rolls.SetEventRollNight(ctx, p.ev.ID, p.cal.ID, campaignID, p.date, p.result, v); err != nil {
 			return err
 		}
 	}

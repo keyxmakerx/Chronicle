@@ -41,6 +41,10 @@ type EventRollService interface {
 	// TellEventRollNight says whether players are told one night; nil goes
 	// back to what its result says.
 	TellEventRollNight(ctx context.Context, eventID, calendarID, campaignID string, date DayDate, told *bool, v permissions.Viewer) error
+	// SetEventRollNight stores the result the Director chose for one night
+	// instead of rolling it: a result's name, or for a dice roll a total. A
+	// locked night is refused, as a reroll is.
+	SetEventRollNight(ctx context.Context, eventID, calendarID, campaignID string, date DayDate, result string, v permissions.Viewer) error
 	// ClearEventRollNights deletes a year's stored nights from today on,
 	// keeping the locked ones when keepLocked.
 	ClearEventRollNights(ctx context.Context, eventID, calendarID, campaignID string, year int, keepLocked bool, v permissions.Viewer) (int, error)
@@ -642,6 +646,48 @@ func (s *calendarService) TellEventRollNight(ctx context.Context, eventID, calen
 	}
 	if _, err := s.rollRepo.SetTold(ctx, eventID, date, told); err != nil {
 		return fmt.Errorf("tell roll night: %w", err)
+	}
+	return nil
+}
+
+// SetEventRollNight: see EventRollService.
+func (s *calendarService) SetEventRollNight(ctx context.Context, eventID, calendarID, campaignID string, date DayDate, result string, v permissions.Viewer) error {
+	if err := requireRollDirector(v); err != nil {
+		return err
+	}
+	t, err := s.rollTargetFor(ctx, eventID, calendarID, campaignID, v)
+	if err != nil {
+		return err
+	}
+	cfg, err := s.rollRepo.GetConfig(ctx, eventID)
+	if err != nil {
+		return fmt.Errorf("get roll: %w", err)
+	}
+	if cfg == nil {
+		return apperror.NewValidation("this event has no roll yet")
+	}
+	if ds, _ := t.dates(date, date); len(ds) == 0 {
+		return apperror.NewValidation(fmt.Sprintf("the event does not land on %d-%d-%d", date.Year, date.Month, date.Day))
+	}
+	got, err := s.rollRepo.ListNights(ctx, eventID, date, date)
+	if err != nil {
+		return fmt.Errorf("list roll nights: %w", err)
+	}
+	if len(got) > 0 && got[0].Locked {
+		return apperror.NewValidation("that night is locked; unlock it to change its result")
+	}
+	var table *RollTable
+	if cfg.Source == RollSourceTable {
+		if table, err = s.loadRollTable(ctx, campaignID, cfg.TableID); err != nil {
+			return err
+		}
+	}
+	n, err := cfg.chosenNight(date, result, table)
+	if err != nil {
+		return err
+	}
+	if err := s.rollRepo.PutNights(ctx, eventID, []RollNight{n}, false); err != nil {
+		return fmt.Errorf("store roll night: %w", err)
 	}
 	return nil
 }
