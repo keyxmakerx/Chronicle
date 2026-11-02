@@ -37,7 +37,7 @@ const BUBBLE = `<div class="aib"><h2 id="ai-bubble-heading">Your AI</h2>
 <a class="aib-full" href="/campaigns/c1/ai" data-ai-full>Your AI page →</a>
 <div data-ai-bubble-warn></div></div>`;
 
-async function open() {
+async function open(path = '/campaigns/c1') {
   const browser = await pw.chromium.launch({ executablePath: chromePath });
   const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
   const state = { waiting: 0 };
@@ -52,7 +52,7 @@ async function open() {
     if (p === '/campaigns/c1/ai/panel') return route.fulfill({ contentType: 'text/html', body: '<h2 id="ai-panel-heading">Your AI</h2><p id="waiting-list">4 waiting</p>' });
     return route.fulfill({ contentType: 'text/html', body: PAGE });
   });
-  await page.goto('http://t.test/campaigns/c1');
+  await page.goto('http://t.test' + path);
   await page.waitForFunction(() => document.querySelector('.ai-chip-host')._aiChip);
   return { browser, page, state };
 }
@@ -103,5 +103,14 @@ test('Side panel closes the bubble and opens the side panel on the same page', {
     assert.equal(await bubbleOpen(page), false);
     assert.equal(await page.evaluate(() => !document.querySelector('.ai-panel').hidden), true);
     assert.equal(new URL(page.url()).pathname, '/campaigns/c1', 'the side panel opens over the page, not instead of it');
+  } finally { await browser.close(); }
+});
+
+test('on the Your AI page the bubble drops its link to that same page', { skip }, async () => {
+  const { browser, page } = await open('/campaigns/c1/ai');
+  try {
+    await page.click('[data-ai-chip]');
+    await page.waitForSelector('[data-ai-side]');
+    assert.equal(await page.locator('#ai-bubble [data-ai-full]').count(), 0);
   } finally { await browser.close(); }
 });

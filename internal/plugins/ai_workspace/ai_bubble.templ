@@ -1,8 +1,8 @@
-// ai_bubble.templ is the small bubble the AI button drops: copy and paste
-// in one thin row at the top, then each waiting request with Review, which
-// opens the side sheet. "Side panel" opens that sheet on all of them; the
-// footer link is the only way to the Your AI page. ai_chip.js wires the
-// data-ai-* buttons.
+// ai_bubble.templ is the small bubble the AI button drops: Copy and Paste
+// answer as its title bar, then each waiting request with Review, which opens
+// the side sheet. "Side panel" opens that sheet on all of them; the footer
+// link is the only way to the Your AI page. ai_chip.js wires the data-ai-*
+// buttons.
 
 package ai_workspace
 
@@ -14,8 +14,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// aiBubbleBody is the owner's bubble. The privacy line reads and writes the
-// same remembered choice as the copy-and-paste tool (ai-sees-<campaign>).
+// aiBubbleBody is the owner's bubble. Copy and Paste answer are its title
+// bar (signed look 5); the connection line, the privacy choice and "Write a
+// request…" sit in the footer. The privacy line reads and writes the same
+// remembered choice as the copy-and-paste tool (ai-sees-<campaign>).
 templ aiBubbleBody(cc *campaigns.CampaignContext, v ConnectView) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
 	<div
@@ -31,12 +33,8 @@ templ aiBubbleBody(cc *campaigns.CampaignContext, v ConnectView) {
 		data-ai-sees-host
 	>
 		<header class="aib-head">
-			if v.Available && hasKey(v) {
-				<span class="aic-dot" data-state={ connStatus(v) } aria-hidden="true"></span>
-				<h2 id="ai-bubble-heading" class="aib-title">{ statusTitle(v) }</h2>
-			} else {
-				<h2 id="ai-bubble-heading" class="aib-title">Your AI</h2>
-			}
+			<h2 id="ai-bubble-heading" class="sr-only">Your AI</h2>
+			@bubbleTools(fmt.Sprintf("/campaigns/%s/ai/copy", cc.Campaign.ID), "Copy for my AI", true)
 			<button type="button" class="aib-side" data-ai-side title="Open the waiting requests in the side panel">
 				<i class="fa-solid fa-table-columns text-xs" aria-hidden="true"></i>
 				<span>Side panel</span>
@@ -45,7 +43,7 @@ templ aiBubbleBody(cc *campaigns.CampaignContext, v ConnectView) {
 				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 			</button>
 		</header>
-		@bubbleCopyRow(fmt.Sprintf("/campaigns/%s/ai/copy", cc.Campaign.ID), "Copy for my AI", true)
+		@bubbleSaid()
 		if v.CutOff != nil {
 			<p class="aib-alert" data-tone="stopped"><b>AI is stopped in this campaign.</b> Turn it back on from Your AI.</p>
 		} else if len(v.Alerts) > 0 {
@@ -62,14 +60,20 @@ templ aiBubbleBody(cc *campaigns.CampaignContext, v ConnectView) {
 			}
 		</section>
 		<footer class="aib-foot">
-			<p class="aib-sees" x-show="!picking">
-				Copies <span x-text="seesWords">what players see</span> ·
-				<button type="button" class="quiet-word" @click="picking = true">change</button>
-			</p>
-			<div class="aib-seg" x-show="picking" x-cloak role="radiogroup" aria-label="When you copy, what may your AI see?">
-				<button type="button" role="radio" :aria-checked="sees === 'safe'" @click="sees = 'safe'; picking = false">What players see</button>
-				<button type="button" role="radio" :aria-checked="sees === 'permitted'" @click="sees = 'permitted'; picking = false">What you see</button>
-				<button type="button" role="radio" :aria-checked="sees === 'everything'" @click="sees = 'everything'; picking = false">Everything</button>
+			<div class="aib-sees">
+				if v.Available && hasKey(v) {
+					<span class="aib-conn"><span class="aic-dot" data-state={ connStatus(v) } aria-hidden="true"></span>{ statusTitle(v) }</span> ·
+				}
+				<span x-show="!picking">
+					Copies <span x-text="seesWords">what players see</span> ·
+					<button type="button" class="quiet-word" @click="picking = true">change</button> ·
+				</span>
+				<button type="button" class="quiet-word" data-ai-tool>Write a request…</button>
+				<div class="aib-seg" x-show="picking" x-cloak role="radiogroup" aria-label="When you copy, what may your AI see?">
+					<button type="button" role="radio" :aria-checked="sees === 'safe'" @click="sees = 'safe'; picking = false">What players see</button>
+					<button type="button" role="radio" :aria-checked="sees === 'permitted'" @click="sees = 'permitted'; picking = false">What you see</button>
+					<button type="button" role="radio" :aria-checked="sees === 'everything'" @click="sees = 'everything'; picking = false">Everything</button>
+				</div>
 			</div>
 			<a class="quiet-word aib-full" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", cc.Campaign.ID)) } data-ai-full>Your AI page →</a>
 		</footer>
@@ -77,17 +81,18 @@ templ aiBubbleBody(cc *campaigns.CampaignContext, v ConnectView) {
 	</div>
 }
 
-// playerBubbleBody is a player's bubble: no privacy choice, since a player's
-// copy only ever holds what they can see, and no full page to go to.
+// playerBubbleBody is a player's bubble: the same title bar, no privacy
+// choice, since a player's copy only ever holds what they can see, and no
+// full page to go to.
 templ playerBubbleBody(v PlayerAIView) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
 	<div class="aib">
 		<header class="aib-head">
-			if v.Why == "" && playerConnected(v) {
-				<span class="aic-dot" data-state={ playerConnState(v) } aria-hidden="true"></span>
-				<h2 id="ai-bubble-heading" class="aib-title">{ playerConnLine(v) }</h2>
+			<h2 id="ai-bubble-heading" class="sr-only">Your AI</h2>
+			if v.Why == "" {
+				@bubbleTools(fmt.Sprintf("/campaigns/%s/ai/me/copy", v.CampaignID), "Copy for my AI", false)
 			} else {
-				<h2 id="ai-bubble-heading" class="aib-title">Your AI</h2>
+				<p class="aib-title">Your AI</p>
 			}
 			<button type="button" class="aic-icon" data-ai-bubble-close aria-label="Close">
 				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
@@ -96,7 +101,7 @@ templ playerBubbleBody(v PlayerAIView) {
 		if v.Why != "" {
 			<p class="aib-empty aib-pad">{ v.Why } When it's turned on, your AI can help with your character here.</p>
 		} else {
-			@bubbleCopyRow(fmt.Sprintf("/campaigns/%s/ai/me/copy", v.CampaignID), "Copy for my AI", false)
+			@bubbleSaid()
 			<section class="aib-list" aria-labelledby="ai-bubble-waiting">
 				if len(v.Requests) > 0 {
 					<p id="ai-bubble-waiting" class="aic-label">Waiting for you · { strconv.Itoa(len(v.Requests)) }</p>
@@ -107,23 +112,22 @@ templ playerBubbleBody(v PlayerAIView) {
 					<p id="ai-bubble-waiting" class="aib-empty">Nothing waiting. When your AI asks to change your character, it shows up here.</p>
 				}
 			</section>
-			if !playerConnected(v) {
-				<footer class="aib-foot">
+			<footer class="aib-foot">
+				if playerConnected(v) {
+					<span class="aib-conn"><span class="aic-dot" data-state={ playerConnState(v) } aria-hidden="true"></span>{ playerConnLine(v) }</span>
+				} else {
 					<button type="button" class="quiet-word" data-ai-connect>Connect your AI app</button>
-				</footer>
-			}
+				}
+			</footer>
 		}
 		<div data-ai-bubble-warn></div>
 	</div>
 }
 
-// bubbleCopyRow is the thin row on top: Copy, Paste answer and, for the
-// owner, "Write a request…". The Copy label says "Copy this page" on a page
-// (ai_chip.js), whose id it sends. The status line under it says what
-// happened, and carries the fallback when the browser won't share the
-// clipboard.
-templ bubbleCopyRow(copyURL, copyLabel string, owner bool) {
-	<div class="aib-row">
+// bubbleTools is Copy and Paste answer, the bubble's title bar. The Copy
+// label says "Copy page" on a page (ai_chip.js), whose id it sends.
+templ bubbleTools(copyURL, copyLabel string, owner bool) {
+	<div class="aib-tools">
 		<button type="button" class="aib-tool" data-ai-copy={ copyURL } data-ai-copy-owner?={ owner }>
 			<i class="fa-regular fa-copy" aria-hidden="true"></i>
 			<span data-ai-copy-label>{ copyLabel }</span>
@@ -132,10 +136,13 @@ templ bubbleCopyRow(copyURL, copyLabel string, owner bool) {
 			<i class="fa-regular fa-paste" aria-hidden="true"></i>
 			<span>Paste answer</span>
 		</button>
-		if owner {
-			<button type="button" class="quiet-word aib-write" data-ai-tool>Write a request…</button>
-		}
 	</div>
+}
+
+// bubbleSaid is the status line under the title bar that says what Copy or
+// Paste did, and the fallback box for when the browser won't share the
+// clipboard.
+templ bubbleSaid() {
 	<p class="aib-said" data-ai-said role="status" aria-live="polite" hidden></p>
 	<form class="aib-paste" data-ai-paste-box hidden>
 		<label for="ai-bubble-paste" class="aic-hint">Your browser kept the clipboard to itself. Paste the answer here instead:</label>

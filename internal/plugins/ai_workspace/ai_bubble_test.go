@@ -47,7 +47,7 @@ func copyAs(t *testing.T, h *Handler, query string) (string, string) {
 	return rec.Body.String(), rec.Header().Get("X-AI-Page")
 }
 
-// "Copy this page" carries the page only as the remembered privacy choice
+// "Copy page" carries the page only as the remembered privacy choice
 // allows: with "what players see" a page players can't open is left out and
 // never named, as if the owner were on no page.
 func TestCopyForAI_PageFollowsPrivacy(t *testing.T) {
@@ -103,6 +103,12 @@ func TestAIBubble(t *testing.T) {
 			t.Errorf("bubble missing %q", want)
 		}
 	}
+	if foot := strings.Index(html, `class="aib-foot"`); foot < 0 || strings.Index(html, "data-ai-tool") < foot {
+		t.Error("Write a request belongs in the footer, under the requests")
+	}
+	if head := strings.Index(html, `class="aib-head"`); head < 0 || strings.Index(html, "data-ai-copy=") < head || strings.Index(html, "data-ai-copy=") > strings.Index(html, `class="aib-list"`) {
+		t.Error("Copy and Paste answer are the title bar, above the requests")
+	}
 	if n := strings.Count(html, `href="/campaigns/camp-1/ai"`); n != 1 {
 		t.Errorf("the bubble links to the Your AI page %d times; only the footer link should", n)
 	}
@@ -136,5 +142,30 @@ func TestAIPanel_ToolOnlyWhenAsked(t *testing.T) {
 	}
 	if strings.Contains(html, `id="ai-requests"`) {
 		t.Error("the tool sheet should not repeat the requests")
+	}
+}
+
+// A player's bubble: off, it says why and offers no Copy; on, Copy for my AI
+// and Paste answer are its title bar, and with an app connected the footer
+// says so, and Copy and Paste stay.
+func TestPlayerBubble(t *testing.T) {
+	h, _, w, _ := playerRig(t)
+	off := asPlayer(t, h.PlayerBubble, http.MethodGet, "/campaigns/camp-1/ai/me/bubble", nil, "").Body.String()
+	if !strings.Contains(off, "hasn&#39;t let players use AI") || strings.Contains(off, "data-ai-copy=") {
+		t.Errorf("off bubble = %s", off)
+	}
+	w.allowed = true
+	on := asPlayer(t, h.PlayerBubble, http.MethodGet, "/campaigns/camp-1/ai/me/bubble", nil, "").Body.String()
+	for _, want := range []string{`data-ai-copy="/campaigns/camp-1/ai/me/copy"`, "data-ai-paste", `class="aib-conn"`, `id="ai-bubble-heading"`} {
+		if !strings.Contains(on, want) {
+			t.Errorf("player bubble missing %q", want)
+		}
+	}
+	head, list := strings.Index(on, `class="aib-head"`), strings.Index(on, `class="aib-list"`)
+	if c := strings.Index(on, "data-ai-copy="); c < head || c > list {
+		t.Error("Copy belongs in the title bar, above the requests")
+	}
+	if strings.Contains(on, "data-ai-tool") || strings.Contains(on, "data-ai-full") {
+		t.Error("a player has no copy-and-paste tool and no Your AI page")
 	}
 }
