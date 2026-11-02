@@ -4,8 +4,8 @@
  * The bell button + unread badge are server-rendered in the app topbar; the
  * badge count is refreshed by an HTMX poll (hx-get /notifications/badge). This
  * widget owns the interactive dropdown: open/close, fetching the list, marking
- * items read, and mark-all. Live "pops" reuse the existing Chronicle.notify
- * toast.
+ * one item read (clicking it, or its row-end check icon), and mark-all. Live
+ * "pops" reuse the existing Chronicle.notify toast.
  *
  * Registered via Chronicle.register and auto-mounted by boot.js on
  * [data-widget="notification-bell"].
@@ -41,6 +41,35 @@
       .catch(function () { /* non-fatal */ });
   }
 
+  // markRead marks one notification read and refreshes the badge from the
+  // server. keepalive lets the request finish when the click also navigates
+  // away; without it the page change can cancel it and the item stays unread.
+  function markRead(el, id) {
+    return Chronicle.apiFetch('/notifications/' + encodeURIComponent(id) + '/read', { method: 'POST', keepalive: true })
+      .then(function (r) {
+        if (!r.ok) throw new Error('mark read failed');
+        refreshBadge(el);
+      });
+  }
+
+  // showRead dims a row, clears its unread dot and drops its mark-read icon.
+  // It runs before the server answers so the click feels immediate.
+  function showRead(row, read) {
+    row.classList.toggle('opacity-60', read);
+    row.setAttribute('data-notif-read', read ? 'true' : 'false');
+    var dot = $('[data-notif-dot]', row);
+    if (dot) {
+      dot.classList.toggle('bg-accent', !read);
+      dot.classList.toggle('bg-transparent', read);
+    }
+    var btn = $('[data-notif-markone]', row);
+    // A class, not the hidden attribute: inline-flex would outrank [hidden].
+    if (btn) {
+      btn.classList.toggle('hidden', read);
+      btn.classList.toggle('inline-flex', !read);
+    }
+  }
+
   function renderList(el, items) {
     var list = $('[data-notif-list]', el);
     if (!list) return;
@@ -53,15 +82,25 @@
       return;
     }
     items.forEach(function (n) {
-      var item = document.createElement('a');
-      item.href = n.link || '#';
-      item.className = 'flex items-start gap-2 px-3 py-2 hover:bg-surface-alt transition-colors border-b border-edge last:border-0' + (n.read ? ' opacity-60' : '');
+      // The row holds the clickable body and, beside it, the mark-read icon;
+      // a button cannot sit inside a link, so they are siblings.
+      var row = document.createElement('div');
+      row.className = 'flex items-start gap-1 pr-2 hover:bg-surface-alt transition-colors border-b border-edge last:border-0';
+      row.setAttribute('data-notif-row', n.id || '');
       if (DM_TYPES[n.type]) {
-        item.setAttribute('data-dm-only', '');
-        item.style.boxShadow = 'inset 3px 0 0 rgb(var(--color-warn-rgb))';
+        row.setAttribute('data-dm-only', '');
+        row.style.boxShadow = 'inset 3px 0 0 rgb(var(--color-warn-rgb))';
       }
+
+      // A notification with somewhere to go is a link; one without is a
+      // button, so clicking it still marks it read.
+      var item = document.createElement(n.link ? 'a' : 'button');
+      if (n.link) item.href = n.link;
+      else item.type = 'button';
+      item.className = 'flex-1 min-w-0 flex items-start gap-2 pl-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
       var dot = document.createElement('span');
-      dot.className = 'mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ' + (n.read ? 'bg-transparent' : 'bg-accent');
+      dot.setAttribute('data-notif-dot', '');
+      dot.className = 'mt-1.5 w-1.5 h-1.5 rounded-full shrink-0';
       item.appendChild(dot);
       if (TYPE_ICON[n.type]) {
         var ic = document.createElement('i');
@@ -81,14 +120,42 @@
       when.textContent = n.detail ? n.detail + ' · ' + relTime(n.createdAt) : relTime(n.createdAt);
       body.appendChild(msg); body.appendChild(when);
       item.appendChild(body);
+      row.appendChild(item);
+
+      // Row-end icon (.ai/ui-standard.md: monochrome, framed only on hover).
+      var markOne = document.createElement('button');
+      markOne.type = 'button';
+      markOne.setAttribute('data-notif-markone', '');
+      markOne.title = 'Mark as read';
+      markOne.setAttribute('aria-label', 'Mark as read: ' + (n.message || 'notification'));
+      markOne.className = 'shrink-0 self-center items-center justify-center w-7 h-7 rounded text-fg-muted border border-transparent hover:text-fg hover:border-edge hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
+      var check = document.createElement('i');
+      check.className = 'fa-solid fa-check text-xs';
+      check.setAttribute('aria-hidden', 'true');
+      markOne.appendChild(check);
+      row.appendChild(markOne);
+
+      showRead(row, !!n.read);
+
+      function read() {
+        if (n.read || !n.id) return null;
+        n.read = true;
+        showRead(row, true);
+        return markRead(el, n.id).catch(function () {
+          n.read = false;
+          showRead(row, false);
+          if (Chronicle.notify) Chronicle.notify('Could not mark that notification read.', 'error');
+        });
+      }
       item.addEventListener('click', function () {
-        if (!n.read && n.id) {
-          Chronicle.apiFetch('/notifications/' + encodeURIComponent(n.id) + '/read', { method: 'POST' })
-            .then(function () { refreshBadge(el); }).catch(function () {});
-        }
-        // Let the anchor navigate normally.
+        // A link navigates on its own; the request survives via keepalive.
+        read();
       });
-      list.appendChild(item);
+      markOne.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        read();
+      });
+      list.appendChild(row);
     });
   }
 
