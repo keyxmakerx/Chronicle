@@ -279,7 +279,7 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if err != nil {
 		return err
 	}
-	desc, err := bodyHTML(r.Body, r.Links)
+	desc, err := bodyHTML(r.Body, linksOf(r))
 	if err != nil {
 		return err
 	}

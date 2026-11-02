@@ -104,7 +104,7 @@ func TestLookups_Waiting(t *testing.T) {
 	if got := (&Lookups{}).Answer(context.Background(), camp, owner, []Record{lookup("pending", nil)})[0]; !strings.Contains(got.Error, "can't be looked up") {
 		t.Errorf("unwired: %+v", got)
 	}
-	if !strings.Contains(LookupDoc(), "`what: waiting`") {
+	if !strings.Contains((&Lookups{}).LookupDoc(), "`what: waiting`") {
 		t.Error("LookupDoc lacks waiting")
 	}
 }

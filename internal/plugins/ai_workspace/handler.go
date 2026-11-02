@@ -297,7 +297,7 @@ func toRecord(i int, p importer.ParsedPage, links *importer.PageLinks) records.R
 	}
 	return records.Record{
 		Index: i, Kind: p.FrontMatter.Kind, Action: p.FrontMatter.Action,
-		Name: p.Name, Fields: fields, Body: p.Body, Links: links,
+		Name: p.Name, Fields: fields, Body: p.Body, Text: records.BodyText(links),
 	}
 }
 
@@ -986,7 +986,7 @@ func (h *Handler) fillPromptInput(c echo.Context, cc *campaigns.CampaignContext,
 	off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
 	in.Today = time.Now().Format("Monday 2 January 2006")
 	if h.lookups != nil {
-		in.Lookups = records.LookupDoc()
+		in.Lookups = h.lookups.LookupDoc()
 		in.PageIndex = h.lookups.PageIndex(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		if off[records.KindCalendar] == "" {
 			in.WorldToday = h.lookups.WorldToday(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
@@ -1049,7 +1049,7 @@ func (h *Handler) instructionsInput() prompt.Input {
 		Instructions:              prompt.InstructionsOnly,
 	}
 	if h.lookups != nil {
-		in.Lookups = records.LookupDoc()
+		in.Lookups = h.lookups.LookupDoc()
 	}
 	if h.records != nil {
 		in.Capabilities = h.records.Capabilities()

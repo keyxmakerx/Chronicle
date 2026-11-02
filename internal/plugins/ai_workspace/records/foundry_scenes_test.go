@@ -68,7 +68,7 @@ func TestLookups_FoundryScenes(t *testing.T) {
 			}
 		})
 	}
-	if !strings.Contains(LookupDoc(), "`what: scenes`") {
+	if !strings.Contains((&Lookups{}).LookupDoc(), "`what: scenes`") {
 		t.Error("LookupDoc lacks the scenes lookup")
 	}
 }
