@@ -392,7 +392,9 @@
       }
 
       function onClick(e) {
-        if (state.bubble && !host.contains(e.target)) closeBubble(true);
+        // The click's path, not host.contains: Look and Stay remove themselves
+        // from the page before this runs, which would read as a click outside.
+        if (state.bubble && e.composedPath().indexOf(host) < 0) closeBubble(true);
         if (e.target.closest('[data-ai-open]') && !host.hidden) { e.preventDefault(); openPanel(''); return; }
         if (state.open && e.target.closest('[data-ai-close]')) close();
       }
