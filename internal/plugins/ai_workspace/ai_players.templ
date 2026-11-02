@@ -6,53 +6,73 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 )
 
-// aiPlayersPanel is players' AI on the owner's Your AI page: off until the
-// owner turns it on, then each player's key with Pause and Disconnect. What
-// a player's AI reads or asks for stays with that player.
+// aiPlayersPanel is players' AI on the owner's Settings: a switch, off
+// until the owner turns it on, what a player's AI may do, then each
+// player's key with Pause and Disconnect. What a player's AI reads or asks
+// for stays with that player.
 templ aiPlayersPanel(p PlayersView) {
-	<section id="ai-players" class="aic-panel space-y-3" aria-labelledby="ai-players-heading">
-		<div>
-			<h2 id="ai-players-heading" class="aic-h">Players' AI</h2>
-			<p class="aic-hint">Each player connects their own AI and answers its requests themselves. Their AI sees only what they see, and may change only their own character's sheet and hero builder choices.</p>
+	<div id="ai-players" class="aic-rowgroup" x-data="{ what: false }">
+		<div class="aic-row">
+			<span class="aic-row-k">
+				<b>Players may use an AI here</b>
+				<span class="aic-hint">
+					Each player connects their own and answers its requests themselves.
+					<button type="button" class="quiet-word aic-inline" @click="what = !what" :aria-expanded="what" aria-controls="ai-players-what">See what they get</button>
+				</span>
+			</span>
+			if p.Blocked {
+				<span class="aic-hint">The server's admin hasn't let players use AI.</span>
+			} else {
+				<form
+					hx-post={ fmt.Sprintf("/campaigns/%s/ai/players", p.CampaignID) }
+					hx-trigger="change"
+					hx-target="#ai-players"
+					hx-swap="outerHTML"
+				>
+					<input type="checkbox" role="switch" class="aic-switch" name="allowed" checked?={ p.Allowed } aria-label="Players may use an AI here"/>
+				</form>
+			}
+			<div id="ai-players-what" class="aic-row-drawer aic-what" x-show="what" x-cloak>
+				@playerCanDo(false)
+				<p class="aic-hint">Off stops every player's key from its next call. Their keys are kept for when you turn it back on.</p>
+			</div>
 		</div>
-		if p.Blocked {
-			<p class="text-sm text-fg">The server's admin hasn't let players use AI.</p>
-		} else {
-			<form
-				hx-post={ fmt.Sprintf("/campaigns/%s/ai/players", p.CampaignID) }
-				hx-trigger="change"
-				hx-target="#ai-players"
-				hx-swap="outerHTML"
-			>
-				<label class="aia-switch">
-					<input type="checkbox" name="allowed" checked?={ p.Allowed }/>
-					<span>
-						<b>Players may use an AI here</b>
-						<span class="block aic-hint">Off stops every player's key from its next call. Their keys are kept for when you turn it back on.</span>
-					</span>
-				</label>
-			</form>
-		}
 		if len(p.Keys) > 0 {
-			<ul class="divide-y divide-edge" aria-label="Players' keys">
+			<ul class="aic-subrows" aria-label="Players' keys">
 				for _, k := range p.Keys {
 					@aiPlayerKeyRow(p, k)
 				}
 			</ul>
 		} else if p.Allowed && !p.Blocked {
-			<p class="aic-hint">No player has connected an AI yet. They find it under the AI button at the top of any page.</p>
+			<p class="aic-row-foot"><span class="aic-hint">No player has connected an AI yet. They find it under the AI button at the top of any page.</span></p>
 		}
-	</section>
+	</div>
+}
+
+// playerCanDo is what a player's AI may do: the same list on the owner's
+// Settings and, said to the player (own), in their side sheet.
+templ playerCanDo(own bool) {
+	<ul class="aic-cando">
+		if own {
+			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Read what you can read in this campaign, and nothing more</span></li>
+			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Ask to change your own character's sheet and hero builder choices</span></li>
+			<li data-never><i class="fa-solid fa-xmark" aria-hidden="true"></i><span>Change anything without your yes, or touch anyone else's things</span></li>
+		} else {
+			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Read what the player can read in this campaign, and nothing more</span></li>
+			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Ask to change their own character's sheet and hero builder choices</span></li>
+			<li data-never><i class="fa-solid fa-xmark" aria-hidden="true"></i><span>Change anything without the player's yes, or touch anyone else's things</span></li>
+		}
+	</ul>
 }
 
 // aiPlayerKeyRow is one player's key: who, which app, when last used, and
 // Pause or Resume and Disconnect (which asks first).
 templ aiPlayerKeyRow(p PlayersView, k connector.KeyRow) {
-	<li class="py-2 space-y-1" x-data="{ asking: false }">
-		<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-			<span class="flex-1 min-w-[10rem] text-sm">
-				<b class="text-fg">{ k.PersonName }</b>
-				<span class="aic-hint">· { playerKeyLine(k) }</span>
+	<li class="aic-subrow" x-data="{ asking: false }">
+		<div class="aic-subrow-line">
+			<span class="aic-row-k">
+				<b>{ k.PersonName }</b>
+				<span class="aic-hint">{ playerKeyLine(k) }</span>
 			</span>
 			<button
 				type="button"
@@ -72,7 +92,7 @@ templ aiPlayerKeyRow(p PlayersView, k connector.KeyRow) {
 					Pause
 				}
 			</button>
-			<button type="button" class="quiet-word text-bad" x-show="!asking" @click="asking = true">Disconnect</button>
+			<button type="button" class="quiet-word aic-bad" x-show="!asking" @click="asking = true">Disconnect</button>
 		</div>
 		<div class="aic-ask" x-show="asking" x-cloak>
 			<p>Disconnect { k.PersonName }'s AI? Its key stops working at once. They can make a new one while players may use AI.</p>
