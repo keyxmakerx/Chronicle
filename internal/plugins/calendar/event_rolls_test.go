@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 func TestParseDice(t *testing.T) {
@@ -467,5 +468,64 @@ func TestDiceRollRefusesOutOfRange(t *testing.T) {
 		if _, _, err := d.Roll(); err == nil {
 			t.Errorf("%+v rolled", d)
 		}
+	}
+}
+
+// A result the Director picks for a night is stored by name and read back as
+// that result's texts, with no total nobody threw; a total, an unknown name,
+// a day the event is not on and a locked night each go their own way.
+func TestSetEventRollNight(t *testing.T) {
+	cfg := bloodnight()
+	_ = cfg.Normalize()
+	ctx := context.Background()
+	night := DayDate{Year: 6, Month: 1, Day: 3}
+
+	svc, rolls := rollFixture(t, &cfg, nil)
+	if err := svc.SetEventRollNight(ctx, "ev-blood", "cal", "camp", night, "red tide", owner); err != nil {
+		t.Fatal(err)
+	}
+	n := rolls.nights["ev-blood"][night]
+	if n.Entry != "Red Tide" || n.Total != nil || n.Source != RollNightManual {
+		t.Fatalf("stored %+v, want the result's own name, no total, set by hand", n)
+	}
+	v, ok := cfg.view(n, true)
+	if !ok || v.Result != "Red Tide" || v.Director != "Run Red Tide." || v.BandIndex == nil || *v.BandIndex != 2 || !*v.Told {
+		t.Fatalf("read back %+v", v)
+	}
+	pv, ok := cfg.view(n, false)
+	if !ok || pv.Players != "The sea looks like blood." || pv.Director != "" {
+		t.Fatalf("player read %+v", pv)
+	}
+
+	if err := svc.SetEventRollNight(ctx, "ev-blood", "cal", "camp", night, "14", owner); err != nil {
+		t.Fatal(err)
+	}
+	if n := rolls.nights["ev-blood"][night]; n.Total == nil || *n.Total != 14 || n.Entry != "" {
+		t.Fatalf("a total stored as %+v", n)
+	}
+
+	checks := []struct {
+		name   string
+		date   DayDate
+		result string
+		v      permissions.Viewer
+		code   int
+	}{
+		{"unknown result", night, "Calm seas", owner, http.StatusUnprocessableEntity},
+		{"empty result", night, " ", owner, http.StatusUnprocessableEntity},
+		{"not the event's day", DayDate{Year: 6, Month: 1, Day: 4}, "Red Tide", owner, http.StatusUnprocessableEntity},
+		{"a player", night, "Red Tide", player, http.StatusForbidden},
+	}
+	for _, c := range checks {
+		if err := svc.SetEventRollNight(ctx, "ev-blood", "cal", "camp", c.date, c.result, c.v); apperror.SafeCode(err) != c.code {
+			t.Errorf("%s = %v, want %d", c.name, err, c.code)
+		}
+	}
+
+	if _, err := svc.LockEventRollNights(ctx, "ev-blood", "cal", "camp", []DayDate{night}, true, owner); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetEventRollNight(ctx, "ev-blood", "cal", "camp", night, "Thin blood", owner); apperror.SafeCode(err) != http.StatusUnprocessableEntity {
+		t.Fatalf("setting a locked night = %v, want 422", err)
 	}
 }

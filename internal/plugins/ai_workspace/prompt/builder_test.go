@@ -651,3 +651,13 @@ func TestBuild_PageLayouts(t *testing.T) {
 		})
 	}
 }
+
+// The connector answers how_to_write_changes in parts by these two headings
+// (connector/howto_parts.go); renaming one there must rename it here.
+func TestTemplate_KeepsTheHeadingsTheConnectorSplitsOn(t *testing.T) {
+	for _, h := range []string{"\n## My campaign's entity types\n", "\n## Other things you can add, change or remove\n"} {
+		if !strings.Contains(promptTemplate, h) {
+			t.Errorf("the template lost the heading %q", strings.TrimSpace(h))
+		}
+	}
+}

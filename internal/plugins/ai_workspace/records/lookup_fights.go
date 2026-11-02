@@ -124,7 +124,7 @@ func (run *lookupRun) testsLookup(page string) (LookupAnswer, error) {
 	}
 	ans.Chip = fmt.Sprintf("Tests · %d", len(lines))
 	var b strings.Builder
-	fmt.Fprintf(&b, "## Tests (%d)\n\nA test is made with the Tests block on a page. An encounter version's `test` and `result` name one of these.\n\n", len(lines))
+	fmt.Fprintf(&b, "## Tests (%d)\n\nA test is set up with a `kind: test` block, or the Tests block on a page. An encounter version's `test` and `result` name one of these.\n\n", len(lines))
 	if len(lines) == 0 {
 		b.WriteString("None yet.\n")
 	}

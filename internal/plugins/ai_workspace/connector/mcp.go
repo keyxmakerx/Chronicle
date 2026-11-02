@@ -230,7 +230,7 @@ func (s *Server) call(ctx context.Context, m rpcMessage, sess Session) Outcome {
 	case toolAsk:
 		return s.ask(ctx, m.ID, sess, args)
 	case toolHowTo:
-		return s.howTo(ctx, m.ID, sess)
+		return s.howTo(ctx, m.ID, sess, args)
 	}
 	text, note, ok := t.answer(ctx, s.Lookups, sess.Conn.CampaignID, sess.CampaignName, sess.Actor, args)
 	out := toolResult(m.ID, text, !ok)
@@ -284,10 +284,16 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 	return out
 }
 
-// howTo answers how_to_write_changes. The prompt was written for copy and
-// paste, so it is prefaced with what is different over a connection.
-func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session) Outcome {
+// howTo answers how_to_write_changes, in the part asked for (howToPart).
+// The prompt was written for copy and paste, so the guide is prefaced with
+// what is different over a connection.
+func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session, args map[string]string) Outcome {
 	line := &CallLine{Tool: toolHowTo, Summary: "Read how to write changes"}
+	if c := args["category"]; c != "" {
+		line.Summary = "Read the sheet fields of " + oneLine(c, 60)
+	} else if args["part"] != "" {
+		line.Summary = "Read how to write changes: " + oneLine(args["part"], 40)
+	}
 	if s.Instructions == nil {
 		out := toolResult(id, "Not answered: the instructions aren't available on this Chronicle site.", true)
 		line.Note = "not available"
@@ -301,9 +307,23 @@ func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session) Ou
 		out.Called = line
 		return out
 	}
+	part, ok, why := howToPart(text, args["part"], args["category"])
+	if !ok {
+		out := toolResult(id, "Not answered: "+why+".", true)
+		line.Note = why
+		out.Called = line
+		return out
+	}
+	if args["category"] != "" || strings.EqualFold(strings.TrimSpace(args["part"]), howToPartCategories) {
+		// The sheet fields are read on their own, so they need no preface.
+		out := toolResult(id, part, false)
+		line.Note, line.OK = fmt.Sprintf("%d KB", (len(part)+1023)/1024), true
+		out.Called = line
+		return out
+	}
 	text = "You are connected to Chronicle through tools, so two things differ from what follows. " +
 		"Where it says to write a `kind: lookup` block, use the lookup tools instead. " +
-		"Where it says to answer with blocks to paste, send them with " + toolAsk + " instead.\n\n" + strings.TrimSpace(text)
+		"Where it says to answer with blocks to paste, send them with " + toolAsk + " instead.\n\n" + strings.TrimSpace(part)
 	out := toolResult(id, text, false)
 	line.Note, line.OK = fmt.Sprintf("%d KB", (len(text)+1023)/1024), true
 	out.Called = line
