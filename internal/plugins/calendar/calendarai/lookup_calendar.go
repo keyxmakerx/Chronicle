@@ -1,7 +1,6 @@
 package calendarai
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -289,15 +288,6 @@ func weatherText(d calendar.DayWeather) string {
 		return "set, no details"
 	}
 	return strings.Join(parts, ", ")
-}
-
-// decodeMeta reads a relation's JSON metadata; bad JSON reads as empty.
-func decodeMeta(raw json.RawMessage) map[string]any {
-	m := map[string]any{}
-	if len(raw) > 0 {
-		_ = json.Unmarshal(raw, &m)
-	}
-	return m
 }
 
 // rollLines are a month's rolled nights within [from, to], for the owner or
