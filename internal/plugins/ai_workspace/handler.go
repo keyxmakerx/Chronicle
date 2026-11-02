@@ -563,6 +563,14 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	if strings.TrimSpace(source) == "" {
 		return apperror.NewBadRequest("Your import session expired. Please paste your markdown again.")
 	}
+	// A connected AI's request is applied once: a second Apply (a double
+	// click, or the same review open in two tabs) would add its new pages and
+	// records again, so it is refused before anything is written.
+	if raw := c.FormValue("ai_request"); raw != "" && h.connector != nil {
+		if _, err := h.waitingRequest(c, cc, raw); err != nil {
+			return err
+		}
+	}
 
 	// Re-parse from scratch so the indexes match what the review
 	// templ rendered. The classifier-supplied dropdowns embedded

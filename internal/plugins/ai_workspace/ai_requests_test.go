@@ -223,6 +223,26 @@ func TestRequest_ReviewThenApply(t *testing.T) {
 	}
 }
 
+// A second Apply of the same request (a double click, or the review open in
+// two tabs) writes nothing: the request was already answered.
+func TestRequest_ApplyTwiceWritesOnce(t *testing.T) {
+	h, repo, m, id := requestRig(t)
+	form := url.Values{"markdown_source": {askedTable}, "rec_0_include": {"on"}, "ai_request": {"1"}}
+	if rec := post(t, h.CommitImport, "/x", form); rec.Code != http.StatusOK {
+		t.Fatalf("first apply: %d %s", rec.Code, rec.Body)
+	}
+	rec := post(t, h.CommitImport, "/x", form)
+	if rec.Code == http.StatusOK || !strings.Contains(rec.Body.String(), "already answered") {
+		t.Errorf("second apply: %d %s", rec.Code, rec.Body)
+	}
+	if len(m.doc.Tables) != 1 {
+		t.Errorf("tables = %d, want 1", len(m.doc.Tables))
+	}
+	if q := repo.reqs[id-1]; q.Outcome != "1 applied, 0 left out" {
+		t.Errorf("request = %+v", q)
+	}
+}
+
 // A request's page text is one fold away in its review, escaped; a paste's
 // isn't (the owner already has it).
 func TestRequest_ReviewShowsText(t *testing.T) {
