@@ -467,7 +467,7 @@ func AppearanceCSS(ctx context.Context) string {
 	}
 
 	// The DM Screen's own kit: the same tokens and faces, scoped to the
-	// overlay so the page keeps the campaign's kit.
+	// dock so the page keeps the campaign's kit.
 	var dmRoot, dmDark strings.Builder
 	if k, ok := czKits[a.DmScreenKit]; ok {
 		kitCSS(&dmRoot, &dmDark, &extra, a, k, accent)
@@ -476,10 +476,10 @@ func AppearanceCSS(ctx context.Context) string {
 	var out strings.Builder
 	out.WriteString(extra.String())
 	if dmRoot.Len() > 0 {
-		out.WriteString("[data-dms-kit] .dms-overlay{" + dmRoot.String() + "}")
+		out.WriteString("[data-dms-kit] .dms-dock{" + dmRoot.String() + "}")
 	}
 	if dmDark.Len() > 0 {
-		out.WriteString(".dark[data-dms-kit] .dms-overlay{" + dmDark.String() + "}")
+		out.WriteString(".dark[data-dms-kit] .dms-dock{" + dmDark.String() + "}")
 	}
 	if root.Len() > 0 {
 		out.WriteString(":root{" + root.String() + "}")
