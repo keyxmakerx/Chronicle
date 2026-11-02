@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"context"
@@ -51,7 +51,7 @@ var rollResultKeys = map[string]bool{"max": true, "name": true, "players": true,
 
 // readRoll reads a row's `roll:`. A table is named by the campaign's own
 // name for it and stored by id.
-func readRoll(ctx context.Context, campaignID string, a Actor, r Record, tables RollTablesAPI) (rollSpec, error) {
+func readRoll(ctx context.Context, campaignID string, a Actor, r Record, tables RollTables) (rollSpec, error) {
 	var s rollSpec
 	v, ok := r.Fields["roll"]
 	if !ok {
@@ -134,18 +134,16 @@ func readRoll(ctx context.Context, campaignID string, a Actor, r Record, tables 
 }
 
 // findRollTable finds one of the campaign's rolling tables by name or id.
-func findRollTable(ctx context.Context, campaignID string, tables RollTablesAPI, name string) (string, error) {
+func findRollTable(ctx context.Context, campaignID string, tables RollTables, name string) (string, error) {
 	if tables == nil {
 		return "", apperror.NewBadRequest("rolling tables aren't available on this server")
 	}
-	doc, err := tables.Get(ctx, campaignID)
+	id, err := tables.FindTable(ctx, campaignID, name)
 	if err != nil {
 		return "", apperror.NewBadRequest("could not read the rolling tables")
 	}
-	for _, t := range doc.Tables {
-		if sameName(t.Name, name) || t.ID == name {
-			return t.ID, nil
-		}
+	if id != "" {
+		return id, nil
 	}
 	return "", badRequestf("no rolling table called %s", quote(name))
 }

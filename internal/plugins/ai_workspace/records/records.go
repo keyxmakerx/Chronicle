@@ -129,28 +129,16 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 	return k, k.Plan(ctx, campaignID, a, rec)
 }
 
-// PlanAll plans records in order. A row that makes the calendar, or makes
-// another one the main calendar, lets the rows after it be checked against
-// that calendar, since commit applies them in the same order; a row that
-// makes a folder or a map does the same for that folder or map.
+// PlanAll plans records in order. A row whose kind is aiplug.Staged (it
+// makes a calendar, folder or map) lets the rows after it be checked
+// against what it makes, since commit applies them in the same order.
 func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs []Record) ([]Kind, []Plan) {
-	ctx = withPendingMaps(withPendingFolders(ctx))
 	kinds := make([]Kind, len(recs))
 	plans := make([]Plan, len(recs))
 	for i, rec := range recs {
 		kinds[i], plans[i] = r.Plan(ctx, campaignID, a, rec)
-		if fk, ok := kinds[i].(FolderKind); ok && rec.Action == ActionCreate && plans[i].Error == "" {
-			if t, err := fk.resolve(ctx, campaignID, rec); err == nil {
-				pendingFolders(ctx)[folderKey(t.cat.ID, rec.Name)] = true
-			}
-		}
-		if _, ok := kinds[i].(MapSketchKind); ok && rec.Action == ActionCreate && plans[i].Error == "" {
-			pendingMaps(ctx)[mapKey(sketchName(rec))] = true
-		}
-		if ck, ok := kinds[i].(CalendarKind); ok && (rec.Action == ActionCreate || rec.Has("main")) && plans[i].Error == "" {
-			if _, cal := ck.plan(ctx, campaignID, a, rec); cal != nil {
-				ctx = withPendingCalendar(ctx, cal)
-			}
+		if s, ok := kinds[i].(aiplug.Staged); ok && plans[i].Error == "" {
+			ctx = s.Stage(ctx, campaignID, a, rec)
 		}
 	}
 	return kinds, plans
@@ -159,9 +147,6 @@ func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs
 // briefs is one plain line per kind for the prompt's opening "what you
 // can do" list, which every prompt carries; Docs has the full formats.
 var briefs = map[string]string{
-	KindCalendar:     "make the campaign calendar, or change its months, weekdays, seasons, moons, year label, eras and current date",
-	"event":          "calendar events on the campaign calendar, one-off or repeating",
-	"weather":        "one day's weather on the calendar",
 	"table":          "rolling tables and their entries",
 	"shop-stock":     "what a shop sells, its price and how many",
 	"carried-item":   "items a character carries",
@@ -189,9 +174,6 @@ var briefs = map[string]string{
 	"shop-room":      "the room players step into from a shop: what kind of shop it is, its look and mood, the keeper's manner and their own lines for each moment of a visit",
 	"storefront":     "how a shop's front looks on the Shops street: building, colours, awning, sign, window wares, lamp and its closed look",
 	"drops":          "a creature's or other page's drop list: what it leaves in the spoils tray when defeated or searched, taken as it is or harvested with a test",
-	"roll_night":     "one night of an event's yearly roll: roll it again, give it a result by hand, lock it, or choose whether players are told",
-	"moon":           "a moon the Director moves by hand: the day it turns full, dark or vanished, and what players see",
-	"generator":      "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }
 
 // Capabilities is the prompt's opening list of what a block can change,
@@ -210,10 +192,6 @@ func (r *Registry) Capabilities() string {
 	}
 	return b.String()
 }
-
-// CalendarKinds are the kinds the prompt's Calendar content choice
-// explains: the calendar itself and everything written onto it.
-var CalendarKinds = []string{KindCalendar, "event", "weather", "generator"}
 
 // DocsFor is Docs for the named kinds only, in that order; a name not
 // wired on this server is skipped.

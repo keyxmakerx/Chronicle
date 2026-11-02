@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func calendarWorld() *Lookups {
 }
 
 func TestLookups_Calendar(t *testing.T) {
-	ans := calendarWorld().Answer(context.Background(), camp, owner, []Record{lookup(lookupWhatCalendar, nil)})[0]
+	ans := calendarWorld().Answer(context.Background(), camp, owner, []Record{lookup(WhatCalendar, nil)})[0]
 	if ans.Error != "" {
 		t.Fatal(ans.Error)
 	}

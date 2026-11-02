@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"context"
@@ -10,23 +10,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
-
-// lookupWhatCalendar is the `what:` of the calendar lookup; LookupWhatCalendar
-// lets the AI connector name it without spelling out a plugin's slug.
-const (
-	lookupWhatCalendar = "calendar"
-	LookupWhatCalendar = lookupWhatCalendar
-)
-
-// CalendarLookups are the lookups the prompt's Calendar content choice
-// answers up front: the calendar itself (or how to set one up) and its
-// kinds of weather.
-func CalendarLookups() []Record {
-	return []Record{
-		{Kind: "lookup", Fields: map[string]any{"what": lookupWhatCalendar}},
-		{Kind: "lookup", Fields: map[string]any{"what": "weather-kinds"}},
-	}
-}
 
 // WeatherSettingsAPI reads a calendar's climate and the owner's own kinds
 // of weather (calendar.CalendarService).
@@ -393,17 +376,4 @@ func todayText(cal *calendar.Calendar) string {
 		line += ", in the era " + e.Name
 	}
 	return line
-}
-
-// WorldToday is the main calendar's current date for the prompt's opening,
-// as the Actor may see the calendar; "" without one.
-func (l *Lookups) WorldToday(ctx context.Context, campaignID string, a Actor) string {
-	if l == nil || l.Cal == nil {
-		return ""
-	}
-	cal, err := l.Cal.GetDefaultCalendarForViewer(ctx, campaignID, a.Viewer())
-	if err != nil || cal == nil || len(cal.Months) == 0 {
-		return ""
-	}
-	return todayText(cal)
 }

@@ -29,7 +29,6 @@ const (
 	maxAnswerBytes  = 24 * 1024
 	maxAnswersBytes = 120 * 1024
 	maxAnswerLines  = aiplug.MaxAnswerLines
-	maxCalMonths    = 24
 	maxPagesWalk    = 50 // pages of 100, as the AI export walks them
 )
 
@@ -102,10 +101,6 @@ type PartyNight struct {
 // Director-only entries. Notes are what the Actor can open in the Journal,
 // and never in Safe. Any service may be nil; its lookups then say so.
 type Lookups struct {
-	Cal     CalendarAPI
-	Weather WeatherSettingsAPI
-	// Rolls adds each rolled night to the `events` answer; nil leaves them out.
-	Rolls   EventRollAPI
 	Tables  RollTablesAPI
 	Maps    MapsAPI
 	Pages   PagesAPI
@@ -121,8 +116,6 @@ type Lookups struct {
 	// Tags answers the tag lookups and shows each page's tags; nil leaves
 	// them out.
 	Tags TagsAPI
-	// Tiers adds the event importance levels to the calendar answer.
-	Tiers TierLister
 	// Plugged are the lookups features register themselves (aiplug),
 	// answered after the built-in ones; a `what:` both know is the
 	// built-in one's.
@@ -182,10 +175,6 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"pages", "optional `type` (e.g. Character) and `tag` (a tag's name)", "page names with their tags, by type or tag"},
 	{"tags", "none", "every tag with how many pages carry it, colour and whether it is Directors only"},
 	{"page", "`name`", "one page: its text, tags and links, its item look, and for a Director its quest notice and notice boards"},
-	{lookupWhatCalendar, "none", "the calendar itself: months, weekdays, seasons, moons with today's phase and the next new and full moon, eras, festivals, today's date, and its climate"},
-	{"weather-kinds", "none", "every climate, built-in weather label and sky effect the calendar can animate, and the owner's own kinds of weather"},
-	{"events", "`from` and `to` (e.g. `Deepwinter 1 1492`), or `year` and optional `month`", "calendar events in a date range"},
-	{"weather", "`from` and `to`, or `year` and `month`", "each day's weather in a date range"},
 	{"table", "optional `name`", "rolling tables, or one table's entries"},
 	{"pins", "optional `map`", "maps, or one map's pins"},
 	{"scenes", "optional `name` (part of a scene's name or folder)", "the scenes in the campaign's Foundry world, as Foundry last reported them, which says which maps already exist there (owner and co-DM only)"},
@@ -227,6 +216,19 @@ func (l *Lookups) plugged() []aiplug.Lookup {
 		return nil
 	}
 	return l.Plugged
+}
+
+// WorldToday is the in-world date for the prompt's opening line, from the
+// first plugged lookup that knows one (aiplug.Dated); "" without one.
+func (l *Lookups) WorldToday(ctx context.Context, campaignID string, a Actor) string {
+	for _, p := range l.plugged() {
+		if d, ok := p.(aiplug.Dated); ok {
+			if s := d.WorldToday(ctx, campaignID, a); s != "" {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 // pluggedFor is the registered lookup answering what, or nil.
@@ -324,14 +326,6 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.pagesIndex(r.Str("type"), r.Str("tag"))
 	case "page":
 		ans, err = run.page(firstNonEmpty(r.Name, r.Str("page")))
-	case lookupWhatCalendar:
-		ans, err = run.calendarInfo()
-	case "weather-kinds", "weather-kind":
-		ans, err = run.weatherKinds()
-	case "events":
-		ans, err = run.events(r)
-	case "weather":
-		ans, err = run.weather(r)
 	case "table", "tables":
 		ans, err = run.table(r.Name)
 	case "pins", "map", "maps":
@@ -385,9 +379,6 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 			return LookupAnswer{Chip: what, Error: fmt.Sprintf("`what: %s` is not something Chronicle can look up", what)}
 		}
 		ans.Chip, ans.Text, err = p.Answer(run.ctx, run.campaignID, run.a, r)
-	}
-	if isNoCalendar(err) {
-		return run.noCalendar(strings.SplitN(ans.Chip, " · ", 2)[0])
 	}
 	if err != nil {
 		if ans.Chip == "" {

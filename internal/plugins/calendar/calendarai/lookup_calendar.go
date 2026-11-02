@@ -1,10 +1,12 @@
-package records
+package calendarai
 
 import (
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
@@ -221,7 +223,7 @@ func (run *lookupRun) events(r Record) (LookupAnswer, error) {
 	if len(lines) == 0 {
 		b.WriteString("None.\n")
 	}
-	writeLines(&b, lines)
+	aiplug.WriteLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
 }
@@ -261,7 +263,7 @@ func (run *lookupRun) weather(r Record) (LookupAnswer, error) {
 	if len(lines) == 0 {
 		b.WriteString("No day in this range has weather yet.\n")
 	}
-	writeLines(&b, lines)
+	aiplug.WriteLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
 }
@@ -281,7 +283,7 @@ func weatherText(d calendar.DayWeather) string {
 		parts = append(parts, "wind "+strconv.FormatFloat(*d.Wind.SpeedKPH, 'f', -1, 64)+" kph")
 	}
 	if len(parts) == 0 && d.Description != nil {
-		parts = append(parts, oneLine(*d.Description, 120))
+		parts = append(parts, aiplug.OneLine(*d.Description, 120))
 	}
 	if len(parts) == 0 {
 		return "set, no details"

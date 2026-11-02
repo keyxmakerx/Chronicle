@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/aiplug"
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
 type fakeEntryFields struct{}
@@ -17,44 +16,6 @@ func (fakeEntryFields) Entries(context.Context, string, string, bool) (string, [
 }
 func (fakeEntryFields) Fields(_ context.Context, _ string, director bool) (string, []SystemEntryField, error) {
 	return "Draw Steel", []SystemEntryField{{Key: "ancestry", Label: "Heritage", Count: 12}, {Key: "kit", Label: "kit", Count: 30}}, nil
-}
-
-func TestLookups_CalendarCategoriesAndImportance(t *testing.T) {
-	tiers := fakeTiers{{Slug: "major", Name: "Major"}, {Slug: "standard", Name: "Standard", IsDefault: true}, {Slug: "side-quest", Name: "Side quest"}}
-	l := calendarWorld()
-	l.Tiers = tiers
-	l.Cal.(*fakeCal).cal.EventKinds = []calendar.EventKind{{Name: "Festival", Slug: "festival"}}
-
-	ans := l.Answer(context.Background(), camp, owner, []Record{lookup(lookupWhatCalendar, nil)})[0]
-	if ans.Error != "" {
-		t.Fatal(ans.Error)
-	}
-	for _, want := range []string{
-		"### Event categories (the names `category:` takes on events)\n\nFestival",
-		"### Event importance levels (the names `importance:` takes on events)",
-		"- Major\n", "- Standard, the usual level", "- Side quest (`side-quest`)",
-	} {
-		if !strings.Contains(ans.Text, want) {
-			t.Errorf("answer lacks %q:\n%s", want, ans.Text)
-		}
-	}
-	if strings.Contains(ans.Text, "Event kinds") {
-		t.Error("the old heading is still there")
-	}
-
-	// Without tiers wired the rest of the answer stands.
-	l.Tiers = nil
-	ans = l.Answer(context.Background(), camp, owner, []Record{lookup(lookupWhatCalendar, nil)})[0]
-	if ans.Error != "" || strings.Contains(ans.Text, "importance") {
-		t.Errorf("unwired tiers: %q %q", ans.Error, ans.Text)
-	}
-
-	// A player is not shown the levels.
-	l.Tiers = tiers
-	ans = l.Answer(context.Background(), camp, player, []Record{lookup(lookupWhatCalendar, nil)})[0]
-	if strings.Contains(ans.Text, "importance") {
-		t.Error("a player was shown the importance levels")
-	}
 }
 
 // fakePlug is a feature's lookup plugged in from outside the engine.

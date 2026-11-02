@@ -60,13 +60,6 @@ const (
 	toolAsk   = "ask_for_changes"
 )
 
-var dateArgs = []arg{
-	{Key: "from", Desc: "First day, as the calendar writes it (for example \"Deepwinter 1 1492\")"},
-	{Key: "to", Desc: "Last day, as the calendar writes it"},
-	{Key: "year", Desc: "A year (instead of from and to), for example \"1492\""},
-	{Key: "month", Desc: "A month of that year, by name or number"},
-}
-
 // tools is every tool, in the order an AI is shown them. Each maps onto one
 // lookup, so answers follow the lookup's privacy and size caps exactly.
 var tools = []tool{
@@ -80,14 +73,6 @@ var tools = []tool{
 		Args: []arg{{Key: "name", Desc: "The page's name", Required: true}}},
 	{Name: "list_tags", Title: "Tags", Did: "Listed the tags", What: "tags",
 		Desc: "Every tag, with how many pages carry it."},
-	{Name: "calendar_overview", Title: "The calendar", Did: "Read the calendar", What: records.LookupWhatCalendar,
-		Desc: "The main calendar: months, weekdays, seasons, moons and their phases, eras, festivals, today's date and the climate."},
-	{Name: "weather_kinds", Title: "Kinds of weather", Did: "Read the kinds of weather", What: "weather-kinds",
-		Desc: "Every climate and kind of weather the calendar knows."},
-	{Name: "calendar_events", Title: "Calendar events", Did: "Looked up events", What: "events",
-		Desc: "Calendar events in a range of dates: from and to, or a year and a month.", Args: dateArgs},
-	{Name: "weather", Title: "Weather by day", Did: "Looked up the weather", What: "weather",
-		Desc: "Each day's weather in a range of dates: from and to, or a year and a month.", Args: dateArgs},
 	{Name: "rolling_tables", Owner: true, Title: "Rolling tables", Did: "Read rolling tables", What: "table",
 		Desc: "The rolling tables, or one table's entries when given its name.",
 		Args: []arg{{Key: "name", Desc: "A table's name, to read its entries"}}},

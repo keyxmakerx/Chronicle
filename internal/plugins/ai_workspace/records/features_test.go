@@ -1,12 +1,13 @@
 package records
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
 
 func TestRegistry_FindsUnderscoredKind(t *testing.T) {
-	r := NewRegistry(RollNightKind{})
+	r := NewRegistry(namedKind("roll_night"))
 	for _, name := range []string{"roll_night", "roll-night", "Roll_Night"} {
 		if _, ok := r.Get(name); !ok {
 			t.Errorf("Get(%q) found nothing", name)
@@ -38,7 +39,7 @@ func TestOffFeatures_For(t *testing.T) {
 }
 
 func TestRegistry_WithoutAndNote(t *testing.T) {
-	r := NewRegistry(EventKind{}, TableKind{}, PinKind{}, GeneratorKind{})
+	r := NewRegistry(namedKind("event"), TableKind{}, PinKind{}, namedKind("generator"))
 	off := OffFeatures{"event": "Calendar", KindCalendar: "Calendar", "pin": "Maps"}
 	caps := r.Without(off).Capabilities()
 	for _, gone := range []string{"kind: event", "kind: pin"} {
@@ -63,4 +64,16 @@ func TestRegistry_WithoutAndNote(t *testing.T) {
 	if (OffFeatures{}).Note() != "" {
 		t.Error("note written with nothing switched off")
 	}
+}
+
+// namedKind is a kind that is only a name.
+type namedKind string
+
+func (k namedKind) Name() string                                     { return string(k) }
+func (namedKind) Label() string                                      { return "Named" }
+func (namedKind) Doc() string                                        { return "" }
+func (namedKind) Plan(context.Context, string, Actor, Record) Plan   { return Plan{} }
+func (namedKind) Apply(context.Context, string, Actor, Record) error { return nil }
+func (namedKind) Export(context.Context, string, Actor) (string, error) {
+	return "", nil
 }

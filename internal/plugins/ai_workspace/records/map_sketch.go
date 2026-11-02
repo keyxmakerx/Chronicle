@@ -332,6 +332,14 @@ func newPins(p sketchPlan, have []PinRef) (add []sketchShape, skipped []string) 
 	return add, skipped
 }
 
+// Stage notes a map this row creates, so a pin after it may name it.
+func (MapSketchKind) Stage(ctx context.Context, _ string, _ Actor, r Record) context.Context {
+	if r.Action != ActionCreate {
+		return ctx
+	}
+	return withPendingMap(ctx, mapKey(sketchName(r)))
+}
+
 func (k MapSketchKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
 	p, blocked := k.plan(a, r)
 	if blocked != "" {

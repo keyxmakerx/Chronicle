@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
-	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 // CalendarStructureAPI is the slice of calendar.CalendarService the
@@ -35,12 +34,16 @@ type CalendarStructureAPI interface {
 	SetMoonPhase(ctx context.Context, moonID int, calendarID, campaignID string, offset float64, color string) error
 }
 
-// PageResolver finds a campaign page by name and says which of them an
-// actor may see, so a moon's or an era's `page:` can only name a page the
-// operator can open. The entities service is one.
+// PageResolver finds a campaign page by name as an actor may open it, so a
+// moon's, an era's or an event's `page:` can only name a page the operator
+// can open. App wiring adapts the entities service.
 type PageResolver interface {
-	EntityLookup
-	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
+	// OpenablePage is the id of the page called name that a may open; ""
+	// when there is none, or a may not open it, so a refusal never
+	// confirms a hidden page. err is a failed visibility check.
+	OpenablePage(ctx context.Context, campaignID, name string, a Actor) (string, error)
+	// Slug is a page name as the paste's own pages are keyed (Record.Made).
+	Slug(name string) string
 }
 
 // pageRef is a `page:` key on a moon or an era: absent keeps the lore page,
@@ -86,19 +89,14 @@ func resolvePageRef(ctx context.Context, pages PageResolver, campaignID string, 
 	if pages == nil {
 		return badRequestf("%s: pages can't be looked up right now, so page can't be set", what)
 	}
-	gone := badRequestf("%s: there is no page called %s that you can open", what, quote(ref.name))
-	e, err := pages.GetBySlug(ctx, campaignID, entities.Slugify(ref.name))
-	if err != nil || e == nil || e.CampaignID != campaignID {
-		return gone
-	}
-	seen, err := pages.FilterViewableEntityIDs(ctx, campaignID, []string{e.ID}, a.Role, a.UserID)
+	id, err := pages.OpenablePage(ctx, campaignID, ref.name, a)
 	if err != nil {
 		return badRequestf("%s: could not check the page; try again in a moment", what)
 	}
-	if !seen[e.ID] {
-		return gone
+	if id == "" {
+		return badRequestf("%s: there is no page called %s that you can open", what, quote(ref.name))
 	}
-	ref.id = e.ID
+	ref.id = id
 	return nil
 }
 

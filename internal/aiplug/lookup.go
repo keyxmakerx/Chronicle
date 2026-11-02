@@ -21,6 +21,13 @@ type Lookup interface {
 	Answer(ctx context.Context, campaignID string, a Actor, r Record) (chip, text string, err error)
 }
 
+// Dated is a lookup that knows the world's date, which the prompt's opening
+// line gives beside the real one. WorldToday reads as the Actor; "" when
+// there is none to give.
+type Dated interface {
+	WorldToday(ctx context.Context, campaignID string, a Actor) string
+}
+
 // LookupInfo describes a lookup to the prompt and to connected AI apps.
 type LookupInfo struct {
 	What    string   // the `what:` value, e.g. "game-nights"

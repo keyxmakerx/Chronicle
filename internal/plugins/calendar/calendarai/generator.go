@@ -1,4 +1,4 @@
-package records
+package calendarai
 
 import (
 	"context"
@@ -32,7 +32,7 @@ const (
 // does; without it a run uses the generator's defaults.
 type GeneratorKind struct {
 	Cal     CalendarAPI
-	Tables  TableKind
+	Tables  RollTables
 	Weather WeatherSettingsAPI
 	// Rolls runs the `rolls` generator; without it that generator is refused.
 	Rolls EventRollAPI
@@ -414,13 +414,16 @@ func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 		if len(names) == 0 || len(names) > maxGenNames {
 			return badRequestf("the generator returned %d names", len(names))
 		}
-		es := make([]Entry, 0, len(names))
+		kept := make([]string, 0, len(names))
 		for _, n := range names {
 			if n = strings.TrimSpace(n); n != "" {
-				es = append(es, Entry{Name: n, Weight: 1})
+				kept = append(kept, n)
 			}
 		}
-		return k.Tables.appendEntries(ctx, campaignID, a, r.Str("table"), es)
+		if k.Tables == nil {
+			return apperror.NewBadRequest("rolling tables aren't available on this server")
+		}
+		return k.Tables.AddNames(ctx, campaignID, a, r.Str("table"), kept)
 	case "weather":
 		var days []genDay
 		if err := json.Unmarshal([]byte(r.Generated), &days); err != nil {
@@ -476,7 +479,7 @@ func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 			}
 			var desc *string
 			if e.Description != nil {
-				if desc, err = bodyHTML(*e.Description, nil); err != nil {
+				if desc, err = bodyHTML(r, *e.Description); err != nil {
 					failed++
 					continue
 				}

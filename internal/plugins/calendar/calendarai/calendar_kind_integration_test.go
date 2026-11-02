@@ -2,7 +2,7 @@
 // calendar service and a scratch MariaDB schema: the create path's import,
 // the update path's structure save, and events written right after a new
 // calendar. Skips when no test DB server answers (`make test-db-up`).
-package records
+package calendarai
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -91,7 +92,7 @@ func TestCalendarKind_Integration(t *testing.T) {
 	svc := calendar.NewCalendarService(calendar.NewCalendarRepository(db), calendar.NewEventRepository(db),
 		calendar.NewEventKindRepository(db), calendar.NewWeatherRepository(db))
 	a := Actor{UserID: user, Role: 3}
-	reg := NewRegistry(CalendarKind{Svc: svc}, EventKind{Svc: svc})
+	reg := records.NewRegistry(CalendarKind{Svc: svc}, EventKind{Svc: svc})
 
 	// One paste: the calendar, then an event in a month only it defines.
 	recs := []Record{
