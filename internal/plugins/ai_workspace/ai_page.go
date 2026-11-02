@@ -54,6 +54,9 @@ type ConnectView struct {
 	Notes *NotesView
 	// Players is the players panel; nil when the watch isn't wired.
 	Players *PlayersView
+	// LevelSaved is true on the answer to a change of level, which says
+	// Saved beside it.
+	LevelSaved bool
 }
 
 // NotesView is the panel saying which notes the AI reads and changes, with
@@ -449,6 +452,7 @@ func (h *Handler) ChangeAIAccess(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	v.LevelSaved = true
 	return middleware.Render(c, http.StatusOK, aiConnectSection(v))
 }
 
@@ -635,7 +639,8 @@ func shownSittings(v ConnectView) []connector.Sitting {
 	return v.Sittings
 }
 
-// sittingSummary says in one line what an AI did in a sitting.
+// sittingSummary says in one line what an AI did in a sitting. What it
+// couldn't answer is a pill beside it, not part of the line.
 func sittingSummary(s connector.Sitting) string {
 	var parts []string
 	if s.Reads > 0 {
@@ -653,10 +658,10 @@ func sittingSummary(s connector.Sitting) string {
 	default:
 		parts = append(parts, fmt.Sprintf("asked for changes %d times", s.Asks))
 	}
-	if s.Refused > 0 {
-		parts = append(parts, fmt.Sprintf("%d not answered", s.Refused))
-	}
 	line := strings.Join(parts, ", ")
+	if line == "" && s.Refused > 0 {
+		return "Nothing answered"
+	}
 	if line == "" {
 		return "Connected"
 	}
@@ -688,6 +693,12 @@ func sittingTag(v ConnectView, s connector.Sitting) string {
 // sittingWhen is when a sitting started, in the owner's time zone: "Today,
 // 2:44 pm", "Yesterday, …", a weekday within the week, else the date.
 func sittingWhen(v ConnectView, t time.Time) string {
+	return sittingDay(v, t) + ", " + clockText(v, t)
+}
+
+// sittingDay is the day of sittingWhen: "Today", "Yesterday", a weekday
+// within the week, else the date.
+func sittingDay(v ConnectView, t time.Time) string {
 	now, t := v.Now.In(v.Loc), t.In(v.Loc)
 	day := func(x time.Time) time.Time { return time.Date(x.Year(), x.Month(), x.Day(), 0, 0, 0, 0, v.Loc) }
 	days := int(day(now).Sub(day(t)).Hours()/24 + 0.5)
@@ -704,7 +715,7 @@ func sittingWhen(v ConnectView, t time.Time) string {
 	default:
 		d = t.Format("2 January 2006")
 	}
-	return d + ", " + clockText(v, t)
+	return d
 }
 
 // clockText is a time of day in the owner's zone: "2:44 pm".

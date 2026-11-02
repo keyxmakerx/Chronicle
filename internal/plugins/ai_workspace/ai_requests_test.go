@@ -293,10 +293,11 @@ func TestRequest_TurnDownAndList(t *testing.T) {
 	}
 }
 
-// The Change choice is part of making a key, defaulting to Ask as signed.
+// The level is part of making a key, starting on the safest one: what
+// players see, only looking.
 func TestAIPage_ChangeChoice(t *testing.T) {
 	html := renderConnect(t, ConnectView{CampaignID: "camp-1", Available: true, Now: time.Now()})
-	for _, want := range []string{`name="change" value="ask" checked`, `name="change" value="look"`, "ChatGPT Plus and Pro"} {
+	for _, want := range []string{`name="sees" value="players"`, `name="change" value="look"`, `lv: &#39;players&#39;`, "live: false", "ChatGPT Plus and Pro"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %q", want)
 		}
@@ -316,7 +317,7 @@ func TestRequest_StayAfterDisconnect(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "1 request waits for you") {
 		t.Errorf("after disconnect: %d %s", rec.Code, rec.Body)
 	}
-	const stays = "What it already asked for stays here"
+	const stays = "What it already asked for stays"
 	v := ConnectView{CampaignID: "camp-1", Available: true, Now: time.Now(),
 		Conn: &connector.Connection{CampaignID: "camp-1", CreatedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}}
 	if strings.Contains(renderConnect(t, v), stays) {
@@ -383,7 +384,7 @@ func TestConnection_PauseAndChange(t *testing.T) {
 		t.Errorf("widened without the confirmation: %d", rec.Code)
 	}
 	widen.Set("widen", "yes")
-	if rec := post(t, h.ChangeAIAccess, "/x", widen); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "sees what you see") {
+	if rec := post(t, h.ChangeAIAccess, "/x", widen); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "sees what you see") || !strings.Contains(rec.Body.String(), "Saved. Works from its next call.") {
 		t.Fatalf("change: %d %s", rec.Code, rec.Body)
 	}
 	if repo.conn.Privacy != aiexport.PrivacyModePermitted || repo.conn.CanAsk {

@@ -1,6 +1,6 @@
-/* The campaign's Your AI page: connecting an AI app, what it asks for, what
- * it did, and the copy-and-paste tool. A workshop, so it sits on the theme tokens, never
- * paper; panels are sheets with a hairline edge and a resting shadow. */
+/* The campaign's Your AI page (What it did and Settings), the AI panel, the
+ * players' side sheet and the AI bubble. A workshop, so it sits on the theme
+ * tokens, never paper; sheets have a hairline edge and a resting shadow. */
 
 .aic-panel { background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--elev-resting); padding: 16px 20px; }
 .aic-label { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
@@ -11,11 +11,6 @@
 .aic-choice { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
 .aic-choice input { margin-top: 3px; accent-color: var(--color-accent); }
 .aic-choice b { color: var(--color-text-primary); font-weight: 600; }
-
-/* Numbered steps, separated by hairlines. */
-.aic-step { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--color-border-light); }
-.aic-step:last-of-type { border-bottom: 1px solid var(--color-border-light); }
-.aic-num { width: 24px; height: 24px; flex: none; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.12); }
 
 /* A value to copy: the text in a field-like well, and a copy icon. */
 .aic-copy { display: flex; gap: 6px; align-items: center; min-width: 0; margin-top: 6px; }
@@ -39,87 +34,225 @@
 .aic-dot[data-state="connected"] { background: rgb(var(--color-ok-rgb)); }
 .aic-dot[data-state="ended"] { background: rgb(var(--color-bad-rgb)); }
 
-/* The ask-first slip under Disconnect. */
-.aic-ask { border-top: 1px solid var(--color-border-light); margin-top: 14px; padding-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+/* The ask-first slip under Disconnect and the like: a tinted strip with
+ * the question and its two answers. */
+.aic-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--color-bg-tertiary); }
 .aic-ask p { flex: 1 1 260px; font-size: 0.875rem; color: var(--color-text-body); }
-
-/* What it did: rows on the page, hairlines between, newest first. */
-.aic-log { display: flex; flex-direction: column; }
-.aic-log-row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 9px 8px; border-bottom: 1px solid var(--color-border-light); border-radius: 8px; font-size: 0.875rem; }
-.aic-log-row:hover { background: var(--color-bg-secondary); }
-.aic-log-when { color: var(--color-text-secondary); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
-.aic-log-what { color: var(--color-text-primary); overflow-wrap: anywhere; }
-.aic-log-note { color: var(--color-text-secondary); font-size: 0.78rem; text-align: right; overflow-wrap: anywhere; max-width: 18rem; }
-@media (max-width: 640px) {
-  .aic-log-row { grid-template-columns: minmax(0, 1fr); }
-  .aic-log-note { text-align: left; max-width: none; }
-}
 
 /* A request waiting for the owner: a sheet lifted above the page with an
  * accent edge, since it is the one thing here that needs an answer. */
 .aic-request { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent), var(--elev-hover); }
-
-/* The key, shown once: a sheet lifted above the page. */
-.aic-key { box-shadow: var(--elev-hover); }
 
 /* A button's working state: a spinner and "…ing" while its request runs. */
 .aic-busy { display: none; }
 .htmx-request .aic-busy { display: inline-flex; align-items: center; }
 .htmx-request .aic-idle { display: none; }
 
-/* The page: what the AI asked for and did in the main column, its
- * connection and copy and paste in a narrow side column. On a phone the
- * connection comes between the requests and the history. */
-.aic-grid { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "req" "side" "hist"; }
-.aic-area-req { grid-area: req; min-width: 0; }
-.aic-area-side { grid-area: side; min-width: 0; }
-.aic-area-hist { grid-area: hist; min-width: 0; }
-.aic-area-req:empty { display: none; }
-@media (min-width: 1024px) {
-  .aic-grid { grid-template-columns: minmax(0, 1fr) 20rem; grid-template-rows: auto 1fr; grid-template-areas: "req side" "hist side"; column-gap: 28px; }
-  .aic-area-side { align-self: start; }
-}
-
-.aic-dot[data-state="paused"] { background: rgb(var(--color-warn-rgb)); }
 .aic-label-muted { color: var(--color-text-secondary); }
-.aic-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--color-border-light); padding-top: 12px; }
-.aic-edit { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--color-border-light); padding-top: 12px; }
-.aic-edit fieldset { border: 0; margin: 0; padding: 0; }
-.aic-edit .aic-choice { padding: 3px 0; font-size: 0.875rem; }
 .aic-confirm { font-size: 0.8125rem; color: var(--color-text-primary); border-left: 3px solid rgb(var(--color-warn-rgb)); padding: 2px 0 2px 10px; }
 
-/* What it did, by sitting: one line each, its calls folded under it. */
-.aic-sits { display: flex; flex-direction: column; }
-.aic-sit { border-bottom: 1px solid var(--color-border-light); }
-.aic-sit > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 11rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 11px 8px; border-radius: 8px; font-size: 0.875rem; }
-.aic-sit > summary::-webkit-details-marker { display: none; }
-.aic-sit > summary:hover { background: var(--color-bg-secondary); }
-.aic-sit > summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.aic-sit-when { color: var(--color-text-primary); font-weight: 600; }
-.aic-sit-what { color: var(--color-text-body); }
-.aic-sit-tag { font-size: 0.78rem; color: var(--color-text-secondary); text-align: right; }
-.aic-sit-tag[data-waiting] { color: var(--color-accent); font-weight: 600; }
-.aic-sit .aic-log { padding: 0 0 8px 11rem; }
-.aic-sit .aic-log-row { grid-template-columns: 4.5rem minmax(0, 1fr); border-bottom: 0; padding: 5px 8px; }
-.aic-sit .aic-log-note { grid-column: 2; text-align: left; max-width: none; }
-@media (max-width: 640px) {
-  .aic-sit > summary { grid-template-columns: minmax(0, 1fr) auto; }
-  .aic-sit-what { grid-column: 1 / -1; grid-row: 2; }
-  .aic-sit .aic-log { padding-left: 0; }
-}
+/* ---- The Your AI page ---- */
+.aic-page { display: flex; flex-direction: column; gap: 16px; --aic-hair: color-mix(in srgb, var(--color-border) 65%, transparent); }
+.aic-title { font-size: 1.25rem; font-weight: 650; color: var(--color-text-primary); line-height: 1.3; }
+.aic-lede { margin-top: 4px; max-width: 64ch; font-size: 0.875rem; color: var(--color-text-secondary); }
+.aic-bad { color: rgb(var(--color-bad-rgb)); }
+.aic-saved { font-size: 0.8125rem; color: rgb(var(--color-ok-rgb)); }
+.aic-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.aic-empty { padding: 20px 8px; font-size: 0.875rem; color: var(--color-text-secondary); }
+.aic-dot[data-state="connected"] { box-shadow: 0 0 0 3px rgb(var(--color-ok-rgb) / 0.15); }
+.aic-dot[data-state="paused"], .aic-dot[data-state="waiting"] { background: var(--color-text-muted); }
 
-/* Copy and paste opens over the page as a large sheet; its own pop-ups
- * (z-50) sit above it. */
-.aic-overlay { position: fixed; inset: 0; z-index: 40; background: rgb(0 0 0 / 0.5); overflow-y: auto; padding: 24px 16px; }
-.aic-sheet { position: relative; max-width: 64rem; margin: 0 auto; background: var(--color-bg-primary); border: 1px solid var(--color-border); border-radius: 14px; box-shadow: var(--elev-hover); padding: 24px; }
-.aic-sheet-close { position: absolute; top: 16px; right: 16px; }
-.aic-ov-enter { transition: opacity 180ms var(--ease-standard, ease); }
-.aic-ov-enter .aic-sheet { transition: transform 220ms var(--ease-standard, ease); }
-.aic-ov-leave { transition: opacity 140ms var(--ease-standard, ease); }
-.aic-ov-from { opacity: 0; }
-.aic-ov-from .aic-sheet { transform: translateY(12px); }
+/* The connection's line: its dot and name, when it was last used, Pause. */
+.aic-head { display: flex; align-items: center; gap: 8px 12px; }
+.aic-head > button { flex: none; }
+.aic-head .aic-h { display: inline-flex; align-items: center; gap: 10px; }
+.aic-head .aic-h { font-size: 0.9375rem; }
+.aic-head-text { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+
+/* Where the AI's requests are, tinted only while one waits. */
+.aic-waitline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--color-border); font-size: 0.875rem; color: var(--color-text-secondary); }
+.aic-waitline > i { color: var(--color-text-muted); }
+.aic-waitline > span { flex: 1 1 260px; min-width: 0; }
+.aic-waitline[data-waiting] { border-color: transparent; background: rgb(var(--color-accent-rgb) / 0.10); color: var(--color-text-primary); }
+.aic-waitline[data-waiting] > i { color: var(--color-accent); }
+.aic-waitline b { font-weight: 600; color: var(--color-text-primary); }
+
+/* The page's two tabs: bigger than the drawer tabs, a 2px accent rule
+ * under the open one. */
+.aic-page-tabs { gap: 0 24px; border-bottom-color: var(--color-border); }
+.aic-page-tabs .aic-tab { font-size: 0.75rem; border-left: 0; padding: 8px 1px 9px; border-bottom: 2px solid transparent; }
+.aic-page-tabs .aic-tab[aria-selected="true"] { border-bottom-color: var(--color-accent); }
+
+/* A small rounded tag: something waits (accent) or wasn't answered (red). */
+.aic-pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.aic-pill[data-tone="wait"] { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); }
+.aic-pill[data-tone="bad"] { background: rgb(var(--color-bad-rgb) / 0.10); color: rgb(var(--color-bad-rgb)); }
+
+/* What it did: filter chips, a search box and Fold all over the sittings. */
+.aic-hbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 16px 0 8px; }
+.aic-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.aic-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); font: inherit; font-size: 0.8125rem; color: var(--color-text-body); cursor: pointer; box-shadow: var(--elev-resting); transition: box-shadow var(--dur-micro, 120ms) var(--ease-standard, ease); }
+.aic-chip:hover { box-shadow: var(--elev-hover); }
+.aic-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.aic-chip[aria-pressed="true"] { border-color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.10); color: var(--color-accent); font-weight: 600; box-shadow: none; }
+.aic-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.aic-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent); }
+.aic-chip-dot[data-tone="fail"] { background: rgb(var(--color-bad-rgb)); }
+.aic-find { position: relative; flex: 1 1 200px; max-width: 280px; min-width: 0; }
+.aic-find i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; color: var(--color-text-muted); pointer-events: none; }
+.aic-find input { width: 100%; min-height: 32px; padding: 5px 10px 5px 30px; border-radius: 8px; border: 1px solid var(--color-input-border, var(--color-border)); background: var(--color-input-bg, var(--color-bg-secondary)); color: var(--color-text-primary); font: inherit; font-size: 0.875rem; }
+.aic-find input::placeholder { color: var(--color-text-muted); }
+.aic-find input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0.15); }
+.aic-foldall { margin-left: auto; }
+
+/* A sitting: one folded line (chevron, day and times, a strip with a tick
+ * per call, what it did, what still waits), its calls under it. */
+.aic-sit { border-bottom: 1px solid var(--color-border); }
+.aic-sit > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 14px 12rem 8.5rem minmax(0, 1fr) auto; gap: 4px 14px; align-items: center; padding: 12px 8px; border-radius: 8px; font-size: 0.875rem; transition: background-color var(--dur-micro, 120ms) var(--ease-standard, ease); }
+.aic-sit > summary::-webkit-details-marker { display: none; }
+.aic-sit > summary:hover { background: color-mix(in srgb, var(--color-bg-tertiary) 70%, transparent); }
+.aic-sit > summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.aic-chev { font-size: 0.6875rem; color: var(--color-text-muted); transition: transform 200ms var(--ease-standard, ease); }
+.aic-sit[open] .aic-chev { transform: rotate(90deg); }
+.aic-sit-when { color: var(--color-text-primary); font-weight: 600; min-width: 0; }
+.aic-sit-when small { display: block; font-size: 0.78rem; font-weight: 400; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.aic-sit-what { color: var(--color-text-body); min-width: 0; }
+.aic-pills { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.aic-strip { display: block; position: relative; height: 20px; border-radius: 4px; background: color-mix(in srgb, var(--color-text-muted) 16%, transparent); }
+.aic-strip i { position: absolute; top: 5px; bottom: 5px; width: 2px; border-radius: 1px; background: var(--color-text-muted); transition: opacity 150ms var(--ease-standard, ease); }
+.aic-strip i[data-kind="ask"] { top: 3px; bottom: 3px; background: var(--color-accent); }
+.aic-strip i[data-fail] { top: 3px; bottom: 3px; background: rgb(var(--color-bad-rgb)); }
+.aic-strip i.aic-dim { opacity: 0.18; }
+.aic-sit[open] > .aic-calls { animation: aic-drop 220ms var(--ease-standard, ease) both; }
+@keyframes aic-drop { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+
+/* One call: time, kind, what was asked (and why it wasn't answered), and
+ * its answer or a pill. Looks are quieter than requests. */
+.aic-calls { padding: 0 0 12px; }
+.aic-call { display: grid; grid-template-columns: 4.25rem 18px minmax(0, 1fr) auto; gap: 2px 10px; align-items: baseline; padding: 7px 8px 7px 30px; border-top: 1px solid var(--aic-hair, var(--color-border-light)); font-size: 0.875rem; }
+.aic-call-t { color: var(--color-text-secondary); font-size: 0.8125rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.aic-call-i { color: var(--color-text-muted); font-size: 0.8125rem; text-align: center; }
+.aic-call-w { color: var(--color-text-primary); overflow-wrap: anywhere; min-width: 0; }
+.aic-call[data-kind="look"]:not([data-fail]) .aic-call-w { color: var(--color-text-body); }
+.aic-call[data-kind="ask"] .aic-call-i { color: var(--color-accent); }
+.aic-call[data-fail] .aic-call-i { color: rgb(var(--color-bad-rgb)); }
+.aic-why { display: block; margin-top: 2px; font-size: 0.8125rem; color: var(--color-text-secondary); }
+.aic-call-r { font-size: 0.8125rem; color: var(--color-text-secondary); text-align: right; white-space: nowrap; }
+
+/* The key under the sittings: what each tick means, and older sittings. */
+.aic-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 8px; font-size: 0.8125rem; color: var(--color-text-secondary); }
+.aic-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.aic-legend i { display: inline-block; width: 2px; height: 12px; border-radius: 1px; background: var(--color-text-muted); }
+.aic-legend i[data-kind="ask"] { background: var(--color-accent); }
+.aic-legend i[data-fail] { background: rgb(var(--color-bad-rgb)); }
+.aic-legend-gap { flex: 1; }
+.aic-legend .quiet-word { font-size: 0.8125rem; }
+
+/* Settings: the levels, then rows. */
+.aic-set { display: flex; flex-direction: column; gap: 20px; padding-top: 20px; }
+.aic-set .aic-set { padding-top: 0; }
+.aic-levels { display: flex; flex-direction: column; gap: 10px; }
+.aic-scale { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.aic-lv { position: relative; display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg-secondary); box-shadow: var(--elev-resting); transition: box-shadow var(--dur-micro, 120ms) var(--ease-standard, ease); }
+.aic-lv:hover { box-shadow: var(--elev-hover); }
+.aic-lv.aic-on { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-secondary)); box-shadow: inset 3px 0 0 var(--color-accent); }
+.aic-lv-pick { display: flex; flex-direction: column; gap: 4px; flex: 1; padding: 40px 14px 6px; border: 0; border-radius: 12px 12px 0 0; background: none; font: inherit; text-align: left; color: inherit; cursor: pointer; }
+.aic-lv-pick::before { content: ""; position: absolute; top: 15px; left: 14px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--color-input-border, var(--color-border)); background: var(--color-bg-secondary); box-sizing: border-box; }
+.aic-lv.aic-on .aic-lv-pick::before { border: 5px solid var(--color-accent); box-shadow: 0 0 0 4px rgb(var(--color-accent-rgb) / 0.15); }
+.aic-lv-pick:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.aic-lv-pick b { font-weight: 600; color: var(--color-text-primary); }
+.aic-lv-tag { position: absolute; top: 14px; right: 12px; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
+.aic-lv-more { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 32px; margin: 0 0 6px; padding: 0 14px; border: 0; background: none; font: inherit; font-size: 0.8125rem; font-weight: 500; color: var(--color-accent); cursor: pointer; }
+.aic-lv-more:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.aic-lv-more:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; border-radius: 6px; }
+.aic-lv-more i { font-size: 0.6875rem; transition: transform 200ms var(--ease-standard, ease); }
+.aic-lv-more[aria-expanded="true"] i { transform: rotate(180deg); }
+.aic-scale > .aic-lv-drawer { grid-column: 1 / -1; order: 1; }
+.aic-scale > .aic-lv { order: 0; }
+.aic-lv-drawer { border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg-secondary); box-shadow: var(--elev-hover); padding: 6px 16px 14px; animation: aic-drop 220ms var(--ease-standard, ease) both; }
+.aic-lv-drawer h4 { margin: 8px 0 2px; font-size: 0.875rem; font-weight: 600; color: var(--color-text-primary); }
+.aic-cov { display: grid; grid-template-columns: 20px 15rem minmax(0, 1fr); gap: 4px 10px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--aic-hair, var(--color-border-light)); font-size: 0.875rem; }
+.aic-lv-drawer h4 + .aic-cov { border-top: 0; }
+.aic-cov > i { color: var(--color-accent); font-size: 0.8125rem; text-align: center; }
+.aic-cov-k { font-weight: 500; color: var(--color-text-primary); }
+.aic-cov-v { color: var(--color-text-body); }
+.aic-cov[data-never] > i, .aic-cov[data-never] .aic-cov-k { color: rgb(var(--color-bad-rgb)); }
+.aic-lv-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding-top: 10px; border-top: 1px solid var(--aic-hair, var(--color-border-light)); }
+.aic-lv-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; }
+.aic-custom { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 24px; padding: 12px 16px; border: 1px solid var(--color-border); border-radius: 12px; }
+.aic-custom fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.aic-custom .aic-choice { padding: 4px 0; font-size: 0.875rem; }
+.dark .aic-choice input, .dark .aic-find input { color-scheme: dark; }
+.aic-levels > .aic-ask p { flex: 1 1 260px; }
+
+/* A sheet for the connect steps and the key shown once. */
+.aic-sheet2 { display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg-secondary); box-shadow: var(--elev-resting); }
+.aic-key { box-shadow: var(--elev-hover); }
+.aic-copies { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.aic-steps { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: aic-step; }
+.aic-steps > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; align-items: start; counter-increment: aic-step; font-size: 0.875rem; }
+.aic-steps > li::before { content: counter(aic-step); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.12); }
+.aic-steps b { display: block; font-weight: 600; color: var(--color-text-primary); }
+.aic-note { padding: 8px 12px; border-radius: 8px; background: var(--color-bg-tertiary); font-size: 0.8125rem; color: var(--color-text-body); }
+.aic-drawer p { font-size: 0.875rem; color: var(--color-text-body); }
+.aic-drawer code, .aic-note code { font-size: 0.8em; }
+
+/* Settings rows: a name and a line under it, and its control at the end.
+ * Hairlines between; a row's drawer (a new key, an ask) spans the row. */
+.aic-rows { display: flex; flex-direction: column; border-bottom: 1px solid var(--color-border); }
+.aic-rows:empty { display: none; }
+.aic-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 14px 0; border-top: 1px solid var(--color-border); }
+label.aic-row { cursor: pointer; }
+.aic-row-k { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.aic-row-k > b { font-weight: 600; color: var(--color-text-primary); }
+.aic-row-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+.aic-row-drawer { flex-basis: 100%; }
+.aic-row-drawer.aic-ask { margin-top: 0; }
+.aic-row-foot { display: flex; flex-direction: column; gap: 4px; margin-top: -6px; padding: 0 0 14px; }
+.aic-rowgroup { display: contents; }
+.aic-notes-shut .aic-row-k, .aic-notes-shut .aic-switch { opacity: 0.55; }
+.aic-inline { display: inline; min-height: 0; font-size: inherit; }
+.aic-subrows { display: flex; flex-direction: column; margin: -6px 0 8px; padding-left: 16px; border-left: 2px solid var(--aic-hair, var(--color-border-light)); }
+.aic-subrow { padding: 6px 0; }
+.aic-subrow-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 16px; }
+.aic-subrow-line > button { white-space: nowrap; }
+.aic-subrow-line .aic-row-k { flex-basis: 180px; }
+.aic-subrow-line .aic-row-k { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 0.875rem; }
+
+/* A switch: a checkbox drawn as a track and a knob; it saves on change. */
+.aic-switch { appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 36px; height: 20px; margin: 0; border-radius: 999px; background: var(--color-input-border, var(--color-border)); cursor: pointer; transition: background-color var(--dur-micro, 120ms) var(--ease-standard, ease); }
+.aic-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); transition: transform 180ms var(--ease-standard, ease); }
+.aic-switch:not(:checked) { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text-muted) 45%, transparent); }
+.aic-switch:checked { background: var(--color-accent); }
+.aic-switch:checked::after { transform: translateX(16px); }
+.aic-switch:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* What a player's AI can do: ticks, and a cross for what it never does. */
+.aic-what { display: flex; flex-direction: column; gap: 8px; }
+.aic-row-drawer.aic-what { padding: 12px 14px; border-radius: 8px; background: var(--color-bg-tertiary); }
+.aic-cando { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 0.875rem; color: var(--color-text-body); }
+.aic-cando li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.aic-cando i { color: rgb(var(--color-ok-rgb)); font-size: 0.8125rem; }
+.aic-cando li[data-never] i { color: rgb(var(--color-bad-rgb)); }
+
+@media (max-width: 760px) {
+  .aic-sit > summary { grid-template-columns: 14px minmax(0, 1fr); align-items: start; }
+  .aic-chev { margin-top: 4px; }
+  .aic-sit-when, .aic-strip, .aic-sit-what, .aic-pills { grid-column: 2; }
+  .aic-pills { justify-content: flex-start; }
+  .aic-pills:empty { display: none; }
+  .aic-call { grid-template-columns: 3.75rem 16px minmax(0, 1fr); padding-left: 30px; }
+  .aic-call-r { grid-column: 3; text-align: left; white-space: normal; }
+  .aic-foldall { margin-left: 0; }
+  .aic-find { max-width: none; }
+  .aic-scale { grid-template-columns: minmax(0, 1fr); }
+  .aic-scale > .aic-lv-drawer { order: 0; }
+  .aic-cov { grid-template-columns: 20px minmax(0, 1fr); }
+  .aic-cov-v { grid-column: 2; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .aic-ov-enter, .aic-ov-leave, .aic-ov-enter .aic-sheet { transition: none; }
+  .aic-sit[open] > .aic-calls, .aic-lv-drawer { animation: none; }
+  .aic-chev, .aic-lv-more i, .aic-switch, .aic-switch::after, .aic-strip i { transition: none; }
 }
 
 /* A request's review unfolds inside its card: Review and Turn down step
@@ -162,19 +295,6 @@
   .aic-req-review > form, .aic-req-review .air-row, .aic-req-review.aic-folding > form, .aic-done { animation-duration: 1ms; animation-delay: 0ms; }
   .aic-req-review .air-peek { transition: none; }
 }
-
-/* The notes panel: a small table of what the AI reads and changes in each
- * kind of note, and the owner's switches under it. */
-.aic-notes-body { display: flex; flex-direction: column; gap: 12px; }
-.aic-notes-shut .aic-kinds { opacity: 0.55; }
-.aic-kinds { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
-.aic-kinds th, .aic-kinds td { text-align: left; vertical-align: top; padding: 8px 8px 8px 0; border-top: 1px solid var(--color-border-light); color: var(--color-text-secondary); }
-.aic-kinds thead th { border-top: 0; padding-top: 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
-.aic-kinds tbody th { width: 34%; font-weight: 600; color: var(--color-text-primary); }
-.aic-kinds tbody th span { display: block; font-weight: 400; color: var(--color-text-secondary); }
-.aic-plus { color: var(--color-accent); }
-.aic-notes-form { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--color-border-light); padding-top: 12px; }
-.aic-saved { color: rgb(var(--color-ok-rgb)); }
 
 /* A warning or a stopped campaign, above everything else on the page: a
  * sheet with an amber edge (red when stopped); the state colour only means
@@ -230,7 +350,6 @@
 .aip-body a.aic-alert:hover p { text-decoration: underline; }
 .aip-empty { display: none; font-size: 0.875rem; color: var(--color-text-secondary); }
 #ai-requests:not(:has(.aic-request)) ~ .aip-empty { display: block; }
-.aip-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
 
 /* The AI button's bubble (ai_bubble.templ): a heading row, Copy and Paste
  * answer in one thin tool row, then the waiting requests, each a row with

@@ -1,6 +1,6 @@
-// ai_page.templ is the campaign's Your AI page: connect an AI app, its
-// warnings and what it did. The requests and copy and paste live in the AI
-// panel (ai_panel.templ).
+// ai_page.templ is the campaign's Your AI page: two tabs, What it did and
+// Settings. The requests and copy and paste live in the AI panel
+// (ai_panel.templ).
 
 package ai_workspace
 
@@ -8,203 +8,383 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// AIPageView is the whole page: what the AI asked for and did on the left,
-// its connection and copy and paste on the right, and copy and paste itself
-// in an overlay, so neither crowds the other.
+// AIPageView is the whole page. The open tab lives outside the part the
+// page's requests swap, so a change in Settings stays on Settings; it opens
+// on Settings while no AI is connected, or when the address says #settings.
 templ AIPageView(cc *campaigns.CampaignContext, v ConnectView) {
 	@layouts.App(cc.Campaign.Name + " - Your AI") {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
-		<div class="max-w-6xl mx-auto px-4 py-6" data-ai-page>
+		<div class="max-w-5xl mx-auto px-4 py-6" data-ai-page x-data={ pageTabState(v) }>
 			@layouts.ManageHeader("Your AI")
-			<p class="-mt-4 mb-6 text-sm text-fg-secondary max-w-prose">
-				Connect your AI app once. It reads what you allow and asks for changes, and you say yes or no to each one from the AI button at the top of any page.
-			</p>
 			@aiConnectSection(v)
 		</div>
 	}
+}
+
+// pageTabState is the page's open tab and how a tab is picked.
+func pageTabState(v ConnectView) string {
+	return fmt.Sprintf("{ tab: (%t || location.hash === '#settings') ? 'set' : 'did', go(t) { this.tab = t; history.replaceState(null, '', t === 'set' ? '#settings' : location.pathname + location.search) } }", !hasKey(v))
 }
 
 // aiPageReviews empties every other request's review when a review starts
 // loading, in a request or in copy and paste (the AI panel).
 const aiPageReviews = `const t = $event.detail.target; if (t && (t.id === 'ai-import-review-host' || t.classList.contains('aic-req-review'))) document.querySelectorAll('.aic-req-review').forEach((h) => { if (h !== t) h.innerHTML = '' })`
 
-// aiConnectSection is the part the connect, pause, change, new-key and
-// disconnect requests swap. With a working key, setup sits in the side
-// column; without one, making a key takes the main column. Requests and copy
-// and paste are in the AI panel (aiPanelBody), not here; the history stays
-// after a disconnect, since it is the owner's.
+// aiConnectSection is the part every Settings request swaps: warnings, the
+// connection's line, the pointer to the AI panel, and both tabs. The
+// history stays after a disconnect, since it is the owner's.
 templ aiConnectSection(v ConnectView) {
-	<div id="ai-connect" x-data="{ renew: false }">
-		if hasKey(v) {
-			<div class="aic-grid">
-				<div class="aic-area-req space-y-4">
-					@aiWatch(v)
-					@aiPanelCard(v)
-					<div x-show="renew" x-cloak x-collapse.duration.200ms>
-						@aiConnectForm(v, true)
-					</div>
-				</div>
-				<div class="aic-area-side space-y-4">
-					@aiStatus(v)
-					if v.Watching {
-						@aiCutOffPanel(v)
-					}
-					if v.Players != nil {
-						@aiPlayersPanel(*v.Players)
-					}
-					if v.Notes != nil {
-						@aiNotesPanel(*v.Notes)
-					}
-				</div>
-				<div class="aic-area-hist">
-					@aiActivityList(v)
-				</div>
+	<div id="ai-connect" class="aic-page">
+		@aiWatch(v)
+		@aiHead(v)
+		@aiPanelCard(v)
+		<div>
+			<div class="aic-tabs aic-page-tabs" role="tablist" aria-label="Your AI">
+				<button type="button" role="tab" id="ai-tab-did" class="aic-tab" aria-controls="ai-pane-did" :aria-selected="tab === 'did'" @click="go('did')">What it did</button>
+				<button type="button" role="tab" id="ai-tab-set" class="aic-tab" aria-controls="ai-pane-set" :aria-selected="tab === 'set'" @click="go('set')">Settings</button>
 			</div>
-		} else {
-			<div class="space-y-8">
-				<div class="space-y-4">
-					@aiWatch(v)
-					@aiPanelCard(v)
-				</div>
-				if !v.Available {
-					<section class="aic-panel">
-						<p class="text-sm text-fg-secondary">Connecting an AI app isn't available on this Chronicle site. Copy and paste works with every AI.</p>
-					</section>
-				} else if v.NewKey != "" {
-					@aiNewKey(v)
+			<div id="ai-pane-did" role="tabpanel" aria-labelledby="ai-tab-did" x-show="tab === 'did'" x-data={ historyState }>
+				if v.Available {
+					@aiActivityList(v)
 				} else {
-					@aiConnectForm(v, false)
-				}
-				if v.Notes != nil {
-					@aiNotesPanel(*v.Notes)
-				}
-				if v.Players != nil {
-					@aiPlayersPanel(*v.Players)
-				}
-				if v.Available && len(v.Sittings) > 0 {
-					@aiActivityList(v)
+					<p class="aic-hint py-5">Connecting an AI app isn't available on this Chronicle site, so there is nothing to show here. Copy and paste works with every AI.</p>
 				}
 			</div>
-		}
+			<div id="ai-pane-set" role="tabpanel" aria-labelledby="ai-tab-set" x-show="tab === 'set'" x-cloak>
+				@aiSettings(v)
+			</div>
+		</div>
 	</div>
+}
+
+// aiHead is the connection's one line above the tabs, with Pause or Resume.
+templ aiHead(v ConnectView) {
+	if hasKey(v) {
+		<div class="aic-head">
+			<span class="aic-head-text">
+				<h2 class="aic-h"><span class="aic-dot" data-state={ connStatus(v) } aria-hidden="true"></span>{ statusTitle(v) }</h2>
+				if v.Conn.LastUsedAt != nil {
+					<span class="aic-hint">last used { agoText(v.Now, *v.Conn.LastUsedAt) }</span>
+				}
+			</span>
+			<button
+				type="button"
+				class="btn-secondary"
+				if connStatus(v) == "paused" {
+					hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection/resume", v.CampaignID) }
+				} else {
+					hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection/pause", v.CampaignID) }
+				}
+				hx-vals={ fmt.Sprintf(`{"connection":"%d"}`, v.Conn.ID) }
+				hx-target="#ai-connect"
+				hx-swap="outerHTML"
+				hx-disabled-elt="this"
+			>
+				if connStatus(v) == "paused" {
+					<span class="aic-idle">Resume</span>
+					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Resuming…</span>
+				} else {
+					<span class="aic-idle">Pause</span>
+					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Pausing…</span>
+				}
+			</button>
+		</div>
+		if connStatus(v) == "paused" {
+			<p class="aic-hint -mt-2">Paused by you { agoText(v.Now, *v.Conn.PausedAt) }. Its calls are refused until you resume, and nothing it asked for is lost.</p>
+		}
+	} else if v.NewKey == "" {
+		<div class="aic-head">
+			<span class="aic-head-text">
+				<h2 class="aic-h">
+					<span class="aic-dot" data-state={ connStatus(v) } aria-hidden="true"></span>
+					if connStatus(v) == "ended" {
+						Your AI's key ran out
+					} else {
+						No AI connected yet
+					}
+				</h2>
+				<span class="aic-hint">Copy and paste works with every AI, from the AI button at the top.</span>
+			</span>
+		</div>
+	}
 }
 
 // aiPanelCard points to the AI panel, where the AI's requests are answered
 // and copy and paste lives, and opens it (ai_chip.js listens for
-// data-ai-open anywhere).
+// data-ai-open anywhere). It is tinted only while something waits.
 templ aiPanelCard(v ConnectView) {
-	<section class="aic-panel aip-card" aria-labelledby="ai-panel-card-heading">
-		<div class="flex-1 min-w-[14rem]">
-			<h2 id="ai-panel-card-heading" class="aic-h">
-				if len(v.Requests) > 0 {
-					<span>{ countOf(len(v.Requests), "request waits", "requests wait") + " for you" }</span>
-				} else {
-					Requests and copy and paste
-				}
-			</h2>
-			<p class="aic-hint">They are in the AI panel on every page: the <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> button at the top, or Ctrl+V with an AI's answer copied.</p>
-		</div>
-		<button type="button" class="btn-secondary" data-ai-open>Open the AI panel</button>
-	</section>
+	if len(v.Requests) > 0 {
+		<p class="aic-waitline" data-waiting>
+			<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+			<span><b>{ countOf(len(v.Requests), "request waits", "requests wait") + " for you" }</b> in the AI panel.</span>
+			<button type="button" class="quiet-word" data-ai-open>Open it</button>
+		</p>
+	} else {
+		<p class="aic-waitline">
+			<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+			<span>Requests and copy and paste are in the AI panel on every page: the <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span class="sr-only">AI</span> button at the top, or Ctrl+V with an AI's answer copied.</span>
+			<button type="button" class="quiet-word" data-ai-open>Open it</button>
+		</p>
+	}
 }
 
-// aiConnectForm is the choice of what the AI may see and how connecting
-// works, ending in Make a key. replacing says a key exists and will stop.
-templ aiConnectForm(v ConnectView, replacing bool) {
+// aiSettings is the Settings tab: making a key while none works, then how
+// far the AI may go and the rows under it.
+templ aiSettings(v ConnectView) {
+	<div class="aic-set">
+		if !v.Available {
+			<p class="aic-hint">Connecting an AI app isn't available on this Chronicle site. Copy and paste works with every AI.</p>
+		} else if v.NewKey != "" {
+			@aiNewKey(v)
+		} else if !hasKey(v) {
+			@aiConnectForm(v)
+		} else {
+			@aiLevelPicker(v, true)
+		}
+		<div class="aic-rows">
+			if hasKey(v) {
+				@aiConnectionRow(v)
+			}
+			if v.Notes != nil {
+				@aiNotesPanel(*v.Notes)
+			}
+			if v.Players != nil {
+				@aiPlayersPanel(*v.Players)
+			}
+			if v.Watching {
+				@aiCutOffPanel(v)
+			}
+		</div>
+	</div>
+}
+
+// aiConnectForm is connecting while no key works: pick a level, then make a
+// key with it.
+templ aiConnectForm(v ConnectView) {
 	<form
+		class="aic-set"
 		hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection", v.CampaignID) }
 		hx-target="#ai-connect"
 		hx-swap="outerHTML"
 		hx-disabled-elt="find button[type=submit]"
-		class="grid gap-5 md:grid-cols-2 items-start"
-		aria-label="Connect your AI app"
+		aria-labelledby="ai-connect-heading"
 	>
-		<section class="aic-panel space-y-3" aria-labelledby="ai-sees-heading">
-			<h2 id="ai-sees-heading" class="aic-h">What may your AI see?</h2>
-			<label class="aic-choice">
-				<input type="radio" name="sees" value="players" checked/>
-				<span>
-					<b>What players see</b>
-					<span class="block aic-hint">Safest. No secrets, and nothing you keep from players.</span>
-				</span>
-			</label>
-			<label class="aic-choice">
-				<input type="radio" name="sees" value="owner"/>
-				<span>
-					<b>What you see</b>
-					<span class="block aic-hint">Adds your { layouts.GMTerm(ctx) }-only pages and secrets. Only for an AI you trust, since text your players wrote could try to talk it into sharing them.</span>
-				</span>
-			</label>
-			<div class="space-y-1 border-t border-edge pt-3" role="radiogroup" aria-labelledby="ai-change-heading">
-				<h3 id="ai-change-heading" class="aic-label">Change</h3>
-				<label class="aic-choice">
-					<input type="radio" name="change" value="ask" checked/>
-					<span>
-						<b>Ask for changes</b>
-						<span class="block aic-hint">Each one waits here for your yes.</span>
-					</span>
-				</label>
-				<label class="aic-choice">
-					<input type="radio" name="change" value="look"/>
-					<span>
-						<b>Only look</b>
-						<span class="block aic-hint">It can read and answer, never ask to change.</span>
-					</span>
-				</label>
+		<div>
+			<h2 id="ai-connect-heading" class="aic-title">Connect your AI app</h2>
+			<p class="aic-lede">Pick how far it may go, then make a key. It can only ask: every change waits for your yes, even if your AI app is set to allow everything.</p>
+		</div>
+		@aiLevelPicker(v, false)
+		<div>
+			<h3 class="aic-label">Then connect it</h3>
+			<div class="aic-sheet2">
+				@aiKeySteps(v, false)
 			</div>
-			<p class="aic-hint flex gap-2 items-start">
-				<i class="fa-solid fa-lock mt-0.5" aria-hidden="true"></i>
-				<span>It can only ask. Every change and removal waits here for your yes, even if your AI app is set to allow everything. ChatGPT Plus and Pro only let connectors read, so there your AI gives you its changes to paste instead.</span>
-			</p>
-		</section>
-		<section aria-labelledby="ai-how-heading">
-			<h2 id="ai-how-heading" class="aic-h pb-2">Connect it</h2>
-			<div class="aic-step">
-				<span class="aic-num">1</span>
-				<span><b class="text-fg">Make a key</b><span class="block aic-hint">Chronicle gives you an address and a key for your AI app.</span></span>
-			</div>
-			<div class="aic-step">
-				<span class="aic-num">2</span>
-				<span><b class="text-fg">In your AI app, add a connector</b><span class="block aic-hint">Claude calls it a custom connector. Other apps may call it an MCP server.</span></span>
-			</div>
-			<div class="aic-step">
-				<span class="aic-num">3</span>
-				<span><b class="text-fg">Paste the address and the key</b><span class="block aic-hint">You see the key once. It runs out after 90 days, and you can disconnect it here any time.</span></span>
-			</div>
-			<div class="flex flex-wrap items-center gap-3 pt-4">
-				<button type="submit" class="btn-primary">
-					<span class="aic-idle"><i class="fa-solid fa-key mr-1.5" aria-hidden="true"></i>Make a key</span>
-					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Making…</span>
-				</button>
-				if replacing {
-					<span class="aic-hint">Your AI's current key stops working.</span>
-				} else if connStatus(v) == "ended" {
-					<span class="aic-hint">Your AI's last key ran out. Make a new one to connect again.</span>
-				}
-			</div>
-		</section>
+		</div>
 	</form>
+}
+
+// aiLevelPicker is "How far may your AI go?": three levels, each unfolding
+// to what it covers, and Custom for the one pair no level names. live saves
+// a pick at once (asking first before it sees more); otherwise the pick is
+// part of the connect form around it.
+templ aiLevelPicker(v ConnectView, live bool) {
+	<div class="aic-levels" x-data={ levelState(v, live) }>
+		<h3 id="ai-levels-heading" class="aic-label">How far may your AI go?</h3>
+		if live {
+			<form
+				x-ref="lvform"
+				hidden
+				hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection/access", v.CampaignID) }
+				hx-target="#ai-connect"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="connection" value={ strconv.FormatInt(v.Conn.ID, 10) }/>
+				<input type="hidden" name="sees" value={ seesValue(v.Conn) } :value="sees"/>
+				<input type="hidden" name="change" value={ changeValue(v.Conn) } :value="change"/>
+				<input type="hidden" name="widen" value="" :value="sure ? 'yes' : ''"/>
+			</form>
+		} else {
+			<input type="hidden" name="sees" value={ seesValue(v.Conn) } :value="sees"/>
+			<input type="hidden" name="change" value={ changeValue(v.Conn) } :value="change"/>
+		}
+		<div class="aic-scale" role="radiogroup" aria-labelledby="ai-levels-heading">
+			for _, l := range aiLevels() {
+				<div class="aic-lv" :class={ fmt.Sprintf("{ 'aic-on': lv === '%s', 'aic-peek': peek === '%s' }", l.ID, l.ID) }>
+					if l.Tag != "" {
+						<span class="aic-lv-tag">{ l.Tag }</span>
+					}
+					<button
+						type="button"
+						class="aic-lv-pick"
+						role="radio"
+						if levelOf(v.Conn) == l.ID {
+							aria-checked="true"
+						} else {
+							aria-checked="false"
+						}
+						:aria-checked={ fmt.Sprintf("lv === '%s'", l.ID) }
+						@click={ fmt.Sprintf("pick('%s', '%s', '%s')", l.ID, l.Sees, l.Change) }
+					>
+						<b>{ l.Name }</b>
+						<span class="aic-hint">{ l.Short }</span>
+					</button>
+					<button
+						type="button"
+						class="aic-lv-more"
+						aria-controls={ "ai-lv-" + l.ID }
+						aria-expanded="false"
+						:aria-expanded={ fmt.Sprintf("peek === '%s'", l.ID) }
+						@click={ fmt.Sprintf("peek = peek === '%s' ? '' : '%s'", l.ID, l.ID) }
+					>
+						<span>What it covers</span>
+						<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+					</button>
+				</div>
+				<div id={ "ai-lv-" + l.ID } class="aic-lv-drawer" x-show={ fmt.Sprintf("peek === '%s'", l.ID) } x-cloak>
+					<h4>{ l.Name }</h4>
+					for _, r := range l.Covers {
+						<div class="aic-cov" data-never?={ r.Never }>
+							<i class={ "fa-solid", r.Icon } aria-hidden="true"></i>
+							<span class="aic-cov-k">{ r.Name }</span>
+							<span class="aic-cov-v">{ r.Value }</span>
+						</div>
+					}
+					<div class="aic-lv-foot">
+						<span class="aic-pill" data-tone="wait" x-show={ fmt.Sprintf("lv === '%s'", l.ID) }>
+							<i class="fa-solid fa-check" aria-hidden="true"></i>
+							if live {
+								Your AI is at this level
+							} else {
+								Picked
+							}
+						</span>
+						<button type="button" class="btn-primary btn-sm" x-show={ fmt.Sprintf("lv !== '%s'", l.ID) } @click={ fmt.Sprintf("pick('%s', '%s', '%s')", l.ID, l.Sees, l.Change) }>Use this level</button>
+						<button type="button" class="quiet-word" @click="peek = ''">Close</button>
+					</div>
+				</div>
+			}
+		</div>
+		if live {
+			<div class="aic-ask" x-show="pending" x-cloak role="alert">
+				<p>From its next call your AI sees your { layouts.GMTerm(ctx) }-only pages and secrets. Text your players wrote could try to talk it into sharing them.</p>
+				<button type="button" class="btn-primary" @click="confirm()">Let it see what you see</button>
+				<button type="button" class="quiet-word" @click="keep()">Keep what players see</button>
+			</div>
+		} else {
+			<p class="aic-confirm" x-show="sees === 'owner'" x-cloak>Only for an AI you trust: text your players wrote could try to talk it into sharing your { layouts.GMTerm(ctx) }-only pages and secrets.</p>
+		}
+		<div class="aic-lv-line">
+			<button type="button" class="quiet-word" @click="custom = !custom" :aria-expanded="custom" aria-controls="ai-lv-custom" x-text="lv === 'custom' ? 'Custom (in use)' : (custom ? 'Hide custom' : 'Custom')">Custom</button>
+			<span class="aic-hint" x-text="lv === 'custom' ? 'Sees what players see and asks for changes.' : 'Pick what it sees and whether it asks separately.'"></span>
+			if live && v.LevelSaved {
+				<span class="aic-saved" role="status">Saved. Works from its next call.</span>
+			}
+		</div>
+		<div id="ai-lv-custom" class="aic-custom" x-ref="custom" x-show="custom" x-cloak>
+			<fieldset>
+				<legend class="aic-label aic-label-muted">It sees</legend>
+				<label class="aic-choice"><input type="radio" value="players" :checked="sees === 'players'" @change="pick(lvOf('players', change), 'players', change)"/><span><b>What players see</b> <span class="aic-hint">No secrets or hidden pages.</span></span></label>
+				<label class="aic-choice"><input type="radio" value="owner" :checked="sees === 'owner'" @change="pick(lvOf('owner', change), 'owner', change)"/><span><b>What you see</b> <span class="aic-hint">Adds your { layouts.GMTerm(ctx) }-only pages and secrets.</span></span></label>
+			</fieldset>
+			<fieldset>
+				<legend class="aic-label aic-label-muted">It may</legend>
+				<label class="aic-choice"><input type="radio" value="ask" :checked="change === 'ask'" @change="pick(lvOf(sees, 'ask'), sees, 'ask')"/><span><b>Ask for changes</b> <span class="aic-hint">Each waits in the AI panel for your yes.</span></span></label>
+				<label class="aic-choice"><input type="radio" value="look" :checked="change === 'look'" @change="pick(lvOf(sees, 'look'), sees, 'look')"/><span><b>Only look</b> <span class="aic-hint">Reads and answers, never asks to change.</span></span></label>
+			</fieldset>
+		</div>
+	</div>
+}
+
+// aiKeySteps is how connecting works, ending in Make a key. replacing says
+// a key exists and will stop. The form around it carries the level.
+templ aiKeySteps(v ConnectView, replacing bool) {
+	<ol class="aic-steps">
+		<li><span><b>Make a key</b><span class="aic-hint">Chronicle gives you an address and a key for your AI app, at the level picked above.</span></span></li>
+		<li><span><b>In your AI app, add a connector</b><span class="aic-hint">Claude calls it a custom connector. Other apps may call it an MCP server. ChatGPT Plus and Pro only let connectors read, so there your AI gives you its changes to paste.</span></span></li>
+		<li><span><b>Paste the address and the key</b><span class="aic-hint">You see the key once. It runs out after 90 days, and you can disconnect it here any time.</span></span></li>
+	</ol>
+	<div class="aic-acts">
+		<button type="submit" class="btn-primary">
+			<span class="aic-idle"><i class="fa-solid fa-key mr-1.5" aria-hidden="true"></i>Make a key</span>
+			<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Making…</span>
+		</button>
+		if replacing {
+			<span class="aic-hint">Your AI's current key stops working.</span>
+			<button type="button" class="quiet-word" @click="renew = false">Cancel</button>
+		} else if connStatus(v) == "ended" {
+			<span class="aic-hint">Your AI's last key ran out. Make a new one to connect again.</span>
+		}
+	</div>
+}
+
+// aiConnectionRow is the key: what it is, Make a new key (with the same
+// level) and Disconnect, which asks first.
+templ aiConnectionRow(v ConnectView) {
+	<div class="aic-row" x-data="{ renew: false, asking: false }">
+		<span class="aic-row-k">
+			<b>Connection</b>
+			<span class="aic-hint">{ statusLine(v) }</span>
+		</span>
+		<span class="aic-row-acts">
+			<button type="button" class="quiet-word" @click="renew = !renew; asking = false" :aria-expanded="renew" aria-controls="ai-renew">Make a new key</button>
+			<button type="button" class="quiet-word aic-bad" @click="asking = !asking; renew = false" :aria-expanded="asking">Disconnect</button>
+		</span>
+		<form
+			id="ai-renew"
+			class="aic-sheet2 aic-row-drawer"
+			x-show="renew"
+			x-cloak
+			hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection", v.CampaignID) }
+			hx-target="#ai-connect"
+			hx-swap="outerHTML"
+			hx-disabled-elt="find button[type=submit]"
+			aria-label="Make a new key"
+		>
+			<input type="hidden" name="sees" value={ seesValue(v.Conn) }/>
+			<input type="hidden" name="change" value={ changeValue(v.Conn) }/>
+			@aiKeySteps(v, true)
+		</form>
+		<div class="aic-ask aic-row-drawer" x-show="asking" x-cloak>
+			<p>
+				Disconnect { appName(v.Conn) }? Its key stops working at once. You can connect again with a new key.
+				if len(v.Requests) > 0 {
+					What it already asked for stays in the AI panel for you to answer.
+				}
+			</p>
+			<button type="button" class="btn-secondary" @click="asking = false">Keep it</button>
+			<button
+				type="button"
+				class="btn-danger"
+				hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection/disconnect", v.CampaignID) }
+				hx-target="#ai-connect"
+				hx-swap="outerHTML"
+				hx-disabled-elt="this"
+			>
+				<span class="aic-idle">Disconnect</span>
+				<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Disconnecting…</span>
+			</button>
+		</div>
+	</div>
 }
 
 // aiNewKey shows the address and the new key, once, with how to add them in
 // each kind of app.
 templ aiNewKey(v ConnectView) {
 	<section
-		class="aic-panel aic-key space-y-4"
+		class="aic-sheet2 aic-key"
 		aria-labelledby="ai-key-heading"
 		x-data="{ app: 'claude', copied: '' }"
 	>
 		<div>
-			<h2 id="ai-key-heading" class="aic-h">Your key is ready</h2>
+			<h2 id="ai-key-heading" class="aic-title">Your key is ready</h2>
 			<p class="aic-hint">Copy it now: Chronicle shows it only this once. If you lose it, make a new one. Your AI { seesLabel(v.Conn.Privacy) } and { changeLabel(v.Conn.CanAsk) }.</p>
 		</div>
-		<div class="grid gap-3 md:grid-cols-2">
+		<div class="aic-copies">
 			@aiCopyField("addr", "Address", v.Endpoint)
 			@aiCopyField("key", "Key", v.NewKey)
 		</div>
@@ -218,23 +398,25 @@ templ aiNewKey(v ConnectView) {
 				<ol>
 					<li>Open Customize, then Connectors, then Add custom connector.</li>
 					<li>Name it Chronicle and paste the address above as the server URL.</li>
-					<li>For sign-in, pick No sign-in, even if Claude marks Sign in now as Detected: Chronicle uses this key instead. Under Request headers, pick <code>authorization</code> and paste this as its value:
+					<li>
+						For sign-in, pick No sign-in. Under Request headers, pick <code>authorization</code> and paste this as its value:
 						@aiCopyField("bearer", "", claudeHeaderValue(v.NewKey))
 					</li>
 					<li>Press Add, then turn Chronicle on in a chat from the + menu.</li>
 				</ol>
-				<p class="aic-hint mt-3">Request headers are new in Claude and not on every account yet. If you don't see them, use Claude Code or another app, or copy and paste below.</p>
+				<p class="aic-hint mt-3">Request headers are new in Claude and not on every account yet. If you don't see them, use Claude Code or another app, or copy and paste.</p>
 			</div>
 			<div class="aic-drawer" role="tabpanel" x-show="app === 'code'" x-cloak>
-				<p class="text-sm text-fg">Run this once in a terminal:</p>
+				<p>Run this once in a terminal:</p>
 				@aiCopyField("cmd", "", claudeCodeCommand(v))
 			</div>
 			<div class="aic-drawer" role="tabpanel" x-show="app === 'other'" x-cloak>
-				<p class="text-sm text-fg">Open WebUI, LM Studio, Claude Desktop and most other AI apps can add an MCP server. Give it the address above, pick Streamable HTTP if it asks, and add the header <code>Authorization</code> with the value <code>Bearer</code> followed by a space and the key.</p>
+				<p>Open WebUI, LM Studio, Claude Desktop and most other AI apps can add an MCP server. Give it the address above, pick Streamable HTTP if it asks, and add the header <code>Authorization</code> with the value <code>Bearer</code> followed by a space and the key.</p>
 			</div>
 		</div>
-		<div class="flex items-center gap-3 pt-1">
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", v.CampaignID)) } class="btn-secondary">Done</a>
+		<p class="aic-note">Your AI app may mark a sign-in as Detected. That's expected: Chronicle uses this key instead. ChatGPT Plus and Pro only let connectors read, so there your AI gives you its changes to paste.</p>
+		<div class="aic-acts">
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai#settings", v.CampaignID)) } class="btn-secondary">Done</a>
 			<span class="aic-hint">The key disappears from this page when you leave it.</span>
 		</div>
 		<span class="sr-only" aria-live="polite" x-text="copied ? 'Copied' : ''"></span>
@@ -259,9 +441,9 @@ templ aiAppTab(key, label string) {
 // aiCopyField is a value in a well with a copy icon. It reads its value
 // from its own data attribute, so nothing is built into a script.
 templ aiCopyField(id, label, value string) {
-	<div>
+	<div class="min-w-0">
 		if label != "" {
-			<span class="aic-label">{ label }</span>
+			<span class="aic-label aic-label-muted">{ label }</span>
 		}
 		<div class="aic-copy">
 			<code>{ value }</code>
@@ -283,171 +465,184 @@ templ aiCopyField(id, label, value string) {
 	</div>
 }
 
-// aiStatus is the connection in the side column: its state and settings,
-// and the ways to change what it may do, pause it, make a new key or
-// disconnect (which asks first).
-templ aiStatus(v ConnectView) {
-	<section
-		class="aic-panel space-y-3"
-		aria-labelledby="ai-status-heading"
-		x-data={ fmt.Sprintf("{ asking: false, editing: false, sees: '%s', change: '%s', wasOwner: %t, sure: false, get widening() { return this.sees === 'owner' && !this.wasOwner } }",
-			seesValue(v.Conn), changeValue(v.Conn), v.Conn.Privacy != aiexport.PrivacyModeSafe) }
-	>
-		<div class="flex items-center gap-2.5">
-			<span class="aic-dot" data-state={ connStatus(v) } aria-hidden="true"></span>
-			<h2 id="ai-status-heading" class="aic-h">{ statusTitle(v) }</h2>
-		</div>
-		if connStatus(v) == "paused" {
-			<p class="text-sm text-fg">Paused by you { agoText(v.Now, *v.Conn.PausedAt) }. Its calls are refused until you resume, and nothing it asked for is lost.</p>
-		}
-		<p class="aic-hint">{ statusLine(v) }</p>
-		<form
-			x-show="editing"
-			x-cloak
-			x-collapse.duration.200ms
-			hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection/access", v.CampaignID) }
-			hx-target="#ai-connect"
-			hx-swap="outerHTML"
-			hx-disabled-elt="find button"
-			class="aic-edit"
-			aria-label="Change what your AI may do"
-		>
-			<input type="hidden" name="connection" value={ strconv.FormatInt(v.Conn.ID, 10) }/>
-			<input type="hidden" name="widen" :value="sure ? 'yes' : ''"/>
-			<fieldset>
-				<legend class="aic-label aic-label-muted">See</legend>
-				<label class="aic-choice"><input type="radio" name="sees" value="players" x-model="sees" @change="sure = false"/><span><b>What players see</b> <span class="aic-hint">No secrets or hidden pages.</span></span></label>
-				<label class="aic-choice"><input type="radio" name="sees" value="owner" x-model="sees"/><span><b>What you see</b> <span class="aic-hint">Adds your { layouts.GMTerm(ctx) }-only pages and secrets.</span></span></label>
-			</fieldset>
-			<fieldset>
-				<legend class="aic-label aic-label-muted">Change</legend>
-				<label class="aic-choice"><input type="radio" name="change" value="ask" x-model="change"/><span><b>Ask for changes</b> <span class="aic-hint">Each waits here for your yes.</span></span></label>
-				<label class="aic-choice"><input type="radio" name="change" value="look" x-model="change"/><span><b>Only look</b> <span class="aic-hint">Reads and answers only.</span></span></label>
-			</fieldset>
-			<p class="aic-hint">Works from its next call, on the same key. Your AI app may need a new chat to notice.</p>
-			<p class="aic-confirm" x-show="widening && sure" x-cloak role="alert">
-				From its next call, your AI sees your { layouts.GMTerm(ctx) }-only pages and secrets. Text your players wrote could try to talk it into sharing them.
-			</p>
-			<div class="flex flex-wrap items-center gap-2">
-				<button type="submit" class="btn-primary" x-show="!widening || sure">
-					<span class="aic-idle" x-text="widening ? 'Let it see what you see' : 'Save'">Save</span>
-					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Saving…</span>
-				</button>
-				<button type="button" class="btn-primary" x-show="widening && !sure" x-cloak @click="sure = true">Save</button>
-				<button type="button" class="quiet-word" @click="editing = false; sure = false">Cancel</button>
-			</div>
-		</form>
-		<div class="aic-actions" x-show="!editing">
-			<button type="button" class="btn-secondary" @click="editing = true; asking = false" :aria-expanded="editing">Change what it may do</button>
-			<button
-				type="button"
-				class="btn-secondary"
-				if connStatus(v) == "paused" {
-					hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection/resume", v.CampaignID) }
-				} else {
-					hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection/pause", v.CampaignID) }
-				}
-				hx-vals={ fmt.Sprintf(`{"connection":"%d"}`, v.Conn.ID) }
-				hx-target="#ai-connect"
-				hx-swap="outerHTML"
-				hx-disabled-elt="this"
-			>
-				if connStatus(v) == "paused" {
-					<span class="aic-idle">Resume</span>
-					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Resuming…</span>
-				} else {
-					<span class="aic-idle">Pause</span>
-					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Pausing…</span>
-				}
-			</button>
-			<button type="button" class="quiet-word" @click="renew = !renew; asking = false" :aria-expanded="renew">Make a new key</button>
-			<button type="button" class="quiet-word text-bad" @click="asking = !asking; renew = false" :aria-expanded="asking">Disconnect</button>
-		</div>
-		<div class="aic-ask" x-show="asking" x-cloak x-collapse.duration.200ms>
-			<p>
-				Disconnect { appName(v.Conn) }? Its key stops working at once. You can connect again with a new key.
-				if len(v.Requests) > 0 {
-					What it already asked for stays here for you to answer.
-				}
-			</p>
-			<button type="button" class="btn-secondary" @click="asking = false">Keep it</button>
-			<button
-				type="button"
-				class="btn-danger"
-				hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection/disconnect", v.CampaignID) }
-				hx-target="#ai-connect"
-				hx-swap="outerHTML"
-				hx-disabled-elt="this"
-			>
-				<span class="aic-idle">Disconnect</span>
-				<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Disconnecting…</span>
-			</button>
-		</div>
-	</section>
-}
+// historyState is What it did's filters, on the tab outside the part the
+// 30-second check swaps, so a filter survives new calls coming in. Each
+// call row carries what the filters read (data-kind, data-wait, data-fail,
+// data-text); a sitting with no match hides, and one with a match opens.
+const historyState = `{ f: 'all', q: '', opened: 0,
+	on() { return this.f !== 'all' || this.q.trim() !== '' },
+	hit(el) {
+		if (!el) return false
+		const d = el.dataset
+		if (this.f === 'ask' && d.kind !== 'ask') return false
+		if (this.f === 'wait' && !('wait' in d)) return false
+		if (this.f === 'fail' && !('fail' in d)) return false
+		const q = this.q.trim().toLowerCase()
+		return !q || (d.text || '').includes(q)
+	},
+	hits(root) { let n = 0; root.querySelectorAll('[data-call]').forEach((e) => { if (this.hit(e)) n++ }); return n },
+	matchLine(root, all) { const n = this.hits(root); return n + (n === 1 ? ' call matches' : ' calls match') + ' of ' + all },
+	count() { this.opened = document.querySelectorAll('#ai-pane-did .aic-sit[open]').length },
+	fold(open) { document.querySelectorAll('#ai-pane-did .aic-sit').forEach((d) => { if (!open || !this.on() || this.hits(d)) d.open = open }); this.count() } }`
 
-// aiActivityList is "What it did", one line per sitting with its calls
-// folded under it. While the page is open it asks every 30 seconds whether
-// anything new came in; the answer is empty (204) until something did, so
-// the sittings the owner opened stay open.
+// aiActivityList is What it did: filters, then one folded line per sitting
+// with its calls under it. While the page is open it asks every 30 seconds
+// whether anything new came in; the answer is empty (204) until something
+// did. It skips while the search box has focus, since a redraw would take
+// the typing away.
 templ aiActivityList(v ConnectView) {
 	<section
 		id="ai-activity"
-		aria-labelledby="ai-activity-heading"
+		class="aic-hist"
+		aria-label="What it did"
 		hx-get={ fmt.Sprintf("/campaigns/%s/ai/activity?shown=%d&seen=%s", v.CampaignID, v.Shown, activitySeen(v)) }
 		hx-trigger="every 30s"
 		hx-swap="outerHTML"
+		@htmx:before-request="if ($event.detail.elt === $el && document.activeElement && $el.contains(document.activeElement) && document.activeElement.matches('input')) $event.preventDefault()"
+		x-init="count()"
 	>
-		<div class="flex flex-wrap items-baseline gap-x-4 pb-2 border-b border-edge">
-			<h2 id="ai-activity-heading" class="aic-h flex-1">What it did</h2>
-			if len(v.Sittings) > 0 {
-				<span class="aic-hint">A sitting ends after 30 quiet minutes</span>
-			}
-		</div>
 		if len(v.Sittings) == 0 {
-			<p class="aic-hint py-3">Nothing yet. Each time your AI looks something up, it shows here.</p>
+			<p class="aic-empty">Nothing yet. Each time your AI looks something up, it shows here.</p>
 		} else {
+			{{ n := countCalls(v) }}
+			<div class="aic-hbar">
+				<div class="aic-chips" role="group" aria-label="Show">
+					@aiChip("all", "Everything", n.All, "")
+					@aiChip("ask", "Requests", n.Asks, "ask")
+					@aiChip("wait", "Waiting for you", n.Waiting, "ask")
+					@aiChip("fail", "Couldn't answer", n.Failed, "fail")
+				</div>
+				<label class="aic-find">
+					<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+					<input type="search" x-model="q" placeholder="Find a page or request" aria-label="Find a page or request"/>
+				</label>
+				<button type="button" class="quiet-word aic-foldall" @click="fold(!opened)" x-text="opened ? 'Fold all' : 'Unfold all'">Unfold all</button>
+			</div>
 			<div class="aic-sits">
-				for i, s := range shownSittings(v) {
-					<details class="aic-sit" open?={ i == 0 }>
-						<summary>
-							<time class="aic-sit-when" datetime={ s.Start.UTC().Format("2006-01-02T15:04:05Z") }>{ sittingWhen(v, s.Start) }</time>
-							<span class="aic-sit-what">{ sittingSummary(s) }</span>
-							<span class="aic-sit-tag" data-waiting?={ sittingWaiting(v, s) > 0 }>{ sittingTag(v, s) }</span>
-						</summary>
-						<div class="aic-log">
-							for _, call := range s.Calls {
-								@aiLogRow(v, call)
-							}
-						</div>
-					</details>
+				for _, s := range shownSittings(v) {
+					@aiSitting(v, s)
+				}
+				<p class="aic-empty" x-show="on() && hits(document.getElementById('ai-activity')) === 0" x-cloak>
+					Nothing matches.
+					<button type="button" class="quiet-word" @click="f = 'all'; q = ''">Show everything</button>
+				</p>
+			</div>
+			<div class="aic-legend">
+				<span><i data-kind="look" aria-hidden="true"></i>looked</span>
+				<span><i data-kind="ask" aria-hidden="true"></i>asked for changes</span>
+				<span><i data-fail aria-hidden="true"></i>couldn't answer</span>
+				<span class="aic-legend-gap"></span>
+				<span>A sitting ends after 30 quiet minutes.</span>
+				if len(v.Sittings) > v.Shown {
+					<button
+						type="button"
+						class="quiet-word"
+						hx-get={ fmt.Sprintf("/campaigns/%s/ai/activity?shown=%d", v.CampaignID, v.Shown+sittingsStep) }
+						hx-target="#ai-activity"
+						hx-swap="outerHTML"
+						hx-disabled-elt="this"
+					>Show older sittings</button>
+				} else if len(v.Calls) >= connector.CallsKept {
+					<span>{ fmt.Sprintf("Chronicle keeps your AI's newest %d calls.", connector.CallsKept) }</span>
 				}
 			</div>
-			if len(v.Sittings) > v.Shown {
-				<button
-					type="button"
-					class="btn-secondary mt-3"
-					hx-get={ fmt.Sprintf("/campaigns/%s/ai/activity?shown=%d", v.CampaignID, v.Shown+sittingsStep) }
-					hx-target="#ai-activity"
-					hx-swap="outerHTML"
-					hx-disabled-elt="this"
-				>Show older sittings</button>
-			} else if len(v.Calls) >= connector.CallsKept {
-				<p class="aic-hint pt-2">{ fmt.Sprintf("Chronicle keeps your AI's newest %d calls.", connector.CallsKept) }</p>
-			}
 		}
 	</section>
 }
 
-templ aiLogRow(v ConnectView, call connector.Call) {
-	<div class="aic-log-row">
-		<time class="aic-log-when" datetime={ call.At.UTC().Format("2006-01-02T15:04:05Z") }>{ clockText(v, call.At) }</time>
-		<span class="aic-log-what">{ call.Summary }</span>
-		<span class="aic-log-note">
-			if !call.OK {
-				<i class="fa-solid fa-circle-info mr-1" aria-hidden="true"></i>not answered:
+// aiChip is one filter of What it did, with how many calls it shows.
+templ aiChip(key, label string, n int, tone string) {
+	<button
+		type="button"
+		class="aic-chip"
+		if key == "all" {
+			aria-pressed="true"
+		} else {
+			aria-pressed="false"
+		}
+		:aria-pressed={ fmt.Sprintf("f === '%s'", key) }
+		@click={ fmt.Sprintf("f = '%s'", key) }
+	>
+		if tone != "" {
+			<span class="aic-chip-dot" data-tone={ tone } aria-hidden="true"></span>
+		}
+		{ label }
+		<b>{ strconv.Itoa(n) }</b>
+	</button>
+}
+
+// aiSitting is one sitting: its day and times, a strip with a tick per call
+// (looks faint, requests in the accent, unanswered red), what it did, and
+// what still needs the owner. Its calls fold under it.
+templ aiSitting(v ConnectView, s connector.Sitting) {
+	{{ rows := sittingRows(v, s) }}
+	<details
+		class="aic-sit"
+		x-show="!on() || hits($el) > 0"
+		x-effect="if (on()) $el.open = hits($el) > 0"
+		@toggle="count()"
+	>
+		<summary>
+			<i class="fa-solid fa-chevron-right aic-chev" aria-hidden="true"></i>
+			<span class="aic-sit-when">
+				<time datetime={ s.Start.UTC().Format("2006-01-02T15:04:05Z") }>{ sittingDay(v, s.Start) }</time>
+				<small>{ sittingSpan(v, s) }</small>
+			</span>
+			<span class="aic-strip" aria-hidden="true">
+				for i, r := range rows {
+					<i
+						style={ stripStyle(r.Left) }
+						data-kind={ r.Kind }
+						data-fail?={ !r.OK }
+						:class={ fmt.Sprintf("{ 'aic-dim': on() && !hit($el.closest('.aic-sit').querySelectorAll('[data-call]')[%d]) }", i) }
+					></i>
+				}
+			</span>
+			<span class="aic-sit-what" x-show="!on()">{ sittingSummary(s) }</span>
+			<span class="aic-sit-what" x-show="on()" x-cloak x-text={ fmt.Sprintf("matchLine($el.closest('.aic-sit'), %d)", len(rows)) }></span>
+			<span class="aic-pills">
+				if w := waitingIn(rows); w > 0 {
+					<span class="aic-pill" data-tone="wait">{ strconv.Itoa(w) } waiting</span>
+				}
+				if f := failedIn(rows); f > 0 {
+					<span class="aic-pill" data-tone="bad">{ strconv.Itoa(f) } couldn't answer</span>
+				}
+			</span>
+		</summary>
+		<div class="aic-calls">
+			for _, r := range rows {
+				@aiLogRow(v, r)
 			}
-			{ call.Note }
+		</div>
+	</details>
+}
+
+// aiLogRow is one call: when, what kind, what was asked and its answer, or
+// why it wasn't answered.
+templ aiLogRow(v ConnectView, r callRow) {
+	<div
+		class="aic-call"
+		data-call
+		data-kind={ r.Kind }
+		data-wait?={ r.Waiting }
+		data-fail?={ !r.OK }
+		data-text={ callText(r.Call) }
+		x-show="!on() || hit($el)"
+	>
+		<time class="aic-call-t" datetime={ r.At.UTC().Format("2006-01-02T15:04:05Z") }>{ clockText(v, r.At) }</time>
+		<i class={ "fa-solid", r.Icon, "aic-call-i" } aria-hidden="true"></i>
+		<span class="aic-call-w">
+			{ r.Summary }
+			if !r.OK {
+				<span class="aic-why">Couldn't answer: { r.Note }</span>
+			}
+		</span>
+		<span class="aic-call-r">
+			if r.Waiting {
+				<span class="aic-pill" data-tone="wait">Waiting for you</span>
+			} else if r.OK {
+				{ r.Note }
+			}
 		</span>
 	</div>
 }

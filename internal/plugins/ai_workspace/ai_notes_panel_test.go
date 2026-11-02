@@ -38,12 +38,12 @@ func TestAINotesPanel(t *testing.T) {
 		notWant []string
 	}{
 		{"both off", NotesView{CampaignID: "camp-1", PlayerNotes: true},
-			[]string{"Notes your AI can use", "Journal", "Jot notes", "Player Notes", "/campaigns/camp-1/ai/notes", `name="co_dms"`, `name="scribes"`, "coDMs: false, scribes: false", "Only the writer can change a Player Note"},
+			[]string{"Notes your AI can use", "Journal entries and jots", "shared notes", "/campaigns/camp-1/ai/notes", `hx-trigger="change"`, `role="switch"`, `name="co_dms"`, `name="scribes"`, "coDMs: false, scribes: false", "Only the writer can change a Player Note"},
 			[]string{"left out while your AI sees what players see", "Saved."}},
 		{"co-DMs on, just saved", NotesView{CampaignID: "camp-1", Access: records.NoteAccess{CoDMs: true}, PlayerNotes: true, Saved: true},
 			[]string{"coDMs: true, scribes: false", "Works from your AI"}, nil},
 		{"Player Notes switched off", NotesView{CampaignID: "camp-1"},
-			[]string{"Journal", "Jot notes"}, []string{"Player Notes", "Player Note,"}},
+			[]string{"shared notes"}, []string{"Player Note"}},
 		{"AI sees what players see", NotesView{CampaignID: "camp-1", PlayerNotes: true, Shut: true},
 			[]string{"Notes are left out while your AI sees what players see", "aic-notes-shut"}, nil},
 	}

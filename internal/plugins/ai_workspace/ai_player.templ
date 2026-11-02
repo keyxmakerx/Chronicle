@@ -40,6 +40,10 @@ templ playerPanelBody(v PlayerAIView) {
 			<div id="ai-player-menu" x-show="menu" x-cloak x-collapse.duration.200ms>
 				@playerMenu(v)
 			</div>
+			<section class="aic-what" aria-labelledby="ai-cando-heading">
+				<h3 id="ai-cando-heading" class="aic-label aic-label-muted">What your AI can do</h3>
+				@playerCanDo(true)
+			</section>
 			if v.Done != "" {
 				<p class="aic-done aic-done-line" role="status">
 					<i class="fa-solid fa-check mr-1.5" aria-hidden="true"></i>
