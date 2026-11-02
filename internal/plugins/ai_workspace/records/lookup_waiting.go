@@ -93,9 +93,11 @@ func (run *lookupRun) waiting() (LookupAnswer, error) {
 		for _, q := range w.Decided {
 			verdict := "applied"
 			if q.TurnedDown {
-				verdict = "turned down, nothing changed"
+				// Said plainly, so the AI doesn't take the owner's No for a
+				// fault and send the same changes again.
+				verdict = "turned down by the owner, nothing changed; that was their choice, not an error"
 			} else if o := strings.TrimSpace(q.Outcome); o != "" {
-				verdict += ": " + oneLine(o, 160)
+				verdict += ": " + oneLine(o, 1000)
 			}
 			lines = append(lines, fmt.Sprintf("- %s%s, %s (%s)", quoted(q.Summary), askCounts(q.Counts), verdict, askDay(q.At)))
 		}

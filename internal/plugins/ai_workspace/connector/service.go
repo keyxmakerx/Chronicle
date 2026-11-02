@@ -439,7 +439,7 @@ func (s *Service) TurnDown(ctx context.Context, campaignID, userID string, id in
 }
 
 func (s *Service) finish(ctx context.Context, campaignID, userID string, id int64, status, outcome string) error {
-	if _, err := s.repo.FinishRequest(ctx, campaignID, userID, id, status, oneLine(outcome, noteMax), s.now()); err != nil {
+	if _, err := s.repo.FinishRequest(ctx, campaignID, userID, id, status, oneLine(outcome, outcomeMax), s.now()); err != nil {
 		return err
 	}
 	if err := s.repo.PruneRequests(ctx, campaignID, userID, requestsKept); err != nil {

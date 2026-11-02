@@ -17,6 +17,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 )
 
 // reqRepo is just enough of the connector's repository for its requests and
@@ -448,5 +449,31 @@ func TestAIActivity_RedrawsOnlyWhenNew(t *testing.T) {
 	// Asking for more than there are is cut to what exists, plus one step.
 	if rec := get("shown=999"); !strings.Contains(rec.Body.String(), "shown=8&amp;seen=0-8") {
 		t.Errorf("shown not clamped: %s", rec.Body)
+	}
+}
+
+// What the AI later reads about an applied request names each change that
+// failed or was held back and why, and leaves the owner's own No answers
+// as a count.
+func TestRequestOutcome(t *testing.T) {
+	tests := []struct {
+		name string
+		in   importer.CommitResult
+		want string
+	}{
+		{"all applied", importer.CommitResult{Updated: 2}, "2 applied, 0 left out"},
+		{"owner's no is only counted", importer.CommitResult{Created: 1, Skipped: 1, Rows: []importer.RowOutcome{
+			{Name: "Ash", Status: importer.StatusSkipped, Reason: "Excluded by operator"},
+		}}, "1 applied, 1 left out"},
+		{"failures say why", importer.CommitResult{Updated: 1, Failed: 1, Skipped: 1, Rows: []importer.RowOutcome{
+			{Name: "Therin", Status: importer.StatusFailed, Reason: "no folder called Harvest"},
+			{Name: "Vessmark", Status: importer.StatusSkipped, Reason: "it has GM-only parts"},
+			{Name: "Lastwell", Status: importer.StatusUpdated},
+		}}, `1 applied, 1 left out, 1 failed. "Therin" failed: no folder called Harvest; "Vessmark" held back: it has GM-only parts`},
+	}
+	for _, tt := range tests {
+		if got := requestOutcome(tt.in); got != tt.want {
+			t.Errorf("%s:\n got %q\nwant %q", tt.name, got, tt.want)
+		}
 	}
 }
