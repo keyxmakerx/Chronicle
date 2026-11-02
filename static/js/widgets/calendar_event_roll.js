@@ -17,11 +17,7 @@
   'use strict';
 
   function $(sel, root) { return (root || document).querySelector(sel); }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   var DICE_RE = /^\s*(\d{0,3})\s*d\s*(\d{1,4})\s*(?:([+-])\s*(\d{1,4}))?\s*$/i;
 
   // parseDice mirrors the server's ParseDice limits so a typo is caught

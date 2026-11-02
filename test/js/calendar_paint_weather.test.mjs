@@ -11,6 +11,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
+import { escapeHtml } from './_escape.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -18,7 +19,7 @@ const widgets = path.join(here, '..', '..', 'static', 'js', 'widgets');
 const G = require(path.join(widgets, 'chronicle_gen.js'));
 
 function load() {
-  const view = { module: { exports: {} }, Chronicle: { register() {} }, console };
+  const view = { module: { exports: {} }, Chronicle: { escapeHtml, register() {} }, console };
   vm.createContext(view);
   vm.runInContext(readFileSync(path.join(widgets, 'calendar_view.js'), 'utf8'), view);
   const sandbox = {

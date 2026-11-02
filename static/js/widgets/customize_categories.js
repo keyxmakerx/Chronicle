@@ -50,11 +50,7 @@
   ];
   var TABS = [['layout', 'Page layout', 'fa-table-columns'], ['home', 'Category home', 'fa-house'], ['fields', 'Fields', 'fa-list-ul'], ['text', 'Starting text', 'fa-align-left'], ['settings', 'Settings', 'fa-sliders']];
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function parse(s, d) { try { var v = JSON.parse(s || ''); return v == null ? d : v; } catch (e) { return d; } }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   // A colour the page shows as a background; anything else falls back so a

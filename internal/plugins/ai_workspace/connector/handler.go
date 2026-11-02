@@ -2,6 +2,7 @@ package connector
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -161,7 +162,7 @@ func (e *Endpoint) Serve(c echo.Context) error {
 			secs = 1
 		}
 		c.Response().Header().Set("Retry-After", strconv.Itoa(secs))
-		return refuse(c, http.StatusTooManyRequests, "Too many calls at once. Wait a little and ask again.")
+		return refuse(c, http.StatusTooManyRequests, fmt.Sprintf("Too many requests at once. Wait %d seconds and ask again.", secs))
 	}
 	if ct := req.Header.Get("Content-Type"); !strings.HasPrefix(strings.ToLower(strings.TrimSpace(ct)), "application/json") {
 		return refuse(c, http.StatusUnsupportedMediaType, "send JSON")
@@ -171,7 +172,12 @@ func (e *Endpoint) Serve(c echo.Context) error {
 		return refuse(c, http.StatusRequestEntityTooLarge, "the request is too large")
 	}
 
-	out := e.server.Handle(req.Context(), Session{Conn: conn, CampaignName: name, Actor: actorFor(conn)}, body)
+	sess := Session{Conn: conn, CampaignName: name, Actor: actorFor(conn),
+		AllowCall: func() (bool, time.Duration) { return e.svc.AllowCall(conn.ID) }}
+	out := e.server.Handle(req.Context(), sess, body)
+	if out.Limited {
+		e.svc.NoteLimited(req.Context(), conn)
+	}
 	switch {
 	case out.Initialized:
 		e.svc.Seen(req.Context(), conn, out.ClientName)

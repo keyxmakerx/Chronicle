@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
+import { escapeHtml } from './_escape.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..', '..');
@@ -27,7 +28,7 @@ const cal = {
 function load() {
   const sandbox = {
     module: { exports: {} }, console,
-    Chronicle: { register() {} },
+    Chronicle: { escapeHtml, register() {} },
     document: { activeElement: null, querySelector: () => null, addEventListener() {} },
     window: {},
   };

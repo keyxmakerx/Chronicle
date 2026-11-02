@@ -201,7 +201,7 @@ func TestReadArgs(t *testing.T) {
 		wantErr string
 	}{
 		{"keeps its own argument, one line", map[string]any{"name": " The\nRusty  Anchor "}, map[string]string{"name": "The Rusty Anchor"}, ""},
-		{"drops arguments it doesn't take", map[string]any{"name": "Vale", "privacy": "everything", "campaign": "camp-2"}, map[string]string{"name": "Vale"}, ""},
+		{"refuses arguments it doesn't take", map[string]any{"name": "Vale", "privacy": "everything"}, nil, "read_page doesn't take privacy; it takes name"},
 		{"a number reads as text", map[string]any{"name": float64(1492)}, map[string]string{"name": "1492"}, ""},
 		{"needs its required argument", map[string]any{}, nil, "it needs name"},
 		{"no objects", map[string]any{"name": map[string]any{"x": 1}}, nil, "should be text"},

@@ -34,7 +34,7 @@
   // Dice figures go into markup unescaped, so anything that isn't a whole
   // number becomes 0 rather than trusting the payload's shape.
   function num(v) { var n = Number(v); return isFinite(n) ? Math.trunc(n) : 0; }
-  function esc(s) { return C.escapeHtml ? C.escapeHtml(s == null ? '' : String(s)) : String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
   function store(key, val) {

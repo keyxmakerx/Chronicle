@@ -230,7 +230,9 @@ func (k ShopRoomKind) plan(ctx context.Context, campaignID string, a Actor, r Re
 		if err != nil {
 			return Plan{Error: planError(err)}, "", nil
 		}
-		if room[f.field] == v {
+		// The server leaves an empty mood or manner out of the saved room, so a
+		// missing field reads as "" and "none" on it is no change.
+		if cur, _ := room[f.field].(string); cur == v {
 			continue
 		}
 		room[f.field] = v

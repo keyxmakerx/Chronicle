@@ -28,12 +28,7 @@
 (function () {
   'use strict';
 
-  function esc(v) {
-    var s = (v == null) ? '' : String(v);
-    return s.replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(v) { return Chronicle.escapeHtml(v); }
 
   // Package prose: {@category term|shown} markers keep their shown text and
   // **bold** becomes bold. Escaped first, so nothing in it can become markup.

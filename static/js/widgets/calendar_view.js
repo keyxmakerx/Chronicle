@@ -410,11 +410,7 @@
   // -----------------------------------------------------------------
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function dayKey(y, m, d) { return y + '_' + m + '_' + d; }
   // The viewer's own date today, as YYYY-MM-DD.
   function localIso(t) { return t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate()); }

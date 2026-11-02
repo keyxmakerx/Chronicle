@@ -279,14 +279,8 @@
 
 	// Escape helpers to prevent XSS when building HTML strings from
 	// user-supplied marker data (name, description, icon, color).
-	function escapeHtml(s) {
-		if (!s) return '';
-		return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-	}
-	function escapeAttr(s) {
-		if (!s) return '';
-		return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-	}
+	function escapeHtml(s) { return Chronicle.escapeHtml(s); }
+	function escapeAttr(s) { return Chronicle.escapeHtml(s); }
 
 	// Use marker clustering when there are many markers.
 	var clusterGroup = null;

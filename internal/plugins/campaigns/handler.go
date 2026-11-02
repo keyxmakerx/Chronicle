@@ -74,12 +74,12 @@ type PluginHubAddon struct {
 	// Description is the addon's canonical one-line blurb, sourced from
 	// the addons service's single builtinAddons copy rather than
 	// re-derived or hand-maintained per render site (ADR-056).
-	Description    string
-	Icon           string
-	Category       string
-	Enabled        bool
-	Installed      bool // Whether backing code exists (for showing Coming Soon vs toggle).
-	HasDashboard   bool
+	Description  string
+	Icon         string
+	Category     string
+	Enabled      bool
+	Installed    bool // Whether backing code exists (for showing Coming Soon vs toggle).
+	HasDashboard bool
 	// HasSetup is true when the addon has a registered SetupProvider (an
 	// extension settings/onboarding page). NeedsSetup is true when that page has
 	// outstanding, actionable checks for this campaign — the card shows a "Setup"
@@ -160,11 +160,10 @@ type Handler struct {
 	categoryLister       CustomizeCategoryLister
 	baseURL              string
 	contentPacksRenderer ContentPacksCardRenderer
-	// Per-extension inline dashboard registry + enable-state check.
-	// Both nil-tolerant; the hub fragment route renders safe
-	// placeholders when either is unwired.
-	extensionEnableChecker      ExtensionEnableChecker
-	sheetChecker                SheetChecker
+	// Whether an add-on is on for the campaign; nil-tolerant, the Customize
+	// page treats an unwired checker as off.
+	extensionEnableChecker ExtensionEnableChecker
+	sheetChecker           SheetChecker
 }
 
 // NewHandler creates a new campaign handler.

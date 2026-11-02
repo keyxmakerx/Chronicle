@@ -27,11 +27,7 @@
   var busy = false;  // a box is loading; ignore further opens until it has
   var ICON_RE = /^fa-[a-z0-9-]{1,40}$/;
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function reduced() {
     if (window.Chronicle && Chronicle.reducedMotion) return Chronicle.reducedMotion();
     var h = document.documentElement;

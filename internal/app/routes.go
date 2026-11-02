@@ -437,17 +437,17 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 			needsSetup, _ = a.svc.NeedsSetup(ctx, campaignID, ca.AddonSlug)
 		}
 		result[i] = campaigns.PluginHubAddon{
-			AddonID:        ca.AddonID,
-			Slug:           ca.AddonSlug,
-			Name:           ca.AddonName,
-			Description:    ca.AddonDescription,
-			Icon:           ca.AddonIcon,
-			Category:       string(ca.AddonCategory),
-			Enabled:        ca.Enabled,
-			Installed:      ca.Installed,
-			HasDashboard:   campaigns.HasExtensionDashboard(ca.AddonSlug),
-			HasSetup:       hasSetup,
-			NeedsSetup:     needsSetup,
+			AddonID:      ca.AddonID,
+			Slug:         ca.AddonSlug,
+			Name:         ca.AddonName,
+			Description:  ca.AddonDescription,
+			Icon:         ca.AddonIcon,
+			Category:     string(ca.AddonCategory),
+			Enabled:      ca.Enabled,
+			Installed:    ca.Installed,
+			HasDashboard: campaigns.HasExtensionDashboard(ca.AddonSlug),
+			HasSetup:     hasSetup,
+			NeedsSetup:   needsSetup,
 		}
 	}
 	return result, nil

@@ -104,9 +104,18 @@ const (
 const (
 	// KeyLifetime is how long a new key works before it runs out.
 	KeyLifetime = 90 * 24 * time.Hour
-	// callsPerMinute and callsPerDay cap one connection's tool calls.
-	callsPerMinute = 30
-	callsPerDay    = 2000
+	// A connection's tool calls come from a bucket of callsBurst that
+	// refills one call each callRefill, so an AI can run a burst of lookups
+	// and then keeps a steady pace; callsPerDay caps a day. A call over the
+	// pace is answered with how long to wait, as a tool result the AI reads.
+	callsBurst  = 30
+	callRefill  = time.Second
+	callsPerDay = 2000
+	// Every request, handshakes and tool lists included, has a looser
+	// bucket in front, answered 429 with Retry-After when it runs dry: it
+	// only stops a flood, never a steady AI.
+	requestsBurst  = 120
+	requestsRefill = 500 * time.Millisecond
 	// CallsKept is how many calls per campaign "What it did" keeps.
 	CallsKept = 500
 	// clientNameMax caps the name an AI app gives itself.

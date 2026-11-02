@@ -24,8 +24,8 @@ type Viewer struct {
 
 // Settings are a campaign's crafting defaults.
 type Settings struct {
-	// Skin is the look every player's bench is drawn in ("desk" or
-	// "journal"). TODO(#1982) let a player pick their own.
+	// Skin is the look a player's bench opens in ("desk" or "journal")
+	// until they switch at the bench; a narrow screen opens the journal.
 	Skin string `json:"skin"`
 	// Difficulty is how tight the bench's timing is.
 	Difficulty string `json:"difficulty"`

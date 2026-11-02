@@ -119,7 +119,7 @@ func (s *service) SaveAIRecipe(ctx context.Context, campaignID string, v Viewer,
 	// version the recipe's write just made, so an edit in between is a
 	// conflict rather than lost.
 	if rules != nil {
-		ok, err := s.repo.UpdateRules(ctx, campaignID, stored.ID, rules.Rules, stored.Looks, stored.Extras, stored.Version+1)
+		ok, err := s.repo.UpdateRules(ctx, campaignID, stored.ID, rules.Rules, stored.Looks, r.Extras, stored.Version+1)
 		if err != nil {
 			return nil, errInternal(err)
 		}

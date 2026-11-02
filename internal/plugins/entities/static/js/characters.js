@@ -12,13 +12,7 @@
 (function () {
   'use strict';
 
-  function esc(v) {
-    var s = (v == null) ? '' : String(v);
-    return (window.Chronicle && Chronicle.escapeHtml) ? Chronicle.escapeHtml(s)
-      : s.replace(/[&<>"']/g, function (c) {
-          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-        });
-  }
+  function esc(v) { return Chronicle.escapeHtml(v); }
 
   // previewHTML — render the /preview JSON into the overlay panel body.
   function previewHTML(d, fullURL) {
