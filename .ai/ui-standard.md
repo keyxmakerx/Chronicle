@@ -181,11 +181,11 @@ would do.
   both sidebars (`SiteAdminEntry`, the tools icon `SiteAdminIcon`): a dark
   plate edged in admin red with a red icon, whose hover brightens the edge
   rather than the everyday glow; its icon alone when the menu is folded.
-- **The table is one tab away.** Every campaign page has one "Table" tab in
-  the campaign header. It opens a drawer of three leaves, like a DM screen;
-  each leaf picks its own section, and the arrangement is remembered for each
+- **The table is one tap away.** Every campaign page has one Table button, a
+  monochrome d20 icon among the header's icons. It opens a drawer of three
+  leaves, like a DM screen; each leaf picks its own section, and the arrangement is remembered for each
   person. The drawer is Material surfaces, never paper. A roll arrives as a
-  slim island that slides out from behind the Table tab and back, styled by
+  slim island that slides out from behind the Table button and back, styled by
   the style kit; clicking it, or a row of the roll log, drapes the roll's
   details down from it. T opens the table and R the rolls, never while
   typing; each person has quick 2D dice. The Handbook's Rules ribbon and its

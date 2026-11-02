@@ -19,10 +19,12 @@ const maxNightTitleChars = 150
 // noteNames picks the label the Notes tab shows and the title the stored note
 // carries. The note is one per campaign and follows the next game night: when
 // the night changes, the next save retitles it. With no night it falls back to
-// a name that doesn't pretend to belong to one.
+// a name that doesn't pretend to belong to one. The label says so in words
+// that hold whatever the campaign calls its GM; the stored title keeps the
+// name the Notes app already lists it under.
 func noteNames(n *NightView) (label, title string) {
 	if n == nil || strings.TrimSpace(n.Name) == "" {
-		return "DM Screen notes", "DM Screen notes"
+		return "Not tied to a game night", "DM Screen notes"
 	}
 	name := strings.TrimSpace(n.Name)
 	if utf8.RuneCountInString(name) > maxNightTitleChars {

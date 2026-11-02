@@ -84,6 +84,9 @@ templ checkupRow(it CheckItem) {
 		<div class="checkup-text">
 			<b><span class="sr-only">{ checkupStateWord(it.State) }: </span>{ it.Title }</b>
 			<small>{ it.Detail }</small>
+			if it.KeepLabel != "" && it.FixPost != "" {
+				<button type="button" class="checkup-quiet checkup-keep" hx-post={ it.FixPost } hx-vals={ it.KeepVals } hx-disabled-elt="this" data-checkup-fix>{ it.KeepLabel }</button>
+			}
 		</div>
 		if it.FixLabel != "" {
 			if it.FixPost != "" {

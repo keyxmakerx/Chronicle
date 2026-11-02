@@ -47,11 +47,37 @@ func TestMergeAIRules(t *testing.T) {
 		}
 	}
 
+	// The edges of every range, and the forms the editor reads, still pass.
+	edges := `[{"when": [{"kind": "always"}], "then": {"kind": "points", "amount": -10}},
+		{"when": [{"kind": "always"}], "then": {"kind": "points", "amount": "10"}, "chance": "1 in 20"},
+		{"when": [{"kind": "always"}], "then": {"kind": "points"}, "chance": "always"},
+		{"when": [{"kind": "always"}], "then": {"kind": "extra", "amount": 3}, "players": "secret"},
+		{"when": [{"kind": "moon", "moon": "The Lantern", "phase": "Waxing"}, {"kind": "time", "time": "Dusk"}], "then": {"kind": "only"}, "chance": "always"}]`
+	if rc, err := MergeAIRules(nil, json.RawMessage(edges)); err != nil || rc.New != 5 {
+		t.Fatalf("values in range: %+v, %v", rc, err)
+	}
+
 	refusals := []struct{ raw, want string }{
 		{`{"when": []}`, "rules are a list"},
 		{`[{"when": [{"kind": "moon"}], "then": {"kind": "fly"}}]`, "rule 1: `then` needs a `kind` of only, cannot, edge"},
 		{`[{"when": [{"kind": "always"}], "then": {"kind": "edge"}}, {"when": [{"kind": "tide"}], "then": {"kind": "edge"}}]`, "rule 2: `when` needs at least one condition with a `kind` of moon, event"},
 		{`["edge on a full moon"]`, "rule 1 is not a rule"},
+		// A value the editor would clamp, drop or replace is refused, not changed.
+		{`[{"when": [{"kind": "always"}], "then": {"kind": "points", "amount": 50}}]`, "rule 1: a `points` effect's `amount` is a whole number from -10 to 10, not 0; 50 is outside that"},
+		{`[{"when": [{"kind": "always"}], "then": {"kind": "points", "amount": 0}}]`, "not 0; 0 is outside"},
+		{`[{"when": [{"kind": "always"}], "then": {"kind": "points", "amount": 2.5}}]`, "2.5 is outside"},
+		{`[{"when": [{"kind": "always"}], "then": {"kind": "points", "amount": "lots"}}]`, "`amount` \"lots\" isn't a number"},
+		{`[{"when": [{"kind": "always"}], "then": {"kind": "extra", "amount": 4}}]`, "from 1 to 3; 4 is outside"},
+		{`[{"when": [{"kind": "always"}], "then": {"kind": "edge"}, "chance": "1 in 7"}]`, "rule 1: `chance` \"1 in 7\" isn't one Chronicle rolls"},
+		{`[{"when": [{"kind": "always"}], "then": {"kind": "edge"}, "chance": 7}]`, "`chance` 7 isn't one"},
+		{`[{"when": [{"kind": "season", "season": "Winter"}], "then": {"kind": "only"}, "chance": "1 in 2"}]`, "an `only` rule has no `chance`"},
+		{`[{"when": [{"kind": "always"}], "then": {"kind": "edge"}, "players": "everyone"}]`, "`players` \"everyone\" isn't book"},
+		{`[{"when": [{"kind": "moon", "moon": "The Lantern", "phase": "gibbous"}], "then": {"kind": "edge"}}]`, "`phase` \"gibbous\" isn't a moon phase"},
+		{`[{"when": [{"kind": "time", "time": "noon"}], "then": {"kind": "edge"}}]`, "`time` \"noon\" isn't dawn, day, dusk or night"},
+		{`[{"when": [{"kind": "always"}, {"kind": "tide"}], "then": {"kind": "edge"}}]`, "rule 1: condition 2: `kind` \"tide\" isn't a condition"},
+		{`[{"when": [{"kind": "time", "time": "night"}, {"kind": "time", "time": "dawn"}, {"kind": "time", "time": "dusk"}, {"kind": "time", "time": "day"}], "then": {"kind": "edge"}}]`, "`when` has 4 conditions; a rule takes at most 3"},
+		{`[{"when": [{"kind": "weather", "weather": "` + strings.Repeat("a", maxRuleText+1) + `"}], "then": {"kind": "edge"}}]`, "`weather` is 121 characters; it holds at most 120"},
+		{`[{"when": [{"kind": "always"}], "then": {"kind": "say", "text": "` + strings.Repeat("a", maxRuleLine+1) + `"}}]`, "`text` is 241 characters"},
 		{`[` + strings.Repeat(`{"when":[{"kind":"always"}],"then":{"kind":"edge"}},`, maxRules) + `{"when":[{"kind":"always"}],"then":{"kind":"edge"}}]`, "at most 40 rules"},
 	}
 	for _, r := range refusals {
