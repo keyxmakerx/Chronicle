@@ -5145,7 +5145,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   /* The bar is a tool's title bar on the theme tokens, solid so the page
      behind never shows through it, and the handle the window drags by. */
   .dms-titlebar {
-    margin: 0 0 .4rem; padding: .3rem .4rem .4rem .75rem; border-radius: var(--dms-r);
+    margin: 0; padding: .3rem .4rem .4rem .75rem; border-radius: var(--dms-r) var(--dms-r) 0 0; border-bottom: 0;
     background: var(--surface-raised); color: var(--surface-text);
     border: 1px solid var(--surface-border); box-shadow: var(--elev-hover);
   }
@@ -5200,9 +5200,9 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     background: var(--dms-leaf); border: 1px solid var(--dms-leaf-edge); min-height: 24rem;
     box-shadow: var(--dms-shadow); backface-visibility: hidden;
   }
-  .dms-leaf-l { border-radius: var(--dms-r) 0 0 var(--dms-r); transform-origin: right center; }
+  .dms-leaf-l { border-radius: 0 0 0 var(--dms-r); transform-origin: right center; }
   .dms-leaf-m { transform-origin: center bottom; border-left: 3px double var(--dms-hinge); border-right: 3px double var(--dms-hinge); }
-  .dms-leaf-r { border-radius: 0 var(--dms-r) var(--dms-r) 0; transform-origin: left center; }
+  .dms-leaf-r { border-radius: 0 0 var(--dms-r) 0; transform-origin: left center; }
   .dms-leaf h3 { font-weight: 700; letter-spacing: .04em; border-bottom: 1px solid var(--dms-leaf-edge); padding-bottom: .25rem; }
   .dms-blk { display: grid; gap: .3rem; }
   .dms-lbl { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--dms-ink-muted); }
@@ -5218,7 +5218,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-confirm-btns button { border: 1px solid var(--dms-leaf-edge); border-radius: .35rem; padding: .15rem .6rem; color: var(--dms-ink); }
   .dms-confirm-btns .dms-confirm-yes { background: var(--dms-warn); border-color: var(--dms-warn); color: #fff; font-weight: 700; }
   .dms-partywrap { position: relative; }
-  .dms-party { position: relative; max-height: 17rem; overflow-y: auto; display: grid; gap: .1rem; padding: .1rem .1rem .4rem; scrollbar-width: thin;
+  .dms-party { position: relative; max-height: max(17rem, calc(100vh - 18rem)); overflow-y: auto; display: grid; gap: .1rem; padding: .1rem .1rem .4rem; scrollbar-width: thin;
     -webkit-mask-image: linear-gradient(#000, #000 calc(100% - 1.6rem), transparent); mask-image: linear-gradient(#000, #000 calc(100% - 1.6rem), transparent); }
   .dms-party.dms-at-end { -webkit-mask-image: none; mask-image: none; }
   .dms-party.dms-scrolled { -webkit-mask-image: linear-gradient(transparent, #000 1.4rem, #000 calc(100% - 1.6rem), transparent); mask-image: linear-gradient(transparent, #000 1.4rem, #000 calc(100% - 1.6rem), transparent); }
@@ -5370,7 +5370,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     .dms-stage { padding-top: 3.75rem; }
     .dms-leaves { flex-direction: column; }
     .dms-leaf { flex: none; min-height: 0; }
-    .dms-leaf-l { border-radius: .6rem .6rem 0 0; transform-origin: center bottom; }
+    .dms-leaf-l { border-radius: 0; transform-origin: center bottom; }
     .dms-leaf-m { border-left: 1px solid var(--dms-leaf-edge); border-right: 1px solid var(--dms-leaf-edge); border-top: 3px double var(--dms-hinge); border-bottom: 3px double var(--dms-hinge); }
     .dms-leaf-r { border-radius: 0 0 .6rem .6rem; transform-origin: center top; }
   }
@@ -6920,25 +6920,17 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 }
 @keyframes why-grow { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 
-/* The header's Table tab (rolls plugin): small capitals with a hairline under
-   it and up its right side, where the drawer hangs from. The drawer, log and
-   island are styled in the plugin's table.css, which table.js loads. */
-.tt-host { align-self: stretch; display: flex; }
-.tt-tab {
-  position: relative; display: flex; align-items: center; gap: 6px; padding: 0 12px; min-width: 44px;
-  background: none; border: 0; cursor: pointer;
-  font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--color-text-secondary);
-}
-.tt-tab::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 14px; height: 1px; background: var(--color-border); }
-.tt-tab::before { content: ""; position: absolute; right: 6px; bottom: 14px; width: 1px; height: 14px; background: var(--color-border); }
-.tt-tab:hover { color: var(--color-text-primary); }
-.tt-tab:hover::after, .tt-tab:hover::before { background: var(--color-text-secondary); }
+/* The header's Table button (rolls plugin): a monochrome icon like its
+   neighbours, framed only on hover, with the drawer hanging from it. The
+   drawer, log and island are styled in the plugin's table.css, which
+   table.js loads. */
+.tt-host { display: flex; align-items: center; }
+.tt-tab { position: relative; }
 .tt-tab[aria-expanded="true"] { color: var(--color-accent-link, var(--color-accent)); }
-.tt-tab[aria-expanded="true"]::after, .tt-tab[aria-expanded="true"]::before { background: var(--color-accent); }
-.tt-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; border-radius: 4px; }
+.tt-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .tt-n {
-  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  position: absolute; top: -2px; right: -4px;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
   background: var(--color-accent-fill, var(--color-accent)); color: var(--color-accent-on-fill, #fff);
   font-size: 10.5px; letter-spacing: 0; display: inline-grid; place-items: center;
 }

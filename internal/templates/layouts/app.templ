@@ -931,8 +931,9 @@ templ Topbar() {
 
 			}
 
-			<!-- Dark mode toggle. Site admin is always dark, so it has none. -->
-			if !InSiteAdmin(ctx) {
+			<!-- Dark mode toggle for signed-out visitors; signed-in people find
+			     it in the account menu. Site admin is always dark, so it has none. -->
+			if !InSiteAdmin(ctx) && !IsAuthenticated(ctx) {
 				<button
 					data-theme-toggle
 					class="btn-ghost btn-icon"
@@ -978,8 +979,14 @@ templ Topbar() {
 					data-gm-term={ GMTerm(ctx) }
 					data-css={ AssetURL("/static/plugins/rolls/css/table.css") }
 				>
-					<button type="button" class="tt-tab" data-tt-tab aria-expanded="false" aria-controls="tt-drawer" title="The table: rolls and dice (T)">
-						Table<span class="tt-n" data-tt-count hidden></span>
+					<button type="button" class="btn-ghost btn-icon tt-tab" data-tt-tab aria-expanded="false" aria-controls="tt-drawer" aria-label="The table: rolls and dice" title="The table: rolls and dice (T)">
+						<svg class="w-4 h-4" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+							<!-- A d20 face-on: the hexagon outline and its front triangle. -->
+							<path d="M12 2.5l8.5 4.9v9.2L12 21.5l-8.5-4.9V7.4z"></path>
+							<path d="M12 7l4.6 8H7.4z"></path>
+							<path d="M12 2.5V7M20.5 7.4L16.6 15M3.5 7.4L7.4 15M7.4 15L3.5 16.6M16.6 15l3.9 1.6M7.4 15L12 21.5l4.6-6.5"></path>
+						</svg>
+						<span class="tt-n" data-tt-count hidden></span>
 					</button>
 				</div>
 			}
@@ -1074,6 +1081,13 @@ templ Topbar() {
 							<a href="/account" class="dropdown-item" @click="open = false">
 								<i class="fa-solid fa-gear text-xs w-4"></i> Account Settings
 							</a>
+						}
+						if !InSiteAdmin(ctx) {
+							<!-- theme.js shows the half that names the other look. -->
+							<button type="button" data-theme-toggle class="dropdown-item w-full text-left">
+								<span class="theme-icon-dark inline-flex items-center gap-2"><i class="fa-solid fa-moon text-xs w-4" aria-hidden="true"></i> Dark mode</span>
+								<span class="theme-icon-light hidden inline-flex items-center gap-2"><i class="fa-solid fa-sun text-xs w-4" aria-hidden="true"></i> Light mode</span>
+							</button>
 						}
 						if IsGuest(ctx) {
 							@guestLogOut()

@@ -59,7 +59,7 @@ func TestSaveNote(t *testing.T) {
 		wantKey   string
 	}{
 		{"with a night", 3, night, "plan\nmore", false, "Session 12: DM notes", "Kept with Session 12", "sess-1:2026-10-16"},
-		{"no night is the standing note", 3, nil, "plan", false, "DM Screen notes", "DM Screen notes", ""},
+		{"no night is the standing note", 3, nil, "plan", false, "DM Screen notes", "Not tied to a game night", ""},
 		{"player refused", 1, nil, "plan", true, "", "", ""},
 		{"scribe refused", 2, nil, "plan", true, "", "", ""},
 		{"too long", 3, nil, strings.Repeat("x", maxNoteChars+1), true, "", "", ""},

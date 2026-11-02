@@ -295,7 +295,7 @@ type RequestsView struct {
 // NotesView is the screen's note: one per campaign, shared with the GM side,
 // kept with the next game night.
 type NotesView struct {
-	// Label reads "Kept with <game night>" or "DM Screen notes".
+	// Label reads "Kept with <game night>" or "Not tied to a game night".
 	Label string `json:"label"`
 	// Text is the note as plain lines; empty before anything is saved.
 	Text string `json:"text"`

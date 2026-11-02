@@ -545,7 +545,7 @@
         if (!o) return;
         o.classList.remove('dms-windowed', 'dms-dimmed-off', 'dms-dragging');
         var r = root();
-        if (r) r.style.translate = '';
+        if (r) { r.style.translate = ''; r.style.maxHeight = ''; }
       }
 
       // Puts the root at the stored offset; settle eases it there once.
@@ -554,6 +554,15 @@
         if (st.windowed) r.setAttribute('aria-modal', 'false'); // a refetch restores the template's value
         r.classList.toggle('dms-settle', !!settle && !reduce());
         r.style.translate = st.off.x + 'px ' + st.off.y + 'px';
+        fitHeight(r);
+      }
+
+      // The window scrolls inside itself, so its box must end inside the
+      // viewport wherever it was dragged, or its lower part can't be reached.
+      function fitHeight(r) {
+        var bar = r.querySelector('.dms-titlebar');
+        var room = window.innerHeight - (r.offsetTop + st.off.y) - 16;
+        r.style.maxHeight = Math.max(bar ? bar.offsetHeight : 48, room) + 'px';
       }
 
       // Keeps the title bar whole inside the viewport. offsetLeft/Top ignore
@@ -617,6 +626,9 @@
         stage.innerHTML = html;
         if (window.htmx) window.htmx.process(stage);
         restoreKept();
+        // The fade path never passes through setPlaying, so the party's edge
+        // fade and "N more below" are worked out here as well.
+        refreshParty();
         return root();
       }
 
