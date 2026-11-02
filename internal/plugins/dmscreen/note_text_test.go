@@ -11,8 +11,8 @@ func TestNoteNames(t *testing.T) {
 		night        *NightView
 		label, title string
 	}{
-		{"no night", nil, "DM Screen notes", "DM Screen notes"},
-		{"blank night name", &NightView{Name: "  "}, "DM Screen notes", "DM Screen notes"},
+		{"no night", nil, "Not tied to a game night", "DM Screen notes"},
+		{"blank night name", &NightView{Name: "  "}, "Not tied to a game night", "DM Screen notes"},
 		{"named night", &NightView{Name: "Session 12"}, "Kept with Session 12", "Session 12: DM notes"},
 		{"name is trimmed", &NightView{Name: " Friday game "}, "Kept with Friday game", "Friday game: DM notes"},
 		{"long name is cut", &NightView{Name: strings.Repeat("x", 400)}, "Kept with " + strings.Repeat("x", 150), strings.Repeat("x", 150) + ": DM notes"},
