@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -39,10 +40,14 @@ type aiNightStore interface {
 	List(ctx context.Context, campaignID string) ([]aiNight, error)
 	// Create makes the night and invites every member; it sends no email.
 	Create(ctx context.Context, campaignID string, a aiplug.Actor, in aiNightInput) (string, error)
-	Update(ctx context.Context, id string, in aiNightInput) error
+	// Update saves the night's details. A move rings the bell of everyone
+	// who had answered and asks them to check again, as the owner's own
+	// move does; it sends no email.
+	Update(ctx context.Context, campaignID, id string, in aiNightInput) error
 	SetRecap(ctx context.Context, id string, recapJSON, recapHTML *string) error
-	// Delete moves the night to the restorable trash.
-	Delete(ctx context.Context, id string) error
+	// Delete moves the night to the restorable trash and rings the bell of
+	// everyone who had answered; it sends no email.
+	Delete(ctx context.Context, campaignID, id string) error
 }
 
 // aiNight is a stored game night as the AI sees it.
@@ -61,7 +66,7 @@ func (*AIGameNights) Brief() string {
 	return "game nights (play sessions): the real-world date and time, a one-line summary, played or cancelled, and the recap every member reads"
 }
 func (*AIGameNights) Doc() string {
-	return "A game night (a play session), matched by `name`; when two share a name, `date` picks one. Keys: `date` (the real-world day, YYYY-MM-DD), `time` (24-hour HH:MM), `summary` (one line), `status` (planned, played or cancelled), `rename_to`. The body is the night's recap, which every member of the campaign can read; on update a body replaces the recap and no body keeps it. A new night invites every member, as the Game nights page does, and sends no email. Removing a night moves it to the trash, where the owner can restore it.\n\n```\n---\nkind: game-night\nname: Session 13\ndate: 2026-10-24\ntime: \"19:30\"\nsummary: The siege of Harrowmere\n---\n```\n\n```\n---\nkind: game-night\naction: update\nname: Session 12\nstatus: played\n---\nThe party broke the siege at dawn and Corvin lost his shield.\n```"
+	return "A game night (a play session), matched by `name`; when two share a name, `date` picks one. Keys: `date` (the real-world day, YYYY-MM-DD), `time` (24-hour HH:MM), `summary` (one line), `status` (planned, played or cancelled), `rename_to`. The body is the night's recap, which every member of the campaign can read; on update a body replaces the recap and no body keeps it. A new night invites every member, as the Game nights page does. Moving or removing a night tells everyone who had answered in Chronicle and asks them to check their answer again. No change you ask for sends an email. Removing a night moves it to the trash, where the owner can restore it.\n\n```\n---\nkind: game-night\nname: Session 13\ndate: 2026-10-24\ntime: \"19:30\"\nsummary: The siege of Harrowmere\n---\n```\n\n```\n---\nkind: game-night\naction: update\nname: Session 12\nstatus: played\n---\nThe party broke the siege at dawn and Corvin lost his shield.\n```"
 }
 
 // nightStatus maps the words an AI may write onto the stored statuses.
@@ -251,10 +256,10 @@ func (k *AIGameNights) Apply(ctx context.Context, campaignID string, a aiplug.Ac
 		return apperror.NewBadRequest("it changed while you were reviewing; check it again")
 	}
 	if r.Action == aiplug.ActionDelete {
-		return k.store.Delete(ctx, hit.ID)
+		return k.store.Delete(ctx, campaignID, hit.ID)
 	}
 	if in != (aiNightInput{}) {
-		if err := k.store.Update(ctx, hit.ID, in); err != nil {
+		if err := k.store.Update(ctx, campaignID, hit.ID, in); err != nil {
 			return err
 		}
 	}
@@ -403,15 +408,32 @@ func (g serviceNights) Create(ctx context.Context, campaignID string, a aiplug.A
 	return s.ID, nil
 }
 
-func (g serviceNights) Update(ctx context.Context, id string, in aiNightInput) error {
-	_, err := g.svc.UpdateSession(ctx, id, UpdateSessionInput{
+func (g serviceNights) Update(ctx context.Context, campaignID, id string, in aiNightInput) error {
+	_, responded, err := g.svc.MoveSession(ctx, id, UpdateSessionInput{
 		Name:          setIfGiven(in.Name),
 		Summary:       setIfGiven(in.Summary),
 		ScheduledDate: setIfGiven(in.Date),
 		ScheduledTime: setIfGiven(in.Time),
 		Status:        setIfGiven(in.Status),
 	})
-	return err
+	if err != nil || len(responded) == 0 {
+		return err
+	}
+	name := ""
+	if s, gErr := g.svc.GetSession(ctx, id); gErr == nil && s != nil {
+		name = s.Name
+	}
+	g.ring(ctx, responded, campaignID, NotifSessionMoved, "\""+name+"\" was moved. Please check your answer.",
+		"/campaigns/"+campaignID+"/sessions/"+id)
+	return nil
+}
+
+// ring tells the people who had answered, as the Game nights page does. The
+// change is already saved, so a failed bell is logged, never returned.
+func (g serviceNights) ring(ctx context.Context, userIDs []string, campaignID, ntype, msg, link string) {
+	if err := g.svc.NotifyUsers(ctx, userIDs, campaignID, ntype, msg, link); err != nil {
+		slog.Error("notifying members of a game night the AI changed", slog.String("error", err.Error()))
+	}
 }
 
 // setIfGiven leaves a key the AI did not write as it is; patch.FromPtr would
@@ -427,7 +449,15 @@ func (g serviceNights) SetRecap(ctx context.Context, id string, recapJSON, recap
 	return g.svc.UpdateSessionRecap(ctx, id, recapJSON, recapHTML)
 }
 
-func (g serviceNights) Delete(ctx context.Context, id string) error {
-	_, err := g.svc.DeleteSession(ctx, id)
-	return err
+func (g serviceNights) Delete(ctx context.Context, campaignID, id string) error {
+	name := ""
+	if s, err := g.svc.GetSession(ctx, id); err == nil && s != nil {
+		name = s.Name
+	}
+	responded, err := g.svc.DeleteSession(ctx, id)
+	if err != nil || len(responded) == 0 {
+		return err
+	}
+	g.ring(ctx, responded, campaignID, NotifSessionCancelled, "\""+name+"\" was cancelled.", "/campaigns/"+campaignID+"/game-nights")
+	return nil
 }

@@ -159,6 +159,42 @@ type Lookups struct {
 	// Shops adds a shop's room and storefront to the `stock` answer, as
 	// blocks; nil leaves them out.
 	Shops ShopLooksAPI
+	// Copies adds what a character's remembered copies are (fine, marked,
+	// enchanted, who made them) to the `inventory` and `players` answers;
+	// nil leaves every count plain.
+	Copies CopiesAPI
+}
+
+// CopiesAPI reads the Armory's remembered copies of what a character
+// carries, as a may see them. Implemented in internal/app.
+type CopiesAPI interface {
+	// Remembered says, per item id, what the character's remembered copies
+	// of it are, in words ("1 Fine, Moonlit (Made by Orrin, 3 Frostmoot)").
+	// An item with only plain copies is absent; a character the Armory
+	// doesn't keep, or a may not look at, gives an empty map.
+	Remembered(ctx context.Context, campaignID string, a Actor, characterID string) (map[string]string, error)
+}
+
+// remembered is Copies.Remembered for one character, empty when it can't be
+// read: the count is still worth answering without it.
+func (run *lookupRun) remembered(characterID string) map[string]string {
+	if run.l.Copies == nil {
+		return nil
+	}
+	m, err := run.l.Copies.Remembered(run.ctx, run.campaignID, run.a, characterID)
+	if err != nil {
+		return nil
+	}
+	return m
+}
+
+// copiesNote is an inventory line's remembered copies, " — remembered: …",
+// or "".
+func copiesNote(rem map[string]string, itemID string) string {
+	if w := rem[itemID]; w != "" {
+		return " — remembered: " + w
+	}
+	return ""
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -897,12 +933,16 @@ func (run *lookupRun) links(owner, relType, label string) (LookupAnswer, error) 
 	if err != nil {
 		return ans, err
 	}
+	var rem map[string]string
+	if relType == "Has Item" {
+		rem = run.remembered(e.ID)
+	}
 	var lines []string
 	for _, r := range rels {
 		if r.RelationType != relType {
 			continue
 		}
-		lines = append(lines, "- "+r.TargetEntityName+linkMeta(r.Metadata, relType == "sells"))
+		lines = append(lines, "- "+r.TargetEntityName+linkMeta(r.Metadata, relType == "sells")+copiesNote(rem, r.TargetEntityID))
 	}
 	ans.Chip = fmt.Sprintf("%s · %s · %d", label, e.Name, len(lines))
 	var b strings.Builder
@@ -1342,10 +1382,11 @@ func (run *lookupRun) carried(id string) string {
 		if err != nil {
 			return ""
 		}
+		rem := run.remembered(id)
 		var items []string
 		for _, r := range rels {
 			if r.RelationType == "Has Item" {
-				items = append(items, r.TargetEntityName+linkMeta(r.Metadata, false))
+				items = append(items, r.TargetEntityName+linkMeta(r.Metadata, false)+copiesNote(rem, r.TargetEntityID))
 			}
 		}
 		if len(items) > 12 {
