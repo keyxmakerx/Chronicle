@@ -25,6 +25,13 @@
  * - Either, for a scribe or the owner: Move up and Move down when its list
  *   is kept by hand, and how the rows inside it are ordered when it has any.
  *
+ * Tiles in the app drawer (app_drawer.js) get the same menu, in the same
+ * words: Open, Open in new tab, Pin to sidebar for everyone or Keep in the
+ * drawer only (the owner), Pin for me (a player or scribe), Hide from
+ * players, and Turn off for this campaign, after a second step. A turned-off
+ * tile offers Turn on. An app row in the sidebar also offers the owner Keep
+ * in the drawer only.
+ *
  * The editor's rows have their own buttons, so the menu stays shut while
  * the owner edits.
  */
@@ -61,6 +68,7 @@
       out.push(loc.row.hidden
         ? { id: 'show', label: 'Show to players', icon: 'fa-eye' }
         : { id: 'hide', label: 'Hide from players', icon: 'fa-eye-slash' });
+      if (loc.row.kind === 'app') out.push({ id: 'keep-drawer', label: 'Keep in the drawer only', icon: 'fa-table-cells-large' });
       out.push({ sep: true });
       out.push({ id: 'up', label: 'Move up', icon: 'fa-arrow-up', disabled: !canStep(ed, info.model, info.key, -1) });
       out.push({ id: 'down', label: 'Move down', icon: 'fa-arrow-down', disabled: !canStep(ed, info.model, info.key, 1) });
@@ -70,6 +78,45 @@
     if (info.model) {
       if (out.length) out.push({ sep: true });
       out.push({ id: 'edit', label: 'Edit sidebar', icon: 'fa-pencil' });
+    }
+    return out;
+  }
+
+  /**
+   * The menu's entries for a tile in the app drawer. info: key, href, off
+   * (the app is turned off), onIds and offIds (the addons that switch it,
+   * owner only), model (the owner's arrangement, or null), editor, canPin
+   * (a player or scribe with pins of their own), pinned (the tile's row is
+   * in Pinned), personal (they pinned it) and inSidebar.
+   */
+  function tileItemsFor(info) {
+    var out = [];
+    if (info.off) {
+      if (!info.model) return out;
+      out.push(info.onIds
+        ? { id: 'turn-on', label: 'Turn on', icon: 'fa-power-off' }
+        : { id: 'features', label: 'Turn on in Game & features', icon: 'fa-puzzle-piece' });
+      return out;
+    }
+    out.push({ id: 'open', label: 'Open', icon: 'fa-arrow-right' });
+    out.push({ id: 'open-tab', label: 'Open in new tab', icon: 'fa-arrow-up-right-from-square' });
+    var ed = info.editor;
+    var loc = info.model && ed ? ed.findRow(info.model, info.key) : null;
+    if (loc) {
+      out.push({ sep: true });
+      out.push(loc.sec.id === 'drawer'
+        ? { id: 'pin-side', label: 'Pin to sidebar for everyone', icon: 'fa-thumbtack' }
+        : { id: 'keep-drawer', label: 'Keep in the drawer only', icon: 'fa-table-cells-large' });
+      out.push(loc.row.hidden
+        ? { id: 'show', label: 'Show to players', icon: 'fa-eye' }
+        : { id: 'hide', label: 'Hide from players', icon: 'fa-eye-slash' });
+      if (info.offIds) {
+        out.push({ sep: true });
+        out.push({ id: 'turn-off', label: 'Turn off for this campaign', icon: 'fa-power-off' });
+      }
+    } else if (info.canPin && (info.personal || !info.pinned)) {
+      out.push({ sep: true });
+      out.push({ id: 'pin-me', label: info.personal ? 'Unpin' : 'Pin for me', icon: 'fa-thumbtack' });
     }
     return out;
   }
@@ -162,6 +209,8 @@
   /** The sidebar row under el, or null for anything the menu leaves alone. */
   function rowFrom(el) {
     if (!el || !el.closest || document.body.classList.contains('nav-editing')) return null;
+    var cell = el.closest('#app-drawer .apd-cell');
+    if (cell) return cell.querySelector('[data-apd-tile]');
     var tree = el.closest('#sidebar-entity-tree .sidebar-tree-node');
     if (tree) return tree;
     if (el.closest('#sidebar-drill, #sidebar-nav-edit')) return null;
@@ -204,6 +253,30 @@
       pinBtn: pinBtn,
       editor: ed,
       name: (row.querySelector('.nav-lb') || row).textContent.trim()
+    };
+  }
+
+  function tileInfoFor(tile) {
+    var drawer = tile.closest('#app-drawer');
+    var ed = editor();
+    var owner = !!drawer && drawer.hasAttribute('data-apd-owner');
+    var lb = tile.querySelector('.apd-tlabel');
+    return {
+      tile: true,
+      node: tile,
+      key: tile.getAttribute('data-nav-key'),
+      href: tile.tagName === 'A' ? sitePath(tile.getAttribute('href')) : '',
+      off: tile.hasAttribute('data-apd-off'),
+      onIds: tile.getAttribute('data-apd-on-ids') || '',
+      offIds: tile.getAttribute('data-apd-off-ids') || '',
+      model: owner && ed ? ed.readModel(document.getElementById('sidebar-nav')) : null,
+      editor: ed,
+      canPin: !!drawer && drawer.hasAttribute('data-apd-pin'),
+      pinned: tile.hasAttribute('data-apd-pinned'),
+      personal: tile.hasAttribute('data-apd-mine'),
+      inSidebar: tile.hasAttribute('data-apd-in'),
+      base: drawer ? drawer.getAttribute('data-nav-base') || '' : '',
+      name: lb ? lb.textContent.trim() : ''
     };
   }
 
@@ -304,8 +377,10 @@
 
   function open(row, x, y, opener) {
     close(false);
-    var info = row.classList.contains('sidebar-tree-node') ? treeInfoFor(row) : infoFor(row);
-    return show(info.tree ? treeItemsFor(info) : itemsFor(info), info, row, x, y, opener);
+    var info = row.classList.contains('sidebar-tree-node') ? treeInfoFor(row)
+      : row.hasAttribute('data-apd-tile') ? tileInfoFor(row) : infoFor(row);
+    var items = info.tree ? treeItemsFor(info) : info.tile ? tileItemsFor(info) : itemsFor(info);
+    return show(items, info, row, x, y, opener);
   }
 
   /** Draws items as the open menu. A submenu (Move to folder, the delete
@@ -340,6 +415,9 @@
 
   function run(id, info, it) {
     if (info.tree) { runTree(id, info, it); return; }
+    var drawer = window.Chronicle && Chronicle.appDrawer;
+    if (info.tile && drawer && drawer.act(id, info)) return;
+    if (id === 'keep-drawer' && drawer) { drawer.act(id, info); return; }
     var ed = info.editor;
     var nm = info.name;
     switch (id) {
@@ -407,7 +485,15 @@
   function submenu(id, info) {
     if (id === 'move') return moveItemsFor(folderChoices(info), info.folder);
     if (id === 'order') return orderItemsFor(info.order);
-    if (id === 'back') return treeItemsFor(info);
+    if (id === 'back') return info.tile ? tileItemsFor(info) : treeItemsFor(info);
+    if (id === 'turn-off') {
+      return [
+        { id: 'back', label: 'Back', icon: 'fa-arrow-left' },
+        { sep: true },
+        { id: 'turn-off-yes', label: 'Turn off ' + info.name, icon: 'fa-power-off', danger: true },
+        { id: 'note', label: 'Its pages stay. Turn it on again here.', icon: '', disabled: true }
+      ];
+    }
     if (id === 'delete') {
       return [
         { id: 'back', label: 'Back', icon: 'fa-arrow-left' },
@@ -532,7 +618,7 @@
     if (justLongPressed) { justLongPressed = false; e.preventDefault(); e.stopPropagation(); return; }
     var item = M && t.closest('.rowmenu-item');
     if (item && M.el.contains(item)) { e.preventDefault(); choose(parseInt(item.getAttribute('data-idx'), 10)); return; }
-    var more = t.closest('#sidebar [data-nav-more], #sidebar [data-tree-more]');
+    var more = t.closest('#sidebar [data-nav-more], #sidebar [data-tree-more], #app-drawer [data-tile-more]');
     if (more) {
       e.preventDefault();
       e.stopPropagation();
@@ -546,7 +632,7 @@
   }, true);
 
   document.addEventListener('pointerdown', function (e) {
-    if (M && e.target && !M.el.contains(e.target) && !(e.target.closest && e.target.closest('[data-nav-more], [data-tree-more]'))) close(false);
+    if (M && e.target && !M.el.contains(e.target) && !(e.target.closest && e.target.closest('[data-nav-more], [data-tree-more], [data-tile-more]'))) close(false);
   }, true);
 
   // A long press on a touch screen opens the menu where the finger is; the
@@ -607,5 +693,5 @@
   document.addEventListener('htmx:beforeSwap', function () { close(false); });
 
   window.Chronicle = window.Chronicle || {};
-  window.Chronicle.navRowMenu = { itemsFor: itemsFor, treeItemsFor: treeItemsFor, moveItemsFor: moveItemsFor, orderItemsFor: orderItemsFor, sitePath: sitePath };
+  window.Chronicle.navRowMenu = { itemsFor: itemsFor, treeItemsFor: treeItemsFor, tileItemsFor: tileItemsFor, isOpen: function () { return !!M; }, moveItemsFor: moveItemsFor, orderItemsFor: orderItemsFor, sitePath: sitePath };
 })();

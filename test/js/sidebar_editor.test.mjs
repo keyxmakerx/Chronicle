@@ -194,3 +194,50 @@ test('the editor starts only from a whole arrangement', () => {
   assert.deepEqual(plain(m.sections[0].items), []);
   assert.deepEqual(plain(m.off), []);
 });
+
+// --- Keeping apps in the drawer only -------------------------------------------
+
+function drawerDraft() {
+  return {
+    sections: [
+      { id: 'pinned', kind: 'pinned', items: [{ key: 'app:notes', kind: 'app' }] },
+      { id: 'apps', kind: 'apps', items: [{ key: 'app:maps', kind: 'app' }, { key: 'app:armory', kind: 'app', hidden: true }] },
+      { id: 'categories', kind: 'categories', items: [{ key: 'cat:1', kind: 'category' }] },
+    ],
+    drawer: [{ key: 'app:crafting', kind: 'app' }],
+  };
+}
+
+test('keepInDrawer takes an app out of the sidebar, and only an app', () => {
+  const ed = load();
+  const d = drawerDraft();
+  assert.equal(ed.keepInDrawer(d, 'app:maps'), true);
+  assert.deepEqual(d.sections[1].items.map((r) => r.key), ['app:armory']);
+  assert.deepEqual(d.drawer.map((r) => r.key), ['app:crafting', 'app:maps']);
+  assert.equal(ed.keepInDrawer(d, 'cat:1'), false);
+  assert.equal(ed.keepInDrawer(d, 'app:crafting'), false, 'already in the drawer');
+});
+
+test('placeBefore puts a drawer app where it was dropped, or at the end', () => {
+  const ed = load();
+  let d = drawerDraft();
+  assert.equal(ed.placeBefore(d, 'app:crafting', 'apps', 'app:armory'), true);
+  assert.deepEqual(d.sections[1].items.map((r) => r.key), ['app:maps', 'app:crafting', 'app:armory']);
+  assert.equal(d.drawer.length, 0);
+  d = drawerDraft();
+  assert.equal(ed.placeBefore(d, 'app:crafting', 'apps', null), true);
+  assert.deepEqual(d.sections[1].items.map((r) => r.key), ['app:maps', 'app:armory', 'app:crafting']);
+  assert.equal(ed.placeBefore(drawerDraft(), 'app:crafting', 'categories', null), false, 'Categories holds no apps');
+});
+
+test('a drawer app is saved in the drawer, so saving the editor keeps it there', () => {
+  const ed = load();
+  const items = JSON.parse(JSON.stringify(ed.itemsFromDraft(drawerDraft())));
+  assert.deepEqual(items.filter((i) => i.section === 'drawer'), [{ type: 'app', slug: 'crafting', visible: true, section: 'drawer' }]);
+});
+
+test('findRow finds a drawer app, so hiding it from players works the same', () => {
+  const ed = load();
+  const loc = ed.findRow(drawerDraft(), 'app:crafting');
+  assert.equal(loc.sec.id, 'drawer');
+});

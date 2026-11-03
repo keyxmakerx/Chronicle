@@ -18,6 +18,9 @@ type NavEditView struct {
 	Sections []NavEditSection `json:"sections"`
 	// Off lists the apps turned off in Extensions, for the editor's tray.
 	Off []NavEditRow `json:"off"`
+	// Drawer lists the apps kept in the app drawer only. The editor writes
+	// them back unchanged; the drawer's menus move them in and out.
+	Drawer []NavEditRow `json:"drawer"`
 }
 
 // NavEditSection is one section of the arrangement. Kind is "pinned",

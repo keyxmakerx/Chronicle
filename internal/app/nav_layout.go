@@ -169,9 +169,10 @@ func navTypeID(key string) int {
 // navInputs is what one campaign's sidebar is built from: its apps, its
 // categories and the owner's arrangement of them.
 type navInputs struct {
-	apps   []campaigns.NavApp
-	cats   []campaigns.NavCategory
-	layout campaigns.NavLayout
+	apps    []campaigns.NavApp
+	cats    []campaigns.NavCategory
+	layout  campaigns.NavLayout
+	enabled map[string]bool // the campaign's addons that are on, by slug
 }
 
 // navInputsFor resolves the apps and categories and normalizes the owner's
@@ -181,9 +182,10 @@ func navInputsFor(cc *campaigns.CampaignContext, types []layouts.SidebarEntityTy
 	apps := navAppsFor(cc.Campaign.ID, enabled, sys)
 	cats := navCategoriesFor(cc.Campaign.ID, types, counts)
 	return navInputs{
-		apps:   apps,
-		cats:   cats,
-		layout: campaigns.NormalizeNav(cc.Campaign.ParseSidebarConfig().Items, apps, cats),
+		apps:    apps,
+		cats:    cats,
+		layout:  campaigns.NormalizeNav(cc.Campaign.ParseSidebarConfig().Items, apps, cats),
+		enabled: enabled,
 	}
 }
 
@@ -215,7 +217,15 @@ func buildNavEdit(in navInputs) *layouts.NavEditView {
 		catByKey[campaigns.NavCategoryKey(c.TypeID)] = c
 	}
 
-	out := &layouts.NavEditView{Sections: []layouts.NavEditSection{}, Off: []layouts.NavEditRow{}}
+	out := &layouts.NavEditView{Sections: []layouts.NavEditSection{}, Off: []layouts.NavEditRow{}, Drawer: []layouts.NavEditRow{}}
+	for _, it := range in.layout.Drawer {
+		_, ref, _ := campaigns.NavKeyKind(it.Key)
+		if a, found := appBySlug[ref]; found {
+			out.Drawer = append(out.Drawer, layouts.NavEditRow{
+				Key: it.Key, Kind: campaigns.NavRowApp, Label: a.Label, Icon: a.Icon, Hidden: it.Hidden, Off: !a.Enabled,
+			})
+		}
+	}
 	for _, s := range in.layout.Sections {
 		sec := layouts.NavEditSection{ID: s.ID, Kind: s.ID, Label: s.Label, Items: []layouts.NavEditRow{}}
 		switch s.ID {
@@ -335,5 +345,120 @@ func (s *navSectionsSource) NavSectionsFor(ctx context.Context, cc *campaigns.Ca
 	enabled, sys := navAddonsFrom(list)
 	in := navInputsFor(cc, sidebarTypesFrom(etypes), nil, enabled, sys)
 	viewer := campaigns.NavViewer{Access: navAccessFor(cc)}
-	return campaigns.ViewNav(in.layout, in.apps, in.cats, viewer), nil
+	secs := campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)
+	// An app kept in the drawer only is in no section, but a member may still
+	// pin it from the drawer, so the pin check counts it too.
+	return append(secs, campaigns.NavSection{
+		ID: campaigns.NavSectionDrawer, Kind: campaigns.NavSectionDrawer,
+		Rows: campaigns.NavDrawerRows(in.layout, in.apps, viewer),
+	}), nil
+}
+
+// navDrawerGroups are the app drawer's groups, in order. "make" is for the
+// apps only Directors see; a group with no apps is left out.
+var navDrawerGroups = []struct {
+	id, label string
+	dm        bool
+}{
+	{"table", "At the table", false},
+	{"world", "Your world", false},
+	{"goods", "Goods and making", false},
+	{"make", "Make your own", true},
+}
+
+// buildNavDrawer lays the viewer's apps out as the drawer's tiles. secs is
+// the viewer's sidebar (ViewNav, their pins applied) and drawer the apps kept
+// in the drawer only that they may open (NavDrawerRows): together they are
+// every app the viewer may open, so the drawer offers nothing more. The owner
+// (owner true, not viewing as a player) also gets the apps turned off and
+// the addon ids that switch each app, from addonIDs (slug to id).
+func buildNavDrawer(in navInputs, secs []campaigns.NavSection, drawer []campaigns.NavRow, owner bool, addonIDs map[string]int) *layouts.NavDrawerView {
+	type place struct {
+		row       campaigns.NavRow
+		inSidebar bool
+		pinned    bool
+	}
+	seen := map[string]place{}
+	for _, s := range secs {
+		for _, r := range s.Rows {
+			if r.Kind == campaigns.NavRowApp {
+				seen[r.Key] = place{row: r, inSidebar: true, pinned: s.ID == campaigns.NavSectionPinned}
+			}
+		}
+	}
+	for _, r := range drawer {
+		if _, ok := seen[r.Key]; !ok {
+			seen[r.Key] = place{row: r}
+		}
+	}
+	appBySlug := make(map[string]campaigns.NavApp, len(in.apps))
+	for _, a := range in.apps {
+		appBySlug[a.Slug] = a
+	}
+
+	out := &layouts.NavDrawerView{}
+	byGroup := map[string][]layouts.NavDrawerTile{}
+	for _, d := range navAppCatalog {
+		app := appBySlug[d.slug]
+		key := campaigns.NavAppKey(d.slug)
+		if p, ok := seen[key]; ok {
+			t := layouts.NavDrawerTile{
+				Key: key, Label: p.row.Label, Icon: p.row.Icon, URL: p.row.URL, Line: d.line,
+				InSidebar: p.inSidebar, Pinned: p.pinned, Personal: p.row.Personal, Hidden: p.row.Hidden,
+			}
+			if owner && !d.system {
+				for _, slug := range d.addons {
+					if id, ok := addonIDs[slug]; ok && in.enabled[slug] {
+						t.TurnOff = append(t.TurnOff, id)
+					}
+				}
+			}
+			byGroup[d.group] = append(byGroup[d.group], t)
+			continue
+		}
+		if owner && !app.Enabled {
+			t := layouts.NavDrawerTile{Key: key, Label: app.Label, Icon: app.Icon, Line: d.line}
+			if !d.system {
+				t.TurnOn = navTurnOn(in, d, addonIDs)
+			}
+			out.Off = append(out.Off, t)
+		}
+	}
+	for _, g := range navDrawerGroups {
+		if tiles := byGroup[g.id]; len(tiles) > 0 {
+			out.Groups = append(out.Groups, layouts.NavDrawerGroup{ID: g.id, Label: g.label, DMOnly: g.dm, Tiles: tiles})
+		}
+	}
+	return out
+}
+
+// navTurnOn is the addons that turn an app on: its first addon, and every
+// one it needs that is off. Nil when one of them is not installed on this
+// site, so the drawer sends the owner to Game & features instead.
+func navTurnOn(in navInputs, d navAppDef, addonIDs map[string]int) []int {
+	if len(d.addons) == 0 {
+		return nil
+	}
+	var ids []int
+	for _, slug := range append([]string{d.addons[0]}, d.needs...) {
+		if in.enabled[slug] {
+			continue
+		}
+		id, ok := addonIDs[slug]
+		if !ok {
+			return nil
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// navAddonIDsFrom maps each active addon's slug to its id, for the drawer's
+// Turn on and Turn off.
+func navAddonIDsFrom(list []addons.CampaignAddon) map[string]int {
+	out := make(map[string]int, len(list))
+	for _, ca := range list {
+		out[ca.AddonSlug] = ca.AddonID
+	}
+	return out
 }
