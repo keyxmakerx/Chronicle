@@ -47,7 +47,7 @@ func TestShelfDayAdapter(t *testing.T) {
 	if d, err := (&shelfDayAdapter{}).ShelfDay(ctx, "camp", 1, "u1"); d != nil || err != nil {
 		t.Errorf("no calendar plugin: %v %v", d, err)
 	}
-	none := &fakeCraftingCalendar{err: apperror.NewNotFound("calendar")}
+	none := &fakeCraftingCalendar{err: apperror.NewNotFound("default calendar")}
 	if d, err := (&shelfDayAdapter{cal: none}).ShelfDay(ctx, "camp", 1, "u1"); d != nil || err != nil {
 		t.Errorf("no calendar: %v %v", d, err)
 	}
@@ -84,5 +84,5 @@ func (f *viewerGatedCalendar) GetDefaultCalendarForViewer(_ context.Context, _ s
 	if v.IsSystem() || f.visible {
 		return f.cal, nil
 	}
-	return nil, apperror.NewNotFound("calendar")
+	return nil, apperror.NewNotFound("default calendar")
 }
