@@ -44,11 +44,21 @@ func validField(s string) bool {
 		return false
 	}
 	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_') {
+		if !isKeyRune(r) {
 			return false
 		}
 	}
 	return true
+}
+
+// isKeyRune is a lower-case letter, digit or underscore.
+func isKeyRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_'
+}
+
+// allowedControl is a control character a multi-line note may hold.
+func allowedControl(r rune, multiline bool) bool {
+	return multiline && (r == '\n' || r == '\t')
 }
 
 // validSource is a preset name such as "drawsteel:revenant".
@@ -57,7 +67,7 @@ func validSource(s string) bool {
 		return false
 	}
 	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == ':' || r == '.') {
+		if !isKeyRune(r) && r != '-' && r != ':' && r != '.' {
 			return false
 		}
 	}
@@ -72,7 +82,7 @@ func plainText(s string, max int, multiline bool) (string, bool) {
 		return "", false
 	}
 	for _, r := range s {
-		if r < 0x20 && !(multiline && (r == '\n' || r == '\t')) || r == 0x7f {
+		if r == 0x7f || (r < 0x20 && !allowedControl(r, multiline)) {
 			return "", false
 		}
 	}
