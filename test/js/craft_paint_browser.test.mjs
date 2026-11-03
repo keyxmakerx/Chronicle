@@ -80,7 +80,11 @@ test('every level paints the lit forge, and the richer levels add light', { skip
     await page.evaluate((l) => { const el = document.querySelector('[data-widget="craft_paint"]'); el._paint.setLevel(l); if (l !== 'still') el._paint.play(); }, level);
     await frames(page, 20);
     const s = await state(page);
-    seen[level] = { level: s.level, light: await brightness(page) };
+    // The fire flickers and each blow flashes, so one frame can be brighter than the next level's; an average over
+    // several frames compares the levels, not the moment.
+    let sum = 0;
+    for (let i = 0; i < 8; i++) { sum += await brightness(page); await frames(page, 4); }
+    seen[level] = { level: s.level, light: sum / 8 };
   }
   assert.equal(seen.basic.level, 'basic');
   assert.equal(seen.canvas.level, 'canvas');
