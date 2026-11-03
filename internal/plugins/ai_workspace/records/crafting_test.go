@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -25,6 +26,7 @@ type fakeCrafting struct {
 	tags    map[string][]string
 	drops   map[string]CraftDropsInput
 	dropped []string
+	benches []CraftBench
 }
 
 func (f *fakeCrafting) Read(_ context.Context, _ string, a Actor) (*Crafting, error) {
@@ -70,6 +72,51 @@ func (f *fakeCrafting) DeleteDrops(_ context.Context, _, pageID string, _ Actor)
 	return nil
 }
 
+// RulesChange counts a rule sent back exactly as stored as kept and any
+// other as new, as the service's MergeAIRules does.
+func (f *fakeCrafting) RulesChange(_ context.Context, _, recipeID string, _ Actor, raw json.RawMessage) (CraftRulesChange, error) {
+	if f.refuse != "" {
+		return CraftRulesChange{}, apperror.NewBadRequest(f.refuse)
+	}
+	var stored []string
+	for _, r := range f.c.Recipes {
+		if r.ID == recipeID {
+			stored = append(stored, r.Rules...)
+		}
+	}
+	var list []json.RawMessage
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return CraftRulesChange{}, apperror.NewBadRequest("rules are a list")
+	}
+	var rc CraftRulesChange
+	for _, item := range list {
+		var v any
+		_ = json.Unmarshal(item, &v)
+		b, _ := json.Marshal(v)
+		found := false
+		for i, s := range stored {
+			var sv any
+			_ = json.Unmarshal([]byte(s), &sv)
+			if sb, _ := json.Marshal(sv); string(sb) == string(b) {
+				stored = append(stored[:i], stored[i+1:]...)
+				found = true
+				break
+			}
+		}
+		if found {
+			rc.Kept++
+		} else {
+			rc.New++
+		}
+	}
+	rc.Gone = len(stored)
+	return rc, nil
+}
+func (f *fakeCrafting) SaveBench(_ context.Context, _ string, _ Actor, in CraftBench) error {
+	f.benches = append(f.benches, in)
+	return nil
+}
+
 func newFakeCrafting() *fakeCrafting {
 	return &fakeCrafting{
 		c: Crafting{
@@ -89,14 +136,17 @@ func newFakeCrafting() *fakeCrafting {
 				{ID: "twin2", Name: "Twin blade"},
 			},
 			Characters: []CraftNamed{{ID: "mira", Name: "Mira"}, {ID: "tobin", Name: "Tobin"}},
-			Recipes: []CraftRecipe{{ID: "r1", Name: "Healing potion", Draft: true, Method: "steady", Steps: 5, Rules: 2,
+			Recipes: []CraftRecipe{{ID: "r1", Name: "Healing potion", Draft: true, Method: "steady", Steps: 5, Rules: []string{
+				`{"when":[{"kind":"moon","moon":"The Lantern","phase":"full"}],"then":{"kind":"edge"},"players":"book"}`,
+				`{"when":[{"kind":"weather","weather":"Storm"}],"then":{"kind":"cannot"},"players":"secret","draft":true}`},
 				Materials: []CraftMaterial{{ItemID: "moss", Qty: 2}, {Tag: "liquid", Qty: 1}}, ResultID: "potion", ResultQty: 1,
 				Goal: 30, Stat: "reason", Cost: 25, Currency: "gp", Who: "all"}},
 			Drops: []CraftDrops{{PageID: "troll", Page: "Troll", Kind: "Creature", Version: 3, Lines: []CraftDropLine{
 				{ItemID: "tooth", Qty: 2}, {ItemID: "hide", Harvest: true, Stat: "might", Yields: [3]int{1, 2, 4}}}}},
-			Tray:     []CraftSpoil{{Source: "Troll", Copy: 1, Copies: 2, Origin: "Ramparts fight", Lines: []string{"2 × Troll tooth", "Troll hide, to harvest"}}},
-			Projects: []CraftProject{{Hero: "Mira", Name: "Healing potion", Points: 12, Goal: 30, Rolls: 1, Status: "active"}},
-			Benches:  []CraftBench{{Name: "Mira's kitchen", Kind: "Apothecary bench"}},
+			Tray:       []CraftSpoil{{Source: "Troll", Copy: 1, Copies: 2, Origin: "Ramparts fight", Lines: []string{"2 × Troll tooth", "Troll hide, to harvest"}}},
+			Projects:   []CraftProject{{Hero: "Mira", Name: "Healing potion", Points: 12, Goal: 30, Rolls: 1, Status: "active"}},
+			Benches:    []CraftBench{{ID: "b1", Name: "Mira's kitchen", Kind: "apothecary", KindLabel: "Apothecary bench"}},
+			BenchKinds: []CraftChoice{{"apothecary", "Apothecary bench"}},
 		},
 		book:  []CraftBookPage{{Name: "Healing potion", Kind: "Steady brew", Makes: "Healing potion", MakesQty: 1, Needs: []string{"2 Bloodmoss", "1 any liquid"}, Goal: 30, Roll: "2d10 + Reason"}},
 		tags:  map[string][]string{},
@@ -371,10 +421,14 @@ func TestCraftingBlocksGoBackUnchanged(t *testing.T) {
 
 	rec := blockRecord(t, recipeBlock(c, c.Recipes[0]), ActionUpdate)
 	p := RecipeKind{Svc: f}.Plan(ctx, camp, owner, rec)
-	if p.Error != "" || p.Summary != "now makes 1 × Healing potion from 2 Bloodmoss and 1 any liquid; goal 30; 2d10 + Reason; a steady brew; costs 25 gp; must be learned (known by Mira)" {
+	if p.Error != "" || p.Summary != "now makes 1 × Healing potion from 2 Bloodmoss and 1 any liquid; goal 30; 2d10 + Reason; a steady brew; costs 25 gp; must be learned (known by Mira); 2 rules kept unchanged" {
 		t.Fatalf("the recipe block read back as %+v", p)
 	}
 	in, _, _ := RecipeKind{Svc: f}.input(c, rec, &c.Recipes[0])
+	if in.Rules == nil {
+		t.Fatal("the block's rules were not read back")
+	}
+	in.Rules = nil
 	want := CraftRecipeInput{ID: "r1", Name: "Healing potion", Method: "steady", Materials: c.Recipes[0].Materials, ResultID: "potion", ResultQty: 1,
 		Goal: 30, Stat: "reason", Prerequisite: "A healer's kit", Source: "Old notes: \"brew\"", Cost: 25, Currency: "gp", Who: "learned", Known: []string{"mira"}}
 	if !reflect.DeepEqual(in, want) {
@@ -457,9 +511,11 @@ func TestLookup_Crafting(t *testing.T) {
 		lookup("crafting", map[string]any{"name": "Troll"}),
 		lookup("crafting", map[string]any{"part": "stations"}),
 		lookup("crafting", map[string]any{"part": "recipes", "name": "Elixir"}),
+		lookup("crafting", map[string]any{"part": "benches"}),
+		lookup("benches", map[string]any{"name": "Nowhere"}),
 	})
 	wants := []string{
-		"Healing potion: a draft, which players don't see until a Director approves it in Crafting; 2 rules in Crafting's rules editor, which an update keeps.\n\n```\n---\nkind: recipe\nname: \"Healing potion\"",
+		"Healing potion: a draft, which players don't see until a Director approves it in Crafting; 1 rule is still waiting for a Director's approval in Crafting; an update without `rules` keeps the rules; one with `rules` replaces the list, keeping each rule sent back unchanged.\n\n```\n---\nkind: recipe\nname: \"Healing potion\"",
 		"kind: material\nitem: \"Troll tooth\"\nkinds: [bone, remnant part]",
 		"kind: drops\npage: \"Troll\"\nlines:\n  - \"2 Troll tooth\"\n  - \"harvest Troll hide with Might: 1/2/4\"",
 		"page: \"Flametongue\"",
@@ -470,8 +526,20 @@ func TestLookup_Crafting(t *testing.T) {
 			t.Fatalf("part %d: %+v\nwant %q", i, parts[i], want)
 		}
 	}
-	if !strings.Contains(parts[5].Error, "the parts are recipes, materials, drops, looks") || !strings.Contains(parts[6].Error, "no recipe called") {
+	// The recipe block carries its rules as the editor shows them, so the
+	// AI can send them back.
+	if !strings.Contains(parts[0].Text, "rules:\n  - {\"when\":[{\"kind\":\"moon\",\"moon\":\"The Lantern\",\"phase\":\"full\"}],\"then\":{\"kind\":\"edge\"},\"players\":\"book\"}\n") {
+		t.Fatalf("the recipe block misses its rules:\n%s", parts[0].Text)
+	}
+	if !strings.Contains(parts[5].Error, "the parts are recipes, materials, drops, benches, looks") || !strings.Contains(parts[6].Error, "no recipe called") {
 		t.Fatalf("refusals: %q, %q", parts[5].Error, parts[6].Error)
+	}
+	if parts[7].Error != "" || !strings.Contains(parts[7].Text, "---\nkind: bench\nname: \"Mira's kitchen\"\nkind_of_bench: apothecary\n---\n") ||
+		!strings.Contains(parts[7].Text, "Kinds of bench:") || parts[7].Chip != "Benches · 1 bench" {
+		t.Fatalf("benches: %+v", parts[7])
+	}
+	if !strings.Contains(parts[8].Error, "no bench called") {
+		t.Fatalf("a missing bench: %+v", parts[8])
 	}
 
 	// What players see: the book and the looks they may see, and no part.
@@ -500,7 +568,7 @@ func TestCraftingDocExamplesPlan(t *testing.T) {
 	f.c.Items = append(f.c.Items, CraftItem{ID: "tonic", Name: "Troll-blood tonic"}, CraftItem{ID: "ash", Name: "Remnant ash"})
 	f.c.Drops = nil
 	pages := craftPages()
-	for _, k := range []Kind{RecipeKind{Svc: f}, MaterialKind{Svc: f}, DropsKind{Svc: f, Entities: pages}} {
+	for _, k := range []Kind{RecipeKind{Svc: f}, MaterialKind{Svc: f}, DropsKind{Svc: f, Entities: pages}, BenchKind{Svc: f}} {
 		doc := k.Doc()
 		for _, part := range strings.Split(doc, "```\n")[1:] {
 			if !strings.HasPrefix(part, "---\n") {

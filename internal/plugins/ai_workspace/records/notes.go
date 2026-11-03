@@ -2,8 +2,10 @@ package records
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
@@ -233,7 +235,7 @@ func (k NoteKind) Apply(ctx context.Context, campaignID string, a Actor, r Recor
 	if err != nil {
 		return err
 	}
-	j, h, err := entry(r.Body, r.Links)
+	j, h, err := entry(r.Body, linksOf(r))
 	if err != nil {
 		return err
 	}
@@ -320,3 +322,43 @@ func (k NoteKind) applyShared(ctx context.Context, campaignID string, a Actor, r
 // Export is empty: the Notes category of the export already lists the
 // operator's own notes.
 func (NoteKind) Export(context.Context, string, Actor) (string, error) { return "", nil }
+
+// bodyText is the engine's aiplug.Text: bodies rendered with the paste's
+// @[Page] links, GM-only markers refused.
+type bodyText struct{ links *importer.PageLinks }
+
+// BodyText is the Text a record applied from a paste carries; links may be
+// nil, which leaves @[Page] mentions as written.
+func BodyText(links *importer.PageLinks) aiplug.Text { return bodyText{links: links} }
+
+func (t bodyText) HTML(body string) (*string, error) { return bodyHTML(body, t.links) }
+
+// bodyHTML renders markdown as sanitized HTML with the paste's links; nil
+// for an empty body. A GM-only marker is refused, never stored.
+func bodyHTML(body string, links *importer.PageLinks) (*string, error) {
+	if strings.TrimSpace(body) == "" {
+		return nil, nil
+	}
+	var opts []importer.RenderOption
+	if links != nil {
+		opts = append(opts, importer.WithPageLinks(links))
+	}
+	h, err := importer.MarkdownToHTML(body, opts...)
+	if errors.Is(err, importer.ErrSecretNotInText) {
+		return nil, apperror.NewBadRequest(importer.SecretNotInTextReason)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &h, nil
+}
+
+func (t bodyText) Entry(body string) (*string, *string, error) { return entry(body, t.links) }
+
+// linksOf is the paste's link resolver behind a record's Text, if any.
+func linksOf(r Record) *importer.PageLinks {
+	if t, ok := r.Text.(bodyText); ok {
+		return t.links
+	}
+	return nil
+}

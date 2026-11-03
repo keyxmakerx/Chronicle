@@ -188,3 +188,10 @@ func validateLog(in LogInput) (LogInput, error) {
 	in.Note = note
 	return in, nil
 }
+
+// CheckKind says whether a kind's settings would be accepted, without
+// saving anything, so a review can refuse a bad one before commit.
+func CheckKind(in KindInput) error {
+	_, err := validateKind(in)
+	return err
+}

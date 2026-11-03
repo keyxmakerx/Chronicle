@@ -106,7 +106,7 @@ window.CraftingProjects = (function () {
       if (busy) return;
       switch (act) {
         case 'respite':
-          then(app.api('POST', '/respites'), function (got) { logged++; return 'Respite logged. ' + plural(got.projects, 'project', 'projects') + ' got a roll.'; });
+          then(app.api('POST', '/respites'), function (got) { logged++; return 'Respite logged. ' + plural(got.projects, 'project', 'projects') + ' got a roll.' + ((got.warnings || []).length ? ' ' + got.warnings.join(' ') : ''); });
           break;
         case 'menu': open = isOpen('menu', id) ? null : {kind: 'menu', id: id}; render(); focus('.crp-strip button'); break;
         case 'close': open = null; render(); focus('[data-act="menu"][data-id="' + id + '"]'); break;

@@ -359,6 +359,22 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		cg.GET("/encounters/:encounterID", enc.Get, RequirePermission(PermRead))
 	}
 
+	// Crafting: a hero's crafting, the spoils tray and the end of a fight,
+	// as a named campaign member. Gated by the crafting addon (slug supplied
+	// by the wiring); crafting's own rules apply to each call — see
+	// CraftingAPIService.
+	if cr := api.crafting; cr != nil {
+		craft := addonRoutes{cg, RequireAddonAPI(addonChecker, cr.addonSlug)}
+		craft.GET("/crafting/characters/:eid", cr.Character, RequirePermission(PermRead))
+		craft.POST("/crafting/characters/:eid/projects", cr.StartProject, RequirePermission(PermWrite))
+		craft.POST("/crafting/projects/:pid/roll", cr.RollProject, RequirePermission(PermWrite))
+		craft.DELETE("/crafting/projects/:pid", cr.CancelProject, RequirePermission(PermWrite))
+		craft.GET("/crafting/spoils", cr.Spoils, RequirePermission(PermRead))
+		craft.POST("/crafting/spoil-lines/:lid/take", cr.TakeSpoil, RequirePermission(PermWrite))
+		craft.POST("/crafting/spoil-lines/:lid/study", cr.StudySpoil, RequirePermission(PermWrite))
+		craft.POST("/crafting/fights", cr.FightEnded, RequirePermission(PermWrite))
+	}
+
 	// Stashes: move items and money as a named campaign member. The group is
 	// gated by the stash feature's addon (slug supplied by the wiring), and the
 	// acting member's own rules apply to each call — see StashAPIService.

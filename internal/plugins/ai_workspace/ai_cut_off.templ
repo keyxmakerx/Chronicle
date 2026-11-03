@@ -1,0 +1,48 @@
+package ai_workspace
+
+import "fmt"
+
+// aiCutOffPanel is the campaign's brake, the last row of Settings: one
+// press stops every AI key here until the owner turns it back on. It asks
+// once before stopping.
+templ aiCutOffPanel(v ConnectView) {
+	<div class="aic-row" x-data="{ sure: false }">
+		<span class="aic-row-k">
+			<b>If something looks wrong</b>
+			if v.CutOff != nil {
+				<span class="aic-hint">Stopped { agoText(v.Now, *v.CutOff) }. Every key in this campaign is refused until you turn it back on.</span>
+			} else {
+				<span class="aic-hint">Refuses every AI key in the campaign, yours and players', from its next call. Nothing already answered changes, and nothing waiting is lost.</span>
+			}
+		</span>
+		if v.CutOff != nil {
+			<button
+				type="button"
+				class="btn-secondary"
+				hx-post={ fmt.Sprintf("/campaigns/%s/ai/cut-off", v.CampaignID) }
+				hx-vals={ `{"on":"0"}` }
+				hx-target="#ai-connect"
+				hx-swap="outerHTML"
+				hx-disabled-elt="this"
+			>Turn AI back on</button>
+		} else {
+			<button type="button" class="btn-secondary aic-bad" x-show="!sure" @click="sure = true">
+				<i class="fa-solid fa-circle-stop" aria-hidden="true"></i>
+				Stop all AI here
+			</button>
+			<div class="aic-ask aic-row-drawer" x-show="sure" x-cloak>
+				<p>Stop every AI in this campaign until you turn it back on?</p>
+				<button type="button" class="btn-secondary" @click="sure = false">Keep it on</button>
+				<button
+					type="button"
+					class="btn-danger"
+					hx-post={ fmt.Sprintf("/campaigns/%s/ai/cut-off", v.CampaignID) }
+					hx-vals={ `{"on":"1"}` }
+					hx-target="#ai-connect"
+					hx-swap="outerHTML"
+					hx-disabled-elt="this"
+				>Stop all AI</button>
+			</div>
+		}
+	</div>
+}

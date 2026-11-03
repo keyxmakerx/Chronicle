@@ -23,7 +23,7 @@ window.CraftBenchEditor = (function () {
   var SOUND_LABEL = {purr: 'Purr', clink: 'Clink', perfect: 'Chime', thunder: 'Thunder', scratch: 'Quill scratch', seal: 'Wax seal', dice: 'Dice', fizz: 'Fizz', pump: 'Whoosh', drop: 'Plop'};
   var I_LOCK = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>',
       I_X = '<svg viewBox="0 0 16 16" width="14" height="14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
-  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function esc(s) { return Chronicle.escapeHtml(s); }
   function opt(v,l,on){return '<option value="'+esc(v)+'"'+(on?' selected':'')+'>'+esc(l)+'</option>';}
 
   // auto: the Director hasn't touched its words or actions, so it follows the room (a lantern says Lantern)

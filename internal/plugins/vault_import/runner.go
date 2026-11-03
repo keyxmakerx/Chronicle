@@ -81,7 +81,7 @@ func (s *Service) audit(job *Job, r *runner, action string) {
 	if s.d.Audit == nil {
 		return
 	}
-	s.d.Audit.LogCampaignEvent(context.Background(), job.CampaignID, action, map[string]any{
+	s.d.Audit.LogCampaignEvent(context.Background(), job.CampaignID, job.UserID, action, map[string]any{
 		"pages":          r.sum.Pages,
 		"pages_failed":   r.sum.PagesFailed,
 		"texts_failed":   r.sum.TextsFailed,

@@ -25,7 +25,8 @@ const (
 
 // CheckItem is one row of the check-up sheet. A row offers at most one fix:
 // a link (FixHref) or, for a one-click change, a form post (FixPost with
-// FixVals as hx-vals JSON).
+// FixVals as hx-vals JSON). A row the host may rightly leave as it is also
+// offers a quiet word (KeepLabel) that posts KeepVals to FixPost.
 type CheckItem struct {
 	Key      string
 	Title    string
@@ -37,6 +38,8 @@ type CheckItem struct {
 	FixVals  string
 	// FixExternal opens FixHref in a new tab (a page outside the site).
 	FixExternal bool
+	KeepLabel   string
+	KeepVals    string
 }
 
 // BackupCheckResult is the weekly read-back of a backup, as the backup
@@ -79,6 +82,10 @@ type checkupInputs struct {
 	// Registration is "open", "invite" or "closed"; "" when unreadable.
 	Registration string
 
+	// SignupKeptOpen is true once an admin has chosen open sign-up on
+	// purpose, so open is a decision rather than a default left alone.
+	SignupKeptOpen bool
+
 	// EmailReady is whether outgoing email is set up, so a player can reset
 	// a forgotten password by themselves.
 	EmailReady bool
@@ -115,7 +122,7 @@ func buildCheckup(in checkupInputs) Checkup {
 		c.CheckedAt = in.Record.At
 	}
 	c.Items = append(c.Items, backupItem(in))
-	if it, ok := signupItem(in.Registration); ok {
+	if it, ok := signupItem(in.Registration, in.SignupKeptOpen); ok {
 		c.Items = append(c.Items, it)
 	}
 	c.Items = append(c.Items, resetItem(in.EmailReady), updatesItem(in))
@@ -157,12 +164,21 @@ func backupItem(in checkupInputs) CheckItem {
 	return it
 }
 
-func signupItem(mode string) (CheckItem, bool) {
+// signupOpenLimit is the per-address sign-up limit on POST /register, said
+// on the row so a host keeping sign-up open knows what still holds.
+const signupOpenLimit = "New accounts are limited to 5 a minute from one address."
+
+func signupItem(mode string, keptOpen bool) (CheckItem, bool) {
 	it := CheckItem{Key: "signup", Title: "Who can sign up", State: CheckOK}
 	switch mode {
 	case "open":
+		if keptOpen {
+			it.Detail = "Open on purpose: anyone with the address can make an account. " + signupOpenLimit
+			return it, true
+		}
 		it.State, it.Detail = CheckWarn, "Anyone with the address can make an account."
 		it.FixLabel, it.FixPost, it.FixVals = "Make invite-only", checkupSignupPost, `{"registration_mode":"invite"}`
+		it.KeepLabel, it.KeepVals = "Keep it open", `{"registration_mode":"open"}`
 	case "invite":
 		it.Detail = "Invite-only."
 	case "closed":

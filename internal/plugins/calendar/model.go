@@ -1957,27 +1957,6 @@ type FestivalInput struct {
 	SortOrder   int     `json:"sort_order"`
 }
 
-// DefaultEventKinds returns the default event kinds seeded for a new
-// campaign. DefaultAnnounced records each kind's own default: festivals and
-// holidays default to "ahead"; everything else to "on_day". A yearly-
-// recurring event overrides its kind's default to "ahead" regardless (see
-// Event.EffectiveAnnounced).
-func DefaultEventKinds() []EventKindInput {
-	return []EventKindInput{
-		// Holiday is lime, not amber: gold means "GM only" across the product
-		// (a GM-only day strikes all its runes gold), and amber at small sizes
-		// is indistinguishable from that gold by hue. This seeds new campaigns
-		// only — an existing kind keeps its stored colour; the owner can
-		// change it in settings -> Kinds.
-		{Slug: "holiday", Name: "Holiday", Icon: "⭐", Color: "#84cc16", SortOrder: 0, DefaultAnnounced: AnnouncedAhead},
-		{Slug: "battle", Name: "Battle", Icon: "⚔", Color: "#ef4444", SortOrder: 1, DefaultAnnounced: AnnouncedOnDay},
-		{Slug: "quest", Name: "Quest", Icon: "❗", Color: "#8b5cf6", SortOrder: 2, DefaultAnnounced: AnnouncedOnDay},
-		{Slug: "birthday", Name: "Birthday", Icon: "🎂", Color: "#ec4899", SortOrder: 3, DefaultAnnounced: AnnouncedOnDay},
-		{Slug: "festival", Name: "Festival", Icon: "🎉", Color: "#10b981", SortOrder: 4, DefaultAnnounced: AnnouncedAhead},
-		{Slug: "travel", Name: "Travel", Icon: "🚶", Color: "#3b82f6", SortOrder: 5, DefaultAnnounced: AnnouncedOnDay},
-	}
-}
-
 // defaultRealLifeSeasons returns the four seasons a new real-world calendar
 // starts with, per the operator's signed decision: the same four Gregorian
 // reference dates (Mar 20 / Jun 21 / Sep 23 / Dec 21) every real-world

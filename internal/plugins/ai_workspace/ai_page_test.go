@@ -25,7 +25,7 @@ func renderConnect(t *testing.T, v ConnectView) string {
 func TestAIPage_ConnectSection(t *testing.T) {
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	used := now.Add(-5 * time.Minute)
-	conn := &connector.Connection{ID: 1, CampaignID: "camp-1", KeyHint: "WXYZ", Privacy: aiexport.PrivacyModePermitted,
+	conn := &connector.Connection{ID: 1, CampaignID: "camp-1", UserID: "user-1", KeyHint: "WXYZ", Privacy: aiexport.PrivacyModePermitted,
 		ClientName: "Claude", CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(connector.KeyLifetime), LastUsedAt: &used}
 	const key = "chai_secretsecretsecretsecretsecretsecretWXYZ"
 	base := ConnectView{CampaignID: "camp-1", Available: true, Endpoint: "https://c.example/api/ai/campaigns/camp-1/mcp", Now: now}
@@ -39,15 +39,15 @@ func TestAIPage_ConnectSection(t *testing.T) {
 		{"not available", func() ConnectView { return ConnectView{CampaignID: "camp-1", Now: now} },
 			nil, []string{"Make a key", key}},
 		{"nothing yet", func() ConnectView { return base },
-			[]string{"Make a key", `value="players"`, `value="owner"`, "/campaigns/camp-1/ai/connection", `href="#copy-and-paste"`},
-			[]string{key, "Disconnect", "What it did", "Pause"}},
+			[]string{"Make a key", `value="players"`, `value="owner"`, "/campaigns/camp-1/ai/connection", `data-ai-open`},
+			[]string{key, "Disconnect", "Pause", "Your AI is at this level"}},
 		{"the key just made", func() ConnectView { v := base; v.Conn = conn; v.NewKey = key; return v },
 			[]string{key, "Bearer " + key, "claude mcp add --transport http chronicle", base.Endpoint, "only this once"},
 			[]string{"Make a key"}},
 		{"connected", func() ConnectView { v := base; v.Conn = conn; return v },
 			[]string{"Claude is connected", "sees what you see", "only looks", "key ends in WXYZ", "last used 5 minutes ago", "Disconnect", "/ai/connection/disconnect",
-				"/ai/connection/pause", `{&#34;connection&#34;:&#34;1&#34;}`, "/ai/connection/access", `name="connection" value="1"`, "Change what it may do",
-				`sees: &#39;owner&#39;`, `change: &#39;look&#39;`, "wasOwner: true", "What it did", `href="#copy-and-paste"`},
+				"/ai/connection/pause", `{&#34;connection&#34;:&#34;1&#34;}`, "/ai/connection/access", `name="connection" value="1"`, "How far may your AI go?", "What it covers", "Your AI is at this level", `lv: &#39;everything&#39;`, "live: true",
+				`sees: &#39;owner&#39;`, `change: &#39;look&#39;`, "wasOwner: true", "What it did", `data-ai-open`},
 			[]string{key, "Resume", "is paused"}},
 		{"paused", func() ConnectView {
 			v := base
@@ -146,7 +146,8 @@ func TestSittingLines(t *testing.T) {
 	}{
 		{connector.Sitting{Reads: 3, Lookups: 1, Asks: 1}, "Read 3 pages, looked up 1 thing, asked for changes once"},
 		{connector.Sitting{Lookups: 41}, "Looked up 41 things"},
-		{connector.Sitting{Asks: 2, Refused: 1}, "Asked for changes twice, 1 not answered"},
+		{connector.Sitting{Asks: 2, Refused: 1}, "Asked for changes twice"},
+		{connector.Sitting{Refused: 2}, "Nothing answered"},
 		{connector.Sitting{Reads: 1, Asks: 4}, "Read 1 page, asked for changes 4 times"},
 		{connector.Sitting{}, "Connected"},
 	} {

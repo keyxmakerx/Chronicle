@@ -120,6 +120,7 @@ templ ImportReview(d ImportReviewData) {
 		hx-target={ "#" + reviewHost(d) }
 		hx-swap="innerHTML"
 		hx-indicator="#ai-import-committing"
+		hx-sync="this:drop"
 		hx-push-url={ reviewHistoryURL(d) }
 		x-data={ fmt.Sprintf("aiImportReview(%d)", startYes) }
 		@change="onChange($event)"

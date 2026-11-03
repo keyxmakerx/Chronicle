@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"unicode"
 )
 
 // A made item's picture comes from what went into it: the recipe's
@@ -63,15 +64,28 @@ func lookShape(own *MaterialPicture, name string) string {
 			return s
 		}
 	}
-	lower := strings.ToLower(name)
+	words := strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return !unicode.IsLetter(r) })
 	for _, sw := range shapeWords {
 		for _, w := range strings.Fields(sw.words) {
-			if strings.Contains(lower, w) {
-				return sw.shape
+			for _, n := range words {
+				if shapeWordMatches(n, w) {
+					return sw.shape
+				}
 			}
 		}
 	}
 	return "bundle"
+}
+
+// shapeWordMatches compares whole words, so "Boiled leather" isn't oil and
+// "Bandage" isn't a band. A word may end in the shape word ("longsword",
+// "greataxe") or add a plural ending ("daggers").
+func shapeWordMatches(word, w string) bool {
+	word = strings.TrimSuffix(word, "s")
+	if strings.HasSuffix(word, "e") && !strings.HasSuffix(w, "e") {
+		word = strings.TrimSuffix(word, "e")
+	}
+	return word == w || (len(word) > len(w)+2 && strings.HasSuffix(word, w))
 }
 
 // composeLook builds a look from a shape and the materials' pictures in

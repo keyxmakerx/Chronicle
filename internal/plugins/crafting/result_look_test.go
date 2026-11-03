@@ -61,3 +61,22 @@ func TestKeptWithOnlyALookIsRemembered(t *testing.T) {
 		t.Fatal("a made copy with only a look must still be stored, or it loses its picture")
 	}
 }
+
+func TestLookShapeMatchesWholeWords(t *testing.T) {
+	tests := []struct{ name, want string }{
+		{"Boiled leather", "bundle"},
+		{"Bandage", "bundle"},
+		{"Spring trap", "bundle"},
+		{"Waxed cloak", "bundle"},
+		{"Longsword", "blade"},
+		{"Throwing daggers", "blade"},
+		{"Silver earring", "ring"},
+		{"Healing potions", "potion"},
+		{"Oil of slipperiness", "vial"},
+	}
+	for _, tt := range tests {
+		if got := lookShape(nil, tt.name); got != tt.want {
+			t.Errorf("lookShape(%q) = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

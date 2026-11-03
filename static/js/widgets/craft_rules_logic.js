@@ -636,7 +636,8 @@
     botch: ['bane', 'baneAndQuirk', 'baneAndIngredients'],
     fine: ['edge', 'points', 'extra', 'none'], poor: ['bane', 'points', 'none'], subCost: ['bane', 'points', 'none'],
     after: [2, 3, 5, 10], gives: ['skip', 'edge', 'points'], learnedBy: ['maker', 'party'], failedTry: ['used', 'half', 'kept'],
-    tags: ['metal', 'remnant_part', 'body_part', 'bone', 'hide', 'liquid', 'herb', 'magic_item', 'magic_essence'],
+    tags: ['metal', 'remnant_part', 'body_part', 'bone', 'hide', 'liquid', 'herb', 'magic_item', 'magic_essence',
+      'fungus', 'wood', 'resin', 'scale', 'feather', 'venom', 'gem', 'stone', 'powder', 'cloth', 'paper'],
     limits: {subs: 8, salvage: 4, days: 360, hint: 240, mishapMoments: 20}
   };
   function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : null; }

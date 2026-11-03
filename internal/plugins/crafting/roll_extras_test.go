@@ -32,13 +32,14 @@ func TestRollProject_WhatBefalls(t *testing.T) {
 		lost     bool
 		result   string // the item the project makes
 		brk      bool
+		moment   string // the How it looks moment, checked when set
 	}{
 		{name: "a quirk when it is made", points: 20, dice: []int{10, 10},
 			rules: []Rule{{When: always, Then: Effect{Kind: "quirk", Table: "Quirks"}, Players: "book"}},
-			work:  WorkSteady, total: 22, made: []string{"A quirk: Smells of roses"}, result: "potion"},
+			work:  WorkSteady, total: 22, made: []string{"A quirk: Smells of roses"}, result: "potion", moment: "success"},
 		{name: "no quirk before it is made", dice: []int{3, 4},
 			rules: []Rule{{When: always, Then: Effect{Kind: "quirk", Table: "Quirks"}, Players: "book"}},
-			work:  WorkSteady, total: 9},
+			work:  WorkSteady, total: 9, moment: "progress"},
 		{name: "fine and marked", points: 20, dice: []int{10, 10},
 			rules: []Rule{
 				{When: always, Then: Effect{Kind: "fine"}, Players: "book"},
@@ -53,7 +54,7 @@ func TestRollProject_WhatBefalls(t *testing.T) {
 			work:  WorkSteady, total: 22, result: "potion", note: "no item by that name"},
 		{name: "a mishap rule", dice: []int{3, 4},
 			rules: []Rule{{When: always, Then: Effect{Kind: "mishap", Table: "Mishaps"}, Players: "book"}},
-			work:  WorkSteady, total: 9, mishap: "The flask cracks", noNote: "The flask cracks"},
+			work:  WorkSteady, total: 9, mishap: "The flask cracks", noNote: "The flask cracks", moment: "progress"},
 		{name: "a missing table is the Director's to hear", dice: []int{3, 4}, director: true,
 			rules: []Rule{{When: always, Then: Effect{Kind: "mishap", Table: "Gone"}, Players: "book"}},
 			work:  WorkSteady, total: 9, note: "no Rolling Table called “Gone”"},
@@ -62,7 +63,7 @@ func TestRollProject_WhatBefalls(t *testing.T) {
 			work:  WorkSteady, total: 9, noNote: "Rolling Table"},
 		{name: "the recipe's mishap chance comes up", dice: []int{3, 4, 1},
 			extras: Extras{Mishaps: &Mishaps{Chance: "1 in 6", Table: "Mishaps"}},
-			work:   WorkSteady, total: 9, mishap: "The flask cracks"},
+			work:   WorkSteady, total: 9, mishap: "The flask cracks", moment: "mishap:0"},
 		{name: "the recipe's mishap chance doesn't", dice: []int{3, 4, 2},
 			extras: Extras{Mishaps: &Mishaps{Chance: "1 in 6", Table: "Mishaps"}},
 			work:   WorkSteady, total: 9},
@@ -71,13 +72,13 @@ func TestRollProject_WhatBefalls(t *testing.T) {
 			work:   WorkBotched, total: 7, made: []string{"A quirk: Smells of roses"}, note: "The botch left a quirk"},
 		{name: "botched work ruins the ingredients", dice: []int{3, 4},
 			extras: Extras{Botch: Botch{Costs: BotchIngredients}},
-			work:   WorkBotched, total: 7, lost: true},
+			work:   WorkBotched, total: 7, lost: true, moment: "failure"},
 		{name: "botched work that finishes keeps them", points: 25, dice: []int{3, 4},
 			extras: Extras{Botch: Botch{Costs: BotchIngredients}},
 			work:   WorkBotched, total: 7, result: "potion"},
 		{name: "a breakthrough rolls again", dice: []int{10, 9, 3, 4},
 			extras: Extras{Breakthrough: true},
-			work:   WorkSteady, total: 28, brk: true},
+			work:   WorkSteady, total: 28, brk: true, moment: "breakthrough"},
 		{name: "no breakthrough below the top", dice: []int{9, 9},
 			extras: Extras{Breakthrough: true},
 			work:   WorkSteady, total: 20},
@@ -153,6 +154,9 @@ func TestRollProject_WhatBefalls(t *testing.T) {
 			if res.Lost != tc.lost || (tc.lost && saved.Status != ProjectCancelled) {
 				t.Fatalf("lost = %v, status %q", res.Lost, saved.Status)
 			}
+			if tc.moment != "" && res.Moment != tc.moment {
+				t.Fatalf("moment = %q, want %q", res.Moment, tc.moment)
+			}
 			if res.Breakthrough != tc.brk {
 				t.Fatalf("breakthrough = %v, terms %q", res.Breakthrough, termTexts(res))
 			}
@@ -164,6 +168,74 @@ func TestRollProject_WhatBefalls(t *testing.T) {
 				t.Fatalf("finished, want not")
 			}
 		})
+	}
+}
+
+// The Director's look for the moment that happened goes out with the roll,
+// and no other: a player never sees the words of a mishap that didn't strike.
+func TestRollProject_SendsOnlyThisMomentsLook(t *testing.T) {
+	fx := newProjectFx()
+	fx.s.projects.Tables = fakeTables{"Mishaps": {"The flask cracks", "Fumes fill the room"}}
+	pv := fx.start(t)
+	r := fx.repo.recipes["heal"]
+	r.Extras = Extras{Mishaps: &Mishaps{Chance: "1 in 6", Table: "Mishaps"}, Botch: Botch{Costs: BotchBane}}
+	r.Looks = map[string]*Look{
+		"mishap:0": {Spots: map[string]LookSpot{"work": {Look: "glass", Move: "shake"}}, Words: "Glass sings, then splits."},
+		"mishap:1": {Words: "A secret second mishap."},
+		"progress": {Words: "It thickens."},
+		"success":  {},
+	}
+	fx.repo.recipes["heal"] = r
+	roll := func(dice []int) *RollResult {
+		t.Helper()
+		fx.ready(pv.ID, 1)
+		p := fx.store.projects[pv.ID]
+		fx.dice = dice
+		res, err := fx.s.RollProject(context.Background(), "c", pv.ID, player, RollInput{Work: WorkSteady, Version: p.Version})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	// 3+4, then the 1-in-6 mishap chance comes up and the table gives row 0.
+	res := roll([]int{3, 4, 1, 1})
+	body, _ := json.Marshal(res)
+	if res.Moment != "mishap:0" || res.Look == nil || res.Look.Words != "Glass sings, then splits." || res.Look.Spots["work"].Move != "shake" {
+		t.Fatalf("moment %q look %+v", res.Moment, res.Look)
+	}
+	if strings.Contains(string(body), "secret second") || strings.Contains(string(body), "It thickens") {
+		t.Fatalf("another moment's look went out: %s", body)
+	}
+	// No mishap: the progress look.
+	res = roll([]int{3, 4, 2})
+	if res.Moment != "progress" || res.Look == nil || res.Look.Words != "It thickens." {
+		t.Fatalf("moment %q look %+v", res.Moment, res.Look)
+	}
+}
+
+func TestRollMoment(t *testing.T) {
+	recipeTable := Extras{Mishaps: &Mishaps{Table: "Mishaps"}}
+	cases := []struct {
+		name string
+		res  RollResult
+		work string
+		x    Extras
+		want string
+	}{
+		{"a mishap from the recipe's table is its row", RollResult{Mishap: &Mishap{Table: "Mishaps", Row: 3}, Finished: true}, WorkSteady, recipeTable, "mishap:3"},
+		{"a mishap from a rule's other table is not", RollResult{Mishap: &Mishap{Table: "Other", Row: 0}}, WorkSteady, recipeTable, "progress"},
+		{"a row past the moments has none", RollResult{Mishap: &Mishap{Table: "Mishaps", Row: maxMishapMoments}}, WorkSteady, recipeTable, "progress"},
+		{"a breakthrough", RollResult{Breakthrough: true, Finished: true}, WorkSteady, Extras{}, "breakthrough"},
+		{"made", RollResult{Finished: true}, WorkBotched, Extras{}, "success"},
+		{"botched", RollResult{}, WorkBotched, Extras{}, "failure"},
+		{"spoiled", RollResult{Spoiled: true}, WorkSteady, Extras{}, "failure"},
+		{"lost", RollResult{Lost: true}, WorkSteady, Extras{}, "failure"},
+		{"steady work", RollResult{}, WorkSteady, Extras{}, "progress"},
+	}
+	for _, tc := range cases {
+		if got := rollMoment(&tc.res, tc.work, tc.x); got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }
 

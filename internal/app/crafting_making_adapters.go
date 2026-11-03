@@ -45,7 +45,7 @@ func (m *craftingItemMaker) CreateItem(ctx context.Context, campaignID, userID, 
 type craftingLayoutPlacer struct{ svc entities.EntityService }
 
 func (p *craftingLayoutPlacer) itemTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error) {
-	return p.svc.GetEntityTypesByPresetCategory(ctx, campaignID, "item")
+	return armoryItemTypes(ctx, p.svc, campaignID)
 }
 
 func (p *craftingLayoutPlacer) ItemBlockPlaced(ctx context.Context, campaignID string) (bool, error) {
@@ -179,7 +179,7 @@ func registerCraftingItemBlock(blockRegistry *entities.BlockRegistry) {
 		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil || rc.EntityType == nil {
 			return templ.NopComponent
 		}
-		if rc.EntityType.PresetCategory == nil || *rc.EntityType.PresetCategory != "item" {
+		if !entities.IsItemType(*rc.EntityType) {
 			return templ.NopComponent
 		}
 		if rc.CC.MemberRole < campaigns.RolePlayer {

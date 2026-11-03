@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,7 +14,21 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 )
+
+// LongTermTrashSizer says about how much one month of packed player changes
+// takes on this site, for the Long-term trash setting's estimate. known is
+// false when nothing has been recorded yet.
+type LongTermTrashSizer interface {
+	MonthlyBytes(ctx context.Context) (bytes int64, known bool, err error)
+}
+
+// SetLongTermTrashSizer wires the estimate; without it the setting shows no
+// sizes.
+func (h *Handler) SetLongTermTrashSizer(s LongTermTrashSizer) {
+	h.longTerm = s
+}
 
 // SetTrashService wires the site Trash.
 func (h *Handler) SetTrashService(svc TrashService) {
@@ -32,6 +47,7 @@ func (h *Handler) trashRegion(c echo.Context, notice string, isErr bool) error {
 		data.LoadFailed = true
 	}
 	data.Overview = ov
+	data.LongTerm = h.longTermView(c.Request().Context())
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, TrashRegion(data))
 	}
@@ -106,6 +122,50 @@ func (h *Handler) SaveTrashRetention(c echo.Context) error {
 	}
 	h.record(c, "trash.retention_changed", "setting", "trash", strconv.Itoa(days)+" days")
 	return h.trashRegion(c, fmt.Sprintf("Deleted things are now kept for %d days.", days), false)
+}
+
+// longTermView reads the Long-term trash setting and its estimate. A failed
+// estimate only hides the sizes.
+func (h *Handler) longTermView(ctx context.Context) LongTermView {
+	v := LongTermView{Months: settings.DefaultLongTermTrashMonths}
+	if h.settingsService != nil {
+		v.Months = h.settingsService.LongTermTrashMonths(ctx)
+	}
+	if h.longTerm != nil {
+		b, known, err := h.longTerm.MonthlyBytes(ctx)
+		if err != nil {
+			slog.Warn("trash: estimating the long-term trash failed", slog.Any("error", err))
+		} else {
+			v.MonthlyBytes, v.Known = b, known
+		}
+	}
+	return v
+}
+
+// SaveLongTermTrash saves how long removed pages and players' old values
+// stay packed (POST /admin/trash/long-term). Each pack keeps the date it was
+// given, so no choice removes anything early and no password re-check is
+// needed.
+func (h *Handler) SaveLongTermTrash(c echo.Context) error {
+	if h.trash == nil || h.settingsService == nil {
+		return apperror.NewMissingContext()
+	}
+	months, err := strconv.Atoi(strings.TrimSpace(c.FormValue("long_term_months")))
+	if err != nil {
+		return h.trashRegion(c, "Choose how long to keep packed changes.", true)
+	}
+	if err := h.settingsService.UpdateLongTermTrashMonths(c.Request().Context(), months); err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusBadRequest {
+			return h.trashRegion(c, appErr.Message, true)
+		}
+		return err
+	}
+	h.record(c, "trash.long_term_changed", "setting", "trash", strconv.Itoa(months)+" months")
+	if months == 0 {
+		return h.trashRegion(c, "Long-term trash is off. What is already packed stays until its date.", false)
+	}
+	return h.trashRegion(c, fmt.Sprintf("Removed pages and old values are now packed for %s.", longTermLabel(months, LongTermView{})), false)
 }
 
 // EmptyTrash removes everything in the Trash for good (DELETE /admin/trash).

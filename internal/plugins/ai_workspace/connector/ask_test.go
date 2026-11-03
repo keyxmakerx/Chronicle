@@ -158,11 +158,11 @@ func TestHandle_OnlyLookCannotAsk(t *testing.T) {
 func TestHandle_AskForChangesWaitingCap(t *testing.T) {
 	s, sess, repo := askRig(t)
 	for i := 0; i < requestsWaiting; i++ {
-		if tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": fmt.Sprint(i), "changes": goodBlocks}))); tr.IsError {
+		if tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": fmt.Sprint(i), "changes": numbered(i)}))); tr.IsError {
 			t.Fatalf("request %d refused: %+v", i+1, tr)
 		}
 	}
-	tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "one more", "changes": goodBlocks})))
+	tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "one more", "changes": numbered(requestsWaiting)})))
 	if !tr.IsError || !strings.Contains(tr.Content[0].Text, "already waiting") {
 		t.Errorf("reply = %+v", tr)
 	}
@@ -170,19 +170,53 @@ func TestHandle_AskForChangesWaitingCap(t *testing.T) {
 		t.Errorf("stored %d", len(repo.reqs))
 	}
 	// Answering one makes room.
-	if err := s.Asks.(*Service).TurnDown(context.Background(), "camp-1", 1); err != nil {
+	if err := s.Asks.(*Service).TurnDown(context.Background(), "camp-1", "owner-1", 1); err != nil {
 		t.Fatal(err)
 	}
-	if tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "now", "changes": goodBlocks}))); tr.IsError {
+	if tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "now", "changes": numbered(requestsWaiting + 1)}))); tr.IsError {
 		t.Errorf("after one was answered: %+v", tr)
+	}
+}
+
+// numbered is goodBlocks made distinct, so requests don't count as resends.
+func numbered(i int) string { return goodBlocks + fmt.Sprintf("\n\nNet %d.", i) }
+
+// A resend of changes still waiting stores nothing new and says so without
+// an error, so the owner isn't left two copies and the AI doesn't retry.
+func TestHandle_AskForChangesResendWhileWaiting(t *testing.T) {
+	s, sess, repo := askRig(t)
+	first := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "A market", "changes": goodBlocks})))
+	if first.IsError {
+		t.Fatalf("first = %+v", first)
+	}
+	out := s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "Resend: a market", "changes": goodBlocks}))
+	tr := toolText(t, out)
+	if tr.IsError || !strings.Contains(tr.Content[0].Text, "Already waiting") || !strings.Contains(tr.Content[0].Text, "don't send it again") {
+		t.Errorf("resend reply = %+v", tr)
+	}
+	if len(repo.reqs) != 1 {
+		t.Errorf("stored %d requests, want 1", len(repo.reqs))
+	}
+	if out.Called == nil || out.Called.Note != "already waiting, not sent again" || !out.Called.OK {
+		t.Errorf("log line = %+v", out.Called)
+	}
+	// Once answered, the same changes may be asked for again.
+	if err := s.Asks.(*Service).TurnDown(context.Background(), "camp-1", "owner-1", 1); err != nil {
+		t.Fatal(err)
+	}
+	if tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "again", "changes": goodBlocks}))); tr.IsError || !strings.Contains(tr.Content[0].Text, "Sent to") {
+		t.Errorf("after an answer: %+v", tr)
+	}
+	if len(repo.reqs) != 2 {
+		t.Errorf("stored %d requests, want 2", len(repo.reqs))
 	}
 }
 
 func TestHandle_HowToWriteChanges(t *testing.T) {
 	s, sess, _ := askRig(t)
 	var gotUser, gotCampaign string
-	s.Instructions = func(_ context.Context, campaignID, _, userID string) (string, error) {
-		gotUser, gotCampaign = userID, campaignID
+	s.Instructions = func(_ context.Context, c *Connection, _ string) (string, error) {
+		gotUser, gotCampaign = c.UserID, c.CampaignID
 		return "BLOCK FORMATS", nil
 	}
 	out := s.Handle(context.Background(), sess, callBody(toolHowTo, nil))
@@ -193,7 +227,7 @@ func TestHandle_HowToWriteChanges(t *testing.T) {
 	if gotUser != "owner-1" || gotCampaign != "camp-1" {
 		t.Errorf("written for %q in %q", gotUser, gotCampaign)
 	}
-	s.Instructions = func(context.Context, string, string, string) (string, error) { return "", errors.New("db down") }
+	s.Instructions = func(context.Context, *Connection, string) (string, error) { return "", errors.New("db down") }
 	if tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolHowTo, nil))); !tr.IsError || strings.Contains(tr.Content[0].Text, "db down") {
 		t.Errorf("a failure: %+v", tr)
 	}
@@ -209,23 +243,23 @@ func TestService_RequestAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.WaitingRequest(ctx, "camp-2", q.ID); err == nil {
+	if _, err := svc.WaitingRequest(ctx, "camp-2", "owner-1", q.ID); err == nil {
 		t.Error("another campaign opened the request")
 	}
-	got, err := svc.WaitingRequest(ctx, "camp-1", q.ID)
+	got, err := svc.WaitingRequest(ctx, "camp-1", "owner-1", q.ID)
 	if err != nil || got.Body != goodBlocks {
 		t.Fatalf("got %+v, %v", got, err)
 	}
-	if err := svc.Answered(ctx, "camp-1", q.ID, "2 applied, 0 left out"); err != nil {
+	if err := svc.Answered(ctx, "camp-1", "owner-1", q.ID, "2 applied, 0 left out"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.WaitingRequest(ctx, "camp-1", q.ID); err == nil {
+	if _, err := svc.WaitingRequest(ctx, "camp-1", "owner-1", q.ID); err == nil {
 		t.Error("an answered request opened again")
 	}
-	if err := svc.TurnDown(ctx, "camp-1", q.ID); err != nil {
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); err != nil {
 		t.Fatal(err)
 	}
-	if w, _ := svc.Waiting(ctx, "camp-1"); len(w) != 0 {
+	if w, _ := svc.Waiting(ctx, "camp-1", "owner-1"); len(w) != 0 {
 		t.Errorf("still waiting: %+v", w)
 	}
 }
@@ -242,7 +276,7 @@ func TestAsk_CampaignCheck(t *testing.T) {
 		wantKept int
 	}{
 		{"problems refuse the request", []string{`block 1 (Coral Court): the Places category has no folder "Docks"`},
-			nil, `Not sent: the owner couldn't use it: block 1 (Coral Court): the Places category has no folder "Docks".`, 0},
+			nil, `Not sent: Chronicle couldn't use it: block 1 (Coral Court): the Places category has no folder "Docks".`, 0},
 		{"many problems are cut short", []string{"a", "b", "c", "d", "e", "f", "g"}, nil, "a; b; c; d; e; and 2 more.", 0},
 		{"no problems", nil, nil, "Sent to the owner for review", 1},
 		{"a failed check is skipped", nil, errors.New("db down"), "Sent to the owner for review", 1},
@@ -251,7 +285,8 @@ func TestAsk_CampaignCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s, sess, repo := askRig(t)
 			var gotCampaign, gotChanges string
-			s.Asks.(*Service).SetCheck(func(_ context.Context, campaignID, changes string) ([]string, error) {
+			s.Asks.(*Service).SetCheck(func(_ context.Context, conn *Connection, changes string) ([]string, error) {
+				campaignID := conn.CampaignID
 				gotCampaign, gotChanges = campaignID, changes
 				return tt.problems, tt.err
 			})
@@ -278,7 +313,7 @@ func TestAsk_CampaignCheck(t *testing.T) {
 func TestAsk_TooManyBlocks(t *testing.T) {
 	s, sess, repo := askRig(t)
 	checked := false
-	s.Asks.(*Service).SetCheck(func(context.Context, string, string) ([]string, error) { checked = true; return nil, nil })
+	s.Asks.(*Service).SetCheck(func(context.Context, *Connection, string) ([]string, error) { checked = true; return nil, nil })
 	block := "---\nname: P%d\n---\n\nx\n\n"
 	var b strings.Builder
 	for i := 0; i <= blocksMax; i++ {

@@ -1,6 +1,6 @@
 // ai_page.go is the campaign's "Your AI" page (owner only): connecting an AI
-// app straight to the campaign, what it asked for, what it did, and the
-// copy-and-paste tool for every other AI.
+// app straight to the campaign and what it did. What it asks for and copy and
+// paste are answered in the AI panel (ai_panel.go) on any page.
 
 package ai_workspace
 
@@ -38,6 +38,12 @@ type ConnectView struct {
 	Calls    []connector.Call
 	// Requests are what the AI asked for, waiting for the owner.
 	Requests []connector.Request
+	// Alerts is the campaign's open warnings about its keys; CutOff is set
+	// while the owner has stopped every AI here. Watching is false when the
+	// watch isn't wired, and both stay empty.
+	Alerts   []connector.Alert
+	CutOff   *time.Time
+	Watching bool
 	// Sittings group Calls; Shown is how many the page lists.
 	Sittings []connector.Sitting
 	Shown    int
@@ -46,6 +52,11 @@ type ConnectView struct {
 	Loc *time.Location
 	// Notes is the notes panel; nil when the switches aren't wired.
 	Notes *NotesView
+	// Players is the players panel; nil when the watch isn't wired.
+	Players *PlayersView
+	// LevelSaved is true on the answer to a change of level, which says
+	// Saved beside it.
+	LevelSaved bool
 }
 
 // NotesView is the panel saying which notes the AI reads and changes, with
@@ -98,17 +109,31 @@ func (h *Handler) connectView(c echo.Context, cc *campaigns.CampaignContext) (Co
 	v.Available = true
 	v.Endpoint = connector.EndpointURL(h.baseURL, cc.Campaign.ID)
 	ctx := c.Request().Context()
-	conn, err := h.connector.Current(ctx, cc.Campaign.ID)
+	conn, err := h.connector.Current(ctx, cc.Campaign.ID, auth.GetUserID(c))
 	if err != nil {
 		return v, err
 	}
 	v.Conn = conn
-	if v.Calls, err = h.connector.Activity(ctx, cc.Campaign.ID); err != nil {
+	if v.Calls, err = h.connector.Activity(ctx, cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return v, err
 	}
 	v.Sittings = connector.Sittings(v.Calls)
-	if v.Requests, err = h.connector.Waiting(ctx, cc.Campaign.ID); err != nil {
+	if v.Requests, err = h.connector.Waiting(ctx, cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return v, err
+	}
+	if h.connector.Watching() {
+		v.Watching = true
+		if v.Alerts, err = h.connector.Alerts(ctx, cc.Campaign.ID); err != nil {
+			return v, err
+		}
+		sw, err := h.connector.CampaignSwitches(ctx, cc.Campaign.ID)
+		if err != nil {
+			return v, err
+		}
+		v.CutOff = sw.CutOffAt
+		if err := h.fillPlayers(c, cc, &v); err != nil {
+			return v, err
+		}
 	}
 	if v.Notes != nil && conn != nil && conn.Privacy == aiexport.PrivacyModeSafe {
 		v.Notes.Shut = true
@@ -156,7 +181,7 @@ func (h *Handler) ChangeNoteAccess(c echo.Context) error {
 		return err
 	}
 	if h.audit != nil && was != to {
-		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, "campaign.ai_note_access.changed", map[string]any{
+		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_note_access.changed", map[string]any{
 			"co_dms_from": was.CoDMs, "co_dms_to": to.CoDMs,
 			"scribes_from": was.Scribes, "scribes_to": to.Scribes,
 		})
@@ -240,11 +265,11 @@ func (h *Handler) TurnDownRequest(c echo.Context) error {
 	if err != nil || id <= 0 {
 		return apperror.NewBadRequest("that request isn't here any more")
 	}
-	if err := h.connector.TurnDown(c.Request().Context(), cc.Campaign.ID, id); err != nil {
+	if err := h.connector.TurnDown(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id); err != nil {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_request.turned_down", map[string]any{"request_id": id})
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_request.turned_down", map[string]any{"request_id": id})
 	}
 	v, err := h.connectView(c, cc)
 	if err != nil {
@@ -302,7 +327,7 @@ func (h *Handler) ConnectAI(c echo.Context) error {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_connection.created",
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_connection.created",
 			map[string]any{"privacy": privacy.String(), "can_ask": canAsk, "expires_at": conn.ExpiresAt.Format(time.RFC3339)})
 	}
 	v, err := h.connectView(c, cc)
@@ -376,7 +401,7 @@ func (h *Handler) setPaused(c echo.Context, pause bool) error {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, event, map[string]any{"connection_id": id})
+		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, auth.GetUserID(c), event, map[string]any{"connection_id": id})
 	}
 	v, err := h.connectView(c, cc)
 	if err != nil {
@@ -405,7 +430,7 @@ func (h *Handler) ChangeAIAccess(c echo.Context) error {
 		return err
 	}
 	ctx := c.Request().Context()
-	cur, err := h.connector.Current(ctx, cc.Campaign.ID)
+	cur, err := h.connector.Current(ctx, cc.Campaign.ID, auth.GetUserID(c))
 	if err != nil {
 		return err
 	}
@@ -417,7 +442,7 @@ func (h *Handler) ChangeAIAccess(c echo.Context) error {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, "campaign.ai_connection.changed", map[string]any{
+		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_connection.changed", map[string]any{
 			"connection_id": id,
 			"privacy_from":  was.Privacy.String(), "privacy_to": privacy.String(),
 			"can_ask_from": was.CanAsk, "can_ask_to": canAsk,
@@ -427,6 +452,7 @@ func (h *Handler) ChangeAIAccess(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	v.LevelSaved = true
 	return middleware.Render(c, http.StatusOK, aiConnectSection(v))
 }
 
@@ -444,11 +470,11 @@ func (h *Handler) DisconnectAI(c echo.Context) error {
 	if h.connector == nil {
 		return apperror.NewBadRequest("connecting an AI is not available on this Chronicle site")
 	}
-	if err := h.connector.Disconnect(c.Request().Context(), cc.Campaign.ID); err != nil {
+	if err := h.connector.Disconnect(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return err
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_connection.disconnected", nil)
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_connection.disconnected", nil)
 	}
 	v, err := h.connectView(c, cc)
 	if err != nil {
@@ -613,7 +639,8 @@ func shownSittings(v ConnectView) []connector.Sitting {
 	return v.Sittings
 }
 
-// sittingSummary says in one line what an AI did in a sitting.
+// sittingSummary says in one line what an AI did in a sitting. What it
+// couldn't answer is a pill beside it, not part of the line.
 func sittingSummary(s connector.Sitting) string {
 	var parts []string
 	if s.Reads > 0 {
@@ -631,10 +658,10 @@ func sittingSummary(s connector.Sitting) string {
 	default:
 		parts = append(parts, fmt.Sprintf("asked for changes %d times", s.Asks))
 	}
-	if s.Refused > 0 {
-		parts = append(parts, fmt.Sprintf("%d not answered", s.Refused))
-	}
 	line := strings.Join(parts, ", ")
+	if line == "" && s.Refused > 0 {
+		return "Nothing answered"
+	}
 	if line == "" {
 		return "Connected"
 	}
@@ -666,6 +693,12 @@ func sittingTag(v ConnectView, s connector.Sitting) string {
 // sittingWhen is when a sitting started, in the owner's time zone: "Today,
 // 2:44 pm", "Yesterday, …", a weekday within the week, else the date.
 func sittingWhen(v ConnectView, t time.Time) string {
+	return sittingDay(v, t) + ", " + clockText(v, t)
+}
+
+// sittingDay is the day of sittingWhen: "Today", "Yesterday", a weekday
+// within the week, else the date.
+func sittingDay(v ConnectView, t time.Time) string {
 	now, t := v.Now.In(v.Loc), t.In(v.Loc)
 	day := func(x time.Time) time.Time { return time.Date(x.Year(), x.Month(), x.Day(), 0, 0, 0, 0, v.Loc) }
 	days := int(day(now).Sub(day(t)).Hours()/24 + 0.5)
@@ -682,7 +715,7 @@ func sittingWhen(v ConnectView, t time.Time) string {
 	default:
 		d = t.Format("2 January 2006")
 	}
-	return d + ", " + clockText(v, t)
+	return d
 }
 
 // clockText is a time of day in the owner's zone: "2:44 pm".

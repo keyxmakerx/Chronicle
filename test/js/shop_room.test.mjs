@@ -207,3 +207,31 @@ test('defaultPayer starts on the first own character, else the first listed', ()
   ];
   for (const [list, want] of cases) assert.equal(SR.defaultPayer(list), want);
 });
+
+test('a room the AI connection changed lays out its furniture when it opens', () => {
+  // A shop the AI dressed before anyone arranged it: the saved layout has no
+  // pieces, so opening it builds the same room a fresh generate would.
+  const want = state({ roomType: 'forge', setting: 'cave' });
+  SR.createRoom(want).generate();
+  const T = state();
+  SR.openRoom(T, SR.createRoom(T), { version: 1, roomType: 'forge', setting: 'cave', size: 'm', furniture: 'normal', decorations: 'some', palette: 'oak', pieces: [], furnish: 'room' });
+  assert.ok(T.pieces.length > 0);
+  assert.deepEqual(T.pieces.map((p) => p.kind), want.pieces.map((p) => p.kind));
+  assert.equal('furnish' in SR.toLayout(T), false, 'the owner\'s next save clears the mark');
+
+  // Only the mood changed: hand-moved pieces stay, the new mood's arrive.
+  const S = state({ mood: '' });
+  const room = SR.createRoom(S);
+  room.generate();
+  S.pieces[0].pinned = true;
+  const L = Object.assign(SR.toLayout(S), { mood: 'haunted', furnish: 'mood' });
+  const U = state();
+  SR.openRoom(U, SR.createRoom(U), JSON.parse(JSON.stringify(L)));
+  assert.ok(U.pieces.some((p) => p.id === S.pieces[0].id && p.kind === S.pieces[0].kind), 'the pinned piece stays');
+  assert.ok(U.pieces.some((p) => SR.MOOD_KIND[p.kind]), 'the haunted pieces arrive');
+
+  // Without the mark a saved room draws exactly as saved.
+  const V = state();
+  SR.openRoom(V, SR.createRoom(V), SR.toLayout(S));
+  assert.deepEqual(SR.toLayout(V).pieces, SR.toLayout(S).pieces);
+});

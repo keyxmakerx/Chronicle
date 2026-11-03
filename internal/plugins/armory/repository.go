@@ -1,6 +1,6 @@
 // repository.go provides data access for the Armory gallery. Queries the
 // existing entities + entity_types tables — no separate table is needed
-// because items are entities with entity types having preset_category = 'item'.
+// because items are entities of an item category (entities.IsItemType).
 //
 // SECURITY: this repository applies NO visibility predicate of its own.
 // A hand-rolled `role < 2 AND e.is_private = false` check here never

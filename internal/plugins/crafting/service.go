@@ -397,6 +397,7 @@ func (s *service) UpdateRecipe(ctx context.Context, campaignID, id string, v Vie
 		return nil, err
 	}
 	r.ID = id
+	r.Extras = FollowMaterials(stored.Extras, stored.Materials, r.Materials)
 	ok, err := s.repo.UpdateRecipe(ctx, campaignID, v.UserID, r, in.Version)
 	if err != nil {
 		if errors.Is(err, errDuplicate) {

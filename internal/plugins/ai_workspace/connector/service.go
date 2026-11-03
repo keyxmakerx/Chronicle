@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -49,37 +50,51 @@ var (
 	ErrKeyPaused = errors.New("this key is paused")
 	// ErrNotOwner: Check found the user is not the campaign's owner.
 	ErrNotOwner = errors.New("not the campaign's owner")
+	// ErrNotMember: CheckMember found the user is not in the campaign.
+	ErrNotMember = errors.New("not in the campaign")
+	// ErrPlayerGone: the player who made the key has left the campaign.
+	ErrPlayerGone = errors.New("whoever made this key is no longer in the campaign")
 )
 
-// Owners checks that a key's maker still owns its campaign, on every request.
+// Owners checks that a key's maker still has their place in its campaign,
+// on every request: the owner for an owner's key, a member for a player's.
 type Owners interface {
 	// Check returns the campaign's name when userID is its owner and the
 	// campaign is not deleted or in the Trash; otherwise an error
 	// (ErrNotOwner when they simply aren't the owner).
 	Check(ctx context.Context, campaignID, userID string) (campaignName string, err error)
+	// CheckMember is Check for anyone in the campaign, the owner included
+	// (ErrNotMember when they aren't in it).
+	CheckMember(ctx context.Context, campaignID, userID string) (campaignName string, err error)
 }
 
 // Service makes, checks and revokes connection keys and keeps the call log.
 type Service struct {
-	repo   Repository
-	owners Owners
-	now    func() time.Time
-	limits *limiter
-	calls  atomic.Int64
-	check  ChangesCheck
+	repo       Repository
+	owners     Owners
+	now        func() time.Time
+	limits     *limiter // every request
+	callLimits *limiter // tool calls
+	calls      atomic.Int64
+	check      ChangesCheck
+	// watchRepo and watch are the switches and warnings (watch.go);
+	// watchRepo is nil until SetWatch.
+	watchRepo WatchRepository
+	watch     *watcher
 }
 
-// ChangesCheck looks at what an AI asks for against the campaign and returns
-// the problems it can fix itself; nil means none. An error only skips the
-// check, since the owner's review checks everything again.
-type ChangesCheck func(ctx context.Context, campaignID, changes string) ([]string, error)
+// ChangesCheck looks at what the connection's AI asks for against the
+// campaign, as its maker could apply it, and returns the problems it can fix
+// itself; nil means none. An error only skips the check, since the review
+// checks everything again.
+type ChangesCheck func(ctx context.Context, c *Connection, changes string) ([]string, error)
 
 // SetCheck adds a check that runs when an AI asks for changes. Optional.
 func (s *Service) SetCheck(f ChangesCheck) { s.check = f }
 
 // NewService creates the connector service.
 func NewService(repo Repository, owners Owners) *Service {
-	return &Service{repo: repo, owners: owners, now: time.Now, limits: newLimiter()}
+	return &Service{repo: repo, owners: owners, now: time.Now, limits: newLimiter(requestsBurst, requestsRefill, 0), callLimits: newLimiter(callsBurst, callRefill, callsPerDay), watch: newWatcher(time.Now())}
 }
 
 // hashKey is the stored form of a key.
@@ -96,17 +111,28 @@ func newKey() (string, error) {
 	return keyPrefix + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// Connect makes a new key for the campaign and revokes any earlier one, so a
-// campaign has one connection at a time. The key is returned once and never
-// kept. Only Safe and Permitted can be chosen: lookups read the same in
-// Permitted and Everything, so a third choice would mean nothing. canAsk is
-// the Change setting.
+// Connect makes a new key for userID in the campaign and revokes their
+// earlier one, so each person has one connection at a time. The key is
+// returned once and never kept. Only Safe and Permitted can be chosen:
+// lookups read the same in Permitted and Everything, so a third choice would
+// mean nothing. canAsk is the Change setting.
+//
+// The owner makes an owner's key. Anyone else in the campaign makes a
+// player's key, which always reads as them in Safe mode, and only while the
+// site admin and the owner let players use AI.
 func (s *Service) Connect(ctx context.Context, campaignID, userID string, privacy aiexport.PrivacyMode, canAsk bool) (string, *Connection, error) {
 	if privacy != aiexport.PrivacyModeSafe && privacy != aiexport.PrivacyModePermitted {
 		return "", nil, apperror.NewBadRequest("pick what your AI may see")
 	}
+	forPlayer := false
 	if _, err := s.owners.Check(ctx, campaignID, userID); err != nil {
-		return "", nil, apperror.NewForbidden("only the campaign's owner can connect an AI")
+		if _, err := s.owners.CheckMember(ctx, campaignID, userID); err != nil {
+			return "", nil, apperror.NewForbidden("only people in this campaign can connect an AI to it")
+		}
+		if err := s.checkPlayerSwitches(ctx, campaignID); err != nil {
+			return "", nil, apperror.NewForbidden(err.Error())
+		}
+		forPlayer, privacy = true, aiexport.PrivacyModeSafe
 	}
 	raw, err := newKey()
 	if err != nil {
@@ -122,6 +148,7 @@ func (s *Service) Connect(ctx context.Context, campaignID, userID string, privac
 		CanAsk:     canAsk,
 		CreatedAt:  now,
 		ExpiresAt:  now.Add(KeyLifetime),
+		ForPlayer:  forPlayer,
 	}
 	id, err := s.repo.Replace(ctx, c)
 	if err != nil {
@@ -131,14 +158,20 @@ func (s *Service) Connect(ctx context.Context, campaignID, userID string, privac
 	return raw, c, nil
 }
 
-// Current is the campaign's connection, or nil when there is none (an
-// expired one is still returned, so the page can say it ran out).
-func (s *Service) Current(ctx context.Context, campaignID string) (*Connection, error) {
-	return s.repo.Current(ctx, campaignID)
+// Current is userID's connection in the campaign, or nil when there is none
+// (an expired one is still returned, so the page can say it ran out).
+func (s *Service) Current(ctx context.Context, campaignID, userID string) (*Connection, error) {
+	return s.repo.Current(ctx, campaignID, userID)
 }
 
-// Disconnect revokes the campaign's connection; the key stops working at once.
-func (s *Service) Disconnect(ctx context.Context, campaignID string) error {
+// Disconnect revokes userID's connection; the key stops working at once.
+func (s *Service) Disconnect(ctx context.Context, campaignID, userID string) error {
+	return s.repo.RevokeMadeBy(ctx, campaignID, userID, s.now().UTC().Truncate(time.Second))
+}
+
+// EndCampaignKeys revokes every key of the campaign, everyone's. It runs
+// when the campaign goes to the Trash.
+func (s *Service) EndCampaignKeys(ctx context.Context, campaignID string) error {
 	return s.repo.RevokeAll(ctx, campaignID, s.now().UTC().Truncate(time.Second))
 }
 
@@ -158,8 +191,9 @@ func (s *Service) EndAllKeysMadeBy(ctx context.Context, userID string) error {
 
 // Authenticate checks a key against the campaign in the address. It returns
 // the connection and the campaign's name, or ErrBadKey, ErrKeyEnded,
-// ErrOwnerGone or ErrKeyPaused. It reads the connection on every call, so a
-// pause or a change of what the key may do applies from the next call.
+// ErrOwnerGone, ErrKeyPaused, ErrAIOff or ErrCutOff. It reads the connection
+// and the switches on every call, so a pause, a switch or a change of what
+// the key may do applies from the next call.
 func (s *Service) Authenticate(ctx context.Context, campaignID, raw string) (*Connection, string, error) {
 	raw = strings.TrimSpace(raw)
 	if len(raw) != keyLen || !strings.HasPrefix(raw, keyPrefix) || campaignID == "" {
@@ -176,15 +210,27 @@ func (s *Service) Authenticate(ctx context.Context, campaignID, raw string) (*Co
 	if !c.Live(s.now()) {
 		return nil, "", ErrKeyEnded
 	}
-	name, err := s.owners.Check(ctx, c.CampaignID, c.UserID)
+	check, gone := s.owners.Check, ErrOwnerGone
+	if c.ForPlayer {
+		check, gone = s.owners.CheckMember, ErrPlayerGone
+	}
+	name, err := check(ctx, c.CampaignID, c.UserID)
 	if err != nil {
-		if !errors.Is(err, ErrNotOwner) {
-			slog.Warn("ai connector: owner check failed", slog.Int64("connection", c.ID), slog.Any("error", err))
+		if !errors.Is(err, ErrNotOwner) && !errors.Is(err, ErrNotMember) {
+			slog.Warn("ai connector: maker check failed", slog.Int64("connection", c.ID), slog.Any("error", err))
 		}
-		return nil, "", ErrOwnerGone
+		return nil, "", gone
 	}
 	if c.PausedAt != nil {
 		return nil, "", ErrKeyPaused
+	}
+	if err := s.checkSwitches(ctx, c.CampaignID); err != nil {
+		return nil, "", err
+	}
+	if c.ForPlayer {
+		if err := s.checkPlayerSwitches(ctx, c.CampaignID); err != nil {
+			return nil, "", err
+		}
 	}
 	return c, name, nil
 }
@@ -218,20 +264,23 @@ func (s *Service) ChangeAccess(ctx context.Context, campaignID, userID string, i
 	if err != nil {
 		return nil, err
 	}
+	if c.ForPlayer {
+		privacy = aiexport.PrivacyModeSafe
+	}
 	if err := s.repo.SetAccess(ctx, campaignID, id, privacy, canAsk); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
-// ownCurrent is the campaign's live connection id, for its owner. The page
-// names the key it shows, so a change never lands on a newer key made
-// elsewhere since.
+// ownCurrent is userID's live connection id in the campaign. The page names
+// the key it shows, so a change never lands on a newer key made elsewhere
+// since. A player's key is theirs to change while they are in the campaign.
 func (s *Service) ownCurrent(ctx context.Context, campaignID, userID string, id int64) (*Connection, error) {
-	if _, err := s.owners.Check(ctx, campaignID, userID); err != nil {
-		return nil, apperror.NewForbidden("only the campaign's owner can change its AI connection")
+	if _, err := s.owners.CheckMember(ctx, campaignID, userID); err != nil {
+		return nil, apperror.NewForbidden("only people in this campaign can change their AI connection")
 	}
-	c, err := s.repo.Current(ctx, campaignID)
+	c, err := s.repo.Current(ctx, campaignID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -241,12 +290,23 @@ func (s *Service) ownCurrent(ctx context.Context, campaignID, userID string, id 
 	if !c.Live(s.now()) {
 		return nil, apperror.NewBadRequest("that key was disconnected or has run out")
 	}
+	if !c.ForPlayer {
+		if _, err := s.owners.Check(ctx, campaignID, userID); err != nil {
+			return nil, apperror.NewForbidden("only the campaign's owner can change its AI connection")
+		}
+	}
 	return c, nil
 }
 
-// Allow spends one call of the connection's budget, or says how long to wait.
+// Allow spends one of the connection's requests, or says how long to wait.
 func (s *Service) Allow(connID int64) (bool, time.Duration) {
 	return s.limits.allow(connID, s.now())
+}
+
+// AllowCall spends one of the connection's tool calls, or says how long to
+// wait for the next.
+func (s *Service) AllowCall(connID int64) (bool, time.Duration) {
+	return s.callLimits.allow(connID, s.now())
 }
 
 // Seen stamps the connection as used, with the name the AI app gave itself
@@ -269,25 +329,25 @@ func (s *Service) Record(ctx context.Context, c *Connection, tool, summary, note
 		return
 	}
 	if s.calls.Add(1)%50 == 0 {
-		if err := s.repo.PruneCalls(ctx, c.CampaignID, CallsKept); err != nil {
+		if err := s.repo.PruneCalls(ctx, c.CampaignID, c.UserID, CallsKept); err != nil {
 			slog.Warn("ai connector: pruning calls", slog.Any("error", err))
 		}
 	}
 }
 
-// Activity is every call the campaign keeps, newest first, for the page's
-// sittings.
-func (s *Service) Activity(ctx context.Context, campaignID string) ([]Call, error) {
-	return s.repo.RecentCalls(ctx, campaignID, CallsKept)
+// Activity is every call userID's keys made in the campaign that is kept,
+// newest first, for the page's sittings.
+func (s *Service) Activity(ctx context.Context, campaignID, userID string) ([]Call, error) {
+	return s.repo.RecentCalls(ctx, campaignID, userID, CallsKept)
 }
 
 // ErrCannotAsk: the connection's Change setting is Only look.
 var ErrCannotAsk = errors.New("this connection may only look things up")
 
-// Ask queues what an AI asked for, for the owner to review. Nothing in it is
-// applied here or anywhere else until the owner presses Apply on the review
+// Ask queues what an AI asked for, for the key's maker to review. Nothing in
+// it is applied here or anywhere else until they press Apply on the review
 // screen. A request the review couldn't use is refused now, with the reason,
-// so the AI can fix it instead of leaving the owner a broken one.
+// so the AI can fix it instead of leaving them a broken one.
 func (s *Service) Ask(ctx context.Context, c *Connection, summary, changes string) (*Request, error) {
 	if !c.CanAsk {
 		return nil, ErrCannotAsk
@@ -297,7 +357,7 @@ func (s *Service) Ask(ctx context.Context, c *Connection, summary, changes strin
 		return nil, err
 	}
 	if s.check != nil {
-		problems, err := s.check(ctx, c.CampaignID, changes)
+		problems, err := s.check(ctx, c, changes)
 		if err != nil {
 			slog.Warn("ai-connector: changes check failed", slog.String("campaign_id", c.CampaignID), slog.Any("error", err))
 		} else if len(problems) > 0 {
@@ -321,17 +381,17 @@ func (s *Service) Ask(ctx context.Context, c *Connection, summary, changes strin
 	return q, nil
 }
 
-// Waiting is the campaign's requests waiting for the owner, newest first.
-func (s *Service) Waiting(ctx context.Context, campaignID string) ([]Request, error) {
-	return s.repo.Requests(ctx, campaignID, RequestWaiting, requestsWaiting)
+// Waiting is the requests waiting for userID, newest first.
+func (s *Service) Waiting(ctx context.Context, campaignID, userID string) ([]Request, error) {
+	return s.repo.Requests(ctx, campaignID, userID, RequestWaiting, requestsWaiting)
 }
 
-// Decided is the campaign's latest n requests the owner answered, applied
-// or turned down, newest answer first.
-func (s *Service) Decided(ctx context.Context, campaignID string, n int) ([]Request, error) {
+// Decided is userID's latest n answered requests, applied or turned down,
+// newest answer first.
+func (s *Service) Decided(ctx context.Context, campaignID, userID string, n int) ([]Request, error) {
 	var out []Request
 	for _, status := range []string{RequestAnswered, RequestTurnedDown} {
-		l, err := s.repo.Requests(ctx, campaignID, status, n)
+		l, err := s.repo.Requests(ctx, campaignID, userID, status, n)
 		if err != nil {
 			return nil, err
 		}
@@ -351,10 +411,10 @@ func decidedAt(q Request) time.Time {
 	return q.CreatedAt
 }
 
-// WaitingRequest is one waiting request of the campaign, with its blocks, or
-// an error the owner can read.
-func (s *Service) WaitingRequest(ctx context.Context, campaignID string, id int64) (*Request, error) {
-	q, err := s.repo.Request(ctx, campaignID, id)
+// WaitingRequest is one of userID's waiting requests, with its blocks, or an
+// error they can read.
+func (s *Service) WaitingRequest(ctx context.Context, campaignID, userID string, id int64) (*Request, error) {
+	q, err := s.repo.Request(ctx, campaignID, userID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -369,20 +429,20 @@ func (s *Service) WaitingRequest(ctx context.Context, campaignID string, id int6
 
 // Answered marks a request reviewed and applied; outcome says what was.
 // Answering one twice changes nothing.
-func (s *Service) Answered(ctx context.Context, campaignID string, id int64, outcome string) error {
-	return s.finish(ctx, campaignID, id, RequestAnswered, outcome)
+func (s *Service) Answered(ctx context.Context, campaignID, userID string, id int64, outcome string) error {
+	return s.finish(ctx, campaignID, userID, id, RequestAnswered, outcome)
 }
 
 // TurnDown answers a request No as a whole, applying nothing.
-func (s *Service) TurnDown(ctx context.Context, campaignID string, id int64) error {
-	return s.finish(ctx, campaignID, id, RequestTurnedDown, "nothing changed")
+func (s *Service) TurnDown(ctx context.Context, campaignID, userID string, id int64) error {
+	return s.finish(ctx, campaignID, userID, id, RequestTurnedDown, "nothing changed")
 }
 
-func (s *Service) finish(ctx context.Context, campaignID string, id int64, status, outcome string) error {
-	if _, err := s.repo.FinishRequest(ctx, campaignID, id, status, oneLine(outcome, noteMax), s.now()); err != nil {
+func (s *Service) finish(ctx context.Context, campaignID, userID string, id int64, status, outcome string) error {
+	if _, err := s.repo.FinishRequest(ctx, campaignID, userID, id, status, oneLine(outcome, outcomeMax), s.now()); err != nil {
 		return err
 	}
-	if err := s.repo.PruneRequests(ctx, campaignID, requestsKept); err != nil {
+	if err := s.repo.PruneRequests(ctx, campaignID, userID, requestsKept); err != nil {
 		slog.Warn("ai connector: pruning requests", slog.Any("error", err))
 	}
 	return nil
@@ -451,7 +511,7 @@ func unusable(problems []string) error {
 	if len(problems) > 5 {
 		problems = append(problems[:5:5], fmt.Sprintf("and %d more", len(problems)-5))
 	}
-	return errors.New("the owner couldn't use it: " + strings.Join(problems, "; "))
+	return errors.New("Chronicle couldn't use it: " + strings.Join(problems, "; "))
 }
 
 // cleanClientName keeps the plain characters of an app's name, cut short.
@@ -483,49 +543,59 @@ func oneLine(s string, n int) string {
 	return s[:cut] + "…"
 }
 
-// limiter is a per-connection budget of calls per minute and per day, kept in
-// memory: a restart forgets it, which only ever gives a connection a fresh
-// budget, never more than one window's worth at once.
+// limiter is a per-connection bucket of calls that refills at a steady
+// pace, with an optional cap per day, kept in memory: a restart forgets it,
+// which only ever gives a connection a full bucket, never more.
 type limiter struct {
 	mu      sync.Mutex
+	burst   int
+	refill  time.Duration
+	daily   int // 0: no day cap
 	windows map[int64]*window
 }
 
 type window struct {
-	minuteStart, dayStart time.Time
-	minute, day           int
+	tokens   float64
+	last     time.Time
+	dayStart time.Time
+	day      int
 }
 
-func newLimiter() *limiter { return &limiter{windows: map[int64]*window{}} }
+func newLimiter(burst int, refill time.Duration, daily int) *limiter {
+	return &limiter{burst: burst, refill: refill, daily: daily, windows: map[int64]*window{}}
+}
 
+// allow spends one call from the connection's bucket, or says how long
+// until the next one is there.
 func (l *limiter) allow(id int64, now time.Time) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if len(l.windows) > 10000 {
 		for k, w := range l.windows {
-			if now.Sub(w.dayStart) > 24*time.Hour {
+			if now.Sub(w.last) > 24*time.Hour {
 				delete(l.windows, k)
 			}
 		}
 	}
 	w := l.windows[id]
 	if w == nil {
-		w = &window{minuteStart: now, dayStart: now}
+		w = &window{tokens: float64(l.burst), last: now, dayStart: now}
 		l.windows[id] = w
 	}
-	if now.Sub(w.minuteStart) >= time.Minute {
-		w.minuteStart, w.minute = now, 0
+	if now.After(w.last) {
+		w.tokens = math.Min(float64(l.burst), w.tokens+float64(now.Sub(w.last))/float64(l.refill))
+		w.last = now
 	}
 	if now.Sub(w.dayStart) >= 24*time.Hour {
 		w.dayStart, w.day = now, 0
 	}
-	if w.day >= callsPerDay {
+	if l.daily > 0 && w.day >= l.daily {
 		return false, w.dayStart.Add(24 * time.Hour).Sub(now)
 	}
-	if w.minute >= callsPerMinute {
-		return false, w.minuteStart.Add(time.Minute).Sub(now)
+	if w.tokens < 1 {
+		return false, time.Duration((1 - w.tokens) * float64(l.refill))
 	}
-	w.minute++
+	w.tokens--
 	w.day++
 	return true, 0
 }

@@ -144,6 +144,54 @@ func mergeCraftItems(items []CraftItem) ([]CraftItem, error) {
 	return out, nil
 }
 
+// craftPicks is which remembered copies a project may use: gone-off copies
+// are never spent, and the ones the hero picked go first. When the plain
+// copies and the picks don't cover qty, fresh remembered copies, oldest
+// first, make up the rest, so the spend never falls through to a gone-off
+// one. usable is how many of the item the hero may spend at all.
+func craftPicks(fit []Copy, held, qty int, pick []CopyPick) (out []CopyPick, usable int) {
+	usable = held
+	fresh := map[int64]int{}
+	for _, c := range fit {
+		if c.Memory.Off {
+			usable -= c.Quantity
+		} else {
+			fresh[c.ID] = c.Quantity
+		}
+	}
+	plain := held
+	for _, c := range fit {
+		plain -= c.Quantity
+	}
+	picked := 0
+	for _, p := range pick {
+		have, ok := fresh[p.ID]
+		if !ok || have <= 0 {
+			continue
+		}
+		n := p.N
+		if n <= 0 || n > have {
+			n = have
+		}
+		fresh[p.ID] -= n
+		picked += n
+		out = append(out, CopyPick{ID: p.ID, N: n})
+	}
+	short := qty - picked - plain
+	for _, c := range fit {
+		if short <= 0 {
+			break
+		}
+		if have := fresh[c.ID]; have > 0 {
+			n := min(have, short)
+			fresh[c.ID] -= n
+			short -= n
+			out = append(out, CopyPick{ID: c.ID, N: n})
+		}
+	}
+	return out, usable
+}
+
 // CraftSpend takes a project's materials and cost from the character, all or
 // nothing, under the campaign lock. A Wealth sheet needs the cost as a level
 // and spends nothing, as at a shop. Each material is a history line on the
@@ -181,7 +229,7 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 	defer unlock()
 
 	heldBefore := map[string]int{}
-	for _, it := range items {
+	for i, it := range items {
 		rel, err := s.hasItem(ctx, campaignID, char.ID, it.ItemID, a.SeesDmOnly())
 		if err != nil {
 			return nil, err
@@ -191,9 +239,18 @@ func (s *stashService) CraftSpend(ctx context.Context, campaignID string, a Acto
 			held, _ = parseCarried(rel.Metadata)
 		}
 		heldBefore[it.ItemID] = held
-		if held < it.Quantity {
+		fit, err := s.copiesAt(ctx, campaignID, Endpoint{Kind: EndpointCharacter, ID: char.ID}, it.ItemID, held)
+		if err != nil {
+			return nil, err
+		}
+		pick, usable := craftPicks(fit, held, it.Quantity, it.Pick)
+		if usable < it.Quantity {
+			if usable < held {
+				return nil, apperror.NewBadRequest(fmt.Sprintf("%s holds %d × %s that haven't gone off, and this needs %d.", char.Name, usable, names[it.ItemID], it.Quantity))
+			}
 			return nil, apperror.NewBadRequest(fmt.Sprintf("%s holds %d × %s, and this needs %d.", char.Name, held, names[it.ItemID], it.Quantity))
 		}
+		items[i].Pick = pick
 	}
 
 	kind := buyKind(char)

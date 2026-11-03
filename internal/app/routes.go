@@ -58,6 +58,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
+	"github.com/keyxmakerx/chronicle/internal/plugins/playerchanges"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
@@ -417,10 +418,8 @@ type addonListerAdapter struct {
 }
 
 // ListForPluginHub returns all addons formatted for the plugin hub page and
-// the top-level Extensions hub. HasDashboard / HasEntitySetup are sourced
-// from the campaigns plugin's slug-keyed capability tables (see
-// internal/plugins/campaigns/extensions_hub.go) so the hub catalog carries a
-// single source of truth.
+// the top-level Extensions hub. HasDashboard comes from the campaigns
+// plugin's dashboard-page table (internal/plugins/campaigns/extensions_hub.go).
 func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID string) ([]campaigns.PluginHubAddon, error) {
 	addonList, err := a.svc.ListForCampaign(ctx, campaignID)
 	if err != nil {
@@ -438,18 +437,17 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 			needsSetup, _ = a.svc.NeedsSetup(ctx, campaignID, ca.AddonSlug)
 		}
 		result[i] = campaigns.PluginHubAddon{
-			AddonID:        ca.AddonID,
-			Slug:           ca.AddonSlug,
-			Name:           ca.AddonName,
-			Description:    ca.AddonDescription,
-			Icon:           ca.AddonIcon,
-			Category:       string(ca.AddonCategory),
-			Enabled:        ca.Enabled,
-			Installed:      ca.Installed,
-			HasDashboard:   campaigns.HasExtensionDashboard(ca.AddonSlug),
-			HasEntitySetup: campaigns.HasExtensionEntitySetup(ca.AddonSlug),
-			HasSetup:       hasSetup,
-			NeedsSetup:     needsSetup,
+			AddonID:      ca.AddonID,
+			Slug:         ca.AddonSlug,
+			Name:         ca.AddonName,
+			Description:  ca.AddonDescription,
+			Icon:         ca.AddonIcon,
+			Category:     string(ca.AddonCategory),
+			Enabled:      ca.Enabled,
+			Installed:    ca.Installed,
+			HasDashboard: campaigns.HasExtensionDashboard(ca.AddonSlug),
+			HasSetup:     hasSetup,
+			NeedsSetup:   needsSetup,
 		}
 	}
 	return result, nil
@@ -2483,15 +2481,24 @@ func (a *auditEntityViewGuardAdapter) ResolveEntityView(ctx context.Context, ent
 }
 
 // armoryItemTypeFinderAdapter wraps entities.EntityService to implement the
-// armory.ItemTypeFinder interface. Resolves item-category entity types using
-// the preset_category column.
+// armory.ItemTypeFinder interface over entities.ItemTypes.
 type armoryItemTypeFinderAdapter struct {
 	svc entities.EntityService
 }
 
-// FindItemTypeIDs returns the IDs of entity types with preset_category "item".
+// armoryItemTypes is the campaign's item categories, the one rule every
+// Armory, crafting and stash reader shares (entities.ItemTypes).
+func armoryItemTypes(ctx context.Context, svc entities.EntityService, campaignID string) ([]entities.EntityType, error) {
+	types, err := svc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return entities.ItemTypes(types), nil
+}
+
+// FindItemTypeIDs returns the IDs of the campaign's item categories.
 func (a *armoryItemTypeFinderAdapter) FindItemTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
-	types, err := a.svc.GetEntityTypesByPresetCategory(ctx, campaignID, "item")
+	types, err := armoryItemTypes(ctx, a.svc, campaignID)
 	if err != nil {
 		return nil, err
 	}
@@ -2504,7 +2511,7 @@ func (a *armoryItemTypeFinderAdapter) FindItemTypeIDs(ctx context.Context, campa
 
 // FindItemTypes returns item-category entity types for the Armory filter dropdown.
 func (a *armoryItemTypeFinderAdapter) FindItemTypes(ctx context.Context, campaignID string) ([]armory.ItemTypeInfo, error) {
-	types, err := a.svc.GetEntityTypesByPresetCategory(ctx, campaignID, "item")
+	types, err := armoryItemTypes(ctx, a.svc, campaignID)
 	if err != nil {
 		return nil, err
 	}
@@ -4435,14 +4442,15 @@ func (a *App) RegisterRoutes() {
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.
-	entityService.SetFieldChangeObserver(&armoryMoneyObserver{history: armory.NewMoneyHistory(
+	armoryObserver := &armoryMoneyObserver{history: armory.NewMoneyHistory(
 		stashRepo, stashDirectory,
 		func(ctx context.Context, campaignID string) bool {
 			on, err := addonService.IsEnabledForCampaign(ctx, campaignID, "armory")
 			return err == nil && on
 		},
 		stashEvents,
-	)})
+	)}
+	entityService.SetFieldChangeObserver(armoryObserver)
 	stashAPI := armory.NewStashAPI(stashSvc, &armoryMemberDirectoryAdapter{svc: campaignService})
 	stashAPIHandler := syncapi.NewStashAPIHandler(
 		&syncStashAPIAdapter{api: stashAPI},
@@ -4453,6 +4461,9 @@ func (a *App) RegisterRoutes() {
 	questAPI := &syncQuestAPIAdapter{stash: stashSvc, actors: stashAPI, signer: urlSigner}
 	// Encounters for the Foundry module; the service attaches below.
 	encounterAPI := &syncEncounterAPIAdapter{}
+	// Crafting for the Foundry module; the service attaches below, once the
+	// crafting plugin is built.
+	craftingAPI := &syncCraftingAPIAdapter{actors: stashAPI}
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
@@ -4521,7 +4532,7 @@ func (a *App) RegisterRoutes() {
 	syncHistoryHandler.SetFoundryScenes(syncapi.NewFoundrySceneRepository(a.DB))
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -4697,9 +4708,8 @@ func (a *App) RegisterRoutes() {
 	// Wire audit logging into mutation handlers so CRUD actions are recorded.
 	entityHandler.SetAuditService(auditService)
 	// CALV5-PLACEHOLDER: V5 must restore the calendar's remaining wiring —
-	// SetAuditService, SetTierDefinitionsLister, RegisterExtensionDashboard,
-	// SetTimelineLister, and the block spine (calendar.NewBlockService +
-	// RealTimeSeam + SyncLinkProbe + calendar.InstallBlockSpine). Keep the
+	// SetAuditService, SetTierDefinitionsLister, SetTimelineLister, and
+	// the block spine (calendar.NewBlockService + RealTimeSeam + SyncLinkProbe + calendar.InstallBlockSpine). Keep the
 	// spine's repository a narrow read surface over *sql.DB rather than a
 	// wide CalendarRepository interface — the old plugin's 60-method
 	// interface was itself a reason it became hard to change. TODO(#778)
@@ -4773,6 +4783,41 @@ func (a *App) RegisterRoutes() {
 	pageSafetyHandler.SetAuditService(auditService)
 	entities.RegisterPageSafetyRoutes(e, pageSafetyHandler, campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
+
+	// What players changed: every change a Player makes to a page, by hand or
+	// through their AI, for the owner to search and undo. It hears about
+	// writes beside the Armory's money history; without its tables, writes
+	// go on exactly as before.
+	a.registerPlugin(PluginRegistration{
+		Slug:     playerchanges.PluginSlug,
+		StaticFS: echo.MustSubFS(playerchanges.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "player-changes", Scripts: []string{"js/player_changes.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(playerchanges.PluginSlug) {
+		keepMonths := func(ctx context.Context) int { return settingsService.LongTermTrashMonths(ctx) }
+		playerChangesSvc := playerchanges.NewService(playerchanges.NewRepository(a.DB),
+			&playerChangePages{entities: entityService, safety: pageSafetyService}, keepMonths)
+		entityService.SetFieldChangeObserver(fieldObservers{armoryObserver,
+			&playerChangeRecorder{svc: playerChangesSvc, members: campaignService, types: entityService}})
+		playerchanges.RegisterRoutes(e, playerchanges.NewHandler(playerChangesSvc,
+			func(c echo.Context) int { return keepMonths(c.Request().Context()) },
+			func(c echo.Context) *time.Location {
+				u, err := authService.GetUser(c.Request().Context(), auth.GetUserID(c))
+				if err != nil || u == nil || u.Timezone == nil {
+					return nil
+				}
+				return timeutil.LoadLocation(*u.Timezone)
+			}), campaignService, authService)
+		// Pages a player removed stay whole past the Trash's days, for the
+		// Long-term trash's length, so the owner can still bring them back.
+		pageSafetyService.SetLongTermTrash(playerChangesSvc)
+		adminHandler.SetLongTermTrashSizer(playerChangesSvc)
+		go playerChangesSvc.StartPacker(a.ShutdownCtx)
+	} else {
+		slog.Warn("player changes plugin degraded — What players changed is not available")
+	}
 
 	// --- Extra places in the page tree ---
 	// One page listed under more than one parent. The service is also the
@@ -5287,6 +5332,20 @@ func (a *App) RegisterRoutes() {
 				slog.Error("ending AI keys failed", slog.String("user_id", userID), slog.Any("error", err))
 			}
 		})
+		// The watch: the server's and each campaign's AI switches, and
+		// warnings about keys used in a way that looks wrong, shown to the
+		// owner and on Site admin ▸ API & access ▸ AI apps.
+		aiConnectorSvc.SetWatch(connector.NewWatchRepository(a.DB))
+		aiAdminHandler := ai_workspace.NewAdminAIHandler(aiConnectorSvc)
+		aiAdminHandler.SetActivityRecorder(adminActivity)
+		aiAdminHandler.SetZone(func(c echo.Context) *time.Location {
+			u, err := authService.GetUser(c.Request().Context(), auth.GetUserID(c))
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		})
+		ai_workspace.RegisterAdminRoutes(adminGroup, aiAdminHandler, auth.RequireReauth(authService))
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)
@@ -5298,6 +5357,8 @@ func (a *App) RegisterRoutes() {
 	)
 	ai_workspace.RegisterOwnerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
 		campaigns.RequireRole(campaigns.RoleOwner))
+	ai_workspace.RegisterPlayerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
+		campaigns.RequireRole(campaigns.RolePlayer))
 
 	// --- Import from Obsidian or Markdown (Settings > Import) ---
 	// Pages, pictures and page files are reached through the narrow adapters in
@@ -5584,6 +5645,9 @@ func (a *App) RegisterRoutes() {
 	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	// A player's AI changes only that player's own character, through the
+	// same claimed-owner checks and hero builder plan as the sheet editor.
+	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc}})
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the
 	// version + files each system loader is ACTUALLY serving, to catch the
@@ -6380,6 +6444,7 @@ func (a *App) RegisterRoutes() {
 		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
 		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
 		aiCrafting = aiCraftingAdapter{svc: craftingSvc, addons: addonService}
+		craftingAPI.attach(craftingSvc)
 	} else {
 		slog.Warn("crafting plugin degraded — the Crafting app is not available")
 	}
@@ -6499,6 +6564,10 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
 		aiItemLooks = aiItemLooksAdapter{svc: itemLookService, names: lookPages}
 	}
+	var aiShopLooks records.ShopLooksAPI
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		aiShopLooks = aiShopLooksAdapter{rooms: shopRoomService, fronts: shopStreetService}
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -6526,6 +6595,7 @@ func (a *App) RegisterRoutes() {
 		Tags:            tagService,
 		PageLayouts:     pageLayoutService,
 		PageTests:       pageTests,
+		Trackers:        trackersSvc,
 		FoundryMonsters: aiFoundryMonsters,
 		FoundryMatcher:  aiFoundryMatcher,
 		FoundryScenes:   aiFoundryScenes,
@@ -6533,6 +6603,8 @@ func (a *App) RegisterRoutes() {
 		ArmoryRequests:  dmSources.Requests,
 		ItemLooks:       aiItemLooks,
 		Crafting:        aiCrafting,
+		ShopLooks:       aiShopLooks,
+		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
@@ -6646,6 +6718,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "diag-picker", Scripts: []string{"/static/js/widgets/diag_picker.js"}},
 	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
 	{Name: "ai-import-review", Scripts: []string{"/static/js/widgets/ai_import_review.js"}},
+	{Name: "ai-chip", Scripts: []string{"/static/js/widgets/ai_chip.js"}},
 	{Name: "mini-bar-chart", Scripts: []string{"/static/js/widgets/mini_bar_chart.js"}},
 	{Name: "surface-demo", Scripts: []string{"/static/js/widgets/surface_demo.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
@@ -6669,7 +6742,8 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules_more.js", "/static/js/widgets/craft_rules.js"}},
 }
@@ -7324,10 +7398,13 @@ type aiWorkspaceAuditAdapter struct {
 	svc audit.AuditService
 }
 
-func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaignID, action string, details map[string]any) {
+// The audit service refuses an entry without a user, so userID must be set
+// or the event is lost.
+func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaignID, userID, action string, details map[string]any) {
 	// Fire-and-forget; audit failures must not break the response.
 	_ = a.svc.Log(ctx, &audit.AuditEntry{
 		CampaignID: campaignID,
+		UserID:     userID,
 		Action:     action,
 		Details:    details,
 	})

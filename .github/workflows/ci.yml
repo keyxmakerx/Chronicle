@@ -142,6 +142,10 @@ jobs:
         # may only shrink. Needs no git history; self-tests on every run.
         run: ./tools/check-widget-mounts.sh
 
+      - name: Escape helpers guard
+        # Scripts escape HTML through Chronicle.escapeHtml, not their own copies.
+        run: ./tools/check-escape-helpers.sh
+
       - name: Customize surface discipline guard
         # Fixed-file-list check on the Customize -> Appearance surface: no
         # setTimeout-driven page reload, no JS-constructed data-mode/file-
@@ -189,7 +193,9 @@ jobs:
   # behind one another. Every file lands in some group by its name.
   js:
     name: JS tests (${{ matrix.group }})
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56.1 has no Chromium build for the newer
+    # ubuntu-latest image. Move both together when Playwright is upgraded.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -437,7 +443,9 @@ jobs:
   # --- Browser tests ---
   e2e:
     name: Browser tests
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56.1 has no Chromium build for the newer
+    # ubuntu-latest image. Move both together when Playwright is upgraded.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 

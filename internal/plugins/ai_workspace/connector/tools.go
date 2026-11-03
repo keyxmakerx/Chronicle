@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
@@ -42,6 +43,12 @@ type tool struct {
 	Args []arg
 	// Asks marks the tools only an "Ask for changes" connection lists.
 	Asks bool
+	// Owner marks the tools a player's key never lists: the Director's
+	// preparation and queues, which a player's view has no business in.
+	Owner bool
+	// PlayerDesc replaces Desc for a player's key, where the owner's
+	// wording would be wrong.
+	PlayerDesc string
 }
 
 // toolConnect logs an AI app connecting; it is no tool the AI calls.
@@ -52,13 +59,6 @@ const (
 	toolHowTo = "how_to_write_changes"
 	toolAsk   = "ask_for_changes"
 )
-
-var dateArgs = []arg{
-	{Key: "from", Desc: "First day, as the calendar writes it (for example \"Deepwinter 1 1492\")"},
-	{Key: "to", Desc: "Last day, as the calendar writes it"},
-	{Key: "year", Desc: "A year (instead of from and to), for example \"1492\""},
-	{Key: "month", Desc: "A month of that year, by name or number"},
-}
 
 // tools is every tool, in the order an AI is shown them. Each maps onto one
 // lookup, so answers follow the lookup's privacy and size caps exactly.
@@ -73,38 +73,31 @@ var tools = []tool{
 		Args: []arg{{Key: "name", Desc: "The page's name", Required: true}}},
 	{Name: "list_tags", Title: "Tags", Did: "Listed the tags", What: "tags",
 		Desc: "Every tag, with how many pages carry it."},
-	{Name: "calendar_overview", Title: "The calendar", Did: "Read the calendar", What: records.LookupWhatCalendar,
-		Desc: "The main calendar: months, weekdays, seasons, moons and their phases, eras, festivals, today's date and the climate."},
-	{Name: "weather_kinds", Title: "Kinds of weather", Did: "Read the kinds of weather", What: "weather-kinds",
-		Desc: "Every climate and kind of weather the calendar knows."},
-	{Name: "calendar_events", Title: "Calendar events", Did: "Looked up events", What: "events",
-		Desc: "Calendar events in a range of dates: from and to, or a year and a month.", Args: dateArgs},
-	{Name: "weather", Title: "Weather by day", Did: "Looked up the weather", What: "weather",
-		Desc: "Each day's weather in a range of dates: from and to, or a year and a month.", Args: dateArgs},
-	{Name: "rolling_tables", Title: "Rolling tables", Did: "Read rolling tables", What: "table",
+	{Name: "rolling_tables", Owner: true, Title: "Rolling tables", Did: "Read rolling tables", What: "table",
 		Desc: "The rolling tables, or one table's entries when given its name.",
 		Args: []arg{{Key: "name", Desc: "A table's name, to read its entries"}}},
 	{Name: "map_pins", Title: "Maps and pins", Did: "Looked at maps", What: "pins",
 		Desc: "The maps, or one map's pins when given its name.",
 		Args: []arg{{Key: "map", Desc: "A map's name, to list its pins"}}},
-	{Name: "foundry_scenes", Title: "Foundry scenes", Did: "Looked at the Foundry scenes", What: "scenes",
+	{Name: "foundry_scenes", Owner: true, Title: "Foundry scenes", Did: "Looked at the Foundry scenes", What: "scenes",
 		Desc: "The scenes in the campaign's Foundry world, which says which maps already exist there. Give a name to check for one.",
 		Args: []arg{{Key: "name", Desc: "Part of a scene's name or folder, to check whether a map exists"}}},
 	{Name: "shop_stock", Title: "What a shop sells", Did: "Looked at a shop", What: "stock",
-		Desc: "What a shop page sells, with prices and how many.",
+		Desc: "What a shop page sells, with prices and how many, and its room (what kind of shop, mood, what the keeper says) and storefront on the Shops street, written as blocks you can send back changed.",
 		Args: []arg{{Key: "shop", Desc: "The shop's page name", Required: true}}},
 	{Name: "inventory", Title: "What a character carries", Did: "Looked at what someone carries", What: "inventory",
 		Desc: "What a character carries.",
 		Args: []arg{{Key: "character", Desc: "The character's page name", Required: true}}},
 	{Name: "crafting", Title: "Crafting", Did: "Looked at crafting", What: "crafting",
-		Desc: "The campaign's crafting: the game system's crafting rules, every recipe, every material (with the pages that drop it and the recipes that use it), every page's drop list, what waits in the spoils tray, heroes' projects and the benches. " +
-			"Give part to get recipes, materials or drop lists written as blocks you can send back changed, or looks for each item's look (how it shows its magic when used). A connection that sees what players see reads only the recipe book.",
+		Desc: "The campaign's crafting: the game system's crafting rules, every recipe, every material (with the pages that drop it and the recipes that use it), every page's drop list, what waits in the spoils tray, heroes' projects and the benches. Each recipe comes with its \"When… then…\" rules. " +
+			"Give part to get recipes, materials, drop lists or benches written as blocks you can send back changed, or looks for each item's look (how it shows its magic when used). A connection that sees what players see reads only the recipe book.",
 		Args: []arg{
-			{Key: "part", Desc: "recipes, materials, drops or looks: that part, written as blocks"},
-			{Key: "name", Desc: "One recipe, material or page with a drop list"},
+			{Key: "part", Desc: "recipes, materials, drops, benches or looks: that part, written as blocks"},
+			{Key: "name", Desc: "One recipe, material, bench or page with a drop list"},
 		}},
 	{Name: "my_notes", Title: "My notes", Did: "Listed your notes", What: "notes",
-		Desc: "The campaign owner's Journal notes, page jots and Player Notes on pages, and the ones other members shared with them, game night entries among them: titles, folders, pages, nights, who wrote each and who it is shared with. Use read_note for one note's text."},
+		Desc:       "The campaign owner's Journal notes, page jots and Player Notes on pages, and the ones other members shared with them, game night entries among them: titles, folders, pages, nights, who wrote each and who it is shared with. Use read_note for one note's text.",
+		PlayerDesc: "Your own Journal notes, page jots and Player Notes on pages, and the ones other members shared with you: titles, folders, pages, who wrote each and who it is shared with. Use read_note for one note's text."},
 	{Name: "read_note", Title: "Read a note", Did: "Read a note", What: "note",
 		Desc: "One note's full text, by its title as my_notes lists it. Notes other members wrote can be read, never changed.",
 		Args: []arg{
@@ -113,53 +106,94 @@ var tools = []tool{
 			{Key: "by", Desc: "Who wrote it, when two notes share a title"},
 		}},
 	{Name: "house_rules", Title: "House rules", Did: "Read the house rules", What: "house-rules",
-		Desc: "The campaign's house rules, chapter by chapter."},
+		Desc: "The campaign's house rules, chapter by chapter. A rulebook too long for one answer lists every chapter's title; give name for any one chapter.",
+		Args: []arg{{Key: "name", Desc: "One chapter's title"}}},
 	{Name: "system_entries", Title: "Game system entries", Did: "Looked up game system entries", What: "system-entries",
 		Desc: "The game system's entries for a character field (ancestries, kits...). Without field, the fields that have entries.",
-		Args: []arg{{Key: "field", Desc: "A character field, for example \"ancestry\""}}},
-	{Name: "game_nights", Title: "Game nights", Did: "Listed the game nights", What: "game-nights",
-		Desc: "The campaign's game nights: name, date, time, status and summary."},
-	{Name: "waiting_for_review", Title: "Waiting for review", Did: "Looked at what is waiting for review", What: "waiting",
+		Args: []arg{{Key: "field", Desc: "A character field, for example \"ancestry\""}, {Key: "name", Desc: "Part of an entry's name, to narrow a long list"}}},
+	{Name: "waiting_for_review", Owner: true, Title: "Waiting for review", Did: "Looked at what is waiting for review", What: "waiting",
 		Desc: "What is waiting for the owner's yes or no: the changes you asked for that are still waiting, how the owner answered your latest ones, entries players wrote and handed in, and players' stash moves and requests to buy. Read-only: only the owner can accept or turn these down, in Chronicle."},
-	{Name: "players", Title: "Players", Did: "Looked at the players", What: "players",
+	{Name: "players", Owner: true, Title: "Players", Did: "Looked at the players", What: "players",
 		Desc: "Each player's character right now, what they carry, and whether they are coming to the next game night."},
-	{Name: "encounters", Title: "Encounters", Did: "Looked at the encounters", What: "encounters",
+	{Name: "encounters", Owner: true, Title: "Encounters", Did: "Looked at the encounters", What: "encounters",
 		Desc: "The fights planned on pages, written as encounter blocks you can send back changed: heroes, creatures, groups, starts and versions, the version that plays now, and any creature Foundry can't place.",
 		Args: []arg{{Key: "page", Desc: "Only the fights on this page"}}},
-	{Name: "tests", Title: "Tests", Did: "Looked at the tests", What: "tests",
+	{Name: "tests", Owner: true, Title: "Tests", Did: "Looked at the tests", What: "tests",
 		Desc: "The montages and other tests on pages, with their results and the one recorded. An encounter version names one of these results to be picked by it.",
 		Args: []arg{{Key: "page", Desc: "Only the tests on this page"}}},
-	{Name: "foundry_monsters", Title: "Foundry's monsters", Did: "Looked at Foundry's monsters", What: "foundry-monsters",
+	{Name: "trackers", Owner: true, Title: "Trackers", Did: "Looked at the trackers", What: "trackers",
+		Desc: "The counters, named steps and clocks kept on pages, hidden ones included: each one's value, what it means now and its latest changes. Change one with a tracker block in ask_for_changes.",
+		Args: []arg{{Key: "page", Desc: "Only the trackers on this page"}}},
+	{Name: "foundry_monsters", Owner: true, Title: "Foundry's monsters", Did: "Looked at Foundry's monsters", What: "foundry-monsters",
 		Desc: "The monsters the campaign's Foundry world can place, from its actors and compendiums, with level, role and EV. Check here before writing a Creature page: a monster Foundry has needs no page to be used in a fight.",
 		Args: []arg{{Key: "name", Desc: "Part of a monster's name"}, {Key: "level", Desc: "A level, for example \"3\""}, {Key: "role", Desc: "A role or organization, for example \"Harrier\" or \"Horde\""}}},
 	{Name: "block_format", Title: "How to write a block", Did: "Read how to write a block", What: "format",
 		Desc: "How Chronicle writes one kind of block (an event, a calendar, a rolling table...).",
 		Args: []arg{{Key: "block", Desc: "The kind of block, for example \"event\"", Required: true}}},
 	{Name: toolHowTo, Title: "How to write changes", Did: "Read how to write changes", Asks: true,
-		Desc: "Read this before ask_for_changes: how Chronicle writes pages and every other kind of block, and this campaign's kinds of pages with their sheet fields."},
+		Desc:       "Read this before ask_for_changes: how Chronicle writes pages and every other kind of block. It comes in parts so each fits one read: without arguments the guide, then a category's sheet fields with category, and each kind of block's format from block_format.",
+		PlayerDesc: "Read this before ask_for_changes: how to write a change to your own character's sheet, the sheets you may change, and the choices the hero builder offers.",
+		Args: []arg{
+			{Key: "category", Desc: "A category's name, for example \"Creature\": its sheet fields"},
+			{Key: "part", Desc: "\"categories\" for every category's sheet fields at once"},
+		}},
 	{Name: toolAsk, Title: "Ask for changes", Did: "Asked for changes", Asks: true,
 		Desc: "Send changes for the campaign's owner to review: new pages, edits, removals, events and the other blocks how_to_write_changes describes. " +
-			"Nothing changes until the owner says yes to each one in Chronicle, so tell them it is waiting on their Your AI page; waiting_for_review shows later how they answered. Send one request per job, not one per block.",
+			"Nothing changes until the owner says yes to each one in Chronicle, so tell them it is waiting under the AI button in Chronicle; waiting_for_review shows later how they answered. Send one request per job, not one per block.",
+		PlayerDesc: "Send changes to your own character's sheet for you to review: the identity fields and the hero builder's choices. " +
+			"Nothing changes until you say yes to each one under the AI button in Chronicle. Changes to anything else are held back. Send one request per job.",
 		Args: []arg{
-			{Key: "summary", Required: true, Desc: "One line for the owner saying what this does, for example \"Five characters for Coral Court\""},
+			{Key: "summary", Required: true, Desc: "One line saying what this does, for example \"Five characters for Coral Court\""},
 			{Key: "changes", Required: true, Max: changesMax, Keep: true, Desc: "The blocks, written as how_to_write_changes says, one after another"},
 		}},
 }
 
-// toolsFor is the tools a connection may use, in order.
-func toolsFor(c *Connection) []*tool {
+// toolsFor is the tools a connection may use, in order: the built-in ones,
+// with the lookups features plug in (l.Plugged) before block_format. A
+// player's key never lists the owner's tools, and one it isn't listed
+// can't be called.
+func toolsFor(c *Connection, l *records.Lookups) []*tool {
 	out := make([]*tool, 0, len(tools))
-	for i := range tools {
-		if !tools[i].Asks || (c != nil && c.CanAsk) {
-			out = append(out, &tools[i])
+	add := func(t *tool) {
+		if t.Asks && (c == nil || !c.CanAsk) {
+			return
 		}
+		if t.Owner && (c == nil || c.ForPlayer) {
+			return
+		}
+		out = append(out, t)
+	}
+	for i := range tools {
+		if tools[i].What == "format" && l != nil {
+			for _, p := range l.Plugged {
+				if t := pluggedTool(p.LookupInfo()); t != nil {
+					add(t)
+				}
+			}
+		}
+		add(&tools[i])
 	}
 	return out
 }
 
+// pluggedTool is a feature's lookup as a tool; nil when it lists none.
+func pluggedTool(in aiplug.LookupInfo) *tool {
+	if in.Tool.Name == "" {
+		return nil
+	}
+	t := &tool{
+		Name: in.Tool.Name, Title: in.Tool.Title, Did: in.Tool.Did, What: in.What,
+		Desc: in.Tool.Desc, PlayerDesc: in.Tool.PlayerDesc, Owner: in.Tool.Owner,
+	}
+	for _, a := range in.Tool.Args {
+		t.Args = append(t.Args, arg{Key: a.Key, Desc: a.Desc, Required: a.Required})
+	}
+	return t
+}
+
 // findTool is the connection's tool by name; one it may not use is not found.
-func findTool(c *Connection, name string) *tool {
-	for _, t := range toolsFor(c) {
+func findTool(c *Connection, l *records.Lookups, name string) *tool {
+	for _, t := range toolsFor(c, l) {
 		if t.Name == name {
 			return t
 		}
@@ -171,7 +205,7 @@ func findTool(c *Connection, name string) *tool {
 // read-only, so an AI app may run it without asking. ask_for_changes is not
 // read-only, since it leaves the owner a request, but it is not destructive:
 // it applies nothing.
-func (t *tool) definition() map[string]any {
+func (t *tool) definition(forPlayer bool) map[string]any {
 	props := map[string]any{}
 	required := []string{}
 	for _, a := range t.Args {
@@ -183,7 +217,7 @@ func (t *tool) definition() map[string]any {
 	return map[string]any{
 		"name":        t.Name,
 		"title":       t.Title,
-		"description": t.Desc,
+		"description": t.describe(forPlayer),
 		"inputSchema": map[string]any{
 			"type":                 "object",
 			"properties":           props,
@@ -200,9 +234,46 @@ func (t *tool) definition() map[string]any {
 	}
 }
 
+// describe is the tool's description for the key's maker.
+func (t *tool) describe(forPlayer bool) string {
+	if forPlayer && t.PlayerDesc != "" {
+		return t.PlayerDesc
+	}
+	return t.Desc
+}
+
 // readArgs keeps only the tool's own arguments, each a string within its
 // cap. A missing required one is an error the AI can fix.
+// takes reports whether the tool has an argument called key.
+func (t *tool) takes(key string) bool {
+	for _, a := range t.Args {
+		if a.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// argList names the tool's arguments: "part, name".
+func (t *tool) argList() string {
+	keys := make([]string, len(t.Args))
+	for i, a := range t.Args {
+		keys[i] = a.Key
+	}
+	return strings.Join(keys, ", ")
+}
+
 func (t *tool) readArgs(in map[string]any) (map[string]string, error) {
+	// An argument the tool doesn't take is refused, not dropped, so the AI
+	// never believes a filter or a part it made up was applied.
+	for k := range in {
+		if !t.takes(k) {
+			if len(t.Args) == 0 {
+				return nil, fmt.Errorf("%s takes no arguments, so %s can't be used", t.Name, oneLine(k, 40))
+			}
+			return nil, fmt.Errorf("%s doesn't take %s; it takes %s", t.Name, oneLine(k, 40), t.argList())
+		}
+	}
 	out := map[string]string{}
 	for _, a := range t.Args {
 		v, ok := in[a.Key]

@@ -1,17 +1,17 @@
 /*
- * dm_screen.js — the DM Screen opener.
+ * dm_screen.js — the DM Screen dock.
  *
  * The top-bar button lives in app.templ; the panel is a server-rendered
- * fragment (GET /campaigns/:id/dm-screen) fetched fresh on every open. This
- * widget owns the overlay, the opening (a rune d20 from Chronicle.dice is
- * thrown from the button and lands on a 20, then bursts: the folded screen
- * pushes up out of it and the knocked-loose pieces fall, bounce and settle),
- * the closing (the leaves fold shut and the screen collapses where it
- * stands), tabs and the condition filter.
+ * fragment (GET /campaigns/:id/dm-screen) that refetches itself after an
+ * Armory change. This widget docks it at the right edge of the page: a rail
+ * of section icons and a column of section cards beside it. Several cards
+ * can be open at once; the newest is shown whole and the older ones fold to
+ * one line. The rail's top icon tucks the dock away to a small edge tab that
+ * carries the waiting count.
  *
- * Nothing loops, so there is nothing to ease to still. One click anywhere,
- * or Escape, skips the opening. Reduced motion, and every open after the
- * first in a browser tab, gets a plain fade.
+ * Whether the dock is out, and which sections are open in which order, is
+ * remembered per browser and per campaign. The dock lives on <body>, so a
+ * boosted navigation (which swaps only #main-content) leaves it standing.
  *
  * Registered via Chronicle.register; boot.js mounts it on [data-widget="dm-screen"].
  */
@@ -19,25 +19,8 @@
   'use strict';
   function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
 
-
-  // The burst: the thrown die is swapped for ten flat facets, a hexagon outline
-  // split around the centre face, in percentages of the die box, so each
-  // facet can fall on its own.
-  var H = [[50, 3], [93, 27], [93, 73], [50, 97], [7, 73], [7, 27]];
-  var T = [[50, 24], [77, 67], [23, 67]];
-  var FACETS = [
-    { p: [T[0], T[1], T[2]], shade: 0, face: true },
-    { p: [H[5], H[0], T[0]], shade: 18 }, { p: [H[0], H[1], T[0]], shade: 10 },
-    { p: [H[1], T[1], T[0]], shade: -8 }, { p: [H[1], H[2], T[1]], shade: -18 },
-    { p: [H[2], H[3], T[1]], shade: -24 }, { p: [H[3], T[2], T[1]], shade: -12 },
-    { p: [H[3], H[4], T[2]], shade: -20 }, { p: [H[4], H[5], T[2]], shade: -4 },
-    { p: [H[5], T[0], T[2]], shade: 6 }
-  ];
-  var DIE = 90;       // burst size in px, about the thrown die's size
-  var BREAK = 1560;   // ms into the burst's clock when the pieces start to fall
-  var FADE = BREAK + 1900;
-  var HOLD = 450;     // ms the landed 20 stays lit before it bursts
   var UNDO_FOR = 10000; // ms a revealed row keeps its Undo
+  var DEFAULT_OPEN = ['world', 'party'];
 
   // A revealed row's Undo lasts a few seconds, long enough to catch a
   // misclick at the table. Focus on it moves to the row's confirmation.
@@ -57,22 +40,8 @@
   });
 
   // Note state per campaign and note label, kept for the page's life so a draft
-  // that failed to save is still there when the screen is reopened.
+  // that failed to save is still there after a refetch.
   var NOTES = {};
-
-  var POS_KEY = 'chronicle.dmscreen.pos';
-
-  function readPos() {
-    try {
-      var p = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
-      if (p && isFinite(p.x) && isFinite(p.y)) return { x: +p.x, y: +p.y };
-    } catch (e) { /* storage blocked or corrupt: open at the default spot */ }
-    return { x: 0, y: 0 };
-  }
-
-  function writePos(p) {
-    try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch (e) { /* not remembered */ }
-  }
 
   // Asked at each move, so a Calm or Off pick in My view applies at once.
   function reduce() {
@@ -80,92 +49,330 @@
       !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
+  // On a narrow window the dock lies over the page instead of narrowing it.
   function narrow() { return window.matchMedia('(max-width: 700px)').matches; }
 
-  // The die opens the first DM Screen of a browser tab; later opens in that
-  // tab use the plain fade, so a screen opened often at the table is quick.
-  var ROLLED_KEY = 'chronicle.dmScreen.rolled';
-  function rolledInTab() {
-    try { return sessionStorage.getItem(ROLLED_KEY) === '1'; } catch (e) { return false; }
+  function readJSON(key, fallback) {
+    try {
+      var v = JSON.parse(localStorage.getItem(key) || 'null');
+      return v === null ? fallback : v;
+    } catch (e) { return fallback; } // storage blocked or corrupt
   }
-  function markRolled() {
-    try { sessionStorage.setItem(ROLLED_KEY, '1'); } catch (e) { /* rolls again next time */ }
+
+  function writeJSON(key, v) {
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* not remembered */ }
+  }
+
+  function standardMs() {
+    var v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dur-standard'));
+    return isFinite(v) && v > 0 ? v : 200;
   }
 
   Chronicle.register('dm-screen', {
     init: function (el) {
-      var openBtn = el.querySelector('[data-dms-open]');
+      var toggleBtn = el.querySelector('[data-dms-toggle]');
       var url = el.getAttribute('data-url');
-      if (!openBtn || !url) return;
+      if (!toggleBtn || !url) return;
 
-      var st = { anims: [], fx: [], raf: 0, playing: false, overlay: null, opener: openBtn };
+      var cid = (url.match(/\/campaigns\/([^/]+)\//) || [])[1] || '';
+      var OUT_KEY = 'chronicle.dms.out.' + cid;
+      var OPEN_KEY = 'chronicle.dms.open.' + cid;
 
-      function overlay() {
-        if (st.overlay) return st.overlay;
-        var o = document.createElement('div');
-        o.className = 'dms-overlay';
-        o.hidden = true;
-        o.innerHTML = '<div class="dms-dim" data-dms-dim></div><div class="dms-stage" data-dms-stage></div>' +
-          '<span class="dms-skip" hidden>Click anywhere to skip</span>';
-        document.body.appendChild(o);
-        o.addEventListener('click', function (e) {
-          if (st.playing) { finish(); return; }
-          if (e.target.closest('[data-dms-close]') || e.target.hasAttribute('data-dms-dim') || e.target.hasAttribute('data-dms-stage')) { close(); return; }
-          var tab = e.target.closest('[data-dms-tab]');
-          if (tab) selectTab(tab);
-          // The downtime switch asks first; its yes button does the post.
-          var ask = e.target.closest('[data-dms-ask]');
-          if (ask) showConfirm(true);
-          if (e.target.closest('[data-dms-cancel]')) showConfirm(false);
-          var hrow = e.target.closest('[data-dms-hrow]');
-          if (hrow) toggleHero(hrow);
-          var b = st.brew || {};
-          if (e.target.closest('[data-dms-brew]')) {
-            brew(!b.open, b.pv);
-            // On a narrow window the drawer opens below the leaves.
-            var pane = st.brew && st.brew.open && root() && root().querySelector('[data-dms-brew-pane]');
-            if (pane) pane.scrollIntoView({ block: 'nearest', behavior: reduce() ? 'auto' : 'smooth' });
-          }
-          if (e.target.closest('[data-dms-brew-pv]')) brew(true, !b.pv);
-        });
-        // Once the opening is over the screen is a window: drag it by its title bar.
-        o.addEventListener('pointerdown', function (e) {
-          if (!st.windowed || e.button > 0 || e.target.closest('button, a, input, textarea')) return;
-          var bar = e.target.closest('.dms-titlebar');
-          if (bar) startDrag(e, bar);
-        });
-        o.addEventListener('scroll', function (e) {
-          if (e.target.hasAttribute && e.target.hasAttribute('data-dms-party')) partyEdges(e.target);
-        }, true);
-        // A refresh after an Armory change swaps the panel in place.
-        o.addEventListener('htmx:afterSettle', function () { refreshParty(); restoreKept(); if (st.windowed) placeWindow(false); });
-        o.addEventListener('input', function (e) {
-          if (e.target.hasAttribute('data-dms-filter')) filterConditions(e.target);
-          if (e.target.hasAttribute('data-dms-note')) noteEdited(e.target);
-        });
-        // blur doesn't bubble; focusout does, and leaving the box saves now.
-        o.addEventListener('focusout', function (e) {
-          if (e.target.hasAttribute && e.target.hasAttribute('data-dms-note')) saveNote();
-        });
-        // A panel refetch (an Allow, a downtime switch) replaces the markup;
-        // keep the open tab and any unsaved note text across it.
-        o.addEventListener('htmx:beforeSwap', function (e) {
-          if (!e.target.hasAttribute || !e.target.hasAttribute('data-dms-root')) return;
-          var tab = e.target.querySelector('[data-dms-tab][aria-selected="true"]');
-          st.keep = { tab: tab && tab.getAttribute('data-dms-tab') };
-        });
-        st.overlay = o;
-        return o;
+      var savedOpen = readJSON(OPEN_KEY, DEFAULT_OPEN);
+      var st = {
+        out: readJSON(OUT_KEY, false) === true,
+        open: Array.isArray(savedOpen) ? savedOpen.filter(function (s) { return typeof s === 'string'; }) : DEFAULT_OPEN.slice(),
+        dock: null, tab: null, loading: null, loaded: false, brewPv: false
+      };
+
+      function root() { return st.dock && st.dock.querySelector('[data-dms-root]'); }
+
+      // The dock starts under the top bar, whatever sits above it.
+      function place() {
+        var bar = document.getElementById('app-topbar');
+        var top = bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 56;
+        document.documentElement.style.setProperty('--dms-top', top + 'px');
       }
 
+      function build() {
+        var d = document.createElement('div');
+        d.className = 'dms-dock';
+        d.hidden = true;
+        d.innerHTML = '<div class="dms-stage" data-dms-stage></div>';
+        var t = document.createElement('button');
+        t.type = 'button';
+        t.className = 'dms-tab';
+        t.hidden = true;
+        t.setAttribute('aria-label', 'Show the ' + gmTerm() + ' Screen');
+        t.title = gmTerm() + ' Screen';
+        t.innerHTML = '<i class="fa-solid fa-angles-left" aria-hidden="true"></i><span class="dms-tab-n" hidden></span>';
+        t.addEventListener('click', function () { show(true); });
+        document.body.appendChild(d);
+        document.body.appendChild(t);
+        st.dock = d;
+        st.tab = t;
+
+        d.addEventListener('click', onClick);
+        d.addEventListener('scroll', function (e) {
+          if (e.target.hasAttribute && e.target.hasAttribute('data-dms-party')) partyEdges(e.target);
+        }, true);
+        d.addEventListener('input', function (e) {
+          if (e.target.hasAttribute('data-dms-filter')) filterConditions(e.target);
+          if (e.target.hasAttribute('data-dms-note')) noteEdited();
+        });
+        // blur doesn't bubble; focusout does, and leaving the box saves now.
+        d.addEventListener('focusout', function (e) {
+          if (e.target.hasAttribute && e.target.hasAttribute('data-dms-note')) saveNote();
+        });
+        // A refetch (an Allow, a downtime switch) replaces the panel; the open
+        // sections, the player view and any unsaved note come back on it.
+        d.addEventListener('htmx:afterSettle', function (e) {
+          if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-dms-root')) afterMount();
+        });
+        document.addEventListener('keydown', onKey);
+        document.addEventListener('click', onOutside);
+        window.addEventListener('resize', place);
+        place();
+      }
+
+      function onClick(e) {
+        var t = e.target;
+        if (t.closest('[data-dms-tuck]')) { tuck(true); return; }
+        var rail = t.closest('[data-dms-open]');
+        if (rail) { railPick(rail.getAttribute('data-dms-open')); return; }
+        var fold = t.closest('[data-dms-fold]');
+        if (fold) { headerPick(fold.closest('[data-dms-sec]').getAttribute('data-dms-sec')); return; }
+        var shut = t.closest('[data-dms-shut]');
+        if (shut) { closeSection(shut.closest('[data-dms-sec]').getAttribute('data-dms-sec')); return; }
+        if (t.closest('[data-dms-closeall]')) { st.open = []; saveOpen(); applyOpen(); return; }
+        // The downtime switch asks first; its yes button does the post.
+        if (t.closest('[data-dms-ask]')) showConfirm(true);
+        if (t.closest('[data-dms-cancel]')) showConfirm(false);
+        var hrow = t.closest('[data-dms-hrow]');
+        if (hrow) toggleHero(hrow);
+        if (t.closest('[data-dms-brew-pv]')) { st.brewPv = !st.brewPv; applyBrew(); }
+      }
+
+      // ---- Sections ----------------------------------------------------
+
+      function saveOpen() { writeJSON(OPEN_KEY, st.open); }
+
+      // A rail icon opens its section as the newest, brings a folded one to
+      // the front, or closes the one already in front.
+      function railPick(id) {
+        var i = st.open.indexOf(id);
+        if (i === st.open.length - 1 && i >= 0) st.open.pop();
+        else {
+          if (i >= 0) st.open.splice(i, 1);
+          st.open.push(id);
+        }
+        saveOpen();
+        applyOpen(id);
+      }
+
+      // A folded card's header brings it to the front; the front card's
+      // header folds it behind the others.
+      function headerPick(id) {
+        var i = st.open.indexOf(id);
+        if (i < 0) return;
+        st.open.splice(i, 1);
+        if (i === st.open.length) st.open.unshift(id); // was the front card
+        else st.open.push(id);
+        saveOpen();
+        applyOpen(st.open[st.open.length - 1]);
+      }
+
+      function closeSection(id) {
+        var i = st.open.indexOf(id);
+        if (i < 0) return;
+        st.open.splice(i, 1);
+        saveOpen();
+        applyOpen();
+        // Focus goes back to the section's rail icon rather than to nowhere.
+        var r = root(), ic = r && r.querySelector('[data-dms-open="' + id + '"]');
+        if (ic) ic.focus({ preventScroll: true });
+      }
+
+      // Draws st.open onto the markup: open cards shown, the newest whole and
+      // first in the column, the rest folded to their one-line summary.
+      function applyOpen(focusId) {
+        var r = root(); if (!r) return;
+        var have = {};
+        r.querySelectorAll('[data-dms-sec]').forEach(function (s) { have[s.getAttribute('data-dms-sec')] = true; });
+        // A section can leave the screen (no fight source any more); forget it.
+        st.open = st.open.filter(function (id, i, a) { return have[id] && a.indexOf(id) === i; });
+        var n = st.open.length;
+        r.querySelectorAll('[data-dms-sec]').forEach(function (s) {
+          var id = s.getAttribute('data-dms-sec'), i = st.open.indexOf(id);
+          var front = i === n - 1 && i >= 0;
+          s.hidden = i < 0;
+          s.classList.toggle('dms-folded', i >= 0 && !front);
+          s.style.order = i < 0 ? '' : String(n - i);
+          var fold = s.querySelector('[data-dms-fold]');
+          if (fold) fold.setAttribute('aria-expanded', front ? 'true' : 'false');
+          var body = s.querySelector('.dms-sec-b');
+          if (body) body.hidden = !front;
+          // A card's widgets (Fight's tracker, the Homebrew lists) mount when
+          // it is first shown, since a mount here doesn't run boot.js's pass.
+          if (front && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(s);
+        });
+        r.querySelectorAll('[data-dms-open]').forEach(function (b) {
+          b.setAttribute('aria-pressed', st.open.indexOf(b.getAttribute('data-dms-open')) >= 0 ? 'true' : 'false');
+        });
+        var count = r.querySelector('[data-dms-count]');
+        if (count) count.textContent = n ? n + ' open' : 'Nothing open';
+        var all = r.querySelector('[data-dms-closeall]');
+        if (all) all.hidden = n === 0;
+        var empty = r.querySelector('[data-dms-empty]');
+        if (empty) empty.hidden = n > 0;
+        if (focusId) {
+          var cards = r.querySelector('[data-dms-cards]');
+          if (cards) cards.scrollTop = 0;
+        }
+        refreshParty();
+      }
+
+      // ---- Out and tucked ----------------------------------------------
+
+      function waiting() {
+        var r = root(), b = r && r.querySelector('[data-dms-open="world"] .dms-badge');
+        return b ? parseInt(b.textContent, 10) || 0 : 0;
+      }
+
+      function paintTab() {
+        if (!st.tab) return;
+        var n = waiting(), badge = st.tab.querySelector('.dms-tab-n');
+        badge.hidden = n === 0;
+        badge.textContent = n;
+        st.tab.setAttribute('aria-label', 'Show the ' + gmTerm() + ' Screen' +
+          (n ? ', ' + n + (n === 1 ? ' request' : ' requests') + ' waiting' : ''));
+        st.tab.hidden = st.out;
+      }
+
+      function setDocked(on) {
+        document.documentElement.classList.toggle('dms-docked', on);
+        toggleBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+      }
+
+      function show(focus) {
+        if (!st.dock) build();
+        st.out = true;
+        writeJSON(OUT_KEY, true);
+        st.dock.hidden = false;
+        setDocked(true);
+        paintTab();
+        if (!reduce()) {
+          st.dock.animate([{ transform: 'translateX(100%)' }, { transform: 'none' }],
+            { duration: standardMs(), easing: 'cubic-bezier(.2,.8,.2,1)' });
+        }
+        ensure(true).then(function () {
+          if (!focus) return;
+          var t = root() && root().querySelector('[data-dms-tuck]');
+          if (t) t.focus({ preventScroll: true });
+        });
+      }
+
+      function tuck(focus) {
+        if (!st.dock || st.dock.hidden) return;
+        saveNote();
+        var had = st.dock.contains(document.activeElement);
+        st.out = false;
+        writeJSON(OUT_KEY, false);
+        setDocked(false);
+        var d = st.dock;
+        var done = function () {
+          if (st.out) return; // brought back out mid-slide
+          d.hidden = true;
+          paintTab();
+          if (focus || had) (narrow() ? toggleBtn : st.tab).focus({ preventScroll: true });
+        };
+        if (reduce()) { done(); return; }
+        d.animate([{ transform: 'none' }, { transform: 'translateX(100%)' }],
+          { duration: standardMs(), easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = done;
+      }
+
+      // Escape tucks the dock only when focus is in it, so it never swallows
+      // Escape meant for a page dropdown or dialog.
+      function onKey(e) {
+        if (e.key !== 'Escape' || e.defaultPrevented || !st.out || !st.dock) return;
+        if (!st.dock.contains(document.activeElement)) return;
+        var confirm = st.dock.querySelector('[data-dms-confirm]:not([hidden])');
+        if (confirm) { showConfirm(false); return; }
+        tuck(true);
+      }
+
+      // On a narrow window the dock covers the page, so a tap outside it
+      // tucks it away. Beside the page it stays until tucked.
+      function onOutside(e) {
+        if (!st.out || !st.dock || !narrow()) return;
+        if (st.dock.contains(e.target) || el.contains(e.target) || (st.tab && st.tab.contains(e.target))) return;
+        // The Adventures page sheet sits over the dock and belongs to it.
+        if (e.target.closest && e.target.closest('.dms-sheet')) return;
+        tuck(false);
+      }
+
+      // ---- Loading -----------------------------------------------------
+
+      function load() {
+        return Chronicle.apiFetch(url, { headers: { 'Accept': 'text/html', 'HX-Request': 'true' } })
+          .then(function (r) {
+            if (!r.ok) throw new Error('DM Screen request failed: ' + r.status);
+            return r.text();
+          });
+      }
+
+      // ensure fetches the panel once; asked marks a load the viewer is
+      // waiting on, whose failure is worth telling them about.
+      function ensure(asked) {
+        if (st.loaded) return Promise.resolve();
+        if (!st.loading) {
+          st.loading = load().then(mount).catch(function (err) {
+            st.loading = null;
+            throw err;
+          });
+        }
+        return st.loading.catch(function () {
+          if (asked && Chronicle.notify) Chronicle.notify('The ' + gmTerm() + ' Screen could not load. Try again in a moment.', 'error');
+        });
+      }
+
+      // clearStage tears the panel down, letting its widgets finish first
+      // (the Fight card saves what was typed last).
+      function clearStage(stage) {
+        if (window.Chronicle && Chronicle.destroyWidget) stage.querySelectorAll('[data-widget]').forEach(Chronicle.destroyWidget);
+        stage.innerHTML = '';
+      }
+
+      function mount(html) {
+        var stage = st.dock.querySelector('[data-dms-stage]');
+        clearStage(stage);
+        stage.innerHTML = html;
+        if (window.htmx) window.htmx.process(stage);
+        st.loaded = true;
+        afterMount();
+      }
+
+      function afterMount() {
+        applyOpen();
+        applyBrew();
+        paintTab();
+        // A draft left by a failed save (or a refetch) comes back with the
+        // fresh markup.
+        var n = curNote(true);
+        if (n && n.dirty) {
+          if (n.conflict) showConflict(true);
+          else { noteStatus('Unsaved changes'); clearTimeout(st.noteTimer); st.noteTimer = setTimeout(saveNote, 800); }
+        }
+      }
+
+      // ---- Section contents --------------------------------------------
+
       function showConfirm(on) {
-        var box = st.overlay && st.overlay.querySelector('[data-dms-confirm]');
+        var box = st.dock && st.dock.querySelector('[data-dms-confirm]');
         if (!box) return;
         box.hidden = !on;
         if (on) { var c = box.querySelector('[data-dms-cancel]'); if (c) c.focus({ preventScroll: true }); }
       }
-
-      function root() { return st.overlay && st.overlay.querySelector('[data-dms-root]'); }
 
       // Heroes start folded to one line; a click folds the rest open.
       function toggleHero(row) {
@@ -220,37 +427,45 @@
 
       function refreshParty() {
         var r = root(); if (!r) return;
-        r.querySelectorAll('[data-dms-party]').forEach(partyEdges);
+        r.querySelectorAll('[data-dms-party]').forEach(function (list) {
+          if (list.offsetParent) partyEdges(list);
+        });
       }
 
-      function selectTab(tab) {
+      function filterConditions(input) {
+        var q = input.value.trim().toLowerCase();
         var r = root(); if (!r) return;
-        var name = tab.getAttribute('data-dms-tab');
-        r.querySelectorAll('[data-dms-tab]').forEach(function (t) {
-          t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
-        });
-        r.querySelectorAll('[data-dms-pane]').forEach(function (p) {
-          p.hidden = p.getAttribute('data-dms-pane') !== name;
-          // A tab's widgets (the Fight tab's tracker) mount when it is first
-          // shown, since a mount here doesn't run boot.js's pass.
-          if (!p.hidden && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(p);
+        r.querySelectorAll('[data-dms-cond]').forEach(function (d) {
+          d.hidden = q !== '' && d.getAttribute('data-dms-cond').toLowerCase().indexOf(q) < 0;
         });
       }
 
-      var NOTE_OK = 'Saved \u00b7 only you and co-' + gmTerm() + 's can see this';
+      // The Homebrew card's player view: what players would see of it. Kept
+      // on st so a refetch finds it as it was left.
+      function applyBrew() {
+        var r = root(), pane = r && r.querySelector('[data-dms-brew-pane]');
+        if (!pane) return;
+        var pvb = pane.querySelector('[data-dms-brew-pv]');
+        if (pvb) pvb.setAttribute('aria-pressed', st.brewPv ? 'true' : 'false');
+        if (st.brewPv) pane.setAttribute('data-player-view', ''); else pane.removeAttribute('data-player-view');
+      }
+
+      // ---- Notes -------------------------------------------------------
+
+      var NOTE_OK = 'Saved · only you and co-' + gmTerm() + 's can see this';
 
       function noteBox() { var r = root(); return r && r.querySelector('[data-dms-note]'); }
 
       function noteStatus(text) {
-        var r = root(), el = r && r.querySelector('[data-dms-note-status]');
-        if (el) el.textContent = text;
+        var r = root(), s = r && r.querySelector('[data-dms-note-status]');
+        if (s) s.textContent = text;
       }
 
-      // The note's state lives outside the markup: a panel refetch, a close
-      // during a save, or a failed save must never lose typed text. noteFor
-      // adopts the box the first time it is seen and, on later mounts, pushes
-      // an unsaved draft back into the fresh markup (with the version it was
-      // typed against, so a save still notices that the note moved on).
+      // The note's state lives outside the markup: a panel refetch or a failed
+      // save must never lose typed text. noteFor adopts the box the first time
+      // it is seen and, on later mounts, pushes an unsaved draft back into the
+      // fresh markup (with the version it was typed against, so a save still
+      // notices that the note moved on).
       function noteKey(ta) { return ta.getAttribute('data-dms-note-url') + '|' + (ta.getAttribute('aria-label') || ''); }
       function onScreen(n, ta) { return !!ta && noteKey(ta) === n.key; }
 
@@ -269,9 +484,9 @@
         return n;
       }
 
-      // The state of the box on screen, or the last one used when the markup is
-      // already gone (closing). The box is the truth for the text while it exists: anything in it that
-      // the state does not hold yet is an unsaved edit.
+      // The state of the box on screen, or the last one used. The box is the
+      // truth for the text while it exists: anything in it that the state
+      // does not hold yet is an unsaved edit.
       function curNote(restore) {
         var ta = noteBox();
         if (ta) {
@@ -308,7 +523,7 @@
         if (on) noteStatus('Changed elsewhere. Your text is kept here.');
       }
 
-      // Autosave: ~800ms after typing stops, and on blur or close.
+      // Autosave: ~800ms after typing stops, and on blur or tuck.
       function noteEdited() {
         var n = curNote();
         if (!n) return;
@@ -319,8 +534,8 @@
         st.noteTimer = setTimeout(saveNote, 800);
       }
 
-      // Sends the note's state, not the box: close() has already torn the box
-      // down by the time a queued or retried save runs.
+      // Sends the note's state, not the box: a refetch may have replaced the
+      // box by the time a queued or retried save runs.
       function saveNote() {
         clearTimeout(st.noteTimer);
         clearTimeout(st.noteRetry);
@@ -329,7 +544,7 @@
         if (n.saving) { n.again = true; return; }
         var text = n.text;
         n.saving = true;
-        noteStatus('Saving\u2026');
+        noteStatus('Saving…');
         Chronicle.apiFetch(n.url, { method: 'PUT', body: { text: text, version: n.version } })
           .then(function (r) {
             if (r.status === 409) { var e = new Error('changed'); e.changed = true; throw e; }
@@ -362,12 +577,12 @@
             var retry = !(err && err.status >= 400 && err.status < 500);
             n.failures++;
             if (retry && n.failures < 2) {
-              noteStatus('Couldn\u2019t save. Your text is kept; retrying in a few seconds.');
+              noteStatus('Couldn’t save. Your text is kept; retrying in a few seconds.');
               st.noteRetry = setTimeout(saveNote, 5000);
             } else if (retry) {
-              noteStatus('Couldn\u2019t save. Your text is kept; it saves on your next edit.');
+              noteStatus('Couldn’t save. Your text is kept; it saves on your next edit.');
             } else {
-              noteStatus('Couldn\u2019t save this note. Your text is kept here.');
+              noteStatus('Couldn’t save this note. Your text is kept here.');
             }
           })
           .then(function () {
@@ -397,7 +612,7 @@
               noteStatus('Loaded the newer text.');
             }
           })
-          .catch(function () { noteStatus('Couldn\u2019t load the newer text. Your text is kept here.'); });
+          .catch(function () { noteStatus('Couldn’t load the newer text. Your text is kept here.'); });
       }
 
       // Re-saves the draft over the note as it is now: fetch its version, then
@@ -418,438 +633,46 @@
             }
             saveNote();
           })
-          .catch(function () { noteStatus('Couldn\u2019t reach the note. Your text is kept here.'); });
+          .catch(function () { noteStatus('Couldn’t reach the note. Your text is kept here.'); });
       }
 
-      // brew opens or shuts the Homebrew drawer and sets its player view. The
-      // state lives on st, not the markup, so a refetch or a reopen of the
-      // screen finds the drawer as it was left. Its widgets mount on first
-      // open, since a mount here doesn't run boot.js's pass.
-      function brew(open, pv) {
-        var r = root(); if (!r) return;
-        var pane = r.querySelector('[data-dms-brew-pane]'); if (!pane) return;
-        st.brew = { open: !!open, pv: !!pv };
-        pane.hidden = !open;
-        r.classList.toggle('dms-brew-open', !!open);
-        var btn = r.querySelector('.dms-titlebar [data-dms-brew]');
-        if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        var pvb = pane.querySelector('[data-dms-brew-pv]');
-        if (pvb) pvb.setAttribute('aria-pressed', pv ? 'true' : 'false');
-        if (pv) pane.setAttribute('data-player-view', ''); else pane.removeAttribute('data-player-view');
-        if (open && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(pane);
-        if (st.windowed) placeWindow(false);
-      }
+      // ---- Start -------------------------------------------------------
 
-      function restoreKept() {
-        var k = st.keep; st.keep = null;
-        var r = root(); if (!r) return;
-        if (st.brew && st.brew.open) brew(true, st.brew.pv);
-        if (k && k.tab) {
-          var t = r.querySelector('[data-dms-tab="' + k.tab + '"]');
-          if (t) selectTab(t);
-        }
-        // A draft left by a failed save (or a refetch) comes back with the
-        // fresh markup.
-        var n = curNote(true);
-        if (n && n.dirty) {
-          if (n.conflict) showConflict(true);
-          else { noteStatus('Unsaved changes'); st.noteTimer = setTimeout(saveNote, 800); }
-        }
-      }
-
-      function filterConditions(input) {
-        var q = input.value.trim().toLowerCase();
-        var r = root(); if (!r) return;
-        r.querySelectorAll('[data-dms-cond]').forEach(function (d) {
-          d.hidden = q !== '' && d.getAttribute('data-dms-cond').toLowerCase().indexOf(q) < 0;
-        });
-      }
-
-      function onKey(e) {
-        if (e.key !== 'Escape' || !st.overlay || st.overlay.hidden) return;
-        if (st.playing) { finish(); return; }
-        // A window sits beside a usable page: Escape closes it only when focus
-        // is in it (or nowhere), so it never swallows Escape meant for a page
-        // dropdown or dialog.
-        if (st.windowed) {
-          var f = document.activeElement;
-          if (e.defaultPrevented || (f && f !== document.body && !st.overlay.contains(f))) return;
-        }
-        close();
-      }
-
-      function anim(target, frames, opts) {
-        opts.fill = 'both';
-        if (!opts.easing) opts.easing = 'cubic-bezier(.2,.8,.2,1)';
-        var a = target.animate(frames, opts);
-        st.anims.push(a);
-        return a;
-      }
-
-      function clearFx() {
-        if (st.thrown) { st.thrown = false; if (Chronicle.dice) Chronicle.dice.stop(); }
-        if (st.land) st.land(null);
-        if (st.raf) { cancelAnimationFrame(st.raf); st.raf = 0; }
-        st.fx.forEach(function (n) { n.remove(); });
-        st.fx = [];
-      }
-
-      function stopAll() {
-        clearFx();
-        st.anims.forEach(function (a) { try { a.cancel(); } catch (e) { /* already gone */ } });
-        st.anims = [];
-        setPlaying(false);
-      }
-
-      // Skip: jump every animation to its end and clear the falling pieces.
-      function finish() {
-        clearFx();
-        st.anims.forEach(function (a) { try { a.finish(); } catch (e) { /* already gone */ } });
-        setPlaying(false);
-      }
-
-      function setPlaying(on) {
-        st.playing = on;
-        if (st.overlay) st.overlay.querySelector('.dms-skip').hidden = !on;
-        if (!on) {
-          refreshParty();
-          if (st.willWindow && root()) enterWindow();
-        }
-      }
-
-      // The window: after the opening the dim fades away and stops catching
-      // clicks (the page behind is usable), the title bar drags the screen, and
-      // the spot is remembered per browser. Narrow screens stay as they are.
-      // The offset is the CSS `translate` property, which composes with the
-      // opening's `transform` animations instead of fighting them.
-      function enterWindow() {
-        var o = st.overlay, r = root();
-        if (st.windowed || !o || !r || narrow()) return;
-        st.windowed = true;
-        o.classList.add('dms-windowed');
-        // The page behind is live now, so the dialog is no longer modal.
-        r.setAttribute('aria-modal', 'false');
-        var dim = o.querySelector('[data-dms-dim]');
-        var fade = anim(dim, [{ opacity: 1 }, { opacity: 0 }], { duration: 300 });
-        fade.onfinish = function () { o.classList.add('dms-dimmed-off'); };
-        st.off = clampOffset(r, readPos());
-        placeWindow(true);
-        window.addEventListener('resize', onResize);
-      }
-
-      function exitWindow() {
-        var o = st.overlay;
-        window.removeEventListener('resize', onResize);
-        st.windowed = false;
-        st.willWindow = false;
-        if (!o) return;
-        o.classList.remove('dms-windowed', 'dms-dimmed-off', 'dms-dragging');
-        var r = root();
-        if (r) r.style.translate = '';
-      }
-
-      // Puts the root at the stored offset; settle eases it there once.
-      function placeWindow(settle) {
-        var r = root(); if (!r || !st.off) return;
-        if (st.windowed) r.setAttribute('aria-modal', 'false'); // a refetch restores the template's value
-        r.classList.toggle('dms-settle', !!settle && !reduce());
-        r.style.translate = st.off.x + 'px ' + st.off.y + 'px';
-      }
-
-      // Keeps the title bar whole inside the viewport. offsetLeft/Top ignore
-      // translate and transform, so the base spot is stable mid-move.
-      function clampOffset(r, p) {
-        var bar = r.querySelector('.dms-titlebar');
-        var hh = bar ? bar.offsetHeight : 32;
-        var minX = -r.offsetLeft, maxX = Math.max(minX, window.innerWidth - r.offsetWidth - r.offsetLeft);
-        var minY = -r.offsetTop, maxY = Math.max(minY, window.innerHeight - hh - r.offsetTop);
-        return { x: Math.min(maxX, Math.max(minX, p.x)), y: Math.min(maxY, Math.max(minY, p.y)) };
-      }
-
-      function onResize() {
-        var r = root(); if (!r || !st.windowed) return;
-        if (narrow()) { exitWindow(); st.willWindow = false; return; }
-        st.off = clampOffset(r, st.off || { x: 0, y: 0 });
-        placeWindow(false);
-      }
-
-      function startDrag(e, bar) {
-        var r = root(); if (!r) return;
-        var startX = e.clientX, startY = e.clientY, from = st.off || { x: 0, y: 0 };
-        st.overlay.classList.add('dms-dragging');
-        r.classList.remove('dms-settle');
-        try { bar.setPointerCapture(e.pointerId); } catch (err) { /* older browsers: window listeners below still work */ }
-        function move(ev) {
-          st.off = clampOffset(r, { x: from.x + ev.clientX - startX, y: from.y + ev.clientY - startY });
-          placeWindow(false);
-        }
-        function up() {
-          bar.removeEventListener('pointermove', move);
-          bar.removeEventListener('pointerup', up);
-          bar.removeEventListener('pointercancel', up);
-          if (st.overlay) st.overlay.classList.remove('dms-dragging');
-          writePos(st.off);
-        }
-        bar.addEventListener('pointermove', move);
-        bar.addEventListener('pointerup', up);
-        bar.addEventListener('pointercancel', up);
-        e.preventDefault();
-      }
-
-      function load() {
-        return Chronicle.apiFetch(url, { headers: { 'Accept': 'text/html', 'HX-Request': 'true' } })
-          .then(function (r) {
-            if (!r.ok) throw new Error('DM Screen request failed: ' + r.status);
-            return r.text();
-          });
-      }
-
-      // clearStage tears the panel down, letting its widgets finish first
-      // (the Fight tab saves what was typed last).
-      function clearStage(stage) {
-        if (window.Chronicle && Chronicle.destroyWidget) stage.querySelectorAll('[data-widget]').forEach(Chronicle.destroyWidget);
-        stage.innerHTML = '';
-      }
-
-      function mount(html) {
-        var stage = st.overlay.querySelector('[data-dms-stage]');
-        clearStage(stage);
-        stage.innerHTML = html;
-        if (window.htmx) window.htmx.process(stage);
-        restoreKept();
-        return root();
-      }
-
-      function buildDie(x, y) {
-        var wrap = document.createElement('div');
-        wrap.className = 'dms-die';
-        wrap.style.left = (x - DIE / 2) + 'px';
-        wrap.style.top = (y - DIE / 2) + 'px';
-        var pieces = FACETS.map(function (f) {
-          var p = document.createElement('div');
-          p.className = 'dms-piece';
-          p.style.clipPath = 'polygon(' + f.p.map(function (v) { return v[0] + '% ' + v[1] + '%'; }).join(',') + ')';
-          p.style.filter = 'brightness(' + (100 + f.shade) + '%)';
-          var cx = (f.p[0][0] + f.p[1][0] + f.p[2][0]) / 3, cy = (f.p[0][1] + f.p[1][1] + f.p[2][1]) / 3;
-          p.style.transformOrigin = cx + '% ' + cy + '%';
-          wrap.appendChild(p);
-          return { el: p, cx: cx, cy: cy, face: !!f.face };
-        });
-        st.overlay.appendChild(wrap);
-        st.fx.push(wrap);
-        return { wrap: wrap, pieces: pieces };
-      }
-
-      // The faces are knocked loose by the rising screen, fall under gravity,
-      // bounce on the bottom of the window, slide to rest, then fade.
-      function shatter(die, start) {
-        var W = window.innerWidth, Hh = window.innerHeight;
-        var wl = parseFloat(die.wrap.style.left), wt = parseFloat(die.wrap.style.top);
-        var bodies = die.pieces.map(function (p) {
-          var px = p.cx / 100 * DIE, py = p.cy / 100 * DIE, r = p.face ? 16 : 11;
-          return {
-            el: p.el, x: 0, y: 0, a: 0,
-            vx: (p.cx - 50) * 9 + (Math.random() - 0.5) * 90,
-            vy: (p.cy - 50) * 7 - 420 - Math.random() * 260,
-            va: (Math.random() < 0.5 ? -1 : 1) * (240 + Math.random() * 420),
-            floor: Hh - 6 - r - (wt + py),
-            xmin: -(wl + px) + r, xmax: W - (wl + px) - r
-          };
-        });
-        var last = start;
-        function step(now) {
-          var t = now - start, dt = Math.min(0.033, (now - last) / 1000);
-          last = now;
-          if (t >= BREAK) {
-            bodies.forEach(function (b) {
-              b.vy += 2400 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.a += b.va * dt;
-              if (b.y > b.floor) {
-                b.y = b.floor;
-                if (b.vy > 90) { b.vy = -b.vy * 0.42; b.vx *= 0.7; b.va = -b.va * 0.5 + b.vx * 0.6; }
-                else { b.vy = 0; b.vx *= 0.86; b.va *= 0.8; }
-              }
-              if (b.x < b.xmin) { b.x = b.xmin; b.vx = -b.vx * 0.5; }
-              if (b.x > b.xmax) { b.x = b.xmax; b.vx = -b.vx * 0.5; }
-              b.el.style.transform = 'translate(' + b.x.toFixed(1) + 'px,' + b.y.toFixed(1) + 'px) rotate(' + b.a.toFixed(1) + 'deg)';
-              b.el.style.opacity = t < FADE ? 1 : Math.max(0, 1 - (t - FADE) / 700);
-            });
-          }
-          if (t < FADE + 700) st.raf = requestAnimationFrame(step);
-          else clearFx();
-        }
-        st.raf = requestAnimationFrame(step);
-      }
-
-      // The screen rises out of where the die stood, stands, and swings open.
-      function unfold(r, fromX, fromY, delay) {
-        var rect = r.getBoundingClientRect();
-        var dx = fromX - (rect.left + rect.width / 2), dy = fromY - (rect.top + rect.height / 2);
-        var side = narrow() ? 'rotateX' : 'rotateY';
-        var L = r.querySelector('[data-dms-leaf="l"]'), M = r.querySelector('[data-dms-leaf="m"]'), R = r.querySelector('[data-dms-leaf="r"]');
-        anim(r, [
-          { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(.1)', opacity: 0 },
-          { transform: 'translate(' + dx * 0.6 + 'px,' + dy * 0.6 + 'px) scale(.22)', opacity: 1, offset: 0.2 },
-          { transform: 'translate(' + dx * 0.3 + 'px,' + dy * 0.3 + 'px) scale(.6)', opacity: 1, offset: 0.55 },
-          { transform: 'none', opacity: 1 }
-        ], { duration: 950, delay: delay, easing: 'cubic-bezier(.3,.5,.3,1)' });
-        if (M) anim(M, [{ transform: 'rotateX(-80deg)' }, { transform: 'rotateX(-80deg)', offset: 0.15 }, { transform: 'rotateX(6deg)', offset: 0.8 }, { transform: 'none' }], { duration: 800, delay: delay });
-        if (L) anim(L, [{ transform: side + '(' + (narrow() ? '-' : '') + '178deg)' }, { transform: side + '(' + (narrow() ? '8' : '-8') + 'deg)', offset: 0.75 }, { transform: 'none' }], { duration: 620, delay: delay + 650, easing: 'cubic-bezier(.3,.7,.3,1)' });
-        var lastAnim = R ? anim(R, [{ transform: side + '(' + (narrow() ? '' : '-') + '178deg)' }, { transform: side + '(' + (narrow() ? '-8' : '8') + 'deg)', offset: 0.75 }, { transform: 'none' }], { duration: 620, delay: delay + 730, easing: 'cubic-bezier(.3,.7,.3,1)' }) : null;
-        r.querySelectorAll('.dms-titlebar').forEach(function (n) {
-          anim(n, [{ opacity: 0 }, { opacity: 1 }], { duration: 250, delay: delay + 1150 });
-        });
-        if (lastAnim) lastAnim.onfinish = function () { setPlaying(false); };
-      }
-
-      // Throws a rune d20 from the button and resolves with where it rests,
-      // once the 20 has been lit for a beat. Anything that keeps the die from
-      // being drawn (motion Calm, no WebGL, the dice files late) resolves at
-      // once with no point, and the screen comes out of the middle instead.
-      function throwDie() {
-        return new Promise(function (resolve) {
-          var done = false;
-          st.land = function (p) {
-            if (done) return;
-            done = true; st.land = null;
-            resolve(p ? { x: p.x, y: p.y } : null);
-          };
-          var dice = Chronicle.dice;
-          if (!dice || !dice.roll) { st.land(null); return; }
-          st.thrown = true;
-          dice.roll([{ label: gmTerm() + ' Screen', dice: [{ sides: 20, value: 20, crit: 'none' }] }], {
-            from: openBtn,
-            skippable: false,
-            // The opening is a show, not a roll: nothing to read out.
-            describe: function () { return ''; },
-            onSettle: function (points) {
-              var p = points && points[0];
-              if (!p) { if (st.land) st.land(null); return; }
-              setTimeout(function () { if (st.land) st.land(p); }, HOLD);
-            }
-          }).catch(function () { if (st.land) st.land(null); });
-        });
-      }
-
-      // A flash of light where the die stood, under the flying pieces.
-      function flash(x, y) {
-        var f = document.createElement('div');
-        f.className = 'dms-flash';
-        f.style.left = x + 'px';
-        f.style.top = y + 'px';
-        st.overlay.appendChild(f);
-        st.fx.push(f);
-        anim(f, [{ transform: 'translate(-50%,-50%) scale(.2)', opacity: 1 }, { transform: 'translate(-50%,-50%) scale(2.6)', opacity: 0 }],
-          { duration: 520, easing: 'cubic-bezier(.2,.8,.3,1)' });
-      }
-
-      function open() {
-        var o = overlay();
-        exitWindow();
-        stopAll();
-        st.closing = false;
-        st.willWindow = !narrow();
-        o.hidden = false;
-        document.addEventListener('keydown', onKey);
-        var dim = o.querySelector('[data-dms-dim]');
-        anim(dim, [{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
-        var loaded = load();
-        var me = st.seq = (st.seq || 0) + 1;
-
-        if (reduce() || rolledInTab()) {
-          loaded.then(function (html) {
-            if (me !== st.seq) return;
-            var r = mount(html);
-            if (r) { anim(r, [{ opacity: 0 }, { opacity: 1 }], { duration: 200 }); focusClose(); if (st.willWindow) enterWindow(); }
-          }).catch(failed);
-          return;
-        }
-
-        markRolled();
-        setPlaying(true);
-        var cx = window.innerWidth / 2, cy = Math.min(window.innerHeight * 0.42, 360);
-        Promise.all([loaded, throwDie()]).then(function (got) {
-          // Closed, or opened again, while the die was in the air.
-          if (me !== st.seq || o.hidden) return;
-          var r = mount(got[0]);
-          if (!r) return;
-          if (!st.playing) { focusClose(); if (st.willWindow) enterWindow(); return; } // skipped
-          var p = got[1] || { x: cx, y: cy };
-          // The thrown die gives way to its flat pieces in the same spot, and
-          // they fly apart as the screen pushes up out of them.
-          st.thrown = false;
-          if (Chronicle.dice) Chronicle.dice.stop();
-          flash(p.x, p.y);
-          var now = performance.now();
-          shatter(buildDie(p.x, p.y), now - BREAK);
-          unfold(r, p.x, p.y, 0);
-          focusClose();
-        }).catch(failed);
-      }
-
-      function focusClose() {
-        var c = st.overlay && st.overlay.querySelector('[data-dms-close]');
-        if (c) c.focus({ preventScroll: true });
-      }
-
-      function failed() {
-        stopAll();
-        close();
-        if (Chronicle.notify) Chronicle.notify('The ' + gmTerm() + ' Screen could not load. Try again in a moment.', 'error');
-      }
-
-      // Closing is the opening backwards, in place: the side leaves swing
-      // shut over the middle one, the middle folds down, and the folded screen
-      // collapses into a flash where it stands.
-      function close() {
-        if (!st.overlay || st.overlay.hidden || st.closing) return;
-        // saveNote captures the box's text into the note state before the box
-        // is torn down below; a save already in flight queues this one behind it.
-        saveNote();
-        st.willWindow = false;
-        st.seq = (st.seq || 0) + 1;
-        stopAll();
-        document.removeEventListener('keydown', onKey);
-        var r = root(), o = st.overlay;
-        var done = function () { exitWindow(); o.hidden = true; clearStage(o.querySelector('[data-dms-stage]')); openBtn.focus({ preventScroll: true }); };
-        if (!r || reduce()) { done(); return; }
-        st.closing = true;
-        var side = narrow() ? 'rotateX' : 'rotateY';
-        var L = r.querySelector('[data-dms-leaf="l"]'), M = r.querySelector('[data-dms-leaf="m"]'), R = r.querySelector('[data-dms-leaf="r"]');
-        var shut = 'cubic-bezier(.5,0,.6,1)';
-        if (!o.classList.contains('dms-dimmed-off')) anim(o.querySelector('[data-dms-dim]'), [{ opacity: 1 }, { opacity: 0 }], { duration: 300, delay: 420 });
-        r.querySelectorAll('.dms-titlebar').forEach(function (n) { anim(n, [{ opacity: 1 }, { opacity: 0 }], { duration: 160 }); });
-        if (R) anim(R, [{ transform: 'none' }, { transform: side + '(' + (narrow() ? '' : '-') + '178deg)' }], { duration: 340, easing: shut });
-        if (L) anim(L, [{ transform: 'none' }, { transform: side + '(' + (narrow() ? '-' : '') + '178deg)' }], { duration: 340, delay: 70, easing: shut });
-        if (M) anim(M, [{ transform: 'none' }, { transform: 'rotateX(-80deg)' }], { duration: 260, delay: 330, easing: shut });
-        anim(r, [{ transform: 'none', opacity: 1 }, { transform: 'scale(.9)', opacity: 1, offset: 0.45 }, { transform: 'scale(.06)', opacity: 0 }],
-          { duration: 360, delay: 420, easing: 'cubic-bezier(.55,0,.8,.3)' }).onfinish = function () {
-          var rect = r.getBoundingClientRect();
-          stopAll();
-          st.closing = false;
-          done();
-          // The flash outlives the screen by a moment, on the page itself.
-          var f = document.createElement('div');
-          f.className = 'dms-flash dms-flash-page';
-          f.style.left = (rect.left + rect.width / 2) + 'px';
-          f.style.top = (rect.top + rect.height / 2) + 'px';
-          document.body.appendChild(f);
-          var a = f.animate([{ transform: 'translate(-50%,-50%) scale(.3)', opacity: .9 }, { transform: 'translate(-50%,-50%) scale(1.6)', opacity: 0 }],
-            { duration: 380, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'both' });
-          a.onfinish = function () { f.remove(); };
-        };
-      }
-
-      openBtn.addEventListener('click', function (e) {
+      toggleBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        open();
+        if (st.out) tuck(true); else show(true);
       });
-      st.close = close;
+
+      build();
+      setDocked(false);
+      if (st.out) {
+        // Out last time: back out at once, without the slide, on a wide
+        // window. A narrow window starts tucked so the page is readable.
+        if (narrow()) { st.out = false; paintTab(); ensure(false); }
+        else { st.dock.hidden = false; setDocked(true); ensure(false); }
+      } else {
+        // Tucked: the panel still loads so the tab can show the waiting count.
+        paintTab();
+        ensure(false);
+      }
+
+      st.onKey = onKey;
+      st.onOutside = onOutside;
+      st.place = place;
       el._dmsState = st;
     },
     destroy: function (el) {
-      // The overlay lives on <body>, outside the top bar; boosted navigation
+      // The dock lives on <body>, outside the top bar; boosted navigation
       // keeps the top bar, so this only runs on a full teardown.
-      if (el && el._dmsState && el._dmsState.close) el._dmsState.close();
+      var st = el && el._dmsState;
+      if (!st || !st.dock) return;
+      document.removeEventListener('keydown', st.onKey);
+      document.removeEventListener('click', st.onOutside);
+      window.removeEventListener('resize', st.place);
+      if (window.Chronicle && Chronicle.destroyWidget) st.dock.querySelectorAll('[data-widget]').forEach(Chronicle.destroyWidget);
+      st.dock.remove();
+      if (st.tab) st.tab.remove();
+      document.documentElement.classList.remove('dms-docked');
     }
   });
 })();

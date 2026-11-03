@@ -454,3 +454,35 @@ func TestRequireOwnPageOrPageWrite(t *testing.T) {
 		})
 	}
 }
+
+// A sheet change from a player's AI is judged as a Player whatever the
+// writer's role, so the claim is the only way in and a Scribe's or owner's
+// broader rights never ride along.
+func TestCheckClaimedOwnerPatch(t *testing.T) {
+	owner := "u1"
+	e := &Entity{ID: "e1", CampaignID: "c1", OwnerUserID: &owner}
+	plan := &HeroPlan{Steps: []HeroStep{{FieldKey: "class", Choices: []HeroChoice{{Name: "Fury"}}}}}
+	tests := []struct {
+		name  string
+		user  string
+		patch map[string]any
+		ok    bool
+	}{
+		{"identity key", "u1", map[string]any{"ancestry": "Elf"}, true},
+		{"builder pick", "u1", map[string]any{"class": "Fury"}, true},
+		{"pick off the list", "u1", map[string]any{"class": "Wizard"}, false},
+		{"any other key", "u1", map[string]any{"stamina": "9"}, false},
+		{"not the claimer", "u2", map[string]any{"ancestry": "Elf"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CheckClaimedOwnerPatch(e, tt.user, "c1", tt.patch, nil, plan)
+			if (err == nil) != tt.ok {
+				t.Fatalf("err = %v, want ok=%v", err, tt.ok)
+			}
+		})
+	}
+	if err := CheckClaimedOwnerPatch(e, "u1", "c2", map[string]any{"ancestry": "Elf"}, nil, plan); err == nil {
+		t.Error("a page of another campaign passed")
+	}
+}

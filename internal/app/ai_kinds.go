@@ -6,7 +6,9 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
+	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar/calendarai"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
@@ -20,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -45,7 +48,7 @@ type aiDeps struct {
 	Notes           notes.NoteService
 	PlayerNotes     entity_notes.Service
 	NoteAccess      records.NoteAccessAPI // nil while the plugin's own tables are degraded
-	Addons          aiAddonChecker // which add-ons a campaign has on
+	Addons          aiAddonChecker        // which add-ons a campaign has on
 	PageBlocks      pageblocks.Service
 	Quests          quests.QuestService // nil while the quests plugin is degraded
 	Boards          quests.BoardService
@@ -57,6 +60,7 @@ type aiDeps struct {
 	Tags            tags.TagService
 	PageLayouts     entities.PageLayoutService       // nil while its tables are degraded
 	PageTests       pagetests.Service                // nil while the Tests block is degraded
+	Trackers        trackers.Service                 // nil while the Trackers block is degraded
 	FoundryMonsters syncapi.FoundryMonsterRepository // nil while syncapi's tables are degraded
 	FoundryMatcher  *syncapi.FoundryMatcher          // with FoundryMonsters; nil leaves matches out
 	FoundryScenes   records.FoundryScenesAPI         // nil while the sync API is degraded
@@ -64,15 +68,18 @@ type aiDeps struct {
 	ArmoryRequests  dmscreen.RequestSource           // stash and buy requests, as the DM Screen lists them
 	ItemLooks       records.ItemLooksAPI             // nil while the item looks table is degraded
 	Crafting        records.CraftingAPI              // nil while crafting is degraded
+	ShopLooks       records.ShopLooksAPI             // nil while the armory is degraded
+	Carried         records.CarriedAPI               // the Armory's give and take for carried items; nil writes relations
 
 	// Derived once and shared by several kinds and the lookups.
-	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
+	Rolls      calendarai.EventRollAPI // the calendar's roll half; nil without one
 	Tables     records.TableKind
 	HouseRules *records.HouseRuleKind
-	Homebrew   records.HomebrewAPI // nil while field rules are degraded
-	Nights     aiGameNightsAdapter
-	PageMaps   records.PageMapsAPI // nil while page blocks are degraded
-	Tests      records.TestsAPI    // nil without the Tests block
+	Homebrew   records.HomebrewAPI    // nil while field rules are degraded
+	Nights     *sessions.AIGameNights // the game nights' own AI part
+	CalLookups *calendarai.Lookups    // the calendar's own lookups
+	PageMaps   records.PageMapsAPI    // nil while page blocks are degraded
+	Tests      records.TestsAPI       // nil without the Tests block
 	Monsters   records.FoundryMonstersAPI
 }
 
@@ -93,7 +100,8 @@ func newAIDeps(d aiDeps) *aiDeps {
 	if d.FieldRules != nil {
 		d.Homebrew = aiHomebrewAdapter{svc: d.FieldRules}
 	}
-	d.Nights = aiGameNightsAdapter{svc: d.Sessions, members: d.Campaigns}
+	d.Nights = sessions.NewAIGameNights(d.Sessions, d.Campaigns)
+	d.CalLookups = &calendarai.Lookups{Cal: d.Calendar, Weather: d.Calendar, Rolls: d.Rolls, Tiers: d.Campaigns}
 	if d.PageBlocks != nil {
 		d.PageMaps = aiPageMapsAdapter{svc: d.PageBlocks}
 	}
@@ -138,9 +146,6 @@ func aiKinds(d *aiDeps) []records.Kind {
 func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	l := &records.Lookups{
 		Folders:  aiFolderNames{folders: d.Folders},
-		Cal:      d.Calendar,
-		Weather:  d.Calendar,
-		Rolls:    d.Rolls,
 		Maps:     aiMapsAdapter{d.Maps},
 		Pages:    d.Entities,
 		Rels:     d.Relations,
@@ -149,13 +154,15 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Entries:  aiSystemEntriesAdapter{choices: d.CharacterChoice},
 		Party:    &aiPartyAdapter{screen: d.DMScreen, types: d.Entities, nights: d.Sessions, members: d.Campaigns},
 		Tags:     d.Tags,
-		Tiers:    d.Campaigns,
-		Nights:   d.Nights,
+		Plugged:  append(d.CalLookups.All(), d.Nights),
 		Kinds:    reg,
 		PageMaps: d.PageMaps,
 		Menu:     aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities},
 		Tests:    d.Tests,
 		Monsters: d.Monsters,
+	}
+	if d.Trackers != nil {
+		l.Trackers = aiTrackersAdapter{svc: d.Trackers, ents: d.Entities}
 	}
 	if d.Encounters != nil {
 		l.Encounters = aiEncountersAdapter{svc: d.Encounters}
@@ -183,6 +190,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	if d.Crafting != nil {
 		l.Crafting = d.Crafting
 	}
+	if d.ShopLooks != nil {
+		l.Shops = d.ShopLooks
+	}
 	return l
 }
 
@@ -191,16 +201,16 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 func init() {
 	addAIKinds(10, func(d *aiDeps) []records.Kind {
 		return []records.Kind{
-			records.CalendarKind{Svc: d.Calendar, Pages: d.Entities},
-			records.EventKind{Svc: d.Calendar, Tiers: d.Campaigns, Pages: d.Entities, Rolls: d.Rolls, Tables: d.Tables.Svc},
-			records.WeatherKind{Svc: d.Calendar},
+			calendarai.CalendarKind{Svc: d.Calendar, Pages: aiCalendarPages{d.Entities}},
+			calendarai.EventKind{Svc: d.Calendar, Tiers: d.Campaigns, Pages: aiCalendarPages{d.Entities}, Rolls: d.Rolls, Tables: d.Tables},
+			calendarai.WeatherKind{Svc: d.Calendar},
 		}
 	})
 	addAIKinds(40, func(d *aiDeps) []records.Kind {
 		if d.Rolls == nil {
 			return nil
 		}
-		return []records.Kind{records.RollNightKind{Cal: d.Calendar, Rolls: d.Rolls}}
+		return []records.Kind{calendarai.RollNightKind{Cal: d.Calendar, Rolls: d.Rolls}}
 	})
 	// Moons set by hand: the calendar service's moon mark half.
 	addAIKinds(50, func(d *aiDeps) []records.Kind {
@@ -208,7 +218,7 @@ func init() {
 		if !ok {
 			return nil
 		}
-		return []records.Kind{records.MoonKind{Cal: d.Calendar, Marks: ms}}
+		return []records.Kind{calendarai.MoonKind{Cal: d.Calendar, Marks: ms}}
 	})
 	addAIKinds(60, func(d *aiDeps) []records.Kind {
 		if !d.Health.IsHealthy(rolltables.PluginSlug) {
@@ -219,7 +229,7 @@ func init() {
 	addAIKinds(70, func(d *aiDeps) []records.Kind {
 		kinds := []records.Kind{
 			records.ShopStockKind(d.Entities, d.Relations),
-			records.CarriedItemKind(d.Entities, d.Relations),
+			records.CarriedItemKind(d.Entities, d.Relations, d.Carried),
 			records.PinKind{Svc: aiMapsAdapter{d.Maps}, Entities: d.Entities},
 			records.MapSketchKind{Svc: aiMapSketchAdapter{maps: d.Maps, drawings: d.Drawings}, Pins: aiMapsAdapter{d.Maps}},
 			records.NoteKind{Svc: d.Notes, Entities: d.Entities, Access: d.NoteAccess},
@@ -252,7 +262,7 @@ func init() {
 	addAIKinds(180, func(d *aiDeps) []records.Kind {
 		return []records.Kind{
 			records.FolderKind{Svc: aiFoldersAdapter{folders: d.Folders, types: d.Entities}},
-			records.GameNightKind{Svc: d.Nights},
+			d.Nights,
 			records.TagKind{Svc: d.Tags, Pages: d.Entities},
 		}
 	})
@@ -269,7 +279,7 @@ func init() {
 		return []records.Kind{records.PageMapKind{Svc: d.PageMaps, Entities: d.Entities}}
 	})
 	addAIKinds(220, func(d *aiDeps) []records.Kind {
-		return []records.Kind{records.GeneratorKind{Cal: d.Calendar, Tables: d.Tables, Weather: d.Calendar, Rolls: d.Rolls}}
+		return []records.Kind{calendarai.GeneratorKind{Cal: d.Calendar, Tables: d.Tables, Weather: d.Calendar, Rolls: d.Rolls}}
 	})
 }
 
@@ -291,7 +301,7 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 		}
 		out := records.OffFeatures{}
 		if off(calendar.PluginSlug) {
-			for _, k := range []string{records.KindCalendar, "event", "weather", "roll-night", "moon", "game-night"} {
+			for _, k := range []string{calendarai.KindCalendar, "event", "weather", "roll-night", "moon", "game-night"} {
 				out[k] = "Calendar"
 			}
 		}
@@ -305,8 +315,13 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 			out[records.KindPlayerNote] = "Player Notes"
 		}
 		if off(crafting.AddonSlug) {
-			for _, k := range []string{"recipe", "material", "drops"} {
+			for _, k := range []string{"recipe", "material", "drops", "bench"} {
 				out[k] = "Crafting"
+			}
+		}
+		if off(armory.AddonSlug) {
+			for _, k := range []string{"shop-room", "storefront", "item-look"} {
+				out[k] = "Armory"
 			}
 		}
 		return out

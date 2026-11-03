@@ -193,8 +193,8 @@ type Choice struct {
 	Label string `json:"label"`
 }
 
-// Skins are the two looks a bench plays in; a campaign picks the default and
-// players may switch.
+// Skins are the two looks a bench plays in; the campaign picks one for every
+// player.
 var Skins = []Choice{{"desk", "The desk"}, {"journal", "The journal"}}
 
 // Difficulties set how tight the bench's timing is (craft_scene.js DIFF).

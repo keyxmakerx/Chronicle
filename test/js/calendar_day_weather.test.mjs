@@ -9,12 +9,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
+import { escapeHtml } from './_escape.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(path.join(here, '..', '..', 'static', 'js', 'widgets', 'calendar_view.js'), 'utf8');
 
 function load() {
-  const sandbox = { module: { exports: {} }, Chronicle: { register: function () {} }, console };
+  const sandbox = { module: { exports: {} }, Chronicle: { escapeHtml, register: function () {} }, console };
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox);
   return sandbox.module.exports;

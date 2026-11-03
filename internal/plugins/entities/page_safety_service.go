@@ -35,6 +35,9 @@ func (s *entityService) recordVersion(ctx context.Context, before, after *Entity
 			kind = VersionSync
 		}
 	}
+	if kind == VersionEdit || kind == VersionSync {
+		s.notifyTextChanged(ctx, before, after)
+	}
 	now := time.Now().UTC()
 	var actor *string
 	if id := actorFrom(ctx); id != "" {
@@ -177,6 +180,9 @@ type PageSafetyService interface {
 	// AddTrashKind lets another plugin's things share the Trash; see
 	// trash_kinds.go.
 	AddTrashKind(k TrashKind)
+	// SetLongTermTrash wires the keeper of removed pages past their Trash
+	// days; see LongTermTrash.
+	SetLongTermTrash(k LongTermTrash)
 	// ListOtherTrash lists the registered kinds' trashed items, newest first.
 	ListOtherTrash(ctx context.Context, campaignID string) []TrashedThing
 	// RestoreOther brings back one item of a registered kind and returns
@@ -203,7 +209,21 @@ type pageSafetyService struct {
 	retention TrashRetention
 	notes     NoteCounter // nil: the Trash and delete say nothing about notes
 	kinds     []TrashKind // other plugins' things that share the Trash
+	keeper    LongTermTrash // nil: every page goes when its Trash days are over
 }
+
+// LongTermTrash names the removed pages to keep after their Trash days are
+// over: the pages a player removed, which the owner can still bring back
+// from "What players changed". Such a page leaves the Trash list but stays
+// whole, links and pictures included, until the keeper lets it go.
+type LongTermTrash interface {
+	// KeptPages returns the Trash item roots to keep. An error keeps every
+	// page this round: nothing is removed on a guess.
+	KeptPages(ctx context.Context) ([]string, error)
+}
+
+// SetLongTermTrash wires the keeper; see LongTermTrash.
+func (p *pageSafetyService) SetLongTermTrash(k LongTermTrash) { p.keeper = k }
 
 // NewPageSafetyService builds the History/Trash service. svc must be the
 // entity service SetPageSafety was called on, so restores are versioned and
@@ -324,9 +344,21 @@ func withVersionKind(ctx context.Context, kind string) context.Context {
 }
 
 func (p *pageSafetyService) ListTrash(ctx context.Context, campaignID string) ([]TrashItem, error) {
-	items, err := p.repo.ListTrash(ctx, campaignID)
+	all, err := p.repo.ListTrash(ctx, campaignID)
 	if err != nil {
 		return nil, apperror.NewInternal(err)
+	}
+	// A page kept by the Long-term trash is past its Trash days; it is
+	// brought back from "What players changed", not listed here.
+	items := all
+	if p.keeper != nil {
+		cutoff := time.Now().UTC().AddDate(0, 0, -p.RetentionDays(ctx))
+		items = all[:0]
+		for _, it := range all {
+			if !it.DeletedAt.Before(cutoff) {
+				items = append(items, it)
+			}
+		}
 	}
 	if len(items) == 0 {
 		return items, nil
@@ -423,7 +455,16 @@ func DaysLeft(deletedAt time.Time, retentionDays int, now time.Time) int {
 
 func (p *pageSafetyService) purgeOnce(ctx context.Context) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -p.RetentionDays(ctx))
-	n, err := p.repo.PurgeTrashedBefore(ctx, cutoff)
+	var keep []string
+	if p.keeper != nil {
+		var err error
+		if keep, err = p.keeper.KeptPages(ctx); err != nil {
+			slog.Error("trash purge skipped: reading the Long-term trash", slog.Any("error", err))
+			p.purgeKinds(ctx, cutoff)
+			return
+		}
+	}
+	n, err := p.repo.PurgeTrashedBefore(ctx, cutoff, keep)
 	if err != nil {
 		slog.Error("trash purge failed", slog.Any("error", err))
 	} else if n > 0 {

@@ -43,10 +43,11 @@ var (
 		{Label: "Backups", Href: "/admin/backup", Icon: "fa-box-archive"},
 		{Label: "Restore", Href: "/admin/restore", Icon: "fa-rotate-left"},
 	}}
-	// The CORS and request-log endpoints answer JSON only, so they are not
-	// pages and cannot be tabs; with one tab the strip is left out.
+	// The sync API's keys and the AI apps' keys. The CORS and request-log
+	// endpoints answer JSON only, so they are not pages and cannot be tabs.
 	AdminTabsAPI = AdminTabGroup{Title: "API & access", Tabs: []AdminTab{
 		{Label: "Requests", Href: "/admin/api", Icon: "fa-satellite-dish"},
+		{Label: "AI apps", Href: "/admin/ai", Icon: "fa-wand-magic-sparkles"},
 	}}
 )
 

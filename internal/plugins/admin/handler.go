@@ -76,6 +76,8 @@ type Handler struct {
 	siteLook SiteLookService
 	// trash is the site Trash; nil until wired.
 	trash TrashService
+	// longTerm estimates the Long-term trash sizes; nil shows none.
+	longTerm LongTermTrashSizer
 	// releaseNotice is the new-version notice on Home; nil shows none.
 	releaseNotice *ReleaseNoticeService
 	// checkup is the site check-up behind the top bar's shield; nil until wired.
@@ -1038,6 +1040,13 @@ func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
 	mode := c.FormValue("registration_mode")
 	if err := h.settingsService.UpdateRegistrationMode(c.Request().Context(), mode); err != nil {
 		return err
+	}
+	// Saving "open" through this reauth-gated route is a deliberate choice,
+	// so the check-up stops warning about it; any other mode clears that.
+	if h.checkup != nil {
+		if err := h.checkup.SetSignupKeptOpen(c.Request().Context(), mode == settings.RegistrationOpen); err != nil {
+			slog.Warn("registration mode: could not record the check-up choice", slog.Any("error", err))
+		}
 	}
 	h.record(c, "registration.mode_changed", "setting", "registration_mode", registrationModeLabel(mode))
 	slog.Info("registration mode updated", slog.String("mode", mode))

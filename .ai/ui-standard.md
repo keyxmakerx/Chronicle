@@ -181,14 +181,17 @@ would do.
   both sidebars (`SiteAdminEntry`, the tools icon `SiteAdminIcon`): a dark
   plate edged in admin red with a red icon, whose hover brightens the edge
   rather than the everyday glow; its icon alone when the menu is folded.
-- **The table is one tab away.** Every campaign page has one "Table" tab in
-  the campaign header. It opens a drawer of three leaves, like a DM screen;
-  each leaf picks its own section, and the arrangement is remembered for each
+- **The table is one tap away.** Every campaign page has one Table button, a
+  monochrome d20 icon among the header's icons. It opens a drawer of three
+  leaves, like a DM screen; each leaf picks its own section, and the arrangement is remembered for each
   person. The drawer is Material surfaces, never paper. A roll arrives as a
-  slim island that slides out from behind the Table tab and back, styled by
+  slim island that slides out from behind the Table button and back, styled by
   the style kit; clicking it, or a row of the roll log, drapes the roll's
-  details down from it. T opens the table and R the rolls, never while
-  typing; each person has quick 2D dice. The Handbook's Rules ribbon and its
+  details down from it. The drawer and those details are pull-downs, so a
+  click off them closes them as well as their close, Escape and the Table
+  button, losing nothing: a half-typed roll is still there next time. T
+  opens the table and R the rolls, never while typing; each person has quick
+  2D dice. The Handbook's Rules ribbon and its
   P key stay as they are. The Table shows Rolls and My dice; Rules,
   Conditions, Party and Notes leaves are TODO(#1475).
 - **Who sees what follows one check.** DM-only content is visible to everyone
@@ -643,7 +646,7 @@ it. Each kit's opening is still to be built (#1548).
   that are signed as their own (character sheets, the rulebook, the
   calendar, the quest board, map frames, encounters, the hover card) keep
   them in every kit, with two exceptions: the DM Screen wears the kit,
-  since the Director keeps it open over the pages at the table, and so does
+  since the Director keeps it docked beside the pages at the table, and so does
   the hover card on a time line (under **Opening and closing**).
 - **Ornate's gilt is brass** (light `#8a8350`, dark `#b8b07f`), well apart
   from the Director's amber, and does not take the campaign's colour.

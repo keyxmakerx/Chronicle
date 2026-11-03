@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 
@@ -39,6 +40,9 @@ type Session struct {
 	Conn         *Connection
 	CampaignName string
 	Actor        records.Actor
+	// AllowCall spends one of the connection's tool calls, or says how long
+	// until the next; nil allows every call.
+	AllowCall func() (bool, time.Duration)
 }
 
 // Outcome is what one request did, for the endpoint to send and log.
@@ -51,6 +55,8 @@ type Outcome struct {
 	Initialized bool
 	// Called is set by tools/call: the line for "What it did".
 	Called *CallLine
+	// Limited is set when a tool call was over the connection's pace.
+	Limited bool
 }
 
 // CallLine is one tool call as the log records it.
@@ -64,9 +70,10 @@ type Asker interface {
 	Ask(ctx context.Context, c *Connection, summary, changes string) (*Request, error)
 }
 
-// InstructionsFunc writes how_to_write_changes' answer: the copy-and-paste
-// prompt's standing instructions for the campaign, as its owner.
-type InstructionsFunc func(ctx context.Context, campaignID, campaignName, userID string) (string, error)
+// InstructionsFunc writes how_to_write_changes' answer for the connection's
+// maker: for the owner, the copy-and-paste prompt's standing instructions;
+// for a player, how to change their own character.
+type InstructionsFunc func(ctx context.Context, c *Connection, campaignName string) (string, error)
 
 // Server answers MCP requests with the tools.
 type Server struct {
@@ -127,10 +134,10 @@ func (s *Server) Handle(ctx context.Context, sess Session, body []byte) Outcome 
 	case "ping":
 		return reply(m.ID, map[string]any{})
 	case "tools/list":
-		list := toolsFor(sess.Conn)
+		list := toolsFor(sess.Conn, s.Lookups)
 		defs := make([]map[string]any, len(list))
 		for i, t := range list {
-			defs[i] = t.definition()
+			defs[i] = t.definition(sess.Conn != nil && sess.Conn.ForPlayer)
 		}
 		return reply(m.ID, map[string]any{"tools": defs})
 	case "tools/call":
@@ -175,11 +182,17 @@ func (s *Server) initialize(m rpcMessage, sess Session) Outcome {
 // the campaign's players and owner, so it is named as content, never orders.
 func instructions(sess Session) string {
 	sees := "what the campaign's players can see"
-	if sess.Conn != nil && sess.Conn.Privacy.String() == "permitted" {
+	if sess.Conn != nil && sess.Conn.Privacy.String() == "permitted" && !sess.Conn.ForPlayer {
 		sees = "what the campaign's owner can see, including their secrets"
 	}
 	changes := "They only read: nothing in the campaign can be changed through them. "
-	if sess.Conn != nil && sess.Conn.CanAsk {
+	if sess.Conn != nil && sess.Conn.ForPlayer {
+		sees = "what you, a player in it, can see"
+		if sess.Conn.CanAsk {
+			changes = "They only read, except " + toolAsk + ", which sends changes to your own character's sheet for you to review: nothing changes until you say yes to each one in Chronicle, and you can change only your own character's identity and hero builder choices. " +
+				"Read " + toolHowTo + " before asking. "
+		}
+	} else if sess.Conn != nil && sess.Conn.CanAsk {
 		changes = "They only read, except " + toolAsk + ", which sends changes for the owner to review: nothing in the campaign changes until the owner says yes to each one in Chronicle. " +
 			"Read " + toolHowTo + " before asking. "
 	}
@@ -196,9 +209,16 @@ func (s *Server) call(ctx context.Context, m rpcMessage, sess Session) Outcome {
 	if err := json.Unmarshal(m.Params, &p); err != nil {
 		return replyError(m.ID, codeInvalidParams, "tools/call needs a name and arguments")
 	}
-	t := findTool(sess.Conn, p.Name)
+	t := findTool(sess.Conn, s.Lookups, p.Name)
 	if t == nil {
 		return replyError(m.ID, codeInvalidParams, "there is no tool called "+oneLine(p.Name, 60))
+	}
+	if sess.AllowCall != nil {
+		if ok, wait := sess.AllowCall(); !ok {
+			out := toolResult(m.ID, waitText(t.Name, wait), true)
+			out.Limited = true
+			return out
+		}
 	}
 	args, err := t.readArgs(p.Arguments)
 	if err != nil {
@@ -210,7 +230,7 @@ func (s *Server) call(ctx context.Context, m rpcMessage, sess Session) Outcome {
 	case toolAsk:
 		return s.ask(ctx, m.ID, sess, args)
 	case toolHowTo:
-		return s.howTo(ctx, m.ID, sess)
+		return s.howTo(ctx, m.ID, sess, args)
 	}
 	text, note, ok := t.answer(ctx, s.Lookups, sess.Conn.CampaignID, sess.CampaignName, sess.Actor, args)
 	out := toolResult(m.ID, text, !ok)
@@ -229,11 +249,20 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 		return out
 	}
 	q, err := s.Asks.Ask(ctx, sess.Conn, args["summary"], args["changes"])
+	if errors.Is(err, ErrAlreadyWaiting) {
+		// Not an error: what the AI wanted is done, so it is told so plainly
+		// and isn't nudged into a third try.
+		out := toolResult(id, "Already waiting: these exact changes were sent earlier and are still waiting for review in Chronicle, so nothing new was sent. "+
+			"Say it is waiting under the AI button at the top of any Chronicle page, and don't send it again.", false)
+		line.Note, line.OK = "already waiting, not sent again", true
+		out.Called = line
+		return out
+	}
 	if err != nil {
 		msg := err.Error()
 		switch {
 		case errors.Is(err, ErrTooManyWaiting):
-			msg = fmt.Sprintf("%d requests are already waiting for the owner. Ask them to review those on the campaign's Your AI page first", requestsWaiting)
+			msg = fmt.Sprintf("%d requests are already waiting for review. Ask for those to be answered from the AI button in Chronicle first", requestsWaiting)
 		case errors.Is(err, ErrCannotAsk):
 		case isAppError(err):
 			msg = "Chronicle couldn't keep the request just now. Try again in a moment"
@@ -245,32 +274,56 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 	}
 	line.Summary = fmt.Sprintf("Asked for %d %s: “%s”", q.Blocks, plural(q.Blocks, "change", "changes"), oneLine(q.Summary, 120))
 	line.Note, line.OK = "sent for your review", true
-	out := toolResult(id, fmt.Sprintf("Sent to the owner for review in Chronicle: %s. Nothing has changed yet: "+
-		"they say yes or no to each one on the campaign's Your AI page. Tell them it is waiting there, and don't send the same changes again.", q.Counts), false)
+	who := "the owner"
+	if sess.Conn.ForPlayer {
+		who = "you"
+	}
+	out := toolResult(id, fmt.Sprintf("Sent to %s for review in Chronicle: %s. Nothing has changed yet: "+
+		"each one is answered yes or no from the AI button at the top of any Chronicle page. Say it is waiting there, and don't send the same changes again.", who, q.Counts), false)
 	out.Called = line
 	return out
 }
 
-// howTo answers how_to_write_changes. The prompt was written for copy and
-// paste, so it is prefaced with what is different over a connection.
-func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session) Outcome {
+// howTo answers how_to_write_changes, in the part asked for (howToPart).
+// The prompt was written for copy and paste, so the guide is prefaced with
+// what is different over a connection.
+func (s *Server) howTo(ctx context.Context, id json.RawMessage, sess Session, args map[string]string) Outcome {
 	line := &CallLine{Tool: toolHowTo, Summary: "Read how to write changes"}
+	if c := args["category"]; c != "" {
+		line.Summary = "Read the sheet fields of " + oneLine(c, 60)
+	} else if args["part"] != "" {
+		line.Summary = "Read how to write changes: " + oneLine(args["part"], 40)
+	}
 	if s.Instructions == nil {
 		out := toolResult(id, "Not answered: the instructions aren't available on this Chronicle site.", true)
 		line.Note = "not available"
 		out.Called = line
 		return out
 	}
-	text, err := s.Instructions(ctx, sess.Conn.CampaignID, sess.CampaignName, sess.Conn.UserID)
+	text, err := s.Instructions(ctx, sess.Conn, sess.CampaignName)
 	if err != nil {
 		out := toolResult(id, "Not answered: Chronicle couldn't write the instructions just now. Try again in a moment.", true)
 		line.Note = "couldn't be written"
 		out.Called = line
 		return out
 	}
+	part, ok, why := howToPart(text, args["part"], args["category"])
+	if !ok {
+		out := toolResult(id, "Not answered: "+why+".", true)
+		line.Note = why
+		out.Called = line
+		return out
+	}
+	if args["category"] != "" || strings.EqualFold(strings.TrimSpace(args["part"]), howToPartCategories) {
+		// The sheet fields are read on their own, so they need no preface.
+		out := toolResult(id, part, false)
+		line.Note, line.OK = fmt.Sprintf("%d KB", (len(part)+1023)/1024), true
+		out.Called = line
+		return out
+	}
 	text = "You are connected to Chronicle through tools, so two things differ from what follows. " +
 		"Where it says to write a `kind: lookup` block, use the lookup tools instead. " +
-		"Where it says to answer with blocks for the owner to paste, send them with " + toolAsk + " instead.\n\n" + strings.TrimSpace(text)
+		"Where it says to answer with blocks to paste, send them with " + toolAsk + " instead.\n\n" + strings.TrimSpace(part)
 	out := toolResult(id, text, false)
 	line.Note, line.OK = fmt.Sprintf("%d KB", (len(text)+1023)/1024), true
 	out.Called = line
@@ -289,6 +342,25 @@ func plural(n int, one, many string) string {
 func isAppError(err error) bool {
 	var ae *apperror.AppError
 	return errors.As(err, &ae)
+}
+
+// waitText tells the AI how long to wait before calling the tool again. It
+// is a tool result, not an HTTP error, so the AI reads it and can retry
+// instead of reporting a failure.
+func waitText(tool string, wait time.Duration) string {
+	secs := int((wait + time.Second - 1) / time.Second)
+	if secs < 1 {
+		secs = 1
+	}
+	if secs > 3600 {
+		h := (secs + 3599) / 3600
+		return fmt.Sprintf("Not answered: this connection has used its %d tool calls for today. Try again in about %d hours.", callsPerDay, h)
+	}
+	unit := "seconds"
+	if secs == 1 {
+		unit = "second"
+	}
+	return fmt.Sprintf("Not answered yet: Chronicle is pacing this connection's tool calls. Wait %d %s, then call %s again with the same arguments.", secs, unit, tool)
 }
 
 func toolResult(id json.RawMessage, text string, isError bool) Outcome {

@@ -152,6 +152,12 @@ const (
 	// from KeyTrashRetentionDays, which is for pages inside a campaign.
 	KeySiteTrashRetentionDays = "content.site_trash_retention_days"
 
+	// KeyLongTermTrashMonths is how many months removed pages and players'
+	// old values are kept packed after a campaign's Trash lets them go. One
+	// of LongTermTrashChoices, 0 meaning off; anything else reads as the
+	// default.
+	KeyLongTermTrashMonths = "content.long_term_trash_months"
+
 	// --- Site look (pages outside a campaign) ---
 	// Stored as plain strings; internal/sitelook defines what each may hold.
 	// An absent key means "never saved", so a fresh site renders as before.
@@ -189,6 +195,13 @@ var SiteTrashRetentionChoices = []int{7, 14, 30, 90}
 
 // DefaultSiteTrashRetentionDays applies while the setting is unset.
 const DefaultSiteTrashRetentionDays = 30
+
+// LongTermTrashChoices are the Long-term trash lengths the admin can pick,
+// in months; 0 turns it off. They match the player changes plugin's list.
+var LongTermTrashChoices = []int{0, 3, 6, 12, 24}
+
+// DefaultLongTermTrashMonths applies while the setting is unset.
+const DefaultLongTermTrashMonths = 6
 
 // Registration mode values for KeyRegistrationMode. Defined here as the canonical
 // source of truth for the site setting; the auth service compares against its own

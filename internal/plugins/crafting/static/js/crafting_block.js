@@ -121,6 +121,14 @@
     if (R.finished && came.length) h += '<p class="cra-fine crp-came">It came out: ' + came.map(esc).join(' · ') + '</p>';
     return h;
   }
+  /* The bench's look for a player: the one they switched to, else the
+     Journal on a narrow screen, where the Desk is too small to work, and the
+     Director's look anywhere wider. */
+  function pickSkin(saved, narrow, director) {
+    if (saved === 'desk' || saved === 'journal') return saved;
+    if (narrow) return 'journal';
+    return director === 'journal' ? 'journal' : 'desk';
+  }
   /* A ready roll held by the recipe's rule, said in full. */
   function waitText(p, today) {
     var w = trimDot(p.waits);
@@ -135,10 +143,20 @@
     return '<button type="button" class="crp-ib" data-act="menu" data-id="' + esc(id) + '" aria-haspopup="menu" aria-expanded="' + isOpen + '" aria-label="More for this project">' + ICON.more + '</button>';
   }
 
+  /* A bench whose scripts never arrive would say "Loading the bench…"
+     forever; after a while it says so and offers another try. */
+  function watchBench(node, retry) {
+    setTimeout(function () {
+      if (!node.isConnected || !node.querySelector(':scope > p[role="status"]')) return;
+      node.innerHTML = '<p class="cra-fine cra-bad" role="alert">The bench didn’t load. <button type="button" class="cra-link">Try again</button></p>';
+      node.querySelector('button').addEventListener('click', retry);
+    }, 20000);
+  }
+
   function mount(el, cfg) {
     var cid = String(cfg.campaignId || ''), eid = String(cfg.entityId || '');
     var base = '/campaigns/' + encodeURIComponent(cid) + '/crafting';
-    var D = null, open = null, pick = {}, use = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0, momentT = 0, said = '';
+    var D = null, open = null, pick = {}, use = {}, last = null, got = null, busy = false, dead = false, benchEl = null, toastT = 0, momentT = 0, said = '', skinPick = '', lookEl = null;
     // got is the harvest or study whose result is unfolded; open.kind says which.
     // tpicks is what goes into a try, by item; tried and broke the last try
     // and break-down; copy the copy picked to break; play says a moment is
@@ -157,6 +175,19 @@
           }
           return data;
         });
+      }, function (e) {
+        // The browser's own words for a dropped connection ("Failed to
+        // fetch", "Load failed") mean nothing to a player.
+        if (e && e.status) throw e;
+        throw new Error('Chronicle couldn’t be reached. Check your connection and try again.');
+      });
+    }
+    /* While a roll or a cancel is out, its project's buttons say so and
+       can't be pressed twice. */
+    function holdButtons(pid, on) {
+      el.querySelectorAll('[data-id="' + pid + '"][data-act="plain"], [data-id="' + pid + '"][data-act="cancel"]').forEach(function (b) {
+        b.disabled = on;
+        if (on) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy');
       });
     }
     /* The message is kept, not just shown: a render right after it would
@@ -179,7 +210,7 @@
     function bench(kind) { for (var i = 0; i < D.benches.length; i++) if (D.benches[i].kind === kind) return D.benches[i]; return null; }
     /* Skipping the steps is the campaign's call for a player; a recipe with
        no steps is only ever rolled. */
-    function canSkip(r) { return !r || !r.steps.length || D.settings.skip || D.director; }
+    function canSkip(r) { return !r || !r.steps.length || D.settings.skip || D.director || !!r.skip; }
 
     function projectRow(p) {
       var r = recipe(p.recipeId), acts, id = p.id;
@@ -289,6 +320,7 @@
       var b = bench(r.bench), E = D.edge, B = D.bane;
       return '<div class="crp-fold"><h4>' + esc(p.name) + (b ? ' at ' + esc(b.name) : ' at the bench') + '</h4>' +
         '<div class="crp-bench" data-bench></div>' +
+        '<p class="crp-look"><button type="button" class="cra-link" data-act="skin" data-id="' + esc(p.id) + '">' + (skinNow() === 'journal' ? 'Switch to the desk' : 'Switch to the journal') + '</button></p>' +
         '<div class="crp-foot"><p class="cra-fine">Clean work earns an edge (' + signed(E) + '). ' +
         (D.settings.bane ? 'Botched work gives a bane (' + signed(B) + ').' : 'Botched work makes a plain roll, because banes are off.') +
         ' Putting the bench away keeps the roll for later.</p>' +
@@ -316,11 +348,13 @@
     }
     function resultFold(p, who) {
       who = who || hero();
-      var R = last, rows = T.terms(R), h = '<div class="crp-fold" aria-live="polite"><h4>Project roll: ' + esc(p.name) + '</h4><div class="crp-result">' +
+      var R = last, rows = T.terms(R), h = '<div class="crp-fold" aria-live="polite"><h4>Project roll: ' + esc(p.name) + '</h4>' +
+        (lookEl ? '<div data-look></div>' : '') + '<div class="crp-result">' +
         (R.dice.length ? '<div class="crp-dice" aria-label="The dice show ' + esc(R.dice.join(' and ')) + '">' + R.dice.map(function (d) { return '<span class="crp-die">' + d + '</span>'; }).join('') + '</div>' : '<div></div>') +
         '<ul class="crp-terms">' + rows.map(function (t) { return '<li><span>' + esc(t.text) + '</span><span>' + esc(t.n) + '</span></li>'; }).join('') +
         '<li class="is-tot"><span>Project points</span><span>+' + R.total + '</span></li></ul>' +
         '<div class="crp-outcome">' + progress(R.to, p.goal, R.from + ' → ' + R.to, p.name);
+      if (R.look && R.look.words) h += '<p class="crp-said">“' + esc(R.look.words) + '”</p>';
       h += befell(R, p.name, who);
       if (R.finished && R.made) h += '<div class="crp-made">' + madeIcon(R.item) + '<span>' + esc(p.name) + ' is made. ' + esc(R.made) + ' is in ' + esc(who) + '’s pack.</span></div>';
       if (R.finished && R.made) h += carries(R.item);
@@ -379,6 +413,30 @@
       showToast();
       if (open && open.kind === 'bench') mountBench(open.id);
       if (play && moment) mountMoment();
+      seatLook();
+    }
+    /* A roll's dressed moment (the server sends only the one that
+       happened) plays over the result. It survives re-renders by moving to
+       the new result; once the result is gone, so is it. */
+    function seatLook() {
+      if (!lookEl) return;
+      var slot = el.querySelector('[data-look]');
+      if (!slot) { dropLook(); return; }
+      slot.appendChild(lookEl);
+      if (!lookEl._mounted) { lookEl._mounted = true; Chronicle.mountWidget(lookEl); }
+    }
+    function dropLook() {
+      if (!lookEl) return;
+      if (lookEl._mounted && Chronicle.destroyWidget) Chronicle.destroyWidget(lookEl);
+      lookEl.remove(); lookEl = null;
+    }
+    function lookFor(res, r) {
+      var l = res.look;
+      if (!l || !l.spots || !Object.keys(l.spots).length || still()) return null;
+      var n = document.createElement('div');
+      n.setAttribute('data-widget', 'craft_moment_look');
+      n._look = {spots: l.spots, words: l.words || '', makes: !!(res.finished && res.made), liquid: r && r.colors && r.colors.final};
+      return n;
     }
 
     function load(keep) {
@@ -402,6 +460,21 @@
       el.querySelector('[data-retry]').addEventListener('click', function () { load().catch(fail); });
     }
 
+    /* A player's switch is kept in this browser per campaign (pickSkin);
+       where storage is blocked it holds until the page closes. */
+    var LOOK_KEY = 'chronicle.crafting.look.' + cid;
+    function skinNow() {
+      var v = '';
+      try { v = window.localStorage.getItem(LOOK_KEY) || ''; } catch (e) { v = ''; }
+      return pickSkin(v || skinPick, !!(window.matchMedia && matchMedia('(max-width: 640px)').matches), D.settings.skin);
+    }
+    function switchSkin(pid) {
+      var to = skinNow() === 'journal' ? 'desk' : 'journal';
+      try { window.localStorage.setItem(LOOK_KEY, to); } catch (e) { /* not kept; it still switches for now */ }
+      skinPick = to;
+      render();
+      focus('[data-act="skin"][data-id="' + pid + '"]');
+    }
     function unmountBench() {
       if (!benchEl) return;
       if (Chronicle.destroyWidget) Chronicle.destroyWidget(benchEl);
@@ -413,7 +486,7 @@
     function mountBench(pid) {
       var p = project(pid), r = p && recipe(p.recipeId), box = el.querySelector('[data-bench]');
       if (!p || !r || !box || !window.Chronicle.mountWidget) return;
-      var b = bench(r.bench), skin = D.settings.skin === 'journal' ? 'journal' : 'desk', data = L.benchRecipe(r, hero(), p.points);
+      var b = bench(r.bench), skin = skinNow(), data = L.benchRecipe(r, hero(), p.points);
       benchEl = document.createElement('div');
       benchEl.setAttribute('data-widget', 'craft_bench');
       benchEl.setAttribute('data-skin', skin);
@@ -424,6 +497,7 @@
         onWorked: function (work) { roll(pid, work, b ? b.id : ''); }};
       box.appendChild(benchEl);
       Chronicle.mountWidget(benchEl);
+      watchBench(benchEl, function () { unmountBench(); mountBench(pid); });
     }
 
     /* Motion at the bench: off under Calm, Off or reduced motion, where the
@@ -449,7 +523,7 @@
     function mountMoment() {
       var box = el.querySelector('[data-moment]'), m = moment;
       if (!box || !m) return;
-      var b = (m.kind && bench(m.kind)) || D.benches[0] || null, skin = D.settings.skin === 'journal' ? 'journal' : 'desk';
+      var b = (m.kind && bench(m.kind)) || D.benches[0] || null, skin = skinNow();
       benchEl = document.createElement('div');
       benchEl.setAttribute('data-widget', 'craft_bench');
       benchEl.setAttribute('data-skin', skin);
@@ -486,12 +560,15 @@
       var p = project(pid);
       if (!p || busy) return;
       busy = true;
+      holdButtons(pid, true);
       api('POST', '/projects/' + encodeURIComponent(pid) + '/roll', {work: work, bench: benchId || '', version: p.version}).then(function (res) {
         busy = false;
         if (dead) return;
         last = res;
         D.projects = D.projects.map(function (x) { return x.id === pid ? res.project : x; });
         open = {kind: 'result', id: pid};
+        dropLook();
+        lookEl = lookFor(res, recipe(p.recipeId));
         render();
         throwDice(res, p.name);
         focus('[data-p="' + pid + '"] [data-act="close"]');
@@ -500,6 +577,7 @@
       }, function (err) {
         busy = false;
         if (dead) return;
+        holdButtons(pid, false);
         toast(err.message);
         // A held roll or a stale project: show where things stand now.
         if (err.status === 409) load().catch(fail);
@@ -668,10 +746,13 @@
 
     function cancel(pid) {
       var p = project(pid);
-      if (!p) return;
+      if (!p || busy) return;
+      busy = true;
+      holdButtons(pid, true);
       api('DELETE', '/projects/' + encodeURIComponent(pid)).then(function () {
+        busy = false;
         return load().then(function () { toast(p.name + ' was cancelled. What it took stays spent.'); });
-      }, function (err) { toast(err.message); load().catch(fail); });
+      }, function (err) { busy = false; holdButtons(pid, false); toast(err.message); load().catch(fail); });
     }
 
     function close(id) {
@@ -692,6 +773,7 @@
         case 'kmore': step(id, 1); break;
         case 'kless': step(id, -1); break;
         case 'bench': open = isOpen('bench', id) ? null : {kind: 'bench', id: id}; render(); break;
+        case 'skin': switchSkin(id); break;
         case 'plain': roll(id, 'skipped', ''); break;
         case 'close':
           if (open && open.kind === 'helped') { open = null; last = null; play = false; moment = null; load().catch(fail); break; }
@@ -736,7 +818,7 @@
 
     el.innerHTML = '<div class="cra-loading" aria-hidden="true"><i></i><i></i><i></i></div><p class="sr-only" role="status">Loading crafting…</p>';
     load().catch(fail);
-    return {destroy: function () { dead = true; clearTimeout(toastT); clearTimeout(momentT); unmountBench(); el.removeEventListener('click', onClick); el.removeEventListener('change', onChange); document.removeEventListener('click', outside); document.removeEventListener('keydown', onKey); el.innerHTML = ''; }};
+    return {destroy: function () { dead = true; clearTimeout(toastT); clearTimeout(momentT); unmountBench(); dropLook(); el.removeEventListener('click', onClick); el.removeEventListener('change', onChange); document.removeEventListener('click', outside); document.removeEventListener('keydown', onKey); el.innerHTML = ''; }};
   }
 
   Chronicle.register('crafting-block', {
@@ -752,5 +834,5 @@
     }
   });
 
-  window.CraftingBlock = {keptOf: keptOf, keptName: keptName, held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: T.terms, costText: costText, befell: befell, standIns: standIns};
+  window.CraftingBlock = {keptOf: keptOf, keptName: keptName, held: held, tagged: tagged, blockers: blockers, waitText: waitText, termRows: T.terms, costText: costText, befell: befell, standIns: standIns, pickSkin: pickSkin};
 })();

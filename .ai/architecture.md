@@ -15,7 +15,9 @@ The plugin and widget lists are in `.ai/README.md`; each has its own `.ai.md`.
 
 Core lives under `internal/`: `app/` (App struct, DI, route aggregation),
 `config/`, `database/` (pools, migration runners, plugin health),
-`middleware/`, `apperror/`, `sanitize/`. Shared Templ is in
+`middleware/`, `apperror/`, `sanitize/`, and `aiplug/`, the contract a
+plugin implements to give the AI engine (`ai_workspace`) its own blocks and
+lookups (ADR-071). Shared Templ is in
 `internal/templates/` (`layouts/`, `components/`, `pages/`). `cmd/server/main.go`
 is the entry point; `db/migrations/` is the core schema.
 
@@ -48,6 +50,7 @@ supplies tooltip data for `@mentions` of game content.
 - `packages/`
 - `pageblocks/`
 - `pagetests/`
+- `playerchanges/`
 - `quests/`
 - `restore/`
 - `rolls/`
@@ -87,8 +90,8 @@ one flat package (loader, manifest parser, registry, generic content handler);
 there are no per-system subdirectories. A package (manifest plus data files)
 is installed per campaign via Admin > Packages; its manifest declares
 categories, fields and metadata, and its data lives in the package's own
-on-disk version directory. Custom tooltip formatting registers through
-`systems.RegisterFactory()` from an `init()`.
+on-disk version directory. Systems carry no Go code: stat blocks and
+tooltips come from the manifest's field definitions.
 
 ## Widgets
 

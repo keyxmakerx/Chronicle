@@ -6,30 +6,47 @@ import (
 	"strings"
 )
 
-// Panel is the DM Screen fragment: a header strip and three leaves (the
-// world, the party, rules and reveals). The dm-screen widget mounts it in an
-// overlay and plays the opening; the markup itself is static so a reduced-
-// motion or no-JS-animation path still reads correctly.
+// Panel is the DM Screen fragment, docked at the right edge of the page: a
+// rail of section icons and a column of section cards beside it. Every card
+// is rendered, hidden; the dm-screen widget shows the ones the viewer opened
+// and keeps that choice per browser, so a refetch (an Allow, a time step)
+// swaps the markup without losing it.
 templ Panel(v *View, csrf string) {
 	<div
 		class="dms"
 		data-dms-root
-		role="dialog"
-		aria-modal="true"
+		role="complementary"
 		aria-labelledby="dms-title"
 		hx-get={ fmt.Sprintf("/campaigns/%s/dm-screen", v.CampaignID) }
 		hx-trigger="armory-moved from:body, dms-refresh from:body"
 		hx-swap="outerHTML"
 	>
-		<div class="dms-titlebar">
-			<div class="dms-head">
-				<h2 id="dms-title"><i class="fa-solid fa-grip-vertical dms-grip" aria-hidden="true"></i>{ layouts.GMTerm(ctx) } Screen</h2>
-				<span class="dms-acts">
-					if v.Homebrew != nil {
-						<button type="button" class="dms-close" data-dms-brew aria-controls="dms-brew" aria-expanded="false" aria-label="Homebrew" title="Homebrew"><i class="fa-solid fa-beer-mug-empty" aria-hidden="true"></i></button>
+		<h2 id="dms-title" class="sr-only">{ layouts.GMTerm(ctx) } Screen</h2>
+		<nav class="dms-rail" aria-label={ layouts.GMTerm(ctx) + " Screen sections" }>
+			<button type="button" class="dms-ic" data-dms-tuck aria-label={ "Tuck the " + layouts.GMTerm(ctx) + " Screen away" } title="Tuck away">
+				<i class="fa-solid fa-angles-right" aria-hidden="true"></i>
+			</button>
+			<hr/>
+			for _, sec := range v.Sections() {
+				<button
+					type="button"
+					class="dms-ic"
+					data-dms-open={ sec.ID }
+					aria-pressed="false"
+					aria-label={ sec.Title }
+					title={ sec.Title + ": " + sec.Summary }
+				>
+					<i class={ "fa-solid fa-" + sec.Icon } aria-hidden="true"></i>
+					if sec.Badge > 0 {
+						<span class="dms-badge" aria-hidden="true">{ fmt.Sprint(sec.Badge) }</span>
 					}
-					<button type="button" class="dms-close" data-dms-close aria-label={ "Close the " + layouts.GMTerm(ctx) + " Screen" } title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-				</span>
+				</button>
+			}
+		</nav>
+		<div class="dms-col" data-dms-col>
+			<div class="dms-colhead">
+				<span class="dms-count" data-dms-count></span>
+				<button type="button" class="dms-quiet" data-dms-closeall>Close all</button>
 			</div>
 			<div class="dms-strip">
 				if v.Night != nil {
@@ -47,226 +64,219 @@ templ Panel(v *View, csrf string) {
 					<span><span class="dms-dot" aria-hidden="true"></span>Foundry not connected</span>
 				}
 			</div>
+			<p class="dms-empty" data-dms-empty hidden>Pick a section on the bar to open it here.</p>
+			<div class="dms-cards" data-dms-cards>
+				for _, sec := range v.Sections() {
+					@section(sec) {
+						@sectionBody(v, sec.ID, csrf)
+					}
+				}
+			</div>
 		</div>
-		<div class="dms-leaves">
-			<section class="dms-leaf dms-leaf-l" data-dms-leaf="l" aria-label="The world">
-				<h3>The world</h3>
-				if v.Downtime != nil {
-					<div class="dms-blk">
-						<span class="dms-lbl">Game state</span>
-						<div class="dms-seg" role="group" aria-label="Game state">
-							for _, opt := range []struct{ Label string; Open bool }{{"In session", false}, {"Downtime", true}} {
-								<button
-									type="button"
-									aria-pressed={ fmt.Sprint(v.Downtime.Open == opt.Open) }
-									disabled?={ !v.Downtime.CanToggle || v.Downtime.Open == opt.Open }
-									data-dms-ask
-								>{ opt.Label }</button>
-							}
-						</div>
-						if v.Downtime.CanToggle {
-							{{ text, yes := v.Downtime.Confirm() }}
-							<div class="dms-confirm" data-dms-confirm role="alertdialog" aria-label={ yes } hidden>
-								<p>{ text }</p>
-								<div class="dms-confirm-btns">
-									<button
-										type="button"
-										class="dms-confirm-yes"
-										hx-post={ fmt.Sprintf("/campaigns/%s/armory/downtime", v.CampaignID) }
-										hx-vals={ fmt.Sprintf(`{"open":"%t"}`, !v.Downtime.Open) }
-										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
-										hx-disabled-elt="this"
-									>{ yes }</button>
-									<button type="button" data-dms-cancel>Cancel</button>
-								</div>
-							</div>
-						}
-						<span class="dms-small">
-							if v.Downtime.Open {
-								Moves happen at once. Shops are open.
-							} else {
-								Moves need your OK. Shops are closed.
-							}
-							if !v.Downtime.CanToggle {
-								{ " " }Only the campaign owner can switch this.
-							}
-						</span>
-						if v.Requests == nil && v.Downtime.Pending > 0 {
-							<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory/stashes", v.CampaignID)) }>
-								{ plural(v.Downtime.Pending, "request", "requests") } waiting on you
-							</a>
-						}
-					</div>
-				}
-				if v.Requests != nil {
-					@waitingBlock(v.CampaignID, v.Requests, csrf)
-				}
-				if v.World != nil {
-					<div class="dms-blk">
-						<span class="dms-lbl">In the world</span>
-						<span class="dms-big">{ v.World.DateLabel }
-							if v.World.TimeLabel != "" {
-								{ " · " + v.World.TimeLabel }
-							}
-						</span>
-						if v.World.CanStep {
-							<div class="dms-chipsrow" role="group" aria-label="Move the date forward">
-								for _, st := range TimeSteps {
-									<button
-										type="button"
-										class="dms-stepchip"
-										data-step={ st.Key }
-										hx-post={ fmt.Sprintf("/campaigns/%s/dm-screen/time", v.CampaignID) }
-										hx-vals={ fmt.Sprintf(`{"step":"%s"}`, st.Key) }
-										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
-										hx-swap="none"
-										hx-disabled-elt="this"
-									>{ st.Label }</button>
-								}
-							</div>
-						}
-						<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", v.CampaignID, v.World.CalendarID)) }>Open the calendar</a>
-					</div>
-					<div class="dms-blk">
-						<span class="dms-lbl">Weather today</span>
-						if v.World.Weather != "" {
-							<span>{ v.World.Weather }</span>
-						} else {
-							<span class="dms-small">No weather set for today.</span>
-						}
-					</div>
-				}
-				if v.Downtime == nil && v.World == nil {
-					<p class="dms-small">Add a calendar or turn on the Armory to see the world's date and game state here.</p>
-				}
-			</section>
-			<section class="dms-leaf dms-leaf-m" data-dms-leaf="m" aria-label="The party">
-				<h3>The party</h3>
-				if len(v.Party) == 0 {
-					<p class="dms-small">No player characters yet.</p>
-				}
-				if len(v.Party) > 0 {
-					<div class="dms-partywrap">
-						<div class="dms-party" data-dms-party>
-							for _, hero := range v.Party {
-								@heroRow(hero)
-							}
-						</div>
-						<span class="dms-more" data-dms-more hidden></span>
-					</div>
-				}
-				if len(v.Party) > 0 && !v.PartyFilled {
-					<p class="dms-small">
-						if v.SystemName != "" {
-							{ v.SystemName } doesn't fill in hero numbers yet.
-						} else {
-							Turn on a game system to see each hero's numbers here.
-						}
-					</p>
-				}
-			</section>
-			<section class="dms-leaf dms-leaf-r" data-dms-leaf="r" aria-label="Rules and reveals">
-				<div class="dms-tabs" role="tablist">
-					if len(v.Conditions) > 0 {
-						<button type="button" role="tab" aria-selected="true" data-dms-tab="rules">Rules</button>
-					}
-					<button type="button" role="tab" aria-selected={ fmt.Sprint(len(v.Conditions) == 0) } data-dms-tab="reveal">Reveal</button>
-					if v.Notes != nil {
-						<button type="button" role="tab" aria-selected="false" data-dms-tab="notes">Notes</button>
-					}
-					if v.Adventures != nil {
-						<button type="button" role="tab" aria-selected="false" data-dms-tab="adventures">Adventures</button>
-					}
-					if v.Fight != nil {
-						<button type="button" role="tab" aria-selected="false" data-dms-tab="fight">Fight</button>
-					}
-				</div>
-				if len(v.Conditions) > 0 {
-					<div class="dms-blk" data-dms-pane="rules">
-						<input type="search" class="dms-search" placeholder="Find a condition" aria-label="Find a condition" data-dms-filter/>
-						for _, cond := range v.Conditions {
-							<details class="dms-cond" data-dms-cond={ cond.Name }>
-								<summary>{ cond.Name }</summary>
-								<p>{ cond.Text }</p>
-							</details>
-						}
-					</div>
-				}
-				<div class="dms-blk" data-dms-pane="reveal" hidden?={ len(v.Conditions) > 0 }>
-					<span class="dms-lbl">Hidden from players</span>
-					if len(v.Hidden) == 0 {
-						<p class="dms-small">Nothing hidden right now.</p>
-					}
-					for _, h := range v.Hidden {
-						@HiddenRow(v.CampaignID, h, csrf)
-					}
-					if v.HiddenMore {
-						<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", v.CampaignID)) }>More are hidden. See all on the Characters page</a>
-					}
-				</div>
-				if v.Notes != nil {
-					<div class="dms-blk" data-dms-pane="notes" hidden>
-						<span class="dms-lbl">{ v.Notes.Label }</span>
-						<textarea
-							class="dms-search dms-notes"
-							rows="12"
-							maxlength="20000"
-							aria-label={ v.Notes.Label }
-							placeholder="Jot things down for the table."
-							readonly?={ v.Notes.ReadOnly }
-							data-dms-note
-							data-dms-note-version={ v.Notes.Version }
-							data-dms-note-url={ fmt.Sprintf("/campaigns/%s/dm-screen/notes", v.CampaignID) }
-						>{ v.Notes.Text }</textarea>
-						<span class="dms-small" role="status" aria-live="polite" data-dms-note-status>
-							if v.Notes.ReadOnly {
-								This note has formatting, so edit it in Notes
-							} else {
-								Only you and co-{ layouts.GMTerm(ctx) }s can see this
-							}
-						</span>
-						<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Notes</a>
-					</div>
-				}
-				if v.Adventures != nil {
-					<div class="dms-blk" data-dms-pane="adventures" hidden>
-						@adventuresPane(v.CampaignID, v.Adventures)
-					</div>
-				}
-				if v.Fight != nil {
-					<div class="dms-blk" data-dms-pane="fight" hidden>
-						@v.Fight
-					</div>
-				}
-			</section>
-		</div>
-		if v.Homebrew != nil {
-			@brewDrawer(v)
-		}
 	</div>
 }
 
-// brewDrawer is the Homebrew drawer beside the leaves: the frame is the
-// screen's, what fills it is homebrew's. "See it as a player" sets
-// data-player-view on the drawer, which the homebrew styles read to hide
-// what players don't get. The wrench opens the Workshop where the recipes
-// are built: whoever may open the screen passes the Workshop's own check,
-// and the rulebook's link is missing when the campaign has no game system.
-templ brewDrawer(v *View) {
-	<aside class="dms-brew" id="dms-brew" data-dms-brew-pane aria-labelledby="dms-brew-title" hidden>
-		<div class="dms-brew-head">
-			<i class="fa-solid fa-beer-mug-empty dms-brew-mark" aria-hidden="true"></i>
-			<h3 id="dms-brew-title">Homebrew</h3>
-			<a class="dms-close" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/homebrew", v.CampaignID)) } data-dms-brew-workshop aria-label="Open the Homebrew workshop" title="Homebrew workshop"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i></a>
-			<button type="button" class="dms-close" data-dms-brew-pv aria-pressed="false" aria-label="See it as a player" title="See it as a player"><i class="fa-solid fa-users" aria-hidden="true"></i></button>
-			<button type="button" class="dms-close" data-dms-brew aria-label="Close Homebrew" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+// section is one card in the column. Its header folds it to the one-line
+// summary or brings it to the front; the cross closes it.
+templ section(sec SectionView) {
+	<section class="dms-sec" data-dms-sec={ sec.ID } aria-labelledby={ "dms-h-" + sec.ID } hidden>
+		<header class="dms-sec-h">
+			<button type="button" class="dms-sec-t" data-dms-fold aria-expanded="true">
+				<i class={ "fa-solid fa-" + sec.Icon } aria-hidden="true"></i>
+				<span id={ "dms-h-" + sec.ID }>{ sec.Title }</span>
+				<span class="dms-sec-sum">{ sec.Summary }</span>
+			</button>
+			<button type="button" class="dms-ic dms-sec-x" data-dms-shut aria-label={ "Close " + sec.Title } title="Close">
+				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+			</button>
+		</header>
+		<div class="dms-sec-b">
+			{ children... }
+		</div>
+	</section>
+}
+
+// sectionBody is what fills each card.
+templ sectionBody(v *View, id string, csrf string) {
+	switch id {
+		case "world":
+			if v.Downtime != nil {
+				<div class="dms-blk">
+					<span class="dms-lbl">Game state</span>
+					<div class="dms-seg" role="group" aria-label="Game state">
+						for _, opt := range []struct{ Label string; Open bool }{{"In session", false}, {"Downtime", true}} {
+							<button
+								type="button"
+								aria-pressed={ fmt.Sprint(v.Downtime.Open == opt.Open) }
+								disabled?={ !v.Downtime.CanToggle || v.Downtime.Open == opt.Open }
+								data-dms-ask
+							>{ opt.Label }</button>
+						}
+					</div>
+					if v.Downtime.CanToggle {
+						{{ text, yes := v.Downtime.Confirm() }}
+						<div class="dms-confirm" data-dms-confirm role="alertdialog" aria-label={ yes } hidden>
+							<p>{ text }</p>
+							<div class="dms-confirm-btns">
+								<button
+									type="button"
+									class="dms-confirm-yes"
+									hx-post={ fmt.Sprintf("/campaigns/%s/armory/downtime", v.CampaignID) }
+									hx-vals={ fmt.Sprintf(`{"open":"%t"}`, !v.Downtime.Open) }
+									hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+									hx-disabled-elt="this"
+								>{ yes }</button>
+								<button type="button" data-dms-cancel>Cancel</button>
+							</div>
+						</div>
+					}
+					<span class="dms-small">
+						if v.Downtime.Open {
+							Moves happen at once. Shops are open.
+						} else {
+							Moves need your OK. Shops are closed.
+						}
+						if !v.Downtime.CanToggle {
+							{ " " }Only the campaign owner can switch this.
+						}
+					</span>
+					if v.Requests == nil && v.Downtime.Pending > 0 {
+						<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory/stashes", v.CampaignID)) }>
+							{ plural(v.Downtime.Pending, "request", "requests") } waiting on you
+						</a>
+					}
+				</div>
+			}
+			if v.Requests != nil {
+				@waitingBlock(v.CampaignID, v.Requests, csrf)
+			}
+			if v.World != nil {
+				<div class="dms-blk">
+					<span class="dms-lbl">In the world</span>
+					<span class="dms-big">{ v.World.DateLabel }
+						if v.World.TimeLabel != "" {
+							{ " · " + v.World.TimeLabel }
+						}
+					</span>
+					if v.World.CanStep {
+						<div class="dms-chipsrow" role="group" aria-label="Move the date forward">
+							for _, st := range TimeSteps {
+								<button
+									type="button"
+									class="dms-stepchip"
+									data-step={ st.Key }
+									hx-post={ fmt.Sprintf("/campaigns/%s/dm-screen/time", v.CampaignID) }
+									hx-vals={ fmt.Sprintf(`{"step":"%s"}`, st.Key) }
+									hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+									hx-swap="none"
+									hx-disabled-elt="this"
+								>{ st.Label }</button>
+							}
+						</div>
+					}
+					<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", v.CampaignID, v.World.CalendarID)) }>Open the calendar</a>
+				</div>
+				<div class="dms-blk">
+					<span class="dms-lbl">Weather today</span>
+					if v.World.Weather != "" {
+						<span>{ v.World.Weather }</span>
+					} else {
+						<span class="dms-small">No weather set for today.</span>
+					}
+				</div>
+			}
+			if v.Downtime == nil && v.World == nil {
+				<p class="dms-small">Add a calendar or turn on the Armory to see the world's date and game state here.</p>
+			}
+		case "fight":
+			@v.Fight
+		case "party":
+			if len(v.Party) == 0 {
+				<p class="dms-small">No player characters yet.</p>
+			}
+			if len(v.Party) > 0 {
+				<div class="dms-partywrap">
+					<div class="dms-party" data-dms-party>
+						for _, hero := range v.Party {
+							@heroRow(hero)
+						}
+					</div>
+					<span class="dms-more" data-dms-more hidden></span>
+				</div>
+			}
+			if len(v.Party) > 0 && !v.PartyFilled {
+				<p class="dms-small">
+					if v.SystemName != "" {
+						{ v.SystemName } doesn't fill in hero numbers yet.
+					} else {
+						Turn on a game system to see each hero's numbers here.
+					}
+				</p>
+			}
+		case "rules":
+			<input type="search" class="dms-search" placeholder="Find a condition" aria-label="Find a condition" data-dms-filter/>
+			for _, cond := range v.Conditions {
+				<details class="dms-cond" data-dms-cond={ cond.Name }>
+					<summary>{ cond.Name }</summary>
+					<p>{ cond.Text }</p>
+				</details>
+			}
+		case "reveal":
+			<span class="dms-lbl">Hidden from players</span>
+			if len(v.Hidden) == 0 {
+				<p class="dms-small">Nothing hidden right now.</p>
+			}
+			for _, h := range v.Hidden {
+				@HiddenRow(v.CampaignID, h, csrf)
+			}
+			if v.HiddenMore {
+				<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", v.CampaignID)) }>More are hidden. See all on the Characters page</a>
+			}
+		case "notes":
+			<span class="dms-lbl">{ v.Notes.Label }</span>
+			<textarea
+				class="dms-search dms-notes"
+				rows="12"
+				maxlength="20000"
+				aria-label={ v.Notes.Label }
+				placeholder="Jot things down for the table."
+				readonly?={ v.Notes.ReadOnly }
+				data-dms-note
+				data-dms-note-version={ v.Notes.Version }
+				data-dms-note-url={ fmt.Sprintf("/campaigns/%s/dm-screen/notes", v.CampaignID) }
+			>{ v.Notes.Text }</textarea>
+			<span class="dms-small" role="status" aria-live="polite" data-dms-note-status>
+				if v.Notes.ReadOnly {
+					This note has formatting, so edit it in Notes
+				} else {
+					Only you and co-{ layouts.GMTerm(ctx) }s can see this
+				}
+			</span>
+			<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Notes</a>
+		case "adventures":
+			@adventuresPane(v.CampaignID, v.Adventures)
+		case "homebrew":
+			@brewBody(v)
+	}
+}
+
+// brewBody is the Homebrew card: the frame is the screen's, what fills it is
+// homebrew's. "See it as a player" sets data-player-view on the card's pane,
+// which the homebrew styles read to hide what players don't get. The wrench
+// opens the Workshop where the recipes are built: whoever may open the
+// screen passes the Workshop's own check.
+templ brewBody(v *View) {
+	<div class="dms-brew" data-dms-brew-pane>
+		<div class="dms-brew-acts">
+			<a class="dms-ic" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/homebrew", v.CampaignID)) } data-dms-brew-workshop aria-label="Open the Homebrew workshop" title="Homebrew workshop"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i></a>
+			<button type="button" class="dms-ic" data-dms-brew-pv aria-pressed="false" aria-label="See it as a player" title="See it as a player"><i class="fa-solid fa-users" aria-hidden="true"></i></button>
 		</div>
 		<p class="dms-brew-pvbar"><i class="fa-solid fa-users" aria-hidden="true"></i>Player view: only what players see. Press the people button again to go back.</p>
 		@v.Homebrew
-	</aside>
+	</div>
 }
 
-// adventuresPane is the Adventures tab: pinned Adventures pages and loose notes
+// adventuresPane is the Adventures card: pinned Adventures pages and loose notes
 // as cards on a board, like a quest notice board. Pressing a page card opens
 // the page as a sheet over the screen (dm_sheet.js); nothing here navigates.
 // Every control carries its own inline handler (onclick_handlers.go) because
@@ -343,9 +353,9 @@ templ adventuresPane(campaignID string, a *AdventuresView) {
 			<div class="dms-pick" data-dms-pick hidden></div>
 		</div>
 	} else {
-		<p class="dms-small">The tab is full. Remove something to add more.</p>
+		<p class="dms-small">This card is full. Remove something to add more.</p>
 	}
-	<p class="dms-small">Only the { layouts.GMTerm(ctx) } team sees this tab.</p>
+	<p class="dms-small">Only the { layouts.GMTerm(ctx) } team sees this card.</p>
 }
 
 // waitingBlock lists the oldest waiting requests with Allow and Refuse. The

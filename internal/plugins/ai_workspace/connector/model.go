@@ -25,7 +25,8 @@ import (
 type Connection struct {
 	ID         int64
 	CampaignID string
-	// UserID is the owner who made the key. Answers are read as them.
+	// UserID is who made the key: the owner, or a player (ForPlayer).
+	// Answers are read as them.
 	UserID string
 	// KeyHash is the hex SHA-256 of the key; the key itself is never kept.
 	KeyHash string
@@ -46,6 +47,9 @@ type Connection struct {
 	// PausedAt is set while the owner has paused the key; it is refused
 	// until they resume it.
 	PausedAt *time.Time
+	// ForPlayer marks a key a player made: it reads as that player, works
+	// only while players may use AI, and its requests wait for the player.
+	ForPlayer bool
 }
 
 // Expired reports whether the key has run out at now.
@@ -100,9 +104,18 @@ const (
 const (
 	// KeyLifetime is how long a new key works before it runs out.
 	KeyLifetime = 90 * 24 * time.Hour
-	// callsPerMinute and callsPerDay cap one connection's tool calls.
-	callsPerMinute = 30
-	callsPerDay    = 2000
+	// A connection's tool calls come from a bucket of callsBurst that
+	// refills one call each callRefill, so an AI can run a burst of lookups
+	// and then keeps a steady pace; callsPerDay caps a day. A call over the
+	// pace is answered with how long to wait, as a tool result the AI reads.
+	callsBurst  = 30
+	callRefill  = time.Second
+	callsPerDay = 2000
+	// Every request, handshakes and tool lists included, has a looser
+	// bucket in front, answered 429 with Retry-After when it runs dry: it
+	// only stops a flood, never a steady AI.
+	requestsBurst  = 120
+	requestsRefill = 500 * time.Millisecond
 	// CallsKept is how many calls per campaign "What it did" keeps.
 	CallsKept = 500
 	// clientNameMax caps the name an AI app gives itself.
@@ -110,6 +123,9 @@ const (
 	// summaryMax and noteMax match the call log's columns.
 	summaryMax = 200
 	noteMax    = 120
+	// outcomeMax matches ai_connection_requests.outcome: the counts and each
+	// failed change's reason.
+	outcomeMax = 1000
 	// changesMax caps one request's size and blocksMax its blocks, which
 	// keeps what checking it costs small; requestsWaiting caps how many
 	// wait for the owner at once, so an AI can't bury them; requestsKept

@@ -18,10 +18,10 @@ type waitingAsksStub struct {
 	err              error
 }
 
-func (s waitingAsksStub) Waiting(context.Context, string) ([]connector.Request, error) {
+func (s waitingAsksStub) Waiting(context.Context, string, string) ([]connector.Request, error) {
 	return s.waiting, s.err
 }
-func (s waitingAsksStub) Decided(context.Context, string, int) ([]connector.Request, error) {
+func (s waitingAsksStub) Decided(context.Context, string, string, int) ([]connector.Request, error) {
 	return s.decided, s.err
 }
 

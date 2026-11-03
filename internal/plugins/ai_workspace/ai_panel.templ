@@ -1,0 +1,82 @@
+package ai_workspace
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// aiPanelBody is the side sheet a review opens in, loaded each time it
+// opens: the AI's requests, answered in place, and a pasted answer's review.
+// With tool it holds the whole copy-and-paste tool instead ("Write a
+// request…" in the bubble). Either way the paste box's id is on the page
+// once. aiPageReviews keeps one review open at a time.
+templ aiPanelBody(cc *campaigns.CampaignContext, v ConnectView, tool bool) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
+	<div class="aip-body" x-data @htmx:before-request={ aiPageReviews }>
+		<header class="aip-head">
+			if tool {
+				<h2 id="ai-panel-heading" class="aip-title">Write a request</h2>
+			} else {
+				<h2 id="ai-panel-heading" class="aip-title">Your AI</h2>
+			}
+			<a class="quiet-word" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", cc.Campaign.ID)) } data-ai-full>Setup and history</a>
+			<button type="button" class="aic-icon" data-ai-close aria-label="Close the AI panel">
+				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+			</button>
+		</header>
+		if tool {
+			@aiCopyPasteSection(cc)
+		} else {
+			if v.CutOff != nil {
+				<a class="aic-alert" data-tone="stopped" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", cc.Campaign.ID)) }>
+					<i class="fa-solid fa-circle-stop" aria-hidden="true"></i>
+					<p><b>AI is stopped in this campaign.</b> Turn it back on from Your AI.</p>
+				</a>
+			} else if len(v.Alerts) > 0 {
+				<a class="aic-alert" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", cc.Campaign.ID)) }>
+					<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+					<p><b>{ countOf(len(v.Alerts), "warning", "warnings") } about your key.</b> See them on Your AI.</p>
+				</a>
+			}
+			@pasteReceiver(cc)
+			if v.Available {
+				<section class="space-y-3" aria-label="Waiting for you">
+					<div id={ requestResultHost }></div>
+					@aiRequests(v, false)
+					<p class="aip-empty">Nothing waiting. When your AI asks for changes, they show up here on any page.</p>
+				</section>
+			}
+		}
+	</div>
+}
+
+// pasteReceiver takes an answer the bubble's Paste button (or Ctrl+V on any
+// page) read from the clipboard: a hidden paste box the widget fills and
+// submits, the tray of answers in parts, and where the review opens.
+// lookup_privacy is the remembered copy choice, set by the widget.
+templ pasteReceiver(cc *campaigns.CampaignContext) {
+	<section class="space-y-3" aria-label="Your AI's pasted answer">
+		<form
+			hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/parse", cc.Campaign.ID) }
+			hx-target="#ai-import-review-host"
+			hx-swap="innerHTML"
+			hx-indicator="#ai-import-parsing"
+			hidden
+		>
+			<input type="hidden" name="lookup_privacy" value="safe" data-ai-lookup-privacy/>
+			<textarea id="ai-import-paste-area" name="markdown_paste" hidden aria-hidden="true"></textarea>
+		</form>
+		<p id="ai-import-parsing" class="htmx-indicator text-xs text-fg-muted" role="status" aria-live="polite">
+			<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Reading your AI's answer…
+		</p>
+		<div
+			id="ai-import-tray"
+			hx-get={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/tray", cc.Campaign.ID) }
+			hx-trigger="load"
+			hx-swap="outerHTML"
+		></div>
+		<div id="ai-import-review-host"></div>
+	</section>
+}

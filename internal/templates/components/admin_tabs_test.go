@@ -16,7 +16,7 @@ func TestAdminGroupHeading(t *testing.T) {
 	}{
 		{"marks only the open tab", AdminTabsStorage, "/admin/storage?tab=limits", 1, true},
 		{"unknown page marks none", AdminTabsHealth, "/admin/elsewhere", 0, true},
-		{"single page has no strip", AdminTabsAPI, "/admin/api", 0, false},
+		{"single page has no strip", AdminTabGroup{Title: "One", Tabs: []AdminTab{{Label: "Only", Href: "/admin/one", Icon: "fa-gauge"}}}, "/admin/one", 0, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

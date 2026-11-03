@@ -114,7 +114,7 @@ func TestServe_SameOriginAndXAPIKeyAreAccepted(t *testing.T) {
 
 func TestServe_RateLimited(t *testing.T) {
 	r := newRig(t, aiexport.PrivacyModeSafe)
-	for i := 0; i < callsPerMinute; i++ {
+	for i := 0; i < requestsBurst; i++ {
 		if rec := r.post("camp-1", pingBody, nil); rec.Code != http.StatusOK {
 			t.Fatalf("call %d: %d", i+1, rec.Code)
 		}
@@ -122,6 +122,27 @@ func TestServe_RateLimited(t *testing.T) {
 	rec := r.post("camp-1", pingBody, nil)
 	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
 		t.Errorf("status = %d, Retry-After = %q", rec.Code, rec.Header().Get("Retry-After"))
+	}
+}
+
+// Tool calls past the pace are answered in the conversation, with how long
+// to wait, not with an HTTP error the AI can only report.
+func TestServe_ToolCallsArePaced(t *testing.T) {
+	r := newRig(t, aiexport.PrivacyModePermitted)
+	call := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"rolling_tables","arguments":{"name":"Loot"}}}`
+	for i := 0; i < callsBurst; i++ {
+		if rec := r.post("camp-1", call, nil); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "pacing") {
+			t.Fatalf("call %d: %d %s", i+1, rec.Code, rec.Body)
+		}
+	}
+	rec := r.post("camp-1", call, nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Wait 1 second, then call rolling_tables again") ||
+		!strings.Contains(rec.Body.String(), `"isError":true`) {
+		t.Errorf("over the pace: %d %s", rec.Code, rec.Body)
+	}
+	// Handshakes aren't tool calls and still go through.
+	if rec := r.post("camp-1", pingBody, nil); rec.Code != http.StatusOK {
+		t.Errorf("a ping after the burst: %d", rec.Code)
 	}
 }
 
@@ -138,7 +159,7 @@ func TestServe_LogsWhatItDid(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Gem") {
 		t.Fatalf("call: %d %s", rec.Code, rec.Body)
 	}
-	calls, _ := r.svc.Activity(context.Background(), "camp-1")
+	calls, _ := r.svc.Activity(context.Background(), "camp-1", "owner-1")
 	if len(calls) != 2 {
 		t.Fatalf("logged %d calls: %+v", len(calls), calls)
 	}
@@ -148,7 +169,7 @@ func TestServe_LogsWhatItDid(t *testing.T) {
 	if calls[0].Tool != "rolling_tables" || calls[0].Summary != "Read rolling tables: “Loot”" || !calls[0].OK {
 		t.Errorf("call line = %+v", calls[0])
 	}
-	conn, _ := r.svc.Current(context.Background(), "camp-1")
+	conn, _ := r.svc.Current(context.Background(), "camp-1", "owner-1")
 	if conn.LastUsedAt == nil || conn.ClientName != "Claude b" {
 		t.Errorf("connection = %+v", conn)
 	}

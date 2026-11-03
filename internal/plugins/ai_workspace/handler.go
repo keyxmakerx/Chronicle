@@ -96,6 +96,9 @@ type Handler struct {
 	// connector makes and revokes the keys an AI app connects with.
 	// Optional — nil leaves the Your AI page with copy and paste only.
 	connector *connector.Service
+	// playerSheets is the door players' AI changes go through; nil holds
+	// every one back.
+	playerSheets PlayerSheets
 	// baseURL is the site's public address, for the connector's address.
 	baseURL string
 }
@@ -106,7 +109,7 @@ type Handler struct {
 // adapter). Optional — nil disables audit emission, which is the
 // default in test fixtures.
 type AuditLogger interface {
-	LogCampaignEvent(ctx context.Context, campaignID, action string, details map[string]any)
+	LogCampaignEvent(ctx context.Context, campaignID, userID, action string, details map[string]any)
 }
 
 // NewHandler constructs the Handler. A nil renderer produces a
@@ -269,7 +272,7 @@ func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, b
 				failed++
 			}
 		}
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_lookup.answered",
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_lookup.answered",
 			map[string]any{
 				"lookups":           len(answers),
 				"unanswered":        failed,
@@ -294,7 +297,7 @@ func toRecord(i int, p importer.ParsedPage, links *importer.PageLinks) records.R
 	}
 	return records.Record{
 		Index: i, Kind: p.FrontMatter.Kind, Action: p.FrontMatter.Action,
-		Name: p.Name, Fields: fields, Body: p.Body, Links: links,
+		Name: p.Name, Fields: fields, Body: p.Body, Text: records.BodyText(links),
 	}
 }
 
@@ -486,7 +489,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 
 	if h.audit != nil {
 		h.audit.LogCampaignEvent(c.Request().Context(),
-			cc.Campaign.ID, "campaign.ai_import.parsed",
+			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_import.parsed",
 			map[string]any{
 				"total_pages":     summary.Total,
 				"selectable":      summary.Selectable,
@@ -559,6 +562,14 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	source := c.FormValue("markdown_source")
 	if strings.TrimSpace(source) == "" {
 		return apperror.NewBadRequest("Your import session expired. Please paste your markdown again.")
+	}
+	// A connected AI's request is applied once: a second Apply (a double
+	// click, or the same review open in two tabs) would add its new pages and
+	// records again, so it is refused before anything is written.
+	if raw := c.FormValue("ai_request"); raw != "" && h.connector != nil {
+		if _, err := h.waitingRequest(c, cc, raw); err != nil {
+			return err
+		}
 	}
 
 	// Re-parse from scratch so the indexes match what the review
@@ -667,7 +678,7 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	if h.audit != nil {
 		// Counts only — no names, no body content.
 		h.audit.LogCampaignEvent(c.Request().Context(),
-			cc.Campaign.ID, "campaign.ai_import.committed",
+			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_import.committed",
 			map[string]any{
 				"created":                result.Created,
 				"renamed":                result.Renamed,
@@ -684,12 +695,8 @@ func (h *Handler) CommitImport(c echo.Context) error {
 
 	res := ImportResultData{CampaignID: cc.Campaign.ID, Result: result}
 	if id, perr := strconv.ParseInt(c.FormValue("ai_request"), 10, 64); perr == nil && id > 0 && h.connector != nil {
-		applied := result.Created + result.Renamed + result.Updated + result.Deleted
-		outcome := fmt.Sprintf("%d applied, %d left out", applied, result.Skipped)
-		if result.Failed > 0 {
-			outcome += fmt.Sprintf(", %d failed", result.Failed)
-		}
-		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, id, outcome); err != nil {
+		outcome := requestOutcome(result)
+		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id, outcome); err != nil {
 			slog.Warn("ai-workspace: marking request answered",
 				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		}
@@ -706,6 +713,34 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, ImportResult(res))
 }
 
+// requestOutcome is what applying a connected AI's request did, as the AI
+// reads it later: the counts, then each change that failed or was held back
+// with its reason, so the AI can fix it instead of guessing. Rows the owner
+// answered No are only counted; that was their choice, not a fault.
+func requestOutcome(result importer.CommitResult) string {
+	applied := result.Created + result.Renamed + result.Updated + result.Deleted
+	outcome := fmt.Sprintf("%d applied, %d left out", applied, result.Skipped)
+	if result.Failed > 0 {
+		outcome += fmt.Sprintf(", %d failed", result.Failed)
+	}
+	var why []string
+	for _, r := range result.Rows {
+		reason := strings.TrimSpace(r.Reason)
+		switch {
+		case reason == "", reason == "Excluded by operator":
+			continue
+		case r.Status == importer.StatusFailed:
+			why = append(why, fmt.Sprintf("%q failed: %s", r.Name, reason))
+		case r.Status == importer.StatusSkipped:
+			why = append(why, fmt.Sprintf("%q held back: %s", r.Name, reason))
+		}
+	}
+	if len(why) > 0 {
+		outcome += ". " + strings.Join(why, "; ")
+	}
+	return outcome
+}
+
 // waitingRequest is one of the campaign's waiting requests, by the id the
 // page sent.
 func (h *Handler) waitingRequest(c echo.Context, cc *campaigns.CampaignContext, raw string) (*connector.Request, error) {
@@ -716,7 +751,7 @@ func (h *Handler) waitingRequest(c echo.Context, cc *campaigns.CampaignContext, 
 	if err != nil || id <= 0 {
 		return nil, apperror.NewBadRequest("that request isn't here any more")
 	}
-	return h.connector.WaitingRequest(c.Request().Context(), cc.Campaign.ID, id)
+	return h.connector.WaitingRequest(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id)
 }
 
 type recordCounts struct{ applied, failed int }
@@ -945,12 +980,45 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	if in.ContentMode == "" {
 		in.ContentMode = "none"
 	}
+	h.fillPromptInput(c, cc, &in)
+
+	userID := auth.GetUserID(c)
+	out, err := h.promptBuilder.Build(c.Request().Context(),
+		cc.Campaign.Name, userID, cc.Campaign.ID, in)
+	if err != nil {
+		slog.Error("ai-workspace: prompt generate failed",
+			slog.String("campaign_id", cc.Campaign.ID),
+			slog.Any("error", err))
+		return middleware.Render(c, http.StatusOK,
+			PromptModal("", "Could not build the prompt. Try again in a moment."))
+	}
+
+	if h.audit != nil {
+		h.audit.LogCampaignEvent(c.Request().Context(),
+			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_prompt.generated",
+			map[string]any{
+				"content_mode":        in.ContentMode,
+				"privacy":             c.QueryParam("privacy"),
+				"schema_types":        in.IncludeEntityTypes,
+				"schema_categories":   in.IncludeCategoriesInUse,
+				"schema_front_matter": in.IncludeFrontMatterExample,
+				"include_gm_notes":    in.IncludeSessionGMNotes,
+				"prompt_byte_count":   len(out),
+			})
+	}
+
+	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
+}
+
+// fillPromptInput adds what every request carries: what the AI may make,
+// the lookups, the page index and today's dates, read as in.Privacy allows.
+func (h *Handler) fillPromptInput(c echo.Context, cc *campaigns.CampaignContext, in *prompt.Input) {
 	// A switched-off feature's kinds are left out, and named, so the AI
 	// doesn't write what the owner couldn't open.
 	off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
 	in.Today = time.Now().Format("Monday 2 January 2006")
 	if h.lookups != nil {
-		in.Lookups = records.LookupDoc()
+		in.Lookups = h.lookups.LookupDoc()
 		in.PageIndex = h.lookups.PageIndex(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		if off[records.KindCalendar] == "" {
 			in.WorldToday = h.lookups.WorldToday(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
@@ -973,33 +1041,6 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 			in.RecordContext = reg.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		}
 	}
-
-	userID := auth.GetUserID(c)
-	out, err := h.promptBuilder.Build(c.Request().Context(),
-		cc.Campaign.Name, userID, cc.Campaign.ID, in)
-	if err != nil {
-		slog.Error("ai-workspace: prompt generate failed",
-			slog.String("campaign_id", cc.Campaign.ID),
-			slog.Any("error", err))
-		return middleware.Render(c, http.StatusOK,
-			PromptModal("", "Could not build the prompt. Try again in a moment."))
-	}
-
-	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(),
-			cc.Campaign.ID, "campaign.ai_prompt.generated",
-			map[string]any{
-				"content_mode":        in.ContentMode,
-				"privacy":             c.QueryParam("privacy"),
-				"schema_types":        in.IncludeEntityTypes,
-				"schema_categories":   in.IncludeCategoriesInUse,
-				"schema_front_matter": in.IncludeFrontMatterExample,
-				"include_gm_notes":    in.IncludeSessionGMNotes,
-				"prompt_byte_count":   len(out),
-			})
-	}
-
-	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
 }
 
 // PromptInstructions returns the standing half of the prompt as plain text,
@@ -1023,7 +1064,7 @@ func (h *Handler) PromptInstructions(c echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_prompt.instructions_copied",
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_prompt.instructions_copied",
 			map[string]any{"prompt_byte_count": len(out)})
 	}
 	c.Response().Header().Set("Cache-Control", "no-store")
@@ -1040,7 +1081,7 @@ func (h *Handler) instructionsInput() prompt.Input {
 		Instructions:              prompt.InstructionsOnly,
 	}
 	if h.lookups != nil {
-		in.Lookups = records.LookupDoc()
+		in.Lookups = h.lookups.LookupDoc()
 	}
 	if h.records != nil {
 		in.Capabilities = h.records.Capabilities()
@@ -1049,22 +1090,42 @@ func (h *Handler) instructionsInput() prompt.Input {
 	return in
 }
 
-// ConnectorInstructions answers a connected AI's how_to_write_changes: the
-// same standing instructions "Copy AI instructions" gives, written for the
-// connection's owner.
-func (h *Handler) ConnectorInstructions(ctx context.Context, campaignID, campaignName, userID string) (string, error) {
+// ConnectorInstructions answers a connected AI's how_to_write_changes: for
+// the owner's key, the same standing instructions "Copy AI instructions"
+// gives; for a player's, how to change their own character.
+func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Connection, campaignName string) (string, error) {
+	if conn.ForPlayer {
+		var sheets []PlayerSheet
+		if h.playerSheets != nil {
+			var err error
+			if sheets, err = h.playerSheets.Sheets(ctx, conn.CampaignID, conn.UserID); err != nil {
+				return "", err
+			}
+		}
+		return playerInstructions(campaignName, sheets), nil
+	}
 	if h.promptBuilder == nil {
 		return "", errors.New("ai-workspace: prompt builder not configured")
 	}
-	return h.promptBuilder.Build(ctx, campaignName, userID, campaignID, h.instructionsInput())
+	return h.promptBuilder.Build(ctx, campaignName, conn.UserID, conn.CampaignID, h.instructionsInput())
 }
 
 // ConnectorCheck is what a connected AI is told about the changes it asks
-// for before they wait for the owner: for now, new pages filed in a folder
-// their category doesn't have. The AI can fix its own request, where the
-// owner would have to work out the right category at review. It looks up
-// categories and folders only, never pages.
-func (h *Handler) ConnectorCheck(ctx context.Context, campaignID, changes string) ([]string, error) {
+// for before they wait for the owner: new pages filed in a folder their
+// category doesn't have, and every other block the review screen would mark
+// as unusable, with the review's own reason. The AI can fix its own request,
+// where the owner would otherwise find a broken row at review.
+//
+// The other blocks are planned as the owner, as the review plans them, so a
+// reason can name what the owner can see. That is only told to a key that
+// already reads as the owner (any privacy but Safe); a Safe key, which reads as a
+// player, gets the folder check alone, so a refusal never tells it a hidden
+// page exists.
+func (h *Handler) ConnectorCheck(ctx context.Context, conn *connector.Connection, changes string) ([]string, error) {
+	if conn.ForPlayer {
+		return h.playerCheck(ctx, conn, changes)
+	}
+	campaignID := conn.CampaignID
 	if h.importLookup == nil || h.importFolders == nil {
 		return nil, nil
 	}
@@ -1078,6 +1139,66 @@ func (h *Handler) ConnectorCheck(ctx context.Context, campaignID, changes string
 	out := make([]string, 0, len(slips))
 	for _, s := range slips {
 		out = append(out, folderSlipLine(s))
+	}
+	if conn.Privacy != aiexport.PrivacyModeSafe {
+		out = append(out, h.recordProblems(ctx, campaignID, conn.UserID, pages, recs)...)
+	}
+	return out, nil
+}
+
+// recordProblems plans the request's record blocks as the review screen
+// will and returns one line for each it would mark unusable.
+func (h *Handler) recordProblems(ctx context.Context, campaignID, userID string, pages, recs []importer.ParsedPage) []string {
+	if h.records == nil || len(recs) == 0 {
+		return nil
+	}
+	made := importer.PasteSlugs(pages)
+	all := make([]records.Record, len(recs))
+	for i, p := range recs {
+		all[i] = toRecord(i, p, nil)
+		all[i].Made = made
+	}
+	owner := records.Actor{UserID: userID, Role: int(campaigns.RoleOwner)}
+	kinds, plans := h.records.PlanAll(ctx, campaignID, owner, all)
+	off := h.offFeatures(ctx, campaignID)
+	var out []string
+	for i, plan := range plans {
+		reason := plan.Error
+		if f := off.For(all[i]); f != "" && reason == "" {
+			reason = records.OffFeatureReason(f)
+		}
+		if reason == "" {
+			continue
+		}
+		label := all[i].Kind
+		if k := kinds[i]; k != nil {
+			label = k.Name()
+		}
+		name := all[i].Name
+		if t, ok := kinds[i].(records.Titled); ok && name == "" {
+			name = t.Title(all[i])
+		}
+		what := label
+		if name != "" {
+			what += " " + oneLineText(name, 60)
+		}
+		out = append(out, fmt.Sprintf("block %d (%s): %s", recs[i].SourceIndex+1, what, reason))
+	}
+	return out
+}
+
+// playerCheck tells a player's AI about every block that would be held
+// back, so it can fix its request before the player sees it.
+func (h *Handler) playerCheck(ctx context.Context, conn *connector.Connection, changes string) ([]string, error) {
+	plan, err := planPlayerChanges(ctx, h.playerSheets, conn.CampaignID, conn.UserID, changes)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, c := range plan {
+		if c.Held != "" {
+			out = append(out, fmt.Sprintf("block %d (%s): %s", c.Block, oneLineText(c.Page, 60), c.Held))
+		}
 	}
 	return out, nil
 }
@@ -1191,7 +1312,7 @@ func (h *Handler) GenerateAIExport(c echo.Context) error {
 
 	if h.audit != nil {
 		h.audit.LogCampaignEvent(c.Request().Context(),
-			cc.Campaign.ID, "campaign.ai_export.generated",
+			cc.Campaign.ID, auth.GetUserID(c), "campaign.ai_export.generated",
 			map[string]any{
 				"privacy":             c.QueryParam("privacy"),
 				"category_count":      len(opts.Categories),

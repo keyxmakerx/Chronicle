@@ -42,7 +42,12 @@
     if (!m) return '';
     if (m.tag) return 'Any ' + tagLabel(lib, m.tag);
     var it = items[m.itemId];
-    return it ? it.name : 'A deleted item';
+    return it ? it.name : items.truncated ? 'An item not in this list' : 'A deleted item';
+  }
+  /* What to say about an item the page doesn't hold: deleted, or only past
+     the end of a list the campaign outgrew. */
+  function gone(items, what) {
+    return items.truncated ? what + ' isn’t in the list this page loaded, which the campaign has outgrown. It may still be there.' : what + ' was deleted. Pick another.';
   }
   function stepTool(lib, s) { var k = stepKind(lib, s.t); return s.t === 'add' ? s.to : k && k.tool; }
   function benchWith(lib, tool) {
@@ -62,7 +67,7 @@
       var m = s.material != null ? r.materials[s.material] : null;
       if (!m) return {warn: true, msg: 'Pick which material this step uses.'};
       var tags = matTags(m, items), name = matName(lib, m, items);
-      if (m.itemId && !items[m.itemId]) return {warn: true, msg: 'That item was deleted. Pick another.'};
+      if (m.itemId && !items[m.itemId]) return {warn: true, msg: gone(items, 'That item')};
       if (k.accepts && k.accepts.length) {
         if (!tags.length) return {warn: true, msg: name + ' has no crafting tag yet. Give it one under Materials.'};
         if (!tags.some(function (t) { return k.accepts.indexOf(t) >= 0; })) {
@@ -105,7 +110,7 @@
     if (r.steps.length && B) out.push(miss.length ? {warn: true, msg: 'The ' + B.name.toLowerCase() + ' lacks the ' + miss.join(' and ') + '.'} : {msg: 'The ' + B.name.toLowerCase() + ' has every tool these steps use.'});
     if (r.steps.length && !r.steps.some(function (s) { var k = stepKind(lib, s.t); return k && k.graded; })) out.push({warn: true, msg: 'No graded steps, so clean work cannot earn an edge.'});
     if (!r.result.itemId) out.push({warn: true, msg: 'Pick the Armory item it makes.'});
-    else if (!items[r.result.itemId]) out.push({warn: true, msg: 'The item it made was deleted. Pick another.'});
+    else if (!items[r.result.itemId]) out.push({warn: true, msg: gone(items, 'The item it makes')});
     else out.push({msg: 'Makes ' + r.result.qty + ' × ' + items[r.result.itemId].name.toLowerCase() + ', an Armory item.'});
     return out;
   }
@@ -277,7 +282,7 @@
     var items = {}, keyOf = [], col = r.colors || {};
     (r.needs || []).forEach(function (m, i) {
       var k = m.itemId ? 'i' + m.itemId.replace(/[^a-zA-Z0-9]/g, '') : 't' + m.tag, pic = m.picture || {};
-      if (!items[k]) items[k] = {name: m.tag ? m.name.charAt(0).toUpperCase() + m.name.slice(1) : m.name, color: pic.tint || '#8a8a8a', picture: pic.picture || '', desc: m.tag ? 'Your pick from the pack.' : ''};
+      if (!items[k]) items[k] = {name: m.tag ? m.name.charAt(0).toUpperCase() + m.name.slice(1) : m.name, color: pic.tint || '#8a8a8a', picture: pic.picture || '', desc: m.tag ? 'Your pick from the pack.' : (m.qty > 1 ? m.qty + ' from your pack.' : 'From your pack.')};
       keyOf[i] = k;
     });
     var stat = String(r.roll || '').split(' + ')[1] || '';

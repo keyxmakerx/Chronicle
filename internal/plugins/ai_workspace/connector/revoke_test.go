@@ -18,7 +18,7 @@ func TestEndKeys_OwnershipReturningDoesNotRevive(t *testing.T) {
 		end  func(svc *Service) error
 	}{
 		{"handed over", func(svc *Service) error { return svc.EndKeysMadeBy(ctx, "camp-1", "owner-1") }},
-		{"moved to the Trash", func(svc *Service) error { return svc.Disconnect(ctx, "camp-1") }},
+		{"moved to the Trash", func(svc *Service) error { return svc.EndCampaignKeys(ctx, "camp-1") }},
 		{"sign-ins ended", func(svc *Service) error { return svc.EndAllKeysMadeBy(ctx, "owner-1") }},
 	}
 	for _, tc := range cases {

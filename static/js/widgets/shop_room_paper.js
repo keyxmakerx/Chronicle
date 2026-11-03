@@ -316,6 +316,20 @@
     }
     return s + card(R(0, h - 12, w, 12), C.trim, 1.4) + card(R(-2, 0, w + 4, 8), dk(C.wood, .2), 1.4);
   }
+  // Wares whose icon has a crafting drawing show it as an ink sketch, so the
+  // paper shop and the paper journal draw a flask the same way. The bolder
+  // small version keeps it readable on a shelf; anything unmapped, or a page
+  // without the pictures loaded, keeps its cut-card silhouette.
+  var PIC = {flask: 'flask', vial: 'vial', 'bottle-droplet': 'potion', jar: 'jar', 'jar-wheat': 'jar', leaf: 'leaf',
+    seedling: 'sprig', 'wheat-awn': 'sprig', spa: 'flower', ring: 'ring', gem: 'gem', scroll: 'scroll', skull: 'skull',
+    feather: 'feather', shell: 'shell', tentacle: 'tentacle', fire: 'ember', eye: 'eye', 'mortar-pestle': 'powder',
+    shirt: 'cloth', bandage: 'cloth', box: 'bundle', 'boxes-stacked': 'bundle', gift: 'bundle'};
+  function inkPic(ic) {
+    var CP = window.CraftPictures, k = PIC[ic];
+    return CP && k && CP.has(k) ? k : '';
+  }
+  // The keeper's spots, as a fraction along the counter.
+  var KSPOT = { left: .2, middle: .5, right: .8 };
   // One good or decoration as a little cut-card icon.
   function iconArt(g, fill) {
     var d = g[1];
@@ -390,6 +404,8 @@
   // goods (its), the shop's name and portrait, the icons and the effects level.
   function html(o) {
     var V = o.view, Rm = V.room, C = Rm.colours, N = Rm.N, WH = Rm.wh, ICONS = o.icons || {}, s = '', i = 0;
+    // Arranging, each piece takes keyboard focus so arrow keys can move it.
+    var pick = function (p) { return o.arr ? ' tabindex="0" role="button" aria-label="' + esc(((o.kindLabel || {})[p.kind] || p.kind) + '. Arrow keys move it.') + '"' : ''; };
     var byId = {}; Rm.pieces.forEach(function (p) { byId[p.id] = p; });
     var M = { full: o.fx === 'full', dim: Rm.dim, warm: [], cool: [] };
     Rm.pieces.forEach(function (p) {
@@ -424,7 +440,7 @@
     // Rugs lie flat on the floor.
     Rm.pieces.forEach(function (p) {
       if (p.kind !== 'rug') return;
-      s += '<div class="srp-rug srp-pc" data-p="' + p.id + '" style="left:' + n1(p.x * T) + 'px;top:' + n1(p.y * T) + 'px;width:' + n1(p.w * T) + 'px;height:' + n1(p.d * T) + 'px' + lf(p.x + p.w / 2, p.y + p.d / 2, M) + '"><div class="srp-cd">' + svg(p.w * T, p.d * T, (KIND[p.art] || KIND.rug)(p.w * T, p.d * T, C)) + '</div></div>';
+      s += '<div class="srp-rug srp-pc" data-p="' + p.id + '"' + pick(p) + ' style="left:' + n1(p.x * T) + 'px;top:' + n1(p.y * T) + 'px;width:' + n1(p.w * T) + 'px;height:' + n1(p.d * T) + 'px' + lf(p.x + p.w / 2, p.y + p.d / 2, M) + '"><div class="srp-cd">' + svg(p.w * T, p.d * T, (KIND[p.art] || KIND.rug)(p.w * T, p.d * T, C)) + '</div></div>';
     });
     // Back walls, then the sign on the one facing most to the right.
     var signE = null, sb = -9;
@@ -452,16 +468,18 @@
       if (p.kind === 'rug') return;
       if (p.wall && p.wall !== 'Y' && p.kind === 'window') return; // a side window keeps its light but has no card
       var st = stand(p, WH), draw = KIND[p.kind] || fallback;
-      bases.push({ d: st.y + st.x * .01, h: at(st.x, st.y, st.z, st.rot, 'srp-pc' + (p.pinned ? ' pinned' : ''), up(st.w, st.h, st.ax, 0, draw(st.w, st.h, C), lf(st.x, st.y, M)), ' data-p="' + p.id + '"') });
+      bases.push({ d: st.y + st.x * .01, h: at(st.x, st.y, st.z, st.rot, 'srp-pc' + (p.pinned ? ' pinned' : ''), up(st.w, st.h, st.ax, 0, draw(st.w, st.h, C), lf(st.x, st.y, M)), ' data-p="' + p.id + '"' + pick(p)) });
     });
     (V.placed || []).forEach(function (q) {
       var p = byId[q.piece]; if (!p) return;
       var pos = spotPos(q.at, p), body, w, h, g;
       if (q.good !== undefined) {
         var it = (o.its || [])[q.good]; if (!it) return;
-        g = ICONS[it.ic] || ICONS.box; if (!g) return;
-        h = 34; w = Math.max(16, h * g[0] / 512);
-        body = '<svg class="srp-ic" viewBox="-40 -40 ' + (g[0] + 80) + ' 592" aria-hidden="true">' + iconArt(g, it.c) + '</svg>';
+        var pic = inkPic(it.ic || 'box');
+        g = ICONS[it.ic] || ICONS.box; if (!g && !pic) return;
+        h = 34;
+        if (pic) { w = h; body = '<svg class="srp-ic srp-ink" viewBox="0 0 40 40" aria-hidden="true">' + window.CraftPictures.inner(pic, it.c, {style: 'ink', small: true}) + '</svg>'; }
+        else { w = Math.max(16, h * g[0] / 512); body = '<svg class="srp-ic" viewBox="-40 -40 ' + (g[0] + 80) + ' 592" aria-hidden="true">' + iconArt(g, it.c) + '</svg>'; }
         var tag = '<div class="srp-tag" style="transform:translateZ(' + (h + 8) + 'px) translateX(-50%) rotateX(-60deg)"><b>' + esc(it.n) + '</b> · ' + esc(it.price) + (it.out ? ' · sold out' : '') + '</div>';
         bases.push({ d: pos[1] + pos[0] * .01 + .01, h: at(pos[0], pos[1], pos[2] * Z, 0, 'srp-good it' + (it.out ? ' out' : ''), '<div class="srp-up" style="left:' + n1(-w / 2) + 'px;width:' + n1(w) + 'px;height:' + h + 'px;--i:0' + lf(pos[0], pos[1], M) + '"><div class="srp-cd">' + body + '</div></div>' + tag,
           ' data-i="' + q.good + '" tabindex="0" role="button" aria-label="' + esc(it.n + ', ' + it.price + (it.out ? ', sold out' : '')) + '"') });
@@ -481,11 +499,24 @@
         bases.push({ d: q[1] + .6, h: at(q[0], q[1] + .6, 0, 0, 'srp-dust', '<div class="srp-up" style="left:' + (-1.6 * T) + 'px;width:' + (3.2 * T) + 'px;height:' + n1(2.4 * Z) + 'px;--i:0">' + d + '</div>') });
       });
     }
-    // The keeper stands behind the counter, or toward the back with no counter.
-    var ctr = Rm.pieces.filter(function (p) { return p.kind === 'counter'; })[0], kx = ctr ? ctr.r[0] + ctr.r[2] / 2 : N * .5, ky = ctr ? ctr.r[1] + ctr.r[3] / 2 - .7 : N * .3;
+    // The keeper stands behind the counter at the spot the GM picked (left,
+    // middle or right), or toward the back with no counter.
+    var ctr = Rm.pieces.filter(function (p) { return p.kind === 'counter'; })[0], ky = ctr ? ctr.r[1] + ctr.r[3] / 2 - .7 : N * .3;
+    var kat = function (spot) { return ctr ? ctr.r[0] + ctr.r[2] * (KSPOT[spot] || KSPOT.middle) : N * .5; }, kx = kat(o.keeperSpot);
     var kp = o.image ? '<img src="' + esc(o.image) + '" alt="">' : '';
     bases.push({ d: ky + kx * .01, h: at(kx, ky, 0, 0, 'srp-keeper', '<div class="srp-up" style="left:-46px;width:92px;height:110px;--i:0' + lf(kx, ky, M) + '"><div class="srp-cd">' + '<svg viewBox="0 0 104 122" aria-hidden="true">' + keeperArt(C.acc, !!o.image) + '</svg>' + kp + '</div></div>', ' tabindex="0" role="button" aria-label="Talk to the shopkeeper"') });
     bases.sort(function (a, b) { return a.d - b.d; }).forEach(function (b) { s += b.h.replace('--i:0', '--i:' + (i++)); });
+    // Arranging, three marks above the counter pick where the keeper stands.
+    // They are drawn last, over everything, and lean back to face the viewer.
+    // On a short counter they spread wider than the spots so each stays a
+    // separate 44px target.
+    if (o.arr && ctr) {
+      var mid = kat('middle'), gap = Math.max(kat('right') - mid, 54 / T);
+      ['left', 'middle', 'right'].forEach(function (k, n) {
+        var on = (o.keeperSpot || 'middle') === k;
+        s += at(mid + (n - 1) * gap, ky, 124, 0, 'srp-kat', '<button type="button" class="srp-kspot' + (on ? ' on' : '') + '" data-ks="' + k + '" aria-pressed="' + on + '" aria-label="Keeper stands ' + (k === 'middle' ? 'in the middle' : 'on the ' + k) + '" title="Keeper stands here"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6" r="3.4"/><path d="M3.5 18c.6-4.6 3.2-7 6.5-7s5.9 2.4 6.5 7z"/></svg></button>');
+      });
+    }
     // Markers for turning a pointer into a floor point or a spot.
     [[0, 0], [N, 0], [N, N], [0, N]].forEach(function (q, k) { s += '<i class="srp-mk" data-c="' + k + '" style="transform:translate3d(' + (q[0] * T) + 'px,' + (q[1] * T) + 'px,0)"></i>'; });
     // The tops of the walls' far corners, so fitting knows how tall the room stands.
@@ -531,13 +562,26 @@
   // The good, decoration or keeper under the pointer. Browsers hit-test cards
   // in a 3D scene unreliably when a small card stands just in front of a big
   // one, so this goes by each small card's box, frontmost (last drawn) first.
+  // A good answers over at least 32px (44 on touch) round its centre, so a
+  // narrow vial on a shelf is still easy to press; a press inside a card's own
+  // box always wins, and between padded boxes the nearest centre. Decorations
+  // keep their own box, so arranging can still grab the furniture beside them.
   function hit(host, cx, cy) {
-    var els = host.querySelectorAll('.srp-good,.srp-deco,.srp-keeper');
-    for (var i = els.length - 1; i >= 0; i--) {
+    var ks = host.querySelectorAll('.srp-kspot');
+    for (var k = 0; k < ks.length; k++) { var q = ks[k].getBoundingClientRect(); if (cx >= q.left && cx <= q.right && cy >= q.top && cy <= q.bottom) return ks[k]; }
+    var els = host.querySelectorAll('.srp-good,.srp-deco,.srp-keeper'), boxes = [], i;
+    for (i = els.length - 1; i >= 0; i--) {
       var r = els[i].querySelector('.srp-cd').getBoundingClientRect();
       if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) return els[i];
+      if (els[i].classList.contains('srp-good')) boxes.push([els[i], r]);
     }
-    return null;
+    var min = window.matchMedia && window.matchMedia('(pointer:coarse)').matches ? 44 : 32, best = null, bd = Infinity;
+    boxes.forEach(function (b) {
+      var r = b[1], mx = (r.left + r.right) / 2, my = (r.top + r.bottom) / 2, hw = Math.max(r.width, min) / 2, hh = Math.max(r.height, min) / 2;
+      if (Math.abs(cx - mx) > hw || Math.abs(cy - my) > hh) return;
+      var d = (cx - mx) * (cx - mx) + (cy - my) * (cy - my); if (d < bd) { bd = d; best = b[0]; }
+    });
+    return best;
   }
 
   // Scales and centres the book in the space it has, from where the page and
@@ -554,7 +598,7 @@
     root.style.setProperty('--s', s.toFixed(3));
     root.style.setProperty('--dx', n1(H.left + H.width / 2 - (l + r) / 2) + 'px'); root.style.setProperty('--dy', n1(H.top + H.height / 2 - (t + b) / 2) + 'px');
   }
-  // Draws the paper room into host. o: { view, its, name, image, icons, fx, arr, shut }.
+  // Draws the paper room into host. o: { view, its, name, image, icons, fx, arr, shut, keeperSpot, kindLabel }.
   function render(host, o) {
     injectStyle();
     var r = html(o), cls = 'srp' + (o.fx === 'full' ? ' full' : ' fxl') + (o.arr ? ' arr' : '') + (o.shut ? ' shut' : '');
@@ -654,6 +698,11 @@
     '.srp-tag b{color:#2a1f17}',
     '.srp-good:hover .srp-tag,.srp-good:focus-visible .srp-tag{opacity:1}',
     '.srp.arr .srp-tag{display:none}',
+    '.srp-pc:focus{outline:none}.srp-pc:focus-visible .srp-cd{filter:drop-shadow(0 0 2px var(--srp-acc,#6366f1)) drop-shadow(0 0 2px var(--srp-acc,#6366f1))}',
+    '.srp-kspot{position:absolute;left:0;bottom:0;transform:translateX(-50%) rotateX(-60deg);transform-origin:50% 100%;width:44px;height:44px;padding:9px;border-radius:50%;border:2px dashed #2a1f17;background:rgb(251 245 230/.85);color:#2a1f17;cursor:pointer;box-shadow:0 2px 6px rgb(0 0 0/.35)}',
+    '.srp-kspot svg{display:block;width:100%;height:100%;fill:currentColor}',
+    '.srp-kspot.on{border-style:solid;background:var(--srp-acc,#6366f1);color:#fff}',
+    '.srp-kspot:focus-visible{outline:3px solid var(--color-accent,#6366f1);outline-offset:2px}',
     '.srp-str{position:absolute;left:50%;bottom:100%;width:1px;height:14px;background:#2a1f17}',
     '.srp-keeper{cursor:pointer;outline:none}.srp-keeper img{position:absolute;left:27%;top:7.5%;width:46%;height:41%;border-radius:50%;object-fit:cover}',
     '.srp-keeper:focus-visible .srp-cd>svg{filter:drop-shadow(0 0 2px var(--color-accent,#6366f1))}',

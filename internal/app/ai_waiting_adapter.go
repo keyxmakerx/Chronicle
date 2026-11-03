@@ -17,8 +17,8 @@ const aiDecidedShown = 5
 
 // aiAskLister is the connector's request queue as the lookup reads it.
 type aiAskLister interface {
-	Waiting(ctx context.Context, campaignID string) ([]connector.Request, error)
-	Decided(ctx context.Context, campaignID string, n int) ([]connector.Request, error)
+	Waiting(ctx context.Context, campaignID, userID string) ([]connector.Request, error)
+	Decided(ctx context.Context, campaignID, userID string, n int) ([]connector.Request, error)
 }
 
 // aiEntryLister is the system entries service's list.
@@ -49,13 +49,13 @@ func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a reco
 		out.Missing = append(out.Missing, what)
 	}
 	if w.asks != nil {
-		if l, err := w.asks.Waiting(ctx, campaignID); err != nil {
+		if l, err := w.asks.Waiting(ctx, campaignID, a.UserID); err != nil {
 			missing("the AI's requests", err)
 		} else {
 			for _, q := range l {
 				out.Asks = append(out.Asks, records.WaitingAsk{Summary: q.Summary, Counts: q.Counts, At: q.CreatedAt})
 			}
-			if d, err := w.asks.Decided(ctx, campaignID, aiDecidedShown); err != nil {
+			if d, err := w.asks.Decided(ctx, campaignID, a.UserID, aiDecidedShown); err != nil {
 				missing("the AI's answered requests", err)
 			} else {
 				for _, q := range d {

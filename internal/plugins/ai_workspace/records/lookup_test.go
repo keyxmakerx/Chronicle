@@ -8,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
@@ -87,17 +86,7 @@ func lookup(what string, fields map[string]any) Record {
 }
 
 func world() *Lookups {
-	c := newCal()
-	c.stored = []calendar.Event{
-		{ID: "e1", Name: "Midwinter Feast", Year: 1492, Month: 1, Day: 21, Visibility: "everyone"},
-		{ID: "e2", Name: "Secret Council", Year: 1492, Month: 1, Day: 12, Visibility: "dm_only"},
-		{ID: "e3", Name: "Spring Fair", Year: 1492, Month: 2, Day: 3, Visibility: "everyone"},
-	}
-	label := "Blizzard"
-	temp := -12.0
-	c.days = []calendar.DayWeather{{Year: 1492, Month: 1, Day: 3, PresetLabel: &label, TemperatureCelsius: &temp}}
 	return &Lookups{
-		Cal:    c,
 		Tables: &fakeTables{doc: TableDoc{Tables: []Table{{Name: "Tavern names", Entries: []Entry{{Name: "The Rusty Anchor"}, {Name: "The Drowned Rat", Brief: "smugglers"}}}}}},
 		Pages: &fakePages{all: []entities.Entity{
 			page("aldric", "Ser Aldric", "Character", false),
@@ -143,15 +132,6 @@ func TestLookups_Answers(t *testing.T) {
 		notWant     []string
 		wantErrText string
 	}{
-		{"events in a month", lookup("events", map[string]any{"from": "Hammer 1 1492", "to": "Hammer 30 1492"}), owner,
-			[]string{"Midwinter Feast: Hammer 21 1492, everyone", "Secret Council", "Directors only"}, []string{"Spring Fair"}, ""},
-		{"events hide Director-only in Safe", lookup("events", map[string]any{"year": 1492, "month": "Hammer"}), player,
-			[]string{"Midwinter Feast"}, []string{"Secret Council"}, ""},
-		{"events across months", lookup("events", map[string]any{"from": "1492-1-20", "to": "Alturiak 5 1492"}), owner,
-			[]string{"Midwinter Feast", "Spring Fair"}, []string{"Secret Council"}, ""},
-		{"events need a range", lookup("events", nil), owner, nil, nil, "it needs `from` and `to`"},
-		{"events refuse a bad month", lookup("events", map[string]any{"from": "Smarch 1 1492"}), owner, nil, nil, "not a month"},
-		{"weather", lookup("weather", map[string]any{"year": 1492, "month": 1}), owner, []string{"Hammer 3 1492: Blizzard, -12°C"}, nil, ""},
 		{"table entries", lookup("table", map[string]any{"name": "tavern names"}), owner, []string{"The Drowned Rat: smugglers"}, nil, ""},
 		{"tables stay out in Safe", lookup("table", nil), player, nil, nil, "left out while your AI sees what players see"},
 		{"pages index", lookup("pages", nil), player, []string{"### Characters (1)", "Ser Aldric", "The Rusty Anchor"}, []string{"The Ghost", "Treasure Map"}, ""},
@@ -239,7 +219,7 @@ func TestLookups_Caps(t *testing.T) {
 }
 
 func TestLookups_Unwired(t *testing.T) {
-	ans := (&Lookups{}).Answer(context.Background(), camp, owner, []Record{lookup("players", nil), lookup("events", map[string]any{"year": 1})})
+	ans := (&Lookups{}).Answer(context.Background(), camp, owner, []Record{lookup("players", nil), lookup("pins", nil)})
 	for _, a := range ans {
 		if !strings.Contains(a.Error, "on this server") {
 			t.Fatalf("unwired lookup answered %+v", a)
@@ -254,46 +234,6 @@ func TestLookups_PageIndexFollowsPrivacy(t *testing.T) {
 	idx := world().PageIndex(context.Background(), camp, player)
 	if !strings.Contains(idx, "**Characters** (1): Ser Aldric") || strings.Contains(idx, "Ghost") {
 		t.Fatalf("index:\n%s", idx)
-	}
-}
-
-func TestParseDateText(t *testing.T) {
-	cal := &newCal().cal
-	tests := []struct {
-		in      string
-		want    calDate
-		wantErr bool
-	}{
-		{"Hammer 21 1492", calDate{1492, 1, 21}, false},
-		{"21 Hammer 1492", calDate{1492, 1, 21}, false},
-		{"Alturiak 3, 1492", calDate{1492, 2, 3}, false},
-		{"1492-2-3", calDate{1492, 2, 3}, false},
-		{"Hammer 31 1492", calDate{}, true},
-		{"Hammer 1492", calDate{}, true},
-		{"next Tuesday", calDate{}, true},
-	}
-	for _, tt := range tests {
-		got, err := parseDateText(cal, tt.in)
-		if (err != nil) != tt.wantErr || got != tt.want {
-			t.Errorf("%q: got %v, %v", tt.in, got, err)
-		}
-	}
-}
-
-// An event to change is found through the role-filtered list: the
-// operator finds what they can see, and a player never finds a hidden one.
-func TestEventKind_FindsEventToChange(t *testing.T) {
-	c := newCal()
-	c.stored = []calendar.Event{
-		{ID: "e1", Name: "Midwinter Feast", Year: 1492, Month: 1, Day: 21},
-		{ID: "e2", Name: "Secret Council", Year: 1492, Month: 1, Day: 12, Visibility: "dm_only"},
-	}
-	k := EventKind{Svc: c}
-	if p := k.Plan(context.Background(), camp, owner, rec("event", ActionUpdate, "Secret Council", nil, "")); p.Error != "" {
-		t.Fatalf("owner: %s", p.Error)
-	}
-	if p := k.Plan(context.Background(), camp, player, rec("event", ActionDelete, "Secret Council", nil, "")); p.Error == "" {
-		t.Fatal("a player found a hidden event to remove")
 	}
 }
 

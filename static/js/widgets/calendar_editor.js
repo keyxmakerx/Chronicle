@@ -48,11 +48,7 @@
     var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     el.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
   }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(s); }
 
   // The compact event form (below) only ever edits plain text — it has no
   // rich-text editor — so reading an existing rich description back into it

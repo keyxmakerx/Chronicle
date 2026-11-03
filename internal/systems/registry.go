@@ -28,21 +28,6 @@ const (
 // globalLoader is the singleton module loader initialized by Init().
 var globalLoader *SystemLoader
 
-// SystemFactory creates a System instance from its manifest and data
-// directory. Used by the factory registry to instantiate modules
-// without circular imports between the modules package and subpackages.
-type SystemFactory func(manifest *SystemManifest, dataDir string) (System, error)
-
-// factories maps module IDs to their factory functions. Subpackages
-// register themselves via RegisterFactory in their init() functions.
-var factories = make(map[string]SystemFactory)
-
-// RegisterFactory registers a system factory for a given module ID.
-// Called from subpackage init() functions (e.g., dnd5e.init()).
-func RegisterFactory(id string, factory SystemFactory) {
-	factories[id] = factory
-}
-
 // Init initializes the system registry by scanning the given directory
 // for module subdirectories containing manifest.json files. Must be
 // called once at application startup before any Registry()/Find() calls.

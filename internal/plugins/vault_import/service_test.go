@@ -124,7 +124,7 @@ type fakeAudit struct {
 	actions []string
 }
 
-func (f *fakeAudit) LogCampaignEvent(_ context.Context, _, action string, _ map[string]any) {
+func (f *fakeAudit) LogCampaignEvent(_ context.Context, _, _, action string, _ map[string]any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.actions = append(f.actions, action)
