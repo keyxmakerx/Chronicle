@@ -12,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -558,6 +559,31 @@ func TestSidebarTypesFrom_LeavesOutDisabledTypes(t *testing.T) {
 	}
 }
 
+// navTestAddonIDs gives every addon behind the catalog an id, except
+// Crafting's own, so one app is not installed and cannot be turned on from
+// the drawer.
+func navTestAddonIDs() map[string]int {
+	ids := map[string]int{}
+	for _, d := range navAppCatalog {
+		for _, a := range append(append([]string{}, d.addons...), d.needs...) {
+			if _, ok := ids[a]; !ok && a != crafting.AddonSlug {
+				ids[a] = len(ids) + 1
+			}
+		}
+	}
+	return ids
+}
+
+// navTestAddonOf is the first addon of the catalog app with this key.
+func navTestAddonOf(key string) string {
+	for _, d := range navAppCatalog {
+		if campaigns.NavAppKey(d.slug) == key && len(d.addons) > 0 {
+			return d.addons[0]
+		}
+	}
+	return ""
+}
+
 // drawerTiles flattens a drawer to key → tile.
 func drawerTiles(v *layouts.NavDrawerView) map[string]layouts.NavDrawerTile {
 	out := map[string]layouts.NavDrawerTile{}
@@ -574,7 +600,7 @@ func TestBuildNavDrawer_ListsWhatTheViewerMayOpen(t *testing.T) {
 		{Type: "app", Slug: "maps", Section: "drawer", Visible: false},
 		{Type: "app", Slug: "characters", Section: "drawer", Visible: true},
 	}
-	ids := map[string]int{"maps": 4, "armory": 6, "notes": 1, calendar.PluginSlug: 2, "sessions": 3, "npcs": 5}
+	ids := navTestAddonIDs()
 	draw := func(role campaigns.Role, owner bool, pins []string) *layouts.NavDrawerView {
 		cc := navTestContext(items, role, true, false)
 		in := navInputsFor(cc, navTestTypes(), nil, navTestEnabled(), navTestSystem)
@@ -592,7 +618,7 @@ func TestBuildNavDrawer_ListsWhatTheViewerMayOpen(t *testing.T) {
 	if n := tiles["app:notes"]; !n.InSidebar || n.Pinned {
 		t.Errorf("Journal is in the sidebar's Apps: %+v", n)
 	}
-	if !reflect.DeepEqual(tiles["app:maps"].TurnOff, []int{4}) {
+	if !reflect.DeepEqual(tiles["app:maps"].TurnOff, []int{ids[navTestAddonOf("app:maps")]}) {
 		t.Errorf("Maps turns off with its own addon: %v", tiles["app:maps"].TurnOff)
 	}
 	var off []string
@@ -606,7 +632,7 @@ func TestBuildNavDrawer_ListsWhatTheViewerMayOpen(t *testing.T) {
 		if o.Key == "app:crafting" && o.TurnOn != nil {
 			t.Errorf("Crafting's own addon is not on this site, so the drawer cannot turn it on: %v", o.TurnOn)
 		}
-		if o.Key == "app:armory" && !reflect.DeepEqual(o.TurnOn, []int{6}) {
+		if o.Key == "app:armory" && !reflect.DeepEqual(o.TurnOn, []int{ids[navTestAddonOf("app:armory")]}) {
 			t.Errorf("Armory turns on with its addon: %v", o.TurnOn)
 		}
 	}
@@ -644,7 +670,7 @@ func TestBuildNavDrawer_ListsWhatTheViewerMayOpen(t *testing.T) {
 func TestSidebar_DrawerSwitchesReachOnlyTheOwner(t *testing.T) {
 	cc := navTestContext(nil, campaigns.RoleOwner, true, false)
 	in := navInputsFor(cc, navTestTypes(), nil, navTestEnabled(), navTestSystem)
-	ids := map[string]int{"maps": 4, "armory": 6}
+	ids := navTestAddonIDs()
 	render := func(role int, owner bool) string {
 		viewer := campaigns.NavViewer{Owner: owner, Access: campaigns.NavAccessMember}
 		secs := campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)
