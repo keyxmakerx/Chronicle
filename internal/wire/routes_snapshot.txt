@@ -480,6 +480,7 @@ PUT	/campaigns/:id/api-keys/:keyID/toggle	session	plugins/syncapi.(*Handler).Tog
 GET	/campaigns/:id/api-keys/sync-mappings	session	plugins/syncapi.(*Handler).SyncMappingsFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/api-keys/sync-overview	session	plugins/syncapi.(*Handler).SyncOverviewFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/appearance	session	plugins/campaigns.(*Handler).SaveAppearanceAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/appearance/email-test	session	plugins/campaigns.(*Handler).SendTestEmailAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
 DELETE	/campaigns/:id/appearance/picture	session	plugins/campaigns.(*Handler).DeleteAppearancePictureAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/appearance/picture	session	plugins/campaigns.(*Handler).UploadAppearancePictureAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/apps/calendar	session	app.(*App).RegisterRoutes	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess

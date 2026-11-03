@@ -393,7 +393,7 @@ func TestProposalEmail_EscapesTitleAndCampaign(t *testing.T) {
 
 	proposal := &SlotProposal{ID: "p1", Title: `<script>alert(1)</script>`}
 	options := []ProposalOptionView{{Option: SlotProposalOption{ID: "o1", StartsAtUTC: time.Now().UTC(), EndsAtUTC: time.Now().UTC().Add(time.Hour)}}}
-	h.sendProposalEmail(context.Background(), mailCampaign{ID: "c1", Name: `<b>Evil Campaign</b>`}, proposal, options, campaigns.CampaignMember{UserID: "u1", Email: "a@b.test"})
+	h.sendProposalEmail(context.Background(), mailCampaign{ID: "c1", Name: `<b>Evil Campaign</b>`}, nil, proposal, options, campaigns.CampaignMember{UserID: "u1", Email: "a@b.test"})
 
 	if strings.Contains(mailer.lastHTML, "<script>alert(1)</script>") {
 		t.Error("raw proposal title leaked into the email HTML (XSS)")
@@ -484,7 +484,7 @@ func TestProposalEmail_NeverPrintsABlankZone(t *testing.T) {
 			proposal := &SlotProposal{ID: "p1", Title: "Session times"}
 			options := []ProposalOptionView{{Option: SlotProposalOption{ID: "o1",
 				StartsAtUTC: time.Now().UTC(), EndsAtUTC: time.Now().UTC().Add(time.Hour)}}}
-			h.sendProposalEmail(context.Background(), mailCampaign{ID: "c1", Name: "Vale of Ash"}, proposal, options,
+			h.sendProposalEmail(context.Background(), mailCampaign{ID: "c1", Name: "Vale of Ash"}, nil, proposal, options,
 				campaigns.CampaignMember{UserID: "u1", Email: "a@b.test"})
 
 			if strings.Contains(mailer.lastHTML, "times in </p>") {

@@ -35,6 +35,12 @@ func TestCreateInvite_Email(t *testing.T) {
 			want:     []string{"You&#39;re invited to join Therin", "Accept the invitation", "/invites/accept?token=", "color:#2563eb", "expires in 7 days"},
 		},
 		{
+			name:     "drawn in the layout the owner picked",
+			campaign: "Therin",
+			settings: `{"appearance":{"email_layout":"poster"}}`,
+			want:     []string{"#0f1420", "Accept the invitation"},
+		},
+		{
 			name:     "escapes the campaign name",
 			campaign: `<img src=x onerror=alert(1)>`,
 			want:     []string{"&lt;img src=x"},

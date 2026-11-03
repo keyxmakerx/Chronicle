@@ -164,6 +164,8 @@ type Handler struct {
 	// page treats an unwired checker as off.
 	extensionEnableChecker ExtensionEnableChecker
 	sheetChecker           SheetChecker
+	// testMailer sends Customize's "Send me a test" email; nil refuses it.
+	testMailer TestMailer
 }
 
 // NewHandler creates a new campaign handler.

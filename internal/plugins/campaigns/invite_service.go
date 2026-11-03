@@ -121,7 +121,7 @@ func (s *inviteService) CreateInvite(ctx context.Context, campaignID, createdBy 
 		subject := fmt.Sprintf("You're invited to %s — Chronicle", campaign.Name)
 		// No preferences footer: the reader isn't a member yet, so there is
 		// nothing for them to switch off.
-		plainBody, htmlBody, err := mailbody.Render(mailbody.DefaultLayout, mailbody.Message{
+		plainBody, htmlBody, err := mailbody.Render(EmailLayoutOf(campaign), mailbody.Message{
 			Campaign: campaign.Name,
 			Accent:   campaign.ParseSettings().AccentColor,
 			Title:    fmt.Sprintf("You're invited to join %s", campaign.Name),

@@ -245,6 +245,43 @@
 .czp .hc-sample .chc__in{ font-size:12.5px; }
 .czp .hc-sample .chc__title{ font-size:15px; }
 .czp .hc-sample .chc__text{ -webkit-line-clamp:3; }
+/* Email layout tiles: a small game night invite in each layout's own fixed
+   colours, since mail apps ignore the site theme; only --em-ac, the campaign
+   colour as the email takes it, comes from the draft. */
+.czp .em-sample{ display:block; height:150px; border-radius:6px; overflow:hidden; --em-ac:#4f46e5; }
+.czp .em{ display:flex; flex-direction:column; gap:5px; height:100%; box-sizing:border-box; font:11px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif; }
+.czp .em > span{ display:block; }
+.czp .em-as{ display:flex !important; flex-wrap:wrap; gap:4px; margin-top:auto; }
+.czp .em-note{ background:#fff; color:#2b2f36; padding:14px 16px; }
+.czp .em-note .em-c{ font-size:10px; color:#8a8f98; }
+.czp .em-note .em-h{ font-size:12.5px; font-weight:600; color:#111; }
+.czp .em-note .em-as{ gap:10px; margin-top:4px; }
+.czp .em-note .em-a{ color:var(--em-ac); text-decoration:underline; text-underline-offset:2px; }
+.czp .em-poster{ background:#161c2b; color:#d8dbe4; text-align:center; align-items:center; padding:0 10px 10px; font-family:Georgia, "Times New Roman", serif; }
+.czp .em-art{ align-self:stretch; height:34px; margin:0 -10px 2px; background:var(--em-ac); background-image:linear-gradient(135deg, #c9a86a 0%, var(--em-ac) 38%, #2b3a55 72%, #161c2b 100%); }
+.czp .em-poster .em-c{ font-size:8.5px; letter-spacing:.3em; text-transform:uppercase; color:#c9a86a; }
+.czp .em-poster .em-h{ font-size:15px; line-height:1.15; color:#f4efe4; }
+.czp .em-poster .em-l{ font-size:10px; }
+.czp .em-poster .em-as{ justify-content:center; margin-top:auto; }
+.czp .em-poster .em-a{ padding:2px 8px; border-radius:999px; border:1px solid #c9a86a; color:#f4efe4; font:600 9.5px -apple-system, "Segoe UI", Roboto, sans-serif; }
+.czp .em-poster .em-a.on{ background:#c9a86a; color:#161c2b; }
+.czp .em-ticket{ flex-direction:row; gap:0; background:#eceef3; padding:12px 10px; }
+.czp .em-stub{ display:flex !important; flex-direction:column; align-items:center; justify-content:center; flex:0 0 46px; background:var(--em-ac); color:#fff; font-family:"Courier New", monospace; border-right:2px dashed #eceef3; border-radius:4px 0 0 4px; }
+.czp .em-stub b{ font-size:9px; letter-spacing:.15em; font-weight:400; }
+.czp .em-stub i{ font-style:normal; font-size:22px; font-weight:700; line-height:1; }
+.czp .em-in{ display:flex !important; flex-direction:column; gap:4px; min-width:0; flex:1; background:#fff; padding:8px 9px; border-radius:0 4px 4px 0; color:#2b2f36; }
+.czp .em-ticket .em-c{ font-size:8.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--em-ac); }
+.czp .em-ticket .em-h{ font-size:12.5px; font-weight:700; color:#111; line-height:1.2; }
+.czp .em-ticket .em-a{ padding:2px 6px; border:1.5px solid #111; border-radius:3px; font-weight:700; font-size:9px; color:#111; }
+.czp .em-ticket .em-a.on{ background:#111; color:#fff; }
+.czp .em-chat{ background:#f6f7f9; color:#2b2f36; padding:12px 12px; }
+.czp .em-who{ display:flex !important; align-items:center; gap:6px; font-size:10px; font-weight:600; color:#111; }
+.czp .em-av{ display:grid !important; place-items:center; width:18px; height:18px; border-radius:50%; background:var(--em-ac); color:#fff; font-size:9px; font-weight:700; }
+.czp .em-bub{ margin-left:24px; padding:6px 8px; background:#fff; border:1px solid #e3e5ea; border-radius:3px 10px 10px 10px; font-size:10px; }
+.czp .em-card{ display:block; margin-top:4px; padding:3px 6px; border-radius:6px; background:#f3f4f6; border-left:2px solid var(--em-ac); font-weight:600; color:#111; }
+.czp .em-chat .em-as{ justify-content:flex-end; }
+.czp .em-chat .em-a{ padding:2px 8px; border-radius:999px; background:#fff; color:var(--em-ac); border:1px solid #c7c9d1; font-weight:600; font-size:9.5px; }
+.czp .em-chat .em-a.on{ background:var(--em-ac); color:#fff; border-color:var(--em-ac); }
 /* Time line popup tiles: a stretch of time line with the popup held open over
    its bead, the classic card below it as on a page, the fading corner above. */
 .czp .tlp-sample{ position:relative; display:block; height:156px; border-radius:6px; background:var(--bg); overflow:hidden; }

@@ -5,8 +5,9 @@
 // with the smtp plugin; this package only writes bodies.
 //
 // A layout is its own template with its own type, colours and button shape,
-// not one frame with a swapped header. Note is the layout every campaign
-// starts with.
+// not one frame with a swapped header: Note, Poster, Ticket and Chat. Note is
+// the layout every campaign starts with; the owner picks another under
+// Customize > Look > Emails.
 package email
 
 import (
@@ -25,7 +26,19 @@ type Layout string
 const (
 	// Note is plain text in a narrow column, with the answers as links.
 	Note Layout = "note"
+	// Poster is a dark card under a band of the campaign colour, with a big
+	// serif title and pill buttons.
+	Poster Layout = "poster"
+	// Ticket puts the date on a stub in the campaign colour beside the name,
+	// with square buttons.
+	Ticket Layout = "ticket"
+	// Chat reads as a message from the person who sent it, with the answers
+	// as reply chips.
+	Chat Layout = "chat"
 )
+
+// Layouts are every layout, in the order the Customize page offers them.
+var Layouts = []Layout{Note, Poster, Ticket, Chat}
 
 // DefaultLayout is what a campaign uses until its owner picks another.
 const DefaultLayout = Note
@@ -37,9 +50,9 @@ const DefaultAccent = "#4f46e5"
 // ParseLayout returns the named layout, or the default for anything unknown,
 // so a stored value from a newer or older version never breaks a send.
 func ParseLayout(s string) Layout {
-	switch Layout(strings.TrimSpace(s)) {
-	case Note:
-		return Note
+	l := Layout(strings.TrimSpace(s))
+	if _, ok := templates[l]; ok {
+		return l
 	}
 	return DefaultLayout
 }
@@ -57,6 +70,21 @@ type Group struct {
 	Title   string
 	Detail  string
 	Answers []Answer
+}
+
+// Stub is a date as the Ticket layout prints it: FRI, 7, NOV and 7pm.
+type Stub struct {
+	Weekday string
+	Day     string
+	Month   string
+	Time    string
+}
+
+// Sender is who a Chat email reads as coming from, such as "Kara" and
+// "your DM".
+type Sender struct {
+	Name string
+	Role string
 }
 
 // Message is everything an email says. Every string is plain text; the
@@ -85,6 +113,25 @@ type Message struct {
 	// PrefsURL opens the notification choices. Empty leaves the link out,
 	// as on safety mail that can't be switched off.
 	PrefsURL string
+	// Stub is the one date the email is about, for the Ticket layout. Nil
+	// leaves the stub out.
+	Stub *Stub
+	// Sender is who the Chat layout shows the message as from. Nil reads as
+	// from the campaign.
+	Sender *Sender
+}
+
+// Initial is the letter in the Chat layout's round picture: the sender's
+// first letter, or the campaign's.
+func (m Message) Initial() string {
+	name := m.Campaign
+	if m.Sender != nil && strings.TrimSpace(m.Sender.Name) != "" {
+		name = m.Sender.Name
+	}
+	for _, r := range strings.TrimSpace(name) {
+		return strings.ToUpper(string(r))
+	}
+	return "?"
 }
 
 // Render returns the plain-text and HTML bodies of m in the given layout.
@@ -151,5 +198,8 @@ func Plain(m Message) string {
 }
 
 var templates = map[Layout]*template.Template{
-	Note: template.Must(template.New("note").Parse(noteHTML)),
+	Note:   template.Must(template.New("note").Parse(noteHTML)),
+	Poster: template.Must(template.New("poster").Parse(posterHTML)),
+	Ticket: template.Must(template.New("ticket").Parse(ticketHTML)),
+	Chat:   template.Must(template.New("chat").Parse(chatHTML)),
 }

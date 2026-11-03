@@ -5236,6 +5236,7 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetSystemAddonEnabler(addonService)
 	campaignHandler.SetMediaUploader(&backdropUploaderAdapter{svc: mediaService})
 	campaignHandler.SetSMTPChecker(smtpService)
+	campaignHandler.SetTestMailer(smtpService)
 	campaignHandler.SetSystemLister(&systemListerAdapter{})
 	tagHandler.SetAuditService(auditService)
 

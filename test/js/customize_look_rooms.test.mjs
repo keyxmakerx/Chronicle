@@ -1,5 +1,5 @@
 // customize_look_rooms.test.mjs — the Look editor's four rooms group the
-// eleven sections, every section has exactly one room, and an address
+// twelve sections, every section has exactly one room, and an address
 // fragment (a section, a room, or the retired "access") opens the right one.
 
 import { test } from 'node:test';
@@ -27,7 +27,7 @@ test('the rooms are the four signed ones, in order', () => {
   assert.deepEqual(rooms.map((r) => r[1]), ['Site frame', 'Colours and type', 'Pages and sheets', 'People']);
   assert.deepEqual(rooms[0][3], ['brand', 'header', 'sidebar', 'nav']);
   assert.deepEqual(rooms[1][3], ['colours', 'type', 'buttons', 'motion']);
-  assert.deepEqual(rooms[2][3], ['page', 'hover', 'sheet']);
+  assert.deepEqual(rooms[2][3], ['page', 'hover', 'sheet', 'email']);
   assert.deepEqual(rooms[3][3], []);
 });
 
@@ -49,7 +49,7 @@ test('a hash opens the section\'s room, a room hash opens the room, junk opens n
   const t = hashTarget();
   const cases = [
     ['#brand', 'frame', 'brand'], ['nav', 'frame', 'nav'], ['#type', 'style', 'type'], ['#motion', 'style', 'motion'],
-    ['#page', 'pages', 'page'], ['#hover', 'pages', 'hover'], ['#sheet', 'pages', 'sheet'],
+    ['#page', 'pages', 'page'], ['#hover', 'pages', 'hover'], ['#sheet', 'pages', 'sheet'], ['#email', 'pages', 'email'],
     ['#people', 'people', null], ['#access', 'people', null], ['#style', 'style', null], ['#frame', 'frame', null],
   ];
   for (const [h, room, sec] of cases) assert.deepEqual({ ...t(h) }, { room, sec }, h);

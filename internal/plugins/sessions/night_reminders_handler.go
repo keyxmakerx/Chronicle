@@ -85,12 +85,20 @@ func (h *Handler) sendNightReminderEmails(ctx context.Context, session *Session,
 	}
 	openURL := h.baseURL + nightsLink(session.CampaignID, session.ID, night.Date)
 	subject := fmt.Sprintf("Are you coming? %s — %s", session.Name, mc.Name)
+	// The stub reads the night as the words above do, on its own clock.
+	stub := ticketStub(&Session{ScheduledDate: &night.Date, ScheduledTime: &night.Time}, "")
+	var from *email.Sender
+	if asker != askerLabel("") {
+		from = mc.sender(asker, false)
+	}
 	for _, m := range members {
 		if m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.GameNightInvites) {
 			continue
 		}
 		msg := h.message(mc, notifyprefs.GameNightInvites, session.Name)
 		msg.Lines = []string{fmt.Sprintf("%s asked whether you're coming on %s.", asker, when)}
+		msg.Stub = stub
+		msg.Sender = from
 		if !night.Recurring {
 			tokens, err := h.svc.CreateRSVPTokens(ctx, session.ID, m.UserID)
 			if err != nil {
@@ -101,7 +109,7 @@ func (h *Handler) sendNightReminderEmails(ctx context.Context, session *Session,
 			msg.Small = linksExpire
 		}
 		msg.Links = []email.Answer{{Label: "Answer on the calendar", URL: openURL}}
-		if err := h.sendMessage(ctx, m.Email, subject, msg); err != nil {
+		if err := h.sendMessage(ctx, mc, m.Email, subject, msg); err != nil {
 			slog.Warn("night reminder: sending email failed", slog.Any("error", err), slog.String("session_id", session.ID))
 		}
 	}

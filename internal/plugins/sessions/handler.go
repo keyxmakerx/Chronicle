@@ -583,6 +583,7 @@ func (h *Handler) UnlinkEntityAPI(c echo.Context) error {
 // blocking the HTTP response.
 func (h *Handler) sendRSVPEmails(ctx context.Context, session *Session, mc mailCampaign, members []campaigns.CampaignMember) {
 	subject := fmt.Sprintf("Game night: %s — %s", session.Name, mc.Name)
+	from := mc.senderAmong(members, session.CreatedBy, h.resolveDisplayName(ctx, session.CreatedBy))
 	for _, m := range members {
 		if m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.GameNightInvites) {
 			continue
@@ -592,16 +593,19 @@ func (h *Handler) sendRSVPEmails(ctx context.Context, session *Session, mc mailC
 			slog.Warn("failed to create rsvp tokens", slog.Any("error", err), slog.String("user_id", m.UserID))
 			continue
 		}
+		zone := h.memberZone(ctx, m.UserID)
 		line := "The date isn't set yet. Can you make it?"
-		if when := h.memberWhen(ctx, session, m.UserID); when != "" {
+		if when := memberWhen(session, zone); when != "" {
 			line = when + ". Can you make it?"
 		}
 		msg := h.message(mc, notifyprefs.GameNightInvites, session.Name)
 		msg.Lines = []string{line}
+		msg.Stub = ticketStub(session, zone)
+		msg.Sender = from
 		msg.Answers = h.rsvpAnswers(tokens)
 		msg.Links = []email.Answer{{Label: "Suggest another time", URL: h.baseURL + "/rsvp/" + tokens.Suggest + "/suggest"}}
 		msg.Small = linksExpire
-		if err := h.sendMessage(ctx, m.Email, subject, msg); err != nil {
+		if err := h.sendMessage(ctx, mc, m.Email, subject, msg); err != nil {
 			slog.Warn("failed to send rsvp email",
 				slog.Any("error", err),
 				slog.String("to", m.Email),

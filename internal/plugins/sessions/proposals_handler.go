@@ -361,11 +361,12 @@ func (h *Handler) fanoutProposalCreated(ctx context.Context, mc mailCampaign, pr
 		slog.Warn("failed to load proposal for email", slog.Any("error", err))
 		return
 	}
+	from := mc.senderAmong(members, creatorID, h.resolveDisplayName(ctx, creatorID))
 	for _, m := range members {
 		if m.UserID == creatorID || m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.GameNightInvites) {
 			continue
 		}
-		h.sendProposalEmail(ctx, mc, proposal, options, m)
+		h.sendProposalEmail(ctx, mc, from, proposal, options, m)
 	}
 }
 
@@ -383,7 +384,7 @@ func (h *Handler) getProposalForEmail(ctx context.Context, campaignID, proposalI
 // one-press Yes, Maybe and No, each backed by a token keyed (option, user,
 // response) so the answer records with no login. Times are written in the
 // member's own stored zone.
-func (h *Handler) sendProposalEmail(ctx context.Context, mc mailCampaign, proposal *SlotProposal, options []ProposalOptionView, m campaigns.CampaignMember) {
+func (h *Handler) sendProposalEmail(ctx context.Context, mc mailCampaign, from *email.Sender, proposal *SlotProposal, options []ProposalOptionView, m campaigns.CampaignMember) {
 	// Always go through tokenUserTZ, never a raw nil check on the field: it
 	// rejects an empty-string (not NULL) users.timezone that would otherwise
 	// print a blank zone here while renderLocalSlotForTZ falls back to UTC.
@@ -391,6 +392,7 @@ func (h *Handler) sendProposalEmail(ctx context.Context, mc mailCampaign, propos
 
 	msg := h.message(mc, notifyprefs.GameNightInvites, proposal.Title)
 	msg.Lines = []string{"Which of these work for you? All times in " + memberTZ + "."}
+	msg.Sender = from
 	for _, ov := range options {
 		tokens, err := h.svc.CreateProposalTokens(ctx, ov.Option.ID, m.UserID)
 		if err != nil {
@@ -412,7 +414,7 @@ func (h *Handler) sendProposalEmail(ctx context.Context, mc mailCampaign, propos
 	msg.Small = linksExpire
 
 	subject := fmt.Sprintf("When can you play? — %s", mc.Name)
-	if err := h.sendMessage(ctx, m.Email, subject, msg); err != nil {
+	if err := h.sendMessage(ctx, mc, m.Email, subject, msg); err != nil {
 		slog.Warn("failed to send proposal email", slog.Any("error", err), slog.String("to", m.Email))
 	}
 }

@@ -199,6 +199,9 @@ func (h *Handler) sendConfirmEmails(ctx context.Context, mc mailCampaign, asker 
 		asked[id] = true
 	}
 	msg := h.message(mc, notifyprefs.AvailabilityAsks, "Are your times still right?")
+	if asker != askerLabel("") {
+		msg.Sender = mc.sender(asker, false)
+	}
 	msg.Lines = []string{
 		fmt.Sprintf("%s asked everyone in %s to check the times they can play.", asker, mc.Name),
 		"On the calendar, press Who's free, then confirm your times or change them.",
@@ -209,7 +212,7 @@ func (h *Handler) sendConfirmEmails(ctx context.Context, mc mailCampaign, asker 
 		if !asked[m.UserID] || m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.AvailabilityAsks) {
 			continue
 		}
-		if err := h.sendMessage(ctx, m.Email, subject, msg); err != nil {
+		if err := h.sendMessage(ctx, mc, m.Email, subject, msg); err != nil {
 			slog.Warn("confirm-times email failed", slog.Any("error", err), slog.String("user_id", m.UserID))
 		}
 	}

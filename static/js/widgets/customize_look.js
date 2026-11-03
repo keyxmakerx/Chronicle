@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  var SPRITE = "<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\" focusable=\"false\"><defs><symbol id=\"cz-i-home\" viewBox=\"0 0 24 24\"><path d=\"M3.5 11.5 12 4.5l8.5 7\"/><path d=\"M5.5 10v9.5h13V10\"/><path d=\"M10 19.5v-5h4v5\"/></symbol><symbol id=\"cz-i-journal\" viewBox=\"0 0 24 24\"><path d=\"M12 6.5C10.3 5 7.4 4.5 4 5v13.5c3.4-.5 6.3 0 8 1.5 1.7-1.5 4.6-2 8-1.5V5c-3.4-.5-6.3 0-8 1.5z\"/><path d=\"M12 6.5V20\"/></symbol><symbol id=\"cz-i-cal\" viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"5.5\" width=\"16\" height=\"14.5\" rx=\"2\"/><path d=\"M4 10h16M8.5 3.5v4M15.5 3.5v4M8 14h2M14 14h2M8 17h2\"/></symbol><symbol id=\"cz-i-d20\" viewBox=\"0 0 24 24\"><path d=\"M12 3 20 7.5v9L12 21l-8-4.5v-9z\"/><path d=\"M12 3 7.5 13.5h9zM4 7.5l3.5 6M20 7.5l-3.5 6M7.5 13.5 12 21l4.5-7.5\"/></symbol><symbol id=\"cz-i-map\" viewBox=\"0 0 24 24\"><path d=\"M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z\"/><path d=\"M9 4.5v13M15 6.5v13\"/></symbol><symbol id=\"cz-i-users\" viewBox=\"0 0 24 24\"><circle cx=\"9\" cy=\"8.5\" r=\"3.2\"/><path d=\"M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5\"/><circle cx=\"16.5\" cy=\"9.5\" r=\"2.6\"/><path d=\"M16 14.2c2.4.1 4 1.7 4.5 4.3\"/></symbol><symbol id=\"cz-i-layers\" viewBox=\"0 0 24 24\"><path d=\"M12 4 20.5 8.5 12 13 3.5 8.5z\"/><path d=\"m3.5 12.5 8.5 4.5 8.5-4.5M3.5 16.5 12 21l8.5-4.5\"/></symbol><symbol id=\"cz-i-mappin\" viewBox=\"0 0 24 24\"><path d=\"M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z\"/><circle cx=\"12\" cy=\"10\" r=\"2.3\"/></symbol><symbol id=\"cz-i-banner\" viewBox=\"0 0 24 24\"><path d=\"M6.5 3.5v17M6.5 4.5h11v10.5l-5.5-3-5.5 3\"/></symbol><symbol id=\"cz-i-gem\" viewBox=\"0 0 24 24\"><path d=\"M7 4.5h10l3.5 5-8.5 10-8.5-10z\"/><path d=\"M3.5 9.5h17M9.5 4.5 8 9.5l4 10 4-10-1.5-5\"/></symbol><symbol id=\"cz-i-scroll\" viewBox=\"0 0 24 24\"><path d=\"M8 4h9.5a2 2 0 0 1 0 4H17v10a2 2 0 0 1-2 2H6.5a2 2 0 0 1 0-4H8z\"/><path d=\"M8 16V6a2 2 0 0 0-4 0v1M11 9h3M11 12.5h3\"/></symbol><symbol id=\"cz-i-tack\" viewBox=\"0 0 24 24\"><path d=\"M9.5 3.5h5l-.8 5.3 3.3 3.2H7l3.3-3.2z\"/><path d=\"M12 12v8.5\"/></symbol><symbol id=\"cz-i-pencil\" viewBox=\"0 0 24 24\"><path d=\"M16.9 4.5a2.1 2.1 0 1 1 3 3L8 19.3l-4 1 1-4z\"/><path d=\"M14.5 7l2.5 2.5\"/></symbol><symbol id=\"cz-i-chev\" viewBox=\"0 0 24 24\"><path d=\"m6 9 6 6 6-6\"/></symbol><symbol id=\"cz-i-chev-r\" viewBox=\"0 0 24 24\"><path d=\"m9 6 6 6-6 6\"/></symbol><symbol id=\"cz-i-search\" viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m20 20-4.2-4.2\"/></symbol><symbol id=\"cz-i-mask\" viewBox=\"0 0 24 24\"><path d=\"M4 5h8v7c0 3-2 6-4 6s-4-3-4-6zM12 5h8v7c0 3-2 6-4 6s-4-3-4-6z\"/></symbol><symbol id=\"cz-i-bell\" viewBox=\"0 0 24 24\"><path d=\"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z\"/><path d=\"M10 21h4\"/></symbol><symbol id=\"cz-i-note\" viewBox=\"0 0 24 24\"><path d=\"M5 4h14v11l-5 5H5z\"/><path d=\"M14 20v-5h5\"/></symbol><symbol id=\"cz-i-flame\" viewBox=\"0 0 24 24\"><path d=\"M12 21c-3.6 0-6-2.4-6-5.6 0-3.6 3.2-5.2 3.7-9.4 2.2 1.3 3.4 3.4 3.3 5.6 1-.5 1.7-1.5 2-2.8 1.7 1.5 3 3.6 3 6.4 0 3.4-2.4 5.8-6 5.8z\"/></symbol><symbol id=\"cz-i-check\" viewBox=\"0 0 24 24\"><path d=\"M5 12.5 10 17.5 19.5 7\"/></symbol><symbol id=\"cz-i-plus\" viewBox=\"0 0 24 24\"><path d=\"M12 5.5v13M5.5 12h13\"/></symbol><symbol id=\"cz-i-x\" viewBox=\"0 0 24 24\"><path d=\"M6.5 6.5l11 11M17.5 6.5l-11 11\"/></symbol><symbol id=\"cz-i-up\" viewBox=\"0 0 24 24\"><path d=\"M12 19V5M6 11l6-6 6 6\"/></symbol><symbol id=\"cz-i-down\" viewBox=\"0 0 24 24\"><path d=\"M12 5v14M6 13l6 6 6-6\"/></symbol><symbol id=\"cz-i-gear\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1\"/></symbol><symbol id=\"cz-i-undo\" viewBox=\"0 0 24 24\"><path d=\"M9 6.5 4.5 11 9 15.5\"/><path d=\"M4.5 11H14a5 5 0 0 1 0 10h-2.5\"/></symbol><symbol id=\"cz-i-info\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5M12 8v.01\"/></symbol><symbol id=\"cz-i-upload\" viewBox=\"0 0 24 24\"><path d=\"M12 15.5V4.5M7.5 9 12 4.5 16.5 9\"/><path d=\"M4.5 15v3.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V15\"/></symbol><symbol id=\"cz-i-trash\" viewBox=\"0 0 24 24\"><path d=\"M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13\"/></symbol><symbol id=\"cz-i-image\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"5\" width=\"17\" height=\"14\" rx=\"2\"/><circle cx=\"9\" cy=\"10\" r=\"1.6\"/><path d=\"m5 17 4.5-4.5 3 3 2.5-2.5 4 4\"/></symbol><symbol id=\"cz-i-link\" viewBox=\"0 0 24 24\"><path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1\"/><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"/></symbol><symbol id=\"cz-i-spark\" viewBox=\"0 0 24 24\"><path d=\"M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z\"/><path d=\"M18.5 15.5v5M16 18h5\"/></symbol><symbol id=\"cz-i-tag\" viewBox=\"0 0 24 24\"><path d=\"M3.5 12V4h8l9 9-8 8z\"/><circle cx=\"7.8\" cy=\"8.2\" r=\"1.3\"/></symbol><symbol id=\"cz-i-topbar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M3.5 9.5h17M6.5 7h4\"/></symbol><symbol id=\"cz-i-sidebar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M5.5 4.5H9.5v15H5.5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z\" fill=\"currentColor\" fill-opacity=\".4\"/></symbol><symbol id=\"cz-i-nav\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M9.5 4.5v15M5.8 8.5h1.6M5.8 12h1.6M5.8 15.5h1.6\"/></symbol><symbol id=\"cz-i-palette\" viewBox=\"0 0 24 24\"><path d=\"M12 3.5a8.5 8.5 0 1 0 0 17c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7h2c2.3 0 4.1-1.8 4.1-4.1 0-4-3.8-7.1-8.5-7.1z\"/><circle cx=\"7.8\" cy=\"11\" r=\"1.1\"/><circle cx=\"10.5\" cy=\"7.6\" r=\"1.1\"/><circle cx=\"15\" cy=\"8\" r=\"1.1\"/></symbol><symbol id=\"cz-i-type\" viewBox=\"0 0 24 24\"><path d=\"M3.5 18.5 8 6h1.5L14 18.5M5.2 14h7.1\"/><path d=\"M20.5 18.5v-5a2.5 2.5 0 0 0-4.7-1.2M20.5 15.2c-3-.4-4.9.3-4.9 1.8 0 1.4 1.8 1.9 3.3 1.1\"/></symbol><symbol id=\"cz-i-cursor\" viewBox=\"0 0 24 24\"><path d=\"M6 3.5 18.5 12l-5.3 1.3 2.9 5.9-2.3 1.1-2.8-5.9L7 17.5z\"/></symbol><symbol id=\"cz-i-depth\" viewBox=\"0 0 24 24\"><rect x=\"8.5\" y=\"8.5\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M15.5 5.5H6A2.5 2.5 0 0 0 3.5 8v9.5\"/></symbol><symbol id=\"cz-i-moon\" viewBox=\"0 0 24 24\"><path d=\"M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z\"/></symbol><symbol id=\"cz-i-lock\" viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"10.5\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M8 10.5V8a4 4 0 0 1 8 0v2.5\"/></symbol><symbol id=\"cz-i-eyeoff\" viewBox=\"0 0 24 24\"><path d=\"M3.5 3.5l17 17M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.7A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3.1 3.8M6.4 6.9C4 8.6 2.5 12 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4-1\"/></symbol></defs></svg>";
+  var SPRITE = "<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\" focusable=\"false\"><defs><symbol id=\"cz-i-home\" viewBox=\"0 0 24 24\"><path d=\"M3.5 11.5 12 4.5l8.5 7\"/><path d=\"M5.5 10v9.5h13V10\"/><path d=\"M10 19.5v-5h4v5\"/></symbol><symbol id=\"cz-i-journal\" viewBox=\"0 0 24 24\"><path d=\"M12 6.5C10.3 5 7.4 4.5 4 5v13.5c3.4-.5 6.3 0 8 1.5 1.7-1.5 4.6-2 8-1.5V5c-3.4-.5-6.3 0-8 1.5z\"/><path d=\"M12 6.5V20\"/></symbol><symbol id=\"cz-i-cal\" viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"5.5\" width=\"16\" height=\"14.5\" rx=\"2\"/><path d=\"M4 10h16M8.5 3.5v4M15.5 3.5v4M8 14h2M14 14h2M8 17h2\"/></symbol><symbol id=\"cz-i-d20\" viewBox=\"0 0 24 24\"><path d=\"M12 3 20 7.5v9L12 21l-8-4.5v-9z\"/><path d=\"M12 3 7.5 13.5h9zM4 7.5l3.5 6M20 7.5l-3.5 6M7.5 13.5 12 21l4.5-7.5\"/></symbol><symbol id=\"cz-i-map\" viewBox=\"0 0 24 24\"><path d=\"M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z\"/><path d=\"M9 4.5v13M15 6.5v13\"/></symbol><symbol id=\"cz-i-users\" viewBox=\"0 0 24 24\"><circle cx=\"9\" cy=\"8.5\" r=\"3.2\"/><path d=\"M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5\"/><circle cx=\"16.5\" cy=\"9.5\" r=\"2.6\"/><path d=\"M16 14.2c2.4.1 4 1.7 4.5 4.3\"/></symbol><symbol id=\"cz-i-layers\" viewBox=\"0 0 24 24\"><path d=\"M12 4 20.5 8.5 12 13 3.5 8.5z\"/><path d=\"m3.5 12.5 8.5 4.5 8.5-4.5M3.5 16.5 12 21l8.5-4.5\"/></symbol><symbol id=\"cz-i-mappin\" viewBox=\"0 0 24 24\"><path d=\"M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z\"/><circle cx=\"12\" cy=\"10\" r=\"2.3\"/></symbol><symbol id=\"cz-i-banner\" viewBox=\"0 0 24 24\"><path d=\"M6.5 3.5v17M6.5 4.5h11v10.5l-5.5-3-5.5 3\"/></symbol><symbol id=\"cz-i-gem\" viewBox=\"0 0 24 24\"><path d=\"M7 4.5h10l3.5 5-8.5 10-8.5-10z\"/><path d=\"M3.5 9.5h17M9.5 4.5 8 9.5l4 10 4-10-1.5-5\"/></symbol><symbol id=\"cz-i-scroll\" viewBox=\"0 0 24 24\"><path d=\"M8 4h9.5a2 2 0 0 1 0 4H17v10a2 2 0 0 1-2 2H6.5a2 2 0 0 1 0-4H8z\"/><path d=\"M8 16V6a2 2 0 0 0-4 0v1M11 9h3M11 12.5h3\"/></symbol><symbol id=\"cz-i-tack\" viewBox=\"0 0 24 24\"><path d=\"M9.5 3.5h5l-.8 5.3 3.3 3.2H7l3.3-3.2z\"/><path d=\"M12 12v8.5\"/></symbol><symbol id=\"cz-i-pencil\" viewBox=\"0 0 24 24\"><path d=\"M16.9 4.5a2.1 2.1 0 1 1 3 3L8 19.3l-4 1 1-4z\"/><path d=\"M14.5 7l2.5 2.5\"/></symbol><symbol id=\"cz-i-chev\" viewBox=\"0 0 24 24\"><path d=\"m6 9 6 6 6-6\"/></symbol><symbol id=\"cz-i-chev-r\" viewBox=\"0 0 24 24\"><path d=\"m9 6 6 6-6 6\"/></symbol><symbol id=\"cz-i-search\" viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m20 20-4.2-4.2\"/></symbol><symbol id=\"cz-i-mask\" viewBox=\"0 0 24 24\"><path d=\"M4 5h8v7c0 3-2 6-4 6s-4-3-4-6zM12 5h8v7c0 3-2 6-4 6s-4-3-4-6z\"/></symbol><symbol id=\"cz-i-bell\" viewBox=\"0 0 24 24\"><path d=\"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z\"/><path d=\"M10 21h4\"/></symbol><symbol id=\"cz-i-note\" viewBox=\"0 0 24 24\"><path d=\"M5 4h14v11l-5 5H5z\"/><path d=\"M14 20v-5h5\"/></symbol><symbol id=\"cz-i-mail\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"5.5\" width=\"17\" height=\"13\" rx=\"2\"/><path d=\"m4.5 7 7.5 6 7.5-6\"/></symbol><symbol id=\"cz-i-flame\" viewBox=\"0 0 24 24\"><path d=\"M12 21c-3.6 0-6-2.4-6-5.6 0-3.6 3.2-5.2 3.7-9.4 2.2 1.3 3.4 3.4 3.3 5.6 1-.5 1.7-1.5 2-2.8 1.7 1.5 3 3.6 3 6.4 0 3.4-2.4 5.8-6 5.8z\"/></symbol><symbol id=\"cz-i-check\" viewBox=\"0 0 24 24\"><path d=\"M5 12.5 10 17.5 19.5 7\"/></symbol><symbol id=\"cz-i-plus\" viewBox=\"0 0 24 24\"><path d=\"M12 5.5v13M5.5 12h13\"/></symbol><symbol id=\"cz-i-x\" viewBox=\"0 0 24 24\"><path d=\"M6.5 6.5l11 11M17.5 6.5l-11 11\"/></symbol><symbol id=\"cz-i-up\" viewBox=\"0 0 24 24\"><path d=\"M12 19V5M6 11l6-6 6 6\"/></symbol><symbol id=\"cz-i-down\" viewBox=\"0 0 24 24\"><path d=\"M12 5v14M6 13l6 6 6-6\"/></symbol><symbol id=\"cz-i-gear\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1\"/></symbol><symbol id=\"cz-i-undo\" viewBox=\"0 0 24 24\"><path d=\"M9 6.5 4.5 11 9 15.5\"/><path d=\"M4.5 11H14a5 5 0 0 1 0 10h-2.5\"/></symbol><symbol id=\"cz-i-info\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5M12 8v.01\"/></symbol><symbol id=\"cz-i-upload\" viewBox=\"0 0 24 24\"><path d=\"M12 15.5V4.5M7.5 9 12 4.5 16.5 9\"/><path d=\"M4.5 15v3.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V15\"/></symbol><symbol id=\"cz-i-trash\" viewBox=\"0 0 24 24\"><path d=\"M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13\"/></symbol><symbol id=\"cz-i-image\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"5\" width=\"17\" height=\"14\" rx=\"2\"/><circle cx=\"9\" cy=\"10\" r=\"1.6\"/><path d=\"m5 17 4.5-4.5 3 3 2.5-2.5 4 4\"/></symbol><symbol id=\"cz-i-link\" viewBox=\"0 0 24 24\"><path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1\"/><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"/></symbol><symbol id=\"cz-i-spark\" viewBox=\"0 0 24 24\"><path d=\"M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z\"/><path d=\"M18.5 15.5v5M16 18h5\"/></symbol><symbol id=\"cz-i-tag\" viewBox=\"0 0 24 24\"><path d=\"M3.5 12V4h8l9 9-8 8z\"/><circle cx=\"7.8\" cy=\"8.2\" r=\"1.3\"/></symbol><symbol id=\"cz-i-topbar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M3.5 9.5h17M6.5 7h4\"/></symbol><symbol id=\"cz-i-sidebar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M5.5 4.5H9.5v15H5.5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z\" fill=\"currentColor\" fill-opacity=\".4\"/></symbol><symbol id=\"cz-i-nav\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M9.5 4.5v15M5.8 8.5h1.6M5.8 12h1.6M5.8 15.5h1.6\"/></symbol><symbol id=\"cz-i-palette\" viewBox=\"0 0 24 24\"><path d=\"M12 3.5a8.5 8.5 0 1 0 0 17c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7h2c2.3 0 4.1-1.8 4.1-4.1 0-4-3.8-7.1-8.5-7.1z\"/><circle cx=\"7.8\" cy=\"11\" r=\"1.1\"/><circle cx=\"10.5\" cy=\"7.6\" r=\"1.1\"/><circle cx=\"15\" cy=\"8\" r=\"1.1\"/></symbol><symbol id=\"cz-i-type\" viewBox=\"0 0 24 24\"><path d=\"M3.5 18.5 8 6h1.5L14 18.5M5.2 14h7.1\"/><path d=\"M20.5 18.5v-5a2.5 2.5 0 0 0-4.7-1.2M20.5 15.2c-3-.4-4.9.3-4.9 1.8 0 1.4 1.8 1.9 3.3 1.1\"/></symbol><symbol id=\"cz-i-cursor\" viewBox=\"0 0 24 24\"><path d=\"M6 3.5 18.5 12l-5.3 1.3 2.9 5.9-2.3 1.1-2.8-5.9L7 17.5z\"/></symbol><symbol id=\"cz-i-depth\" viewBox=\"0 0 24 24\"><rect x=\"8.5\" y=\"8.5\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M15.5 5.5H6A2.5 2.5 0 0 0 3.5 8v9.5\"/></symbol><symbol id=\"cz-i-moon\" viewBox=\"0 0 24 24\"><path d=\"M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z\"/></symbol><symbol id=\"cz-i-lock\" viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"10.5\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M8 10.5V8a4 4 0 0 1 8 0v2.5\"/></symbol><symbol id=\"cz-i-eyeoff\" viewBox=\"0 0 24 24\"><path d=\"M3.5 3.5l17 17M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.7A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3.1 3.8M6.4 6.9C4 8.6 2.5 12 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4-1\"/></symbol></defs></svg>";
 
   // refreshTopbar() redraws the live header's background, centre content
   // and name from a fresh server render of this page. The header sits
@@ -360,7 +360,8 @@
       { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
       { id:'page', name:'Pages', icon:'i-scroll', desc:'How every page in the campaign draws its sections. Workshops like this one keep their own look.' },
       { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page, a rule word or an event on a time line. One look for the whole campaign.' },
-      { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' }
+      { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' },
+      { id:'email', name:'Emails', icon:'i-mail', desc:'How the campaign’s emails look: game night invites, reminders, date polls and campaign invites. One layout for everyone who gets them.' }
     ];
     // The rooms group the sections; the tabs are rooms. A room opens on its
     // first section and shows the example page that fits it. People has no
@@ -368,7 +369,7 @@
     var ROOMS = [
       ['frame', 'Site frame', 'i-sidebar', ['brand', 'header', 'sidebar', 'nav'], 'dash', 'The parts around every page.'],
       ['style', 'Colours and type', 'i-palette', ['colours', 'type', 'buttons', 'motion'], 'dash', 'Colour, fonts, buttons and depth. Click a part, or pick one below.'],
-      ['pages', 'Pages and sheets', 'i-scroll', ['page', 'hover', 'sheet'], 'city', 'A page, a hover card and a character sheet.'],
+      ['pages', 'Pages and sheets', 'i-scroll', ['page', 'hover', 'sheet', 'email'], 'city', 'A page, a hover card, a character sheet and the campaign’s emails.'],
       ['people', 'People', 'i-users', [], 'city', 'Everything others may change for themselves, in one list.']
     ];
     // The parts a person can pick for themselves, with the section that holds each.
@@ -423,7 +424,8 @@
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
       page:['page.look', 'page.kit', 'page.dmKit', 'access.page', 'access.dmscreen'],
       hover:['hover.look', 'hover.timelinePopup', 'access.hover'],
-      sheet:['sheet.style', 'sheet.craftArt', 'access.sheet']
+      sheet:['sheet.style', 'sheet.craftArt', 'access.sheet'],
+      email:['email.layout']
     };
 
     /* ---------- Sample pictures, painted once so the page needs no files ---------- */
@@ -489,6 +491,7 @@
       if (!d.page.kit) d.page.kit = 'material';
       if (!d.page.dmKit) d.page.dmKit = 'same';
       if (!d.hover.timelinePopup) d.hover.timelinePopup = 'classic';
+      if (!d.email || !d.email.layout) d.email = { layout:'note' };
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -735,6 +738,33 @@
           '<span class="tn">' + esc(p[1]) + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + esc(p[2]) + '</span></span></label>';
       }).join('');
     }
+    // Same ids as the server's AppearanceEmailLayouts, in that order. Each tile
+    // holds a small game night invite drawn the way that layout draws it, in
+    // the draft's colour (syncControls), so what the owner picks is what
+    // players get.
+    var EMAIL_LAYOUTS = [
+      ['note', 'Note', 'Just text in a narrow column, with the answers as links. The quietest.'],
+      ['poster', 'Poster', 'Dark, with a band of your colour across the top and the name in large type.'],
+      ['ticket', 'Ticket', 'The date on a stub in your colour, beside the name and square buttons.'],
+      ['chat', 'Chat', 'Reads like a message from the person who sent it, with reply chips.']
+    ];
+    function emailSample(id){
+      var ans = '<span class="em-a on">Going</span><span class="em-a">Maybe</span><span class="em-a">Can’t make it</span>';
+      if (id === 'poster') return '<span class="em em-poster"><span class="em-art"></span><span class="em-c">' + esc(CAMPAIGN) + '</span><span class="em-h">The Ferryman’s Toll</span><span class="em-l">Friday 7 November, 7pm</span><span class="em-as">' + ans + '</span></span>';
+      if (id === 'ticket') return '<span class="em em-ticket"><span class="em-stub"><b>FRI</b><i>7</i><b>NOV</b></span><span class="em-in"><span class="em-c">' + esc(CAMPAIGN) + '</span><span class="em-h">The Ferryman’s Toll</span><span class="em-as">' + ans + '</span></span></span>';
+      if (id === 'chat') return '<span class="em em-chat"><span class="em-who"><span class="em-av">K</span>Kara, your DM</span><span class="em-bub">Friday 7 November, 7pm. Can you make it?<span class="em-card">The Ferryman’s Toll</span></span><span class="em-as">' + ans + '</span></span>';
+      return '<span class="em em-note"><span class="em-c">' + esc(CAMPAIGN) + '</span><span class="em-h">The Ferryman’s Toll</span><span class="em-l">Friday 7 November, 7pm. Can you make it?</span><span class="em-as">' + ans + '</span></span>';
+    }
+    function tilesEmail(){
+      return EMAIL_LAYOUTS.map(function(l){
+        return '<label class="tile em-tile"><input type="radio" name="t-email" value="' + l[0] + '" data-k="email.layout"><span class="tb">' +
+          '<span class="em-sample" aria-hidden="true">' + emailSample(l[0]) + '</span>' +
+          '<span class="tn">' + esc(l[1]) + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + esc(l[2]) + '</span></span></label>';
+      }).join('');
+    }
+    // The email's colour: the draft's accent when it reads on white at 4.5:1,
+    // otherwise the fallback, as internal/email's linkAccent decides.
+    function emailAccent(hex){ return /^#[0-9a-f]{6}$/i.test(hex || '') && contrast(hex, '#ffffff') >= 4.5 ? hex : '#4f46e5'; }
     function tilesElev(){
       return Object.keys(ELEVATION).map(function(id){
         var E = ELEVATION[id], k = { flat:'Cards sit on the page, with an outline on hover.', standard:'A soft shadow; cards lift a little on hover.', dramatic:'Deep shadows; cards rise clearly off the page.', ambient:'Shadows tinted with your accent and a faint light from the top corner.' }[id];
@@ -843,6 +873,11 @@
           '<p class="hint">Point at a linked page or a rule word anywhere in the campaign to see it. What a card shows comes from each page’s own settings.</p>') +
         fld('h-tl', 'Popups on time lines', 'What opens over an event on a time line', '<div class="tiles two" role="radiogroup" aria-labelledby="h-tl-l">' + tilesTlPop() + '</div>' +
           '<p class="hint">Used on the time line page and on the time line under a page’s title. A click still opens the event.</p>'));
+      if (id === 'email') return (
+        fld('em-layout', 'Layout', 'Every email the campaign sends', '<div class="tiles two" role="radiogroup" aria-labelledby="em-layout-l">' + tilesEmail() + '</div>' +
+          '<p class="hint">Each layout fills a phone screen, with its answers as rows big enough to tap. Mail apps don’t follow your site’s theme, so every layout keeps its own colours and takes only your campaign colour.</p>') +
+        fld('em-test', 'Send me a test', 'A sample game night invite', '<div class="img-row"><button type="button" class="czb czb-s czb-sm" id="em-test-btn">' + IC('i-mail') + 'Send me a test</button></div>' +
+          '<p class="hint" id="em-test-h">Sends a sample invite in the layout and colour picked here to your own email address, before you save. Its answer links go nowhere.</p><p class="err" id="em-test-e" role="alert" hidden></p>'));
       if (id === 'sheet') return (
         fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES) +
           '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>') +
@@ -1106,6 +1141,7 @@
       });
       $('#m-reduce').checked = !!d.motion.reduceAll;
       $$('.tlp-classic .chc, .e-hc .chc').forEach(function(c){ if (c.dataset.look !== d.hover.look) c.dataset.look = d.hover.look; });
+      $$('.em-sample').forEach(function(e){ e.style.setProperty('--em-ac', emailAccent(d.colours.accent)); });
       syncText('#b-name', d.brand.name); syncText('#b-welcome', d.brand.welcome);
       setText($('#b-name-c'), d.brand.name.length + ' / 40');
       setText($('#b-welcome-c'), d.brand.welcome.length + ' / ' + welcomeMax());
@@ -1178,7 +1214,7 @@
     }
     function resetCaption(sec){
       var L = look(draft.look).name;
-      if (sec === 'brand') return 'Back to what is saved';
+      if (sec === 'brand' || sec === 'email') return 'Back to what is saved';
       if (sec === 'header') return 'Background to ' + L + ', height and widgets as saved';
       if (sec === 'sidebar') return 'Colour to ' + L + ', corner and glow as saved';
       return 'Back to the ' + L + ' look';
@@ -1649,7 +1685,7 @@
       Object.keys(t).forEach(function(k){ setP(draft, k, clone(t[k])); });
       update(); settle(); tidyPictures();
       $('#tab-' + ROOM_OF[sec]).focus();
-      toast(sectionName(sec) + (sec === 'brand' ? ' is back to what is saved.' : ' is back to the ' + look(draft.look).name + ' look.'));
+      toast((sec === 'email' ? 'The email layout' : sectionName(sec)) + (sec === 'brand' || sec === 'email' ? ' is back to what is saved.' : ' is back to the ' + look(draft.look).name + ' look.'));
     }
 
     /* ---------- Inside Customize's frame ---------- */
@@ -1713,6 +1749,7 @@
           widgets:h.widgets.slice(), links:h.links.filter(function(l){ return l.label.trim() || l.url.trim(); }), text:h.text },
         colours:{ accent:d.colours.accent, s1:d.colours.s1 || '', s2:d.colours.s2 || '', page:d.colours.page, contrast:d.colours.contrast },
         nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet), page:clone(d.page), access:clone(d.access),
+        email:clone(d.email),
         // The companion of each choice is sent only while that choice is
         // selected, so nothing stale is stored.
         sidebar:{ colour:d.colours.sidebar, own:d.colours.sidebar === 'own' ? sb.own : '', corner:sb.corner,
@@ -1749,6 +1786,27 @@
             .catch(function(){});
         } catch (_) { /* tidying is best effort */ }
       });
+    }
+    // Send me a test: the server renders a sample invite in the picked layout
+    // and the draft's colour, and sends it to the owner's own address.
+    var testing = false;
+    function sendTestEmail(btn){
+      if (testing) return;
+      var err = $('#em-test-e');
+      err.hidden = true; testing = true; btn.disabled = true; btn.setAttribute('aria-busy', 'true');
+      setText($('#em-test-h'), 'Sending…');
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(CID) + '/appearance/email-test', { method:'POST', body:{ layout:draft.email.layout, accent:draft.colours.accent }, csrfToken:CSRF })
+        .then(function(res){
+          return res.json().then(function(b){ return { ok:res.ok, b:b || {} }; }, function(){ return { ok:res.ok, b:{} }; });
+        })
+        .catch(function(){ return { ok:false, b:{ message:'Chronicle could not be reached. Try again in a moment.' } }; })
+        .then(function(r){
+          testing = false; btn.disabled = false; btn.removeAttribute('aria-busy');
+          if (!alive) return;
+          setText($('#em-test-h'), 'Sends a sample invite in the layout and colour picked here to your own email address, before you save. Its answer links go nowhere.');
+          if (r.ok){ toast('Test sent to ' + (r.b.to || 'your email address') + '.'); return; }
+          err.hidden = false; err.textContent = r.b.message || r.b.error || 'The test could not be sent.';
+        });
     }
     var saving = false;
     function doSave(){
@@ -1873,6 +1931,7 @@
         case 'pop-use': useHex(); break;
         case 'pv-hide': toggleStrip(); break;
         case 'fz-all': fzSet(null); $('#tab-' + ui.room).focus(); break;
+        case 'em-test-btn': sendTestEmail(t); break;
       }
     });
     on(ROOT, 'keydown', function(e){
