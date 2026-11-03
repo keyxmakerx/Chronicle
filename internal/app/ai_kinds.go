@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
@@ -23,6 +25,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
+	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -70,16 +73,18 @@ type aiDeps struct {
 	Crafting        records.CraftingAPI              // nil while crafting is degraded
 	ShopLooks       records.ShopLooksAPI             // nil while the armory is degraded
 	Carried         records.CarriedAPI               // the Armory's give and take for carried items; nil writes relations
+	Layers          transformations.Service          // nil while the transformations plugin is degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      calendarai.EventRollAPI // the calendar's roll half; nil without one
 	Tables     records.TableKind
 	HouseRules *records.HouseRuleKind
-	Homebrew   records.HomebrewAPI    // nil while field rules are degraded
-	Nights     *sessions.AIGameNights // the game nights' own AI part
-	CalLookups *calendarai.Lookups    // the calendar's own lookups
-	PageMaps   records.PageMapsAPI    // nil while page blocks are degraded
-	Tests      records.TestsAPI       // nil without the Tests block
+	Homebrew   records.HomebrewAPI       // nil while field rules are degraded
+	Nights     *sessions.AIGameNights    // the game nights' own AI part
+	LayersAI   *transformations.AILayers // the transformations' own AI part; nil without the plugin
+	CalLookups *calendarai.Lookups       // the calendar's own lookups
+	PageMaps   records.PageMapsAPI       // nil while page blocks are degraded
+	Tests      records.TestsAPI          // nil without the Tests block
 	Monsters   records.FoundryMonstersAPI
 }
 
@@ -101,6 +106,13 @@ func newAIDeps(d aiDeps) *aiDeps {
 		d.Homebrew = aiHomebrewAdapter{svc: d.FieldRules}
 	}
 	d.Nights = sessions.NewAIGameNights(d.Sessions, d.Campaigns)
+	if d.Layers != nil {
+		addons := d.Addons
+		d.LayersAI = transformations.NewAILayers(d.Layers, aiLayerPages{pages: d.Entities}, func(ctx context.Context, campaignID string) bool {
+			on, err := addons.IsEnabledForCampaign(ctx, campaignID, transformations.AddonSlug)
+			return err == nil && on
+		})
+	}
 	d.CalLookups = &calendarai.Lookups{Cal: d.Calendar, Weather: d.Calendar, Rolls: d.Rolls, Tiers: d.Campaigns}
 	if d.PageBlocks != nil {
 		d.PageMaps = aiPageMapsAdapter{svc: d.PageBlocks}
@@ -154,7 +166,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Entries:  aiSystemEntriesAdapter{choices: d.CharacterChoice},
 		Party:    &aiPartyAdapter{screen: d.DMScreen, types: d.Entities, nights: d.Sessions, members: d.Campaigns},
 		Tags:     d.Tags,
-		Plugged:  append(d.CalLookups.All(), d.Nights),
+		Plugged:  d.plugged(),
 		Kinds:    reg,
 		PageMaps: d.PageMaps,
 		Menu:     aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities},
@@ -197,6 +209,43 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		l.Copies = cp
 	}
 	return l
+}
+
+// plugged are the lookups features bring themselves, in the prompt's order.
+func (d *aiDeps) plugged() []aiplug.Lookup {
+	out := append(d.CalLookups.All(), d.Nights)
+	if d.LayersAI != nil {
+		out = append(out, d.LayersAI)
+	}
+	return out
+}
+
+// Transformations follow the game nights and tags.
+func init() {
+	addAIKinds(185, func(d *aiDeps) []records.Kind {
+		if d.LayersAI == nil {
+			return nil
+		}
+		return []records.Kind{d.LayersAI}
+	})
+}
+
+// aiLayerPages finds a hero's page by the name an AI wrote; the
+// transformations service then applies the page's own view and edit rules.
+type aiLayerPages struct{ pages entities.EntityService }
+
+func (p aiLayerPages) FindPage(ctx context.Context, campaignID, name string) (string, string, bool, error) {
+	e, err := p.pages.GetBySlug(ctx, campaignID, entities.Slugify(name))
+	if err != nil {
+		if apperror.SafeCode(err) == 404 {
+			return "", "", false, nil
+		}
+		return "", "", false, err
+	}
+	if e == nil || e.CampaignID != campaignID {
+		return "", "", false, nil
+	}
+	return e.ID, e.Name, true, nil
 }
 
 // The kinds that existed before kinds registered themselves, in their prompt
@@ -310,6 +359,9 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 		}
 		if off(sessions.SessionsAddonSlug) {
 			out["game-night"] = "Game nights"
+		}
+		if off(transformations.AddonSlug) {
+			out["layer"] = "Transformations"
 		}
 		if off("maps") {
 			out["map"], out["pin"] = "Maps", "Maps"

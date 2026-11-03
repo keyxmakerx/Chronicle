@@ -6495,8 +6495,9 @@ func (a *App) RegisterRoutes() {
 	// Transformations: layers on a hero (a vampire's bite, rising as a
 	// revenant) that change sheet fields without writing them.
 	a.registerPlugin(PluginRegistration{Slug: transformations.PluginSlug})
+	var layersSvc transformations.Service // nil while degraded; the AI part is left out then
 	if a.PluginHealth.IsHealthy(transformations.PluginSlug) {
-		layersSvc := transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages})
+		layersSvc = transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages})
 		transformations.RegisterRoutes(e, transformations.NewHandler(layersSvc), campaignService, authService, addonService)
 	} else {
 		slog.Warn("transformations plugin degraded — layers on heroes are not available")
@@ -6635,6 +6636,7 @@ func (a *App) RegisterRoutes() {
 		Crafting:        aiCrafting,
 		ShopLooks:       aiShopLooks,
 		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
+		Layers:          layersSvc,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
