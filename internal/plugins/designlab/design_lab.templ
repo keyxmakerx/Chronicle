@@ -9,8 +9,9 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // box expand/collapse primitive, an action that pushes an overlay, and the
 // mini->full launch (container-transform). Admin-only via /admin/design-lab.
 // Below it, the crafting bench kit runs in build mode on demo recipes, once
-// with the desk skin and once with the paper journal skin, and the crafting
-// rules editor writes a recipe's "When… then…" rules against a calendar.
+// with the desk skin and once with the paper journal skin, the painted forge
+// runs at the effect level the device can hold, and the crafting rules editor
+// writes a recipe's "When… then…" rules against a calendar.
 templ SurfaceDemoPage(sky BenchSky) {
 	@layouts.App("Design Lab") {
 		<!-- surface-demo: the sample System consumer (surface_demo.js, loaded on
@@ -81,6 +82,30 @@ templ SurfaceDemoPage(sky BenchSky) {
 					data-campaign-id={ sky.CampaignID }
 					data-calendar-id={ sky.CalendarID }
 				><p class="text-sm text-fg-muted" role="status">Loading the journal…</p></div>
+			</section>
+
+			<!-- A painted bench (static/js/widgets/craft_paint.ai.md): the signed
+			     forge on the canvas engine, finished at the effect level the device
+			     can hold. The level picker and readout show only here. -->
+			<section class="space-y-2">
+				<p class="section-header">Painted bench &mdash; the forge</p>
+				<p class="text-sm text-fg-secondary max-w-3xl">
+					The forge painted on a canvas, with effects that adjust to the device. It starts
+					with the graphics card&rsquo;s effects (heat haze, a shockwave off each blow,
+					bloom, light from the window) and steps down after about two seconds of slow
+					frames: to canvas glow, then the plain scene, then a still frame with Play. Pick a
+					level to hold it there, or pretend this is a slow computer to watch it step down.
+					Click the scene for a fresh run of strikes. The window shows the same calendar
+					as the bench above, as players see it.
+				</p>
+				<div
+					data-widget="craft_paint"
+					data-scene="forge"
+					data-name="the forge"
+					data-lab
+					data-campaign-id={ sky.CampaignID }
+					data-calendar-id={ sky.CalendarID }
+				><p class="text-sm text-fg-muted" role="status">Loading the forge…</p></div>
 			</section>
 
 			<!-- The crafting rules editor (static/js/widgets/craft_rules.ai.md): a

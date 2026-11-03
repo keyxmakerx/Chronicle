@@ -26,38 +26,8 @@
      (moon effects, shapes, particles) as two more, and the land as a small texture of ridge heights. A failed compile is
      an error in the console, never a silent blank. ── */
   var GLX = (function(){
-    var VS = '#version 300 es\nvoid main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }';
-    /* A program is compiled and linked without waiting on it; finish() checks it and reads its uniforms once the driver
-       is done, so the page is never held up by a compile it does not need yet. */
-    function program(gl, fs, label){
-      var p = gl.createProgram(), v = gl.createShader(gl.VERTEX_SHADER), f = gl.createShader(gl.FRAGMENT_SHADER);
-      gl.shaderSource(v, VS); gl.compileShader(v); gl.shaderSource(f, fs); gl.compileShader(f);
-      gl.attachShader(p, v); gl.attachShader(p, f); gl.linkProgram(p);
-      return {p:p, v:v, f:f, src:fs, label:label, U:null};
-    }
-    function finish(gl, P){
-      if (P.U) return;
-      if (!gl.getProgramParameter(P.p, gl.LINK_STATUS) && !gl.isContextLost()){
-        [[P.v, VS, ' (vertex)'], [P.f, P.src, '']].forEach(function(q){
-          if (gl.getShaderParameter(q[0], gl.COMPILE_STATUS)) return;
-          var log = gl.getShaderInfoLog(q[0]) || '', lines = q[1].split('\n'), m = /ERROR: \d+:(\d+)/.exec(log);
-          throw new Error('Sky shader "' + P.label + q[2] + '" failed: ' + log + (m ? ' @ ' + lines[+m[1] - 1] : ''));
-        });
-        throw new Error('Sky program "' + P.label + '" failed to link: ' + gl.getProgramInfoLog(P.p));
-      }
-      var U = {}, n = gl.getProgramParameter(P.p, gl.ACTIVE_UNIFORMS);
-      for (var i = 0; i < n; i++){ var info = gl.getActiveUniform(P.p, i), nm = info.name.replace(/\[0\]$/, ''); U[nm] = {loc:gl.getUniformLocation(P.p, info.name), type:info.type, size:info.size}; }
-      P.U = U;
-    }
-    function setU(gl, P, name, v){
-      var u = P.U[name]; if (!u) return;
-      var t = u.type, a = typeof v === 'number' ? [v] : v;
-      if (t === gl.FLOAT) gl.uniform1fv(u.loc, a);
-      else if (t === gl.FLOAT_VEC2) gl.uniform2fv(u.loc, a);
-      else if (t === gl.FLOAT_VEC3) gl.uniform3fv(u.loc, a);
-      else if (t === gl.FLOAT_VEC4) gl.uniform4fv(u.loc, a);
-      else if (t === gl.INT || t === gl.SAMPLER_2D) gl.uniform1iv(u.loc, a.map(function(x){ return x | 0; }));
-    }
+    /* Compiling, checking and setting uniforms are the page's shared painter's (gl_shared.js). */
+    var program = window.SharedGL.program, finish = window.SharedGL.finish, setU = window.SharedGL.setU;
     function tex(gl, filter){
       var t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
@@ -68,13 +38,10 @@
     var SRC = {};
     function source(dir){ return SRC[dir] || (SRC[dir] = window.SkyShaders.common + '\n' + window.SkyShaders[dir]); }
 
-    /* The painter on its canvas. dir: 'painted'. */
-    function create(canvas, dir){
-      /* failIfMajorPerformanceCaveat: a browser that would paint in software gives no context, and the basic sky draws
-       instead. SkyGL.allowSoftware lifts that, for the browser checks only. preserveDrawingBuffer: each sky is copied
-       out of this canvas with drawImage, and Firefox can copy an unkept buffer as empty. */
-    var gl = canvas.getContext('webgl2', {alpha:true, premultipliedAlpha:true, antialias:false, depth:false, stencil:false, preserveDrawingBuffer:true, powerPreference:'low-power', failIfMajorPerformanceCaveat:!window.SkyGLAllowSoftware});
-      if (!gl) throw new Error('This sky needs WebGL2, which this browser did not provide.');
+    /* The painter on the page's shared context (C, from SharedGL.context()), which also paints the crafting benches;
+       a browser that would paint in software gives no context, and the basic sky draws instead. dir: 'painted'. */
+    function create(C, dir){
+      var gl = C.gl, canvas = C.canvas;
       var S = {gl:gl, dir:dir, canvas:canvas, slots:{}, slotPx:0, lost:false, warm:false, par:gl.getExtension('KHR_parallel_shader_compile')};
       function build(){
         S.P = program(gl, source(dir), dir); S.warm = false;
@@ -85,8 +52,8 @@
       build();
       /* Canvases come in premultiplied; raw arrays are uploaded as they are, which Firefox requires of them. */
       function raw(up){ gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); up(); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); }
-      canvas.addEventListener('webglcontextlost', function(e){ e.preventDefault(); S.lost = true; });
-      canvas.addEventListener('webglcontextrestored', function(){ S.lost = false; build(); S.onRestore && S.onRestore(); });
+      C.onLost(function(){ S.lost = true; });
+      C.onRestore(function(){ S.lost = false; build(); S.onRestore && S.onRestore(); });
 
       /* Moon sprites share one texture, a slot each. Sizes are rounded up to steps of 8 device pixels, so a sky that is
          growing reuses a few prepared sizes instead of preparing one per frame. */
@@ -138,7 +105,7 @@
       S.draw = function(uni, dpr, cssW, cssH){
         if (S.lost || gl.isContextLost() || !S.warm) return false;
         var w = Math.max(1, Math.round(cssW * dpr)), h = Math.max(1, Math.round(cssH * dpr));
-        if (canvas.width < w || canvas.height < h){ canvas.width = Math.max(canvas.width, w); canvas.height = Math.max(canvas.height, h); }
+        window.SharedGL.fit(w, h);
         gl.viewport(0, 0, w, h);
         gl.useProgram(S.P.p);
         setU(gl, S.P, 'uRes', [w, h]); setU(gl, S.P, 'uDpr', w / cssW); setU(gl, S.P, 'uSize', [cssW, cssH]);
@@ -554,17 +521,18 @@
 
   /* ── The one painter every sky shares. Without WebGL2, while its context is lost, after a failed compile, or on a
      device that paints it too slowly, skies are drawn by the basic 2D sky instead. ── */
-  var SLOW_KEY = 'chronicle.sky.basic';
   var PAINTER = (function(){
-    var P = {S:null, err:null, waiting:false, slow:false, frames:[], listeners:[]};
-    try { P.slow = window.sessionStorage.getItem(SLOW_KEY) === '1'; } catch (e) { /* no storage: measure again */ }
+    var GS = window.SharedGL, P = {S:null, err:null, waiting:false, slow:GS.isSlow(), frames:[], listeners:[]};
     function touch(){ P.listeners.forEach(function(fn){ try { fn(); } catch (e) { /* a gone sky */ } }); }
+    /* The page has one slow-device verdict (gl_shared.js): a bench that found the device slow turns the skies basic too. */
+    GS.onSlow(function(){ P.slow = true; touch(); });
     P.get = function(){
       if (P.err || P.slow) return null;
       if (!P.S){
         if (!window.WebGL2RenderingContext || !window.SkyShaders){ P.err = 'no-webgl2'; return null; }
-        var cv = document.createElement('canvas'); cv.width = 16; cv.height = 16;
-        try { P.S = GLX.create(cv, 'painted'); P.S.onRestore = P.wait; cv.addEventListener('webglcontextlost', touch); }
+        var C = GS.context();
+        if (!C){ P.err = GS.error() || 'no-webgl2'; return null; }
+        try { P.S = GLX.create(C, 'painted'); P.S.onRestore = P.wait; C.onLost(touch); }
         catch (e){ P.err = e; return null; }
         P.wait();
         return null;
@@ -586,7 +554,7 @@
        of moving frames, or longer than STALL_MS on two moving frames in a row, gets the basic sky for the rest of the
        session. */
     P.SLOW_MS = 28; P.WINDOW = 45; P.STALL_MS = 120; P.stalls = 0;
-    function giveUp(){ P.slow = true; try { window.sessionStorage.setItem(SLOW_KEY, '1'); } catch (e) { /* not remembered */ } touch(); }
+    function giveUp(){ P.slow = true; GS.markSlow(); touch(); }
     /* A copy that arrives empty means this browser cannot hand the painted sky over at all: the basic sky draws instead
        for the rest of the page, never a blank pane. */
     P.blank = function(){ P.err = 'painted sky copied as empty'; if (window.console) console.warn('Sky: the painted sky came through empty here, so the basic sky is drawn instead.'); touch(); };

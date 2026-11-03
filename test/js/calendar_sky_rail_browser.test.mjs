@@ -34,7 +34,7 @@ const CAL = {
   seasons: [], eras: [],
 };
 
-const SKY = ['sky_world', 'sky_looks', 'sky_moon', 'sky_events', 'sky_2d', 'sky_shaders', 'sky_gl', 'sky_pane']
+const SKY = ['sky_world', 'sky_looks', 'sky_moon', 'sky_events', 'sky_2d', 'sky_shaders', 'gl_shared', 'sky_gl', 'sky_pane']
   .map((f) => `<script src="/static/js/widgets/${f}.js"></script>`).join('\n');
 const attr = (v) => JSON.stringify(v).replace(/&/g, '&amp;').replace(/'/g, '&#39;');
 const html = (role) => `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/static/css/calendar-view.css">
