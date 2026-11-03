@@ -961,6 +961,7 @@ POST	/campaigns/:id/join-code	session	plugins/campaigns.(*Handler).GenerateJoinC
 GET	/campaigns/:id/journal	session	widgets/notes.(*Handler).ShowJournal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/journal/:noteId	session	widgets/notes.(*Handler).ShowJournal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/last-night	public-capable	app.(*lastNightHandler).Show	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
+DELETE	/campaigns/:id/layers/:lid	session	plugins/transformations.(*Handler).Remove	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon
 GET	/campaigns/:id/layout-presets	session	plugins/entities.(*LayoutPresetHandler).ListAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/layout-presets	session	plugins/entities.(*LayoutPresetHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/layout-presets/:pid	session	plugins/entities.(*LayoutPresetHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1078,6 +1079,8 @@ GET	/campaigns/:id/page-blocks/:eid/:bid/sketch	session	plugins/pageblocks.(*Han
 POST	/campaigns/:id/page-blocks/:eid/:bid/sketch	session	plugins/pageblocks.(*Handler).Sketch	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/pages/:eid/encounters	session	plugins/encounters.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/pages/:eid/encounters	session	plugins/encounters.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+GET	/campaigns/:id/pages/:eid/layers	session	plugins/transformations.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon
+POST	/campaigns/:id/pages/:eid/layers	session	plugins/transformations.(*Handler).Add	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon
 GET	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/pinned-pages	public-capable	plugins/entities.(*PagePinHandler).Widget	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess

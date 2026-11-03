@@ -71,6 +71,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
+	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -6479,6 +6480,16 @@ func (a *App) RegisterRoutes() {
 		pageTests = testsSvc
 	} else {
 		slog.Warn("page tests plugin degraded — the Tests block is not available")
+	}
+
+	// Transformations: layers on a hero (a vampire's bite, rising as a
+	// revenant) that change sheet fields without writing them.
+	a.registerPlugin(PluginRegistration{Slug: transformations.PluginSlug})
+	if a.PluginHealth.IsHealthy(transformations.PluginSlug) {
+		layersSvc := transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages})
+		transformations.RegisterRoutes(e, transformations.NewHandler(layersSvc), campaignService, authService, addonService)
+	} else {
+		slog.Warn("transformations plugin degraded — layers on heroes are not available")
 	}
 
 	// Homebrew Workshop: saved recipes of parts and When/Then rules. The
