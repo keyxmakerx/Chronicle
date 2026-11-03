@@ -318,6 +318,9 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 		if nErr := h.svc.NotifyUsers(c.Request().Context(), responded, cc.Campaign.ID, NotifSessionMoved, msg, link); nErr != nil {
 			slog.Error("notifying responded members of a moved session", slog.String("error", nErr.Error()))
 		}
+		if after, gErr := h.svc.GetSession(c.Request().Context(), sessionID); gErr == nil {
+			go h.emailNightChange(context.Background(), mailCampaignOf(cc.Campaign), nightMoved, existing, after, auth.GetUserID(c))
+		}
 	}
 
 	// If a recurring session was completed, a new session was auto-generated.
@@ -369,6 +372,7 @@ func (h *Handler) DeleteSessionAPI(c echo.Context) error {
 		if nErr := h.svc.NotifyUsers(c.Request().Context(), responded, cc.Campaign.ID, NotifSessionCancelled, msg, link); nErr != nil {
 			slog.Error("notifying responded members of a cancelled session", slog.String("error", nErr.Error()))
 		}
+		go h.emailNightChange(context.Background(), mailCampaignOf(cc.Campaign), nightCancelled, nil, sess, auth.GetUserID(c))
 	}
 
 	if middleware.IsHTMX(c) {
@@ -390,6 +394,7 @@ func (h *Handler) RestoreSessionAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	go h.emailNightChange(context.Background(), mailCampaignOf(cc.Campaign), nightBackOn, nil, sess, auth.GetUserID(c))
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect",
 			"/campaigns/"+cc.Campaign.ID+"/sessions/"+sess.ID)

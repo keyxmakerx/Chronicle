@@ -89,6 +89,10 @@ type SessionRepository interface {
 	// or restored — every night's answer is flagged, not just one.
 	MarkAllOccurrencesNeedsRecheck(ctx context.Context, sessionID string) error
 	ListAllOccurrenceRespondedUserIDs(ctx context.Context, sessionID string) ([]string, error)
+	// ListGoingOrMaybeUserIDs returns who answered Going or Maybe to the
+	// session or any one of its nights: who a cancel, move or back-on email
+	// goes to. Deleted sessions included, since a cancel reads it after.
+	ListGoingOrMaybeUserIDs(ctx context.Context, sessionID string) ([]string, error)
 
 	// "Suggest another time" (session_reschedule_suggestions).
 	CreateRescheduleSuggestion(ctx context.Context, s *RescheduleSuggestion) error

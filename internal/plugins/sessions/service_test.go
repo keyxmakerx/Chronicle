@@ -36,6 +36,7 @@ type mockSessionRepo struct {
 	markReadForLinkFn          func(ctx context.Context, userID, ntype, link string) error
 	removeAttendeeFn           func(ctx context.Context, sessionID, userID string) error
 	listAttendeesFn            func(ctx context.Context, sessionID string) ([]Attendee, error)
+	listGoingOrMaybeUserIDsFn  func(ctx context.Context, sessionID string) ([]string, error)
 	linkEntityFn               func(ctx context.Context, sessionID, entityID, role string) error
 	unlinkEntityFn             func(ctx context.Context, sessionID, entityID string) error
 	listSessionEntitiesFn      func(ctx context.Context, sessionID string) ([]SessionEntity, error)
@@ -187,6 +188,13 @@ func (m *mockSessionRepo) MarkAllOccurrencesNeedsRecheck(ctx context.Context, se
 		return m.markAllOccurrencesNeedsRecheckFn(ctx, sessionID)
 	}
 	return nil
+}
+
+func (m *mockSessionRepo) ListGoingOrMaybeUserIDs(ctx context.Context, sessionID string) ([]string, error) {
+	if m.listGoingOrMaybeUserIDsFn != nil {
+		return m.listGoingOrMaybeUserIDsFn(ctx, sessionID)
+	}
+	return nil, nil
 }
 
 func (m *mockSessionRepo) ListAllOccurrenceRespondedUserIDs(ctx context.Context, sessionID string) ([]string, error) {

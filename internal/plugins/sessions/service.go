@@ -82,6 +82,9 @@ type SessionService interface {
 	// tells everyone who had answered that it is back on. A session of
 	// another campaign, or one not deleted, is not found.
 	RestoreAndAnnounce(ctx context.Context, campaignID, id string) (*Session, error)
+	// GoingOrMaybe lists who answered Going or Maybe to the session or any of
+	// its nights, deleted or not: who hears by email that it changed.
+	GoingOrMaybe(ctx context.Context, sessionID string) ([]string, error)
 	// ListTrashedSessions lists the campaign's deleted sessions for the Trash.
 	ListTrashedSessions(ctx context.Context, campaignID string) ([]TrashedSession, error)
 	// PurgeTrashedSessions removes for good sessions deleted before cutoff.
