@@ -165,3 +165,8 @@ func normalise(in AddInput) (AddInput, error) {
 	}
 	return out, nil
 }
+
+// CheckLayer checks a layer exactly as Add does, without storing it, and
+// returns it trimmed and re-encoded. A preset saved in the Homebrew Workshop
+// is checked with it, so a saved preset can always be put on a hero.
+func CheckLayer(in AddInput) (AddInput, error) { return normalise(in) }

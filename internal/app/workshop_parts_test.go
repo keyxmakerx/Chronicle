@@ -8,6 +8,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
+	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
 )
 
 // TestRegisterWorkshopParts pins that each feature's own init joins the
@@ -18,7 +19,7 @@ func TestRegisterWorkshopParts(t *testing.T) {
 		labels = append(labels, s.Label)
 	}
 	sort.Strings(labels)
-	if want := []string{"ancestries", "crafting recipes", "creature variants", "field rules", "respite", "the calendar", "trackers"}; !reflect.DeepEqual(labels, want) {
+	if want := []string{"ancestries", "crafting recipes", "creature variants", "field rules", "respite", "the calendar", "trackers", "transformations"}; !reflect.DeepEqual(labels, want) {
 		t.Fatalf("workshop sources = %v, want %v", labels, want)
 	}
 
@@ -26,16 +27,20 @@ func TestRegisterWorkshopParts(t *testing.T) {
 		name      string
 		trackers  bool
 		fieldRule bool
-		want      []string
+		// transformations is the layer store's health.
+		transformations bool
+		want            []string
 	}{
 		{name: "all degraded", want: []string{"ancestry"}},
 		{name: "trackers healthy", trackers: true, want: []string{"ancestry", "clock", "tracker"}},
 		{name: "field rules healthy", fieldRule: true, want: []string{"ancestry", "field", "item", "words"}},
+		{name: "transformations healthy", transformations: true, want: []string{"ancestry", "transformation"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			health := database.NewPluginHealthRegistry()
 			health.Register(trackers.PluginSlug, tt.trackers, nil, 1, 1)
+			health.Register(transformations.PluginSlug, tt.transformations, nil, 1, 1)
 			d := workshopDeps{Health: health}
 			if tt.fieldRule {
 				d.FieldRules = &fieldRulesWorld{}
