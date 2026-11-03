@@ -105,7 +105,8 @@ templ AppDrawer() {
 			</div>
 			if NavCanEdit(ctx) || NavCanPin(ctx) {
 				<div class="apd-foot">
-					<span>Right-click an app to pin it.</span>
+					<span class="apd-hint-pointer">Right-click an app to pin it.</span>
+					<span class="apd-hint-touch">Press and hold an app to pin it.</span>
 					if NavCanEdit(ctx) {
 						<a class="apd-quiet" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx))) }>Game &amp; features</a>
 					}

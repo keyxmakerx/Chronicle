@@ -76,6 +76,8 @@
   // --- Opening and closing -----------------------------------------------------
 
   var from = null; // what opened the drawer, for focus and aria-expanded
+  var gen = 0;      // bumped on every open and close, so a close still
+                    // fading out never hides a drawer opened again since
 
   /** Places the drawer beside the sidebar, its top level with the Apps
    *  heading, growing from the opener's height. On a narrow screen it lies
@@ -105,6 +107,8 @@
     if (!d) return;
     if (isOpen()) { close(true); return; }
     from = opener || null;
+    gen++;
+    d.getAnimations && d.getAnimations().forEach(function (a) { a.onfinish = a.oncancel = null; a.cancel(); });
     d.classList.remove('is-closing');
     place(d, opener);
     d.hidden = false;
@@ -125,9 +129,13 @@
     if (!d || d.hidden) return;
     setExpanded(false);
     endDrag(null);
-    var back = refocus && from && document.contains(from) ? from : null;
+    // A change can redraw the sidebar while the drawer is open, replacing
+    // the opener; focus then goes to the Apps heading's grid.
+    var back = refocus ? (from && document.contains(from) ? from : $('.nav-apd-door')) : null;
     from = null;
+    var mine = ++gen;
     var finish = function () {
+      if (mine !== gen) return;
       d.classList.remove('is-closing');
       d.hidden = true;
       resetFind(d);
@@ -368,6 +376,7 @@
     g.className = 'apd-tile apd-ghost';
     g.setAttribute('aria-hidden', 'true');
     g.style.width = r.width + 'px';
+    g.style.height = r.height + 'px';
     g.style.left = r.left + 'px';
     g.style.top = r.top + 'px';
     document.body.appendChild(g);
