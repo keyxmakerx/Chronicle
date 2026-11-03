@@ -26,6 +26,11 @@ const (
 	NavSectionCategories = "categories"
 )
 
+// NavSectionDrawer is where an app the owner keeps in the drawer only is
+// stored. It is not a sidebar section: no sidebar draws it, the app drawer
+// lists it, and a member may still pin it for themselves.
+const NavSectionDrawer = "drawer"
+
 // NavKindCustom is the kind of a section the owner added; the built-in
 // sections report their own id as their kind.
 const NavKindCustom = "custom"
@@ -103,6 +108,8 @@ type NavSubcategory struct {
 // see (hidden rows, apps turned off in Extensions).
 type NavLayout struct {
 	Sections []NavLayoutSection `json:"sections"`
+	// Drawer lists the apps kept in the drawer only, in no sidebar section.
+	Drawer []NavLayoutItem `json:"drawer"`
 }
 
 // NavLayoutSection is one section of a NavLayout. Label is set for the
@@ -329,6 +336,13 @@ func validateSidebarItems(items []SidebarItem) ([]SidebarItem, error) {
 		if it.Type == SidebarTypeSection && !it.Visible {
 			continue
 		}
+		if it.Section == NavSectionDrawer {
+			if sidebarItemRowKind(it) != NavRowApp {
+				return nil, apperror.NewBadRequest("only an app can be kept in the drawer only")
+			}
+			out = append(out, it)
+			continue
+		}
 		if hiddenSections[it.Section] {
 			it.Section = navHomeSection(sidebarItemRowKind(it))
 		}
@@ -367,7 +381,7 @@ func NormalizeNav(items []SidebarItem, apps []NavApp, cats []NavCategory) NavLay
 		{ID: NavSectionPinned, Items: []NavLayoutItem{}},
 		{ID: NavSectionApps, Items: []NavLayoutItem{}},
 		{ID: NavSectionCategories, Items: []NavLayoutItem{}},
-	}}
+	}, Drawer: []NavLayoutItem{}}
 	index := map[string]int{NavSectionPinned: 0, NavSectionApps: 1, NavSectionCategories: 2}
 	for _, it := range items {
 		// A heading hidden in the old editor never becomes a section, for
@@ -435,6 +449,10 @@ func NormalizeNav(items []SidebarItem, apps []NavApp, cats []NavCategory) NavLay
 		entry.Hidden = !it.Visible
 
 		section := strings.TrimSpace(it.Section)
+		if section == NavSectionDrawer && kind == NavRowApp {
+			layout.Drawer = append(layout.Drawer, entry)
+			continue
+		}
 		switch {
 		case section != "":
 			if _, ok := index[section]; !ok || !navSectionAccepts(section, kind) {
@@ -530,7 +548,51 @@ func ViewNav(layout NavLayout, apps []NavApp, cats []NavCategory, viewer NavView
 		out = append(out, sec)
 	}
 	if !viewer.Owner && len(viewer.Pins) > 0 && len(out) > 0 && out[0].ID == NavSectionPinned {
-		applyNavPins(out, viewer.Pins)
+		// A member may pin an app kept in the drawer only; its row comes
+		// from the drawer, which no sidebar draws, and is dropped after.
+		drawer := NavSection{ID: NavSectionDrawer, Kind: NavSectionDrawer, Rows: navDrawerRows(layout, appBySlug, viewer)}
+		all := applyNavPins(append(out, drawer), viewer.Pins)
+		out = all[:len(all)-1]
+	}
+	return out
+}
+
+// NavDrawerRows lists the apps kept in the drawer only that this viewer may
+// open, as ViewNav would draw them, leaving out the ones they pinned (those
+// are in their Pinned). A row hidden from players reaches only the owner.
+func NavDrawerRows(layout NavLayout, apps []NavApp, viewer NavViewer) []NavRow {
+	appBySlug := make(map[string]NavApp, len(apps))
+	for _, a := range apps {
+		appBySlug[a.Slug] = a
+	}
+	pinned := make(map[string]bool, len(viewer.Pins))
+	if !viewer.Owner {
+		for _, k := range viewer.Pins {
+			pinned[k] = true
+		}
+	}
+	var out []NavRow
+	for _, r := range navDrawerRows(layout, appBySlug, viewer) {
+		if !pinned[r.Key] {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// navDrawerRows resolves the drawer's items into rows for the viewer.
+func navDrawerRows(layout NavLayout, apps map[string]NavApp, viewer NavViewer) []NavRow {
+	var out []NavRow
+	for _, it := range layout.Drawer {
+		if it.Hidden && !viewer.Owner {
+			continue
+		}
+		row, ok := navRowFor(it, apps, nil, viewer)
+		if !ok || row.Kind != NavRowApp {
+			continue
+		}
+		row.Hidden = it.Hidden
+		out = append(out, row)
 	}
 	return out
 }
@@ -624,7 +686,7 @@ func navRowFor(it NavLayoutItem, apps map[string]NavApp, cats map[int]NavCategor
 // end of Pinned. Keys the viewer cannot see, or that the campaign already
 // pinned, are skipped, which is what keeps another viewer's or a hidden
 // row's key from ever surfacing here.
-func applyNavPins(sections []NavSection, pins []string) {
+func applyNavPins(sections []NavSection, pins []string) []NavSection {
 	pinned := &sections[0]
 	inPinned := make(map[string]bool, len(pinned.Rows))
 	for _, r := range pinned.Rows {
@@ -654,4 +716,5 @@ func applyNavPins(sections []NavSection, pins []string) {
 			break
 		}
 	}
+	return sections
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -555,5 +556,141 @@ func TestSidebarTypesFrom_LeavesOutDisabledTypes(t *testing.T) {
 				t.Fatalf("got %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// navTestAddonIDs gives every addon behind the catalog an id, except
+// Crafting's own, so one app is not installed and cannot be turned on from
+// the drawer.
+func navTestAddonIDs() map[string]int {
+	ids := map[string]int{}
+	for _, d := range navAppCatalog {
+		for _, a := range append(append([]string{}, d.addons...), d.needs...) {
+			if _, ok := ids[a]; !ok && a != crafting.AddonSlug {
+				ids[a] = len(ids) + 1
+			}
+		}
+	}
+	return ids
+}
+
+// navTestAddonOf is the first addon of the catalog app with this key.
+func navTestAddonOf(key string) string {
+	for _, d := range navAppCatalog {
+		if campaigns.NavAppKey(d.slug) == key && len(d.addons) > 0 {
+			return d.addons[0]
+		}
+	}
+	return ""
+}
+
+// drawerTiles flattens a drawer to key → tile.
+func drawerTiles(v *layouts.NavDrawerView) map[string]layouts.NavDrawerTile {
+	out := map[string]layouts.NavDrawerTile{}
+	for _, g := range v.Groups {
+		for _, t := range g.Tiles {
+			out[t.Key] = t
+		}
+	}
+	return out
+}
+
+func TestBuildNavDrawer_ListsWhatTheViewerMayOpen(t *testing.T) {
+	items := []campaigns.SidebarItem{
+		{Type: "app", Slug: "maps", Section: "drawer", Visible: false},
+		{Type: "app", Slug: "characters", Section: "drawer", Visible: true},
+	}
+	ids := navTestAddonIDs()
+	draw := func(role campaigns.Role, owner bool, pins []string) *layouts.NavDrawerView {
+		cc := navTestContext(items, role, true, false)
+		in := navInputsFor(cc, navTestTypes(), nil, navTestEnabled(), navTestSystem)
+		viewer := campaigns.NavViewer{Owner: owner, Access: navAccessFor(cc), Pins: pins}
+		secs := campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)
+		return buildNavDrawer(in, secs, campaigns.NavDrawerRows(in.layout, in.apps, viewer), owner, ids)
+	}
+
+	owner := draw(campaigns.RoleOwner, true, nil)
+	tiles := drawerTiles(owner)
+	if tiles["app:maps"].InSidebar || !tiles["app:maps"].Hidden {
+		t.Errorf("the owner's Maps tile = %+v: in the drawer only, hidden from players", tiles["app:maps"])
+	}
+	// An arranged sidebar puts every app not stored elsewhere in Apps.
+	if n := tiles["app:notes"]; !n.InSidebar || n.Pinned {
+		t.Errorf("Journal is in the sidebar's Apps: %+v", n)
+	}
+	if !reflect.DeepEqual(tiles["app:maps"].TurnOff, []int{ids[navTestAddonOf("app:maps")]}) {
+		t.Errorf("Maps turns off with its own addon: %v", tiles["app:maps"].TurnOff)
+	}
+	var off []string
+	for _, o := range owner.Off {
+		off = append(off, o.Key)
+	}
+	if !reflect.DeepEqual(off, []string{"app:armory", "app:crafting", "app:timeline"}) {
+		t.Errorf("the owner's turned-off apps = %v", off)
+	}
+	for _, o := range owner.Off {
+		if o.Key == "app:crafting" && o.TurnOn != nil {
+			t.Errorf("Crafting's own addon is not on this site, so the drawer cannot turn it on: %v", o.TurnOn)
+		}
+		if o.Key == "app:armory" && !reflect.DeepEqual(o.TurnOn, []int{ids[navTestAddonOf("app:armory")]}) {
+			t.Errorf("Armory turns on with its addon: %v", o.TurnOn)
+		}
+	}
+	var groups []string
+	for _, g := range owner.Groups {
+		groups = append(groups, g.ID)
+	}
+	if !reflect.DeepEqual(groups, []string{"table", "world"}) {
+		t.Errorf("groups = %v: empty groups are left out", groups)
+	}
+
+	player := draw(campaigns.RolePlayer, false, nil)
+	pt := drawerTiles(player)
+	if _, ok := pt["app:maps"]; ok {
+		t.Errorf("Maps is hidden from players; a player's drawer must not list it")
+	}
+	if len(player.Off) != 0 {
+		t.Errorf("a player never sees the turned-off apps")
+	}
+	for k, tile := range pt {
+		if tile.TurnOn != nil || tile.TurnOff != nil || tile.Hidden {
+			t.Errorf("%s: a player's tile carries the owner's switches or marks: %+v", k, tile)
+		}
+	}
+	if pt["app:characters"].InSidebar {
+		t.Errorf("Characters is in the drawer only")
+	}
+
+	pinned := drawerTiles(draw(campaigns.RolePlayer, false, []string{"app:characters"}))
+	if c := pinned["app:characters"]; !c.InSidebar || !c.Pinned || !c.Personal {
+		t.Errorf("a player's own pin from the drawer puts it in their Pinned: %+v", c)
+	}
+}
+
+func TestSidebar_DrawerSwitchesReachOnlyTheOwner(t *testing.T) {
+	cc := navTestContext(nil, campaigns.RoleOwner, true, false)
+	in := navInputsFor(cc, navTestTypes(), nil, navTestEnabled(), navTestSystem)
+	ids := navTestAddonIDs()
+	render := func(role int, owner bool) string {
+		viewer := campaigns.NavViewer{Owner: owner, Access: campaigns.NavAccessMember}
+		secs := campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)
+		ctx := navTestLayoutCtx(navSectionViews(secs), role)
+		ctx = layouts.SetNavDrawer(ctx, buildNavDrawer(in, secs, nil, owner, ids))
+		var buf bytes.Buffer
+		if err := layouts.AppDrawer().Render(ctx, &buf); err != nil {
+			t.Fatalf("render AppDrawer: %v", err)
+		}
+		return buf.String()
+	}
+	owner := render(int(campaigns.RoleOwner), true)
+	if !strings.Contains(owner, `id="app-drawer"`) || !strings.Contains(owner, "data-apd-off-ids") || !strings.Contains(owner, "Turned off") {
+		t.Fatalf("the owner's drawer must carry its switches:\n%s", owner)
+	}
+	player := render(int(campaigns.RolePlayer), false)
+	if !strings.Contains(player, `id="app-drawer"`) {
+		t.Fatalf("a player gets the drawer too")
+	}
+	if strings.Contains(player, "data-apd-off-ids") || strings.Contains(player, "data-apd-on-ids") || strings.Contains(player, "Turned off") || strings.Contains(player, "data-apd-owner") {
+		t.Errorf("a player's drawer carries the owner's switches")
 	}
 }

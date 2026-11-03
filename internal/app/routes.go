@@ -1263,6 +1263,8 @@ type navAppDef struct {
 	access  campaigns.NavAccess
 	pinned  bool // starts in Pinned for a campaign that never arranged its sidebar
 	system  bool // the enabled game system's reference; label, icon and path come from it
+	group   string // the app drawer's group (navDrawerGroups)
+	line    string // the app drawer's one line on what the app is for
 }
 
 // navAppCatalog lists every app the sidebar can show, in the order a campaign
@@ -1272,15 +1274,15 @@ type navAppDef struct {
 // and also needs the calendar addon, because its routes need both. Its slug stays "sessions" so sidebars already arranged keep it. Characters is the campaign's cast, party and NPCs together, which is
 // why the NPC gallery addon also turns it on.
 var navAppCatalog = []navAppDef{
-	{slug: "notes", label: "Journal", icon: "fa-book-open", path: "/journal", addons: []string{"notes"}, access: campaigns.NavAccessMember, pinned: true},
-	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessMemberOrAdmin, pinned: true},
-	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{"sessions"}, needs: []string{calendar.PluginSlug}, access: campaigns.NavAccessMember},
-	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
-	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone},
-	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
-	{slug: "crafting", label: "Crafting", icon: "fa-flask", path: "/crafting", addons: []string{crafting.AddonSlug}, needs: []string{"armory"}, access: campaigns.NavAccessMember},
-	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone},
-	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessMemberOrAdmin},
+	{slug: "notes", label: "Journal", icon: "fa-book-open", path: "/journal", addons: []string{"notes"}, access: campaigns.NavAccessMember, pinned: true, group: "world", line: "Notes for you and for the party"},
+	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessMemberOrAdmin, pinned: true, group: "table", line: "Days, moons, weather and what is coming"},
+	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{"sessions"}, needs: []string{calendar.PluginSlug}, access: campaigns.NavAccessMember, group: "table", line: "When you play, and who can come"},
+	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone, group: "world", line: "Your world, with pins to pages"},
+	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone, group: "table", line: "The party and the people they meet"},
+	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone, group: "goods", line: "Every item, and who carries it"},
+	{slug: "crafting", label: "Crafting", icon: "fa-flask", path: "/crafting", addons: []string{crafting.AddonSlug}, needs: []string{"armory"}, access: campaigns.NavAccessMember, group: "goods", line: "Recipes, benches and tools"},
+	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone, group: "world", line: "What happened, and when"},
+	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessMemberOrAdmin, group: "table", line: "The rulebook and your house rules"},
 }
 
 // navAppPath returns the campaign-relative page an app links to ("" for an
@@ -5947,8 +5949,10 @@ func (a *App) RegisterRoutes() {
 			// system that backs the campaign's rulebook.
 			enabledSlugs := make(map[string]bool)
 			var enabledSystem layouts.EnabledSystem
+			var addonIDs map[string]int
 			if campaignAddons, err := addonService.ListForCampaign(reqCtx, cc.Campaign.ID); err == nil {
 				enabledSlugs, enabledSystem = navAddonsFrom(campaignAddons)
+				addonIDs = navAddonIDsFrom(campaignAddons)
 				ctx = layouts.SetEnabledAddons(ctx, enabledSlugs)
 				if enabledSystem.Slug != "" {
 					ctx = layouts.SetEnabledSystem(ctx, enabledSystem)
@@ -5988,7 +5992,11 @@ func (a *App) RegisterRoutes() {
 						slog.Warn("reading member nav pins", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 					}
 				}
-				ctx = layouts.SetNavSections(ctx, viewNavSections(cc, in, navOwner, pins))
+				viewer := campaigns.NavViewer{Owner: navOwner, Access: navAccessFor(cc), Pins: pins}
+				secs := campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)
+				ctx = layouts.SetNavSections(ctx, navSectionViews(secs))
+				ctx = layouts.SetNavDrawer(ctx, buildNavDrawer(in, secs,
+					campaigns.NavDrawerRows(in.layout, in.apps, viewer), navOwner, addonIDs))
 				if navOwner {
 					ctx = layouts.SetNavEdit(ctx, buildNavEdit(in))
 				}

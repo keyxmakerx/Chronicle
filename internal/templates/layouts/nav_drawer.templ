@@ -1,0 +1,194 @@
+// nav_drawer.templ draws the app drawer: every app the viewer may open, in
+// groups, beside the sidebar. It opens from the grid on the Apps heading or
+// the All apps row (static/js/app_drawer.js). A tile's menu is the sidebar's
+// own row menu (sidebar_row_menu.js), with the same words.
+package layouts
+
+import "fmt"
+import "strconv"
+
+// navDrawerDoor is the grid on the Apps heading that opens the drawer.
+templ navDrawerDoor() {
+	<button
+		type="button"
+		class="nav-gh-add nav-apd-door"
+		data-apd-open
+		title="All apps"
+		aria-label="All apps"
+		aria-haspopup="dialog"
+		aria-expanded="false"
+		aria-controls="app-drawer"
+	>
+		<i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
+	</button>
+}
+
+// navAllApps is the last row of the Apps section; it opens the drawer too.
+templ navAllApps() {
+	<button
+		type="button"
+		class="nav-row nav-apd-all"
+		data-apd-open
+		data-nav-tr={ strconv.Itoa(NavDrawerCount(ctx)) }
+		aria-haspopup="dialog"
+		aria-expanded="false"
+		aria-controls="app-drawer"
+	>
+		<span class="nav-ic"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></span>
+		<span class="nav-lb">All apps</span>
+		<span class="nav-tr">{ strconv.Itoa(NavDrawerCount(ctx)) }</span>
+	</button>
+}
+
+// AppDrawer is the drawer itself, drawn hidden after the sidebar. It carries
+// the same boost as the sidebar, so a tile opens its app the way a row does.
+templ AppDrawer() {
+	if v := GetNavDrawer(ctx); v != nil && InCampaign(ctx) && NavHasDrawer(ctx) {
+		<div
+			id="app-drawer"
+			class="apd"
+			role="dialog"
+			aria-labelledby="apd-title"
+			hidden
+			data-apd-owner?={ NavCanEdit(ctx) }
+			data-apd-pin?={ NavCanPin(ctx) }
+			data-nav-base={ fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)) }
+			hx-boost="true"
+			hx-target="#main-content"
+			hx-select="#main-content > *"
+			hx-swap="innerHTML show:window:top"
+		>
+			<div class="apd-head">
+				<h2 id="apd-title" class="apd-title">Apps</h2>
+				<span class="apd-n">{ strconv.Itoa(NavDrawerCount(ctx)) }</span>
+				<button type="button" class="apd-x" data-apd-close aria-label="Close apps" title="Close (Esc)">
+					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+				</button>
+			</div>
+			<label class="apd-find">
+				<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+				<input type="search" data-apd-find placeholder="Find an app" aria-label="Find an app" autocomplete="off" spellcheck="false"/>
+				<kbd aria-hidden="true">/</kbd>
+			</label>
+			<div class="apd-body" id="app-drawer-body">
+				for _, g := range v.Groups {
+					<section class="apd-group" data-apd-group>
+						<h3 class="apd-gl">
+							{ g.Label }
+							if g.DMOnly {
+								<span class="cb-dm apd-dm">{ GMTerm(ctx) + "s" }</span>
+							}
+						</h3>
+						<div class="apd-grid" role="list">
+							for _, t := range g.Tiles {
+								@appDrawerTile(t)
+							}
+						</div>
+					</section>
+				}
+				if NavCanEdit(ctx) && len(v.Off) > 0 {
+					<section class="apd-group apd-group-off" data-apd-group>
+						<h3 class="apd-gl">Turned off <span class="apd-gn">{ strconv.Itoa(len(v.Off)) }</span></h3>
+						<div class="apd-grid" role="list">
+							for _, t := range v.Off {
+								@appDrawerOffTile(t)
+							}
+						</div>
+					</section>
+				}
+				<p class="apd-empty" data-apd-empty hidden>
+					No app by that name.
+					if NavCanEdit(ctx) {
+						<a class="apd-quiet" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx))) }>Look in Game &amp; features</a>
+					}
+				</p>
+			</div>
+			if NavCanEdit(ctx) || NavCanPin(ctx) {
+				<div class="apd-foot">
+					<span class="apd-hint-pointer">Right-click an app to pin it.</span>
+					<span class="apd-hint-touch">Press and hold an app to pin it.</span>
+					if NavCanEdit(ctx) {
+						<a class="apd-quiet" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx))) }>Game &amp; features</a>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+// appDrawerTile is one app the viewer may open. The data attributes are what
+// its menu reads; the owner's addon ids are only ever drawn for the owner.
+templ appDrawerTile(t NavDrawerTile) {
+	<div class="apd-cell" role="listitem">
+		<a
+			href={ templ.SafeURL(t.URL) }
+			class={ "apd-tile", templ.KV("is-hidden", t.Hidden) }
+			data-apd-tile
+			data-nav-key={ t.Key }
+			data-apd-find={ navDrawerFind(t) }
+			data-apd-in?={ t.InSidebar }
+			data-apd-pinned?={ t.Pinned }
+			data-apd-mine?={ t.Personal }
+			data-apd-hidden?={ t.Hidden }
+			if NavCanEdit(ctx) && len(t.TurnOff) > 0 {
+				data-apd-off-ids={ navDrawerIDs(t.TurnOff) }
+			}
+		>
+			<span class="apd-ti"><i class={ "fa-solid " + SafeNavIcon(t.Icon, "fa-cube") } aria-hidden="true"></i></span>
+			<span class="apd-tn">
+				<span class="apd-tlabel">{ t.Label }</span>
+				if t.InSidebar {
+					<i class="fa-solid fa-thumbtack apd-mark" title="In your sidebar" aria-hidden="true"></i>
+					<span class="sr-only">(in your sidebar)</span>
+				}
+				if t.Hidden {
+					<i class="fa-solid fa-eye-slash apd-mark" title="Hidden from players" aria-hidden="true"></i>
+					<span class="sr-only">(hidden from players)</span>
+				}
+			</span>
+			if t.Line != "" {
+				<span class="apd-tl">{ t.Line }</span>
+			}
+		</a>
+		<button
+			type="button"
+			class="apd-more"
+			data-tile-more
+			aria-haspopup="menu"
+			aria-expanded="false"
+			aria-label={ "More actions for " + t.Label }
+			title="More actions"
+		>
+			<i class="fa-solid fa-ellipsis" aria-hidden="true"></i>
+		</button>
+	</div>
+}
+
+// appDrawerOffTile is an app turned off, which only the owner sees. Turn on
+// switches its addons here; an app the drawer cannot switch (the rulebook,
+// which follows the game system) goes to Game & features.
+templ appDrawerOffTile(t NavDrawerTile) {
+	<div class="apd-cell" role="listitem">
+		<div
+			class="apd-tile is-off"
+			data-apd-tile
+			data-apd-off
+			data-nav-key={ t.Key }
+			data-apd-find={ navDrawerFind(t) }
+			if len(t.TurnOn) > 0 {
+				data-apd-on-ids={ navDrawerIDs(t.TurnOn) }
+			}
+		>
+			<span class="apd-ti"><i class={ "fa-solid " + SafeNavIcon(t.Icon, "fa-cube") } aria-hidden="true"></i></span>
+			<span class="apd-tn"><span class="apd-tlabel">{ t.Label }</span></span>
+			if t.Line != "" {
+				<span class="apd-tl">{ t.Line }</span>
+			}
+			if len(t.TurnOn) > 0 {
+				<button type="button" class="apd-quiet apd-turnon" data-apd-turnon aria-label={ "Turn on " + t.Label }>Turn on</button>
+			} else {
+				<a class="apd-quiet apd-turnon" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx))) } hx-boost="false">Turn on in Game &amp; features</a>
+			}
+		</div>
+	</div>
+}
