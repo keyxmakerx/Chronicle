@@ -477,6 +477,12 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 | `player_change_packs` | Older months, one gzip'd JSON array per campaign and month | PK `(campaign_id, month)`; `body` MEDIUMBLOB; `keep_until` fixed when packed from the Long-term trash length, so shortening it never removes anything early; FK→`campaigns` CASCADE |
 | `player_change_kept_pages` | Pages a player removed that the campaign Trash keeps past its days (Long-term trash) | PK `(campaign_id, entity_id)`; `keep_until`; FK→`campaigns` CASCADE |
 
+### transformations (`internal/plugins/transformations/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `hero_layers` | A layer on a hero's page (a vampire's bite, rising as a revenant) that changes sheet fields without writing them | `name`, `source` (the preset, such as `drawsteel:revenant`); `data` LONGTEXT JSON (`note`, `changes` of `{field, op, value, label}`) validated in the service; applied oldest first by `created_at`; at most 20 per page; FK→`entities` and `campaigns` CASCADE |
+
 ## MariaDB-specific notes
 
 - **JSON columns:** MariaDB validates JSON on write. Prefer loading full JSON

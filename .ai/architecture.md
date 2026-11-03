@@ -63,6 +63,7 @@ supplies tooltip data for `@mentions` of game content.
 - `systemstate/`
 - `timeline/`
 - `trackers/`
+- `transformations/`
 - `vault_import/`
 - `widgetbindings/`
 
