@@ -74,6 +74,21 @@ func (f *fakeCraftingSync) StudySpoil(_ context.Context, _ string, _ int64, v cr
 	return &crafting.StudyResult{}, nil
 }
 
+func (f *fakeCraftingSync) Experiment(_ context.Context, _, _ string, v crafting.Viewer, in crafting.TryInput) (*crafting.TryResult, error) {
+	f.heard(v, in)
+	return &crafting.TryResult{}, nil
+}
+
+func (f *fakeCraftingSync) BreakDown(_ context.Context, _, _ string, v crafting.Viewer, in crafting.BreakInput) (*crafting.BreakResult, error) {
+	f.heard(v, in)
+	return &crafting.BreakResult{}, nil
+}
+
+func (f *fakeCraftingSync) Help(_ context.Context, _, _ string, v crafting.Viewer, in crafting.HelpInput) (*crafting.RollResult, error) {
+	f.heard(v, in)
+	return &crafting.RollResult{}, nil
+}
+
 func (f *fakeCraftingSync) FightEnded(_ context.Context, _ string, v crafting.Viewer, fight crafting.Fight) (*crafting.FightSpoils, error) {
 	f.heard(v, fight)
 	return &crafting.FightSpoils{Lines: []string{"Troll left spoils in the tray: 1 × Troll tooth."}, Spoils: 2}, nil
@@ -93,6 +108,9 @@ func craftSyncCalls(a *syncCraftingAPIAdapter, key, acting string) []error {
 	keep(a.TakeSpoil(ctx, "c", key, acting, 4, body))
 	keep(a.StudySpoil(ctx, "c", key, acting, 4, body))
 	keep(a.FightEnded(ctx, "c", key, acting, json.RawMessage(`{"name":"Bog","creatures":[{"pageId":"troll","name":"Troll","down":2,"copies":3}]}`)))
+	keep(a.Experiment(ctx, "c", key, acting, "hero", json.RawMessage(`{"items":[{"itemId":"i1","qty":2}]}`)))
+	keep(a.BreakDown(ctx, "c", key, acting, "hero", json.RawMessage(`{"recipeId":"r1","copy":4}`)))
+	keep(a.Help(ctx, "c", key, acting, "pj", json.RawMessage(`{"characterId":"hero","version":3}`)))
 	return errs
 }
 
@@ -144,8 +162,8 @@ func TestSyncCraftingAdapter_ActsAsMember(t *testing.T) {
 				}
 				return
 			}
-			if len(svc.viewers) != 8 {
-				t.Fatalf("crafting heard %d calls, want 8", len(svc.viewers))
+			if len(svc.viewers) != 11 {
+				t.Fatalf("crafting heard %d calls, want 11", len(svc.viewers))
 			}
 			for i, v := range svc.viewers {
 				if v != tc.wantViewer {
@@ -176,6 +194,9 @@ func TestSyncCraftingAdapter_Bodies(t *testing.T) {
 		crafting.TakeInput{CharacterID: "hero"},
 		crafting.TakeInput{CharacterID: "hero"},
 		crafting.Fight{Name: "Bog", Creatures: []crafting.FightCreature{{PageID: "troll", Name: "Troll", Down: 2, Copies: 3}}},
+		crafting.TryInput{Items: []crafting.TryPick{{ItemID: "i1", Qty: 2}}},
+		crafting.BreakInput{RecipeID: "r1", Copy: 4},
+		crafting.HelpInput{CharacterID: "hero", Version: 3},
 	}
 	if !reflect.DeepEqual(svc.inputs, want) {
 		t.Fatalf("inputs\n got %#v\nwant %#v", svc.inputs, want)

@@ -31,6 +31,12 @@ type CraftingAPIService interface {
 	Spoils(ctx context.Context, campaignID, keyUserID, actingUserID string) (any, error)
 	TakeSpoil(ctx context.Context, campaignID, keyUserID, actingUserID string, lineID int64, body json.RawMessage) (any, error)
 	StudySpoil(ctx context.Context, campaignID, keyUserID, actingUserID string, lineID int64, body json.RawMessage) (any, error)
+	// Experiment, BreakDown and Help are a hero's turns: trying something
+	// new, breaking an item down, and lending a hand on a party member's
+	// project.
+	Experiment(ctx context.Context, campaignID, keyUserID, actingUserID, characterID string, body json.RawMessage) (any, error)
+	BreakDown(ctx context.Context, campaignID, keyUserID, actingUserID, characterID string, body json.RawMessage) (any, error)
+	Help(ctx context.Context, campaignID, keyUserID, actingUserID, projectID string, body json.RawMessage) (any, error)
 	// FightEnded puts what a fight's defeated creatures drop in the tray.
 	FightEnded(ctx context.Context, campaignID, keyUserID, actingUserID string, body json.RawMessage) (any, error)
 }
@@ -131,6 +137,45 @@ func (h *CraftingAPIHandler) RollProject(c echo.Context) error {
 		return err
 	}
 	out, err := h.svc.RollProject(c.Request().Context(), c.Param("id"), uid, acting, c.Param("pid"), raw)
+	if err != nil {
+		return err
+	}
+	noteSyncActor(c, acting)
+	return c.JSON(http.StatusOK, out)
+}
+
+// Experiment spends a hero's turn trying something new.
+// POST /api/v1/campaigns/:id/crafting/characters/:eid/experiment
+// Body: {"actingUserId"?, "items":[{"itemId","qty"}]}
+func (h *CraftingAPIHandler) Experiment(c echo.Context) error {
+	return h.turn(c, c.Param("eid"), h.svc.Experiment)
+}
+
+// BreakDown breaks a hero's copy of a crafted item down.
+// POST /api/v1/campaigns/:id/crafting/characters/:eid/break-down
+// Body: {"actingUserId"?, "recipeId", "copy"}
+func (h *CraftingAPIHandler) BreakDown(c echo.Context) error {
+	return h.turn(c, c.Param("eid"), h.svc.BreakDown)
+}
+
+// Help lends a hero's hand on a party member's project; the dice are the
+// server's.
+// POST /api/v1/campaigns/:id/crafting/projects/:pid/help
+// Body: {"actingUserId"?, "characterId", "version"}
+func (h *CraftingAPIHandler) Help(c echo.Context) error {
+	return h.turn(c, c.Param("pid"), h.svc.Help)
+}
+
+func (h *CraftingAPIHandler) turn(c echo.Context, id string, fn func(ctx context.Context, campaignID, keyUserID, actingUserID, id string, body json.RawMessage) (any, error)) error {
+	uid, err := keyUser(c)
+	if err != nil {
+		return err
+	}
+	raw, acting, err := actingRaw(c)
+	if err != nil {
+		return err
+	}
+	out, err := fn(c.Request().Context(), c.Param("id"), uid, acting, id, raw)
 	if err != nil {
 		return err
 	}
