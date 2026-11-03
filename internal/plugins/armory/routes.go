@@ -127,3 +127,21 @@ func RegisterStreetRoutes(e *echo.Echo, h *ShopStreetHandler, campaignSvc campai
 	)
 	cg.PUT("/armory/shops/:eid/front", h.PutFront, campaigns.RequireRole(campaigns.RoleOwner))
 }
+
+// RegisterShelfRoutes sets up today's shelf: anyone who can view the shop
+// reads it (the service checks the shop is visible to them), and only the
+// campaign Owner sets how many places it has.
+func RegisterShelfRoutes(e *echo.Echo, h *ShopTodayHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+	pub := e.Group("/campaigns/:id",
+		auth.OptionalAuth(authSvc),
+		campaigns.AllowPublicCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, AddonSlug),
+	)
+	pub.GET("/armory/shops/:eid/today", h.Get, campaigns.RequireViewAccess())
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, AddonSlug),
+	)
+	cg.PUT("/armory/shops/:eid/today", h.Put, campaigns.RequireRole(campaigns.RoleOwner))
+}

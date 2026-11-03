@@ -4583,7 +4583,16 @@ func (a *App) RegisterRoutes() {
 	stashHandler := armory.NewStashHandler(stashSvc)
 	// Buying shares the stash service's campaign lock, so a purchase and a
 	// stash move can't spend the same coins.
-	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB))
+	// Today's shelf: the goods out today are picked from the shop and the
+	// calendar's day, and buying refuses one that is not out.
+	shopTodaySvc := armory.NewShopTodayService(
+		armory.NewShopShelfRepository(a.DB),
+		&armoryShopCheckerAdapter{svc: entityService},
+		&entityVisibilityFilterAdapter{svc: entityService},
+		&shopSellsAdapter{svc: relService},
+		&shelfDayAdapter{cal: calendarService},
+	)
+	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB), shopTodaySvc)
 	shopBuyHandler := armory.NewShopBuyHandler(shopBuySvc)
 	// The Foundry module buys through the sync API as the player at the table,
 	// with the same service and acting-as rule as the stash calls. Its routes
@@ -4612,6 +4621,7 @@ func (a *App) RegisterRoutes() {
 		stashSvc,
 	)
 	armory.RegisterStreetRoutes(e, armory.NewShopStreetHandler(shopStreetService), campaignService, authService, addonService)
+	armory.RegisterShelfRoutes(e, armory.NewShopTodayHandler(shopTodaySvc), campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).

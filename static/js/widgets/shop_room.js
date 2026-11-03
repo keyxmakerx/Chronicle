@@ -898,11 +898,18 @@
       var g = ICONS[name], w = sz * g[0] / 512, tf = o.rot ? ' transform="rotate(' + o.rot + ' ' + x.toFixed(1) + ' ' + (y - sz / 2).toFixed(1) + ')"' : '';
       return '<use href="#i-' + name + '" x="' + (x - w / 2).toFixed(1) + '" y="' + (y - sz).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + sz + '" fill="' + fill + '" stroke="rgba(0,0,0,.55)" stroke-width="22" paint-order="stroke"' + tf + (o.op ? ' opacity="' + o.op + '"' : '') + '/>';
     }
+    // A paper "Today" tag under a good that is out only today.
+    function todayTag(x, y, k) {
+      return '<g class="sr-today" transform="translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') scale(' + Math.max(.45, Math.min(1, k * .7)).toFixed(2) + ') rotate(-6)" pointer-events="none">' +
+        '<path d="M-20,0 L14,0 L19,6.5 L14,13 L-20,13 Z" fill="#f1e6cc" stroke="rgba(0,0,0,.35)" stroke-width=".8"/><circle cx="13" cy="6.5" r="1.5" fill="#8a6a40"/>' +
+        '<text x="-3" y="10" text-anchor="middle" font-size="9.5" font-family="Shop Kalam,cursive" fill="#7a2a1a">Today</text></g>';
+    }
     function itemSvg(a, i) {
-      var it = S.its[i], pt = P(a.x, a.y, a.z), sz = 21 * a.s, s = '<g class="it item' + (it.out ? ' out' : '') + '" data-i="' + i + '" tabindex="0" role="button" aria-label="' + esc(it.n + ', ' + it.price + (it.out ? ', sold out' : '')) + '">';
+      var it = S.its[i], pt = P(a.x, a.y, a.z), sz = 21 * a.s, s = '<g class="it item' + (it.out ? ' out' : '') + '" data-i="' + i + '" tabindex="0" role="button" aria-label="' + esc(it.n + ', ' + it.price + (it.out ? ', sold out' : '') + (it.today ? ', only today' : '')) + '">';
       s += '<ellipse cx="' + pt[0].toFixed(1) + '" cy="' + pt[1].toFixed(1) + '" rx="' + (sz * .38).toFixed(1) + '" ry="' + (sz * .14).toFixed(1) + '" fill="rgba(0,0,0,.32)"/>';
       if (it.magic) s += '<circle cx="' + pt[0].toFixed(1) + '" cy="' + (pt[1] - sz / 2).toFixed(1) + '" r="' + (sz * .85).toFixed(1) + '" fill="url(#gMagic)"/>';
       s += icon(it.ic, pt[0], pt[1], sz, it.c, { rot: a.rot });
+      if (it.today) s += todayTag(pt[0], pt[1] + 3, sz / 21);
       return s + '<circle class="ring" cx="' + pt[0].toFixed(1) + '" cy="' + (pt[1] - sz / 2).toFixed(1) + '" r="' + (sz * .62).toFixed(1) + '" fill="transparent" stroke="none"/></g>';
     }
     function decoSvg(a, name) {
@@ -1173,6 +1180,28 @@
     });
   }
 
+  // Today's shelf: a good that only turns up on some days is shown only on a
+  // day it is out, marked so the room can tag it. today is the server's
+  // answer ({ pool, today } relation ids), or null when it could not be read,
+  // and then every good shows; buying still refuses one that is not out.
+  function todayShelf(its, today) {
+    if (!today || !Array.isArray(today.pool) || !today.pool.length) return its;
+    var pool = {}, out = {};
+    today.pool.forEach(function (id) { pool[String(id)] = 1; });
+    (today.today || []).forEach(function (id) { out[String(id)] = 1; });
+    return its.filter(function (it) { return !pool[String(it.id)] || out[String(it.id)]; }).map(function (it) {
+      if (out[String(it.id)]) it.today = true;
+      return it;
+    });
+  }
+  // The slate's second line: when the shelf changes, with the hours left
+  // only when the calendar gives them.
+  function dawnLine(today) {
+    var h = today && today.hoursToDawn;
+    return typeof h === 'number' && h > 0 ? 'gone at dawn · ' + h + ' h' : 'gone at dawn';
+  }
+  var TODAY_SAID = 'New every morning. Whatever’s left goes back in the crate at dawn.';
+
   // A coin's local name. Chronicle.localName is absent where this widget runs
   // outside Chronicle, and then coins keep their usual names.
   function localCoin(words, cur) {
@@ -1232,7 +1261,7 @@
     };
   }
 
-  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, basketSummary: basketSummary, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -1250,6 +1279,8 @@
     table: 'fa-table', barrel: 'fa-database', crate: 'fa-box', anvil: 'fa-hammer', glass: 'fa-gem', stall: 'fa-store', rug: 'fa-rug', pedestal: 'fa-monument', lamp: 'fa-lightbulb', sack: 'fa-sack-dollar' };
   var CSS = [
     '.shr{display:grid;gap:12px;margin-bottom:16px}',
+    // The "Today" tag's hand, the Customize page's own Kalam file.
+    '@font-face{font-family:"Shop Kalam";src:url(/static/fonts/customize/kalam-latin-400.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}',
     '.shr.arr .shr-scene{min-height:540px}',
     // Inside, the room fills the window: a modal dialog sits above everything,
     // including a Foundry window that holds the widget.
@@ -1503,7 +1534,7 @@
       injectStyle();
       var ds = el.dataset, canArrange = ds.canArrange === 'true', campaignUrl = ds.campaignUrl || '';
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
-      var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy');
+      var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy'), todayEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/today'), today = null;
       var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], manner: '', moments: {}, mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
@@ -1544,7 +1575,9 @@
       var view = null;
       function draw() {
         S.dark = document.documentElement.classList.contains('dark');
+        // Arranging shows every good, so a GM can place one that is not out today.
         S.its = shopItems(rels, S.ov, room.MAT, ICONS, words);
+        if (S.mode !== 'arr') S.its = todayShelf(S.its, today);
         view = room.draw();
         svg.setAttribute('viewBox', view.viewBox.join(' '));
         fitScene();
@@ -1583,7 +1616,8 @@
       function paperOn() { return S.look === 'paper' && !!window.ShopRoomPaper; }
       function counterOn() { return S.look === 'counter' && !!window.ShopRoomCounter; }
       function counterModel() {
-        return { its: S.its, basket: basket, icons: ICONS, image: ds.shopImage, name: S.name, roomType: S.roomType, time: (S.efx || moodEfx(S.mood)).time, lines: S.lines.length > 0 };
+        return { its: S.its, basket: basket, icons: ICONS, image: ds.shopImage, name: S.name, roomType: S.roomType, time: (S.efx || moodEfx(S.mood)).time, lines: S.lines.length > 0,
+          today: today && today.today && today.today.length ? { line: dawnLine(today), said: TODAY_SAID } : null };
       }
       // The counter scene puts goods on the pile through the same rules as the wares list's Add.
       function addable(id) {
@@ -1601,7 +1635,7 @@
         remove: function (id) { var k = String(id); if (!basket[k]) return; if (!--basket[k]) delete basket[k]; note = ''; renderList(); },
         basketEl: function () { return cartBtn; },
         openList: function () { setOpen(true); },
-        talk: function (el) { talk(el); }
+        talk: function (el, said) { talk(el, said); }
       };
       // The scene keeps the drawing's shape and grows to the biggest size the
       // window leaves it, so the portrait and paper stay on their spots.
@@ -1636,6 +1670,7 @@
         var rows = S.its.filter(function (it) { return tab === 'All' || it.k === tab; }).map(function (it) {
           var name = it.entityId ? '<a class="shr-nm" href="' + esc(campaignUrl + '/entities/' + it.entityId) + '" data-hx-boost="true">' + esc(it.n) + '</a>' : '<span class="shr-nm">' + esc(it.n) + '</span>';
           var stock = it.out ? 'Sold out' : it.qty === null ? '' : it.qty + ' left';
+          if (it.today) stock = stock ? stock + ', only today' : 'Only today';
           return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price"' + (it.priceUsual ? ' title="' + esc(it.priceUsual) + '"' : '') + '>' + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + '</div>';
         });
         root.querySelector('.shr-list').innerHTML = rows.join('') || '<p class="shr-empty">' + (canArrange ? 'Nothing for sale yet. Add goods in the shop inventory below.' : 'Nothing for sale right now.') + '</p>';
@@ -1677,6 +1712,11 @@
         return Chronicle.apiFetch(buyersEndpoint).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
           buy = j && Array.isArray(j.buyers) ? { canBuyNow: !!j.canBuyNow, buyers: j.buyers } : null;
           if (buy && !buyer()) payer = defaultPayer(buy.buyers);
+        });
+      }
+      function loadToday() {
+        return Chronicle.apiFetch(todayEndpoint).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
+          today = j && Array.isArray(j.pool) ? j : null;
         });
       }
       function loadGoods() {
@@ -1741,7 +1781,7 @@
       function showTip(g) {
         var it = S.its[+g.getAttribute('data-i')]; if (!it) return;
         var r = g.getBoundingClientRect();
-        tip.innerHTML = '<b>' + esc(it.n) + '</b>' + esc(it.price) + (it.out ? ' · sold out' : it.qty !== null ? ' · ' + it.qty + ' left' : '');
+        tip.innerHTML = '<b>' + esc(it.n) + '</b>' + esc(it.price) + (it.out ? ' · sold out' : it.qty !== null ? ' · ' + it.qty + ' left' : '') + (it.today ? ' · only today' : '');
         tip.classList.add('on');
         tip.style.left = Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + 'px';
         tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + 'px';
@@ -2421,6 +2461,7 @@
         Chronicle.apiFetch(ds.roomEndpoint).then(function (r) { if (!r.ok) throw new Error('room ' + r.status); return r.json(); }),
         loadGoods(),
         loadBuyers(),
+        loadToday(),
         window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, eid).then(function (w) { words = w || {}; }) : null
       ]).then(function (res) {
         openRoom(S, room, res[0] && res[0].layout);
