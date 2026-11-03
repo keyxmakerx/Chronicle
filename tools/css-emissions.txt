@@ -118,6 +118,16 @@
 .shop-inv-stock-toggle
 .shop-inv-stock-in
 .shop-inv-stock-out
+.shop-inv-today-on
+.shop-inv-today-off
+.dark .shop-inv-today-on
+.dark .shop-inv-today-off
+.shop-inv-today-note
+.dark .shop-inv-today-note
+.shop-inv-shelf
+.dark .shop-inv-shelf
+.shop-inv-shelf-input
+.dark .shop-inv-shelf-input
 .shop-inv-remove
 .shop-inv-remove:hover
 .shop-inv-search

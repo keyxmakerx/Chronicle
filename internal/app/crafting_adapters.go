@@ -213,13 +213,13 @@ func (a *craftingArmoryAdapter) GoOff(ctx context.Context, campaignID string, v 
 // keptOf and memoryOf carry what copies remember across the plugin line.
 func keptOf(c armory.Copy) crafting.Kept {
 	m := c.Memory
-	return crafting.Kept{ID: c.ID, Qty: c.Quantity, Marks: m.Marks, Quality: m.Quality, Quirk: m.Quirk,
+	return crafting.Kept{ID: c.ID, Qty: c.Quantity, Marks: m.Marks, Enchants: m.Enchants, Quality: m.Quality, Quirk: m.Quirk,
 		How: m.How, By: m.By, On: m.On, OffDay: m.OffDay, OffOn: m.OffOn, Becomes: m.Becomes, BecomesName: m.BecomesName, Off: m.Off,
 		Look: itemLookOf(m.Look)}
 }
 
 func memoryOf(k crafting.Kept) armory.Memory {
-	return armory.Memory{Marks: k.Marks, Quality: k.Quality, Quirk: k.Quirk, How: k.How, By: k.By, On: k.On,
+	return armory.Memory{Marks: k.Marks, Enchants: k.Enchants, Quality: k.Quality, Quirk: k.Quirk, How: k.How, By: k.By, On: k.On,
 		OffDay: k.OffDay, OffOn: k.OffOn, Becomes: k.Becomes, BecomesName: k.BecomesName, Off: k.Off,
 		Look: craftLookOf(k.Look)}
 }

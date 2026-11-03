@@ -9,7 +9,7 @@ import { pw, chromePath } from './_browser_env.mjs';
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-const SKY = ['sky_world', 'sky_looks', 'sky_moon', 'sky_events', 'sky_2d', 'sky_shaders', 'sky_gl', 'sky_pane'];
+const SKY = ['sky_world', 'sky_looks', 'sky_moon', 'sky_events', 'sky_2d', 'sky_shaders', 'gl_shared', 'sky_gl', 'sky_pane'];
 const CRAFT = ['craft_scene', 'craft_desk', 'craft_journal', 'craft_bench_editor', 'craft_bench'];
 const TYPES = { '.css': 'text/css', '.js': 'application/javascript', '.jpg': 'image/jpeg', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 

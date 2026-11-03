@@ -1169,3 +1169,19 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - A plugged lookup is answered after the built-in ones and listed before `format`; a built-in `what:` always wins.
 - A kind's body reaches storage only through `Record.BodyEntry`, so links and GM-only markers stay the engine's job.
 
+
+## ADR-072: A page has one WebGL2 context and one slow-device verdict
+
+**Status:** Accepted; follows the operator's question whether the painted crafting benches double up on the sky's engine (#2053).
+
+**Context:** The painted sky (`sky_gl.js`) held the page's only WebGL2 context and its own session verdict that a device paints too slowly. The painted crafting benches need a graphics-card pass too. A second context per feature runs into the browser's small context limit, gives two things to restore when a context is lost, and lets one feature run its richest look on a device another has already found too slow.
+
+**Decision:**
+1. `static/js/widgets/gl_shared.js` (`SharedGL`) owns the page's one WebGL2 context on one hidden canvas, the shader compile and uniform helpers, and the slow-device verdict (`isSlow`, `markSlow`, `onSlow`, kept for the session under `chronicle.sky.basic`). It is loaded globally before the sky.
+2. Each user draws into the shared canvas's lower-left corner and copies its picture out at once; the canvas only grows. A lost context is restored once, and each user rebuilds its programs when `gen` changes.
+3. Whichever user measures the device as too slow for its graphics-card look marks the verdict; every user then draws its plainer look for the rest of the session. A user's own test switches (the Design Lab's pretend-slow) never mark it.
+4. Scene art stays with each feature: the sky's shaders in `sky_shaders.js`, a bench's scene in its own `craft_paint_*.js`. Only the context, the helpers and the verdict are shared.
+
+**Consequences:**
+- A new WebGL feature uses `SharedGL.context()`, never `getContext('webgl2')`, and reads `SharedGL.isSlow()` before choosing its richest look.
+- A page that loads `sky_gl.js` must load `gl_shared.js` before it, including the Foundry module's vendored copy of the sky.

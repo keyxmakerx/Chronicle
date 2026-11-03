@@ -2753,6 +2753,122 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: Someone else changed the project first; reload and try again
+  /campaigns/{campaignId}/crafting/projects/{projectId}/help:
+    post:
+      tags: [Crafting]
+      summary: Lend a hero's hand on a party member's project; the dice are the server's
+      operationId: helpCraftingProject
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: projectId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [characterId]
+              properties:
+                actingUserId: {type: string}
+                characterId: {type: string, description: The hero helping}
+                version: {type: integer, description: The project's version as last read}
+      responses:
+        "200":
+          description: The helper's roll as made and what it did to the project
+          content:
+            application/json:
+              schema: {type: object}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "409":
+          description: Someone else changed the project first, it is already made or set aside, or this hero already helped since the last respite
+  /campaigns/{campaignId}/crafting/characters/{characterId}/experiment:
+    post:
+      tags: [Crafting]
+      summary: Spend a hero's turn trying something new
+      operationId: craftingExperiment
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: characterId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actingUserId: {type: string}
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      itemId: {type: string}
+                      qty: {type: integer}
+      responses:
+        "200":
+          description: "{outcome, recipe?, recipeId?, hint?, learned?, party?, …}: what the try found"
+          content:
+            application/json:
+              schema: {type: object}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "409":
+          description: This hero already experimented since the last respite
+  /campaigns/{campaignId}/crafting/characters/{characterId}/break-down:
+    post:
+      tags: [Crafting]
+      summary: Break a hero's copy of a crafted item down
+      operationId: craftingBreakDown
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: characterId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipeId]
+              properties:
+                actingUserId: {type: string}
+                recipeId: {type: string, description: The recipe that makes the item}
+                copy: {type: integer, description: The copy in the hero's pack}
+      responses:
+        "200":
+          description: "{item, back, notes}: what breaking it down gave back"
+          content:
+            application/json:
+              schema: {type: object}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
   /campaigns/{campaignId}/crafting/spoils:
     get:
       tags: [Crafting]

@@ -35,8 +35,11 @@ const (
 // Memory is what one copy remembers. Every field is optional; a Memory with
 // nothing in it is a plain copy and is never stored.
 type Memory struct {
-	Marks   []string `json:"marks,omitempty"`
-	Quality string   `json:"quality,omitempty"`
+	Marks []string `json:"marks,omitempty"`
+	// Enchants are the enchantments a crafting recipe added to this copy,
+	// oldest first. They stay with the copy wherever it moves.
+	Enchants []string `json:"enchants,omitempty"`
+	Quality  string   `json:"quality,omitempty"`
 	// Quirk is the words of a quirk the copy came out with.
 	Quirk string `json:"quirk,omitempty"`
 	// How is "made" or "harvested"; By and On name who and when, in words.
@@ -149,6 +152,15 @@ func (m Memory) Clean() Memory {
 		seen[strings.ToLower(k)] = true
 		out.Marks = append(out.Marks, k)
 	}
+	seen = map[string]bool{}
+	for _, k := range m.Enchants {
+		k = clip(k, maxCopyMark)
+		if k == "" || seen[strings.ToLower(k)] || len(out.Enchants) >= maxCopyMarks {
+			continue
+		}
+		seen[strings.ToLower(k)] = true
+		out.Enchants = append(out.Enchants, k)
+	}
 	if m.Quality == QualityFine || m.Quality == QualityPoor {
 		out.Quality = m.Quality
 	}
@@ -170,7 +182,7 @@ func (m Memory) Clean() Memory {
 
 // Empty reports a memory with nothing in it: a plain copy.
 func (m Memory) Empty() bool {
-	return len(m.Marks) == 0 && m.Quality == "" && m.Quirk == "" && m.How == "" && m.OffDay == 0 && m.Look == nil
+	return len(m.Marks) == 0 && len(m.Enchants) == 0 && m.Quality == "" && m.Quirk == "" && m.How == "" && m.OffDay == 0 && m.Look == nil
 }
 
 // HasMark reports whether the copy carries mark, case-blind.
@@ -280,8 +292,9 @@ func planTake(copies []Copy, total, take int, pick []CopyPick) (leaving []Copy) 
 	return leaving
 }
 
-// CopyTag is one word a copy wears in the pack: its quality, a mark, or
-// that it has gone off. Kind picks the tag's colour ("", "poor", "off").
+// CopyTag is one word a copy wears in the pack: its quality, a mark, an
+// enchantment, or that it has gone off. Kind picks the tag's look ("",
+// "poor", "enchant", "off").
 type CopyTag struct {
 	Label string
 	Kind  string
@@ -298,6 +311,9 @@ func (m Memory) Tags() []CopyTag {
 	}
 	for _, k := range m.Marks {
 		out = append(out, CopyTag{Label: strings.ToUpper(k[:1]) + k[1:]})
+	}
+	for _, k := range m.Enchants {
+		out = append(out, CopyTag{Label: k, Kind: "enchant"})
 	}
 	if m.Off {
 		out = append(out, CopyTag{Label: "Gone off", Kind: "off"})

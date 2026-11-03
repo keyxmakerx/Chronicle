@@ -257,6 +257,18 @@
      refuses, the live drawing stays, only slower to repaint. Images are kept
      by their source, so turning back to a view already seen is instant. */
   var BAKED = {};
+  /* Lights and encodes one baked image off the page's thread: a canvas's
+     toBlob holds the page up to two seconds for the largest layers, and
+     drawing the SVG straight into a canvas paints its filters on the page's
+     thread. Rejects where a browser lacks a step, and the canvas way is used. */
+  function offBake(img) {
+    if (!window.createImageBitmap || !window.OffscreenCanvas || !OffscreenCanvas.prototype.convertToBlob) return Promise.reject();
+    return createImageBitmap(img).then(function (bmp) {
+      var oc = new OffscreenCanvas(bmp.width, bmp.height);
+      oc.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
+      return oc.convertToBlob({ type: 'image/png' });
+    });
+  }
   function bake(svg, defs, done) {
     var groups = svg.querySelectorAll('[data-bake]'), left = groups.length;
     function one() { if (!--left && done) done(); }
@@ -276,8 +288,10 @@
       }
       if (BAKED[src]) { swap(BAKED[src]); return; }
       img.onload = function () {
-        try { var cv = document.createElement('canvas'); cv.width = w * k; cv.height = h * k; cv.getContext('2d').drawImage(img, 0, 0); cv.toBlob(function (b) { swap(b ? URL.createObjectURL(b) : img.src); }); }
-        catch (e) { swap(img.src); }
+        offBake(img).then(function (b) { swap(URL.createObjectURL(b)); }, function () {
+          try { var cv = document.createElement('canvas'); cv.width = w * k; cv.height = h * k; cv.getContext('2d').drawImage(img, 0, 0); cv.toBlob(function (b) { swap(b ? URL.createObjectURL(b) : img.src); }); }
+          catch (e) { swap(img.src); }
+        });
       };
       img.onerror = one;
       img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
@@ -360,6 +374,12 @@
     '@keyframes src-flick{0%{transform:scale(1,1) skewX(0)}35%{transform:scale(.96,1.08) skewX(-3deg)}70%{transform:scale(1.03,.95) skewX(2deg)}100%{transform:scale(.98,1.04) skewX(-1deg)}}',
     '.src-flame{transform-box:fill-box;transform-origin:50% 100%;animation:src-flick 1.3s ease-in-out infinite alternate}',
     '.src-tag{font-family:"IM Fell English",Georgia,serif;font-size:10px;fill:#3a2a1a}',
+    // Today's shelf: chalk and paper tags in the Customize page's Kalam file.
+    '@font-face{font-family:"Shop Kalam";src:url(/static/fonts/customize/kalam-latin-400.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}',
+    '.src-todayt{font-family:"Shop Kalam",cursive;font-size:11px;fill:#7a2a1a}',
+    '.src-chalk{font-family:"Shop Kalam",cursive;font-size:16px;fill:#f1ede2}.src-chalk2{font-size:12px;fill:#f2c27a}',
+    '.src-slate{cursor:pointer}.src-today{animation:src-sway 4.5s ease-in-out infinite}',
+    '@keyframes src-sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}',
     '.src-hand{font-family:"IM Fell English",Georgia,serif;font-style:italic;font-size:11px;fill:#3a2a1a}.src-hand.small{font-size:9px}',
     '.src-more{font:600 13px Inter,system-ui,sans-serif;fill:#ffd77a}',
     '.src-heldware{cursor:grab}.src-heldware.drag{cursor:grabbing;filter:drop-shadow(0 14px 10px rgb(0 0 0/.5))}',
@@ -477,9 +497,27 @@
       // More than one left: the rest stand behind, darker.
       if (left === null || left > 1) s += '<g transform="translate(' + (x + 16) + ',' + (y - 2) + ') scale(1.04)" opacity=".55" filter="url(#src-dof)">' + ware(it, 'R', R.icons) + '</g>';
       if (!here) s += wallShadow(x, y, 46, 70) + '<g transform="translate(' + x + ',' + y + ') scale(1.2)">' + ware(it, 'R', R.icons) + '</g>';
+      if (it.today) s += todayTag(x, y + 2, i);
       return s + '</g>';
     }
-    function wares() { return shelfIt().map(wareOnShelf).join(''); }
+    /* Today's goods: a paper tag hangs from the shelf edge under each and
+       sways, and a chalk slate on the wall says when they go. */
+    function todayTag(x, y, i) {
+      return '<g class="src-today src-nohit" style="transform-origin:' + x + 'px ' + y + 'px;animation-delay:' + (i * -1.3).toFixed(1) + 's">' +
+        '<path d="M' + x + ',' + y + ' L' + (x - 2) + ',' + (y + 14) + '" stroke="#c9b48a" stroke-width="1"/>' +
+        '<g transform="translate(' + (x - 2) + ',' + (y + 14) + ') rotate(-6)"><path d="M-22,0 L18,0 L24,8 L18,16 L-22,16 Z" fill="#f1e6cc"/><circle cx="17" cy="8" r="1.8" fill="#8a6a40"/>' +
+        '<text x="-2" y="12" text-anchor="middle" class="src-todayt">Today</text></g></g>';
+    }
+    function slate() {
+      var t = R.model.today;
+      if (!t || !shelfIt().some(function (it) { return it.today; })) return '';
+      return '<g data-k="slate" class="src-slate" transform="translate(538,94)">' +
+        '<path d="M66,-14 L66,-2" stroke="#5a3e26" stroke-width="1.5"/><circle cx="66" cy="-16" r="3" fill="#8a6a40"/>' +
+        '<rect x="-4" y="-3" width="140" height="56" rx="5" fill="#6b4a2c"/><rect x="1" y="2" width="130" height="46" rx="3" fill="#24282a"/>' +
+        '<text x="66" y="21" text-anchor="middle" class="src-chalk">Only today</text>' +
+        '<text x="66" y="40" text-anchor="middle" class="src-chalk src-chalk2">' + esc(t.line) + '</text></g>';
+    }
+    function wares() { return shelfIt().map(wareOnShelf).join('') + slate(); }
     function windowArt() {
       var s = '<g data-k="window"><rect x="782" y="64" width="260" height="246" rx="6" fill="#000" opacity=".45" filter="url(#src-blur8)"/><rect x="792" y="72" width="240" height="224" rx="3" fill="url(#src-frame)"/>';
       s += '<g clip-path="url(#srcb-winclip)">' + skyArt('srcb-sky', 806, 86, 212, 196, R.model.time) +
@@ -596,6 +634,7 @@
       if (p[0] === 'pile' && it) return { title: it.n, meta: it.price + ' each', now: R.inBasket(it.id) + ' on your pile', foot: 'Right-click to put one back' };
       if (k === 'case') return { title: 'The keeper’s case', meta: 'Finer goods', body: R.place.case.length + (R.place.case.length === 1 ? ' thing' : ' things') + ' kept shut and out of the dust.', foot: 'Press and the keeper opens it for you' };
       if (k === 'shelves') return { title: 'The shelves', body: 'Everyday goods, a few of each.', foot: 'Press to walk closer' };
+      if (k === 'slate') return { title: 'Only today', body: 'The tagged goods are out today only. The shelf changes at dawn.', foot: 'Press to ask the keeper' };
       if (k === 'window') return { title: 'The window', body: 'The lane outside.' };
       if (k === 'keeper') return { title: R.model.name, meta: 'The keeper', foot: R.model.lines ? 'Press to talk' : '' };
       if (k === 'bell') return { title: 'The counter bell', foot: 'Press to ring it' };
@@ -707,6 +746,7 @@
       if (p[0] === 'held') return true;
       if (k === 'bell') { ring(); return true; }
       if (k === 'keeper') { nod(); R.talk(R.svg.querySelector('[data-k="keeper"]')); return true; }
+      if (k === 'slate' && R.model.today) { nod(); R.talk(R.svg.querySelector('[data-k="keeper"]'), R.model.today.said); return true; }
       if (k === 'lamp') { R.flare(1); return true; }
       if (k === 'more') { R.openList(); return true; }
       return false;
@@ -1208,7 +1248,8 @@
     var gr = grain(); if (gr) stage.querySelector('.src-grain').style.backgroundImage = 'url(' + gr + ')';
 
     function setModel(m) {
-      R.model = { its: m.its || [], basket: m.basket || {}, icons: m.icons || window.ShopRoomIcons || {}, image: m.image || '', name: m.name || 'Shop', roomType: m.roomType || 'general', time: m.time || '', lines: !!m.lines };
+      R.model = { its: m.its || [], basket: m.basket || {}, icons: m.icons || window.ShopRoomIcons || {}, image: m.image || '', name: m.name || 'Shop', roomType: m.roomType || 'general', time: m.time || '', lines: !!m.lines,
+        today: m.today && m.today.line ? { line: String(m.today.line), said: String(m.today.said || '') } : null };
       R.place = layout(R.model.its); R.icons = R.model.icons; R.seed = seedOf(R.model.name);
     }
     setModel(model);
@@ -1220,11 +1261,11 @@
     R.why = function (id) { return (hooks.why && hooks.why(id)) || 'That can’t go on your pile.'; };
     R.add = function (id) { if (!R.canAdd(id)) { R.pop(R.why(id), 600, 420); return false; } return hooks.add(id) !== false; };
     R.remove = function (id) { hooks.remove(id); };
-    R.talk = function (el) { if (hooks.talk) hooks.talk(el); };
+    R.talk = function (el, said) { if (hooks.talk) hooks.talk(el, said); };
     R.openList = function () { if (hooks.openList) hooks.openList(); };
     R.info = function (it, foot) {
       var left = R.stock(it), inb = R.inBasket(it.id);
-      return { title: it.n, meta: (it.k ? it.k + ' · ' : '') + it.price, now: it.out ? 'Sold out' : (left === null ? 'Plenty in stock' : left + ' left') + (inb ? ', ' + inb + ' on your pile' : ''), foot: foot };
+      return { title: it.n, meta: (it.k ? it.k + ' · ' : '') + it.price + (it.today ? ' · Only today' : ''), now: it.out ? 'Sold out' : (left === null ? 'Plenty in stock' : left + ' left') + (inb ? ', ' + inb + ' on your pile' : ''), foot: foot };
     };
     R.say = function (h) { hintEl.innerHTML = h || ''; hintEl.hidden = !h; };
     R.tab = function (root) { Array.prototype.forEach.call(root.querySelectorAll('[data-k]'), function (e) { e.setAttribute('tabindex', '0'); }); };

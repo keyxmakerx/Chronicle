@@ -73,6 +73,16 @@ type Salvage struct {
 	Qty  int    `json:"qty"`
 }
 
+// Enchant makes a recipe enchant an item the hero already owns instead of
+// making a new one: one of material Line goes in and comes back as the same
+// item, with what it remembered, plus the enchantment Name. An item holds at
+// most Slots enchantments, so a recipe can't stack them without end.
+type Enchant struct {
+	Line  int    `json:"line"`
+	Name  string `json:"name"`
+	Slots int    `json:"slots"`
+}
+
 // Extras are a recipe's "If it goes wrong" and "Extras" settings. A nil
 // pointer is a setting turned off.
 type Extras struct {
@@ -87,6 +97,7 @@ type Extras struct {
 	MakersMark    bool         `json:"makersMark"`
 	Salvage       []Salvage    `json:"salvage"`
 	OthersCanHelp bool         `json:"othersCanHelp"`
+	Enchant       *Enchant     `json:"enchant"`
 }
 
 // Extras limits, the editor's.
@@ -95,6 +106,10 @@ const (
 	maxSalvage     = 4
 	maxKeepDays    = 360
 	maxHint        = 240
+	// An enchantment's name fits a copy's mark, and an item holds no more
+	// enchantments than a copy holds marks.
+	maxEnchantName = 40
+	maxSlots       = 6
 )
 
 var (
@@ -208,6 +223,17 @@ func CleanExtras(raw json.RawMessage, materials int) Extras {
 		}
 	}
 	out.OthersCanHelp = m["othersCanHelp"] == true
+	if x, ok := m["enchant"].(map[string]any); ok && materials > 0 {
+		line, finite := number(x["line"])
+		if !finite || line < 0 || line >= materials {
+			line = 0
+		}
+		slots, finite := number(x["slots"])
+		if !finite {
+			slots = 3
+		}
+		out.Enchant = &Enchant{Line: line, Name: str(x["name"], maxEnchantName), Slots: clamp(slots, 1, maxSlots)}
+	}
 	return out
 }
 
@@ -230,16 +256,13 @@ func closeKnown(s string, n int) bool {
 	return false
 }
 
-// FollowMaterials keeps a recipe's substitutes on the material they were
+// FollowMaterials keeps a recipe's substitutes, and the line it enchants, on
+// the material they were
 // written for when the materials list changes. A substitute names its
 // material by index, so without this an edit that removes or reorders
 // materials leaves it standing in for a different line. A substitute whose
 // material is gone is dropped.
 func FollowMaterials(x Extras, before, after []Material) Extras {
-	if len(x.Substitutes) == 0 {
-		x.Substitutes = []Substitute{}
-		return x
-	}
 	key := func(m Material) string {
 		if m.ItemID != "" {
 			return "i:" + m.ItemID
@@ -251,6 +274,25 @@ func FollowMaterials(x Extras, before, after []Material) Extras {
 		if _, dup := at[key(m)]; !dup {
 			at[key(m)] = i
 		}
+	}
+	if e := x.Enchant; e != nil {
+		// The enchanted line follows its material like a substitute does;
+		// with it gone the recipe no longer says what it enchants.
+		i, ok := -1, false
+		if e.Line >= 0 && e.Line < len(before) {
+			i, ok = at[key(before[e.Line])]
+		}
+		if ok {
+			moved := *e
+			moved.Line = i
+			x.Enchant = &moved
+		} else {
+			x.Enchant = nil
+		}
+	}
+	if len(x.Substitutes) == 0 {
+		x.Substitutes = []Substitute{}
+		return x
 	}
 	out := make([]Substitute, 0, len(x.Substitutes))
 	seen := map[int]bool{}

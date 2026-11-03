@@ -65,12 +65,18 @@
     return null;
   }
 
+  /** Where a row is: its section, or the drawer ({id: 'drawer'}) for an
+   *  app kept in the drawer only. */
   function findRow(draft, key) {
     for (var i = 0; i < draft.sections.length; i++) {
       var items = draft.sections[i].items;
       for (var j = 0; j < items.length; j++) {
         if (items[j].key === key) return { sec: draft.sections[i], index: j, row: items[j] };
       }
+    }
+    var drawer = draft.drawer || [];
+    for (var k = 0; k < drawer.length; k++) {
+      if (drawer[k].key === key) return { sec: { id: 'drawer', kind: 'drawer', items: drawer }, index: k, row: drawer[k] };
     }
     return null;
   }
@@ -119,6 +125,32 @@
     var toId = loc.sec.id === 'pinned' ? homeFor(loc.row.kind) : 'pinned';
     if (!moveRowTo(draft, key, toId, toId === 'pinned' ? Infinity : 0)) return null;
     return sectionById(draft, toId);
+  }
+
+  /** Takes an app out of the sidebar and keeps it in the app drawer only.
+   *  Returns false for anything but an app in a sidebar section. */
+  function keepInDrawer(draft, key) {
+    var loc = findRow(draft, key);
+    if (!loc || loc.row.kind !== 'app' || loc.sec.id === 'drawer') return false;
+    loc.sec.items.splice(loc.index, 1);
+    if (!draft.drawer) draft.drawer = [];
+    draft.drawer.push(loc.row);
+    return true;
+  }
+
+  /** Moves a row, from the drawer or a section, into section toId just
+   *  before the row beforeKey, or to the end when beforeKey is not there.
+   *  Returns false when the section cannot hold the row. */
+  function placeBefore(draft, key, toId, beforeKey) {
+    var loc = findRow(draft, key), to = sectionById(draft, toId);
+    if (!loc || !to || !accepts(to.kind, loc.row.kind) || key === beforeKey) return false;
+    loc.sec.items.splice(loc.index, 1);
+    var at = -1;
+    for (var i = 0; i < to.items.length; i++) {
+      if (to.items[i].key === beforeKey) { at = i; break; }
+    }
+    to.items.splice(at < 0 ? to.items.length : at, 0, loc.row);
+    return true;
   }
 
   /** Removes one of the owner's sections; its rows go back to their homes. */
@@ -197,6 +229,10 @@
         out.push(it);
       });
     });
+    (draft.drawer || []).forEach(function (r) {
+      if (r.kind !== 'app') return;
+      out.push({ type: 'app', slug: r.key.slice(r.key.indexOf(':') + 1), visible: !r.hidden, section: 'drawer' });
+    });
     return out;
   }
 
@@ -220,6 +256,7 @@
     if (!m || !Array.isArray(m.sections) || !sectionById(m, 'pinned') || !sectionById(m, 'apps') || !sectionById(m, 'categories')) return null;
     m.sections.forEach(function (s) { if (!Array.isArray(s.items)) s.items = []; });
     if (!Array.isArray(m.off)) m.off = [];
+    if (!Array.isArray(m.drawer)) m.drawer = [];
     return m;
   }
 
@@ -763,6 +800,16 @@
           var edit = freshNav && freshNav.getAttribute('data-nav-edit');
           if (edit) n.setAttribute('data-nav-edit', edit); else n.removeAttribute('data-nav-edit');
         }
+        // The app drawer stays open across a change; only its tiles and
+        // count are swapped, so focus and the find line survive.
+        var freshBody = doc.getElementById('app-drawer-body'), body = document.getElementById('app-drawer-body');
+        if (freshBody && body) {
+          body.parentNode.replaceChild(document.importNode(freshBody, true), body);
+          var fn = doc.querySelector('#app-drawer .apd-n'), n2 = document.querySelector('#app-drawer .apd-n');
+          if (fn && n2) n2.textContent = fn.textContent;
+          if (window.htmx && htmx.process) htmx.process(document.getElementById('app-drawer-body'));
+          document.dispatchEvent(new CustomEvent('chronicle:app-drawer-refreshed'));
+        }
         var freshSb = doc.getElementById('sidebar'), sb = document.getElementById('sidebar');
         if (freshSb && sb && freshSb.hasAttribute('data-nav-commands')) {
           sb.setAttribute('data-nav-commands', freshSb.getAttribute('data-nav-commands'));
@@ -1114,15 +1161,23 @@
   }
 
   function togglePersonalPin(btn) {
-    if (pinning || S) return;
-    var key = btn.getAttribute('data-nav-pin'), on = btn.getAttribute('aria-pressed') !== 'true';
+    var label = btn.parentNode.querySelector('.nav-lb');
+    return setPersonalPin(btn.getAttribute('data-nav-pin'), btn.getAttribute('aria-pressed') !== 'true',
+      label ? label.textContent : '');
+  }
+
+  /**
+   * Pins a row (or an app from the drawer) to the top of the viewer's own
+   * sidebar, or unpins it. Resolves true once the sidebar shows it, false
+   * when nothing was saved.
+   */
+  function setPersonalPin(key, on, name) {
+    if (pinning || S) return Promise.resolve(false);
     var pins = ownPins().filter(function (k) { return k !== key; });
     if (on) pins.push(key);
-    var label = btn.parentNode.querySelector('.nav-lb');
-    var name = label ? label.textContent : '';
     var base = nav() ? nav().getAttribute('data-nav-base') : '';
     pinning = true;
-    Chronicle.apiFetch(base + '/nav-pins', { method: 'PUT', body: { pins: pins } })
+    return Chronicle.apiFetch(base + '/nav-pins', { method: 'PUT', body: { pins: pins } })
       .then(function (res) {
         if (res.ok) return true;
         return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1141,14 +1196,22 @@
           if (top) top.hidden = false;
           playFlip(sidebarEl(), prev, { lift: 'n:' + key });
           var again = sidebarEl().querySelector('[data-nav-pin="' + key.replace(/["\\]/g, '\\$&') + '"]');
-          if (again) again.focus({ preventScroll: true });
+          if (again && !inDrawer()) again.focus({ preventScroll: true });
           announce(on ? name + ' is pinned to the top of your sidebar.' : name + ' is unpinned.');
+          return true;
         }, function () {
           window.location.reload();
+          return false;
         });
       })
-      .catch(function (err) { notify(err.message, 'error'); })
-      .then(function () { pinning = false; });
+      .catch(function (err) { notify(err.message, 'error'); return false; })
+      .then(function (ok) { pinning = false; return ok; });
+  }
+
+  /** Whether focus is in the open app drawer, which keeps it there. */
+  function inDrawer() {
+    var d = document.getElementById('app-drawer');
+    return !!(d && !d.hidden && d.contains(document.activeElement));
   }
 
   /**
@@ -1158,14 +1221,14 @@
    * mutate edits a copy of the arrangement and returns false to do nothing.
    */
   function quickChange(key, mutate, done) {
-    if (pinning || S) return;
+    if (pinning || S) return Promise.resolve(false);
     var model = readModel(nav());
-    if (!model) return;
+    if (!model) return Promise.resolve(false);
     var draft = clone(model);
-    if (mutate(draft) === false) return;
+    if (mutate(draft) === false) return Promise.resolve(false);
     var base = nav().getAttribute('data-nav-base');
     pinning = true;
-    Chronicle.apiFetch(base + '/sidebar-config', { method: 'PUT', body: { items: itemsFromDraft(draft) } })
+    return Chronicle.apiFetch(base + '/sidebar-config', { method: 'PUT', body: { items: itemsFromDraft(draft) } })
       .then(function (res) {
         if (res.ok) return true;
         return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1182,14 +1245,35 @@
           playFlip(sidebarEl(), prev, { lift: 'n:' + key });
           // The row was redrawn; focus follows it to its new place.
           var again = sidebarEl().querySelector('.nav-row[data-nav-key="' + key.replace(/["\\]/g, '\\$&') + '"]');
-          if (again) again.focus({ preventScroll: true });
+          if (again && !inDrawer()) again.focus({ preventScroll: true });
           if (done) announce(done);
+          return true;
         }, function () {
           window.location.reload();
+          return false;
         });
       })
-      .catch(function (err) { notify(err.message, 'error'); })
-      .then(function () { pinning = false; });
+      .catch(function (err) { notify(err.message, 'error'); return false; })
+      .then(function (ok) { pinning = false; return ok; });
+  }
+
+  /**
+   * Redraws the sidebar (and the app drawer's tiles) as the server now draws
+   * them, after a change made elsewhere, such as an app turned on from the
+   * drawer. Resolves once the new rows are in place.
+   */
+  function refresh() {
+    if (S) return Promise.resolve(false);
+    var prev = snapshot(sidebarEl());
+    return refreshSidebar().then(function () {
+      viewList().hidden = false;
+      if (topList()) topList().hidden = false;
+      playFlip(sidebarEl(), prev, {});
+      return true;
+    }, function () {
+      window.location.reload();
+      return false;
+    });
   }
 
   document.addEventListener('click', function (e) {
@@ -1249,6 +1333,10 @@
     findRow: findRow,
     quickChange: quickChange,
     togglePersonalPin: togglePersonalPin,
+    setPersonalPin: setPersonalPin,
+    refresh: refresh,
+    keepInDrawer: keepInDrawer,
+    placeBefore: placeBefore,
     homeFor: homeFor,
     moveRowTo: moveRowTo,
     stepRow: stepRow,

@@ -314,6 +314,7 @@ type shopMeta struct {
 	InStock  bool    // false when an editor marked the item out of stock.
 	Price    float64 // unit price as listed; 0 when unset or unreadable.
 	Currency string  // listed currency; empty when unset.
+	Today    bool    // true when the good only turns up on some days' shelf.
 	fields   map[string]json.RawMessage
 }
 
@@ -350,6 +351,9 @@ func parseShopMeta(raw json.RawMessage) shopMeta {
 	}
 	if v, ok := m.fields["currency"]; ok {
 		_ = json.Unmarshal(v, &m.Currency)
+	}
+	if v, ok := m.fields["today"]; ok {
+		_ = json.Unmarshal(v, &m.Today)
 	}
 	if v, ok := m.fields["in_stock"]; ok {
 		var in *bool

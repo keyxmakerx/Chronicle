@@ -57,6 +57,7 @@
       case 'discover': return {closeWhen: n > 1 ? '1 of ' + n : '', learnedBy: 'maker', failedTry: 'used'};
       case 'keeps': return {days: 30, thenBecomes: ''};
       case 'salvage': return [{item: (S.rec().ings[0] || [0, ''])[1], qty: 1}];
+      case 'enchant': return {line: 0, name: '', slots: 3};
     }
     return x[k];
   }
@@ -133,6 +134,13 @@
         chips('salvage.0.qty', ['1', '2'], String(x.salvage[0].qty)) + ' × ' + chips('salvage.0.item', r.ings.map(function (g) { return g[1]; }), x.salvage[0].item) + '</p>' : '');
       h += card('othersCanHelp', x.othersCanHelp, 'crr-when', 'people-group', 'Others can help', 'Party members can lend a hand on it.',
         x.othersCanHelp ? '<p class="crr-hint">Each party member can add one extra roll to a hero’s project at each respite, with their own characteristic.</p>' : '');
+      h += card('enchant', !!x.enchant, 'crr-change', 'wand-magic-sparkles', 'It enchants an item', 'One ingredient goes in and comes back as itself, plus an enchantment.', x.enchant ?
+        '<p class="crr-sent">It enchants ' + chips('enchant.line', ings, String(x.enchant.line)) + ' with</p>' +
+        '<input class="crr-in" data-xt="enchant.name" maxlength="' + R.EXTRAS.limits.enchantName + '" value="' + esc(x.enchant.name) + '" placeholder="The enchantment’s name, like Frostbite" aria-label="The enchantment’s name">' +
+        '<p class="crr-sent">An item holds at most <span class="crr-stepper"><button type="button" data-step="enchant.slots" data-v="-1" aria-label="One fewer">' + fa('minus') + '</button><output>' + x.enchant.slots +
+        '</output><button type="button" data-step="enchant.slots" data-v="1" aria-label="One more">' + fa('plus') + '</button></span> ' + (x.enchant.slots === 1 ? 'enchantment' : 'enchantments') + '.</p>' +
+        '<p class="crr-hint">The item keeps its name, picture, maker and marks. Cancelling the project gives it back as it was. The item the recipe makes isn’t used.</p>' :
+        (n ? '' : '<p class="crr-hint">Add an ingredient first: the item to enchant is one of them.</p>'));
       return h + '</div><p class="crr-hint">Who knows the recipe is set on the recipe form, beside its ingredients.</p><div class="crr-aicap crr-block">What the AI writes</div><pre class="crr-aij crr-block">' + hl(data('extras')) + '</pre></div>';
     }
     function data(k) {
@@ -182,8 +190,10 @@
         set(t.getAttribute('data-x'), t.getAttribute('data-v'));
         changed('[data-x="' + t.getAttribute('data-x') + '"][data-v="' + t.getAttribute('data-v') + '"]');
       } else if (t.hasAttribute('data-step')) {
-        x.keeps.days = Math.max(1, Math.min(R.EXTRAS.limits.days, x.keeps.days + (+t.getAttribute('data-v'))));
-        changed('[data-step][data-v="' + t.getAttribute('data-v') + '"]');
+        var sp = t.getAttribute('data-step'), dv = +t.getAttribute('data-v');
+        if (sp === 'enchant.slots') x.enchant.slots = Math.max(1, Math.min(R.EXTRAS.limits.slots, x.enchant.slots + dv));
+        else x.keeps.days = Math.max(1, Math.min(R.EXTRAS.limits.days, x.keeps.days + dv));
+        changed('[data-step="' + sp + '"][data-v="' + t.getAttribute('data-v') + '"]');
       } else if (t.hasAttribute('data-watch')) S.goLook('mishap:' + t.getAttribute('data-watch'));
       else if (t.hasAttribute('data-roll')) tryRoll(t);
       else if (t.hasAttribute('data-rm-sub')) { x.substitutes.splice(+t.getAttribute('data-rm-sub'), 1); changed('[data-add-sub]'); }

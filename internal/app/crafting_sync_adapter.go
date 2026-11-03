@@ -126,6 +126,42 @@ func (a *syncCraftingAPIAdapter) StudySpoil(ctx context.Context, campaignID, key
 	return a.svc.StudySpoil(ctx, campaignID, lineID, v, in)
 }
 
+func (a *syncCraftingAPIAdapter) Experiment(ctx context.Context, campaignID, keyUserID, actingUserID, characterID string, body json.RawMessage) (any, error) {
+	v, err := a.viewer(ctx, campaignID, keyUserID, actingUserID)
+	if err != nil {
+		return nil, err
+	}
+	var in crafting.TryInput
+	if err := decodeCrafting(body, &in); err != nil {
+		return nil, err
+	}
+	return a.svc.Experiment(ctx, campaignID, characterID, v, in)
+}
+
+func (a *syncCraftingAPIAdapter) BreakDown(ctx context.Context, campaignID, keyUserID, actingUserID, characterID string, body json.RawMessage) (any, error) {
+	v, err := a.viewer(ctx, campaignID, keyUserID, actingUserID)
+	if err != nil {
+		return nil, err
+	}
+	var in crafting.BreakInput
+	if err := decodeCrafting(body, &in); err != nil {
+		return nil, err
+	}
+	return a.svc.BreakDown(ctx, campaignID, characterID, v, in)
+}
+
+func (a *syncCraftingAPIAdapter) Help(ctx context.Context, campaignID, keyUserID, actingUserID, projectID string, body json.RawMessage) (any, error) {
+	v, err := a.viewer(ctx, campaignID, keyUserID, actingUserID)
+	if err != nil {
+		return nil, err
+	}
+	var in crafting.HelpInput
+	if err := decodeCrafting(body, &in); err != nil {
+		return nil, err
+	}
+	return a.svc.Help(ctx, campaignID, projectID, v, in)
+}
+
 // syncFight is a fight as the Foundry module reports it once the GM has
 // confirmed what dropped: each creature row with a Chronicle page, and how
 // many of its copies were down.

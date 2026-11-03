@@ -12,6 +12,7 @@
  *        data-quick-create-endpoint="/campaigns/:id/entities/quick-create"
  *        data-campaign-url="/campaigns/:id"
  *        data-editable="true"
+ *        data-owner="true"
  *        data-csrf-token="..."
  *   ></div>
  */
@@ -22,10 +23,14 @@ Chronicle.register('shop_inventory', {
     var quickCreateEndpoint = el.dataset.quickCreateEndpoint;
     var campaignUrl = el.dataset.campaignUrl;
     var editable = el.dataset.editable === 'true';
+    // Only the campaign Owner sets how many places today's shelf has.
+    var isOwner = el.dataset.owner === 'true';
     var csrfToken = el.dataset.csrfToken || '';
 
     // Transaction endpoints derive from the campaign URL.
     var txEndpoint = campaignUrl + '/armory/transactions';
+    var shopId = ((relationsEndpoint || '').match(/\/entities\/([^/]+)\/relations/) || [])[1] || '';
+    var todayEndpoint = campaignUrl + '/armory/shops/' + shopId + '/today';
 
     // Internal state.
     var state = {
@@ -41,6 +46,9 @@ Chronicle.register('shop_inventory', {
       entityTypes: [],
       // The shop page's local words, so a reader sees the coin's local name.
       words: {},
+      // Today's shelf from the armory ({spots, hoursToDawn, pool, today}),
+      // or null when the armory is off or could not be read.
+      today: null,
     };
     el._shopState = state;
 
@@ -105,10 +113,15 @@ Chronicle.register('shop_inventory', {
         empty.textContent = editable ? 'No items yet. Click "+ Add Item" to stock the shop.' : 'This shop has no items.';
         wrapper.appendChild(empty);
       } else {
+        if (editable) {
+          var shelfRow = renderShelfRow();
+          if (shelfRow) wrapper.appendChild(shelfRow);
+        }
         var list = document.createElement('div');
         list.className = 'shop-inv-list';
-        for (var i = 0; i < state.items.length; i++) {
-          list.appendChild(renderItem(state.items[i]));
+        var shown = editable ? state.items : state.items.filter(function (it) { return todayState(it) !== 'away'; });
+        for (var i = 0; i < shown.length; i++) {
+          list.appendChild(renderItem(shown[i]));
         }
         wrapper.appendChild(list);
       }
@@ -208,6 +221,45 @@ Chronicle.register('shop_inventory', {
       }
     }
 
+    // 'out' for a good on today's shelf, 'away' for one that can turn up but
+    // is not out today, '' for an everyday good or when the shelf is unknown.
+    function todayState(item) {
+      var t = state.today, id = Number(item.id);
+      if (!t || !Array.isArray(t.pool) || t.pool.indexOf(id) < 0) return '';
+      return (t.today || []).indexOf(id) >= 0 ? 'out' : 'away';
+    }
+
+    // The editors' line about today's shelf: how many places change each day
+    // (the Owner can change it), shown once a good is marked for the shelf.
+    function renderShelfRow() {
+      var marked = state.items.some(function (it) { return it.metadata && it.metadata.today === true; });
+      if (!marked) return null;
+      var row = document.createElement('div');
+      row.className = 'shop-inv-shelf';
+      var spots = state.today ? state.today.spots : 2;
+      var label = document.createElement('label');
+      var lead = document.createElement('span');
+      lead.textContent = 'Today’s shelf: ';
+      label.appendChild(lead);
+      if (isOwner && state.today) {
+        var input = document.createElement('input');
+        input.type = 'number'; input.min = '1'; input.max = '20'; input.value = String(spots);
+        input.className = 'shop-inv-shelf-input';
+        input.setAttribute('aria-label', 'Places on today’s shelf');
+        input.onchange = function () { saveSpots(parseInt(input.value, 10)); };
+        label.appendChild(input);
+      }
+      var rest = document.createElement('span');
+      rest.textContent = (isOwner && state.today ? ' ' : spots + ' ') + 'of the marked goods are out each day.';
+      label.appendChild(rest);
+      row.appendChild(label);
+      var help = document.createElement('div');
+      help.className = 'shop-inv-item-meta';
+      help.textContent = 'They change at dawn on the campaign calendar. Players see only the ones out today.';
+      row.appendChild(help);
+      return row;
+    }
+
     function renderItem(item) {
       var meta = item.metadata || {};
       var isCustom = !item.targetEntityId;
@@ -252,6 +304,13 @@ Chronicle.register('shop_inventory', {
           typeBadge.textContent = item.targetEntityType;
           info.appendChild(typeBadge);
         }
+      }
+      var ts = todayState(item);
+      if (ts || (editable && meta.today === true)) {
+        var tb = document.createElement('div');
+        tb.className = 'shop-inv-item-meta shop-inv-today-note';
+        tb.textContent = !editable ? 'Only today' : ts === 'out' ? 'On today’s shelf, out today' : ts === 'away' ? 'On today’s shelf, not out today' : 'On today’s shelf';
+        info.appendChild(tb);
       }
       row.appendChild(info);
 
@@ -328,6 +387,20 @@ Chronicle.register('shop_inventory', {
           render();
         };
         controls.appendChild(stockBtn);
+
+        // Whether this good only turns up on some days' shelf.
+        var todayBtn = document.createElement('button');
+        todayBtn.type = 'button';
+        todayBtn.className = 'shop-inv-stock-toggle ' + (meta.today === true ? 'shop-inv-today-on' : 'shop-inv-today-off');
+        todayBtn.textContent = 'Today’s shelf';
+        todayBtn.setAttribute('aria-pressed', meta.today === true ? 'true' : 'false');
+        todayBtn.title = meta.today === true ? 'Sold only on days it is out. Press to sell it every day.' : 'Press to sell it only on days it turns up on today’s shelf.';
+        todayBtn.onclick = function () {
+          if (meta.today === true) delete meta.today; else meta.today = true;
+          updateMetadata(item.id, meta, loadToday);
+          render();
+        };
+        controls.appendChild(todayBtn);
 
         // Remove button.
         var removeBtn = document.createElement('button');
@@ -514,8 +587,10 @@ Chronicle.register('shop_inventory', {
             r.metadata = r.metadata || {};
             return r;
           });
-          state.loading = false;
-          render();
+          // A reader waits for today's shelf, so a good that is not out
+          // today never flashes up first.
+          if (editable) { state.loading = false; render(); }
+          loadToday();
         })
         .catch(function (err) {
           console.error('Shop inventory: failed to load', err);
@@ -563,17 +638,44 @@ Chronicle.register('shop_inventory', {
         });
     }
 
-    function updateMetadata(relationId, meta) {
+    function updateMetadata(relationId, meta, then) {
       Chronicle.apiFetch(relationsEndpoint + '/' + relationId + '/metadata', {
         method: 'PUT',
         body: { metadata: meta },
       })
         .then(function (res) {
           if (!res.ok) throw new Error('Failed to save: ' + res.status);
+          if (then) then();
         })
         .catch(function (err) {
           console.error('Shop inventory: failed to update metadata', err);
           Chronicle.notify('Could not save the change to this item.', 'error');
+        });
+    }
+
+    // Today's shelf. A shop with the armory off has no such route, and then
+    // every good simply shows.
+    function loadToday() {
+      var read = shopId ? Chronicle.apiFetch(todayEndpoint, { method: 'GET' })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .catch(function () { return null; }) : Promise.resolve(null);
+      read.then(function (j) {
+        state.today = j && Array.isArray(j.pool) ? j : null;
+        state.loading = false;
+        render();
+      });
+    }
+
+    function saveSpots(n) {
+      Chronicle.apiFetch(todayEndpoint, { method: 'PUT', body: { spots: n } })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Failed to save: ' + res.status);
+          return res.json();
+        })
+        .then(function (j) { state.today = j; render(); })
+        .catch(function (err) {
+          console.error('Shop inventory: failed to save today’s shelf', err);
+          Chronicle.notify('Could not save the number of places on today’s shelf.', 'error');
         });
     }
 

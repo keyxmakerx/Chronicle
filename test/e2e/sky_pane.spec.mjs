@@ -164,7 +164,7 @@ function reducedMotionGuardCSS() {
 }
 
 const SKY_SCRIPTS = [
-  'sky_world.js', 'sky_looks.js', 'sky_moon.js', 'sky_events.js', 'sky_2d.js', 'sky_shaders.js', 'sky_gl.js', 'sky_pane.js',
+  'sky_world.js', 'sky_looks.js', 'sky_moon.js', 'sky_events.js', 'sky_2d.js', 'sky_shaders.js', 'gl_shared.js', 'sky_gl.js', 'sky_pane.js',
 ];
 
 function harnessHTML(campaignID, calendarID) {

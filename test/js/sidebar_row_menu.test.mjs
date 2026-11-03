@@ -58,15 +58,15 @@ test('the owner gets pin, hide, move and Edit sidebar on their rows', () => {
   const { editor, menu } = load();
   const cases = [
     { name: 'an app with a page', info: { key: 'app:armory', href: '/campaigns/c/armory' },
-      want: ['open-tab', 'copy-link', 'pin-all', 'show', '|', 'up', 'down(off)', '|', 'edit'] },
+      want: ['open-tab', 'copy-link', 'pin-all', 'show', 'keep-drawer', '|', 'up', 'down(off)', '|', 'edit'] },
     { name: 'a category: no new tab, and the first one cannot move up out of its section', info: { key: 'cat:1', href: '' },
       want: ['pin-all', 'hide', '|', 'up(off)', 'down', '|', 'edit'] },
     { name: 'the first app cannot move up into Pinned', info: { key: 'app:maps', href: '' },
-      want: ['pin-all', 'hide', '|', 'up(off)', 'down', '|', 'edit'] },
+      want: ['pin-all', 'hide', 'keep-drawer', '|', 'up(off)', 'down', '|', 'edit'] },
     { name: 'the last category cannot move down', info: { key: 'cat:2', href: '' },
       want: ['pin-all', 'hide', '|', 'up', 'down(off)', '|', 'edit'] },
     { name: 'a shown row offers to hide it', info: { key: 'app:maps', href: '/x' },
-      want: ['open-tab', 'copy-link', 'pin-all', 'hide', '|', 'up(off)', 'down', '|', 'edit'] },
+      want: ['open-tab', 'copy-link', 'pin-all', 'hide', 'keep-drawer', '|', 'up(off)', 'down', '|', 'edit'] },
     { name: 'a fixed row (Dashboard) has only a new tab and Edit sidebar', info: { key: 'dashboard', href: '/campaigns/c' },
       want: ['open-tab', 'copy-link', '|', 'edit'] },
   ];
@@ -121,4 +121,37 @@ test('a page path is only ever a path on this site', () => {
     [null, ''],
   ];
   for (const [give, want] of cases) assert.equal(menu.sitePath(give), want, String(give));
+});
+
+// --- The app drawer's tiles ---------------------------------------------------
+
+function drawerModel() {
+  const m = model();
+  m.drawer = [{ key: 'app:crafting', kind: 'app', label: 'Crafting' }];
+  return m;
+}
+
+test('the owner pins a drawer-only app to the sidebar, and keeps a sidebar app in the drawer', () => {
+  const { editor, menu } = load();
+  const tile = (key, extra = {}) => menu.tileItemsFor({ key, href: '/x', model: drawerModel(), editor, ...extra });
+  assert.deepEqual(ids(tile('app:crafting')), ['open', 'open-tab', '|', 'pin-side', 'hide']);
+  assert.deepEqual(labels(tile('app:crafting')), ['Open', 'Open in new tab', 'Pin to sidebar for everyone', 'Hide from players']);
+  assert.deepEqual(ids(tile('app:maps', { offIds: '7' })), ['open', 'open-tab', '|', 'keep-drawer', 'hide', '|', 'turn-off']);
+  assert.deepEqual(labels(tile('app:armory')), ['Open', 'Open in new tab', 'Keep in the drawer only', 'Show to players']);
+});
+
+test('a player pins a tile for themselves, unless the campaign already pinned it', () => {
+  const { editor, menu } = load();
+  const tile = (extra) => labels(menu.tileItemsFor({ key: 'app:maps', href: '/m', model: null, editor, canPin: true, ...extra }));
+  assert.deepEqual(tile({}), ['Open', 'Open in new tab', 'Pin for me']);
+  assert.deepEqual(tile({ personal: true, pinned: true }), ['Open', 'Open in new tab', 'Unpin']);
+  assert.deepEqual(tile({ pinned: true }), ['Open', 'Open in new tab']);
+  assert.deepEqual(labels(menu.tileItemsFor({ key: 'app:maps', href: '/m', model: null, editor, canPin: false })), ['Open', 'Open in new tab']);
+});
+
+test('a turned-off tile offers the owner Turn on, and nobody else anything', () => {
+  const { editor, menu } = load();
+  assert.deepEqual(ids(menu.tileItemsFor({ key: 'app:maps', off: true, onIds: '3,4', model: drawerModel(), editor })), ['turn-on']);
+  assert.deepEqual(ids(menu.tileItemsFor({ key: 'app:rulebook', off: true, onIds: '', model: drawerModel(), editor })), ['features']);
+  assert.equal(menu.tileItemsFor({ key: 'app:maps', off: true, onIds: '3', model: null, editor }).length, 0);
 });

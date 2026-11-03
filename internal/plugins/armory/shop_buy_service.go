@@ -62,6 +62,9 @@ type shopBuyService struct {
 	tx       *transactionService
 	shops    ShopEntityChecker
 	requests PurchaseRequestRepository
+	// today refuses a good that only turns up on some days when it is not
+	// out today; nil sells every listing as before.
+	today ShopTodayService
 }
 
 // NewShopBuyService wires the buy flow. It takes the concrete stash and
@@ -73,8 +76,8 @@ type shopBuyService struct {
 // the downtime-open sweep and the stashes page. Opening downtime lives in the
 // stash service and runs under the campaign lock, so the sweep must be
 // reachable from there without the stash service importing this one.
-func NewShopBuyService(stash *stashService, tx *transactionService, shops ShopEntityChecker, requests PurchaseRequestRepository) ShopRequestService {
-	s := &shopBuyService{stash: stash, tx: tx, shops: shops, requests: requests}
+func NewShopBuyService(stash *stashService, tx *transactionService, shops ShopEntityChecker, requests PurchaseRequestRepository, today ShopTodayService) ShopRequestService {
+	s := &shopBuyService{stash: stash, tx: tx, shops: shops, requests: requests, today: today}
 	stash.purchases = s
 	return s
 }
@@ -335,7 +338,9 @@ func highestUnit(lines []buyLine) Cents {
 // decided that buying is allowed now (downtime open, the Owner, or a request
 // the Owner approved), so this never looks at the downtime switch.
 func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntityID string, a Actor, buyer *EntityRef, in BuyInput, quote *basketQuote) (*BuyResult, error) {
-	lines, currency, total, err := s.priceBasket(ctx, campaignID, shopEntityID, a, in)
+	// A request the GM approves was asked for while its goods were out, so it
+	// is honoured after the shelf has changed.
+	lines, currency, total, err := s.priceBasket(ctx, campaignID, shopEntityID, a, in, quote == nil)
 	if err != nil {
 		return nil, err
 	}
@@ -540,8 +545,9 @@ func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntity
 // priceBasket validates every line against the shop's listings and totals
 // them. It changes nothing. A relation that is not one of this shop's
 // "sells" listings in this campaign, a hidden listing, or a good the caller
-// cannot see all read as not found.
-func (s *shopBuyService) priceBasket(ctx context.Context, campaignID, shopEntityID string, a Actor, in BuyInput) ([]buyLine, string, Cents, error) {
+// cannot see all read as not found. With checkShelf, a good that only turns
+// up on some days is refused when it is not out today.
+func (s *shopBuyService) priceBasket(ctx context.Context, campaignID, shopEntityID string, a Actor, in BuyInput, checkShelf bool) ([]buyLine, string, Cents, error) {
 	if s.tx.relationFinder == nil {
 		return nil, "", 0, apperror.NewInternal(errors.New("shop relations are not wired"))
 	}
@@ -563,6 +569,15 @@ func (s *shopBuyService) priceBasket(ctx context.Context, campaignID, shopEntity
 			return nil, "", 0, notFound("shop item")
 		}
 		meta := parseShopMeta(rel.Metadata)
+		if checkShelf && s.today != nil {
+			on, err := s.today.OnShelf(ctx, campaignID, shopEntityID, int(it.RelationID), meta)
+			if err != nil {
+				return nil, "", 0, err
+			}
+			if !on {
+				return nil, "", 0, apperror.NewBadRequest(notOnShelfMessage)
+			}
+		}
 		unit, err := unitPriceCents(meta.Price)
 		if err != nil {
 			return nil, "", 0, err

@@ -141,6 +141,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/sidebar_editor.js") } defer></script>
 		<!-- A sidebar row's menu: right-click, long press, dots, Shift+F10 -->
 		<script src={ AssetURL("/static/js/sidebar_row_menu.js") } defer></script>
+		<!-- The app drawer beside the sidebar: open, find, drag to pin -->
+		<script src={ AssetURL("/static/js/app_drawer.js") } defer></script>
 		<!-- Hidden sidebar: peek open from the window's left edge -->
 		<script src={ AssetURL("/static/js/sidebar_peek.js") } defer></script>
 
@@ -299,12 +301,13 @@ templ Base(title string) {
 
 		<!-- Sky pane widget (issue #763): the "skybox" dashboard/template
 		     block's ambient sky — moons, stars, weather, celestial events.
-		     Eight files, loaded in the dependency order each one's own header
+		     Nine files, loaded in the dependency order each one's own header
 		     comment documents: world (astronomy/palette) stands alone; looks
 		     (weather recipes, near particles) needs world; moon (the body
 		     renderer) stands alone; events needs world+looks; the basic 2D
-		     painter needs world+looks+moon; the painted sky (shaders + gl)
-		     needs all of those; the widget glue (sky_pane.js,
+		     painter needs world+looks+moon; gl_shared.js (the page's one
+		     WebGL2 context, shared with the painted crafting benches) stands
+		     alone; the painted sky (shaders + gl) needs all of those; the widget glue (sky_pane.js,
 		     Chronicle.register('sky-pane', ...)) needs all of the above. -->
 		<script src={ AssetURL("/static/js/widgets/sky_world.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/sky_looks.js") } defer></script>
@@ -312,6 +315,7 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/sky_events.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/sky_2d.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/sky_shaders.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/gl_shared.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/sky_gl.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/sky_pane.js") } defer></script>
 

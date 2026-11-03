@@ -480,9 +480,9 @@
         h = 34;
         if (pic) { w = h; body = '<svg class="srp-ic srp-ink" viewBox="0 0 40 40" aria-hidden="true">' + window.CraftPictures.inner(pic, it.c, {style: 'ink', small: true}) + '</svg>'; }
         else { w = Math.max(16, h * g[0] / 512); body = '<svg class="srp-ic" viewBox="-40 -40 ' + (g[0] + 80) + ' 592" aria-hidden="true">' + iconArt(g, it.c) + '</svg>'; }
-        var tag = '<div class="srp-tag" style="transform:translateZ(' + (h + 8) + 'px) translateX(-50%) rotateX(-60deg)"><b>' + esc(it.n) + '</b> · ' + esc(it.price) + (it.out ? ' · sold out' : '') + '</div>';
+        var tag = '<div class="srp-tag" style="transform:translateZ(' + (h + 8) + 'px) translateX(-50%) rotateX(-60deg)"><b>' + esc(it.n) + '</b> · ' + esc(it.price) + (it.out ? ' · sold out' : '') + (it.today ? ' · <i>only today</i>' : '') + '</div>';
         bases.push({ d: pos[1] + pos[0] * .01 + .01, h: at(pos[0], pos[1], pos[2] * Z, 0, 'srp-good it' + (it.out ? ' out' : ''), '<div class="srp-up" style="left:' + n1(-w / 2) + 'px;width:' + n1(w) + 'px;height:' + h + 'px;--i:0' + lf(pos[0], pos[1], M) + '"><div class="srp-cd">' + body + '</div></div>' + tag,
-          ' data-i="' + q.good + '" tabindex="0" role="button" aria-label="' + esc(it.n + ', ' + it.price + (it.out ? ', sold out' : '')) + '"') });
+          ' data-i="' + q.good + '" tabindex="0" role="button" aria-label="' + esc(it.n + ', ' + it.price + (it.out ? ', sold out' : '') + (it.today ? ', only today' : '')) + '"') });
       } else {
         g = ICONS[q.icon]; if (!g) return;
         h = 26; w = Math.max(13, h * g[0] / 512);

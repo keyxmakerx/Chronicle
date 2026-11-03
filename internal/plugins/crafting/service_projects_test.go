@@ -152,6 +152,8 @@ type fakeArmory struct {
 	// "actingFor>character: why".
 	whys    []string
 	gaveFor []string
+	// kept is each item's remembered copies, as the pack lists them.
+	kept map[string][]Kept
 }
 
 func newFakeArmory() *fakeArmory {
@@ -162,7 +164,7 @@ func (a *fakeArmory) Pack(context.Context, string, Viewer, string) (*Pack, error
 	p := &Pack{Name: "Mira", PayKind: "coins", Have: a.gold, MoneyLabel: "Gold"}
 	for _, id := range []string{"moss", "water", "potion"} {
 		if a.have[id] > 0 {
-			p.Items = append(p.Items, PackItem{ItemID: id, Name: dirEntities[id].Name, Qty: a.have[id]})
+			p.Items = append(p.Items, PackItem{ItemID: id, Name: dirEntities[id].Name, Qty: a.have[id], Kept: a.kept[id]})
 		}
 	}
 	return p, nil

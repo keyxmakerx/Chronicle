@@ -45,6 +45,10 @@ var systemViewerAllowlist = map[string]bool{
 	// viewer the default calendar is visible to, and a respite's date only
 	// the Director's Projects tab.
 	"internal/app/crafting_adapters.go": true,
+	// Today's shelf: only a count of days leaves the read, so every viewer
+	// is shown the same shelf; the hours to dawn, which tell the time of
+	// day, come from a second read as the viewer.
+	"internal/app/shop_shelf_adapters.go": true,
 }
 
 // TestSystemViewerAllowlist scans internal/ for calls to

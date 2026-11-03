@@ -50,6 +50,15 @@ func (f *fakeCraftingSvc) TakeSpoil(_ context.Context, _, _, acting string, id i
 func (f *fakeCraftingSvc) StudySpoil(_ context.Context, _, _, acting string, id int64, body json.RawMessage) (any, error) {
 	return f.rec("study:"+acting+":"+strconv.FormatInt(id, 10), body)
 }
+func (f *fakeCraftingSvc) Experiment(_ context.Context, _, _, acting, char string, body json.RawMessage) (any, error) {
+	return f.rec("experiment:"+acting+":"+char, body)
+}
+func (f *fakeCraftingSvc) BreakDown(_ context.Context, _, _, acting, char string, body json.RawMessage) (any, error) {
+	return f.rec("break:"+acting+":"+char, body)
+}
+func (f *fakeCraftingSvc) Help(_ context.Context, _, _, acting, pid string, body json.RawMessage) (any, error) {
+	return f.rec("help:"+acting+":"+pid, body)
+}
 func (f *fakeCraftingSvc) FightEnded(_ context.Context, _, _, acting string, body json.RawMessage) (any, error) {
 	return f.rec("fight:"+acting, body)
 }
@@ -130,6 +139,9 @@ func TestCraftingRoutes_HandlerContract(t *testing.T) {
 		{"the Director's tray", "GET", craftBase + "/spoils", "", 200, "spoils:"},
 		{"take a line", "POST", craftBase + "/spoil-lines/12/take", `{"actingUserId":"p1","characterId":"c1"}`, 200, "take:p1:12"},
 		{"study a line", "POST", craftBase + "/spoil-lines/12/study", `{"actingUserId":"p1","characterId":"c1"}`, 200, "study:p1:12"},
+		{"try something new", "POST", craftBase + "/characters/c1/experiment", `{"actingUserId":"p1","items":[{"itemId":"i1","qty":2}]}`, 200, "experiment:p1:c1"},
+		{"break an item down", "POST", craftBase + "/characters/c1/break-down", `{"actingUserId":"p1","recipeId":"r1","copy":4}`, 200, "break:p1:c1"},
+		{"help a party member", "POST", craftBase + "/projects/pj1/help", `{"actingUserId":"p1","characterId":"c1","version":3}`, 200, "help:p1:pj1"},
 		{"a fight the GM confirmed", "POST", craftBase + "/fights", `{"name":"Bog","creatures":[{"pageId":"pg","down":2}]}`, 200, "fight:"},
 		{"an empty body is an empty object", "POST", craftBase + "/spoil-lines/12/take", ``, 200, "take::12"},
 		{"a line id that isn't a number", "POST", craftBase + "/spoil-lines/abc/take", `{}`, 404, ""},
@@ -181,6 +193,10 @@ func TestCraftingRoutes_Gates(t *testing.T) {
 		{"read key cannot start", readOnly, craftAddons(), "POST", craftBase + "/characters/c1/projects", `{}`, 403},
 		{"read key cannot roll", readOnly, craftAddons(), "POST", craftBase + "/projects/p/roll", `{}`, 403},
 		{"read key cannot set aside", readOnly, craftAddons(), "DELETE", craftBase + "/projects/p", "", 403},
+		{"read key cannot experiment", readOnly, craftAddons(), "POST", craftBase + "/characters/c1/experiment", `{}`, 403},
+		{"read key cannot break down", readOnly, craftAddons(), "POST", craftBase + "/characters/c1/break-down", `{}`, 403},
+		{"read key cannot help", readOnly, craftAddons(), "POST", craftBase + "/projects/p/help", `{}`, 403},
+		{"crafting off refuses a hero's turn", allPerms, off, "POST", craftBase + "/projects/p/help", `{}`, 403},
 		{"read key cannot end a fight", readOnly, craftAddons(), "POST", craftBase + "/fights", `{}`, 403},
 		{"crafting off refuses reads", allPerms, off, "GET", craftBase + "/characters/c1", "", 403},
 		{"crafting off refuses writes", allPerms, off, "POST", craftBase + "/fights", `{}`, 403},
