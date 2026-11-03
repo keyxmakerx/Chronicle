@@ -52,6 +52,9 @@ type linkKind struct {
 	relType, reverseType string
 	numbers              []string // metadata keys copied from front matter
 	strs                 []string
+	// flags are true-or-false metadata keys; false takes the key away, as
+	// the widgets store an unset flag.
+	flags []string
 	Entities             EntityLookup
 	Rels                 RelationsAPI
 	// Armory, on carried items only, writes counts through the Armory.
@@ -63,9 +66,9 @@ func ShopStockKind(e EntityLookup, r RelationsAPI) Kind {
 	return &linkKind{
 		name: "shop-stock", label: "Shop stock", ownerKey: "shop", joiner: "at", qtyWord: "in stock",
 		relType: "sells", reverseType: "sold by",
-		numbers: []string{"price", "quantity"}, strs: []string{"currency"},
+		numbers: []string{"price", "quantity"}, strs: []string{"currency"}, flags: []string{"today"},
 		Entities: e, Rels: r,
-		doc: "An item a shop sells. Keys: `shop` (the shop's page name), `item` (the item's page name), `price` (number), `currency` (cp, sp, gp…; default gp), `quantity` (leave out for unlimited, 0 = sold out). Both pages must exist or be created in the same paste. `action: delete` stops selling it.\n\n```\n---\nkind: shop-stock\nshop: The Rusty Anchor\nitem: Rope (50 ft)\nprice: 1\nquantity: 5\n---\n```",
+		doc: "An item a shop sells. Keys: `shop` (the shop's page name), `item` (the item's page name), `price` (number), `currency` (cp, sp, gp…; default gp), `quantity` (leave out for unlimited, 0 = sold out), `today` (true: it turns up on today's shelf on only some days, as `what: stock` shows; false: sold every day). Both pages must exist or be created in the same paste. `action: delete` stops selling it.\n\n```\n---\nkind: shop-stock\nshop: The Rusty Anchor\nitem: Rope (50 ft)\nprice: 1\nquantity: 5\n---\n```",
 	}
 }
 
@@ -134,6 +137,13 @@ func (k *linkKind) summary(r Record) string {
 	}
 	if r.Has("quantity") {
 		parts = append(parts, r.Str("quantity")+" "+k.qtyWord)
+	}
+	if on, ok := r.Bool("today"); ok && k.name == "shop-stock" {
+		if on {
+			parts = append(parts, "on today's shelf some days")
+		} else {
+			parts = append(parts, "sold every day")
+		}
 	}
 	if len(parts) == 0 {
 		if k.name == "carried-item" {
@@ -268,6 +278,13 @@ func (k *linkKind) meta(existing json.RawMessage, r Record) (json.RawMessage, er
 	for _, s := range k.strs {
 		if v := r.Str(s); v != "" {
 			m[s] = v
+		}
+	}
+	for _, f := range k.flags {
+		if on, ok := r.Bool(f); ok && on {
+			m[f] = true
+		} else if ok {
+			delete(m, f)
 		}
 	}
 	if k.name == "shop-stock" {

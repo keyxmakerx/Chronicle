@@ -6596,7 +6596,7 @@ func (a *App) RegisterRoutes() {
 	}
 	var aiShopLooks records.ShopLooksAPI
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
-		aiShopLooks = aiShopLooksAdapter{rooms: shopRoomService, fronts: shopStreetService}
+		aiShopLooks = aiShopLooksAdapter{rooms: shopRoomService, fronts: shopStreetService, today: shopTodaySvc}
 	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,

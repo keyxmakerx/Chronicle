@@ -14,9 +14,13 @@ import (
 type aiShopLooksAdapter struct {
 	rooms  armory.ShopRoomService
 	fronts armory.ShopStreetService
+	today  armory.ShopTodayService // nil leaves today's shelf out
 }
 
-var _ records.ShopLooksAPI = aiShopLooksAdapter{}
+var (
+	_ records.ShopLooksAPI = aiShopLooksAdapter{}
+	_ records.ShopShelfAPI = aiShopLooksAdapter{}
+)
 
 // The shop room and storefront follow the shop stock in the prompt.
 func init() {
@@ -56,4 +60,27 @@ func (s aiShopLooksAdapter) SaveFront(ctx context.Context, campaignID, shopID st
 	}
 	_, err := s.fronts.SaveFront(ctx, campaignID, shopID, a.UserID, front)
 	return err
+}
+
+// Shelf reads today's shelf as a may see it: goods a can't see are left out
+// of the pool, and the hours to dawn only when the calendar shows a.
+func (s aiShopLooksAdapter) Shelf(ctx context.Context, campaignID, shopID string, a records.Actor) (*records.ShopShelf, error) {
+	if s.today == nil {
+		return nil, nil
+	}
+	v, err := s.today.Today(ctx, campaignID, shopID, armory.Actor{UserID: a.UserID, Role: a.Role})
+	if err != nil || v == nil {
+		return nil, err
+	}
+	out := &records.ShopShelf{Places: v.Spots, HoursToDawn: -1, Pool: map[int]bool{}, Today: map[int]bool{}}
+	if v.HoursToDawn != nil {
+		out.HoursToDawn = *v.HoursToDawn
+	}
+	for _, id := range v.Pool {
+		out.Pool[id] = true
+	}
+	for _, id := range v.Today {
+		out.Today[id] = true
+	}
+	return out, nil
 }
