@@ -257,6 +257,18 @@
      refuses, the live drawing stays, only slower to repaint. Images are kept
      by their source, so turning back to a view already seen is instant. */
   var BAKED = {};
+  /* Lights and encodes one baked image off the page's thread: a canvas's
+     toBlob holds the page up to two seconds for the largest layers, and
+     drawing the SVG straight into a canvas paints its filters on the page's
+     thread. Rejects where a browser lacks a step, and the canvas way is used. */
+  function offBake(img) {
+    if (!window.createImageBitmap || !window.OffscreenCanvas || !OffscreenCanvas.prototype.convertToBlob) return Promise.reject();
+    return createImageBitmap(img).then(function (bmp) {
+      var oc = new OffscreenCanvas(bmp.width, bmp.height);
+      oc.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
+      return oc.convertToBlob({ type: 'image/png' });
+    });
+  }
   function bake(svg, defs, done) {
     var groups = svg.querySelectorAll('[data-bake]'), left = groups.length;
     function one() { if (!--left && done) done(); }
@@ -276,8 +288,10 @@
       }
       if (BAKED[src]) { swap(BAKED[src]); return; }
       img.onload = function () {
-        try { var cv = document.createElement('canvas'); cv.width = w * k; cv.height = h * k; cv.getContext('2d').drawImage(img, 0, 0); cv.toBlob(function (b) { swap(b ? URL.createObjectURL(b) : img.src); }); }
-        catch (e) { swap(img.src); }
+        offBake(img).then(function (b) { swap(URL.createObjectURL(b)); }, function () {
+          try { var cv = document.createElement('canvas'); cv.width = w * k; cv.height = h * k; cv.getContext('2d').drawImage(img, 0, 0); cv.toBlob(function (b) { swap(b ? URL.createObjectURL(b) : img.src); }); }
+          catch (e) { swap(img.src); }
+        });
       };
       img.onerror = one;
       img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
