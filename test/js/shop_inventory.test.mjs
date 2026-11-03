@@ -142,3 +142,36 @@ test('search offers only entity pages that are not already stocked', async () =>
   const rows = findAllByClass(el, 'shop-inv-search-item');
   assert.deepEqual(rows.map((r) => r.dataset.entityId), ['item-def']);
 });
+
+// Today's shelf: a good marked for it is listed to a reader only on a day it
+// is out, and the reader's list waits for the shelf so it never flashes up.
+const flagged = (id, name) => ({ ...sellsRelation, id, targetEntityId: 'item-' + id, targetEntityName: name, metadata: { price: 1, today: true } });
+// The mini-DOM has no firstChild, so each render is appended; read the last.
+const last = (el) => el.children[el.children.length - 1];
+const TODAY = ['/campaigns/c1/armory/shops/shop1/today', { spots: 1, hoursToDawn: 5, pool: [21, 22], today: [21] }];
+
+test('a reader sees only the goods out on today’s shelf, marked as such', async () => {
+  const { el } = boot([['/campaigns/c1/entities/shop1/relations', [sellsRelation, flagged(21, 'Ember salt'), flagged(22, 'Stormglass')]], TODAY], false);
+  await flush(); await flush(); await flush();
+  const names = findAllByClass(last(el), 'shop-inv-item-name').map((n) => n.textContent);
+  assert.deepEqual(names, ['Longsword', 'Ember salt']);
+  const notes = findAllByClass(last(el), 'shop-inv-today-note').map((n) => n.textContent);
+  assert.deepEqual(notes, ['Only today']);
+});
+
+test('with the armory off a reader still sees every good', async () => {
+  const { el } = boot([['/campaigns/c1/entities/shop1/relations', [sellsRelation, flagged(22, 'Stormglass')]]], false);
+  await flush(); await flush(); await flush();
+  assert.equal(findAllByClass(last(el), 'shop-inv-item').length, 2);
+});
+
+test('an editor sees every good, which are out today, and the shelf switch', async () => {
+  const { el } = boot([['/campaigns/c1/entities/shop1/relations', [sellsRelation, flagged(21, 'Ember salt'), flagged(22, 'Stormglass')]], TODAY], true);
+  await flush(); await flush(); await flush();
+  assert.equal(findAllByClass(last(el), 'shop-inv-item').length, 3);
+  const notes = findAllByClass(last(el), 'shop-inv-today-note').map((n) => n.textContent);
+  assert.deepEqual(notes, ['On today’s shelf, out today', 'On today’s shelf, not out today']);
+  assert.equal(findAllByClass(last(el), 'shop-inv-today-on').length, 2);
+  assert.equal(findAllByClass(last(el), 'shop-inv-today-off').length, 1);
+  assert.ok(findByClass(last(el), 'shop-inv-shelf'), 'the places line shows once a good is marked');
+});

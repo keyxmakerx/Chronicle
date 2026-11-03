@@ -572,6 +572,9 @@ templ blockShopInventory(cc *campaigns.CampaignContext, entity *Entity, csrfToke
 		if cc.MemberRole >= campaigns.RoleScribe {
 			data-editable="true"
 		}
+		if cc.MemberRole >= campaigns.RoleOwner {
+			data-owner="true"
+		}
 		data-csrf-token={ csrfToken }
 	></div>
 }
