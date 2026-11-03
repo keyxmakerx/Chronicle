@@ -121,7 +121,9 @@ on, and a chance of a mishap from a table on every roll; a table's rows are
 shown read-only (they are edited on the Rolling Tables page), with "Try a
 roll" and "Watch" for each mishap's moment. "Extras" holds breakthroughs,
 mastery, substitutes, finding the recipe by experimenting, breaking the
-made item down, others helping, and the settings that need an item to
+made item down, others helping, enchanting one of the ingredients instead
+of making an item (which ingredient, the enchantment's name and how many an
+item holds), and the settings that need an item to
 remember something of its own (quality, shelf life, the maker's mark); those
 last are labelled "Not yet carried out at the roll". A recipe with
 "Finding it by experimenting" off can never be found that way.

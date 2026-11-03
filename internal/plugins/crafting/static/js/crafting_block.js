@@ -72,6 +72,7 @@
     if (k.quality === 'fine') w.push('Fine');
     if (k.quality === 'poor') w.push('Poor');
     (k.marks || []).forEach(function (m) { w.push(m.charAt(0).toUpperCase() + m.slice(1)); });
+    (k.enchants || []).forEach(function (m) { w.push(m); });
     return w.join(', ') || 'Remembered';
   }
 
@@ -305,6 +306,8 @@
             return '<option value="' + esc(o.id) + '"' + (o.id === pick[i] ? ' selected' : '') + '>' + esc(o.name) + ' (' + o.qty + ')</option>';
           }).join('') + '</select></span></li>';
       }
+      if (r.enchant && r.needs[r.enchant.line]) lines += '<li><span class="crp-k">Enchanting<small>The ' + esc(r.needs[r.enchant.line].name) + ' comes back as itself, with what it remembers, plus ' +
+        esc(r.enchant.name) + '. Cancelling the project gives it back as it was.</small></span><span class="crp-v">' + ICON.check + '</span></li>';
       var pk = D.pack.payKind;
       if (r.cost && pk === 'wealth') lines += '<li><span class="crp-k">Cost<small>Wealth is a threshold, as at a shop, so nothing is spent</small></span><span class="crp-v">Wealth ' + num(r.charge) + ' <span class="is-ok">· ' + who + ' has ' + num(D.pack.have) + '</span></span></li>';
       else if (r.cost) lines += '<li><span class="crp-k">Cost<small>' + who + ' has ' + num(D.pack.have) + ' ' + esc(unit(r, D.pack)) + ', so ' + num(D.pack.have - r.charge) + ' ' + esc(unit(r, D.pack)) + ' will be left</small></span><span class="crp-v">' + esc(L.money(r.cost)) + '</span></li>';
@@ -328,10 +331,12 @@
     }
 
     /* What the made item carries into the pack: the maker's mark and when it
-       goes off. Fine, marks and quirks are already in what befell. */
+       goes off, and its enchantments. Fine, marks and quirks are already in
+       what befell. */
     function carries(k) {
       if (!k) return '';
       var rows = [];
+      if (k.enchants && k.enchants.length) rows.push(['Enchanted', k.enchants.join(', ')]);
       if (k.how === 'made' && k.by) rows.push(['Maker’s mark', 'Made by ' + k.by + (k.on ? ', ' + k.on : '')]);
       if (k.offOn) rows.push(['Goes off', 'On ' + k.offOn + (k.becomes ? '. Then it becomes ' + k.becomes + '.' : '.')]);
       if (!rows.length) return '';

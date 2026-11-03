@@ -131,6 +131,11 @@ func bookPage(r *Recipe, names map[string]string, rules systems.CraftingRules) B
 	if r.Result.ItemID != "" {
 		p.Makes = materialName(Material{ItemID: r.Result.ItemID}, names)
 	}
+	if makes, line := enchantWords(r, names); makes != "" {
+		p.Makes, p.MakesQty = makes, 1
+		p.Needs[r.Extras.Enchant.Line].Qty = 1
+		p.Lines = append(p.Lines, line)
+	}
 	if r.Cost.Amount > 0 {
 		c := r.Cost
 		p.Cost = &c
@@ -146,6 +151,24 @@ func bookPage(r *Recipe, names map[string]string, rules systems.CraftingRules) B
 		}
 	}
 	return p
+}
+
+// enchantWords says what an enchanting recipe makes, "Grandfather's axe,
+// enchanted with Frostbite", and the book's line about it; both are "" for
+// a recipe that makes a new item.
+func enchantWords(r *Recipe, names map[string]string) (makes, line string) {
+	e := r.Extras.Enchant
+	if e == nil || e.Line < 0 || e.Line >= len(r.Materials) {
+		return "", ""
+	}
+	what := materialName(r.Materials[e.Line], names)
+	makes = what + ", enchanted"
+	if e.Name != "" {
+		makes += " with " + e.Name
+	}
+	line = fmt.Sprintf("The item you enchant comes back with what it remembers, plus the enchantment. An item holds at most %d %s, and cancelling gives it back as it was.",
+		e.Slots, plural(e.Slots, "enchantment", "enchantments"))
+	return makes, line
 }
 
 // ruleSentence says a rule plainly, for a book rule with no line of its

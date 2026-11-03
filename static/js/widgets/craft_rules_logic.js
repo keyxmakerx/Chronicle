@@ -638,7 +638,7 @@
     after: [2, 3, 5, 10], gives: ['skip', 'edge', 'points'], learnedBy: ['maker', 'party'], failedTry: ['used', 'half', 'kept'],
     tags: ['metal', 'remnant_part', 'body_part', 'bone', 'hide', 'liquid', 'herb', 'magic_item', 'magic_essence',
       'fungus', 'wood', 'resin', 'scale', 'feather', 'venom', 'gem', 'stone', 'powder', 'cloth', 'paper'],
-    limits: {subs: 8, salvage: 4, days: 360, hint: 240, mishapMoments: 20}
+    limits: {subs: 8, salvage: 4, days: 360, hint: 240, mishapMoments: 20, enchantName: 40, slots: 6}
   };
   function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : null; }
   function pick(v, opts) { return opts.indexOf(v) >= 0 ? v : opts[0]; }
@@ -652,7 +652,7 @@
   function clampN(n, lo, hi) { return n < lo ? lo : n > hi ? hi : n; }
   function defaultExtras() {
     return {botch: {costs: 'bane'}, mishaps: null, quality: null, substitutes: [], breakthrough: false, mastery: null, discover: null,
-      keeps: null, makersMark: false, salvage: [], othersCanHelp: false};
+      keeps: null, makersMark: false, salvage: [], othersCanHelp: false, enchant: null};
   }
   /* cleanExtras reads a recipe's extras as the AI or the editor wrote them;
      materials is how many materials the recipe has. */
@@ -707,6 +707,13 @@
       });
     }
     out.othersCanHelp = m.othersCanHelp === true;
+    /* Enchanting gives back the item that went in, so it names one of the
+       recipe's materials; a name left blank is kept while it is typed. */
+    if ((x = obj(m.enchant)) && materials > 0) {
+      var line = num(x.line), slots = num(x.slots);
+      if (!isFinite(line) || line < 0 || line >= materials) line = 0;
+      out.enchant = {line: line, name: str(x.name, EXTRAS.limits.enchantName), slots: clampN(isFinite(slots) ? slots : 3, 1, EXTRAS.limits.slots)};
+    }
     return out;
   }
 

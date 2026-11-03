@@ -284,6 +284,10 @@ func (s *service) madeKept(ctx context.Context, p *Project, e *EntityInfo, x Ext
 	if p.Details.Item != nil {
 		k = *p.Details.Item
 	}
+	if p.Details.Base != nil {
+		// An enchanted item keeps its own picture, maker and keeping.
+		return k
+	}
 	k.Look = s.madeLook(ctx, p)
 	if x.MakersMark {
 		k.How, k.By = "made", e.Name
