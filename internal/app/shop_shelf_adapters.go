@@ -14,6 +14,7 @@ import (
 // shelfCalendarService is the part of the calendar service today's shelf reads.
 type shelfCalendarService interface {
 	GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
+	ListCalendars(ctx context.Context, campaignID string, v permissions.Viewer) ([]calendar.Calendar, error)
 }
 
 // shelfDayAdapter reads the shelf day from the default calendar. The shelf
@@ -22,7 +23,8 @@ type shelfCalendarService interface {
 // trusted in-process read, ADR-049's allowlist) so every viewer gets the
 // same shelf; only a count leaves here, never the date. The hours to dawn
 // tell the time of day, so they are given only to a viewer the calendar is
-// visible to.
+// visible to. That check is the calendar list, one query under the same
+// visibility rule, rather than a second full read of the calendar.
 type shelfDayAdapter struct {
 	cal shelfCalendarService
 }
@@ -43,15 +45,25 @@ func (a *shelfDayAdapter) ShelfDay(ctx context.Context, campaignID string, role 
 	}
 	d := shelfDayOf(c)
 	if role < permissions.RoleOwner {
-		seen, err := a.cal.GetDefaultCalendarForViewer(ctx, campaignID, permissions.RequestViewer(role, userID))
-		if err != nil && apperror.SafeCode(err) != http.StatusNotFound {
+		seen, err := a.cal.ListCalendars(ctx, campaignID, permissions.RequestViewer(role, userID))
+		if err != nil {
 			return nil, err
 		}
-		if err != nil || seen == nil {
+		if !calendarListed(seen, c.ID) {
 			d.HoursToDawn = -1
 		}
 	}
 	return d, nil
+}
+
+// calendarListed reports whether the calendar id is among cals.
+func calendarListed(cals []calendar.Calendar, id string) bool {
+	for i := range cals {
+		if cals[i].ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // shelfDayOf works out the shelf day at the calendar's current time.

@@ -84,6 +84,14 @@ func (f *fakeCraftingCalendar) GetDefaultCalendarForViewer(_ context.Context, _ 
 	return f.cal, f.err
 }
 
+func (f *fakeCraftingCalendar) ListCalendars(_ context.Context, _ string, v permissions.Viewer) ([]calendar.Calendar, error) {
+	f.viewers = append(f.viewers, v)
+	if f.cal == nil {
+		return nil, f.err
+	}
+	return []calendar.Calendar{*f.cal}, f.err
+}
+
 func (f *fakeCraftingCalendar) ListEventsForMonth(context.Context, string, string, int, int, permissions.Viewer) ([]calendar.Event, error) {
 	return f.events, nil
 }

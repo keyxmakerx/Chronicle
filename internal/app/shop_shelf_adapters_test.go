@@ -55,12 +55,15 @@ func TestShelfDayAdapter(t *testing.T) {
 		t.Errorf("a fault must be an error: %v", err)
 	}
 	t.Run("the countdown only for a viewer who can see the calendar", func(t *testing.T) {
-		cal := &calendar.Calendar{CurrentYear: 3, CurrentMonth: 2, CurrentDay: 12, CurrentHour: 20, HoursPerDay: 24, MinutesPerHour: 60,
+		cal := &calendar.Calendar{ID: "cal-1", CurrentYear: 3, CurrentMonth: 2, CurrentDay: 12, CurrentHour: 20, HoursPerDay: 24, MinutesPerHour: 60,
 			Months: []calendar.Month{{ID: 1, Name: "A", Days: 30, SortOrder: 1}, {ID: 2, Name: "B", Days: 30, SortOrder: 2}}}
 		hidden := &viewerGatedCalendar{cal: cal}
 		d, err := (&shelfDayAdapter{cal: hidden}).ShelfDay(ctx, "camp", permissions.RolePlayer, "u1")
 		if err != nil || d == nil || d.HoursToDawn != -1 || d.Index != int64(cal.CurrentDayIndex()) {
 			t.Errorf("hidden calendar: %+v %v", d, err)
+		}
+		if hidden.reads != 1 || hidden.lists != 1 {
+			t.Errorf("a player costs one full read and one list, got %d reads and %d lists", hidden.reads, hidden.lists)
 		}
 		hidden.visible = true
 		if d, _ := (&shelfDayAdapter{cal: hidden}).ShelfDay(ctx, "camp", permissions.RolePlayer, "u1"); d == nil || d.HoursToDawn <= 0 {
@@ -76,11 +79,21 @@ func TestShelfDayAdapter(t *testing.T) {
 // viewerGatedCalendar answers the system read, and a request viewer's only
 // when visible.
 type viewerGatedCalendar struct {
-	cal     *calendar.Calendar
-	visible bool
+	cal          *calendar.Calendar
+	visible      bool
+	reads, lists int
+}
+
+func (f *viewerGatedCalendar) ListCalendars(_ context.Context, _ string, v permissions.Viewer) ([]calendar.Calendar, error) {
+	f.lists++
+	if v.IsSystem() || f.visible {
+		return []calendar.Calendar{{ID: "other"}, *f.cal}, nil
+	}
+	return []calendar.Calendar{{ID: "other"}}, nil
 }
 
 func (f *viewerGatedCalendar) GetDefaultCalendarForViewer(_ context.Context, _ string, v permissions.Viewer) (*calendar.Calendar, error) {
+	f.reads++
 	if v.IsSystem() || f.visible {
 		return f.cal, nil
 	}
