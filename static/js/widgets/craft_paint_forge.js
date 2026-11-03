@@ -287,11 +287,19 @@
       });
     }
     // Heat haze on every level: the band above the fire redrawn in thin strips, each nudged sideways.
+    // The band is copied out once a frame and the strips drawn from the copy:
+    // drawing a canvas onto itself copies the whole canvas on every call.
+    var band = null;
     function shimmer(t) {
-      var cv = g.canvas, s = cv.width / W;
+      var cv = g.canvas, s = cv.width / W, bw = Math.ceil(170 * s), bh = Math.ceil(100 * s);
+      if (!band) band = document.createElement('canvas');
+      if (band.width !== bw || band.height !== bh) { band.width = bw; band.height = bh; }
+      var bg = band.getContext('2d');
+      bg.clearRect(0, 0, bw, bh);
+      bg.drawImage(cv, 45 * s, 100 * s, bw, bh, 0, 0, bw, bh);
       for (var y = 100; y < 200; y += 3) {
         var off = Math.sin(y * .18 + t * 7) * 1.4 * (1 - (200 - y) / 140);
-        g.drawImage(cv, 45 * s, y * s, 170 * s, 3 * s, 45 + off, y, 170, 3);
+        g.drawImage(band, 0, (y - 100) * s, 170 * s, 3 * s, 45 + off, y, 170, 3);
       }
     }
     v.frame = function (t, dt) {

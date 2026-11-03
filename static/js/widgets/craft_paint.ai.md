@@ -108,6 +108,11 @@ context already scaled to the logical size, 640x360. The scene object:
 Every level draws the scene's own fire and light, so a scene must look
 finished on `basic`; the levels only add.
 
+A scene never draws its canvas onto itself in a loop: each such call copies
+the whole canvas, so the forge's heat haze (34 strips) cost 47 ms a frame on a
+2x screen without a graphics card. Copy the region once a frame into a small
+canvas and draw the strips from that copy, as the forge's `shimmer` does.
+
 ## Tests
 
 - `test/js/craft_paint.test.mjs`: the rules in a vm (the governor's step
