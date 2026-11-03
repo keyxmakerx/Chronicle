@@ -193,6 +193,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	if d.ShopLooks != nil {
 		l.Shops = d.ShopLooks
 	}
+	if cp, ok := d.Carried.(records.CopiesAPI); ok {
+		l.Copies = cp
+	}
 	return l
 }
 

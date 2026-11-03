@@ -27,7 +27,7 @@ func (f *fakeNights) Create(_ context.Context, _ string, _ aiplug.Actor, in aiNi
 	f.created = append(f.created, in)
 	return "new", nil
 }
-func (f *fakeNights) Update(_ context.Context, id string, in aiNightInput) error {
+func (f *fakeNights) Update(_ context.Context, _, id string, in aiNightInput) error {
 	f.updates[id] = in
 	return nil
 }
@@ -35,7 +35,7 @@ func (f *fakeNights) SetRecap(_ context.Context, id string, _, h *string) error 
 	f.recaps[id] = *h
 	return nil
 }
-func (f *fakeNights) Delete(_ context.Context, id string) error {
+func (f *fakeNights) Delete(_ context.Context, _, id string) error {
 	f.deleted = append(f.deleted, id)
 	return nil
 }
@@ -196,5 +196,65 @@ func TestAIGameNights_Lookup(t *testing.T) {
 	in := k.LookupInfo()
 	if in.What != "game-nights" || in.Tool.Name != "game_nights" || in.Tool.Owner {
 		t.Errorf("lookup info = %+v", in)
+	}
+}
+
+// ringSvc is the sessions service as serviceNights calls it: who had
+// answered the night, and the bells rung.
+type ringSvc struct {
+	SessionService
+	responded []string
+	bells     []string
+	moves     int
+}
+
+func (r *ringSvc) MoveSession(context.Context, string, UpdateSessionInput) (*Session, []string, error) {
+	r.moves++
+	return nil, r.responded, nil
+}
+func (r *ringSvc) DeleteSession(context.Context, string) ([]string, error) { return r.responded, nil }
+func (r *ringSvc) GetSession(_ context.Context, id string) (*Session, error) {
+	return &Session{ID: id, Name: "Session 12"}, nil
+}
+func (r *ringSvc) NotifyUsers(_ context.Context, ids []string, campaignID, ntype, msg, link string) error {
+	r.bells = append(r.bells, strings.Join(ids, ",")+"|"+campaignID+"|"+ntype+"|"+msg+"|"+link)
+	return nil
+}
+
+// An approved AI change to a night tells the people who had answered, the
+// way the owner's own move or cancel does, so their answer is checked again
+// rather than left on a date that no longer holds.
+func TestServiceNights_RingsWhoAnswered(t *testing.T) {
+	date := "2026-10-18"
+	tests := []struct {
+		name      string
+		responded []string
+		act       func(serviceNights) error
+		want      []string
+	}{
+		{"a move asks who answered to check again", []string{"u1", "u2"},
+			func(g serviceNights) error {
+				return g.Update(context.Background(), "c", "s12", aiNightInput{Date: &date})
+			},
+			[]string{`u1,u2|c|` + NotifSessionMoved + `|"Session 12" was moved. Please check your answer.|/campaigns/c/sessions/s12`}},
+		{"a removal tells who answered it is cancelled", []string{"u1"},
+			func(g serviceNights) error { return g.Delete(context.Background(), "c", "s12") },
+			[]string{`u1|c|` + NotifSessionCancelled + `|"Session 12" was cancelled.|/campaigns/c/game-nights`}},
+		{"nobody answered, no bell", nil,
+			func(g serviceNights) error {
+				return g.Update(context.Background(), "c", "s12", aiNightInput{Date: &date})
+			},
+			nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &ringSvc{responded: tt.responded}
+			if err := tt.act(serviceNights{svc: svc}); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(svc.bells, "\n") != strings.Join(tt.want, "\n") {
+				t.Errorf("bells = %q, want %q", svc.bells, tt.want)
+			}
+		})
 	}
 }

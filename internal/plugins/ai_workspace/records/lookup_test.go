@@ -320,3 +320,43 @@ func TestLookups_PageSheet(t *testing.T) {
 		})
 	}
 }
+
+// fakeCopies remembers Aldric's rope for an owner only, as the Armory lets
+// the character's player or a GM look.
+type fakeCopies struct{}
+
+func (fakeCopies) Remembered(_ context.Context, _ string, a Actor, characterID string) (map[string]string, error) {
+	if characterID != "aldric" || a.UserID != owner.UserID {
+		return map[string]string{}, nil
+	}
+	return map[string]string{"rope": "1 Fine · Moonlit (Made by Orrin)"}, nil
+}
+
+// A remembered copy (fine, marked, enchanted, made by someone) is part of
+// what a hero carries, so the AI no longer reads it as a plain count.
+func TestLookups_RememberedCopies(t *testing.T) {
+	l := world()
+	l.Copies = fakeCopies{}
+	tests := []struct {
+		name    string
+		r       Record
+		a       Actor
+		want    string
+		notWant string
+	}{
+		{"inventory", lookup("inventory", map[string]any{"character": "Ser Aldric"}), owner, "- Rope x2 — remembered: 1 Fine · Moonlit (Made by Orrin)", ""},
+		{"players", lookup("players", nil), owner, "Carries Rope x2 — remembered: 1 Fine · Moonlit (Made by Orrin), The Rusty Anchor.", ""},
+		{"a viewer the Armory refuses sees the plain count", lookup("inventory", map[string]any{"character": "Ser Aldric"}), player, "- Rope x2", "remembered"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := l.Answer(context.Background(), camp, tt.a, []Record{tt.r})[0]
+			if got.Error != "" || !strings.Contains(got.Text, tt.want) {
+				t.Fatalf("answer lacks %q (error %q):\n%s", tt.want, got.Error, got.Text)
+			}
+			if tt.notWant != "" && strings.Contains(got.Text, tt.notWant) {
+				t.Errorf("answer has %q:\n%s", tt.notWant, got.Text)
+			}
+		})
+	}
+}
