@@ -188,3 +188,47 @@ func TestCheckDrops(t *testing.T) {
 		t.Fatalf("a harvest paying 0 at the bottom: %v", err)
 	}
 }
+
+// An AI can make a recipe enchant an item the hero owns, change it, and stop
+// it; a line or a name the editor couldn't hold is refused at review.
+func TestSaveAIRecipe_Enchant(t *testing.T) {
+	s, repo, _ := newTestService()
+	ctx := context.Background()
+	repo.tags = map[string][]string{"moss": {"herb"}, "water": {"liquid"}}
+	in := AIRecipe{Name: "Frost oil", Method: "steady", Materials: []Material{{ItemID: "moss", Qty: 2}, {ItemID: "water", Qty: 1}},
+		Goal: 30, Stat: "Reason", SetEnchant: true, Enchant: &Enchant{Line: 1, Name: " Frostbite ", Slots: 2}}
+
+	r, err := s.SaveAIRecipe(ctx, "c", director, in, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := r.Extras.Enchant; e == nil || *e != (Enchant{Line: 1, Name: "Frostbite", Slots: 2}) || !r.Draft {
+		t.Fatalf("created %+v (enchant %+v)", r, r.Extras.Enchant)
+	}
+
+	// An update without enchant keeps it; with nil it stops.
+	up := AIRecipe{ID: r.ID, Name: r.Name, Materials: in.Materials, Goal: 40}
+	if got, err := s.SaveAIRecipe(ctx, "c", director, up, false); err != nil || got.Extras.Enchant == nil {
+		t.Fatalf("kept: %+v, %v", got, err)
+	}
+	up.SetEnchant = true
+	if got, err := s.SaveAIRecipe(ctx, "c", director, up, false); err != nil || got.Extras.Enchant != nil {
+		t.Fatalf("stopped: %+v, %v", got, err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		e    Enchant
+		want string
+	}{
+		{"a line past the materials", Enchant{Line: 2, Name: "Glow"}, "line 3 is not one of the recipe's 2 materials"},
+		{"no name", Enchant{Line: 0, Name: "  "}, "needs a name"},
+		{"too many slots", Enchant{Line: 0, Name: "Glow", Slots: 9}, "1 to 6 enchantments"},
+	} {
+		bad := in
+		bad.Name, bad.Enchant = "Other", &tc.e
+		if _, err := s.SaveAIRecipe(ctx, "c", director, bad, true); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: %v, want %q", tc.name, err, tc.want)
+		}
+	}
+}

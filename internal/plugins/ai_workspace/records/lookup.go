@@ -165,6 +165,21 @@ type Lookups struct {
 	Copies CopiesAPI
 }
 
+// ShopShelfAPI is today's shelf of a shop, which a ShopLooksAPI may also
+// offer: goods flagged `today` turn up on only some days.
+type ShopShelfAPI interface {
+	// Shelf is the shop's shelf as a may see it, or nil when the campaign
+	// can't work one out.
+	Shelf(ctx context.Context, campaignID, shopID string, a Actor) (*ShopShelf, error)
+}
+
+// ShopShelf is one shop's shelf today, keyed by "sells" relation id.
+type ShopShelf struct {
+	Places      int // how many places change at dawn
+	HoursToDawn int // -1 when there is no calendar the viewer may see
+	Pool, Today map[int]bool
+}
+
 // CopiesAPI reads the Armory's remembered copies of what a character
 // carries, as a may see them. Implemented in internal/app.
 type CopiesAPI interface {
@@ -186,6 +201,41 @@ func (run *lookupRun) remembered(characterID string) map[string]string {
 		return nil
 	}
 	return m
+}
+
+// shelf is the shop's shelf today, or nil when there is none to read.
+func (run *lookupRun) shelf(e *entities.Entity) *ShopShelf {
+	sh, ok := run.l.Shops.(ShopShelfAPI)
+	if !ok || e.TypeSlug != "shop" {
+		return nil
+	}
+	v, err := sh.Shelf(run.ctx, run.campaignID, e.ID, run.a)
+	if err != nil {
+		return nil
+	}
+	return v
+}
+
+// shelfHead says how today's shelf works, above the stock list.
+func shelfHead(s *ShopShelf) string {
+	w := fmt.Sprintf("Today's shelf: goods marked \"some days\" turn up on only some days, %d of them at a time, and change at dawn", s.Places)
+	if s.HoursToDawn >= 0 {
+		w += fmt.Sprintf(" (in %d hours)", s.HoursToDawn)
+	}
+	return w + ". Players can buy only the ones out today. In a `shop-stock` block, `today: true` makes a good one of these, `today: false` sells it every day.\n\n"
+}
+
+// shelfNote is a stock line's place on today's shelf, or "" for a good sold
+// every day.
+func shelfNote(s *ShopShelf, relationID int) string {
+	switch {
+	case s == nil || !s.Pool[relationID]:
+		return ""
+	case s.Today[relationID]:
+		return " · some days: out today"
+	default:
+		return " · some days: not out today"
+	}
 }
 
 // copiesNote is an inventory line's remembered copies, " — remembered: …",
@@ -934,15 +984,18 @@ func (run *lookupRun) links(owner, relType, label string) (LookupAnswer, error) 
 		return ans, err
 	}
 	var rem map[string]string
+	var shelf *ShopShelf
 	if relType == "Has Item" {
 		rem = run.remembered(e.ID)
+	} else {
+		shelf = run.shelf(e)
 	}
 	var lines []string
 	for _, r := range rels {
 		if r.RelationType != relType {
 			continue
 		}
-		lines = append(lines, "- "+r.TargetEntityName+linkMeta(r.Metadata, relType == "sells")+copiesNote(rem, r.TargetEntityID))
+		lines = append(lines, "- "+r.TargetEntityName+linkMeta(r.Metadata, relType == "sells")+copiesNote(rem, r.TargetEntityID)+shelfNote(shelf, r.ID))
 	}
 	ans.Chip = fmt.Sprintf("%s · %s · %d", label, e.Name, len(lines))
 	var b strings.Builder
@@ -953,6 +1006,9 @@ func (run *lookupRun) links(owner, relType, label string) (LookupAnswer, error) 
 	}
 	if len(lines) == 0 {
 		b.WriteString("Nothing yet.\n")
+	}
+	if shelf != nil && len(shelf.Pool) > 0 {
+		b.WriteString(shelfHead(shelf))
 	}
 	writeLines(&b, lines)
 	if relType == "sells" {

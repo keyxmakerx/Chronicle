@@ -3,6 +3,7 @@ package records
 import (
 	"context"
 	"encoding/json"
+	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"strings"
 	"testing"
 
@@ -224,5 +225,67 @@ func TestShopRoomKindNoneOnAMissingField(t *testing.T) {
 	p := k.Plan(context.Background(), camp, owner, craftRec("shop-room", ActionUpdate, "", map[string]any{"shop": "Ember Forge", "mood": "none", "manner": "none"}))
 	if p.Error != "" || !strings.HasPrefix(p.Summary, "changes nothing") || len(p.Warnings) > 0 {
 		t.Fatalf("plan = %+v", p)
+	}
+}
+
+// shelfShops is the shop looks with today's shelf: of the forge's two
+// some-days goods (sells 2 and 3), only 2 is out today.
+type shelfShops struct{ *fakeShopLooks }
+
+func (shelfShops) Shelf(context.Context, string, string, Actor) (*ShopShelf, error) {
+	return &ShopShelf{Places: 1, HoursToDawn: 5, Pool: map[int]bool{2: true, 3: true}, Today: map[int]bool{2: true}}, nil
+}
+
+// The stock answer says which goods only turn up some days and whether each
+// is out today, so the AI never offers one that can't be bought today.
+func TestStockLookupShowsTodaysShelf(t *testing.T) {
+	_, _, f := shopKinds()
+	pages := []entities.Entity{}
+	for _, e := range shopPages() {
+		pages = append(pages, *e)
+	}
+	rels := &fakeRels{rels: []relations.Relation{
+		{ID: 1, SourceEntityID: "forge", TargetEntityID: "inn", TargetEntityName: "Nails", RelationType: "sells"},
+		{ID: 2, SourceEntityID: "forge", TargetEntityID: "inn", TargetEntityName: "Star-iron", RelationType: "sells", Metadata: json.RawMessage(`{"today":true}`)},
+		{ID: 3, SourceEntityID: "forge", TargetEntityID: "inn", TargetEntityName: "Dragon scale", RelationType: "sells", Metadata: json.RawMessage(`{"today":true}`)},
+	}}
+	l := &Lookups{Pages: &fakePages{all: pages}, Rels: rels, Shops: shelfShops{f}}
+	got := l.Answer(context.Background(), camp, owner, []Record{lookup("stock", map[string]any{"shop": "Ember Forge"})})[0]
+	for _, w := range []string{"1 of them at a time, and change at dawn (in 5 hours)", "- Nails: unlimited\n", "- Star-iron: unlimited · some days: out today", "- Dragon scale: unlimited · some days: not out today"} {
+		if !strings.Contains(got.Text, w) {
+			t.Errorf("stock lacks %q:\n%s", w, got.Text)
+		}
+	}
+	// A shop without a shelf to read says nothing about one.
+	l.Shops = f
+	if got := l.Answer(context.Background(), camp, owner, []Record{lookup("stock", map[string]any{"shop": "Ember Forge"})})[0]; strings.Contains(got.Text, "some days") {
+		t.Errorf("no shelf, yet:\n%s", got.Text)
+	}
+}
+
+// `today` writes the flag the shelf reads, and false takes it away while
+// keeping the rest of the listing.
+func TestShopStockTodayFlag(t *testing.T) {
+	k := ShopStockKind(nil, nil).(*linkKind)
+	tests := []struct {
+		name, existing string
+		today          any
+		want           string
+	}{
+		{"on", `{"price":3,"currency":"gp"}`, true, `{"currency":"gp","price":3,"today":true}`},
+		{"off", `{"price":3,"currency":"gp","today":true}`, false, `{"currency":"gp","price":3}`},
+		{"left out keeps it", `{"price":3,"currency":"gp","today":true}`, nil, `{"currency":"gp","price":3,"today":true}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := map[string]any{"shop": "Ember Forge", "item": "Star-iron"}
+			if tt.today != nil {
+				f["today"] = tt.today
+			}
+			m, err := k.meta(json.RawMessage(tt.existing), rec("shop-stock", ActionUpdate, "", f, ""))
+			if err != nil || string(m) != tt.want {
+				t.Errorf("meta = %s (%v), want %s", m, err, tt.want)
+			}
+		})
 	}
 }

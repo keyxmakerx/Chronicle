@@ -130,6 +130,18 @@ type CraftRecipe struct {
 	// Who is "all" or "learned"; Known are the characters who learned it.
 	Who   string
 	Known []string
+	// Enchant is set on a recipe that enchants an item the hero already
+	// owns instead of making a new one.
+	Enchant *CraftEnchant
+}
+
+// CraftEnchant is a recipe's enchanting: Line is the material line (from 0)
+// the hero's own item fills, Name the enchantment it gains, Slots how many
+// enchantments an item may hold.
+type CraftEnchant struct {
+	Line  int
+	Name  string
+	Slots int
 }
 
 // CraftRecipeInput is a whole recipe to check or save, by ids. Method ""
@@ -147,6 +159,10 @@ type CraftRecipeInput struct {
 	Known                      []string
 	// Rules, when set, is the whole list of rules as JSON; nil keeps them.
 	Rules json.RawMessage
+	// SetEnchant says the block wrote `enchant`: Enchant replaces the
+	// recipe's enchanting, nil turning it off.
+	SetEnchant bool
+	Enchant    *CraftEnchant
 }
 
 // CraftDropLine is one line of a drop list: taken as it is (Qty), or

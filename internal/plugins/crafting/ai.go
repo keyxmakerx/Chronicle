@@ -31,6 +31,40 @@ type AIRecipe struct {
 	Who          string
 	Known        []string
 	Rules        json.RawMessage
+	// SetEnchant says the AI wrote the recipe's enchanting: Enchant then
+	// replaces it, nil turning it off. Unset keeps what is stored.
+	SetEnchant bool
+	Enchant    *Enchant
+}
+
+// aiEnchant checks the enchanting an AI wrote against the recipe's
+// materials. Unlike the editor's CleanExtras, which quietly fixes a value,
+// it refuses one, so the review says what is wrong.
+func aiEnchant(e *Enchant, materials int) (*Enchant, error) {
+	if e == nil {
+		return nil, nil
+	}
+	name, ok := plainEnchantName(e.Name)
+	if !ok {
+		return nil, errInvalid(fmt.Sprintf("enchant: the enchantment needs a name of up to %d characters", maxEnchantName))
+	}
+	if e.Line < 0 || e.Line >= materials {
+		return nil, errInvalid(fmt.Sprintf("enchant: line %d is not one of the recipe's %d materials (they count from 1)", e.Line+1, materials))
+	}
+	slots := e.Slots
+	if slots == 0 {
+		slots = 3
+	}
+	if slots < 1 || slots > maxSlots {
+		return nil, errInvalid(fmt.Sprintf("enchant: an item holds 1 to %d enchantments", maxSlots))
+	}
+	return &Enchant{Line: e.Line, Name: name, Slots: slots}, nil
+}
+
+// plainEnchantName is the name trimmed, refused when empty or too long.
+func plainEnchantName(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	return s, s != "" && len([]rune(s)) <= maxEnchantName
 }
 
 // SaveAIRecipe checks a recipe an AI wrote and, unless check is set, saves
@@ -74,6 +108,12 @@ func (s *service) SaveAIRecipe(ctx context.Context, campaignID string, v Viewer,
 	if err != nil {
 		return nil, err
 	}
+	var enchant *Enchant
+	if in.SetEnchant {
+		if enchant, err = aiEnchant(in.Enchant, len(r.Materials)); err != nil {
+			return nil, err
+		}
+	}
 	var rules *RulesChange
 	if in.Rules != nil {
 		var was []Rule
@@ -101,10 +141,26 @@ func (s *service) SaveAIRecipe(ctx context.Context, campaignID string, v Viewer,
 			}
 			return nil, errInternal(err)
 		}
-		return s.load(ctx, campaignID, r.ID)
+		made, err := s.load(ctx, campaignID, r.ID)
+		if err != nil || enchant == nil {
+			return made, err
+		}
+		// A new recipe is stored without extras, so its enchanting is the
+		// extras' own write, as the editor's Extras tab saves it.
+		x := made.Extras
+		x.Enchant = enchant
+		if ok, err := s.repo.UpdateRules(ctx, campaignID, made.ID, made.Rules, made.Looks, x, made.Version); err != nil {
+			return nil, errInternal(err)
+		} else if !ok {
+			return nil, errConflict()
+		}
+		return s.load(ctx, campaignID, made.ID)
 	}
 	r.ID = stored.ID
 	r.Extras = FollowMaterials(stored.Extras, stored.Materials, r.Materials)
+	if in.SetEnchant {
+		r.Extras.Enchant = enchant
+	}
 	ok, err := s.repo.UpdateRecipe(ctx, campaignID, v.UserID, r, stored.Version)
 	if err != nil {
 		if errors.Is(err, errDuplicate) {
