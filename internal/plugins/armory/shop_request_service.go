@@ -42,7 +42,7 @@ func (s *shopBuyService) queueRequest(ctx context.Context, campaignID, shopEntit
 	if s.requests == nil {
 		return nil, apperror.NewInternal(errors.New("purchase requests are not wired"))
 	}
-	_, currency, total, err := s.priceBasket(ctx, campaignID, shopEntityID, a, in)
+	_, currency, total, err := s.priceBasket(ctx, campaignID, shopEntityID, a, in, true)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (s *shopBuyService) pendingLines(ctx context.Context, campaignID string, a 
 			l.RequesterName = "A player"
 		}
 		in := BuyInput{BuyerEntityID: r.BuyerEntityID, Items: r.Basket}
-		if _, cur, total, err := s.priceBasket(ctx, campaignID, r.ShopEntityID, a, in); err == nil {
+		if _, cur, total, err := s.priceBasket(ctx, campaignID, r.ShopEntityID, a, in, false); err == nil {
 			l.Total, l.Currency = &total, cur
 			if cur != r.QuotedCurrency || total > r.QuotedTotal {
 				q := r.QuotedTotal

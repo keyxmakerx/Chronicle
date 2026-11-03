@@ -65,6 +65,7 @@ type buyFx struct {
 	txRows   []*Transaction
 	svc      ShopRequestService
 	reqs     *fakePurchaseRepo
+	today    ShopTodayService
 }
 
 func sells(source, target, meta string) *RelationInfo {
@@ -98,7 +99,7 @@ func newBuyFx() *buyFx {
 	txSvc.SetRelationMetadataUpdater(f.listings)
 	f.reqs = newFakePurchaseRepo()
 	f.dir.ents["shop-1"] = &EntityRef{ID: "shop-1", Name: "The Gilded Cup"}
-	f.svc = NewShopBuyService(f.fx.svc.(*stashService), txSvc, buyShops{}, f.reqs)
+	f.svc = NewShopBuyService(f.fx.svc.(*stashService), txSvc, buyShops{}, f.reqs, f.today)
 	return f
 }
 
