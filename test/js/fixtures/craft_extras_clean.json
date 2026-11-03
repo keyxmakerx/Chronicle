@@ -18,7 +18,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -40,7 +41,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -64,7 +66,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -90,7 +93,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -115,7 +119,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -139,7 +144,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -167,7 +173,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -195,7 +202,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -219,7 +227,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -247,7 +256,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -304,7 +314,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -332,7 +343,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -360,7 +372,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -391,7 +404,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -420,7 +434,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -446,7 +461,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -474,7 +490,8 @@
     },
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -501,7 +518,8 @@
     },
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -561,7 +579,8 @@
       "qty": 1
      }
     ],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -585,7 +604,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -610,7 +630,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -714,7 +735,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -818,7 +840,8 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
    }
   },
   {
@@ -882,7 +905,179 @@
     "keeps": null,
     "makersMark": false,
     "salvage": [],
-    "othersCanHelp": false
+    "othersCanHelp": false,
+    "enchant": null
+   }
+  },
+  {
+   "name": "an enchantment on a material",
+   "input": {
+    "enchant": {
+     "line": 1,
+     "name": "  Frostbite ",
+     "slots": 2
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false,
+    "enchant": {
+     "line": 1,
+     "name": "Frostbite",
+     "slots": 2
+    }
+   }
+  },
+  {
+   "name": "an enchantment on a material that is gone falls back to the first",
+   "input": {
+    "enchant": {
+     "line": 5,
+     "name": "Frostbite"
+    }
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false,
+    "enchant": {
+     "line": 0,
+     "name": "Frostbite",
+     "slots": 3
+    }
+   }
+  },
+  {
+   "name": "an enchantment holds one to six",
+   "input": {
+    "enchant": {
+     "line": 0,
+     "name": "Glow",
+     "slots": 40
+    }
+   },
+   "materials": 1,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false,
+    "enchant": {
+     "line": 0,
+     "name": "Glow",
+     "slots": 6
+    }
+   }
+  },
+  {
+   "name": "an enchantment with no slots holds three, and a blank name is kept",
+   "input": {
+    "enchant": {
+     "line": "0"
+    }
+   },
+   "materials": 1,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false,
+    "enchant": {
+     "line": 0,
+     "name": "",
+     "slots": 3
+    }
+   }
+  },
+  {
+   "name": "an enchantment needs a material",
+   "input": {
+    "enchant": {
+     "line": 0,
+     "name": "Glow",
+     "slots": 2
+    }
+   },
+   "materials": 0,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false,
+    "enchant": null
+   }
+  },
+  {
+   "name": "an enchantment that is not an object is off",
+   "input": {
+    "enchant": "Frostbite"
+   },
+   "materials": 2,
+   "want": {
+    "botch": {
+     "costs": "bane"
+    },
+    "mishaps": null,
+    "quality": null,
+    "substitutes": [],
+    "breakthrough": false,
+    "mastery": null,
+    "discover": null,
+    "keeps": null,
+    "makersMark": false,
+    "salvage": [],
+    "othersCanHelp": false,
+    "enchant": null
    }
   }
  ]

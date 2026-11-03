@@ -6096,6 +6096,8 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .ag-tag { display: inline-flex; align-items: center; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 600; line-height: 20px; background: rgb(var(--color-accent-rgb) / .12); color: var(--color-accent); }
 .ag-tag.is-poor { background: rgb(107 114 128 / .14); color: var(--color-text-secondary); }
 .ag-tag.is-off { background: var(--color-danger-bg); color: var(--color-danger-strong); }
+/* An enchantment a crafting recipe added: outlined, so it reads apart from a mark. */
+.ag-tag.is-enchant { background: transparent; box-shadow: inset 0 0 0 1px rgb(var(--color-accent-rgb) / .5); }
 /* A hero's containers: each item a tile in the box it is carried in (character_panel.templ, hero_pack.js). */
 .hp-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px; }
 .hp-box { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px 10px 10px; border-radius: 12px; background: var(--color-bg-tertiary); transition: box-shadow .15s ease; }

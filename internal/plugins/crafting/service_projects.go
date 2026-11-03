@@ -304,7 +304,10 @@ func (s *service) Character(ctx context.Context, campaignID, characterID string,
 		if r.Extras.Mastery != nil && r.Extras.Mastery.Gives == "skip" {
 			cr.Skip = s.mastered(ctx, campaignID, Project{CharacterID: e.ID, RecipeID: r.ID}, r.Extras)
 		}
-		if r.Result.ItemID != "" {
+		if makes, _ := enchantWords(r, names); makes != "" {
+			cr.Makes, cr.MakesQty, cr.Enchant = makes, 1, r.Extras.Enchant
+			cr.Needs[r.Extras.Enchant.Line].Qty = 1
+		} else if r.Result.ItemID != "" {
 			cr.Makes = materialName(Material{ItemID: r.Result.ItemID}, names)
 			cr.MakesID, cr.Salvage = r.Result.ItemID, salvageText(r.Extras)
 		}
@@ -396,12 +399,18 @@ func (s *service) StartProject(ctx context.Context, campaignID, characterID stri
 	if r.Goal < 1 {
 		return nil, errInvalid("this recipe has no goal yet; ask the Director to set one")
 	}
-	made, err := s.dir.Entity(ctx, campaignID, r.Result.ItemID)
-	if err != nil {
-		return nil, errInternal(err)
+	enchant := r.Extras.Enchant
+	if enchant != nil && enchant.Name == "" {
+		return nil, errInvalid("this recipe doesn't name its enchantment yet; ask the Director to name it")
 	}
-	if r.Result.ItemID == "" || made == nil || !made.IsItem {
-		return nil, errInvalid("this recipe doesn't name an item it makes; ask the Director to pick one")
+	var made *EntityInfo
+	if enchant == nil {
+		if made, err = s.dir.Entity(ctx, campaignID, r.Result.ItemID); err != nil {
+			return nil, errInternal(err)
+		}
+		if r.Result.ItemID == "" || made == nil || !made.IsItem {
+			return nil, errInvalid("this recipe doesn't name an item it makes; ask the Director to pick one")
+		}
 	}
 	n, err := s.projects.Store.CountActive(ctx, campaignID, e.ID)
 	if err != nil {
@@ -417,6 +426,13 @@ func (s *service) StartProject(ctx context.Context, campaignID, characterID stri
 	for i := range items {
 		items[i].Use = in.Use[i]
 	}
+	var base *Kept
+	if enchant != nil {
+		if base, err = s.enchantBase(ctx, campaignID, e, &items[enchant.Line], *enchant, v); err != nil {
+			return nil, err
+		}
+		made = &EntityInfo{ID: items[enchant.Line].ItemID, Name: items[enchant.Line].Name, IsItem: true}
+	}
 	paid, used, err := s.projects.Armory.Spend(ctx, campaignID, v, e.ID, items, r.Cost, r.Name)
 	if err != nil {
 		return nil, err
@@ -431,6 +447,14 @@ func (s *service) StartProject(ctx context.Context, campaignID, characterID stri
 	p := Project{ID: s.newID(), CampaignID: campaignID, CharacterID: e.ID, RecipeID: r.ID, RecipeName: r.Name, Goal: r.Goal, Stat: r.Stat,
 		ResultItemID: r.Result.ItemID, ResultQty: r.Result.Qty, Status: ProjectActive, Took: clipText(strings.Join(took, ", "), maxTookLen),
 		StartedBy: v.UserID, StartedAt: s.now(), Details: ProjectDetails{Subs: subs, Used: ingredientsOf(used)}}
+	if base != nil {
+		item := *base
+		item.ID, item.Qty = 0, 0
+		item.Marks = append([]string(nil), base.Marks...)
+		item.Enchants = append(append([]string(nil), base.Enchants...), enchant.Name)
+		p.ResultItemID, p.ResultQty = made.ID, 1
+		p.Details.Item, p.Details.Base, p.Details.BaseItem = &item, base, made.ID
+	}
 	if err := s.projects.Store.CreateProject(ctx, p); err != nil {
 		slog.Error("crafting: MATERIALS TAKEN BUT THE PROJECT WAS NOT SAVED",
 			slog.String("campaign_id", campaignID), slog.String("character_id", e.ID), slog.String("recipe_id", r.ID),
@@ -507,6 +531,60 @@ func (s *service) materialsFor(ctx context.Context, campaignID string, e *Entity
 		out = append(out, PackItem{ItemID: pick, Name: held.Name, Qty: m.Qty})
 	}
 	return out, subs, nil
+}
+
+// enchantBase decides which copy of the item to enchant is going in, before
+// anything is taken: the remembered copy the player picked, else a plain
+// one. It refuses an item already full of enchantments or already carrying
+// this one, and asks for a pick when every copy remembers something, since
+// the Armory would otherwise choose one the player may treasure. The line
+// always takes exactly one copy.
+func (s *service) enchantBase(ctx context.Context, campaignID string, e *EntityInfo, it *PackItem, x Enchant, v Viewer) (*Kept, error) {
+	it.Qty = 1
+	pack, err := s.projects.Armory.Pack(ctx, campaignID, v, e.ID)
+	if err != nil {
+		return nil, err
+	}
+	var held *PackItem
+	for i := range pack.Items {
+		if pack.Items[i].ItemID == it.ItemID {
+			held = &pack.Items[i]
+		}
+	}
+	if held == nil || held.Qty < 1 {
+		return nil, errInvalid(fmt.Sprintf("%s doesn't carry %s to enchant", e.Name, it.Name))
+	}
+	base := &Kept{}
+	picked := false
+	for _, u := range it.Use {
+		for _, k := range held.Kept {
+			if u.ID == k.ID && u.N > 0 && !picked {
+				c := k
+				base, picked = &c, true
+			}
+		}
+	}
+	if picked {
+		it.Use = []KeptPick{{ID: base.ID, N: 1}}
+	} else {
+		it.Use = nil
+		plain := held.Qty
+		for _, k := range held.Kept {
+			plain -= k.Qty
+		}
+		if plain < 1 {
+			return nil, errInvalid("pick which " + it.Name + " to enchant")
+		}
+	}
+	for _, n := range base.Enchants {
+		if strings.EqualFold(n, x.Name) {
+			return nil, errInvalid(fmt.Sprintf("this %s is already enchanted with %s", it.Name, x.Name))
+		}
+	}
+	if len(base.Enchants) >= x.Slots {
+		return nil, errInvalid(fmt.Sprintf("this %s already holds %d %s, the most this recipe allows", it.Name, len(base.Enchants), plural(len(base.Enchants), "enchantment", "enchantments")))
+	}
+	return base, nil
 }
 
 func hasTag(tags []string, tag string) bool {
@@ -884,7 +962,20 @@ func (s *service) deliver(ctx context.Context, e, helper *EntityInfo, p *Project
 	}
 	k := s.madeKept(ctx, p, e, x, day)
 	var err error
-	if helper != nil {
+	if p.Details.Base != nil {
+		// An enchanted item is the one that went in, so a breakthrough's
+		// extra never copies it.
+		qty = 1
+		why := "Enchanted " + makesText(1, p.ResultItemID, names)
+		if n := len(k.Enchants); n > 0 {
+			why += " with " + k.Enchants[n-1]
+		}
+		acting := e.ID
+		if helper != nil {
+			acting, why = helper.ID, why+", with "+helper.Name+"’s help"
+		}
+		err = s.projects.Armory.GiveFor(ctx, p.CampaignID, v, acting, e.ID, p.ResultItemID, qty, why, k)
+	} else if helper != nil {
 		why := "Made " + makesText(qty, p.ResultItemID, names)
 		if p.RecipeName != "" && p.RecipeName != names[p.ResultItemID] {
 			why += " (" + p.RecipeName + ")"
@@ -950,6 +1041,19 @@ func (s *service) CancelProject(ctx context.Context, campaignID, id string, v Vi
 	}
 	if !ok {
 		return errConflict()
+	}
+	// An item taken to be enchanted is the hero's own, not a material, so
+	// cancelling gives it back as it was. The project is marked cancelled
+	// first, so two presses can't both give it back.
+	if b := p.Details.Base; b != nil && p.Details.BaseItem != "" {
+		k := *b
+		k.ID, k.Qty = 0, 0
+		why := "Given back: " + p.RecipeName + " was cancelled"
+		if err := s.projects.Armory.GiveFor(ctx, campaignID, v, p.CharacterID, p.CharacterID, p.Details.BaseItem, 1, why, k); err != nil {
+			slog.Error("crafting: AN ENCHANTING PROJECT WAS CANCELLED BUT ITS ITEM WAS NOT GIVEN BACK",
+				slog.String("project_id", p.ID), slog.String("character_id", p.CharacterID), slog.Any("error", err))
+			return apperror.NewInternal(fmt.Errorf("crafting: the project was cancelled but the item wasn't given back; tell your Director so they can give it: %w", err))
+		}
 	}
 	return nil
 }

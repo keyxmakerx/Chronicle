@@ -73,6 +73,10 @@ type ProjectDetails struct {
 	Used *Ingredients `json:"used,omitempty"`
 	// Item is what the made item will remember (fine, marks, a quirk).
 	Item *Kept `json:"item,omitempty"`
+	// Base is the copy an enchanting project took, as it was, and BaseItem
+	// its item, so a cancelled project gives it back unchanged.
+	Base     *Kept  `json:"base,omitempty"`
+	BaseItem string `json:"baseItem,omitempty"`
 }
 
 // ProjectView is a project as the block and the Projects tab show it.
@@ -123,17 +127,19 @@ type PackItem struct {
 // marks, fine or poor, a quirk, who made or harvested them and when, and
 // when they go off (OffDay on the calendar's day count) and what into.
 type Kept struct {
-	ID      int64    `json:"id,omitempty"`
-	Qty     int      `json:"qty,omitempty"`
-	Marks   []string `json:"marks,omitempty"`
-	Quality string   `json:"quality,omitempty"`
-	Quirk   string   `json:"quirk,omitempty"`
-	How     string   `json:"how,omitempty"`
-	By      string   `json:"by,omitempty"`
-	On      string   `json:"on,omitempty"`
-	OffDay  int64    `json:"offDay,omitempty"`
-	OffOn   string   `json:"offOn,omitempty"`
-	Becomes string   `json:"-"`
+	ID    int64    `json:"id,omitempty"`
+	Qty   int      `json:"qty,omitempty"`
+	Marks []string `json:"marks,omitempty"`
+	// Enchants are the enchantments the copy carries.
+	Enchants []string `json:"enchants,omitempty"`
+	Quality  string   `json:"quality,omitempty"`
+	Quirk    string   `json:"quirk,omitempty"`
+	How      string   `json:"how,omitempty"`
+	By       string   `json:"by,omitempty"`
+	On       string   `json:"on,omitempty"`
+	OffDay   int64    `json:"offDay,omitempty"`
+	OffOn    string   `json:"offOn,omitempty"`
+	Becomes  string   `json:"-"`
 	// BecomesName names Becomes for the block.
 	BecomesName string `json:"becomes,omitempty"`
 	// Off marks a copy that has gone off.
@@ -144,7 +150,7 @@ type Kept struct {
 
 // Empty reports copies that remember nothing.
 func (k Kept) Empty() bool {
-	return len(k.Marks) == 0 && k.Quality == "" && k.Quirk == "" && k.How == "" && k.OffDay == 0 && k.Look == nil
+	return len(k.Marks) == 0 && len(k.Enchants) == 0 && k.Quality == "" && k.Quirk == "" && k.How == "" && k.OffDay == 0 && k.Look == nil
 }
 
 // KeptPick asks for N copies of one remembered row.
@@ -229,6 +235,8 @@ type CraftRecipe struct {
 	// Charge is the cost against this hero's money, in Pack.Have's units.
 	Charge int64    `json:"charge"`
 	Lines  []string `json:"lines"`
+	// Enchant is set on a recipe that enchants one of its materials.
+	Enchant *Enchant `json:"enchant,omitempty"`
 }
 
 // BenchPlay is the campaign's bench of one kind as a player plays it: its

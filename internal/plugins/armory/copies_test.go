@@ -354,3 +354,22 @@ func mustAdd(t *testing.T, cs *fakeCopies, campaignID, kind, holderID string, c 
 		t.Fatal(err)
 	}
 }
+
+// Enchantments are trimmed, kept once each case-blind and capped like marks,
+// survive the stored form, and show as their own kind of tag.
+func TestMemory_Enchants(t *testing.T) {
+	m := Memory{Enchants: []string{" Frostbite ", "frostbite", "", "Glow", "A", "B", "C", "D", "E"}}.Clean()
+	if want := []string{"Frostbite", "Glow", "A", "B", "C", "D"}; !reflect.DeepEqual(m.Enchants, want) {
+		t.Fatalf("enchants = %q, want %q", m.Enchants, want)
+	}
+	if m.Empty() {
+		t.Fatal("an enchanted copy counted as plain")
+	}
+	if back := decodeMemory(encodeMemory(m)); !reflect.DeepEqual(back.Enchants, m.Enchants) {
+		t.Fatalf("stored and read back: %q", back.Enchants)
+	}
+	tags := Memory{Marks: []string{"moonlit"}, Enchants: []string{"Frostbite"}}.Tags()
+	if want := []CopyTag{{Label: "Moonlit"}, {Label: "Frostbite", Kind: "enchant"}}; !reflect.DeepEqual(tags, want) {
+		t.Fatalf("tags = %+v", tags)
+	}
+}

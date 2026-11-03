@@ -238,7 +238,7 @@ templ spreadCopies(it HeldItem) {
 					}
 				</span>
 				for _, tg := range c.Memory.Tags() {
-					<span class={ "ag-tag", templ.KV("is-poor", tg.Kind == "poor"), templ.KV("is-off", tg.Kind == "off") }>{ tg.Label }</span>
+					<span class={ "ag-tag", templ.KV("is-poor", tg.Kind == "poor"), templ.KV("is-enchant", tg.Kind == "enchant"), templ.KV("is-off", tg.Kind == "off") }>{ tg.Label }</span>
 				}
 				if w := c.Memory.Words(); w != "" {
 					<span class="hp-card-w">{ w }</span>
@@ -275,7 +275,7 @@ templ heldCopies(copies []Copy, total int) {
 					}
 				</span>
 				for _, tg := range c.Memory.Tags() {
-					<span class={ "ag-tag", templ.KV("is-poor", tg.Kind == "poor"), templ.KV("is-off", tg.Kind == "off") }>{ tg.Label }</span>
+					<span class={ "ag-tag", templ.KV("is-poor", tg.Kind == "poor"), templ.KV("is-enchant", tg.Kind == "enchant"), templ.KV("is-off", tg.Kind == "off") }>{ tg.Label }</span>
 				}
 				if w := c.Memory.Words(); w != "" {
 					<span>{ w }</span>
