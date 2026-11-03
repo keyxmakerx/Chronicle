@@ -15,6 +15,9 @@
  */
 (function () {
   'use strict';
+  // Without the shared painter (gl_shared.js, loaded first) there is no painted sky: SkyGL stays undefined and every
+  // sky draws the basic one, with one console line naming the missing file rather than a TypeError.
+  if (!window.SharedGL) { if (window.console) console.error('[sky] gl_shared.js is not loaded before sky_gl.js, so skies are drawn basic.'); return; }
 
   var SW = window.SkyWorld, LOOKS = window.SkyLooks, PAL = SW.PAL, clamp = SW.clamp, smooth01 = SW.smooth01, mod = SW.mod, D2R = SW.D2R;
   function hashN(n){ var x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
