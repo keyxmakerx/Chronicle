@@ -585,3 +585,51 @@ func TestCraftingDocExamplesPlan(t *testing.T) {
 	}
 	_ = entities.Slugify
 }
+
+// A recipe that enchants the hero's own item is written, read back and
+// stopped through `enchant`; its line counts the materials from 1.
+func TestRecipeKind_Enchant(t *testing.T) {
+	ctx := context.Background()
+	f := newFakeCrafting()
+	k := RecipeKind{Svc: f}
+	on := craftRec("recipe", ActionUpdate, "Healing potion", map[string]any{"enchant": map[string]any{"line": 2, "name": "Frostbite", "slots": 2}})
+	if p := k.Plan(ctx, camp, owner, on); p.Error != "" || !strings.Contains(p.Summary, "enchants the hero's own any liquid with Frostbite") {
+		t.Fatalf("plan = %+v", p)
+	}
+	if err := k.Apply(ctx, camp, owner, on); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.saved[0]; !got.SetEnchant || !reflect.DeepEqual(got.Enchant, &CraftEnchant{Line: 1, Name: "Frostbite", Slots: 2}) {
+		t.Fatalf("saved %+v", got)
+	}
+
+	// The stored enchanting is printed in the block and reads back the same.
+	f.c.Recipes[0].Enchant = &CraftEnchant{Line: 1, Name: "Frostbite", Slots: 2}
+	c, _ := f.Read(ctx, camp, owner)
+	block := recipeBlock(c, c.Recipes[0])
+	if !strings.Contains(block, "enchant: {line: 2, name: \"Frostbite\", slots: 2}\n") {
+		t.Fatalf("block:\n%s", block)
+	}
+	in, _, err := k.input(c, blockRecord(t, block, ActionUpdate), &c.Recipes[0])
+	if err != nil || !reflect.DeepEqual(in.Enchant, c.Recipes[0].Enchant) {
+		t.Fatalf("read back %+v, %v", in.Enchant, err)
+	}
+
+	off := craftRec("recipe", ActionUpdate, "Healing potion", map[string]any{"enchant": "none"})
+	if p := k.Plan(ctx, camp, owner, off); !strings.Contains(p.Summary, "no longer enchants") {
+		t.Fatalf("off plan = %+v", p)
+	}
+	for _, tc := range []struct {
+		e    any
+		want string
+	}{
+		{map[string]any{"line": 3, "name": "Glow"}, "line 3 is not one of the recipe's 2 materials"},
+		{map[string]any{"line": 1}, "needs `name`"},
+		{"Frostbite", "write {line, name, slots}"},
+	} {
+		p := k.Plan(ctx, camp, owner, craftRec("recipe", ActionUpdate, "Healing potion", map[string]any{"enchant": tc.e}))
+		if !strings.Contains(p.Error, tc.want) {
+			t.Errorf("enchant %v: error %q, want %q", tc.e, p.Error, tc.want)
+		}
+	}
+}
