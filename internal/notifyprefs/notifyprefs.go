@@ -50,10 +50,11 @@ type Category struct {
 // Catalog lists every category in page order.
 var Catalog = []Category{
 	{Key: GameNightInvites, Group: "Game nights", Label: "A game night is planned or a time is suggested",
-		Detail:   "Includes the invitation email with Going / Can't make it buttons",
+		Detail:   "Includes the invitation email with Going, Maybe and Can't make it",
 		Channels: []Channel{Bell, Email}, Defaults: map[Channel]bool{Bell: true, Email: true}},
 	{Key: GameNightChanges, Group: "Game nights", Label: "A game night moves, is cancelled or comes back",
-		Channels: []Channel{Bell}, Defaults: map[Channel]bool{Bell: true}},
+		Detail:   "Emails go to people who said Going or Maybe",
+		Channels: []Channel{Bell, Email}, Defaults: map[Channel]bool{Bell: true, Email: true}},
 	{Key: GameNightAnswers, Group: "Game nights", Label: "Someone answers a time I suggested, or suggests another time",
 		Channels: []Channel{Bell}, Defaults: map[Channel]bool{Bell: true}},
 	{Key: AvailabilityAsks, Group: "Game nights", Label: "The owner asks me to fill in or confirm my free times",
@@ -66,6 +67,17 @@ var Catalog = []Category{
 	{Key: ModuleUpdates, Group: "Items and campaigns", Label: "A new Foundry module version is out",
 		Detail:   "Campaign owners only",
 		Channels: []Channel{Email}, Defaults: map[Channel]bool{Email: true}},
+}
+
+// LabelOf returns a category's label as the account page shows it, so an
+// email can name the switch that sent it. Unknown keys return "".
+func LabelOf(key string) string {
+	for _, c := range Catalog {
+		if c.Key == key {
+			return c.Label
+		}
+	}
+	return ""
 }
 
 // bellTypes maps each bell notification type a plugin writes to its

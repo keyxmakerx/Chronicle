@@ -110,6 +110,7 @@ var lookSections = []struct{ ID, Name, Words string }{
 	{"page", "Pages", "page look style kit material sharp ornate"},
 	{"hover", "Hover cards", "peek preview tooltip popup time line"},
 	{"sheet", "Character sheets", "sheet style"},
+	{"email", "Emails", "email emails mail invite reminder layout note poster ticket chat test"},
 	{"people", "Who can change", "access members players co-dm permission pick own look sheet dm screen quick setups locked table open"},
 	{"book", "Rulebook", "rules book"},
 }

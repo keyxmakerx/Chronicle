@@ -12,6 +12,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/colour"
+	mailbody "github.com/keyxmakerx/chronicle/internal/email"
 )
 
 // requireBadRequest fails unless err is a 400 apperror.
@@ -112,6 +113,7 @@ func appearanceFieldCases() []fieldCase {
 		{"page look", func(in *AppearanceInput, v string) { in.Page.Look = v }, func(a *Appearance) string { return a.PageLook }, "annals"},
 		{"time line popup", func(in *AppearanceInput, v string) { in.Hover.TimelinePopup = v }, func(a *Appearance) string { return a.TimelinePopup }, "corner"},
 		{"style kit", func(in *AppearanceInput, v string) { in.Page.Kit = v }, func(a *Appearance) string { return a.StyleKit }, "ornate"},
+		{"email layout", func(in *AppearanceInput, v string) { in.Email.Layout = v }, func(a *Appearance) string { return a.EmailLayout }, "poster"},
 	}
 }
 
@@ -201,6 +203,7 @@ func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 		"button style": AppearanceButtonStyles, "elevation": AppearanceElevations, "motion speed": AppearanceSpeeds,
 		"hover card": AppearanceHoverCards, "character sheet style": AppearanceSheetStyles, "made item pictures": AppearanceCraftArts,
 		"page look": AppearancePageLooks, "style kit": AppearanceStyleKits, "time line popup": AppearanceTimelinePopups,
+		"email layout": AppearanceEmailLayouts,
 	}
 	for _, fc := range appearanceFieldCases() {
 		for _, v := range lists[fc.name] {
@@ -858,6 +861,46 @@ func TestStyleKitChoice(t *testing.T) {
 				t.Errorf("styleKitChoice(%q) = %q, %v; want %q", tt.v, got, err, tt.want)
 			}
 		})
+	}
+}
+
+func TestEmailLayoutChoice(t *testing.T) {
+	tests := []struct {
+		name    string
+		v       string
+		prev    *Appearance
+		want    string
+		wantErr bool
+	}{
+		{"not sent, nothing stored", "", nil, "", false},
+		{"not sent keeps the layout", "", &Appearance{EmailLayout: "ticket"}, "ticket", false},
+		{"Note is stored as unset", "note", &Appearance{EmailLayout: "ticket"}, "", false},
+		{"a layout", "poster", nil, "poster", false},
+		{"unknown refused", "fancy", nil, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := emailLayoutChoice(tt.v, tt.prev)
+			if (err != nil) != tt.wantErr || got != tt.want {
+				t.Errorf("emailLayoutChoice(%q) = %q, %v; want %q", tt.v, got, err, tt.want)
+			}
+		})
+	}
+}
+
+// The save accepts exactly the layouts internal/email can draw, Note first so
+// it is the one stored as unset.
+func TestAppearanceEmailLayoutsMatchEmail(t *testing.T) {
+	if len(AppearanceEmailLayouts) != len(mailbody.Layouts) {
+		t.Fatalf("layouts = %v, internal/email draws %v", AppearanceEmailLayouts, mailbody.Layouts)
+	}
+	for i, l := range mailbody.Layouts {
+		if AppearanceEmailLayouts[i] != string(l) {
+			t.Errorf("layout %d = %q, want %q", i, AppearanceEmailLayouts[i], l)
+		}
+	}
+	if AppearanceEmailLayouts[0] != string(mailbody.DefaultLayout) {
+		t.Errorf("first layout = %q, want the default %q", AppearanceEmailLayouts[0], mailbody.DefaultLayout)
 	}
 }
 

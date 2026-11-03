@@ -127,6 +127,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("/appearance", h.SaveAppearanceAPI, RequireRole(RoleOwner))
 	cg.POST("/appearance/picture", h.UploadAppearancePictureAPI, RequireRole(RoleOwner))
 	cg.DELETE("/appearance/picture", h.DeleteAppearancePictureAPI, RequireRole(RoleOwner))
+	// A test email goes only to the owner's own address; the limit keeps a
+	// held-down button from flooding their inbox or the mail server.
+	cg.POST("/appearance/email-test", h.SendTestEmailAPI, RequireRole(RoleOwner), middleware.RateLimit(5, time.Minute))
 	cg.PUT("/default-visibility", h.UpdateDefaultVisibilityAPI, RequireRole(RoleOwner))
 	// Event tier definitions per campaign: owner-only campaign-config
 	// surface, not exposed via syncapi.

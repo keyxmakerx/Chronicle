@@ -82,6 +82,9 @@ type SessionService interface {
 	// tells everyone who had answered that it is back on. A session of
 	// another campaign, or one not deleted, is not found.
 	RestoreAndAnnounce(ctx context.Context, campaignID, id string) (*Session, error)
+	// GoingOrMaybe lists who answered Going or Maybe to the session or any of
+	// its nights, deleted or not: who hears by email that it changed.
+	GoingOrMaybe(ctx context.Context, sessionID string) ([]string, error)
 	// ListTrashedSessions lists the campaign's deleted sessions for the Trash.
 	ListTrashedSessions(ctx context.Context, campaignID string) ([]TrashedSession, error)
 	// PurgeTrashedSessions removes for good sessions deleted before cutoff.
@@ -158,7 +161,7 @@ type SessionService interface {
 	// RSVP tokens for email-based responses. Redeem is split into a read-only
 	// validate (GET confirm page) + a state-changing apply (POST) so a mail
 	// prefetcher's GET never records an RSVP.
-	CreateRSVPTokens(ctx context.Context, sessionID, userID string) (acceptToken, declineToken, suggestToken string, err error)
+	CreateRSVPTokens(ctx context.Context, sessionID, userID string) (RSVPTokens, error)
 	ValidateRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
 	ApplyRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
 
@@ -751,13 +754,19 @@ func (s *sessionService) ListPlannedSessionsInWorldDateRange(ctx context.Context
 	return sessions, nil
 }
 
-// CreateRSVPTokens generates accept, decline, and suggest-another-time tokens
-// for a session invitation, so the emailed invite can offer all three
-// one-click actions. Tokens are single-use and expire in 7 days.
-func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID string) (string, string, string, error) {
-	acceptToken := generateToken()
-	declineToken := generateToken()
-	suggestToken := generateToken()
+// RSVPTokens are one member's single-use answer links for one game night.
+type RSVPTokens struct {
+	Accept  string
+	Maybe   string
+	Decline string
+	Suggest string
+}
+
+// CreateRSVPTokens generates going, maybe, can't-make-it and
+// suggest-another-time tokens for a game night invite, so the email can offer
+// every answer as one press. Tokens are single-use and expire in 7 days.
+func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID string) (RSVPTokens, error) {
+	t := RSVPTokens{Accept: generateToken(), Maybe: generateToken(), Decline: generateToken(), Suggest: generateToken()}
 	now := time.Now().UTC()
 	expires := now.Add(7 * 24 * time.Hour)
 
@@ -765,9 +774,10 @@ func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID
 		token  string
 		action string
 	}{
-		{acceptToken, RSVPAccepted},
-		{declineToken, RSVPDeclined},
-		{suggestToken, RSVPActionSuggest},
+		{t.Accept, RSVPAccepted},
+		{t.Maybe, RSVPTentative},
+		{t.Decline, RSVPDeclined},
+		{t.Suggest, RSVPActionSuggest},
 	} {
 		if err := s.repo.CreateRSVPToken(ctx, &RSVPToken{
 			Token:     tok.token,
@@ -777,11 +787,11 @@ func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID
 			ExpiresAt: expires,
 			CreatedAt: now,
 		}); err != nil {
-			return "", "", "", apperror.NewInternal(fmt.Errorf("creating rsvp token: %w", err))
+			return RSVPTokens{}, apperror.NewInternal(fmt.Errorf("creating rsvp token: %w", err))
 		}
 	}
 
-	return acceptToken, declineToken, suggestToken, nil
+	return t, nil
 }
 
 // ValidateRSVPToken resolves + checks an RSVP token WITHOUT applying it. Used

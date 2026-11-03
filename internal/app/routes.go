@@ -4776,7 +4776,7 @@ func (a *App) RegisterRoutes() {
 	pageSafetyService.SetNoteCounter(entityNotesService)
 	entityHandler.SetTrashNoteCounter(pageSafetyService)
 	// Game nights, pictures and maps share the campaign Trash with pages.
-	pageSafetyService.AddTrashKind(gameNightTrash{svc: sessionsService})
+	pageSafetyService.AddTrashKind(gameNightTrash{svc: sessionsService, backOn: sessionsHandler.EmailBackOn})
 	pageSafetyService.AddTrashKind(pictureTrash{svc: mediaService})
 	pageSafetyService.AddTrashKind(mapTrash{svc: mapsService})
 	pageSafetyHandler := entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService)
@@ -5236,6 +5236,7 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetSystemAddonEnabler(addonService)
 	campaignHandler.SetMediaUploader(&backdropUploaderAdapter{svc: mediaService})
 	campaignHandler.SetSMTPChecker(smtpService)
+	campaignHandler.SetTestMailer(smtpService)
 	campaignHandler.SetSystemLister(&systemListerAdapter{})
 	tagHandler.SetAuditService(auditService)
 

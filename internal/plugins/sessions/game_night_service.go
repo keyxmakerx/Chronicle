@@ -114,6 +114,16 @@ func (s *sessionService) RestoreAndAnnounce(ctx context.Context, campaignID, id 
 	return sess, nil
 }
 
+// GoingOrMaybe lists who answered Going or Maybe to the session or any of
+// its nights.
+func (s *sessionService) GoingOrMaybe(ctx context.Context, sessionID string) ([]string, error) {
+	ids, err := s.repo.ListGoingOrMaybeUserIDs(ctx, sessionID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing going or maybe: %w", err))
+	}
+	return ids, nil
+}
+
 // ListTrashedSessions lists the campaign's deleted sessions for the Trash.
 func (s *sessionService) ListTrashedSessions(ctx context.Context, campaignID string) ([]TrashedSession, error) {
 	return s.repo.ListDeleted(ctx, campaignID)

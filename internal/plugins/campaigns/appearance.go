@@ -10,6 +10,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/colour"
+	"github.com/keyxmakerx/chronicle/internal/email"
 )
 
 // Appearance holds the Customize page's style choices that have no older
@@ -45,6 +46,7 @@ type Appearance struct {
 	TimelinePopup   string `json:"timeline_popup,omitempty"`   // What opens on a time line's event: "classic" (default) or "corner".
 	StyleKit        string `json:"style_kit,omitempty"`        // The pages' character under the Material page look (AppearanceStyleKits); "material" is the default.
 	DmScreenKit     string `json:"dmscreen_kit,omitempty"`     // The DM Screen's own style kit (AppearanceStyleKits); empty wears the pages' kit.
+	EmailLayout     string `json:"email_layout,omitempty"`     // The campaign's emails (AppearanceEmailLayouts); empty is Note.
 
 	// Who may pick their own version of a part (look_access.go); empty is the
 	// part's default.
@@ -91,7 +93,18 @@ var (
 	// AppearanceStyleKits are the signed style kits style_kits.css draws
 	// (ui-standard.md, "Style kits"); "material" is the base and adds nothing.
 	AppearanceStyleKits = []string{"material", "sharp", "ornate", "flowing", "lumen", "sketchbook"}
+	// AppearanceEmailLayouts are the layouts internal/email draws the
+	// campaign's emails in, Note first as the default.
+	AppearanceEmailLayouts = emailLayoutIDs()
 )
+
+func emailLayoutIDs() []string {
+	ids := make([]string, len(email.Layouts))
+	for i, l := range email.Layouts {
+		ids[i] = string(l)
+	}
+	return ids
+}
 
 // Text limits the Customize page shows. Brand name and welcome keep their
 // older server limits (40, 500) so a longer message saved before is never
@@ -145,6 +158,9 @@ type AppearanceInput struct {
 		Kit   string `json:"kit"`
 		DmKit string `json:"dmKit"` // "same" follows the pages' kit.
 	} `json:"page"`
+	Email struct {
+		Layout string `json:"layout"`
+	} `json:"email"`
 	// Access is who may change each part for themselves. Nil keeps what the
 	// campaign has stored.
 	Access *LookAccessInput `json:"access,omitempty"`
@@ -273,6 +289,19 @@ func timelinePopupChoice(v string, prev *Appearance) (string, error) {
 		return "", nil
 	}
 	return oneOf("time line popup", v, AppearanceTimelinePopups)
+}
+
+// emailLayoutChoice is the email layout a save stores, Note as unset. A save
+// that sends no layout keeps the stored one, so an editor that predates the
+// Emails section can't quietly drop the owner's choice.
+func emailLayoutChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.EmailLayout, nil
+		}
+		return "", nil
+	}
+	return oneOf("email layout", v, AppearanceEmailLayouts)
 }
 
 // styleKitChoice is the style kit a save stores: Material as unset, like the
@@ -525,6 +554,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		return fail(err)
 	}
 	if a.StyleKit, err = styleKitChoice(in.Page.Kit, s.Appearance); err != nil {
+		return fail(err)
+	}
+	if a.EmailLayout, err = emailLayoutChoice(in.Email.Layout, s.Appearance); err != nil {
 		return fail(err)
 	}
 	if a.DmScreenKit, err = dmScreenKitChoice(in.Page.DmKit, s.Appearance); err != nil {

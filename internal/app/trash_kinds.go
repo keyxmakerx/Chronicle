@@ -15,6 +15,9 @@ import (
 // on" notice as the night's own restore, and purges them with the pages.
 type gameNightTrash struct {
 	svc sessions.SessionService
+	// backOn emails who said Going or Maybe that the night is back on. Nil
+	// sends no email.
+	backOn func(ctx context.Context, campaignID string, s *sessions.Session)
 }
 
 func (g gameNightTrash) TrashKind() string { return "game-night" }
@@ -38,6 +41,9 @@ func (g gameNightTrash) RestoreTrashed(ctx context.Context, campaignID, id strin
 	sess, err := g.svc.RestoreAndAnnounce(ctx, campaignID, id)
 	if err != nil {
 		return "", err
+	}
+	if g.backOn != nil {
+		go g.backOn(context.Background(), campaignID, sess)
 	}
 	return "/campaigns/" + campaignID + "/sessions/" + sess.ID, nil
 }

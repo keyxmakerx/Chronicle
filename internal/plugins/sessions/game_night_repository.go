@@ -296,6 +296,29 @@ func (r *sessionRepository) MarkAllOccurrencesNeedsRecheck(ctx context.Context, 
 	return nil
 }
 
+// ListGoingOrMaybeUserIDs reads both answer stores, like respondedUserIDs,
+// because a repeating night's answers can sit in either.
+func (r *sessionRepository) ListGoingOrMaybeUserIDs(ctx context.Context, sessionID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT user_id FROM session_attendees WHERE session_id = ? AND status IN (?, ?)
+		UNION
+		SELECT user_id FROM session_occurrence_rsvps WHERE session_id = ? AND status IN (?, ?)`,
+		sessionID, RSVPAccepted, RSVPTentative, sessionID, RSVPAccepted, RSVPTentative)
+	if err != nil {
+		return nil, fmt.Errorf("listing going or maybe user ids: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning going or maybe user id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // ListAllOccurrenceRespondedUserIDs is ListOccurrenceRespondedUserIDs without
 // a date filter — the distinct set of members who answered ANY night of the
 // series, deduplicated so a mass notify never messages someone twice.

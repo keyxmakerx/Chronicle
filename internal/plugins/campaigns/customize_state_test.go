@@ -38,8 +38,16 @@ func TestBuildCustomizeState(t *testing.T) {
 			if d.Header.Widgets == nil || d.Header.Links == nil {
 				t.Error("widgets and links must be empty lists, never null")
 			}
+			if d.Email.Layout != "note" {
+				t.Errorf("an unset email layout is Note, got %q", d.Email.Layout)
+			}
 			if d.Hover.TimelinePopup != "classic" {
 				t.Errorf("an unset time line popup is the classic card, got %q", d.Hover.TimelinePopup)
+			}
+		}},
+		{"email layout reads back", `{"appearance":{"email_layout":"chat"}}`, nil, func(t *testing.T, st customizeState) {
+			if st.Draft.Email.Layout != "chat" {
+				t.Errorf("email layout = %q, want chat", st.Draft.Email.Layout)
 			}
 		}},
 		{"time line popup reads back", `{"appearance":{"timeline_popup":"corner"}}`, nil, func(t *testing.T, st customizeState) {
