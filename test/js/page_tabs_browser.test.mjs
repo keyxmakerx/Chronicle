@@ -141,3 +141,19 @@ test('the Notes tab selectors match what entity_notes.js draws', () => {
   assert.match(js, /data-en-act="new"/);
   assert.equal(NOTES_ACT, '[data-en-act="new"]');
 });
+
+// The panel's own width rules, read from input.css so the test follows them.
+const CSS = readFileSync(join(root, 'static/css/input.css'), 'utf8');
+const PT_RULES = [CSS.match(/^:root \{ --sheet-width:[^}]*\}/m)[0], CSS.match(/^\.pt \{[^}]*\}/m)[0]].join('\n');
+
+test('on a wide page the panel is as wide as the sheet above it and lines up with it', { skip }, async (t) => {
+  const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const p = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+  // A sheet folio sized the way docs/system-package-rendering.md asks.
+  const folio = '<div data-sheet><div data-sheet-folio style="width:var(--sheet-width,920px);max-width:100%;margin-inline:auto;height:200px"></div></div>';
+  await p.setContent(`<!doctype html><html><head><style>body{margin:0}${PT_RULES}</style></head><body><main style="width:1280px">${folio}${MARKUP}</main></body></html>`);
+  const box = (s) => p.evaluate((sel) => { const b = document.querySelector(sel).getBoundingClientRect(); return [b.left, b.width]; }, s);
+  assert.deepEqual(await box('section.pt'), await box('[data-sheet-folio]'));
+  assert.equal((await box('section.pt'))[1], 920);
+});

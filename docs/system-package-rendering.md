@@ -346,7 +346,7 @@ What your markup carries:
 | Attribute / class | Meaning |
 |---|---|
 | `data-sheet` | The root. Without one, none of this runs. |
-| `data-sheet-folio` | Optional wrapper around the sheet; it slides left when a panel opens beside it. |
+| `data-sheet-folio` | Optional wrapper around the sheet; it slides left when a panel opens beside it. Size it `width: var(--sheet-width, 920px); max-width: 100%; margin-inline: auto` so it lines up with the tabbed panel (Notes, Items, Files, Posts, Links) Chronicle draws under a page renderer, which is that wide and centred. |
 | `.paper-stack > .paper` | The sheet itself. |
 | `data-sheet-section="id"` on a `.paper-pull` | A part with paper behind it. Pressing anywhere on it presses its button. |
 | `data-sheet-open="panel-id"` | The button in a part that opens a panel. |
