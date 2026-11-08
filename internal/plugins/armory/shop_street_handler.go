@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -24,7 +24,7 @@ func NewShopStreetHandler(svc ShopStreetService) *ShopStreetHandler {
 }
 
 // Street handles GET /campaigns/:id/armory/shops/street.
-func (h *ShopStreetHandler) Street(c echo.Context) error {
+func (h *ShopStreetHandler) Street(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -42,7 +42,7 @@ type frontResponse struct {
 }
 
 // PutFront handles PUT /campaigns/:id/armory/shops/:eid/front.
-func (h *ShopStreetHandler) PutFront(c echo.Context) error {
+func (h *ShopStreetHandler) PutFront(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

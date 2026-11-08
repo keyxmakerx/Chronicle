@@ -1,7 +1,7 @@
 package entities
 
 import (
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -237,7 +237,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Dynamic category route: resolves any entity type slug to a category
 	// dashboard. Echo's router gives static segments (entities, settings, etc.)
 	// priority over this parameter route, so it only catches actual type slugs.
-	pub.GET("/:typeSlug", func(c echo.Context) error {
+	pub.GET("/:typeSlug", func(c *echo.Context) error {
 		c.Set("entity_type_slug", c.Param("typeSlug"))
 		return h.Index(c)
 	}, campaigns.RequireViewAccess())
@@ -246,7 +246,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 // withActorMiddleware marks the request context with the signed-in user, so
 // page history credits saves and the Trash records who deleted a page.
 func withActorMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		if uid := auth.GetUserID(c); uid != "" {
 			req := c.Request()
 			c.SetRequest(req.WithContext(WithActor(req.Context(), uid)))

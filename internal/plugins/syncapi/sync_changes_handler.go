@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -38,7 +38,7 @@ type syncChangesResponse struct {
 
 // isDMEquivalent mirrors MapAPIHandler.canAuthorDmOnly: campaign Owner or a
 // co-DM grant. Fails closed on any lookup error.
-func (h *SyncChangesHandler) isDMEquivalent(c echo.Context) bool {
+func (h *SyncChangesHandler) isDMEquivalent(c *echo.Context) bool {
 	key := GetAPIKey(c)
 	if key == nil {
 		return false
@@ -54,7 +54,7 @@ func (h *SyncChangesHandler) isDMEquivalent(c echo.Context) bool {
 // ListChanges returns change ids after a cursor. DM-equivalent callers only:
 // even the ids of private records are not for players.
 // GET /api/v1/campaigns/:id/sync/changes?since=N&limit=500
-func (h *SyncChangesHandler) ListChanges(c echo.Context) error {
+func (h *SyncChangesHandler) ListChanges(c *echo.Context) error {
 	if !h.isDMEquivalent(c) {
 		return apperror.NewForbidden("the change feed requires owner or co-DM access")
 	}

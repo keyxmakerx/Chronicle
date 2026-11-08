@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"github.com/labstack/echo/v4"
-	echomw "github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	echomw "github.com/labstack/echo/v5/middleware"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
@@ -66,7 +66,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// campaign. The POST carries picture uploads, so it has its own body cap
 	// (the global 2M limit skips this path in app.go).
 	admin.GET("/site-look", h.SiteLook)
-	admin.POST("/site-look", h.SaveSiteLook, echomw.BodyLimit("5M"))
+	admin.POST("/site-look", h.SaveSiteLook, echomw.BodyLimit(5<<20))
 
 	// Site-wide log of admin changes.
 	admin.GET("/activity", h.Activity)

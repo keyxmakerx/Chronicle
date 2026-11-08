@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -28,12 +28,12 @@ func NewShopBuyHandler(svc ShopRequestService) *ShopBuyHandler {
 
 // buyActor builds the caller from the request. VisibilityRole so a DM-granted
 // co-DM is treated as the Owner, as on every other armory path.
-func buyActor(c echo.Context, cc *campaigns.CampaignContext) Actor {
+func buyActor(c *echo.Context, cc *campaigns.CampaignContext) Actor {
 	return Actor{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
 }
 
 // Buyers handles GET /campaigns/:id/armory/shops/:eid/buyers.
-func (h *ShopBuyHandler) Buyers(c echo.Context) error {
+func (h *ShopBuyHandler) Buyers(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -46,7 +46,7 @@ func (h *ShopBuyHandler) Buyers(c echo.Context) error {
 }
 
 // Buy handles POST /campaigns/:id/armory/shops/:eid/buy.
-func (h *ShopBuyHandler) Buy(c echo.Context) error {
+func (h *ShopBuyHandler) Buy(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

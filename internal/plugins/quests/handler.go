@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -30,7 +30,7 @@ func NewHandler(q QuestService, b BoardService, p PickerService) *Handler {
 
 // viewerFrom builds the Viewer from the campaign context. DM is the owner or
 // a member with DM access; VisibilityRole promotes a co-DM for page visibility.
-func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
+func viewerFrom(c *echo.Context) (campaignID string, v Viewer, err error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
@@ -47,7 +47,7 @@ func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
 // category, /notice-boards/:eid a page. The same handlers serve both, so the
 // two route families cannot drift apart. A malformed category id is a 404,
 // the same as a category that does not exist.
-func homeFrom(c echo.Context) (Home, error) {
+func homeFrom(c *echo.Context) (Home, error) {
 	if raw := c.Param("tid"); raw != "" {
 		tid, err := strconv.Atoi(raw)
 		if err != nil || tid <= 0 {
@@ -59,7 +59,7 @@ func homeFrom(c echo.Context) (Home, error) {
 }
 
 // GetQuest handles GET /campaigns/:id/quests/:eid.
-func (h *Handler) GetQuest(c echo.Context) error {
+func (h *Handler) GetQuest(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func (h *Handler) GetQuest(c echo.Context) error {
 }
 
 // PutQuest handles PUT /campaigns/:id/quests/:eid.
-func (h *Handler) PutQuest(c echo.Context) error {
+func (h *Handler) PutQuest(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func DecodePatch(raw []byte) (QuestPatch, error) {
 }
 
 // Picker handles GET /campaigns/:id/quests/picker.
-func (h *Handler) Picker(c echo.Context) error {
+func (h *Handler) Picker(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -127,7 +127,7 @@ func (h *Handler) Picker(c echo.Context) error {
 
 // GetBoards handles GET /campaigns/:id/notice-boards/:eid and
 // /campaigns/:id/category-boards/:tid.
-func (h *Handler) GetBoards(c echo.Context) error {
+func (h *Handler) GetBoards(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -158,7 +158,7 @@ type createBoardRequest struct {
 }
 
 // CreateBoard handles POST .../notice-boards/:eid/boards.
-func (h *Handler) CreateBoard(c echo.Context) error {
+func (h *Handler) CreateBoard(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -179,7 +179,7 @@ func (h *Handler) CreateBoard(c echo.Context) error {
 }
 
 // PatchBoard handles PATCH .../boards/:bid.
-func (h *Handler) PatchBoard(c echo.Context) error {
+func (h *Handler) PatchBoard(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -200,7 +200,7 @@ func (h *Handler) PatchBoard(c echo.Context) error {
 }
 
 // DeleteBoard handles DELETE .../boards/:bid.
-func (h *Handler) DeleteBoard(c echo.Context) error {
+func (h *Handler) DeleteBoard(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -220,7 +220,7 @@ type orderRequest struct {
 }
 
 // SetOrder handles PUT .../notice-boards/:eid/order.
-func (h *Handler) SetOrder(c echo.Context) error {
+func (h *Handler) SetOrder(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -240,7 +240,7 @@ func (h *Handler) SetOrder(c echo.Context) error {
 }
 
 // SetLooks handles PUT .../notice-boards/:eid/looks.
-func (h *Handler) SetLooks(c echo.Context) error {
+func (h *Handler) SetLooks(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -261,7 +261,7 @@ func (h *Handler) SetLooks(c echo.Context) error {
 }
 
 // ClearPlayerItems handles DELETE .../boards/:bid/player-items.
-func (h *Handler) ClearPlayerItems(c echo.Context) error {
+func (h *Handler) ClearPlayerItems(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -278,7 +278,7 @@ func (h *Handler) ClearPlayerItems(c echo.Context) error {
 }
 
 // itemResponse resolves the image path the service could not turn into a URL.
-func itemResponse(c echo.Context, iv *ItemView) *ItemView {
+func itemResponse(c *echo.Context, iv *ItemView) *ItemView {
 	if iv.ImagePath != "" {
 		iv.ImageURL = layouts.MediaThumbURL(c.Request().Context(), iv.ImagePath, "300")
 	}
@@ -286,7 +286,7 @@ func itemResponse(c echo.Context, iv *ItemView) *ItemView {
 }
 
 // CreateItem handles POST .../boards/:bid/items.
-func (h *Handler) CreateItem(c echo.Context) error {
+func (h *Handler) CreateItem(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -307,7 +307,7 @@ func (h *Handler) CreateItem(c echo.Context) error {
 }
 
 // PatchItem handles PATCH .../boards/:bid/items/:iid.
-func (h *Handler) PatchItem(c echo.Context) error {
+func (h *Handler) PatchItem(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -328,7 +328,7 @@ func (h *Handler) PatchItem(c echo.Context) error {
 }
 
 // DeleteItem handles DELETE .../boards/:bid/items/:iid.
-func (h *Handler) DeleteItem(c echo.Context) error {
+func (h *Handler) DeleteItem(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -36,7 +36,7 @@ func NewHandler(svc ExtensionService, extDir string) *Handler {
 
 // ListExtensions returns all installed extensions and built-in game systems.
 // GET /admin/extensions
-func (h *Handler) ListExtensions(c echo.Context) error {
+func (h *Handler) ListExtensions(c *echo.Context) error {
 	exts, err := h.svc.List(c.Request().Context())
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (h *Handler) ListExtensions(c echo.Context) error {
 
 // GetExtension returns details for a single extension.
 // GET /admin/extensions/:extID
-func (h *Handler) GetExtension(c echo.Context) error {
+func (h *Handler) GetExtension(c *echo.Context) error {
 	extID := c.Param("extID")
 
 	ext, err := h.svc.GetByExtID(c.Request().Context(), extID)
@@ -77,7 +77,7 @@ func (h *Handler) GetExtension(c echo.Context) error {
 
 // InstallExtension handles zip upload for installing a new extension.
 // POST /admin/extensions/install
-func (h *Handler) InstallExtension(c echo.Context) error {
+func (h *Handler) InstallExtension(c *echo.Context) error {
 	session := auth.GetSession(c)
 	if session == nil {
 		return apperror.NewUnauthorized("authentication required")
@@ -137,7 +137,7 @@ func (h *Handler) InstallExtension(c echo.Context) error {
 
 // UpdateExtension handles zip upload for updating an existing extension.
 // PUT /admin/extensions/:extID
-func (h *Handler) UpdateExtension(c echo.Context) error {
+func (h *Handler) UpdateExtension(c *echo.Context) error {
 	extID := c.Param("extID")
 
 	file, err := c.FormFile("file")
@@ -184,7 +184,7 @@ func (h *Handler) UpdateExtension(c echo.Context) error {
 
 // UninstallExtension removes an extension site-wide.
 // DELETE /admin/extensions/:extID
-func (h *Handler) UninstallExtension(c echo.Context) error {
+func (h *Handler) UninstallExtension(c *echo.Context) error {
 	extID := c.Param("extID")
 
 	// Read the name first: the row is gone after the uninstall.
@@ -222,7 +222,7 @@ func (h *Handler) UninstallExtension(c echo.Context) error {
 
 // RescanExtensions discovers extensions from the filesystem.
 // POST /admin/extensions/rescan
-func (h *Handler) RescanExtensions(c echo.Context) error {
+func (h *Handler) RescanExtensions(c *echo.Context) error {
 	discovered, err := h.svc.Rescan(c.Request().Context())
 	if err != nil {
 		return err
@@ -261,7 +261,7 @@ func (h *Handler) RescanExtensions(c echo.Context) error {
 
 // ListCampaignExtensions returns extensions available for a campaign.
 // GET /campaigns/:id/extensions
-func (h *Handler) ListCampaignExtensions(c echo.Context) error {
+func (h *Handler) ListCampaignExtensions(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -283,7 +283,7 @@ func (h *Handler) ListCampaignExtensions(c echo.Context) error {
 
 // PreviewExtension returns what an extension will contribute when enabled.
 // GET /campaigns/:id/extensions/:extID/preview
-func (h *Handler) PreviewExtension(c echo.Context) error {
+func (h *Handler) PreviewExtension(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -300,7 +300,7 @@ func (h *Handler) PreviewExtension(c echo.Context) error {
 
 // EnableExtension enables an extension for a campaign.
 // POST /campaigns/:id/extensions/:extID/enable
-func (h *Handler) EnableExtension(c echo.Context) error {
+func (h *Handler) EnableExtension(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -329,7 +329,7 @@ func (h *Handler) EnableExtension(c echo.Context) error {
 
 // DisableExtension disables an extension for a campaign.
 // POST /campaigns/:id/extensions/:extID/disable
-func (h *Handler) DisableExtension(c echo.Context) error {
+func (h *Handler) DisableExtension(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -353,7 +353,7 @@ func (h *Handler) DisableExtension(c echo.Context) error {
 
 // ListMarkerIcons returns all extension marker icon packs for a campaign.
 // GET /campaigns/:id/extensions/marker-icons
-func (h *Handler) ListMarkerIcons(c echo.Context) error {
+func (h *Handler) ListMarkerIcons(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -389,7 +389,7 @@ func (h *Handler) ListMarkerIcons(c echo.Context) error {
 
 // ListThemes returns all extension themes for a campaign.
 // GET /campaigns/:id/extensions/themes
-func (h *Handler) ListThemes(c echo.Context) error {
+func (h *Handler) ListThemes(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -423,7 +423,7 @@ func (h *Handler) ListThemes(c echo.Context) error {
 
 // ListWidgets returns all extension widgets for a campaign.
 // GET /campaigns/:id/extensions/widgets
-func (h *Handler) ListWidgets(c echo.Context) error {
+func (h *Handler) ListWidgets(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -536,7 +536,7 @@ func (h *Handler) GetWidgetBlockInfos(ctx context.Context, campaignID string) []
 
 // ServeAsset serves static assets from an extension's directory.
 // GET /extensions/:extID/assets/*filepath
-func (h *Handler) ServeAsset(c echo.Context) error {
+func (h *Handler) ServeAsset(c *echo.Context) error {
 	extID := c.Param("extID")
 	assetPath := c.Param("*")
 
@@ -582,5 +582,5 @@ func (h *Handler) ServeAsset(c echo.Context) error {
 		slog.String("path", assetPath),
 	)
 
-	return c.File(fullPath)
+	return middleware.ServeFile(c, fullPath)
 }

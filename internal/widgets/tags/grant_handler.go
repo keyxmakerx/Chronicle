@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -14,7 +14,7 @@ import (
 
 // ListGrants returns the visibility grants on a tag.
 // GET /campaigns/:id/tags/:tagId/grants (Owner only).
-func (h *Handler) ListGrants(c echo.Context) error {
+func (h *Handler) ListGrants(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -36,7 +36,7 @@ func (h *Handler) ListGrants(c echo.Context) error {
 
 // CreateGrant adds a visibility grant to a tag.
 // POST /campaigns/:id/tags/:tagId/grants (Owner only).
-func (h *Handler) CreateGrant(c echo.Context) error {
+func (h *Handler) CreateGrant(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -64,7 +64,7 @@ func (h *Handler) CreateGrant(c echo.Context) error {
 
 // DeleteGrant removes a visibility grant from a tag.
 // DELETE /campaigns/:id/tags/:tagId/grants/:grantId (Owner only).
-func (h *Handler) DeleteGrant(c echo.Context) error {
+func (h *Handler) DeleteGrant(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

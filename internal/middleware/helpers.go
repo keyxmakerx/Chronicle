@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -16,20 +16,20 @@ import (
 // Templ templates can read it. Registered once at startup in app/routes.go.
 //
 // This callback pattern avoids the middleware package importing any plugin types.
-var LayoutInjector func(echo.Context, context.Context) context.Context
+var LayoutInjector func(*echo.Context, context.Context) context.Context
 
 // MediaSigner builds the signed media-URL generators bound to whoever is making
 // the request. Registered once at startup in app/routes.go, where the signing
 // secret lives; nil means signing is off and links fall back to unsigned
 // /media/ paths.
-var MediaSigner func(echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc)
+var MediaSigner func(*echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc)
 
 // MediaContext returns the request context with the signed media-URL
 // generators attached. JSON handlers use it so layouts.AvatarURL and
 // layouts.MediaURL sign links for the caller the way a rendered page does;
 // Render does not run for JSON, so without this they would always fall back to
 // unsigned links.
-func MediaContext(c echo.Context) context.Context {
+func MediaContext(c *echo.Context) context.Context {
 	ctx := c.Request().Context()
 	if MediaSigner == nil {
 		return ctx
@@ -50,7 +50,7 @@ func MediaContext(c echo.Context) context.Context {
 // one fetches) swaps the whole body with what it gets, so it needs the full
 // page too, or the sidebar and top bar vanish. Handlers use this to decide
 // whether to return a fragment or full page.
-func IsHTMX(c echo.Context) bool {
+func IsHTMX(c *echo.Context) bool {
 	h := c.Request().Header
 	return h.Get("HX-Request") == "true" &&
 		h.Get("HX-Boosted") != "true" &&
@@ -61,7 +61,7 @@ func IsHTMX(c echo.Context) bool {
 // on one of Chronicle's own pages: a page opened beside another
 // (static/js/beside.js). Browsers set both headers themselves, so another
 // site framing Chronicle always says cross-site here.
-func IsSameOriginFrame(c echo.Context) bool {
+func IsSameOriginFrame(c *echo.Context) bool {
 	h := c.Request().Header
 	return h.Get("Sec-Fetch-Dest") == "iframe" && h.Get("Sec-Fetch-Site") == "same-origin"
 }
@@ -71,7 +71,7 @@ func IsSameOriginFrame(c echo.Context) bool {
 // Accept: application/json). The header checks catch fetch() widgets under
 // /campaigns/*, and match the app's error handler, so such a caller gets
 // JSON from a refusal the same way it does from an error.
-func IsAPIRequest(c echo.Context) bool {
+func IsAPIRequest(c *echo.Context) bool {
 	path := c.Request().URL.Path
 	if len(path) >= 4 && path[:4] == "/api" {
 		return true
@@ -86,7 +86,7 @@ func IsAPIRequest(c echo.Context) bool {
 // For HTMX requests it sets the HX-Redirect header and returns 204 No Content
 // (so HTMX performs a client-side redirect). For normal requests it returns a
 // standard 303 See Other redirect.
-func HTMXRedirect(c echo.Context, url string) error {
+func HTMXRedirect(c *echo.Context, url string) error {
 	if IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", url)
 		return c.NoContent(http.StatusNoContent)
@@ -97,7 +97,7 @@ func HTMXRedirect(c echo.Context, url string) error {
 // Render writes a Templ component to the response with the given status code.
 // Before rendering, it runs the LayoutInjector (if registered) to copy
 // session/campaign data into the Go context for Templ templates to access.
-func Render(c echo.Context, statusCode int, component templ.Component) error {
+func Render(c *echo.Context, statusCode int, component templ.Component) error {
 	ctx := c.Request().Context()
 
 	// Inject layout data from Echo context into Go context for Templ.
@@ -107,5 +107,17 @@ func Render(c echo.Context, statusCode int, component templ.Component) error {
 
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 	c.Response().WriteHeader(statusCode)
-	return component.Render(ctx, c.Response().Writer)
+	return component.Render(ctx, c.Response())
+}
+
+// ResponseState returns Echo's response wrapper for the request, which carries
+// the status, size and committed flag that http.ResponseWriter does not. A
+// middleware may swap in its own writer (gzip, for example), so it unwraps.
+// When nothing unwraps to Echo's type it returns an uncommitted 200, which is
+// what a fresh response reports.
+func ResponseState(c *echo.Context) *echo.Response {
+	if r, err := echo.UnwrapResponse(c.Response()); err == nil {
+		return r
+	}
+	return &echo.Response{ResponseWriter: c.Response(), Status: http.StatusOK}
 }

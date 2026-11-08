@@ -13,7 +13,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -278,8 +278,7 @@ func TestSetPermissionsAPI_EmitsWireContractOnError(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("c1", "e1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "e1"}})
 
 	if err := h.SetPermissionsAPI(c); err != nil {
 		t.Fatalf("handler returned error (should have been written to rec): %v", err)

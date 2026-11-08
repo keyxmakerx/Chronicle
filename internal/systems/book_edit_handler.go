@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -33,7 +33,7 @@ type bookEditorRequest struct {
 	pkg *BookPackage
 }
 
-func (h *SystemHandler) bookEditor(c echo.Context) (*bookEditorRequest, error) {
+func (h *SystemHandler) bookEditor(c *echo.Context) (*bookEditorRequest, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, apperror.NewMissingContext()
@@ -68,7 +68,7 @@ func bookBaseURL(cc *campaigns.CampaignContext, mod System) string {
 }
 
 // readBookBody reads a request body under the same 1 MB cap as a book file.
-func readBookBody(c echo.Context) ([]byte, error) {
+func readBookBody(c *echo.Context) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(c.Request().Body, maxBookFileBytes+1))
 	if err != nil {
 		return nil, apperror.NewBadRequest("the request could not be read")
@@ -81,7 +81,7 @@ func readBookBody(c echo.Context) ([]byte, error) {
 
 // readPageEnvelope returns the raw "page" of {"page": {...}}. The page itself
 // is decoded by the service with the strict book decoder.
-func readPageEnvelope(c echo.Context) ([]byte, error) {
+func readPageEnvelope(c *echo.Context) ([]byte, error) {
 	data, err := readBookBody(c)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func readPageEnvelope(c echo.Context) ([]byte, error) {
 // BookEditPage renders the full-screen editor.
 //
 // GET /campaigns/:id/systems/:mod/book/edit
-func (h *SystemHandler) BookEditPage(c echo.Context) error {
+func (h *SystemHandler) BookEditPage(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -114,7 +114,7 @@ func (h *SystemHandler) BookEditPage(c echo.Context) error {
 // every page's state and the package's own page where it differs.
 //
 // GET /campaigns/:id/systems/:mod/book/source
-func (h *SystemHandler) BookSourceAPI(c echo.Context) error {
+func (h *SystemHandler) BookSourceAPI(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -131,7 +131,7 @@ func (h *SystemHandler) BookSourceAPI(c echo.Context) error {
 // BookPageSave replaces a page's content.
 //
 // PUT /campaigns/:id/systems/:mod/book/chapters/:chapter/pages/:key
-func (h *SystemHandler) BookPageSave(c echo.Context) error {
+func (h *SystemHandler) BookPageSave(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -150,7 +150,7 @@ func (h *SystemHandler) BookPageSave(c echo.Context) error {
 // BookPageAdd appends a page of the campaign's own to a chapter.
 //
 // POST /campaigns/:id/systems/:mod/book/chapters/:chapter/pages
-func (h *SystemHandler) BookPageAdd(c echo.Context) error {
+func (h *SystemHandler) BookPageAdd(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -170,7 +170,7 @@ func (h *SystemHandler) BookPageAdd(c echo.Context) error {
 // page the campaign added.
 //
 // DELETE /campaigns/:id/systems/:mod/book/chapters/:chapter/pages/:key
-func (h *SystemHandler) BookPageDelete(c echo.Context) error {
+func (h *SystemHandler) BookPageDelete(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -186,7 +186,7 @@ func (h *SystemHandler) BookPageDelete(c echo.Context) error {
 // it, in favour of the campaign's copy.
 //
 // POST /campaigns/:id/systems/:mod/book/chapters/:chapter/pages/:key/keep
-func (h *SystemHandler) BookPageKeep(c echo.Context) error {
+func (h *SystemHandler) BookPageKeep(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -201,7 +201,7 @@ func (h *SystemHandler) BookPageKeep(c echo.Context) error {
 // BookChapterCreate adds a house-rules chapter.
 //
 // POST /campaigns/:id/systems/:mod/book/chapters
-func (h *SystemHandler) BookChapterCreate(c echo.Context) error {
+func (h *SystemHandler) BookChapterCreate(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -227,7 +227,7 @@ func (h *SystemHandler) BookChapterCreate(c echo.Context) error {
 // keys sent change.
 //
 // PUT /campaigns/:id/systems/:mod/book/chapters/:chapter
-func (h *SystemHandler) BookChapterUpdate(c echo.Context) error {
+func (h *SystemHandler) BookChapterUpdate(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -250,7 +250,7 @@ func (h *SystemHandler) BookChapterUpdate(c echo.Context) error {
 // BookChapterDelete removes a house-rules chapter and its pages.
 //
 // DELETE /campaigns/:id/systems/:mod/book/chapters/:chapter
-func (h *SystemHandler) BookChapterDelete(c echo.Context) error {
+func (h *SystemHandler) BookChapterDelete(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -267,7 +267,7 @@ var exportNameUnsafe = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
 // format, ready to drop into a package's book/ folder.
 //
 // GET /campaigns/:id/systems/:mod/book/export
-func (h *SystemHandler) BookExport(c echo.Context) error {
+func (h *SystemHandler) BookExport(c *echo.Context) error {
 	r, err := h.bookEditor(c)
 	if err != nil {
 		return err
@@ -284,7 +284,7 @@ func (h *SystemHandler) BookExport(c echo.Context) error {
 
 // bookJSON answers an editor call. Never cached: the body is the campaign's
 // private draft state.
-func bookJSON(c echo.Context, body any) error {
+func bookJSON(c *echo.Context, body any) error {
 	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.JSON(http.StatusOK, body)
 }

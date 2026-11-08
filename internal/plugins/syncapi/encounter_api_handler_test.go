@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -71,8 +71,7 @@ func TestEncounterAPIHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/?"+tt.query, nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id", "encounterID")
-			c.SetParamValues("camp-1", "enc-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "encounterID", Value: "enc-1"}})
 			if !tt.noKey {
 				c.Set(apiKeyContextKey, &APIKey{ID: 1, CampaignID: "camp-1", UserID: "u1"})
 			}

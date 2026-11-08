@@ -3,7 +3,7 @@ package middleware
 import (
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // StaticCache sets an explicit Cache-Control policy on static asset
@@ -25,7 +25,7 @@ func StaticCache(urlPrefix string) echo.MiddlewareFunc {
 		revalidatePolicy = "public, max-age=0, must-revalidate"
 	)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if !strings.HasPrefix(c.Request().URL.Path, urlPrefix) {
 				return next(c)
 			}

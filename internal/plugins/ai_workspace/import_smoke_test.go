@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -45,7 +45,7 @@ func (s *stubLookup) GetEntityTypes(_ context.Context, _ string) ([]entities.Ent
 // fakeContext stuffs a CampaignContext into echo so the handler's
 // GetCampaignContext returns non-nil. Mirrors what the
 // RequireCampaignAccess middleware does in production.
-func fakeContext(c echo.Context, cc *campaigns.CampaignContext) {
+func fakeContext(c *echo.Context, cc *campaigns.CampaignContext) {
 	c.Set("campaign_context", cc)
 	c.Set("auth_user_id", "user-1") // what auth.GetUserID reads
 }
@@ -131,8 +131,7 @@ Body.`
 	req.Header.Set(echo.HeaderContentType, contentType)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	fakeContext(c, &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1", Name: "Ashfall"},
 		MemberRole: campaigns.RoleOwner,
@@ -210,8 +209,7 @@ func TestImport_EmptyBodyReturns400(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, contentType)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	fakeContext(c, &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1"},
 		MemberRole: campaigns.RoleOwner,
@@ -240,8 +238,7 @@ func TestImport_UnwiredLookupGracefulDegrade(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, contentType)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	fakeContext(c, &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1"},
 		MemberRole: campaigns.RoleOwner,

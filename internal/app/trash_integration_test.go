@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
@@ -147,7 +147,7 @@ func trashStatus(e *echo.Echo, method, target, userID string) int {
 
 func trashEcho() *echo.Echo {
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		var appErr *apperror.AppError
 		if errors.As(err, &appErr) {
 			_ = c.NoContent(appErr.Code)
@@ -167,7 +167,7 @@ func TestSiteTrash_CampaignIsGoneForMembersAndBackAfterUndo(t *testing.T) {
 	// /campaigns/:id/... stands for every campaign route (the entity routes
 	// among them): they all sit behind this one membership gate.
 	g := e.Group("/campaigns/:id", auth.RequireAuth(authStub), campaigns.RequireCampaignAccess(fx.campaigns))
-	ok := func(c echo.Context) error { return c.NoContent(http.StatusOK) }
+	ok := func(c *echo.Context) error { return c.NoContent(http.StatusOK) }
 	g.GET("", ok)
 	g.GET("/entities/:eid", ok)
 

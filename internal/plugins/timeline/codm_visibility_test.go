@@ -14,16 +14,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// newTimelineTestContext builds an echo.Context carrying the view-as-player
+// newTimelineTestContext builds an *echo.Context carrying the view-as-player
 // toggle the way a browser sends it: the cookie, not the layout's context
 // flag, which is only set while rendering, after the handler loaded its data.
-func newTimelineTestContext(viewingAsPlayer bool) echo.Context {
+func newTimelineTestContext(viewingAsPlayer bool) *echo.Context {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/timelines", nil)
 	if viewingAsPlayer {

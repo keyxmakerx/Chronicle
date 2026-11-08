@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -153,7 +153,7 @@ func adr058File() *MediaFile {
 // newADR058TestContext builds an authenticated, unsigned request context —
 // no expires/sig query params, so signatureValid is always false and
 // checkMediaAccess always reaches the defense-in-depth block under test.
-func newADR058TestContext(userID string) echo.Context {
+func newADR058TestContext(userID string) *echo.Context {
 	c := newAccessTestContext(nil, &auth.Session{UserID: userID})
 	return c
 }

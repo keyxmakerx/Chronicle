@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -123,7 +123,7 @@ var degradeSignalThrottle sync.Map
 //     so a Bearer key that reaches this point is confirmed live-Owner; the
 //     loud signal below is a defense-in-depth breadcrumb for any caller
 //     that chain doesn't cover, not the primary gate.
-func (h *APIHandler) resolveRole(c echo.Context) int {
+func (h *APIHandler) resolveRole(c *echo.Context) int {
 	key := GetAPIKey(c)
 	if key == nil {
 		return 0
@@ -149,7 +149,7 @@ func (h *APIHandler) resolveRole(c echo.Context) int {
 // as a defense-in-depth breadcrumb for any resolveRole caller outside that
 // middleware chain, so the condition still surfaces instead of looking silently
 // normal.
-func (h *APIHandler) flagIfKeyOwnerLostAccess(c echo.Context, key *APIKey) {
+func (h *APIHandler) flagIfKeyOwnerLostAccess(c *echo.Context, key *APIKey) {
 	member, err := h.campaignSvc.GetMember(c.Request().Context(), key.CampaignID, key.UserID)
 	// err != nil => creator removed from campaign; role < Owner => demoted.
 	if err == nil && member.Role >= campaigns.RoleOwner {
@@ -200,7 +200,7 @@ func shouldEmitDegradeSignal(keyID int) bool {
 }
 
 // resolveUserID returns the API key owner's user ID for permission checks.
-func (h *APIHandler) resolveUserID(c echo.Context) string {
+func (h *APIHandler) resolveUserID(c *echo.Context) string {
 	key := GetAPIKey(c)
 	if key == nil {
 		return ""
@@ -243,7 +243,7 @@ type apiCampaignResponse struct {
 
 // GetCampaign returns campaign details for the API key's campaign.
 // GET /api/v1/campaigns/:id
-func (h *APIHandler) GetCampaign(c echo.Context) error {
+func (h *APIHandler) GetCampaign(c *echo.Context) error {
 	campaignID := c.Param("id")
 	campaign, err := h.campaignSvc.GetByID(c.Request().Context(), campaignID)
 	if err != nil {
@@ -262,7 +262,7 @@ func (h *APIHandler) GetCampaign(c echo.Context) error {
 
 // ListMembers returns all members of the campaign.
 // GET /api/v1/campaigns/:id/members
-func (h *APIHandler) ListMembers(c echo.Context) error {
+func (h *APIHandler) ListMembers(c *echo.Context) error {
 	campaignID := c.Param("id")
 	members, err := h.campaignSvc.ListMembers(c.Request().Context(), campaignID)
 	if err != nil {
@@ -329,7 +329,7 @@ func (h *APIHandler) toAPIMember(campaignID string, m *campaigns.CampaignMember)
 
 // ListEntityTypes returns all entity types for the campaign.
 // GET /api/v1/campaigns/:id/entity-types
-func (h *APIHandler) ListEntityTypes(c echo.Context) error {
+func (h *APIHandler) ListEntityTypes(c *echo.Context) error {
 	campaignID := c.Param("id")
 	types, err := h.entitySvc.GetEntityTypes(c.Request().Context(), campaignID)
 	if err != nil {
@@ -346,7 +346,7 @@ func (h *APIHandler) ListEntityTypes(c echo.Context) error {
 
 // GetEntityType returns a single entity type by ID.
 // GET /api/v1/campaigns/:id/entity-types/:typeID
-func (h *APIHandler) GetEntityType(c echo.Context) error {
+func (h *APIHandler) GetEntityType(c *echo.Context) error {
 	typeID, err := strconv.Atoi(c.Param("typeID"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid entity type ID")
@@ -372,7 +372,7 @@ func (h *APIHandler) GetEntityType(c echo.Context) error {
 
 // ListEntities returns entities with pagination and optional filters.
 // GET /api/v1/campaigns/:id/entities?type_id=N&page=1&per_page=20&q=search
-func (h *APIHandler) ListEntities(c echo.Context) error {
+func (h *APIHandler) ListEntities(c *echo.Context) error {
 	campaignID := c.Param("id")
 	// The visibility role, as the web uses: a Co-DM reads as Owner.
 	role := h.visibilityRoleFor(c.Request().Context(), campaignID, h.resolveUserID(c), h.resolveRole(c))
@@ -453,7 +453,7 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 
 // GetEntity returns a single entity by ID.
 // GET /api/v1/campaigns/:id/entities/:entityID
-func (h *APIHandler) GetEntity(c echo.Context) error {
+func (h *APIHandler) GetEntity(c *echo.Context) error {
 	entityID := c.Param("entityID")
 	role := h.resolveRole(c)
 	ctx := c.Request().Context()
@@ -592,7 +592,7 @@ type apiCreateEntityRequest struct {
 
 // CreateEntity creates a new entity in the campaign.
 // POST /api/v1/campaigns/:id/entities
-func (h *APIHandler) CreateEntity(c echo.Context) error {
+func (h *APIHandler) CreateEntity(c *echo.Context) error {
 	key := GetAPIKey(c)
 	if key == nil {
 		return apperror.NewUnauthorized("api key required")
@@ -667,7 +667,7 @@ type apiUpdateEntityRequest struct {
 
 // UpdateEntity updates an existing entity.
 // PUT /api/v1/campaigns/:id/entities/:entityID
-func (h *APIHandler) UpdateEntity(c echo.Context) error {
+func (h *APIHandler) UpdateEntity(c *echo.Context) error {
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
 
@@ -723,7 +723,7 @@ type apiUpdateFieldsRequest struct {
 
 // UpdateEntityFields merges the sent custom fields into an entity's fields.
 // PUT /api/v1/campaigns/:id/entities/:entityID/fields
-func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
+func (h *APIHandler) UpdateEntityFields(c *echo.Context) error {
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
 
@@ -763,7 +763,7 @@ func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
 // POST /api/v1/campaigns/:id/entities/:entityID/reveal
 // Used by Foundry VTT to sync NPC visibility changes bidirectionally.
 // Body: {"is_private": true|false} — if omitted, toggles current state.
-func (h *APIHandler) ToggleEntityReveal(c echo.Context) error {
+func (h *APIHandler) ToggleEntityReveal(c *echo.Context) error {
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
 
@@ -816,7 +816,7 @@ func (h *APIHandler) ToggleEntityReveal(c echo.Context) error {
 // header comment). RequirePermission(PermWrite) alone also admits a
 // Scribe, whether via a Foundry key or the Scribe's own session cookie
 // (this route group accepts both), which the web UI refuses.
-func (h *APIHandler) DeleteEntity(c echo.Context) error {
+func (h *APIHandler) DeleteEntity(c *echo.Context) error {
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
 	role := h.resolveRole(c)
@@ -916,7 +916,7 @@ type syncResponse struct {
 // false. server_time from the FIRST response of a completed walk is the next
 // since — taking it from the last response would skip anything modified while
 // the walk was in flight.
-func (h *APIHandler) Sync(c echo.Context) error {
+func (h *APIHandler) Sync(c *echo.Context) error {
 	key := GetAPIKey(c)
 	if key == nil {
 		return apperror.NewUnauthorized("api key required")
@@ -1110,7 +1110,7 @@ func (h *APIHandler) Sync(c echo.Context) error {
 // ListEntityRelations returns all relations for an entity, enriched with target
 // entity display data and metadata (price, quantity for shop inventory).
 // GET /api/v1/campaigns/:id/entities/:entityID/relations
-func (h *APIHandler) ListEntityRelations(c echo.Context) error {
+func (h *APIHandler) ListEntityRelations(c *echo.Context) error {
 	entityID := c.Param("entityID")
 	if entityID == "" {
 		return apperror.NewBadRequest("entity ID required")
@@ -1160,7 +1160,7 @@ func (h *APIHandler) ListEntityRelations(c echo.Context) error {
 // and the caller may view it, with the same promotion for a member with DM
 // access that GetEntity applies. It returns the visibility role and user id
 // the caller resolved to, for reads that go on to filter by viewer.
-func (h *APIHandler) requireViewableEntity(c echo.Context, entityID string) (visRole int, userID string, err error) {
+func (h *APIHandler) requireViewableEntity(c *echo.Context, entityID string) (visRole int, userID string, err error) {
 	ctx := c.Request().Context()
 	entity, gerr := h.entitySvc.GetByID(ctx, entityID)
 	if gerr != nil || entity.CampaignID != c.Param("id") {
@@ -1191,7 +1191,7 @@ type permissionsAPIResponse struct {
 
 // GetEntityPermissions returns the visibility mode and permission grants for an entity.
 // GET /api/v1/campaigns/:id/entities/:entityID/permissions
-func (h *APIHandler) GetEntityPermissions(c echo.Context) error {
+func (h *APIHandler) GetEntityPermissions(c *echo.Context) error {
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
 
@@ -1244,7 +1244,7 @@ func (h *APIHandler) GetEntityPermissions(c echo.Context) error {
 
 // SetEntityPermissions updates the visibility mode and permission grants for an entity.
 // PUT /api/v1/campaigns/:id/entities/:entityID/permissions
-func (h *APIHandler) SetEntityPermissions(c echo.Context) error {
+func (h *APIHandler) SetEntityPermissions(c *echo.Context) error {
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
 	role := h.resolveRole(c)
@@ -1337,7 +1337,7 @@ type CampaignSystemLister interface {
 // was deployed — the endpoint auto-enables the addon on read so the
 // Foundry module sees enabled=true without manual intervention.
 // GET /api/v1/campaigns/:id/systems
-func (h *APIHandler) ListSystems(c echo.Context) error {
+func (h *APIHandler) ListSystems(c *echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()
 
@@ -1432,7 +1432,7 @@ func (h *APIHandler) checkOrHealSystemAddon(ctx context.Context, campaignID, sys
 // specific system, including Foundry path annotations. Used by the Foundry
 // module's generic adapter to auto-generate field mappings at runtime.
 // GET /api/v1/campaigns/:id/systems/:systemId/character-fields
-func (h *APIHandler) GetCharacterFields(c echo.Context) error {
+func (h *APIHandler) GetCharacterFields(c *echo.Context) error {
 	campaignID := c.Param("id")
 	systemID := c.Param("systemId")
 
@@ -1460,7 +1460,7 @@ func (h *APIHandler) GetCharacterFields(c echo.Context) error {
 // system, including Foundry path annotations. Used by the Foundry module
 // for item sync field mappings.
 // GET /api/v1/campaigns/:id/systems/:systemId/item-fields
-func (h *APIHandler) GetItemFields(c echo.Context) error {
+func (h *APIHandler) GetItemFields(c *echo.Context) error {
 	campaignID := c.Param("id")
 	systemID := c.Param("systemId")
 
@@ -1495,7 +1495,7 @@ func (h *APIHandler) GetItemFields(c echo.Context) error {
 // Foundry NPC actors. A system without a creature preset answers with an
 // empty field list, as item-fields does.
 // GET /api/v1/campaigns/:id/systems/:systemId/creature-fields
-func (h *APIHandler) GetCreatureFields(c echo.Context) error {
+func (h *APIHandler) GetCreatureFields(c *echo.Context) error {
 	campaignID := c.Param("id")
 	systemID := c.Param("systemId")
 
@@ -1526,7 +1526,7 @@ func (h *APIHandler) GetCreatureFields(c echo.Context) error {
 // ListAddons returns all addons for the campaign with their enabled state.
 // Used by external clients to discover available features without probing.
 // GET /api/v1/campaigns/:id/addons
-func (h *APIHandler) ListAddons(c echo.Context) error {
+func (h *APIHandler) ListAddons(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	if h.addonLister == nil {
@@ -1553,7 +1553,7 @@ func (h *APIHandler) ListAddons(c echo.Context) error {
 
 // ListRelationTypes returns the predefined relation type pairs for the frontend.
 // GET /api/v1/campaigns/:id/relations/types
-func (h *APIHandler) ListRelationTypes(c echo.Context) error {
+func (h *APIHandler) ListRelationTypes(c *echo.Context) error {
 	types := h.relationSvc.GetCommonTypes()
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":  types,
@@ -1572,7 +1572,7 @@ type apiCreateRelationRequest struct {
 
 // CreateRelation creates a new relation between two entities.
 // POST /api/v1/campaigns/:id/entities/:entityID/relations
-func (h *APIHandler) CreateRelation(c echo.Context) error {
+func (h *APIHandler) CreateRelation(c *echo.Context) error {
 	campaignID := c.Param("id")
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
@@ -1615,7 +1615,7 @@ type apiUpdateRelationRequest struct {
 
 // UpdateRelation updates a relation's metadata.
 // PUT /api/v1/campaigns/:id/relations/:relationId
-func (h *APIHandler) UpdateRelation(c echo.Context) error {
+func (h *APIHandler) UpdateRelation(c *echo.Context) error {
 	campaignID := c.Param("id")
 	relationID, err := strconv.Atoi(c.Param("relationId"))
 	if err != nil {
@@ -1651,7 +1651,7 @@ func (h *APIHandler) UpdateRelation(c echo.Context) error {
 
 // DeleteRelation removes a relation and its reverse.
 // DELETE /api/v1/campaigns/:id/relations/:relationId
-func (h *APIHandler) DeleteRelation(c echo.Context) error {
+func (h *APIHandler) DeleteRelation(c *echo.Context) error {
 	campaignID := c.Param("id")
 	relationID, err := strconv.Atoi(c.Param("relationId"))
 	if err != nil {
@@ -1688,7 +1688,7 @@ type apiCreateEntityTypeRequest struct {
 
 // CreateEntityType creates a new entity type for the campaign.
 // POST /api/v1/campaigns/:id/entity-types
-func (h *APIHandler) CreateEntityType(c echo.Context) error {
+func (h *APIHandler) CreateEntityType(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	// Same bar as the web route: entity types shape the whole campaign.
@@ -1727,7 +1727,7 @@ type apiUpdateEntityTypeRequest struct {
 
 // UpdateEntityType updates an existing entity type.
 // PUT /api/v1/campaigns/:id/entity-types/:typeID
-func (h *APIHandler) UpdateEntityType(c echo.Context) error {
+func (h *APIHandler) UpdateEntityType(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	// Same bar as the web route: entity types shape the whole campaign.
@@ -1776,7 +1776,7 @@ type apiBulkUpdateEntityTypeRequest struct {
 
 // BulkUpdateEntityType changes the entity type for multiple entities at once.
 // POST /api/v1/campaigns/:id/entities/bulk-update
-func (h *APIHandler) BulkUpdateEntityType(c echo.Context) error {
+func (h *APIHandler) BulkUpdateEntityType(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	var req apiBulkUpdateEntityTypeRequest

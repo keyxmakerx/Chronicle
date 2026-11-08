@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -18,7 +18,7 @@ import (
 func TestRoutesGuardCampaignOverrides(t *testing.T) {
 	e := echo.New()
 	reauth := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error { return c.NoContent(http.StatusForbidden) }
+		return func(c *echo.Context) error { return c.NoContent(http.StatusForbidden) }
 	}
 	RegisterRoutes(e.Group("/admin"), nil, reauth)
 
@@ -207,14 +207,13 @@ func (r *recordingReminder) RemindOwner(_ context.Context, _ *Package, c, v stri
 	return r.err
 }
 
-func adminCtx(method string) (echo.Context, *httptest.ResponseRecorder) {
+func adminCtx(method string) (*echo.Context, *httptest.ResponseRecorder) {
 	req := httptest.NewRequest(method, "/x", strings.NewReader("version=2.8.0"))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(req, rec)
-	c.SetParamNames("id", "cid")
-	c.SetParamValues("m1", "c1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "m1"}, {Name: "cid", Value: "c1"}})
 	auth.SetSession(c, &auth.Session{UserID: "admin-1"})
 	return c, rec
 }
@@ -250,7 +249,7 @@ func TestAdminCampaignActionsActOnTheOwnersBehalf(t *testing.T) {
 
 func TestAdminCampaignActionsNeedTheUpdateService(t *testing.T) {
 	h := &Handler{service: fakePackageGetter{}}
-	for name, fn := range map[string]func(echo.Context) error{
+	for name, fn := range map[string]func(*echo.Context) error{
 		"hold": h.HoldCampaign, "release": h.ReleaseCampaign, "move": h.MoveCampaign, "remind": h.RemindCampaignOwner,
 	} {
 		c, _ := adminCtx(http.MethodPost)

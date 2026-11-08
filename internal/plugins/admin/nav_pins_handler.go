@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -31,7 +31,7 @@ type adminNavPinsRequest struct {
 // ordered list in the body ({"pins": ["/admin/users"]}) and answers with the
 // re-rendered admin nav block, so the page can swap it in. The client reads
 // the current list from the page before it sends.
-func (h *Handler) UpdateNavPins(c echo.Context) error {
+func (h *Handler) UpdateNavPins(c *echo.Context) error {
 	if h.navPins == nil {
 		return apperror.NewInternal(fmt.Errorf("admin nav pins are not wired"))
 	}

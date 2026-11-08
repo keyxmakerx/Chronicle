@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -45,7 +45,7 @@ func listError(err error) error {
 
 // CreateTransaction handles POST /campaigns/:id/armory/transactions.
 // Records a manual transaction (gift, transfer, restock).
-func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
+func (h *TransactionHandler) CreateTransaction(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -67,7 +67,7 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 
 // ListTransactions handles GET /campaigns/:id/armory/transactions.
 // Returns paginated transactions with optional filters.
-func (h *TransactionHandler) ListTransactions(c echo.Context) error {
+func (h *TransactionHandler) ListTransactions(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -116,7 +116,7 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 
 // ListShopTransactions handles GET /campaigns/:id/armory/shops/:eid/transactions.
 // Returns transactions for a specific shop entity.
-func (h *TransactionHandler) ListShopTransactions(c echo.Context) error {
+func (h *TransactionHandler) ListShopTransactions(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -43,7 +43,7 @@ func dmWriteCampaignCtx(role campaigns.Role, dmGranted bool) *campaigns.Campaign
 	}
 }
 
-func newDMWriteRequest(method, path, body string) (echo.Context, *httptest.ResponseRecorder) {
+func newDMWriteRequest(method, path, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	if body == "" {
 		body = "{}"
 	}
@@ -76,8 +76,7 @@ func TestCreateMarkerAPI_DmOnlyDowngrade_ByCapability(t *testing.T) {
 			h := NewHandler(NewMapService(repo))
 			c, rec := newDMWriteRequest(http.MethodPost, "/campaigns/camp-1/maps/map-1/markers",
 				`{"name":"Secret Door","x":10,"y":10,"icon":"fa-door-closed","color":"#000000","visibility":"dm_only"}`)
-			c.SetParamNames("id", "mid")
-			c.SetParamValues("camp-1", "map-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}})
 			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
 
 			if err := h.CreateMarkerAPI(c); err != nil {
@@ -140,8 +139,7 @@ func TestUpdateMarkerAPI_StoredDmOnly_RequiresCanAuthorDmOnly(t *testing.T) {
 			h := NewHandler(NewMapService(repo))
 			c, rec := newDMWriteRequest(http.MethodPut, "/campaigns/camp-1/maps/map-1/markers/mk-secret",
 				`{"name":"Renamed Door"}`)
-			c.SetParamNames("id", "mid", "mkid")
-			c.SetParamValues("camp-1", "map-1", "mk-secret")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}, {Name: "mkid", Value: "mk-secret"}})
 			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
 
 			err := h.UpdateMarkerAPI(c)
@@ -178,8 +176,7 @@ func TestDeleteMarkerAPI_StoredDmOnly_RequiresCanAuthorDmOnly(t *testing.T) {
 			}
 			h := NewHandler(NewMapService(repo))
 			c, rec := newDMWriteRequest(http.MethodDelete, "/campaigns/camp-1/maps/map-1/markers/mk-secret", "")
-			c.SetParamNames("id", "mid", "mkid")
-			c.SetParamValues("camp-1", "map-1", "mk-secret")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}, {Name: "mkid", Value: "mk-secret"}})
 			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
 
 			err := h.DeleteMarkerAPI(c)
@@ -249,8 +246,7 @@ func TestUpdateMarkerAPI_StoredEveryone_AlwaysReachesRepo(t *testing.T) {
 			h := NewHandler(NewMapService(repo))
 			c, rec := newDMWriteRequest(http.MethodPut, "/campaigns/camp-1/maps/map-1/markers/mk-public",
 				`{"name":"Renamed Square"}`)
-			c.SetParamNames("id", "mid", "mkid")
-			c.SetParamValues("camp-1", "map-1", "mk-public")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}, {Name: "mkid", Value: "mk-public"}})
 			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
 
 			if err := h.UpdateMarkerAPI(c); err != nil {
@@ -279,8 +275,7 @@ func TestDeleteMarkerAPI_StoredEveryone_AlwaysReachesRepo(t *testing.T) {
 			}
 			h := NewHandler(NewMapService(repo))
 			c, rec := newDMWriteRequest(http.MethodDelete, "/campaigns/camp-1/maps/map-1/markers/mk-public", "")
-			c.SetParamNames("id", "mid", "mkid")
-			c.SetParamValues("camp-1", "map-1", "mk-public")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}, {Name: "mkid", Value: "mk-public"}})
 			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
 
 			err := h.DeleteMarkerAPI(c)

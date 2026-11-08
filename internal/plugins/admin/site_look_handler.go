@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -34,7 +34,7 @@ func (h *Handler) SetSiteLookService(svc SiteLookService) {
 }
 
 // SiteLook handles GET /admin/site-look.
-func (h *Handler) SiteLook(c echo.Context) error {
+func (h *Handler) SiteLook(c *echo.Context) error {
 	if h.siteLook == nil {
 		return apperror.NewMissingContext()
 	}
@@ -51,7 +51,7 @@ func (h *Handler) SiteLook(c echo.Context) error {
 
 // SaveSiteLook handles POST /admin/site-look: the whole form in one request,
 // uploads included, so nothing is saved by half.
-func (h *Handler) SaveSiteLook(c echo.Context) error {
+func (h *Handler) SaveSiteLook(c *echo.Context) error {
 	if h.siteLook == nil {
 		return apperror.NewMissingContext()
 	}
@@ -88,7 +88,7 @@ func (h *Handler) SaveSiteLook(c echo.Context) error {
 // renderSiteLookError re-renders the page with the submitted choices and the
 // reason a Save was refused. Only a rejected input (400) is shown to the
 // admin; anything else is a real failure and goes to the error page.
-func (h *Handler) renderSiteLookError(c echo.Context, sub SiteLookSubmission, err error) error {
+func (h *Handler) renderSiteLookError(c *echo.Context, sub SiteLookSubmission, err error) error {
 	var ae *apperror.AppError
 	if !errors.As(err, &ae) || ae.Code != http.StatusBadRequest {
 		return err
@@ -107,7 +107,7 @@ func (h *Handler) renderSiteLookError(c echo.Context, sub SiteLookSubmission, er
 
 // formUpload reads one optional file field, refusing anything over limit
 // without reading past it. nil means no file was chosen.
-func formUpload(c echo.Context, field string, limit int64) (*SiteLookUpload, error) {
+func formUpload(c *echo.Context, field string, limit int64) (*SiteLookUpload, error) {
 	fh, err := c.FormFile(field)
 	if err != nil {
 		if errors.Is(err, http.ErrMissingFile) || errors.Is(err, http.ErrNotMultipart) {

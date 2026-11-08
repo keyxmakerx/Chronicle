@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -24,7 +24,7 @@ func NewSyncHandler(syncMappingSvc SyncMappingService) *SyncHandler {
 
 // ListMappings returns all sync mappings for a campaign.
 // GET /api/v1/campaigns/:id/sync/mappings?limit=50&offset=0
-func (h *SyncHandler) ListMappings(c echo.Context) error {
+func (h *SyncHandler) ListMappings(c *echo.Context) error {
 	campaignID := c.Param("id")
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
 	offset, _ := strconv.Atoi(c.QueryParam("offset"))
@@ -59,7 +59,7 @@ func (h *SyncHandler) ListMappings(c echo.Context) error {
 
 // GetMapping returns a single sync mapping by ID.
 // GET /api/v1/campaigns/:id/sync/mappings/:mappingID
-func (h *SyncHandler) GetMapping(c echo.Context) error {
+func (h *SyncHandler) GetMapping(c *echo.Context) error {
 	mappingID := c.Param("mappingID")
 	mapping, err := h.syncMappingSvc.GetMapping(c.Request().Context(), mappingID)
 	if err != nil {
@@ -76,7 +76,7 @@ func (h *SyncHandler) GetMapping(c echo.Context) error {
 
 // CreateMapping creates a new sync mapping.
 // POST /api/v1/campaigns/:id/sync/mappings
-func (h *SyncHandler) CreateMapping(c echo.Context) error {
+func (h *SyncHandler) CreateMapping(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	var input CreateSyncMappingInput
@@ -100,7 +100,7 @@ func (h *SyncHandler) CreateMapping(c echo.Context) error {
 
 // DeleteMapping removes a sync mapping.
 // DELETE /api/v1/campaigns/:id/sync/mappings/:mappingID
-func (h *SyncHandler) DeleteMapping(c echo.Context) error {
+func (h *SyncHandler) DeleteMapping(c *echo.Context) error {
 	mappingID := c.Param("mappingID")
 
 	// Verify campaign scope.
@@ -122,7 +122,7 @@ func (h *SyncHandler) DeleteMapping(c echo.Context) error {
 // LookupMapping finds a sync mapping by Chronicle or external identity.
 // GET /api/v1/campaigns/:id/sync/lookup?chronicle_type=entity&chronicle_id=X
 // GET /api/v1/campaigns/:id/sync/lookup?external_system=foundry&external_id=X
-func (h *SyncHandler) LookupMapping(c echo.Context) error {
+func (h *SyncHandler) LookupMapping(c *echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()
 
@@ -157,7 +157,7 @@ func (h *SyncHandler) LookupMapping(c echo.Context) error {
 
 // PullMappings returns sync mappings modified since a given timestamp.
 // GET /api/v1/campaigns/:id/sync/pull?since=2024-01-01T00:00:00Z&limit=100
-func (h *SyncHandler) PullMappings(c echo.Context) error {
+func (h *SyncHandler) PullMappings(c *echo.Context) error {
 	campaignID := c.Param("id")
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
 

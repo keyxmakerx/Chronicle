@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -41,7 +41,7 @@ type apiSystemEntry struct {
 // never goes into a saved Foundry document. So Directors-only entries are
 // left out and secret spans are stripped by the service.
 // GET /api/v1/campaigns/:id/system-entries?fieldKey=ancestry
-func (h *APIHandler) ListSystemEntries(c echo.Context) error {
+func (h *APIHandler) ListSystemEntries(c *echo.Context) error {
 	if h.systemEntries == nil {
 		return apperror.NewNotFound("system entries are not available")
 	}

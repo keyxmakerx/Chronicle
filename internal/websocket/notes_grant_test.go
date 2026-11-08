@@ -15,7 +15,7 @@ import (
 	"time"
 
 	gorillaWs "github.com/gorilla/websocket"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 )

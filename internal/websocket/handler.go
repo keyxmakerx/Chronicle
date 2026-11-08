@@ -8,7 +8,7 @@ import (
 	"time"
 
 	gorillaWs "github.com/gorilla/websocket"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -96,7 +96,7 @@ type Authenticator interface {
 func HandleUpgrade(hub *Hub, auth Authenticator, allowedOrigins []string, dynamicOrigins DynamicOrigins) echo.HandlerFunc {
 	upgrader := newUpgrader(allowedOrigins, dynamicOrigins)
 
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		r := c.Request()
 
 		campaignID, userID, source, role, isDmGranted, expiresAt, err := auth.AuthenticateWS(r)

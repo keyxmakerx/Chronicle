@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"

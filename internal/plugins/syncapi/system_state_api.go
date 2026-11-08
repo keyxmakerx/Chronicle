@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -57,7 +57,7 @@ type systemStateResponse struct {
 // the caller resolves to Owner after DM-grant promotion, the same bar the web
 // route applies with CanAuthorDmOnly; every stored Bearer key is Owner-level.
 // GET /api/v1/campaigns/:id/entities/:entityID/system-state/:system/:key
-func (h *APIHandler) GetSystemState(c echo.Context) error {
+func (h *APIHandler) GetSystemState(c *echo.Context) error {
 	if h.systemState == nil {
 		return apperror.NewNotFound("system state is not available")
 	}
@@ -94,7 +94,7 @@ func (h *APIHandler) GetSystemState(c echo.Context) error {
 // promotion (the bar the web route applies with CanAuthorDmOnly): a key that
 // is not Owner-level must never write, whatever the route permission says.
 // PUT /api/v1/campaigns/:id/entities/:entityID/system-state/:system/:key
-func (h *APIHandler) PutSystemState(c echo.Context) error {
+func (h *APIHandler) PutSystemState(c *echo.Context) error {
 	if h.systemStateWriter == nil {
 		return apperror.NewNotFound("system state is not available")
 	}
@@ -135,7 +135,7 @@ func (h *APIHandler) PutSystemState(c echo.Context) error {
 // Members decode raw because a typed pointer would turn an explicit null into
 // "absent"; null must reach the service so it is rejected. Unknown members are
 // rejected so a misspelt half name cannot become a silent no-op.
-func bindSystemStateBody(c echo.Context) (gm, public *json.RawMessage, err error) {
+func bindSystemStateBody(c *echo.Context) (gm, public *json.RawMessage, err error) {
 	body, rerr := io.ReadAll(http.MaxBytesReader(c.Response(), c.Request().Body, maxSystemStateBodyBytes))
 	if rerr != nil {
 		return nil, nil, apperror.NewBadRequest("request body is missing or too large")

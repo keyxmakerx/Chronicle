@@ -9,7 +9,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -67,7 +67,7 @@ func (h *CampaignSystemHandler) SetEntityDeps(counter EntityCountProvider, typeL
 // Shows a diagnostics page for the currently enabled game system: manifest
 // details, category item counts, entity presets, Foundry compatibility, and
 // validation warnings.
-func (h *CampaignSystemHandler) SystemStatus(c echo.Context) error {
+func (h *CampaignSystemHandler) SystemStatus(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -228,7 +228,7 @@ func (h *CampaignSystemHandler) buildDiagnostics(ctx context.Context, campaignID
 // Accepts a ZIP file, validates it without writing to disk, and returns
 // a full preview of what the system contains (impact tree, categories,
 // entity presets, warnings). The owner can then confirm installation.
-func (h *CampaignSystemHandler) PreviewSystem(c echo.Context) error {
+func (h *CampaignSystemHandler) PreviewSystem(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -263,7 +263,7 @@ func (h *CampaignSystemHandler) PreviewSystem(c echo.Context) error {
 // UploadSystem handles POST /campaigns/:id/systems/upload.
 // Accepts a ZIP file containing manifest.json + data/*.json, validates it,
 // and installs it as the campaign's custom game system.
-func (h *CampaignSystemHandler) UploadSystem(c echo.Context) error {
+func (h *CampaignSystemHandler) UploadSystem(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -317,7 +317,7 @@ func (h *CampaignSystemHandler) UploadSystem(c echo.Context) error {
 }
 
 // readUploadedZIP reads and validates the uploaded ZIP file from the request.
-func (h *CampaignSystemHandler) readUploadedZIP(c echo.Context) ([]byte, error) {
+func (h *CampaignSystemHandler) readUploadedZIP(c *echo.Context) ([]byte, error) {
 	file, err := c.FormFile("file")
 	if err != nil {
 		return nil, apperror.NewBadRequest("file is required")
@@ -343,7 +343,7 @@ func (h *CampaignSystemHandler) readUploadedZIP(c echo.Context) ([]byte, error) 
 
 // DeleteSystem handles DELETE /campaigns/:id/systems/custom.
 // Removes the campaign's custom game system from disk and memory.
-func (h *CampaignSystemHandler) DeleteSystem(c echo.Context) error {
+func (h *CampaignSystemHandler) DeleteSystem(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -371,7 +371,7 @@ func (h *CampaignSystemHandler) DeleteSystem(c echo.Context) error {
 // GetCustomSystem handles GET /campaigns/:id/systems/custom.
 // Returns an HTMX fragment showing the custom system status with
 // upload or manage controls.
-func (h *CampaignSystemHandler) GetCustomSystem(c echo.Context) error {
+func (h *CampaignSystemHandler) GetCustomSystem(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -50,12 +50,11 @@ func tokenHandler(t *testing.T, roster []string, applied *string) *Handler {
 	return h
 }
 
-func rsvpTokenCtx(method string) (echo.Context, *httptest.ResponseRecorder) {
+func rsvpTokenCtx(method string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	rec := httptest.NewRecorder()
 	c := e.NewContext(httptest.NewRequest(method, "/rsvp/rt", nil), rec)
-	c.SetParamNames("token")
-	c.SetParamValues("rt")
+	c.SetPathValues(echo.PathValues{{Name: "token", Value: "rt"}})
 	return c, rec
 }
 
@@ -66,7 +65,7 @@ func TestRSVPToken_RemovedMemberIsRefused(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		method string
-		call   func(*Handler, echo.Context) error
+		call   func(*Handler, *echo.Context) error
 	}{
 		{"GET confirm page", http.MethodGet, (*Handler).RedeemRSVPToken},
 		{"POST apply", http.MethodPost, (*Handler).ApplyRSVPToken},

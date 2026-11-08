@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -53,11 +53,11 @@ func TestMapAPIHandler_MarkerRoutes_RequireMarkerOnURLMap(t *testing.T) {
 	routes := []struct {
 		name   string
 		method string
-		call   func(h *MapAPIHandler, c echo.Context) error
+		call   func(h *MapAPIHandler, c *echo.Context) error
 	}{
-		{"GetMarker", http.MethodGet, func(h *MapAPIHandler, c echo.Context) error { return h.GetMarker(c) }},
-		{"UpdateMarker", http.MethodPut, func(h *MapAPIHandler, c echo.Context) error { return h.UpdateMarker(c) }},
-		{"DeleteMarker", http.MethodDelete, func(h *MapAPIHandler, c echo.Context) error { return h.DeleteMarker(c) }},
+		{"GetMarker", http.MethodGet, func(h *MapAPIHandler, c *echo.Context) error { return h.GetMarker(c) }},
+		{"UpdateMarker", http.MethodPut, func(h *MapAPIHandler, c *echo.Context) error { return h.UpdateMarker(c) }},
+		{"DeleteMarker", http.MethodDelete, func(h *MapAPIHandler, c *echo.Context) error { return h.DeleteMarker(c) }},
 	}
 	cases := []struct {
 		name        string
@@ -78,8 +78,7 @@ func TestMapAPIHandler_MarkerRoutes_RequireMarkerOnURLMap(t *testing.T) {
 				h := NewMapAPIHandler(nil, svc, &stubDrawingSvcOwnerGate{}, &stubCampaignSvcOwnerGate{role: campaigns.RoleOwner})
 				key := &APIKey{ID: 1, CampaignID: "camp-1", UserID: "owner-1", IsActive: true, Permissions: []APIKeyPermission{PermRead, PermWrite}}
 				c, _ := newMapAPIContext(r.method, "/api/v1/campaigns/camp-1/maps/map-1/markers/mk-1", key)
-				c.SetParamNames("id", "mapID", "markerID")
-				c.SetParamValues("camp-1", "map-1", "mk-1")
+				c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mapID", Value: "map-1"}, {Name: "markerID", Value: "mk-1"}})
 
 				err := r.call(h, c)
 				if !tc.wantErr {
@@ -112,8 +111,7 @@ func TestMapAPIHandler_GetMarker_HidesDMOnlyFromNonDM(t *testing.T) {
 	h := NewMapAPIHandler(nil, svc, &stubDrawingSvcOwnerGate{}, camp)
 	key := &APIKey{ID: 1, CampaignID: "camp-1", UserID: "player-1", IsActive: true, Permissions: []APIKeyPermission{PermRead}}
 	c, _ := newMapAPIContext(http.MethodGet, "/api/v1/campaigns/camp-1/maps/map-1/markers/mk-1", key)
-	c.SetParamNames("id", "mapID", "markerID")
-	c.SetParamValues("camp-1", "map-1", "mk-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mapID", Value: "map-1"}, {Name: "markerID", Value: "mk-1"}})
 
 	err := h.GetMarker(c)
 	var ae *apperror.AppError
@@ -145,8 +143,7 @@ func TestMapAPIHandler_GetMarker_HidesShadowedPin(t *testing.T) {
 		h := NewMapAPIHandler(nil, svc, &stubDrawingSvcOwnerGate{}, camp)
 		key := &APIKey{ID: 1, CampaignID: "camp-1", UserID: "player-1", IsActive: true, Permissions: []APIKeyPermission{PermRead}}
 		c, _ := newMapAPIContext(http.MethodGet, "/api/v1/campaigns/camp-1/maps/map-1/markers/mk-1", key)
-		c.SetParamNames("id", "mapID", "markerID")
-		c.SetParamValues("camp-1", "map-1", "mk-1")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mapID", Value: "map-1"}, {Name: "markerID", Value: "mk-1"}})
 
 		err := h.GetMarker(c)
 		var ae *apperror.AppError
@@ -187,8 +184,7 @@ func TestMapAPIHandler_GetMarker_AppliesVisibilityRules(t *testing.T) {
 			h := NewMapAPIHandler(nil, svc, &stubDrawingSvcOwnerGate{}, camp)
 			key := &APIKey{ID: 1, CampaignID: "camp-1", UserID: tt.userID, IsActive: true, Permissions: []APIKeyPermission{PermRead}}
 			c, _ := newMapAPIContext(http.MethodGet, "/api/v1/campaigns/camp-1/maps/map-1/markers/mk-1", key)
-			c.SetParamNames("id", "mapID", "markerID")
-			c.SetParamValues("camp-1", "map-1", "mk-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mapID", Value: "map-1"}, {Name: "markerID", Value: "mk-1"}})
 
 			err := h.GetMarker(c)
 			if !tt.wantErr {
@@ -239,8 +235,7 @@ func TestMapAPIHandler_UpdateMarker_RulesOwnerOnly(t *testing.T) {
 			c, _ := newMapAPIContext(http.MethodPut, "/api/v1/campaigns/camp-1/maps/map-1/markers/mk-1", key)
 			c.Request().Body = io.NopCloser(strings.NewReader(`{"visibility_rules":"{\"allowed_users\":[\"u-1\"]}"}`))
 			c.Request().Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			c.SetParamNames("id", "mapID", "markerID")
-			c.SetParamValues("camp-1", "map-1", "mk-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mapID", Value: "map-1"}, {Name: "markerID", Value: "mk-1"}})
 
 			if err := h.UpdateMarker(c); err != nil {
 				t.Fatalf("update: %v", err)

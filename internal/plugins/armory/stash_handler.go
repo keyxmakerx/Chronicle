@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -34,7 +34,7 @@ func NewStashHandler(svc StashService) *StashHandler {
 // caller extracts the campaign and the acting user. The role is the
 // VisibilityRole so a DM-granted co-DM is treated as Owner, matching every
 // other armory path.
-func caller(c echo.Context) (*campaigns.CampaignContext, Actor, error) {
+func caller(c *echo.Context) (*campaigns.CampaignContext, Actor, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, Actor{}, apperror.NewMissingContext()
@@ -45,7 +45,7 @@ func caller(c echo.Context) (*campaigns.CampaignContext, Actor, error) {
 // done answers a successful write. HTMX callers get a toast and a signal that
 // makes every armory panel on the page reload itself; anything else is sent
 // back to the stashes page.
-func done(c echo.Context, cc *campaigns.CampaignContext, message string) error {
+func done(c *echo.Context, cc *campaigns.CampaignContext, message string) error {
 	if !middleware.IsHTMX(c) {
 		return c.Redirect(http.StatusSeeOther, stashesURL(cc.Campaign.ID))
 	}
@@ -79,7 +79,7 @@ func triggerJSON(v any) string {
 }
 
 // Page renders GET /campaigns/:id/armory/stashes.
-func (h *StashHandler) Page(c echo.Context) error {
+func (h *StashHandler) Page(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -96,7 +96,7 @@ func (h *StashHandler) Page(c echo.Context) error {
 }
 
 // CreateStash handles POST /armory/stashes.
-func (h *StashHandler) CreateStash(c echo.Context) error {
+func (h *StashHandler) CreateStash(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func (r updateStashRequest) input() UpdateStashInput {
 }
 
 // UpdateStash handles PUT /armory/stashes/:sid.
-func (h *StashHandler) UpdateStash(c echo.Context) error {
+func (h *StashHandler) UpdateStash(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -143,7 +143,7 @@ func (h *StashHandler) UpdateStash(c echo.Context) error {
 		in = req.input()
 	} else {
 		// A form sends only the fields it has. A blank location means "clear".
-		form, err := c.FormParams()
+		form, err := c.FormValues()
 		if err != nil {
 			return apperror.NewBadRequest("invalid form")
 		}
@@ -165,7 +165,7 @@ func (h *StashHandler) UpdateStash(c echo.Context) error {
 }
 
 // DeleteStash handles DELETE /armory/stashes/:sid.
-func (h *StashHandler) DeleteStash(c echo.Context) error {
+func (h *StashHandler) DeleteStash(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -182,7 +182,7 @@ func (h *StashHandler) DeleteStash(c echo.Context) error {
 
 // SetViewers handles PUT /armory/stashes/:sid/viewers. The body is the full
 // set of characters that may see the stash, so an unchecked box is a removal.
-func (h *StashHandler) SetViewers(c echo.Context) error {
+func (h *StashHandler) SetViewers(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -191,7 +191,7 @@ func (h *StashHandler) SetViewers(c echo.Context) error {
 	if err != nil {
 		return notFound("stash")
 	}
-	form, err := c.FormParams()
+	form, err := c.FormValues()
 	if err != nil {
 		return apperror.NewBadRequest("invalid form")
 	}
@@ -202,7 +202,7 @@ func (h *StashHandler) SetViewers(c echo.Context) error {
 }
 
 // AddItem handles POST /armory/stashes/:sid/items.
-func (h *StashHandler) AddItem(c echo.Context) error {
+func (h *StashHandler) AddItem(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -222,7 +222,7 @@ func (h *StashHandler) AddItem(c echo.Context) error {
 }
 
 // StashHistory handles GET /armory/stashes/:sid/history.
-func (h *StashHandler) StashHistory(c echo.Context) error {
+func (h *StashHandler) StashHistory(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -239,7 +239,7 @@ func (h *StashHandler) StashHistory(c echo.Context) error {
 }
 
 // MoveDialog handles GET /armory/move: the dialog for one item or money line.
-func (h *StashHandler) MoveDialog(c echo.Context) error {
+func (h *StashHandler) MoveDialog(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -255,7 +255,7 @@ func (h *StashHandler) MoveDialog(c echo.Context) error {
 // GiveDialog handles GET /armory/give: the Give box. ?character= fixes the
 // recipient (the character page's box), ?item= fixes the item (the Armory
 // card's box); ?list=items&q= answers the box's search with the list alone.
-func (h *StashHandler) GiveDialog(c echo.Context) error {
+func (h *StashHandler) GiveDialog(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -276,7 +276,7 @@ func (h *StashHandler) GiveDialog(c echo.Context) error {
 // Give handles POST /armory/give. Besides the usual reload signal it answers
 // with armory-given, which the Give box reads for its toast and to flash the
 // line the item landed on.
-func (h *StashHandler) Give(c echo.Context) error {
+func (h *StashHandler) Give(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -311,7 +311,7 @@ func (h *StashHandler) Give(c echo.Context) error {
 
 // ShareBox handles GET /armory/characters/:eid/items/:iid/share: the box
 // that lets the holder's player choose who else can see a hidden item.
-func (h *StashHandler) ShareBox(c echo.Context) error {
+func (h *StashHandler) ShareBox(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -325,12 +325,12 @@ func (h *StashHandler) ShareBox(c echo.Context) error {
 
 // Share handles POST /armory/characters/:eid/items/:iid/share. The body is
 // the full set of players ("user"), so an unticked box is a take-back.
-func (h *StashHandler) Share(c echo.Context) error {
+func (h *StashHandler) Share(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
 	}
-	form, err := c.FormParams()
+	form, err := c.FormValues()
 	if err != nil {
 		return apperror.NewBadRequest("invalid form")
 	}
@@ -356,7 +356,7 @@ func parseDestination(v string) Endpoint {
 }
 
 // Move handles POST /armory/moves.
-func (h *StashHandler) Move(c echo.Context) error {
+func (h *StashHandler) Move(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -393,7 +393,7 @@ func (h *StashHandler) Move(c echo.Context) error {
 }
 
 // moveID reads the :mid path parameter.
-func moveID(c echo.Context) (int64, error) {
+func moveID(c *echo.Context) (int64, error) {
 	id, err := strconv.ParseInt(c.Param("mid"), 10, 64)
 	if err != nil || id < 1 {
 		return 0, notFound("request")
@@ -402,7 +402,7 @@ func moveID(c echo.Context) (int64, error) {
 }
 
 // Approve handles POST /armory/moves/:mid/approve.
-func (h *StashHandler) Approve(c echo.Context) error {
+func (h *StashHandler) Approve(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -422,7 +422,7 @@ func (h *StashHandler) Approve(c echo.Context) error {
 }
 
 // Decline handles POST /armory/moves/:mid/decline.
-func (h *StashHandler) Decline(c echo.Context) error {
+func (h *StashHandler) Decline(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -438,7 +438,7 @@ func (h *StashHandler) Decline(c echo.Context) error {
 }
 
 // doneWithTone is done with a notification type other than success.
-func doneWithTone(c echo.Context, cc *campaigns.CampaignContext, message, tone string) error {
+func doneWithTone(c *echo.Context, cc *campaigns.CampaignContext, message, tone string) error {
 	if !middleware.IsHTMX(c) {
 		return c.Redirect(http.StatusSeeOther, stashesURL(cc.Campaign.ID))
 	}
@@ -452,7 +452,7 @@ func doneWithTone(c echo.Context, cc *campaigns.CampaignContext, message, tone s
 
 // SetDowntime handles POST /armory/downtime (Owner visibility). There is no
 // page control for it yet; the service and this endpoint are the backend.
-func (h *StashHandler) SetDowntime(c echo.Context) error {
+func (h *StashHandler) SetDowntime(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -483,7 +483,7 @@ func (h *StashHandler) SetDowntime(c echo.Context) error {
 // CharacterPanel handles GET /armory/characters/:eid/panel. A character the
 // viewer has no business with answers with an empty fragment, so the page that
 // asked for it simply shows nothing there.
-func (h *StashHandler) CharacterPanel(c echo.Context) error {
+func (h *StashHandler) CharacterPanel(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -499,7 +499,7 @@ func (h *StashHandler) CharacterPanel(c echo.Context) error {
 }
 
 // CharacterHistory handles GET /armory/characters/:eid/history.
-func (h *StashHandler) CharacterHistory(c echo.Context) error {
+func (h *StashHandler) CharacterHistory(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -514,7 +514,7 @@ func (h *StashHandler) CharacterHistory(c echo.Context) error {
 // SetPlace handles POST /armory/characters/:eid/items/:iid/place: the hero
 // page's containers, when an item is dragged or sent to another one. The page
 // has already drawn the item there, so the answer is empty.
-func (h *StashHandler) SetPlace(c echo.Context) error {
+func (h *StashHandler) SetPlace(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err

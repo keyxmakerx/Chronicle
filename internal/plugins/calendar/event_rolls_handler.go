@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -24,7 +24,7 @@ func (h *Handler) rollService() (EventRollService, error) {
 	return rs, nil
 }
 
-func queryYear(c echo.Context) (int, error) {
+func queryYear(c *echo.Context) (int, error) {
 	y, err := strconv.Atoi(c.QueryParam("year"))
 	if err != nil {
 		return 0, apperror.NewBadRequest("year is required")
@@ -34,7 +34,7 @@ func queryYear(c echo.Context) (int, error) {
 
 // GetEventRollAPI returns an event's roll and its nights in a year.
 // GET /campaigns/:id/calendars/:calid/events/:eid/roll?year=
-func (h *Handler) GetEventRollAPI(c echo.Context) error {
+func (h *Handler) GetEventRollAPI(c *echo.Context) error {
 	rs, err := h.rollService()
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func (h *Handler) GetEventRollAPI(c echo.Context) error {
 // ListMonthRollsAPI returns the nights of every rolling event in a month,
 // by event id, for the calendar's day cells.
 // GET /campaigns/:id/calendars/:calid/rolls?year=&month=
-func (h *Handler) ListMonthRollsAPI(c echo.Context) error {
+func (h *Handler) ListMonthRollsAPI(c *echo.Context) error {
 	rs, err := h.rollService()
 	if err != nil {
 		return err
@@ -78,7 +78,7 @@ func (h *Handler) ListMonthRollsAPI(c echo.Context) error {
 // SetEventRollAPI creates, replaces or (with "config": null) removes an
 // event's roll, and answers with the roll for year.
 // PUT /campaigns/:id/calendars/:calid/events/:eid/roll  {"config":{...}|null,"year":N}
-func (h *Handler) SetEventRollAPI(c echo.Context) error {
+func (h *Handler) SetEventRollAPI(c *echo.Context) error {
 	rs, err := h.rollService()
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func (h *Handler) SetEventRollAPI(c echo.Context) error {
 
 // RollEventNightsAPI rolls nights ahead: a whole year, or the given dates.
 // POST /campaigns/:id/calendars/:calid/events/:eid/roll/nights  {"year":N} | {"dates":[...]}
-func (h *Handler) RollEventNightsAPI(c echo.Context) error {
+func (h *Handler) RollEventNightsAPI(c *echo.Context) error {
 	rs, err := h.rollService()
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func (h *Handler) RollEventNightsAPI(c echo.Context) error {
 
 // LockEventRollNightsAPI locks or unlocks stored nights.
 // POST /campaigns/:id/calendars/:calid/events/:eid/roll/nights/lock  {"days":[...],"locked":bool}
-func (h *Handler) LockEventRollNightsAPI(c echo.Context) error {
+func (h *Handler) LockEventRollNightsAPI(c *echo.Context) error {
 	rs, err := h.rollService()
 	if err != nil {
 		return err
@@ -149,7 +149,7 @@ func (h *Handler) LockEventRollNightsAPI(c echo.Context) error {
 // TellEventRollNightAPI says whether players are told one night; "told":
 // null goes back to what the night's result says.
 // POST /campaigns/:id/calendars/:calid/events/:eid/roll/nights/tell  {"year","month","day","told"}
-func (h *Handler) TellEventRollNightAPI(c echo.Context) error {
+func (h *Handler) TellEventRollNightAPI(c *echo.Context) error {
 	rs, err := h.rollService()
 	if err != nil {
 		return err
@@ -170,7 +170,7 @@ func (h *Handler) TellEventRollNightAPI(c echo.Context) error {
 
 // ClearEventRollNightsAPI deletes a year's stored nights.
 // POST /campaigns/:id/calendars/:calid/events/:eid/roll/nights/clear  {"year":N,"keep_locked":bool}
-func (h *Handler) ClearEventRollNightsAPI(c echo.Context) error {
+func (h *Handler) ClearEventRollNightsAPI(c *echo.Context) error {
 	rs, err := h.rollService()
 	if err != nil {
 		return err

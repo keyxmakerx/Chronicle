@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -26,7 +26,7 @@ func NewHandler(svc Service) *Handler {
 // Get returns the campaign's tables.
 //
 // GET /campaigns/:id/roll-tables
-func (h *Handler) Get(c echo.Context) error {
+func (h *Handler) Get(c *echo.Context) error {
 	cc, err := requireContext(c)
 	if err != nil {
 		return err
@@ -44,7 +44,7 @@ func (h *Handler) Get(c echo.Context) error {
 // Put replaces the campaign's whole set of tables.
 //
 // PUT /campaigns/:id/roll-tables
-func (h *Handler) Put(c echo.Context) error {
+func (h *Handler) Put(c *echo.Context) error {
 	cc, err := requireContext(c)
 	if err != nil {
 		return err
@@ -79,7 +79,7 @@ func canRead(cc *campaigns.CampaignContext) bool {
 // requireContext fetches the campaign context. Handlers re-check the
 // capability themselves rather than trusting the route gate alone, so a
 // mis-wired route cannot expose or overwrite the tables.
-func requireContext(c echo.Context) (*campaigns.CampaignContext, error) {
+func requireContext(c *echo.Context) (*campaigns.CampaignContext, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, apperror.NewMissingContext()

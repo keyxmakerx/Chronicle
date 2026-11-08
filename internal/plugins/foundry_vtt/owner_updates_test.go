@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -194,7 +194,7 @@ func newHandlerEnv(st packages.CampaignPackageState) handlerEnv {
 	return handlerEnv{h: h, upd: upd}
 }
 
-func (e handlerEnv) call(t *testing.T, method, target string, role campaigns.Role, form url.Values, fn func(echo.Context) error) (*httptest.ResponseRecorder, error) {
+func (e handlerEnv) call(t *testing.T, method, target string, role campaigns.Role, form url.Values, fn func(*echo.Context) error) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	var body *strings.Reader
 	if form != nil {
@@ -223,7 +223,7 @@ func TestPlayersNeverGetTheUpdateScreensOrActions(t *testing.T) {
 	form := url.Values{"version": {"2.9.0"}, "view": {"banner"}}
 	cases := []struct {
 		name string
-		fn   func(echo.Context) error
+		fn   func(*echo.Context) error
 		post bool
 	}{
 		{"banner", e.h.CampaignShowBannerHandler, false},

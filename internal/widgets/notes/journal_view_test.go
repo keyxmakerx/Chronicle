@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -97,7 +97,7 @@ func TestInitials(t *testing.T) {
 func TestShowJournal_RendersThroughTheLayoutInjector(t *testing.T) {
 	prev := middleware.LayoutInjector
 	t.Cleanup(func() { middleware.LayoutInjector = prev })
-	middleware.LayoutInjector = func(_ echo.Context, ctx context.Context) context.Context {
+	middleware.LayoutInjector = func(_ *echo.Context, ctx context.Context) context.Context {
 		return layouts.SetUserID(ctx, "u-player")
 	}
 	h := NewHandler(newAccessSvc())

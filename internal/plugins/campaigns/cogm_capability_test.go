@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 func TestCapabilityTruthTable(t *testing.T) {
@@ -40,7 +40,7 @@ func TestCapabilityTruthTable(t *testing.T) {
 // DM-grantee and 403s Scribe/Player — the world-state PUT gate semantics.
 func TestRequireCapability_GatesWorldStateControl(t *testing.T) {
 	mw := RequireCapability((*CampaignContext).CanControlWorldState, "nope")
-	final := func(c echo.Context) error { return c.NoContent(http.StatusOK) }
+	final := func(c *echo.Context) error { return c.NoContent(http.StatusOK) }
 	handler := mw(final)
 
 	// passed reports whether the gate let the request through (err nil + 200).

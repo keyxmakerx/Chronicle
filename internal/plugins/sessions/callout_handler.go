@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
@@ -29,7 +29,7 @@ const calloutNotificationScan = 50
 // Every error path returns empty HTML with 200 rather than failing the poll:
 // a banner that cannot be built should read the same as one with nothing to
 // say, not as a page-wide error toast.
-func (h *Handler) CalloutAPI(c echo.Context) error {
+func (h *Handler) CalloutAPI(c *echo.Context) error {
 	ctx := c.Request().Context()
 	userID := auth.GetUserID(c)
 	if userID == "" {

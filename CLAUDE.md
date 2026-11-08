@@ -1,6 +1,6 @@
 # Chronicle
 
-Chronicle is a self-hosted TTRPG worldbuilding platform. Go backend with Echo v4 framework, Templ templates, HTMX for interactivity, MariaDB for persistence, Redis for caching/sessions. Frontend uses a **three-tier extension architecture** (Plugins, Systems, Widgets) — see "Architecture at a Glance" below.
+Chronicle is a self-hosted TTRPG worldbuilding platform. Go backend with Echo v5 framework, Templ templates, HTMX for interactivity, MariaDB for persistence, Redis for caching/sessions. Frontend uses a **three-tier extension architecture** (Plugins, Systems, Widgets) — see "Architecture at a Glance" below.
 
 ## Quick Commands
 

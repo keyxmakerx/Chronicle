@@ -15,7 +15,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -43,13 +43,12 @@ func (s *stubEntitySvcOwnerGate) Delete(context.Context, string) error {
 
 // newEntityAPIContext builds an Echo context for DELETE
 // /api/v1/campaigns/:id/entities/:entityID with :id and :entityID bound.
-func newEntityAPIContext(key *APIKey) (echo.Context, *httptest.ResponseRecorder) {
+func newEntityAPIContext(key *APIKey) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/campaigns/camp-1/entities/ent-1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "entityID")
-	c.SetParamValues("camp-1", "ent-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "entityID", Value: "ent-1"}})
 	c.Set(apiKeyContextKey, key)
 	return c, rec
 }

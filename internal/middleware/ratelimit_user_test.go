@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -21,7 +21,7 @@ func runUserRateLimit(t *testing.T, mw echo.MiddlewareFunc) (reached bool, err e
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := mw(func(c echo.Context) error {
+	handler := mw(func(c *echo.Context) error {
 		reached = true
 		return nil
 	})
@@ -34,7 +34,7 @@ func runUserRateLimit(t *testing.T, mw echo.MiddlewareFunc) (reached bool, err e
 // 429 error type, not a bespoke body, so every caller (JSON API, HTMX toast)
 // gets the shape they already handle.
 func TestUserRateLimit_BlocksOverLimit(t *testing.T) {
-	mw := UserRateLimit(func(echo.Context) string { return "user-1" }, 3, time.Minute)
+	mw := UserRateLimit(func(*echo.Context) string { return "user-1" }, 3, time.Minute)
 
 	for i := 0; i < 3; i++ {
 		reached, err := runUserRateLimit(t, mw)
@@ -66,7 +66,7 @@ func TestUserRateLimit_BlocksOverLimit(t *testing.T) {
 // user hitting their limit never throttles another.
 func TestUserRateLimit_SeparatesIdentities(t *testing.T) {
 	current := "user-a"
-	mw := UserRateLimit(func(echo.Context) string { return current }, 1, time.Minute)
+	mw := UserRateLimit(func(*echo.Context) string { return current }, 1, time.Minute)
 
 	if reached, err := runUserRateLimit(t, mw); err != nil || !reached {
 		t.Fatalf("user-a request 1: reached=%v err=%v, want reached=true err=nil", reached, err)
@@ -85,7 +85,7 @@ func TestUserRateLimit_SeparatesIdentities(t *testing.T) {
 // (e.g. no authenticated user behind this request) is never throttled here —
 // that's authentication's job, not this middleware's.
 func TestUserRateLimit_SkipsEmptyIdentity(t *testing.T) {
-	mw := UserRateLimit(func(echo.Context) string { return "" }, 1, time.Minute)
+	mw := UserRateLimit(func(*echo.Context) string { return "" }, 1, time.Minute)
 
 	for i := 0; i < 5; i++ {
 		reached, err := runUserRateLimit(t, mw)

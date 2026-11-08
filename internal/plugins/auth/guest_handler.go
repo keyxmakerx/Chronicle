@@ -3,7 +3,7 @@ package auth
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -11,7 +11,7 @@ import (
 
 // JoinPage shows the guest code form (GET /join). A guest already belongs
 // to a campaign, so they go back to it.
-func (h *Handler) JoinPage(c echo.Context) error {
+func (h *Handler) JoinPage(c *echo.Context) error {
 	sess := GetSession(c)
 	if sess != nil && sess.GuestCampaignID != "" {
 		return c.Redirect(http.StatusSeeOther, "/campaigns/"+sess.GuestCampaignID)
@@ -25,7 +25,7 @@ func (h *Handler) JoinPage(c echo.Context) error {
 
 // Join takes a guest code (POST /join): a new guest is made and signed in,
 // or someone already signed in is added to the campaign.
-func (h *Handler) Join(c echo.Context) error {
+func (h *Handler) Join(c *echo.Context) error {
 	ctx := c.Request().Context()
 	ip, ua := c.RealIP(), c.Request().UserAgent()
 	sess := GetSession(c)
@@ -52,7 +52,7 @@ func (h *Handler) Join(c echo.Context) error {
 
 // GuestPanelFragment loads the keep-your-account panel under a guest's
 // banner (GET /account/guest). tab=close empties it.
-func (h *Handler) GuestPanelFragment(c echo.Context) error {
+func (h *Handler) GuestPanelFragment(c *echo.Context) error {
 	sess := GetSession(c)
 	if sess == nil || sess.GuestCampaignID == "" {
 		return c.NoContent(http.StatusNoContent)
@@ -75,7 +75,7 @@ func (h *Handler) GuestPanelFragment(c echo.Context) error {
 
 // KeepGuestAccount adds an email and password to a guest's account (POST
 // /account/guest/keep).
-func (h *Handler) KeepGuestAccount(c echo.Context) error {
+func (h *Handler) KeepGuestAccount(c *echo.Context) error {
 	ctx := c.Request().Context()
 	sess := GetSession(c)
 	if sess == nil || sess.GuestCampaignID == "" {
@@ -94,7 +94,7 @@ func (h *Handler) KeepGuestAccount(c echo.Context) error {
 
 // MergeGuest moves a guest into an account they already have (POST
 // /account/guest/merge).
-func (h *Handler) MergeGuest(c echo.Context) error {
+func (h *Handler) MergeGuest(c *echo.Context) error {
 	ctx := c.Request().Context()
 	sess := GetSession(c)
 	if sess == nil || sess.GuestCampaignID == "" {

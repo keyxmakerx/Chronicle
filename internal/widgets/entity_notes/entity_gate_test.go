@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -77,7 +77,7 @@ func TestNotesRoutes_EntityGate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &recordingNotesSvc{note: tt.note}
 			e := echo.New()
-			e.HTTPErrorHandler = func(err error, c echo.Context) {
+			e.HTTPErrorHandler = func(c *echo.Context, err error) {
 				var appErr *apperror.AppError
 				if errors.As(err, &appErr) {
 					_ = c.NoContent(appErr.Code)

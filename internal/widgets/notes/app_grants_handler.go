@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -88,7 +88,7 @@ func normalizeOrigin(raw string) string {
 
 // allowedOrigin validates the origin query/form value against the allowed
 // origins. Matching is exact, as the CORS check is.
-func (h *AppGrantHandler) allowedOrigin(c echo.Context, raw string) (string, bool) {
+func (h *AppGrantHandler) allowedOrigin(c *echo.Context, raw string) (string, bool) {
 	origin := normalizeOrigin(raw)
 	if origin == "" || h.origins == nil {
 		return origin, false
@@ -100,7 +100,7 @@ func (h *AppGrantHandler) allowedOrigin(c echo.Context, raw string) (string, boo
 // The page talks to the window that opened it, so it must keep its opener:
 // the site-wide Cross-Origin-Opener-Policy of same-origin would cut that
 // link. Framing stays forbidden by the site-wide headers.
-func (h *AppGrantHandler) ShowAllow(c echo.Context) error {
+func (h *AppGrantHandler) ShowAllow(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -120,7 +120,7 @@ func (h *AppGrantHandler) ShowAllow(c echo.Context) error {
 // Allow makes a grant for the signed-in player (POST
 // /campaigns/:id/notes/allow-app) and returns the token once, to the Allow
 // window's own script, which hands it to the opener at exactly that origin.
-func (h *AppGrantHandler) Allow(c echo.Context) error {
+func (h *AppGrantHandler) Allow(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -160,7 +160,7 @@ func (h *AppGrantHandler) Allow(c echo.Context) error {
 }
 
 // List returns the player's live grants (GET /campaigns/:id/notes/app-grants).
-func (h *AppGrantHandler) List(c echo.Context) error {
+func (h *AppGrantHandler) List(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -174,7 +174,7 @@ func (h *AppGrantHandler) List(c echo.Context) error {
 
 // Revoke ends one of the player's grants
 // (DELETE /campaigns/:id/notes/app-grants/:gid).
-func (h *AppGrantHandler) Revoke(c echo.Context) error {
+func (h *AppGrantHandler) Revoke(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -191,7 +191,7 @@ func (h *AppGrantHandler) Revoke(c echo.Context) error {
 // sign-in and shows nothing about the campaign: the content arrives later
 // over the grant the parent window hands it. Only the allowed origins may
 // frame it; everywhere else the site stays unframeable.
-func (h *AppGrantHandler) ShowEmbed(c echo.Context) error {
+func (h *AppGrantHandler) ShowEmbed(c *echo.Context) error {
 	id := c.Param("id")
 	mode := c.Param("mode")
 	if !idPattern.MatchString(id) || (mode != "journal" && mode != "jots" && !h.embedModes[mode]) {
@@ -234,7 +234,7 @@ func frameAncestors(origins []string) string {
 // member at their live role.
 func RequireAppGrant(grants AppGrantService, gate AppGate) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			authz := c.Request().Header.Get("Authorization")
 			token, found := strings.CutPrefix(authz, "Bearer ")
 			if !found || token == "" {
@@ -285,7 +285,7 @@ const maxMediaLinkPaths = 100
 // (POST /api/notes-app/campaigns/:id/notes/media-links). The frame's <img>
 // and <audio> can't send the grant, so each gets a link instead; only files
 // the player may open on the site are signed, the rest are left out.
-func (h *AppGrantHandler) MediaLinks(c echo.Context) error {
+func (h *AppGrantHandler) MediaLinks(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

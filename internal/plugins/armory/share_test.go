@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -404,8 +404,7 @@ func TestShareRoutes(t *testing.T) {
 		req.Header.Set("HX-Request", "true")
 		rec := httptest.NewRecorder()
 		c := echo.New().NewContext(req, rec)
-		c.SetParamNames("eid", "iid")
-		c.SetParamValues("c2", "z1")
+		c.SetPathValues(echo.PathValues{{Name: "eid", Value: "c2"}, {Name: "iid", Value: "z1"}})
 		c.Set("auth_user_id", uid)
 		c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp"}, MemberRole: role})
 		return rec, h.Share(c)

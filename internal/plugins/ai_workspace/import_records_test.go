@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
@@ -48,9 +48,8 @@ func recordsHandler(m *memTables) *Handler {
 	return h
 }
 
-func ownerCtx(c echo.Context) {
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+func ownerCtx(c *echo.Context) {
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	fakeContext(c, &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1", Name: "Ashfall"},
 		MemberRole: campaigns.RoleOwner,

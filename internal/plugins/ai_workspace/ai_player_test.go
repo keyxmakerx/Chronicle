@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -89,16 +89,15 @@ func playerRig(t *testing.T) (*Handler, *reqRepo, *switchWatch, *fakeSheets) {
 	return h, repo, w, sheets
 }
 
-func playerCtx(c echo.Context) {
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+func playerCtx(c *echo.Context) {
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Ashfall"}, MemberRole: campaigns.RolePlayer,
 	})
 	c.Set("auth_user_id", "player-1")
 }
 
-func asPlayer(t *testing.T, h func(echo.Context) error, method, path string, form url.Values, rid string) *httptest.ResponseRecorder {
+func asPlayer(t *testing.T, h func(*echo.Context) error, method, path string, form url.Values, rid string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(form.Encode()))
 	if method == http.MethodPost {
@@ -108,8 +107,7 @@ func asPlayer(t *testing.T, h func(echo.Context) error, method, path string, for
 	c := echo.New().NewContext(req, rec)
 	playerCtx(c)
 	if rid != "" {
-		c.SetParamNames("id", "rid")
-		c.SetParamValues("camp-1", rid)
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "rid", Value: rid}})
 	}
 	if err := h(c); err != nil {
 		rec.Code = -1
@@ -134,7 +132,7 @@ func TestPlayerAI_OffUntilAllowed(t *testing.T) {
 	if !strings.Contains(panel, "hasn&#39;t let players use AI") || strings.Contains(panel, "ai-import-paste-area") {
 		t.Fatalf("off panel = %s", panel)
 	}
-	for name, call := range map[string]func(echo.Context) error{"key": h.PlayerConnect, "copy": h.PlayerCopy, "paste": h.PlayerPaste, "apply": h.PlayerApply} {
+	for name, call := range map[string]func(*echo.Context) error{"key": h.PlayerConnect, "copy": h.PlayerCopy, "paste": h.PlayerPaste, "apply": h.PlayerApply} {
 		if rec := asPlayer(t, call, http.MethodPost, "/x", url.Values{"text": {"x"}}, ""); rec.Code != -1 {
 			t.Errorf("%s worked while players' AI is off: %d", name, rec.Code)
 		}
@@ -221,7 +219,7 @@ func TestPlayerAI_Copy(t *testing.T) {
 	}
 }
 
-func asOwner1(t *testing.T, h func(echo.Context) error, form url.Values, kid string) *httptest.ResponseRecorder {
+func asOwner1(t *testing.T, h func(*echo.Context) error, form url.Values, kid string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -229,8 +227,7 @@ func asOwner1(t *testing.T, h func(echo.Context) error, form url.Values, kid str
 	c := echo.New().NewContext(req, rec)
 	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Ashfall"}, MemberRole: campaigns.RoleOwner})
 	c.Set("auth_user_id", "owner-1")
-	c.SetParamNames("id", "kid")
-	c.SetParamValues("camp-1", kid)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "kid", Value: kid}})
 	if err := h(c); err != nil {
 		rec.Code = -1
 		rec.Body.WriteString(err.Error())

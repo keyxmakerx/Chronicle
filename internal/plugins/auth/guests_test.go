@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -317,7 +317,7 @@ func TestRequireAuthFencesGuests(t *testing.T) {
 	r := newGuestRig(t)
 	res := r.join(t, "ABCD2345", "Rook")
 	mw := RequireAuth(r.svc)
-	ok := func(c echo.Context) error { return c.NoContent(http.StatusOK) }
+	ok := func(c *echo.Context) error { return c.NoContent(http.StatusOK) }
 	tests := []struct {
 		name, method, path string
 		htmx               bool

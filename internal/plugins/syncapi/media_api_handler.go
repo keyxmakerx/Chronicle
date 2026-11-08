@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -61,7 +61,7 @@ func (h *MediaAPIHandler) SetMapImageGuard(g media.MapImageGuard) {
 // link stays valid for its whole lifetime: one minted before a DM adds a shadow
 // would still fetch the original afterwards. So a map picture gets no link for
 // such a caller, shadowed or not. A failed check withholds too.
-func (h *MediaAPIHandler) response(c echo.Context, file *media.MediaFile) apiMediaFileResponse {
+func (h *MediaAPIHandler) response(c *echo.Context, file *media.MediaFile) apiMediaFileResponse {
 	resp := h.toAPIResponse(file)
 	if h.mapImages == nil || file.CampaignID == nil || h.resolveRole(c) >= int(campaigns.RoleOwner) {
 		return resp
@@ -92,7 +92,7 @@ func (h *MediaAPIHandler) response(c echo.Context, file *media.MediaFile) apiMed
 //
 // Returns campaigns.RoleNone if no campaign service is wired or no key is
 // present — fails closed into the "must filter" branch, never open.
-func (h *MediaAPIHandler) resolveRole(c echo.Context) int {
+func (h *MediaAPIHandler) resolveRole(c *echo.Context) int {
 	key := GetAPIKey(c)
 	if key == nil || h.campaignSvc == nil {
 		return int(campaigns.RoleNone)
@@ -173,7 +173,7 @@ func (h *MediaAPIHandler) toAPIResponse(file *media.MediaFile) apiMediaFileRespo
 // the threshold the web app already uses for bulk campaign media access
 // (media/routes.go: the picker list and campaign media browser are both
 // Scribe+/Owner).
-func (h *MediaAPIHandler) ListMedia(c echo.Context) error {
+func (h *MediaAPIHandler) ListMedia(c *echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()
 
@@ -221,7 +221,7 @@ func (h *MediaAPIHandler) ListMedia(c echo.Context) error {
 // API-key flow, which the media server honours without the page-visibility
 // check a browser request gets, so a Player who learned a file's id would be
 // handed a working link to a picture on a page hidden from them.
-func (h *MediaAPIHandler) GetMedia(c echo.Context) error {
+func (h *MediaAPIHandler) GetMedia(c *echo.Context) error {
 	mediaID := c.Param("mediaID")
 	ctx := c.Request().Context()
 
@@ -246,7 +246,7 @@ func (h *MediaAPIHandler) GetMedia(c echo.Context) error {
 
 // GetMediaStats returns aggregate storage stats for the campaign.
 // GET /api/v1/campaigns/:id/media/stats
-func (h *MediaAPIHandler) GetMediaStats(c echo.Context) error {
+func (h *MediaAPIHandler) GetMediaStats(c *echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()
 
@@ -272,7 +272,7 @@ const maxAPIUploadBody = 11 * 1024 * 1024
 // Form fields:
 //   - file: the file to upload (required)
 //   - usage_type: "attachment" or "entity_image" (optional, defaults to "attachment")
-func (h *MediaAPIHandler) UploadMedia(c echo.Context) error {
+func (h *MediaAPIHandler) UploadMedia(c *echo.Context) error {
 	// Limit request body size to prevent memory exhaustion from oversized payloads.
 	// The media service enforces the exact per-file limit; this is a coarse guard.
 	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, maxAPIUploadBody)
@@ -332,7 +332,7 @@ func (h *MediaAPIHandler) UploadMedia(c echo.Context) error {
 // RequirePermission(PermWrite) alone also admits a Scribe, whether via a
 // Foundry key or the Scribe's own session cookie (this route group accepts
 // both), which the web UI refuses.
-func (h *MediaAPIHandler) DeleteMedia(c echo.Context) error {
+func (h *MediaAPIHandler) DeleteMedia(c *echo.Context) error {
 	mediaID := c.Param("mediaID")
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()

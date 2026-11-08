@@ -7,6 +7,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
+	"github.com/labstack/echo/v5"
 )
 
 // recordingDrawingSvc captures the caller role the sync API forwards on a
@@ -52,8 +53,7 @@ func TestMapAPIHandler_DrawingWrites_ForwardTheKeyOwnersRole(t *testing.T) {
 		}
 
 		c, _ = newMapAPIContext(http.MethodPut, "/", key)
-		c.SetParamNames("id", "mapID", "drawingID")
-		c.SetParamValues("camp-1", "map-1", "d-1")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mapID", Value: "map-1"}, {Name: "drawingID", Value: "d-1"}})
 		_ = h.UpdateDrawing(c)
 		if rec.updateRole != int(role) {
 			t.Errorf("role %d: update forwarded role %d", role, rec.updateRole)

@@ -1,6 +1,6 @@
 package smtp
 
-import "github.com/labstack/echo/v4"
+import "github.com/labstack/echo/v5"
 
 // RegisterRoutes sets up SMTP admin routes on the given admin route group.
 // All routes require site admin middleware (applied by the caller). reauth

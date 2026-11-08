@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -32,7 +32,7 @@ import (
 // plus whether the terminal handler was reached.
 func runCampaignAccess(svc CampaignService, session *auth.Session, method string, gate func(CampaignService) echo.MiddlewareFunc) (*httptest.ResponseRecorder, bool) {
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		if ae, ok := err.(*apperror.AppError); ok {
 			c.Response().Header().Set("X-Error-Message", ae.Message)
 			_ = c.NoContent(ae.Code)
@@ -42,7 +42,7 @@ func runCampaignAccess(svc CampaignService, session *auth.Session, method string
 	}
 
 	setSession := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if session != nil {
 				auth.SetSession(c, session)
 			}
@@ -52,7 +52,7 @@ func runCampaignAccess(svc CampaignService, session *auth.Session, method string
 
 	reached := false
 	g := e.Group("/campaigns/:id", setSession, gate(svc))
-	g.Add(method, "", func(c echo.Context) error {
+	g.Add(method, "", func(c *echo.Context) error {
 		reached = true
 		return c.NoContent(http.StatusOK)
 	})
@@ -197,7 +197,7 @@ func TestCampaignRouteTable_ArchivedCampaign(t *testing.T) {
 	}
 
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		if ae, ok := err.(*apperror.AppError); ok {
 			_ = c.NoContent(ae.Code)
 			return
@@ -205,12 +205,12 @@ func TestCampaignRouteTable_ArchivedCampaign(t *testing.T) {
 		_ = c.NoContent(http.StatusInternalServerError)
 	}
 	setSession := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			auth.SetSession(c, owner)
 			return next(c)
 		}
 	}
-	ok := func(c echo.Context) error { return c.NoContent(http.StatusOK) }
+	ok := func(c *echo.Context) error { return c.NoContent(http.StatusOK) }
 
 	// Mirrors routes.go: cg defaults to blocking writes on archive; cgArchived
 	// is the short exception list (unarchive, delete).

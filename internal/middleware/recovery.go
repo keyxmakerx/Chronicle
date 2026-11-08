@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/observability"
 )
@@ -16,7 +16,7 @@ import (
 // prevents a single panicking handler from crashing the entire server.
 func Recovery() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) (returnErr error) {
+		return func(c *echo.Context) (returnErr error) {
 			defer func() {
 				if r := recover(); r != nil {
 					// Log the panic with full stack trace for debugging.

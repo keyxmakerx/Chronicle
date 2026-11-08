@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -22,7 +22,7 @@ const maxRecentIDLen = 64
 // lives in the browser, so it asks before drawing and drops a page that was
 // hidden or deleted since the visit. A page the viewer cannot see is absent,
 // exactly like one that does not exist.
-func (h *Handler) ViewableIDsAPI(c echo.Context) error {
+func (h *Handler) ViewableIDsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

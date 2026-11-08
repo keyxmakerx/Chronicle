@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -34,7 +34,7 @@ func RequestLimit(l Limits) int64 { return l.MaxUploadBytes + maxFormOverhead }
 
 // Page sends the old Import page address to Settings > Import, so bookmarks
 // and links written before the move still land on the import.
-func (h *Handler) Page(c echo.Context) error {
+func (h *Handler) Page(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -67,7 +67,7 @@ func (h *Handler) SettingsTabFactory() func(*campaigns.CampaignContext) campaign
 
 // DropZone renders the upload step on its own, for "choose a different file"
 // and "import another".
-func (h *Handler) DropZone(c echo.Context) error {
+func (h *Handler) DropZone(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -77,7 +77,7 @@ func (h *Handler) DropZone(c echo.Context) error {
 
 // Preview takes the uploaded zip and answers with what an import would do.
 // Nothing is written to the campaign.
-func (h *Handler) Preview(c echo.Context) error {
+func (h *Handler) Preview(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -114,7 +114,7 @@ func (h *Handler) Preview(c echo.Context) error {
 }
 
 // Start begins the import of a previewed upload and answers with its progress.
-func (h *Handler) Start(c echo.Context) error {
+func (h *Handler) Start(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -133,7 +133,7 @@ func (h *Handler) Start(c echo.Context) error {
 // Job answers a poll with the current progress, or the result once it ends. A
 // job the server no longer knows (it restarted) gets a plain explanation and
 // no further polling.
-func (h *Handler) Job(c echo.Context) error {
+func (h *Handler) Job(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

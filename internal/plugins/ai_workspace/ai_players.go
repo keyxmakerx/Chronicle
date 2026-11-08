@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -30,7 +30,7 @@ type PlayersView struct {
 }
 
 // fillPlayers reads the players panel for the owner.
-func (h *Handler) fillPlayers(c echo.Context, cc *campaigns.CampaignContext, v *ConnectView) error {
+func (h *Handler) fillPlayers(c *echo.Context, cc *campaigns.CampaignContext, v *ConnectView) error {
 	if h.connector == nil || !h.connector.Watching() {
 		return nil
 	}
@@ -54,7 +54,7 @@ func (h *Handler) fillPlayers(c echo.Context, cc *campaigns.CampaignContext, v *
 }
 
 // SetPlayersAI turns players' AI on or off in the campaign.
-func (h *Handler) SetPlayersAI(c echo.Context) error {
+func (h *Handler) SetPlayersAI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -78,7 +78,7 @@ func (h *Handler) SetPlayersAI(c echo.Context) error {
 }
 
 // PlayerKeyAction pauses, resumes or disconnects one player's key.
-func (h *Handler) PlayerKeyAction(c echo.Context) error {
+func (h *Handler) PlayerKeyAction(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -111,7 +111,7 @@ func (h *Handler) PlayerKeyAction(c echo.Context) error {
 	return h.renderPlayers(c, cc)
 }
 
-func (h *Handler) renderPlayers(c echo.Context, cc *campaigns.CampaignContext) error {
+func (h *Handler) renderPlayers(c *echo.Context, cc *campaigns.CampaignContext) error {
 	var v ConnectView
 	if err := h.fillPlayers(c, cc, &v); err != nil {
 		return err

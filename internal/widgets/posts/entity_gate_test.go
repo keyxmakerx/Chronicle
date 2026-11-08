@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -48,7 +48,7 @@ func TestPostWrites_EntityGate(t *testing.T) {
 		name      string
 		eid       string
 		post      *Post
-		call      func(h *Handler, c echo.Context) error
+		call      func(h *Handler, c *echo.Context) error
 		wantErr   bool
 		wantCalls int
 	}{
@@ -74,8 +74,7 @@ func TestPostWrites_EntityGate(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"x","postIds":["p1"]}`))
 			req.Header.Set("Content-Type", "application/json")
 			c := e.NewContext(req, httptest.NewRecorder())
-			c.SetParamNames("id", "eid", "pid")
-			c.SetParamValues("camp-1", tt.eid, "p1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: tt.eid}, {Name: "pid", Value: "p1"}})
 			c.Set("campaign_context", &campaigns.CampaignContext{
 				Campaign:   &campaigns.Campaign{ID: "camp-1"},
 				MemberRole: campaigns.RoleScribe,

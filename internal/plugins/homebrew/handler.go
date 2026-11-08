@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -21,7 +21,7 @@ type Handler struct{ svc Service }
 // NewHandler builds the handler.
 func NewHandler(svc Service) *Handler { return &Handler{svc: svc} }
 
-func viewerFrom(c echo.Context) (string, Viewer, error) {
+func viewerFrom(c *echo.Context) (string, Viewer, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
@@ -30,7 +30,7 @@ func viewerFrom(c echo.Context) (string, Viewer, error) {
 }
 
 // bind reads a JSON body of at most MaxBodyBytes into dst.
-func bind(c echo.Context, dst any) error {
+func bind(c *echo.Context, dst any) error {
 	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, MaxBodyBytes+1))
 	if err != nil || len(raw) == 0 || len(raw) > MaxBodyBytes {
 		return apperror.NewBadRequest("request body is missing or too large")
@@ -44,7 +44,7 @@ func bind(c echo.Context, dst any) error {
 // Page handles GET /campaigns/:id/homebrew: the Workshop itself. The
 // catalog call is the service's Director check, so the page and its API
 // keep everyone else out by the same rule.
-func (h *Handler) Page(c echo.Context) error {
+func (h *Handler) Page(c *echo.Context) error {
 	_, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func (h *Handler) Page(c echo.Context) error {
 }
 
 // Catalog handles GET /campaigns/:id/homebrew/catalog.
-func (h *Handler) Catalog(c echo.Context) error {
+func (h *Handler) Catalog(c *echo.Context) error {
 	_, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func (h *Handler) Catalog(c echo.Context) error {
 }
 
 // List handles GET /campaigns/:id/homebrew/recipes.
-func (h *Handler) List(c echo.Context) error {
+func (h *Handler) List(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func (h *Handler) List(c echo.Context) error {
 }
 
 // Get handles GET /campaigns/:id/homebrew/recipes/:rid.
-func (h *Handler) Get(c echo.Context) error {
+func (h *Handler) Get(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ func (h *Handler) Get(c echo.Context) error {
 }
 
 // Placements handles GET /campaigns/:id/homebrew/recipes/:rid/placements.
-func (h *Handler) Placements(c echo.Context) error {
+func (h *Handler) Placements(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -108,7 +108,7 @@ func (h *Handler) Placements(c echo.Context) error {
 }
 
 // Drawer handles GET /campaigns/:id/homebrew/drawer.
-func (h *Handler) Drawer(c echo.Context) error {
+func (h *Handler) Drawer(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -121,7 +121,7 @@ func (h *Handler) Drawer(c echo.Context) error {
 }
 
 // Press handles POST /campaigns/:id/homebrew/press/:event.
-func (h *Handler) Press(c echo.Context) error {
+func (h *Handler) Press(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func (h *Handler) Press(c echo.Context) error {
 }
 
 // RunHeld handles POST /campaigns/:id/homebrew/runs/:run/run.
-func (h *Handler) RunHeld(c echo.Context) error {
+func (h *Handler) RunHeld(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func (h *Handler) RunHeld(c echo.Context) error {
 }
 
 // Dismiss handles POST /campaigns/:id/homebrew/runs/:run/dismiss.
-func (h *Handler) Dismiss(c echo.Context) error {
+func (h *Handler) Dismiss(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -160,7 +160,7 @@ func (h *Handler) Dismiss(c echo.Context) error {
 }
 
 // Create handles POST /campaigns/:id/homebrew/recipes.
-func (h *Handler) Create(c echo.Context) error {
+func (h *Handler) Create(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -177,7 +177,7 @@ func (h *Handler) Create(c echo.Context) error {
 }
 
 // Update handles PUT /campaigns/:id/homebrew/recipes/:rid.
-func (h *Handler) Update(c echo.Context) error {
+func (h *Handler) Update(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -194,7 +194,7 @@ func (h *Handler) Update(c echo.Context) error {
 }
 
 // Delete handles DELETE /campaigns/:id/homebrew/recipes/:rid.
-func (h *Handler) Delete(c echo.Context) error {
+func (h *Handler) Delete(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err

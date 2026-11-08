@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -22,7 +22,7 @@ type Handler struct{ svc Service }
 // NewHandler builds the handler.
 func NewHandler(svc Service) *Handler { return &Handler{svc: svc} }
 
-func viewerFrom(c echo.Context) (string, Viewer, error) {
+func viewerFrom(c *echo.Context) (string, Viewer, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
@@ -36,7 +36,7 @@ func viewerFrom(c echo.Context) (string, Viewer, error) {
 }
 
 // bind reads a JSON body of at most MaxBodyBytes into dst.
-func bind(c echo.Context, dst any) error {
+func bind(c *echo.Context, dst any) error {
 	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, MaxBodyBytes+1))
 	if err != nil || len(raw) == 0 || len(raw) > MaxBodyBytes {
 		return apperror.NewBadRequest("request body is missing or too large")
@@ -49,7 +49,7 @@ func bind(c echo.Context, dst any) error {
 
 // Page handles GET /campaigns/:id/trackers/page/:eid; ?owner= limits it to
 // the kinds owned under that prefix.
-func (h *Handler) Page(c echo.Context) error {
+func (h *Handler) Page(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func (h *Handler) Page(c echo.Context) error {
 }
 
 // Pages handles GET /campaigns/:id/trackers/pages.
-func (h *Handler) Pages(c echo.Context) error {
+func (h *Handler) Pages(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func (h *Handler) Pages(c echo.Context) error {
 }
 
 // Place handles POST /campaigns/:id/trackers/page/:eid.
-func (h *Handler) Place(c echo.Context) error {
+func (h *Handler) Place(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func (h *Handler) Place(c echo.Context) error {
 }
 
 // Log handles POST /campaigns/:id/trackers/page/:eid/log.
-func (h *Handler) Log(c echo.Context) error {
+func (h *Handler) Log(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -114,7 +114,7 @@ func (h *Handler) Log(c echo.Context) error {
 }
 
 // Patch handles PATCH /campaigns/:id/trackers/:tid.
-func (h *Handler) Patch(c echo.Context) error {
+func (h *Handler) Patch(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -131,7 +131,7 @@ func (h *Handler) Patch(c echo.Context) error {
 }
 
 // Remove handles DELETE /campaigns/:id/trackers/:tid.
-func (h *Handler) Remove(c echo.Context) error {
+func (h *Handler) Remove(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ type strikeBody struct {
 }
 
 // Strike handles POST /campaigns/:id/trackers/entries/:entry/strike.
-func (h *Handler) Strike(c echo.Context) error {
+func (h *Handler) Strike(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -168,7 +168,7 @@ func (h *Handler) Strike(c echo.Context) error {
 }
 
 // ListKinds handles GET /campaigns/:id/tracker-kinds.
-func (h *Handler) ListKinds(c echo.Context) error {
+func (h *Handler) ListKinds(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -181,7 +181,7 @@ func (h *Handler) ListKinds(c echo.Context) error {
 }
 
 // CreateKind handles POST /campaigns/:id/tracker-kinds.
-func (h *Handler) CreateKind(c echo.Context) error {
+func (h *Handler) CreateKind(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -198,7 +198,7 @@ func (h *Handler) CreateKind(c echo.Context) error {
 }
 
 // UpdateKind handles PUT /campaigns/:id/tracker-kinds/:kid.
-func (h *Handler) UpdateKind(c echo.Context) error {
+func (h *Handler) UpdateKind(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -215,7 +215,7 @@ func (h *Handler) UpdateKind(c echo.Context) error {
 }
 
 // DeleteKind handles DELETE /campaigns/:id/tracker-kinds/:kid.
-func (h *Handler) DeleteKind(c echo.Context) error {
+func (h *Handler) DeleteKind(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err

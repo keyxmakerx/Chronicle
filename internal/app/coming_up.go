@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -464,7 +464,7 @@ type comingUpHandler struct {
 // Show renders the card for the campaign in the URL. An empty body (no source
 // available or answering) makes the dashboard drop the block's placeholder.
 // GET /campaigns/:id/coming-up
-func (h *comingUpHandler) Show(c echo.Context) error {
+func (h *comingUpHandler) Show(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx, cancel := context.WithTimeout(c.Request().Context(), comingUpTimeout)
 	defer cancel()
@@ -514,7 +514,7 @@ type comingUpWaitingItem struct {
 // button on the Game nights calendar. Members only; anyone else, or a
 // campaign without game nights, gets an empty list.
 // GET /campaigns/:id/coming-up/waiting
-func (h *comingUpHandler) Waiting(c echo.Context) error {
+func (h *comingUpHandler) Waiting(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx, cancel := context.WithTimeout(c.Request().Context(), comingUpTimeout)
 	defer cancel()

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -43,7 +43,7 @@ func RateLimit(maxRequests int, window time.Duration) echo.MiddlewareFunc {
 	}()
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			ip := c.RealIP()
 			now := time.Now()
 
@@ -80,7 +80,7 @@ type userRateLimitEntry struct {
 // identity(c). The caller supplies identity so this package never imports
 // plugin code; an empty identity skips limiting. Over the limit it answers
 // with the app's normal 429 (apperror.NewTooManyRequests) and Retry-After.
-func UserRateLimit(identity func(echo.Context) string, maxRequests int, window time.Duration) echo.MiddlewareFunc {
+func UserRateLimit(identity func(*echo.Context) string, maxRequests int, window time.Duration) echo.MiddlewareFunc {
 	var mu sync.Mutex
 	entries := make(map[string]*userRateLimitEntry)
 
@@ -100,7 +100,7 @@ func UserRateLimit(identity func(echo.Context) string, maxRequests int, window t
 	}()
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			key := identity(c)
 			if key == "" {
 				return next(c)

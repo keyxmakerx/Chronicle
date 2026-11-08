@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
@@ -44,8 +44,7 @@ func (r *endpointRig) post(campaign, body string, mod func(req *http.Request, ke
 	}
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues(campaign)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: campaign}})
 	if err := r.ep.Serve(c); err != nil {
 		panic(err)
 	}

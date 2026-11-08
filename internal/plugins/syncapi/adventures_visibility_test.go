@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -84,7 +84,7 @@ func (advRelationSvc) ListByEntity(_ context.Context, _, entityID string) ([]rel
 	}, nil
 }
 
-func advAPICall(t *testing.T, role campaigns.Role, granted bool, call func(*APIHandler, echo.Context) error, params map[string]string) (*httptest.ResponseRecorder, error) {
+func advAPICall(t *testing.T, role campaigns.Role, granted bool, call func(*APIHandler, *echo.Context) error, params map[string]string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	h := NewAPIHandler(nil, advEntitySvc{}, &stubCampaignSvcForDmGrant{role: role, granted: granted}, advRelationSvc{})
 	e := echo.New()
@@ -94,8 +94,7 @@ func advAPICall(t *testing.T, role campaigns.Role, granted bool, call func(*APIH
 	for k, v := range params {
 		names, values = append(names, k), append(values, v)
 	}
-	c.SetParamNames(names...)
-	c.SetParamValues(values...)
+	c.SetPathValues(pathValuesOf(names, values))
 	c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "u1", IsActive: true})
 	return rec, call(h, c)
 }

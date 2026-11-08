@@ -10,6 +10,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
+	"github.com/labstack/echo/v5"
 )
 
 // recordingDeleteMapSvc captures the actor and role the handler forwards, so
@@ -67,8 +68,7 @@ func TestMapAPIHandler_Delete_ScribeReachesServiceWithKeyIdentity(t *testing.T) 
 				h := NewMapAPIHandler(nil, ms, ds, &dmGrantCampaignSvc{stubCampaignSvcOwnerGate{role: tc.role}})
 				key := &APIKey{ID: 1, CampaignID: "camp-1", UserID: "user-9", IsActive: true, Permissions: []APIKeyPermission{PermRead, PermWrite}}
 				c, _ := newMapAPIContext(http.MethodDelete, "/x", key)
-				c.SetParamNames("id", "mapID", "markerID", "drawingID")
-				c.SetParamValues("camp-1", "map-1", "mk-1", "d-1")
+				c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mapID", Value: "map-1"}, {Name: "markerID", Value: "mk-1"}, {Name: "drawingID", Value: "d-1"}})
 
 				var err error
 				var hit bool

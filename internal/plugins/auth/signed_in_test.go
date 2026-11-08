@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -180,8 +180,7 @@ func TestDisconnectAppAPI(t *testing.T) {
 		req.Header.Set("HX-Request", "true")
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("id")
-		c.SetParamValues(id)
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: id}})
 		c.Set(contextKeyUserID, "alice")
 		if err := h.DisconnectAppAPI(c); err != nil {
 			t.Fatal(err)

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -117,8 +117,7 @@ func TestListChanges(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/campaigns/camp-1/sync/changes?"+tt.query, nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id")
-			c.SetParamValues("camp-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 			if !tt.noKey {
 				c.Set(apiKeyContextKey, &APIKey{ID: 1, CampaignID: "camp-1", UserID: "u1"})
 			}

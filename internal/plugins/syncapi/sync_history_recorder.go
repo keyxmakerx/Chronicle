@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 )
 
 // historyRecordTimeout bounds the write a request leaves behind; the
@@ -28,7 +29,7 @@ const historyResourceKey = "syncHistoryResource"
 const historyActorKey = "syncHistoryActor"
 
 // noteSyncActor tells the history recorder the verified acting member.
-func noteSyncActor(c echo.Context, userID string) {
+func noteSyncActor(c *echo.Context, userID string) {
 	if userID != "" {
 		c.Set(historyActorKey, userID)
 	}
@@ -39,7 +40,7 @@ type historyResource struct {
 }
 
 // noteSyncResource tells the history recorder what this call touched.
-func noteSyncResource(c echo.Context, id, name string) {
+func noteSyncResource(c *echo.Context, id, name string) {
 	c.Set(historyResourceKey, historyResource{id: id, name: name})
 }
 
@@ -47,7 +48,7 @@ func noteSyncResource(c echo.Context, id, name string) {
 // people know by name: name is what was asked for, was what it replaced.
 // Noted before the call is allowed, so a refused change still says what it
 // asked for.
-func noteSyncChange(c echo.Context, id, name, was string) {
+func noteSyncChange(c *echo.Context, id, name, was string) {
 	c.Set(historyResourceKey, historyResource{id: id, name: name, was: was})
 }
 
@@ -154,7 +155,7 @@ func firstSegment(p string) string {
 // so the campaign is the key's own.
 func RecordSyncHistory(repo SyncHistoryRepository, namer EntityNamer) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if repo == nil {
 				return next(c)
 			}
@@ -164,10 +165,10 @@ func RecordSyncHistory(repo SyncHistoryRepository, namer EntityNamer) echo.Middl
 			if key == nil || key.ID == synthKeySessionID {
 				return err
 			}
-			status := c.Response().Status
+			status := middleware.ResponseState(c).Status
 			if err != nil {
-				if he, ok := err.(*echo.HTTPError); ok {
-					status = he.Code
+				if sc := echo.StatusCode(err); sc != 0 {
+					status = sc
 				} else {
 					status = apperror.SafeCode(err)
 				}

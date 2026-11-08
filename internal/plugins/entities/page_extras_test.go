@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 func TestPlacePageExtras(t *testing.T) {
@@ -113,8 +113,7 @@ func TestShow_LayoutPageDrawsOnlyPlacedPieces(t *testing.T) {
 	e := echo.New()
 	rec := httptest.NewRecorder()
 	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/e1", nil), rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("c1", "e1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "e1"}})
 	c.Set("campaign_context", coDmContext())
 	auth.SetSession(c, &auth.Session{UserID: "codm-1"})
 	if err := h.Show(c); err != nil {

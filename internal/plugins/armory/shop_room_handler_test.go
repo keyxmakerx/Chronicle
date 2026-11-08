@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -35,13 +35,12 @@ func (f *fakeRoomSvc) SaveRoom(_ context.Context, _, _, _ string, raw []byte) (j
 	return json.RawMessage(`{"version":1}`), nil
 }
 
-func roomCtx(method, body string, role campaigns.Role) (echo.Context, *httptest.ResponseRecorder) {
+func roomCtx(method, body string, role campaigns.Role) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/", strings.NewReader(body))
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("camp-1", "shop-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: "shop-1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1"},
 		MemberRole: role,

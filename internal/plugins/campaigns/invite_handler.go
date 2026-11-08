@@ -3,7 +3,7 @@ package campaigns
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -27,7 +27,7 @@ func NewInviteHandler(service InviteService, campaigns CampaignService, baseURL 
 
 // ListInvitesAPI returns all invites for a campaign as JSON.
 // GET /campaigns/:id/invites
-func (h *InviteHandler) ListInvitesAPI(c echo.Context) error {
+func (h *InviteHandler) ListInvitesAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -45,7 +45,7 @@ func (h *InviteHandler) ListInvitesAPI(c echo.Context) error {
 
 // CreateInviteAPI creates a new campaign invite.
 // POST /campaigns/:id/invites
-func (h *InviteHandler) CreateInviteAPI(c echo.Context) error {
+func (h *InviteHandler) CreateInviteAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -67,7 +67,7 @@ func (h *InviteHandler) CreateInviteAPI(c echo.Context) error {
 
 // RevokeInviteAPI deletes a pending invite.
 // DELETE /campaigns/:id/invites/:inviteId
-func (h *InviteHandler) RevokeInviteAPI(c echo.Context) error {
+func (h *InviteHandler) RevokeInviteAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -87,7 +87,7 @@ func (h *InviteHandler) RevokeInviteAPI(c echo.Context) error {
 
 // AcceptInvitePage handles invite acceptance.
 // GET /invites/accept?token=xxx
-func (h *InviteHandler) AcceptInvitePage(c echo.Context) error {
+func (h *InviteHandler) AcceptInvitePage(c *echo.Context) error {
 	token := c.QueryParam("token")
 	if token == "" {
 		return apperror.NewBadRequest("missing invite token")
@@ -135,7 +135,7 @@ func (h *InviteHandler) AcceptInvitePage(c echo.Context) error {
 
 // InvitesPage renders the invite management tab in campaign settings.
 // GET /campaigns/:id/invites/page
-func (h *InviteHandler) InvitesPage(c echo.Context) error {
+func (h *InviteHandler) InvitesPage(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

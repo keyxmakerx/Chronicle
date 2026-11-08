@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -22,7 +22,7 @@ func NewHandler(svc BestiaryService) *Handler {
 
 // Browse lists published bestiary publications, paginated.
 // GET /bestiary
-func (h *Handler) Browse(c echo.Context) error {
+func (h *Handler) Browse(c *echo.Context) error {
 	page, perPage := parsePagination(c)
 	ctx := c.Request().Context()
 
@@ -36,7 +36,7 @@ func (h *Handler) Browse(c echo.Context) error {
 
 // Show returns a single publication by slug.
 // GET /bestiary/:slug
-func (h *Handler) Show(c echo.Context) error {
+func (h *Handler) Show(c *echo.Context) error {
 	slug := c.Param("slug")
 	ctx := c.Request().Context()
 
@@ -58,7 +58,7 @@ func (h *Handler) Show(c echo.Context) error {
 
 // GetStatblock returns the raw statblock JSON for a publication.
 // GET /bestiary/:slug/statblock
-func (h *Handler) GetStatblock(c echo.Context) error {
+func (h *Handler) GetStatblock(c *echo.Context) error {
 	slug := c.Param("slug")
 	ctx := c.Request().Context()
 
@@ -80,7 +80,7 @@ func (h *Handler) GetStatblock(c echo.Context) error {
 
 // Create publishes a new creature to the bestiary.
 // POST /bestiary
-func (h *Handler) Create(c echo.Context) error {
+func (h *Handler) Create(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -101,7 +101,7 @@ func (h *Handler) Create(c echo.Context) error {
 
 // Update modifies an existing publication.
 // PUT /bestiary/:id
-func (h *Handler) Update(c echo.Context) error {
+func (h *Handler) Update(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -123,7 +123,7 @@ func (h *Handler) Update(c echo.Context) error {
 
 // Delete archives a publication (soft-delete).
 // DELETE /bestiary/:id
-func (h *Handler) Delete(c echo.Context) error {
+func (h *Handler) Delete(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -139,7 +139,7 @@ func (h *Handler) Delete(c echo.Context) error {
 
 // ChangeVisibility updates the visibility of a publication.
 // PATCH /bestiary/:id/visibility
-func (h *Handler) ChangeVisibility(c echo.Context) error {
+func (h *Handler) ChangeVisibility(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -163,7 +163,7 @@ func (h *Handler) ChangeVisibility(c echo.Context) error {
 
 // MyCreations lists the current user's publications across all visibility states.
 // GET /bestiary/my-creations
-func (h *Handler) MyCreations(c echo.Context) error {
+func (h *Handler) MyCreations(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -180,7 +180,7 @@ func (h *Handler) MyCreations(c echo.Context) error {
 
 // Search performs a filtered search across published publications.
 // GET /bestiary/search
-func (h *Handler) Search(c echo.Context) error {
+func (h *Handler) Search(c *echo.Context) error {
 	page, perPage := parsePagination(c)
 
 	filters := SearchFilters{
@@ -216,7 +216,7 @@ func (h *Handler) Search(c echo.Context) error {
 
 // Trending returns publications sorted by trending score.
 // GET /bestiary/trending
-func (h *Handler) Trending(c echo.Context) error {
+func (h *Handler) Trending(c *echo.Context) error {
 	page, perPage := parsePagination(c)
 
 	// Trending uses the search endpoint with sort=trending and no filters.
@@ -234,7 +234,7 @@ func (h *Handler) Trending(c echo.Context) error {
 
 // Newest returns the most recently published publications.
 // GET /bestiary/newest
-func (h *Handler) Newest(c echo.Context) error {
+func (h *Handler) Newest(c *echo.Context) error {
 	page, perPage := parsePagination(c)
 
 	result, err := h.svc.ListNewest(c.Request().Context(), page, perPage)
@@ -247,7 +247,7 @@ func (h *Handler) Newest(c echo.Context) error {
 
 // TopRated returns publications with the highest average rating.
 // GET /bestiary/top-rated
-func (h *Handler) TopRated(c echo.Context) error {
+func (h *Handler) TopRated(c *echo.Context) error {
 	page, perPage := parsePagination(c)
 
 	result, err := h.svc.ListTopRated(c.Request().Context(), page, perPage)
@@ -260,7 +260,7 @@ func (h *Handler) TopRated(c echo.Context) error {
 
 // MostImported returns publications with the most downloads.
 // GET /bestiary/most-imported
-func (h *Handler) MostImported(c echo.Context) error {
+func (h *Handler) MostImported(c *echo.Context) error {
 	page, perPage := parsePagination(c)
 
 	result, err := h.svc.ListMostImported(c.Request().Context(), page, perPage)
@@ -273,7 +273,7 @@ func (h *Handler) MostImported(c echo.Context) error {
 
 // CreatorProfile returns a creator's public profile with stats.
 // GET /bestiary/creators/:userId
-func (h *Handler) CreatorProfile(c echo.Context) error {
+func (h *Handler) CreatorProfile(c *echo.Context) error {
 	userID := c.Param("userId")
 
 	profile, err := h.svc.GetCreatorProfile(c.Request().Context(), userID)
@@ -288,7 +288,7 @@ func (h *Handler) CreatorProfile(c echo.Context) error {
 
 // AdminFlagged lists flagged publications for moderation review.
 // GET /admin/bestiary/flagged
-func (h *Handler) AdminFlagged(c echo.Context) error {
+func (h *Handler) AdminFlagged(c *echo.Context) error {
 	page, perPage := parsePagination(c)
 
 	result, err := h.svc.ListFlagged(c.Request().Context(), page, perPage)
@@ -301,7 +301,7 @@ func (h *Handler) AdminFlagged(c echo.Context) error {
 
 // AdminStats returns aggregate bestiary statistics.
 // GET /admin/bestiary/stats
-func (h *Handler) AdminStats(c echo.Context) error {
+func (h *Handler) AdminStats(c *echo.Context) error {
 	stats, err := h.svc.GetStats(c.Request().Context())
 	if err != nil {
 		return err
@@ -312,7 +312,7 @@ func (h *Handler) AdminStats(c echo.Context) error {
 
 // AdminModerate performs a moderation action on a publication.
 // POST /admin/bestiary/:id/moderate
-func (h *Handler) AdminModerate(c echo.Context) error {
+func (h *Handler) AdminModerate(c *echo.Context) error {
 	moderatorID := auth.GetUserID(c)
 	if moderatorID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -337,7 +337,7 @@ func (h *Handler) AdminModerate(c echo.Context) error {
 
 // AdminModerationLog returns the moderation audit trail for a publication.
 // GET /admin/bestiary/:id/moderation-log
-func (h *Handler) AdminModerationLog(c echo.Context) error {
+func (h *Handler) AdminModerationLog(c *echo.Context) error {
 	pubID := c.Param("id")
 
 	entries, err := h.svc.GetModerationLog(c.Request().Context(), pubID)
@@ -352,7 +352,7 @@ func (h *Handler) AdminModerationLog(c echo.Context) error {
 
 // ImportToCampaign imports a publication's creature into a campaign.
 // POST /bestiary/:id/import/:campaignId
-func (h *Handler) ImportToCampaign(c echo.Context) error {
+func (h *Handler) ImportToCampaign(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -370,7 +370,7 @@ func (h *Handler) ImportToCampaign(c echo.Context) error {
 
 // ForkToCampaign imports a publication as an editable copy into a campaign.
 // POST /bestiary/:id/fork/:campaignId
-func (h *Handler) ForkToCampaign(c echo.Context) error {
+func (h *Handler) ForkToCampaign(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -388,7 +388,7 @@ func (h *Handler) ForkToCampaign(c echo.Context) error {
 
 // FlagPublication flags a publication for moderation.
 // POST /bestiary/:id/flag
-func (h *Handler) FlagPublication(c echo.Context) error {
+func (h *Handler) FlagPublication(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -414,7 +414,7 @@ func (h *Handler) FlagPublication(c echo.Context) error {
 
 // RatePublication creates or updates a rating on a publication.
 // POST /bestiary/:id/rate
-func (h *Handler) RatePublication(c echo.Context) error {
+func (h *Handler) RatePublication(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -441,7 +441,7 @@ func (h *Handler) RatePublication(c echo.Context) error {
 
 // RemoveRating removes a user's rating on a publication.
 // DELETE /bestiary/:id/rate
-func (h *Handler) RemoveRating(c echo.Context) error {
+func (h *Handler) RemoveRating(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -457,7 +457,7 @@ func (h *Handler) RemoveRating(c echo.Context) error {
 
 // ListReviews returns paginated reviews for a publication.
 // GET /bestiary/:slug/reviews
-func (h *Handler) ListReviews(c echo.Context) error {
+func (h *Handler) ListReviews(c *echo.Context) error {
 	slug := c.Param("slug")
 	ctx := c.Request().Context()
 
@@ -478,7 +478,7 @@ func (h *Handler) ListReviews(c echo.Context) error {
 
 // AddFavorite toggles a favorite on a publication.
 // POST /bestiary/:id/favorite
-func (h *Handler) AddFavorite(c echo.Context) error {
+func (h *Handler) AddFavorite(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -498,7 +498,7 @@ func (h *Handler) AddFavorite(c echo.Context) error {
 
 // RemoveFavorite removes a favorite from a publication.
 // DELETE /bestiary/:id/favorite
-func (h *Handler) RemoveFavorite(c echo.Context) error {
+func (h *Handler) RemoveFavorite(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -514,7 +514,7 @@ func (h *Handler) RemoveFavorite(c echo.Context) error {
 
 // ListFavorites returns the current user's favorited publications.
 // GET /bestiary/favorites
-func (h *Handler) ListFavorites(c echo.Context) error {
+func (h *Handler) ListFavorites(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -532,7 +532,7 @@ func (h *Handler) ListFavorites(c echo.Context) error {
 // --- Helpers ---
 
 // parsePagination extracts page and per_page query parameters with safe defaults.
-func parsePagination(c echo.Context) (int, int) {
+func parsePagination(c *echo.Context) (int, int) {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	perPage, _ := strconv.Atoi(c.QueryParam("per_page"))
 	if page < 1 {

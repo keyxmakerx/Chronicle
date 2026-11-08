@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -39,7 +39,7 @@ func NewMapAPIHandler(syncSvc SyncAPIService, mapSvc maps.MapService, drawingSvc
 }
 
 // resolveRole returns the API key owner's role for visibility filtering.
-func (h *MapAPIHandler) resolveRole(c echo.Context) int {
+func (h *MapAPIHandler) resolveRole(c *echo.Context) int {
 	key := GetAPIKey(c)
 	if key == nil {
 		return 0
@@ -55,7 +55,7 @@ func (h *MapAPIHandler) resolveRole(c echo.Context) int {
 // (campaigns.CampaignContext.VisibilityRole): the member role, promoted to
 // owner for a co-DM grant. A failed grant lookup leaves the raw role, which only
 // ever hides more. Writes keep using resolveRole.
-func (h *MapAPIHandler) viewRole(c echo.Context) int {
+func (h *MapAPIHandler) viewRole(c *echo.Context) int {
 	role := h.resolveRole(c)
 	key := GetAPIKey(c)
 	if key == nil || role >= int(campaigns.RoleOwner) {
@@ -74,7 +74,7 @@ func (h *MapAPIHandler) viewRole(c echo.Context) int {
 // alone also admits a Scribe key, which the web route refuses for these
 // actions. Fails closed — an unresolved role (resolveRole's 0) is refused
 // same as any role below Owner.
-func (h *MapAPIHandler) requireOwnerRole(c echo.Context) error {
+func (h *MapAPIHandler) requireOwnerRole(c *echo.Context) error {
 	if campaigns.Role(h.resolveRole(c)) < campaigns.RoleOwner {
 		return apperror.NewForbidden("owner role required for this map operation")
 	}
@@ -85,7 +85,7 @@ func (h *MapAPIHandler) requireOwnerRole(c echo.Context) error {
 // dm_only content — Owner role, or a co-DM grant — mirroring
 // campaigns.CampaignContext.CanAuthorDmOnly for a caller that only has an
 // API key, not a CampaignContext.
-func (h *MapAPIHandler) canAuthorDmOnly(c echo.Context) bool {
+func (h *MapAPIHandler) canAuthorDmOnly(c *echo.Context) bool {
 	key := GetAPIKey(c)
 	if key == nil {
 		return false
@@ -99,7 +99,7 @@ func (h *MapAPIHandler) canAuthorDmOnly(c echo.Context) bool {
 
 // ownerVisibilityRules keeps per-player visibility rules on a new marker only
 // for an Owner, as the web route does; anyone else's are dropped.
-func (h *MapAPIHandler) ownerVisibilityRules(c echo.Context, rules *string) *string {
+func (h *MapAPIHandler) ownerVisibilityRules(c *echo.Context, rules *string) *string {
 	if campaigns.Role(h.resolveRole(c)) < campaigns.RoleOwner {
 		return nil
 	}
@@ -109,7 +109,7 @@ func (h *MapAPIHandler) ownerVisibilityRules(c echo.Context, rules *string) *str
 // ownerVisibilityRulesPatch is ownerVisibilityRules for an update: a non-Owner's
 // rules become absent, never null, so refusing the write can't erase the
 // Owner's existing rules.
-func (h *MapAPIHandler) ownerVisibilityRulesPatch(c echo.Context, rules patch.Field[string]) patch.Field[string] {
+func (h *MapAPIHandler) ownerVisibilityRulesPatch(c *echo.Context, rules patch.Field[string]) patch.Field[string] {
 	if campaigns.Role(h.resolveRole(c)) < campaigns.RoleOwner {
 		return patch.Absent[string]()
 	}
@@ -117,7 +117,7 @@ func (h *MapAPIHandler) ownerVisibilityRulesPatch(c echo.Context, rules patch.Fi
 }
 
 // requireMapInCampaign validates that the map belongs to the campaign in the URL.
-func (h *MapAPIHandler) requireMapInCampaign(c echo.Context) (*maps.Map, error) {
+func (h *MapAPIHandler) requireMapInCampaign(c *echo.Context) (*maps.Map, error) {
 	campaignID := c.Param("id")
 	mapID := c.Param("mapID")
 	ctx := c.Request().Context()
@@ -137,7 +137,7 @@ func (h *MapAPIHandler) requireMapInCampaign(c echo.Context) (*maps.Map, error) 
 // The map service looks markers up by id alone, so without this a marker id
 // from another campaign would be readable and writable through this route.
 // A mismatch answers the same NotFound as a missing id.
-func (h *MapAPIHandler) requireMarkerOnMap(c echo.Context, m *maps.Map) (*maps.Marker, error) {
+func (h *MapAPIHandler) requireMarkerOnMap(c *echo.Context, m *maps.Map) (*maps.Marker, error) {
 	mk, err := h.mapSvc.GetMarker(c.Request().Context(), c.Param("markerID"))
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func (h *MapAPIHandler) requireMarkerOnMap(c echo.Context, m *maps.Map) (*maps.M
 
 // ListMaps returns all maps for a campaign.
 // GET /api/v1/campaigns/:id/maps
-func (h *MapAPIHandler) ListMaps(c echo.Context) error {
+func (h *MapAPIHandler) ListMaps(c *echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()
 
@@ -202,7 +202,7 @@ func (h *MapAPIHandler) playerImageAPIURL(ctx context.Context, m *maps.Map) (str
 // any key that may read the map. Any failure to produce the copy is an error,
 // never the original.
 // GET /api/v1/campaigns/:id/maps/:mapID/player-image
-func (h *MapAPIHandler) PlayerImage(c echo.Context) error {
+func (h *MapAPIHandler) PlayerImage(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -218,7 +218,7 @@ func (h *MapAPIHandler) PlayerImage(c echo.Context) error {
 
 // GetMap returns a single map with its markers.
 // GET /api/v1/campaigns/:id/maps/:mapID
-func (h *MapAPIHandler) GetMap(c echo.Context) error {
+func (h *MapAPIHandler) GetMap(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -278,7 +278,7 @@ type apiCreateDrawingRequest struct {
 
 // ListDrawings returns all drawings for a map.
 // GET /api/v1/campaigns/:id/maps/:mapID/drawings
-func (h *MapAPIHandler) ListDrawings(c echo.Context) error {
+func (h *MapAPIHandler) ListDrawings(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -307,7 +307,7 @@ func (h *MapAPIHandler) ListDrawings(c echo.Context) error {
 
 // CreateDrawing creates a new drawing on a map.
 // POST /api/v1/campaigns/:id/maps/:mapID/drawings
-func (h *MapAPIHandler) CreateDrawing(c echo.Context) error {
+func (h *MapAPIHandler) CreateDrawing(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -364,7 +364,7 @@ type apiUpdateDrawingRequest struct {
 
 // UpdateDrawing updates an existing drawing.
 // PUT /api/v1/campaigns/:id/maps/:mapID/drawings/:drawingID
-func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
+func (h *MapAPIHandler) UpdateDrawing(c *echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
@@ -401,7 +401,7 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 
 // DeleteDrawing removes a drawing.
 // DELETE /api/v1/campaigns/:id/maps/:mapID/drawings/:drawingID
-func (h *MapAPIHandler) DeleteDrawing(c echo.Context) error {
+func (h *MapAPIHandler) DeleteDrawing(c *echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
@@ -455,7 +455,7 @@ type apiCreateTokenRequest struct {
 
 // ListTokens returns all tokens for a map.
 // GET /api/v1/campaigns/:id/maps/:mapID/tokens
-func (h *MapAPIHandler) ListTokens(c echo.Context) error {
+func (h *MapAPIHandler) ListTokens(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -470,7 +470,7 @@ func (h *MapAPIHandler) ListTokens(c echo.Context) error {
 
 // CreateToken places a new token on a map.
 // POST /api/v1/campaigns/:id/maps/:mapID/tokens
-func (h *MapAPIHandler) CreateToken(c echo.Context) error {
+func (h *MapAPIHandler) CreateToken(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -557,7 +557,7 @@ type apiUpdateTokenRequest struct {
 
 // UpdateToken updates an existing token.
 // PUT /api/v1/campaigns/:id/maps/:mapID/tokens/:tokenID
-func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
+func (h *MapAPIHandler) UpdateToken(c *echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
@@ -603,7 +603,7 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 
 // UpdateTokenPosition updates only the position (optimized for drag sync).
 // PATCH /api/v1/campaigns/:id/maps/:mapID/tokens/:tokenID/position
-func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
+func (h *MapAPIHandler) UpdateTokenPosition(c *echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
@@ -623,7 +623,7 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 
 // DeleteToken removes a token.
 // DELETE /api/v1/campaigns/:id/maps/:mapID/tokens/:tokenID
-func (h *MapAPIHandler) DeleteToken(c echo.Context) error {
+func (h *MapAPIHandler) DeleteToken(c *echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
@@ -650,7 +650,7 @@ type apiCreateLayerRequest struct {
 
 // ListLayers returns all layers for a map.
 // GET /api/v1/campaigns/:id/maps/:mapID/layers
-func (h *MapAPIHandler) ListLayers(c echo.Context) error {
+func (h *MapAPIHandler) ListLayers(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -664,7 +664,7 @@ func (h *MapAPIHandler) ListLayers(c echo.Context) error {
 
 // CreateLayer creates a new layer on a map.
 // POST /api/v1/campaigns/:id/maps/:mapID/layers
-func (h *MapAPIHandler) CreateLayer(c echo.Context) error {
+func (h *MapAPIHandler) CreateLayer(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -707,7 +707,7 @@ type apiUpdateLayerRequest struct {
 
 // UpdateLayer updates an existing layer.
 // PUT /api/v1/campaigns/:id/maps/:mapID/layers/:layerID
-func (h *MapAPIHandler) UpdateLayer(c echo.Context) error {
+func (h *MapAPIHandler) UpdateLayer(c *echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
@@ -737,7 +737,7 @@ func (h *MapAPIHandler) UpdateLayer(c echo.Context) error {
 
 // DeleteLayer removes a layer.
 // DELETE /api/v1/campaigns/:id/maps/:mapID/layers/:layerID
-func (h *MapAPIHandler) DeleteLayer(c echo.Context) error {
+func (h *MapAPIHandler) DeleteLayer(c *echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
@@ -760,7 +760,7 @@ type apiCreateFogRequest struct {
 
 // ListFog returns all fog regions for a map.
 // GET /api/v1/campaigns/:id/maps/:mapID/fog
-func (h *MapAPIHandler) ListFog(c echo.Context) error {
+func (h *MapAPIHandler) ListFog(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -777,7 +777,7 @@ func (h *MapAPIHandler) ListFog(c echo.Context) error {
 
 // CreateFog creates a fog region on a map.
 // POST /api/v1/campaigns/:id/maps/:mapID/fog
-func (h *MapAPIHandler) CreateFog(c echo.Context) error {
+func (h *MapAPIHandler) CreateFog(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -804,7 +804,7 @@ func (h *MapAPIHandler) CreateFog(c echo.Context) error {
 
 // DeleteFog removes a fog region.
 // DELETE /api/v1/campaigns/:id/maps/:mapID/fog/:fogID
-func (h *MapAPIHandler) DeleteFog(c echo.Context) error {
+func (h *MapAPIHandler) DeleteFog(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -822,7 +822,7 @@ func (h *MapAPIHandler) DeleteFog(c echo.Context) error {
 
 // ResetFog removes all fog regions for a map.
 // DELETE /api/v1/campaigns/:id/maps/:mapID/fog
-func (h *MapAPIHandler) ResetFog(c echo.Context) error {
+func (h *MapAPIHandler) ResetFog(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -878,7 +878,7 @@ type apiUpdateMarkerRequest struct {
 
 // ListMarkers returns all markers for a map, filtered by the caller's role.
 // GET /api/v1/campaigns/:id/maps/:mapID/markers
-func (h *MapAPIHandler) ListMarkers(c echo.Context) error {
+func (h *MapAPIHandler) ListMarkers(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -899,7 +899,7 @@ func (h *MapAPIHandler) ListMarkers(c echo.Context) error {
 
 // GetMarker returns a single marker.
 // GET /api/v1/campaigns/:id/maps/:mapID/markers/:markerID
-func (h *MapAPIHandler) GetMarker(c echo.Context) error {
+func (h *MapAPIHandler) GetMarker(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -931,7 +931,7 @@ func (h *MapAPIHandler) GetMarker(c echo.Context) error {
 
 // CreateMarker places a new marker on a map.
 // POST /api/v1/campaigns/:id/maps/:mapID/markers
-func (h *MapAPIHandler) CreateMarker(c echo.Context) error {
+func (h *MapAPIHandler) CreateMarker(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -970,7 +970,7 @@ func (h *MapAPIHandler) CreateMarker(c echo.Context) error {
 
 // UpdateMarker updates an existing marker.
 // PUT /api/v1/campaigns/:id/maps/:mapID/markers/:markerID
-func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
+func (h *MapAPIHandler) UpdateMarker(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
@@ -1008,7 +1008,7 @@ func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
 
 // DeleteMarker removes a marker.
 // DELETE /api/v1/campaigns/:id/maps/:mapID/markers/:markerID
-func (h *MapAPIHandler) DeleteMarker(c echo.Context) error {
+func (h *MapAPIHandler) DeleteMarker(c *echo.Context) error {
 	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err

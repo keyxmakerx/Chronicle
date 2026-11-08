@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -18,7 +18,7 @@ import (
 func TestReportOnlyCSP(t *testing.T) {
 	e := echo.New()
 	rec := httptest.NewRecorder()
-	h := SecurityHeaders()(func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	h := SecurityHeaders()(func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 	if err := h(e.NewContext(httptest.NewRequest(http.MethodGet, "/campaigns", nil), rec)); err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestCSRFLetsCSPReportsThrough(t *testing.T) {
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
 		req.AddCookie(&http.Cookie{Name: csrfCookieBaseName, Value: "tok"})
 		rec := httptest.NewRecorder()
-		h := CSRF()(func(c echo.Context) error { return c.NoContent(http.StatusNoContent) })
+		h := CSRF()(func(c *echo.Context) error { return c.NoContent(http.StatusNoContent) })
 		err := h(e.NewContext(req, rec))
 		code := rec.Code
 		var appErr *apperror.AppError

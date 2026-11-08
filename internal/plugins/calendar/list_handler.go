@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -41,7 +41,7 @@ type CalendarsListData struct {
 // Replaces the "calendar is being rebuilt" placeholder: app/routes.go no
 // longer registers a handler for this exact path (see its own comment on
 // the removed line).
-func (h *Handler) Index(c echo.Context) error {
+func (h *Handler) Index(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	v := viewerFrom(c, cc)

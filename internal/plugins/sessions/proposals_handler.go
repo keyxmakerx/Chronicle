@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/email"
@@ -26,7 +26,7 @@ import (
 
 // ListProposals renders the proposals list for a campaign.
 // GET /campaigns/:id/proposals
-func (h *Handler) ListProposals(c echo.Context) error {
+func (h *Handler) ListProposals(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	// Date polls are answered on the Game nights calendar; this list stays
 	// only for a campaign without one.
@@ -49,7 +49,7 @@ func (h *Handler) ListProposals(c echo.Context) error {
 // ShowProposal renders one proposal's detail: options in the viewer's zone, the
 // viewer's own responses, tallies, and (owner only) the per-responder breakdown.
 // GET /campaigns/:id/proposals/:pid
-func (h *Handler) ShowProposal(c echo.Context) error {
+func (h *Handler) ShowProposal(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	viewerTZ := h.resolveViewerTZ(c, userID)
@@ -78,7 +78,7 @@ func (h *Handler) ShowProposal(c echo.Context) error {
 // CreateProposalAPI creates a proposal from the DM slot builder, then fans out
 // notifications + email invites to members.
 // POST /campaigns/:id/proposals
-func (h *Handler) CreateProposalAPI(c echo.Context) error {
+func (h *Handler) CreateProposalAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	var req CreateProposalRequest
@@ -107,7 +107,7 @@ func (h *Handler) CreateProposalAPI(c echo.Context) error {
 // RespondOptionAPI records a member's response to one option, then notifies the
 // proposer. Returns the refreshed detail fragment so the card re-renders in place.
 // POST /campaigns/:id/proposals/:pid/options/:oid/respond
-func (h *Handler) RespondOptionAPI(c echo.Context) error {
+func (h *Handler) RespondOptionAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	proposalID := c.Param("pid")
@@ -153,7 +153,7 @@ func (h *Handler) RespondOptionAPI(c echo.Context) error {
 // open (in the service) and the user is still a member (below), then shows a
 // POST form. ApplyProposalToken records the response, so a mail prefetcher's
 // GET never writes.
-func (h *Handler) RedeemProposalToken(c echo.Context) error {
+func (h *Handler) RedeemProposalToken(c *echo.Context) error {
 	tokenStr := c.Param("token")
 	if tokenStr == "" {
 		return c.HTML(http.StatusBadRequest, rsvpResultHTML("Invalid Link", "This response link is invalid.", false))
@@ -181,7 +181,7 @@ func (h *Handler) RedeemProposalToken(c echo.Context) error {
 // POST /proposals/respond/:token — the state-changing half of the flow.
 // Re-runs the open-proposal (service) and current-membership checks before
 // applying.
-func (h *Handler) ApplyProposalToken(c echo.Context) error {
+func (h *Handler) ApplyProposalToken(c *echo.Context) error {
 	tokenStr := c.Param("token")
 	if tokenStr == "" {
 		return c.HTML(http.StatusBadRequest, rsvpResultHTML("Invalid Link", "This response link is invalid.", false))
@@ -208,7 +208,7 @@ func (h *Handler) ApplyProposalToken(c echo.Context) error {
 // slot's UTC instant. Members are auto-invited to the new session and every
 // responder is notified — both off the request path, mirroring create.
 // POST /campaigns/:id/proposals/:pid/confirm
-func (h *Handler) ConfirmProposalAPI(c echo.Context) error {
+func (h *Handler) ConfirmProposalAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	proposalID := c.Param("pid")

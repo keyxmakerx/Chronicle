@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // buildImportZip wraps an envelope plus n fake media files into a bundle in

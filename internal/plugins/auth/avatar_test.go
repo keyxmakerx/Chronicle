@@ -17,7 +17,7 @@ import (
 	"net/textproto"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // fakeAvatarUploader is a controllable AvatarUploader for service/handler tests.

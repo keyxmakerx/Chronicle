@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -108,8 +108,7 @@ func TestJoinByCode_HandlerLandsInCampaign(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/join/abc123", nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("code")
-			c.SetParamValues("abc123")
+			c.SetPathValues(echo.PathValues{{Name: "code", Value: "abc123"}})
 			if tt.user != "" {
 				c.Set("auth_user_id", tt.user)
 			}

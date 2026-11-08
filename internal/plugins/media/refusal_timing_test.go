@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -34,8 +34,7 @@ func timedAnonymousServe(t *testing.T, h *Handler, id string, thumb bool) (time.
 		path += "/thumb/300"
 	}
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, path, nil), httptest.NewRecorder())
-	c.SetParamNames("id", "size")
-	c.SetParamValues(id, "300")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: id}, {Name: "size", Value: "300"}})
 	start := time.Now()
 	var err error
 	if thumb {

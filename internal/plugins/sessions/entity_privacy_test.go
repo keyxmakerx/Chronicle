@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -59,8 +59,7 @@ func showSessionHTML(t *testing.T, role campaigns.Role) string {
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/sessions/s1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "sid")
-	c.SetParamValues("camp-1", "s1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "sid", Value: "s1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1"},
 		MemberRole: role,

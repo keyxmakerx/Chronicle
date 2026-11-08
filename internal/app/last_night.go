@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -68,7 +68,7 @@ type lastNightHandler struct {
 
 // Show renders the card.
 // GET /campaigns/:id/last-night
-func (h *lastNightHandler) Show(c echo.Context) error {
+func (h *lastNightHandler) Show(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	// The same bar as the recap's own save route.

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -65,7 +65,7 @@ func (h *Handler) loadTreePlaces(ctx context.Context, cc *campaigns.CampaignCont
 // editablePage loads the page named in the URL and checks the viewer may edit
 // it. The same rule guards add and remove: who can edit the page decides who
 // can list it elsewhere.
-func (h *Handler) editablePage(c echo.Context, cc *campaigns.CampaignContext) (*Entity, error) {
+func (h *Handler) editablePage(c *echo.Context, cc *campaigns.CampaignContext) (*Entity, error) {
 	entity, err := h.service.GetByID(c.Request().Context(), c.Param("eid"))
 	if err != nil || entity.CampaignID != cc.Campaign.ID {
 		return nil, apperror.NewNotFound("page not found")
@@ -83,7 +83,7 @@ func (h *Handler) editablePage(c echo.Context, cc *campaigns.CampaignContext) (*
 // AddPlaceAPI lists a page under one more parent.
 // POST /campaigns/:id/entities/:eid/places  {"parent_id": "..."}
 // It answers with the refreshed "Also listed under" line.
-func (h *Handler) AddPlaceAPI(c echo.Context) error {
+func (h *Handler) AddPlaceAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -120,7 +120,7 @@ func (h *Handler) AddPlaceAPI(c echo.Context) error {
 
 // RemovePlaceAPI takes a page out of one extra place. The page is untouched.
 // DELETE /campaigns/:id/entities/:eid/places/:pid
-func (h *Handler) RemovePlaceAPI(c echo.Context) error {
+func (h *Handler) RemovePlaceAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -145,7 +145,7 @@ func (h *Handler) RemovePlaceAPI(c echo.Context) error {
 }
 
 // renderPlaces answers with the swappable line for the page.
-func (h *Handler) renderPlaces(c echo.Context, cc *campaigns.CampaignContext, entity *Entity) error {
+func (h *Handler) renderPlaces(c *echo.Context, cc *campaigns.CampaignContext, entity *Entity) error {
 	p := h.loadPagePlaces(c.Request().Context(), cc, entity, true, auth.GetUserID(c))
 	return middleware.Render(c, http.StatusOK, entityPlaces(cc, entity, p))
 }
@@ -153,7 +153,7 @@ func (h *Handler) renderPlaces(c echo.Context, cc *campaigns.CampaignContext, en
 // visibleParent loads a parent page in this campaign that the viewer can see.
 // A page they can't see, one in another campaign and one that does not exist
 // all answer alike.
-func (h *Handler) visibleParent(c echo.Context, cc *campaigns.CampaignContext, id string) (*Entity, error) {
+func (h *Handler) visibleParent(c *echo.Context, cc *campaigns.CampaignContext, id string) (*Entity, error) {
 	ctx := c.Request().Context()
 	parent, err := h.service.GetByID(ctx, id)
 	if err != nil || parent.CampaignID != cc.Campaign.ID {

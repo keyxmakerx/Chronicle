@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -16,7 +16,7 @@ import (
 
 // AnswerAIAlert answers one warning about the campaign's AI key: how=mine
 // says the owner did it, how=paused also pauses the key.
-func (h *Handler) AnswerAIAlert(c echo.Context) error {
+func (h *Handler) AnswerAIAlert(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -45,7 +45,7 @@ func (h *Handler) AnswerAIAlert(c echo.Context) error {
 
 // CutOffAI stops every AI in the campaign (on=1) or lets it back (on=0).
 // Keys keep working once it is back on; nothing they asked for is lost.
-func (h *Handler) CutOffAI(c echo.Context) error {
+func (h *Handler) CutOffAI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

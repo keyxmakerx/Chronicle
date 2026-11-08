@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -25,7 +25,7 @@ func (h *APIHandler) SetDMScreen(p DMScreenProvider) {
 	h.dmScreen = p
 }
 
-func (h *APIHandler) dmScreenCaller(c echo.Context) (userID string, role int, err error) {
+func (h *APIHandler) dmScreenCaller(c *echo.Context) (userID string, role int, err error) {
 	if h.dmScreen == nil {
 		return "", 0, apperror.NewNotFound("this Chronicle has no DM Screen")
 	}
@@ -37,7 +37,7 @@ func (h *APIHandler) dmScreenCaller(c echo.Context) (userID string, role int, er
 }
 
 // GetDMScreen handles GET /api/v1/campaigns/:id/dm-screen.
-func (h *APIHandler) GetDMScreen(c echo.Context) error {
+func (h *APIHandler) GetDMScreen(c *echo.Context) error {
 	userID, role, err := h.dmScreenCaller(c)
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func (h *APIHandler) GetDMScreen(c echo.Context) error {
 // RevealDMScreenCharacter handles POST
 // /api/v1/campaigns/:id/dm-screen/reveal/:entityID: it makes one hidden
 // character from the screen's list visible to players.
-func (h *APIHandler) RevealDMScreenCharacter(c echo.Context) error {
+func (h *APIHandler) RevealDMScreenCharacter(c *echo.Context) error {
 	userID, role, err := h.dmScreenCaller(c)
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ type dmScreenDowntimeRequest struct {
 // SetDMScreenDowntime handles POST /api/v1/campaigns/:id/dm-screen/downtime.
 // The body must say {"open": true|false}; a missing field is refused rather
 // than read as "close".
-func (h *APIHandler) SetDMScreenDowntime(c echo.Context) error {
+func (h *APIHandler) SetDMScreenDowntime(c *echo.Context) error {
 	userID, role, err := h.dmScreenCaller(c)
 	if err != nil {
 		return err

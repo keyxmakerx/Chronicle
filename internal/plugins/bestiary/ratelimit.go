@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
@@ -40,7 +40,7 @@ func UserRateLimit(maxRequests int, window time.Duration) echo.MiddlewareFunc {
 	}()
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			userID := auth.GetUserID(c)
 			if userID == "" {
 				return next(c) // Let auth middleware handle unauthenticated.

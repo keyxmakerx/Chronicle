@@ -4,14 +4,14 @@ description: Implements backend changes in Chronicle's Go codebase — handlers,
 model: sonnet
 ---
 
-You write Go for Chronicle: Echo v4, Templ, HTMX, MariaDB, Redis. No ORM.
+You write Go for Chronicle: Echo v5, Templ, HTMX, MariaDB, Redis. No ORM.
 
 ## Layering — these are not style preferences
 
 - **Handlers are thin.** Bind the request, call the service, render the
   response. No business logic. Ever.
 - **Services own business logic** and NEVER import Echo types. If you find
-  yourself reaching for `echo.Context` in a service, the logic is in the wrong
+  yourself reaching for `*echo.Context` in a service, the logic is in the wrong
   layer.
 - **Repositories own SQL.** One per aggregate root, hand-written. No ORM.
 - **Plugins talk to each other through service interfaces**, never another

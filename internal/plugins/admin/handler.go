@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -192,7 +192,7 @@ func (h *Handler) SetActivityService(svc ActivityService) {
 
 // record logs an admin change. Called after the change succeeded; a missing or
 // failing log never affects the response.
-func (h *Handler) record(c echo.Context, action, targetType, targetID, label string) {
+func (h *Handler) record(c *echo.Context, action, targetType, targetID, label string) {
 	if h.activity == nil {
 		return
 	}
@@ -221,7 +221,7 @@ func (h *Handler) campaignLabel(ctx context.Context, campaignID string) string {
 // --- Data Hygiene ---
 
 // DataHygiene renders the data hygiene dashboard (GET /admin/data-hygiene).
-func (h *Handler) DataHygiene(c echo.Context) error {
+func (h *Handler) DataHygiene(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	data := DataHygieneData{
@@ -264,7 +264,7 @@ func (h *Handler) DataHygiene(c echo.Context) error {
 // PurgeOrphanedMediaAPI handles DELETE /admin/data-hygiene/orphaned-media. The
 // unused uploads move to the Trash as one clean-up that can be undone; the
 // files are only removed when the Trash is emptied.
-func (h *Handler) PurgeOrphanedMediaAPI(c echo.Context) error {
+func (h *Handler) PurgeOrphanedMediaAPI(c *echo.Context) error {
 	if h.trash == nil {
 		return apperror.NewInternal(fmt.Errorf("trash not configured"))
 	}
@@ -281,7 +281,7 @@ func (h *Handler) PurgeOrphanedMediaAPI(c echo.Context) error {
 }
 
 // PurgeOrphanedAPIKeysAPI handles DELETE /admin/data-hygiene/orphaned-api-keys.
-func (h *Handler) PurgeOrphanedAPIKeysAPI(c echo.Context) error {
+func (h *Handler) PurgeOrphanedAPIKeysAPI(c *echo.Context) error {
 	if h.hygieneScanner == nil {
 		return apperror.NewInternal(fmt.Errorf("hygiene scanner not configured"))
 	}
@@ -295,7 +295,7 @@ func (h *Handler) PurgeOrphanedAPIKeysAPI(c echo.Context) error {
 }
 
 // PurgeStaleFilesAPI handles DELETE /admin/data-hygiene/stale-files.
-func (h *Handler) PurgeStaleFilesAPI(c echo.Context) error {
+func (h *Handler) PurgeStaleFilesAPI(c *echo.Context) error {
 	if h.hygieneScanner == nil {
 		return apperror.NewInternal(fmt.Errorf("hygiene scanner not configured"))
 	}
@@ -311,7 +311,7 @@ func (h *Handler) PurgeStaleFilesAPI(c echo.Context) error {
 // --- Dashboard ---
 
 // Dashboard renders the admin overview page (GET /admin).
-func (h *Handler) Dashboard(c echo.Context) error {
+func (h *Handler) Dashboard(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	// A failed count is -1 so the tile shows a dash instead of a false 0.
@@ -464,7 +464,7 @@ type StatusFigures struct {
 
 // Status renders the status strip's figures (GET /admin/status), loaded by
 // every admin page after it is shown.
-func (h *Handler) Status(c echo.Context) error {
+func (h *Handler) Status(c *echo.Context) error {
 	ctx := c.Request().Context()
 	f := StatusFigures{Sessions: -1}
 	if h.securityService != nil {
@@ -516,7 +516,7 @@ func lastGoodBackup(bi BackupInfo) (time.Time, bool) {
 }
 
 // Activity renders the filterable admin change log (GET /admin/activity).
-func (h *Handler) Activity(c echo.Context) error {
+func (h *Handler) Activity(c *echo.Context) error {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	if page < 1 {
 		page = 1
@@ -540,7 +540,7 @@ func (h *Handler) Activity(c echo.Context) error {
 // --- Users ---
 
 // Users renders the user management page (GET /admin/users).
-func (h *Handler) Users(c echo.Context) error {
+func (h *Handler) Users(c *echo.Context) error {
 	ctx := c.Request().Context()
 	lq := parseListQuery(c.QueryParam("q"), c.QueryParam("f"), c.QueryParam("page"))
 	filter := auth.ParseUserFilter(lq.Filter)
@@ -576,7 +576,7 @@ func (h *Handler) Users(c echo.Context) error {
 }
 
 // ToggleAdmin toggles a user's is_admin flag (PUT /admin/users/:id/admin).
-func (h *Handler) ToggleAdmin(c echo.Context) error {
+func (h *Handler) ToggleAdmin(c *echo.Context) error {
 	targetID := c.Param("id")
 
 	// Prevent admins from removing their own admin status.
@@ -639,7 +639,7 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 // --- Campaigns ---
 
 // Campaigns renders the campaign management page (GET /admin/campaigns).
-func (h *Handler) Campaigns(c echo.Context) error {
+func (h *Handler) Campaigns(c *echo.Context) error {
 	ctx := c.Request().Context()
 	lq := parseListQuery(c.QueryParam("q"), c.QueryParam("f"), c.QueryParam("page"))
 
@@ -703,7 +703,7 @@ func (h *Handler) leavableCampaigns(ctx context.Context, list []campaigns.Campai
 // DeleteCampaign moves a campaign to the Trash (DELETE /admin/campaigns/:id).
 // Nothing is removed: the campaign vanishes for everyone and can be brought
 // back from the Trash page until the retention is up.
-func (h *Handler) DeleteCampaign(c echo.Context) error {
+func (h *Handler) DeleteCampaign(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	// Read the name first: the log keeps it, and the Trash shows it.
@@ -723,7 +723,7 @@ func (h *Handler) DeleteCampaign(c echo.Context) error {
 
 // JoinCampaign adds the admin to a campaign with the selected role
 // (POST /admin/campaigns/:id/join).
-func (h *Handler) JoinCampaign(c echo.Context) error {
+func (h *Handler) JoinCampaign(c *echo.Context) error {
 	campaignID := c.Param("id")
 	userID := auth.GetUserID(c)
 
@@ -749,7 +749,7 @@ func (h *Handler) JoinCampaign(c echo.Context) error {
 }
 
 // LeaveCampaign removes the admin from a campaign (DELETE /admin/campaigns/:id/leave).
-func (h *Handler) LeaveCampaign(c echo.Context) error {
+func (h *Handler) LeaveCampaign(c *echo.Context) error {
 	campaignID := c.Param("id")
 	userID := auth.GetUserID(c)
 
@@ -773,7 +773,7 @@ func (h *Handler) LeaveCampaign(c echo.Context) error {
 // HandoverPage shows who could take over a campaign whose owner has been
 // away (GET /admin/campaigns/:id/hand-over). The list's row action asks for
 // it over htmx, so that request is turned into a full page load.
-func (h *Handler) HandoverPage(c echo.Context) error {
+func (h *Handler) HandoverPage(c *echo.Context) error {
 	campaignID := c.Param("id")
 	if middleware.IsHTMX(c) {
 		return middleware.HTMXRedirect(c, fmt.Sprintf("/admin/campaigns/%s/hand-over", campaignID))
@@ -809,7 +809,7 @@ func (h *Handler) HandoverPage(c echo.Context) error {
 
 // HandOver gives the campaign to the chosen member
 // (POST /admin/campaigns/:id/hand-over). The service re-checks every rule.
-func (h *Handler) HandOver(c echo.Context) error {
+func (h *Handler) HandOver(c *echo.Context) error {
 	campaignID := c.Param("id")
 	toUserID := c.FormValue("user_id")
 	if toUserID == "" {
@@ -832,7 +832,7 @@ func (h *Handler) HandOver(c echo.Context) error {
 // Storage renders the combined storage management page (GET /admin/storage).
 // Loads storage stats, files, global settings, overrides, and user/campaign
 // lists for the dropdown selectors.
-func (h *Handler) Storage(c echo.Context) error {
+func (h *Handler) Storage(c *echo.Context) error {
 	if h.mediaRepo == nil {
 		return apperror.NewMissingContext()
 	}
@@ -900,7 +900,7 @@ func (h *Handler) Storage(c echo.Context) error {
 }
 
 // DeleteMedia deletes a media file (DELETE /admin/media/:fileID).
-func (h *Handler) DeleteMedia(c echo.Context) error {
+func (h *Handler) DeleteMedia(c *echo.Context) error {
 	if h.mediaService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -928,7 +928,7 @@ func (h *Handler) DeleteMedia(c echo.Context) error {
 // --- Security ---
 
 // Security renders the security dashboard page (GET /admin/security).
-func (h *Handler) Security(c echo.Context) error {
+func (h *Handler) Security(c *echo.Context) error {
 	if h.securityService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -1033,7 +1033,7 @@ func (h *Handler) Security(c echo.Context) error {
 
 // UpdateRegistrationMode persists the site registration gate (POST
 // /admin/security/registration). Reauth-gated as a security-sensitive change.
-func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
+func (h *Handler) UpdateRegistrationMode(c *echo.Context) error {
 	if h.settingsService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -1056,7 +1056,7 @@ func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
 
 // SaveSignInProvider stores the provider setting
 // (POST /admin/security/sign-in-provider). Reauth-gated.
-func (h *Handler) SaveSignInProvider(c echo.Context) error {
+func (h *Handler) SaveSignInProvider(c *echo.Context) error {
 	if h.securityService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -1081,7 +1081,7 @@ func (h *Handler) SaveSignInProvider(c echo.Context) error {
 
 // TestSignInProvider sends the admin through a sign-in that only reports
 // back (POST /admin/security/sign-in-provider/test). Reauth-gated.
-func (h *Handler) TestSignInProvider(c echo.Context) error {
+func (h *Handler) TestSignInProvider(c *echo.Context) error {
 	if h.securityService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -1097,7 +1097,7 @@ func (h *Handler) TestSignInProvider(c echo.Context) error {
 // TerminateSession destroys a specific session by its token hash
 // (DELETE /admin/security/sessions/:hash). Uses hash-based lookup to avoid
 // exposing raw session tokens in admin HTML.
-func (h *Handler) TerminateSession(c echo.Context) error {
+func (h *Handler) TerminateSession(c *echo.Context) error {
 	if h.securityService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -1145,7 +1145,7 @@ func tokenHint(hash string) string {
 }
 
 // ForceLogoutUser destroys all sessions for a user (POST /admin/security/users/:id/force-logout).
-func (h *Handler) ForceLogoutUser(c echo.Context) error {
+func (h *Handler) ForceLogoutUser(c *echo.Context) error {
 	if h.securityService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -1173,7 +1173,7 @@ func (h *Handler) ForceLogoutUser(c echo.Context) error {
 }
 
 // DisableUser disables a user account (PUT /admin/security/users/:id/disable).
-func (h *Handler) DisableUser(c echo.Context) error {
+func (h *Handler) DisableUser(c *echo.Context) error {
 	if h.securityService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -1204,7 +1204,7 @@ func (h *Handler) DisableUser(c echo.Context) error {
 
 // DisableTwoFactor switches two-factor off for a user who is locked out of it
 // (PUT /admin/security/users/:id/two-factor/off).
-func (h *Handler) DisableTwoFactor(c echo.Context) error {
+func (h *Handler) DisableTwoFactor(c *echo.Context) error {
 	if h.securityService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -1220,7 +1220,7 @@ func (h *Handler) DisableTwoFactor(c echo.Context) error {
 }
 
 // EnableUser re-enables a disabled user account (PUT /admin/security/users/:id/enable).
-func (h *Handler) EnableUser(c echo.Context) error {
+func (h *Handler) EnableUser(c *echo.Context) error {
 	if h.securityService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -1247,7 +1247,7 @@ func (h *Handler) EnableUser(c echo.Context) error {
 // --- Database Explorer ---
 
 // Database renders the admin database explorer page (GET /admin/database).
-func (h *Handler) Database(c echo.Context) error {
+func (h *Handler) Database(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	var statuses []PluginMigrationStatus
@@ -1297,7 +1297,7 @@ func (h *Handler) Database(c echo.Context) error {
 // DatabaseStatusAPI returns core + plugin migration status as JSON
 // (GET /admin/database/status). Usable by external monitoring/alerting as well
 // as the admin page.
-func (h *Handler) DatabaseStatusAPI(c echo.Context) error {
+func (h *Handler) DatabaseStatusAPI(c *echo.Context) error {
 	if h.databaseExplorer == nil {
 		return apperror.NewInternal(fmt.Errorf("database explorer not configured"))
 	}
@@ -1318,7 +1318,7 @@ func (h *Handler) DatabaseStatusAPI(c echo.Context) error {
 
 // DatabaseSchemaAPI returns the full schema as JSON (GET /admin/database/schema).
 // The D3 widget fetches this to render the interactive diagram.
-func (h *Handler) DatabaseSchemaAPI(c echo.Context) error {
+func (h *Handler) DatabaseSchemaAPI(c *echo.Context) error {
 	if h.databaseExplorer == nil {
 		return apperror.NewInternal(fmt.Errorf("database explorer not configured"))
 	}
@@ -1332,7 +1332,7 @@ func (h *Handler) DatabaseSchemaAPI(c echo.Context) error {
 }
 
 // ApplyMigrationsAPI runs all pending plugin migrations (POST /admin/database/migrations/apply).
-func (h *Handler) ApplyMigrationsAPI(c echo.Context) error {
+func (h *Handler) ApplyMigrationsAPI(c *echo.Context) error {
 	if h.databaseExplorer == nil {
 		return apperror.NewInternal(fmt.Errorf("database explorer not configured"))
 	}
@@ -1396,7 +1396,7 @@ func (h *Handler) ApplyMigrationsAPI(c echo.Context) error {
 }
 
 // Systems renders the system diagnostics page (GET /admin/systems).
-func (h *Handler) Systems(c echo.Context) error {
+func (h *Handler) Systems(c *echo.Context) error {
 	ctx := c.Request().Context()
 	manifests := systems.Registry()
 	allSystems := systems.AllSystems()
@@ -1451,7 +1451,7 @@ func (h *Handler) diagnosticsCampaigns(ctx context.Context) []CampaignOption {
 // DiagnosticsWorkspace renders the in-app operator AI workspace: the everyday
 // questions, the checks in folds for picking by hand, and the hand-off to an
 // outside AI. Read-only.
-func (h *Handler) DiagnosticsWorkspace(c echo.Context) error {
+func (h *Handler) DiagnosticsWorkspace(c *echo.Context) error {
 	return middleware.Render(c, http.StatusOK, DiagnosticsWorkspacePage(DiagnosticsWorkspaceData{
 		FunctionsJSON: systems.FunctionsSpecJSON(),
 		CSRFToken:     middleware.GetCSRFToken(c),
@@ -1465,15 +1465,15 @@ func (h *Handler) DiagnosticsWorkspace(c echo.Context) error {
 // diagnostic catalog and returns the review fragment (the human-approval gate).
 // A malformed request is not an error response — it renders an inline message so
 // the operator can fix the paste. POST /admin/diagnostics/workspace/parse.
-func (h *Handler) DiagnosticsWorkspaceParse(c echo.Context) error {
+func (h *Handler) DiagnosticsWorkspaceParse(c *echo.Context) error {
 	return h.renderBatchReview(c, c.FormValue("batch"))
 }
 
 // DiagnosticsWorkspaceCompose turns the checks picked on the page into the same
 // batch request an AI would paste, and shows the same review step for it.
 // POST /admin/diagnostics/workspace/compose.
-func (h *Handler) DiagnosticsWorkspaceCompose(c echo.Context) error {
-	form, err := c.FormParams()
+func (h *Handler) DiagnosticsWorkspaceCompose(c *echo.Context) error {
+	form, err := c.FormValues()
 	if err != nil {
 		return h.renderBatchReview(c, "")
 	}
@@ -1493,7 +1493,7 @@ func (h *Handler) DiagnosticsWorkspaceCompose(c echo.Context) error {
 }
 
 // renderBatchReview validates a batch request and renders the review fragment.
-func (h *Handler) renderBatchReview(c echo.Context, raw string) error {
+func (h *Handler) renderBatchReview(c *echo.Context, raw string) error {
 	data := DiagnosticsReviewData{Raw: raw, CSRFToken: middleware.GetCSRFToken(c)}
 	plan, err := systems.ParseBatch(raw)
 	if err != nil {
@@ -1515,7 +1515,7 @@ func (h *Handler) renderBatchReview(c echo.Context, raw string) error {
 // client-built plan), executes the runnable read-only diagnostics, and returns
 // the compact, secret-redacted result fragment.
 // POST /admin/diagnostics/workspace/run.
-func (h *Handler) DiagnosticsWorkspaceRun(c echo.Context) error {
+func (h *Handler) DiagnosticsWorkspaceRun(c *echo.Context) error {
 	raw := c.FormValue("batch")
 	plan, err := systems.ParseBatch(raw)
 	if err != nil {

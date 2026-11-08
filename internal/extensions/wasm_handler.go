@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -29,7 +29,7 @@ func NewWASMHandler(manager *PluginManager, dispatcher *HookDispatcher, extSvc E
 
 // ListWASMPlugins returns info about all loaded WASM plugins.
 // GET /admin/extensions/wasm/plugins
-func (h *WASMHandler) ListWASMPlugins(c echo.Context) error {
+func (h *WASMHandler) ListWASMPlugins(c *echo.Context) error {
 	plugins := h.manager.ListPlugins()
 	if plugins == nil {
 		plugins = []WASMPluginInfo{}
@@ -42,7 +42,7 @@ func (h *WASMHandler) ListWASMPlugins(c echo.Context) error {
 
 // GetWASMPlugin returns info about a specific WASM plugin.
 // GET /admin/extensions/wasm/plugins/:extID/:slug
-func (h *WASMHandler) GetWASMPlugin(c echo.Context) error {
+func (h *WASMHandler) GetWASMPlugin(c *echo.Context) error {
 	extID := c.Param("extID")
 	slug := c.Param("slug")
 
@@ -56,7 +56,7 @@ func (h *WASMHandler) GetWASMPlugin(c echo.Context) error {
 
 // ReloadWASMPlugin reloads a WASM plugin from disk.
 // POST /admin/extensions/wasm/plugins/:extID/:slug/reload
-func (h *WASMHandler) ReloadWASMPlugin(c echo.Context) error {
+func (h *WASMHandler) ReloadWASMPlugin(c *echo.Context) error {
 	extID := c.Param("extID")
 	slug := c.Param("slug")
 
@@ -71,7 +71,7 @@ func (h *WASMHandler) ReloadWASMPlugin(c echo.Context) error {
 
 // StopWASMPlugin unloads a WASM plugin.
 // POST /admin/extensions/wasm/plugins/:extID/:slug/stop
-func (h *WASMHandler) StopWASMPlugin(c echo.Context) error {
+func (h *WASMHandler) StopWASMPlugin(c *echo.Context) error {
 	extID := c.Param("extID")
 	slug := c.Param("slug")
 
@@ -86,7 +86,7 @@ func (h *WASMHandler) StopWASMPlugin(c echo.Context) error {
 
 // CallWASMPlugin invokes a function on a WASM plugin in the context of a campaign.
 // POST /campaigns/:id/extensions/wasm/:extID/:slug/call
-func (h *WASMHandler) CallWASMPlugin(c echo.Context) error {
+func (h *WASMHandler) CallWASMPlugin(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -136,7 +136,7 @@ func (h *WASMHandler) CallWASMPlugin(c echo.Context) error {
 // ListCampaignWASMPlugins returns WASM plugins available for a campaign
 // (from enabled extensions that have WASM contributions).
 // GET /campaigns/:id/extensions/wasm/plugins
-func (h *WASMHandler) ListCampaignWASMPlugins(c echo.Context) error {
+func (h *WASMHandler) ListCampaignWASMPlugins(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

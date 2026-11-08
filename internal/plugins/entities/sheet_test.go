@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/labstack/echo/v5"
 )
 
 // The sheet is the DM Screen's view of an Adventures page. It answers 404, the
@@ -34,8 +35,7 @@ func TestSheet_Access(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c, rec := advCtx(tt.role, tt.dm, http.MethodGet, "/campaigns/c1/entities/"+tt.page+"/sheet")
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("c1", tt.page)
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: tt.page}})
 			h := advHandlerEnv()
 			err := h.Sheet(c)
 			if tt.wantCode == http.StatusNotFound {

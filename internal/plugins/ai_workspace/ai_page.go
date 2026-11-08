@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -93,7 +93,7 @@ func (h *Handler) SetConnector(svc *connector.Service, baseURL string) {
 }
 
 // connectView reads the campaign's connection and recent calls.
-func (h *Handler) connectView(c echo.Context, cc *campaigns.CampaignContext) (ConnectView, error) {
+func (h *Handler) connectView(c *echo.Context, cc *campaigns.CampaignContext) (ConnectView, error) {
 	v := ConnectView{CampaignID: cc.Campaign.ID, Now: time.Now(), Shown: sittingsStep, Loc: time.UTC}
 	if h.zone != nil {
 		if loc := h.zone(c.Request().Context(), auth.GetUserID(c)); loc != nil {
@@ -143,7 +143,7 @@ func (h *Handler) connectView(c echo.Context, cc *campaigns.CampaignContext) (Co
 
 // fillNotes reads the notes panel: the owner's switches, and whether Player
 // Notes are on in the campaign.
-func (h *Handler) fillNotes(c echo.Context, cc *campaigns.CampaignContext, v *ConnectView) error {
+func (h *Handler) fillNotes(c *echo.Context, cc *campaigns.CampaignContext, v *ConnectView) error {
 	if h.noteAccess == nil {
 		return nil
 	}
@@ -163,7 +163,7 @@ func (h *Handler) fillNotes(c echo.Context, cc *campaigns.CampaignContext, v *Co
 
 // ChangeNoteAccess saves the owner's switches for which shared notes the AI
 // may change, from its next call or paste.
-func (h *Handler) ChangeNoteAccess(c echo.Context) error {
+func (h *Handler) ChangeNoteAccess(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -198,7 +198,7 @@ func (h *Handler) ChangeNoteAccess(c echo.Context) error {
 }
 
 // AIPage renders the Your AI page.
-func (h *Handler) AIPage(c echo.Context) error {
+func (h *Handler) AIPage(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -214,7 +214,7 @@ func (h *Handler) AIPage(c echo.Context) error {
 }
 
 // AIActivity re-renders "What it did", which the page refreshes while open.
-func (h *Handler) AIActivity(c echo.Context) error {
+func (h *Handler) AIActivity(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -237,7 +237,7 @@ func (h *Handler) AIActivity(c echo.Context) error {
 // AIRequests re-renders the waiting requests, which the page asks for while
 // open. seen is what the page shows now (requestsSeen); when nothing changed
 // the answer is 204, so htmx swaps nothing.
-func (h *Handler) AIRequests(c echo.Context) error {
+func (h *Handler) AIRequests(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -253,7 +253,7 @@ func (h *Handler) AIRequests(c echo.Context) error {
 }
 
 // TurnDownRequest answers a waiting request No as a whole: nothing applies.
-func (h *Handler) TurnDownRequest(c echo.Context) error {
+func (h *Handler) TurnDownRequest(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -310,7 +310,7 @@ func requestLine(v ConnectView, q connector.Request) string {
 
 // ConnectAI makes a new connection key (revoking any earlier one) and shows
 // it once. sees is "players" or "owner"; change is "ask" or "look".
-func (h *Handler) ConnectAI(c echo.Context) error {
+func (h *Handler) ConnectAI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -343,7 +343,7 @@ func (h *Handler) ConnectAI(c echo.Context) error {
 
 // accessForm reads what the AI may do from a form: sees is "players" or
 // "owner", change is "ask" or "look".
-func accessForm(c echo.Context) (aiexport.PrivacyMode, bool, error) {
+func accessForm(c *echo.Context) (aiexport.PrivacyMode, bool, error) {
 	privacy := aiexport.PrivacyModeSafe
 	switch c.FormValue("sees") {
 	case "players":
@@ -363,7 +363,7 @@ func accessForm(c echo.Context) (aiexport.PrivacyMode, bool, error) {
 
 // connectionID is the key the page shows, which a pause or change names so
 // it never lands on a newer key made elsewhere since.
-func connectionID(c echo.Context) (int64, error) {
+func connectionID(c *echo.Context) (int64, error) {
 	id, err := strconv.ParseInt(c.FormValue("connection"), 10, 64)
 	if err != nil || id <= 0 {
 		return 0, apperror.NewBadRequest("that key isn't this campaign's key any more; reload the page")
@@ -372,12 +372,12 @@ func connectionID(c echo.Context) (int64, error) {
 }
 
 // PauseAI stops the campaign's key at once; what it asked for still waits.
-func (h *Handler) PauseAI(c echo.Context) error { return h.setPaused(c, true) }
+func (h *Handler) PauseAI(c *echo.Context) error { return h.setPaused(c, true) }
 
 // ResumeAI lets a paused key work again.
-func (h *Handler) ResumeAI(c echo.Context) error { return h.setPaused(c, false) }
+func (h *Handler) ResumeAI(c *echo.Context) error { return h.setPaused(c, false) }
 
-func (h *Handler) setPaused(c echo.Context, pause bool) error {
+func (h *Handler) setPaused(c *echo.Context, pause bool) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -413,7 +413,7 @@ func (h *Handler) setPaused(c echo.Context, pause bool) error {
 // ChangeAIAccess changes what the key may see and whether it may ask, from
 // its next call. Letting it see what the owner sees needs widen=yes, which
 // the page sends only after the owner confirms.
-func (h *Handler) ChangeAIAccess(c echo.Context) error {
+func (h *Handler) ChangeAIAccess(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -462,7 +462,7 @@ func widens(from, to aiexport.PrivacyMode) bool {
 }
 
 // DisconnectAI revokes the campaign's connection key at once.
-func (h *Handler) DisconnectAI(c echo.Context) error {
+func (h *Handler) DisconnectAI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

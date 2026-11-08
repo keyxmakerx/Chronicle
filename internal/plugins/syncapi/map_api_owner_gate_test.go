@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -87,7 +87,7 @@ func (s *stubCampaignSvcOwnerGate) GetMember(context.Context, string, string) (*
 // newMapAPIContext builds an Echo context for a map-scoped /api/v1 request
 // carrying a real Bearer-style APIKey (not the synthetic session sentinel),
 // with :id and :mapID params bound.
-func newMapAPIContext(method, path string, key *APIKey) (echo.Context, *httptest.ResponseRecorder) {
+func newMapAPIContext(method, path string, key *APIKey) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	// A harmless empty JSON body — CreateLayer/UpdateLayer/CreateFog call
 	// c.Bind; the other cases under test ignore the body entirely.
@@ -95,8 +95,7 @@ func newMapAPIContext(method, path string, key *APIKey) (echo.Context, *httptest
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "mapID")
-	c.SetParamValues("camp-1", "map-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mapID", Value: "map-1"}})
 	c.Set(apiKeyContextKey, key)
 	return c, rec
 }
@@ -122,16 +121,16 @@ func TestMapAPIHandler_OwnerOnlyRoutes_MatchWebRoleFloor(t *testing.T) {
 
 	cases := []struct {
 		name string
-		call func(h *MapAPIHandler, c echo.Context) error
+		call func(h *MapAPIHandler, c *echo.Context) error
 	}{
-		{"ListFog", func(h *MapAPIHandler, c echo.Context) error { return h.ListFog(c) }},
-		{"CreateFog", func(h *MapAPIHandler, c echo.Context) error { return h.CreateFog(c) }},
-		{"DeleteFog", func(h *MapAPIHandler, c echo.Context) error { return h.DeleteFog(c) }},
-		{"ResetFog", func(h *MapAPIHandler, c echo.Context) error { return h.ResetFog(c) }},
-		{"CreateLayer", func(h *MapAPIHandler, c echo.Context) error { return h.CreateLayer(c) }},
-		{"UpdateLayer", func(h *MapAPIHandler, c echo.Context) error { return h.UpdateLayer(c) }},
-		{"DeleteLayer", func(h *MapAPIHandler, c echo.Context) error { return h.DeleteLayer(c) }},
-		{"DeleteToken", func(h *MapAPIHandler, c echo.Context) error { return h.DeleteToken(c) }},
+		{"ListFog", func(h *MapAPIHandler, c *echo.Context) error { return h.ListFog(c) }},
+		{"CreateFog", func(h *MapAPIHandler, c *echo.Context) error { return h.CreateFog(c) }},
+		{"DeleteFog", func(h *MapAPIHandler, c *echo.Context) error { return h.DeleteFog(c) }},
+		{"ResetFog", func(h *MapAPIHandler, c *echo.Context) error { return h.ResetFog(c) }},
+		{"CreateLayer", func(h *MapAPIHandler, c *echo.Context) error { return h.CreateLayer(c) }},
+		{"UpdateLayer", func(h *MapAPIHandler, c *echo.Context) error { return h.UpdateLayer(c) }},
+		{"DeleteLayer", func(h *MapAPIHandler, c *echo.Context) error { return h.DeleteLayer(c) }},
+		{"DeleteToken", func(h *MapAPIHandler, c *echo.Context) error { return h.DeleteToken(c) }},
 	}
 
 	for _, tc := range cases {

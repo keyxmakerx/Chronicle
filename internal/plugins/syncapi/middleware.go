@@ -13,10 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/changesource"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -41,7 +42,7 @@ const SyncAPIAddonSlug = "sync-api"
 // Under the multi-auth path (RequireAuthOrAPIKey), a session-authed caller
 // gets a synthetic APIKey with ID == 0; callers that need to distinguish
 // real keys from session callers should check for that sentinel.
-func GetAPIKey(c echo.Context) *APIKey {
+func GetAPIKey(c *echo.Context) *APIKey {
 	key, _ := c.Get(apiKeyContextKey).(*APIKey)
 	return key
 }
@@ -85,7 +86,7 @@ func RequireAuthOrAPIKey(authSvc auth.AuthService, campaignSvc campaigns.Campaig
 	apiKey := RequireAPIKey(syncSvc)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		apiKeyChain := apiKey(next)
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if key, ok := tryAuthFromSession(c, authSvc, campaignSvc); ok {
 				c.Set(apiKeyContextKey, key)
 				return next(c)
@@ -104,7 +105,7 @@ func RequireAuthOrAPIKey(authSvc auth.AuthService, campaignSvc campaigns.Campaig
 // isn't a member of the campaign in the URL must return false here rather
 // than 403, otherwise a real API key for the same campaign would be
 // blocked by the session-membership failure.
-func tryAuthFromSession(c echo.Context, authSvc auth.AuthService, campaignSvc campaigns.CampaignService) (*APIKey, bool) {
+func tryAuthFromSession(c *echo.Context, authSvc auth.AuthService, campaignSvc campaigns.CampaignService) (*APIKey, bool) {
 	token := auth.GetSessionTokenFromCookie(c)
 	if token == "" {
 		return nil, false
@@ -186,7 +187,7 @@ func recordKeyUsage(ctx context.Context, service SyncAPIService, key *APIKey, ip
 // checks the IP blocklist, verifies IP allowlist, and records the request.
 func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			ctx := c.Request().Context()
 			ip := c.RealIP()
 
@@ -291,10 +292,10 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 			err = next(c)
 			duration := time.Since(start)
 
-			statusCode := c.Response().Status
+			statusCode := middleware.ResponseState(c).Status
 			if err != nil {
-				if he, ok := err.(*echo.HTTPError); ok {
-					statusCode = he.Code
+				if sc := echo.StatusCode(err); sc != 0 {
+					statusCode = sc
 				} else {
 					statusCode = http.StatusInternalServerError
 				}
@@ -319,7 +320,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 				IPAddress:    ip,
 				UserAgent:    strPtr(c.Request().UserAgent()),
 				RequestSize:  int(c.Request().ContentLength),
-				ResponseSize: int(c.Response().Size),
+				ResponseSize: int(middleware.ResponseState(c).Size),
 				DurationMs:   int(duration.Milliseconds()),
 				ErrorMessage: errMsg,
 			}
@@ -335,7 +336,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 // RequirePermission returns middleware that checks the API key has a specific permission.
 func RequirePermission(perm APIKeyPermission) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			key := GetAPIKey(c)
 			if key == nil {
 				return apperror.NewUnauthorized("api key required")
@@ -360,7 +361,7 @@ func RequirePermission(perm APIKeyPermission) echo.MiddlewareFunc {
 // access another.
 func RequireCampaignMatch(campaignSvc campaigns.CampaignService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			key := GetAPIKey(c)
 			if key == nil {
 				return apperror.NewUnauthorized("api key required")
@@ -404,7 +405,7 @@ func RequireCampaignMatch(campaignSvc campaigns.CampaignService) echo.Middleware
 // parallel sub-group that omits this middleware — see RegisterAPIRoutes.
 func RequireJSONContentType() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			switch c.Request().Method {
 			case http.MethodPost, http.MethodPut, http.MethodPatch:
 			default:
@@ -457,7 +458,7 @@ var globalRateLimiter = &rateLimiter{
 // the auth service's responsibility, not the API-key limiter's.
 func RateLimit(service SyncAPIService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			key := GetAPIKey(c)
 			if key == nil {
 				return next(c)
@@ -549,7 +550,7 @@ func isIPAllowed(ip string, allowlist []string) bool {
 // the addons plugin's own middleware and are unaffected.
 func RequireAddonAPI(addonChecker AddonChecker, slug string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			campaignID := c.Param("id")
 			if campaignID == "" {
 				return apperror.NewBadRequest("campaign ID required")
@@ -594,7 +595,7 @@ type AddonChecker interface {
 // Fails closed on any uncertainty: no key, no campaign, unreadable state.
 func RequireSyncAPIAddon(addonChecker AddonChecker) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			key := GetAPIKey(c)
 			if key == nil {
 				// Auth middleware must have run before this one; reaching
@@ -654,7 +655,7 @@ func RequireSyncAPIAddon(addonChecker AddonChecker) echo.MiddlewareFunc {
 // key's creator lost access" is the more fundamental reason to report first.
 func RequireKeyOwnerStillOwner(campaignSvc campaigns.CampaignService, syncSvc SyncAPIService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			key := GetAPIKey(c)
 			if key == nil {
 				return apperror.NewUnauthorized("api key required")
@@ -745,7 +746,7 @@ func addonDisabledError(slug string) *apperror.AppError {
 // widgets on these routes) is the web UI. Mounted after the identity resolver.
 func WithChangeSource() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if key := GetAPIKey(c); key != nil {
 				kind := changesource.KindFoundry
 				if key.ID == synthKeySessionID {

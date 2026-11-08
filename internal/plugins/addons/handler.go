@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -29,7 +29,7 @@ func NewHandler(service AddonService) *Handler {
 // AdminAddonsPage renders the admin addon management page (GET /admin/addons).
 // Filters out module-category addons (shown on Content Packs page) and
 // planned addons without backing code (future work, not actionable).
-func (h *Handler) AdminAddonsPage(c echo.Context) error {
+func (h *Handler) AdminAddonsPage(c *echo.Context) error {
 	allAddons, err := h.service.List(c.Request().Context())
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func (h *Handler) AdminAddonsPage(c echo.Context) error {
 }
 
 // CreateAddon handles POST /admin/addons to register a new addon.
-func (h *Handler) CreateAddon(c echo.Context) error {
+func (h *Handler) CreateAddon(c *echo.Context) error {
 	input := CreateAddonInput{
 		Slug:        c.FormValue("slug"),
 		Name:        c.FormValue("name"),
@@ -76,7 +76,7 @@ func (h *Handler) CreateAddon(c echo.Context) error {
 }
 
 // UpdateAddonStatus handles PUT /admin/addons/:addonID/status.
-func (h *Handler) UpdateAddonStatus(c echo.Context) error {
+func (h *Handler) UpdateAddonStatus(c *echo.Context) error {
 	addonID, err := strconv.Atoi(c.Param("addonID"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid addon ID")
@@ -93,7 +93,7 @@ func (h *Handler) UpdateAddonStatus(c echo.Context) error {
 }
 
 // DeleteAddon handles DELETE /admin/addons/:addonID.
-func (h *Handler) DeleteAddon(c echo.Context) error {
+func (h *Handler) DeleteAddon(c *echo.Context) error {
 	addonID, err := strconv.Atoi(c.Param("addonID"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid addon ID")
@@ -114,7 +114,7 @@ func (h *Handler) DeleteAddon(c echo.Context) error {
 // --- Campaign-scoped Routes (campaign owner) ---
 
 // CampaignAddonsAPI returns the addon list with per-campaign enabled state (GET /campaigns/:id/addons).
-func (h *Handler) CampaignAddonsAPI(c echo.Context) error {
+func (h *Handler) CampaignAddonsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -129,7 +129,7 @@ func (h *Handler) CampaignAddonsAPI(c echo.Context) error {
 
 // CampaignAddonsFragment returns the addons list fragment for embedding in the
 // Customization Hub Extensions tab (GET /campaigns/:id/addons/fragment).
-func (h *Handler) CampaignAddonsFragment(c echo.Context) error {
+func (h *Handler) CampaignAddonsFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -145,7 +145,7 @@ func (h *Handler) CampaignAddonsFragment(c echo.Context) error {
 }
 
 // ToggleCampaignAddon handles PUT /campaigns/:id/addons/:addonID/toggle.
-func (h *Handler) ToggleCampaignAddon(c echo.Context) error {
+func (h *Handler) ToggleCampaignAddon(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -218,7 +218,7 @@ func (h *Handler) ToggleCampaignAddon(c echo.Context) error {
 
 // addonLabel returns an addon's name for the change log, or "" when it can't
 // be read; the id is still recorded.
-func (h *Handler) addonLabel(c echo.Context, addonID int) string {
+func (h *Handler) addonLabel(c *echo.Context, addonID int) string {
 	a, err := h.service.GetByID(c.Request().Context(), addonID)
 	if err != nil || a == nil {
 		return ""

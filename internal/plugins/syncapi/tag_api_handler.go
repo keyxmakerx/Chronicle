@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -36,7 +36,7 @@ func NewTagAPIHandler(syncSvc SyncAPIService, tagSvc tags.TagService, entitySvc 
 }
 
 // resolveRole returns the API key owner's role in the campaign for visibility filtering.
-func (h *TagAPIHandler) resolveRole(c echo.Context) int {
+func (h *TagAPIHandler) resolveRole(c *echo.Context) int {
 	key := GetAPIKey(c)
 	if key == nil {
 		return 0
@@ -50,7 +50,7 @@ func (h *TagAPIHandler) resolveRole(c echo.Context) int {
 
 // seesDmOnly reports whether the caller may read and keep dm_only tags: the
 // owner and Co-DMs, as on the web. A Scribe sees what players see.
-func (h *TagAPIHandler) seesDmOnly(c echo.Context, campaignID string) bool {
+func (h *TagAPIHandler) seesDmOnly(c *echo.Context, campaignID string) bool {
 	if h.resolveRole(c) >= int(campaigns.RoleOwner) {
 		return true
 	}
@@ -66,7 +66,7 @@ func (h *TagAPIHandler) seesDmOnly(c echo.Context, campaignID string) bool {
 
 // ListTags returns all tags for a campaign with DM-only filtering based on role.
 // GET /api/v1/campaigns/:id/tags
-func (h *TagAPIHandler) ListTags(c echo.Context) error {
+func (h *TagAPIHandler) ListTags(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	// The owner and Co-DMs can see DM-only tags; Scribes and Players cannot.
@@ -97,7 +97,7 @@ type apiCreateTagRequest struct {
 
 // CreateTag creates a new tag in the campaign.
 // POST /api/v1/campaigns/:id/tags
-func (h *TagAPIHandler) CreateTag(c echo.Context) error {
+func (h *TagAPIHandler) CreateTag(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	var req apiCreateTagRequest
@@ -126,7 +126,7 @@ type apiUpdateTagRequest struct {
 
 // UpdateTag updates an existing tag.
 // PUT /api/v1/campaigns/:id/tags/:tagId
-func (h *TagAPIHandler) UpdateTag(c echo.Context) error {
+func (h *TagAPIHandler) UpdateTag(c *echo.Context) error {
 	campaignID := c.Param("id")
 	tagID, err := strconv.Atoi(c.Param("tagId"))
 	if err != nil {
@@ -168,7 +168,7 @@ func (h *TagAPIHandler) UpdateTag(c echo.Context) error {
 
 // DeleteTag removes a tag from the campaign.
 // DELETE /api/v1/campaigns/:id/tags/:tagId
-func (h *TagAPIHandler) DeleteTag(c echo.Context) error {
+func (h *TagAPIHandler) DeleteTag(c *echo.Context) error {
 	campaignID := c.Param("id")
 	tagID, err := strconv.Atoi(c.Param("tagId"))
 	if err != nil {
@@ -200,7 +200,7 @@ type apiSetEntityTagsRequest struct {
 
 // SetEntityTags replaces all tags on an entity with the given set.
 // PUT /api/v1/campaigns/:id/entities/:entityID/tags
-func (h *TagAPIHandler) SetEntityTags(c echo.Context) error {
+func (h *TagAPIHandler) SetEntityTags(c *echo.Context) error {
 	campaignID := c.Param("id")
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
@@ -245,7 +245,7 @@ type bulkTagResult struct {
 
 // BulkAssignTags applies tag changes to multiple entities at once.
 // POST /api/v1/campaigns/:id/entities/bulk-tags
-func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
+func (h *TagAPIHandler) BulkAssignTags(c *echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()
 

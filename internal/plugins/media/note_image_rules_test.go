@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -268,8 +268,7 @@ func TestInfo_NotePictureDetailsGoToTheUploaderOnly(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/media/"+tt.file+"/info", nil), rec)
-			c.SetParamNames("fileID")
-			c.SetParamValues(tt.file)
+			c.SetPathValues(echo.PathValues{{Name: "fileID", Value: tt.file}})
 			auth.SetSession(c, &auth.Session{UserID: tt.who, IsAdmin: tt.admin})
 			h := &Handler{service: &linkFilesService{files: files}}
 			if err := h.Info(c); err != nil {

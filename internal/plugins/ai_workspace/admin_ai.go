@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -19,7 +19,7 @@ import (
 // writes to. Declared here so this plugin never imports admin; app wiring
 // supplies an adapter that stamps the signed-in admin. Best-effort.
 type ActivityRecorder interface {
-	RecordAdminChange(c echo.Context, action, targetType, targetID, label string)
+	RecordAdminChange(c *echo.Context, action, targetType, targetID, label string)
 }
 
 // AdminAIHandler is Site admin ▸ AI: every AI key on the server, what looks
@@ -27,7 +27,7 @@ type ActivityRecorder interface {
 type AdminAIHandler struct {
 	svc      *connector.Service
 	activity ActivityRecorder
-	zone     func(echo.Context) *time.Location
+	zone     func(*echo.Context) *time.Location
 }
 
 // NewAdminAIHandler creates Site admin ▸ AI over the connector's service.
@@ -38,9 +38,9 @@ func (h *AdminAIHandler) SetActivityRecorder(r ActivityRecorder) { h.activity = 
 
 // SetZone wires the admin's time zone, for the times on the page. Optional:
 // unwired, times are UTC.
-func (h *AdminAIHandler) SetZone(f func(echo.Context) *time.Location) { h.zone = f }
+func (h *AdminAIHandler) SetZone(f func(*echo.Context) *time.Location) { h.zone = f }
 
-func (h *AdminAIHandler) record(c echo.Context, action, targetType, targetID, label string) {
+func (h *AdminAIHandler) record(c *echo.Context, action, targetType, targetID, label string) {
 	if h.activity != nil {
 		h.activity.RecordAdminChange(c, action, targetType, targetID, label)
 	}
@@ -66,7 +66,7 @@ type AdminAIView struct {
 	Note string
 }
 
-func (h *AdminAIHandler) view(c echo.Context, note string) (*AdminAIView, error) {
+func (h *AdminAIHandler) view(c *echo.Context, note string) (*AdminAIView, error) {
 	v, err := h.svc.Admin(c.Request().Context())
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (h *AdminAIHandler) view(c echo.Context, note string) (*AdminAIView, error)
 }
 
 // Page renders Site admin ▸ AI.
-func (h *AdminAIHandler) Page(c echo.Context) error {
+func (h *AdminAIHandler) Page(c *echo.Context) error {
 	v, err := h.view(c, "")
 	if err != nil {
 		return err
@@ -94,7 +94,7 @@ func (h *AdminAIHandler) Page(c echo.Context) error {
 
 // SetAccess saves the server's switches: ai_off=1 stops every key,
 // players=1 lets owners turn on players' AI.
-func (h *AdminAIHandler) SetAccess(c echo.Context) error {
+func (h *AdminAIHandler) SetAccess(c *echo.Context) error {
 	a := connector.ServerAccess{AIOff: c.FormValue("ai_off") == "1", PlayersBlocked: c.FormValue("players") != "1"}
 	if err := h.svc.SetServerAccess(c.Request().Context(), a, auth.GetUserID(c)); err != nil {
 		return err
@@ -117,7 +117,7 @@ func (h *AdminAIHandler) SetAccess(c echo.Context) error {
 }
 
 // Key pauses, resumes or ends one key.
-func (h *AdminAIHandler) Key(c echo.Context) error {
+func (h *AdminAIHandler) Key(c *echo.Context) error {
 	id, err := strconv.ParseInt(c.Param("kid"), 10, 64)
 	if err != nil || id <= 0 {
 		return apperror.NewBadRequest("that isn't a key")
@@ -138,7 +138,7 @@ func (h *AdminAIHandler) Key(c echo.Context) error {
 
 // Settle closes a warning; for a wrong-key flood it also stops turning the
 // address away.
-func (h *AdminAIHandler) Settle(c echo.Context) error {
+func (h *AdminAIHandler) Settle(c *echo.Context) error {
 	id, err := strconv.ParseInt(c.Param("aid"), 10, 64)
 	if err != nil || id <= 0 {
 		return apperror.NewBadRequest("that isn't a warning")

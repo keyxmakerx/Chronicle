@@ -14,7 +14,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -56,8 +56,7 @@ func serveToggleRevealAs(t *testing.T, tog VisibilityToggler, campaignID, eid st
 	req := httptest.NewRequest(http.MethodPost, "/campaigns/"+campaignID+"/npcs/"+eid+"/reveal", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues(campaignID, eid)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: campaignID}, {Name: "eid", Value: eid}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:    &campaigns.Campaign{ID: campaignID},
 		MemberRole:  campaigns.RoleScribe,

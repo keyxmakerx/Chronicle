@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
@@ -13,7 +13,7 @@ import (
 // page rendering and JSON handlers so both mint links the same way. A nil
 // signer (signing off) returns nil funcs and callers fall back to unsigned
 // /media/ paths.
-func mediaSignerFor(signer *media.URLSigner, c echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc) {
+func mediaSignerFor(signer *media.URLSigner, c *echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc) {
 	if signer == nil {
 		return nil, nil
 	}

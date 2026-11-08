@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -41,7 +41,7 @@ func pngBytes(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-func pictureRequest(t *testing.T, role campaigns.Role, file []byte, declared string) (echo.Context, *httptest.ResponseRecorder) {
+func pictureRequest(t *testing.T, role campaigns.Role, file []byte, declared string) (*echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)

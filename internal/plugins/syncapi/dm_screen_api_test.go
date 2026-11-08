@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -45,7 +45,7 @@ func (f *fakeDMScreen) SetDowntime(_ context.Context, campaignID, userID string,
 	return map[string]any{"open": open, "applied": 0, "failed": 0}, nil
 }
 
-func dmScreenContext(method, body string, keyID int, params ...string) (echo.Context, *httptest.ResponseRecorder) {
+func dmScreenContext(method, body string, keyID int, params ...string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/api/v1/campaigns/camp-1/dm-screen", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -55,8 +55,7 @@ func dmScreenContext(method, body string, keyID int, params ...string) (echo.Con
 	for i := 0; i+1 < len(params); i += 2 {
 		names, values = append(names, params[i]), append(values, params[i+1])
 	}
-	c.SetParamNames(names...)
-	c.SetParamValues(values...)
+	c.SetPathValues(pathValuesOf(names, values))
 	c.Set(apiKeyContextKey, &APIKey{ID: keyID, CampaignID: "camp-1", UserID: "user-1", IsActive: true})
 	return c, rec
 }

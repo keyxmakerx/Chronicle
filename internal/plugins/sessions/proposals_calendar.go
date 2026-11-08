@@ -3,7 +3,7 @@ package sessions
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -87,7 +87,7 @@ func calendarPollsFrom(views []ProposalView, names map[string]string, members in
 // OpenPollsAPI returns the open date polls for the calendar, dates in the
 // zone the calendar asks for (?tz=, else the viewer's own).
 // GET /campaigns/:id/proposals/open
-func (h *Handler) OpenPollsAPI(c echo.Context) error {
+func (h *Handler) OpenPollsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	userID := auth.GetUserID(c)

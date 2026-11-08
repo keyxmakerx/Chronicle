@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"context"
 	"encoding/json"
@@ -401,8 +401,7 @@ func TestDrawingHandler_GetDrawing_ShadowedIs404ForPlayers(t *testing.T) {
 		e := echo.New()
 		rec := httptest.NewRecorder()
 		c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-		c.SetParamNames("id", "mid", "did")
-		c.SetParamValues("camp-1", "map-1", "d-1")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}, {Name: "did", Value: "d-1"}})
 		c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
 		err := h.GetDrawing(c)
 		got := http.StatusOK

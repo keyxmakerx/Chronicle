@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
-	emw "github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	emw "github.com/labstack/echo/v5/middleware"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -22,13 +22,13 @@ import (
 func newAppTestRouter(addonEnabled bool, roles map[string]campaigns.Role) (*echo.Echo, *fakeCalendarSvc) {
 	e := echo.New()
 	e.Use(emw.Recover())
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		if ae, ok := err.(*apperror.AppError); ok {
 			_ = c.JSON(ae.Code, map[string]string{"error": ae.Type, "message": ae.Message})
 			return
 		}
-		if he, ok := err.(*echo.HTTPError); ok {
-			_ = c.NoContent(he.Code)
+		if code := echo.StatusCode(err); code != 0 {
+			_ = c.NoContent(code)
 			return
 		}
 		_ = c.NoContent(http.StatusInternalServerError)

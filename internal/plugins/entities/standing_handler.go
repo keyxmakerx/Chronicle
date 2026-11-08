@@ -3,7 +3,7 @@ package entities
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -51,7 +51,7 @@ func RegisterStandingRoutes(e *echo.Echo, h *StandingHandler, campaignSvc campai
 // an id from another campaign, or a page hidden from this player, reads as not
 // found. VisibilityRole is used as on the page itself, so a Co-Director sees
 // what the owner sees.
-func (h *StandingHandler) page(c echo.Context) (*campaigns.CampaignContext, *Entity, error) {
+func (h *StandingHandler) page(c *echo.Context) (*campaigns.CampaignContext, *Entity, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, nil, apperror.NewMissingContext()
@@ -72,7 +72,7 @@ func (h *StandingHandler) page(c echo.Context) (*campaigns.CampaignContext, *Ent
 }
 
 // Get returns one subject's standing for the caller.
-func (h *StandingHandler) Get(c echo.Context) error {
+func (h *StandingHandler) Get(c *echo.Context) error {
 	cc, entity, err := h.page(c)
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ type standingReasonBody struct {
 }
 
 // AddReason adds a reason to a subject's standing and returns the standing.
-func (h *StandingHandler) AddReason(c echo.Context) error {
+func (h *StandingHandler) AddReason(c *echo.Context) error {
 	cc, entity, err := h.page(c)
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (h *StandingHandler) AddReason(c echo.Context) error {
 }
 
 // RemoveReason removes a reason and returns the standing that is left.
-func (h *StandingHandler) RemoveReason(c echo.Context) error {
+func (h *StandingHandler) RemoveReason(c *echo.Context) error {
 	cc, entity, err := h.page(c)
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ type standingSettingsBody struct {
 }
 
 // SetSettings sets whether players can see the page's standing.
-func (h *StandingHandler) SetSettings(c echo.Context) error {
+func (h *StandingHandler) SetSettings(c *echo.Context) error {
 	cc, entity, err := h.page(c)
 	if err != nil {
 		return err

@@ -3,7 +3,7 @@ package packages
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -21,7 +21,7 @@ func NewOwnerHandler(service PackageService) *OwnerHandler {
 }
 
 // BrowseSystems renders the systems browse page (GET /systems/browse).
-func (h *OwnerHandler) BrowseSystems(c echo.Context) error {
+func (h *OwnerHandler) BrowseSystems(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	pkgs, err := h.service.ListPackages(ctx)
@@ -44,7 +44,7 @@ func (h *OwnerHandler) BrowseSystems(c echo.Context) error {
 }
 
 // SubmitSystemForm renders the submission form (GET /systems/submit).
-func (h *OwnerHandler) SubmitSystemForm(c echo.Context) error {
+func (h *OwnerHandler) SubmitSystemForm(c *echo.Context) error {
 	ctx := c.Request().Context()
 	secSettings, _ := h.service.GetSecuritySettings(ctx)
 	csrfToken := middleware.GetCSRFToken(c)
@@ -52,7 +52,7 @@ func (h *OwnerHandler) SubmitSystemForm(c echo.Context) error {
 }
 
 // HandleSubmitSystem processes a system submission (POST /systems/submit).
-func (h *OwnerHandler) HandleSubmitSystem(c echo.Context) error {
+func (h *OwnerHandler) HandleSubmitSystem(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	session := auth.GetSession(c)
@@ -74,7 +74,7 @@ func (h *OwnerHandler) HandleSubmitSystem(c echo.Context) error {
 }
 
 // MySubmissions renders the user's submitted packages (GET /systems/my-submissions).
-func (h *OwnerHandler) MySubmissions(c echo.Context) error {
+func (h *OwnerHandler) MySubmissions(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	session := auth.GetSession(c)

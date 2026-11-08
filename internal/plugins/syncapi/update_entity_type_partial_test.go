@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -67,8 +67,7 @@ func TestUpdateEntityType_PartialBody(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(req, rec)
-			c.SetParamNames("id", "typeID")
-			c.SetParamValues("camp-1", "3")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "typeID", Value: "3"}})
 			c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "user-1", IsActive: true})
 
 			if err := h.UpdateEntityType(c); err != nil {
@@ -98,8 +97,7 @@ func TestEntityTypeWrites_RequireOwner(t *testing.T) {
 				req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"Site"}`))
 				req.Header.Set("Content-Type", "application/json")
 				c := echo.New().NewContext(req, httptest.NewRecorder())
-				c.SetParamNames("id", "typeID")
-				c.SetParamValues("camp-1", "3")
+				c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "typeID", Value: "3"}})
 				c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "user-1", IsActive: true})
 
 				var err error

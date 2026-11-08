@@ -17,7 +17,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/changesource"
@@ -2855,7 +2855,7 @@ func (a *App) RegisterRoutes() {
 	// Health check endpoint for Docker/Cosmos health monitoring.
 	// Pings both MariaDB and Redis to report actual infrastructure health.
 	// Registered on both /healthz (Kubernetes convention) and /health (common alias).
-	healthHandler := func(c echo.Context) error {
+	healthHandler := func(c *echo.Context) error {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
 
@@ -3039,7 +3039,7 @@ func (a *App) RegisterRoutes() {
 	// Discover page (/) -- browse public campaigns. Uses OptionalAuth so
 	// authenticated users get the App layout with sidebar, while guests
 	// see a standalone page with signup CTA.
-	e.GET("/", func(c echo.Context) error {
+	e.GET("/", func(c *echo.Context) error {
 		publicCampaigns, err := campaignService.ListPublic(c.Request().Context(), 24)
 		if err != nil {
 			slog.Warn("failed to load public campaigns for discover page", slog.Any("error", err))
@@ -3052,7 +3052,7 @@ func (a *App) RegisterRoutes() {
 	}, auth.OptionalAuth(authService))
 
 	// About/Welcome page -- Chronicle marketing and feature highlights.
-	e.GET("/about", func(c echo.Context) error {
+	e.GET("/about", func(c *echo.Context) error {
 		return middleware.Render(c, http.StatusOK, pages.AboutPage())
 	}, auth.OptionalAuth(authService))
 
@@ -3176,7 +3176,7 @@ func (a *App) RegisterRoutes() {
 	// /media/upload to honor the live admin-configured limit. Falls back
 	// to the env-var value if the settings lookup fails so a transient
 	// DB hiccup can't block all uploads.
-	resolveMaxUpload := func(c echo.Context) int64 {
+	resolveMaxUpload := func(c *echo.Context) int64 {
 		userID := auth.GetUserID(c)
 		if eff, err := settingsService.GetEffectiveLimits(c.Request().Context(), userID, ""); err == nil && eff != nil {
 			if eff.MaxUploadSize > 0 {
@@ -4078,7 +4078,7 @@ func (a *App) RegisterRoutes() {
 		auth.RequireAuth(authService),
 		campaigns.RequireCampaignAccess(campaignService),
 	)
-	calendarRedirectToCalendars := func(c echo.Context) error {
+	calendarRedirectToCalendars := func(c *echo.Context) error {
 		return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/calendars", c.Param("id")))
 	}
 	calendarRebuildGroup.GET("/apps/calendar", calendarRedirectToCalendars)
@@ -4737,10 +4737,10 @@ func (a *App) RegisterRoutes() {
 		addons:    addonService,
 		entities:  entityService,
 		routes: func() []systems.RouteFact {
-			live := e.Routes()
+			live := e.Router().Routes()
 			out := make([]systems.RouteFact, 0, len(live))
 			for _, r := range live {
-				out = append(out, systems.RouteFact{Method: r.Method, Path: r.Path, Handler: r.Name})
+				out = append(out, systems.RouteFact{Method: r.Method, Path: r.Path, Handler: a.routeHandler(r.Method, r.Path)})
 			}
 			return out
 		},
@@ -4815,8 +4815,8 @@ func (a *App) RegisterRoutes() {
 		entityService.SetFieldChangeObserver(fieldObservers{armoryObserver,
 			&playerChangeRecorder{svc: playerChangesSvc, members: campaignService, types: entityService}})
 		playerchanges.RegisterRoutes(e, playerchanges.NewHandler(playerChangesSvc,
-			func(c echo.Context) int { return keepMonths(c.Request().Context()) },
-			func(c echo.Context) *time.Location {
+			func(c *echo.Context) int { return keepMonths(c.Request().Context()) },
+			func(c *echo.Context) *time.Location {
 				u, err := authService.GetUser(c.Request().Context(), auth.GetUserID(c))
 				if err != nil || u == nil || u.Timezone == nil {
 					return nil
@@ -5352,7 +5352,7 @@ func (a *App) RegisterRoutes() {
 		aiConnectorSvc.SetWatch(connector.NewWatchRepository(a.DB))
 		aiAdminHandler := ai_workspace.NewAdminAIHandler(aiConnectorSvc)
 		aiAdminHandler.SetActivityRecorder(adminActivity)
-		aiAdminHandler.SetZone(func(c echo.Context) *time.Location {
+		aiAdminHandler.SetZone(func(c *echo.Context) *time.Location {
 			u, err := authService.GetUser(c.Request().Context(), auth.GetUserID(c))
 			if err != nil || u == nil || u.Timezone == nil {
 				return nil
@@ -5717,7 +5717,7 @@ func (a *App) RegisterRoutes() {
 	syncAPIHandler.SetCampaignSystemLister(campaignSystemMgr)
 
 	// Dashboard redirects to campaigns list for authenticated users.
-	e.GET("/dashboard", func(c echo.Context) error {
+	e.GET("/dashboard", func(c *echo.Context) error {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
 	}, auth.RequireAuth(authService))
 
@@ -5735,10 +5735,10 @@ func (a *App) RegisterRoutes() {
 	// Registers the callback that copies auth/campaign data from Echo's
 	// context into Go's context.Context so Templ templates can read it.
 	// This runs inside middleware.Render() before every template render.
-	middleware.MediaSigner = func(c echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc) {
+	middleware.MediaSigner = func(c *echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc) {
 		return mediaSignerFor(urlSigner, c)
 	}
-	middleware.LayoutInjector = func(c echo.Context, ctx context.Context) context.Context {
+	middleware.LayoutInjector = func(c *echo.Context, ctx context.Context) context.Context {
 		// Inject plugin-contributed body scripts (constant for process lifetime),
 		// so plugins can register widget scripts without hardcoding paths in the
 		// core base.templ layout.
@@ -7020,7 +7020,7 @@ func renderSkyboxBlock(ctx context.Context, svc skyboxCalendarService, rc entiti
 	campaignID := rc.CC.Campaign.ID
 	// Same viewer construction as calendar.viewerFrom (handler.go): promoted
 	// VisibilityRole + the request's user id, empty for an anonymous
-	// public-campaign visitor — this block has no echo.Context to build it
+	// public-campaign visitor — this block has no *echo.Context to build it
 	// the handler's own way.
 	viewer := permissions.RequestViewer(rc.CC.VisibilityRole(), rc.UserID)
 	cal, err := svc.GetDefaultCalendarForViewer(ctx, campaignID, viewer)

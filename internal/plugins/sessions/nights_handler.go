@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -16,7 +16,7 @@ import (
 // ListGameNightsAPI returns the game nights in a date window, each with the
 // whole table's answers, for the calendar's day card and event page.
 // GET /campaigns/:id/sessions/nights?from=YYYY-MM-DD&to=YYYY-MM-DD
-func (h *Handler) ListGameNightsAPI(c echo.Context) error {
+func (h *Handler) ListGameNightsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	// Without the member list there is no honest roster: a missing member
@@ -76,7 +76,7 @@ type nightPageLink struct {
 // With ?date= (one of the session's nights) it adds the night's Journal
 // entries the viewer can read and, for the DM, the check-in.
 // GET /campaigns/:id/sessions/:sid/page[?date=YYYY-MM-DD]
-func (h *Handler) NightPageAPI(c echo.Context) error {
+func (h *Handler) NightPageAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	session, err := h.requireSessionInCampaign(c, c.Param("sid"), cc.Campaign.ID)
 	if err != nil {
@@ -110,7 +110,7 @@ func (h *Handler) SetNightEntryService(s NightEntryService) {
 
 // nameAuthors fills each entry's writer name from the member list. A name
 // that can't be read leaves the row unnamed rather than failing the page.
-func (h *Handler) nameAuthors(c echo.Context, rows []NightEntryView) {
+func (h *Handler) nameAuthors(c *echo.Context, rows []NightEntryView) {
 	if len(rows) == 0 || h.memberLister == nil {
 		return
 	}

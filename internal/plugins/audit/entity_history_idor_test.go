@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -75,8 +75,7 @@ func TestEntityHistory_CampaignAndVisibilityGate(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/"+tc.eid+"/history", nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("c1", tc.eid)
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: tc.eid}})
 			c.Set("campaign_context", &campaigns.CampaignContext{
 				Campaign:   &campaigns.Campaign{ID: "c1"},
 				MemberRole: campaigns.RolePlayer,
@@ -118,8 +117,7 @@ func TestEntityHistory_ScopesQueryEvenWithoutGuard(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/ent-9/history", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("c1", "ent-9")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "ent-9"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "c1"},
 		MemberRole: campaigns.RolePlayer,

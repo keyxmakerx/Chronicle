@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/observability"
 )
@@ -27,7 +27,7 @@ func runPanickingRequest(t *testing.T, routeTemplate, rawPath string, panicValue
 	c := e.NewContext(req, rec)
 	c.SetPath(routeTemplate)
 
-	h := Recovery()(func(echo.Context) error { panic(panicValue) })
+	h := Recovery()(func(*echo.Context) error { panic(panicValue) })
 	if err := h(c); err != nil {
 		t.Fatalf("Recovery returned an error instead of handling the panic: %v", err)
 	}

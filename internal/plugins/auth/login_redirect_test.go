@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -212,7 +212,7 @@ func TestRequireAuth_PreservesDestination(t *testing.T) {
 		}
 		rec := httptest.NewRecorder()
 		mw := RequireAuth(redirectStubService{})
-		handler := mw(func(echo.Context) error { return nil })
+		handler := mw(func(*echo.Context) error { return nil })
 		if err := handler(e.NewContext(req, rec)); err != nil {
 			t.Fatalf("middleware: %v", err)
 		}
@@ -243,7 +243,7 @@ func TestRequireAuth_PreservesDestination(t *testing.T) {
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodPost, "/campaigns/c-123/calendar/ask", nil)
 		rec := httptest.NewRecorder()
-		handler := RequireAuth(redirectStubService{})(func(echo.Context) error { return nil })
+		handler := RequireAuth(redirectStubService{})(func(*echo.Context) error { return nil })
 		if err := handler(e.NewContext(req, rec)); err != nil {
 			t.Fatalf("middleware: %v", err)
 		}
@@ -256,7 +256,7 @@ func TestRequireAuth_PreservesDestination(t *testing.T) {
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/api/campaigns", nil)
 		rec := httptest.NewRecorder()
-		handler := RequireAuth(redirectStubService{})(func(echo.Context) error { return nil })
+		handler := RequireAuth(redirectStubService{})(func(*echo.Context) error { return nil })
 		if err := handler(e.NewContext(req, rec)); err != nil {
 			t.Fatalf("middleware: %v", err)
 		}
@@ -276,7 +276,7 @@ func TestRequireAuth_PreservesDestination(t *testing.T) {
 			e := echo.New()
 			req := httptest.NewRequest(http.MethodGet, target, nil)
 			rec := httptest.NewRecorder()
-			handler := RequireAuth(redirectStubService{})(func(echo.Context) error { return nil })
+			handler := RequireAuth(redirectStubService{})(func(*echo.Context) error { return nil })
 			if err := handler(e.NewContext(req, rec)); err != nil {
 				t.Fatalf("middleware: %v", err)
 			}

@@ -1,7 +1,7 @@
 # Contributing to Chronicle
 
 Thanks for helping. Chronicle is a self-hosted worldbuilding app for tabletop
-RPGs: Go, Echo v4, Templ, HTMX, MariaDB and Redis. It runs in production for
+RPGs: Go, Echo v5, Templ, HTMX, MariaDB and Redis. It runs in production for
 real people, so changes are small, verified and reviewed.
 
 ## Reporting a security problem

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -41,7 +41,7 @@ func (h *Handler) SetEntityGate(gate EntityGate) { h.entityGate = gate }
 // requireViewableEntity rejects an entity that is not in the URL campaign or
 // that the caller may not view. Both cases are the same 404 so a foreign or
 // hidden entity ID is indistinguishable from a missing one.
-func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignContext, entityID string) error {
+func (h *Handler) requireViewableEntity(c *echo.Context, cc *campaigns.CampaignContext, entityID string) error {
 	if h.entityGate == nil {
 		// Fail closed: a missing gate must never serve ungated notes.
 		return apperror.NewInternal(errors.New("entity_notes: entity gate not configured"))
@@ -75,7 +75,7 @@ func viewerFrom(cc *campaigns.CampaignContext, userID string) ViewerContext {
 
 // List returns notes attached to an entity that the viewer can see.
 // GET /campaigns/:id/entities/:eid/notes
-func (h *Handler) List(c echo.Context) error {
+func (h *Handler) List(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -101,7 +101,7 @@ func (h *Handler) List(c echo.Context) error {
 // Create authors a new note. The author is taken from auth context;
 // any author_user_id in the body is ignored.
 // POST /campaigns/:id/entities/:eid/notes
-func (h *Handler) Create(c echo.Context) error {
+func (h *Handler) Create(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -127,7 +127,7 @@ func (h *Handler) Create(c echo.Context) error {
 
 // Get returns one note if the viewer can read it.
 // GET /campaigns/:id/entities/:eid/notes/:nid
-func (h *Handler) Get(c echo.Context) error {
+func (h *Handler) Get(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -154,7 +154,7 @@ func (h *Handler) Get(c echo.Context) error {
 
 // Update mutates a note. Author-only enforced inside the service.
 // PUT /campaigns/:id/entities/:eid/notes/:nid
-func (h *Handler) Update(c echo.Context) error {
+func (h *Handler) Update(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -177,7 +177,7 @@ func (h *Handler) Update(c echo.Context) error {
 
 // Delete removes a note. Author-only enforced inside the service.
 // DELETE /campaigns/:id/entities/:eid/notes/:nid
-func (h *Handler) Delete(c echo.Context) error {
+func (h *Handler) Delete(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // DefaultTrustedProxies is the trusted-proxy list used when TRUSTED_PROXY_CIDRS

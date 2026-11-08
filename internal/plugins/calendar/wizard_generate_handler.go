@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -65,7 +65,7 @@ func parseGeneratedCalendarJSON(ctx context.Context, svc CalendarService, raw st
 // all driven client-side once chronicle_gen.js loads (wizardGenerateBody's
 // own x-init handles that on demand; nothing here waits for it).
 // GET /campaigns/:id/calendars/wizard/generate
-func (h *Handler) WizardGenerateStep(c echo.Context) error {
+func (h *Handler) WizardGenerateStep(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	body := wizardGenerateBody(cc.Campaign.ID, middleware.GetCSRFToken(c), "")
 	return middleware.Render(c, http.StatusOK, wizardShell("Generate one", body))
@@ -83,7 +83,7 @@ func (h *Handler) WizardGenerateStep(c echo.Context) error {
 // structure over the same limits every other import path enforces, neither
 // of which the engine's own generators ever produce on their own.
 // POST /campaigns/:id/calendars/wizard/generate/preview
-func (h *Handler) WizardGeneratePreview(c echo.Context) error {
+func (h *Handler) WizardGeneratePreview(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ir, err := parseGeneratedCalendarJSON(c.Request().Context(), h.svc, c.FormValue("generated_json"))
 	if err != nil {

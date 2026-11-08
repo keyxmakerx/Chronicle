@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -25,7 +25,7 @@ func NewWorldbuildingPromptHandler(service WorldbuildingPromptService) *Worldbui
 // ListAPI returns worldbuilding prompts for a campaign as JSON.
 // GET /campaigns/:id/worldbuilding-prompts
 // Optional query: ?entity_type_id=N to filter by entity type.
-func (h *WorldbuildingPromptHandler) ListAPI(c echo.Context) error {
+func (h *WorldbuildingPromptHandler) ListAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -60,7 +60,7 @@ func (h *WorldbuildingPromptHandler) ListAPI(c echo.Context) error {
 
 // CreateAPI creates a new worldbuilding prompt.
 // POST /campaigns/:id/worldbuilding-prompts
-func (h *WorldbuildingPromptHandler) CreateAPI(c echo.Context) error {
+func (h *WorldbuildingPromptHandler) CreateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -81,7 +81,7 @@ func (h *WorldbuildingPromptHandler) CreateAPI(c echo.Context) error {
 
 // UpdateAPI updates an existing worldbuilding prompt.
 // PUT /campaigns/:id/worldbuilding-prompts/:pid
-func (h *WorldbuildingPromptHandler) UpdateAPI(c echo.Context) error {
+func (h *WorldbuildingPromptHandler) UpdateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -118,7 +118,7 @@ func (h *WorldbuildingPromptHandler) UpdateAPI(c echo.Context) error {
 
 // DeleteAPI deletes a worldbuilding prompt.
 // DELETE /campaigns/:id/worldbuilding-prompts/:pid
-func (h *WorldbuildingPromptHandler) DeleteAPI(c echo.Context) error {
+func (h *WorldbuildingPromptHandler) DeleteAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

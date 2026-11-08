@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -24,8 +24,7 @@ func runOwner(t *testing.T, h echo.HandlerFunc, req *http.Request, params ...str
 	for i := 0; i+1 < len(params); i += 2 {
 		names, values = append(names, params[i]), append(values, params[i+1])
 	}
-	c.SetParamNames(names...)
-	c.SetParamValues(values...)
+	c.SetPathValues(pathValuesOf(names, values))
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1"},
 		MemberRole: campaigns.RoleOwner,

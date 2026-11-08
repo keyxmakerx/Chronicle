@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
@@ -50,8 +50,7 @@ func TestUpdateTag_NameIsOptional(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			c := echo.New().NewContext(req, httptest.NewRecorder())
-			c.SetParamNames("id", "tagId")
-			c.SetParamValues("camp-1", "7")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "tagId", Value: "7"}})
 
 			err := h.UpdateTag(c)
 			if tt.wantErr {

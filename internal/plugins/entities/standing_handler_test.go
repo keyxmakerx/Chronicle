@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -29,7 +29,7 @@ func standingHandlerEnv(t *testing.T) (*StandingHandler, *fakeStandingRepo) {
 	return NewStandingHandler(NewStandingService(repo, entitySvc), entitySvc), repo
 }
 
-func standingReq(role campaigns.Role, dmGranted bool, method, page, subject, body string) (echo.Context, *httptest.ResponseRecorder) {
+func standingReq(role campaigns.Role, dmGranted bool, method, page, subject, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/x", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -39,8 +39,7 @@ func standingReq(role campaigns.Role, dmGranted bool, method, page, subject, bod
 		Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: role, IsDmGranted: dmGranted, IsMember: true,
 	})
 	auth.SetSession(c, &auth.Session{UserID: "u1"})
-	c.SetParamNames("id", "eid", "subject")
-	c.SetParamValues("c1", page, subject)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: page}, {Name: "subject", Value: subject}})
 	return c, rec
 }
 
@@ -104,7 +103,7 @@ func TestStandingWrites_AreTheDirectors(t *testing.T) {
 		role     campaigns.Role
 		dm       bool
 		page     string
-		do       func(*StandingHandler, echo.Context) error
+		do       func(*StandingHandler, *echo.Context) error
 		method   string
 		body     string
 		wantCode int
@@ -135,8 +134,7 @@ func TestStandingWrites_AreTheDirectors(t *testing.T) {
 			h, repo := standingHandlerEnv(t)
 			nReasons := len(repo.reasons)
 			c, rec := standingReq(tt.role, tt.dm, tt.method, tt.page, "party", tt.body)
-			c.SetParamNames("id", "eid", "subject", "rid")
-			c.SetParamValues("c1", tt.page, "party", uuidFor("r1"))
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: tt.page}, {Name: "subject", Value: "party"}, {Name: "rid", Value: uuidFor("r1")}})
 			err := tt.do(h, c)
 			code := rec.Code
 			if err != nil {
@@ -221,7 +219,7 @@ func TestStandingDirectorOnlyGate(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.Set("campaign_context", tt.cc)
-			err := directorOnly()(func(c echo.Context) error { return c.NoContent(200) })(c)
+			err := directorOnly()(func(c *echo.Context) error { return c.NoContent(200) })(c)
 			code := rec.Code
 			if err != nil {
 				code = errCode(err)

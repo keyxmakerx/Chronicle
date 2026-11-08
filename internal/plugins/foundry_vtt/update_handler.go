@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -24,7 +24,7 @@ func (h *Handler) SetOwnerUpdates(o OwnerUpdates) {
 // route already requires the owner role; checking it here too keeps a player
 // from ever being served the line or moving the campaign if a route were
 // ever mounted without it.
-func (h *Handler) ownerCampaign(c echo.Context) (*campaigns.CampaignContext, error) {
+func (h *Handler) ownerCampaign(c *echo.Context) (*campaigns.CampaignContext, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, apperror.NewMissingContext()
@@ -39,7 +39,7 @@ func (h *Handler) ownerCampaign(c echo.Context) (*campaigns.CampaignContext, err
 }
 
 // updateView is the form's choice of screen, defaulting to the dashboard line.
-func updateView(c echo.Context) string {
+func updateView(c *echo.Context) string {
 	if c.FormValue("view") == updateViewRow {
 		return updateViewRow
 	}
@@ -47,7 +47,7 @@ func updateView(c echo.Context) string {
 }
 
 // renderUpdate answers with the markup of the screen the action came from.
-func (h *Handler) renderUpdate(c echo.Context, cc *campaigns.CampaignContext, view string, updated bool) error {
+func (h *Handler) renderUpdate(c *echo.Context, cc *campaigns.CampaignContext, view string, updated bool) error {
 	v, err := h.owner.View(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func (h *Handler) renderUpdate(c echo.Context, cc *campaigns.CampaignContext, vi
 // Never fails the page: a problem reads as "nothing to show".
 //
 // GET /campaigns/:id/foundry-vtt/show-banner-fragment
-func (h *Handler) CampaignShowBannerHandler(c echo.Context) error {
+func (h *Handler) CampaignShowBannerHandler(c *echo.Context) error {
 	cc, err := h.ownerCampaign(c)
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func (h *Handler) CampaignShowBannerHandler(c echo.Context) error {
 // Foundry page.
 //
 // GET /campaigns/:id/foundry-vtt/apps-row
-func (h *Handler) AppsUpdateRowHandler(c echo.Context) error {
+func (h *Handler) AppsUpdateRowHandler(c *echo.Context) error {
 	cc, err := h.ownerCampaign(c)
 	if err != nil {
 		return err
@@ -104,7 +104,7 @@ func (h *Handler) AppsUpdateRowHandler(c echo.Context) error {
 
 // ownerActor is who is pressing the button: the owner themself, never an
 // admin acting for them, so an admin hold applies to them too.
-func ownerActor(c echo.Context) (packages.ActorInfo, error) {
+func ownerActor(c *echo.Context) (packages.ActorInfo, error) {
 	session := auth.GetSession(c)
 	if session == nil {
 		return packages.ActorInfo{}, apperror.NewUnauthorized("not authenticated")
@@ -115,7 +115,7 @@ func ownerActor(c echo.Context) (packages.ActorInfo, error) {
 // OwnerUpdateHandler moves the campaign onto the version the owner confirmed.
 //
 // POST /campaigns/:id/foundry-vtt/update   form: version, view
-func (h *Handler) OwnerUpdateHandler(c echo.Context) error {
+func (h *Handler) OwnerUpdateHandler(c *echo.Context) error {
 	cc, err := h.ownerCampaign(c)
 	if err != nil {
 		return err
@@ -133,7 +133,7 @@ func (h *Handler) OwnerUpdateHandler(c echo.Context) error {
 // OwnerUpdateLaterHandler hides the prompt for the waiting version.
 //
 // POST /campaigns/:id/foundry-vtt/update/later   form: version, view
-func (h *Handler) OwnerUpdateLaterHandler(c echo.Context) error {
+func (h *Handler) OwnerUpdateLaterHandler(c *echo.Context) error {
 	cc, err := h.ownerCampaign(c)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func (h *Handler) OwnerUpdateLaterHandler(c echo.Context) error {
 // OwnerUpdateSwitchHandler keeps the campaign on a version the owner picked.
 //
 // POST /campaigns/:id/foundry-vtt/update/switch   form: version, view
-func (h *Handler) OwnerUpdateSwitchHandler(c echo.Context) error {
+func (h *Handler) OwnerUpdateSwitchHandler(c *echo.Context) error {
 	cc, err := h.ownerCampaign(c)
 	if err != nil {
 		return err
@@ -165,7 +165,7 @@ func (h *Handler) OwnerUpdateSwitchHandler(c echo.Context) error {
 // OwnerUpdateModeHandler changes how new module versions reach the campaign.
 //
 // POST /campaigns/:id/foundry-vtt/update/mode   form: mode, view
-func (h *Handler) OwnerUpdateModeHandler(c echo.Context) error {
+func (h *Handler) OwnerUpdateModeHandler(c *echo.Context) error {
 	cc, err := h.ownerCampaign(c)
 	if err != nil {
 		return err

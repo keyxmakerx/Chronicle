@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -96,7 +96,7 @@ func (h *Handler) SetSecurityLogger(logger SecurityEventLogger) {
 }
 
 // LoginForm renders the login page (GET /login).
-func (h *Handler) LoginForm(c echo.Context) error {
+func (h *Handler) LoginForm(c *echo.Context) error {
 	// If the user already has a valid session, redirect to dashboard.
 	if token := getSessionToken(c); token != "" {
 		if _, err := h.service.ValidateSession(c.Request().Context(), token); err == nil {
@@ -131,7 +131,7 @@ func (h *Handler) LoginForm(c echo.Context) error {
 }
 
 // Login processes the login form submission (POST /login).
-func (h *Handler) Login(c echo.Context) error {
+func (h *Handler) Login(c *echo.Context) error {
 	var req LoginRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -201,7 +201,7 @@ func (h *Handler) Login(c echo.Context) error {
 // LoginTwoFactor is the code step of a sign-in (POST /login/two-factor).
 // The challenge from the password step stands in for the email and
 // password, so neither is sent twice.
-func (h *Handler) LoginTwoFactor(c echo.Context) error {
+func (h *Handler) LoginTwoFactor(c *echo.Context) error {
 	ip := c.RealIP()
 	ua := c.Request().UserAgent()
 	redirect := sanitizeRedirect(c.FormValue("redirect"))
@@ -246,7 +246,7 @@ const (
 
 // SetOIDCStateCookie remembers the round trip's state in this browser. It
 // is Lax so it comes back on the provider's top-level redirect.
-func SetOIDCStateCookie(c echo.Context, state string) {
+func SetOIDCStateCookie(c *echo.Context, state string) {
 	secure := middleware.SchemeIsSecure(c.Request())
 	name := oidcStateCookieName
 	if secure {
@@ -256,7 +256,7 @@ func SetOIDCStateCookie(c echo.Context, state string) {
 		SameSite: http.SameSiteLaxMode, MaxAge: int(oidcStateTTL.Seconds())})
 }
 
-func readOIDCStateCookie(c echo.Context) string {
+func readOIDCStateCookie(c *echo.Context) string {
 	names := []string{oidcStateCookieName}
 	if middleware.SchemeIsSecure(c.Request()) {
 		names = []string{oidcStateCookieSecureName, oidcStateCookieName}
@@ -269,7 +269,7 @@ func readOIDCStateCookie(c echo.Context) string {
 	return ""
 }
 
-func clearOIDCStateCookie(c echo.Context) {
+func clearOIDCStateCookie(c *echo.Context) {
 	for _, n := range []string{oidcStateCookieName, oidcStateCookieSecureName} {
 		c.SetCookie(&http.Cookie{Name: n, Value: "", Path: "/", HttpOnly: true,
 			Secure: n == oidcStateCookieSecureName, MaxAge: -1})
@@ -277,13 +277,13 @@ func clearOIDCStateCookie(c echo.Context) {
 }
 
 // loginError shows the sign-in page with a message, for provider failures.
-func (h *Handler) loginError(c echo.Context, msg string) error {
+func (h *Handler) loginError(c *echo.Context, msg string) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", msg, "", "", h.service.LoginOptions(c.Request().Context())))
 }
 
 // LoginOIDC sends the browser to the provider (GET /login/oidc).
-func (h *Handler) LoginOIDC(c echo.Context) error {
+func (h *Handler) LoginOIDC(c *echo.Context) error {
 	redirect := sanitizeRedirect(c.QueryParam("redirect"))
 	authURL, state, err := h.service.BeginOIDC(c.Request().Context(), OIDCModeLogin, "", redirect)
 	if err != nil {
@@ -295,7 +295,7 @@ func (h *Handler) LoginOIDC(c echo.Context) error {
 
 // LinkOIDC starts linking the signed-in person's provider account
 // (POST /account/sign-in/link). It's a POST so another site can't start it.
-func (h *Handler) LinkOIDC(c echo.Context) error {
+func (h *Handler) LinkOIDC(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -309,7 +309,7 @@ func (h *Handler) LinkOIDC(c echo.Context) error {
 }
 
 // UnlinkOIDCAPI removes the link (POST /account/sign-in/unlink).
-func (h *Handler) UnlinkOIDCAPI(c echo.Context) error {
+func (h *Handler) UnlinkOIDCAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -324,7 +324,7 @@ func (h *Handler) UnlinkOIDCAPI(c echo.Context) error {
 // OIDCCallback is where the provider sends the browser back
 // (GET /login/oidc/callback). The state must match this browser's cookie
 // before anything else is looked at.
-func (h *Handler) OIDCCallback(c echo.Context) error {
+func (h *Handler) OIDCCallback(c *echo.Context) error {
 	ctx := c.Request().Context()
 	ip, ua := c.RealIP(), c.Request().UserAgent()
 	state := c.QueryParam("state")
@@ -382,7 +382,7 @@ func (h *Handler) OIDCCallback(c echo.Context) error {
 }
 
 // RegisterForm renders the registration page (GET /register).
-func (h *Handler) RegisterForm(c echo.Context) error {
+func (h *Handler) RegisterForm(c *echo.Context) error {
 	// If the user already has a valid session, redirect to dashboard.
 	if token := getSessionToken(c); token != "" {
 		if _, err := h.service.ValidateSession(c.Request().Context(), token); err == nil {
@@ -406,7 +406,7 @@ func (h *Handler) RegisterForm(c echo.Context) error {
 }
 
 // Register processes the registration form submission (POST /register).
-func (h *Handler) Register(c echo.Context) error {
+func (h *Handler) Register(c *echo.Context) error {
 	var req RegisterRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -483,7 +483,7 @@ func (h *Handler) Register(c echo.Context) error {
 }
 
 // Logout destroys the session and clears the cookie (POST /logout).
-func (h *Handler) Logout(c echo.Context) error {
+func (h *Handler) Logout(c *echo.Context) error {
 	token := getSessionToken(c)
 	if token != "" {
 		// Capture session info before destroying for the security log.
@@ -504,14 +504,14 @@ func (h *Handler) Logout(c echo.Context) error {
 // --- Password Reset ---
 
 // ForgotPasswordForm renders the forgot password page (GET /forgot-password).
-func (h *Handler) ForgotPasswordForm(c echo.Context) error {
+func (h *Handler) ForgotPasswordForm(c *echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", "", h.service.CanEmailResetLinks(c.Request().Context())))
 }
 
 // ForgotPassword processes the forgot password form (POST /forgot-password).
 // Always shows a success message to avoid leaking whether the email exists.
-func (h *Handler) ForgotPassword(c echo.Context) error {
+func (h *Handler) ForgotPassword(c *echo.Context) error {
 	email := c.FormValue("email")
 	if email == "" {
 		csrfToken := middleware.GetCSRFToken(c)
@@ -531,7 +531,7 @@ func (h *Handler) ForgotPassword(c echo.Context) error {
 }
 
 // ResetPasswordForm renders the reset password page (GET /reset-password?token=...).
-func (h *Handler) ResetPasswordForm(c echo.Context) error {
+func (h *Handler) ResetPasswordForm(c *echo.Context) error {
 	token := c.QueryParam("token")
 	if token == "" {
 		return c.Redirect(http.StatusSeeOther, "/forgot-password")
@@ -550,7 +550,7 @@ func (h *Handler) ResetPasswordForm(c echo.Context) error {
 }
 
 // ResetPassword processes the new password form (POST /reset-password).
-func (h *Handler) ResetPassword(c echo.Context) error {
+func (h *Handler) ResetPassword(c *echo.Context) error {
 	token := c.FormValue("token")
 	password := c.FormValue("password")
 	confirm := c.FormValue("confirm")
@@ -590,7 +590,7 @@ func (h *Handler) ResetPassword(c echo.Context) error {
 }
 
 // ChangePasswordAPI changes the authenticated user's password (PUT /account/password).
-func (h *Handler) ChangePasswordAPI(c echo.Context) error {
+func (h *Handler) ChangePasswordAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -621,7 +621,7 @@ func (h *Handler) ChangePasswordAPI(c echo.Context) error {
 }
 
 // UpdateDisplayNameAPI updates the authenticated user's display name (PUT /account/display-name).
-func (h *Handler) UpdateDisplayNameAPI(c echo.Context) error {
+func (h *Handler) UpdateDisplayNameAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -655,7 +655,7 @@ const avatarMaxUploadBytes = 2 * 1024 * 1024
 // form and renders the result. The per-campaign storage/file-count quota
 // does NOT apply (there is no campaign to scope it to); the route-level
 // rate limit (routes.go) is the only throttle on repeated avatar uploads.
-func (h *Handler) UploadAvatarAPI(c echo.Context) error {
+func (h *Handler) UploadAvatarAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -701,7 +701,7 @@ func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 // ClearAvatarAPI removes the current user's avatar (DELETE /account/avatar).
 // A user may only clear their own avatar: userID comes from the session,
 // never from a request parameter.
-func (h *Handler) ClearAvatarAPI(c echo.Context) error {
+func (h *Handler) ClearAvatarAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -716,7 +716,7 @@ func (h *Handler) ClearAvatarAPI(c echo.Context) error {
 
 // RequestEmailChangeAPI initiates an email change (PUT /account/email).
 // Requires the user's current password for security.
-func (h *Handler) RequestEmailChangeAPI(c echo.Context) error {
+func (h *Handler) RequestEmailChangeAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -741,7 +741,7 @@ func (h *Handler) RequestEmailChangeAPI(c echo.Context) error {
 
 // ConfirmEmailChange handles the verification link click (GET /account/email/verify?token=...).
 // On success, redirects to login since all sessions are invalidated.
-func (h *Handler) ConfirmEmailChange(c echo.Context) error {
+func (h *Handler) ConfirmEmailChange(c *echo.Context) error {
 	token := c.QueryParam("token")
 	if token == "" {
 		return c.Redirect(http.StatusSeeOther, "/account")
@@ -770,7 +770,7 @@ func (h *Handler) logSecurityEvent(ctx context.Context, eventType, userID, actor
 // --- Account Settings ---
 
 // AccountPage renders the user account settings page (GET /account).
-func (h *Handler) AccountPage(c echo.Context) error {
+func (h *Handler) AccountPage(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return c.Redirect(http.StatusSeeOther, "/login")
@@ -817,7 +817,7 @@ func (h *Handler) AccountPage(c echo.Context) error {
 // DeleteAccountAPI deletes the signed-in person's own account
 // (POST /account/delete) after checking their password and the typed
 // confirmation, then signs this browser out.
-func (h *Handler) DeleteAccountAPI(c echo.Context) error {
+func (h *Handler) DeleteAccountAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -841,7 +841,7 @@ type twoFactorRequest struct {
 	Code     string `json:"code"`
 }
 
-func bindTwoFactorRequest(c echo.Context) (string, twoFactorRequest, error) {
+func bindTwoFactorRequest(c *echo.Context) (string, twoFactorRequest, error) {
 	userID := GetUserID(c)
 	if userID == "" {
 		return "", twoFactorRequest{}, apperror.NewUnauthorized("not authenticated")
@@ -854,7 +854,7 @@ func bindTwoFactorRequest(c echo.Context) (string, twoFactorRequest, error) {
 }
 
 // TwoFactorSetupAPI starts turning two-factor on (POST /account/two-factor/setup).
-func (h *Handler) TwoFactorSetupAPI(c echo.Context) error {
+func (h *Handler) TwoFactorSetupAPI(c *echo.Context) error {
 	userID, req, err := bindTwoFactorRequest(c)
 	if err != nil {
 		return err
@@ -868,7 +868,7 @@ func (h *Handler) TwoFactorSetupAPI(c echo.Context) error {
 
 // TwoFactorEnableAPI finishes turning two-factor on and returns the recovery
 // codes (POST /account/two-factor/enable).
-func (h *Handler) TwoFactorEnableAPI(c echo.Context) error {
+func (h *Handler) TwoFactorEnableAPI(c *echo.Context) error {
 	userID, req, err := bindTwoFactorRequest(c)
 	if err != nil {
 		return err
@@ -882,7 +882,7 @@ func (h *Handler) TwoFactorEnableAPI(c echo.Context) error {
 }
 
 // TwoFactorDisableAPI turns two-factor off (POST /account/two-factor/disable).
-func (h *Handler) TwoFactorDisableAPI(c echo.Context) error {
+func (h *Handler) TwoFactorDisableAPI(c *echo.Context) error {
 	userID, req, err := bindTwoFactorRequest(c)
 	if err != nil {
 		return err
@@ -896,7 +896,7 @@ func (h *Handler) TwoFactorDisableAPI(c echo.Context) error {
 
 // TwoFactorRecoveryCodesAPI replaces the recovery codes
 // (POST /account/two-factor/recovery-codes).
-func (h *Handler) TwoFactorRecoveryCodesAPI(c echo.Context) error {
+func (h *Handler) TwoFactorRecoveryCodesAPI(c *echo.Context) error {
 	userID, req, err := bindTwoFactorRequest(c)
 	if err != nil {
 		return err
@@ -911,7 +911,7 @@ func (h *Handler) TwoFactorRecoveryCodesAPI(c echo.Context) error {
 
 // UpdateNotifyPrefsAPI saves the signed-in person's notification choices
 // (PUT /account/notifications). The body is partial: only the switches sent change.
-func (h *Handler) UpdateNotifyPrefsAPI(c echo.Context) error {
+func (h *Handler) UpdateNotifyPrefsAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -931,7 +931,7 @@ func (h *Handler) UpdateNotifyPrefsAPI(c echo.Context) error {
 
 // UpdateViewPrefsAPI saves the signed-in person's own viewing choices
 // (PUT /account/view-prefs). The body is partial: only the keys sent change.
-func (h *Handler) UpdateViewPrefsAPI(c echo.Context) error {
+func (h *Handler) UpdateViewPrefsAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -950,7 +950,7 @@ func (h *Handler) UpdateViewPrefsAPI(c echo.Context) error {
 }
 
 // UpdateTimezoneAPI updates the user's timezone preference (PUT /account/timezone).
-func (h *Handler) UpdateTimezoneAPI(c echo.Context) error {
+func (h *Handler) UpdateTimezoneAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("not authenticated")
@@ -993,7 +993,7 @@ func sessionCookieNameFor(req *http.Request) string {
 // its anti-forgery property (it always wins over a subdomain-injected bare
 // cookie); the bare fallback does not enable session fixation because login
 // always rotates the token. Over plain HTTP only the bare name is read.
-func getSessionToken(c echo.Context) string {
+func getSessionToken(c *echo.Context) string {
 	return readSessionToken(c.Request())
 }
 
@@ -1015,7 +1015,7 @@ func readSessionToken(req *http.Request) string {
 
 // ReadSessionToken reads the session token from an http.Request using the same
 // scheme-aware dual-read as the web handlers. For callers outside this package
-// (the WebSocket handshake) that don't have an echo.Context.
+// (the WebSocket handshake) that don't have an *echo.Context.
 func ReadSessionToken(req *http.Request) string {
 	return readSessionToken(req)
 }
@@ -1023,7 +1023,7 @@ func ReadSessionToken(req *http.Request) string {
 // setSessionCookie sets the session cookie on the response. The cookie is
 // HttpOnly (JS can't read it), Secure + __Host--prefixed behind TLS, and
 // SameSite=Lax. The __Host- prefix requires Secure=true, Path=/, and no Domain.
-func setSessionCookie(c echo.Context, token string, ttl time.Duration) {
+func setSessionCookie(c *echo.Context, token string, ttl time.Duration) {
 	req := c.Request()
 	secure := middleware.SchemeIsSecure(req)
 	c.SetCookie(&http.Cookie{
@@ -1046,7 +1046,7 @@ const (
 
 // setTrustedDeviceCookie remembers this device for the code step. It only
 // skips the code; the password is still asked every time.
-func setTrustedDeviceCookie(c echo.Context, token string) {
+func setTrustedDeviceCookie(c *echo.Context, token string) {
 	req := c.Request()
 	secure := middleware.SchemeIsSecure(req)
 	name := trustedDeviceCookieName
@@ -1082,7 +1082,7 @@ func readTrustedDevice(req *http.Request) string {
 // clearSessionCookie removes the session cookie by setting MaxAge to -1. It
 // clears BOTH the scheme-appropriate name AND the bare legacy name, so a stale
 // pre-upgrade cookie can't linger in the browser after logout.
-func clearSessionCookie(c echo.Context) {
+func clearSessionCookie(c *echo.Context) {
 	req := c.Request()
 	names := []string{sessionCookieNameFor(req)}
 	if n := sessionCookieName; names[0] != n {
@@ -1136,7 +1136,7 @@ func validateRegisterRequest(req *RegisterRequest) string {
 // (POST /account/reauth). It validates the admin's password and, if correct,
 // sets a short-lived reauth token in Redis that allows sensitive operations
 // for 5 minutes without re-prompting.
-func (h *Handler) ReauthConfirm(c echo.Context) error {
+func (h *Handler) ReauthConfirm(c *echo.Context) error {
 	session := GetSession(c)
 	if session == nil {
 		return apperror.NewUnauthorized("authentication required")

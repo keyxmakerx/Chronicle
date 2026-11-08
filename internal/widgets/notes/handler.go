@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -112,7 +112,7 @@ func (h *Handler) SetPageLinker(pl PageLinker) {
 // Returns own notes + shared notes from other users.
 // Supports ?scope=all (default), ?scope=campaign (campaign-wide only),
 // and ?scope=entity&entity_id=<eid> (entity-scoped).
-func (h *Handler) List(c echo.Context) error {
+func (h *Handler) List(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -142,7 +142,7 @@ func (h *Handler) List(c echo.Context) error {
 }
 
 // Get returns one note (GET /campaigns/:id/notes/:noteId).
-func (h *Handler) Get(c echo.Context) error {
+func (h *Handler) Get(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -155,7 +155,7 @@ func (h *Handler) Get(c echo.Context) error {
 }
 
 // Index returns the viewer's Journal list (GET /campaigns/:id/notes/index).
-func (h *Handler) Index(c echo.Context) error {
+func (h *Handler) Index(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -169,7 +169,7 @@ func (h *Handler) Index(c echo.Context) error {
 
 // Search finds the viewer's notes by title or text
 // (GET /campaigns/:id/notes/search?q=…[&jots=1]).
-func (h *Handler) Search(c echo.Context) error {
+func (h *Handler) Search(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -184,7 +184,7 @@ func (h *Handler) Search(c echo.Context) error {
 
 // Backlinks lists what links to a note, as far as the viewer may see: notes
 // and pages (GET /campaigns/:id/notes/:noteId/backlinks).
-func (h *Handler) Backlinks(c echo.Context) error {
+func (h *Handler) Backlinks(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -218,7 +218,7 @@ func (h *Handler) Backlinks(c echo.Context) error {
 
 // PageRefs lists the viewer's Journal notes that link to a page
 // (GET /campaigns/:id/notes/page-refs?entity_id=…).
-func (h *Handler) PageRefs(c echo.Context) error {
+func (h *Handler) PageRefs(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -233,7 +233,7 @@ func (h *Handler) PageRefs(c echo.Context) error {
 // Labels resolves [[note]] link labels for the viewer
 // (GET /campaigns/:id/notes/labels?ids=a,b,…). A note the viewer cannot see
 // is absent from the result, exactly like one that does not exist.
-func (h *Handler) Labels(c echo.Context) error {
+func (h *Handler) Labels(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -248,7 +248,7 @@ func (h *Handler) Labels(c echo.Context) error {
 
 // Bulk applies one action to several of the viewer's own notes
 // (POST /campaigns/:id/notes/bulk).
-func (h *Handler) Bulk(c echo.Context) error {
+func (h *Handler) Bulk(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -270,7 +270,7 @@ const maxPageNames = 200
 // PageNames names the pages behind jots, for the viewer
 // (GET /campaigns/:id/notes/page-names?ids=a,b,…). A page the viewer cannot
 // see is absent, exactly like one that does not exist.
-func (h *Handler) PageNames(c echo.Context) error {
+func (h *Handler) PageNames(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -295,7 +295,7 @@ func (h *Handler) PageNames(c echo.Context) error {
 
 // SendToJournal copies one of the caller's jots into a new Journal note
 // (POST /campaigns/:id/notes/:noteId/send-to-journal). Owner only.
-func (h *Handler) SendToJournal(c echo.Context) error {
+func (h *Handler) SendToJournal(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -328,7 +328,7 @@ func (h *Handler) SendToJournal(c echo.Context) error {
 }
 
 // Create adds a new note (POST /campaigns/:id/notes).
-func (h *Handler) Create(c echo.Context) error {
+func (h *Handler) Create(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -350,7 +350,7 @@ func (h *Handler) Create(c echo.Context) error {
 // Update modifies an existing note (PUT /campaigns/:id/notes/:noteId).
 // Access: anyone who can view the note may edit its title and body; only its
 // owner may change sharing, pinning, archiving or its folder.
-func (h *Handler) Update(c echo.Context) error {
+func (h *Handler) Update(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -381,7 +381,7 @@ func (h *Handler) Update(c echo.Context) error {
 
 // Delete removes a note (DELETE /campaigns/:id/notes/:noteId).
 // Only the note owner can delete.
-func (h *Handler) Delete(c echo.Context) error {
+func (h *Handler) Delete(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -405,7 +405,7 @@ func (h *Handler) Delete(c echo.Context) error {
 }
 
 // ToggleCheck toggles a checklist item (POST /campaigns/:id/notes/:noteId/toggle).
-func (h *Handler) ToggleCheck(c echo.Context) error {
+func (h *Handler) ToggleCheck(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -430,7 +430,7 @@ func (h *Handler) ToggleCheck(c echo.Context) error {
 }
 
 // Lock acquires the edit lock on a shared note (POST /campaigns/:id/notes/:noteId/lock).
-func (h *Handler) Lock(c echo.Context) error {
+func (h *Handler) Lock(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -450,7 +450,7 @@ func (h *Handler) Lock(c echo.Context) error {
 }
 
 // Unlock releases the edit lock (POST /campaigns/:id/notes/:noteId/unlock).
-func (h *Handler) Unlock(c echo.Context) error {
+func (h *Handler) Unlock(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -469,7 +469,7 @@ func (h *Handler) Unlock(c echo.Context) error {
 }
 
 // Heartbeat keeps the edit lock alive (POST /campaigns/:id/notes/:noteId/heartbeat).
-func (h *Handler) Heartbeat(c echo.Context) error {
+func (h *Handler) Heartbeat(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -489,7 +489,7 @@ func (h *Handler) Heartbeat(c echo.Context) error {
 
 // ForceUnlock releases any user's lock (POST /campaigns/:id/notes/:noteId/force-unlock).
 // Requires campaign owner role.
-func (h *Handler) ForceUnlock(c echo.Context) error {
+func (h *Handler) ForceUnlock(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -512,7 +512,7 @@ func (h *Handler) ForceUnlock(c echo.Context) error {
 }
 
 // ListVersions returns version history (GET /campaigns/:id/notes/:noteId/versions).
-func (h *Handler) ListVersions(c echo.Context) error {
+func (h *Handler) ListVersions(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -534,7 +534,7 @@ func (h *Handler) ListVersions(c echo.Context) error {
 }
 
 // GetVersion returns a specific version (GET /campaigns/:id/notes/:noteId/versions/:vid).
-func (h *Handler) GetVersion(c echo.Context) error {
+func (h *Handler) GetVersion(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -560,7 +560,7 @@ func (h *Handler) GetVersion(c echo.Context) error {
 
 // RestoreVersion reverts a note to a previous version
 // (POST /campaigns/:id/notes/:noteId/versions/:vid/restore).
-func (h *Handler) RestoreVersion(c echo.Context) error {
+func (h *Handler) RestoreVersion(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -582,7 +582,7 @@ func (h *Handler) RestoreVersion(c echo.Context) error {
 
 // ShowJournal renders the Journal (GET /campaigns/:id/journal, and
 // /journal/:noteId to open it at one note). Full page or HTMX fragment.
-func (h *Handler) ShowJournal(c echo.Context) error {
+func (h *Handler) ShowJournal(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -600,7 +600,7 @@ func (h *Handler) ShowJournal(c echo.Context) error {
 // fragment for the frame an allowed app shows
 // (GET /api/notes-app/campaigns/:id/notes/embed?mode=journal|jots&entity=).
 // The same templates as the site, so the frame has every Journal feature.
-func (h *Handler) EmbedFragment(c echo.Context) error {
+func (h *Handler) EmbedFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -631,7 +631,7 @@ func (h *Handler) EmbedFragment(c echo.Context) error {
 // journalView gathers the page's server-side inputs. The deep-linked id is
 // only echoed back when id-shaped; whether the note exists or may be seen is
 // answered later by the gated JSON route, never by this page.
-func (h *Handler) journalView(c echo.Context, cc *campaigns.CampaignContext) JournalView {
+func (h *Handler) journalView(c *echo.Context, cc *campaigns.CampaignContext) JournalView {
 	// The same test that admits someone to notes shared with the GM.
 	view := JournalView{IsGM: permissions.CanSeeDmOnly(cc.VisibilityRole())}
 	if id := c.Param("noteId"); idPattern.MatchString(id) {
@@ -655,7 +655,7 @@ func (h *Handler) journalView(c echo.Context, cc *campaigns.CampaignContext) Jou
 
 // MembersAPI returns campaign members as JSON for the share-with-players picker.
 // GET /campaigns/:id/notes/members
-func (h *Handler) MembersAPI(c echo.Context) error {
+func (h *Handler) MembersAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -683,7 +683,7 @@ func (h *Handler) MembersAPI(c echo.Context) error {
 // viewerFor is the note viewer for the session user. VisibilityRole folds a
 // co-DM grant into the Owner tier, which is exactly who "shared with the GM"
 // admits.
-func viewerFor(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewer {
+func viewerFor(c *echo.Context, cc *campaigns.CampaignContext) permissions.Viewer {
 	return permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c))
 }
 
@@ -691,7 +691,7 @@ func viewerFor(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewer
 // it in this campaign (Note.CanView, the one predicate the web and REST API
 // routes share). Anything else is a 404, so a response never confirms that a
 // note the caller cannot see exists.
-func (h *Handler) viewableNote(c echo.Context, cc *campaigns.CampaignContext, noteID string) (*Note, error) {
+func (h *Handler) viewableNote(c *echo.Context, cc *campaigns.CampaignContext, noteID string) (*Note, error) {
 	note, err := h.service.GetByID(c.Request().Context(), noteID)
 	if err != nil {
 		return nil, err
@@ -706,7 +706,7 @@ func (h *Handler) viewableNote(c echo.Context, cc *campaigns.CampaignContext, no
 
 // ListAttachments returns attachments for a note.
 // GET /campaigns/:id/notes/:nid/attachments
-func (h *Handler) ListAttachments(c echo.Context) error {
+func (h *Handler) ListAttachments(c *echo.Context) error {
 	if h.attService == nil {
 		return c.JSON(http.StatusOK, []NoteAttachment{})
 	}
@@ -740,7 +740,7 @@ func (h *Handler) SetPictureUploader(u PictureUploader) {
 // its media id (POST /campaigns/:id/notes/pictures). Open to every member who
 // can use notes: unlike /media/upload it needs no Scribe role, because the
 // file is private to the readers of the note that ends up holding it.
-func (h *Handler) UploadPicture(c echo.Context) error {
+func (h *Handler) UploadPicture(c *echo.Context) error {
 	if h.pictureUploader == nil {
 		return apperror.NewBadRequest("pictures not configured")
 	}
@@ -787,7 +787,7 @@ func (h *Handler) UploadPicture(c echo.Context) error {
 
 // UploadAttachment uploads an audio file and attaches it to a note.
 // POST /campaigns/:id/notes/:nid/attachments
-func (h *Handler) UploadAttachment(c echo.Context) error {
+func (h *Handler) UploadAttachment(c *echo.Context) error {
 	if h.attService == nil || h.mediaUploader == nil {
 		return apperror.NewBadRequest("attachments not configured")
 	}
@@ -849,7 +849,7 @@ func (h *Handler) UploadAttachment(c echo.Context) error {
 
 // DeleteAttachment removes an attachment.
 // DELETE /campaigns/:id/notes/:nid/attachments/:aid
-func (h *Handler) DeleteAttachment(c echo.Context) error {
+func (h *Handler) DeleteAttachment(c *echo.Context) error {
 	if h.attService == nil {
 		return apperror.NewBadRequest("attachments not configured")
 	}
@@ -889,7 +889,7 @@ func (h *Handler) DeleteAttachment(c echo.Context) error {
 
 // UpdateTranscript saves or updates the transcript text for an attachment.
 // PUT /campaigns/:id/notes/:nid/attachments/:aid/transcript
-func (h *Handler) UpdateTranscript(c echo.Context) error {
+func (h *Handler) UpdateTranscript(c *echo.Context) error {
 	if h.attService == nil {
 		return apperror.NewBadRequest("attachments not configured")
 	}

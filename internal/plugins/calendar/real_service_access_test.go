@@ -19,8 +19,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
-	emw "github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	emw "github.com/labstack/echo/v5/middleware"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -36,8 +36,8 @@ func newRealServiceTestRouter(calRepo *fakeCalendarRepo, roles map[string]campai
 	e.Use(emw.Recover())
 	// Same minimal error translation access_test.go uses: apperror.AppError
 	// -> its own status code, so a NotFound really comes back as HTTP 404.
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		if c.Response().Committed {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
+		if c.Response().(*echo.Response).Committed {
 			return
 		}
 		if ae, ok := err.(*apperror.AppError); ok {

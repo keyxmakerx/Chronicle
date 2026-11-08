@@ -16,7 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -77,7 +77,7 @@ func wrapPermissionError(ctx context.Context, stage string, err error) error {
 //
 // Returns the error untouched if it isn't a typed *AppError so
 // Echo's framework handler still gets a chance to render it.
-func respondPermissionsError(c echo.Context, err error) error {
+func respondPermissionsError(c *echo.Context, err error) error {
 	var ae *apperror.AppError
 	if !errors.As(err, &ae) {
 		return err

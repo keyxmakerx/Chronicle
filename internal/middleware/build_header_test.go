@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 func TestBuildHeader(t *testing.T) {
@@ -20,7 +20,7 @@ func TestBuildHeader(t *testing.T) {
 			e := echo.New()
 			rec := httptest.NewRecorder()
 			c := e.NewContext(httptest.NewRequest(http.MethodGet, tt.path, nil), rec)
-			h := BuildHeader("abc123")(func(c echo.Context) error { return c.String(http.StatusOK, "ok") })
+			h := BuildHeader("abc123")(func(c *echo.Context) error { return c.String(http.StatusOK, "ok") })
 			if err := h(c); err != nil {
 				t.Fatal(err)
 			}

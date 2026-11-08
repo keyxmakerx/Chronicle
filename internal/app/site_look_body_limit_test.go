@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/config"
 )
@@ -30,8 +30,8 @@ func (c *countingReader) Read(p []byte) (int, error) {
 func TestSiteLookBodyLimit(t *testing.T) {
 	a := &App{Config: &config.Config{}, Echo: echo.New()}
 	a.setupMiddleware()
-	a.Echo.POST(siteLookPath, func(c echo.Context) error { return c.NoContent(http.StatusOK) })
-	a.Echo.POST("/login", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	a.Echo.POST(siteLookPath, func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
+	a.Echo.POST("/login", func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 
 	const mb = 1 << 20
 	body := func(n int) string { return strings.Repeat("a", n) }

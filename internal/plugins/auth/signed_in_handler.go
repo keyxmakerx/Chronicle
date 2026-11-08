@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -47,7 +47,7 @@ func (h *Handler) signedInView(ctx context.Context, userID, token, csrfToken str
 }
 
 // renderSignedIn answers an action on the card with the card itself.
-func (h *Handler) renderSignedIn(c echo.Context, userID, msg string) error {
+func (h *Handler) renderSignedIn(c *echo.Context, userID, msg string) error {
 	v := h.signedInView(c.Request().Context(), userID, getSessionToken(c), middleware.GetCSRFToken(c))
 	v.Message = msg
 	return middleware.Render(c, http.StatusOK, signedInCard(v))
@@ -55,7 +55,7 @@ func (h *Handler) renderSignedIn(c echo.Context, userID, msg string) error {
 
 // SignOutSessionAPI ends another of the user's browsers
 // (POST /account/signed-in/sessions/:id/sign-out).
-func (h *Handler) SignOutSessionAPI(c echo.Context) error {
+func (h *Handler) SignOutSessionAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	if err := h.service.SignOutMySession(c.Request().Context(), userID, c.Param("id"), getSessionToken(c)); err != nil {
 		if apperror.SafeCode(err) == http.StatusNotFound {
@@ -69,7 +69,7 @@ func (h *Handler) SignOutSessionAPI(c echo.Context) error {
 
 // DisconnectAppAPI ends one of the user's connected apps
 // (POST /account/signed-in/apps/:id/disconnect).
-func (h *Handler) DisconnectAppAPI(c echo.Context) error {
+func (h *Handler) DisconnectAppAPI(c *echo.Context) error {
 	if h.apps == nil {
 		return apperror.NewNotFound("app not found")
 	}
@@ -87,7 +87,7 @@ func (h *Handler) DisconnectAppAPI(c echo.Context) error {
 // SignOutEverywhereAPI ends every session the user has, this one included,
 // and every connected app with them, then sends the browser to sign in
 // (POST /account/signed-in/sign-out-everywhere).
-func (h *Handler) SignOutEverywhereAPI(c echo.Context) error {
+func (h *Handler) SignOutEverywhereAPI(c *echo.Context) error {
 	userID := GetUserID(c)
 	n, err := h.service.DestroyAllUserSessions(c.Request().Context(), userID)
 	if err != nil {

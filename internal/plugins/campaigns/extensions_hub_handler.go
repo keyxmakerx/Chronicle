@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -37,7 +37,7 @@ import (
 // the `ContentPacksCardRenderer` interface; a nil renderer (or a
 // render error) degrades gracefully — the hub omits the card and logs
 // a warning instead of failing the page.
-func (h *Handler) ExtensionsHub(c echo.Context) error {
+func (h *Handler) ExtensionsHub(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -100,7 +100,7 @@ func (h *Handler) foundryRow(ctx context.Context, campaignID string) FoundryRowD
 //
 // The response carries the raw key, so it is marked no-store and the line is
 // never logged.
-func (h *Handler) NewFoundryConnectLine(c echo.Context) error {
+func (h *Handler) NewFoundryConnectLine(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -131,7 +131,7 @@ func (h *Handler) NewFoundryConnectLine(c echo.Context) error {
 // the existing addons-toggle handler emits the event via the
 // HX-Trigger header when `redirect_to=extensions-hub` is posted
 // alongside the toggle.
-func (h *Handler) ExtensionsHubFragmentAPI(c echo.Context) error {
+func (h *Handler) ExtensionsHubFragmentAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -36,8 +36,7 @@ func callReportMonsters(h *SyncHistoryHandler, body string) (*httptest.ResponseR
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("c1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 	c.Set(apiKeyContextKey, &APIKey{ID: 3, UserID: "u1", CampaignID: "c1", IsActive: true})
 	return rec, h.ReportMonsters(c)
 }

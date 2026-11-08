@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // CORSConfig holds configuration for the CORS middleware.
@@ -40,7 +40,7 @@ func CORS(cfg CORSConfig) echo.MiddlewareFunc {
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			req := c.Request()
 			res := c.Response()
 			origin := req.Header.Get("Origin")

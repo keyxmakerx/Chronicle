@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -37,7 +37,7 @@ func NewHandler(svc MapService) *Handler {
 
 // Index lists all maps for a campaign, or redirects to the first map.
 // GET /campaigns/:id/maps
-func (h *Handler) Index(c echo.Context) error {
+func (h *Handler) Index(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
@@ -76,13 +76,13 @@ func (h *Handler) Index(c echo.Context) error {
 // requireMapInCampaign fetches a map by ID and verifies it belongs to the
 // given campaign. Returns 404 if not found or mismatched, preventing
 // cross-campaign IDOR attacks.
-func (h *Handler) requireMapInCampaign(c echo.Context, mapID, campaignID string) (*Map, error) {
+func (h *Handler) requireMapInCampaign(c *echo.Context, mapID, campaignID string) (*Map, error) {
 	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetMap, mapID, campaignID, "map")
 }
 
 // requireMarkerInCampaign fetches a marker and verifies its parent map belongs
 // to the given campaign. Returns 404 for cross-campaign IDOR attempts.
-func (h *Handler) requireMarkerInCampaign(c echo.Context, markerID, campaignID string) (*Marker, error) {
+func (h *Handler) requireMarkerInCampaign(c *echo.Context, markerID, campaignID string) (*Marker, error) {
 	mk, err := h.svc.GetMarker(c.Request().Context(), markerID)
 	if err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func (h *Handler) requireMarkerInCampaign(c echo.Context, markerID, campaignID s
 
 // Show renders a single map with its markers in a Leaflet.js viewer.
 // GET /campaigns/:id/maps/:mid
-func (h *Handler) Show(c echo.Context) error {
+func (h *Handler) Show(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	data, err := h.mapViewData(c, cc)
 	if err != nil {
@@ -118,7 +118,7 @@ func (h *Handler) Show(c echo.Context) error {
 // builds its data through the same mapViewData, so what a viewer receives here
 // (role-filtered markers, tool gates, resolved frame) is by construction what
 // the map page gives them; there is no second copy of the rules to drift.
-func (h *Handler) Viewer(c echo.Context) error {
+func (h *Handler) Viewer(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	data, err := h.mapViewData(c, cc)
 	if err != nil {
@@ -131,7 +131,7 @@ func (h *Handler) Viewer(c echo.Context) error {
 // request's campaign and filtered for the requester's role. Shared by the map
 // page and the focus-view fragment so the two cannot disagree about who sees
 // what.
-func (h *Handler) mapViewData(c echo.Context, cc *campaigns.CampaignContext) (MapViewData, error) {
+func (h *Handler) mapViewData(c *echo.Context, cc *campaigns.CampaignContext) (MapViewData, error) {
 	mapID := c.Param("mid")
 
 	m, err := h.requireMapInCampaign(c, mapID, cc.Campaign.ID)
@@ -196,7 +196,7 @@ func (h *Handler) mapViewData(c echo.Context, cc *campaigns.CampaignContext) (Ma
 
 // linkMapOptions lists the maps a pin on mapID may open, each with the
 // viewer's version of its picture as a thumbnail.
-func (h *Handler) linkMapOptions(c echo.Context, cc *campaigns.CampaignContext, mapID string) ([]LinkMapOption, error) {
+func (h *Handler) linkMapOptions(c *echo.Context, cc *campaigns.CampaignContext, mapID string) ([]LinkMapOption, error) {
 	ctx := c.Request().Context()
 	ms, err := h.svc.ListMaps(ctx, cc.Campaign.ID)
 	if err != nil {
@@ -223,7 +223,7 @@ func (h *Handler) linkMapOptions(c echo.Context, cc *campaigns.CampaignContext, 
 // them. The service builds it from the viewer's own marker lists, so a link
 // on a pin hidden from them is never in it.
 // GET /campaigns/:id/maps/link-tree
-func (h *Handler) LinkTreeAPI(c echo.Context) error {
+func (h *Handler) LinkTreeAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	tree, err := h.svc.LinkTree(ctx, cc.Campaign.ID, cc.VisibilityRole(), getUserID(c))
@@ -237,7 +237,7 @@ func (h *Handler) LinkTreeAPI(c echo.Context) error {
 
 // CreateMapAPI creates a new map.
 // POST /campaigns/:id/maps
-func (h *Handler) CreateMapAPI(c echo.Context) error {
+func (h *Handler) CreateMapAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
@@ -277,7 +277,7 @@ func (h *Handler) CreateMapAPI(c echo.Context) error {
 
 // CreateMapForm handles map creation from a form POST.
 // POST /campaigns/:id/maps/new
-func (h *Handler) CreateMapForm(c echo.Context) error {
+func (h *Handler) CreateMapForm(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
@@ -306,7 +306,7 @@ func (h *Handler) CreateMapForm(c echo.Context) error {
 
 // UpdateMapAPI updates a map's metadata.
 // PUT /campaigns/:id/maps/:mid
-func (h *Handler) UpdateMapAPI(c echo.Context) error {
+func (h *Handler) UpdateMapAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	mapID := c.Param("mid")
@@ -353,7 +353,7 @@ func (h *Handler) UpdateMapAPI(c echo.Context) error {
 
 // DeleteMapAPI moves a map, with its pins, to the campaign Trash.
 // DELETE /campaigns/:id/maps/:mid
-func (h *Handler) DeleteMapAPI(c echo.Context) error {
+func (h *Handler) DeleteMapAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	mapID := c.Param("mid")
@@ -375,7 +375,7 @@ func (h *Handler) DeleteMapAPI(c echo.Context) error {
 // query parameter — both are accepted because curl-style DELETE often
 // avoids bodies. Invalid values fall through to nil (last-writer-wins)
 // rather than 400 — the field is advisory.
-func ParseExpectedUpdatedAt(c echo.Context) *time.Time {
+func ParseExpectedUpdatedAt(c *echo.Context) *time.Time {
 	if q := c.QueryParam("expected_updated_at"); q != "" {
 		if t, err := time.Parse(time.RFC3339Nano, q); err == nil {
 			return &t
@@ -392,7 +392,7 @@ func ParseExpectedUpdatedAt(c echo.Context) *time.Time {
 
 // CreateMarkerAPI places a new marker on a map.
 // POST /campaigns/:id/maps/:mid/markers
-func (h *Handler) CreateMarkerAPI(c echo.Context) error {
+func (h *Handler) CreateMarkerAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	mapID := c.Param("mid")
@@ -458,7 +458,7 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 
 // UpdateMarkerAPI updates an existing marker.
 // PUT /campaigns/:id/maps/:mid/markers/:mkid
-func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
+func (h *Handler) UpdateMarkerAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	markerID := c.Param("mkid")
@@ -528,7 +528,7 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 
 // DeleteMarkerAPI deletes a marker.
 // DELETE /campaigns/:id/maps/:mid/markers/:mkid
-func (h *Handler) DeleteMarkerAPI(c echo.Context) error {
+func (h *Handler) DeleteMarkerAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	markerID := c.Param("mkid")
@@ -551,7 +551,7 @@ func (h *Handler) DeleteMarkerAPI(c echo.Context) error {
 // API-key) path. Role/visibility filtering matches ListMarkersAPI and is
 // empty-userID safe (anonymous public visitors).
 // GET /campaigns/:id/maps/:mid/meta
-func (h *Handler) GetMapMetaAPI(c echo.Context) error {
+func (h *Handler) GetMapMetaAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	mapID := c.Param("mid")
@@ -591,7 +591,7 @@ func (h *Handler) GetMapMetaAPI(c echo.Context) error {
 // the map page with the same access check, and any failure to produce the copy
 // is an error, never the original.
 // GET /campaigns/:id/maps/:mid/player-image
-func (h *Handler) PlayerImage(c echo.Context) error {
+func (h *Handler) PlayerImage(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	m, err := h.requireMapInCampaign(c, c.Param("mid"), cc.Campaign.ID)
 	if err != nil {
@@ -610,7 +610,7 @@ func (h *Handler) PlayerImage(c echo.Context) error {
 
 // ListMarkersAPI returns all markers for a map as JSON.
 // GET /campaigns/:id/maps/:mid/markers
-func (h *Handler) ListMarkersAPI(c echo.Context) error {
+func (h *Handler) ListMarkersAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	mapID := c.Param("mid")
@@ -637,7 +637,7 @@ func (h *Handler) ListMarkersAPI(c echo.Context) error {
 // icon ID renders the same concept on both sides. Static catalog (no
 // per-campaign state) but campaign-scoped + Player-gated to match the rest
 // of the maps API surface.
-func (h *Handler) MarkerIconsAPI(c echo.Context) error {
+func (h *Handler) MarkerIconsAPI(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"default": DefaultMarkerIcon,
 		"icons":   MarkerIconCatalog(),
@@ -650,7 +650,7 @@ func (h *Handler) MarkerIconsAPI(c echo.Context) error {
 // HTMX request with the refreshed section so "Saved" shows in place, and a
 // plain request with 204 so the endpoint is also usable without the page.
 // PUT /campaigns/:id/maps/frame-style
-func (h *Handler) SetCampaignFrameAPI(c echo.Context) error {
+func (h *Handler) SetCampaignFrameAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
@@ -676,7 +676,7 @@ func (h *Handler) SetCampaignFrameAPI(c echo.Context) error {
 // stray request can never clear a scale. Who may write is decided in the
 // service (owner or DM grant).
 // PUT /campaigns/:id/maps/:mid/measure
-func (h *Handler) PutMeasureScaleAPI(c echo.Context) error {
+func (h *Handler) PutMeasureScaleAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

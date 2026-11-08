@@ -31,7 +31,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -251,7 +251,7 @@ func TestUpload_MergeSkipped_NoReferences(t *testing.T) {
 // newUploadTestContext, parameterized on the file bytes — needed here
 // because these tests run the real mediaService.Upload's full
 // magic-byte/sanitize/dedup pipeline, which requires genuine image bytes.
-func newUploadTestContextWithFile(t *testing.T, userID, campaignID string, fileBytes []byte) (echo.Context, *httptest.ResponseRecorder) {
+func newUploadTestContextWithFile(t *testing.T, userID, campaignID string, fileBytes []byte) (*echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
@@ -370,13 +370,12 @@ const campaignRefsTestMediaID = "11111111-1111-4111-8111-111111111111"
 // newCampaignRefsTestContext builds an Echo GET context for
 // /campaigns/:id/media/:mid/refs carrying cc as the campaign context, using
 // the same "campaign_context" key campaigns/middleware.go sets.
-func newCampaignRefsTestContext(cc *campaigns.CampaignContext, userID string) (echo.Context, *httptest.ResponseRecorder) {
+func newCampaignRefsTestContext(cc *campaigns.CampaignContext, userID string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/"+cc.Campaign.ID+"/media/"+campaignRefsTestMediaID+"/refs", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "mid")
-	c.SetParamValues(cc.Campaign.ID, campaignRefsTestMediaID)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: cc.Campaign.ID}, {Name: "mid", Value: campaignRefsTestMediaID}})
 	c.Set("campaign_context", cc)
 	if userID != "" {
 		auth.SetSession(c, &auth.Session{UserID: userID})
@@ -490,8 +489,7 @@ func TestCampaignMediaRefs_NonUUIDMediaID_Rejected(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/media/%25/refs", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "mid")
-	c.SetParamValues(cc.Campaign.ID, "%")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: cc.Campaign.ID}, {Name: "mid", Value: "%"}})
 	c.Set("campaign_context", cc)
 	auth.SetSession(c, &auth.Session{UserID: "scribe-1"})
 

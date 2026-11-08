@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -35,7 +35,7 @@ func (h *PageFileHandler) SetSecurityLogger(l SecurityEventLogger) {
 	h.securityLogger = l
 }
 
-func (h *PageFileHandler) logEvent(c echo.Context, eventType string, details map[string]any) {
+func (h *PageFileHandler) logEvent(c *echo.Context, eventType string, details map[string]any) {
 	if h.securityLogger != nil {
 		_ = h.securityLogger.LogEvent(c.Request().Context(), eventType, auth.GetUserID(c), "", c.RealIP(), c.Request().UserAgent(), details)
 	}
@@ -43,7 +43,7 @@ func (h *PageFileHandler) logEvent(c echo.Context, eventType string, details map
 
 // viewer builds who is asking from the request: the promoted role, so a co-DM
 // counts as the owner, the same as every other visibility check.
-func pageFileViewer(c echo.Context, cc *campaigns.CampaignContext) PageFileViewer {
+func pageFileViewer(c *echo.Context, cc *campaigns.CampaignContext) PageFileViewer {
 	return PageFileViewer{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
 }
 
@@ -52,7 +52,7 @@ func pageFileViewer(c echo.Context, cc *campaigns.CampaignContext) PageFileViewe
 // It is loaded into an already-shown page by HTMX, where a server error would
 // retarget the whole page body, so no failure here is ever sent as an error:
 // the section simply does not appear, and the cause is logged.
-func (h *PageFileHandler) Section(c echo.Context) error {
+func (h *PageFileHandler) Section(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return c.NoContent(http.StatusNoContent)
@@ -79,7 +79,7 @@ func (h *PageFileHandler) Section(c echo.Context) error {
 }
 
 // Upload attaches a file (POST /campaigns/:id/entities/:eid/files).
-func (h *PageFileHandler) Upload(c echo.Context) error {
+func (h *PageFileHandler) Upload(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -132,7 +132,7 @@ func (h *PageFileHandler) Upload(c echo.Context) error {
 // one of the stored allow-list (never HTML or SVG), the response is an
 // attachment, and sniffing is switched off, so a file that lied about being a
 // document still cannot run as a page.
-func (h *PageFileHandler) Download(c echo.Context) error {
+func (h *PageFileHandler) Download(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -142,11 +142,11 @@ func (h *PageFileHandler) Download(c echo.Context) error {
 		return err
 	}
 	setDownloadHeaders(c, f)
-	return c.File(h.media.FilePath(stored))
+	return middleware.ServeFile(c, h.media.FilePath(stored))
 }
 
 // setDownloadHeaders is the one place a page file's response headers are set.
-func setDownloadHeaders(c echo.Context, f *PageFile) {
+func setDownloadHeaders(c *echo.Context, f *PageFile) {
 	hdr := c.Response().Header()
 	ctype := f.MimeType
 	if !PageFileMimeTypes[ctype] {
@@ -191,7 +191,7 @@ func downloadName(f *PageFile) string {
 }
 
 // Remove deletes a file (DELETE /campaigns/:id/entities/:eid/files/:fid).
-func (h *PageFileHandler) Remove(c echo.Context) error {
+func (h *PageFileHandler) Remove(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -230,7 +230,7 @@ func parseGMOnlyForm(v string) (gmOnly, ok bool) {
 
 // SetVisibility marks a file GM-only or lets the page's readers see it again
 // (PUT /campaigns/:id/entities/:eid/files/:fid/visibility).
-func (h *PageFileHandler) SetVisibility(c echo.Context) error {
+func (h *PageFileHandler) SetVisibility(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -3,7 +3,7 @@ package entities
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -48,7 +48,7 @@ func RegisterPagePinRoutes(e *echo.Echo, h *PagePinHandler, campaignSvc campaign
 
 // pinViewer is who is looking. A Director looking as a player reads pages as a
 // player and gets no Director controls, so the home shows what players see.
-func pinViewer(c echo.Context, cc *campaigns.CampaignContext) PinViewer {
+func pinViewer(c *echo.Context, cc *campaigns.CampaignContext) PinViewer {
 	v := PinViewer{
 		CampaignID: cc.Campaign.ID,
 		UserID:     auth.GetUserID(c),
@@ -63,7 +63,7 @@ func pinViewer(c echo.Context, cc *campaigns.CampaignContext) PinViewer {
 }
 
 // Widget draws the Pinned Pages widget for the viewer.
-func (h *PagePinHandler) Widget(c echo.Context) error {
+func (h *PagePinHandler) Widget(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -71,7 +71,7 @@ func (h *PagePinHandler) Widget(c echo.Context) error {
 	return h.renderWidget(c, cc, pinViewer(c, cc))
 }
 
-func (h *PagePinHandler) renderWidget(c echo.Context, cc *campaigns.CampaignContext, v PinViewer) error {
+func (h *PagePinHandler) renderWidget(c *echo.Context, cc *campaigns.CampaignContext, v PinViewer) error {
 	pages, err := h.svc.ForViewer(c.Request().Context(), v)
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func (h *PagePinHandler) renderWidget(c echo.Context, cc *campaigns.CampaignCont
 // PinButton draws the Director's pin beside a page's name in its current
 // state. Without the Director's pins table there is no pin to offer, and
 // the empty answer leaves the page as it is.
-func (h *PagePinHandler) PinButton(c echo.Context) error {
+func (h *PagePinHandler) PinButton(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -99,7 +99,7 @@ func (h *PagePinHandler) PinButton(c echo.Context) error {
 
 // SetPin pins the page for everyone (on=1) or takes it off, and answers with
 // the pin in its new state.
-func (h *PagePinHandler) SetPin(c echo.Context) error {
+func (h *PagePinHandler) SetPin(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -112,7 +112,7 @@ func (h *PagePinHandler) SetPin(c echo.Context) error {
 }
 
 // UnpinShared takes a page off everyone's pins from the widget's ×.
-func (h *PagePinHandler) UnpinShared(c echo.Context) error {
+func (h *PagePinHandler) UnpinShared(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -125,7 +125,7 @@ func (h *PagePinHandler) UnpinShared(c echo.Context) error {
 }
 
 // UnpinOwn takes a page off the viewer's own pins from the widget's ×.
-func (h *PagePinHandler) UnpinOwn(c echo.Context) error {
+func (h *PagePinHandler) UnpinOwn(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

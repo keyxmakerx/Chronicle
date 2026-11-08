@@ -5,7 +5,7 @@
 package ai_workspace
 
 import (
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // RegisterOwnerRoutes mounts the per-campaign routes the AI Workspace

@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -126,8 +126,7 @@ func TestShow_CoDmCanOpenDmOnlyEntity(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/e1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("c1", "e1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "e1"}})
 	c.Set("campaign_context", coDmContext())
 	auth.SetSession(c, &auth.Session{UserID: "codm-1"})
 
@@ -154,8 +153,7 @@ func TestBacklinksFragment_CoDmSeesListAndReachesTarget(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/e1/backlinks", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("c1", "e1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "e1"}})
 	c.Set("campaign_context", coDmContext())
 	auth.SetSession(c, &auth.Session{UserID: "codm-1"})
 
@@ -187,8 +185,7 @@ func TestShow_CoDmSeesDmOnlyChildren(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/e1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("c1", "e1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "e1"}})
 	c.Set("campaign_context", coDmContext())
 	auth.SetSession(c, &auth.Session{UserID: "codm-1"})
 

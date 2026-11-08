@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -272,7 +272,7 @@ func TestNormalizeOrigin(t *testing.T) {
 func runGrantMiddleware(t *testing.T, svc AppGrantService, authz string) (int, *auth.Session) {
 	t.Helper()
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		if ae, ok := err.(*apperror.AppError); ok {
 			_ = c.NoContent(ae.Code)
 			return
@@ -280,7 +280,7 @@ func runGrantMiddleware(t *testing.T, svc AppGrantService, authz string) (int, *
 		_ = c.NoContent(http.StatusInternalServerError)
 	}
 	var seen *auth.Session
-	e.GET("/api/notes-app/campaigns/:id/notes", func(c echo.Context) error {
+	e.GET("/api/notes-app/campaigns/:id/notes", func(c *echo.Context) error {
 		seen = auth.GetSession(c)
 		return c.NoContent(http.StatusOK)
 	}, RequireAppGrant(svc, nil))
@@ -377,13 +377,13 @@ func TestRequireAppGrant_ClosedGateRefuses(t *testing.T) {
 
 	for _, open := range []bool{true, false} {
 		e := echo.New()
-		e.HTTPErrorHandler = func(err error, c echo.Context) {
+		e.HTTPErrorHandler = func(c *echo.Context, err error) {
 			if ae, ok := err.(*apperror.AppError); ok {
 				_ = c.NoContent(ae.Code)
 			}
 		}
 		gate := func(context.Context, string) (bool, error) { return open, nil }
-		e.GET("/api/notes-app/campaigns/:id/notes", func(c echo.Context) error {
+		e.GET("/api/notes-app/campaigns/:id/notes", func(c *echo.Context) error {
 			return c.NoContent(http.StatusOK)
 		}, RequireAppGrant(svc, gate))
 		req := httptest.NewRequest(http.MethodGet, "/api/notes-app/campaigns/camp/notes", nil)
@@ -476,7 +476,7 @@ func TestShowEmbed_FramableOnlyByAllowedOrigins(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
-			e.HTTPErrorHandler = func(err error, c echo.Context) {
+			e.HTTPErrorHandler = func(c *echo.Context, err error) {
 				if ae, ok := err.(*apperror.AppError); ok {
 					_ = c.NoContent(ae.Code)
 				}

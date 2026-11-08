@@ -8,6 +8,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/labstack/echo/v5"
 )
 
 // deleteCase enumerates who may delete an item with a given creator. The
@@ -140,8 +141,7 @@ func TestDeleteMarkerAPI_ScribeOwnVsOther(t *testing.T) {
 			repo.deleteMarkerFn = func(context.Context, string) error { deleted = true; return nil }
 			h := NewHandler(NewMapService(repo))
 			c, _ := newDMWriteRequest(http.MethodDelete, "/campaigns/camp-1/maps/map-1/markers/mk-public", "")
-			c.SetParamNames("id", "mid", "mkid")
-			c.SetParamValues("camp-1", "map-1", "mk-public")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}, {Name: "mkid", Value: "mk-public"}})
 			c.Set("campaign_context", dmWriteCampaignCtx(campaigns.RoleScribe, false))
 			if tc.userID != "" {
 				auth.SetSession(c, &auth.Session{UserID: tc.userID})

@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -86,17 +86,15 @@ func gmTestFixtures() (*entities.Entity, *entities.EntityType) {
 	return ent, et
 }
 
-func gmContext(method, path, entityID string, bearer bool) (echo.Context, *httptest.ResponseRecorder) {
+func gmContext(method, path, entityID string, bearer bool) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, path, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	if entityID != "" {
-		c.SetParamNames("id", "entityID")
-		c.SetParamValues("camp-1", entityID)
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "entityID", Value: entityID}})
 	} else {
-		c.SetParamNames("id")
-		c.SetParamValues("camp-1")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	}
 	keyID := synthKeySessionID // session-authed → role from GetMember
 	if bearer {
@@ -191,17 +189,15 @@ func ownerOnlyTestFixtures() (*entities.Entity, *entities.EntityType) {
 // gmContextAsUser mirrors gmContext but lets the caller set the session's
 // resolved user id (gmContext hardcodes "u1" via apiKeyContextKey), needed to
 // exercise "is this viewer the entity's claimed owner".
-func gmContextAsUser(method, path, entityID, userID string) (echo.Context, *httptest.ResponseRecorder) {
+func gmContextAsUser(method, path, entityID, userID string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, path, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	if entityID != "" {
-		c.SetParamNames("id", "entityID")
-		c.SetParamValues("camp-1", entityID)
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "entityID", Value: entityID}})
 	} else {
-		c.SetParamNames("id")
-		c.SetParamValues("camp-1")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	}
 	c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: userID, IsActive: true})
 	return c, rec

@@ -1,6 +1,6 @@
 package middleware
 
-import "github.com/labstack/echo/v4"
+import "github.com/labstack/echo/v5"
 
 // BuildHeaderName carries the running build's token on every response.
 const BuildHeaderName = "X-Chronicle-Build"
@@ -12,7 +12,7 @@ const BuildHeaderName = "X-Chronicle-Build"
 // page loaded with and turns a mismatched boosted swap into a full load.
 func BuildHeader(token string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			c.Response().Header().Set(BuildHeaderName, token)
 			return next(c)
 		}

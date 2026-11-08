@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -24,7 +24,7 @@ var appearancePictureLimits = map[string]int64{
 
 // SaveAppearanceAPI handles PUT /campaigns/:id/appearance: one Save from
 // the Customize page, carrying the whole draft.
-func (h *Handler) SaveAppearanceAPI(c echo.Context) error {
+func (h *Handler) SaveAppearanceAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -98,7 +98,7 @@ func appearanceStoredPictures(cc *CampaignContext) map[string]bool {
 // UploadAppearancePictureAPI handles POST /campaigns/:id/appearance/picture.
 // It stores the file and returns its name; nothing changes on the campaign
 // until the owner saves the draft that uses it.
-func (h *Handler) UploadAppearancePictureAPI(c echo.Context) error {
+func (h *Handler) UploadAppearancePictureAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -158,7 +158,7 @@ func (h *Handler) UploadAppearancePictureAPI(c echo.Context) error {
 // no-op: a file the saved look still uses, another campaign's file, a file
 // that did not come from this upload path, or one that is already gone.
 // Only a malformed name is refused, since that is never a legitimate call.
-func (h *Handler) DeleteAppearancePictureAPI(c echo.Context) error {
+func (h *Handler) DeleteAppearancePictureAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -42,7 +42,7 @@ func WithEncounters(h *EncounterAPIHandler) func(*APIHandler) {
 
 // dmUser returns the caller when they are the campaign owner or a co-DM, and
 // fails closed on any lookup error.
-func (h *EncounterAPIHandler) dmUser(c echo.Context) (string, error) {
+func (h *EncounterAPIHandler) dmUser(c *echo.Context) (string, error) {
 	key := GetAPIKey(c)
 	if key == nil {
 		return "", apperror.NewUnauthorized("api key required")
@@ -60,7 +60,7 @@ func (h *EncounterAPIHandler) dmUser(c echo.Context) (string, error) {
 // List returns the campaign's encounters, ready ones first.
 // GET /api/v1/campaigns/:id/encounters[?q=&limit=]
 // Response: {"data": [...], "total": N}
-func (h *EncounterAPIHandler) List(c echo.Context) error {
+func (h *EncounterAPIHandler) List(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func (h *EncounterAPIHandler) List(c echo.Context) error {
 
 // Get returns one encounter.
 // GET /api/v1/campaigns/:id/encounters/:encounterID
-func (h *EncounterAPIHandler) Get(c echo.Context) error {
+func (h *EncounterAPIHandler) Get(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err

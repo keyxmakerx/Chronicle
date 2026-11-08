@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -95,7 +95,7 @@ func (f *fakeUploadService) ValidateMediaPath() error { return nil }
 // newUploadTestContext builds a real multipart POST /media/upload request
 // (file + optional campaign_id field) and an Echo context carrying an
 // authenticated session for userID (or none, if userID == "").
-func newUploadTestContext(t *testing.T, userID, campaignID string, extra ...[2]string) (echo.Context, *httptest.ResponseRecorder) {
+func newUploadTestContext(t *testing.T, userID, campaignID string, extra ...[2]string) (*echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)

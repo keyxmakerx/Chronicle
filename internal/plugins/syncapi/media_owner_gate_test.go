@@ -16,7 +16,7 @@ import (
 
 	"context"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -44,13 +44,12 @@ func (s *stubMediaSvcOwnerGate) Delete(context.Context, string) error {
 
 // newMediaAPIContext builds an Echo context for DELETE
 // /api/v1/campaigns/:id/media/:mediaID with :id and :mediaID bound.
-func newMediaAPIContext(key *APIKey) (echo.Context, *httptest.ResponseRecorder) {
+func newMediaAPIContext(key *APIKey) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/campaigns/camp-1/media/med-1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "mediaID")
-	c.SetParamValues("camp-1", "med-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mediaID", Value: "med-1"}})
 	c.Set(apiKeyContextKey, key)
 	return c, rec
 }

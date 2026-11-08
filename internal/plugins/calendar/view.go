@@ -8,7 +8,7 @@ package calendar
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -64,7 +64,7 @@ type CalendarViewData struct {
 // may not see, or that does not belong to this campaign, comes back as
 // whatever error GetCalendarForViewer already returns (NotFound in both
 // cases, per its own doc comment) — propagated as-is, no new handling here.
-func (h *Handler) CalendarViewPage(c echo.Context) error {
+func (h *Handler) CalendarViewPage(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	calID := c.Param("calid")
@@ -116,7 +116,7 @@ func viewerZone(cc *campaigns.CampaignContext, cal *Calendar) string {
 // as this member sees it, ready to mount in the window's frame. A campaign
 // with no calendar the member may see gets a short note instead of an
 // error page, since the window is open either way.
-func (h *Handler) CalendarEmbedFragment(c echo.Context) error {
+func (h *Handler) CalendarEmbedFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	v := viewerFrom(c, cc)

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -57,7 +57,7 @@ func NewExportHandler(exportSvc *ExportImportService) *ExportHandler {
 // When ?include_media=1 is set, the response is a zip containing the JSON
 // envelope as campaign.json plus a media/ directory with each campaign-owned
 // media file. Requires campaign owner role.
-func (h *ExportHandler) ExportCampaign(c echo.Context) error {
+func (h *ExportHandler) ExportCampaign(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -115,7 +115,7 @@ func (h *ExportHandler) ExportCampaign(c echo.Context) error {
 	// entry bodies are being written, per-file failures are logged and
 	// skipped rather than returned — a partial file beats a truncated
 	// download with no signal.
-	zw := zip.NewWriter(c.Response().Writer)
+	zw := zip.NewWriter(c.Response())
 	defer func() { _ = zw.Close() }()
 
 	// 1. campaign.json at the root. Create is metadata-only; if it
@@ -179,7 +179,7 @@ func (h *ExportHandler) ExportCampaign(c echo.Context) error {
 
 // ImportCampaignForm renders the import page with a file upload form
 // (GET /campaigns/import).
-func (h *ExportHandler) ImportCampaignForm(c echo.Context) error {
+func (h *ExportHandler) ImportCampaignForm(c *echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, ImportCampaignPage(csrfToken))
 }
@@ -188,7 +188,7 @@ func (h *ExportHandler) ImportCampaignForm(c echo.Context) error {
 // bundle (POST /campaigns/import). Creates a new campaign owned by the
 // current user. A zip from ?include_media=1 also restores its picture
 // files; a JSON upload carries none, and the report says which are missing.
-func (h *ExportHandler) ImportCampaign(c echo.Context) error {
+func (h *ExportHandler) ImportCampaign(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")

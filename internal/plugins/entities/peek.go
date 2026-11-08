@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -44,7 +44,7 @@ type PeekView struct {
 // subset of the full page a viewer is allowed to read: field values pass
 // FilterRestrictedFields and the entry passes the same secret stripping as
 // GetEntry. Editing is never offered here.
-func (h *Handler) Peek(c echo.Context) error {
+func (h *Handler) Peek(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

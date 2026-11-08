@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -95,7 +95,7 @@ func newAccessSvc() *stubAccessSvc {
 }
 
 // ctxFor builds a request context for userID at role in campaign c1.
-func ctxFor(method, path string, userID string, role campaigns.Role, params map[string]string, body []byte) (echo.Context, *httptest.ResponseRecorder) {
+func ctxFor(method, path string, userID string, role campaigns.Role, params map[string]string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, path, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -106,8 +106,7 @@ func ctxFor(method, path string, userID string, role campaigns.Role, params map[
 		names = append(names, k)
 		values = append(values, v)
 	}
-	c.SetParamNames(names...)
-	c.SetParamValues(values...)
+	c.SetPathValues(pathValuesOf(names, values))
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "c1"},
 		MemberRole: role,

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -56,8 +56,7 @@ func TestGetEntity_HidesMentionsOfHiddenPages(t *testing.T) {
 
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/api/v1/campaigns/camp-1/entities/e1", nil), rec)
-			c.SetParamNames("id", "entityID")
-			c.SetParamValues("camp-1", "e1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "entityID", Value: "e1"}})
 			c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "member-1", IsActive: true})
 			if err := h.GetEntity(c); err != nil {
 				t.Fatalf("GetEntity: %v", err)

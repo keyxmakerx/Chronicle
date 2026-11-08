@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -16,7 +16,7 @@ import (
 // content (secret text, GM pictures, rollers) removed, and mentions of pages
 // they can't open read "a hidden page". A post a player may see can still
 // carry GM-only parts inside it, so hiding private posts alone is not enough.
-func (h *Handler) servePosts(c echo.Context, cc *campaigns.CampaignContext, posts []Post) {
+func (h *Handler) servePosts(c *echo.Context, cc *campaigns.CampaignContext, posts []Post) {
 	texts := make([]*string, 0, 2*len(posts))
 	entries := make([]string, len(posts))
 	for i := range posts {
@@ -40,7 +40,7 @@ func (h *Handler) servePosts(c echo.Context, cc *campaigns.CampaignContext, post
 
 // hideMentions hides, in place, the mentions in texts of pages this viewer
 // can't open, and reports how many it hid.
-func (h *Handler) hideMentions(c echo.Context, cc *campaigns.CampaignContext, texts ...*string) int {
+func (h *Handler) hideMentions(c *echo.Context, cc *campaigns.CampaignContext, texts ...*string) int {
 	n, err := sanitize.HideMentionsFor(c.Request().Context(), h.mentions, cc.Campaign.ID, int(cc.VisibilityRole()), auth.GetUserID(c), texts...)
 	if err != nil {
 		slog.Warn("posts: checking which mentioned pages a reader can open failed; all are hidden",
@@ -56,7 +56,7 @@ const hideRefusal = "only the owner or a Co-DM can make a post GM-only"
 // GM-only post is not theirs to see, so it reads as missing; and a post whose
 // text has GM-only parts or names a page they can't open is served to them
 // without those, so changing or deleting its text would lose them.
-func (h *Handler) requirePostWrite(c echo.Context, cc *campaigns.CampaignContext, p *Post, changesText bool) error {
+func (h *Handler) requirePostWrite(c *echo.Context, cc *campaigns.CampaignContext, p *Post, changesText bool) error {
 	if cc.CanAuthorDmOnly() {
 		return nil
 	}

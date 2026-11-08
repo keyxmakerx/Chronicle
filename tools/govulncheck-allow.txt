@@ -5,10 +5,3 @@
 # vulnerability database still lists without a fixed version. Below the
 # named version the finding fails CI as usual. Remove the entry once the
 # database lists the fix; the check warns when an entry stops matching.
-#
-# Echo 4.16.3 fixes both client-IP advisories (its release notes name them),
-# and Chronicle does not rely on the affected defaults either way: it sets
-# its own trusted-proxy IPExtractor (internal/middleware/proxy.go) and does
-# not use Echo's Proxy or RateLimiter middleware.
-GO-2026-6872 github.com/labstack/echo/v4 v4.16.3 #2077
-GO-2026-6875 github.com/labstack/echo/v4 v4.16.3 #2077

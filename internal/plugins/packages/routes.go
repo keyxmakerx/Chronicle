@@ -1,6 +1,6 @@
 package packages
 
-import "github.com/labstack/echo/v4"
+import "github.com/labstack/echo/v5"
 
 // RegisterRoutes mounts all package manager routes under the given admin group.
 // All routes require site admin authentication (enforced by the parent group).

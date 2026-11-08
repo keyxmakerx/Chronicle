@@ -16,8 +16,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
-	emw "github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	emw "github.com/labstack/echo/v5/middleware"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -73,8 +73,7 @@ func TestGetEntityTags_CoDmReachesDmOnlyEntity(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/entities/dm-only-ent/tags", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("camp-1", "dm-only-ent")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: "dm-only-ent"}})
 	c.Set("campaign_context", tagsCoDmContext())
 	auth.SetSession(c, &auth.Session{UserID: "codm-1"})
 

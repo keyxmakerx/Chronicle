@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )

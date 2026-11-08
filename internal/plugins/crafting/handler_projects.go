@@ -3,12 +3,12 @@ package crafting
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // Character handles GET /campaigns/:id/crafting/characters/:eid: the
 // Crafting block on a character's page.
-func (h *Handler) Character(c echo.Context) error {
+func (h *Handler) Character(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -21,7 +21,7 @@ func (h *Handler) Character(c echo.Context) error {
 }
 
 // StartProject handles POST /campaigns/:id/crafting/characters/:eid/projects.
-func (h *Handler) StartProject(c echo.Context) error {
+func (h *Handler) StartProject(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -38,7 +38,7 @@ func (h *Handler) StartProject(c echo.Context) error {
 }
 
 // RollProject handles POST /campaigns/:id/crafting/projects/:pid/roll.
-func (h *Handler) RollProject(c echo.Context) error {
+func (h *Handler) RollProject(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func (h *Handler) RollProject(c echo.Context) error {
 }
 
 // Experiment handles POST /campaigns/:id/crafting/characters/:eid/experiment.
-func (h *Handler) Experiment(c echo.Context) error {
+func (h *Handler) Experiment(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func (h *Handler) Experiment(c echo.Context) error {
 }
 
 // BreakDown handles POST /campaigns/:id/crafting/characters/:eid/break-down.
-func (h *Handler) BreakDown(c echo.Context) error {
+func (h *Handler) BreakDown(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -89,7 +89,7 @@ func (h *Handler) BreakDown(c echo.Context) error {
 }
 
 // Help handles POST /campaigns/:id/crafting/projects/:pid/help.
-func (h *Handler) Help(c echo.Context) error {
+func (h *Handler) Help(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -106,7 +106,7 @@ func (h *Handler) Help(c echo.Context) error {
 }
 
 // CancelProject handles DELETE /campaigns/:id/crafting/projects/:pid.
-func (h *Handler) CancelProject(c echo.Context) error {
+func (h *Handler) CancelProject(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func (h *Handler) CancelProject(c echo.Context) error {
 }
 
 // Projects handles GET /campaigns/:id/crafting/projects: the Director's tab.
-func (h *Handler) Projects(c echo.Context) error {
+func (h *Handler) Projects(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -131,7 +131,7 @@ func (h *Handler) Projects(c echo.Context) error {
 }
 
 // LogRespite handles POST /campaigns/:id/crafting/respites.
-func (h *Handler) LogRespite(c echo.Context) error {
+func (h *Handler) LogRespite(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ func (h *Handler) LogRespite(c echo.Context) error {
 }
 
 // GiveRoll handles POST /campaigns/:id/crafting/projects/:pid/rolls.
-func (h *Handler) GiveRoll(c echo.Context) error {
+func (h *Handler) GiveRoll(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -157,7 +157,7 @@ func (h *Handler) GiveRoll(c echo.Context) error {
 }
 
 // SetPoints handles PUT /campaigns/:id/crafting/projects/:pid/points.
-func (h *Handler) SetPoints(c echo.Context) error {
+func (h *Handler) SetPoints(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err

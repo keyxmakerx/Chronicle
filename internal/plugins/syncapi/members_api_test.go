@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
@@ -52,8 +52,7 @@ func TestListMembers_AvatarURLAndNoEmail(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-			c.SetParamNames("id")
-			c.SetParamValues("c1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 			if err := h.ListMembers(c); err != nil {
 				t.Fatal(err)
 			}

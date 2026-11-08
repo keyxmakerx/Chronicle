@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -51,7 +51,7 @@ func TestRequireKeyOwnerStillOwner_TrashedCampaign(t *testing.T) {
 			campSvc := &fakeCampaignService{getByIDFn: tc.getByID, getMemberFn: memberWithRole(campaigns.RoleOwner)}
 
 			e := echo.New()
-			e.HTTPErrorHandler = func(err error, c echo.Context) {
+			e.HTTPErrorHandler = func(c *echo.Context, err error) {
 				var appErr *apperror.AppError
 				if stderrors.As(err, &appErr) {
 					_ = c.JSON(appErr.Code, map[string]string{"error": appErr.Type})
@@ -60,7 +60,7 @@ func TestRequireKeyOwnerStillOwner_TrashedCampaign(t *testing.T) {
 				_ = c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal_error"})
 			}
 			g := e.Group("/api/v1/campaigns/:id", RequireAPIKey(syncSvc), RequireKeyOwnerStillOwner(campSvc, syncSvc))
-			g.GET("", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+			g.GET("", func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/campaigns/camp-1", nil)
 			req.Header.Set("Authorization", "Bearer "+rawKey)

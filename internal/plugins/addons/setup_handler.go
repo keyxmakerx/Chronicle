@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -38,7 +38,7 @@ type ExtensionSettingsView struct {
 // (GET /campaigns/:id/extensions/:slug/settings). HTMX requests get the modal
 // overlay (so the Extensions hub can inject it); normal requests get the full
 // page (deep-link / no-JS fallback). Owner-gated by the route.
-func (h *Handler) ExtensionSettings(c echo.Context) error {
+func (h *Handler) ExtensionSettings(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -73,7 +73,7 @@ func (h *Handler) ExtensionSettings(c echo.Context) error {
 // (POST /campaigns/:id/extensions/:slug/settings/apply). On success it persists
 // the answers + completion, re-renders the body with the result, and fires the
 // hub-refresh + a toast. Owner-gated by the route.
-func (h *Handler) ApplyExtensionSettings(c echo.Context) error {
+func (h *Handler) ApplyExtensionSettings(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -141,7 +141,7 @@ func (h *Handler) ApplyExtensionSettings(c echo.Context) error {
 // DismissExtensionSetup marks setup as dismissed so the Features card stops
 // nudging (POST /campaigns/:id/extensions/:slug/settings/dismiss). The owner can
 // reopen the page any time. Owner-gated by the route.
-func (h *Handler) DismissExtensionSetup(c echo.Context) error {
+func (h *Handler) DismissExtensionSetup(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -187,7 +187,7 @@ func (h *Handler) fillProviderView(ctx context.Context, v *ExtensionSettingsView
 
 // renderSettingsBody renders the inner fragment for HTMX (so an Apply swaps
 // inside the open modal) or the full page otherwise.
-func (h *Handler) renderSettingsBody(c echo.Context, v ExtensionSettingsView) error {
+func (h *Handler) renderSettingsBody(c *echo.Context, v ExtensionSettingsView) error {
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, ExtensionSettingsFormFragment(v))
 	}
@@ -195,7 +195,7 @@ func (h *Handler) renderSettingsBody(c echo.Context, v ExtensionSettingsView) er
 }
 
 // formAnswers parses the POST body into an answer map, dropping framework fields.
-func formAnswers(c echo.Context) (map[string]string, error) {
+func formAnswers(c *echo.Context) (map[string]string, error) {
 	if err := c.Request().ParseForm(); err != nil {
 		return nil, apperror.NewBadRequest("invalid form submission")
 	}
@@ -214,7 +214,7 @@ func formAnswers(c echo.Context) (map[string]string, error) {
 // setSetupHXTrigger sets an HX-Trigger header that both refreshes the Extensions
 // hub fragment and raises a client toast, in one JSON payload (HTMX fires every
 // key as an event; a null value means "no detail").
-func setSetupHXTrigger(c echo.Context, refreshEvent, notifyMsg, notifyType string) {
+func setSetupHXTrigger(c *echo.Context, refreshEvent, notifyMsg, notifyType string) {
 	payload := map[string]any{
 		refreshEvent: nil,
 		"chronicle:notify": map[string]string{

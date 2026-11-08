@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -158,7 +158,7 @@ const foundryMonsterSearchMax = 50
 func (h *SyncHistoryHandler) SetFoundryMatcher(m *FoundryMatcher) { h.matcher = m }
 
 // matcherFor gates a match route: wired, and an owner or DM-access caller.
-func (h *SyncHistoryHandler) matcherFor(c echo.Context) (*FoundryMatcher, error) {
+func (h *SyncHistoryHandler) matcherFor(c *echo.Context) (*FoundryMatcher, error) {
 	if h.matcher == nil {
 		return nil, apperror.NewNotFound("creature matches are not available")
 	}
@@ -170,7 +170,7 @@ func (h *SyncHistoryHandler) matcherFor(c echo.Context) (*FoundryMatcher, error)
 
 // GetFoundryMatch is one creature page's match.
 // GET /api/v1/campaigns/:id/entities/:entityID/foundry-match
-func (h *SyncHistoryHandler) GetFoundryMatch(c echo.Context) error {
+func (h *SyncHistoryHandler) GetFoundryMatch(c *echo.Context) error {
 	m, err := h.matcherFor(c)
 	if err != nil {
 		return err
@@ -186,7 +186,7 @@ func (h *SyncHistoryHandler) GetFoundryMatch(c echo.Context) error {
 // {"action":"match","name":…,"pack":…}, {"action":"not_same","name":…} or
 // {"action":"reset"}.
 // PUT /api/v1/campaigns/:id/entities/:entityID/foundry-match
-func (h *SyncHistoryHandler) PutFoundryMatch(c echo.Context) error {
+func (h *SyncHistoryHandler) PutFoundryMatch(c *echo.Context) error {
 	m, err := h.matcherFor(c)
 	if err != nil {
 		return err
@@ -204,7 +204,7 @@ func (h *SyncHistoryHandler) PutFoundryMatch(c echo.Context) error {
 
 // ListFoundryMatches is every creature page's match.
 // GET /api/v1/campaigns/:id/foundry-matches
-func (h *SyncHistoryHandler) ListFoundryMatches(c echo.Context) error {
+func (h *SyncHistoryHandler) ListFoundryMatches(c *echo.Context) error {
 	m, err := h.matcherFor(c)
 	if err != nil {
 		return err
@@ -218,7 +218,7 @@ func (h *SyncHistoryHandler) ListFoundryMatches(c echo.Context) error {
 
 // SearchFoundryMonsters finds Foundry's monsters by part of a name.
 // GET /api/v1/campaigns/:id/foundry-monsters?q=
-func (h *SyncHistoryHandler) SearchFoundryMonsters(c echo.Context) error {
+func (h *SyncHistoryHandler) SearchFoundryMonsters(c *echo.Context) error {
 	m, err := h.matcherFor(c)
 	if err != nil {
 		return err

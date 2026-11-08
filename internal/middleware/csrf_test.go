@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -23,7 +23,7 @@ func runCSRF(t *testing.T, req *http.Request) (nextCalled bool, rec *httptest.Re
 	e := echo.New()
 	rec = httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	h := CSRF()(func(c echo.Context) error {
+	h := CSRF()(func(c *echo.Context) error {
 		nextCalled = true
 		return c.NoContent(http.StatusOK)
 	})

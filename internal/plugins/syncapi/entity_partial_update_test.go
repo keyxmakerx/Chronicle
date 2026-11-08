@@ -13,7 +13,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -62,14 +62,13 @@ func (s *stubEntityServiceForPartialUpdate) Update(_ context.Context, id string,
 	return &entities.Entity{ID: id, CampaignID: "camp-1"}, nil
 }
 
-func newPartialUpdateContext(method, path, body string) (echo.Context, *httptest.ResponseRecorder) {
+func newPartialUpdateContext(method, path, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, path, bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "entityID")
-	c.SetParamValues("camp-1", "ent-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "entityID", Value: "ent-1"}})
 	c.Set(apiKeyContextKey, &APIKey{
 		ID:         synthKeySessionID,
 		CampaignID: "camp-1",

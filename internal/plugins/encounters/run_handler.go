@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -16,7 +16,7 @@ type RunHandler struct{ svc RunService }
 // NewRunHandler builds the run handler.
 func NewRunHandler(svc RunService) *RunHandler { return &RunHandler{svc: svc} }
 
-func bindJSON(c echo.Context, limit int64, into any) error {
+func bindJSON(c *echo.Context, limit int64, into any) error {
 	// One byte past the cap so an oversize body is refused, not truncated.
 	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, limit+1))
 	if err != nil || len(raw) == 0 || int64(len(raw)) > limit {
@@ -29,7 +29,7 @@ func bindJSON(c echo.Context, limit int64, into any) error {
 }
 
 // Current handles GET /campaigns/:id/encounter-run.
-func (h *RunHandler) Current(c echo.Context) error {
+func (h *RunHandler) Current(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func (h *RunHandler) Current(c echo.Context) error {
 }
 
 // Start handles POST /campaigns/:id/encounter-run.
-func (h *RunHandler) Start(c echo.Context) error {
+func (h *RunHandler) Start(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (h *RunHandler) Start(c echo.Context) error {
 }
 
 // Save handles PUT /campaigns/:id/encounter-run.
-func (h *RunHandler) Save(c echo.Context) error {
+func (h *RunHandler) Save(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func (h *RunHandler) Save(c echo.Context) error {
 
 // End handles DELETE /campaigns/:id/encounter-run, answering with what the
 // fight left.
-func (h *RunHandler) End(c echo.Context) error {
+func (h *RunHandler) End(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // An allowed outside origin may read Chronicle's answers, but never with the
@@ -16,7 +16,7 @@ func TestCORS_NeverAllowsCredentials(t *testing.T) {
 	h := CORS(CORSConfig{
 		AllowedOrigins: []string{"https://chronicle.example"},
 		DynamicOrigins: func() []string { return []string{"https://foundry.example"} },
-	})(func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	})(func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 	for _, method := range []string{http.MethodOptions, http.MethodGet, http.MethodPost} {
 		for _, path := range []string{"/api/v1/campaigns/c/entities", "/campaigns/c/settings", "/admin/users"} {
 			req := httptest.NewRequest(method, path, nil)

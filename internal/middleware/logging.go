@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // sensitiveParams are query parameter names whose values should be redacted
@@ -33,7 +33,7 @@ var sensitiveParams = []string{
 // to prevent credential leakage in log files.
 func RequestLogger() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			start := time.Now()
 
 			err := next(c)
@@ -41,7 +41,7 @@ func RequestLogger() echo.MiddlewareFunc {
 			// Log after the request completes so we have the status code.
 			latency := time.Since(start)
 			req := c.Request()
-			res := c.Response()
+			res := ResponseState(c)
 
 			// Build structured log fields.
 			attrs := []slog.Attr{

@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -20,7 +20,7 @@ import (
 
 // StructureEditPage renders the editor prefilled from the calendar.
 // GET /campaigns/:id/calendars/:calid/structure
-func (h *Handler) StructureEditPage(c echo.Context) error {
+func (h *Handler) StructureEditPage(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	cal, err := h.svc.GetCalendarForViewer(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, ownViewer(c, cc))
 	if err != nil {
@@ -48,7 +48,7 @@ func (h *Handler) StructureEditPage(c echo.Context) error {
 // bindStructureEdit re-validates the editor's submission through the same
 // size cap and clamp a wizard build gets (parseWizardImportJSON): it is
 // browser-submitted, on the preview and again on the save.
-func bindStructureEdit(c echo.Context) (StructureEdit, string, error) {
+func bindStructureEdit(c *echo.Context) (StructureEdit, string, error) {
 	ir, err := parseImportJSON(c.FormValue("import_json"))
 	if err != nil {
 		return StructureEdit{}, "", apperror.NewBadRequest(err.Error())
@@ -68,7 +68,7 @@ func bindStructureEdit(c echo.Context) (StructureEdit, string, error) {
 // was on the form: with it, an absent weather_forecast means off; without
 // it, the stored switch stays. Invalid values are a bad-request the owner
 // reads in the preview slot.
-func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext, calID string) (weatherCarry, error) {
+func (h *Handler) bindWeatherCarry(c *echo.Context, cc *campaigns.CampaignContext, calID string) (weatherCarry, error) {
 	climate, cont, kindsRaw := c.FormValue("weather_climate"), c.FormValue("weather_continuity"), c.FormValue("weather_kinds")
 	forecastSent, daysRaw := c.FormValue("weather_forecast_sent") != "", c.FormValue("weather_forecast_days")
 	if climate == "" && cont == "" && kindsRaw == "" && !forecastSent && daysRaw == "" {
@@ -162,7 +162,7 @@ func isOwnerFacingError(err error) bool {
 
 // StructureEditPreview shows what saving the submitted structure would do.
 // POST /campaigns/:id/calendars/:calid/structure/preview
-func (h *Handler) StructureEditPreview(c echo.Context) error {
+func (h *Handler) StructureEditPreview(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	calID := c.Param("calid")
 	edit, raw, err := bindStructureEdit(c)
@@ -188,7 +188,7 @@ func (h *Handler) StructureEditPreview(c echo.Context) error {
 // the calendar. If the calendar changed since the preview, nothing is
 // written and the up-to-date preview replaces the old one.
 // POST /campaigns/:id/calendars/:calid/structure
-func (h *Handler) StructureEditApply(c echo.Context) error {
+func (h *Handler) StructureEditApply(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	calID := c.Param("calid")
 	edit, raw, err := bindStructureEdit(c)

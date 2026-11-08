@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -24,7 +24,7 @@ func NewItemLookHandler(svc ItemLookService) *ItemLookHandler {
 }
 
 // Get handles GET /campaigns/:id/armory/items/:eid/look.
-func (h *ItemLookHandler) Get(c echo.Context) error {
+func (h *ItemLookHandler) Get(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -37,7 +37,7 @@ func (h *ItemLookHandler) Get(c echo.Context) error {
 }
 
 // Put handles PUT /campaigns/:id/armory/items/:eid/look.
-func (h *ItemLookHandler) Put(c echo.Context) error {
+func (h *ItemLookHandler) Put(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

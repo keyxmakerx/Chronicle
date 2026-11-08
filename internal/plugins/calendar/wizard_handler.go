@@ -26,7 +26,7 @@ import (
 	"net/url"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -58,14 +58,14 @@ func (h *Handler) SetTimezoneLookup(l timezoneLookup) {
 
 // WizardStart renders the wizard's Start step.
 // GET /campaigns/:id/calendars/wizard
-func (h *Handler) WizardStart(c echo.Context) error {
+func (h *Handler) WizardStart(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	return middleware.Render(c, http.StatusOK, wizardShell("Start", wizardStartBody(cc.Campaign.ID)))
 }
 
 // WizardPresets renders the preset-picker step.
 // GET /campaigns/:id/calendars/wizard/presets
-func (h *Handler) WizardPresets(c echo.Context) error {
+func (h *Handler) WizardPresets(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
@@ -91,7 +91,7 @@ func (h *Handler) WizardPresets(c echo.Context) error {
 
 // WizardPresetReview renders the Review step for one shipped preset.
 // GET /campaigns/:id/calendars/wizard/presets/:name
-func (h *Handler) WizardPresetReview(c echo.Context) error {
+func (h *Handler) WizardPresetReview(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	name := c.Param("name")
 	ir, err := h.svc.PreviewPreset(c.Request().Context(), name)
@@ -105,7 +105,7 @@ func (h *Handler) WizardPresetReview(c echo.Context) error {
 
 // WizardImportStep renders the Import step's drop zone.
 // GET /campaigns/:id/calendars/wizard/import
-func (h *Handler) WizardImportStep(c echo.Context) error {
+func (h *Handler) WizardImportStep(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	return middleware.Render(c, http.StatusOK, wizardShell("Import a file", wizardImportBody(cc.Campaign.ID, middleware.GetCSRFToken(c), "")))
 }
@@ -115,7 +115,7 @@ func (h *Handler) WizardImportStep(c echo.Context) error {
 // carrying the parsed *ImportResult forward as JSON in a hidden field (see
 // this file's package doc for why).
 // POST /campaigns/:id/calendars/wizard/import/preview (multipart, field "file")
-func (h *Handler) WizardImportPreview(c echo.Context) error {
+func (h *Handler) WizardImportPreview(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	data, err := readCalendarImportFile(c)
 	if err != nil {
@@ -142,7 +142,7 @@ func (h *Handler) WizardImportPreview(c echo.Context) error {
 // client-controlled — see this file's package doc), so unlike the preset
 // and import sources there is no separate picker/upload step first.
 // GET /campaigns/:id/calendars/wizard/reallife
-func (h *Handler) WizardRealWorldReview(c echo.Context) error {
+func (h *Handler) WizardRealWorldReview(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ir, err := h.svc.PreviewRealWorld(c.Request().Context())
 	if err != nil {
@@ -158,7 +158,7 @@ func (h *Handler) WizardRealWorldReview(c echo.Context) error {
 // the lookup fails — this is a starting-default nicety, never something a
 // failure here should surface as an error (the review step's own Intl
 // detection and the plain "UTC" fallback both still work with "").
-func (h *Handler) ownerZoneHint(c echo.Context) string {
+func (h *Handler) ownerZoneHint(c *echo.Context) string {
 	if h.userZones == nil {
 		return ""
 	}
@@ -175,7 +175,7 @@ func (h *Handler) ownerZoneHint(c echo.Context) string {
 
 // WizardBuildStep renders the "Build your own" structure editor.
 // GET /campaigns/:id/calendars/wizard/build
-func (h *Handler) WizardBuildStep(c echo.Context) error {
+func (h *Handler) WizardBuildStep(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	return middleware.Render(c, http.StatusOK, wizardShell("Build your own", wizardBuildBody(cc.Campaign.ID, middleware.GetCSRFToken(c), "")))
 }
@@ -191,7 +191,7 @@ func (h *Handler) WizardBuildStep(c echo.Context) error {
 // editor's own client-side soft caps let a normal session reach, so this
 // path is realistically only hit by a tampered request, not a lost edit.
 // POST /campaigns/:id/calendars/wizard/build/preview
-func (h *Handler) WizardBuildPreview(c echo.Context) error {
+func (h *Handler) WizardBuildPreview(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ir, err := parseWizardImportJSON(c.FormValue("import_json"))
 	if err != nil {
@@ -227,7 +227,7 @@ type wizardCreateForm struct {
 // absent value becomes nil, exactly like formIntPtr does for the JSON
 // import-create route) so a genuinely missing value is reported by
 // CreateCalendarFromImport's own #741 validation, not masked by a 400 here.
-func bindWizardCreateForm(c echo.Context) wizardCreateForm {
+func bindWizardCreateForm(c *echo.Context) wizardCreateForm {
 	return wizardCreateForm{
 		Source:         c.FormValue("source"),
 		PresetName:     c.FormValue("preset_name"),
@@ -297,7 +297,7 @@ func parseImportJSON(raw string) (*ImportResult, error) {
 // the error and the caller's own submitted values, never the original
 // source's defaults, so a correction doesn't lose what was already typed.
 // POST /campaigns/:id/calendars/wizard/create
-func (h *Handler) WizardCreate(c echo.Context) error {
+func (h *Handler) WizardCreate(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	form := bindWizardCreateForm(c)

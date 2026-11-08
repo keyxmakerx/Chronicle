@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -36,7 +36,7 @@ type eraTarget struct {
 // loadEraTarget checks the page and era for an era route. Someone who may
 // not see other eras gets the same NotFound for any era but the current one,
 // so the routes tell them nothing about eras still hidden from them.
-func (h *Handler) loadEraTarget(c echo.Context) (*eraTarget, error) {
+func (h *Handler) loadEraTarget(c *echo.Context) (*eraTarget, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, apperror.NewMissingContext()
@@ -84,7 +84,7 @@ func (t *eraTarget) requireWrite() error {
 }
 
 // version returns the page's version for the target era, or NotFound.
-func (h *Handler) eraVersionOf(c echo.Context, t *eraTarget) (*PageEraVersion, error) {
+func (h *Handler) eraVersionOf(c *echo.Context, t *eraTarget) (*PageEraVersion, error) {
 	v, err := h.eraPages.Version(c.Request().Context(), t.entity.ID, t.eraID)
 	if err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func eraPageURL(campaignID, entityID string, eraID int, query string) string {
 // CreateEraVersionAPI starts a version of the page for an era and opens it
 // for editing.
 // POST /campaigns/:id/entities/:eid/eras/:eraID
-func (h *Handler) CreateEraVersionAPI(c echo.Context) error {
+func (h *Handler) CreateEraVersionAPI(c *echo.Context) error {
 	t, err := h.loadEraTarget(c)
 	if err != nil {
 		return err
@@ -128,7 +128,7 @@ func (h *Handler) CreateEraVersionAPI(c echo.Context) error {
 // DeleteEraVersionAPI removes the page's version for an era; the page shows
 // its usual self in that era again.
 // DELETE /campaigns/:id/entities/:eid/eras/:eraID
-func (h *Handler) DeleteEraVersionAPI(c echo.Context) error {
+func (h *Handler) DeleteEraVersionAPI(c *echo.Context) error {
 	t, err := h.loadEraTarget(c)
 	if err != nil {
 		return err
@@ -150,7 +150,7 @@ func (h *Handler) DeleteEraVersionAPI(c echo.Context) error {
 // Partial: an absent key keeps, an empty or null one goes back to the usual
 // page's. Accepts JSON or the Eras panel's form.
 // PATCH /campaigns/:id/entities/:eid/eras/:eraID
-func (h *Handler) UpdateEraIdentityAPI(c echo.Context) error {
+func (h *Handler) UpdateEraIdentityAPI(c *echo.Context) error {
 	t, err := h.loadEraTarget(c)
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func (h *Handler) UpdateEraIdentityAPI(c echo.Context) error {
 		}
 		name, image = body.Name, body.ImagePath
 	} else {
-		form, err := c.FormParams()
+		form, err := c.FormValues()
 		if err != nil {
 			return apperror.NewBadRequest("invalid form")
 		}
@@ -197,7 +197,7 @@ func (h *Handler) UpdateEraIdentityAPI(c echo.Context) error {
 
 // UpdateEraImageAPI sets the version's picture, for the picture widget.
 // PUT /campaigns/:id/entities/:eid/eras/:eraID/image
-func (h *Handler) UpdateEraImageAPI(c echo.Context) error {
+func (h *Handler) UpdateEraImageAPI(c *echo.Context) error {
 	t, err := h.loadEraTarget(c)
 	if err != nil {
 		return err
@@ -227,7 +227,7 @@ func (h *Handler) UpdateEraImageAPI(c echo.Context) error {
 // GetEraEntryAPI returns the version's text, or the usual text while the
 // version has none of its own, in the usual entry route's shape.
 // GET /campaigns/:id/entities/:eid/eras/:eraID/entry
-func (h *Handler) GetEraEntryAPI(c echo.Context) error {
+func (h *Handler) GetEraEntryAPI(c *echo.Context) error {
 	t, err := h.loadEraTarget(c)
 	if err != nil {
 		return err
@@ -254,7 +254,7 @@ func (h *Handler) GetEraEntryAPI(c echo.Context) error {
 // UpdateEraEntryAPI saves the version's text from the editor. A save on top
 // of newer text answers 409 like the usual entry route.
 // PUT /campaigns/:id/entities/:eid/eras/:eraID/entry
-func (h *Handler) UpdateEraEntryAPI(c echo.Context) error {
+func (h *Handler) UpdateEraEntryAPI(c *echo.Context) error {
 	t, err := h.loadEraTarget(c)
 	if err != nil {
 		return err
@@ -307,7 +307,7 @@ func (h *Handler) UpdateEraEntryAPI(c echo.Context) error {
 // over, in the usual fields route's shape. For the DM it adds era_changed:
 // each changed field's usual value, so the widget can say what it usually is.
 // GET /campaigns/:id/entities/:eid/eras/:eraID/fields
-func (h *Handler) GetEraFieldsAPI(c echo.Context) error {
+func (h *Handler) GetEraFieldsAPI(c *echo.Context) error {
 	t, err := h.loadEraTarget(c)
 	if err != nil {
 		return err
@@ -352,7 +352,7 @@ func (h *Handler) GetEraFieldsAPI(c echo.Context) error {
 // usual value stops being a change. fields_data and fields_patch both change
 // only the keys they carry (null clears).
 // PUT /campaigns/:id/entities/:eid/eras/:eraID/fields
-func (h *Handler) UpdateEraFieldsAPI(c echo.Context) error {
+func (h *Handler) UpdateEraFieldsAPI(c *echo.Context) error {
 	t, err := h.loadEraTarget(c)
 	if err != nil {
 		return err
@@ -416,7 +416,7 @@ func (h *Handler) UpdateEraFieldsAPI(c echo.Context) error {
 
 // memberName is a member's display name for a clash message, or "" when it
 // can't be found.
-func (h *Handler) memberName(c echo.Context, campaignID, userID string) string {
+func (h *Handler) memberName(c *echo.Context, campaignID, userID string) string {
 	if userID == "" || h.memberLister == nil {
 		return ""
 	}

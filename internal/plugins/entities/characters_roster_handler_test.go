@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -69,7 +69,7 @@ func (rosterMembers) ListMembers(context.Context, string) ([]campaigns.CampaignM
 	}, nil
 }
 
-func rosterCall(t *testing.T, svc *rosterSvc, addonOn bool, method, target string, form url.Values, call func(*Handler, echo.Context) error) (*httptest.ResponseRecorder, error) {
+func rosterCall(t *testing.T, svc *rosterSvc, addonOn bool, method, target string, form url.Values, call func(*Handler, *echo.Context) error) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	h := NewHandler(svc)
 	h.SetCharacterLists(&fakeCastLists{chars: []int{7}, chosen: CharacterLists{CharacterTypeIDs: []int{7}}})
@@ -89,8 +89,7 @@ func rosterCall(t *testing.T, svc *rosterSvc, addonOn bool, method, target strin
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1", Name: "Test"},
 		MemberRole: campaigns.RoleScribe,
@@ -120,7 +119,7 @@ func TestSetCharacterOwner(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &rosterSvc{ent: Entity{ID: "e1", CampaignID: "camp-1", Name: "Tyne"}}
 			rec, err := rosterCall(t, svc, tc.addonOn, http.MethodPost, "/campaigns/camp-1/characters/owner", tc.form,
-				func(h *Handler, c echo.Context) error { return h.SetCharacterOwner(c) })
+				func(h *Handler, c *echo.Context) error { return h.SetCharacterOwner(c) })
 			if tc.wantCode != 200 {
 				assertAppError(t, err, tc.wantCode)
 				if svc.ownerSet {
@@ -163,7 +162,7 @@ func TestSetCharacterPlayable(t *testing.T) {
 			svc := &rosterSvc{ent: Entity{ID: "e1", CampaignID: "camp-1", Name: "Tyne"}}
 			rec, err := rosterCall(t, svc, tc.addonOn, http.MethodPost, "/campaigns/camp-1/characters/playable",
 				url.Values{"entity_id": {"e1"}, "playable": {tc.playable}},
-				func(h *Handler, c echo.Context) error { return h.SetCharacterPlayable(c) })
+				func(h *Handler, c *echo.Context) error { return h.SetCharacterPlayable(c) })
 			if tc.wantCode != 200 {
 				assertAppError(t, err, tc.wantCode)
 				if svc.playable != nil {
@@ -246,7 +245,7 @@ func TestSearchRosterFinder(t *testing.T) {
 			svc := &rosterSvc{found: tc.found}
 			target := "/campaigns/camp-1/characters/players/search?q=" + url.QueryEscape(tc.q) + "&for=" + tc.target
 			rec, err := rosterCall(t, svc, tc.addonOn, http.MethodGet, target, nil,
-				func(h *Handler, c echo.Context) error { return h.SearchRosterFinder(c) })
+				func(h *Handler, c *echo.Context) error { return h.SearchRosterFinder(c) })
 			if tc.wantCode != 200 {
 				assertAppError(t, err, tc.wantCode)
 				if svc.searched {
@@ -388,8 +387,7 @@ func TestClaimFromPickBox(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(req, rec)
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("camp-1", "e1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: "e1"}})
 			c.Set("campaign_context", &campaigns.CampaignContext{
 				Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}, MemberRole: campaigns.RolePlayer, IsMember: true,
 			})
@@ -438,8 +436,7 @@ func TestClaimEntity_RefusesNPCs(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/campaigns/camp-1/entities/e1/claim", nil)
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(req, rec)
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("camp-1", "e1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: "e1"}})
 			c.Set("campaign_context", &campaigns.CampaignContext{
 				Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}, MemberRole: campaigns.RolePlayer, IsMember: true,
 			})

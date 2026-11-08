@@ -3,7 +3,7 @@ package addons
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -22,7 +22,7 @@ import (
 // Must be applied AFTER RequireCampaignAccess (needs campaign :id param).
 func RequireAddon(svc AddonService, slug string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			campaignID := c.Param("id")
 			if campaignID == "" {
 				return apperror.NewBadRequest("campaign ID is required")

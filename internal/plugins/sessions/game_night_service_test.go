@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -513,15 +513,14 @@ func TestFlagNeedsRecheck_RecurringSessionFlagsBothStores(t *testing.T) {
 
 // --- handler-level: restore reachability, and membership re-checks --------
 
-// echoCtxWithToken builds a bare echo.Context with a "token" path param, for
+// echoCtxWithToken builds a bare *echo.Context with a "token" path param, for
 // the public token routes below — mirrors rsvp_token_guard_test.go's
 // rsvpTokenCtx.
-func echoCtxWithToken(method, token string) (echo.Context, *httptest.ResponseRecorder) {
+func echoCtxWithToken(method, token string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	rec := httptest.NewRecorder()
 	c := e.NewContext(httptest.NewRequest(method, "/x", nil), rec)
-	c.SetParamNames("token")
-	c.SetParamValues(token)
+	c.SetPathValues(echo.PathValues{{Name: "token", Value: token}})
 	return c, rec
 }
 
@@ -605,8 +604,7 @@ func TestApplySuggestToken_RemovedMemberDenied(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/rsvp/st/suggest", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	c := e.NewContext(req, rec)
-	c.SetParamNames("token")
-	c.SetParamValues("st")
+	c.SetPathValues(echo.PathValues{{Name: "token", Value: "st"}})
 
 	if err := h.ApplySuggestToken(c); err != nil {
 		t.Fatalf("handler: %v", err)
@@ -643,8 +641,7 @@ func TestRestoreSessionAPI_SoftDeletedSessionIsReachable(t *testing.T) {
 	e := echo.New()
 	rec := httptest.NewRecorder()
 	c := e.NewContext(httptest.NewRequest(http.MethodPost, "/x", nil), rec)
-	c.SetParamNames("sid")
-	c.SetParamValues("s1")
+	c.SetPathValues(echo.PathValues{{Name: "sid", Value: "s1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}})
 
 	if err := h.RestoreSessionAPI(c); err != nil {
@@ -678,8 +675,7 @@ func TestRestoreSessionAPI_CrossCampaign404s(t *testing.T) {
 	e := echo.New()
 	rec := httptest.NewRecorder()
 	c := e.NewContext(httptest.NewRequest(http.MethodPost, "/x", nil), rec)
-	c.SetParamNames("sid")
-	c.SetParamValues("s1")
+	c.SetPathValues(echo.PathValues{{Name: "sid", Value: "s1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}})
 
 	err := h.RestoreSessionAPI(c)

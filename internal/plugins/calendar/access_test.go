@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
-	emw "github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	emw "github.com/labstack/echo/v5/middleware"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -360,8 +360,8 @@ func newAccessTestRouterWithSettings(public, addonEnabled bool, roles map[string
 	// minimal stand-in translates *apperror.AppError to its own status code
 	// exactly like it does — the same shape internal/plugins/npcs/
 	// public_route_test.go uses for the identical reason.
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		if c.Response().Committed {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
+		if c.Response().(*echo.Response).Committed {
 			return
 		}
 		if ae, ok := err.(*apperror.AppError); ok {

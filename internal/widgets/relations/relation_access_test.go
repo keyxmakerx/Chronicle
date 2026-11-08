@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -57,7 +57,7 @@ func TestRelationWrites_RequireAccess(t *testing.T) {
 		{"dm_only as owner", owner, Relation{CampaignID: "camp-1", SourceEntityID: "a", TargetEntityID: "b", DmOnly: true}, 1},
 		{"dm_only as dm-granted", granted, Relation{CampaignID: "camp-1", SourceEntityID: "a", TargetEntityID: "b", DmOnly: true}, 1},
 	}
-	ops := map[string]func(*Handler, echo.Context) error{
+	ops := map[string]func(*Handler, *echo.Context) error{
 		"delete":   (*Handler).DeleteRelation,
 		"metadata": (*Handler).UpdateRelationMetadata,
 	}
@@ -71,8 +71,7 @@ func TestRelationWrites_RequireAccess(t *testing.T) {
 				e := echo.New()
 				req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"metadata":{}}`))
 				c := e.NewContext(req, httptest.NewRecorder())
-				c.SetParamNames("id", "eid", "rid")
-				c.SetParamValues("camp-1", "a", "7")
+				c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: "a"}, {Name: "rid", Value: "7"}})
 				c.Set("campaign_context", tc.cc)
 				auth.SetSession(c, &auth.Session{UserID: "u1"})
 

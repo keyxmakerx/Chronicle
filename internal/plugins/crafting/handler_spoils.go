@@ -4,14 +4,14 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // lineID reads a spoil line's id from the path; anything else is a line
 // that isn't there.
-func lineID(c echo.Context) (int64, error) {
+func lineID(c *echo.Context) (int64, error) {
 	id, err := strconv.ParseInt(c.Param("lid"), 10, 64)
 	if err != nil || id < 1 {
 		return 0, apperror.NewNotFound("those spoils are gone")
@@ -20,7 +20,7 @@ func lineID(c echo.Context) (int64, error) {
 }
 
 // Spoils handles GET /campaigns/:id/crafting/spoils: the Director's tab.
-func (h *Handler) Spoils(c echo.Context) error {
+func (h *Handler) Spoils(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -33,7 +33,7 @@ func (h *Handler) Spoils(c echo.Context) error {
 }
 
 // SaveDrops handles PUT /campaigns/:id/crafting/drops/:eid.
-func (h *Handler) SaveDrops(c echo.Context) error {
+func (h *Handler) SaveDrops(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -50,7 +50,7 @@ func (h *Handler) SaveDrops(c echo.Context) error {
 }
 
 // DeleteDrops handles DELETE /campaigns/:id/crafting/drops/:eid.
-func (h *Handler) DeleteDrops(c echo.Context) error {
+func (h *Handler) DeleteDrops(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func (h *Handler) DeleteDrops(c echo.Context) error {
 }
 
 // PutSpoils handles POST /campaigns/:id/crafting/spoils.
-func (h *Handler) PutSpoils(c echo.Context) error {
+func (h *Handler) PutSpoils(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -79,7 +79,7 @@ func (h *Handler) PutSpoils(c echo.Context) error {
 }
 
 // ClearTray handles DELETE /campaigns/:id/crafting/spoils.
-func (h *Handler) ClearTray(c echo.Context) error {
+func (h *Handler) ClearTray(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -91,7 +91,7 @@ func (h *Handler) ClearTray(c echo.Context) error {
 }
 
 // ClearSpoil handles DELETE /campaigns/:id/crafting/spoils/:sid.
-func (h *Handler) ClearSpoil(c echo.Context) error {
+func (h *Handler) ClearSpoil(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -103,7 +103,7 @@ func (h *Handler) ClearSpoil(c echo.Context) error {
 }
 
 // ClearSpoilLine handles DELETE /campaigns/:id/crafting/spoil-lines/:lid.
-func (h *Handler) ClearSpoilLine(c echo.Context) error {
+func (h *Handler) ClearSpoilLine(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -120,7 +120,7 @@ func (h *Handler) ClearSpoilLine(c echo.Context) error {
 
 // TakeSpoil handles POST /campaigns/:id/crafting/spoil-lines/:lid/take:
 // taking or harvesting one line for a hero.
-func (h *Handler) TakeSpoil(c echo.Context) error {
+func (h *Handler) TakeSpoil(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -142,7 +142,7 @@ func (h *Handler) TakeSpoil(c echo.Context) error {
 
 // StudySpoil handles POST /campaigns/:id/crafting/spoil-lines/:lid/study:
 // a hero's study of a find that needs one.
-func (h *Handler) StudySpoil(c echo.Context) error {
+func (h *Handler) StudySpoil(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -164,7 +164,7 @@ func (h *Handler) StudySpoil(c echo.Context) error {
 
 // RevealSpoil handles POST /campaigns/:id/crafting/spoil-lines/:lid/reveal:
 // the Director naming a find's item to the party.
-func (h *Handler) RevealSpoil(c echo.Context) error {
+func (h *Handler) RevealSpoil(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err

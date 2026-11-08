@@ -3,7 +3,7 @@ package systems
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -27,7 +27,7 @@ func NewCharacterChoiceHandler(svc CharacterChoiceService) *CharacterChoiceHandl
 // Players can read it, since a list of ancestries or kits is reference data
 // they see in the system pages anyway; whether they may then write the field
 // is the entity fields endpoint's decision.
-func (h *CharacterChoiceHandler) ChoicesAPI(c echo.Context) error {
+func (h *CharacterChoiceHandler) ChoicesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

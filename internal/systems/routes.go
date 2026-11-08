@@ -1,7 +1,7 @@
 package systems
 
 import (
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -84,7 +84,7 @@ func RegisterCustomSystemRoutes(e *echo.Echo, ch *CampaignSystemHandler, authSvc
 // both built-in and custom systems to work through the same routes.
 func requireSystemAddon(addonSvc addons.AddonService, cmm *CampaignSystemManager) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			sysID := c.Param("mod")
 			campaignID := c.Param("id")
 

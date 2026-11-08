@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -23,7 +23,7 @@ type Handler struct {
 	activity ActivityRecorder
 	svc      Service
 	signer   *downloadSigner
-	userID   func(echo.Context) string
+	userID   func(*echo.Context) string
 	settings SettingsStore
 }
 
@@ -34,14 +34,14 @@ func (h *Handler) SetScheduleStore(st SettingsStore) { h.settings = st }
 // NewHandler constructs a Handler against the given Service. Downloads fail
 // closed until SetDownloadAuth supplies the identity lookup.
 func NewHandler(svc Service) *Handler {
-	return &Handler{svc: svc, signer: newRandomDownloadSigner(), userID: func(echo.Context) string { return "" }}
+	return &Handler{svc: svc, signer: newRandomDownloadSigner(), userID: func(*echo.Context) string { return "" }}
 }
 
 // SetDownloadAuth wires the signing secret and the current-user lookup used
 // to bind download tokens to the admin who re-confirmed. The lookup is
 // injected so this plugin does not import the auth plugin. An empty secret
 // keeps the per-process random key.
-func (h *Handler) SetDownloadAuth(secret string, userID func(echo.Context) string) {
+func (h *Handler) SetDownloadAuth(secret string, userID func(*echo.Context) string) {
 	if secret != "" {
 		h.signer.key = []byte(secret)
 	}
@@ -51,7 +51,7 @@ func (h *Handler) SetDownloadAuth(secret string, userID func(echo.Context) strin
 }
 
 // Page renders the backup dashboard (GET /admin/backup).
-func (h *Handler) Page(c echo.Context) error {
+func (h *Handler) Page(c *echo.Context) error {
 	d := BackupPageData{
 		BackupDir:  h.svc.BackupDir(),
 		LastRun:    h.svc.LastRun(),
@@ -83,9 +83,9 @@ func (h *Handler) Page(c echo.Context) error {
 }
 
 // SaveSchedule stores the daily backup choice (POST /admin/backup/schedule).
-func (h *Handler) SaveSchedule(c echo.Context) error {
+func (h *Handler) SaveSchedule(c *echo.Context) error {
 	if h.settings == nil {
-		return echo.NewHTTPError(http.StatusNotFound)
+		return echo.NewHTTPError(http.StatusNotFound, http.StatusText(http.StatusNotFound))
 	}
 	hour, hErr := strconv.Atoi(c.FormValue("hour"))
 	keep, kErr := strconv.Atoi(c.FormValue("keep_days"))
@@ -117,7 +117,7 @@ func (h *Handler) SaveSchedule(c echo.Context) error {
 // If a backup is already in flight (e.g. the admin double-clicked, or
 // another admin is running one), we return 409 rather than coalescing
 // — operators benefit from knowing their click didn't start a fresh run.
-func (h *Handler) Run(c echo.Context) error {
+func (h *Handler) Run(c *echo.Context) error {
 	// Detached from the request: a closed tab or proxy timeout must not
 	// SIGKILL backup.sh mid-dump. The service's own timeout still bounds it.
 	ctx := context.WithoutCancel(c.Request().Context())
@@ -143,7 +143,7 @@ func (h *Handler) Run(c echo.Context) error {
 // /admin/backup/files/:name/link). The route sits behind the reauth
 // middleware, so a token only exists after a recent password confirmation.
 // The name is validated exactly as Download does.
-func (h *Handler) DownloadLink(c echo.Context) error {
+func (h *Handler) DownloadLink(c *echo.Context) error {
 	name := c.Param("name")
 	if _, err := ResolveArtifactPath(h.svc.BackupDir(), name); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -162,13 +162,13 @@ func (h *Handler) DownloadLink(c echo.Context) error {
 // parameter is validated against BACKUP_DIR; any attempt at
 // path traversal is rejected with 400.
 //
-// Uses echo.Context.Attachment which RFC 5987-encodes the filename in
+// Uses middleware.ServeAttachment, which Go-quotes the filename in
 // the Content-Disposition header. ResolveArtifactPath rejects path
 // separators and ".." but does not reject quotes or newlines in
 // basenames — Linux filesystems allow both. Without proper encoding,
 // an admin who renamed a backup artifact on disk to include `"` or
 // `\n` could inject HTTP headers via this response.
-func (h *Handler) Download(c echo.Context) error {
+func (h *Handler) Download(c *echo.Context) error {
 	name := c.Param("name")
 	full, err := ResolveArtifactPath(h.svc.BackupDir(), name)
 	if err != nil {
@@ -177,5 +177,5 @@ func (h *Handler) Download(c echo.Context) error {
 	if !h.signer.Verify(c.QueryParam("t"), h.userID(c), name) {
 		return echo.NewHTTPError(http.StatusForbidden, "This download link is missing or has expired. Use the Download button on the Backups page.")
 	}
-	return c.Attachment(full, name)
+	return middleware.ServeAttachment(c, full, name)
 }

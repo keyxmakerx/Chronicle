@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -20,18 +20,18 @@ func TestRecordSyncHistory_NotedActor(t *testing.T) {
 		handler echo.HandlerFunc
 		want    string
 	}{
-		{"success records the noted actor", func(c echo.Context) error {
+		{"success records the noted actor", func(c *echo.Context) error {
 			noteSyncActor(c, "player-9")
 			return c.NoContent(http.StatusOK)
 		}, "player-9"},
-		{"error keeps the key holder", func(c echo.Context) error {
+		{"error keeps the key holder", func(c *echo.Context) error {
 			noteSyncActor(c, "player-9")
 			return apperror.NewForbidden("not allowed")
 		}, "gm-1"},
-		{"no actor noted keeps the key holder", func(c echo.Context) error {
+		{"no actor noted keeps the key holder", func(c *echo.Context) error {
 			return c.NoContent(http.StatusOK)
 		}, "gm-1"},
-		{"empty actor is ignored", func(c echo.Context) error {
+		{"empty actor is ignored", func(c *echo.Context) error {
 			noteSyncActor(c, "")
 			return c.NoContent(http.StatusOK)
 		}, "gm-1"},
@@ -42,7 +42,7 @@ func TestRecordSyncHistory_NotedActor(t *testing.T) {
 			key := &APIKey{ID: 4, UserID: "gm-1", CampaignID: "c1"}
 			e := echo.New()
 			e.POST("/api/v1/campaigns/:id/armory/shops/:eid/buy", tc.handler, func(next echo.HandlerFunc) echo.HandlerFunc {
-				return func(c echo.Context) error { c.Set(apiKeyContextKey, key); return next(c) }
+				return func(c *echo.Context) error { c.Set(apiKeyContextKey, key); return next(c) }
 			}, RecordSyncHistory(repo, nil))
 			e.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/campaigns/c1/armory/shops/s1/buy", nil))
 			select {

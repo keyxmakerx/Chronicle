@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -160,7 +160,7 @@ func newFoundryRouteFixture(role Role, connector FoundryConnector) *echo.Echo {
 		h.SetFoundryConnector(connector)
 	}
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		var ae *apperror.AppError
 		if errors.As(err, &ae) {
 			_ = c.NoContent(ae.Code)

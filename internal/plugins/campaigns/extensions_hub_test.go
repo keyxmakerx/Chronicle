@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 func TestHasExtensionDashboard_KnownSlugs(t *testing.T) {
@@ -210,8 +210,7 @@ func TestPluginHubRedirect_LandsOnExtensionsHub(t *testing.T) {
 	req := httptest.NewRequest("GET", "/campaigns/c-1/plugins", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("c-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c-1"}})
 	// PluginHub reads campaign context via GetCampaignContext; mirror
 	// what the middleware would have set.
 	cc := &CampaignContext{Campaign: &Campaign{ID: "c-1"}}

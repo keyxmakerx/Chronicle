@@ -4,8 +4,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/labstack/echo/v4"
-	echomw "github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	echomw "github.com/labstack/echo/v5/middleware"
 )
 
 // staticGzipExts are the text assets worth compressing. Images, fonts and
@@ -25,7 +25,7 @@ func StaticGzip(urlPrefix string) echo.MiddlewareFunc {
 	return echomw.GzipWithConfig(echomw.GzipConfig{
 		Level:     5,
 		MinLength: 1024,
-		Skipper: func(c echo.Context) bool {
+		Skipper: func(c *echo.Context) bool {
 			return !staticGzipWanted(urlPrefix, c.Request().URL.Path)
 		},
 	})

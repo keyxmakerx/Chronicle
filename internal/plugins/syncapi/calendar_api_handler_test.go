@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -133,7 +133,7 @@ func sessionKey() *APIKey {
 	return &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "user-p"}
 }
 
-func callCalendarAPI(t *testing.T, h *CalendarAPIHandler, fn func(echo.Context) error, method, target, body string, key *APIKey, params ...string) (*httptest.ResponseRecorder, error) {
+func callCalendarAPI(t *testing.T, h *CalendarAPIHandler, fn func(*echo.Context) error, method, target, body string, key *APIKey, params ...string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -143,8 +143,7 @@ func callCalendarAPI(t *testing.T, h *CalendarAPIHandler, fn func(echo.Context) 
 	for i := 0; i+1 < len(params); i += 2 {
 		names, values = append(names, params[i]), append(values, params[i+1])
 	}
-	c.SetParamNames(names...)
-	c.SetParamValues(values...)
+	c.SetPathValues(pathValuesOf(names, values))
 	if key != nil {
 		c.Set(apiKeyContextKey, key)
 	}
@@ -431,8 +430,7 @@ func TestCalendarAPI_SetDateNamesTheDates(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"year":1492,"month":4,"day":1}`))
 			req.Header.Set("Content-Type", "application/json")
 			c := echo.New().NewContext(req, httptest.NewRecorder())
-			c.SetParamNames("id")
-			c.SetParamValues("camp-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 			c.Set(apiKeyContextKey, bearerKey())
 			err := h.SetDate(c)
 			if statusOf(err) != tc.wantCode {
@@ -463,12 +461,12 @@ func TestCalendarAPI_AudiencePlayersNarrows(t *testing.T) {
 	}
 	routes := []struct {
 		name string
-		fn   func(*CalendarAPIHandler) func(echo.Context) error
+		fn   func(*CalendarAPIHandler) func(*echo.Context) error
 	}{
-		{"GetCalendar", func(h *CalendarAPIHandler) func(echo.Context) error { return h.GetCalendar }},
-		{"GetCurrentDate", func(h *CalendarAPIHandler) func(echo.Context) error { return h.GetCurrentDate }},
-		{"ListEvents", func(h *CalendarAPIHandler) func(echo.Context) error { return h.ListEvents }},
-		{"ListDayWeather", func(h *CalendarAPIHandler) func(echo.Context) error { return h.ListDayWeather }},
+		{"GetCalendar", func(h *CalendarAPIHandler) func(*echo.Context) error { return h.GetCalendar }},
+		{"GetCurrentDate", func(h *CalendarAPIHandler) func(*echo.Context) error { return h.GetCurrentDate }},
+		{"ListEvents", func(h *CalendarAPIHandler) func(*echo.Context) error { return h.ListEvents }},
+		{"ListDayWeather", func(h *CalendarAPIHandler) func(*echo.Context) error { return h.ListDayWeather }},
 	}
 	for _, r := range routes {
 		for _, tc := range cases {

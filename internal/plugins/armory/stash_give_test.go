@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -511,7 +511,7 @@ func TestGiveDialog_Renders(t *testing.T) {
 func TestGiveRoutes(t *testing.T) {
 	g := newGiveFx()
 	h := NewStashHandler(g.svc)
-	ctx := func(c echo.Context, role campaigns.Role, uid string) {
+	ctx := func(c *echo.Context, role campaigns.Role, uid string) {
 		c.Set("auth_user_id", uid)
 		c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp"}, MemberRole: role})
 	}

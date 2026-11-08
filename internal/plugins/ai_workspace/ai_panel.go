@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -24,7 +24,7 @@ type ChipCounts struct {
 
 // AIChip answers the AI button on every campaign page. It is JSON, not a
 // fragment, so the button can tell when the count goes up and drop a notice.
-func (h *Handler) AIChip(c echo.Context) error {
+func (h *Handler) AIChip(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -56,7 +56,7 @@ func (h *Handler) AIChip(c echo.Context) error {
 
 // AIBubble is the small bubble the AI button drops: copy and paste in one
 // thin row, then each waiting request with Review.
-func (h *Handler) AIBubble(c echo.Context) error {
+func (h *Handler) AIBubble(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -72,7 +72,7 @@ func (h *Handler) AIBubble(c echo.Context) error {
 // AIPanel is the side sheet a review opens in: the AI's waiting requests,
 // answered in place, and the review of a pasted answer. With tool=1 it holds
 // the whole copy-and-paste tool instead ("Write a request…").
-func (h *Handler) AIPanel(c echo.Context) error {
+func (h *Handler) AIPanel(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -92,7 +92,7 @@ const copyPageAsk = "I'm looking at the page below. Ask me what I'd like to do w
 // standing instructions and, when the owner is on a page, that page as a
 // lookup reads it. privacy is the owner's remembered choice; a page it hides
 // is left out, never named.
-func (h *Handler) CopyForAI(c echo.Context) error {
+func (h *Handler) CopyForAI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 func TestStaticGzipWanted(t *testing.T) {
@@ -40,8 +40,8 @@ func TestStaticGzip_CompressesScriptsNotPages(t *testing.T) {
 	body := strings.Repeat("var chronicle = 1;\n", 200)
 	e := echo.New()
 	e.Use(StaticGzip("/static/"))
-	e.GET("/static/js/app.js", func(c echo.Context) error { return c.String(http.StatusOK, body) })
-	e.GET("/campaigns/x", func(c echo.Context) error { return c.HTML(http.StatusOK, body) })
+	e.GET("/static/js/app.js", func(c *echo.Context) error { return c.String(http.StatusOK, body) })
+	e.GET("/campaigns/x", func(c *echo.Context) error { return c.HTML(http.StatusOK, body) })
 
 	for _, tc := range []struct {
 		path     string

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -123,8 +123,7 @@ func TestDatePollPagesOpenOnTheCalendar(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, tt.path, nil), rec)
 			c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RolePlayer, IsMember: true})
-			c.SetParamNames("pid")
-			c.SetParamValues("p1")
+			c.SetPathValues(echo.PathValues{{Name: "pid", Value: "p1"}})
 			var err error
 			if strings.HasSuffix(c.Request().URL.Path, "/proposals") {
 				err = h.ListProposals(c)

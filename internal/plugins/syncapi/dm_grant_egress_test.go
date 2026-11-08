@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -85,8 +85,7 @@ func TestGetEntity_GMFieldsAndSecretsFollowDMAccess(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/campaigns/camp-1/entities/e1", nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id", "entityID")
-			c.SetParamValues("camp-1", "e1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "entityID", Value: "e1"}})
 			c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "member-1", IsActive: true})
 
 			if err := h.GetEntity(c); err != nil {

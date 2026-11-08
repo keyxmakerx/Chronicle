@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -45,8 +45,7 @@ func callState(h *Handler, method, entityID string, cc *campaigns.CampaignContex
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid", "system", "key")
-	c.SetParamValues("camp-1", entityID, "drawsteel", "negotiation")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: entityID}, {Name: "system", Value: "drawsteel"}, {Name: "key", Value: "negotiation"}})
 	c.Set("campaign_context", cc)
 	var err error
 	if method == http.MethodPut {
@@ -227,8 +226,7 @@ func callList(h *Handler, system, key string, cc *campaigns.CampaignContext) (*h
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/system-state/"+system+"/"+key, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "system", "key")
-	c.SetParamValues("camp-1", system, key)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "system", Value: system}, {Name: "key", Value: key}})
 	c.Set("campaign_context", cc)
 	return rec, h.List(c)
 }
@@ -313,8 +311,7 @@ func callCampaign(h *Handler, method string, cc *campaigns.CampaignContext, body
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "system", "key")
-	c.SetParamValues("camp-1", "drawsteel", "party")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "system", Value: "drawsteel"}, {Name: "key", Value: "party"}})
 	c.Set("campaign_context", cc)
 	if method == http.MethodPut {
 		return rec, h.PutCampaign(c)

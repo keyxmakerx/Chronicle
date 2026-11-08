@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -23,7 +23,7 @@ import (
 // older / Notify older) plus an "auto-tracking latest (N)" summary. No
 // empty-state error — an empty exact-pin list is the normal case since
 // most campaigns auto-track the newest version rather than pinning one.
-func (h *Handler) AdminVersionCampaignsHandler(c echo.Context) error {
+func (h *Handler) AdminVersionCampaignsHandler(c *echo.Context) error {
 	version := c.Param("version")
 	usage, err := h.svc.CampaignsUsingVersion(c.Request().Context(), version)
 	if err != nil {
@@ -44,7 +44,7 @@ func (h *Handler) AdminVersionCampaignsHandler(c echo.Context) error {
 // courtesy email for a single campaign. Does NOT change the pin.
 //
 // POST /admin/foundry-vtt/version/:version/notify/:cid
-func (h *Handler) AdminNotifyCampaignHandler(c echo.Context) error {
+func (h *Handler) AdminNotifyCampaignHandler(c *echo.Context) error {
 	session := auth.GetSession(c)
 	if session == nil {
 		return apperror.NewUnauthorized("not authenticated")
@@ -64,7 +64,7 @@ func (h *Handler) AdminNotifyCampaignHandler(c echo.Context) error {
 // re-auth (applied at the route level via auth.RequireReauth).
 //
 // POST /admin/foundry-vtt/version/:version/force-pin/:cid
-func (h *Handler) AdminForcePinCampaignHandler(c echo.Context) error {
+func (h *Handler) AdminForcePinCampaignHandler(c *echo.Context) error {
 	session := auth.GetSession(c)
 	if session == nil {
 		return apperror.NewUnauthorized("not authenticated")
@@ -89,7 +89,7 @@ func (h *Handler) AdminForcePinCampaignHandler(c echo.Context) error {
 //
 // Returns {notified: N}. Partial failures don't abort — N reflects
 // successes only.
-func (h *Handler) AdminNotifyOlderHandler(c echo.Context) error {
+func (h *Handler) AdminNotifyOlderHandler(c *echo.Context) error {
 	session := auth.GetSession(c)
 	if session == nil {
 		return apperror.NewUnauthorized("not authenticated")
@@ -111,7 +111,7 @@ func (h *Handler) AdminNotifyOlderHandler(c echo.Context) error {
 // POST /admin/foundry-vtt/version/:version/force-pin-older
 //
 // Returns {pinned: N}.
-func (h *Handler) AdminForcePinOlderHandler(c echo.Context) error {
+func (h *Handler) AdminForcePinOlderHandler(c *echo.Context) error {
 	session := auth.GetSession(c)
 	if session == nil {
 		return apperror.NewUnauthorized("not authenticated")
@@ -136,7 +136,7 @@ func (h *Handler) AdminForcePinOlderHandler(c echo.Context) error {
 // force-updated, so its owner can't move straight back to the version it was
 // moved off. Owners can only move a campaign through the update modes, so
 // without them there is nothing to hold against.
-func (h *Handler) holdForcePinned(c echo.Context, session *auth.Session, campaignID string) error {
+func (h *Handler) holdForcePinned(c *echo.Context, session *auth.Session, campaignID string) error {
 	if h.owner == nil {
 		return nil
 	}
@@ -156,7 +156,7 @@ func (h *Handler) holdForcePinned(c echo.Context, session *auth.Session, campaig
 // Always returns 200 OK; the response is either the banner HTML or
 // an empty body. Empty body = HTMX swaps nothing visible into the
 // target div, so the banner gracefully absents itself.
-func (h *Handler) AdminAutoPinBannerHandler(c echo.Context) error {
+func (h *Handler) AdminAutoPinBannerHandler(c *echo.Context) error {
 	summary, err := h.svc.GetUnreadAutoPinSummary(c.Request().Context())
 	if err != nil {
 		// Banner is supplementary; never fail the admin page load
@@ -179,7 +179,7 @@ func (h *Handler) AdminAutoPinBannerHandler(c echo.Context) error {
 // The next AdminAutoPinBannerHandler request will return empty.
 //
 // POST /admin/foundry-vtt/autopin-banner/dismiss
-func (h *Handler) AdminAutoPinBannerDismissHandler(c echo.Context) error {
+func (h *Handler) AdminAutoPinBannerDismissHandler(c *echo.Context) error {
 	if err := h.svc.DismissAutoPinBanner(c.Request().Context()); err != nil {
 		return h.respondError(c, err)
 	}
@@ -197,7 +197,7 @@ func (h *Handler) AdminAutoPinBannerDismissHandler(c echo.Context) error {
 // 404s if the package ID doesn't exist, or if the package isn't a
 // foundry-module typed package (defensive: a direct request from a
 // poking admin shouldn't render foundry UI for a system package).
-func (h *Handler) AdminPackageActionsFragmentHandler(c echo.Context) error {
+func (h *Handler) AdminPackageActionsFragmentHandler(c *echo.Context) error {
 	id := c.Param("id")
 	if id == "" {
 		return apperror.NewNotFound("package")

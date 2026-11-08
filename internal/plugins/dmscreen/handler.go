@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -22,13 +22,13 @@ func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-func viewerOf(c echo.Context, cc *campaigns.CampaignContext) Viewer {
+func viewerOf(c *echo.Context, cc *campaigns.CampaignContext) Viewer {
 	return Viewer{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
 }
 
 // Show handles GET /campaigns/:id/dm-screen and returns the panel fragment
 // the top-bar widget mounts.
-func (h *Handler) Show(c echo.Context) error {
+func (h *Handler) Show(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -42,7 +42,7 @@ func (h *Handler) Show(c echo.Context) error {
 
 // StepTime handles POST /campaigns/:id/dm-screen/time. The panel listens for
 // the dms-refresh trigger and redraws itself with the new date.
-func (h *Handler) StepTime(c echo.Context) error {
+func (h *Handler) StepTime(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -56,7 +56,7 @@ func (h *Handler) StepTime(c echo.Context) error {
 }
 
 // ShowNote handles GET /campaigns/:id/dm-screen/notes.
-func (h *Handler) ShowNote(c echo.Context) error {
+func (h *Handler) ShowNote(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -75,7 +75,7 @@ type saveNoteRequest struct {
 }
 
 // SaveNote handles PUT /campaigns/:id/dm-screen/notes.
-func (h *Handler) SaveNote(c echo.Context) error {
+func (h *Handler) SaveNote(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -93,7 +93,7 @@ func (h *Handler) SaveNote(c echo.Context) error {
 
 // Reveal handles POST /campaigns/:id/dm-screen/reveal/:eid and returns the
 // row redrawn as revealed.
-func (h *Handler) Reveal(c echo.Context) error {
+func (h *Handler) Reveal(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -108,7 +108,7 @@ func (h *Handler) Reveal(c echo.Context) error {
 
 // UndoReveal handles POST /campaigns/:id/dm-screen/hide/:eid and returns the
 // row redrawn hidden, with its Reveal button back.
-func (h *Handler) UndoReveal(c echo.Context) error {
+func (h *Handler) UndoReveal(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -134,7 +134,7 @@ type noteRequest struct {
 // maxBoardBody caps a board request body; a note is 500 characters.
 const maxBoardBody = 8 << 10
 
-func decodeBoardBody(c echo.Context, into any) error {
+func decodeBoardBody(c *echo.Context, into any) error {
 	if err := json.NewDecoder(http.MaxBytesReader(c.Response(), c.Request().Body, maxBoardBody)).Decode(into); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
@@ -142,7 +142,7 @@ func decodeBoardBody(c echo.Context, into any) error {
 }
 
 // PinPage handles POST /campaigns/:id/dm-screen/adventures/pins.
-func (h *Handler) PinPage(c echo.Context) error {
+func (h *Handler) PinPage(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -158,7 +158,7 @@ func (h *Handler) PinPage(c echo.Context) error {
 }
 
 // AddBoardNote handles POST /campaigns/:id/dm-screen/adventures/notes.
-func (h *Handler) AddBoardNote(c echo.Context) error {
+func (h *Handler) AddBoardNote(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -174,7 +174,7 @@ func (h *Handler) AddBoardNote(c echo.Context) error {
 }
 
 // RemoveBoardItem handles DELETE /campaigns/:id/dm-screen/adventures/items/:itemID.
-func (h *Handler) RemoveBoardItem(c echo.Context) error {
+func (h *Handler) RemoveBoardItem(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -186,7 +186,7 @@ func (h *Handler) RemoveBoardItem(c echo.Context) error {
 }
 
 // PickPages handles GET /campaigns/:id/dm-screen/adventures/pages?q=.
-func (h *Handler) PickPages(c echo.Context) error {
+func (h *Handler) PickPages(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

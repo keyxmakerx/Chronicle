@@ -7,6 +7,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/labstack/echo/v5"
 )
 
 // TestHandlers_ReadSignedInUserFromAuth pins that the maps handlers take the
@@ -27,8 +28,7 @@ func TestHandlers_ReadSignedInUserFromAuth(t *testing.T) {
 			repo.listedUserID = "unset"
 			h := NewHandler(NewMapService(repo))
 			c, _ := newDMWriteRequest(http.MethodGet, "/campaigns/camp-1/maps/map-1/markers", "")
-			c.SetParamNames("id", "mid")
-			c.SetParamValues("camp-1", "map-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}})
 			c.Set("campaign_context", dmWriteCampaignCtx(campaigns.RolePlayer, false))
 			if tc.userID != "" {
 				auth.SetSession(c, &auth.Session{UserID: tc.userID})
@@ -49,8 +49,7 @@ func TestHandlers_ReadSignedInUserFromAuth(t *testing.T) {
 		h := NewHandler(NewMapService(repo))
 		c, _ := newDMWriteRequest(http.MethodPost, "/campaigns/camp-1/maps/map-1/markers",
 			`{"name":"Camp","x":10,"y":10}`)
-		c.SetParamNames("id", "mid")
-		c.SetParamValues("camp-1", "map-1")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}})
 		c.Set("campaign_context", dmWriteCampaignCtx(campaigns.RoleScribe, false))
 		auth.SetSession(c, &auth.Session{UserID: "scribe-1"})
 		if err := h.CreateMarkerAPI(c); err != nil {

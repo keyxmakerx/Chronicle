@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -435,8 +435,7 @@ func TestListDrawings_PicturesCarrySignedURLForTheViewer(t *testing.T) {
 				return "/media/" + id + "?sig=for-" + viewer
 			}))
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id", "mid")
-			c.SetParamValues("camp-1", "map-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}})
 			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, false))
 			if err := h.ListDrawings(c); err != nil {
 				t.Fatal(err)
