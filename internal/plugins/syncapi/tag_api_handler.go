@@ -48,6 +48,20 @@ func (h *TagAPIHandler) resolveRole(c echo.Context) int {
 	return int(member.Role)
 }
 
+// resolveUserID returns the caller's user id: the key's maker, or the
+// signed-in member for a session caller.
+func (h *TagAPIHandler) resolveUserID(c echo.Context) string {
+	if key := GetAPIKey(c); key != nil {
+		return key.UserID
+	}
+	return ""
+}
+
+// pageGate is the page-write check shared with the entity handlers.
+func (h *TagAPIHandler) pageGate() pageWriteGate {
+	return pageWriteGate{entitySvc: h.entitySvc, campaignSvc: h.campaignSvc}
+}
+
 // seesDmOnly reports whether the caller may read and keep dm_only tags: the
 // owner and Co-DMs, as on the web. A Scribe sees what players see.
 func (h *TagAPIHandler) seesDmOnly(c echo.Context, campaignID string) bool {
@@ -213,6 +227,9 @@ func (h *TagAPIHandler) SetEntityTags(c echo.Context) error {
 	if entity.CampaignID != campaignID {
 		return apperror.NewNotFound("entity not found")
 	}
+	if err := h.pageGate().check(ctx, campaignID, entityID, h.resolveUserID(c), h.resolveRole(c)); err != nil {
+		return err
+	}
 
 	var req apiSetEntityTagsRequest
 	if err := c.Bind(&req); err != nil {
@@ -267,6 +284,7 @@ func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
 	}
 
 	includeDmOnly := h.seesDmOnly(c, campaignID)
+	gate, role, userID := h.pageGate(), h.resolveRole(c), h.resolveUserID(c)
 
 	var results []bulkTagResult
 	processed := 0
@@ -279,6 +297,12 @@ func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
 		if err != nil || entity.CampaignID != campaignID {
 			result.Status = "error"
 			result.Error = "entity not found"
+			results = append(results, result)
+			continue
+		}
+		if err := gate.check(ctx, campaignID, entityID, userID, role); err != nil {
+			result.Status = "error"
+			result.Error = apperror.SafeMessage(err)
 			results = append(results, result)
 			continue
 		}

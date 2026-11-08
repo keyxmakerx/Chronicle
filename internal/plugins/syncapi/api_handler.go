@@ -679,10 +679,17 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 	if entity.CampaignID != c.Param("id") {
 		return apperror.NewNotFound("entity not found")
 	}
+	gate, role, userID := h.pageGate(), h.resolveRole(c), h.resolveUserID(c)
+	if err := gate.check(ctx, entity.CampaignID, entityID, userID, role); err != nil {
+		return err
+	}
 
 	var req apiUpdateEntityRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
+	}
+	if v, ok := req.IsPrivate.Get(); ok && v != entity.IsPrivate && !gate.canHideOrShow(ctx, entity.CampaignID, userID, role) {
+		return apperror.NewForbidden("only the owner or a Co-DM can hide or show pages")
 	}
 
 	// Update replaces the whole fields map, so a present fields_data is merged
@@ -735,6 +742,9 @@ func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
 	if entity.CampaignID != c.Param("id") {
 		return apperror.NewNotFound("entity not found")
 	}
+	if err := h.pageGate().check(ctx, entity.CampaignID, entityID, h.resolveUserID(c), h.resolveRole(c)); err != nil {
+		return err
+	}
 
 	var req apiUpdateFieldsRequest
 	if err := c.Bind(&req); err != nil {
@@ -774,6 +784,9 @@ func (h *APIHandler) ToggleEntityReveal(c echo.Context) error {
 	}
 	if entity.CampaignID != c.Param("id") {
 		return apperror.NewNotFound("entity not found")
+	}
+	if !h.pageGate().canHideOrShow(ctx, entity.CampaignID, h.resolveUserID(c), h.resolveRole(c)) {
+		return apperror.NewForbidden("only the owner or a Co-DM can hide or show pages")
 	}
 
 	var req struct {
@@ -1154,6 +1167,11 @@ func (h *APIHandler) ListEntityRelations(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, rels)
+}
+
+// pageGate is the page-write check shared with the tag handlers.
+func (h *APIHandler) pageGate() pageWriteGate {
+	return pageWriteGate{entitySvc: h.entitySvc, campaignSvc: h.campaignSvc}
 }
 
 // requireViewableEntity answers 404 unless the page is in the key's campaign
