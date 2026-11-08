@@ -50,9 +50,6 @@ new kind of move needs a signed mockup. Then:
 
 - **Every move has a physical reason**: it comes from where the thing lives
   and goes back the same way. Nothing appears and then moves.
-- **Slow to a stop**: `--ease-out` or `--ease-slide` for arrivals, `--ease-in`
-  for exits. No bounce or overshoot (Site admin's entrance is the signed
-  exception).
 - **Short**: most moves are 120 to 280 ms; nothing over half a second unless
   the standard names it. Closing is quicker than opening.
 - **Animate `transform` and `opacity`**; never `transition: all`
@@ -66,11 +63,50 @@ new kind of move needs a signed mockup. Then:
 - **Feedback within 100 ms** of every click or key, even when the move is
   longer.
 
-The craft behind these, with sources, is in
-[references/motion-craft.md](references/motion-craft.md).
+## Emil Kowalski's skills
+
+The motion craft comes from Emil Kowalski's published skills, copied
+unchanged beside this one (`.claude/skills/THIRD-PARTY.md`). Use them for
+the craft; this section says which one to reach for and where Chronicle
+overrides them.
+
+| Task | Skill |
+|---|---|
+| Build a new animation | `animate` (recipes in its `RECIPES.md`) |
+| Review motion in a diff | `review-animations` |
+| Plan fixes across an area | `improve-animations` |
+| Several things moving together | `choreograph` |
+| Dropped frames, jank | `animation-performance` |
+| "Too much animation", feels slow | `remove-animations` |
+| What could move but doesn't | `find-animation-opportunities` |
+| Naming an effect | `animation-vocabulary` |
+| General polish and taste | `emil-design-eng` |
+| Stress-test a screen with worst-case data | `break-ui` |
+
+Where they disagree with Chronicle, Chronicle wins:
+
+- **Tokens and timings are Chronicle's.** Use `--ease-*` and `--dur-*` from
+  `static/css/input.css` and the standard's timing tables, never the curve
+  values in those skills. A curve Chronicle lacks needs a signed mockup
+  before it becomes a token.
+- **Exits use `--ease-in`.** The skills say never to use ease-in on UI; the
+  standard signs it for things leaving (a menu closing in 120 ms, a row
+  folding away). Entrances never use it.
+- **No springs, bounce or overshoot** outside the moves the standard signs
+  (Site admin's entrance, a creature's token, a style kit's own opening).
+- **Translate React and Motion examples** into CSS transitions or the Web
+  Animations API. Chronicle is server-rendered with HTMX and plain
+  JavaScript, with no React and no Motion library.
+- **Respect Calm and Off.** The skills' reduced-motion advice is the floor;
+  Chronicle's three levels are the rule.
+- **`break-ui`'s worst-case toggle lives in a mockup or scratch page**, never
+  in shipped UI.
+- **Subagents** that `improve-animations` fans out run on a lighter model,
+  as the project rules say.
 
 ## Reviewing a UI change
 
 Run the checklist in [references/ux-review.md](references/ux-review.md)
-against the diff or the mockup. Look at it in light and dark, at phone width,
+against the diff or the mockup, and `review-animations` on anything that
+moves. Look at it in light and dark, at phone width,
 with the keyboard only, and under Calm and Off before calling it done.
