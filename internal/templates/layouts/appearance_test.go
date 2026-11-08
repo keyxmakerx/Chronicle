@@ -27,7 +27,22 @@ func withTestFonts(t *testing.T) {
 	})
 }
 
-func TestAppearanceClassicIsEmpty(t *testing.T) {
+// TestAppearanceClassicShadesDefaultAccent pins that a page with no Customize
+// choices gets only the readable shades of the default accent, which on its
+// own measures about 4.46:1 on white, and that each shade reaches 4.5:1.
+func TestAppearanceClassicShadesDefaultAccent(t *testing.T) {
+	const want = ":root{--color-accent-fill:#6265f0;--color-accent-fill-hover:#5154ca;--color-accent-on-fill:#ffffff;--color-accent-link:#5f61eb;}:root.dark{--color-accent-link:#7a82ff;}"
+	if r := colour.Contrast(czDefaultAccent, "#ffffff"); r >= 4.5 {
+		t.Fatalf("default accent now reaches %.2f:1 on white; this shading may be unneeded", r)
+	}
+	for _, c := range []struct{ fg, bg string }{
+		{"#6265f0", "#ffffff"}, {"#5f61eb", "#ffffff"}, {"#5f61eb", "#f9fafb"},
+		{"#7a82ff", "#111827"}, {"#7a82ff", "#1f2937"},
+	} {
+		if r := colour.Contrast(c.fg, c.bg); r < 4.5 {
+			t.Errorf("%s on %s = %.2f:1, want at least 4.5", c.fg, c.bg, r)
+		}
+	}
 	cases := []struct {
 		name string
 		ctx  context.Context
@@ -37,8 +52,8 @@ func TestAppearanceClassicIsEmpty(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := AppearanceCSS(tc.ctx); got != "" {
-				t.Errorf("AppearanceCSS = %q, want empty", got)
+			if got := AppearanceCSS(tc.ctx); got != want {
+				t.Errorf("AppearanceCSS = %q, want %q", got, want)
 			}
 			if got := AppearanceAttrs(tc.ctx); len(got) != 0 {
 				t.Errorf("AppearanceAttrs = %v, want none", got)
