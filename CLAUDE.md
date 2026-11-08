@@ -52,7 +52,7 @@ See `.ai/architecture.md` for the full document.
 - **Repositories:** own SQL, one per aggregate root, hand-written.
 - **Cross-boundary:** plugins reach each other only via service interfaces, never direct repo access; systems are read-only; widgets talk via DOM events + API endpoints.
 - **Templ:** one file per component; layouts in `internal/templates/layouts/`.
-- **UI:** every visible change follows `.ai/ui-standard.md`.
+- **UI:** every visible change follows `.ai/ui-standard.md`; the `ui-and-motion` skill (`.claude/skills/`) is how to apply it, with motion craft and a review checklist.
 - **Errors:** domain types from `internal/apperror/`, never raw DB errors.
 - **Tests:** table-driven; interfaces at every service/repo boundary.
 - **Naming:** `snake_case.go` files, `PascalCase` exported Go types, `camelCase` JSON.
