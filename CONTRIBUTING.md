@@ -16,7 +16,7 @@ published contact address.
 
 - Go 1.27 or newer (see `go.mod`)
 - MariaDB 10.11+ and Redis 7+, from Docker (`make docker-up`) or installed locally
-- The `templ` CLI (`go install github.com/a-h/templ/cmd/templ@v0.3.1070`, the
+- The `templ` CLI (`go install github.com/a-h/templ/cmd/templ@v0.3.1100`, the
   version CI uses) and `air` for hot reload
 - Nothing extra for `make tailwind`: it downloads the pinned standalone CLI
   into `bin/` on first use
