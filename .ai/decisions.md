@@ -1185,3 +1185,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - A new WebGL feature uses `SharedGL.context()`, never `getContext('webgl2')`, and reads `SharedGL.isSlow()` before choosing its richest look.
 - A page that loads `sky_gl.js` must load `gl_shared.js` before it, including the Foundry module's vendored copy of the sky.
+
+## ADR-073: Restore runs inside Chronicle, behind a maintenance gate
+
+**Status:** Accepted; refines ADR-036 (its "the UI does not auto-snapshot" consequence no longer holds) (#2085).
+
+**Context:** The admin Restore button ran `scripts/restore.sh` from inside the running server, and the script refuses to run while `/healthz` answers, so it could never restore anything.
+
+**Decision:**
+1. `internal/maintenance` holds one shared `State` and the global gate middleware (after CORS, before CSRF). While a restore runs, every request except health probes, `GET /static/…` and the restoring admin's own pages gets a 503 with `Retry-After` (a plain page for browsers, JSON for API, Foundry and websocket callers). The restoring admin is recognised by the SHA-256 of their session token, stored in a marker file, never by a guessable cookie.
+2. The marker (`<BACKUP_DIR>/.chronicle-maintenance`) is written before the gate closes and removed on success or when an admin leaves. A restart with a marker present comes back closed and says the restore was interrupted.
+3. `restore.sh --from-inside` lifts the "server is running" refusal only when the marker is `running` for this manifest, the run token Chronicle put in the script's environment matches the marker, and `/healthz` answers `maintenance`. By hand against a live site the script still refuses.
+4. The script saves the current database as `chronicle_pre_restore_manifest_<TS>.txt` before dropping it, and stops if it cannot (`--no-safety-backup` for a database too broken to dump).
+5. After a successful script run Chronicle resets its DB pool, runs the same migrations as a boot, deletes derived Redis caches, forces every session to re-check its user, then opens. On failure it stays closed and shows the output, the safety copy and a by-hand command, with a "Leave maintenance anyway" button.
+
+**Consequences:**
+- Background schedulers are not paused (no shared mechanism exists); only HTTP traffic is gated.
+- The restore page needs no layout while closed, because the layout reads the database.
+- The change log row for `restore.started` lives in the replaced database; the server log keeps it.

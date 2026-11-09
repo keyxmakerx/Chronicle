@@ -12,9 +12,20 @@
 #
 # Usage: docker compose exec chronicle /app/scripts/restore.sh
 #   --manifest PATH [--db-only] [--media-only] [--yes] [--force]
+#   [--no-safety-backup] [--from-inside]
 # --manifest (required) pairs the DB/media/redis artifacts, so a stale mix
 #   (e.g. last week's DB with last month's media) can't slip through.
 # --force allows restoring over a non-empty target (default: refuse).
+# Before the database is dropped the script saves the current one as
+#   chronicle_pre_restore_manifest_<TS>.txt (a manifest this script can
+#   restore, and the admin restore page lists); if that save fails the
+#   restore stops. --no-safety-backup skips it, for a database too broken to
+#   dump.
+# --from-inside (or CHRONICLE_RESTORE_IN_PROCESS=1) is for the admin restore
+#   page, which runs this script from inside Chronicle. It lifts the "server
+#   is running" refusal only when Chronicle's own maintenance marker, the run
+#   token it handed this process and its /healthz all say it is in maintenance
+#   for this manifest. Run by hand against a live site it still refuses.
 #
 # Exit codes: 0 success / 1 operator error / 2 precondition / 3 tool failure.
 
@@ -26,6 +37,9 @@ DB_ONLY=0
 MEDIA_ONLY=0
 ASSUME_YES=0
 FORCE=0
+NO_SAFETY=0
+FROM_INSIDE=0
+[ "${CHRONICLE_RESTORE_IN_PROCESS:-}" = "1" ] && FROM_INSIDE=1
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -34,6 +48,8 @@ while [ "$#" -gt 0 ]; do
         --media-only) MEDIA_ONLY=1 ;;
         --yes) ASSUME_YES=1 ;;
         --force) FORCE=1 ;;
+        --no-safety-backup) NO_SAFETY=1 ;;
+        --from-inside) FROM_INSIDE=1 ;;
         -h|--help)
             sed -n '1,/^set -eu/p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
@@ -127,13 +143,52 @@ done < "$MANIFEST"
 [ -n "$DB_FILE" ] || fail_op manifest_invalid "manifest has no db_file entry"
 
 # ---- Pre-flight ----
-# 1. Refuse if a chronicle server is running. The 8080/healthz probe is
-# the most general check (works inside the container too via localhost).
+# 1. Refuse if a chronicle server is running. The /healthz probe is the most
+# general check (works inside the container too via localhost).
+BACKUP_DIR_ENV="${BACKUP_DIR:-$MANIFEST_DIR}"
+MAINT_FILE="${CHRONICLE_MAINTENANCE_FILE:-$BACKUP_DIR_ENV/.chronicle-maintenance}"
+HEALTH_URL="http://localhost:${PORT:-8080}/healthz"
+
+# marker_value KEY prints one value from Chronicle's maintenance marker.
+marker_value() {
+    sed -n "s/^$1=//p" "$MAINT_FILE" 2>/dev/null | head -n 1
+}
+
+# maintenance_confirmed succeeds only when Chronicle itself says it is closed
+# for this very restore: the marker is in the running state for this manifest,
+# the token Chronicle passed to this process matches the marker's, and the
+# live health probe answers "maintenance". Any one missing refuses.
+maintenance_confirmed() {
+    [ -f "$MAINT_FILE" ] || return 1
+    [ "$(marker_value state)" = "running" ] || return 1
+    marker_token="$(marker_value token)"
+    [ -n "$marker_token" ] || return 1
+    [ "${CHRONICLE_RESTORE_TOKEN:-}" = "$marker_token" ] || return 1
+    [ "$(marker_value manifest)" = "$(basename "$MANIFEST")" ] || return 1
+    command -v wget >/dev/null 2>&1 || return 1
+    health_body="$(wget -qO- "$HEALTH_URL" 2>/dev/null || true)"
+    case "$health_body" in
+        *'"maintenance"'*) return 0 ;;
+    esac
+    return 1
+}
+
 if command -v wget >/dev/null 2>&1; then
-    if wget -qO- "http://localhost:8080/healthz" >/dev/null 2>&1; then
-        fail_pre server_running \
-            "chronicle is up at localhost:8080/healthz; stop it first (docker compose stop chronicle)"
+    if wget -qO- "$HEALTH_URL" >/dev/null 2>&1; then
+        if [ "$FROM_INSIDE" = "1" ]; then
+            maintenance_confirmed || fail_pre maintenance_not_confirmed \
+                "chronicle is up at $HEALTH_URL but does not say it is in maintenance for this restore; stop it first (docker compose stop chronicle)"
+        else
+            fail_pre server_running \
+                "chronicle is up at $HEALTH_URL; stop it first (docker compose stop chronicle)"
+        fi
     fi
+fi
+if [ "$FROM_INSIDE" = "1" ]; then
+    # Asked to run inside Chronicle: the confirmation must hold even when
+    # the probe could not run, so a missing wget never weakens the check.
+    maintenance_confirmed || fail_pre maintenance_not_confirmed \
+        "--from-inside needs Chronicle's maintenance marker, run token and health answer"
 fi
 
 # 2. Verify artifacts exist and SHAs match.
@@ -173,6 +228,8 @@ fi
 # ---- Confirmation ----
 if [ "$ASSUME_YES" = "0" ]; then
     printf 'About to restore from %s\n' "$MANIFEST"
+    [ "$MEDIA_ONLY" = "0" ] && [ "$NO_SAFETY" = "0" ] && \
+        printf '  - first save a copy of the current DB next to the backups\n'
     [ "$MEDIA_ONLY" = "0" ] && printf '  - DROP and recreate DB %s on %s:%s\n' \
         "$DB_NAME" "$DB_HOST" "$DB_PORT"
     [ "$DB_ONLY" = "0" ] && [ -n "$MEDIA_FILE" ] && \
@@ -182,6 +239,62 @@ if [ "$ASSUME_YES" = "0" ]; then
     printf 'Type RESTORE to proceed: '
     read -r confirm
     [ "$confirm" = "RESTORE" ] || fail_op confirmation_declined "did not type RESTORE"
+fi
+
+# ---- Safety backup ----
+# The restore replaces the live database, so save it first. The copy is
+# written as a manifest of its own so this script (and the admin restore
+# page) can put it back if the restored data turns out to be wrong.
+if [ "$MEDIA_ONLY" = "0" ] && [ "$NO_SAFETY" = "0" ]; then
+    safety_tables="$(MYSQL_PWD="$DB_PASSWORD" mysql \
+        -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -N -B \
+        -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB_NAME'" \
+        2>/dev/null || echo "0")"
+    if [ "${safety_tables:-0}" -gt 0 ]; then
+        command -v mysqldump >/dev/null 2>&1 || \
+            fail_pre safety_backup_failed "mysqldump not on PATH; install mariadb-client or pass --no-safety-backup"
+        command -v gzip >/dev/null 2>&1 || \
+            fail_pre safety_backup_failed "gzip not on PATH; pass --no-safety-backup to skip the safety copy"
+        mkdir -p "$BACKUP_DIR_ENV" 2>/dev/null || \
+            fail_pre safety_backup_failed "cannot create $BACKUP_DIR_ENV"
+        SAFE_TS="$(date -u +'%Y%m%dT%H%M%SZ')"
+        SAFE_DB="chronicle_pre_restore_db_${SAFE_TS}.sql.gz"
+        SAFE_MANIFEST="$BACKUP_DIR_ENV/chronicle_pre_restore_manifest_${SAFE_TS}.txt"
+        printf 'step=safety_backup file=%s\n' "$SAFE_DB"
+        # Two steps so a failing mysqldump is not hidden behind gzip's exit
+        # status (no PIPESTATUS in POSIX sh).
+        if ! MYSQL_PWD="$DB_PASSWORD" mysqldump \
+                -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" \
+                --single-transaction --routines --triggers \
+                "$DB_NAME" > "$BACKUP_DIR_ENV/$SAFE_DB.sql.partial"; then
+            rm -f "$BACKUP_DIR_ENV/$SAFE_DB.sql.partial"
+            fail_pre safety_backup_failed "could not save the current database; nothing was changed (pass --no-safety-backup to restore anyway)"
+        fi
+        if ! gzip -9 -c "$BACKUP_DIR_ENV/$SAFE_DB.sql.partial" > "$BACKUP_DIR_ENV/$SAFE_DB.partial"; then
+            rm -f "$BACKUP_DIR_ENV/$SAFE_DB.sql.partial" "$BACKUP_DIR_ENV/$SAFE_DB.partial"
+            fail_pre safety_backup_failed "could not compress the saved copy; nothing was changed"
+        fi
+        rm -f "$BACKUP_DIR_ENV/$SAFE_DB.sql.partial"
+        mv "$BACKUP_DIR_ENV/$SAFE_DB.partial" "$BACKUP_DIR_ENV/$SAFE_DB"
+        SAFE_SHA="$(sha256sum "$BACKUP_DIR_ENV/$SAFE_DB" | awk '{print $1}')"
+        SAFE_SIZE="$(wc -c < "$BACKUP_DIR_ENV/$SAFE_DB")"
+        SAFE_VER="$(MYSQL_PWD="$DB_PASSWORD" mysql \
+            -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -N -B \
+            -e "SELECT CONCAT(version, '/', dirty) FROM schema_migrations LIMIT 1" \
+            "$DB_NAME" 2>/dev/null || echo "unknown")"
+        {
+            printf 'chronicle_manifest_version=1\n'
+            printf 'chronicle_pre_restore=1\n'
+            printf 'timestamp=%s\n' "$SAFE_TS"
+            printf 'chronicle_version=%s\n' "${CHRONICLE_VERSION:-unknown}"
+            printf 'migration_version=%s\n' "$SAFE_VER"
+            printf 'db_file=%s sha256=%s size=%s\n' "$SAFE_DB" "$SAFE_SHA" "$SAFE_SIZE"
+        } > "$SAFE_MANIFEST.partial"
+        mv "$SAFE_MANIFEST.partial" "$SAFE_MANIFEST"
+        printf 'safety_backup=%s\n' "$SAFE_MANIFEST"
+    else
+        printf 'step=safety_backup skipped reason=db_empty\n'
+    fi
 fi
 
 # ---- DB restore ----
@@ -226,6 +339,14 @@ fi
 if [ -n "$REDIS_FILE" ]; then
     printf 'step=redis_skipped reason=manual_only file=%s\n' "$REDIS_FILE"
     printf 'note=See docs/deployment.md \xc2\xa79 for the Redis-restore steps.\n'
+fi
+
+# A restore finished by hand supersedes a maintenance marker Chronicle left
+# behind (a failed or interrupted in-app restore), so the next start opens
+# normally. The in-app run clears its own marker.
+if [ "$FROM_INSIDE" = "0" ] && [ "$MEDIA_ONLY" = "0" ] && [ -f "$MAINT_FILE" ]; then
+    rm -f "$MAINT_FILE" "$MAINT_FILE.log"
+    printf 'step=maintenance_marker_cleared\n'
 fi
 
 printf 'RESTORE=ok manifest=%s migration_version=%s\n' \

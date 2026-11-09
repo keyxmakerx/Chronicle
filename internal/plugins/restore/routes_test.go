@@ -21,7 +21,7 @@ func TestRunRequiresReauthBeforeRateLimit(t *testing.T) {
 		}
 	}
 	// A nil handler is safe: the stub refuses before any handler runs.
-	RegisterRoutes(e.Group("/admin"), nil, reauth)
+	RegisterRoutes(e.Group("/admin"), nil, reauth, nil)
 
 	for i := 0; i < 3; i++ {
 		rec := httptest.NewRecorder()

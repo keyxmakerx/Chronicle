@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
+	"github.com/keyxmakerx/chronicle/internal/maintenance"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/observability"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
@@ -90,6 +92,16 @@ type App struct {
 	// it nil.
 	UploadCeilingFn func() int64
 
+	// Maintenance is the site-wide "back in a few minutes" state a restore
+	// drives. The global gate middleware and /healthz read it; it is built
+	// from the backup directory so a restart mid-restore comes back closed.
+	Maintenance *maintenance.State
+
+	// PostRestoreSchema brings a freshly restored database up to this build
+	// the way a normal start does. Set by cmd/server before RegisterRoutes;
+	// nil skips it (tests).
+	PostRestoreSchema func(ctx context.Context) error
+
 	// pkgService is the package manager service, used for Foundry module
 	// path resolution and system loading from external repos.
 	pkgService packages.PackageService
@@ -131,6 +143,7 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 		PluginSchemas:  pluginSchemas,
 		ShutdownCtx:    shutdownCtx,
 		ShutdownCancel: shutdownCancel,
+		Maintenance:    maintenance.NewState(filepath.Join(cfg.BackupDir, maintenance.MarkerName)),
 	}
 
 	app.routeHandlers = make(map[string]string)
@@ -249,6 +262,13 @@ func (a *App) setupMiddleware() {
 		ceiling = uploadCeiling(settingsSvc, a.Config.Upload.MaxSize, uploadCeilingTTL)
 	}
 	registerUploadCaps(a.Echo, ceiling)
+
+	// Maintenance gate -- while a restore replaces the database every request
+	// except health probes, static files and the restoring admin's own pages
+	// gets a plain 503. It sits after CORS so API and Foundry callers can read
+	// the JSON refusal, and before CSRF so a refused request never touches
+	// anything else.
+	a.Echo.Use(a.Maintenance.Gate())
 
 	// CSRF -- double-submit cookie pattern on all state-changing requests.
 	a.Echo.Use(middleware.CSRF())
