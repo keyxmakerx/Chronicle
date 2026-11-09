@@ -501,7 +501,16 @@ column's version; Off shows the end state.
   (Lumen's glow is its kit's character and the one exception).
 - **Colour roles**: page `--color-bg-primary`, panel `--color-bg-secondary`,
   hover and alternate rows `--color-bg-tertiary`, menu `--color-sidebar-bg`,
-  headings `--color-text-primary`, labels `--color-text-secondary`.
+  headings `--color-text-primary`, labels `--color-text-secondary`, hints and
+  dates `--color-text-muted`. Both text greys reach 4.5:1 on the page, panel
+  and alternate-row fills in light and dark (a custom page tone is nudged to
+  match), so nothing a reader needs is faint. `--color-text-faint` is for
+  disabled controls and decoration only. A card says when it was last changed
+  as "Edited 2 days ago" in the label grey, with the exact time in the
+  element's `title` and `datetime`, and never fills a missing description
+  with "No description"; a standing instruction sits behind a quiet word
+  ("How linking works") and a short placeholder says only what the field is.
+  Menu group names use the menu's label grey, not its 3:1 count grey.
 - **One accent.** The accent (`--color-accent`, the campaign's colour) marks
   what you can act on and where you are: links (underlined at 40%), the
   selected row's edge, focus, the title's rule, group and section labels, and

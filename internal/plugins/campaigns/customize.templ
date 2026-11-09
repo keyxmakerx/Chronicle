@@ -250,7 +250,7 @@ templ contentTemplatesTab(cc *CampaignContext) {
 							</span>
 							<div class="flex-1 min-w-0">
 								<div class="font-medium text-sm text-fg truncate" x-text="t.name"></div>
-								<div class="text-xs text-fg-muted truncate" x-text="t.description || 'No description'"></div>
+								<div x-show="t.description" class="text-xs text-fg-secondary truncate" x-text="t.description"></div>
 								<div x-show="t.entity_type_name" class="text-[10px] text-fg-muted mt-0.5">
 									<i class="fa-solid fa-folder-open mr-0.5"></i>
 									<span x-text="t.entity_type_name"></span>

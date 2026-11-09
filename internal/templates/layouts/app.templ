@@ -302,7 +302,7 @@ templ AdminSidebarNav() {
 			@adminNavLink(adminNav.Home)
 			if len(pinned) > 0 {
 				<div role="group" aria-label="Pinned admin pages">
-					<div class="px-4 pt-3 pb-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-gray-500">Pinned</div>
+					<div class="px-4 pt-3 pb-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-gray-400">Pinned</div>
 					for _, it := range pinned {
 						@adminNavLink(it)
 					}
@@ -319,7 +319,7 @@ templ AdminSidebarNav() {
 // always open: the admin menu has the sidebar to itself.
 templ adminNavSection(sec AdminNavSection, pins []string) {
 	<div id={ "admin-nav-sec-" + sec.ID } role="group" aria-labelledby={ "admin-nav-sec-" + sec.ID + "-label" }>
-		<div id={ "admin-nav-sec-" + sec.ID + "-label" } class="px-4 pt-3 pb-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+		<div id={ "admin-nav-sec-" + sec.ID + "-label" } class="px-4 pt-3 pb-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-gray-400">
 			{ sec.Label }
 		</div>
 		for _, it := range sec.Items {
@@ -412,7 +412,7 @@ templ DefaultSidebarNav() {
 }
 
 templ defaultSidebarLinks() {
-	<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+	<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
 		Navigation
 	</div>
 

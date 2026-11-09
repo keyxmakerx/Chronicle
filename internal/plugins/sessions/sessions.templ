@@ -131,6 +131,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 			if recap.Open && cc.IsMember {
 				<div class={ "mb-6", templ.KV("card p-4", !isScribe) } id="session-recap">
 					if isScribe {
+						<div x-data="{ linkHelp: false }">
 						<div
 							data-widget="editor"
 							data-endpoint={ fmt.Sprintf("/campaigns/%s/sessions/%s/recap", cc.Campaign.ID, session.ID) }
@@ -138,7 +139,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 							data-editable="true"
 							data-autosave="5"
 							data-label="Recap"
-							data-placeholder="What happened? Type @ to link a page."
+							data-placeholder="What happened?"
 							data-secrets="false"
 							data-open-to-players="true"
 							if recap.StartWriting {
@@ -146,6 +147,11 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 							}
 							data-csrf-token={ csrfToken }
 						></div>
+						<div class="mt-2">
+							<button type="button" class="quiet-word text-xs" aria-expanded="false" aria-controls="recap-link-help" x-bind:aria-expanded="linkHelp" x-on:click="linkHelp = !linkHelp">How linking works</button>
+							<p id="recap-link-help" x-show="linkHelp" x-cloak class="mt-1 text-xs text-fg-secondary">{ "Type @ and the start of a page's name, then pick the page to link it." }</p>
+						</div>
+						</div>
 					} else {
 						<h2 class="text-sm font-semibold text-fg mb-2">
 							<i class="fa-solid fa-scroll mr-1 text-accent"></i> Recap

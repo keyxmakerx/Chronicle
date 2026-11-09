@@ -2,7 +2,12 @@
 
 package campaigns
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
+)
 
 // CampaignCard renders a single campaign card for the grid.
 templ CampaignCard(campaign *Campaign) {
@@ -22,15 +27,12 @@ templ CampaignCard(campaign *Campaign) {
 					<h3 class="text-base font-semibold text-fg truncate group-hover:text-accent transition-colors">{ campaign.Name }</h3>
 					if campaign.Description != nil && *campaign.Description != "" {
 						<p class="text-sm text-fg-secondary line-clamp-2 mt-1">{ *campaign.Description }</p>
-					} else {
-						<p class="text-sm text-fg-muted italic mt-1">No description</p>
 					}
 				</div>
 			</div>
 
-			<div class="mt-4 flex items-center text-xs text-fg-muted">
-				<i class="fa-regular fa-clock mr-1.5"></i>
-				{ campaign.UpdatedAt.Format("Jan 2, 2006") }
+			<div class="mt-4 flex items-center text-xs text-fg-secondary">
+				<time datetime={ campaign.UpdatedAt.UTC().Format(time.RFC3339) } title={ campaign.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>{ timeutil.EditedAgo(campaign.UpdatedAt, time.Now()) }</time>
 				if campaign.IsPublic {
 					<span class="ml-auto inline-flex items-center gap-1 text-green-600 dark:text-green-400">
 						<i class="fa-solid fa-globe text-[10px]"></i>

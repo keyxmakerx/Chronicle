@@ -239,19 +239,26 @@ func (a *AppearanceData) tones(theme int) czTone {
 	return t
 }
 
-// toneVars writes one theme's tokens. Hints and faint text are mixed toward
-// the page so they stay a step quieter than labels on every tone.
+// hintContrast is the contrast a hint, date or label must reach on the page,
+// card and alt-row fills of its tone.
+const hintContrast = 4.5
+
+// toneVars writes one theme's tokens. Hints are the tone's grey nudged until
+// they read at 4.5:1 on every fill; labels sit a step stronger, so the two
+// stay apart without either going faint. Faint is for disabled controls only.
 func toneVars(t czTone, dark bool) string {
 	input := t.card
 	borderLight := t.alt
 	if dark {
 		input, borderLight = t.bg, t.line2
 	}
+	hint := colour.Readable(t.muted, []string{t.bg, t.card, t.alt}, hintContrast, !dark).Hex
+	label := colour.Mix(hint, t.text, 0.45)
 	return fmt.Sprintf("--color-bg-primary:%s;--color-bg-secondary:%s;--color-card-bg:%s;--color-bg-tertiary:%s;"+
 		"--color-border:%s;--color-border-light:%s;--color-input-border:%s;--color-input-bg:%s;"+
 		"--color-text-primary:%s;--color-text-body:%s;--color-text-secondary:%s;--color-text-muted:%s;--color-text-faint:%s;",
 		t.bg, t.card, t.card, t.alt, t.line, borderLight, t.line2, input,
-		t.text, t.body, t.muted, colour.Mix(t.muted, t.bg, 0.35), colour.Mix(t.muted, t.bg, 0.6))
+		t.text, t.body, label, hint, colour.Mix(hint, t.bg, 0.6))
 }
 
 // czMenu is one menu colour with the shades the menu derives from it.
