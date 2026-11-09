@@ -102,7 +102,7 @@ test('the save body is the whole encounter in the server\'s shape', () => {
   const e = H.normalise({ id: 'e1', name: '  ', version: 3, ready: true, heroes: [{ id: 'h1', name: 'Ash' }],
     creatures: [{ id: 'r1', entityId: 'gob', name: 'Goblin', count: 2, group: 'B', start: 'hidden' }] });
   assert.deepEqual(plain(H.toSave(e)), {
-    name: 'Untitled encounter', ready: true, heroes: ['h1'], version: 3, stages: [], versions: [],
+    name: 'Untitled encounter', kind: 'fight', shows: [], ready: true, heroes: ['h1'], version: 3, stages: [], versions: [],
     creatures: [{ id: 'r1', entityId: 'gob', name: 'Goblin', count: 2, group: 'B', start: 'hidden' }]
   });
 });
@@ -313,4 +313,52 @@ test('pickedLine says which version the recorded result chooses', () => {
   assert.match(H.pickedLine(e({ version: '', open: ['t1'] })), /No result recorded yet/);
   assert.match(H.pickedLine(e({ version: '', open: [] })), /base list plays/);
   assert.equal(H.pickedLine(H.normalise(base())), '');
+});
+
+// ---- Scenes ----
+
+test('an encounter with no kind reads as a fight, and a scene keeps its rows', () => {
+  const H = H0();
+  assert.equal(H.normalise({ id: 'e1' }).kind, 'fight');
+  assert.equal(H.normalise({ id: 'e1', kind: 'boss' }).kind, 'fight');
+  const s = H.normalise({ id: 'e1', kind: 'scene', shows: [{ id: 's1', kind: 'page', entityId: 'p1', label: 'Lastwell' }, { id: 's2', kind: 'song' }] });
+  assert.equal(s.kind, 'scene');
+  assert.deepEqual(plain(s.shows.map((x) => x.kind)), ['page', 'note']);
+  assert.equal(H.summary(s), 'Scene · 2 things to show');
+});
+
+test('switching never throws work away', () => {
+  const H = H0();
+  const fight = queen();
+  assert.equal(H.canSwitch(fight), false);
+  assert.equal(H.setKind(fight, 'scene').kind, 'fight');
+  const empty = H.normalise({ id: 'e1' });
+  const scene = H.setKind(empty, 'scene');
+  assert.equal(scene.kind, 'scene');
+  const busy = H.addShow(scene, 'note');
+  assert.equal(H.canSwitch(busy), false);
+  assert.equal(H.setKind(busy, 'fight').kind, 'scene');
+});
+
+test('scene rows add, move, edit and remove, and save in the server\'s shape', () => {
+  const H = H0();
+  let e = H.setKind(H.normalise({ id: 'e1', version: 1 }), 'scene');
+  e = H.addShow(e, 'page', { entityId: 'p1', name: 'Lastwell' });
+  e = H.addShow(e, 'note');
+  const note = e.shows[1].id;
+  e = H.setShow(e, note, 'label', ' A vial ');
+  e = H.setShow(e, note, 'text', 'It smells of pine.');
+  e = H.setShow(e, note, 'to', 'u-ash');
+  e = H.moveShow(e, note, -1);
+  assert.deepEqual(plain(e.shows.map((x) => x.kind)), ['note', 'page']);
+  assert.equal(H.moveShow(e, note, -1).shows[0].id, note, 'the first row stays first');
+  const body = H.toSave(e);
+  assert.equal(body.kind, 'scene');
+  assert.deepEqual(plain(body.shows[0]), { id: note, kind: 'note', entityId: '', label: 'A vial', text: 'It smells of pine.', to: 'u-ash' });
+  assert.equal(body.shows[1].entityId, 'p1');
+  e = H.removeShow(e, note);
+  assert.equal(e.shows.length, 1);
+  let full = e;
+  for (let i = 0; i < H.LIM.shows + 3; i++) full = H.addShow(full, 'note');
+  assert.equal(full.shows.length, H.LIM.shows);
 });

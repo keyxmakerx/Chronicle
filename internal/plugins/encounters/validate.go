@@ -23,6 +23,9 @@ const (
 	MaxFormNameChars = 80
 	MaxVersions      = 6
 	MaxVersionAdds   = 10
+	MaxShows         = 30
+	MaxShowLabel     = 120
+	MaxShowText      = 500
 	// MaxPerPage keeps one page's widget a list a DM can scan; a campaign
 	// can still hold any number of encounters across its pages.
 	MaxPerPage = 50
@@ -102,6 +105,25 @@ func validateInput(in SaveInput) (name string, d doc, err error) {
 			seen[id] = true
 			d.Heroes = append(d.Heroes, id)
 		}
+	}
+	switch in.Kind {
+	case "", KindFight:
+		d.Kind = ""
+		if len(in.Shows) > 0 {
+			return "", doc{}, errInvalid("a fight has no things to show; switch it to a scene")
+		}
+	case KindScene:
+		d.Kind = KindScene
+		if len(in.Creatures) > 0 || len(in.Versions) > 0 || len(in.Stages) > 0 {
+			return "", doc{}, errInvalid("a scene has no creatures, versions or stages; switch it to a fight")
+		}
+		if d.Shows, err = validateShows(in.Shows); err != nil {
+			return "", doc{}, err
+		}
+		d.Creatures, d.Stages = []Creature{}, []Stage{}
+		return name, d, nil
+	default:
+		return "", doc{}, errInvalid("an encounter is a fight or a scene")
 	}
 	if len(in.Creatures) > MaxCreatureRows {
 		return "", doc{}, errInvalid(fmt.Sprintf("an encounter has at most %d creature rows", MaxCreatureRows))
@@ -341,6 +363,50 @@ func validateStages(in []Stage, rows []Creature) ([]Stage, error) {
 			return nil, err
 		}
 		out = append(out, s)
+	}
+	return out, nil
+}
+
+// validateShows checks a scene's rows, cleaned. Whether a named page or
+// player belongs to the campaign is the service's check.
+func validateShows(in []Show) ([]Show, error) {
+	if len(in) > MaxShows {
+		return nil, errInvalid(fmt.Sprintf("a scene shows at most %d things", MaxShows))
+	}
+	ids := map[string]bool{}
+	out := make([]Show, 0, len(in))
+	for _, sh := range in {
+		var err error
+		if !validToken(sh.ID) || ids[sh.ID] {
+			return nil, errInvalid("a thing to show has a missing or repeated id")
+		}
+		ids[sh.ID] = true
+		if sh.Label, err = cleanLine("a label", sh.Label, MaxShowLabel); err != nil {
+			return nil, err
+		}
+		if sh.Text, err = cleanLine("a note", sh.Text, MaxShowText); err != nil {
+			return nil, err
+		}
+		if sh.To != "" && !validToken(sh.To) {
+			return nil, errInvalid("a thing to show names a player that isn't valid")
+		}
+		switch sh.Kind {
+		case ShowPage, ShowReveal:
+			if !validToken(sh.EntityID) {
+				return nil, errInvalid("pick the page to show")
+			}
+		case ShowNote:
+			sh.EntityID = ""
+			if sh.Text == "" {
+				return nil, errInvalid("write the note to show")
+			}
+			if sh.Label == "" {
+				return nil, errInvalid("give the note a label")
+			}
+		default:
+			return nil, errInvalid("a thing to show is a page, a reveal or a note")
+		}
+		out = append(out, sh)
 	}
 	return out, nil
 }

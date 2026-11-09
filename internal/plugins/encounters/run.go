@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // A run is a fight the DM team is playing out on the DM Screen's Fight tab,
@@ -42,6 +43,37 @@ type Run struct {
 	// turn, while the DM types initiative.
 	Turn  string    `json:"turn"`
 	Lines []RunLine `json:"lines"`
+	// Kind is "scene" for a scene, empty for a fight. A scene has no lines;
+	// its Shows are copied from the encounter when it starts.
+	Kind  string    `json:"kind,omitempty"`
+	Shows []RunShow `json:"shows,omitempty"`
+}
+
+// RunShow is one row of a running scene and when it was last shown.
+type RunShow struct {
+	Show
+	ShownAt *time.Time `json:"shownAt"`
+}
+
+// ShownItem is one thing shown to players, as the shown log keeps it and as
+// a player's Table receives it. Scene is the scene's name; To is empty for
+// everyone.
+type ShownItem struct {
+	ID       string    `json:"id"`
+	Kind     string    `json:"kind"`
+	Label    string    `json:"label"`
+	Text     string    `json:"text,omitempty"`
+	EntityID string    `json:"entityId,omitempty"`
+	To       string    `json:"to,omitempty"`
+	Scene    string    `json:"scene"`
+	ShownAt  time.Time `json:"shownAt"`
+}
+
+// ShowPublisher sends a shown item to the players' live connections:
+// everyone, or only item.To (and the DM team). It is implemented in
+// internal/app over the WebSocket hub.
+type ShowPublisher interface {
+	Shown(campaignID string, item ShownItem)
 }
 
 // RunLine is one hero, or one creature row with a box of hit points for
@@ -78,6 +110,8 @@ type RunView struct {
 	// Leaves says, by page, what a creature will leave when the fight ends
 	// ("Has a drop list"), as the fight listener tells it; empty without one.
 	Leaves map[string]string `json:"leaves,omitempty"`
+	// Players names who a scene row goes to; set only while a scene runs.
+	Players []Player `json:"players,omitempty"`
 }
 
 // EndedFight is a fight as it stood when the DM ended it.
@@ -287,6 +321,14 @@ func playedRows(e *Encounter) []Creature {
 // rows, each with a full hit point box per copy. "Later" rows wait.
 func newRun(e *Encounter) *Run {
 	r := &Run{EncounterID: e.ID, Name: e.Name, Round: 1, Lines: []RunLine{}}
+	if e.Kind == KindScene {
+		r.Kind = KindScene
+		r.Shows = make([]RunShow, 0, len(e.Shows))
+		for _, sh := range e.Shows {
+			r.Shows = append(r.Shows, RunShow{Show: sh})
+		}
+		return r
+	}
 	for _, h := range e.Heroes {
 		r.Lines = append(r.Lines, RunLine{
 			ID: "h-" + h.ID, Kind: LineHero, Name: h.Name, EntityID: h.ID,

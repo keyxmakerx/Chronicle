@@ -314,3 +314,31 @@ a.erun-btn { display: inline-flex; align-items: center; text-decoration: none; }
   .erun-row { grid-template-columns: 2.6em minmax(0, 1fr) 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .erun-btn { transition: none; } .erun-btn:active:not(:disabled) { transform: none; } }
+
+/* Scenes: the Fight or Scene switch uses the version tabs' look; each thing
+   to show is a row with its kind, title, who sees it and, for a note, the
+   words. */
+.enc-kind { margin-bottom: 4px; }
+.enc-kind .enc-tab:disabled { cursor: not-allowed; opacity: .5; }
+.enc-kind-why { margin-left: auto; align-self: center; font-size: 12px; }
+.enc-shows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.enc-show {
+  display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 8px;
+  border: 1px solid var(--color-border, #e5e7eb); min-width: 0;
+}
+.enc-show-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.enc-show-head .enc-input { flex: 1 1 auto; min-width: 0; }
+.enc-show-kind {
+  flex: none; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600;
+  color: var(--color-text-secondary, #4b5563); min-width: 4.5em;
+}
+.enc-show-btn { flex: none; width: 28px; height: 28px; font-size: 14px; }
+.enc-show-btn:disabled { opacity: .35; cursor: not-allowed; }
+.enc-show .enc-sel { align-self: flex-start; min-height: 32px; max-width: 100%; }
+.enc-note { resize: vertical; min-height: 3em; }
+
+/* A scene on the DM Screen: what can be shown, each with its Show button. */
+.erun-shows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.erun-show { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--erun-edge); }
+.erun-show:first-child { border-top: 0; }
+.erun-shown .erun-pick-txt b { font-weight: 600; color: var(--erun-muted); }

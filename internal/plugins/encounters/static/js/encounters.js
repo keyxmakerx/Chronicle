@@ -24,7 +24,13 @@
   'use strict';
 
   // The server's limits, mirrored so the builder can stop short of a refusal.
-  var LIM = { name: 120, heroes: 12, rows: 30, count: 40, perPage: 50, stages: 8, forms: 10, arrive: 30, note: 200, formName: 80, versions: 6, versionAdds: 10, versionName: 80 };
+  var LIM = { name: 120, heroes: 12, rows: 30, count: 40, perPage: 50, stages: 8, forms: 10, arrive: 30, note: 200, formName: 80, versions: 6, versionAdds: 10, versionName: 80, shows: 30, showLabel: 120, showText: 500 };
+  // What a scene row shows, as the builder names it.
+  var SHOW_KINDS = {
+    page: { label: 'Page' },
+    reveal: { label: 'Reveal' },
+    note: { label: 'Note' }
+  };
   var FIRST_FORM = 'Its first form';
   var GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   var STARTS = [
@@ -85,8 +91,59 @@
       creatures: (e.creatures || []).map(normaliseRow),
       stages: (e.stages || []).map(normaliseStage),
       versions: (e.versions || []).map(normaliseVersion),
-      picked: e.picked || null
+      picked: e.picked || null,
+      kind: e.kind === 'scene' ? 'scene' : 'fight',
+      shows: (e.shows || []).map(normaliseShow)
     };
+  }
+
+  function normaliseShow(sh) {
+    return {
+      id: sh.id || uid(), kind: SHOW_KINDS[sh.kind] ? sh.kind : 'note', entityId: sh.entityId || '',
+      label: sh.label || '', text: sh.text || '', to: sh.to || ''
+    };
+  }
+
+  // A fight with creatures, versions or stages can't become a scene, and a
+  // scene with things to show can't become a fight, so switching never
+  // throws work away.
+  function canSwitch(e) {
+    if (e.kind === 'scene') return !e.shows.length;
+    return !e.creatures.length && !e.versions.length && !e.stages.length;
+  }
+
+  function setKind(e, kind) {
+    var n = clone(e);
+    if (canSwitch(e)) n.kind = kind;
+    return n;
+  }
+
+  function addShow(e, kind, page) {
+    var n = clone(e);
+    if (n.shows.length >= LIM.shows) return n;
+    n.shows.push(normaliseShow({ id: uid(), kind: kind, entityId: page ? page.entityId : '', label: page ? page.name : '' }));
+    return n;
+  }
+
+  function setShow(e, id, key, value) {
+    var n = clone(e);
+    n.shows.forEach(function (sh) { if (sh.id === id) sh[key] = value; });
+    return n;
+  }
+
+  function removeShow(e, id) {
+    var n = clone(e);
+    n.shows = n.shows.filter(function (sh) { return sh.id !== id; });
+    return n;
+  }
+
+  function moveShow(e, id, by) {
+    var n = clone(e), i = -1;
+    n.shows.forEach(function (sh, x) { if (sh.id === id) i = x; });
+    var j = i + by;
+    if (i < 0 || j < 0 || j >= n.shows.length) return n;
+    var t = n.shows[i]; n.shows[i] = n.shows[j]; n.shows[j] = t;
+    return n;
   }
 
   function normaliseRow(c) {
@@ -415,6 +472,10 @@
 
   // summary is the one line under an encounter's name in the block.
   function summary(e) {
+    if (e.kind === 'scene') {
+      var k = e.shows.length;
+      return 'Scene · ' + (k ? k + (k === 1 ? ' thing to show' : ' things to show') : 'nothing to show yet');
+    }
     var n = totalCreatures(e);
     if (!n) return 'No creatures yet';
     var by = countByStart(e), parts = [n + (n === 1 ? ' creature' : ' creatures')];
@@ -427,6 +488,10 @@
   function toSave(e) {
     return {
       name: e.name.trim() || 'Untitled encounter',
+      kind: e.kind,
+      shows: e.kind === 'scene' ? e.shows.map(function (sh) {
+        return { id: sh.id, kind: sh.kind, entityId: sh.kind === 'note' ? '' : sh.entityId, label: sh.label.trim(), text: sh.text.trim(), to: sh.to };
+      }) : [],
       ready: e.ready,
       heroes: e.heroes.map(function (h) { return h.id; }),
       creatures: e.creatures.map(function (c) {
@@ -477,7 +542,8 @@
     toggleArrive: toggleArrive, arriveOrder: arriveOrder, stageReady: stageReady, pagedRows: pagedRows,
     addVersion: addVersion, removeVersion: removeVersion, setVersionName: setVersionName, setPick: setPick,
     keepRow: keepRow, setVersionCount: setVersionCount, versionCount: versionCount, addVersionRow: addVersionRow,
-    setVersionRow: setVersionRow, removeVersionRow: removeVersionRow, versionTotal: versionTotal, pickedLine: pickedLine
+    setVersionRow: setVersionRow, removeVersionRow: removeVersionRow, versionTotal: versionTotal, pickedLine: pickedLine,
+    canSwitch: canSwitch, setKind: setKind, addShow: addShow, setShow: setShow, removeShow: removeShow, moveShow: moveShow
   };
 
   if (typeof Chronicle === 'undefined' || typeof document === 'undefined') return;
@@ -553,6 +619,7 @@
       S.heroTypes = pickTypes(v && v.heroTypeIds);
       S.creatureTypes = pickTypes(v && v.creatureTypeIds);
       S.statBlocks = Array.isArray(v && v.statBlocks) ? v.statBlocks : [];
+      S.players = Array.isArray(v && v.players) ? v.players : [];
       S.loaded = true;
       drawBlock(S);
     }).catch(function () {
@@ -861,12 +928,14 @@
 
     var body = h('div', 'enc-d-body');
     var slot = h('div', 'enc-system', '', { 'data-encounter-budget': true });
-    append(body, [heroSection(S), slot, creatureSection(S), versionSection(S), stageSection(S), readySection(S)]);
+    var scene = d.kind === 'scene';
+    if (scene) append(body, [kindSection(S), heroSection(S), showSection(S), readySection(S)]);
+    else append(body, [kindSection(S), heroSection(S), slot, creatureSection(S), versionSection(S), stageSection(S), readySection(S)]);
 
     var foot = h('div', 'enc-d-foot');
     append(foot, [
       h('span', 'enc-status' + (S.statusErr ? ' err' : ''), S.status, { role: 'status', 'aria-live': 'polite' }),
-      h('span', 'enc-hint', 'Foundry finds it in its Encounters tab.'),
+      h('span', 'enc-hint', scene ? 'Run it from the DM Screen’s Fight card.' : 'Foundry finds it in its Encounters tab.'),
       edit ? deleteButton(S) : null
     ]);
     append(aside, [top, body, foot]);
@@ -881,7 +950,7 @@
     var d = S.draft, sec = h('section', 'enc-sec');
     var on = {};
     d.heroes.forEach(function (x) { on[x.id] = true; });
-    var label = h('p', 'enc-lab', "Who's fighting");
+    var label = h('p', 'enc-lab', d.kind === 'scene' ? "Who's there" : "Who's fighting");
     label.appendChild(h('b', '', d.heroes.length + (d.heroes.length === 1 ? ' hero' : ' heroes')));
     sec.appendChild(label);
     if (S.heroes === null) { sec.appendChild(h('p', 'enc-muted', 'Loading heroes…')); return sec; }
@@ -1395,10 +1464,134 @@
     cb.checked = S.draft.ready;
     var text = h('span');
     append(text, [h('b', '', 'Ready for game night'),
-      h('span', 'enc-muted', 'Ready fights are the ones Foundry lists first. Untick it after the fight.')]);
+      h('span', 'enc-muted', S.draft.kind === 'scene'
+        ? 'Ready scenes are listed on the DM Screen to start.'
+        : 'Ready fights are the ones Foundry lists first. Untick it after the fight.')]);
     append(lab, [cb, text]);
     return lab;
   }
+
+  // ---------- Scenes ----------
+
+  // kindSection is the Fight or Scene switch: two tabs, the lighter control
+  // for choosing what the builder holds.
+  function kindSection(S) {
+    var d = S.draft, sec = h('div', 'enc-kind', '', { role: 'group', 'aria-label': 'What this encounter is' });
+    var can = S.canEdit && canSwitch(d);
+    [['fight', 'Fight'], ['scene', 'Scene']].forEach(function (k) {
+      sec.appendChild(h('button', 'enc-tab' + (d.kind === k[0] ? ' on' : ''), k[1], {
+        type: 'button', 'aria-pressed': String(d.kind === k[0]), 'data-k': 'kind-' + k[0],
+        disabled: d.kind !== k[0] && !can
+      }, { click: function () { if (d.kind !== k[0]) change(S, setKind(S.draft, k[0]), 'kind-' + k[0]); } }));
+    });
+    if (S.canEdit && !canSwitch(d)) {
+      sec.appendChild(h('span', 'enc-muted enc-kind-why', d.kind === 'scene'
+        ? 'Remove the things to show to make it a fight.'
+        : 'Remove the creatures, versions and stages to make it a scene.'));
+    }
+    return sec;
+  }
+
+  // showSection lists what the scene can show, in the order it will be run.
+  function showSection(S) {
+    var d = S.draft, edit = S.canEdit, sec = h('section', 'enc-sec');
+    var label = h('p', 'enc-lab', 'Things to show');
+    label.appendChild(h('b', '', String(d.shows.length)));
+    sec.appendChild(label);
+    if (!d.shows.length) sec.appendChild(h('p', 'enc-muted', 'Add a page, an NPC to reveal or a note. On the night, each one gets a Show button on the DM Screen.'));
+    var list = h('ol', 'enc-shows');
+    d.shows.forEach(function (sh, i) {
+      var k = sh.id, li = h('li', 'enc-show');
+      var head = h('div', 'enc-show-head');
+      var lab = h('input', 'enc-input', '', {
+        type: 'text', maxlength: String(LIM.showLabel), 'aria-label': 'Title players see', 'data-k': 'sl-' + k,
+        placeholder: sh.kind === 'note' ? 'Title, like “Hessa slips you a vial”' : 'Title (the page’s name if left empty)', readonly: !edit
+      }, { input: function () { S.draft = setShow(S.draft, k, 'label', lab.value); schedule(S); } });
+      lab.value = sh.label;
+      append(head, [h('span', 'enc-show-kind', SHOW_KINDS[sh.kind].label), lab]);
+      if (edit) {
+        append(head, [
+          h('button', 'enc-x enc-show-btn', '↑', { type: 'button', 'aria-label': 'Move up', 'data-k': 'su-' + k, disabled: i === 0 }, { click: function () { change(S, moveShow(S.draft, k, -1), 'su-' + k); } }),
+          h('button', 'enc-x enc-show-btn', '↓', { type: 'button', 'aria-label': 'Move down', 'data-k': 'sd-' + k, disabled: i === d.shows.length - 1 }, { click: function () { change(S, moveShow(S.draft, k, 1), 'sd-' + k); } }),
+          h('button', 'enc-x enc-show-btn', '×', { type: 'button', 'aria-label': 'Remove this row', 'data-k': 'sx-' + k }, { click: function () { change(S, removeShow(S.draft, k), 'show-add-note'); } })
+        ]);
+      }
+      li.appendChild(head);
+      if (sh.kind === 'note') {
+        var txt = h('textarea', 'enc-input enc-note', '', {
+          maxlength: String(LIM.showText), rows: '2', 'aria-label': 'The note players read', 'data-k': 'st-' + k, readonly: !edit
+        }, { input: function () { S.draft = setShow(S.draft, k, 'text', txt.value.replace(/[\r\n]+/g, ' ')); schedule(S); } });
+        txt.value = sh.text;
+        li.appendChild(txt);
+      } else if (!sh.entityId) {
+        li.appendChild(h('p', 'enc-stage-warn', 'Its page has gone. Remove this row or add the page again.'));
+      }
+      var to = h('select', 'enc-sel', '', { 'aria-label': 'Who sees it', 'data-k': 'sw-' + k, disabled: !edit }, {
+        change: function () { change(S, setShow(S.draft, k, 'to', to.value), 'sw-' + k); }
+      });
+      to.appendChild(h('option', '', 'Everyone', { value: '', selected: !sh.to }));
+      (S.players || []).forEach(function (p) { to.appendChild(h('option', '', 'Only ' + p.name, { value: p.userId, selected: sh.to === p.userId })); });
+      if (sh.to && !(S.players || []).some(function (p) { return p.userId === sh.to; })) {
+        to.appendChild(h('option', '', 'Someone who left', { value: sh.to, selected: true }));
+      }
+      li.appendChild(to);
+      list.appendChild(li);
+    });
+    sec.appendChild(list);
+    if (edit) {
+      var full = d.shows.length >= LIM.shows;
+      sec.appendChild(btn('Add a note', 'enc-quiet', function () { change(S, addShow(S.draft, 'note'), 'show-add-note'); }, { 'data-k': 'show-add-note', disabled: full }));
+      sec.appendChild(pageBox(S, 'show-add-page', full, 'Add a page to show', false, function (p) { change(S, addShow(S.draft, 'page', p), 'show-add-page'); }));
+      if ((S.creatureTypes || []).length) {
+        sec.appendChild(pageBox(S, 'show-add-reveal', full, 'Reveal an NPC or creature', true, function (p) { change(S, addShow(S.draft, 'reveal', p), 'show-add-reveal'); }));
+      }
+    }
+    return sec;
+  }
+
+  // searchPages finds any page of the campaign by name, for a page row.
+  function searchPages(S, q) {
+    if (!q || q.length < MIN_SEARCH) return Promise.resolve([]);
+    return api(S, 'GET', apiBase(S) + '/entities?per_page=8&q=' + encodeURIComponent(q)).then(function (env) {
+      return ((env && env.data) || []).map(function (p) { return { entityId: p.id, name: p.name }; }).slice(0, 8);
+    }).catch(function () { return []; });
+  }
+
+  // pageBox is the search box for a page or reveal row. A reveal row looks
+  // only in the creature and NPC categories, the pages the DM Screen's
+  // Reveal card can un-hide.
+  function pageBox(S, key, full, placeholder, creaturesOnly, onPick) {
+    var box = h('div', 'enc-add');
+    var results = h('ul', 'enc-results', '', { role: 'listbox', 'aria-label': placeholder });
+    var seq = 0;
+    var input = h('input', 'enc-input', '', {
+      type: 'search', placeholder: full ? 'This scene has the most rows it can hold' : placeholder,
+      'aria-label': placeholder, 'data-k': key, maxlength: String(LIM.name), disabled: full, autocomplete: 'off'
+    }, {
+      input: function () {
+        var q = input.value.trim(), mine = ++seq;
+        (creaturesOnly ? searchCreatures(S, q) : searchPages(S, q)).then(function (found) {
+          if (mine !== seq) return;
+          results.textContent = '';
+          found.forEach(function (p) {
+            var li = h('li');
+            li.appendChild(h('button', '', p.name, { type: 'button', role: 'option' }, { click: function () { onPick(p); } }));
+            results.appendChild(li);
+          });
+          if (q.length >= MIN_SEARCH && !found.length) results.appendChild(h('li', 'enc-muted', 'No page by that name.'));
+        });
+      },
+      keydown: function (ev) {
+        if (ev.key !== 'Enter') return;
+        ev.preventDefault();
+        var first = results.querySelector('button');
+        if (first) first.click();
+      }
+    });
+    append(box, [input, results]);
+    return box;
+  }
+
 
   // deleteButton asks once, in place, before deleting.
   function deleteButton(S) {

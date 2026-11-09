@@ -55,7 +55,14 @@
     return {
       encounterId: r.encounterId || '', name: typeof r.name === 'string' ? r.name : '',
       round: Math.max(1, intOrNull(r.round) || 1), turn: r.turn || '',
-      lines: (r.lines || []).map(normaliseLine)
+      lines: (r.lines || []).map(normaliseLine),
+      kind: r.kind === 'scene' ? 'scene' : 'fight',
+      shows: (r.shows || []).map(function (sh) {
+        return {
+          id: String(sh.id || ''), kind: sh.kind || 'note', label: typeof sh.label === 'string' ? sh.label : '',
+          text: typeof sh.text === 'string' ? sh.text : '', to: sh.to || '', entityId: sh.entityId || '', shownAt: sh.shownAt || ''
+        };
+      })
     };
   }
 
@@ -248,6 +255,7 @@
       S.ready = (v && v.ready) || [];
       S.blocks = (v && v.statBlocks) || [];
       S.leaves = (v && v.leaves) || {};
+      S.players = (v && v.players) || [];
       S.dirty = false;
       S.confirmEnd = false;
       draw(S);
@@ -307,7 +315,8 @@
   function mode(S) {
     if (!S.loaded) return 'loading';
     if (S.failed) return 'failed';
-    return S.run ? 'run' : 'none';
+    if (!S.run) return 'none';
+    return S.run.kind === 'scene' ? 'scene' : 'run';
   }
 
   function draw(S) {
@@ -324,10 +333,12 @@
       }
       if (m === 'none') S.el.appendChild(h('div', 'erun-none'));
       if (m === 'run') skeleton(S);
-      if (m === 'none' || m === 'run') S.el.appendChild(foot());
+      if (m === 'scene') sceneSkeleton(S);
+      if (m !== 'loading' && m !== 'failed') S.el.appendChild(foot());
     }
     if (m === 'none') drawReady(S);
     if (m === 'run') drawRun(S);
+    if (m === 'scene') drawScene(S);
   }
 
   function foot() {
@@ -375,8 +386,11 @@
       var li = h('li', 'erun-pick');
       var txt = h('span', 'erun-pick-txt');
       txt.appendChild(h('b', '', e.name || 'Untitled encounter'));
-      var n = e.creatureCount || 0;
-      var sub = (e.page && e.page.name ? 'On ' + e.page.name + ' \u00b7 ' : '') + n + (n === 1 ? ' creature' : ' creatures');
+      var n = e.kind === 'scene' ? (e.showCount || 0) : (e.creatureCount || 0);
+      var what = e.kind === 'scene'
+        ? 'Scene \u00b7 ' + n + (n === 1 ? ' thing to show' : ' things to show')
+        : n + (n === 1 ? ' creature' : ' creatures');
+      var sub = (e.page && e.page.name ? 'On ' + e.page.name + ' \u00b7 ' : '') + what;
       txt.appendChild(h('span', 'erun-sub', sub));
       li.appendChild(txt);
       var b = btn('erun-go', 'Start', 'start');
@@ -418,6 +432,89 @@
     ask.appendChild(btn('', 'Keep going', 'end-no'));
     end.appendChild(ask);
     S.el.appendChild(end);
+  }
+
+  // ---------- A running scene ----------
+
+  function sceneSkeleton(S) {
+    var bar = h('div', 'erun-bar');
+    bar.appendChild(h('b', 'erun-name'));
+    bar.appendChild(h('span', 'erun-round', 'Scene'));
+    S.el.appendChild(bar);
+    S.el.appendChild(h('p', 'erun-note', 'Press Show and it lands on the players\u2019 Table, on their phones too.'));
+    var list = h('ol', 'erun-shows');
+    list.setAttribute('aria-label', 'Things to show');
+    S.el.appendChild(list);
+    S.el.appendChild(h('p', 'erun-note erun-empty', 'This scene has nothing to show. Add things in its builder.'));
+    var end = h('div', 'erun-endbox');
+    end.appendChild(btn('erun-end', 'End the scene', 'end'));
+    var ask = h('div', 'erun-confirm');
+    ask.setAttribute('role', 'group');
+    ask.setAttribute('aria-label', 'End the scene');
+    ask.appendChild(h('p', '', 'End this scene? What was shown stays on the players\u2019 Table for tonight.'));
+    ask.appendChild(btn('erun-end erun-armed', 'End it', 'end-yes'));
+    ask.appendChild(btn('', 'Keep going', 'end-no'));
+    end.appendChild(ask);
+    S.el.appendChild(end);
+  }
+
+  function whoGets(S, sh) {
+    if (!sh.to) return 'Everyone';
+    var p = (S.players || []).filter(function (x) { return x.userId === sh.to; })[0];
+    return 'Only ' + (p ? p.name : 'one player');
+  }
+
+  var SHOW_KIND = { page: 'Page', reveal: 'Reveal', note: 'Note' };
+
+  function timeOf(iso) {
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function drawScene(S) {
+    var run = S.run, el = S.el;
+    el.querySelector('.erun-name').textContent = run.name || 'Untitled scene';
+    el.querySelector('.erun-empty').hidden = run.shows.length > 0;
+    var list = el.querySelector('.erun-shows');
+    var focusId = document.activeElement && el.contains(document.activeElement) && document.activeElement.getAttribute('data-id');
+    list.textContent = '';
+    run.shows.forEach(function (sh) {
+      var li = h('li', 'erun-show' + (sh.shownAt ? ' erun-shown' : ''));
+      var txt = h('span', 'erun-pick-txt');
+      txt.appendChild(h('b', '', sh.label || (sh.kind === 'note' ? 'A note' : 'A page')));
+      txt.appendChild(h('span', 'erun-sub', (SHOW_KIND[sh.kind] || 'Note') + ' \u00b7 ' + whoGets(S, sh) +
+        (sh.shownAt ? ' \u00b7 Shown ' + timeOf(sh.shownAt) : '')));
+      li.appendChild(txt);
+      var b = btn(sh.shownAt ? '' : 'erun-go', sh.shownAt ? 'Show again' : 'Show', 'show');
+      b.setAttribute('data-id', sh.id);
+      b.setAttribute('aria-label', (sh.shownAt ? 'Show again: ' : 'Show: ') + (sh.label || 'this'));
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+    if (focusId) {
+      var again = list.querySelector('[data-id="' + focusId + '"]');
+      if (again) again.focus({ preventScroll: true });
+    }
+    el.querySelector('.erun-confirm').hidden = !S.confirmEnd;
+    el.querySelector('[data-act="end"]').hidden = S.confirmEnd;
+  }
+
+  function show(S, id, b) {
+    b.disabled = true;
+    status(S, 'Showing\u2026');
+    C.apiFetch(S.url + '/show', { method: 'POST', body: { showId: id } }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (v) {
+        if (!res.ok) throw new Error((v && (v.message || v.error)) || 'It wasn\u2019t shown. Try again.');
+        S.run = normaliseRun(v && v.run);
+        S.version = (v && v.version) || S.version;
+        S.players = (v && v.players) || S.players;
+        draw(S);
+        status(S, 'Shown.');
+      });
+    }).catch(function (err) {
+      b.disabled = false;
+      status(S, err.message);
+    });
   }
 
   function drawRun(S) {
@@ -670,6 +767,7 @@
     if (act === 'start') { start(S, b.getAttribute('data-id'), b); return; }
     if (act === 'report-done') { S.report = null; draw(S); return; }
     if (!S.run) return;
+    if (act === 'show') { show(S, b.getAttribute('data-id'), b); return; }
     if (act === 'next') {
       change(S, nextTurn(S.run));
       var now = S.nodes[S.run.turn];
@@ -718,6 +816,7 @@
   // what makes that creature drop its spoils; a save that fails stops the
   // end, so the fight isn't over on numbers the server never got.
   function end(S, b) {
+    var scene = !!(S.run && S.run.kind === 'scene');
     b.disabled = true;
     save(S).then(function () {
       if (S.dirty) throw new Error('unsaved');
@@ -727,7 +826,7 @@
       return res.status === 404 ? null : res.json().catch(function () { return null; });
     }).then(function (rep) {
       S.report = rep && Array.isArray(rep.lines) && rep.lines.length ? rep : null;
-      return load(S, 'The fight is over.', true);
+      return load(S, scene ? 'The scene is over.' : 'The fight is over.', true);
     }).catch(function () {
       b.disabled = false;
       status(S, 'Couldn\u2019t end the fight. Try again.');

@@ -6561,6 +6561,22 @@ func (a *App) RegisterRoutes() {
 		encounterAPI.attach(encounterSvc)
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 		runSvc := encounters.NewRunService(encounters.NewRunRepository(a.DB), encounterSvc, encounterPages)
+		// Scenes show things to players: pages they may open, NPCs the
+		// Reveal card can un-hide, and the DM's notes.
+		scenes := &encountersSceneAdapter{
+			members: campaignService, svc: entityService, cards: entities.NewPageCards(a.DB),
+			reveal: &dmHiddenAdapter{entities: entityService, lists: characterListService},
+		}
+		if d, ok := encounterSvc.(interface {
+			SetSceneDirectory(encounters.SceneDirectory)
+		}); ok {
+			d.SetSceneDirectory(scenes)
+		}
+		if r, ok := runSvc.(interface {
+			SetShowing(encounters.SceneDirectory, encounters.ShownRepository, encounters.ShowPublisher)
+		}); ok {
+			r.SetShowing(scenes, encounters.NewShownRepository(a.DB), &encountersShowPublisher{bus: wsEventBus})
+		}
 		// A fight that ends drops its defeated creatures' spoils.
 		if l, ok := runSvc.(interface {
 			SetFightListener(encounters.FightListener)
