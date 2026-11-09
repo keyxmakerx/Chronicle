@@ -1005,7 +1005,13 @@ func (h *Handler) Security(c *echo.Context) error {
 		}
 	}
 
+	var addresses VisitorAddressesData
+	if tab == SecurityTabAddresses {
+		addresses = visitorAddressesFor(c.Request())
+	}
+
 	data := SecurityPageData{
+		Addresses:        addresses,
 		Tab:              tab,
 		WatchItems:       watch,
 		Stats:            stats,
@@ -1051,6 +1057,28 @@ func (h *Handler) UpdateRegistrationMode(c *echo.Context) error {
 	h.record(c, "registration.mode_changed", "setting", "registration_mode", registrationModeLabel(mode))
 	slog.Info("registration mode updated", slog.String("mode", mode))
 	c.Response().Header().Set("HX-Redirect", securityTabHref(SecurityTabSignup))
+	return c.NoContent(http.StatusOK)
+}
+
+// SaveVisitorAddresses stores which header Chronicle believes for the
+// visitor's address (POST /admin/security/visitor-addresses). Reauth-gated: it
+// decides what every per-address rate limit and audit row records. The change
+// applies to this running server at once.
+func (h *Handler) SaveVisitorAddresses(c *echo.Context) error {
+	if h.settingsService == nil || h.securityService == nil {
+		return apperror.NewMissingContext()
+	}
+	ctx := c.Request().Context()
+	mode := c.FormValue("client_ip_header")
+	if err := h.settingsService.UpdateClientIPHeader(ctx, mode); err != nil {
+		return err
+	}
+	middleware.SetClientIPHeader(mode)
+	_ = h.securityService.LogEvent(ctx, EventVisitorAddressSaved, "", auth.GetUserID(c),
+		c.RealIP(), c.Request().UserAgent(), map[string]any{"header": mode})
+	h.record(c, "visitor_address.header_changed", "setting", "client_ip_header", visitorHeaderLabel(mode))
+	slog.Info("visitor address header updated", slog.String("header", mode))
+	c.Response().Header().Set("HX-Redirect", securityTabHref(SecurityTabAddresses))
 	return c.NoContent(http.StatusOK)
 }
 
@@ -1573,6 +1601,8 @@ type SecurityPageData struct {
 	// RegistrationMode is the current site registration gate ("open", "invite",
 	// "closed"). Rendered as a select on the security page (B-R4).
 	RegistrationMode string
+	// Addresses is the Visitor addresses check, read only on its tab.
+	Addresses VisitorAddressesData
 	// Provider is the sign-in provider setting, read only on its tab.
 	Provider       auth.OIDCSettings
 	ProviderFailed bool

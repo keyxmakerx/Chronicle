@@ -122,7 +122,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `MEDIA_SIGNING_SECRET` | (auto) | HMAC-SHA256 key for signed media URLs; generated if empty. |
 | `MEDIA_SIGNING_SECRET_FILE` | `./data/.signing-secret` | Where the generated secret is persisted. |
 | `MEDIA_SERVE_RATE_LIMIT` | `300` | Requests/min/IP for `GET /media/:id`; per-IP only works if `TRUSTED_PROXY_CIDRS` is right. |
-| `TRUSTED_PROXY_CIDRS` | loopback + private ranges | Comma-separated CIDRs or addresses whose `X-Real-IP` / `X-Forwarded-For` are believed. **Replaces** the default. See "Client IP behind a reverse proxy". |
+| `TRUSTED_PROXY_CIDRS` | loopback + private ranges | Comma-separated CIDRs or addresses whose `X-Real-IP` / `X-Forwarded-For` are believed (which header: Admin > Security > Visitor addresses). **Replaces** the default. See "Client IP behind a reverse proxy". |
 | `BACKUP_DIR` | `/app/data/backups` | Empty is unsupported: the admin UI reports "not configured" and the pre-migration backup is skipped. |
 | `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The pre-migration rotator has its own fixed 7 days. |
 | `BACKUP_REQUIRED` | `0` (binary), `1` (compose) | `1`/`true` makes the pre-migration backup mandatory: any failure (no `mysqldump`, empty dump, manifest write failure) aborts startup before migrations apply, for pending core and plugin migrations. Default is warn and proceed. Use `1` in production. |
@@ -152,6 +152,15 @@ Then set the new value in `.env` so the healthcheck and backup tooling agree.
 Echo's `IPExtractor` believes `X-Real-IP` / `X-Forwarded-For` **only** from a
 peer inside `TRUSTED_PROXY_CIDRS`; otherwise it records the peer. Per-IP rate
 limits, the media serve limit and the address on every audit row depend on it.
+
+Which header is believed is a site setting under **Admin > Security > Visitor
+addresses** (`/admin/security?tab=addresses`): `X-Real-IP`, `X-Forwarded-For`
+read from the right (the first address not in the trusted list, so an entry the
+visitor wrote ahead of the proxy's own is never used), the connection's own
+address when nothing sits in front, or Automatic (`X-Real-IP` if sent, else
+`X-Forwarded-For` from the right), which is what a site that never chose uses.
+The same page shows how your own request was read and warns when the proxy's
+header is missing or the proxy is not in the trusted list.
 
 The default covers loopback and private ranges: right for a proxy on the same
 Docker network, wrong for one arriving over a **mesh VPN** (e.g.
