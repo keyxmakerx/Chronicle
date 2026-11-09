@@ -6420,7 +6420,10 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
 .ph-danger-btn:hover { background: #b91c1c; }
 /* The tabbed panel under a system-rendered page (page_tabs.templ, widgets/page_tabs.js). Each piece keeps its own markup; inside a
    pane its heading and add button give way to the tab and the bar's one action button, which presses that same add button. */
-.pt { margin-top: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); box-shadow: 0 1px 2px rgb(0 0 0 / .06); min-width: 0; }
+/* A system's paper sheet caps its folio at --sheet-width and centres it; the panel keeps the same width so the two read as one
+   column instead of the panel running past the sheet's edges on a wide screen. */
+:root { --sheet-width: 920px; }
+.pt { max-width: var(--sheet-width); margin-inline: auto; margin-top: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); box-shadow: 0 1px 2px rgb(0 0 0 / .06); min-width: 0; }
 .pt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
 .pt-tabs { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; min-width: 0; }
 .pt-tab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 8px; background: none; color: var(--color-text-body); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
