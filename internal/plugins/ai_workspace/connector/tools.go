@@ -83,7 +83,7 @@ var tools = []tool{
 		Desc: "The scenes in the campaign's Foundry world, which says which maps already exist there. Give a name to check for one.",
 		Args: []arg{{Key: "name", Desc: "Part of a scene's name or folder, to check whether a map exists"}}},
 	{Name: "shop_stock", Title: "What a shop sells", Did: "Looked at a shop", What: "stock",
-		Desc: "What a shop page sells, with prices and how many, and its room (what kind of shop, mood, what the keeper says) and storefront on the Shops street, written as blocks you can send back changed.",
+		Desc: "What a shop page sells, with prices and how many and which goods turn up on today's shelf only some days, and its room (what kind of shop, mood, what the keeper says) and storefront on the Shops street, written as blocks you can send back changed.",
 		Args: []arg{{Key: "shop", Desc: "The shop's page name", Required: true}}},
 	{Name: "inventory", Title: "What a character carries", Did: "Looked at what someone carries", What: "inventory",
 		Desc: "What a character carries.",

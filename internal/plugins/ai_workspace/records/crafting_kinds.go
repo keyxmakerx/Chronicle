@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -39,7 +40,7 @@ func (RecipeKind) Doc() string {
 		"`method` (the steps a hero plays at the bench: `steady`, a brew that ends on the heat, or `volatile`, one that ends on a timing bar; it adds an `any` line for a step that has no material to use), " +
 		"`goal` (the project's points, required on create), `characteristic` (what the project roll adds; `what: crafting` lists the system's), `prerequisite` and `source` (the system's words for what the item needs and where its knowledge comes from), " +
 		"`cost` (coins on top of the materials, like `25 gp`; a hero who keeps Wealth needs it instead), `who` (`everyone`, the default, or `learned`) and `known_by` (the characters who learned it; naming them makes it `learned`), `rename_to`, " +
-		"and `rules`, the recipe's \"When… then…\" rules (below). " +
+		"`enchant` (`{line, name, slots}`: the recipe enchants an item the hero already owns instead of making one; `line` is the material, counting from 1, the hero's item fills, `name` the enchantment it gains, `slots` how many enchantments an item may hold, 1 to 6, default 3; `none` stops it), and `rules`, the recipe's \"When… then…\" rules (below). " +
 		"A new recipe arrives as a draft players don't see until the Director approves it in Crafting. On update, a key you leave out keeps what is there; `materials`, `known_by` and `rules` replace the whole list, and without `method` the steps stay as they are, each on the same material. " +
 		"The bench colours, each moment's look and the exact steps are set in Crafting and an update keeps them. Removing a recipe leaves heroes' projects from it going.\n\n" + craftingRulesDoc + "\n\n" + craftingTies + "\n\n" +
 		"```\n---\nkind: recipe\nname: Troll-blood tonic\nmakes: 1 Troll-blood tonic\nmaterials:\n  - 2 Troll tooth\n  - 1 any liquid\nmethod: steady\ngoal: 30\ncharacteristic: Reason\ncost: 25 gp\nwho: learned\nknown_by: [Mira]\nrules:\n  - {when: [{kind: moon, moon: The Lantern, phase: full}], then: {kind: edge}, players: book, bookLine: Brewed under a full Lantern}\n  - {when: [{kind: weather, weather: Storm}], then: {kind: cannot}, players: whenItHappens}\n---\n```"
@@ -155,6 +156,13 @@ func (k RecipeKind) input(c *Crafting, r Record, cur *CraftRecipe) (CraftRecipeI
 		}
 		in.Rules = raw
 	}
+	if r.Has("enchant") {
+		e, err := enchantOf(r, len(in.Materials))
+		if err != nil {
+			return in, nil, err
+		}
+		in.SetEnchant, in.Enchant = true, e
+	}
 	if r.Has("known_by") {
 		in.Known = nil
 		for _, raw := range r.List("known_by") {
@@ -169,6 +177,43 @@ func (k RecipeKind) input(c *Crafting, r Record, cur *CraftRecipe) (CraftRecipeI
 		}
 	}
 	return in, pending, nil
+}
+
+// enchantOf reads `enchant: {line, name, slots}`, or `none` to stop the
+// recipe enchanting. line counts the materials from 1, as the block lists
+// them; the crafting service checks the rest.
+func enchantOf(r Record, materials int) (*CraftEnchant, error) {
+	if isNone(r.Str("enchant")) {
+		return nil, nil
+	}
+	m, ok := r.Fields["enchant"].(map[string]any)
+	if !ok {
+		return nil, badRequestf("enchant: write {line, name, slots}, or none")
+	}
+	e := &CraftEnchant{Name: strings.TrimSpace(fmt.Sprint(m["name"]))}
+	if m["name"] == nil || e.Name == "" {
+		return nil, badRequestf("enchant: needs `name`, the enchantment the item gains")
+	}
+	line, slots := 1, 0
+	if v, ok := m["line"]; ok {
+		n, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(v)))
+		if err != nil {
+			return nil, badRequestf("enchant: `line` is the number of the material the hero's item fills, counting from 1")
+		}
+		line = n
+	}
+	if line < 1 || line > materials {
+		return nil, badRequestf("enchant: line %d is not one of the recipe's %d materials", line, materials)
+	}
+	if v, ok := m["slots"]; ok {
+		n, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(v)))
+		if err != nil {
+			return nil, badRequestf("enchant: `slots` is how many enchantments an item may hold")
+		}
+		slots = n
+	}
+	e.Line, e.Slots = line-1, slots
+	return e, nil
 }
 
 // rulesJSON is the block's `rules` list as the JSON the crafting service
@@ -230,6 +275,16 @@ func recipeWords(c *Crafting, in CraftRecipeInput, pending []string) string {
 	}
 	if in.Cost > 0 {
 		parts = append(parts, "costs "+money(in.Cost, in.Currency))
+	}
+	if in.SetEnchant && in.Enchant != nil && in.Enchant.Line < len(in.Materials) {
+		m := in.Materials[in.Enchant.Line]
+		what := name(m.ItemID)
+		if m.Tag != "" {
+			what = "any " + strings.ToLower(c.tagLabel(m.Tag))
+		}
+		parts = append(parts, fmt.Sprintf("enchants the hero's own %s with %s", what, in.Enchant.Name))
+	} else if in.SetEnchant {
+		parts = append(parts, "no longer enchants")
 	}
 	if in.Who == "learned" {
 		var who []string
@@ -444,6 +499,9 @@ func recipeBlock(c *Crafting, rec CraftRecipe) string {
 		if len(who) > 0 {
 			b.WriteString("known_by: [" + strings.Join(who, ", ") + "]\n")
 		}
+	}
+	if e := rec.Enchant; e != nil {
+		fmt.Fprintf(&b, "enchant: {line: %d, name: %s, slots: %d}\n", e.Line+1, quote(e.Name), e.Slots)
 	}
 	if len(rec.Rules) > 0 {
 		b.WriteString("rules:\n")
