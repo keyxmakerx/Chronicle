@@ -154,7 +154,7 @@ func TestNilStateGateIsOpen(t *testing.T) {
 	var s *State
 	e := echo.New()
 	e.Use(s.Gate())
-	e.GET("/", func(c echo.Context) error { return c.String(http.StatusOK, "ok") })
+	e.GET("/", func(c *echo.Context) error { return c.String(http.StatusOK, "ok") })
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 	if rec.Code != http.StatusOK {
