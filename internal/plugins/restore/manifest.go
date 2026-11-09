@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -73,9 +74,13 @@ const preUpdateManifestPrefix = "chronicle_pre_migrate_manifest_"
 // backup.sh's, so the script can restore it.
 const preRestoreManifestPrefix = "chronicle_pre_restore_manifest_"
 
+// manifestChars is every character a manifest name may hold: the scripts
+// write a prefix, a UTC timestamp and .txt, so anything else is refused.
+var manifestChars = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
 // isManifestName reports whether name is a restorable manifest basename.
 func isManifestName(name string) bool {
-	if !strings.HasSuffix(name, ".txt") {
+	if !strings.HasSuffix(name, ".txt") || !manifestChars.MatchString(name) {
 		return false
 	}
 	return strings.HasPrefix(name, manifestPrefix) ||
@@ -199,17 +204,21 @@ func ResolveManifestPath(backupDir, name string) (string, error) {
 	if !isManifestName(name) {
 		return "", fmt.Errorf("not a chronicle backup manifest")
 	}
-	full := filepath.Clean(filepath.Join(backupDir, name))
 	cleanDir := filepath.Clean(backupDir)
-	if !strings.HasPrefix(full, cleanDir+string(os.PathSeparator)) && full != cleanDir {
-		return "", fmt.Errorf("path escapes backup directory")
-	}
-	info, err := os.Stat(full)
+	// The path handed to restore.sh is built from the directory listing,
+	// never from the request: the requested name only picks an entry.
+	entries, err := os.ReadDir(cleanDir)
 	if err != nil {
 		return "", err
 	}
-	if info.IsDir() {
-		return "", fmt.Errorf("not a file")
+	for _, e := range entries {
+		if e.Name() != name {
+			continue
+		}
+		if e.IsDir() {
+			return "", fmt.Errorf("not a file")
+		}
+		return filepath.Join(cleanDir, e.Name()), nil
 	}
-	return full, nil
+	return "", fmt.Errorf("manifest %q: %w", name, os.ErrNotExist)
 }
