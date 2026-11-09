@@ -640,7 +640,7 @@
     el.appendChild(head);
     if (!S.list.length) {
       el.appendChild(h('p', 'enc-empty', S.canEdit
-        ? 'Plan the fights on this page. Foundry can load them on game night.'
+        ? 'Plan the fights and scenes on this page. Foundry loads the fights; a scene shows pages and notes on the players’ phones.'
         : 'No encounters planned here.'));
       return;
     }
@@ -660,7 +660,7 @@
   function fillCard(card, e) {
     card.textContent = '';
     var top = h('span', 'enc-card-top');
-    append(top, [h('span', 'enc-card-name', e.name || 'Untitled encounter'), e.ready ? h('span', 'enc-ready', 'Ready') : null]);
+    append(top, [h('span', 'enc-card-name' + (e.kind === 'scene' ? ' enc-card-scene' : ''), e.name || 'Untitled encounter'), e.ready ? h('span', 'enc-ready', 'Ready') : null]);
     append(card, [top, h('span', 'enc-card-sub', summary(e))]);
   }
 

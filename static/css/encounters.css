@@ -47,6 +47,7 @@
 .enc-card-top { display: flex; align-items: center; gap: 8px; }
 .enc-card-name { font-weight: 600; color: var(--color-text-primary, #111827); min-width: 0; overflow-wrap: anywhere; }
 .enc-card-name::before { content: "⚔ "; color: var(--color-accent, #6366f1); }
+.enc-card-scene::before { content: "◈ "; }
 .enc-card-sub { font-size: 12.5px; color: var(--color-text-muted, #6b7280); }
 .enc-ready {
   font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; margin-left: auto;
