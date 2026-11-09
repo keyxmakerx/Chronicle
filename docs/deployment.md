@@ -450,6 +450,27 @@ least one offsite copy before a release or a risky migration.
 
 ## 9. Restore procedure
 
+### From the admin page
+
+Site admin > Backups & restore > Restore lists every backup. Type `RESTORE` on
+the row and confirm. Chronicle then shows everyone else a "Back in a few
+minutes" page (HTTP 503 with `Retry-After`; JSON for API and Foundry callers),
+saves the current database as a "Before a restore" backup, restores, brings the
+restored data up to date with the running version, re-checks every sign-in and
+opens again. Your own page follows the progress and shows the result.
+
+If it stops, the site stays closed. The page shows what the script printed,
+whether the database had been touched, the safety copy's name and the command to
+put it back by hand, and a "Leave maintenance anyway" button. If Chronicle is
+restarted mid-restore it comes back closed and the page says so. As a last resort
+delete `/app/data/backups/.chronicle-maintenance` and restart the container. A
+restore finished by hand (below) clears that file itself.
+
+`GET /healthz` answers `{"status":"maintenance"}` (HTTP 200) while the site is
+closed, so container health checks do not report a restore as an outage.
+
+### By hand
+
 `scripts/restore.sh` refuses to run unless its preconditions hold.
 
 ```sh
@@ -486,12 +507,16 @@ End to end: log in as a player whose character predates the backup, open
 - `--media-only`: skip the DB restore.
 - `--yes`: skip the RESTORE prompt; required unattended.
 - `--force`: restore over a non-empty target. The default refuses if the DB has tables or `MEDIA_PATH` is non-empty.
+- `--no-safety-backup`: skip saving the current database first. The script otherwise writes `chronicle_pre_restore_manifest_<TS>.txt` before dropping anything, and stops if it cannot; use this only when the current database is too broken to dump.
+- `--from-inside` (or `CHRONICLE_RESTORE_IN_PROCESS=1`): used by the admin page. It lifts the "server is running" refusal only when Chronicle's maintenance marker, a run token and `/healthz` all agree, so it does nothing for a human at a shell.
 
 ### Unhappy paths
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `RESTORE=failed reason=server_running` | Chronicle still answers `/healthz`. | `docker compose stop chronicle`, retry. |
+| `RESTORE=failed reason=server_running` | Chronicle still answers `/healthz`. | `docker compose stop chronicle`, retry. Or use the admin page. |
+| `RESTORE=failed reason=maintenance_not_confirmed` | `--from-inside` was given but Chronicle is not in maintenance for this manifest. | Run it from the admin page, or stop Chronicle and run without the flag. |
+| `RESTORE=failed reason=safety_backup_failed` | The current database could not be saved first; nothing was changed. | Fix the disk or `mysqldump` problem, or pass `--no-safety-backup`. |
 | `RESTORE=failed reason=sha_mismatch` | Manifest paired with a different artifact than on disk. | Use another manifest, or re-run `backup.sh`. |
 | `RESTORE=failed reason=target_not_empty` | Target DB or media dir has data. | Confirm intent, re-run with `--force`. |
 | `RESTORE=failed reason=tarball_unsafe` | Media tarball has absolute paths or `..`. | Do not use it; it is tampered or corrupt. |

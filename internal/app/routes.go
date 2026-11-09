@@ -1427,6 +1427,13 @@ type wsRevokerHolder struct {
 	hub *ws.Hub
 }
 
+// RevokeAll disconnects every socket, for a restore that replaces the database.
+func (h *wsRevokerHolder) RevokeAll() {
+	if h.hub != nil {
+		h.hub.RevokeAll()
+	}
+}
+
 func (h *wsRevokerHolder) RevokeAPIKeyClients(campaignID string) {
 	if h.hub != nil {
 		h.hub.RevokeAPIKeyClients(campaignID)
@@ -2856,6 +2863,12 @@ func (a *App) RegisterRoutes() {
 	// Pings both MariaDB and Redis to report actual infrastructure health.
 	// Registered on both /healthz (Kubernetes convention) and /health (common alias).
 	healthHandler := func(c *echo.Context) error {
+		// While a restore has the site closed the database is being replaced,
+		// so probing it would report a healthy site as down. The answer also
+		// tells scripts/restore.sh that Chronicle itself is in maintenance.
+		if a.Maintenance != nil && a.Maintenance.Active() {
+			return c.JSON(http.StatusOK, map[string]string{"status": "maintenance"})
+		}
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
 
@@ -3328,10 +3341,20 @@ func (a *App) RegisterRoutes() {
 	restoreSvc := restore.NewService(restore.Config{
 		ScriptPath: a.Config.RestoreScriptPath,
 		BackupDir:  a.Config.BackupDir,
+		State:      a.Maintenance,
+		Activity:   adminActivity,
+		Hooks: &restoreHooks{
+			db:      a.DB,
+			maxIdle: a.Config.Database.MaxIdleConns,
+			rdb:     a.Redis,
+			auth:    authService,
+			ws:      wsRevoker,
+			migrate: a.PostRestoreSchema,
+		},
 	})
 	restoreHandler := restore.NewHandler(restoreSvc)
-	restoreHandler.SetActivityRecorder(adminActivity)
-	restore.RegisterRoutes(adminGroup, restoreHandler, auth.RequireReauth(authService))
+	restoreHandler.SetActor(auth.GetUserID)
+	restore.RegisterRoutes(adminGroup, restoreHandler, auth.RequireReauth(authService), a.Maintenance)
 
 	// Settings plugin route registration. The service + repo were
 	// constructed earlier (above the media routes) so the body-limit

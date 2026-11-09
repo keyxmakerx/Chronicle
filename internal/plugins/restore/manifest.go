@@ -44,6 +44,10 @@ type ManifestSummary struct {
 	// changed the database, so the list can say why it exists.
 	PreUpdate bool
 
+	// PreRestore marks the copy of the database that restore.sh saves just
+	// before replacing it, so a restore can be undone.
+	PreRestore bool
+
 	// SizeBytes is the manifest file size itself. Ancillary; the bundled
 	// artifact sizes appear in the manifest body but we don't surface
 	// them in the list view to keep the UI scannable.
@@ -64,12 +68,19 @@ const manifestPrefix = "chronicle_manifest_"
 // leaving it out hid the one backup an admin most needs after a bad update.
 const preUpdateManifestPrefix = "chronicle_pre_migrate_manifest_"
 
+// preRestoreManifestPrefix names the manifest restore.sh writes for the copy
+// of the live database it saves before replacing it. Same format as
+// backup.sh's, so the script can restore it.
+const preRestoreManifestPrefix = "chronicle_pre_restore_manifest_"
+
 // isManifestName reports whether name is a restorable manifest basename.
 func isManifestName(name string) bool {
 	if !strings.HasSuffix(name, ".txt") {
 		return false
 	}
-	return strings.HasPrefix(name, manifestPrefix) || strings.HasPrefix(name, preUpdateManifestPrefix)
+	return strings.HasPrefix(name, manifestPrefix) ||
+		strings.HasPrefix(name, preUpdateManifestPrefix) ||
+		strings.HasPrefix(name, preRestoreManifestPrefix)
 }
 
 // ListManifests scans BACKUP_DIR for backup and pre-update manifests,
@@ -102,10 +113,11 @@ func (s *service) ListManifests() ([]ManifestSummary, error) {
 			continue
 		}
 		summary := ManifestSummary{
-			Name:      name,
-			ModTime:   info.ModTime(),
-			SizeBytes: info.Size(),
-			PreUpdate: strings.HasPrefix(name, preUpdateManifestPrefix),
+			Name:       name,
+			ModTime:    info.ModTime(),
+			SizeBytes:  info.Size(),
+			PreUpdate:  strings.HasPrefix(name, preUpdateManifestPrefix),
+			PreRestore: strings.HasPrefix(name, preRestoreManifestPrefix),
 		}
 		if err := parseManifestInto(&summary, filepath.Join(dir, name)); err != nil {
 			summary.ParseError = err.Error()
@@ -136,6 +148,8 @@ func parseManifestInto(s *ManifestSummary, path string) error {
 		switch {
 		case line == "chronicle_pre_migrate=1":
 			s.PreUpdate = true
+		case line == "chronicle_pre_restore=1":
+			s.PreRestore = true
 		case strings.HasPrefix(line, "chronicle_version="):
 			s.ChronicleVersion = strings.TrimPrefix(line, "chronicle_version=")
 		case strings.HasPrefix(line, "migration_version="):
@@ -168,7 +182,7 @@ func firstToken(line, prefix string) string {
 // ResolveManifestPath validates a manifest basename against BACKUP_DIR,
 // rejects path-traversal attempts, and returns the absolute path. Same
 // shape as backup.ResolveArtifactPath but additionally enforces that
-// the file is a backup or pre-update manifest — restore.sh would refuse
+// the file is a backup, pre-update or pre-restore manifest — restore.sh would refuse
 // other inputs anyway, but failing fast at the HTTP boundary surfaces
 // the wrong-file error to the operator rather than burying it in a
 // shell exit code.

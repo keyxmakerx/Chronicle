@@ -19,6 +19,12 @@ type adminActivityAdapter struct {
 	svc admin.ActivityRecorder
 }
 
+// RecordAdminChangeAs logs a change made by userID outside a request, such as
+// a restore that finishes in the background.
+func (a adminActivityAdapter) RecordAdminChangeAs(ctx context.Context, userID, action, targetType, targetID, label string) {
+	a.svc.RecordActivity(ctx, userID, action, targetType, targetID, label)
+}
+
 // RecordAdminChange stamps the current admin and records the change; the
 // recorder itself swallows storage errors.
 func (a adminActivityAdapter) RecordAdminChange(c *echo.Context, action, targetType, targetID, label string) {

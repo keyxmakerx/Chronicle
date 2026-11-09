@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/app"
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/maintenance"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
@@ -51,21 +53,22 @@ func main() {
 	// build (rollback, or an applied-but-missing migration) by logging and
 	// starting anyway instead of crash-looping. BACKUP_REQUIRED=1 makes a
 	// backup failure on the pending path abort the boot. See ADR-035/036/037/044.
-	backupRequired := strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "1") ||
-		strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "true")
-	backupCfg := database.HealthCheckConfig{
-		BackupDir:      cfg.BackupDir,
-		BackupRequired: backupRequired,
-		MediaPath:      cfg.Upload.MediaPath,
-		RedisURL:       cfg.Redis.URL,
-		DBName:         cfg.Database.Name,
-		DBHost:         cfg.Database.Host,
-		DBUser:         cfg.Database.User,
-		DBPassword:     cfg.Database.Password,
+	backupCfg, backupRequired := bootBackupConfig(cfg)
+
+	// A restore marker means the last run stopped in the middle of replacing
+	// the database. Chronicle then starts closed (the app reads the same
+	// marker), and a schema that cannot migrate or pass its checks must not
+	// crash-loop the process: the admin needs the page that explains it.
+	restoreMarker := maintenance.MarkerExists(filepath.Join(cfg.BackupDir, maintenance.MarkerName))
+	if restoreMarker {
+		slog.Warn("a restore was in progress when Chronicle last stopped; starting in maintenance")
 	}
 	coreBackedUp, err := database.MigrateWithBackup(db, cfg.Database.DSN(), "db/migrations", backupCfg)
 	if err != nil {
-		fatalBoot("failed to run migrations", err)
+		if !restoreMarker {
+			fatalBoot("failed to run migrations", err)
+		}
+		slog.Error("migrations failed while a restore marker is present; continuing in maintenance", slog.Any("error", err))
 	}
 
 	// --- Startup Health Checks ---
@@ -74,7 +77,10 @@ func main() {
 	// admin Database > Health tab via app.StartupHealthCheckConfig so the two
 	// surfaces never disagree.
 	if err := database.RunStartupHealthChecks(db, app.StartupHealthCheckConfig(cfg)); err != nil {
-		fatalBoot("startup health checks failed", err)
+		if !restoreMarker {
+			fatalBoot("startup health checks failed", err)
+		}
+		slog.Error("startup health checks failed while a restore marker is present; continuing in maintenance", slog.Any("error", err))
 	}
 
 	// --- Run Plugin Migrations ---
@@ -183,6 +189,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The admin restore page migrates the restored database with the same
+	// steps as this boot.
+	application.PostRestoreSchema = postRestoreSchema(cfg, db, pluginHealth, pluginSchemas)
+
 	// Register all routes (public, plugin, system, widget, API).
 	application.RegisterRoutes()
 
@@ -220,6 +230,23 @@ func main() {
 		// The server returns http.ErrServerClosed on graceful shutdown, which is expected.
 		slog.Info("server stopped", slog.Any("reason", err))
 	}
+}
+
+// bootBackupConfig builds the pre-migration backup settings and reports
+// whether a failed backup must stop the boot (BACKUP_REQUIRED).
+func bootBackupConfig(cfg *config.Config) (database.HealthCheckConfig, bool) {
+	required := strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "1") ||
+		strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "true")
+	return database.HealthCheckConfig{
+		BackupDir:      cfg.BackupDir,
+		BackupRequired: required,
+		MediaPath:      cfg.Upload.MediaPath,
+		RedisURL:       cfg.Redis.URL,
+		DBName:         cfg.Database.Name,
+		DBHost:         cfg.Database.Host,
+		DBUser:         cfg.Database.User,
+		DBPassword:     cfg.Database.Password,
+	}, required
 }
 
 // setupLogging configures the global slog logger based on the environment.
