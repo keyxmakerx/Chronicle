@@ -866,3 +866,25 @@ func TestDmScreenKitIsScopedToTheOverlay(t *testing.T) {
 		t.Error("material must be kept as an explicit pick")
 	}
 }
+
+// TestToneVarsHintsReadable pins that every page tone's hint grey reaches
+// 4.5:1 on its page, card and alt-row fills, and that labels stay stronger.
+func TestToneVarsHintsReadable(t *testing.T) {
+	re := regexp.MustCompile(`--color-text-secondary:(#[0-9a-f]{6});--color-text-muted:(#[0-9a-f]{6});`)
+	for name, themes := range czTones {
+		for i, tone := range themes {
+			m := re.FindStringSubmatch(toneVars(tone, i == 1))
+			if m == nil {
+				t.Fatalf("%s/%d: no secondary and muted tokens", name, i)
+			}
+			for _, bg := range []string{tone.bg, tone.card, tone.alt} {
+				if c := colour.Contrast(m[2], bg); c < 4.5 {
+					t.Errorf("%s/%d: hint %s on %s is %.2f:1, want 4.5", name, i, m[2], bg, c)
+				}
+				if colour.Contrast(m[1], bg) < colour.Contrast(m[2], bg) {
+					t.Errorf("%s/%d: label %s is weaker than hint %s on %s", name, i, m[1], m[2], bg)
+				}
+			}
+		}
+	}
+}
