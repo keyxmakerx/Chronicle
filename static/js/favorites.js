@@ -96,17 +96,24 @@
         e.preventDefault();
         toggleFavorite(campaignId, entityId).then(function (nowFav) {
           updateStarButton(btn, nowFav);
-          renderFavorites(campaignId);
+          renderFavorites(campaignId, true);
         });
       });
     });
   }
 
-  /** Render favorites list in the sidebar drill panel. */
-  function renderFavorites(campaignId) {
+  /**
+   * Render favorites list in the sidebar drill panel. The list changes only
+   * when a star is toggled, so a container already drawn for this campaign is
+   * left alone unless force is set: every htmx swap on a page settles, and a
+   * page view runs several.
+   */
+  function renderFavorites(campaignId, force) {
     var container = document.getElementById('sidebar-cat-favorites');
     var header = document.getElementById('sidebar-cat-favorites-header');
     if (!container) return;
+    if (!force && container.getAttribute('data-fav-for') === campaignId) return;
+    container.setAttribute('data-fav-for', campaignId);
 
     Chronicle.apiFetch('/campaigns/' + campaignId + '/favorites')
       .then(function (res) { return res.ok ? res.json() : []; })
@@ -134,7 +141,9 @@
         if (window.htmx) htmx.process(container);
       })
       .catch(function () {
-        // Silently fail — favorites section just stays empty.
+        // Silently fail — favorites section just stays empty, and the next
+        // swap tries again.
+        container.removeAttribute('data-fav-for');
       });
   }
 

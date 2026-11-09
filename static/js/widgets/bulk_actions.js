@@ -69,6 +69,14 @@
 
       // --- Inject Checkboxes ---
 
+      // nameCheckbox gives a row's checkbox the page's name, so a screen reader
+      // says "Select Aria" rather than an unnamed checkbox in a list of many.
+      function nameCheckbox(input, host) {
+        var t = host.querySelector('h3, h4, a[href*="/entities/"]');
+        var name = t ? t.textContent.trim() : '';
+        input.setAttribute('aria-label', name ? 'Select ' + name : 'Select page');
+      }
+
       function injectCheckboxes() {
         // Grid view cards.
         el.querySelectorAll('[data-entity-preview]').forEach(function (card) {
@@ -77,8 +85,10 @@
           if (!entityId) return;
 
           var cb = document.createElement('div');
-          cb.className = 'bulk-checkbox absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity';
+          // Shown on hover, and on keyboard focus, which reaches it without a hover.
+          cb.className = 'bulk-checkbox absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity';
           cb.innerHTML = '<input type="checkbox" class="w-4 h-4 accent-accent rounded border-edge cursor-pointer" data-bulk-id="' + entityId + '"/>';
+          nameCheckbox(cb.querySelector('input'), card);
           cb.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); });
           cb.querySelector('input').addEventListener('change', function (e) {
             e.stopPropagation();
@@ -99,6 +109,7 @@
           var td = document.createElement('td');
           td.className = 'bulk-checkbox px-2 py-2 w-8';
           td.innerHTML = '<input type="checkbox" class="w-4 h-4 accent-accent rounded border-edge cursor-pointer" data-bulk-id="' + entityId + '"/>';
+          nameCheckbox(td.querySelector('input'), row);
           td.querySelector('input').addEventListener('change', function () {
             toggleSelect(entityId, this.checked);
           });
@@ -110,7 +121,7 @@
         if (thead && !thead.querySelector('.bulk-select-all')) {
           var th = document.createElement('th');
           th.className = 'bulk-select-all px-2 py-2.5 w-8';
-          th.innerHTML = '<input type="checkbox" class="w-4 h-4 accent-accent rounded border-edge cursor-pointer" title="Select all"/>';
+          th.innerHTML = '<input type="checkbox" class="w-4 h-4 accent-accent rounded border-edge cursor-pointer" title="Select all" aria-label="Select all"/>';
           th.querySelector('input').addEventListener('change', function () {
             var checked = this.checked;
             el.querySelectorAll('[data-bulk-id]').forEach(function (cb) {

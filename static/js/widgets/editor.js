@@ -229,8 +229,12 @@
       // is editable, intercept keydown events to let the mention popup
       // handle arrow keys, Enter, and Escape before ProseMirror processes them.
       var editorProps = {
+        // ProseMirror gives the editable area role="textbox"; without a name a
+        // screen reader announces only "edit text".
         attributes: {
           class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-4 text-fg-body',
+          'aria-label': label,
+          'aria-multiline': 'true',
         },
       };
 

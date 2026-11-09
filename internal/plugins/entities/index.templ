@@ -139,7 +139,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 
 		<!-- Type filter tabs (horizontal, scrollable on mobile) -->
 		<div class="mb-6 border-b border-edge">
-			<nav class="flex gap-1 overflow-x-auto pb-px -mb-px" role="tablist">
+			<nav class="flex gap-1 overflow-x-auto pb-px -mb-px" aria-label="Show pages of one category">
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
 					class={ "entity-tab",
