@@ -148,3 +148,16 @@ func TestSessionHashReadsEitherCookie(t *testing.T) {
 		t.Error("hash without a cookie")
 	}
 }
+
+// TestNilStateGateIsOpen pins that an App without a State still serves.
+func TestNilStateGateIsOpen(t *testing.T) {
+	var s *State
+	e := echo.New()
+	e.Use(s.Gate())
+	e.GET("/", func(c echo.Context) error { return c.String(http.StatusOK, "ok") })
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}

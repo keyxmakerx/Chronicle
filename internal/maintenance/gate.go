@@ -29,7 +29,13 @@ func (s *State) SetOwnerHandler(h OwnerHandler) {
 //   - health probes, which answer "maintenance" themselves;
 //   - static files, which touch no data and let the pages below look right;
 //   - the owning admin's session on the paths its OwnerHandler claims.
+//
+// A nil State is a gate that is always open, so an App built without one (in
+// tests) still serves.
 func (s *State) Gate() echo.MiddlewareFunc {
+	if s == nil {
+		return func(next echo.HandlerFunc) echo.HandlerFunc { return next }
+	}
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			if !s.Active() {
