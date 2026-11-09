@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/labstack/echo/v5"
 )
@@ -28,6 +29,69 @@ var DefaultTrustedProxies = []string{
 	"fd00::/8",       // IPv6 private
 }
 
+// Values of the client-address setting. They match the settings plugin's
+// stored values; middleware cannot import plugins, so app wires them across.
+const (
+	// ClientIPAuto reads X-Real-IP when present, otherwise X-Forwarded-For from
+	// the right. It is what a site that never chose behaves as.
+	ClientIPAuto = "auto"
+	// ClientIPRealIP believes X-Real-IP only.
+	ClientIPRealIP = "x-real-ip"
+	// ClientIPForwardedFor believes X-Forwarded-For only, read from the right.
+	ClientIPForwardedFor = "x-forwarded-for"
+	// ClientIPDirect ignores every header and uses the connection's address.
+	ClientIPDirect = "direct"
+)
+
+// IsClientIPMode reports whether mode is one of the four known values.
+func IsClientIPMode(mode string) bool {
+	switch mode {
+	case ClientIPAuto, ClientIPRealIP, ClientIPForwardedFor, ClientIPDirect:
+		return true
+	}
+	return false
+}
+
+var (
+	// clientIPMode holds the current mode as a string. An atomic keeps the
+	// per-request read free of locks and of any database call.
+	clientIPMode atomic.Value
+	// trustedState is what TrustedProxies last installed, kept so the Security
+	// page can show the list and judge a request the way the extractor does.
+	trustedState atomic.Pointer[trustedSnapshot]
+)
+
+type trustedSnapshot struct {
+	entries []string
+	nets    []*net.IPNet
+}
+
+// SetClientIPHeader chooses which header the extractor believes. An unknown
+// value becomes auto, so a damaged setting never turns the headers off or
+// back to reading the leftmost entry.
+func SetClientIPHeader(mode string) {
+	if !IsClientIPMode(mode) {
+		mode = ClientIPAuto
+	}
+	clientIPMode.Store(mode)
+}
+
+// ClientIPHeader returns the mode in force.
+func ClientIPHeader() string {
+	if m, ok := clientIPMode.Load().(string); ok && m != "" {
+		return m
+	}
+	return ClientIPAuto
+}
+
+// TrustedProxyList returns the trusted proxy entries in use, as configured.
+func TrustedProxyList() []string {
+	if t := trustedState.Load(); t != nil {
+		return append([]string(nil), t.entries...)
+	}
+	return nil
+}
+
 // TrustedProxies configures Echo to trust reverse proxy headers
 // (X-Forwarded-For, X-Real-IP) from specific IP ranges, and returns an error
 // if any entry is unparseable. Without this, c.RealIP() returns the proxy's
@@ -40,18 +104,19 @@ var DefaultTrustedProxies = []string{
 // client IPs resolving.
 //
 // SECURITY: once a peer is trusted, the headers it sends decide what gets
-// recorded. If the proxy APPENDS to X-Forwarded-For rather than replacing it,
-// a visitor can supply the leftmost entry and choose the address in their own
-// audit row — trust the specific proxy, and verify it sets X-Real-IP or
-// overwrites X-Forwarded-For.
+// recorded. X-Forwarded-For is read from the right, so an entry the visitor
+// wrote ahead of the proxy's own is never believed; X-Real-IP is believed as
+// sent, so the proxy must overwrite it. Trust the specific proxy, and pick
+// the header it really sets under Admin > Security > Visitor addresses.
 func TrustedProxies(e *echo.Echo, trustedCIDRs []string) error {
 	// Echo's IPExtractor determines how c.RealIP() resolves the client IP.
-	// We use a custom extractor that checks X-Forwarded-For and X-Real-IP
-	// headers only when the direct connection comes from a trusted proxy.
+	// We use a custom extractor that reads the forwarding headers only when
+	// the direct connection comes from a trusted proxy.
 	trusted, err := ParseTrustedProxies(trustedCIDRs)
 	if err != nil {
 		return err
 	}
+	trustedState.Store(&trustedSnapshot{entries: append([]string(nil), trustedCIDRs...), nets: trusted})
 	e.IPExtractor = buildIPExtractor(trusted)
 	return nil
 }
@@ -85,34 +150,123 @@ func ParseTrustedProxies(trustedCIDRs []string) ([]*net.IPNet, error) {
 	return trusted, nil
 }
 
-// buildIPExtractor returns an Echo IPExtractor that trusts X-Forwarded-For
-// and X-Real-IP headers only from connections originating in trusted networks.
+// buildIPExtractor returns an Echo IPExtractor that reads forwarding headers
+// only from connections originating in trusted networks, in the mode set by
+// SetClientIPHeader.
 func buildIPExtractor(trusted []*net.IPNet) echo.IPExtractor {
 	return func(req *http.Request) string {
-		// Get the direct connection IP (peer address).
-		directIP := extractDirectIP(req.RemoteAddr)
+		return resolveClientIP(req, trusted, ClientIPHeader())
+	}
+}
 
-		// Only trust forwarding headers if the direct connection is from a proxy.
-		if !isTrusted(directIP, trusted) {
-			return directIP
-		}
+// resolveClientIP is the whole decision: which address this request is from.
+// Anything it cannot read as an address falls back to the connection's own.
+func resolveClientIP(req *http.Request, trusted []*net.IPNet, mode string) string {
+	directIP := extractDirectIP(req.RemoteAddr)
 
-		// Try X-Real-IP first (set by many reverse proxies including nginx).
-		if realIP := req.Header.Get("X-Real-IP"); realIP != "" {
-			return strings.TrimSpace(realIP)
-		}
-
-		// Fall back to X-Forwarded-For (comma-separated list, leftmost = client).
-		if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
-			// The leftmost IP is the original client (if all proxies are trusted).
-			parts := strings.SplitN(xff, ",", 2)
-			if len(parts) > 0 {
-				return strings.TrimSpace(parts[0])
-			}
-		}
-
+	// Only a proxy we trust gets to say who the visitor is.
+	if mode == ClientIPDirect || !isTrusted(directIP, trusted) {
 		return directIP
 	}
+
+	switch mode {
+	case ClientIPRealIP:
+		if ip := realIPHeader(req); ip != "" {
+			return ip
+		}
+	case ClientIPForwardedFor:
+		if ip := forwardedForClient(req, trusted); ip != "" {
+			return ip
+		}
+	default:
+		if ip := realIPHeader(req); ip != "" {
+			return ip
+		}
+		if ip := forwardedForClient(req, trusted); ip != "" {
+			return ip
+		}
+	}
+	return directIP
+}
+
+// realIPHeader returns X-Real-IP when it holds an address, else "".
+func realIPHeader(req *http.Request) string {
+	v := strings.TrimSpace(req.Header.Get("X-Real-IP"))
+	if net.ParseIP(v) == nil {
+		return ""
+	}
+	return v
+}
+
+// forwardedForClient walks X-Forwarded-For from the right, skipping addresses
+// inside the trusted list, and returns the first one outside it: a proxy
+// appends the address it saw, so entries to the left of that were written by
+// the visitor and prove nothing. When every entry is trusted (a visitor on the
+// same private network) the leftmost is the originator. An entry that is not
+// an address stops the walk with "", because nothing past it can be believed.
+func forwardedForClient(req *http.Request, trusted []*net.IPNet) string {
+	values := req.Header.Values("X-Forwarded-For")
+	if len(values) == 0 {
+		return ""
+	}
+	parts := strings.Split(strings.Join(values, ","), ",")
+	leftmost := ""
+	for i := len(parts) - 1; i >= 0; i-- {
+		entry := strings.TrimSpace(parts[i])
+		if net.ParseIP(entry) == nil {
+			return ""
+		}
+		if !isTrusted(entry, trusted) {
+			return entry
+		}
+		leftmost = entry
+	}
+	return leftmost
+}
+
+// ClientIPDiagnosis describes how one request was read, for the admin's
+// Visitor addresses check.
+type ClientIPDiagnosis struct {
+	Mode string
+	// Address is what Chronicle believes the visitor's address is.
+	Address string
+	// Direct is the connection's own address.
+	Direct        string
+	DirectTrusted bool
+	// RealIP and ForwardedFor are the raw header values received.
+	RealIP, ForwardedFor string
+	// HeaderMissing is true when the header the mode relies on is absent or
+	// unreadable on this request (never true for the direct mode).
+	HeaderMissing bool
+}
+
+// DiagnoseClientIP reads req the way the extractor does and reports the inputs.
+func DiagnoseClientIP(req *http.Request) ClientIPDiagnosis {
+	var nets []*net.IPNet
+	if t := trustedState.Load(); t != nil {
+		nets = t.nets
+	}
+	mode := ClientIPHeader()
+	direct := extractDirectIP(req.RemoteAddr)
+	d := ClientIPDiagnosis{
+		Mode:          mode,
+		Address:       resolveClientIP(req, nets, mode),
+		Direct:        direct,
+		DirectTrusted: isTrusted(direct, nets),
+		RealIP:        req.Header.Get("X-Real-IP"),
+		ForwardedFor:  strings.Join(req.Header.Values("X-Forwarded-For"), ", "),
+	}
+	hasReal := realIPHeader(req) != ""
+	hasXFF := forwardedForClient(req, nets) != ""
+	switch mode {
+	case ClientIPRealIP:
+		d.HeaderMissing = !hasReal
+	case ClientIPForwardedFor:
+		d.HeaderMissing = !hasXFF
+	case ClientIPAuto:
+		d.HeaderMissing = !hasReal && !hasXFF
+	}
+	return d
 }
 
 // extractDirectIP extracts the IP address from a "host:port" RemoteAddr string.

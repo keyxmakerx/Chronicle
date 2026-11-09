@@ -85,6 +85,11 @@ type App struct {
 	// handler in cmd/server/main.go.
 	ShutdownCancel context.CancelFunc
 
+	// UploadCeilingFn, when set, replaces the settings-backed media upload
+	// ceiling used by the pre-CSRF size cap. Tests set it; production leaves
+	// it nil.
+	UploadCeilingFn func() int64
+
 	// pkgService is the package manager service, used for Foundry module
 	// path resolution and system loading from external repos.
 	pkgService packages.PackageService
@@ -109,6 +114,10 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 	if err := middleware.TrustedProxies(e, cfg.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("trusted proxy configuration: %w", err)
 	}
+	// Which header those proxies are believed on is an admin choice (Security >
+	// Visitor addresses). The extractor reads it from memory on every request;
+	// it is loaded here and refreshed when the admin saves.
+	loadClientIPHeader(db)
 
 	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 
@@ -168,7 +177,8 @@ func (a *App) setupMiddleware() {
 	// Global request body size limit -- prevents memory exhaustion from
 	// oversized payloads on non-upload endpoints. The media upload endpoint
 	// has its own per-route body limit based on the configured max upload size,
-	// so we skip this global limit for that path.
+	// so we skip this global limit for that path (see registerUploadCaps for
+	// the cap that runs ahead of CSRF).
 	//
 	// The calendar import routes (the wizard's drag-and-drop preview and its
 	// review-step create, plus the equivalent JSON API pair) advertise an
@@ -231,8 +241,33 @@ func (a *App) setupMiddleware() {
 		},
 	}))
 
+	// Upload size caps for the media and calendar import routes. These sit
+	// just ahead of CSRF for the reason given on the Site look cap above:
+	// the CSRF check parses the multipart body before sign-in is checked.
+	ceiling := a.UploadCeilingFn
+	if ceiling == nil {
+		ceiling = uploadCeiling(settingsSvc, a.Config.Upload.MaxSize, uploadCeilingTTL)
+	}
+	registerUploadCaps(a.Echo, ceiling)
+
 	// CSRF -- double-submit cookie pattern on all state-changing requests.
 	a.Echo.Use(middleware.CSRF())
+}
+
+// loadClientIPHeader reads the saved visitor-address header choice into the
+// extractor. A read failure leaves the automatic default in force.
+func loadClientIPHeader(db *sql.DB) {
+	if db == nil {
+		return
+	}
+	svc := settings.NewSettingsService(settings.NewSettingsRepository(db))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	mode, err := svc.GetClientIPHeader(ctx)
+	if err != nil {
+		slog.Warn("could not read the visitor address setting; using automatic", slog.Any("error", err))
+	}
+	middleware.SetClientIPHeader(mode)
 }
 
 // calendarImportPathPattern matches the calendar plugin's upload-heavy

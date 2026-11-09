@@ -84,6 +84,8 @@ templ AdminSecurityPage(data SecurityPageData) {
 					@securityLogTab(data)
 				case SecurityTabSignup:
 					@registrationGateCard(data.RegistrationMode, data.CSRFToken)
+				case SecurityTabAddresses:
+					@visitorAddressesCard(data.Addresses, data.CSRFToken)
 				case SecurityTabProvider:
 					if data.ProviderFailed {
 						@loadFailedNotice("sign-in provider setting")
@@ -123,6 +125,7 @@ templ securityTabs(data SecurityPageData) {
 			@securityTab(data.Tab, SecurityTabLog, "Sign-in log")
 			@securityTab(data.Tab, SecurityTabSignup, "Who can sign up")
 			@securityTab(data.Tab, SecurityTabProvider, "Sign-in provider")
+			@securityTab(data.Tab, SecurityTabAddresses, "Visitor addresses")
 		</ul>
 	</nav>
 }
@@ -289,6 +292,85 @@ templ registrationGateCard(mode, csrfToken string) {
 			<button type="submit" class="btn-primary py-2 px-4">Save</button>
 		</form>
 	</div>
+}
+
+// visitorAddressesCard picks which proxy header Chronicle believes for a
+// visitor's address and shows how this request was read, so the choice can be
+// checked against the real proxy. Saving is reauth-gated.
+templ visitorAddressesCard(v VisitorAddressesData, csrfToken string) {
+	<div class="card p-6 space-y-5 max-w-3xl">
+		<div class="flex items-center gap-2">
+			<i class="fa-solid fa-location-dot text-accent" aria-hidden="true"></i>
+			<h2 class="text-lg font-semibold text-fg">Visitor addresses</h2>
+		</div>
+		<p class="text-sm text-fg-secondary">
+			Rate limits and the sign-in log go by each visitor's address. When Chronicle sits behind a proxy, the proxy tells it that address in a header, and only the header your proxy really sets can be believed.
+		</p>
+		for _, w := range v.Warnings {
+			<div class="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300" role="alert">
+				<i class="fa-solid fa-triangle-exclamation mt-0.5" aria-hidden="true"></i>
+				<span>{ w }</span>
+			</div>
+		}
+		<form
+			hx-post="/admin/security/visitor-addresses"
+			hx-swap="none"
+			class="flex flex-wrap items-end gap-3"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			<div>
+				<label for="client_ip_header" class="block text-sm font-medium text-fg-body mb-1.5">
+					Header to believe
+				</label>
+				<select
+					id="client_ip_header"
+					name="client_ip_header"
+					class="text-sm rounded-lg border border-edge bg-surface px-3 py-2 text-fg"
+				>
+					for _, o := range visitorHeaderOptions {
+						<option value={ o.Value } selected?={ v.Diagnosis.Mode == o.Value }>{ o.Label }</option>
+					}
+				</select>
+			</div>
+			<button type="submit" class="btn-primary py-2 px-4">Save</button>
+		</form>
+		<div class="space-y-2">
+			<h3 class="text-sm font-medium text-fg-body">Trusted proxies</h3>
+			<p class="text-xs text-fg-muted">
+				Headers are read only from a connection whose address is on this list. Set it with TRUSTED_PROXY_CIDRS; left unset, it is loopback and the private ranges.
+			</p>
+			if len(v.Trusted) == 0 {
+				<p class="text-sm text-fg-secondary">No proxy is trusted, so every visitor is recorded by their connection's address.</p>
+			} else {
+				<ul class="flex flex-wrap gap-1.5">
+					for _, t := range v.Trusted {
+						<li class="px-2 py-0.5 rounded bg-surface-alt border border-edge font-mono text-xs text-fg">{ t }</li>
+					}
+				</ul>
+			}
+		</div>
+		<div class="space-y-2">
+			<h3 class="text-sm font-medium text-fg-body">This request</h3>
+			<dl class="grid grid-cols-1 sm:grid-cols-[14rem_1fr] gap-x-4 gap-y-1.5 text-sm">
+				<dt class="text-fg-muted">Chronicle sees you as</dt>
+				<dd class="font-mono text-fg break-all">{ v.Diagnosis.Address }</dd>
+				<dt class="text-fg-muted">Connection address</dt>
+				<dd class="font-mono text-fg break-all">{ v.Diagnosis.Direct }</dd>
+				<dt class="text-fg-muted">X-Real-IP received</dt>
+				<dd class="font-mono text-fg break-all">{ headerOrNotSent(v.Diagnosis.RealIP) }</dd>
+				<dt class="text-fg-muted">X-Forwarded-For received</dt>
+				<dd class="font-mono text-fg break-all">{ headerOrNotSent(v.Diagnosis.ForwardedFor) }</dd>
+			</dl>
+		</div>
+	</div>
+}
+
+// headerOrNotSent shows a raw header value, or says it did not arrive.
+func headerOrNotSent(v string) string {
+	if v == "" {
+		return "not sent"
+	}
+	return v
 }
 
 // signInProviderCard is the sign-in provider setting: one OpenID Connect
