@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // TestSecurityHeadersFraming pins who may frame a page: only Chronicle's own
@@ -31,7 +31,7 @@ func TestSecurityHeadersFraming(t *testing.T) {
 				req.Header.Set("Sec-Fetch-Site", tc.site)
 			}
 			rec := httptest.NewRecorder()
-			h := SecurityHeaders()(func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+			h := SecurityHeaders()(func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 			if err := h(e.NewContext(req, rec)); err != nil {
 				t.Fatal(err)
 			}

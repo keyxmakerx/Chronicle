@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -32,7 +32,7 @@ type notifDTO struct {
 // ListNotificationsAPI returns the current user's recent notifications as JSON
 // (the bell dropdown renders them client-side).
 // GET /notifications
-func (h *Handler) ListNotificationsAPI(c echo.Context) error {
+func (h *Handler) ListNotificationsAPI(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	ns, err := h.svc.ListMyNotifications(c.Request().Context(), userID, 30)
 	if err != nil {
@@ -59,7 +59,7 @@ func (h *Handler) ListNotificationsAPI(c echo.Context) error {
 // NotificationBadgeAPI returns the unread-count badge as an HTML fragment for
 // the topbar bell's HTMX poll. Empty output means zero unread (nothing shown).
 // GET /notifications/badge
-func (h *Handler) NotificationBadgeAPI(c echo.Context) error {
+func (h *Handler) NotificationBadgeAPI(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	n, err := h.svc.CountMyUnreadNotifications(c.Request().Context(), userID)
 	if err != nil || n <= 0 {
@@ -76,7 +76,7 @@ func (h *Handler) NotificationBadgeAPI(c echo.Context) error {
 
 // MarkNotificationReadAPI marks one of the current user's notifications read.
 // POST /notifications/:nid/read
-func (h *Handler) MarkNotificationReadAPI(c echo.Context) error {
+func (h *Handler) MarkNotificationReadAPI(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if err := h.svc.MarkNotificationRead(c.Request().Context(), userID, c.Param("nid")); err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
@@ -86,7 +86,7 @@ func (h *Handler) MarkNotificationReadAPI(c echo.Context) error {
 
 // MarkAllNotificationsReadAPI marks all of the current user's notifications read.
 // POST /notifications/read-all
-func (h *Handler) MarkAllNotificationsReadAPI(c echo.Context) error {
+func (h *Handler) MarkAllNotificationsReadAPI(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if err := h.svc.MarkAllNotificationsRead(c.Request().Context(), userID); err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})

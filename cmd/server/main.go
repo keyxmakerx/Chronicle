@@ -210,14 +210,14 @@ func main() {
 			application.WASMPluginManager.UnloadAll(ctx)
 		}
 
-		if err := application.Echo.Shutdown(ctx); err != nil {
+		if err := application.Shutdown(ctx); err != nil {
 			slog.Error("server forced shutdown", slog.Any("error", err))
 		}
 	}()
 
 	// --- Start Server ---
 	if err := application.Start(); err != nil {
-		// Echo returns http.ErrServerClosed on graceful shutdown, which is expected.
+		// The server returns http.ErrServerClosed on graceful shutdown, which is expected.
 		slog.Info("server stopped", slog.Any("reason", err))
 	}
 }

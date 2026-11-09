@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -110,7 +110,7 @@ func testHandler(svc Service, wt *fakeWT) *Handler {
 
 // hctx builds an Echo context with a Scribe campaign context (camp-1) + a CSRF
 // token, for the given method/target/body.
-func hctx(e *echo.Echo, method, target, body string) (echo.Context, *httptest.ResponseRecorder) {
+func hctx(e *echo.Echo, method, target, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	if body != "" {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -121,8 +121,7 @@ func hctx(e *echo.Echo, method, target, body string) (echo.Context, *httptest.Re
 		Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleScribe,
 	})
 	c.Set("csrf_token", "tok-1")
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	return c, rec
 }
 

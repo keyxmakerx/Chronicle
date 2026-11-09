@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -446,15 +446,14 @@ func TestGetLayer_DefaultAndFogFiltering(t *testing.T) {
 // hexRequest runs a handler and reports the HTTP status the app's error
 // handler would send: the recorder's code on success, the AppError's code on
 // failure.
-func hexRequest(t *testing.T, h *HexHandler, method, body string, role campaigns.Role, dmGranted bool, fn func(echo.Context) error) *hexResult {
+func hexRequest(t *testing.T, h *HexHandler, method, body string, role campaigns.Role, dmGranted bool, fn func(*echo.Context) error) *hexResult {
 	t.Helper()
 	e := echo.New()
 	req := httptest.NewRequest(method, "/campaigns/camp-1/maps/map-1/hexes", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "mid")
-	c.SetParamValues("camp-1", "map-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: "map-1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: role, IsDmGranted: dmGranted,
 	})

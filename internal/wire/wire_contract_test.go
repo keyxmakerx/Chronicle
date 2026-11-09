@@ -59,7 +59,7 @@ import (
 	// Registers the "mysql" driver; sql.Open needs it even though no
 	// connection is ever established.
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/keyxmakerx/chronicle/internal/app"
@@ -237,13 +237,20 @@ func buildRouteRecords(t *testing.T) []routeRecord {
 	t.Cleanup(a.ShutdownCancel)
 
 	var records []routeRecord
-	a.Echo.OnAddRouteHandler = func(_ string, route echo.Route, handler echo.HandlerFunc, mws []echo.MiddlewareFunc) {
+	prevOnAdd := a.Echo.OnAddRoute
+	a.Echo.OnAddRoute = func(route echo.Route) error {
+		if prevOnAdd != nil {
+			if err := prevOnAdd(route); err != nil {
+				return err
+			}
+		}
 		// Group.Use makes Echo add a catch-all 404 per group so the group's
 		// middleware runs on unmatched paths. They are not routes anyone
 		// calls, and their chain repeats the group's real routes.
 		if route.Method == echo.RouteNotFound {
-			return
+			return nil
 		}
+		handler, mws := route.Handler, route.Middlewares
 		chain := make([]string, len(mws))
 		for i, mw := range mws {
 			chain[i] = funcName(mw)
@@ -254,6 +261,7 @@ func buildRouteRecords(t *testing.T) []routeRecord {
 			Handler: funcName(handler),
 			Chain:   chain,
 		})
+		return nil
 	}
 	a.RegisterRoutes()
 

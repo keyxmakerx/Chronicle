@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -47,8 +47,7 @@ func TestCreateMapping_ErrorStatuses(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(validMappingBody))
 			req.Header.Set("Content-Type", "application/json")
 			c := echo.New().NewContext(req, httptest.NewRecorder())
-			c.SetParamNames("id")
-			c.SetParamValues("camp-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 
 			err := h.CreateMapping(c)
 			var ae *apperror.AppError

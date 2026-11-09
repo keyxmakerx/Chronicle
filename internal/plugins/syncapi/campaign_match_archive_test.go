@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -25,7 +25,7 @@ import (
 // auth middleware that normally resolves it first in production.
 func newCampaignMatchFixture(campSvc campaigns.CampaignService, key *APIKey) *echo.Echo {
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		type errBody struct {
 			Error   string `json:"error"`
 			Message string `json:"message"`
@@ -37,13 +37,13 @@ func newCampaignMatchFixture(campSvc campaigns.CampaignService, key *APIKey) *ec
 		_ = c.JSON(http.StatusInternalServerError, errBody{Error: "internal_error"})
 	}
 	injectKey := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			c.Set(apiKeyContextKey, key)
 			return next(c)
 		}
 	}
 	g := e.Group("/api/v1/campaigns/:id", injectKey, RequireCampaignMatch(campSvc))
-	pong := func(c echo.Context) error { return c.NoContent(http.StatusOK) }
+	pong := func(c *echo.Context) error { return c.NoContent(http.StatusOK) }
 	g.GET("", pong)
 	g.POST("", pong)
 	g.PUT("", pong)

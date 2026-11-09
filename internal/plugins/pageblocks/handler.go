@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -22,7 +22,7 @@ type Handler struct{ svc Service }
 func NewHandler(svc Service) *Handler { return &Handler{svc: svc} }
 
 // viewerFrom builds the Viewer from the campaign context.
-func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
+func viewerFrom(c *echo.Context) (campaignID string, v Viewer, err error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
@@ -35,7 +35,7 @@ func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
 }
 
 // Get handles GET /campaigns/:id/page-blocks/:eid/:bid.
-func (h *Handler) Get(c echo.Context) error {
+func (h *Handler) Get(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -48,7 +48,7 @@ func (h *Handler) Get(c echo.Context) error {
 }
 
 // Put handles PUT /campaigns/:id/page-blocks/:eid/:bid.
-func (h *Handler) Put(c echo.Context) error {
+func (h *Handler) Put(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ type sketchBody struct {
 
 // SketchText handles GET /campaigns/:id/page-blocks/:eid/:bid/sketch: the map
 // as text, for the editor's "edit as text".
-func (h *Handler) SketchText(c echo.Context) error {
+func (h *Handler) SketchText(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -90,7 +90,7 @@ func (h *Handler) SketchText(c echo.Context) error {
 
 // Sketch handles POST /campaigns/:id/page-blocks/:eid/:bid/sketch: it parses
 // text into a map for the editor to show and does not save it.
-func (h *Handler) Sketch(c echo.Context) error {
+func (h *Handler) Sketch(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err

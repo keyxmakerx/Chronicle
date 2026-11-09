@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -66,7 +66,7 @@ func matchVals(action string, m *FoundryMonster) string {
 
 // CreaturesFragment is the Creatures in Foundry card body.
 // GET /campaigns/:id/foundry/creatures
-func (h *SyncHistoryHandler) CreaturesFragment(c echo.Context) error {
+func (h *SyncHistoryHandler) CreaturesFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -84,7 +84,7 @@ func (h *SyncHistoryHandler) CreaturesFragment(c echo.Context) error {
 // ChangeCreatureMatch applies a row's button and redraws the card. A refused
 // change is said on the card, not as an error page.
 // POST /campaigns/:id/foundry/creatures/:eid
-func (h *SyncHistoryHandler) ChangeCreatureMatch(c echo.Context) error {
+func (h *SyncHistoryHandler) ChangeCreatureMatch(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

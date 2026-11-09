@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -21,7 +21,7 @@ type adminActivityAdapter struct {
 
 // RecordAdminChange stamps the current admin and records the change; the
 // recorder itself swallows storage errors.
-func (a adminActivityAdapter) RecordAdminChange(c echo.Context, action, targetType, targetID, label string) {
+func (a adminActivityAdapter) RecordAdminChange(c *echo.Context, action, targetType, targetID, label string) {
 	a.svc.RecordActivity(c.Request().Context(), auth.GetUserID(c), action, targetType, targetID, label)
 }
 

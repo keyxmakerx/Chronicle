@@ -2,7 +2,6 @@ package media
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,7 +13,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -131,7 +130,7 @@ func NewHandler(service MediaService) *Handler {
 // A refusal of a real file runs the access checks a missing id skips, so
 // without the hold its response time would tell a caller that a guessed id
 // names a real file. Anything else is answered at once.
-func (h *Handler) holdRefusal(c echo.Context, start time.Time, err error) error {
+func (h *Handler) holdRefusal(c *echo.Context, start time.Time, err error) error {
 	if err == nil || h.refusalFloor <= 0 || !isNotFound(err) {
 		return err
 	}
@@ -150,8 +149,7 @@ func isNotFound(err error) bool {
 	if apperror.SafeCode(err) == http.StatusNotFound {
 		return true
 	}
-	var he *echo.HTTPError
-	return errors.As(err, &he) && he.Code == http.StatusNotFound
+	return echo.StatusCode(err) == http.StatusNotFound
 }
 
 // SetURLSigner sets the HMAC URL signer for signed URL generation and
@@ -224,7 +222,7 @@ func (h *Handler) logSecurityEvent(ctx context.Context, eventType, userID, actor
 }
 
 // Upload handles multipart file uploads (POST /media/upload).
-func (h *Handler) Upload(c echo.Context) error {
+func (h *Handler) Upload(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -375,12 +373,12 @@ func (h *Handler) Upload(c echo.Context) error {
 // without signing: an avatar still requires an authenticated viewer
 // (checkMediaAccess denies an anonymous request); a backdrop is fully
 // public.
-func (h *Handler) Serve(c echo.Context) error {
+func (h *Handler) Serve(c *echo.Context) error {
 	start := time.Now()
 	return h.holdRefusal(c, start, h.serve(c))
 }
 
-func (h *Handler) serve(c echo.Context) error {
+func (h *Handler) serve(c *echo.Context) error {
 	fileID := c.Param("id")
 	fileID = strings.TrimSuffix(fileID, "/")
 
@@ -404,7 +402,7 @@ func (h *Handler) serve(c echo.Context) error {
 	h.setSecurityHeaders(c, file)
 	c.Response().Header().Set("Content-Type", file.MimeType)
 
-	return c.File(filePath)
+	return middleware.ServeFile(c, filePath)
 }
 
 // allowedThumbSizes restricts thumbnail size parameter to known values,
@@ -412,12 +410,12 @@ func (h *Handler) serve(c echo.Context) error {
 var allowedThumbSizes = map[string]bool{"300": true, "800": true}
 
 // ServeThumbnail serves a thumbnail of a media file (GET /media/:id/thumb/:size).
-func (h *Handler) ServeThumbnail(c echo.Context) error {
+func (h *Handler) ServeThumbnail(c *echo.Context) error {
 	start := time.Now()
 	return h.holdRefusal(c, start, h.serveThumbnail(c))
 }
 
-func (h *Handler) serveThumbnail(c echo.Context) error {
+func (h *Handler) serveThumbnail(c *echo.Context) error {
 	fileID := c.Param("id")
 	size := c.Param("size")
 
@@ -442,7 +440,7 @@ func (h *Handler) serveThumbnail(c echo.Context) error {
 	thumbPath := h.service.ThumbnailPath(file, size)
 	h.setSecurityHeaders(c, file)
 
-	return c.File(thumbPath)
+	return middleware.ServeFile(c, thumbPath)
 }
 
 // currentViewerIdentity resolves the presented viewer identity for verifying
@@ -450,7 +448,7 @@ func (h *Handler) serveThumbnail(c echo.Context) error {
 // ViewerAnonymous when no session cookie is present (e.g. a cross-origin
 // <img> request). Verify decides whether that still satisfies a link minted
 // for ViewerAPIKey.
-func currentViewerIdentity(c echo.Context) string {
+func currentViewerIdentity(c *echo.Context) string {
 	if userID := auth.GetUserID(c); userID != "" {
 		return ViewerSession(userID)
 	}
@@ -460,7 +458,7 @@ func currentViewerIdentity(c echo.Context) string {
 // checkMediaAccess enforces signed URL verification and private/public
 // campaign access control, then the shadowed-map-picture rule. Returns nil if
 // access is allowed, or an error to return to the client.
-func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+func (h *Handler) checkMediaAccess(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
 	// Backstop for the serve handlers' own refusal: whatever else is true, a
 	// page file is never decided by the rules below.
 	if file.IsPageFile() {
@@ -483,7 +481,7 @@ func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool
 // even for a validly signed URL: a signature proves the link is genuine, not
 // that its holder may see under the shadows. Any error refuses, with the same
 // 404 as every other denial so the response does not reveal the file exists.
-func (h *Handler) checkMapImageGuard(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+func (h *Handler) checkMapImageGuard(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
 	if h.mapImages == nil || file.CampaignID == nil {
 		return nil
 	}
@@ -506,7 +504,7 @@ func (h *Handler) checkMapImageGuard(c echo.Context, file *MediaFile, isThumb bo
 // whether or not the picture has a shadow yet, so no link below owner predates
 // a shadow and stays valid for the signed-URL lifetime. Everything else,
 // including an anonymous-bound link, is refused.
-func (h *Handler) viewerSeesUnderShadow(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) bool {
+func (h *Handler) viewerSeesUnderShadow(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) bool {
 	if userID := auth.GetUserID(c); userID != "" {
 		return promotedVisibilityRole(h.memberChecker, *file.CampaignID, userID) >= int(campaigns.RoleOwner)
 	}
@@ -526,7 +524,7 @@ func (h *Handler) viewerSeesUnderShadow(c echo.Context, file *MediaFile, isThumb
 // that campaign; the membership check keeps a link from outliving the
 // member's place in it. Every other case, including every non-avatar file,
 // is refused by the caller.
-func (h *Handler) avatarLinkAllowed(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) bool {
+func (h *Handler) avatarLinkAllowed(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) bool {
 	if !isThumb || h.signer == nil || h.memberChecker == nil || file.UploadedBy == "" {
 		return false
 	}
@@ -539,7 +537,7 @@ func (h *Handler) avatarLinkAllowed(c echo.Context, file *MediaFile, isThumb boo
 
 // checkBaseMediaAccess is signed URL verification and private/public campaign
 // access control; checkMediaAccess adds the map picture rule on top.
-func (h *Handler) checkBaseMediaAccess(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+func (h *Handler) checkBaseMediaAccess(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
 	// A nil campaign_id only skips the checks below for a usage type that
 	// was uploaded without a campaign on purpose: an avatar (gated on
 	// sign-in, not campaign membership) or a backdrop (fully public, no
@@ -867,7 +865,7 @@ func promotedVisibilityRole(checker MemberChecker, campaignID, userID string) in
 // fine-grained defense-in-depth switch (ADR-058 decisions 1-3, 7), which can
 // still deny regardless. Allows authenticated campaign members through so
 // pre-signing URLs keep working.
-func (h *Handler) allowUnsignedAccess(c echo.Context, file *MediaFile) bool {
+func (h *Handler) allowUnsignedAccess(c *echo.Context, file *MediaFile) bool {
 	// Public campaigns: let the request through to the decision-7 check
 	// rather than answering "signed URL required" outright; that check has
 	// the final word, not this function.
@@ -891,7 +889,7 @@ func (h *Handler) allowUnsignedAccess(c echo.Context, file *MediaFile) bool {
 }
 
 // setSecurityHeaders applies defense-in-depth headers to media responses.
-func (h *Handler) setSecurityHeaders(c echo.Context, file *MediaFile) {
+func (h *Handler) setSecurityHeaders(c *echo.Context, file *MediaFile) {
 	resp := c.Response()
 
 	// Force browser to respect declared Content-Type (prevents MIME sniffing).
@@ -953,7 +951,7 @@ func sanitizeFilename(name string) string {
 
 // Info returns metadata about a media file (GET /media/:fileID/info).
 // Requires authentication. Only the uploader or a site admin can view info.
-func (h *Handler) Info(c echo.Context) error {
+func (h *Handler) Info(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -993,7 +991,7 @@ func (h *Handler) Info(c echo.Context) error {
 
 // Delete removes a media file (DELETE /media/:fileID).
 // Only the uploader or a site admin can delete.
-func (h *Handler) Delete(c echo.Context) error {
+func (h *Handler) Delete(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		return apperror.NewUnauthorized("authentication required")
@@ -1049,7 +1047,7 @@ type CampaignMediaPageData struct {
 // signing scheme.
 //
 // GET /campaigns/:id/media/list?page=N&perPage=M
-func (h *Handler) CampaignMediaList(c echo.Context) error {
+func (h *Handler) CampaignMediaList(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1139,7 +1137,7 @@ func pickThumbnail(f *MediaFile) string {
 }
 
 // CampaignMedia renders the campaign media browser page (GET /campaigns/:id/media).
-func (h *Handler) CampaignMedia(c echo.Context) error {
+func (h *Handler) CampaignMedia(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewNotFound("campaign not found")
@@ -1180,7 +1178,7 @@ func (h *Handler) CampaignMedia(c echo.Context) error {
 
 // CampaignDeleteMedia moves a campaign picture to the campaign Trash
 // (DELETE /campaigns/:id/media/:mid).
-func (h *Handler) CampaignDeleteMedia(c echo.Context) error {
+func (h *Handler) CampaignDeleteMedia(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewNotFound("campaign not found")
@@ -1212,7 +1210,7 @@ func (h *Handler) CampaignDeleteMedia(c echo.Context) error {
 // so a co-DM sees what the DM sees. The result is then filtered to entities
 // this viewer may see via the same FilterViewableEntityIDs seam checkMediaAccess
 // uses, since being a Scribe doesn't mean seeing every entity.
-func (h *Handler) CampaignMediaRefs(c echo.Context) error {
+func (h *Handler) CampaignMediaRefs(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewNotFound("campaign not found")

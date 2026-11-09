@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -148,7 +148,7 @@ func TestBlockLastSeen_EscapesNames(t *testing.T) {
 
 // sightingsGET drives the real handler (route logic aside) for one member
 // role over a page with stored answers, links and a "mentioned" suggestion.
-func sightingsGET(t *testing.T, role campaigns.Role, path string, handle func(*Handler, echo.Context) error) (int, string) {
+func sightingsGET(t *testing.T, role campaigns.Role, path string, handle func(*Handler, *echo.Context) error) (int, string) {
 	t.Helper()
 	repo := &fakeSightingRepo{
 		rows: []SightingRow{
@@ -171,8 +171,7 @@ func sightingsGET(t *testing.T, role campaigns.Role, path string, handle func(*H
 	e := echo.New()
 	rec := httptest.NewRecorder()
 	c := e.NewContext(httptest.NewRequest(http.MethodGet, path, nil), rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: role})
 	if err := handle(h, c); err != nil {
 		t.Fatalf("handler: %v", err)
@@ -183,7 +182,7 @@ func sightingsGET(t *testing.T, role campaigns.Role, path string, handle func(*H
 // A player's GET carries no suggestions, no dismissed nights and no who-added-it,
 // and the Director's carries all three.
 func TestSightingsAPI_PlayerNeverReceivesDirectorData(t *testing.T) {
-	get := func(h *Handler, c echo.Context) error { return h.SightingsAPI(c) }
+	get := func(h *Handler, c *echo.Context) error { return h.SightingsAPI(c) }
 	path := "/campaigns/camp-1/sessions/sightings?entity=e1"
 
 	code, body := sightingsGET(t, campaigns.RolePlayer, path, get)
@@ -212,7 +211,7 @@ func TestSightingsAPI_PlayerNeverReceivesDirectorData(t *testing.T) {
 }
 
 func TestSightingNightsAPI(t *testing.T) {
-	get := func(h *Handler, c echo.Context) error { return h.SightingNightsAPI(c) }
+	get := func(h *Handler, c *echo.Context) error { return h.SightingNightsAPI(c) }
 	code, body := sightingsGET(t, campaigns.RolePlayer, "/campaigns/camp-1/sessions/sightings/nights", get)
 	if code != http.StatusOK {
 		t.Fatalf("status = %d", code)

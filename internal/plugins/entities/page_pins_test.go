@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -351,8 +351,7 @@ func TestPagePinHandler_Widget(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(req, rec)
-			c.SetParamNames("id")
-			c.SetParamValues("camp-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 			c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner})
 			c.Set("auth_user_id", "owner")
 			if err := h.Widget(c); err != nil {

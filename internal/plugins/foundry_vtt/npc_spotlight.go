@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -48,7 +48,7 @@ type NPCSpotlightView struct {
 // campaigns that don't use Foundry never see it.
 //
 // GET /campaigns/:id/foundry-vtt/npc-spotlight/:eid
-func (h *Handler) NPCSpotlightButtonHandler(c echo.Context) error {
+func (h *Handler) NPCSpotlightButtonHandler(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -68,7 +68,7 @@ func (h *Handler) NPCSpotlightButtonHandler(c echo.Context) error {
 // tells the GM there.
 //
 // POST /campaigns/:id/foundry-vtt/npc-spotlight/:eid
-func (h *Handler) NPCSpotlightAPI(c echo.Context) error {
+func (h *Handler) NPCSpotlightAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -3,7 +3,7 @@ package sessions
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -17,14 +17,14 @@ func (h *Handler) SetSightingService(s SightingService) {
 	h.sightings = s
 }
 
-func sightingViewer(c echo.Context) permissions.Viewer {
+func sightingViewer(c *echo.Context) permissions.Viewer {
 	cc := campaigns.GetCampaignContext(c)
 	return permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c))
 }
 
 // SightingsAPI returns when the party saw one page:
 // GET /campaigns/:id/sessions/sightings?entity=ID.
-func (h *Handler) SightingsAPI(c echo.Context) error {
+func (h *Handler) SightingsAPI(c *echo.Context) error {
 	if h.sightings == nil {
 		return apperror.NewNotFound("sightings are not available")
 	}
@@ -42,7 +42,7 @@ func (h *Handler) SightingsAPI(c echo.Context) error {
 
 // RecordSightingAPI answers one night for one page:
 // PUT /campaigns/:id/sessions/:sid/sightings {entityId, date, state, source}.
-func (h *Handler) RecordSightingAPI(c echo.Context) error {
+func (h *Handler) RecordSightingAPI(c *echo.Context) error {
 	if h.sightings == nil {
 		return apperror.NewNotFound("sightings are not available")
 	}
@@ -60,7 +60,7 @@ func (h *Handler) RecordSightingAPI(c echo.Context) error {
 
 // ClearSightingAPI removes one night's answer for one page:
 // DELETE /campaigns/:id/sessions/:sid/sightings?entity=ID&date=YYYY-MM-DD.
-func (h *Handler) ClearSightingAPI(c echo.Context) error {
+func (h *Handler) ClearSightingAPI(c *echo.Context) error {
 	if h.sightings == nil {
 		return apperror.NewNotFound("sightings are not available")
 	}
@@ -75,7 +75,7 @@ func (h *Handler) ClearSightingAPI(c echo.Context) error {
 // SightingNightsAPI returns the played game nights, for a page's Last seen to
 // draw every night and let the DM answer one:
 // GET /campaigns/:id/sessions/sightings/nights.
-func (h *Handler) SightingNightsAPI(c echo.Context) error {
+func (h *Handler) SightingNightsAPI(c *echo.Context) error {
 	if h.sightings == nil {
 		return apperror.NewNotFound("sightings are not available")
 	}

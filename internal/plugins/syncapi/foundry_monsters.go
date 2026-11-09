@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -166,7 +166,7 @@ func (h *SyncHistoryHandler) SetFoundryMonsters(repo FoundryMonsterRepository) {
 // client's report. Owner or DM-access keys only: the list includes the GM's
 // own actors, which players may not know exist.
 // POST /api/v1/campaigns/:id/sync/monsters
-func (h *SyncHistoryHandler) ReportMonsters(c echo.Context) error {
+func (h *SyncHistoryHandler) ReportMonsters(c *echo.Context) error {
 	if h.monsters == nil {
 		return apperror.NewNotFound("monster reports are not available")
 	}

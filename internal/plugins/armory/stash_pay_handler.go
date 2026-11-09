@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -14,7 +14,7 @@ import (
 // Pay handles POST /armory/pay: form character_id, amount (the sheet's main
 // unit, up to two decimals) and an optional reason. It answers JSON so a
 // widget can say who was paid what.
-func (h *StashHandler) Pay(c echo.Context) error {
+func (h *StashHandler) Pay(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err

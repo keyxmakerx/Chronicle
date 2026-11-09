@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -32,12 +32,12 @@ func RegisterGuestCodeRoutes(e *echo.Echo, h *GuestCodeHandler, svc CampaignServ
 }
 
 // Card renders the card (GET /campaigns/:id/guest-codes).
-func (h *GuestCodeHandler) Card(c echo.Context) error {
+func (h *GuestCodeHandler) Card(c *echo.Context) error {
 	return h.render(c, nil, "")
 }
 
 // Create makes a code and shows it once (POST /campaigns/:id/guest-codes).
-func (h *GuestCodeHandler) Create(c echo.Context) error {
+func (h *GuestCodeHandler) Create(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -50,7 +50,7 @@ func (h *GuestCodeHandler) Create(c echo.Context) error {
 }
 
 // Remove deletes an unused code (DELETE /campaigns/:id/guest-codes/:gcid).
-func (h *GuestCodeHandler) Remove(c echo.Context) error {
+func (h *GuestCodeHandler) Remove(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -61,7 +61,7 @@ func (h *GuestCodeHandler) Remove(c echo.Context) error {
 	return h.render(c, nil, "")
 }
 
-func (h *GuestCodeHandler) render(c echo.Context, fresh *NewGuestCode, errMsg string) error {
+func (h *GuestCodeHandler) render(c *echo.Context, fresh *NewGuestCode, errMsg string) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

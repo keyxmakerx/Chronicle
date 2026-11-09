@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -245,7 +245,7 @@ func (h *Handler) customizeFind(cc *CampaignContext, areas []CustomizeArea, cats
 }
 
 // renderCustomize draws an area inside the frame.
-func (h *Handler) renderCustomize(c echo.Context, cc *CampaignContext, area, title string, crumbs []CustomizeCrumb, cats []CustomizeCategory, body templ.Component) error {
+func (h *Handler) renderCustomize(c *echo.Context, cc *CampaignContext, area, title string, crumbs []CustomizeCrumb, cats []CustomizeCategory, body templ.Component) error {
 	ctx := c.Request().Context()
 	version, draft := h.CustomizeDraftFor(ctx, cc.Campaign.ID, auth.GetUserID(c))
 	areas := h.customizeAreas(cc)
@@ -271,7 +271,7 @@ func (h *Handler) renderCustomize(c echo.Context, cc *CampaignContext, area, tit
 }
 
 // Customize is the Overview: GET /campaigns/:id/customize.
-func (h *Handler) Customize(c echo.Context) error {
+func (h *Handler) Customize(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -281,7 +281,7 @@ func (h *Handler) Customize(c echo.Context) error {
 }
 
 // CustomizeLook is the signed Look editor: GET /campaigns/:id/customize/look.
-func (h *Handler) CustomizeLook(c echo.Context) error {
+func (h *Handler) CustomizeLook(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -304,7 +304,7 @@ func (h *Handler) CustomizeLook(c echo.Context) error {
 
 // CustomizeHome arranges one home, the campaign home for an audience or the
 // DM dashboard: GET /campaigns/:id/customize/home[/:who].
-func (h *Handler) CustomizeHome(c echo.Context) error {
+func (h *Handler) CustomizeHome(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -357,7 +357,7 @@ func (h *Handler) categoriesData(ctx context.Context, cc *CampaignContext, cats 
 
 // CustomizeCategoriesPage is the grid of categories:
 // GET /campaigns/:id/customize/categories.
-func (h *Handler) CustomizeCategoriesPage(c echo.Context) error {
+func (h *Handler) CustomizeCategoriesPage(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -371,7 +371,7 @@ func (h *Handler) CustomizeCategoriesPage(c echo.Context) error {
 // CustomizeCategory is one category's workspace:
 // GET /campaigns/:id/customize/categories/:key and .../:key/:tab. The key is
 // the category's id, or the draft key of one made in the draft.
-func (h *Handler) CustomizeCategory(c echo.Context) error {
+func (h *Handler) CustomizeCategory(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -428,7 +428,7 @@ func (h *Handler) CustomizeCategory(c echo.Context) error {
 
 // CustomizePluginArea is an area a plugin contributes:
 // GET /campaigns/:id/customize/x/:tab.
-func (h *Handler) CustomizePluginArea(c echo.Context) error {
+func (h *Handler) CustomizePluginArea(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

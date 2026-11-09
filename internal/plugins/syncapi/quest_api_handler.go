@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -76,7 +76,7 @@ func WithQuests(h *QuestAPIHandler) func(*APIHandler) {
 
 // dmUser returns the caller when they are the campaign owner or a co-DM, and
 // fails closed on any lookup error.
-func (h *QuestAPIHandler) dmUser(c echo.Context) (string, error) {
+func (h *QuestAPIHandler) dmUser(c *echo.Context) (string, error) {
 	key := GetAPIKey(c)
 	if key == nil {
 		return "", apperror.NewUnauthorized("api key required")
@@ -91,9 +91,9 @@ func (h *QuestAPIHandler) dmUser(c echo.Context) (string, error) {
 	return "", apperror.NewForbidden("quests over the API need owner or co-DM access")
 }
 
-func playersView(c echo.Context) bool { return c.QueryParam("audience") == "players" }
+func playersView(c *echo.Context) bool { return c.QueryParam("audience") == "players" }
 
-func (h *QuestAPIHandler) answer(c echo.Context, out any, err error) error {
+func (h *QuestAPIHandler) answer(c *echo.Context, out any, err error) error {
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (h *QuestAPIHandler) answer(c echo.Context, out any, err error) error {
 
 // Homes lists the places with boards.
 // GET /api/v1/campaigns/:id/quests/homes[?audience=players]
-func (h *QuestAPIHandler) Homes(c echo.Context) error {
+func (h *QuestAPIHandler) Homes(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func (h *QuestAPIHandler) Homes(c echo.Context) error {
 
 // Boards returns one home's boards.
 // GET /api/v1/campaigns/:id/quests/boards?category=<typeId>|page=<entityId>[&audience=players]
-func (h *QuestAPIHandler) Boards(c echo.Context) error {
+func (h *QuestAPIHandler) Boards(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func (h *QuestAPIHandler) Boards(c echo.Context) error {
 
 // GetQuest returns one quest sheet.
 // GET /api/v1/campaigns/:id/quests/:entityID[?audience=players]
-func (h *QuestAPIHandler) GetQuest(c echo.Context) error {
+func (h *QuestAPIHandler) GetQuest(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err
@@ -146,7 +146,7 @@ func (h *QuestAPIHandler) GetQuest(c echo.Context) error {
 // PutQuest saves a partial quest change; the body is the quest plugin's own
 // patch (version required, absent fields kept).
 // PUT /api/v1/campaigns/:id/quests/:entityID
-func (h *QuestAPIHandler) PutQuest(c echo.Context) error {
+func (h *QuestAPIHandler) PutQuest(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err
@@ -162,7 +162,7 @@ func (h *QuestAPIHandler) PutQuest(c echo.Context) error {
 // Party lists the characters rewards can go to. It is a DM read with no
 // players view, so a request for one is refused rather than answered as the DM.
 // GET /api/v1/campaigns/:id/quests/party
-func (h *QuestAPIHandler) Party(c echo.Context) error {
+func (h *QuestAPIHandler) Party(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err
@@ -176,7 +176,7 @@ func (h *QuestAPIHandler) Party(c echo.Context) error {
 
 // Pay adds coins to one character's sheet.
 // POST /api/v1/campaigns/:id/quests/pay {characterId, amount, reason}
-func (h *QuestAPIHandler) Pay(c echo.Context) error {
+func (h *QuestAPIHandler) Pay(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err
@@ -191,7 +191,7 @@ func (h *QuestAPIHandler) Pay(c echo.Context) error {
 
 // Give hands one reward item to one character.
 // POST /api/v1/campaigns/:id/quests/give {characterId, itemId}
-func (h *QuestAPIHandler) Give(c echo.Context) error {
+func (h *QuestAPIHandler) Give(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err

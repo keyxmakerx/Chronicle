@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -143,7 +143,7 @@ func newAddonGateFixture(t *testing.T, keyID int, campaignID string) *addonGateF
 	}
 
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		var appErr *apperror.AppError
 		if stderrors.As(err, &appErr) {
 			_ = c.JSON(appErr.Code, map[string]string{"error": appErr.Type, "message": appErr.Message})

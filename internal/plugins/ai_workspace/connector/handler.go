@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
@@ -81,14 +81,14 @@ func actorFor(c *Connection) records.Actor {
 	return records.Actor{UserID: c.UserID, Role: role}
 }
 
-func refuse(c echo.Context, status int, msg string) error {
+func refuse(c *echo.Context, status int, msg string) error {
 	c.Response().Header().Set("Cache-Control", "no-store")
 	return c.JSON(status, map[string]string{"error": msg})
 }
 
 // NoStream answers GET and DELETE: this server keeps no event streams or
 // sessions, which the protocol allows with 405.
-func (e *Endpoint) NoStream(c echo.Context) error {
+func (e *Endpoint) NoStream(c *echo.Context) error {
 	c.Response().Header().Set("Allow", http.MethodPost)
 	return refuse(c, http.StatusMethodNotAllowed, "send requests with POST")
 }
@@ -106,7 +106,7 @@ func keyFrom(r *http.Request) string {
 }
 
 // Serve answers one MCP message.
-func (e *Endpoint) Serve(c echo.Context) error {
+func (e *Endpoint) Serve(c *echo.Context) error {
 	req := c.Request()
 	if o := req.Header.Get("Origin"); o != "" && o != e.origin {
 		return refuse(c, http.StatusForbidden, "requests from web pages are not accepted")

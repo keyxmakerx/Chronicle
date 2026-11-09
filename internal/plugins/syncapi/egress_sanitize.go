@@ -14,7 +14,7 @@ package syncapi
 import (
 	"log/slog"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -163,7 +163,7 @@ func stripEntitiesFieldsForEgress(es []entities.Entity, role int, userID string,
 // open read "a hidden page" in the entities' text, for the same callers the
 // secret strip covers: the stored link text is the hidden page's name. One
 // batch check covers every entity; a failed check hides every mention.
-func (h *APIHandler) hideEntityMentionsForEgress(c echo.Context, campaignID string, role int, userID string, es ...*entities.Entity) {
+func (h *APIHandler) hideEntityMentionsForEgress(c *echo.Context, campaignID string, role int, userID string, es ...*entities.Entity) {
 	if role >= int(campaigns.RoleOwner) || len(es) == 0 {
 		return
 	}

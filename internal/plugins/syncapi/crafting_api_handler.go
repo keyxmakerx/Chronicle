@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -66,7 +66,7 @@ func WithCrafting(h *CraftingAPIHandler) func(*APIHandler) {
 
 // actingRaw reads a JSON body of at most maxCraftingBodyBytes and the member
 // it names. An empty body is an empty object, for calls that need no fields.
-func actingRaw(c echo.Context) (json.RawMessage, string, error) {
+func actingRaw(c *echo.Context) (json.RawMessage, string, error) {
 	// Read one byte past the cap so an oversize body is refused, not truncated.
 	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, maxCraftingBodyBytes+1))
 	if err != nil || len(raw) > maxCraftingBodyBytes {
@@ -82,7 +82,7 @@ func actingRaw(c echo.Context) (json.RawMessage, string, error) {
 	return raw, acting.ActingUserID, nil
 }
 
-func parseSpoilLineID(c echo.Context) (int64, error) {
+func parseSpoilLineID(c *echo.Context) (int64, error) {
 	id, err := strconv.ParseInt(c.Param("lid"), 10, 64)
 	if err != nil || id < 1 {
 		return 0, apperror.NewNotFound("those spoils are gone")
@@ -92,7 +92,7 @@ func parseSpoilLineID(c echo.Context) (int64, error) {
 
 // Character returns a hero's crafting as the acting member sees it.
 // GET /api/v1/campaigns/:id/crafting/characters/:eid?actingUserId=
-func (h *CraftingAPIHandler) Character(c echo.Context) error {
+func (h *CraftingAPIHandler) Character(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func (h *CraftingAPIHandler) Character(c echo.Context) error {
 // StartProject starts a project for a hero.
 // POST /api/v1/campaigns/:id/crafting/characters/:eid/projects
 // Body: {"actingUserId"?, "recipeId", "picks"}
-func (h *CraftingAPIHandler) StartProject(c echo.Context) error {
+func (h *CraftingAPIHandler) StartProject(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -127,7 +127,7 @@ func (h *CraftingAPIHandler) StartProject(c echo.Context) error {
 // RollProject makes a project's roll; the dice are the server's.
 // POST /api/v1/campaigns/:id/crafting/projects/:pid/roll
 // Body: {"actingUserId"?, "work", "bench", "version"}
-func (h *CraftingAPIHandler) RollProject(c echo.Context) error {
+func (h *CraftingAPIHandler) RollProject(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -147,14 +147,14 @@ func (h *CraftingAPIHandler) RollProject(c echo.Context) error {
 // Experiment spends a hero's turn trying something new.
 // POST /api/v1/campaigns/:id/crafting/characters/:eid/experiment
 // Body: {"actingUserId"?, "items":[{"itemId","qty"}]}
-func (h *CraftingAPIHandler) Experiment(c echo.Context) error {
+func (h *CraftingAPIHandler) Experiment(c *echo.Context) error {
 	return h.turn(c, c.Param("eid"), h.svc.Experiment)
 }
 
 // BreakDown breaks a hero's copy of a crafted item down.
 // POST /api/v1/campaigns/:id/crafting/characters/:eid/break-down
 // Body: {"actingUserId"?, "recipeId", "copy"}
-func (h *CraftingAPIHandler) BreakDown(c echo.Context) error {
+func (h *CraftingAPIHandler) BreakDown(c *echo.Context) error {
 	return h.turn(c, c.Param("eid"), h.svc.BreakDown)
 }
 
@@ -162,11 +162,11 @@ func (h *CraftingAPIHandler) BreakDown(c echo.Context) error {
 // server's.
 // POST /api/v1/campaigns/:id/crafting/projects/:pid/help
 // Body: {"actingUserId"?, "characterId", "version"}
-func (h *CraftingAPIHandler) Help(c echo.Context) error {
+func (h *CraftingAPIHandler) Help(c *echo.Context) error {
 	return h.turn(c, c.Param("pid"), h.svc.Help)
 }
 
-func (h *CraftingAPIHandler) turn(c echo.Context, id string, fn func(ctx context.Context, campaignID, keyUserID, actingUserID, id string, body json.RawMessage) (any, error)) error {
+func (h *CraftingAPIHandler) turn(c *echo.Context, id string, fn func(ctx context.Context, campaignID, keyUserID, actingUserID, id string, body json.RawMessage) (any, error)) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -185,7 +185,7 @@ func (h *CraftingAPIHandler) turn(c echo.Context, id string, fn func(ctx context
 
 // CancelProject sets a project aside.
 // DELETE /api/v1/campaigns/:id/crafting/projects/:pid?actingUserId=
-func (h *CraftingAPIHandler) CancelProject(c echo.Context) error {
+func (h *CraftingAPIHandler) CancelProject(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -200,7 +200,7 @@ func (h *CraftingAPIHandler) CancelProject(c echo.Context) error {
 
 // Spoils returns the Director's tray and drop lists.
 // GET /api/v1/campaigns/:id/crafting/spoils?actingUserId=
-func (h *CraftingAPIHandler) Spoils(c echo.Context) error {
+func (h *CraftingAPIHandler) Spoils(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -215,18 +215,18 @@ func (h *CraftingAPIHandler) Spoils(c echo.Context) error {
 // TakeSpoil takes or harvests a tray line for a hero.
 // POST /api/v1/campaigns/:id/crafting/spoil-lines/:lid/take
 // Body: {"actingUserId"?, "characterId"}
-func (h *CraftingAPIHandler) TakeSpoil(c echo.Context) error {
+func (h *CraftingAPIHandler) TakeSpoil(c *echo.Context) error {
 	return h.line(c, h.svc.TakeSpoil)
 }
 
 // StudySpoil studies a find that needs it, for a hero.
 // POST /api/v1/campaigns/:id/crafting/spoil-lines/:lid/study
 // Body: {"actingUserId"?, "characterId"}
-func (h *CraftingAPIHandler) StudySpoil(c echo.Context) error {
+func (h *CraftingAPIHandler) StudySpoil(c *echo.Context) error {
 	return h.line(c, h.svc.StudySpoil)
 }
 
-func (h *CraftingAPIHandler) line(c echo.Context, fn func(ctx context.Context, campaignID, keyUserID, actingUserID string, lineID int64, body json.RawMessage) (any, error)) error {
+func (h *CraftingAPIHandler) line(c *echo.Context, fn func(ctx context.Context, campaignID, keyUserID, actingUserID string, lineID int64, body json.RawMessage) (any, error)) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -251,7 +251,7 @@ func (h *CraftingAPIHandler) line(c echo.Context, fn func(ctx context.Context, c
 // the GM has confirmed it.
 // POST /api/v1/campaigns/:id/crafting/fights
 // Body: {"actingUserId"?, "name", "creatures":[{"pageId","name","down","copies"}]}
-func (h *CraftingAPIHandler) FightEnded(c echo.Context) error {
+func (h *CraftingAPIHandler) FightEnded(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err

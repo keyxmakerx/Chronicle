@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -206,7 +206,7 @@ func TestMapFrameSection(t *testing.T) {
 	}
 }
 
-func frameRequest(role campaigns.Role, body, contentType string, htmx bool) (echo.Context, *httptest.ResponseRecorder) {
+func frameRequest(role campaigns.Role, body, contentType string, htmx bool) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPut, "/campaigns/camp-1/maps/frame-style", strings.NewReader(body))
 	req.Header.Set("Content-Type", contentType)
@@ -215,8 +215,7 @@ func frameRequest(role campaigns.Role, body, contentType string, htmx bool) (ech
 	}
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set("campaign_context", dmWriteCampaignCtx(role, false))
 	return c, rec
 }

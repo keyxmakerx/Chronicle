@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -44,7 +44,7 @@ func dmWriteTimelineCtx(role campaigns.Role, dmGranted bool) *campaigns.Campaign
 	}
 }
 
-func newTimelineDMWriteRequest(method, path, body string) (echo.Context, *httptest.ResponseRecorder) {
+func newTimelineDMWriteRequest(method, path, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	if body == "" {
 		body = "{}"
 	}
@@ -81,8 +81,7 @@ func TestCreateStandaloneEventAPI_DmOnlyDowngrade_ByCapability(t *testing.T) {
 			h := NewHandler(newTestTimelineService(repo))
 			c, rec := newTimelineDMWriteRequest(http.MethodPost, "/campaigns/camp-1/timelines/tl-1/standalone-events",
 				`{"name":"Secret Meeting","year":1,"month":1,"day":1,"visibility":"dm_only"}`)
-			c.SetParamNames("id", "tid")
-			c.SetParamValues("camp-1", "tl-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "tid", Value: "tl-1"}})
 			c.Set("campaign_context", dmWriteTimelineCtx(tc.role, tc.dmGranted))
 
 			if err := h.CreateStandaloneEventAPI(c); err != nil {
@@ -143,8 +142,7 @@ func TestUpdateStandaloneEventAPI_StoredDmOnly_RequiresCanAuthorDmOnly(t *testin
 			h := NewHandler(newTestTimelineService(repo))
 			c, rec := newTimelineDMWriteRequest(http.MethodPut, "/campaigns/camp-1/timelines/tl-1/standalone-events/evt-secret",
 				`{"name":"Renamed Meeting"}`)
-			c.SetParamNames("id", "tid", "eid")
-			c.SetParamValues("camp-1", "tl-1", "evt-secret")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "tid", Value: "tl-1"}, {Name: "eid", Value: "evt-secret"}})
 			c.Set("campaign_context", dmWriteTimelineCtx(tc.role, tc.dmGranted))
 
 			err := h.UpdateStandaloneEventAPI(c)
@@ -183,8 +181,7 @@ func TestDeleteStandaloneEventAPI_StoredDmOnly_RequiresCanAuthorDmOnly(t *testin
 			}
 			h := NewHandler(newTestTimelineService(repo))
 			c, rec := newTimelineDMWriteRequest(http.MethodDelete, "/campaigns/camp-1/timelines/tl-1/standalone-events/evt-secret", "")
-			c.SetParamNames("id", "tid", "eid")
-			c.SetParamValues("camp-1", "tl-1", "evt-secret")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "tid", Value: "tl-1"}, {Name: "eid", Value: "evt-secret"}})
 			c.Set("campaign_context", dmWriteTimelineCtx(tc.role, tc.dmGranted))
 
 			err := h.DeleteStandaloneEventAPI(c)
@@ -244,8 +241,7 @@ func TestUpdateStandaloneEventAPI_StoredEveryone_AlwaysReachesRepo(t *testing.T)
 			h := NewHandler(newTestTimelineService(repo))
 			c, rec := newTimelineDMWriteRequest(http.MethodPut, "/campaigns/camp-1/timelines/tl-1/standalone-events/evt-public",
 				`{"name":"Renamed Meeting"}`)
-			c.SetParamNames("id", "tid", "eid")
-			c.SetParamValues("camp-1", "tl-1", "evt-public")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "tid", Value: "tl-1"}, {Name: "eid", Value: "evt-public"}})
 			c.Set("campaign_context", dmWriteTimelineCtx(tc.role, tc.dmGranted))
 
 			if err := h.UpdateStandaloneEventAPI(c); err != nil {
@@ -274,8 +270,7 @@ func TestDeleteStandaloneEventAPI_StoredEveryone_AlwaysReachesRepo(t *testing.T)
 			}
 			h := NewHandler(newTestTimelineService(repo))
 			c, rec := newTimelineDMWriteRequest(http.MethodDelete, "/campaigns/camp-1/timelines/tl-1/standalone-events/evt-public", "")
-			c.SetParamNames("id", "tid", "eid")
-			c.SetParamValues("camp-1", "tl-1", "evt-public")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "tid", Value: "tl-1"}, {Name: "eid", Value: "evt-public"}})
 			c.Set("campaign_context", dmWriteTimelineCtx(tc.role, tc.dmGranted))
 
 			if err := h.DeleteStandaloneEventAPI(c); err != nil {

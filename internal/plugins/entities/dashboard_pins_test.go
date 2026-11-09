@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -43,8 +43,7 @@ func TestUpdateEntityTypeDashboard_KeepsPinsUnlessNamed(t *testing.T) {
 			e := echo.New()
 			req := httptest.NewRequest(http.MethodPut, "/campaigns/c1/entity-types/4/dashboard", strings.NewReader(tt.body))
 			c := e.NewContext(req, httptest.NewRecorder())
-			c.SetParamNames("id", "etid")
-			c.SetParamValues("c1", "4")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "etid", Value: "4"}})
 			c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleOwner, IsMember: true})
 			if err := h.UpdateEntityTypeDashboard(c); err != nil {
 				t.Fatal(err)

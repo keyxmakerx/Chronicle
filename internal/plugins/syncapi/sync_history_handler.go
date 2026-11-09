@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -52,7 +52,7 @@ func NewSyncHistoryHandler(repo SyncHistoryRepository, campaignSvc campaigns.Cam
 
 // isDMEquivalent is the same gate as the change feed: the campaign owner or
 // a member the owner has given DM access. Fails closed.
-func (h *SyncHistoryHandler) isDMEquivalent(c echo.Context) bool {
+func (h *SyncHistoryHandler) isDMEquivalent(c *echo.Context) bool {
 	key := GetAPIKey(c)
 	if key == nil {
 		return false
@@ -66,7 +66,7 @@ func (h *SyncHistoryHandler) isDMEquivalent(c echo.Context) bool {
 }
 
 // historyFilterFrom reads the shared query parameters of both readers.
-func historyFilterFrom(c echo.Context) (SyncHistoryFilter, error) {
+func historyFilterFrom(c *echo.Context) (SyncHistoryFilter, error) {
 	f := SyncHistoryFilter{Limit: historyPageSize}
 	for name, dst := range map[string]*int64{"before": &f.Before, "after": &f.After} {
 		if v := c.QueryParam(name); v != "" {
@@ -101,7 +101,7 @@ type syncHistoryResponse struct {
 
 // ListHistory returns history rows newest first.
 // GET /api/v1/campaigns/:id/sync/history?before=&after=&limit=&direction=&failed=1&q=
-func (h *SyncHistoryHandler) ListHistory(c echo.Context) error {
+func (h *SyncHistoryHandler) ListHistory(c *echo.Context) error {
 	if !h.isDMEquivalent(c) {
 		return apperror.NewForbidden("the sync history requires owner or DM access")
 	}
@@ -144,7 +144,7 @@ type reportHistoryRequest struct {
 // applied in Foundry, its connects and catch-up runs, and failures that
 // never reached Chronicle.
 // POST /api/v1/campaigns/:id/sync/history
-func (h *SyncHistoryHandler) ReportHistory(c echo.Context) error {
+func (h *SyncHistoryHandler) ReportHistory(c *echo.Context) error {
 	if !h.isDMEquivalent(c) {
 		return apperror.NewForbidden("the sync history requires owner or DM access")
 	}
@@ -251,7 +251,7 @@ func canSeeHistory(cc *campaigns.CampaignContext) bool {
 	return cc != nil && cc.VisibilityRole() >= int(campaigns.RoleOwner)
 }
 
-func (h *SyncHistoryHandler) pageData(c echo.Context, cc *campaigns.CampaignContext) (SyncHistoryPageData, error) {
+func (h *SyncHistoryHandler) pageData(c *echo.Context, cc *campaigns.CampaignContext) (SyncHistoryPageData, error) {
 	f, err := historyFilterFrom(c)
 	if err != nil {
 		return SyncHistoryPageData{}, err
@@ -277,7 +277,7 @@ func (h *SyncHistoryHandler) pageData(c echo.Context, cc *campaigns.CampaignCont
 
 // Page renders the Sync history page.
 // GET /campaigns/:id/sync-history
-func (h *SyncHistoryHandler) Page(c echo.Context) error {
+func (h *SyncHistoryHandler) Page(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

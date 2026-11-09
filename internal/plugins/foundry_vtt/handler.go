@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -69,7 +69,7 @@ type FoundryPresenceResponse struct {
 // app/routes.go's fvttCampaignAuthed group).
 //
 // GET /campaigns/:id/foundry-presence
-func (h *Handler) GetFoundryPresenceAPI(c echo.Context) error {
+func (h *Handler) GetFoundryPresenceAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -99,7 +99,7 @@ func (h *Handler) GetFoundryPresenceAPI(c echo.Context) error {
 // won't swap a 4xx/5xx response by default, so a raw error status here
 // would leave owners stuck on a spinner. Errors render inline via
 // OwnerTabErrorState within the same swap target instead.
-func (h *Handler) OwnerTabFragmentHandler(c echo.Context) error {
+func (h *Handler) OwnerTabFragmentHandler(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		// Defensive — middleware should set this. If we get here,
@@ -139,7 +139,7 @@ func (h *Handler) OwnerTabFragmentHandler(c echo.Context) error {
 // non-owners see the outer chrome but the inner status fails.
 //
 // GET /campaigns/:id/foundry-vtt/dashboard-sync-block
-func (h *Handler) DashboardSyncBlockHandler(c echo.Context) error {
+func (h *Handler) DashboardSyncBlockHandler(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -152,7 +152,7 @@ func (h *Handler) DashboardSyncBlockHandler(c echo.Context) error {
 // Campaign-member access (non-sensitive status data).
 //
 // GET /campaigns/:id/foundry-vtt/presence-pill-fragment
-func (h *Handler) CampaignShowPresencePillHandler(c echo.Context) error {
+func (h *Handler) CampaignShowPresencePillHandler(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -182,7 +182,7 @@ func (h *Handler) resolvePresence(campaignID string) PresenceView {
 // RotateTokenAPI bumps the per-campaign signing version and
 // returns the freshly-minted install URL.
 // POST /campaigns/:id/foundry-vtt/token/rotate
-func (h *Handler) RotateTokenAPI(c echo.Context) error {
+func (h *Handler) RotateTokenAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -196,7 +196,7 @@ func (h *Handler) RotateTokenAPI(c echo.Context) error {
 
 // InstallURLAPI returns the campaign's current install URL.
 // GET /campaigns/:id/foundry-vtt/install-url
-func (h *Handler) InstallURLAPI(c echo.Context) error {
+func (h *Handler) InstallURLAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -217,7 +217,7 @@ func (h *Handler) InstallURLAPI(c echo.Context) error {
 // and surface the message inline.
 //
 // GET /api/v1/campaigns/:cid/foundry-vtt/module.json?token=...
-func (h *Handler) PublicManifestAPI(c echo.Context) error {
+func (h *Handler) PublicManifestAPI(c *echo.Context) error {
 	cid := c.Param("cid")
 	token := c.QueryParam("token")
 	if token == "" {
@@ -242,7 +242,7 @@ func (h *Handler) PublicManifestAPI(c echo.Context) error {
 // since token rotation invalidates earlier ones.
 //
 // GET /api/v1/campaigns/:cid/foundry-vtt/module.zip?token=...
-func (h *Handler) PublicDownloadAPI(c echo.Context) error {
+func (h *Handler) PublicDownloadAPI(c *echo.Context) error {
 	cid := c.Param("cid")
 	token := c.QueryParam("token")
 	if token == "" {
@@ -274,7 +274,7 @@ func (h *Handler) PublicDownloadAPI(c echo.Context) error {
 // breadcrumb for every typed error, since Foundry core's client-side
 // error rendering collapses a 403 to a generic "is forbidden" and the
 // server log is the operator's only reliable diagnostic.
-func (h *Handler) respondError(c echo.Context, err error) error {
+func (h *Handler) respondError(c *echo.Context, err error) error {
 	fe := AsError(err)
 	if fe == nil {
 		return err

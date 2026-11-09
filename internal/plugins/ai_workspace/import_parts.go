@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -364,7 +364,7 @@ func (h *Handler) rememberApplied(ctx context.Context, campaignID string, result
 // ImportTrayList renders the tray under the paste box.
 //
 // GET /campaigns/:id/ai-workspace/import/tray
-func (h *Handler) ImportTrayList(c echo.Context) error {
+func (h *Handler) ImportTrayList(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -376,7 +376,7 @@ func (h *Handler) ImportTrayList(c echo.Context) error {
 // in the campaign changes; only the waiting text goes.
 //
 // POST /campaigns/:id/ai-workspace/import/tray/clear
-func (h *Handler) ClearImportTray(c echo.Context) error {
+func (h *Handler) ClearImportTray(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

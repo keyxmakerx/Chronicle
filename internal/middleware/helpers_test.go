@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -49,7 +49,7 @@ func TestMediaContext(t *testing.T) {
 		t.Fatalf("unsigned fallback = %q", got)
 	}
 
-	MediaSigner = func(echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc) {
+	MediaSigner = func(*echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc) {
 		return func(id string) string { return "/media/" + id + "?sig=1" },
 			func(id, size string) string { return "/media/" + id + "/thumb/" + size + "?sig=1" }
 	}

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -28,7 +28,7 @@ func (h *Handler) SetMentionHider(m sanitize.MentionHider) {
 // and a mention of a page they can't open reads "a hidden page". hidden
 // reports whether their copy left anything out, so a save from it would erase
 // that.
-func (h *Handler) serveRecap(c echo.Context, cc *campaigns.CampaignContext, s *Session) (hidden bool) {
+func (h *Handler) serveRecap(c *echo.Context, cc *campaigns.CampaignContext, s *Session) (hidden bool) {
 	if cc.CanAuthorDmOnly() {
 		return false
 	}

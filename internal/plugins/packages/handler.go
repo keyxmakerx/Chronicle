@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -42,7 +42,7 @@ func (h *Handler) SetTypeUI(t PackageType, ui TypeUI) {
 // ListPackages renders the package management page (GET /admin/packages).
 // The tab, filter, search and open package are query parameters, so every view
 // is a link and survives a reload.
-func (h *Handler) ListPackages(c echo.Context) error {
+func (h *Handler) ListPackages(c *echo.Context) error {
 	q := parsePackagesQuery(
 		c.QueryParam("tab"), c.QueryParam("f"), c.QueryParam("q"),
 		c.QueryParam("pkg"), c.QueryParam("ptab"),
@@ -58,19 +58,19 @@ func (h *Handler) ListPackages(c echo.Context) error {
 
 // backToPage answers a write by sending the admin back to the page they were
 // on, so acting from the open panel does not close it.
-func (h *Handler) backToPage(c echo.Context) error {
+func (h *Handler) backToPage(c *echo.Context) error {
 	return middleware.HTMXRedirect(c, packagesReturnURL(c.Request().Header.Get("HX-Current-URL")))
 }
 
 // wantsFullPage reports whether the request is a browser navigation, as
 // opposed to an HTMX fragment fetch or an API call, which keep their old
 // responses.
-func wantsFullPage(c echo.Context) bool {
+func wantsFullPage(c *echo.Context) bool {
 	return !middleware.IsHTMX(c) && !middleware.IsAPIRequest(c)
 }
 
 // AddPackage registers a new GitHub repository (POST /admin/packages).
-func (h *Handler) AddPackage(c echo.Context) error {
+func (h *Handler) AddPackage(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	var input AddPackageInput
@@ -97,7 +97,7 @@ func (h *Handler) AddPackage(c echo.Context) error {
 // fragment (GET /admin/packages/prune). Dry-run only — nothing deleted.
 // Errors (incl. the fail-closed unwired-provider case) degrade to an
 // empty fragment rather than breaking the packages page.
-func (h *Handler) PrunePreview(c echo.Context) error {
+func (h *Handler) PrunePreview(c *echo.Context) error {
 	res, err := h.service.PruneStaleVersions(c.Request().Context(), 1, true)
 	if err != nil || res == nil {
 		return c.NoContent(http.StatusOK)
@@ -108,7 +108,7 @@ func (h *Handler) PrunePreview(c echo.Context) error {
 // PruneExecute deletes stale version folders (DELETE /admin/packages/prune).
 // The service re-derives the deletion set server-side — the confirm click
 // authorizes the OPERATION, never a client-supplied list.
-func (h *Handler) PruneExecute(c echo.Context) error {
+func (h *Handler) PruneExecute(c *echo.Context) error {
 	res, err := h.service.PruneStaleVersions(c.Request().Context(), 1, false)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -122,7 +122,7 @@ func (h *Handler) PruneExecute(c echo.Context) error {
 }
 
 // RemovePackage deletes a package (DELETE /admin/packages/:id).
-func (h *Handler) RemovePackage(c echo.Context) error {
+func (h *Handler) RemovePackage(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -140,7 +140,7 @@ func (h *Handler) RemovePackage(c echo.Context) error {
 
 // ListVersions returns available versions for a package (GET /admin/packages/:id/versions).
 // Returns an HTMX fragment for the version picker.
-func (h *Handler) ListVersions(c echo.Context) error {
+func (h *Handler) ListVersions(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -167,7 +167,7 @@ func (h *Handler) ListVersions(c echo.Context) error {
 }
 
 // InstallVersion installs a specific version (PUT /admin/packages/:id/version).
-func (h *Handler) InstallVersion(c echo.Context) error {
+func (h *Handler) InstallVersion(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -186,7 +186,7 @@ func (h *Handler) InstallVersion(c echo.Context) error {
 }
 
 // SetPinnedVersion pins a package to a version (PUT /admin/packages/:id/pin).
-func (h *Handler) SetPinnedVersion(c echo.Context) error {
+func (h *Handler) SetPinnedVersion(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -205,7 +205,7 @@ func (h *Handler) SetPinnedVersion(c echo.Context) error {
 }
 
 // ClearPinnedVersion unpins a package (DELETE /admin/packages/:id/pin).
-func (h *Handler) ClearPinnedVersion(c echo.Context) error {
+func (h *Handler) ClearPinnedVersion(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -219,7 +219,7 @@ func (h *Handler) ClearPinnedVersion(c echo.Context) error {
 }
 
 // SetAutoUpdate changes the auto-update policy (PUT /admin/packages/:id/auto-update).
-func (h *Handler) SetAutoUpdate(c echo.Context) error {
+func (h *Handler) SetAutoUpdate(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -242,7 +242,7 @@ func (h *Handler) SetAutoUpdate(c echo.Context) error {
 // (PUT /admin/packages/:id/retention). mode=site clears it; mode=own stores
 // keep_newest. No re-auth, matching auto-update: it only decides how many
 // already-installed old folders may be cleaned up later.
-func (h *Handler) SetRetention(c echo.Context) error {
+func (h *Handler) SetRetention(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -269,7 +269,7 @@ func (h *Handler) SetRetention(c echo.Context) error {
 }
 
 // CheckForUpdates triggers an update check (POST /admin/packages/:id/check).
-func (h *Handler) CheckForUpdates(c echo.Context) error {
+func (h *Handler) CheckForUpdates(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -281,7 +281,7 @@ func (h *Handler) CheckForUpdates(c echo.Context) error {
 }
 
 // GetUsage shows which campaigns use a package (GET /admin/packages/:id/usage).
-func (h *Handler) GetUsage(c echo.Context) error {
+func (h *Handler) GetUsage(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -304,7 +304,7 @@ func (h *Handler) GetUsage(c echo.Context) error {
 // --- Admin Approval Workflow ---
 
 // ListPendingSubmissions shows packages awaiting approval (GET /admin/packages/pending).
-func (h *Handler) ListPendingSubmissions(c echo.Context) error {
+func (h *Handler) ListPendingSubmissions(c *echo.Context) error {
 	// The page lives in the Review tab now; the old address still works.
 	if wantsFullPage(c) {
 		return c.Redirect(http.StatusSeeOther, tabHref(PackagesTabReview))
@@ -321,7 +321,7 @@ func (h *Handler) ListPendingSubmissions(c echo.Context) error {
 }
 
 // ReviewPackage approves or rejects a submission (POST /admin/packages/:id/review).
-func (h *Handler) ReviewPackage(c echo.Context) error {
+func (h *Handler) ReviewPackage(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -345,7 +345,7 @@ func (h *Handler) ReviewPackage(c echo.Context) error {
 }
 
 // UpdateRepoURL changes a package's repository URL (PUT /admin/packages/:id/repo).
-func (h *Handler) UpdateRepoURL(c echo.Context) error {
+func (h *Handler) UpdateRepoURL(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -364,7 +364,7 @@ func (h *Handler) UpdateRepoURL(c echo.Context) error {
 }
 
 // DeprecatePackage marks a package as EOL (POST /admin/packages/:id/deprecate).
-func (h *Handler) DeprecatePackage(c echo.Context) error {
+func (h *Handler) DeprecatePackage(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -383,7 +383,7 @@ func (h *Handler) DeprecatePackage(c echo.Context) error {
 }
 
 // UndeprecatePackage clears deprecation (DELETE /admin/packages/:id/deprecate).
-func (h *Handler) UndeprecatePackage(c echo.Context) error {
+func (h *Handler) UndeprecatePackage(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -403,7 +403,7 @@ func (h *Handler) UndeprecatePackage(c echo.Context) error {
 }
 
 // ArchivePackage hides a package (POST /admin/packages/:id/archive).
-func (h *Handler) ArchivePackage(c echo.Context) error {
+func (h *Handler) ArchivePackage(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -417,7 +417,7 @@ func (h *Handler) ArchivePackage(c echo.Context) error {
 }
 
 // UnarchivePackage restores an archived package (DELETE /admin/packages/:id/archive).
-func (h *Handler) UnarchivePackage(c echo.Context) error {
+func (h *Handler) UnarchivePackage(c *echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
@@ -433,7 +433,7 @@ func (h *Handler) UnarchivePackage(c echo.Context) error {
 // --- Package Security Settings ---
 
 // GetSecuritySettings renders the settings page (GET /admin/packages/settings).
-func (h *Handler) GetSecuritySettings(c echo.Context) error {
+func (h *Handler) GetSecuritySettings(c *echo.Context) error {
 	// The page lives in the Settings tab now; the old address still works.
 	if wantsFullPage(c) {
 		return c.Redirect(http.StatusSeeOther, tabHref(PackagesTabSettings))
@@ -455,7 +455,7 @@ func (h *Handler) GetSecuritySettings(c echo.Context) error {
 }
 
 // SaveSecuritySettings persists settings (POST /admin/packages/settings).
-func (h *Handler) SaveSecuritySettings(c echo.Context) error {
+func (h *Handler) SaveSecuritySettings(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	maxFileSizeMB, _ := strconv.ParseInt(c.FormValue("max_file_size_mb"), 10, 64)

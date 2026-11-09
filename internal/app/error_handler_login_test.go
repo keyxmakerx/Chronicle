@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -26,7 +26,7 @@ func runErrorHandler(t *testing.T, hdrs map[string]string) *httptest.ResponseRec
 	}
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	(&App{}).errorHandler(apperror.NewUnauthorized("auth required"), c)
+	(&App{}).errorHandler(c, apperror.NewUnauthorized("auth required"))
 	return rec
 }
 

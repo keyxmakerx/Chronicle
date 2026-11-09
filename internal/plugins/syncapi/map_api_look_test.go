@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 )
@@ -41,8 +41,7 @@ func TestGetMapLook(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/campaigns/c1/maps/look", nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id")
-			c.SetParamValues("c1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 
 			h := NewMapAPIHandler(nil, tt.svc, nil, nil)
 			if err := h.GetMapLook(c); err != nil {
@@ -76,8 +75,7 @@ func TestGetMapLook_WireKeys(t *testing.T) {
 	e := echo.New()
 	rec := httptest.NewRecorder()
 	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-	c.SetParamNames("id")
-	c.SetParamValues("c1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 	if err := NewMapAPIHandler(nil, &stubMapSvcLook{frame: "old"}, nil, nil).GetMapLook(c); err != nil {
 		t.Fatal(err)
 	}

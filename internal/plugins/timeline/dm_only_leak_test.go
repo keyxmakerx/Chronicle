@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -50,10 +50,10 @@ func newDMOnlyRepo() *mockTimelineRepo {
 	}
 }
 
-// tlTestReq builds an echo.Context carrying a CampaignContext, an optional
+// tlTestReq builds an *echo.Context carrying a CampaignContext, an optional
 // authenticated user id, and the view-as-player toggle: the cookie
 // effectiveRole reads, and the layout flag the templates read when rendering.
-func tlTestReq(path string, cc *campaigns.CampaignContext, userID string, viewAsPlayer bool, htmx bool) echo.Context {
+func tlTestReq(path string, cc *campaigns.CampaignContext, userID string, viewAsPlayer bool, htmx bool) *echo.Context {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	ctx := layouts.SetViewingAsPlayer(req.Context(), viewAsPlayer)
@@ -66,8 +66,7 @@ func tlTestReq(path string, cc *campaigns.CampaignContext, userID string, viewAs
 	}
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "tid")
-	c.SetParamValues("camp-1", "tl-secret")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "tid", Value: "tl-secret"}})
 	c.Set("campaign_context", cc)
 	if userID != "" {
 		c.Set("auth_user_id", userID)
@@ -131,7 +130,7 @@ func TestShow_Owner_DMOnlyTimeline_Succeeds(t *testing.T) {
 	if err := h.Show(c); err != nil {
 		t.Fatalf("Owner must be able to open a dm_only timeline: %v", err)
 	}
-	rec := c.Response().Writer.(*httptest.ResponseRecorder)
+	rec := c.Response().(*echo.Response).ResponseWriter.(*httptest.ResponseRecorder)
 	if !strings.Contains(rec.Body.String(), secretTimeline().Name) {
 		t.Error("Owner's rendered page did not contain the timeline name")
 	}
@@ -144,7 +143,7 @@ func TestShow_CoDM_DMOnlyTimeline_Succeeds(t *testing.T) {
 	if err := h.Show(c); err != nil {
 		t.Fatalf("a co-DM must see a dm_only timeline like an Owner does: %v", err)
 	}
-	rec := c.Response().Writer.(*httptest.ResponseRecorder)
+	rec := c.Response().(*echo.Response).ResponseWriter.(*httptest.ResponseRecorder)
 	if !strings.Contains(rec.Body.String(), secretTimeline().Name) {
 		t.Error("co-DM's rendered page did not contain the timeline name")
 	}
@@ -187,7 +186,7 @@ func TestTimelineDataAPI_Owner_DMOnlyTimeline_Succeeds(t *testing.T) {
 	if err := h.TimelineDataAPI(c); err != nil {
 		t.Fatalf("Owner must be able to fetch dm_only timeline data: %v", err)
 	}
-	rec := c.Response().Writer.(*httptest.ResponseRecorder)
+	rec := c.Response().(*echo.Response).ResponseWriter.(*httptest.ResponseRecorder)
 	if !strings.Contains(rec.Body.String(), secretTimeline().Name) {
 		t.Error("Owner's JSON response did not contain the timeline name")
 	}
@@ -200,7 +199,7 @@ func TestTimelineDataAPI_CoDM_DMOnlyTimeline_Succeeds(t *testing.T) {
 	if err := h.TimelineDataAPI(c); err != nil {
 		t.Fatalf("a co-DM must be able to fetch dm_only timeline data: %v", err)
 	}
-	rec := c.Response().Writer.(*httptest.ResponseRecorder)
+	rec := c.Response().(*echo.Response).ResponseWriter.(*httptest.ResponseRecorder)
 	if !strings.Contains(rec.Body.String(), secretTimeline().Name) {
 		t.Error("co-DM's JSON response did not contain the timeline name")
 	}
@@ -220,7 +219,7 @@ func TestEmbedTimeline_Anonymous_DMOnlyTimeline_RendersEmpty(t *testing.T) {
 	if err := h.EmbedTimeline(c); err != nil {
 		t.Fatalf("EmbedTimeline must not error, even for a hidden id: %v", err)
 	}
-	rec := c.Response().Writer.(*httptest.ResponseRecorder)
+	rec := c.Response().(*echo.Response).ResponseWriter.(*httptest.ResponseRecorder)
 	body := rec.Body.String()
 	if strings.Contains(body, secretTimeline().Name) {
 		t.Errorf("anonymous viewer's embed fragment leaked the dm_only timeline's name: %s", body)
@@ -234,7 +233,7 @@ func TestEmbedTimeline_PlainPlayer_DMOnlyTimeline_RendersEmpty(t *testing.T) {
 	if err := h.EmbedTimeline(c); err != nil {
 		t.Fatalf("EmbedTimeline must not error, even for a hidden id: %v", err)
 	}
-	rec := c.Response().Writer.(*httptest.ResponseRecorder)
+	rec := c.Response().(*echo.Response).ResponseWriter.(*httptest.ResponseRecorder)
 	body := rec.Body.String()
 	if strings.Contains(body, secretTimeline().Name) {
 		t.Errorf("Player's embed fragment leaked the dm_only timeline's name: %s", body)
@@ -248,7 +247,7 @@ func TestEmbedTimeline_Owner_DMOnlyTimeline_RendersFragment(t *testing.T) {
 	if err := h.EmbedTimeline(c); err != nil {
 		t.Fatalf("EmbedTimeline must not error: %v", err)
 	}
-	rec := c.Response().Writer.(*httptest.ResponseRecorder)
+	rec := c.Response().(*echo.Response).ResponseWriter.(*httptest.ResponseRecorder)
 	body := rec.Body.String()
 	if !strings.Contains(body, secretTimeline().Name) {
 		t.Errorf("Owner's embed fragment should contain the timeline name, got: %s", body)
@@ -262,7 +261,7 @@ func TestEmbedTimeline_CoDM_DMOnlyTimeline_RendersFragment(t *testing.T) {
 	if err := h.EmbedTimeline(c); err != nil {
 		t.Fatalf("EmbedTimeline must not error: %v", err)
 	}
-	rec := c.Response().Writer.(*httptest.ResponseRecorder)
+	rec := c.Response().(*echo.Response).ResponseWriter.(*httptest.ResponseRecorder)
 	body := rec.Body.String()
 	if !strings.Contains(body, secretTimeline().Name) {
 		t.Errorf("co-DM's embed fragment should contain the timeline name, got: %s", body)

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -55,7 +55,7 @@ func (h *Handler) SetBaseURL(url string) {
 // --- Campaign Owner: API Key Management ---
 
 // KeysPage renders the API keys management page for a campaign (GET /campaigns/:id/api-keys).
-func (h *Handler) KeysPage(c echo.Context) error {
+func (h *Handler) KeysPage(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -77,7 +77,7 @@ func (h *Handler) KeysPage(c echo.Context) error {
 // for the Settings > API keys tab. Includes connection status, key cards,
 // and the inline key creation form.
 // GET /campaigns/:id/integrations/keys
-func (h *Handler) IntegrationsKeysFragment(c echo.Context) error {
+func (h *Handler) IntegrationsKeysFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -97,7 +97,7 @@ func (h *Handler) IntegrationsKeysFragment(c echo.Context) error {
 }
 
 // CreateKey handles POST /campaigns/:id/api-keys to create a new API key.
-func (h *Handler) CreateKey(c echo.Context) error {
+func (h *Handler) CreateKey(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -172,7 +172,7 @@ func (h *Handler) CreateKey(c echo.Context) error {
 }
 
 // ToggleKey handles PUT /campaigns/:id/api-keys/:keyID/toggle.
-func (h *Handler) ToggleKey(c echo.Context) error {
+func (h *Handler) ToggleKey(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -210,7 +210,7 @@ func (h *Handler) ToggleKey(c echo.Context) error {
 }
 
 // RevokeKey handles DELETE /campaigns/:id/api-keys/:keyID.
-func (h *Handler) RevokeKey(c echo.Context) error {
+func (h *Handler) RevokeKey(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -243,7 +243,7 @@ func (h *Handler) RevokeKey(c echo.Context) error {
 // SyncStatusEmbed returns an HTMX fragment showing Foundry sync health for a campaign.
 // Displays active keys, last sync time, and request stats.
 // GET /campaigns/:id/sync-status
-func (h *Handler) SyncStatusEmbed(c echo.Context) error {
+func (h *Handler) SyncStatusEmbed(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -264,7 +264,7 @@ func (h *Handler) SyncStatusEmbed(c echo.Context) error {
 // With embed=1 it is the lighter version that sits inside the Foundry page's
 // Connection card instead of a card of its own.
 // GET /campaigns/:id/api-keys/sync-overview
-func (h *Handler) SyncOverviewFragment(c echo.Context) error {
+func (h *Handler) SyncOverviewFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -291,7 +291,7 @@ func (h *Handler) SyncOverviewFragment(c echo.Context) error {
 
 // SyncMappingsFragment returns an HTMX fragment with the paginated sync mappings table.
 // GET /campaigns/:id/api-keys/sync-mappings?search=&type=&sort=&offset=0
-func (h *Handler) SyncMappingsFragment(c echo.Context) error {
+func (h *Handler) SyncMappingsFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -357,7 +357,7 @@ type CalendarSyncBeaconResponse struct {
 // pre-filtering by age here.
 //
 // GET /campaigns/:id/calendar-sync-beacon
-func (h *Handler) GetCalendarSyncBeacon(c echo.Context) error {
+func (h *Handler) GetCalendarSyncBeacon(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("campaign context required")
@@ -391,7 +391,7 @@ func (h *Handler) GetCalendarSyncBeacon(c echo.Context) error {
 // --- Admin: API Monitoring Dashboard ---
 
 // AdminDashboard renders the admin API monitoring page (GET /admin/api).
-func (h *Handler) AdminDashboard(c echo.Context) error {
+func (h *Handler) AdminDashboard(c *echo.Context) error {
 	ctx := c.Request().Context()
 	since := time.Now().Add(-24 * time.Hour)
 
@@ -449,7 +449,7 @@ func (h *Handler) AdminDashboard(c echo.Context) error {
 }
 
 // AdminRequestLogs returns paginated request logs (GET /admin/api/logs).
-func (h *Handler) AdminRequestLogs(c echo.Context) error {
+func (h *Handler) AdminRequestLogs(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	filter := RequestLogFilter{Limit: 50}
@@ -479,7 +479,7 @@ func (h *Handler) AdminRequestLogs(c echo.Context) error {
 }
 
 // AdminSecurityEvents returns paginated security events (GET /admin/api/security).
-func (h *Handler) AdminSecurityEvents(c echo.Context) error {
+func (h *Handler) AdminSecurityEvents(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	filter := SecurityEventFilter{Limit: 50}
@@ -509,7 +509,7 @@ func (h *Handler) AdminSecurityEvents(c echo.Context) error {
 }
 
 // ResolveEvent handles PUT /admin/api/security/:eventID/resolve.
-func (h *Handler) ResolveEvent(c echo.Context) error {
+func (h *Handler) ResolveEvent(c *echo.Context) error {
 	eventID, err := strconv.ParseInt(c.Param("eventID"), 10, 64)
 	if err != nil {
 		return apperror.NewBadRequest("invalid event ID")
@@ -526,7 +526,7 @@ func (h *Handler) ResolveEvent(c echo.Context) error {
 }
 
 // BlockIP handles POST /admin/api/ip-blocks to add an IP block.
-func (h *Handler) BlockIP(c echo.Context) error {
+func (h *Handler) BlockIP(c *echo.Context) error {
 	adminID := auth.GetUserID(c)
 
 	var expiresAt *time.Time
@@ -552,7 +552,7 @@ func (h *Handler) BlockIP(c echo.Context) error {
 }
 
 // UnblockIP handles DELETE /admin/api/ip-blocks/:blockID.
-func (h *Handler) UnblockIP(c echo.Context) error {
+func (h *Handler) UnblockIP(c *echo.Context) error {
 	blockID, err := strconv.Atoi(c.Param("blockID"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid block ID")
@@ -579,7 +579,7 @@ func (h *Handler) UnblockIP(c echo.Context) error {
 }
 
 // AdminToggleKey handles PUT /admin/api/keys/:keyID/toggle — admin can activate/deactivate any key.
-func (h *Handler) AdminToggleKey(c echo.Context) error {
+func (h *Handler) AdminToggleKey(c *echo.Context) error {
 	keyID, err := strconv.Atoi(c.Param("keyID"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid key ID")
@@ -606,7 +606,7 @@ func (h *Handler) AdminToggleKey(c echo.Context) error {
 
 // keyLabel is the key's name for the activity log, or "" when it cannot be
 // read; the log then falls back to a generic label.
-func (h *Handler) keyLabel(c echo.Context, keyID int) string {
+func (h *Handler) keyLabel(c *echo.Context, keyID int) string {
 	k, err := h.service.GetKey(c.Request().Context(), keyID)
 	if err != nil || k == nil {
 		return ""
@@ -615,7 +615,7 @@ func (h *Handler) keyLabel(c echo.Context, keyID int) string {
 }
 
 // AdminRevokeKey handles DELETE /admin/api/keys/:keyID — admin can revoke any key.
-func (h *Handler) AdminRevokeKey(c echo.Context) error {
+func (h *Handler) AdminRevokeKey(c *echo.Context) error {
 	keyID, err := strconv.Atoi(c.Param("keyID"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid key ID")

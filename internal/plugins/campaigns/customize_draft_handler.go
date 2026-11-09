@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -52,7 +52,7 @@ type draftRequest struct {
 // draftContext does the checks every draft route shares: a campaign, an owner
 // and a wired store. The route group already requires the owner; this keeps
 // the handler safe if it is ever mounted elsewhere.
-func (h *Handler) draftContext(c echo.Context) (*CampaignContext, string, error) {
+func (h *Handler) draftContext(c *echo.Context) (*CampaignContext, string, error) {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return nil, "", apperror.NewMissingContext()
@@ -67,7 +67,7 @@ func (h *Handler) draftContext(c echo.Context) (*CampaignContext, string, error)
 }
 
 // GetCustomizeDraftAPI handles GET /campaigns/:id/customize/draft.
-func (h *Handler) GetCustomizeDraftAPI(c echo.Context) error {
+func (h *Handler) GetCustomizeDraftAPI(c *echo.Context) error {
 	cc, userID, err := h.draftContext(c)
 	if err != nil {
 		return err
@@ -81,7 +81,7 @@ func (h *Handler) GetCustomizeDraftAPI(c echo.Context) error {
 
 // PutCustomizeDraftAPI handles PUT /campaigns/:id/customize/draft. The page
 // calls it (debounced) as the owner edits.
-func (h *Handler) PutCustomizeDraftAPI(c echo.Context) error {
+func (h *Handler) PutCustomizeDraftAPI(c *echo.Context) error {
 	cc, userID, err := h.draftContext(c)
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func (h *Handler) PutCustomizeDraftAPI(c echo.Context) error {
 }
 
 // DeleteCustomizeDraftAPI handles DELETE /campaigns/:id/customize/draft?version=n.
-func (h *Handler) DeleteCustomizeDraftAPI(c echo.Context) error {
+func (h *Handler) DeleteCustomizeDraftAPI(c *echo.Context) error {
 	cc, userID, err := h.draftContext(c)
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ func publishLock(campaignID, userID string) *sync.Mutex {
 // every section of the stored draft, each by the code that owns it. A section
 // that fails stays in the draft, with whatever of it was not applied, so one
 // bad section never costs the owner the rest of their work.
-func (h *Handler) PublishCustomizeAPI(c echo.Context) error {
+func (h *Handler) PublishCustomizeAPI(c *echo.Context) error {
 	cc, userID, err := h.draftContext(c)
 	if err != nil {
 		return err
@@ -300,7 +300,7 @@ func draftPayload(d *CustomizeDraft) map[string]any {
 // draftConflictOr answers a version Conflict with the standard error body plus
 // the current version and draft, so the page can show what changed without a
 // second request. Any other error is returned for the error handler.
-func (h *Handler) draftConflictOr(c echo.Context, cc *CampaignContext, userID string, err error) error {
+func (h *Handler) draftConflictOr(c *echo.Context, cc *CampaignContext, userID string, err error) error {
 	if apperror.SafeCode(err) != http.StatusConflict {
 		return err
 	}

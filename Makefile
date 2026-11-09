@@ -187,8 +187,8 @@ security: ## Run gosec security scanner
 	gosec ./...
 
 .PHONY: vuln
-vuln: ## Run govulncheck dependency vulnerability scanner
-	govulncheck ./...
+vuln: ## Run govulncheck (same allow-list as CI)
+	./tools/check-govulncheck.sh
 
 # --- Database Migrations ---
 .PHONY: migrate-up

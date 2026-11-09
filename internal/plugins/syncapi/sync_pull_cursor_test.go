@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -50,15 +50,14 @@ func (s *bigCampaignEntityService) List(_ context.Context, campaignID string, _ 
 	return out, s.total, nil
 }
 
-func newSyncContext(t *testing.T, body string) (echo.Context, *httptest.ResponseRecorder) {
+func newSyncContext(t *testing.T, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/campaigns/camp-1/sync", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set(apiKeyContextKey, &APIKey{
 		ID:         synthKeySessionID,
 		CampaignID: "camp-1",

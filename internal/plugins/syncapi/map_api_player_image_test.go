@@ -12,7 +12,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 const playerImageAPIPrefix = `"player_image_url":"/api/v1/campaigns/camp-1/maps/map-1/player-image?v=`
@@ -64,7 +64,7 @@ func TestMapAPIHandler_PlayerImageAPIURL(t *testing.T) {
 			svc.SetShadowLookup(tc.shadows)
 			h := NewMapAPIHandler(nil, svc, nil, &stubCampaignSvcOwnerGate{role: tc.role})
 			key := &APIKey{CampaignID: "camp-1", UserID: "u1"}
-			for name, call := range map[string]func(echo.Context) error{"GetMap": h.GetMap, "ListMaps": h.ListMaps} {
+			for name, call := range map[string]func(*echo.Context) error{"GetMap": h.GetMap, "ListMaps": h.ListMaps} {
 				c, rec := newMapAPIContext(http.MethodGet, "/", key)
 				if err := call(c); err != nil || rec.Code != http.StatusOK {
 					t.Fatalf("%s: code=%d err=%v", name, rec.Code, err)

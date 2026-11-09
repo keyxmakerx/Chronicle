@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -195,7 +195,7 @@ func TestInstanceManagementRoleGate(t *testing.T) {
 			c := e.NewContext(httptest.NewRequest(http.MethodPut, "/", nil), httptest.NewRecorder())
 			c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: tt.role})
 			called := false
-			err := campaigns.RequireRole(campaigns.RoleScribe)(func(c echo.Context) error { called = true; return nil })(c)
+			err := campaigns.RequireRole(campaigns.RoleScribe)(func(c *echo.Context) error { called = true; return nil })(c)
 			if tt.allowed && (err != nil || !called) {
 				t.Errorf("role %v should pass the Scribe gate (err=%v)", tt.role, err)
 			}

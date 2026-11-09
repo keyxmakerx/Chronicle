@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -36,7 +36,7 @@ type apiFolder struct {
 
 // ListFolders handles GET /api/v1/campaigns/:id/folders. Only folders in
 // categories this key may see are listed, the same rule as /entity-types.
-func (h *APIHandler) ListFolders(c echo.Context) error {
+func (h *APIHandler) ListFolders(c *echo.Context) error {
 	if h.folders == nil {
 		return apperror.NewNotFound("this Chronicle does not list folders")
 	}

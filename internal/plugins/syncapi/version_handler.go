@@ -7,7 +7,7 @@ package syncapi
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/hostinfo"
 )
@@ -19,6 +19,6 @@ import (
 // Resolution lives in internal/hostinfo (this handler stays thin). Precedence:
 // CHRONICLE_VERSION → the VCS revision compiled into the binary → the main
 // module version → the literal "unknown".
-func VersionHandler(c echo.Context) error {
+func VersionHandler(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"version": hostinfo.Version()})
 }

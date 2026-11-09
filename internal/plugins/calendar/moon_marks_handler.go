@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -23,7 +23,7 @@ func (h *Handler) markService() (MoonMarkService, error) {
 	return ms, nil
 }
 
-func moonIDParam(c echo.Context) (int, error) {
+func moonIDParam(c *echo.Context) (int, error) {
 	id, err := strconv.Atoi(c.Param("moonID"))
 	if err != nil {
 		return 0, apperror.NewBadRequest("invalid moon id")
@@ -34,7 +34,7 @@ func moonIDParam(c echo.Context) (int, error) {
 // SetMoonModeAPI switches a moon between its cycle and being set by hand.
 // PUT /campaigns/:id/calendars/:calid/moons/:moonID/mode
 // {"mode":"manual","state_names":{"vanished":"Gone below"}}
-func (h *Handler) SetMoonModeAPI(c echo.Context) error {
+func (h *Handler) SetMoonModeAPI(c *echo.Context) error {
 	ms, err := h.markService()
 	if err != nil {
 		return err
@@ -61,7 +61,7 @@ func (h *Handler) SetMoonModeAPI(c echo.Context) error {
 // SetMoonMarkAPI sets a hand-set moon's state from a day on.
 // PUT /campaigns/:id/calendars/:calid/moons/:moonID/marks
 // {"year":1043,"month":3,"day":22,"state":"vanished","shown":true}
-func (h *Handler) SetMoonMarkAPI(c echo.Context) error {
+func (h *Handler) SetMoonMarkAPI(c *echo.Context) error {
 	ms, err := h.markService()
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ func (h *Handler) SetMoonMarkAPI(c echo.Context) error {
 
 // DeleteMoonMarkAPI removes the mark on a day.
 // DELETE /campaigns/:id/calendars/:calid/moons/:moonID/marks?year=&month=&day=
-func (h *Handler) DeleteMoonMarkAPI(c echo.Context) error {
+func (h *Handler) DeleteMoonMarkAPI(c *echo.Context) error {
 	ms, err := h.markService()
 	if err != nil {
 		return err

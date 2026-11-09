@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -246,11 +246,11 @@ func (h *Handler) SetSystemLister(lister SystemLister) {
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
 // never block the primary operation.
-func (h *Handler) logAudit(c echo.Context, campaignID, action string, details map[string]any) {
+func (h *Handler) logAudit(c *echo.Context, campaignID, action string, details map[string]any) {
 	h.logAuditCtx(c.Request().Context(), campaignID, auth.GetUserID(c), action, details)
 }
 
-// logAuditCtx is logAudit for callers with no echo.Context, such as a
+// logAuditCtx is logAudit for callers with no *echo.Context, such as a
 // Customize section applied from a stored draft.
 func (h *Handler) logAuditCtx(ctx context.Context, campaignID, userID, action string, details map[string]any) {
 	if h.auditLogger == nil {
@@ -264,7 +264,7 @@ func (h *Handler) logAuditCtx(ctx context.Context, campaignID, userID, action st
 // --- Campaign CRUD ---
 
 // Index renders the campaign list page (GET /campaigns).
-func (h *Handler) Index(c echo.Context) error {
+func (h *Handler) Index(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 
 	page, _ := strconv.Atoi(c.QueryParam("page"))
@@ -288,7 +288,7 @@ func (h *Handler) Index(c echo.Context) error {
 
 // Picker returns an HTMX fragment listing the user's campaigns for the
 // topbar campaign selector dropdown. Loads lazily on dropdown open.
-func (h *Handler) Picker(c echo.Context) error {
+func (h *Handler) Picker(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 
 	// Fetch all campaigns (up to 50 — most users have far fewer).
@@ -309,13 +309,13 @@ func (h *Handler) Picker(c echo.Context) error {
 }
 
 // NewForm renders the campaign creation form (GET /campaigns/new).
-func (h *Handler) NewForm(c echo.Context) error {
+func (h *Handler) NewForm(c *echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, CampaignNewPage(csrfToken, "", ""))
 }
 
 // Create processes the campaign creation form (POST /campaigns).
-func (h *Handler) Create(c echo.Context) error {
+func (h *Handler) Create(c *echo.Context) error {
 	var req CreateCampaignRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -351,7 +351,7 @@ func (h *Handler) Create(c echo.Context) error {
 // Show renders the campaign dashboard (GET /campaigns/:id).
 // Uses role-aware dashboard layout: each role can have its own Campaign Page
 // layout, falling back to the default layout.
-func (h *Handler) Show(c echo.Context) error {
+func (h *Handler) Show(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -391,7 +391,7 @@ func (h *Handler) Show(c echo.Context) error {
 
 // EditForm redirects to the unified settings page (GET /campaigns/:id/edit).
 // Kept for backward compatibility with bookmarks and links.
-func (h *Handler) EditForm(c echo.Context) error {
+func (h *Handler) EditForm(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -400,7 +400,7 @@ func (h *Handler) EditForm(c echo.Context) error {
 }
 
 // Update processes the campaign edit form (PUT /campaigns/:id).
-func (h *Handler) Update(c echo.Context) error {
+func (h *Handler) Update(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -430,7 +430,7 @@ func (h *Handler) Update(c echo.Context) error {
 // Delete moves a campaign to the site Trash (DELETE /campaigns/:id). The owner
 // sees it vanish; only a site admin can bring it back. Requires the request to
 // include a confirm_name field that matches the campaign name exactly (S4).
-func (h *Handler) Delete(c echo.Context) error {
+func (h *Handler) Delete(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -459,7 +459,7 @@ func (h *Handler) Delete(c echo.Context) error {
 
 // UpdateBrandingAPI handles PUT /campaigns/:id/branding. Sets the campaign's
 // custom brand name and optional logo path.
-func (h *Handler) UpdateBrandingAPI(c echo.Context) error {
+func (h *Handler) UpdateBrandingAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -491,7 +491,7 @@ func (h *Handler) UpdateBrandingAPI(c echo.Context) error {
 
 // UpdateDmGrantsAPI handles PUT /campaigns/:id/dm-grants. Sets which users
 // are granted visibility of dm_only content (co-DM privileges).
-func (h *Handler) UpdateDmGrantsAPI(c echo.Context) error {
+func (h *Handler) UpdateDmGrantsAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -519,7 +519,7 @@ func (h *Handler) UpdateDmGrantsAPI(c echo.Context) error {
 
 // GetDmGrantsAPI handles GET /campaigns/:id/dm-grants. Returns the current
 // list of users granted dm_only visibility.
-func (h *Handler) GetDmGrantsAPI(c echo.Context) error {
+func (h *Handler) GetDmGrantsAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -542,7 +542,7 @@ func (h *Handler) GetDmGrantsAPI(c echo.Context) error {
 // Returns the per-campaign event tier vocabulary, falling back to the
 // platform default trio when no override is set. Campaign-config surface,
 // NOT exposed via syncapi.
-func (h *Handler) GetEventTierDefinitionsAPI(c echo.Context) error {
+func (h *Handler) GetEventTierDefinitionsAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -561,7 +561,7 @@ func (h *Handler) GetEventTierDefinitionsAPI(c echo.Context) error {
 // Replaces the campaign's tier vocabulary. Validation (exactly-one-default,
 // non-empty array, unique slugs, hex color, prominence 0-100) runs at the
 // service layer.
-func (h *Handler) UpdateEventTierDefinitionsAPI(c echo.Context) error {
+func (h *Handler) UpdateEventTierDefinitionsAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -583,7 +583,7 @@ func (h *Handler) UpdateEventTierDefinitionsAPI(c echo.Context) error {
 
 // UpdateWelcomeMessageAPI handles PUT /campaigns/:id/welcome-message. Sets the
 // campaign's MOTD banner displayed on the dashboard.
-func (h *Handler) UpdateWelcomeMessageAPI(c echo.Context) error {
+func (h *Handler) UpdateWelcomeMessageAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -610,7 +610,7 @@ func (h *Handler) UpdateWelcomeMessageAPI(c echo.Context) error {
 
 // UpdateDefaultVisibilityAPI handles PUT /campaigns/:id/default-visibility. Sets
 // the default visibility applied to newly created entities.
-func (h *Handler) UpdateDefaultVisibilityAPI(c echo.Context) error {
+func (h *Handler) UpdateDefaultVisibilityAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -638,7 +638,7 @@ func (h *Handler) UpdateDefaultVisibilityAPI(c echo.Context) error {
 // UpdateHandoverSettingAPI saves the owner's "If you're away" choice
 // (PUT /campaigns/:id/handover-setting). Only the owner themself may set
 // it: it decides when others can take their campaign, so a Co-DM can't.
-func (h *Handler) UpdateHandoverSettingAPI(c echo.Context) error {
+func (h *Handler) UpdateHandoverSettingAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -663,7 +663,7 @@ func (h *Handler) UpdateHandoverSettingAPI(c echo.Context) error {
 
 // Settings renders the campaign settings page (GET /campaigns/:id/settings).
 // Supports ?tab= query param to open a specific tab (general, people, integrations, activity).
-func (h *Handler) Settings(c echo.Context) error {
+func (h *Handler) Settings(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -710,7 +710,7 @@ func (h *Handler) Settings(c echo.Context) error {
 // to the top-level Extensions hub, which now owns the per-campaign feature
 // catalog. Sub-fragment route (`/plugins/fragment`) stays for any HTMX
 // consumers still pointed at it.
-func (h *Handler) PluginHub(c echo.Context) error {
+func (h *Handler) PluginHub(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -721,7 +721,7 @@ func (h *Handler) PluginHub(c echo.Context) error {
 // PluginHubFragment returns the plugin hub list content as an HTMX fragment.
 // Used for in-place refresh after toggling features.
 // GET /campaigns/:id/plugins/fragment
-func (h *Handler) PluginHubFragment(c echo.Context) error {
+func (h *Handler) PluginHubFragment(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -746,7 +746,7 @@ func (h *Handler) PluginHubFragment(c echo.Context) error {
 // --- Sidebar Config API ---
 
 // GetSidebarConfig returns the sidebar configuration as JSON (GET /campaigns/:id/sidebar-config).
-func (h *Handler) GetSidebarConfig(c echo.Context) error {
+func (h *Handler) GetSidebarConfig(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -761,7 +761,7 @@ func (h *Handler) GetSidebarConfig(c echo.Context) error {
 }
 
 // UpdateSidebarConfig updates the sidebar configuration (PUT /campaigns/:id/sidebar-config).
-func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
+func (h *Handler) UpdateSidebarConfig(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -782,7 +782,7 @@ func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 // UpdateNavPins stores the caller's own pinned sidebar rows for this campaign
 // (PUT /campaigns/:id/nav-pins, body {"pins": ["app:x", "cat:12"]}) and
 // returns what was stored.
-func (h *Handler) UpdateNavPins(c echo.Context) error {
+func (h *Handler) UpdateNavPins(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -806,7 +806,7 @@ func (h *Handler) UpdateNavPins(c echo.Context) error {
 // (GET /campaigns/:id/sidebar/drill/:slug). The LayoutInjector populates
 // entity types and counts into the context, and the Templ component finds
 // the matching entity type by slug.
-func (h *Handler) SidebarDrill(c echo.Context) error {
+func (h *Handler) SidebarDrill(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -824,7 +824,7 @@ func (h *Handler) SidebarDrill(c echo.Context) error {
 
 // homeAudienceParam reads ?role= (default when absent) and refuses a name that
 // isn't a home audience, so a typo can't overwrite the Default home.
-func homeAudienceParam(c echo.Context) (string, error) {
+func homeAudienceParam(c *echo.Context) (string, error) {
 	roleName := c.QueryParam("role")
 	if roleName == "" {
 		roleName = HomeDefault
@@ -839,7 +839,7 @@ func homeAudienceParam(c echo.Context) (string, error) {
 // Supports ?role= (default/player/scribe/director/guest). With nothing saved
 // for that audience it returns the layout the audience sees instead, so the
 // editor opens on the real page; X-Layout-Saved says which it is.
-func (h *Handler) GetDashboardLayout(c echo.Context) error {
+func (h *Handler) GetDashboardLayout(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -863,7 +863,7 @@ func (h *Handler) GetDashboardLayout(c echo.Context) error {
 
 // UpdateDashboardLayout saves a new dashboard layout (PUT /campaigns/:id/dashboard-layout).
 // Supports ?role= (default/player/scribe/director/guest) to update one audience's layout.
-func (h *Handler) UpdateDashboardLayout(c echo.Context) error {
+func (h *Handler) UpdateDashboardLayout(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -905,7 +905,7 @@ func (h *Handler) UpdateDashboardLayout(c echo.Context) error {
 // ResetDashboardLayout removes the custom dashboard layout (DELETE /campaigns/:id/dashboard-layout).
 // Supports ?role=. If "default", resets entire layout; any other audience
 // removes only its own layout.
-func (h *Handler) ResetDashboardLayout(c echo.Context) error {
+func (h *Handler) ResetDashboardLayout(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -943,7 +943,7 @@ func (h *Handler) ResetDashboardLayout(c echo.Context) error {
 // --- Owner Dashboard ---
 
 // OwnerDashboard renders the owner-only management dashboard (GET /campaigns/:id/dashboard).
-func (h *Handler) OwnerDashboard(c echo.Context) error {
+func (h *Handler) OwnerDashboard(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -963,7 +963,7 @@ func (h *Handler) OwnerDashboard(c echo.Context) error {
 }
 
 // GetOwnerDashboardLayout returns the owner dashboard layout JSON (GET /campaigns/:id/owner-dashboard-layout).
-func (h *Handler) GetOwnerDashboardLayout(c echo.Context) error {
+func (h *Handler) GetOwnerDashboardLayout(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -978,7 +978,7 @@ func (h *Handler) GetOwnerDashboardLayout(c echo.Context) error {
 }
 
 // UpdateOwnerDashboardLayout saves the owner dashboard layout (PUT /campaigns/:id/owner-dashboard-layout).
-func (h *Handler) UpdateOwnerDashboardLayout(c echo.Context) error {
+func (h *Handler) UpdateOwnerDashboardLayout(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -998,7 +998,7 @@ func (h *Handler) UpdateOwnerDashboardLayout(c echo.Context) error {
 }
 
 // ResetOwnerDashboardLayout removes the custom owner dashboard layout (DELETE /campaigns/:id/owner-dashboard-layout).
-func (h *Handler) ResetOwnerDashboardLayout(c echo.Context) error {
+func (h *Handler) ResetOwnerDashboardLayout(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1021,7 +1021,7 @@ const viewAsPlayerCookie = "chronicle_view_as_player"
 // on. Handlers read it themselves because the layout context that also
 // carries it is only filled in when a page renders. Display only: never use
 // it to grant.
-func ViewingAsPlayer(c echo.Context, cc *CampaignContext) bool {
+func ViewingAsPlayer(c *echo.Context, cc *CampaignContext) bool {
 	if cc == nil || !cc.CanAuthorDmOnly() {
 		return false
 	}
@@ -1033,7 +1033,7 @@ func ViewingAsPlayer(c echo.Context, cc *CampaignContext) bool {
 // co-DMs (POST /campaigns/:id/toggle-view-mode). When active, templates
 // render as if they had the Player role, hiding DM-only UI and private
 // entities. Display only: access control still uses their real role.
-func (h *Handler) ToggleViewAsPlayer(c echo.Context) error {
+func (h *Handler) ToggleViewAsPlayer(c *echo.Context) error {
 	// Read current cookie state and toggle.
 	viewing := false
 	if cookie, err := c.Cookie(viewAsPlayerCookie); err == nil && cookie.Value == "1" {
@@ -1092,7 +1092,7 @@ func (h *Handler) ToggleViewAsPlayer(c echo.Context) error {
 
 // Members returns the member list as JSON for API consumers (Alpine.js pickers)
 // or redirects HTML requests to the settings People tab.
-func (h *Handler) Members(c echo.Context) error {
+func (h *Handler) Members(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1142,7 +1142,7 @@ func redactMemberEmails(members []CampaignMember, viewer Role, viewerID string) 
 
 // renderPeoplePage renders the People page. The add-member error path shares
 // it so a failed add redraws the whole page, not a bare list.
-func (h *Handler) renderPeoplePage(c echo.Context, cc *CampaignContext, members []CampaignMember, errMsg string) error {
+func (h *Handler) renderPeoplePage(c *echo.Context, cc *CampaignContext, members []CampaignMember, errMsg string) error {
 	ctx := c.Request().Context()
 	transfer, _ := h.service.GetPendingTransfer(ctx, cc.Campaign.ID)
 	smtpConfigured := h.smtpChecker != nil && h.smtpChecker.IsConfigured(ctx)
@@ -1150,7 +1150,7 @@ func (h *Handler) renderPeoplePage(c echo.Context, cc *CampaignContext, members 
 }
 
 // AddMember adds a user to the campaign (POST /campaigns/:id/members).
-func (h *Handler) AddMember(c echo.Context) error {
+func (h *Handler) AddMember(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1188,7 +1188,7 @@ func (h *Handler) AddMember(c echo.Context) error {
 }
 
 // RemoveMember removes a user from the campaign (DELETE /campaigns/:id/members/:uid).
-func (h *Handler) RemoveMember(c echo.Context) error {
+func (h *Handler) RemoveMember(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1216,7 +1216,7 @@ func (h *Handler) RemoveMember(c echo.Context) error {
 }
 
 // UpdateRole changes a member's role (PUT /campaigns/:id/members/:uid/role).
-func (h *Handler) UpdateRole(c echo.Context) error {
+func (h *Handler) UpdateRole(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1268,7 +1268,7 @@ func (h *Handler) freshContext(ctx context.Context, cc *CampaignContext) *Campai
 
 // UpdateMemberCharacterAPI sets a member's character entity assignment.
 // PUT /campaigns/:id/members/:uid/character
-func (h *Handler) UpdateMemberCharacterAPI(c echo.Context) error {
+func (h *Handler) UpdateMemberCharacterAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1292,7 +1292,7 @@ func (h *Handler) UpdateMemberCharacterAPI(c echo.Context) error {
 // --- Ownership Transfer ---
 
 // TransferForm renders the ownership transfer form (GET /campaigns/:id/transfer).
-func (h *Handler) TransferForm(c echo.Context) error {
+func (h *Handler) TransferForm(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1305,7 +1305,7 @@ func (h *Handler) TransferForm(c echo.Context) error {
 }
 
 // Transfer initiates an ownership transfer (POST /campaigns/:id/transfer).
-func (h *Handler) Transfer(c echo.Context) error {
+func (h *Handler) Transfer(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1330,7 +1330,7 @@ func (h *Handler) Transfer(c echo.Context) error {
 }
 
 // AcceptTransfer accepts a pending ownership transfer (GET /campaigns/:id/accept-transfer).
-func (h *Handler) AcceptTransfer(c echo.Context) error {
+func (h *Handler) AcceptTransfer(c *echo.Context) error {
 	token := c.QueryParam("token")
 	if token == "" {
 		return apperror.NewBadRequest("transfer token is required")
@@ -1346,7 +1346,7 @@ func (h *Handler) AcceptTransfer(c echo.Context) error {
 }
 
 // CancelTransfer cancels a pending ownership transfer (POST /campaigns/:id/cancel-transfer).
-func (h *Handler) CancelTransfer(c echo.Context) error {
+func (h *Handler) CancelTransfer(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1384,7 +1384,7 @@ type addGroupMemberRequest struct {
 }
 
 // ListGroupsAPI returns all groups for a campaign (GET /campaigns/:id/groups).
-func (h *Handler) ListGroupsAPI(c echo.Context) error {
+func (h *Handler) ListGroupsAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1399,7 +1399,7 @@ func (h *Handler) ListGroupsAPI(c echo.Context) error {
 }
 
 // CreateGroupAPI creates a new campaign group (POST /campaigns/:id/groups).
-func (h *Handler) CreateGroupAPI(c echo.Context) error {
+func (h *Handler) CreateGroupAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1424,7 +1424,7 @@ func (h *Handler) CreateGroupAPI(c echo.Context) error {
 }
 
 // GetGroupAPI returns a single group with its members (GET /campaigns/:id/groups/:gid).
-func (h *Handler) GetGroupAPI(c echo.Context) error {
+func (h *Handler) GetGroupAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1456,7 +1456,7 @@ func (h *Handler) GetGroupAPI(c echo.Context) error {
 }
 
 // UpdateGroupAPI updates a campaign group (PUT /campaigns/:id/groups/:gid).
-func (h *Handler) UpdateGroupAPI(c echo.Context) error {
+func (h *Handler) UpdateGroupAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1494,7 +1494,7 @@ func (h *Handler) UpdateGroupAPI(c echo.Context) error {
 }
 
 // DeleteGroupAPI deletes a campaign group (DELETE /campaigns/:id/groups/:gid).
-func (h *Handler) DeleteGroupAPI(c echo.Context) error {
+func (h *Handler) DeleteGroupAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1527,7 +1527,7 @@ func (h *Handler) DeleteGroupAPI(c echo.Context) error {
 }
 
 // AddGroupMemberAPI adds a user to a campaign group (POST /campaigns/:id/groups/:gid/members).
-func (h *Handler) AddGroupMemberAPI(c echo.Context) error {
+func (h *Handler) AddGroupMemberAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1572,7 +1572,7 @@ func (h *Handler) AddGroupMemberAPI(c echo.Context) error {
 }
 
 // RemoveGroupMemberAPI removes a user from a campaign group (DELETE /campaigns/:id/groups/:gid/members/:uid).
-func (h *Handler) RemoveGroupMemberAPI(c echo.Context) error {
+func (h *Handler) RemoveGroupMemberAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1608,7 +1608,7 @@ func (h *Handler) RemoveGroupMemberAPI(c echo.Context) error {
 // --- Archive & Join Code ---
 
 // ArchiveCampaign soft-archives a campaign (POST /campaigns/:id/archive).
-func (h *Handler) ArchiveCampaign(c echo.Context) error {
+func (h *Handler) ArchiveCampaign(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1623,7 +1623,7 @@ func (h *Handler) ArchiveCampaign(c echo.Context) error {
 }
 
 // UnarchiveCampaign restores a soft-archived campaign (POST /campaigns/:id/unarchive).
-func (h *Handler) UnarchiveCampaign(c echo.Context) error {
+func (h *Handler) UnarchiveCampaign(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1638,7 +1638,7 @@ func (h *Handler) UnarchiveCampaign(c echo.Context) error {
 }
 
 // GenerateJoinCode creates a shareable invite code (POST /campaigns/:id/join-code).
-func (h *Handler) GenerateJoinCode(c echo.Context) error {
+func (h *Handler) GenerateJoinCode(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1655,7 +1655,7 @@ func (h *Handler) GenerateJoinCode(c echo.Context) error {
 }
 
 // RevokeJoinCode removes the shareable invite code (DELETE /campaigns/:id/join-code).
-func (h *Handler) RevokeJoinCode(c echo.Context) error {
+func (h *Handler) RevokeJoinCode(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1672,7 +1672,7 @@ func (h *Handler) RevokeJoinCode(c echo.Context) error {
 // JoinByCode handles a user joining a campaign via invite code (GET /join/:code).
 // It lands them inside the campaign, with a welcome line when they have just
 // joined, rather than on the campaign list where the new one is easy to miss.
-func (h *Handler) JoinByCode(c echo.Context) error {
+func (h *Handler) JoinByCode(c *echo.Context) error {
 	code := c.Param("code")
 	if code == "" {
 		return apperror.NewBadRequest("invite code is required")
@@ -1700,7 +1700,7 @@ func (h *Handler) JoinByCode(c echo.Context) error {
 // UpdateSystemID sets the game system for a campaign (PUT /campaigns/:id/system).
 // Also auto-enables the corresponding addon so the system's widgets and scripts
 // are immediately available without a separate toggle in the Features tab.
-func (h *Handler) UpdateSystemID(c echo.Context) error {
+func (h *Handler) UpdateSystemID(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1744,7 +1744,7 @@ func (h *Handler) UpdateSystemID(c echo.Context) error {
 }
 
 // GroupsPage renders the groups management page (GET /campaigns/:id/groups/manage).
-func (h *Handler) GroupsPage(c echo.Context) error {
+func (h *Handler) GroupsPage(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

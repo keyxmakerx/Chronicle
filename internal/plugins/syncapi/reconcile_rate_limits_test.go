@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -83,7 +83,7 @@ func TestRetryAfterSeconds(t *testing.T) {
 func TestRateLimit_RetryAfterIsTheWindowsRemainder(t *testing.T) {
 	e := echo.New()
 	key := &APIKey{ID: 424242, CampaignID: "camp-1", RateLimit: 2}
-	h := RateLimit(NewSyncAPIService(&mockSyncAPIRepo{}))(func(c echo.Context) error {
+	h := RateLimit(NewSyncAPIService(&mockSyncAPIRepo{}))(func(c *echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	})
 	var lastErr error

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -46,8 +46,7 @@ func serveHandler(t *testing.T, h echo.HandlerFunc, path string, cc *campaigns.C
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "mid")
-	c.SetParamValues("camp-1", mapID)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: mapID}})
 	c.Set("campaign_context", cc)
 	err := h(c)
 	return rec, err

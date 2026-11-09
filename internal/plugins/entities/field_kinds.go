@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -342,7 +342,7 @@ func (s *entityService) checkLinkValues(ctx context.Context, e *Entity, oldData,
 // GetLocalWordsAPI returns the local words a viewer sees on one page, for
 // widgets that show words outside the fields box, such as a shop's coins.
 // GET /campaigns/:id/entities/:eid/local-words
-func (h *Handler) GetLocalWordsAPI(c echo.Context) error {
+func (h *Handler) GetLocalWordsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

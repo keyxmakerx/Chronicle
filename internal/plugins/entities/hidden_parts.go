@@ -8,7 +8,7 @@ package entities
 import (
 	"log/slog"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -23,7 +23,7 @@ const entryLockedMessage = "Parts of this text are hidden from players, so only 
 // pass; anyone else must be allowed to view and edit the page, and a page
 // they can't view answers 404, as if it were missing.
 func (h *Handler) requirePageWrite(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		if err := h.pageWriteErr(c, c.Param("eid")); err != nil {
 			return err
 		}
@@ -33,7 +33,7 @@ func (h *Handler) requirePageWrite(next echo.HandlerFunc) echo.HandlerFunc {
 
 // pageWriteErr is requirePageWrite's check, for a route that names the page
 // in its body rather than its path.
-func (h *Handler) pageWriteErr(c echo.Context, entityID string) error {
+func (h *Handler) pageWriteErr(c *echo.Context, entityID string) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -52,7 +52,7 @@ func (h *Handler) pageWriteErr(c echo.Context, entityID string) error {
 }
 
 // pageViewErr refuses a page the viewer cannot see as not found.
-func (h *Handler) pageViewErr(c echo.Context, entityID string) error {
+func (h *Handler) pageViewErr(c *echo.Context, entityID string) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -70,7 +70,7 @@ func (h *Handler) pageViewErr(c echo.Context, entityID string) error {
 // textLocked reports whether this writer may not save over the stored text:
 // they are served a copy with the hidden parts taken out, so their save
 // would delete those parts.
-func (h *Handler) textLocked(c echo.Context, cc *campaigns.CampaignContext, stored, storedHTML *string) bool {
+func (h *Handler) textLocked(c *echo.Context, cc *campaigns.CampaignContext, stored, storedHTML *string) bool {
 	_, _, hidden := h.servedText(c, cc, stored, storedHTML)
 	return hidden
 }
@@ -80,7 +80,7 @@ func (h *Handler) textLocked(c echo.Context, cc *campaigns.CampaignContext, stor
 // page they can't open reads "a hidden page", since the stored link carries
 // that page's name. hidden reports whether the copy left anything out, so a
 // save from it would erase what it left out. The stored text is not changed.
-func (h *Handler) servedText(c echo.Context, cc *campaigns.CampaignContext, entry, entryHTML *string) (*string, *string, bool) {
+func (h *Handler) servedText(c *echo.Context, cc *campaigns.CampaignContext, entry, entryHTML *string) (*string, *string, bool) {
 	if cc.CanAuthorDmOnly() {
 		return entry, entryHTML, false
 	}
@@ -173,7 +173,7 @@ func dropRestrictedFields(patch map[string]any, keys map[string]struct{}) map[st
 // servedCopy is the page as this viewer is served it: for anyone but the
 // owner and Co-DMs, the text as servedText gives it and the fields without
 // the restricted values. The stored entity is not changed.
-func (h *Handler) servedCopy(c echo.Context, cc *campaigns.CampaignContext, entity *Entity, et *EntityType, userID string) *Entity {
+func (h *Handler) servedCopy(c *echo.Context, cc *campaigns.CampaignContext, entity *Entity, et *EntityType, userID string) *Entity {
 	if entity == nil || cc.CanAuthorDmOnly() {
 		return entity
 	}
@@ -189,7 +189,7 @@ func (h *Handler) servedCopy(c echo.Context, cc *campaigns.CampaignContext, enti
 // editablePageIDs keeps the ids of pages this caller may edit, in order. The
 // owner and Co-DMs keep every id; the ids come from a request body, so for
 // anyone else each is checked like requirePageWrite checks one page.
-func (h *Handler) editablePageIDs(c echo.Context, cc *campaigns.CampaignContext, ids []string) []string {
+func (h *Handler) editablePageIDs(c *echo.Context, cc *campaigns.CampaignContext, ids []string) []string {
 	if cc.CanAuthorDmOnly() {
 		return ids
 	}
@@ -206,7 +206,7 @@ func (h *Handler) editablePageIDs(c echo.Context, cc *campaigns.CampaignContext,
 
 // requireCreatableType refuses a Scribe a new page in the DM-only category:
 // the page would vanish from their own view as soon as it was made.
-func (h *Handler) requireCreatableType(c echo.Context, cc *campaigns.CampaignContext, typeID int) error {
+func (h *Handler) requireCreatableType(c *echo.Context, cc *campaigns.CampaignContext, typeID int) error {
 	if cc.CanAuthorDmOnly() {
 		return nil
 	}

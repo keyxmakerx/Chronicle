@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -41,7 +41,7 @@ func NewCalendarAPIHandler(syncSvc SyncAPIService, calendarSvc calendar.Calendar
 // is gone for good and what to use instead. The Foundry module calls none of
 // them.
 func retiredCalendarRoute(instead string) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		return c.JSON(http.StatusGone, map[string]string{
 			"error":   "calendar_route_retired",
 			"message": "This calendar API route was retired. " + instead,
@@ -64,7 +64,7 @@ const (
 // Owner for a co-DM grant. A stored Bearer key's owner is a live Owner
 // (RequireKeyOwnerStillOwner); the session door carries the signed-in
 // member's own role. An unresolved member fails closed to RoleNone.
-func (h *CalendarAPIHandler) viewer(c echo.Context) permissions.Viewer {
+func (h *CalendarAPIHandler) viewer(c *echo.Context) permissions.Viewer {
 	key := GetAPIKey(c)
 	if key == nil {
 		return permissions.RequestViewer(int(campaigns.RoleNone), "")
@@ -90,7 +90,7 @@ func (h *CalendarAPIHandler) viewer(c echo.Context) permissions.Viewer {
 // module's GM client uses it to build the date bar every player sees from
 // Chronicle's own player filtering rather than re-deriving it. It can only
 // narrow what the key would otherwise read.
-func (h *CalendarAPIHandler) readViewer(c echo.Context) permissions.Viewer {
+func (h *CalendarAPIHandler) readViewer(c *echo.Context) permissions.Viewer {
 	if playersAudience(c) {
 		return permissions.RequestViewer(int(campaigns.RolePlayer), "")
 	}
@@ -102,12 +102,12 @@ func (h *CalendarAPIHandler) readViewer(c echo.Context) permissions.Viewer {
 // older one ignores the parameter and answers with the key's own view.
 const audiencePlayers = "players"
 
-func playersAudience(c echo.Context) bool { return c.QueryParam("audience") == audiencePlayers }
+func playersAudience(c *echo.Context) bool { return c.QueryParam("audience") == audiencePlayers }
 
 // requireOwner mirrors the calendar plugin's RequireRole(Owner) web routes
 // (settings, event delete) for the same actions over the API, where
 // RequirePermission(PermWrite) alone would also admit a Scribe.
-func (h *CalendarAPIHandler) requireOwner(c echo.Context) error {
+func (h *CalendarAPIHandler) requireOwner(c *echo.Context) error {
 	key := GetAPIKey(c)
 	if key == nil {
 		return apperror.NewForbidden("owner role required")
@@ -123,7 +123,7 @@ func (h *CalendarAPIHandler) requireOwner(c echo.Context) error {
 // or the first when none is marked default), with its sub-resources already
 // filtered for v. A campaign with no calendar, or one v cannot see, is the
 // same 404 the module reads as "no calendar".
-func (h *CalendarAPIHandler) defaultCalendar(c echo.Context, v permissions.Viewer) (*calendar.Calendar, error) {
+func (h *CalendarAPIHandler) defaultCalendar(c *echo.Context, v permissions.Viewer) (*calendar.Calendar, error) {
 	return h.calendarSvc.GetPrimaryCalendarForViewer(c.Request().Context(), c.Param("id"), v)
 }
 
@@ -160,7 +160,7 @@ func eventForWire(e calendar.Event) calendar.Event {
 
 // ListCalendars returns the campaign's calendars the caller can see.
 // GET /api/v1/campaigns/:id/calendars
-func (h *CalendarAPIHandler) ListCalendars(c echo.Context) error {
+func (h *CalendarAPIHandler) ListCalendars(c *echo.Context) error {
 	cals, err := h.calendarSvc.ListCalendars(c.Request().Context(), c.Param("id"), h.viewer(c))
 	if err != nil {
 		return err
@@ -173,7 +173,7 @@ func (h *CalendarAPIHandler) ListCalendars(c echo.Context) error {
 
 // GetCalendar returns the default calendar with its structure.
 // GET /api/v1/campaigns/:id/calendar
-func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
+func (h *CalendarAPIHandler) GetCalendar(c *echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.readViewer(c))
 	if err != nil {
 		return err
@@ -185,7 +185,7 @@ func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
 // and weather for it. A read by a real Bearer key (the module) records the
 // served-date beacon; a member browsing over the session door never does.
 // GET /api/v1/campaigns/:id/calendar/date
-func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
+func (h *CalendarAPIHandler) GetCurrentDate(c *echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.readViewer(c))
 	if err != nil {
 		return err
@@ -247,7 +247,7 @@ type confirmDateRequest struct {
 // whole purpose is the write, so a session-door caller (never the module)
 // gets 403 rather than a misleading 204.
 // POST /api/v1/campaigns/:id/calendar/date/confirm
-func (h *CalendarAPIHandler) ConfirmDate(c echo.Context) error {
+func (h *CalendarAPIHandler) ConfirmDate(c *echo.Context) error {
 	key := GetAPIKey(c)
 	if key == nil || key.ID == synthKeySessionID {
 		return apperror.NewForbidden("calendar date confirmation requires a real API key")
@@ -266,7 +266,7 @@ func (h *CalendarAPIHandler) ConfirmDate(c echo.Context) error {
 
 // GetSeasons returns the default calendar's seasons.
 // GET /api/v1/campaigns/:id/calendar/seasons
-func (h *CalendarAPIHandler) GetSeasons(c echo.Context) error {
+func (h *CalendarAPIHandler) GetSeasons(c *echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.viewer(c))
 	if err != nil {
 		return err
@@ -277,7 +277,7 @@ func (h *CalendarAPIHandler) GetSeasons(c echo.Context) error {
 // GetMoons returns the default calendar's moons, without hidden ones for a
 // player.
 // GET /api/v1/campaigns/:id/calendar/moons
-func (h *CalendarAPIHandler) GetMoons(c echo.Context) error {
+func (h *CalendarAPIHandler) GetMoons(c *echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.viewer(c))
 	if err != nil {
 		return err
@@ -289,7 +289,7 @@ func (h *CalendarAPIHandler) GetMoons(c echo.Context) error {
 // for a player, eras hidden until they begin are withheld and Director
 // notes stripped (the calendar service's viewer read does both).
 // GET /api/v1/campaigns/:id/calendar/eras
-func (h *CalendarAPIHandler) GetEras(c echo.Context) error {
+func (h *CalendarAPIHandler) GetEras(c *echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.viewer(c))
 	if err != nil {
 		return err
@@ -299,7 +299,7 @@ func (h *CalendarAPIHandler) GetEras(c echo.Context) error {
 
 // GetStructure returns the months, weekdays, time system and leap rule.
 // GET /api/v1/campaigns/:id/calendar/structure
-func (h *CalendarAPIHandler) GetStructure(c echo.Context) error {
+func (h *CalendarAPIHandler) GetStructure(c *echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.viewer(c))
 	if err != nil {
 		return err
@@ -320,7 +320,7 @@ func (h *CalendarAPIHandler) GetStructure(c echo.Context) error {
 
 // GetWeather returns today's weather, or {} when none is set.
 // GET /api/v1/campaigns/:id/calendar/weather
-func (h *CalendarAPIHandler) GetWeather(c echo.Context) error {
+func (h *CalendarAPIHandler) GetWeather(c *echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.viewer(c))
 	if err != nil {
 		return err
@@ -335,7 +335,7 @@ func (h *CalendarAPIHandler) GetWeather(c echo.Context) error {
 // Director gets only days up to today and no lock state (the service
 // decides), so `?audience=players` never shows a forecast.
 // GET /api/v1/campaigns/:id/calendar/weather/days?year=&month=
-func (h *CalendarAPIHandler) ListDayWeather(c echo.Context) error {
+func (h *CalendarAPIHandler) ListDayWeather(c *echo.Context) error {
 	v := h.readViewer(c)
 	cal, err := h.defaultCalendar(c, v)
 	if err != nil {
@@ -361,7 +361,7 @@ func (h *CalendarAPIHandler) ListDayWeather(c echo.Context) error {
 
 // GetCycles returns the default calendar's cycles.
 // GET /api/v1/campaigns/:id/calendar/cycles
-func (h *CalendarAPIHandler) GetCycles(c echo.Context) error {
+func (h *CalendarAPIHandler) GetCycles(c *echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.viewer(c))
 	if err != nil {
 		return err
@@ -371,7 +371,7 @@ func (h *CalendarAPIHandler) GetCycles(c echo.Context) error {
 
 // GetFestivals returns the default calendar's festivals.
 // GET /api/v1/campaigns/:id/calendar/festivals
-func (h *CalendarAPIHandler) GetFestivals(c echo.Context) error {
+func (h *CalendarAPIHandler) GetFestivals(c *echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.viewer(c))
 	if err != nil {
 		return err
@@ -396,7 +396,7 @@ func nonNil[T any](s []T) []T {
 // TODO(#930): the module places events by their own date and ignores
 // `occurrences`, so a rule event shows on its start date only in Foundry.
 // GET /api/v1/campaigns/:id/calendar/events?year=N&month=M
-func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
+func (h *CalendarAPIHandler) ListEvents(c *echo.Context) error {
 	v := h.readViewer(c)
 	cal, err := h.defaultCalendar(c, v)
 	if err != nil {
@@ -427,7 +427,7 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 
 // GetEvent returns one event of the default calendar.
 // GET /api/v1/campaigns/:id/calendar/events/:eventID
-func (h *CalendarAPIHandler) GetEvent(c echo.Context) error {
+func (h *CalendarAPIHandler) GetEvent(c *echo.Context) error {
 	v := h.viewer(c)
 	cal, err := h.defaultCalendar(c, v)
 	if err != nil {
@@ -482,7 +482,7 @@ type apiCreateEventRequest struct {
 // Scribe+, matching the web route; the service refuses a gm-only event from
 // a caller who may not author one.
 // POST /api/v1/campaigns/:id/calendar/events
-func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
+func (h *CalendarAPIHandler) CreateEvent(c *echo.Context) error {
 	v := h.viewer(c)
 	cal, err := h.defaultCalendar(c, v)
 	if err != nil {
@@ -571,7 +571,7 @@ type apiUpdateEventRequest struct {
 // The service answers 404 for an event the caller cannot see and 403 for a
 // visibility change the caller may not make.
 // PUT /api/v1/campaigns/:id/calendar/events/:eventID
-func (h *CalendarAPIHandler) UpdateEvent(c echo.Context) error {
+func (h *CalendarAPIHandler) UpdateEvent(c *echo.Context) error {
 	v := h.viewer(c)
 	cal, err := h.defaultCalendar(c, v)
 	if err != nil {
@@ -624,7 +624,7 @@ func (h *CalendarAPIHandler) UpdateEvent(c echo.Context) error {
 // DeleteEvent removes an event of the default calendar. Owner only, like the
 // web route.
 // DELETE /api/v1/campaigns/:id/calendar/events/:eventID
-func (h *CalendarAPIHandler) DeleteEvent(c echo.Context) error {
+func (h *CalendarAPIHandler) DeleteEvent(c *echo.Context) error {
 	if err := h.requireOwner(c); err != nil {
 		return err
 	}
@@ -654,7 +654,7 @@ type apiSetDateRequest struct {
 // only, like the calendar settings page. A real-time calendar answers 422,
 // which the module reads as "dates are read-only here".
 // PUT /api/v1/campaigns/:id/calendar/date
-func (h *CalendarAPIHandler) SetDate(c echo.Context) error {
+func (h *CalendarAPIHandler) SetDate(c *echo.Context) error {
 	// Read first so the sync history names the date asked for and the date
 	// it would replace, refused or not. The answers keep their order: a
 	// non-owner hears 403 before anything about the calendar or the body.
@@ -699,7 +699,7 @@ func calendarDateLabel(cal *calendar.Calendar, year, month, day int) string {
 // real Bearer key: the session door's synthetic key (synthKeySessionID) is a
 // member browsing, not the module. Fire-and-forget on a background context
 // so the GET does not wait on the throttle read and upsert.
-func (h *CalendarAPIHandler) recordCalendarDateBeaconIfModule(c echo.Context, campaignID string, year, month, day int) {
+func (h *CalendarAPIHandler) recordCalendarDateBeaconIfModule(c *echo.Context, campaignID string, year, month, day int) {
 	key := GetAPIKey(c)
 	if key == nil || key.ID == synthKeySessionID {
 		return

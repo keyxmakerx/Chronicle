@@ -5,16 +5,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
-func runStaticCache(t *testing.T, target string, seed func(c echo.Context)) *httptest.ResponseRecorder {
+func runStaticCache(t *testing.T, target string, seed func(c *echo.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, target, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	h := StaticCache("/static/")(func(c echo.Context) error {
+	h := StaticCache("/static/")(func(c *echo.Context) error {
 		if seed != nil {
 			seed(c)
 		}
@@ -64,7 +64,7 @@ func TestStaticCache_IgnoresNonStaticPaths(t *testing.T) {
 // handler runs, so a handler under /static with its own caching decision
 // (package downloads, signed assets) overwrites it and wins.
 func TestStaticCache_HandlerPolicyWins(t *testing.T) {
-	rec := runStaticCache(t, "/static/plugins/calendar/js/event_grid.js", func(c echo.Context) {
+	rec := runStaticCache(t, "/static/plugins/calendar/js/event_grid.js", func(c *echo.Context) {
 		c.Response().Header().Set(echo.HeaderCacheControl, "no-store")
 	})
 	if got := rec.Header().Get(echo.HeaderCacheControl); got != "no-store" {

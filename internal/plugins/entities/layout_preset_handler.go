@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -24,7 +24,7 @@ func NewLayoutPresetHandler(service LayoutPresetService) *LayoutPresetHandler {
 
 // ListAPI returns layout presets for a campaign as JSON.
 // GET /campaigns/:id/layout-presets
-func (h *LayoutPresetHandler) ListAPI(c echo.Context) error {
+func (h *LayoutPresetHandler) ListAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -43,7 +43,7 @@ func (h *LayoutPresetHandler) ListAPI(c echo.Context) error {
 
 // GetAPI returns a single layout preset by ID.
 // GET /campaigns/:id/layout-presets/:pid
-func (h *LayoutPresetHandler) GetAPI(c echo.Context) error {
+func (h *LayoutPresetHandler) GetAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -69,7 +69,7 @@ func (h *LayoutPresetHandler) GetAPI(c echo.Context) error {
 
 // CreateAPI creates a new layout preset.
 // POST /campaigns/:id/layout-presets
-func (h *LayoutPresetHandler) CreateAPI(c echo.Context) error {
+func (h *LayoutPresetHandler) CreateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -103,7 +103,7 @@ func (h *LayoutPresetHandler) CreateAPI(c echo.Context) error {
 
 // UpdateAPI updates an existing layout preset.
 // PUT /campaigns/:id/layout-presets/:pid
-func (h *LayoutPresetHandler) UpdateAPI(c echo.Context) error {
+func (h *LayoutPresetHandler) UpdateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -141,7 +141,7 @@ func (h *LayoutPresetHandler) UpdateAPI(c echo.Context) error {
 
 // DeleteAPI deletes a layout preset.
 // DELETE /campaigns/:id/layout-presets/:pid
-func (h *LayoutPresetHandler) DeleteAPI(c echo.Context) error {
+func (h *LayoutPresetHandler) DeleteAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

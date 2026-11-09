@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -87,7 +87,7 @@ func categoryHomeEditorState(cc *campaigns.CampaignContext, et *EntityType) stri
 // POST /campaigns/:id/entity-types/:etid/home-preview with
 // {"description": "...", "blocks": [{id, type, config}]}. It answers
 // {"blocks": {id: html}}; a block that draws nothing is left out.
-func (h *Handler) CategoryHomePreview(c echo.Context) error {
+func (h *Handler) CategoryHomePreview(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

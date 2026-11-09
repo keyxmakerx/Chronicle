@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -59,8 +59,7 @@ func TestCreateRelation_TargetScopedToCampaignAndVisibility(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/x", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			c := echo.New().NewContext(req, httptest.NewRecorder())
-			c.SetParamNames("id", "entityID")
-			c.SetParamValues("camp-1", tt.source)
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "entityID", Value: tt.source}})
 			c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "u1", IsActive: true})
 
 			err := h.CreateRelation(c)

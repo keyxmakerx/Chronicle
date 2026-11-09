@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -62,7 +62,7 @@ func advHandlerEnv() *Handler {
 	return &Handler{service: NewEntityService(entityRepo, typeRepo, &mockPermissionRepo{})}
 }
 
-func advCtx(role campaigns.Role, dmGranted bool, method, target string) (echo.Context, *httptest.ResponseRecorder) {
+func advCtx(role campaigns.Role, dmGranted bool, method, target string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, target, nil)
 	rec := httptest.NewRecorder()
@@ -91,8 +91,7 @@ func TestShow_AdventuresPageIs404ForPlayers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c, _ := advCtx(tt.role, tt.dm, http.MethodGet, "/campaigns/c1/entities/adv-page")
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("c1", "adv-page")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "adv-page"}})
 			if err := advHandlerEnv().Show(c); !notFound(err) {
 				t.Fatalf("Show err = %v, want a 404", err)
 			}
@@ -105,7 +104,7 @@ func TestShow_AdventuresPageIs404ForPlayers(t *testing.T) {
 // widget or the editor calls.
 func TestPageReadEndpoints_AdventuresPageIs404ForPlayers(t *testing.T) {
 	h := advHandlerEnv()
-	endpoints := map[string]func(echo.Context) error{
+	endpoints := map[string]func(*echo.Context) error{
 		"entry":    h.GetEntry,
 		"fields":   h.GetFieldsAPI,
 		"preview":  h.PreviewAPI,
@@ -115,8 +114,7 @@ func TestPageReadEndpoints_AdventuresPageIs404ForPlayers(t *testing.T) {
 	for name, fn := range endpoints {
 		t.Run(name, func(t *testing.T) {
 			c, _ := advCtx(campaigns.RolePlayer, false, http.MethodGet, "/x")
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("c1", "adv-page")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "adv-page"}})
 			if err := fn(c); !notFound(err) {
 				t.Fatalf("%s err = %v, want a 404", name, err)
 			}
@@ -148,8 +146,7 @@ func TestIndex_AdventuresCategoryAnswersLikeAMissingOne(t *testing.T) {
 			path = "/campaigns/c1/" + target
 		}
 		c, rec := advCtx(campaigns.RolePlayer, false, http.MethodGet, path)
-		c.SetParamNames("id")
-		c.SetParamValues("c1")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 		if slug {
 			c.Set("entity_type_slug", target)
 		}
@@ -205,8 +202,7 @@ func TestEntityTypesAPI_HidesAdventuresFromPlayers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c, rec := advCtx(tt.role, tt.dm, http.MethodGet, "/campaigns/c1/entity-types")
-			c.SetParamNames("id")
-			c.SetParamValues("c1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 			if err := advHandlerEnv().EntityTypesAPI(c); err != nil {
 				t.Fatal(err)
 			}
@@ -250,8 +246,7 @@ func TestFavorites_NeverCarryAdventuresForPlayers(t *testing.T) {
 		fav := &recordingFavorites{}
 		h.favoriteRepo = fav
 		c, _ := advCtx(campaigns.RolePlayer, false, http.MethodPost, "/campaigns/c1/entities/adv-page/favorite")
-		c.SetParamNames("id", "eid")
-		c.SetParamValues("c1", "adv-page")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "adv-page"}})
 		if err := h.ToggleFavoriteAPI(c); !notFound(err) {
 			t.Fatalf("err = %v, want a 404", err)
 		}
@@ -265,8 +260,7 @@ func TestFavorites_NeverCarryAdventuresForPlayers(t *testing.T) {
 		fav := &recordingFavorites{}
 		h.favoriteRepo = fav
 		c, _ := advCtx(campaigns.RolePlayer, false, http.MethodPost, "/campaigns/c1/entities/npc-page/favorite")
-		c.SetParamNames("id", "eid")
-		c.SetParamValues("c1", "npc-page")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "npc-page"}})
 		if err := h.ToggleFavoriteAPI(c); err != nil || !fav.toggled {
 			t.Fatalf("err=%v toggled=%v", err, fav.toggled)
 		}
@@ -276,8 +270,7 @@ func TestFavorites_NeverCarryAdventuresForPlayers(t *testing.T) {
 		h := advHandlerEnv()
 		h.favoriteRepo = &recordingFavorites{items: []FavoriteItem{{EntityID: "npc-page", Name: "Barkeep"}, {EntityID: "adv-page", Name: "The Sunken Crypt"}}}
 		c, rec := advCtx(campaigns.RolePlayer, false, http.MethodGet, "/campaigns/c1/favorites")
-		c.SetParamNames("id")
-		c.SetParamValues("c1")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 		if err := h.ListFavoritesAPI(c); err != nil {
 			t.Fatal(err)
 		}
@@ -290,8 +283,7 @@ func TestFavorites_NeverCarryAdventuresForPlayers(t *testing.T) {
 		h := advHandlerEnv()
 		h.favoriteRepo = &recordingFavorites{ids: map[string]bool{"npc-page": true, "adv-page": true}}
 		c, rec := advCtx(campaigns.RolePlayer, false, http.MethodGet, "/campaigns/c1/favorite-ids")
-		c.SetParamNames("id")
-		c.SetParamValues("c1")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 		if err := h.FavoriteIDsAPI(c); err != nil {
 			t.Fatal(err)
 		}
@@ -316,8 +308,7 @@ func TestViewableIDsAPI(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c, rec := advCtx(campaigns.RolePlayer, false, http.MethodGet, "/campaigns/c1/entities/viewable?ids="+tt.query)
-			c.SetParamNames("id")
-			c.SetParamValues("c1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 			h := &Handler{service: NewEntityService(&mockEntityRepo{
 				filterViewableFn: func(ids []string) (map[string]bool, error) {
 					return map[string]bool{"npc-page": true}, nil

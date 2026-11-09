@@ -116,7 +116,7 @@ Chronicle is a Go server (Echo, Templ, HTMX) with MariaDB and Redis. Features li
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.27, [Echo v4](https://echo.labstack.com/) |
+| Backend | Go 1.27, [Echo v5](https://echo.labstack.com/) |
 | Templates | [Templ](https://templ.guide/) |
 | Frontend | [HTMX](https://htmx.org/), [Alpine.js](https://alpinejs.dev/), [Tailwind CSS](https://tailwindcss.com/) |
 | Editor | [TipTap](https://tiptap.dev/) |

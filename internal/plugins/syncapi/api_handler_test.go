@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -61,14 +61,13 @@ func (s *stubCampaignServiceForCreate) GetByID(_ context.Context, id string) (*c
 // /api/v1/campaigns/camp-1/entities with the given JSON body and a
 // synthetic Owner-role API key on the context (so GetAPIKey / resolveRole
 // succeed without a real auth chain).
-func newCreateEntityContext(body []byte) (echo.Context, *httptest.ResponseRecorder) {
+func newCreateEntityContext(body []byte) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/campaigns/camp-1/entities", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set(apiKeyContextKey, &APIKey{
 		ID:         synthKeySessionID,
 		CampaignID: "camp-1",
@@ -159,8 +158,7 @@ func TestSync_BatchCreatePassesType(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "user-1", IsActive: true})
 
 	if err := h.Sync(c); err != nil {

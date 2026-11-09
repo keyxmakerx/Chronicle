@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -20,7 +20,7 @@ import (
 
 // pageFileCtx builds a request context for the handler as userID, a member of
 // campA with the given role.
-func pageFileCtx(method, target string, body *bytes.Buffer, contentType, userID string, role campaigns.Role, params map[string]string) (echo.Context, *httptest.ResponseRecorder) {
+func pageFileCtx(method, target string, body *bytes.Buffer, contentType, userID string, role campaigns.Role, params map[string]string) (*echo.Context, *httptest.ResponseRecorder) {
 	var req *http.Request
 	if body != nil {
 		req = httptest.NewRequest(method, target, body)
@@ -40,8 +40,7 @@ func pageFileCtx(method, target string, body *bytes.Buffer, contentType, userID 
 	for k, v := range params {
 		names, values = append(names, k), append(values, v)
 	}
-	c.SetParamNames(names...)
-	c.SetParamValues(values...)
+	c.SetPathValues(pathValuesOf(names, values))
 	return c, rec
 }
 

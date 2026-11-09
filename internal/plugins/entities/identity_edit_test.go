@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -60,19 +60,18 @@ func (s *identityStubSvc) Update(_ context.Context, _ string, in UpdateEntityInp
 	return &e, nil
 }
 
-func runIdentityCall(t *testing.T, svc *identityStubSvc, handler func(*Handler, echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
+func runIdentityCall(t *testing.T, svc *identityStubSvc, handler func(*Handler, *echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
 	t.Helper()
 	return runIdentityCallOn(t, &Handler{service: svc}, handler, role, userID, campaignID, body)
 }
 
-func runIdentityCallOn(t *testing.T, h *Handler, handler func(*Handler, echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
+func runIdentityCallOn(t *testing.T, h *Handler, handler func(*Handler, *echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
 	t.Helper()
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPut, "/x", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	c := e.NewContext(req, httptest.NewRecorder())
-	c.SetParamNames("id", "eid")
-	c.SetParamValues(campaignID, "e1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: campaignID}, {Name: "eid", Value: "e1"}})
 	c.Set("auth_user_id", userID)
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: campaignID},
@@ -179,7 +178,7 @@ func TestIdentityWrites_RefusedOnHiddenPage(t *testing.T) {
 	owner := "user-owner"
 	calls := []struct {
 		name    string
-		handler func(*Handler, echo.Context) error
+		handler func(*Handler, *echo.Context) error
 		body    string
 	}{
 		{"fields", (*Handler).UpdateFieldsAPI, `{"fields_patch":{"ancestry":"Dwarf"}}`},
@@ -311,7 +310,7 @@ func TestUpdateFieldsAPI_NoPlannerKeepsIdentityOnly(t *testing.T) {
 	}
 }
 
-func runIdentityCallWith(t *testing.T, svc *identityStubSvc, pl HeroPlanner, handler func(*Handler, echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
+func runIdentityCallWith(t *testing.T, svc *identityStubSvc, pl HeroPlanner, handler func(*Handler, *echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
 	t.Helper()
 	return runIdentityCallOn(t, &Handler{service: svc, heroPlanner: pl}, handler, role, userID, campaignID, body)
 }
@@ -353,7 +352,7 @@ func TestOwnPageWrites(t *testing.T) {
 	entryBody := `{"entry":` + strconvQuote(plain) + `,"entry_html":"<p>A sailor.</p>"}`
 	cases := []struct {
 		name       string
-		handler    func(*Handler, echo.Context) error
+		handler    func(*Handler, *echo.Context) error
 		role       campaigns.Role
 		userID     string
 		storedHTML string
@@ -440,7 +439,7 @@ func TestRequireOwnPageOrPageWrite(t *testing.T) {
 			h := &Handler{service: &hiddenPartsSvc{entity: &Entity{ID: "e1", CampaignID: "c1"}, access: tt.access}}
 			reached := false
 			c, _ := hiddenPartsCtx(tt.cc, http.MethodPut, "")
-			err := h.requireOwnPageOrPageWrite(func(echo.Context) error { reached = true; return nil })(c)
+			err := h.requireOwnPageOrPageWrite(func(*echo.Context) error { reached = true; return nil })(c)
 			if tt.want == 0 {
 				if err != nil || !reached {
 					t.Fatalf("err = %v, reached = %v; want passed through", err, reached)

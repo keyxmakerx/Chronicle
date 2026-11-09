@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -27,8 +27,8 @@ func serveViewChain(svc CampaignService, session *auth.Session, gate echo.Middle
 	e := echo.New()
 	// Mirror production: map AppError.Code -> HTTP status. Redirects are written
 	// by the middleware directly (response already committed), so skip those.
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		if c.Response().Committed {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
+		if c.Response().(*echo.Response).Committed {
 			return
 		}
 		if ae, ok := err.(*apperror.AppError); ok {
@@ -39,7 +39,7 @@ func serveViewChain(svc CampaignService, session *auth.Session, gate echo.Middle
 	}
 
 	setSession := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if session != nil {
 				auth.SetSession(c, session)
 			}
@@ -49,7 +49,7 @@ func serveViewChain(svc CampaignService, session *auth.Session, gate echo.Middle
 
 	var reached *CampaignContext
 	pub := e.Group("/campaigns/:id", setSession, AllowPublicCampaignAccess(svc))
-	pub.GET("", func(c echo.Context) error {
+	pub.GET("", func(c *echo.Context) error {
 		reached = GetCampaignContext(c)
 		return c.NoContent(http.StatusOK)
 	}, gate)

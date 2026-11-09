@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
@@ -39,7 +39,7 @@ func TestVaultImportUploadBodyLimit(t *testing.T) {
 	a := &App{Config: &config.Config{}, Echo: echo.New()}
 	a.setupMiddleware()
 	const path = "/campaigns/c1/import/markdown/preview"
-	a.Echo.POST(path, func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	a.Echo.POST(path, func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 
 	limit := vault_import.RequestLimit(vault_import.DefaultLimits)
 	const mb = 1 << 20

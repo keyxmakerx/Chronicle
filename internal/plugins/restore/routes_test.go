@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // TestRunRequiresReauthBeforeRateLimit pins that a restore without a recent
@@ -15,7 +15,7 @@ func TestRunRequiresReauthBeforeRateLimit(t *testing.T) {
 	e := echo.New()
 	denied := 0
 	reauth := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			denied++
 			return c.NoContent(http.StatusForbidden)
 		}

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/email"
@@ -57,7 +57,7 @@ func (h *Handler) SetCampaignReader(cr CampaignReader) { h.campaignReader = cr }
 // overlay). The interactive grid/heatmap is rendered client-side from the JSON
 // APIs below, matching the signed mockup encoding.
 // GET /campaigns/:id/availability
-func (h *Handler) ShowAvailability(c echo.Context) error {
+func (h *Handler) ShowAvailability(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	csrf := middleware.GetCSRFToken(c)
@@ -70,7 +70,7 @@ func (h *Handler) ShowAvailability(c echo.Context) error {
 // GetMyAvailabilityAPI returns the current user's own recurring pattern to seed
 // the paint grid.
 // GET /campaigns/:id/availability/mine
-func (h *Handler) GetMyAvailabilityAPI(c echo.Context) error {
+func (h *Handler) GetMyAvailabilityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	resp, err := h.svc.GetMyAvailability(c.Request().Context(), cc.Campaign.ID, userID)
@@ -86,7 +86,7 @@ func (h *Handler) GetMyAvailabilityAPI(c echo.Context) error {
 
 // SaveMyAvailabilityAPI replaces the current user's recurring pattern.
 // PUT /campaigns/:id/availability/mine
-func (h *Handler) SaveMyAvailabilityAPI(c echo.Context) error {
+func (h *Handler) SaveMyAvailabilityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	var req SaveAvailabilityRequest
@@ -103,7 +103,7 @@ func (h *Handler) SaveMyAvailabilityAPI(c echo.Context) error {
 // the anonymous density; per-member identity is included only for the owner /
 // DM-granted (enforced here by role, not by route — design §5 / Q1).
 // GET /campaigns/:id/availability/overlay?week=YYYY-MM-DD&tz=IANA
-func (h *Handler) GetOverlayAPI(c echo.Context) error {
+func (h *Handler) GetOverlayAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 
@@ -141,7 +141,7 @@ func (h *Handler) GetOverlayAPI(c echo.Context) error {
 // An optional JSON body widens the ask: {"userId": "..."} reminds that one
 // member whatever their state, and {"ask": "confirm"} asks everyone to
 // confirm their times, on the site and by email.
-func (h *Handler) NudgeAvailabilityAPI(c echo.Context) error {
+func (h *Handler) NudgeAvailabilityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc.MemberRole < campaigns.RoleOwner && !cc.IsDmGranted {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the Director can send this"})
@@ -221,7 +221,7 @@ func (h *Handler) sendConfirmEmails(ctx context.Context, mc mailCampaign, asker 
 // ConfirmMyAvailabilityAPI records that the caller's saved times are still
 // right, answering a confirm ask without changing them.
 // POST /campaigns/:id/availability/confirm
-func (h *Handler) ConfirmMyAvailabilityAPI(c echo.Context) error {
+func (h *Handler) ConfirmMyAvailabilityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if err := h.svc.ConfirmMyAvailability(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
@@ -231,17 +231,17 @@ func (h *Handler) ConfirmMyAvailabilityAPI(c echo.Context) error {
 
 // MarkAwayAPI marks a stretch of days the caller can't play.
 // PUT /campaigns/:id/availability/away
-func (h *Handler) MarkAwayAPI(c echo.Context) error {
+func (h *Handler) MarkAwayAPI(c *echo.Context) error {
 	return h.awayAPI(c, h.svc.MarkMeAway)
 }
 
 // ClearAwayAPI takes the away mark off a stretch of days.
 // POST /campaigns/:id/availability/away/clear
-func (h *Handler) ClearAwayAPI(c echo.Context) error {
+func (h *Handler) ClearAwayAPI(c *echo.Context) error {
 	return h.awayAPI(c, h.svc.ClearMeAway)
 }
 
-func (h *Handler) awayAPI(c echo.Context, do func(ctx context.Context, campaignID, userID string, req AwayRequest) error) error {
+func (h *Handler) awayAPI(c *echo.Context, do func(ctx context.Context, campaignID, userID string, req AwayRequest) error) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req AwayRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
@@ -258,7 +258,7 @@ func (h *Handler) awayAPI(c echo.Context, do func(ctx context.Context, campaignI
 //
 // Party-visible, for the same reason RosterEntry.HasAnswered is: it says who has
 // spoken, never what they said.
-func (h *Handler) AvailabilityAnswersAPI(c echo.Context) error {
+func (h *Handler) AvailabilityAnswersAPI(c *echo.Context) error {
 	ctx := c.Request().Context()
 	cc := campaigns.GetCampaignContext(c)
 	rows, err := h.svc.AvailabilityAnswerStatuses(ctx, cc.Campaign.ID, h.overlayMembers(ctx, cc.Campaign.ID))
@@ -297,7 +297,7 @@ func (h *Handler) availabilityAnswerStamped(ctx context.Context, campaignID stri
 // The two functions below expose the same availability this plugin serves at
 // /availability/overlay for other plugins to read, so a consumer never has to
 // assemble its own roster and risk disagreeing about who is free and who may
-// see it. Neither takes an echo.Context: a caller reaches them through a
+// see it. Neither takes an *echo.Context: a caller reaches them through a
 // narrow interface wired in internal/app/routes.go (house rule 8), so this
 // plugin gains no edge into the caller and the caller gains none into this one.
 
@@ -366,7 +366,7 @@ func (h *Handler) CampaignWeekOverlay(ctx context.Context, campaignID, weekStart
 
 // ListMyExceptionsAPI returns the current user's per-date overrides.
 // GET /campaigns/:id/availability/exceptions
-func (h *Handler) ListMyExceptionsAPI(c echo.Context) error {
+func (h *Handler) ListMyExceptionsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	excs, err := h.svc.ListMyExceptions(c.Request().Context(), cc.Campaign.ID, userID)
@@ -390,7 +390,7 @@ func (h *Handler) ListMyExceptionsAPI(c echo.Context) error {
 
 // AddExceptionAPI adds a per-date override for the current user.
 // POST /campaigns/:id/availability/exceptions
-func (h *Handler) AddExceptionAPI(c echo.Context) error {
+func (h *Handler) AddExceptionAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	var req AddExceptionRequest
@@ -407,7 +407,7 @@ func (h *Handler) AddExceptionAPI(c echo.Context) error {
 // one date with a composed set — the backend for the "compose the day" editor.
 // An empty blocks array clears the day.
 // PUT /campaigns/:id/availability/exceptions
-func (h *Handler) ReplaceDayExceptionsAPI(c echo.Context) error {
+func (h *Handler) ReplaceDayExceptionsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	var req ReplaceDayExceptionsRequest
@@ -422,7 +422,7 @@ func (h *Handler) ReplaceDayExceptionsAPI(c echo.Context) error {
 
 // DeleteExceptionAPI removes one of the current user's own exceptions.
 // DELETE /campaigns/:id/availability/exceptions/:eid
-func (h *Handler) DeleteExceptionAPI(c echo.Context) error {
+func (h *Handler) DeleteExceptionAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	if err := h.svc.DeleteMyException(c.Request().Context(), cc.Campaign.ID, userID, c.Param("eid")); err != nil {
@@ -438,7 +438,7 @@ func (h *Handler) DeleteExceptionAPI(c echo.Context) error {
 // UTC fallback is correct here — the grid must be drawn in some zone — but
 // wrong for a per-member clock, which is why storedTZ below reports absence
 // rather than guessing.
-func (h *Handler) resolveViewerTZ(c echo.Context, userID string) string {
+func (h *Handler) resolveViewerTZ(c *echo.Context, userID string) string {
 	if tz := c.QueryParam("tz"); timeutil.IsValidLocation(tz) {
 		return tz
 	}

@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -36,7 +36,7 @@ func NewTagAPIHandler(syncSvc SyncAPIService, tagSvc tags.TagService, entitySvc 
 }
 
 // resolveRole returns the API key owner's role in the campaign for visibility filtering.
-func (h *TagAPIHandler) resolveRole(c echo.Context) int {
+func (h *TagAPIHandler) resolveRole(c *echo.Context) int {
 	key := GetAPIKey(c)
 	if key == nil {
 		return 0
@@ -48,9 +48,23 @@ func (h *TagAPIHandler) resolveRole(c echo.Context) int {
 	return int(member.Role)
 }
 
+// resolveUserID returns the caller's user id: the key's maker, or the
+// signed-in member for a session caller.
+func (h *TagAPIHandler) resolveUserID(c *echo.Context) string {
+	if key := GetAPIKey(c); key != nil {
+		return key.UserID
+	}
+	return ""
+}
+
+// pageGate is the page-write check shared with the entity handlers.
+func (h *TagAPIHandler) pageGate() pageWriteGate {
+	return pageWriteGate{entitySvc: h.entitySvc, campaignSvc: h.campaignSvc}
+}
+
 // seesDmOnly reports whether the caller may read and keep dm_only tags: the
 // owner and Co-DMs, as on the web. A Scribe sees what players see.
-func (h *TagAPIHandler) seesDmOnly(c echo.Context, campaignID string) bool {
+func (h *TagAPIHandler) seesDmOnly(c *echo.Context, campaignID string) bool {
 	if h.resolveRole(c) >= int(campaigns.RoleOwner) {
 		return true
 	}
@@ -66,7 +80,7 @@ func (h *TagAPIHandler) seesDmOnly(c echo.Context, campaignID string) bool {
 
 // ListTags returns all tags for a campaign with DM-only filtering based on role.
 // GET /api/v1/campaigns/:id/tags
-func (h *TagAPIHandler) ListTags(c echo.Context) error {
+func (h *TagAPIHandler) ListTags(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	// The owner and Co-DMs can see DM-only tags; Scribes and Players cannot.
@@ -97,7 +111,7 @@ type apiCreateTagRequest struct {
 
 // CreateTag creates a new tag in the campaign.
 // POST /api/v1/campaigns/:id/tags
-func (h *TagAPIHandler) CreateTag(c echo.Context) error {
+func (h *TagAPIHandler) CreateTag(c *echo.Context) error {
 	campaignID := c.Param("id")
 
 	var req apiCreateTagRequest
@@ -126,7 +140,7 @@ type apiUpdateTagRequest struct {
 
 // UpdateTag updates an existing tag.
 // PUT /api/v1/campaigns/:id/tags/:tagId
-func (h *TagAPIHandler) UpdateTag(c echo.Context) error {
+func (h *TagAPIHandler) UpdateTag(c *echo.Context) error {
 	campaignID := c.Param("id")
 	tagID, err := strconv.Atoi(c.Param("tagId"))
 	if err != nil {
@@ -168,7 +182,7 @@ func (h *TagAPIHandler) UpdateTag(c echo.Context) error {
 
 // DeleteTag removes a tag from the campaign.
 // DELETE /api/v1/campaigns/:id/tags/:tagId
-func (h *TagAPIHandler) DeleteTag(c echo.Context) error {
+func (h *TagAPIHandler) DeleteTag(c *echo.Context) error {
 	campaignID := c.Param("id")
 	tagID, err := strconv.Atoi(c.Param("tagId"))
 	if err != nil {
@@ -200,7 +214,7 @@ type apiSetEntityTagsRequest struct {
 
 // SetEntityTags replaces all tags on an entity with the given set.
 // PUT /api/v1/campaigns/:id/entities/:entityID/tags
-func (h *TagAPIHandler) SetEntityTags(c echo.Context) error {
+func (h *TagAPIHandler) SetEntityTags(c *echo.Context) error {
 	campaignID := c.Param("id")
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
@@ -212,6 +226,9 @@ func (h *TagAPIHandler) SetEntityTags(c echo.Context) error {
 	}
 	if entity.CampaignID != campaignID {
 		return apperror.NewNotFound("entity not found")
+	}
+	if err := h.pageGate().check(ctx, campaignID, entityID, h.resolveUserID(c), h.resolveRole(c)); err != nil {
+		return err
 	}
 
 	var req apiSetEntityTagsRequest
@@ -245,7 +262,7 @@ type bulkTagResult struct {
 
 // BulkAssignTags applies tag changes to multiple entities at once.
 // POST /api/v1/campaigns/:id/entities/bulk-tags
-func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
+func (h *TagAPIHandler) BulkAssignTags(c *echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()
 
@@ -267,6 +284,7 @@ func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
 	}
 
 	includeDmOnly := h.seesDmOnly(c, campaignID)
+	gate, role, userID := h.pageGate(), h.resolveRole(c), h.resolveUserID(c)
 
 	var results []bulkTagResult
 	processed := 0
@@ -279,6 +297,12 @@ func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
 		if err != nil || entity.CampaignID != campaignID {
 			result.Status = "error"
 			result.Error = "entity not found"
+			results = append(results, result)
+			continue
+		}
+		if err := gate.check(ctx, campaignID, entityID, userID, role); err != nil {
+			result.Status = "error"
+			result.Error = apperror.SafeMessage(err)
 			results = append(results, result)
 			continue
 		}

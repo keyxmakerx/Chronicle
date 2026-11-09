@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -47,7 +47,7 @@ const maxRollReportBytes = 16 << 10
 // which Foundry decided. Only a stored Bearer key may report one, so a
 // signed-in browser on the same route can never pass a number off as
 // Foundry's. A replay of the same chat message answers 200 with duplicate.
-func (h *APIHandler) ReportRoll(c echo.Context) error {
+func (h *APIHandler) ReportRoll(c *echo.Context) error {
 	if h.rolls == nil {
 		return apperror.NewNotFound("this Chronicle has no shared rolls")
 	}

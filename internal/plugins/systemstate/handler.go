@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -72,7 +72,7 @@ func NewStateResponse(systemID, key string, st State, includeGM bool) StateRespo
 // Get returns the state of one page for any member who can view the page.
 //
 // GET /campaigns/:id/entities/:eid/system-state/:system/:key
-func (h *Handler) Get(c echo.Context) error {
+func (h *Handler) Get(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -93,7 +93,7 @@ func (h *Handler) Get(c echo.Context) error {
 // capability rather than trusting the gate alone.
 //
 // PUT /campaigns/:id/entities/:eid/system-state/:system/:key
-func (h *Handler) Put(c echo.Context) error {
+func (h *Handler) Put(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -140,7 +140,7 @@ type ListResponse struct {
 // repository already scopes by campaign and drops trashed pages.
 //
 // GET /campaigns/:id/system-state/:system/:key
-func (h *Handler) List(c echo.Context) error {
+func (h *Handler) List(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -167,7 +167,7 @@ func (h *Handler) List(c echo.Context) error {
 // the gm half only to the DM team, as on a page.
 //
 // GET /campaigns/:id/campaign-system-state/:system/:key
-func (h *Handler) GetCampaign(c echo.Context) error {
+func (h *Handler) GetCampaign(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -184,7 +184,7 @@ func (h *Handler) GetCampaign(c echo.Context) error {
 // document. Gated to the DM team on the route and again here.
 //
 // PUT /campaigns/:id/campaign-system-state/:system/:key
-func (h *Handler) PutCampaign(c echo.Context) error {
+func (h *Handler) PutCampaign(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -206,7 +206,7 @@ func (h *Handler) PutCampaign(c echo.Context) error {
 
 // requireViewable applies the show-page gate: the entity must belong to this
 // campaign and be visible to the viewer. Both failures are a plain 404.
-func (h *Handler) requireViewable(c echo.Context, cc *campaigns.CampaignContext, entityID string) error {
+func (h *Handler) requireViewable(c *echo.Context, cc *campaigns.CampaignContext, entityID string) error {
 	owner, canView, err := h.access.ResolveViewableEntity(c.Request().Context(), entityID, int(cc.VisibilityRole()), auth.GetUserID(c))
 	if err != nil {
 		var ae *apperror.AppError
@@ -226,7 +226,7 @@ func (h *Handler) requireViewable(c echo.Context, cc *campaigns.CampaignContext,
 // null into a nil pointer, which would silently read as "absent"; here null
 // must reach the service so it is rejected. Unknown members are rejected so a
 // misspelt half name cannot become a silent no-op.
-func bindPutBody(c echo.Context) (gm, public *json.RawMessage, err error) {
+func bindPutBody(c *echo.Context) (gm, public *json.RawMessage, err error) {
 	body, rerr := io.ReadAll(http.MaxBytesReader(c.Response(), c.Request().Body, maxBodyBytes))
 	if rerr != nil {
 		return nil, nil, apperror.NewBadRequest("request body is missing or too large")

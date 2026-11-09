@@ -1,6 +1,6 @@
 package designlab
 
-import "github.com/labstack/echo/v4"
+import "github.com/labstack/echo/v5"
 
 // RegisterRoutes adds the Design Lab page to the admin route group.
 func RegisterRoutes(adminGroup *echo.Group, h *Handler) {

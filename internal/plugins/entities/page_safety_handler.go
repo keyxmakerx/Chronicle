@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -31,7 +31,7 @@ func (h *PageSafetyHandler) SetAuditService(svc audit.AuditService) { h.audit = 
 
 // logRestore writes one restore to the activity log; a failure never undoes
 // the restore.
-func (h *PageSafetyHandler) logRestore(c echo.Context, campaignID, kind, id, name string) {
+func (h *PageSafetyHandler) logRestore(c *echo.Context, campaignID, kind, id, name string) {
 	if h.audit == nil {
 		return
 	}
@@ -73,7 +73,7 @@ func RegisterPageSafetyRoutes(e *echo.Echo, h *PageSafetyHandler, campaignSvc ca
 // campaign, or a page hidden from this scribe, reads as not found. History
 // holds every past text of the page, so it is gated like the page itself;
 // edit says the caller must also be allowed to change it.
-func (h *PageSafetyHandler) pageInCampaign(c echo.Context, cc *campaigns.CampaignContext, edit bool) (*Entity, error) {
+func (h *PageSafetyHandler) pageInCampaign(c *echo.Context, cc *campaigns.CampaignContext, edit bool) (*Entity, error) {
 	ctx := c.Request().Context()
 	entity, err := h.entities.GetByID(ctx, c.Param("eid"))
 	if err != nil {
@@ -95,7 +95,7 @@ func (h *PageSafetyHandler) pageInCampaign(c echo.Context, cc *campaigns.Campaig
 
 // History renders the History panel (GET .../entities/:eid/history?v=<id>).
 // v picks the version whose changes are shown; the newest by default.
-func (h *PageSafetyHandler) History(c echo.Context) error {
+func (h *PageSafetyHandler) History(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -123,7 +123,7 @@ func (h *PageSafetyHandler) History(c echo.Context) error {
 
 // roleLabels maps member user ids to their role word ("scribe"), for the
 // "Sam (scribe)" labels. Best-effort: a failed read just drops the roles.
-func (h *PageSafetyHandler) roleLabels(c echo.Context, campaignID string) map[string]string {
+func (h *PageSafetyHandler) roleLabels(c *echo.Context, campaignID string) map[string]string {
 	out := map[string]string{}
 	if h.members == nil {
 		return out
@@ -140,7 +140,7 @@ func (h *PageSafetyHandler) roleLabels(c echo.Context, campaignID string) map[st
 
 // RestoreVersion puts an old version back and reloads the page
 // (POST .../entities/:eid/history/:vid/restore).
-func (h *PageSafetyHandler) RestoreVersion(c echo.Context) error {
+func (h *PageSafetyHandler) RestoreVersion(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -156,7 +156,7 @@ func (h *PageSafetyHandler) RestoreVersion(c echo.Context) error {
 }
 
 // Trash renders the campaign's Trash under Manage (GET /campaigns/:id/trash).
-func (h *PageSafetyHandler) Trash(c echo.Context) error {
+func (h *PageSafetyHandler) Trash(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -181,7 +181,7 @@ func (h *PageSafetyHandler) Trash(c echo.Context) error {
 // RestoreFromTrash brings a page back (POST /campaigns/:id/trash/:eid/restore).
 // The Undo toast calls it with fetch and gets JSON; the Trash page's button
 // is an htmx form and gets the refreshed Trash.
-func (h *PageSafetyHandler) RestoreFromTrash(c echo.Context) error {
+func (h *PageSafetyHandler) RestoreFromTrash(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -201,7 +201,7 @@ func (h *PageSafetyHandler) RestoreFromTrash(c echo.Context) error {
 // RestoreOtherFromTrash brings back a picture, game night or map
 // (POST /campaigns/:id/trash/:kind/:tid/restore). The Undo toast gets JSON
 // with the link; the Trash page's button opens the restored thing.
-func (h *PageSafetyHandler) RestoreOtherFromTrash(c echo.Context) error {
+func (h *PageSafetyHandler) RestoreOtherFromTrash(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

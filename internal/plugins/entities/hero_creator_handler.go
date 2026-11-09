@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -21,7 +21,7 @@ func (h *Handler) SetHeroPlanner(p HeroPlanner) { h.heroPlanner = p }
 
 // heroTarget works out the page type a new hero becomes for this viewer and
 // whether they may make one. A player's hero must be a type they may claim.
-func (h *Handler) heroTarget(c echo.Context, cc *campaigns.CampaignContext) (*EntityType, heroAccess, error) {
+func (h *Handler) heroTarget(c *echo.Context, cc *campaigns.CampaignContext) (*EntityType, heroAccess, error) {
 	ctx := c.Request().Context()
 	campaignID := cc.Campaign.ID
 	if h.charLists == nil || cc.MemberRole < campaigns.RolePlayer {
@@ -62,7 +62,7 @@ func (h *Handler) ownsCharacter(ctx context.Context, campaignID, userID string, 
 	return false, nil
 }
 
-func (h *Handler) heroPlan(c echo.Context, cc *campaigns.CampaignContext) (*HeroPlan, error) {
+func (h *Handler) heroPlan(c *echo.Context, cc *campaigns.CampaignContext) (*HeroPlan, error) {
 	if h.heroPlanner == nil {
 		return &HeroPlan{Steps: []HeroStep{}}, nil
 	}
@@ -72,7 +72,7 @@ func (h *Handler) heroPlan(c echo.Context, cc *campaigns.CampaignContext) (*Hero
 // mayReadHeroPlan reports whether a viewer below Director may read the
 // creator plan: they may make a hero, or they own a page of one of the
 // campaign's character types.
-func (h *Handler) mayReadHeroPlan(c echo.Context, cc *campaigns.CampaignContext) (bool, error) {
+func (h *Handler) mayReadHeroPlan(c *echo.Context, cc *campaigns.CampaignContext) (bool, error) {
 	_, access, err := h.heroTarget(c, cc)
 	if err != nil || access.Allowed {
 		return access.Allowed, err
@@ -88,7 +88,7 @@ func (h *Handler) mayReadHeroPlan(c echo.Context, cc *campaigns.CampaignContext)
 }
 
 // NewHero renders the hero creator (GET /campaigns/:id/characters/new).
-func (h *Handler) NewHero(c echo.Context) error {
+func (h *Handler) NewHero(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -108,7 +108,7 @@ func (h *Handler) NewHero(c echo.Context) error {
 }
 
 // HeroPlanAPI returns the creator's steps (GET /campaigns/:id/characters/new/plan).
-func (h *Handler) HeroPlanAPI(c echo.Context) error {
+func (h *Handler) HeroPlanAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -135,7 +135,7 @@ func (h *Handler) HeroPlanAPI(c echo.Context) error {
 
 // CreateHero makes the hero from the creator's picks
 // (POST /campaigns/:id/characters/new) and answers with its page address.
-func (h *Handler) CreateHero(c echo.Context) error {
+func (h *Handler) CreateHero(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -195,7 +195,7 @@ func (h *Handler) CreateHero(c echo.Context) error {
 //
 // ?field= opens that list; ?for= names the player's character the new entry
 // is for, and the page links back to it (or to the hero creator, ?back=new).
-func (h *Handler) OwnEntries(c echo.Context) error {
+func (h *Handler) OwnEntries(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

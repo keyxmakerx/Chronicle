@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -46,20 +46,19 @@ func runPublicAccess(t *testing.T, svc CampaignService, session *auth.Session) (
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	if session != nil {
 		auth.SetSession(c, session)
 	}
 
 	var got *CampaignContext
-	h := AllowPublicCampaignAccess(svc)(func(c echo.Context) error {
+	h := AllowPublicCampaignAccess(svc)(func(c *echo.Context) error {
 		got = GetCampaignContext(c)
 		return nil
 	})
 	if err := h(c); err != nil {
 		// Surface the error to the recorder so redirect/forbidden cases assert on it.
-		e.HTTPErrorHandler(err, c)
+		e.HTTPErrorHandler(c, err)
 	}
 	return got, rec
 }

@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -13,7 +13,7 @@ import (
 // Homebrew Workshop's Crafting recipes part, its generator and recipe packs.
 
 // ItemCrafting handles GET /campaigns/:id/crafting/items/:eid.
-func (h *Handler) ItemCrafting(c echo.Context) error {
+func (h *Handler) ItemCrafting(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -26,7 +26,7 @@ func (h *Handler) ItemCrafting(c echo.Context) error {
 }
 
 // CreateMaterial handles POST /campaigns/:id/crafting/materials.
-func (h *Handler) CreateMaterial(c echo.Context) error {
+func (h *Handler) CreateMaterial(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -43,7 +43,7 @@ func (h *Handler) CreateMaterial(c echo.Context) error {
 }
 
 // ItemBlock handles GET /campaigns/:id/crafting/item-block.
-func (h *Handler) ItemBlock(c echo.Context) error {
+func (h *Handler) ItemBlock(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func (h *Handler) ItemBlock(c echo.Context) error {
 }
 
 // PlaceItemBlock handles POST /campaigns/:id/crafting/item-block.
-func (h *Handler) PlaceItemBlock(c echo.Context) error {
+func (h *Handler) PlaceItemBlock(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func (h *Handler) PlaceItemBlock(c echo.Context) error {
 }
 
 // Generate handles POST /campaigns/:id/crafting/generate.
-func (h *Handler) Generate(c echo.Context) error {
+func (h *Handler) Generate(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -86,7 +86,7 @@ func (h *Handler) Generate(c echo.Context) error {
 }
 
 // ListPacks handles GET /campaigns/:id/crafting/packs.
-func (h *Handler) ListPacks(c echo.Context) error {
+func (h *Handler) ListPacks(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func (h *Handler) ListPacks(c echo.Context) error {
 }
 
 // SavePack handles POST /campaigns/:id/crafting/packs.
-func (h *Handler) SavePack(c echo.Context) error {
+func (h *Handler) SavePack(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -117,7 +117,7 @@ func (h *Handler) SavePack(c echo.Context) error {
 
 // UploadPack handles POST /campaigns/:id/crafting/packs/file: the pack
 // file as the request body, up to maxPackBytes.
-func (h *Handler) UploadPack(c echo.Context) error {
+func (h *Handler) UploadPack(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func (h *Handler) UploadPack(c echo.Context) error {
 }
 
 // PackDetail handles GET /campaigns/:id/crafting/packs/:pid.
-func (h *Handler) PackDetail(c echo.Context) error {
+func (h *Handler) PackDetail(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func (h *Handler) PackDetail(c echo.Context) error {
 }
 
 // UpdatePack handles PUT /campaigns/:id/crafting/packs/:pid.
-func (h *Handler) UpdatePack(c echo.Context) error {
+func (h *Handler) UpdatePack(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -164,7 +164,7 @@ func (h *Handler) UpdatePack(c echo.Context) error {
 }
 
 // DeletePack handles DELETE /campaigns/:id/crafting/packs/:pid.
-func (h *Handler) DeletePack(c echo.Context) error {
+func (h *Handler) DeletePack(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -177,7 +177,7 @@ func (h *Handler) DeletePack(c echo.Context) error {
 
 // PackFile handles GET /campaigns/:id/crafting/packs/:pid/file: the pack as
 // a download.
-func (h *Handler) PackFile(c echo.Context) error {
+func (h *Handler) PackFile(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -192,7 +192,7 @@ func (h *Handler) PackFile(c echo.Context) error {
 }
 
 // ImportPack handles POST /campaigns/:id/crafting/packs/:pid/import.
-func (h *Handler) ImportPack(c echo.Context) error {
+func (h *Handler) ImportPack(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err

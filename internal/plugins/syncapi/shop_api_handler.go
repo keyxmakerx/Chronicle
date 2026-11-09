@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -44,7 +44,7 @@ type shopRoomAPIResponse struct {
 // goods are filtered for a plain Player with no per-user grants: dm_only
 // relations and goods whose item page is hidden from players are left out.
 // That is never more than any one player sees on the shop page.
-func (h *APIHandler) GetShopRoom(c echo.Context) error {
+func (h *APIHandler) GetShopRoom(c *echo.Context) error {
 	if h.shopRoomReader == nil {
 		return apperror.NewNotFound("shop")
 	}
@@ -130,7 +130,7 @@ func (h *APIHandler) SetShopBuyer(s ShopBuyAPIService) {
 
 // GetShopBuyers lists the characters the acting member may buy for at a shop.
 // GET /api/v1/campaigns/:id/armory/shops/:eid/buyers?actingUserId=
-func (h *APIHandler) GetShopBuyers(c echo.Context) error {
+func (h *APIHandler) GetShopBuyers(c *echo.Context) error {
 	if h.shopBuyer == nil {
 		return apperror.NewNotFound("shop")
 	}
@@ -148,7 +148,7 @@ func (h *APIHandler) GetShopBuyers(c echo.Context) error {
 // BuyFromShop buys a basket as the acting member.
 // POST /api/v1/campaigns/:id/armory/shops/:eid/buy
 // Body: {"actingUserId"?, "buyerEntityId", "items":[{"relationId","quantity"}]}
-func (h *APIHandler) BuyFromShop(c echo.Context) error {
+func (h *APIHandler) BuyFromShop(c *echo.Context) error {
 	if h.shopBuyer == nil {
 		return apperror.NewNotFound("shop")
 	}

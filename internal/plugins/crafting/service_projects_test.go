@@ -923,3 +923,31 @@ func TestProjects_NotSetUp(t *testing.T) {
 		t.Fatalf("CanCraftFor with no store = %v, %v", ok, err)
 	}
 }
+
+// namesDown is the directory once its item listing starts failing.
+type namesDown struct{ *fakeDir }
+
+func (namesDown) ListItems(context.Context, string, int, string) ([]Named, bool, error) {
+	return nil, false, errors.New("directory down")
+}
+
+// A roll that is already saved still delivers and answers when the item
+// names fail to load afterwards.
+func TestRollProject_NamesFailingAfterTheSave(t *testing.T) {
+	fx := newProjectFx()
+	pv := fx.start(t)
+	fx.ready(pv.ID, 1)
+	p := fx.store.projects[pv.ID]
+	p.Points = 20
+	fx.store.projects[pv.ID] = p
+	fx.s.dir = namesDown{&fakeDir{}}
+
+	fx.dice = []int{10, 10}
+	res, err := fx.roll(t, pv.ID, WorkClean)
+	if err != nil {
+		t.Fatalf("roll: %v", err)
+	}
+	if !res.Finished || fx.arm.given["potion"] != 1 || !fx.store.projects[pv.ID].Delivered {
+		t.Fatalf("finished %v, given %v, delivered %v", res.Finished, fx.arm.given, fx.store.projects[pv.ID].Delivered)
+	}
+}

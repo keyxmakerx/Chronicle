@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -20,7 +20,7 @@ func (h *Handler) SetReleaseNoticeService(svc *ReleaseNoticeService) {
 // ReleaseNoticeLater handles POST /admin/release-notice/later: hide this
 // version from the caller until a newer one is out. The empty answer swaps
 // the notice away.
-func (h *Handler) ReleaseNoticeLater(c echo.Context) error {
+func (h *Handler) ReleaseNoticeLater(c *echo.Context) error {
 	if h.releaseNotice == nil {
 		return apperror.NewMissingContext()
 	}
@@ -34,7 +34,7 @@ func (h *Handler) ReleaseNoticeLater(c echo.Context) error {
 // calls to GitHub about Chronicle's own version on or off. Reauth-gated like
 // the rest of the Security page, since turning it off silences news of
 // security fixes.
-func (h *Handler) SaveUpdateCheck(c echo.Context) error {
+func (h *Handler) SaveUpdateCheck(c *echo.Context) error {
 	if h.releaseNotice == nil {
 		return apperror.NewMissingContext()
 	}

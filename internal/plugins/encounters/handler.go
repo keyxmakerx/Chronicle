@@ -6,7 +6,7 @@ package encounters
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -19,7 +19,7 @@ type Handler struct{ svc Service }
 // NewHandler builds the handler.
 func NewHandler(svc Service) *Handler { return &Handler{svc: svc} }
 
-func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
+func viewerFrom(c *echo.Context) (campaignID string, v Viewer, err error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
@@ -27,7 +27,7 @@ func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
 	return cc.Campaign.ID, Viewer{UserID: auth.GetUserID(c), VisibilityRole: cc.VisibilityRole()}, nil
 }
 
-func bindSave(c echo.Context) (SaveInput, error) {
+func bindSave(c *echo.Context) (SaveInput, error) {
 	var in SaveInput
 	if err := bindJSON(c, MaxBodyBytes, &in); err != nil {
 		return SaveInput{}, err
@@ -36,7 +36,7 @@ func bindSave(c echo.Context) (SaveInput, error) {
 }
 
 // List handles GET /campaigns/:id/pages/:eid/encounters.
-func (h *Handler) List(c echo.Context) error {
+func (h *Handler) List(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -49,7 +49,7 @@ func (h *Handler) List(c echo.Context) error {
 }
 
 // Create handles POST /campaigns/:id/pages/:eid/encounters.
-func (h *Handler) Create(c echo.Context) error {
+func (h *Handler) Create(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (h *Handler) Create(c echo.Context) error {
 }
 
 // Get handles GET /campaigns/:id/encounters/:encid.
-func (h *Handler) Get(c echo.Context) error {
+func (h *Handler) Get(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -79,7 +79,7 @@ func (h *Handler) Get(c echo.Context) error {
 }
 
 // Update handles PUT /campaigns/:id/encounters/:encid.
-func (h *Handler) Update(c echo.Context) error {
+func (h *Handler) Update(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -96,7 +96,7 @@ func (h *Handler) Update(c echo.Context) error {
 }
 
 // Delete handles DELETE /campaigns/:id/encounters/:encid.
-func (h *Handler) Delete(c echo.Context) error {
+func (h *Handler) Delete(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err

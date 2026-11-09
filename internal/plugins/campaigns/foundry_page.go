@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -84,7 +84,7 @@ func lowerFirst(s string) string {
 }
 
 // FoundryPage renders GET /campaigns/:id/foundry (owner only).
-func (h *Handler) FoundryPage(c echo.Context) error {
+func (h *Handler) FoundryPage(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

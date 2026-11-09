@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
@@ -36,13 +36,12 @@ func (s *stubMapSvcLinkedMap) UpdateMarker(_ context.Context, _ string, in maps.
 	return nil
 }
 
-func linkedMapContext(method, body string) echo.Context {
+func linkedMapContext(method, body string) *echo.Context {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/api/v1/campaigns/camp-1/maps/map-1/markers/mk-1", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	c := e.NewContext(req, httptest.NewRecorder())
-	c.SetParamNames("id", "mapID", "markerID")
-	c.SetParamValues("camp-1", "map-1", "mk-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mapID", Value: "map-1"}, {Name: "markerID", Value: "mk-1"}})
 	c.Set(apiKeyContextKey, &APIKey{ID: 1, CampaignID: "camp-1", UserID: "owner-1", IsActive: true, Permissions: []APIKeyPermission{PermRead, PermWrite}})
 	return c
 }

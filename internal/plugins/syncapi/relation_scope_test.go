@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
@@ -84,14 +84,13 @@ func newRelationScopeSvc() *stubRelationSvcForScope {
 
 // newRelationScopeContext builds an Echo context for the given method against
 // /api/v1/campaigns/<campaignID>/relations/<relationID>.
-func newRelationScopeContext(method, campaignID, relationID string, body []byte) (echo.Context, *httptest.ResponseRecorder) {
+func newRelationScopeContext(method, campaignID, relationID string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/api/v1/campaigns/"+campaignID+"/relations/"+relationID, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "relationId")
-	c.SetParamValues(campaignID, relationID)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: campaignID}, {Name: "relationId", Value: relationID}})
 	return c, rec
 }
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -92,7 +92,7 @@ func newCraftingRouteFixture(t *testing.T, perms []APIKeyPermission, addons slug
 		return &campaigns.Campaign{ID: id}, nil
 	}}
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		var ae *apperror.AppError
 		if stderrors.As(err, &ae) {
 			_ = c.JSON(ae.Code, map[string]string{"error": ae.Type})

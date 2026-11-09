@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -51,7 +51,7 @@ func ViewerOf(cc *campaigns.CampaignContext, userID string) Viewer {
 	return Viewer{UserID: userID, Role: cc.VisibilityRole()}
 }
 
-func (h *Handler) ctx(c echo.Context) (*campaigns.CampaignContext, Viewer, error) {
+func (h *Handler) ctx(c *echo.Context) (*campaigns.CampaignContext, Viewer, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, Viewer{}, apperror.NewMissingContext()
@@ -59,7 +59,7 @@ func (h *Handler) ctx(c echo.Context) (*campaigns.CampaignContext, Viewer, error
 	return cc, ViewerOf(cc, auth.GetUserID(c)), nil
 }
 
-func bind(c echo.Context, into any) error {
+func bind(c *echo.Context, into any) error {
 	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, maxBodyBytes)
 	if err := c.Bind(into); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -68,7 +68,7 @@ func bind(c echo.Context, into any) error {
 }
 
 // idParam reads a numeric path id; 0 when the route has none (a create).
-func idParam(c echo.Context, name string) (int, error) {
+func idParam(c *echo.Context, name string) (int, error) {
 	raw := c.Param(name)
 	if raw == "" {
 		return 0, nil
@@ -81,7 +81,7 @@ func idParam(c echo.Context, name string) (int, error) {
 }
 
 // ListRules returns every rule.
-func (h *Handler) ListRules(c echo.Context) error {
+func (h *Handler) ListRules(c *echo.Context) error {
 	cc, v, err := h.ctx(c)
 	if err != nil {
 		return err
@@ -100,7 +100,7 @@ type ruleBody struct {
 }
 
 // SaveRule creates (POST) or replaces (PUT) a rule.
-func (h *Handler) SaveRule(c echo.Context) error {
+func (h *Handler) SaveRule(c *echo.Context) error {
 	cc, v, err := h.ctx(c)
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func (h *Handler) SaveRule(c echo.Context) error {
 
 // DeleteRule removes a rule. Fields that followed it keep any value typed by
 // hand and otherwise show nothing.
-func (h *Handler) DeleteRule(c echo.Context) error {
+func (h *Handler) DeleteRule(c *echo.Context) error {
 	cc, v, err := h.ctx(c)
 	if err != nil {
 		return err
@@ -142,7 +142,7 @@ func (h *Handler) DeleteRule(c echo.Context) error {
 }
 
 // ListWords returns every local word.
-func (h *Handler) ListWords(c echo.Context) error {
+func (h *Handler) ListWords(c *echo.Context) error {
 	cc, v, err := h.ctx(c)
 	if err != nil {
 		return err
@@ -163,7 +163,7 @@ type wordBody struct {
 }
 
 // SaveWord creates (POST) or replaces (PUT) a local word.
-func (h *Handler) SaveWord(c echo.Context) error {
+func (h *Handler) SaveWord(c *echo.Context) error {
 	cc, v, err := h.ctx(c)
 	if err != nil {
 		return err
@@ -189,7 +189,7 @@ func (h *Handler) SaveWord(c echo.Context) error {
 }
 
 // DeleteWord removes a local word.
-func (h *Handler) DeleteWord(c echo.Context) error {
+func (h *Handler) DeleteWord(c *echo.Context) error {
 	cc, v, err := h.ctx(c)
 	if err != nil {
 		return err

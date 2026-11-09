@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -31,7 +31,7 @@ func (h *Handler) SetOwnerReminder(r OwnerReminder) {
 // adminCampaignAction returns the actor for a per-campaign admin action. The
 // route group already requires a site admin; Admin here tells the service the
 // action is on an owner's behalf, which is what lets it pass an admin hold.
-func (h *Handler) adminCampaignAction(c echo.Context) (ActorInfo, error) {
+func (h *Handler) adminCampaignAction(c *echo.Context) (ActorInfo, error) {
 	if h.updates == nil {
 		return ActorInfo{}, apperror.NewNotFound("campaign updates are not available")
 	}
@@ -44,7 +44,7 @@ func (h *Handler) adminCampaignAction(c echo.Context) (ActorInfo, error) {
 
 // HoldCampaign keeps a campaign on its current version against its owner's
 // Update (POST /admin/packages/:id/campaigns/:cid/hold).
-func (h *Handler) HoldCampaign(c echo.Context) error {
+func (h *Handler) HoldCampaign(c *echo.Context) error {
 	actor, err := h.adminCampaignAction(c)
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (h *Handler) HoldCampaign(c echo.Context) error {
 }
 
 // ReleaseCampaign lets go of a hold (DELETE /admin/packages/:id/campaigns/:cid/hold).
-func (h *Handler) ReleaseCampaign(c echo.Context) error {
+func (h *Handler) ReleaseCampaign(c *echo.Context) error {
 	actor, err := h.adminCampaignAction(c)
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func (h *Handler) ReleaseCampaign(c echo.Context) error {
 
 // MoveCampaign moves a campaign to a version the admin picked
 // (PUT /admin/packages/:id/campaigns/:cid/version, form: version).
-func (h *Handler) MoveCampaign(c echo.Context) error {
+func (h *Handler) MoveCampaign(c *echo.Context) error {
 	actor, err := h.adminCampaignAction(c)
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ func (h *Handler) MoveCampaign(c echo.Context) error {
 
 // RemindCampaignOwner nudges the owner of a campaign that has a version
 // waiting (POST /admin/packages/:id/campaigns/:cid/remind).
-func (h *Handler) RemindCampaignOwner(c echo.Context) error {
+func (h *Handler) RemindCampaignOwner(c *echo.Context) error {
 	actor, err := h.adminCampaignAction(c)
 	if err != nil {
 		return err

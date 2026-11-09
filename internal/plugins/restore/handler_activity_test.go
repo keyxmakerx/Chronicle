@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 type stubRestoreSvc struct {
@@ -34,7 +34,7 @@ func (s stubRestoreSvc) RunRestore(ctx context.Context, _ string) (*RunResult, e
 
 type recordingActivity struct{ actions []string }
 
-func (r *recordingActivity) RecordAdminChange(_ echo.Context, action, _, _, _ string) {
+func (r *recordingActivity) RecordAdminChange(_ *echo.Context, action, _, _, _ string) {
 	r.actions = append(r.actions, action)
 }
 

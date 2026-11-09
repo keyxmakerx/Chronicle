@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -26,7 +26,7 @@ import (
 func newJSONContentTypeFixture(t *testing.T) *echo.Echo {
 	t.Helper()
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		type errBody struct {
 			Error   string `json:"error"`
 			Message string `json:"message"`
@@ -41,7 +41,7 @@ func newJSONContentTypeFixture(t *testing.T) *echo.Echo {
 		_ = c.JSON(http.StatusInternalServerError, errBody{Error: "internal_error"})
 	}
 	g := e.Group("/test", RequireJSONContentType())
-	pong := func(c echo.Context) error {
+	pong := func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
 	}
 	g.POST("/echo", pong)
@@ -159,7 +159,7 @@ func TestRequireJSONContentType_SafeMethodsPassThrough(t *testing.T) {
 // middleware, UploadMedia returns 415 in production.
 func TestRequireJSONContentType_SubGroupSkipPattern(t *testing.T) {
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		if appErr, ok := err.(*apperror.AppError); ok {
 			_ = c.JSON(appErr.Code, map[string]string{"type": appErr.Type})
 			return
@@ -168,11 +168,11 @@ func TestRequireJSONContentType_SubGroupSkipPattern(t *testing.T) {
 	}
 	// JSON-locked group — mirrors v1.
 	v1 := e.Group("/test", RequireJSONContentType())
-	v1.POST("/json", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	v1.POST("/json", func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 	// Multipart sub-group at the same prefix — mirrors v1Multipart.
 	// NO RequireJSONContentType() here.
 	v1Multipart := e.Group("/test")
-	v1Multipart.POST("/upload", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	v1Multipart.POST("/upload", func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 
 	// /test/json with multipart → 415 (JSON-locked group rejects).
 	req := httptest.NewRequest(http.MethodPost, "/test/json", strings.NewReader(""))

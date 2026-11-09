@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // A path that doesn't exist answers 404, never the 403 of an add-on gate on
@@ -16,11 +16,11 @@ func TestAddonRoutes_UnknownPathIsNotFound(t *testing.T) {
 	e := echo.New()
 	pass := func(next echo.HandlerFunc) echo.HandlerFunc { return next }
 	deny := func(echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error { return c.NoContent(http.StatusForbidden) }
+		return func(c *echo.Context) error { return c.NoContent(http.StatusForbidden) }
 	}
 	cg := e.Group("/api/v1/campaigns/:id", pass)
-	cg.GET("/entities", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
-	addonRoutes{cg, deny}.GET("/armory/shops/:eid/room", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	cg.GET("/entities", func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
+	addonRoutes{cg, deny}.GET("/armory/shops/:eid/room", func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 
 	for path, want := range map[string]int{
 		"/api/v1/campaigns/c1/entities":            http.StatusOK,

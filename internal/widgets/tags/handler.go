@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
@@ -61,7 +61,7 @@ func (h *Handler) SetGrantService(svc TagGrantService) {
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
 // never block the primary operation.
-func (h *Handler) logAudit(c echo.Context, campaignID, action, tagName string) {
+func (h *Handler) logAudit(c *echo.Context, campaignID, action, tagName string) {
 	if h.auditSvc == nil {
 		return
 	}
@@ -84,7 +84,7 @@ func canSeeDmOnly(cc *campaigns.CampaignContext) bool {
 
 // ListTags returns all tags for a campaign as JSON (GET /campaigns/:id/tags).
 // Players and Scribes see only public tags; Owners see all tags including dm_only.
-func (h *Handler) ListTags(c echo.Context) error {
+func (h *Handler) ListTags(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -104,7 +104,7 @@ func (h *Handler) ListTags(c echo.Context) error {
 }
 
 // CreateTag creates a new tag in the campaign (POST /campaigns/:id/tags).
-func (h *Handler) CreateTag(c echo.Context) error {
+func (h *Handler) CreateTag(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -132,7 +132,7 @@ func (h *Handler) CreateTag(c echo.Context) error {
 }
 
 // UpdateTag updates an existing tag (PUT /campaigns/:id/tags/:tagId).
-func (h *Handler) UpdateTag(c echo.Context) error {
+func (h *Handler) UpdateTag(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -182,7 +182,7 @@ func (h *Handler) UpdateTag(c echo.Context) error {
 }
 
 // DeleteTag removes a tag from the campaign (DELETE /campaigns/:id/tags/:tagId).
-func (h *Handler) DeleteTag(c echo.Context) error {
+func (h *Handler) DeleteTag(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -215,7 +215,7 @@ func (h *Handler) DeleteTag(c echo.Context) error {
 // IDs (PUT /campaigns/:id/entities/:eid/tags). Accepts a JSON body with a
 // "tagIds" array. This is an idempotent replacement operation: the entity
 // will have exactly the tags specified, with old ones removed and new ones added.
-func (h *Handler) SetEntityTags(c echo.Context) error {
+func (h *Handler) SetEntityTags(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -257,7 +257,7 @@ func (h *Handler) SetEntityTags(c echo.Context) error {
 // and the caller may view it. It fails closed when no gate is wired. The role
 // is cc.VisibilityRole(), not the raw cc.MemberRole, so a Co-DM (Player + DM
 // grant) clears it before canSeeDmOnly checks IsDmGranted (ADR-057).
-func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignContext, entityID string) error {
+func (h *Handler) requireViewableEntity(c *echo.Context, cc *campaigns.CampaignContext, entityID string) error {
 	if h.entityGate == nil {
 		return apperror.NewInternal(errors.New("tags: entity gate not configured"))
 	}
@@ -275,7 +275,7 @@ func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignCo
 // GetEntityTags returns all tags for an entity as JSON
 // (GET /campaigns/:id/entities/:eid/tags).
 // Players see only public tags; Scribes and Owners see all tags including dm_only.
-func (h *Handler) GetEntityTags(c echo.Context) error {
+func (h *Handler) GetEntityTags(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

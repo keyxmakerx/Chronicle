@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -89,8 +89,7 @@ func TestPeek_Access(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/e1/peek", nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("c1", "e1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "e1"}})
 			c.Set("campaign_context", &campaigns.CampaignContext{
 				Campaign:   &campaigns.Campaign{ID: "c1"},
 				MemberRole: tc.role,
@@ -154,8 +153,7 @@ func TestPeek_DocumentNavigationRedirects(t *testing.T) {
 	req.Header.Set("Sec-Fetch-Dest", "document")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("c1", "e1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "e1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}})
 	if err := h.Peek(c); err != nil {
 		t.Fatal(err)

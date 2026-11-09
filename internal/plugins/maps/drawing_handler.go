@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -29,7 +29,7 @@ func NewDrawingHandler(mapSvc MapService, drawingSvc DrawingService) *DrawingHan
 
 // requireMapOwnership verifies the map belongs to the campaign. Returns 404 for
 // cross-campaign IDOR attempts.
-func (h *DrawingHandler) requireMapOwnership(c echo.Context, mapID, campaignID string) error {
+func (h *DrawingHandler) requireMapOwnership(c *echo.Context, mapID, campaignID string) error {
 	m, err := h.mapSvc.GetMap(c.Request().Context(), mapID)
 	if err != nil {
 		return err
@@ -43,7 +43,7 @@ func (h *DrawingHandler) requireMapOwnership(c echo.Context, mapID, campaignID s
 // getUserID returns the signed-in user's id, or "" for an anonymous visitor.
 // It must read through the auth plugin's accessor: pin rules, own-item
 // deletes and creator stamps all key off this id.
-func getUserID(c echo.Context) string {
+func getUserID(c *echo.Context) string {
 	return auth.GetUserID(c)
 }
 
@@ -69,7 +69,7 @@ func drawingResponseFor(ctx context.Context, d Drawing) drawingResponse {
 
 // ListDrawings returns all drawings for a map, filtered by the user's role.
 // GET /api/v1/campaigns/:id/maps/:mid/drawings
-func (h *DrawingHandler) ListDrawings(c echo.Context) error {
+func (h *DrawingHandler) ListDrawings(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -98,7 +98,7 @@ func (h *DrawingHandler) ListDrawings(c echo.Context) error {
 
 // CreateDrawing creates a new drawing on a map.
 // POST /api/v1/campaigns/:id/maps/:mid/drawings
-func (h *DrawingHandler) CreateDrawing(c echo.Context) error {
+func (h *DrawingHandler) CreateDrawing(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -156,7 +156,7 @@ func (h *DrawingHandler) CreateDrawing(c echo.Context) error {
 
 // GetDrawing returns a single drawing by ID.
 // GET /api/v1/campaigns/:id/maps/:mid/drawings/:did
-func (h *DrawingHandler) GetDrawing(c echo.Context) error {
+func (h *DrawingHandler) GetDrawing(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -189,7 +189,7 @@ func (h *DrawingHandler) GetDrawing(c echo.Context) error {
 
 // UpdateDrawing updates an existing drawing.
 // PUT /api/v1/campaigns/:id/maps/:mid/drawings/:did
-func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
+func (h *DrawingHandler) UpdateDrawing(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -240,7 +240,7 @@ func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
 
 // DeleteDrawing removes a drawing.
 // DELETE /api/v1/campaigns/:id/maps/:mid/drawings/:did
-func (h *DrawingHandler) DeleteDrawing(c echo.Context) error {
+func (h *DrawingHandler) DeleteDrawing(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -258,7 +258,7 @@ func (h *DrawingHandler) DeleteDrawing(c echo.Context) error {
 
 // ListTokens returns all tokens for a map, filtered by the user's role.
 // GET /api/v1/campaigns/:id/maps/:mid/tokens
-func (h *DrawingHandler) ListTokens(c echo.Context) error {
+func (h *DrawingHandler) ListTokens(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -276,7 +276,7 @@ func (h *DrawingHandler) ListTokens(c echo.Context) error {
 
 // CreateToken places a new token on a map.
 // POST /api/v1/campaigns/:id/maps/:mid/tokens
-func (h *DrawingHandler) CreateToken(c echo.Context) error {
+func (h *DrawingHandler) CreateToken(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -356,7 +356,7 @@ func (h *DrawingHandler) CreateToken(c echo.Context) error {
 
 // GetToken returns a single token by ID.
 // GET /api/v1/campaigns/:id/maps/:mid/tokens/:tid
-func (h *DrawingHandler) GetToken(c echo.Context) error {
+func (h *DrawingHandler) GetToken(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -385,7 +385,7 @@ func (h *DrawingHandler) GetToken(c echo.Context) error {
 
 // UpdateToken updates a token's properties.
 // PUT /api/v1/campaigns/:id/maps/:mid/tokens/:tid
-func (h *DrawingHandler) UpdateToken(c echo.Context) error {
+func (h *DrawingHandler) UpdateToken(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -461,7 +461,7 @@ func (h *DrawingHandler) UpdateToken(c echo.Context) error {
 
 // UpdateTokenPosition updates only the position of a token (optimized for drag).
 // PATCH /api/v1/campaigns/:id/maps/:mid/tokens/:tid/position
-func (h *DrawingHandler) UpdateTokenPosition(c echo.Context) error {
+func (h *DrawingHandler) UpdateTokenPosition(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -482,7 +482,7 @@ func (h *DrawingHandler) UpdateTokenPosition(c echo.Context) error {
 
 // DeleteToken removes a token.
 // DELETE /api/v1/campaigns/:id/maps/:mid/tokens/:tid
-func (h *DrawingHandler) DeleteToken(c echo.Context) error {
+func (h *DrawingHandler) DeleteToken(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -500,7 +500,7 @@ func (h *DrawingHandler) DeleteToken(c echo.Context) error {
 
 // ListLayers returns all layers for a map.
 // GET /api/v1/campaigns/:id/maps/:mid/layers
-func (h *DrawingHandler) ListLayers(c echo.Context) error {
+func (h *DrawingHandler) ListLayers(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -517,7 +517,7 @@ func (h *DrawingHandler) ListLayers(c echo.Context) error {
 
 // CreateLayer creates a new layer on a map.
 // POST /api/v1/campaigns/:id/maps/:mid/layers
-func (h *DrawingHandler) CreateLayer(c echo.Context) error {
+func (h *DrawingHandler) CreateLayer(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -554,7 +554,7 @@ func (h *DrawingHandler) CreateLayer(c echo.Context) error {
 
 // GetLayer returns a single layer by ID.
 // GET /api/v1/campaigns/:id/maps/:mid/layers/:lid
-func (h *DrawingHandler) GetLayer(c echo.Context) error {
+func (h *DrawingHandler) GetLayer(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -574,7 +574,7 @@ func (h *DrawingHandler) GetLayer(c echo.Context) error {
 
 // UpdateLayer updates a layer's properties.
 // PUT /api/v1/campaigns/:id/maps/:mid/layers/:lid
-func (h *DrawingHandler) UpdateLayer(c echo.Context) error {
+func (h *DrawingHandler) UpdateLayer(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -612,7 +612,7 @@ func (h *DrawingHandler) UpdateLayer(c echo.Context) error {
 
 // DeleteLayer removes a layer.
 // DELETE /api/v1/campaigns/:id/maps/:mid/layers/:lid
-func (h *DrawingHandler) DeleteLayer(c echo.Context) error {
+func (h *DrawingHandler) DeleteLayer(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -630,7 +630,7 @@ func (h *DrawingHandler) DeleteLayer(c echo.Context) error {
 
 // ListFog returns all fog regions for a map.
 // GET /api/v1/campaigns/:id/maps/:mid/fog
-func (h *DrawingHandler) ListFog(c echo.Context) error {
+func (h *DrawingHandler) ListFog(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -647,7 +647,7 @@ func (h *DrawingHandler) ListFog(c echo.Context) error {
 
 // CreateFog creates a new fog region on a map.
 // POST /api/v1/campaigns/:id/maps/:mid/fog
-func (h *DrawingHandler) CreateFog(c echo.Context) error {
+func (h *DrawingHandler) CreateFog(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -676,7 +676,7 @@ func (h *DrawingHandler) CreateFog(c echo.Context) error {
 
 // DeleteFog removes a fog region.
 // DELETE /api/v1/campaigns/:id/maps/:mid/fog/:fid
-func (h *DrawingHandler) DeleteFog(c echo.Context) error {
+func (h *DrawingHandler) DeleteFog(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 
@@ -692,7 +692,7 @@ func (h *DrawingHandler) DeleteFog(c echo.Context) error {
 
 // ResetFog removes all fog regions for a map.
 // POST /api/v1/campaigns/:id/maps/:mid/fog/reset
-func (h *DrawingHandler) ResetFog(c echo.Context) error {
+func (h *DrawingHandler) ResetFog(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	mapID := c.Param("mid")
 

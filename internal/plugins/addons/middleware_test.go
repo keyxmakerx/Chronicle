@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -69,11 +69,10 @@ func TestRequireAddon_DisabledRefusal(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id")
-			c.SetParamValues("c1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 
 			mw := RequireAddon(stubAddonService{}, "player-notes")
-			handler := mw(func(c echo.Context) error {
+			handler := mw(func(c *echo.Context) error {
 				t.Fatal("next() must not be called when the addon is disabled")
 				return nil
 			})

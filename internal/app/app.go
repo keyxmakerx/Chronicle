@@ -13,10 +13,11 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
-	echomw "github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	echomw "github.com/labstack/echo/v5/middleware"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -44,8 +45,18 @@ type App struct {
 	// Redis is the Redis client shared for sessions, caching, rate limiting.
 	Redis *redis.Client
 
-	// Echo is the HTTP server instance.
+	// Echo is the router and middleware chain that serves every request.
 	Echo *echo.Echo
+
+	// server is the HTTP listener in front of Echo. Echo v5 no longer owns
+	// one, so Start and Shutdown drive it here.
+	server *http.Server
+
+	// routeHandlers maps "METHOD path" to the registered handler's function
+	// name. Echo v5's route table names a route by method and path only, and
+	// the operator diagnostics compare live handlers by function name.
+	routeHandlersMu sync.Mutex
+	routeHandlers   map[string]string
 
 	// WASMPluginManager manages loaded WASM logic extension plugins.
 	// Set during route registration; nil until then.
@@ -89,10 +100,6 @@ type App struct {
 func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *database.PluginHealthRegistry, pluginSchemas []database.PluginSchema) (*App, error) {
 	e := echo.New()
 
-	// Disable Echo's default banner and startup message -- we log our own.
-	e.HideBanner = true
-	e.HidePort = true
-
 	// Configure trusted reverse proxy IPs so c.RealIP() returns the actual
 	// client IP instead of the proxy's IP — needed for rate limiting, audit
 	// logging, and abuse detection to see the real visitor. The list is
@@ -110,10 +117,22 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 		DB:             db,
 		Redis:          rdb,
 		Echo:           e,
+		server:         &http.Server{Handler: e},
 		PluginHealth:   pluginHealth,
 		PluginSchemas:  pluginSchemas,
 		ShutdownCtx:    shutdownCtx,
 		ShutdownCancel: shutdownCancel,
+	}
+
+	app.routeHandlers = make(map[string]string)
+	e.OnAddRoute = func(r echo.Route) error {
+		if r.Handler == nil {
+			return nil
+		}
+		app.routeHandlersMu.Lock()
+		app.routeHandlers[r.Method+" "+r.Path] = echo.HandlerName(r.Handler)
+		app.routeHandlersMu.Unlock()
+		return nil
 	}
 
 	// Register global middleware in order of execution.
@@ -158,8 +177,8 @@ func (a *App) setupMiddleware() {
 	// (and silent, since it fails before the handler's own check ever runs)
 	// ceiling for every one of them.
 	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
-		Limit: "2M",
-		Skipper: func(c echo.Context) bool {
+		LimitBytes: 2 << 20,
+		Skipper: func(c *echo.Context) bool {
 			path := c.Request().URL.Path
 			if strings.HasPrefix(path, "/media/upload") || path == "/ws" || path == siteLookPath {
 				return true
@@ -173,8 +192,8 @@ func (a *App) setupMiddleware() {
 	// before any route-level middleware runs; a limit set only at the route
 	// would come too late.
 	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
-		Limit:   siteLookBodyLimit,
-		Skipper: func(c echo.Context) bool { return c.Request().URL.Path != siteLookPath },
+		LimitBytes: siteLookBodyLimit,
+		Skipper:    func(c *echo.Context) bool { return c.Request().URL.Path != siteLookPath },
 	}))
 
 	// Settings > Import's zip upload is exempt from the 2 MB limit above but gets
@@ -182,8 +201,8 @@ func (a *App) setupMiddleware() {
 	// check below parses the multipart body before authentication, so an
 	// unauthenticated client could otherwise make the server spool any size.
 	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
-		Limit:   vaultImportBodyLimit(),
-		Skipper: func(c echo.Context) bool { return !isVaultImportUploadPath(c.Request().URL.Path) },
+		LimitBytes: vaultImportBodyLimit(),
+		Skipper:    func(c *echo.Context) bool { return !isVaultImportUploadPath(c.Request().URL.Path) },
 	}))
 
 	// Request logging -- log every request with method, path, status, latency.
@@ -233,10 +252,10 @@ var calendarImportPathPattern = regexp.MustCompile(
 // the global limit must not apply here.
 var vaultImportUploadPattern = regexp.MustCompile(`^/campaigns/[^/]+/import/markdown/preview$`)
 
-// vaultImportBodyLimit is the upload route's size cap in Echo's unit syntax,
-// rounded up to a whole KiB.
-func vaultImportBodyLimit() string {
-	return fmt.Sprintf("%dK", (vault_import.RequestLimit(vault_import.DefaultLimits)+1023)/1024)
+// vaultImportBodyLimit is the upload route's size cap in bytes, rounded up to
+// a whole KiB.
+func vaultImportBodyLimit() int64 {
+	return (vault_import.RequestLimit(vault_import.DefaultLimits) + 1023) / 1024 * 1024
 }
 
 // isVaultImportUploadPath reports whether path is that upload route.
@@ -248,7 +267,7 @@ func isVaultImportUploadPath(path string) bool {
 // size cap: room for a 1 MB logo and a 3 MB picture plus the other fields.
 const (
 	siteLookPath      = "/admin/site-look"
-	siteLookBodyLimit = "5M"
+	siteLookBodyLimit = 5 << 20
 )
 
 // isCalendarImportPath reports whether path is one of the calendar import
@@ -269,9 +288,9 @@ func isCalendarImportPath(path string) bool {
 // being swapped into a partial target.
 //
 // For 401 errors on browser requests, we redirect to the login page.
-func (a *App) errorHandler(err error, c echo.Context) {
+func (a *App) errorHandler(c *echo.Context, err error) {
 	// Don't double-write if response is already committed.
-	if c.Response().Committed {
+	if middleware.ResponseState(c).Committed {
 		return
 	}
 
@@ -290,16 +309,20 @@ func (a *App) errorHandler(err error, c echo.Context) {
 		code = appErr.Code
 		message = appErr.Message
 	} else {
-		// Check for Echo's built-in HTTP errors (e.g., 404 from router,
-		// panic recovery).
-		var echoErr *echo.HTTPError
-		if errors.As(err, &echoErr) {
+		// Echo's own errors: an *echo.HTTPError a handler returned, or one
+		// of Echo's fixed sentinels (the router's 404 and 405, the body
+		// limit's 413). The sentinels carry no message, so they get the
+		// status text, as they did when they were HTTPErrors.
+		if sc := echo.StatusCode(err); sc != 0 {
 			kind = observability.KindHTTP
-			code = echoErr.Code
-			if msg, ok := echoErr.Message.(string); ok {
-				message = msg
-			} else {
-				message = defaultErrorMessage(code)
+			code = sc
+			message = http.StatusText(code)
+			var echoErr *echo.HTTPError
+			if errors.As(err, &echoErr) {
+				message = echoErr.Message
+				if message == "" {
+					message = defaultErrorMessage(code)
+				}
 			}
 		}
 	}
@@ -417,7 +440,7 @@ func defaultErrorMessage(code int) string {
 // Matches /api/* paths and fetch requests with JSON content type (e.g.,
 // calendar/maps/timeline endpoints that use fetch + JSON but live under
 // /campaigns/* rather than /api/*).
-func isAPIRequest(c echo.Context) bool {
+func isAPIRequest(c *echo.Context) bool {
 	path := c.Request().URL.Path
 	if len(path) >= 4 && path[:4] == "/api" {
 		return true
@@ -433,7 +456,7 @@ func isAPIRequest(c echo.Context) bool {
 }
 
 // isHTMXRequest returns true if the request was initiated by HTMX.
-func isHTMXRequest(c echo.Context) bool {
+func isHTMXRequest(c *echo.Context) bool {
 	return c.Request().Header.Get("HX-Request") == "true"
 }
 
@@ -444,5 +467,20 @@ func (a *App) Start() error {
 		slog.String("addr", addr),
 		slog.String("env", a.Config.Env),
 	)
-	return a.Echo.Start(addr)
+	a.server.Addr = addr
+	return a.server.ListenAndServe()
+}
+
+// routeHandler returns the function name of the handler registered for
+// method and path, or "" when none was recorded.
+func (a *App) routeHandler(method, path string) string {
+	a.routeHandlersMu.Lock()
+	defer a.routeHandlersMu.Unlock()
+	return a.routeHandlers[method+" "+path]
+}
+
+// Shutdown stops accepting connections and waits, until ctx ends, for
+// in-flight requests to finish. Start then returns http.ErrServerClosed.
+func (a *App) Shutdown(ctx context.Context) error {
+	return a.server.Shutdown(ctx)
 }

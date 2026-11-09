@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -100,7 +100,7 @@ func signThumbURL(t *testing.T, signer *URLSigner, fileID, size, viewer string, 
 // the given query params. Tests then call h.checkMediaAccess against
 // it. Optional session is set via auth.SetSession so we exercise the
 // real auth helpers (no shadow keys).
-func newAccessTestContext(query map[string]string, session *auth.Session) echo.Context {
+func newAccessTestContext(query map[string]string, session *auth.Session) *echo.Context {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/media/x", nil)
 	q := req.URL.Query()

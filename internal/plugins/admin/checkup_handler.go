@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -22,7 +22,7 @@ func (h *Handler) SetCheckupService(svc *CheckupService, runCtx context.Context)
 // CheckupShield handles GET /admin/checkup: the top bar's shield and sheet,
 // plus the reminder strip swapped in out of band. It may peek; the answers to
 // Check now and Remind me tomorrow never do.
-func (h *Handler) CheckupShield(c echo.Context) error {
+func (h *Handler) CheckupShield(c *echo.Context) error {
 	if h.checkup == nil {
 		return c.NoContent(http.StatusNoContent)
 	}
@@ -31,7 +31,7 @@ func (h *Handler) CheckupShield(c echo.Context) error {
 
 // RunCheckup handles POST /admin/checkup/run (Check now). The run goes on in
 // the background; the answer is the shield showing it in progress.
-func (h *Handler) RunCheckup(c echo.Context) error {
+func (h *Handler) RunCheckup(c *echo.Context) error {
 	if h.checkup == nil {
 		return apperror.NewMissingContext()
 	}
@@ -44,7 +44,7 @@ func (h *Handler) RunCheckup(c echo.Context) error {
 }
 
 // SnoozeCheckup handles POST /admin/checkup/snooze (Remind me tomorrow).
-func (h *Handler) SnoozeCheckup(c echo.Context) error {
+func (h *Handler) SnoozeCheckup(c *echo.Context) error {
 	if h.checkup == nil {
 		return apperror.NewMissingContext()
 	}
@@ -54,7 +54,7 @@ func (h *Handler) SnoozeCheckup(c echo.Context) error {
 	return h.renderCheckup(c, true)
 }
 
-func (h *Handler) renderCheckup(c echo.Context, noPeek bool) error {
+func (h *Handler) renderCheckup(c *echo.Context, noPeek bool) error {
 	var signedInAt time.Time
 	if s := auth.GetSession(c); s != nil {
 		signedInAt = s.CreatedAt

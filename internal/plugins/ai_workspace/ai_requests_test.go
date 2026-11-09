@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
@@ -158,7 +158,7 @@ func requestRig(t *testing.T) (*Handler, *reqRepo, *memTables, int64) {
 	return h, repo, m, q.ID
 }
 
-func post(t *testing.T, h func(echo.Context) error, path string, form url.Values, params ...string) *httptest.ResponseRecorder {
+func post(t *testing.T, h func(*echo.Context) error, path string, form url.Values, params ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -166,8 +166,7 @@ func post(t *testing.T, h func(echo.Context) error, path string, form url.Values
 	c := echo.New().NewContext(req, rec)
 	ownerCtx(c)
 	if len(params) == 2 {
-		c.SetParamNames("id", params[0])
-		c.SetParamValues("camp-1", params[1])
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: params[0], Value: params[1]}})
 	}
 	if err := h(c); err != nil {
 		rec.Code = -1

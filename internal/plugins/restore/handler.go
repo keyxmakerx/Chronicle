@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 )
@@ -28,7 +28,7 @@ type Handler struct {
 func NewHandler(svc Service) *Handler { return &Handler{svc: svc} }
 
 // Page renders the restore dashboard (GET /admin/restore).
-func (h *Handler) Page(c echo.Context) error {
+func (h *Handler) Page(c *echo.Context) error {
 	manifests, err := h.svc.ListManifests()
 	if err != nil {
 		return middleware.Render(c, http.StatusOK, RestorePage(RestorePageData{
@@ -59,7 +59,7 @@ func (h *Handler) Page(c echo.Context) error {
 // browser hangs for the duration. That's the right shape because the
 // site is unavailable during restore anyway — there's no "background
 // completion" the operator could navigate to.
-func (h *Handler) Run(c echo.Context) error {
+func (h *Handler) Run(c *echo.Context) error {
 	manifest := c.FormValue("manifest")
 	if manifest == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "manifest is required")

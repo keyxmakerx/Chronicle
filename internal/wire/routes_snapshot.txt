@@ -142,7 +142,7 @@ PUT	/admin/security/users/:id/enable	site-admin	plugins/admin.(*Handler).EnableU
 POST	/admin/security/users/:id/force-logout	site-admin	plugins/admin.(*Handler).ForceLogoutUser	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 PUT	/admin/security/users/:id/two-factor/off	site-admin	plugins/admin.(*Handler).DisableTwoFactor	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 GET	/admin/site-look	site-admin	plugins/admin.(*Handler).SiteLook	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
-POST	/admin/site-look	site-admin	plugins/admin.(*Handler).SaveSiteLook	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > github.com/labstack/echo/v4/middleware.BodyLimitWithConfig
+POST	/admin/site-look	site-admin	plugins/admin.(*Handler).SaveSiteLook	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > github.com/labstack/echo/v5/middleware.BodyLimitConfig.ToMiddleware
 GET	/admin/smtp	site-admin	plugins/smtp.(*Handler).Settings	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 PUT	/admin/smtp	site-admin	plugins/smtp.(*Handler).UpdateSettings	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 POST	/admin/smtp/send-test	site-admin	plugins/smtp.(*Handler).SendTestEmail	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
@@ -1296,20 +1296,20 @@ POST	/rsvp/:token	none	plugins/sessions.(*Handler).ApplyRSVPToken	-
 GET	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).RedeemSuggestToken	-
 POST	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).ApplySuggestToken	-
 GET	/sessions/feed/:token	none	plugins/sessions.(*Handler).GameNightFeedICS	-
-GET	/static/plugins/crafting*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/encounters*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/entities*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/homebrew*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/maps*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/page_tests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/pageblocks*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/player_changes*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/quests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/rolls*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/rumours*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/sessions*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/timeline*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
-GET	/static/plugins/trackers*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
+GET	/static/plugins/crafting*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/encounters*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/entities*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/homebrew*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/maps*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/page_tests*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/pageblocks*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/player_changes*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/quests*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/rolls*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/rumours*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/sessions*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/timeline*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/trackers*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
 GET	/systems/browse	session	plugins/packages.(*OwnerHandler).BrowseSystems	plugins/auth.RequireAuth
 GET	/systems/my-submissions	session	plugins/packages.(*OwnerHandler).MySubmissions	plugins/auth.RequireAuth
 GET	/systems/submit	session	plugins/packages.(*OwnerHandler).SubmitSystemForm	plugins/auth.RequireAuth

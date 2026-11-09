@@ -4,7 +4,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -44,7 +44,7 @@ func TestCampaignPageSeen(t *testing.T) {
 			rec := &seenRecorder{}
 			e := echo.New()
 			e.Use(campaignPageSeen(rec))
-			handler := func(c echo.Context) error {
+			handler := func(c *echo.Context) error {
 				if tt.cc != nil {
 					c.Set("campaign_context", tt.cc)
 				}

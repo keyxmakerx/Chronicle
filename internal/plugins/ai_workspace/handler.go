@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -185,12 +185,12 @@ func (h *Handler) offFeatures(ctx context.Context, campaignID string) records.Of
 }
 
 // actorFor is the operator as the record kinds see them.
-func actorFor(c echo.Context, cc *campaigns.CampaignContext) records.Actor {
+func actorFor(c *echo.Context, cc *campaigns.CampaignContext) records.Actor {
 	return records.Actor{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
 }
 
 // viewerFor is the operator as page-link resolution checks access.
-func viewerFor(c echo.Context, cc *campaigns.CampaignContext) importer.Viewer {
+func viewerFor(c *echo.Context, cc *campaigns.CampaignContext) importer.Viewer {
 	return importer.Viewer{Role: cc.VisibilityRole(), UserID: auth.GetUserID(c)}
 }
 
@@ -199,7 +199,7 @@ func viewerFor(c echo.Context, cc *campaigns.CampaignContext) importer.Viewer {
 // nil means all of them, for the review). Only the owner or a co-DM gets
 // any, since the roller is a DM tool; for anyone else every such line stays
 // text, with a warning.
-func (h *Handler) rollTables(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, include func(int) bool) map[string]string {
+func (h *Handler) rollTables(c *echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, include func(int) bool) map[string]string {
 	if h.records == nil || !actorFor(c, cc).CanAuthorDmOnly() {
 		return nil
 	}
@@ -215,7 +215,7 @@ func (h *Handler) rollTables(c echo.Context, cc *campaigns.CampaignContext, recs
 // exportActor is who the export lists records as. Safe mode, the default,
 // lists them as a player sees them, so hidden events and pins, rolling
 // tables and Director-only rules stay out, as for every other category.
-func exportActor(c echo.Context, cc *campaigns.CampaignContext, mode aiexport.PrivacyMode) records.Actor {
+func exportActor(c *echo.Context, cc *campaigns.CampaignContext, mode aiexport.PrivacyMode) records.Actor {
 	a := actorFor(c, cc)
 	if mode == aiexport.PrivacyModeSafe {
 		a.Role = int(campaigns.RolePlayer)
@@ -252,7 +252,7 @@ func splitLookups(all []importer.ParsedPage) (rest, lookups []importer.ParsedPag
 // answerLookups reads what the AI asked for, as the chosen privacy mode
 // allows (Safe by default), and renders the answer panel. Nothing is
 // written; the other pasted blocks are left out and counted.
-func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, blocks []importer.ParsedPage, skipped int) error {
+func (h *Handler) answerLookups(c *echo.Context, cc *campaigns.CampaignContext, blocks []importer.ParsedPage, skipped int) error {
 	privacy := parsePrivacy(c.FormValue("lookup_privacy"))
 	recs := make([]records.Record, len(blocks))
 	for i, p := range blocks {
@@ -302,7 +302,7 @@ func toRecord(i int, p importer.ParsedPage, links *importer.PageLinks) records.R
 }
 
 // planRecords plans every record for the review screen.
-func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, links *importer.PageLinks, pasteSlugs map[string]bool) []RecordRow {
+func (h *Handler) planRecords(c *echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, links *importer.PageLinks, pasteSlugs map[string]bool) []RecordRow {
 	rows := make([]RecordRow, len(recs))
 	all := make([]records.Record, len(recs))
 	for i, p := range recs {
@@ -355,7 +355,7 @@ func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, rec
 // Files and paste content are concatenated with `\n\n` separators
 // before parsing — pasted text comes first, then each file in the
 // order the operator selected them.
-func (h *Handler) ParseImport(c echo.Context) error {
+func (h *Handler) ParseImport(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -540,7 +540,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 // choice.
 //
 // Returns the import_result fragment.
-func (h *Handler) CommitImport(c echo.Context) error {
+func (h *Handler) CommitImport(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -743,7 +743,7 @@ func requestOutcome(result importer.CommitResult) string {
 
 // waitingRequest is one of the campaign's waiting requests, by the id the
 // page sent.
-func (h *Handler) waitingRequest(c echo.Context, cc *campaigns.CampaignContext, raw string) (*connector.Request, error) {
+func (h *Handler) waitingRequest(c *echo.Context, cc *campaigns.CampaignContext, raw string) (*connector.Request, error) {
 	if h.connector == nil {
 		return nil, apperror.NewBadRequest("connecting an AI is not available on this Chronicle site")
 	}
@@ -760,7 +760,7 @@ type recordCounts struct{ applied, failed int }
 // the result. A delete needs its own confirmation tick, checked here again
 // whatever the browser sent; every record is re-planned inside Apply, so
 // nothing the review screen showed is trusted at commit.
-func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult, early map[int]importer.RowOutcome) recordCounts {
+func (h *Handler) commitRecords(c *echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult, early map[int]importer.RowOutcome) recordCounts {
 	var n recordCounts
 	// Pages are saved by now, so a record's @[Name] resolves against the
 	// campaign alone.
@@ -800,7 +800,7 @@ func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, r
 // commitRecord applies one record, or says why it was not.
 // A record for a feature in off is refused again here, since the feature
 // may have been switched off after the review.
-func (h *Handler) commitRecord(c echo.Context, cc *campaigns.CampaignContext, i int, p importer.ParsedPage, links *importer.PageLinks, off records.OffFeatures) importer.RowOutcome {
+func (h *Handler) commitRecord(c *echo.Context, cc *campaigns.CampaignContext, i int, p importer.ParsedPage, links *importer.PageLinks, off records.OffFeatures) importer.RowOutcome {
 	prefix := "rec_" + strconv.Itoa(i) + "_"
 	rec := toRecord(i, p, links)
 	out := importer.RowOutcome{Name: rec.Name}
@@ -852,7 +852,7 @@ func isEarlyFolder(p importer.ParsedPage) bool {
 
 // commitEarlyFolders applies the folder blocks that pages may depend on, in
 // paste order, and keeps their outcomes for the result list.
-func (h *Handler) commitEarlyFolders(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage) map[int]importer.RowOutcome {
+func (h *Handler) commitEarlyFolders(c *echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage) map[int]importer.RowOutcome {
 	early := map[int]importer.RowOutcome{}
 	if h.records == nil {
 		return early
@@ -902,7 +902,7 @@ func recordError(err error) string {
 // import from chewing memory.
 const importBodyCap = 5 * 1024 * 1024
 
-func readImportBody(c echo.Context) (string, error) {
+func readImportBody(c *echo.Context) (string, error) {
 	var b strings.Builder
 	pasted := strings.TrimSpace(c.FormValue("markdown_paste"))
 	if pasted != "" {
@@ -955,7 +955,7 @@ func readImportBody(c echo.Context) (string, error) {
 //
 // A builder error surfaces in the modal's error region, not a top-level
 // apperror, so the operator sees an in-modal failure they can correct.
-func (h *Handler) GeneratePrompt(c echo.Context) error {
+func (h *Handler) GeneratePrompt(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1012,7 +1012,7 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 
 // fillPromptInput adds what every request carries: what the AI may make,
 // the lookups, the page index and today's dates, read as in.Privacy allows.
-func (h *Handler) fillPromptInput(c echo.Context, cc *campaigns.CampaignContext, in *prompt.Input) {
+func (h *Handler) fillPromptInput(c *echo.Context, cc *campaigns.CampaignContext, in *prompt.Input) {
 	// A switched-off feature's kinds are left out, and named, so the AI
 	// doesn't write what the owner couldn't open.
 	off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
@@ -1049,7 +1049,7 @@ func (h *Handler) fillPromptInput(c echo.Context, cc *campaigns.CampaignContext,
 // operator can save it in their AI once and paste only short requests.
 //
 // GET /campaigns/:id/ai-workspace/prompt/instructions (owner only)
-func (h *Handler) PromptInstructions(c echo.Context) error {
+func (h *Handler) PromptInstructions(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1232,7 +1232,7 @@ func folderSlipLine(s importer.FolderSlip) string {
 // the calendar kinds (always, since the AI must write those formats) and the
 // calendar and weather-kinds lookups in the chosen privacy, which say how to
 // set up a main calendar when there is none.
-func (h *Handler) calendarContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode, reg *records.Registry) (doc, answers string) {
+func (h *Handler) calendarContext(c *echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode, reg *records.Registry) (doc, answers string) {
 	doc = reg.DocsFor(records.CalendarKinds...)
 	if h.lookups == nil {
 		return doc, ""
@@ -1244,7 +1244,7 @@ func (h *Handler) calendarContext(c echo.Context, cc *campaigns.CampaignContext,
 // houseRulesContext is the house-rules prompt's format and context: the
 // house-rule kind's doc (always, since the AI must write that format) and
 // today's house rules in the chosen privacy.
-func (h *Handler) houseRulesContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode) (doc, rules string) {
+func (h *Handler) houseRulesContext(c *echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode) (doc, rules string) {
 	k, ok := h.records.Get("house-rule")
 	if !ok {
 		return "", ""
@@ -1268,7 +1268,7 @@ func (h *Handler) houseRulesContext(c echo.Context, cc *campaigns.CampaignContex
 //
 // URL is preserved byte-for-byte so operator bookmarks and external
 // monitoring keep working.
-func (h *Handler) GenerateAIExport(c echo.Context) error {
+func (h *Handler) GenerateAIExport(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

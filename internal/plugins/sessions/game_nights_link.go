@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -60,7 +60,7 @@ func gameNightsTarget(campaignID, calendarID, sessionID, date string) string {
 // are members' business, so anyone else goes to the campaign.
 // GET /campaigns/:id/game-nights[?session=ID&date=YYYY-MM-DD]
 // GET /campaigns/:id/sessions
-func (h *Handler) GameNightsLink(c echo.Context) error {
+func (h *Handler) GameNightsLink(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.QueryParam("session")
 	if cc.MemberRole < campaigns.RolePlayer {
@@ -83,7 +83,7 @@ func (h *Handler) GameNightsLink(c echo.Context) error {
 // keepTrashNotice carries ?trashed= and &kind= through the redirect, so a
 // night moved to the Trash still gets page_safety.js's "Moved to Trash" and
 // Undo on whichever campaign page it lands.
-func keepTrashNotice(c echo.Context, target string) string {
+func keepTrashNotice(c *echo.Context, target string) string {
 	id := c.QueryParam("trashed")
 	if id == "" {
 		return target
@@ -104,7 +104,7 @@ func keepTrashNotice(c echo.Context, target string) string {
 // viewer, or "" when there is none. found is false when the lookup didn't
 // run or failed, so a caller can tell "no calendar" from "couldn't tell".
 // Only members answer there, so a public viewer gets "".
-func (h *Handler) realWorldCalendar(c echo.Context) (calID string, found bool) {
+func (h *Handler) realWorldCalendar(c *echo.Context) (calID string, found bool) {
 	cc := campaigns.GetCampaignContext(c)
 	if h.calendarFinder == nil || cc.MemberRole < campaigns.RolePlayer {
 		return "", false

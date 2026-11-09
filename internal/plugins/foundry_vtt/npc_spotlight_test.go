@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -41,13 +41,12 @@ func (f fakePresence) FoundryPresence(string) (*time.Time, bool) {
 	return &t, f.connected
 }
 
-func spotlightContext(method, entityID string) (echo.Context, *httptest.ResponseRecorder) {
+func spotlightContext(method, entityID string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/campaigns/camp-1/foundry-vtt/npc-spotlight/"+entityID, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("camp-1", entityID)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: entityID}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1"},
 		MemberRole: campaigns.RoleOwner,

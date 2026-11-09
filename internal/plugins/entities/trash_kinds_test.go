@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -105,8 +105,7 @@ func TestRestoreOtherFromTrash_StaysInTheCampaign(t *testing.T) {
 			e := echo.New()
 			rec := httptest.NewRecorder()
 			c := e.NewContext(httptest.NewRequest(http.MethodPost, "/", nil), rec)
-			c.SetParamNames("id", "kind", "tid")
-			c.SetParamValues("c1", "game-night", "n1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "kind", Value: "game-night"}, {Name: "tid", Value: "n1"}})
 			c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleOwner})
 			if err := h.RestoreOtherFromTrash(c); err != nil {
 				t.Fatal(err)
@@ -135,8 +134,7 @@ func TestRestoreOtherFromTrash_WritesTheActivityLog(t *testing.T) {
 	h.SetAuditService(log)
 	e := echo.New()
 	c := e.NewContext(httptest.NewRequest(http.MethodPost, "/", nil), httptest.NewRecorder())
-	c.SetParamNames("id", "kind", "tid")
-	c.SetParamValues("c1", "game-night", "n1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "kind", Value: "game-night"}, {Name: "tid", Value: "n1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleOwner})
 	c.Set("auth_user_id", "u-owner")
 	if err := h.RestoreOtherFromTrash(c); err != nil {

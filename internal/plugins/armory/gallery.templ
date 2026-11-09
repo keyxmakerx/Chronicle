@@ -139,6 +139,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 				<!-- Sort dropdown -->
 				<select
 					name="sort"
+					aria-label="Sort by"
 					class="input py-2 text-sm"
 					hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 					hx-target="#armory-gallery"

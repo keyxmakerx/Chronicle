@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -50,15 +50,14 @@ func scopeFakeEntities() visFakeEntitySvc {
 	}
 }
 
-func scopeContext(method, target, body, eid string) (echo.Context, *httptest.ResponseRecorder) {
+func scopeContext(method, target, body, eid string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	if eid != "" {
-		c.SetParamNames("id", "eid")
-		c.SetParamValues("camp-1", eid)
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: eid}})
 	}
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleScribe, IsMember: true,

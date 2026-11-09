@@ -20,7 +20,7 @@ func TestNormaliseFuncName(t *testing.T) {
 		{"nested closure", "github.com/keyxmakerx/chronicle/internal/plugins/auth.RequireAuth.func1.2", "plugins/auth.RequireAuth"},
 		{"method value", "github.com/keyxmakerx/chronicle/internal/plugins/auth.(*Handler).Login-fm", "plugins/auth.(*Handler).Login"},
 		{"closure in method", "github.com/keyxmakerx/chronicle/internal/app.(*App).RegisterRoutes.func42", "app.(*App).RegisterRoutes"},
-		{"third party keeps its path", "github.com/labstack/echo/v4/middleware.BodyLimitWithConfig.func1", "github.com/labstack/echo/v4/middleware.BodyLimitWithConfig"},
+		{"third party keeps its path", "github.com/labstack/echo/v5/middleware.BodyLimitWithConfig.func1", "github.com/labstack/echo/v5/middleware.BodyLimitWithConfig"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -61,13 +61,12 @@ func (s *stubEntitySvcForShop) FilterViewableEntityIDs(_ context.Context, _ stri
 	return out, nil
 }
 
-func newShopRoomContext() (echo.Context, *httptest.ResponseRecorder) {
+func newShopRoomContext() (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/campaigns/camp-1/armory/shops/shop-1/room", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("camp-1", "shop-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: "shop-1"}})
 	// A stored Bearer key, which resolves at Owner level.
 	c.Set(apiKeyContextKey, &APIKey{ID: 42, CampaignID: "camp-1", UserID: "owner-1", IsActive: true})
 	return c, rec
@@ -168,13 +167,12 @@ func (s *stubShopBuyer) Buy(_ context.Context, campaignID, keyUserID, actingUser
 	return map[string]any{"status": "bought"}, nil
 }
 
-func newShopBuyContext(method, target, body string) (echo.Context, *httptest.ResponseRecorder) {
+func newShopBuyContext(method, target, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("camp-1", "shop-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: "shop-1"}})
 	c.Set(apiKeyContextKey, &APIKey{ID: 42, CampaignID: "camp-1", UserID: "owner-1", IsActive: true})
 	return c, rec
 }
@@ -184,7 +182,7 @@ func TestShopBuyRoutes(t *testing.T) {
 	cases := []struct {
 		name       string
 		wired      bool
-		call       func(h *APIHandler, c echo.Context) error
+		call       func(h *APIHandler, c *echo.Context) error
 		method     string
 		target     string
 		body       string

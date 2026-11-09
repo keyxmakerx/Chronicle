@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -200,7 +200,7 @@ func authorizeOwnPageWrite(role campaigns.Role, entity *Entity, userID, campaign
 // meets requirePageWrite, as on every other page write.
 func (h *Handler) requireOwnPageOrPageWrite(next echo.HandlerFunc) echo.HandlerFunc {
 	guarded := h.requirePageWrite(next)
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		if cc := campaigns.GetCampaignContext(c); cc != nil && cc.MemberRole < campaigns.RoleScribe {
 			return next(c)
 		}

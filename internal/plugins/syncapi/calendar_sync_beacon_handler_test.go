@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -21,13 +21,12 @@ import (
 // context the way campaigns.RequireCampaignAccess would have set it (any
 // member role — this endpoint is intentionally NOT owner-gated, see
 // routes.go RegisterCampaignRoutes).
-func newCampaignMemberTestContext(campaignID string) (echo.Context, *httptest.ResponseRecorder) {
+func newCampaignMemberTestContext(campaignID string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/"+campaignID+"/calendar-sync-beacon", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues(campaignID)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: campaignID}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: campaignID},
 		MemberRole: campaigns.RolePlayer,
@@ -171,8 +170,7 @@ func TestGetCalendarSyncBeacon_NoCampaignContext_Forbidden(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/calendar-sync-beacon", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	// No campaign_context set — simulates a request that bypassed
 	// RequireCampaignAccess, which should never happen in production
 	// routing but the handler must still fail closed.

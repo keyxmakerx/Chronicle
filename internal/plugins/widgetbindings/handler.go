@@ -13,7 +13,7 @@ package widgetbindings
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -54,7 +54,7 @@ func hostFrom(cc *campaigns.CampaignContext, hostType, hostID, entityTypeID stri
 
 // PickerAPI renders the picker fragment (Scribe+):
 // GET /campaigns/:id/bindings/picker?host_type=&host_id=&widget_type=&entity_type_id=
-func (h *Handler) PickerAPI(c echo.Context) error {
+func (h *Handler) PickerAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil || cc.Campaign == nil {
 		return apperror.NewMissingContext()
@@ -97,7 +97,7 @@ func (h *Handler) PickerAPI(c echo.Context) error {
 
 // BindAPI binds a host to an existing instance (Scribe+):
 // POST /campaigns/:id/bindings {host_type, host_id, widget_type, instance_id}
-func (h *Handler) BindAPI(c echo.Context) error {
+func (h *Handler) BindAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil || cc.Campaign == nil {
 		return apperror.NewMissingContext()
@@ -119,7 +119,7 @@ func (h *Handler) BindAPI(c echo.Context) error {
 
 // CreateBindAPI creates a new instance then binds it (Scribe+):
 // POST /campaigns/:id/bindings/create {host_type, host_id, widget_type, name, ...}
-func (h *Handler) CreateBindAPI(c echo.Context) error {
+func (h *Handler) CreateBindAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil || cc.Campaign == nil {
 		return apperror.NewMissingContext()
@@ -145,7 +145,7 @@ func (h *Handler) CreateBindAPI(c echo.Context) error {
 
 // UnbindAPI removes a host's binding, reverting to the default (Scribe+):
 // DELETE /campaigns/:id/bindings?host_type=&host_id=&widget_type=
-func (h *Handler) UnbindAPI(c echo.Context) error {
+func (h *Handler) UnbindAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil || cc.Campaign == nil {
 		return apperror.NewMissingContext()
@@ -184,7 +184,7 @@ func (h *Handler) validate(hostType, hostID, widgetType string) (WidgetType, boo
 // wrapped in BlockHost, so the outerHTML swap the picker targets replaces
 // the block in place. Defensive fallback: if a widget can't render (nil
 // component), reload.
-func (h *Handler) swapHostBlock(c echo.Context, cc *campaigns.CampaignContext, wt WidgetType, host HostRef, widgetType string) error {
+func (h *Handler) swapHostBlock(c *echo.Context, cc *campaigns.CampaignContext, wt WidgetType, host HostRef, widgetType string) error {
 	ctx := c.Request().Context()
 	res, _ := h.svc.Resolve(ctx, host, widgetType)
 	comp := wt.RenderBlock(ctx, BlockRenderContext{
@@ -203,7 +203,7 @@ func (h *Handler) swapHostBlock(c echo.Context, cc *campaigns.CampaignContext, w
 
 // reloadHost signals the client to do a full reload — the defensive fallback
 // when a widget can't produce a swap fragment (P4b keeps it only for that).
-func reloadHost(c echo.Context) error {
+func reloadHost(c *echo.Context) error {
 	c.Response().Header().Set("HX-Refresh", "true")
 	return c.NoContent(http.StatusOK)
 }

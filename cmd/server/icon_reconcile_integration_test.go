@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/app"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -197,8 +197,7 @@ func TestIconReconcile_SyncAPICreateEntityType(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id")
-			c.SetParamValues(campaignID)
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: campaignID}})
 			// Entity types are owner-only; "api_key" is where the key
 			// middleware leaves the authenticated stored key.
 			c.Set("api_key", &syncapi.APIKey{ID: 1, CampaignID: campaignID, UserID: userID, IsActive: true})

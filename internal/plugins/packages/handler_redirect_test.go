@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // TestOldPagesRedirectToTabs pins that the retired standalone pages send a
@@ -15,7 +15,7 @@ func TestOldPagesRedirectToTabs(t *testing.T) {
 	h := &Handler{}
 	tests := []struct {
 		name    string
-		handler func(echo.Context) error
+		handler func(*echo.Context) error
 		want    string
 	}{
 		{"pending", h.ListPendingSubmissions, "/admin/packages?tab=review"},

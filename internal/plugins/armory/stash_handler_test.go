@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -60,8 +60,7 @@ func TestStashHandler_Update_JSONAndForm(t *testing.T) {
 			req.Header.Set("Content-Type", tc.ctype)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("sid")
-			c.SetParamValues(strconv.Itoa(st.ID))
+			c.SetPathValues(echo.PathValues{{Name: "sid", Value: strconv.Itoa(st.ID)}})
 			c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp"}, MemberRole: campaigns.RoleOwner})
 			if err := NewStashHandler(f.svc).UpdateStash(c); err != nil {
 				t.Fatal(err)

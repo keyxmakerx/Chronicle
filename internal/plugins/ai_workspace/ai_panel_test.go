@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
-func getAs(t *testing.T, h func(echo.Context) error, path string) *httptest.ResponseRecorder {
+func getAs(t *testing.T, h func(*echo.Context) error, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, path, nil), rec)

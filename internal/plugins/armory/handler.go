@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -34,7 +34,7 @@ func (h *Handler) SetInstanceService(svc InstanceService) {
 
 // Index renders the Armory gallery page at GET /campaigns/:id/armory.
 // Returns a full page or an HTMX fragment depending on the request header.
-func (h *Handler) Index(c echo.Context) error {
+func (h *Handler) Index(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -110,7 +110,7 @@ func (h *Handler) Index(c echo.Context) error {
 
 // CountAPI returns the item count as JSON at GET /campaigns/:id/armory/count.
 // Used by the sidebar badge and layout blocks.
-func (h *Handler) CountAPI(c echo.Context) error {
+func (h *Handler) CountAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -129,7 +129,7 @@ func (h *Handler) CountAPI(c echo.Context) error {
 
 // ManageInstances renders the instance management panel (HTMX fragment).
 // GET /campaigns/:id/armory/instances/manage (Scribe+).
-func (h *Handler) ManageInstances(c echo.Context) error {
+func (h *Handler) ManageInstances(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

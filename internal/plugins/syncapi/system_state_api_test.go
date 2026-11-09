@@ -14,6 +14,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
+	"github.com/labstack/echo/v5"
 )
 
 type stubSystemStateReader struct {
@@ -38,8 +39,7 @@ func systemStateCall(t *testing.T, reader SystemStateReader, role campaigns.Role
 		h.SetSystemStateReader(reader)
 	}
 	c, rec := gmContext(http.MethodGet, "/api/v1/campaigns/camp-1/entities/e1/system-state/drawsteel/negotiation", "e1", bearer)
-	c.SetParamNames("id", "entityID", "system", "key")
-	c.SetParamValues(campaignParam, "e1", "drawsteel", "negotiation")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: campaignParam}, {Name: "entityID", Value: "e1"}, {Name: "system", Value: "drawsteel"}, {Name: "key", Value: "negotiation"}})
 	return rec, h.GetSystemState(c)
 }
 
@@ -147,8 +147,7 @@ func systemStatePutCall(t *testing.T, w SystemStateWriter, role campaigns.Role, 
 	}
 	c, rec := gmContext(http.MethodPut, "/api/v1/campaigns/camp-1/entities/e1/system-state/drawsteel/negotiation", "e1", bearer)
 	c.SetRequest(httptest.NewRequest(http.MethodPut, "/", strings.NewReader(body)))
-	c.SetParamNames("id", "entityID", "system", "key")
-	c.SetParamValues(campaignParam, "e1", "drawsteel", "negotiation")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: campaignParam}, {Name: "entityID", Value: "e1"}, {Name: "system", Value: "drawsteel"}, {Name: "key", Value: "negotiation"}})
 	return rec, h.PutSystemState(c)
 }
 

@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/email"
@@ -20,7 +20,7 @@ import (
 // RemindNightAPI asks players to answer one game night, on the site and by
 // email. Only the night's organiser, the campaign owner or a co-Director may.
 // POST /campaigns/:id/sessions/:sid/remind {"date": "YYYY-MM-DD", "userId": optional}
-func (h *Handler) RemindNightAPI(c echo.Context) error {
+func (h *Handler) RemindNightAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	session, err := h.requireSessionInCampaign(c, c.Param("sid"), cc.Campaign.ID)

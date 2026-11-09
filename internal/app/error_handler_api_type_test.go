@@ -17,7 +17,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -31,7 +31,7 @@ func runAPIErrorHandler(t *testing.T, err error) (int, map[string]string) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	(&App{}).errorHandler(err, c)
+	(&App{}).errorHandler(c, err)
 
 	var body map[string]string
 	if uerr := json.Unmarshal(rec.Body.Bytes(), &body); uerr != nil {

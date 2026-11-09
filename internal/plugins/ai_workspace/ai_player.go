@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -96,7 +96,7 @@ func (h *Handler) playersWhy(ctx context.Context, campaignID string) string {
 }
 
 // playerView reads a player's panel.
-func (h *Handler) playerView(c echo.Context, cc *campaigns.CampaignContext) (PlayerAIView, error) {
+func (h *Handler) playerView(c *echo.Context, cc *campaigns.CampaignContext) (PlayerAIView, error) {
 	ctx := c.Request().Context()
 	v := PlayerAIView{CampaignID: cc.Campaign.ID, Now: time.Now()}
 	if v.Why = h.playersWhy(ctx, cc.Campaign.ID); v.Why != "" {
@@ -115,7 +115,7 @@ func (h *Handler) playerView(c echo.Context, cc *campaigns.CampaignContext) (Pla
 
 // PlayerChip answers the AI button on a player's screen: how many of their
 // AI's requests wait, or off when they can't use AI here, which hides it.
-func (h *Handler) PlayerChip(c echo.Context) error {
+func (h *Handler) PlayerChip(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -139,7 +139,7 @@ func (h *Handler) PlayerChip(c echo.Context) error {
 }
 
 // PlayerPanel is the panel a player's AI button opens.
-func (h *Handler) PlayerPanel(c echo.Context) error {
+func (h *Handler) PlayerPanel(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -155,7 +155,7 @@ func (h *Handler) PlayerPanel(c echo.Context) error {
 
 // PlayerBubble is the small bubble a player's AI button drops: copy and
 // paste in one thin row, then their AI's waiting requests.
-func (h *Handler) PlayerBubble(c echo.Context) error {
+func (h *Handler) PlayerBubble(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -171,7 +171,7 @@ func (h *Handler) PlayerBubble(c echo.Context) error {
 // PlayerConnect makes the player's own key, revoking their earlier one, and
 // shows it once. A player's key always reads as them and may ask for
 // changes to their own character.
-func (h *Handler) PlayerConnect(c echo.Context) error {
+func (h *Handler) PlayerConnect(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -198,7 +198,7 @@ func (h *Handler) PlayerConnect(c echo.Context) error {
 }
 
 // PlayerDisconnect revokes the player's own key.
-func (h *Handler) PlayerDisconnect(c echo.Context) error {
+func (h *Handler) PlayerDisconnect(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -223,7 +223,7 @@ func (h *Handler) PlayerDisconnect(c echo.Context) error {
 
 // PlayerCopy is the text a player copies for an AI app they paste into:
 // their characters, what each may change, and how to write a change.
-func (h *Handler) PlayerCopy(c echo.Context) error {
+func (h *Handler) PlayerCopy(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -244,7 +244,7 @@ func (h *Handler) PlayerCopy(c echo.Context) error {
 }
 
 // PlayerPaste reviews an answer the player pasted.
-func (h *Handler) PlayerPaste(c echo.Context) error {
+func (h *Handler) PlayerPaste(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -260,7 +260,7 @@ func (h *Handler) PlayerPaste(c echo.Context) error {
 }
 
 // PlayerReviewRequest reviews one of the player's waiting requests.
-func (h *Handler) PlayerReviewRequest(c echo.Context) error {
+func (h *Handler) PlayerReviewRequest(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -272,7 +272,7 @@ func (h *Handler) PlayerReviewRequest(c echo.Context) error {
 	return h.renderPlayerReview(c, cc, q.ID, q.Body)
 }
 
-func (h *Handler) playerRequest(c echo.Context, cc *campaigns.CampaignContext) (*connector.Request, error) {
+func (h *Handler) playerRequest(c *echo.Context, cc *campaigns.CampaignContext) (*connector.Request, error) {
 	if h.connector == nil {
 		return nil, apperror.NewBadRequest("using an AI isn't available on this Chronicle site")
 	}
@@ -283,7 +283,7 @@ func (h *Handler) playerRequest(c echo.Context, cc *campaigns.CampaignContext) (
 	return h.connector.WaitingRequest(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id)
 }
 
-func (h *Handler) renderPlayerReview(c echo.Context, cc *campaigns.CampaignContext, rid int64, text string) error {
+func (h *Handler) renderPlayerReview(c *echo.Context, cc *campaigns.CampaignContext, rid int64, text string) error {
 	ctx := c.Request().Context()
 	if why := h.playersWhy(ctx, cc.Campaign.ID); why != "" {
 		return apperror.NewForbidden(strings.TrimRight(why, "."))
@@ -302,7 +302,7 @@ func (h *Handler) renderPlayerReview(c echo.Context, cc *campaigns.CampaignConte
 // PlayerApply applies the changes the player said yes to. The blocks are
 // read again from the request or the paste, and each is checked again as it
 // is written, so the form can only choose among what the player may do.
-func (h *Handler) PlayerApply(c echo.Context) error {
+func (h *Handler) PlayerApply(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -373,7 +373,7 @@ func (h *Handler) PlayerApply(c echo.Context) error {
 }
 
 // PlayerTurnDown answers one of the player's requests No as a whole.
-func (h *Handler) PlayerTurnDown(c echo.Context) error {
+func (h *Handler) PlayerTurnDown(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

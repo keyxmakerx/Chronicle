@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -28,7 +28,7 @@ func NewInstanceHandler(svc InstanceService) *InstanceHandler {
 }
 
 // ListInstances returns all instances for a campaign (GET /campaigns/:id/armory/instances).
-func (h *InstanceHandler) ListInstances(c echo.Context) error {
+func (h *InstanceHandler) ListInstances(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -44,7 +44,7 @@ func (h *InstanceHandler) ListInstances(c echo.Context) error {
 
 // ItemCollections lists every collection with whether it holds one item
 // (GET /campaigns/:id/armory/items/:eid/collections). Feeds the card menu.
-func (h *InstanceHandler) ItemCollections(c echo.Context) error {
+func (h *InstanceHandler) ItemCollections(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -58,7 +58,7 @@ func (h *InstanceHandler) ItemCollections(c echo.Context) error {
 }
 
 // CreateInstance creates a new inventory instance (POST /campaigns/:id/armory/instances).
-func (h *InstanceHandler) CreateInstance(c echo.Context) error {
+func (h *InstanceHandler) CreateInstance(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -93,7 +93,7 @@ func (h *InstanceHandler) CreateInstance(c echo.Context) error {
 }
 
 // UpdateInstance modifies an instance (PUT /campaigns/:id/armory/instances/:iid).
-func (h *InstanceHandler) UpdateInstance(c echo.Context) error {
+func (h *InstanceHandler) UpdateInstance(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -112,7 +112,7 @@ func (h *InstanceHandler) UpdateInstance(c echo.Context) error {
 		}
 	} else {
 		// A form sends only the fields it has; a blank description clears it.
-		form, err := c.FormParams()
+		form, err := c.FormValues()
 		if err != nil {
 			return apperror.NewBadRequest("invalid form")
 		}
@@ -146,7 +146,7 @@ func (h *InstanceHandler) UpdateInstance(c echo.Context) error {
 }
 
 // DeleteInstance removes an instance (DELETE /campaigns/:id/armory/instances/:iid).
-func (h *InstanceHandler) DeleteInstance(c echo.Context) error {
+func (h *InstanceHandler) DeleteInstance(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -169,7 +169,7 @@ func (h *InstanceHandler) DeleteInstance(c echo.Context) error {
 }
 
 // AddItem adds an entity to an instance (POST /campaigns/:id/armory/instances/:iid/items).
-func (h *InstanceHandler) AddItem(c echo.Context) error {
+func (h *InstanceHandler) AddItem(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -204,7 +204,7 @@ func (h *InstanceHandler) AddItem(c echo.Context) error {
 }
 
 // RemoveItem removes an entity from an instance (DELETE /campaigns/:id/armory/instances/:iid/items/:eid).
-func (h *InstanceHandler) RemoveItem(c echo.Context) error {
+func (h *InstanceHandler) RemoveItem(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

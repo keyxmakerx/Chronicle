@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -239,8 +239,7 @@ func TestChoicesAPIRequiresCampaignContext(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	c := e.NewContext(req, httptest.NewRecorder())
-	c.SetParamNames("fieldKey")
-	c.SetParamValues("ancestry")
+	c.SetPathValues(echo.PathValues{{Name: "fieldKey", Value: "ancestry"}})
 	if err := h.ChoicesAPI(c); err == nil {
 		t.Fatal("expected missing-context error")
 	}

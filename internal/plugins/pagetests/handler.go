@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -27,7 +27,7 @@ func ViewerOf(cc *campaigns.CampaignContext, userID string) Viewer {
 	return Viewer{UserID: userID, VisibilityRole: cc.VisibilityRole()}
 }
 
-func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
+func viewerFrom(c *echo.Context) (campaignID string, v Viewer, err error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
@@ -35,7 +35,7 @@ func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
 	return cc.Campaign.ID, ViewerOf(cc, auth.GetUserID(c)), nil
 }
 
-func bind(c echo.Context, into any) error {
+func bind(c *echo.Context, into any) error {
 	// One byte past the cap so an oversize body is refused, not truncated.
 	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, MaxBodyBytes+1))
 	if err != nil || len(raw) == 0 || len(raw) > MaxBodyBytes {
@@ -48,7 +48,7 @@ func bind(c echo.Context, into any) error {
 }
 
 // List handles GET /campaigns/:id/pages/:eid/tests.
-func (h *Handler) List(c echo.Context) error {
+func (h *Handler) List(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -61,7 +61,7 @@ func (h *Handler) List(c echo.Context) error {
 }
 
 // Create handles POST /campaigns/:id/pages/:eid/tests.
-func (h *Handler) Create(c echo.Context) error {
+func (h *Handler) Create(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -78,7 +78,7 @@ func (h *Handler) Create(c echo.Context) error {
 }
 
 // Update handles PUT /campaigns/:id/tests/:tid.
-func (h *Handler) Update(c echo.Context) error {
+func (h *Handler) Update(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ func (h *Handler) Update(c echo.Context) error {
 }
 
 // Tally handles POST /campaigns/:id/tests/:tid/tally.
-func (h *Handler) Tally(c echo.Context) error {
+func (h *Handler) Tally(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -112,7 +112,7 @@ func (h *Handler) Tally(c echo.Context) error {
 }
 
 // Record handles POST /campaigns/:id/tests/:tid/record.
-func (h *Handler) Record(c echo.Context) error {
+func (h *Handler) Record(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -129,7 +129,7 @@ func (h *Handler) Record(c echo.Context) error {
 }
 
 // Delete handles DELETE /campaigns/:id/tests/:tid.
-func (h *Handler) Delete(c echo.Context) error {
+func (h *Handler) Delete(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -142,7 +142,7 @@ func (h *Handler) Delete(c echo.Context) error {
 
 // Choices handles GET /campaigns/:id/tests: every test of the campaign, for
 // the encounter builder's version picks.
-func (h *Handler) Choices(c echo.Context) error {
+func (h *Handler) Choices(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err

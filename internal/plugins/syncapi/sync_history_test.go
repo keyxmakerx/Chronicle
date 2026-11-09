@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -216,8 +216,7 @@ func TestSyncHistory_OnlyOwnerOrDMAccess(t *testing.T) {
 				req.Header.Set("Content-Type", "application/json")
 				rec := httptest.NewRecorder()
 				c := e.NewContext(req, rec)
-				c.SetParamNames("id")
-				c.SetParamValues("c1")
+				c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 				c.Set(apiKeyContextKey, &APIKey{ID: 3, UserID: "u1", CampaignID: "c1", IsActive: true})
 				handler := h.ListHistory
 				if method == http.MethodPost {
@@ -249,8 +248,7 @@ func TestReportHistory_StoresParentWithSteps(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("c1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 	c.Set(apiKeyContextKey, &APIKey{ID: 3, UserID: "u1", CampaignID: "c1"})
 	if err := h.ReportHistory(c); err != nil {
 		t.Fatal(err)
@@ -274,14 +272,14 @@ func TestRecordSyncHistory(t *testing.T) {
 		wantOK    bool
 		wantState string
 	}{
-		{"key write recorded", &APIKey{ID: 4, UserID: "u1", CampaignID: "c1"}, func(c echo.Context) error {
+		{"key write recorded", &APIKey{ID: 4, UserID: "u1", CampaignID: "c1"}, func(c *echo.Context) error {
 			noteSyncResource(c, "e1", "Ren")
 			return c.NoContent(http.StatusOK)
 		}, true, true, "200"},
-		{"failed write recorded with its error", &APIKey{ID: 4, UserID: "u1", CampaignID: "c1"}, func(c echo.Context) error {
+		{"failed write recorded with its error", &APIKey{ID: 4, UserID: "u1", CampaignID: "c1"}, func(c *echo.Context) error {
 			return apperror.NewConflict("page changed since you read it")
 		}, true, false, "409"},
-		{"session call skipped", &APIKey{ID: synthKeySessionID, UserID: "u1", CampaignID: "c1"}, func(c echo.Context) error {
+		{"session call skipped", &APIKey{ID: synthKeySessionID, UserID: "u1", CampaignID: "c1"}, func(c *echo.Context) error {
 			return c.NoContent(http.StatusOK)
 		}, false, false, ""},
 	}
@@ -290,7 +288,7 @@ func TestRecordSyncHistory(t *testing.T) {
 			repo := &fakeHistoryRepo{done: make(chan struct{}, 1)}
 			e := echo.New()
 			e.PUT("/api/v1/campaigns/:id/entities/:entityID", tc.handler, func(next echo.HandlerFunc) echo.HandlerFunc {
-				return func(c echo.Context) error { c.Set(apiKeyContextKey, tc.key); return next(c) }
+				return func(c *echo.Context) error { c.Set(apiKeyContextKey, tc.key); return next(c) }
 			}, RecordSyncHistory(repo, nil))
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/v1/campaigns/c1/entities/e1", nil))

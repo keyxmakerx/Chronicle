@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -36,8 +36,7 @@ func getPage(t *testing.T, h *Handler, handler echo.HandlerFunc, target string, 
 	for i := 0; i+1 < len(params); i += 2 {
 		names, values = append(names, params[i]), append(values, params[i+1])
 	}
-	c.SetParamNames(names...)
-	c.SetParamValues(values...)
+	c.SetPathValues(pathValuesOf(names, values))
 	c.Set(contextKeyCampaign, &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Ashfall"}, MemberRole: RoleOwner})
 	auth.SetSession(c, &auth.Session{UserID: "owner-1"})
 	err := handler(c)

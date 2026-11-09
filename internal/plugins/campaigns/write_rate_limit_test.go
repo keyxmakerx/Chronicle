@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -27,7 +27,7 @@ func TestRequireCampaignAccess_WriteRateLimit(t *testing.T) {
 	}
 
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		if ae, ok := err.(*apperror.AppError); ok {
 			_ = c.NoContent(ae.Code)
 			return
@@ -35,12 +35,12 @@ func TestRequireCampaignAccess_WriteRateLimit(t *testing.T) {
 		_ = c.NoContent(http.StatusInternalServerError)
 	}
 	setSession := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			auth.SetSession(c, owner)
 			return next(c)
 		}
 	}
-	ok := func(c echo.Context) error { return c.NoContent(http.StatusOK) }
+	ok := func(c *echo.Context) error { return c.NoContent(http.StatusOK) }
 
 	g := e.Group("/campaigns/:id", setSession, RequireCampaignAccess(svc))
 	g.PUT("", ok)
@@ -79,7 +79,7 @@ func TestRequireCampaignAccess_WriteRateLimit_SharedAcrossInstances(t *testing.T
 	}
 
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		if ae, ok := err.(*apperror.AppError); ok {
 			_ = c.NoContent(ae.Code)
 			return
@@ -87,12 +87,12 @@ func TestRequireCampaignAccess_WriteRateLimit_SharedAcrossInstances(t *testing.T
 		_ = c.NoContent(http.StatusInternalServerError)
 	}
 	setSession := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			auth.SetSession(c, owner)
 			return next(c)
 		}
 	}
-	ok := func(c echo.Context) error { return c.NoContent(http.StatusOK) }
+	ok := func(c *echo.Context) error { return c.NoContent(http.StatusOK) }
 
 	// Two independent gate instances, as two different plugins' routes.go
 	// would each produce by calling RequireCampaignAccess(svc) themselves.
@@ -134,7 +134,7 @@ func TestRequireCampaignAccessEvenIfArchived_WriteRateLimit(t *testing.T) {
 	}
 
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		if ae, ok := err.(*apperror.AppError); ok {
 			_ = c.NoContent(ae.Code)
 			return
@@ -142,12 +142,12 @@ func TestRequireCampaignAccessEvenIfArchived_WriteRateLimit(t *testing.T) {
 		_ = c.NoContent(http.StatusInternalServerError)
 	}
 	setSession := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			auth.SetSession(c, owner)
 			return next(c)
 		}
 	}
-	ok := func(c echo.Context) error { return c.NoContent(http.StatusOK) }
+	ok := func(c *echo.Context) error { return c.NoContent(http.StatusOK) }
 
 	g := e.Group("/campaigns/:id", setSession, RequireCampaignAccessEvenIfArchived(svc))
 	g.POST("/unarchive", ok)

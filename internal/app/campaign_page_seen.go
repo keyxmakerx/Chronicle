@@ -3,8 +3,9 @@ package app
 import (
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -24,9 +25,9 @@ type pageSeenMarker interface {
 // resolved by the route group's own middleware, which runs inside it.
 func campaignPageSeen(m pageSeenMarker) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			err := next(c)
-			if err != nil || c.Request().Method != "GET" || c.Response().Status >= 400 {
+			if err != nil || c.Request().Method != "GET" || middleware.ResponseState(c).Status >= 400 {
 				return err
 			}
 			if !strings.HasPrefix(c.Path(), "/campaigns/:id") {

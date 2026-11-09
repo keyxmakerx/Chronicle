@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/observability"
@@ -34,7 +34,7 @@ func runHandlerWithRoute(t *testing.T, err error, method, routeTemplate, rawPath
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath(routeTemplate)
-	(&App{}).errorHandler(err, c)
+	(&App{}).errorHandler(c, err)
 	return rec
 }
 
@@ -130,7 +130,7 @@ func TestErrorHandlerDoesNotRecordCommittedResponses(t *testing.T) {
 	_ = c.String(http.StatusOK, "already sent") // commits the response
 
 	before := observability.Recent(0).Total
-	(&App{}).errorHandler(apperror.NewInternalMessage("too late", nil), c)
+	(&App{}).errorHandler(c, apperror.NewInternalMessage("too late", nil))
 	if after := observability.Recent(0).Total; after != before {
 		t.Errorf("Total went %d -> %d: an already-committed response was recorded", before, after)
 	}

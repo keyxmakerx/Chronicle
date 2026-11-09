@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -41,7 +41,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 // ViewerOf is who is asking, from the campaign context. A member with DM
 // access counts as a Director, as on every page.
-func ViewerOf(cc *campaigns.CampaignContext, c echo.Context) Viewer {
+func ViewerOf(cc *campaigns.CampaignContext, c *echo.Context) Viewer {
 	v := Viewer{UserID: auth.GetUserID(c), Director: cc.VisibilityRole() >= int(campaigns.RoleOwner)}
 	if s := auth.GetSession(c); s != nil {
 		v.Name = s.Name
@@ -49,7 +49,7 @@ func ViewerOf(cc *campaigns.CampaignContext, c echo.Context) Viewer {
 	return v
 }
 
-func (h *Handler) viewer(c echo.Context) (string, Viewer, error) {
+func (h *Handler) viewer(c *echo.Context) (string, Viewer, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
@@ -57,7 +57,7 @@ func (h *Handler) viewer(c echo.Context) (string, Viewer, error) {
 	return cc.Campaign.ID, ViewerOf(cc, c), nil
 }
 
-func bind(c echo.Context, into any) error {
+func bind(c *echo.Context, into any) error {
 	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, maxBodyBytes)
 	if err := c.Bind(into); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -66,7 +66,7 @@ func bind(c echo.Context, into any) error {
 }
 
 // List returns a page of the log, oldest first: ?before=<roll id>&limit=N.
-func (h *Handler) List(c echo.Context) error {
+func (h *Handler) List(c *echo.Context) error {
 	campaignID, v, err := h.viewer(c)
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func (h *Handler) List(c echo.Context) error {
 }
 
 // Roll makes a roll at the table and returns it as the roller sees it.
-func (h *Handler) Roll(c echo.Context) error {
+func (h *Handler) Roll(c *echo.Context) error {
 	campaignID, v, err := h.viewer(c)
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func (h *Handler) Roll(c echo.Context) error {
 }
 
 // Settings returns the table's dice look.
-func (h *Handler) Settings(c echo.Context) error {
+func (h *Handler) Settings(c *echo.Context) error {
 	campaignID, _, err := h.viewer(c)
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func (h *Handler) Settings(c echo.Context) error {
 
 // SetSettings changes the table's dice look; the service refuses anyone but
 // a Director.
-func (h *Handler) SetSettings(c echo.Context) error {
+func (h *Handler) SetSettings(c *echo.Context) error {
 	campaignID, v, err := h.viewer(c)
 	if err != nil {
 		return err

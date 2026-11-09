@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -41,7 +41,7 @@ func (h *Handler) SetAuditService(svc audit.AuditService) {
 
 // logTimelineAudit fires a fire-and-forget audit entry. Errors are
 // slog-logged and never block the primary operation.
-func (h *Handler) logTimelineAudit(c echo.Context, campaignID, action, entityType, entityID, entityName string, details map[string]any) {
+func (h *Handler) logTimelineAudit(c *echo.Context, campaignID, action, entityType, entityID, entityName string, details map[string]any) {
 	if h.auditSvc == nil {
 		return
 	}
@@ -66,7 +66,7 @@ func (h *Handler) logTimelineAudit(c echo.Context, campaignID, action, entityTyp
 // requireTimelineInCampaign fetches a timeline by ID and verifies it belongs
 // to the given campaign. Returns 404 if not found or mismatched, preventing
 // cross-campaign IDOR attacks.
-func (h *Handler) requireTimelineInCampaign(c echo.Context, timelineID, campaignID string) (*Timeline, error) {
+func (h *Handler) requireTimelineInCampaign(c *echo.Context, timelineID, campaignID string) (*Timeline, error) {
 	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetTimeline, timelineID, campaignID, "timeline")
 }
 
@@ -80,7 +80,7 @@ func (h *Handler) requireTimelineInCampaign(c echo.Context, timelineID, campaign
 // Outside preview mode, a DM-granted co-DM is promoted to Owner for
 // visibility via cc.VisibilityRole(), the same promotion every entity path
 // applies, so a co-DM sees dm_only timeline events too.
-func effectiveRole(c echo.Context, cc *campaigns.CampaignContext) int {
+func effectiveRole(c *echo.Context, cc *campaigns.CampaignContext) int {
 	if campaigns.ViewingAsPlayer(c, cc) {
 		return int(campaigns.RolePlayer)
 	}
@@ -89,7 +89,7 @@ func effectiveRole(c echo.Context, cc *campaigns.CampaignContext) int {
 
 // Index lists all timelines for a campaign.
 // GET /campaigns/:id/timelines
-func (h *Handler) Index(c echo.Context) error {
+func (h *Handler) Index(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	role := effectiveRole(c, cc)
@@ -116,7 +116,7 @@ func (h *Handler) Index(c echo.Context) error {
 
 // Show renders a single timeline with its events.
 // GET /campaigns/:id/timelines/:tid
-func (h *Handler) Show(c echo.Context) error {
+func (h *Handler) Show(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -181,7 +181,7 @@ func (h *Handler) Show(c echo.Context) error {
 
 // CreateForm handles timeline creation from a form POST.
 // POST /campaigns/:id/timelines
-func (h *Handler) CreateForm(c echo.Context) error {
+func (h *Handler) CreateForm(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	userID := auth.GetUserID(c)
@@ -234,7 +234,7 @@ func (h *Handler) CreateForm(c echo.Context) error {
 
 // UpdateAPI updates timeline settings.
 // PUT /campaigns/:id/timelines/:tid
-func (h *Handler) UpdateAPI(c echo.Context) error {
+func (h *Handler) UpdateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -276,7 +276,7 @@ func (h *Handler) UpdateAPI(c echo.Context) error {
 
 // DeleteAPI deletes a timeline and all associated data.
 // DELETE /campaigns/:id/timelines/:tid
-func (h *Handler) DeleteAPI(c echo.Context) error {
+func (h *Handler) DeleteAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -295,7 +295,7 @@ func (h *Handler) DeleteAPI(c echo.Context) error {
 
 // LinkEventAPI links a calendar event to a timeline.
 // POST /campaigns/:id/timelines/:tid/events
-func (h *Handler) LinkEventAPI(c echo.Context) error {
+func (h *Handler) LinkEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -327,7 +327,7 @@ func (h *Handler) LinkEventAPI(c echo.Context) error {
 
 // UnlinkEventAPI removes a calendar event from a timeline.
 // DELETE /campaigns/:id/timelines/:tid/events/:eid
-func (h *Handler) UnlinkEventAPI(c echo.Context) error {
+func (h *Handler) UnlinkEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -349,7 +349,7 @@ func (h *Handler) UnlinkEventAPI(c echo.Context) error {
 
 // CreateStandaloneEventAPI creates a new standalone event on a timeline.
 // POST /campaigns/:id/timelines/:tid/standalone-events
-func (h *Handler) CreateStandaloneEventAPI(c echo.Context) error {
+func (h *Handler) CreateStandaloneEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -425,7 +425,7 @@ func (h *Handler) CreateStandaloneEventAPI(c echo.Context) error {
 
 // UpdateStandaloneEventAPI modifies a standalone event.
 // PUT /campaigns/:id/timelines/:tid/standalone-events/:eid
-func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
+func (h *Handler) UpdateStandaloneEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -507,7 +507,7 @@ func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
 
 // DeleteStandaloneEventAPI removes a standalone event from a timeline.
 // DELETE /campaigns/:id/timelines/:tid/standalone-events/:eid
-func (h *Handler) DeleteStandaloneEventAPI(c echo.Context) error {
+func (h *Handler) DeleteStandaloneEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -528,7 +528,7 @@ func (h *Handler) DeleteStandaloneEventAPI(c echo.Context) error {
 
 // TimelineDataAPI returns JSON data for the D3.js timeline visualization.
 // GET /campaigns/:id/timelines/:tid/data
-func (h *Handler) TimelineDataAPI(c echo.Context) error {
+func (h *Handler) TimelineDataAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -578,7 +578,7 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 
 // ListAvailableEventsAPI returns calendar events not yet linked to a timeline.
 // GET /campaigns/:id/timelines/:tid/available-events
-func (h *Handler) ListAvailableEventsAPI(c echo.Context) error {
+func (h *Handler) ListAvailableEventsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -598,7 +598,7 @@ func (h *Handler) ListAvailableEventsAPI(c echo.Context) error {
 
 // LinkAllEventsAPI links all available calendar events to a timeline at once.
 // POST /campaigns/:id/timelines/:tid/events/all
-func (h *Handler) LinkAllEventsAPI(c echo.Context) error {
+func (h *Handler) LinkAllEventsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -618,7 +618,7 @@ func (h *Handler) LinkAllEventsAPI(c echo.Context) error {
 
 // ListCalendarsAPI returns available calendars for the create timeline form.
 // GET /campaigns/:id/timelines/calendars
-func (h *Handler) ListCalendarsAPI(c echo.Context) error {
+func (h *Handler) ListCalendarsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
@@ -632,7 +632,7 @@ func (h *Handler) ListCalendarsAPI(c echo.Context) error {
 
 // CreateEntityGroupAPI creates a new entity group for swim-lane organization.
 // POST /campaigns/:id/timelines/:tid/groups
-func (h *Handler) CreateEntityGroupAPI(c echo.Context) error {
+func (h *Handler) CreateEntityGroupAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	timelineID := c.Param("tid")
 
@@ -662,7 +662,7 @@ func (h *Handler) CreateEntityGroupAPI(c echo.Context) error {
 
 // UpdateEntityGroupAPI modifies an existing entity group.
 // PUT /campaigns/:id/timelines/:tid/groups/:gid
-func (h *Handler) UpdateEntityGroupAPI(c echo.Context) error {
+func (h *Handler) UpdateEntityGroupAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	timelineID := c.Param("tid")
 	groupID, err := parseIntParam(c, "gid")
@@ -690,7 +690,7 @@ func (h *Handler) UpdateEntityGroupAPI(c echo.Context) error {
 
 // DeleteEntityGroupAPI removes an entity group and all its members.
 // DELETE /campaigns/:id/timelines/:tid/groups/:gid
-func (h *Handler) DeleteEntityGroupAPI(c echo.Context) error {
+func (h *Handler) DeleteEntityGroupAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	timelineID := c.Param("tid")
 	groupID, err := parseIntParam(c, "gid")
@@ -712,7 +712,7 @@ func (h *Handler) DeleteEntityGroupAPI(c echo.Context) error {
 
 // AddGroupMemberAPI adds an entity to an entity group.
 // POST /campaigns/:id/timelines/:tid/groups/:gid/members
-func (h *Handler) AddGroupMemberAPI(c echo.Context) error {
+func (h *Handler) AddGroupMemberAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	timelineID := c.Param("tid")
 	groupID, err := parseIntParam(c, "gid")
@@ -744,7 +744,7 @@ func (h *Handler) AddGroupMemberAPI(c echo.Context) error {
 
 // RemoveGroupMemberAPI removes an entity from an entity group.
 // DELETE /campaigns/:id/timelines/:tid/groups/:gid/members/:eid
-func (h *Handler) RemoveGroupMemberAPI(c echo.Context) error {
+func (h *Handler) RemoveGroupMemberAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	timelineID := c.Param("tid")
 	groupID, err := parseIntParam(c, "gid")
@@ -767,7 +767,7 @@ func (h *Handler) RemoveGroupMemberAPI(c echo.Context) error {
 
 // ListEntityGroupsAPI returns all entity groups for a timeline.
 // GET /campaigns/:id/timelines/:tid/groups
-func (h *Handler) ListEntityGroupsAPI(c echo.Context) error {
+func (h *Handler) ListEntityGroupsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	timelineID := c.Param("tid")
 
@@ -789,7 +789,7 @@ func (h *Handler) ListEntityGroupsAPI(c echo.Context) error {
 
 // UpdateTimelineVisibilityAPI updates timeline visibility and per-user rules.
 // PUT /campaigns/:id/timelines/:tid/visibility
-func (h *Handler) UpdateTimelineVisibilityAPI(c echo.Context) error {
+func (h *Handler) UpdateTimelineVisibilityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -828,7 +828,7 @@ func (h *Handler) UpdateTimelineVisibilityAPI(c echo.Context) error {
 
 // UpdateEventVisibilityAPI updates per-event visibility on a timeline event link.
 // PUT /campaigns/:id/timelines/:tid/events/:eid/visibility
-func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
+func (h *Handler) UpdateEventVisibilityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -854,7 +854,7 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 
 // UpdateStandaloneEventVisibilityAPI updates visibility and per-user rules on a standalone event.
 // PUT /campaigns/:id/timelines/:tid/standalone-events/:eid/visibility
-func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
+func (h *Handler) UpdateStandaloneEventVisibilityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -905,7 +905,7 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 
 // ListCampaignMembersAPI returns campaign members for the visibility user selector.
 // GET /campaigns/:id/timelines/members
-func (h *Handler) ListCampaignMembersAPI(c echo.Context) error {
+func (h *Handler) ListCampaignMembersAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 
 	if h.memberLister == nil {
@@ -930,7 +930,7 @@ func (h *Handler) ListCampaignMembersAPI(c echo.Context) error {
 
 // PreviewAPI returns an HTMX fragment for the dashboard timeline preview block.
 // GET /campaigns/:id/timelines/preview
-func (h *Handler) PreviewAPI(c echo.Context) error {
+func (h *Handler) PreviewAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	role := effectiveRole(c, cc)
@@ -961,7 +961,7 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 
 // EmbedTimeline returns a compact timeline visualization fragment for dashboard embedding.
 // GET /campaigns/:id/timelines/embed
-func (h *Handler) EmbedTimeline(c echo.Context) error {
+func (h *Handler) EmbedTimeline(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	role := effectiveRole(c, cc)
@@ -997,7 +997,7 @@ func (h *Handler) EmbedTimeline(c echo.Context) error {
 
 // CreateConnectionAPI creates a connection between two events on a timeline.
 // POST /campaigns/:id/timelines/:tid/connections
-func (h *Handler) CreateConnectionAPI(c echo.Context) error {
+func (h *Handler) CreateConnectionAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -1039,7 +1039,7 @@ func (h *Handler) CreateConnectionAPI(c echo.Context) error {
 
 // DeleteConnectionAPI removes a connection between two events.
 // DELETE /campaigns/:id/timelines/:tid/connections/:cid
-func (h *Handler) DeleteConnectionAPI(c echo.Context) error {
+func (h *Handler) DeleteConnectionAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -1064,7 +1064,7 @@ func (h *Handler) DeleteConnectionAPI(c echo.Context) error {
 // ListConnectionsAPI returns the timeline's connections between events the
 // viewer may see.
 // GET /campaigns/:id/timelines/:tid/connections
-func (h *Handler) ListConnectionsAPI(c echo.Context) error {
+func (h *Handler) ListConnectionsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
@@ -1085,7 +1085,7 @@ func (h *Handler) ListConnectionsAPI(c echo.Context) error {
 }
 
 // parseIntParam extracts an integer path parameter, returning 400 on failure.
-func parseIntParam(c echo.Context, name string) (int, error) {
+func parseIntParam(c *echo.Context, name string) (int, error) {
 	s := c.Param(name)
 	var v int
 	if _, err := fmt.Sscanf(s, "%d", &v); err != nil {

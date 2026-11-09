@@ -30,7 +30,7 @@
 
 | Package | Role |
 |---------|------|
-| `github.com/labstack/echo/v4` | HTTP framework |
+| `github.com/labstack/echo/v5` | HTTP framework |
 | `github.com/a-h/templ` | Template engine |
 | `github.com/go-sql-driver/mysql` | MariaDB driver |
 | `github.com/redis/go-redis/v9` | Redis client |

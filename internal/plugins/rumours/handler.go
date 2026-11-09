@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -76,7 +76,7 @@ func ViewerOf(cc *campaigns.CampaignContext, userID string) Viewer {
 }
 
 // page loads the campaign context and checks the caller may open the page.
-func (h *Handler) page(c echo.Context) (*campaigns.CampaignContext, Viewer, string, error) {
+func (h *Handler) page(c *echo.Context) (*campaigns.CampaignContext, Viewer, string, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, Viewer{}, "", apperror.NewMissingContext()
@@ -89,7 +89,7 @@ func (h *Handler) page(c echo.Context) (*campaigns.CampaignContext, Viewer, stri
 	return cc, v, eid, nil
 }
 
-func bind(c echo.Context, into any) error {
+func bind(c *echo.Context, into any) error {
 	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, maxBodyBytes)
 	if err := c.Bind(into); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -98,7 +98,7 @@ func bind(c echo.Context, into any) error {
 }
 
 // List returns the page's rumours as the caller may see them.
-func (h *Handler) List(c echo.Context) error {
+func (h *Handler) List(c *echo.Context) error {
 	cc, v, eid, err := h.page(c)
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ type addBody struct {
 }
 
 // Add writes a rumour and returns it.
-func (h *Handler) Add(c echo.Context) error {
+func (h *Handler) Add(c *echo.Context) error {
 	cc, v, eid, err := h.page(c)
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ type updateBody struct {
 }
 
 // Update edits a rumour's words and returns it.
-func (h *Handler) Update(c echo.Context) error {
+func (h *Handler) Update(c *echo.Context) error {
 	cc, v, eid, err := h.page(c)
 	if err != nil {
 		return err
@@ -167,7 +167,7 @@ type truthBody struct {
 }
 
 // SetTruth records what is true and returns the rumour.
-func (h *Handler) SetTruth(c echo.Context) error {
+func (h *Handler) SetTruth(c *echo.Context) error {
 	cc, v, eid, err := h.page(c)
 	if err != nil {
 		return err
@@ -189,7 +189,7 @@ type beliefBody struct {
 }
 
 // SetBelief records what the party thinks and returns the rumour.
-func (h *Handler) SetBelief(c echo.Context) error {
+func (h *Handler) SetBelief(c *echo.Context) error {
 	cc, v, eid, err := h.page(c)
 	if err != nil {
 		return err
@@ -206,7 +206,7 @@ func (h *Handler) SetBelief(c echo.Context) error {
 }
 
 // Remove deletes a rumour.
-func (h *Handler) Remove(c echo.Context) error {
+func (h *Handler) Remove(c *echo.Context) error {
 	cc, v, eid, err := h.page(c)
 	if err != nil {
 		return err

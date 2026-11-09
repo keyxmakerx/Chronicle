@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -25,7 +25,7 @@ func NewContentTemplateHandler(service ContentTemplateService) *ContentTemplateH
 // ListAPI returns content templates for a campaign as JSON.
 // GET /campaigns/:id/content-templates
 // Optional query: ?entity_type_id=N to filter by entity type.
-func (h *ContentTemplateHandler) ListAPI(c echo.Context) error {
+func (h *ContentTemplateHandler) ListAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -55,7 +55,7 @@ func (h *ContentTemplateHandler) ListAPI(c echo.Context) error {
 
 // GetAPI returns a single content template by ID.
 // GET /campaigns/:id/content-templates/:tid
-func (h *ContentTemplateHandler) GetAPI(c echo.Context) error {
+func (h *ContentTemplateHandler) GetAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -81,7 +81,7 @@ func (h *ContentTemplateHandler) GetAPI(c echo.Context) error {
 
 // CreateAPI creates a new content template.
 // POST /campaigns/:id/content-templates
-func (h *ContentTemplateHandler) CreateAPI(c echo.Context) error {
+func (h *ContentTemplateHandler) CreateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -119,7 +119,7 @@ func (h *ContentTemplateHandler) CreateAPI(c echo.Context) error {
 
 // UpdateAPI updates an existing content template.
 // PUT /campaigns/:id/content-templates/:tid
-func (h *ContentTemplateHandler) UpdateAPI(c echo.Context) error {
+func (h *ContentTemplateHandler) UpdateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -157,7 +157,7 @@ func (h *ContentTemplateHandler) UpdateAPI(c echo.Context) error {
 
 // DeleteAPI deletes a content template.
 // DELETE /campaigns/:id/content-templates/:tid
-func (h *ContentTemplateHandler) DeleteAPI(c echo.Context) error {
+func (h *ContentTemplateHandler) DeleteAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

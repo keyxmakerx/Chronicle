@@ -12,7 +12,7 @@ import (
 	"sync"
 	"unicode"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // CSPReportPath is where browsers send report-only violations. It takes no
@@ -52,7 +52,7 @@ type cspViolation struct {
 // nothing to retry and a caller learns nothing.
 func CSPReportHandler() echo.HandlerFunc {
 	t := &cspReportTable{seen: make(map[string]int)}
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		body, err := io.ReadAll(io.LimitReader(c.Request().Body, cspReportMaxBody))
 		if err == nil {
 			for _, v := range parseCSPReports(body) {

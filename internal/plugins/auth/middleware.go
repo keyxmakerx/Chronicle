@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // Context keys for storing session data in Echo context. Other plugins
@@ -23,7 +23,7 @@ const (
 // for API requests.
 func RequireAuth(service AuthService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			token := getSessionToken(c)
 			if token == "" {
 				return handleUnauthenticated(c)
@@ -57,7 +57,7 @@ func RequireAuth(service AuthService) echo.MiddlewareFunc {
 // bare word "unauthorized". In-app widgets usually hit this when their
 // session quietly expires mid-session, so "reload" is the correct next
 // step for the user.
-func handleUnauthenticated(c echo.Context) error {
+func handleUnauthenticated(c *echo.Context) error {
 	// API requests get a JSON 401 response.
 	if isAPIRequest(c) {
 		return c.JSON(http.StatusUnauthorized, map[string]string{
@@ -90,7 +90,7 @@ func handleUnauthenticated(c echo.Context) error {
 //   - The destination goes through sanitizeRedirect, so a protocol-relative
 //     open-redirect ("//evil.example") degrades to a bare /login instead of
 //     becoming a Location the login handler would later honour.
-func loginRedirectTarget(c echo.Context) string {
+func loginRedirectTarget(c *echo.Context) string {
 	const bare = "/login"
 	req := c.Request()
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
@@ -110,7 +110,7 @@ func loginRedirectTarget(c echo.Context) string {
 // pages where logged-in users see more features than guests).
 func OptionalAuth(service AuthService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			token := getSessionToken(c)
 			if token != "" {
 				session, err := service.ValidateSession(c.Request().Context(), token)
@@ -170,7 +170,7 @@ func guestMayReach(p, campaignID string) bool {
 }
 
 // guestFenced sends a guest who wandered outside back to their campaign.
-func guestFenced(c echo.Context, campaignID string) error {
+func guestFenced(c *echo.Context, campaignID string) error {
 	home := "/campaigns/" + campaignID
 	if isAPIRequest(c) {
 		return c.JSON(http.StatusForbidden, map[string]string{
@@ -195,7 +195,7 @@ func guestFenced(c echo.Context, campaignID string) error {
 
 // GetSession retrieves the authenticated session from the Echo context.
 // Returns nil if the request is not authenticated (middleware not applied).
-func GetSession(c echo.Context) *Session {
+func GetSession(c *echo.Context) *Session {
 	session, ok := c.Get(contextKeySession).(*Session)
 	if !ok {
 		return nil
@@ -205,7 +205,7 @@ func GetSession(c echo.Context) *Session {
 
 // GetUserID retrieves the authenticated user's ID from the Echo context.
 // Returns empty string if the request is not authenticated.
-func GetUserID(c echo.Context) string {
+func GetUserID(c *echo.Context) string {
 	id, ok := c.Get(contextKeyUserID).(string)
 	if !ok {
 		return ""
@@ -219,7 +219,7 @@ func GetUserID(c echo.Context) string {
 // middleware that lets in-app widgets authenticate with a cookie instead
 // of a Bearer token) can read the cookie without reaching into unexported
 // helpers.
-func GetSessionTokenFromCookie(c echo.Context) string {
+func GetSessionTokenFromCookie(c *echo.Context) string {
 	return getSessionToken(c)
 }
 
@@ -229,7 +229,7 @@ func GetSessionTokenFromCookie(c echo.Context) string {
 // advertise the session to downstream code — anything calling GetSession /
 // GetUserID afterwards sees a uniform result regardless of which middleware
 // did the validation.
-func SetSession(c echo.Context, session *Session) {
+func SetSession(c *echo.Context, session *Session) {
 	c.Set(contextKeySession, session)
 	c.Set(contextKeyUserID, session.UserID)
 }
@@ -240,7 +240,7 @@ func SetSession(c echo.Context, session *Session) {
 // Used by: admin plugin routes, SMTP settings routes.
 func RequireSiteAdmin() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			session := GetSession(c)
 			if session == nil {
 				return handleUnauthenticated(c)
@@ -262,7 +262,7 @@ func RequireSiteAdmin() echo.MiddlewareFunc {
 // HX-Trigger header that tells the client JS to show the password modal.
 func RequireReauth(service AuthService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			session := GetSession(c)
 			if session == nil {
 				return handleUnauthenticated(c)
@@ -289,12 +289,12 @@ func RequireReauth(service AuthService) echo.MiddlewareFunc {
 // --- Helpers ---
 
 // isAPIRequest returns true if the request targets the /api/ path.
-func isAPIRequest(c echo.Context) bool {
+func isAPIRequest(c *echo.Context) bool {
 	path := c.Request().URL.Path
 	return len(path) >= 4 && path[:4] == "/api"
 }
 
 // isHTMXRequest returns true if the request was made by HTMX.
-func isHTMXRequest(c echo.Context) bool {
+func isHTMXRequest(c *echo.Context) bool {
 	return c.Request().Header.Get("HX-Request") == "true"
 }

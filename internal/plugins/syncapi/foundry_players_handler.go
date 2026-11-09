@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -33,7 +33,7 @@ func (h *SyncHistoryHandler) SetWorldPresence(open func(campaignID string) bool)
 // client's report. Only an owner or DM-access key may send it: a player's
 // own client never holds a key, and the list names who is linked to whom.
 // POST /api/v1/campaigns/:id/sync/players
-func (h *SyncHistoryHandler) ReportPlayers(c echo.Context) error {
+func (h *SyncHistoryHandler) ReportPlayers(c *echo.Context) error {
 	if h.players == nil {
 		return apperror.NewNotFound("player reports are not available")
 	}
@@ -95,7 +95,7 @@ func (h *SyncHistoryHandler) playersView(ctx context.Context, cc *campaigns.Camp
 
 // PlayersFragment is the Players in Foundry card body.
 // GET /campaigns/:id/foundry/players
-func (h *SyncHistoryHandler) PlayersFragment(c echo.Context) error {
+func (h *SyncHistoryHandler) PlayersFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -110,7 +110,7 @@ func (h *SyncHistoryHandler) PlayersFragment(c echo.Context) error {
 // MemberStatusFragment fills the People table's "In Foundry" cells with
 // out-of-band swaps, one per member.
 // GET /campaigns/:id/foundry/member-status
-func (h *SyncHistoryHandler) MemberStatusFragment(c echo.Context) error {
+func (h *SyncHistoryHandler) MemberStatusFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -127,7 +127,7 @@ const problemsShown = 5
 
 // ProblemsFragment lists the latest failed syncs in plain words.
 // GET /campaigns/:id/foundry/problems
-func (h *SyncHistoryHandler) ProblemsFragment(c echo.Context) error {
+func (h *SyncHistoryHandler) ProblemsFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

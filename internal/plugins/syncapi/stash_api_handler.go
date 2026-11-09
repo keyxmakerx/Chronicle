@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -108,7 +108,7 @@ type actingBody struct {
 	ActingUserID string `json:"actingUserId"`
 }
 
-func keyUser(c echo.Context) (string, error) {
+func keyUser(c *echo.Context) (string, error) {
 	key := GetAPIKey(c)
 	if key == nil {
 		return "", apperror.NewUnauthorized("api key required")
@@ -117,7 +117,7 @@ func keyUser(c echo.Context) (string, error) {
 }
 
 // decodeOptional reads a JSON body that may be absent.
-func decodeOptional(c echo.Context, v any) error {
+func decodeOptional(c *echo.Context, v any) error {
 	err := json.NewDecoder(c.Request().Body).Decode(v)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return apperror.NewBadRequest("invalid request body")
@@ -125,7 +125,7 @@ func decodeOptional(c echo.Context, v any) error {
 	return nil
 }
 
-func parseMoveID(c echo.Context) (int64, error) {
+func parseMoveID(c *echo.Context) (int64, error) {
 	id, err := strconv.ParseInt(c.Param("moveId"), 10, 64)
 	if err != nil || id <= 0 {
 		return 0, apperror.NewNotFound("request not found")
@@ -135,7 +135,7 @@ func parseMoveID(c echo.Context) (int64, error) {
 
 // View returns what the acting member sees for a character.
 // GET /api/v1/campaigns/:id/stashes/view?characterId=&actingUserId=
-func (h *StashAPIHandler) View(c echo.Context) error {
+func (h *StashAPIHandler) View(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func (h *StashAPIHandler) View(c echo.Context) error {
 
 // Move applies or queues a move as the acting member.
 // POST /api/v1/campaigns/:id/stashes/moves
-func (h *StashAPIHandler) Move(c echo.Context) error {
+func (h *StashAPIHandler) Move(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -177,7 +177,7 @@ func (h *StashAPIHandler) Move(c echo.Context) error {
 
 // History lists the moves of a character or a stash.
 // GET /api/v1/campaigns/:id/stashes/history?characterId=|stashId=&actingUserId=
-func (h *StashAPIHandler) History(c echo.Context) error {
+func (h *StashAPIHandler) History(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -192,7 +192,7 @@ func (h *StashAPIHandler) History(c echo.Context) error {
 
 // Requests lists the pending requests; the acting member must be an approver.
 // GET /api/v1/campaigns/:id/stashes/requests?actingUserId=
-func (h *StashAPIHandler) Requests(c echo.Context) error {
+func (h *StashAPIHandler) Requests(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -206,17 +206,17 @@ func (h *StashAPIHandler) Requests(c echo.Context) error {
 
 // Approve answers a pending request with a yes.
 // POST /api/v1/campaigns/:id/stashes/requests/:moveId/approve
-func (h *StashAPIHandler) Approve(c echo.Context) error {
+func (h *StashAPIHandler) Approve(c *echo.Context) error {
 	return h.answer(c, h.svc.Approve)
 }
 
 // Decline answers a pending request with a no.
 // POST /api/v1/campaigns/:id/stashes/requests/:moveId/decline
-func (h *StashAPIHandler) Decline(c echo.Context) error {
+func (h *StashAPIHandler) Decline(c *echo.Context) error {
 	return h.answer(c, h.svc.Decline)
 }
 
-func (h *StashAPIHandler) answer(c echo.Context, fn func(ctx context.Context, campaignID, keyUserID, actingUserID string, moveID int64) (any, error)) error {
+func (h *StashAPIHandler) answer(c *echo.Context, fn func(ctx context.Context, campaignID, keyUserID, actingUserID string, moveID int64) (any, error)) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err
@@ -239,7 +239,7 @@ func (h *StashAPIHandler) answer(c echo.Context, fn func(ctx context.Context, ca
 
 // Downtime reports whether downtime is open.
 // GET /api/v1/campaigns/:id/stashes/downtime
-func (h *StashAPIHandler) Downtime(c echo.Context) error {
+func (h *StashAPIHandler) Downtime(c *echo.Context) error {
 	out, err := h.svc.Downtime(c.Request().Context(), c.Param("id"))
 	if err != nil {
 		return err
@@ -249,7 +249,7 @@ func (h *StashAPIHandler) Downtime(c echo.Context) error {
 
 // SetDowntime opens or closes downtime; only an approver may.
 // PUT /api/v1/campaigns/:id/stashes/downtime  {open, actingUserId}
-func (h *StashAPIHandler) SetDowntime(c echo.Context) error {
+func (h *StashAPIHandler) SetDowntime(c *echo.Context) error {
 	uid, err := keyUser(c)
 	if err != nil {
 		return err

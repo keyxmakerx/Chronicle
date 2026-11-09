@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // A browser sends a preflight before any request carrying a custom header, and
@@ -15,7 +15,7 @@ import (
 // all sync from a browser-hosted Foundry.
 func TestCORSPreflight_AllowsModuleVersionHeader(t *testing.T) {
 	e := echo.New()
-	h := CORS(CORSConfig{AllowedOrigins: []string{"https://foundry.example"}})(func(c echo.Context) error {
+	h := CORS(CORSConfig{AllowedOrigins: []string{"https://foundry.example"}})(func(c *echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	})
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/campaigns/c/entities", nil)

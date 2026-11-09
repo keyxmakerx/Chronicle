@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -44,11 +44,10 @@ func TestRequireAddonAPI(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := echo.New()
 			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
-			c.SetParamNames("id")
-			c.SetParamValues("camp-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 
 			calledNext := false
-			h := RequireAddonAPI(tc.checker, testAddonSlug)(func(echo.Context) error {
+			h := RequireAddonAPI(tc.checker, testAddonSlug)(func(*echo.Context) error {
 				calledNext = true
 				return nil
 			})

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -30,12 +30,12 @@ func withLoadedSystems(t *testing.T, mods map[string]*loadedSystem, fn func()) {
 	fn()
 }
 
-// --- OperatorDiagnosticsAPI handler (real echo.Context via httptest) ----------
+// --- OperatorDiagnosticsAPI handler (real *echo.Context via httptest) ----------
 
-// newDiagCtx builds an echo.Context for GET /admin/diagnostics with the given
+// newDiagCtx builds an *echo.Context for GET /admin/diagnostics with the given
 // raw query string ("" for none), returning the context + the recorder to assert
 // status/body/headers against.
-func newDiagCtx(query string) (echo.Context, *httptest.ResponseRecorder) {
+func newDiagCtx(query string) (*echo.Context, *httptest.ResponseRecorder) {
 	target := "/admin/diagnostics"
 	if query != "" {
 		target += "?" + query

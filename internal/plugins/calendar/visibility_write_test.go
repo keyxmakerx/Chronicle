@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -45,8 +45,8 @@ func visWriteStack(roles map[string]campaigns.Role, settings, stored string) (*e
 	}
 	svc := NewCalendarService(calRepo, eventRepo, &fakeEventKindRepo{}, &fakeWeatherRepo{})
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		if c.Response().Committed {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
+		if c.Response().(*echo.Response).Committed {
 			return
 		}
 		if ae, ok := err.(*apperror.AppError); ok {

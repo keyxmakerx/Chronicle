@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -46,7 +46,7 @@ func (s *stubCreateCapturingSvc) GetEntityTypes(_ context.Context, _ string) ([]
 
 // newCreateContext builds an echo context carrying a campaign whose settings
 // JSON holds the given default_visibility value.
-func newCreateContext(t *testing.T, defaultVis, body, contentType string) echo.Context {
+func newCreateContext(t *testing.T, defaultVis, body, contentType string) *echo.Context {
 	t.Helper()
 	settings := "{}"
 	if defaultVis != "" {
@@ -56,8 +56,7 @@ func newCreateContext(t *testing.T, defaultVis, body, contentType string) echo.C
 	req := httptest.NewRequest(http.MethodPost, "/campaigns/camp-1/entities", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", contentType)
 	c := e.NewContext(req, httptest.NewRecorder())
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1", Name: "Test", Settings: settings},
 		MemberRole: campaigns.RoleOwner,

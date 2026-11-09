@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -44,7 +44,7 @@ func (h *Handler) SetEntityGate(gate EntityGate) {
 
 // ListRelations returns all relations for an entity as JSON
 // (GET /campaigns/:id/entities/:eid/relations).
-func (h *Handler) ListRelations(c echo.Context) error {
+func (h *Handler) ListRelations(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -116,7 +116,7 @@ func (h *Handler) ListRelations(c echo.Context) error {
 // requireViewableEntity answers 404 unless the entity is in the URL's campaign
 // and the caller may view it, failing closed when no gate is wired. It uses
 // cc.VisibilityRole() like ListRelations (ADR-057).
-func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignContext, entityID, userID string) error {
+func (h *Handler) requireViewableEntity(c *echo.Context, cc *campaigns.CampaignContext, entityID, userID string) error {
 	if h.entityGate == nil {
 		return apperror.NewInternal(errors.New("relations: entity gate not configured"))
 	}
@@ -165,7 +165,7 @@ func (h *Handler) filterByTargetVisibility(ctx context.Context, campaignID strin
 
 // CreateRelation creates a new bi-directional relation between two entities
 // (POST /campaigns/:id/entities/:eid/relations).
-func (h *Handler) CreateRelation(c echo.Context) error {
+func (h *Handler) CreateRelation(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -224,7 +224,7 @@ func (h *Handler) CreateRelation(c echo.Context) error {
 // only reachable by the same viewers ListRelations shows it to. Delete and
 // metadata edits take a bare relation ID, so without this a caller could
 // change a relation whose entities or visibility they cannot see.
-func (h *Handler) requireRelationAccess(c echo.Context, cc *campaigns.CampaignContext, rel *Relation) error {
+func (h *Handler) requireRelationAccess(c *echo.Context, cc *campaigns.CampaignContext, rel *Relation) error {
 	if rel.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("relation not found")
 	}
@@ -242,7 +242,7 @@ func (h *Handler) requireRelationAccess(c echo.Context, cc *campaigns.CampaignCo
 
 // DeleteRelation removes a relation and its reverse direction
 // (DELETE /campaigns/:id/entities/:eid/relations/:rid).
-func (h *Handler) DeleteRelation(c echo.Context) error {
+func (h *Handler) DeleteRelation(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -270,7 +270,7 @@ func (h *Handler) DeleteRelation(c echo.Context) error {
 
 // UpdateRelationMetadata updates the metadata JSON for a single relation
 // (PUT /campaigns/:id/entities/:eid/relations/:rid/metadata).
-func (h *Handler) UpdateRelationMetadata(c echo.Context) error {
+func (h *Handler) UpdateRelationMetadata(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -306,7 +306,7 @@ func (h *Handler) UpdateRelationMetadata(c echo.Context) error {
 
 // GetCommonTypes returns the predefined relation type pairs for the frontend
 // UI suggestion list (GET /campaigns/:id/relation-types).
-func (h *Handler) GetCommonTypes(c echo.Context) error {
+func (h *Handler) GetCommonTypes(c *echo.Context) error {
 	return c.JSON(http.StatusOK, h.service.GetCommonTypes())
 }
 
@@ -322,7 +322,7 @@ func (h *Handler) GetCommonTypes(c echo.Context) error {
 //   - include_orphans:  include entities with no connections (default "false")
 //
 // GET /campaigns/:id/relations-graph
-func (h *Handler) GraphAPI(c echo.Context) error {
+func (h *Handler) GraphAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -374,7 +374,7 @@ func (h *Handler) GraphAPI(c echo.Context) error {
 
 // GraphPage renders the standalone relations graph visualization page.
 // GET /campaigns/:id/relations-graph/page
-func (h *Handler) GraphPage(c echo.Context) error {
+func (h *Handler) GraphPage(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

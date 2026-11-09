@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -24,7 +24,7 @@ func NewHandler(service SMTPService) *Handler {
 }
 
 // Settings renders the SMTP settings page (GET /admin/smtp).
-func (h *Handler) Settings(c echo.Context) error {
+func (h *Handler) Settings(c *echo.Context) error {
 	settings, err := h.service.GetSettings(c.Request().Context())
 	if err != nil {
 		return err
@@ -35,7 +35,7 @@ func (h *Handler) Settings(c echo.Context) error {
 }
 
 // UpdateSettings saves SMTP settings (PUT /admin/smtp).
-func (h *Handler) UpdateSettings(c echo.Context) error {
+func (h *Handler) UpdateSettings(c *echo.Context) error {
 	var req UpdateSMTPRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -67,7 +67,7 @@ func (h *Handler) UpdateSettings(c echo.Context) error {
 }
 
 // TestConnection tests SMTP connectivity (POST /admin/smtp/test).
-func (h *Handler) TestConnection(c echo.Context) error {
+func (h *Handler) TestConnection(c *echo.Context) error {
 	if err := h.service.TestConnection(c.Request().Context()); err != nil {
 		settings, _ := h.service.GetSettings(c.Request().Context())
 		csrfToken := middleware.GetCSRFToken(c)
@@ -89,7 +89,7 @@ func (h *Handler) TestConnection(c echo.Context) error {
 }
 
 // SendTestEmail sends a test email to a specified address (POST /admin/smtp/send-test).
-func (h *Handler) SendTestEmail(c echo.Context) error {
+func (h *Handler) SendTestEmail(c *echo.Context) error {
 	to := c.FormValue("test_email")
 	if to == "" {
 		to = c.QueryParam("to")

@@ -18,6 +18,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
+	"github.com/labstack/echo/v5"
 )
 
 // fakeMediaSvcForList is a minimal media.MediaService double for ListMedia
@@ -174,8 +175,7 @@ func TestGetMedia_RoleGate(t *testing.T) {
 			h := NewMediaAPIHandler(&stubSyncSvcForRole{}, mediaSvc)
 			h.SetCampaignService(&stubCampaignSvcForRole{getMemberFn: memberWithRole(tt.role)})
 			c, rec := newRoleContext(tt.key)
-			c.SetParamNames("id", "mediaID")
-			c.SetParamValues("camp-1", "file-1")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mediaID", Value: "file-1"}})
 
 			err := h.GetMedia(c)
 			if !tt.allowed {

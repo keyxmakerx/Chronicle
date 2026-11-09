@@ -1,0 +1,7 @@
+# Advisories tools/check-govulncheck.sh lets through, one per line:
+#   <OSV id> <module> <lowest version the exception covers> <tracking issue>
+#
+# An entry is only for an advisory that the module has fixed but the Go
+# vulnerability database still lists without a fixed version. Below the
+# named version the finding fails CI as usual. Remove the entry once the
+# database lists the fix; the check warns when an entry stops matching.

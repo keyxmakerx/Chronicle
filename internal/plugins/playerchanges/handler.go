@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -23,13 +23,13 @@ const (
 // Handler serves the owner's "What players changed" page.
 type Handler struct {
 	svc        Service
-	keepMonths func(c echo.Context) int
-	zone       func(c echo.Context) *time.Location
+	keepMonths func(c *echo.Context) int
+	zone       func(c *echo.Context) *time.Location
 }
 
 // NewHandler creates the handler. keepMonths says how far back the long
 // range reaches; zone is the owner's time zone (UTC when nil).
-func NewHandler(svc Service, keepMonths func(c echo.Context) int, zone func(c echo.Context) *time.Location) *Handler {
+func NewHandler(svc Service, keepMonths func(c *echo.Context) int, zone func(c *echo.Context) *time.Location) *Handler {
 	return &Handler{svc: svc, keepMonths: keepMonths, zone: zone}
 }
 
@@ -62,7 +62,7 @@ type PageGroup struct {
 }
 
 // Page renders the page.
-func (h *Handler) Page(c echo.Context) error {
+func (h *Handler) Page(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -75,7 +75,7 @@ func (h *Handler) Page(c echo.Context) error {
 }
 
 // Results answers the search box.
-func (h *Handler) Results(c echo.Context) error {
+func (h *Handler) Results(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -90,7 +90,7 @@ func (h *Handler) Results(c echo.Context) error {
 }
 
 // Undo puts one change back.
-func (h *Handler) Undo(c echo.Context) error {
+func (h *Handler) Undo(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -106,7 +106,7 @@ func (h *Handler) Undo(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, changeLine(cc.Campaign.ID, *ch, h.loc(c), nil, time.Now()))
 }
 
-func (h *Handler) query(c echo.Context) (Query, string) {
+func (h *Handler) query(c *echo.Context) (Query, string) {
 	params := c.QueryParams()
 	q := Query{
 		Pages:   capped(params["page"], 20),
@@ -128,7 +128,7 @@ func (h *Handler) query(c echo.Context) (Query, string) {
 	return q, rng
 }
 
-func (h *Handler) results(c echo.Context, campaignID, rng string, q Query, res *Result) ResultsView {
+func (h *Handler) results(c *echo.Context, campaignID, rng string, q Query, res *Result) ResultsView {
 	v := ResultsView{CampaignID: campaignID, Range: rng, KeepMonths: h.months(c), Count: len(res.Changes),
 		Truncated: res.Truncated, Zone: h.loc(c), Words: q.Words, Now: time.Now()}
 	at := map[string]int{}
@@ -144,14 +144,14 @@ func (h *Handler) results(c echo.Context, campaignID, rng string, q Query, res *
 	return v
 }
 
-func (h *Handler) months(c echo.Context) int {
+func (h *Handler) months(c *echo.Context) int {
 	if h.keepMonths == nil {
 		return DefaultKeepMonths
 	}
 	return h.keepMonths(c)
 }
 
-func (h *Handler) loc(c echo.Context) *time.Location {
+func (h *Handler) loc(c *echo.Context) *time.Location {
 	if h.zone != nil {
 		if z := h.zone(c); z != nil {
 			return z

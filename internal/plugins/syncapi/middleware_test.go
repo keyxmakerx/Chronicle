@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -68,7 +68,7 @@ func newMultiAuthFixture(t *testing.T, authSvc auth.AuthService, campaignSvc cam
 	// Code and Message from *apperror.AppError, emit {error, message}
 	// JSON. Anything else becomes 500 with a generic message — tests
 	// that exercise AppError paths don't rely on the 500 branch.
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		type errBody struct {
 			Error   string `json:"error"`
 			Message string `json:"message"`
@@ -94,7 +94,7 @@ func newMultiAuthFixture(t *testing.T, authSvc auth.AuthService, campaignSvc cam
 	cg := e.Group("/api/v1/campaigns/:id",
 		RequireAuthOrAPIKey(authSvc, campaignSvc, syncSvc),
 	)
-	cg.POST("/entities", func(c echo.Context) error {
+	cg.POST("/entities", func(c *echo.Context) error {
 		key := GetAPIKey(c)
 		if key == nil {
 			return c.JSON(http.StatusInternalServerError, map[string]any{"error": "no key in context"})

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -70,8 +70,7 @@ func TestGetPlayerNotes_VisibilityAndCampaignGate(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/"+tc.eid+"/player-notes", nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("c1", tc.eid)
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: tc.eid}})
 			// The campaign-context middleware normally sets this; set it directly
 			// by its known key so GetCampaignContext resolves it (a real Player).
 			c.Set("campaign_context", &campaigns.CampaignContext{

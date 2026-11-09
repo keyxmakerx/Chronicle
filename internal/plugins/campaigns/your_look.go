@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -51,7 +51,7 @@ func ShownLookParts(parts []LookPart, hasSheet func() bool) []LookPart {
 // YourLook is the page where a member sets the parts of the look the owner let
 // them change for themselves: GET /campaigns/:id/my-look. The owner edits the
 // campaign's look in Customize, and a member with nothing allowed is told so.
-func (h *Handler) YourLook(c echo.Context) error {
+func (h *Handler) YourLook(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -85,7 +85,7 @@ func (h *Handler) YourLook(c echo.Context) error {
 // PutLookPick stores or clears the caller's own pick for one part:
 // PUT /campaigns/:id/my-look/:part. The service checks the current "who can
 // change" setting and the value; the row is the caller's own.
-func (h *Handler) PutLookPick(c echo.Context) error {
+func (h *Handler) PutLookPick(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

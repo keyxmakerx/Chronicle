@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // TestRequestLogger_RedactsSignedMediaURL_EndToEnd drives a request shaped
@@ -36,7 +36,7 @@ func TestRequestLogger_RedactsSignedMediaURL_EndToEnd(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := RequestLogger()(func(c echo.Context) error {
+	handler := RequestLogger()(func(c *echo.Context) error {
 		return c.String(http.StatusOK, "ok")
 	})
 	if err := handler(c); err != nil {

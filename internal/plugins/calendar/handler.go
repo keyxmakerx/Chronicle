@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -51,7 +51,7 @@ func NewHandler(svc CalendarService) *Handler {
 // viewer below Player keeps their own view, and writes ignore it. A page
 // that feeds a save (the structure editor) uses ownViewer instead, so a
 // narrowed read can never be written back over what was hidden.
-func viewerFrom(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewer {
+func viewerFrom(c *echo.Context, cc *campaigns.CampaignContext) permissions.Viewer {
 	role := cc.VisibilityRole()
 	if c.Request().Method == http.MethodGet && c.QueryParam("audience") == "players" && role > int(campaigns.RolePlayer) {
 		return permissions.RequestViewer(int(campaigns.RolePlayer), "")
@@ -60,7 +60,7 @@ func viewerFrom(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewe
 }
 
 // ownViewer is viewerFrom without the players' audience.
-func ownViewer(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewer {
+func ownViewer(c *echo.Context, cc *campaigns.CampaignContext) permissions.Viewer {
 	return permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c))
 }
 
@@ -68,7 +68,7 @@ func ownViewer(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewer
 
 // ListCalendarsAPI lists a campaign's calendars.
 // GET /campaigns/:id/calendars
-func (h *Handler) ListCalendarsAPI(c echo.Context) error {
+func (h *Handler) ListCalendarsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	cals, err := h.svc.ListCalendars(c.Request().Context(), cc.Campaign.ID, viewerFrom(c, cc))
 	if err != nil {
@@ -89,7 +89,7 @@ func (h *Handler) ListCalendarsAPI(c echo.Context) error {
 // ordinary state for a campaign that has the addon enabled but never
 // configured it.
 // GET /campaigns/:id/calendars/upcoming?limit=N
-func (h *Handler) PreviewUpcomingEvents(c echo.Context) error {
+func (h *Handler) PreviewUpcomingEvents(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	v := viewerFrom(c, cc)
 	ctx := c.Request().Context()
@@ -126,7 +126,7 @@ func (h *Handler) PreviewUpcomingEvents(c echo.Context) error {
 
 // GetCalendarAPI returns one calendar with its sub-resources.
 // GET /campaigns/:id/calendars/:calid
-func (h *Handler) GetCalendarAPI(c echo.Context) error {
+func (h *Handler) GetCalendarAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	cal, err := h.svc.GetCalendarForViewer(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
 	if err != nil {
@@ -137,7 +137,7 @@ func (h *Handler) GetCalendarAPI(c echo.Context) error {
 
 // CreateCalendarAPI creates a calendar. Owner only.
 // POST /campaigns/:id/calendars
-func (h *Handler) CreateCalendarAPI(c echo.Context) error {
+func (h *Handler) CreateCalendarAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		Mode             string  `json:"mode"`
@@ -174,7 +174,7 @@ func (h *Handler) CreateCalendarAPI(c echo.Context) error {
 
 // UpdateCalendarAPI applies a partial settings update. Owner only.
 // PUT /campaigns/:id/calendars/:calid
-func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
+func (h *Handler) UpdateCalendarAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		Name             string              `json:"name"`
@@ -221,7 +221,7 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 
 // DeleteCalendarAPI deletes a calendar. Owner only.
 // DELETE /campaigns/:id/calendars/:calid
-func (h *Handler) DeleteCalendarAPI(c echo.Context) error {
+func (h *Handler) DeleteCalendarAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if err := h.svc.DeleteCalendar(c.Request().Context(), c.Param("calid"), cc.Campaign.ID); err != nil {
 		return err
@@ -231,7 +231,7 @@ func (h *Handler) DeleteCalendarAPI(c echo.Context) error {
 
 // SetDefaultCalendarAPI marks a calendar as the campaign's default. Owner only.
 // PUT /campaigns/:id/calendars/:calid/default
-func (h *Handler) SetDefaultCalendarAPI(c echo.Context) error {
+func (h *Handler) SetDefaultCalendarAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if err := h.svc.SetDefaultCalendar(c.Request().Context(), cc.Campaign.ID, c.Param("calid")); err != nil {
 		return err
@@ -243,7 +243,7 @@ func (h *Handler) SetDefaultCalendarAPI(c echo.Context) error {
 
 // ListEventsAPI lists a calendar's events for one (year, month).
 // GET /campaigns/:id/calendars/:calid/events?year=YYYY&month=M
-func (h *Handler) ListEventsAPI(c echo.Context) error {
+func (h *Handler) ListEventsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	year, err := strconv.Atoi(c.QueryParam("year"))
 	if err != nil {
@@ -266,7 +266,7 @@ func (h *Handler) ListEventsAPI(c echo.Context) error {
 // ListEventIndexAPI returns a compact calendar-wide event list for pickers
 // (the repeat rule's "day of <event>"), optionally narrowed by name.
 // GET /campaigns/:id/calendars/:calid/events/index?q=
-func (h *Handler) ListEventIndexAPI(c echo.Context) error {
+func (h *Handler) ListEventIndexAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	entries, truncated, err := h.svc.ListEventIndexForViewer(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, c.QueryParam("q"), viewerFrom(c, cc))
 	if err != nil {
@@ -278,7 +278,7 @@ func (h *Handler) ListEventIndexAPI(c echo.Context) error {
 // ListEraEventsAPI returns the events dated within one era, for the era
 // panel's key events.
 // GET /campaigns/:id/calendars/:calid/eras/:eraID/events
-func (h *Handler) ListEraEventsAPI(c echo.Context) error {
+func (h *Handler) ListEraEventsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	eraID, err := strconv.Atoi(c.Param("eraID"))
 	if err != nil {
@@ -296,7 +296,7 @@ func (h *Handler) ListEraEventsAPI(c echo.Context) error {
 
 // GetEventAPI returns one event.
 // GET /campaigns/:id/calendars/:calid/events/:eid
-func (h *Handler) GetEventAPI(c echo.Context) error {
+func (h *Handler) GetEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	evt, err := h.svc.GetEventForViewer(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
 	if err != nil {
@@ -309,7 +309,7 @@ func (h *Handler) GetEventAPI(c echo.Context) error {
 // visibility=dm_only or a visibility_rules from a caller who may not author
 // dm_only content (CalendarService.CreateEvent's doc comment).
 // POST /campaigns/:id/calendars/:calid/events
-func (h *Handler) CreateEventAPI(c echo.Context) error {
+func (h *Handler) CreateEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		Name                     string          `json:"name"`
@@ -396,7 +396,7 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 // than what is already stored, and answers NotFound for an event the caller
 // cannot see at all.
 // PUT /campaigns/:id/calendars/:calid/events/:eid
-func (h *Handler) UpdateEventAPI(c echo.Context) error {
+func (h *Handler) UpdateEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		Name                     patch.Field[string]          `json:"name"`
@@ -471,7 +471,7 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 }
 
 // occurrenceDate reads the :y/:m/:d path segments naming one occurrence.
-func occurrenceDate(c echo.Context) (DayDate, error) {
+func occurrenceDate(c *echo.Context) (DayDate, error) {
 	y, errY := strconv.Atoi(c.Param("y"))
 	m, errM := strconv.Atoi(c.Param("m"))
 	d, errD := strconv.Atoi(c.Param("d"))
@@ -485,7 +485,7 @@ func occurrenceDate(c echo.Context) (DayDate, error) {
 // ("this one only"). Scribe+, and the event must be visible to the caller.
 // Body: {"action":"skip"} or {"action":"move","year":Y,"month":M,"day":D}.
 // PUT /campaigns/:id/calendars/:calid/events/:eid/occurrences/:y/:m/:d
-func (h *Handler) SetOccurrenceAPI(c echo.Context) error {
+func (h *Handler) SetOccurrenceAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	occ, err := occurrenceDate(c)
 	if err != nil {
@@ -510,7 +510,7 @@ func (h *Handler) SetOccurrenceAPI(c echo.Context) error {
 
 // DeleteOccurrenceAPI puts one skipped or moved occurrence back.
 // DELETE /campaigns/:id/calendars/:calid/events/:eid/occurrences/:y/:m/:d
-func (h *Handler) DeleteOccurrenceAPI(c echo.Context) error {
+func (h *Handler) DeleteOccurrenceAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	occ, err := occurrenceDate(c)
 	if err != nil {
@@ -525,7 +525,7 @@ func (h *Handler) DeleteOccurrenceAPI(c echo.Context) error {
 // PreviewRecurrenceAPI lists the next dates a draft rule gives, for the
 // event editor. Read-gated; writes nothing.
 // POST /campaigns/:id/calendars/:calid/recurrence/preview
-func (h *Handler) PreviewRecurrenceAPI(c echo.Context) error {
+func (h *Handler) PreviewRecurrenceAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		RecurrenceRule           json.RawMessage `json:"recurrence_rule"`
@@ -559,7 +559,7 @@ func (h *Handler) PreviewRecurrenceAPI(c echo.Context) error {
 
 // DeleteEventAPI deletes an event. Owner only.
 // DELETE /campaigns/:id/calendars/:calid/events/:eid
-func (h *Handler) DeleteEventAPI(c echo.Context) error {
+func (h *Handler) DeleteEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if err := h.svc.DeleteEvent(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc)); err != nil {
 		return err
@@ -569,7 +569,7 @@ func (h *Handler) DeleteEventAPI(c echo.Context) error {
 
 // ListEventPagesAPI lists the pages tied to an event that the caller may see.
 // GET /campaigns/:id/calendars/:calid/events/:eid/pages
-func (h *Handler) ListEventPagesAPI(c echo.Context) error {
+func (h *Handler) ListEventPagesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	pages, err := h.svc.EventPages(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
 	if err != nil {
@@ -580,7 +580,7 @@ func (h *Handler) ListEventPagesAPI(c echo.Context) error {
 
 // LinkEventPageAPI ties a page to an event.
 // POST /campaigns/:id/calendars/:calid/events/:eid/pages
-func (h *Handler) LinkEventPageAPI(c echo.Context) error {
+func (h *Handler) LinkEventPageAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		EntityID string `json:"entity_id"`
@@ -596,7 +596,7 @@ func (h *Handler) LinkEventPageAPI(c echo.Context) error {
 
 // UnlinkEventPageAPI removes a page's tie to an event.
 // DELETE /campaigns/:id/calendars/:calid/events/:eid/pages/:entityID
-func (h *Handler) UnlinkEventPageAPI(c echo.Context) error {
+func (h *Handler) UnlinkEventPageAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if err := h.svc.UnlinkEventPage(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, c.Param("entityID"), viewerFrom(c, cc)); err != nil {
 		return err
@@ -608,7 +608,7 @@ func (h *Handler) UnlinkEventPageAPI(c echo.Context) error {
 // campaigns.CanAuthorDmOnly (the Owner, or a co-DM with a grant), not
 // RequireRole(Owner) — see routes.go.
 // PUT /campaigns/:id/calendars/:calid/events/:eid/visibility
-func (h *Handler) SetEventVisibilityAPI(c echo.Context) error {
+func (h *Handler) SetEventVisibilityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		Visibility      string              `json:"visibility"`
@@ -630,7 +630,7 @@ func (h *Handler) SetEventVisibilityAPI(c echo.Context) error {
 
 // ListEventKindsAPI lists a campaign's event kinds.
 // GET /campaigns/:id/calendars/event-kinds
-func (h *Handler) ListEventKindsAPI(c echo.Context) error {
+func (h *Handler) ListEventKindsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	kinds, err := h.svc.ListEventKinds(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
@@ -642,7 +642,7 @@ func (h *Handler) ListEventKindsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, kinds)
 }
 
-func bindEventKindInput(c echo.Context) (EventKindInput, error) {
+func bindEventKindInput(c *echo.Context) (EventKindInput, error) {
 	var req struct {
 		Slug             string `json:"slug"`
 		Name             string `json:"name"`
@@ -667,7 +667,7 @@ func bindEventKindInput(c echo.Context) (EventKindInput, error) {
 // CreateEventKindAPI creates an event kind. CanAuthorDmOnly (Owner or a
 // granted co-Director).
 // POST /campaigns/:id/calendars/event-kinds
-func (h *Handler) CreateEventKindAPI(c echo.Context) error {
+func (h *Handler) CreateEventKindAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	input, err := bindEventKindInput(c)
 	if err != nil {
@@ -683,7 +683,7 @@ func (h *Handler) CreateEventKindAPI(c echo.Context) error {
 // UpdateEventKindAPI applies a partial update to an event kind.
 // CanAuthorDmOnly (Owner or a granted co-Director).
 // PUT /campaigns/:id/calendars/event-kinds/:kindID
-func (h *Handler) UpdateEventKindAPI(c echo.Context) error {
+func (h *Handler) UpdateEventKindAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	kindID, err := strconv.Atoi(c.Param("kindID"))
 	if err != nil {
@@ -716,7 +716,7 @@ func (h *Handler) UpdateEventKindAPI(c echo.Context) error {
 // DeleteEventKindAPI deletes an event kind. CanAuthorDmOnly (Owner or a
 // granted co-Director).
 // DELETE /campaigns/:id/calendars/event-kinds/:kindID
-func (h *Handler) DeleteEventKindAPI(c echo.Context) error {
+func (h *Handler) DeleteEventKindAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	kindID, err := strconv.Atoi(c.Param("kindID"))
 	if err != nil {
@@ -730,7 +730,7 @@ func (h *Handler) DeleteEventKindAPI(c echo.Context) error {
 
 // --- Eras (per-calendar, CanAuthorDmOnly — Owner or a granted co-Director) ---
 
-func bindEraInput(c echo.Context) (EraInput, error) {
+func bindEraInput(c *echo.Context) (EraInput, error) {
 	var req struct {
 		Name              string  `json:"name"`
 		StartYear         int     `json:"start_year"`
@@ -775,7 +775,7 @@ func bindEraInput(c echo.Context) (EraInput, error) {
 // CreateEraAPI creates an era. CanAuthorDmOnly (Owner or a granted
 // co-Director).
 // POST /campaigns/:id/calendars/:calid/eras
-func (h *Handler) CreateEraAPI(c echo.Context) error {
+func (h *Handler) CreateEraAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	input, err := bindEraInput(c)
 	if err != nil {
@@ -791,7 +791,7 @@ func (h *Handler) CreateEraAPI(c echo.Context) error {
 // UpdateEraAPI applies a partial update to an era. CanAuthorDmOnly (Owner or
 // a granted co-Director).
 // PUT /campaigns/:id/calendars/:calid/eras/:eraID
-func (h *Handler) UpdateEraAPI(c echo.Context) error {
+func (h *Handler) UpdateEraAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	eraID, err := strconv.Atoi(c.Param("eraID"))
 	if err != nil {
@@ -846,7 +846,7 @@ func (h *Handler) UpdateEraAPI(c echo.Context) error {
 // Each era entry is partial (absent keeps, null clears); the calendar-wide
 // look is sent whole.
 // PUT /campaigns/:id/calendars/:calid/era-look
-func (h *Handler) SaveEraLookAPI(c echo.Context) error {
+func (h *Handler) SaveEraLookAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		ColorsOn  bool    `json:"colors_on"`
@@ -881,7 +881,7 @@ func (h *Handler) SaveEraLookAPI(c echo.Context) error {
 // DeleteEraAPI deletes an era. CanAuthorDmOnly (Owner or a granted
 // co-Director).
 // DELETE /campaigns/:id/calendars/:calid/eras/:eraID
-func (h *Handler) DeleteEraAPI(c echo.Context) error {
+func (h *Handler) DeleteEraAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	eraID, err := strconv.Atoi(c.Param("eraID"))
 	if err != nil {
@@ -902,7 +902,7 @@ func (h *Handler) DeleteEraAPI(c echo.Context) error {
 // only, matching every other anchor-adjacent write in this plugin.
 // real_date is an RFC3339 timestamp; only its calendar date is used.
 // POST /campaigns/:id/calendars/:calid/anchor-preview
-func (h *Handler) AnchorPreviewAPI(c echo.Context) error {
+func (h *Handler) AnchorPreviewAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		AnchorYear  int       `json:"anchor_year"`
@@ -929,7 +929,7 @@ func (h *Handler) AnchorPreviewAPI(c echo.Context) error {
 // SetMoonHiddenAPI toggles a moon's visibility to players. CanAuthorDmOnly
 // (Owner or a granted co-Director).
 // PUT /campaigns/:id/calendars/:calid/moons/:moonID/hidden
-func (h *Handler) SetMoonHiddenAPI(c echo.Context) error {
+func (h *Handler) SetMoonHiddenAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	moonID, err := strconv.Atoi(c.Param("moonID"))
 	if err != nil {
@@ -951,7 +951,7 @@ func (h *Handler) SetMoonHiddenAPI(c echo.Context) error {
 // hand controls. Owner only, like the sun's look; a null strength returns
 // the moon to the sky's default.
 // PUT /campaigns/:id/calendars/:calid/moons/:moonID/look
-func (h *Handler) SetMoonLookAPI(c echo.Context) error {
+func (h *Handler) SetMoonLookAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	moonID, err := strconv.Atoi(c.Param("moonID"))
 	if err != nil {
@@ -974,7 +974,7 @@ func (h *Handler) SetMoonLookAPI(c echo.Context) error {
 // exact colour (null keeps the kind's own). Owner only, like the rest of
 // the calendar settings.
 // PUT /campaigns/:id/calendars/:calid/sun
-func (h *Handler) SaveSunLookAPI(c echo.Context) error {
+func (h *Handler) SaveSunLookAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var look SunLook
 	if err := c.Bind(&look); err != nil {
@@ -991,7 +991,7 @@ func (h *Handler) SaveSunLookAPI(c echo.Context) error {
 // ListDayWeatherAPI returns a year's day readings, or one month's when
 // month is given. Players get only days up to today (the service decides).
 // GET /campaigns/:id/calendars/:calid/weather/days?year=Y[&month=M]
-func (h *Handler) ListDayWeatherAPI(c echo.Context) error {
+func (h *Handler) ListDayWeatherAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	year, err := strconv.Atoi(c.QueryParam("year"))
 	if err != nil {
@@ -1014,7 +1014,7 @@ func (h *Handler) ListDayWeatherAPI(c echo.Context) error {
 // lasts, for the weather calendar. Same gate as the day-weather writes, since
 // only those who can store generated weather need it.
 // GET /campaigns/:id/calendars/:calid/weather/settings
-func (h *Handler) GetWeatherSettingsAPI(c echo.Context) error {
+func (h *Handler) GetWeatherSettingsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	s, err := h.svc.GetWeatherSettings(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
 	if err != nil {
@@ -1025,7 +1025,7 @@ func (h *Handler) GetWeatherSettingsAPI(c echo.Context) error {
 
 // SetDayWeatherAPI paints or stores generated readings on a set of days.
 // PUT /campaigns/:id/calendars/:calid/weather/days  {"days":[{year,month,day,source,...}]}
-func (h *Handler) SetDayWeatherAPI(c echo.Context) error {
+func (h *Handler) SetDayWeatherAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		Days []DayWeatherInput `json:"days"`
@@ -1042,7 +1042,7 @@ func (h *Handler) SetDayWeatherAPI(c echo.Context) error {
 // ClearDayWeatherAPI removes the readings on a set of days. A POST action,
 // not DELETE, because it carries a body.
 // POST /campaigns/:id/calendars/:calid/weather/days/clear  {"days":[{year,month,day}]}
-func (h *Handler) ClearDayWeatherAPI(c echo.Context) error {
+func (h *Handler) ClearDayWeatherAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		Days []DayDate `json:"days"`
@@ -1061,7 +1061,7 @@ func (h *Handler) ClearDayWeatherAPI(c echo.Context) error {
 // action like clear. "locked" must be present so an omitted field can never
 // read as an unlock.
 // POST /campaigns/:id/calendars/:calid/weather/days/lock  {"days":[{year,month,day}],"locked":true}
-func (h *Handler) LockDayWeatherAPI(c echo.Context) error {
+func (h *Handler) LockDayWeatherAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		Days   []DayDate `json:"days"`
@@ -1080,7 +1080,7 @@ func (h *Handler) LockDayWeatherAPI(c echo.Context) error {
 // ListWeatherForecastAPI returns the blurred outlook for the days after
 // today, the same for every viewer who can see the calendar.
 // GET /campaigns/:id/calendars/:calid/weather/forecast
-func (h *Handler) ListWeatherForecastAPI(c echo.Context) error {
+func (h *Handler) ListWeatherForecastAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	out, err := h.svc.ListWeatherForecast(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
 	if err != nil {
@@ -1107,7 +1107,7 @@ const maxCalendarImportSize = 10 * 1024 * 1024
 // readCalendarImportFile reads and size-caps the "file" field of a
 // multipart upload, shared by PreviewImportAPI and CreateFromImportAPI —
 // mirrors campaigns.ExportHandler.ImportCampaign's own FormFile handling.
-func readCalendarImportFile(c echo.Context) ([]byte, error) {
+func readCalendarImportFile(c *echo.Context) ([]byte, error) {
 	fh, err := c.FormFile("file")
 	if err != nil {
 		return nil, apperror.NewBadRequest("file upload required")
@@ -1135,7 +1135,7 @@ func readCalendarImportFile(c echo.Context) ([]byte, error) {
 // value the import itself determined, or a validation error if it
 // specified none, still governs) rather than a hard 400 on a field the
 // wizard's own review step already validated client-side.
-func formIntPtr(c echo.Context, key string) *int {
+func formIntPtr(c *echo.Context, key string) *int {
 	v := c.FormValue(key)
 	if v == "" {
 		return nil
@@ -1169,7 +1169,7 @@ type calendarImportResponse struct {
 
 // ListPresetsAPI lists the shipped calendar presets. Owner only.
 // GET /campaigns/:id/calendars/presets
-func (h *Handler) ListPresetsAPI(c echo.Context) error {
+func (h *Handler) ListPresetsAPI(c *echo.Context) error {
 	names, err := PresetNames()
 	if err != nil {
 		return apperror.NewInternal(err)
@@ -1194,7 +1194,7 @@ func (h *Handler) ListPresetsAPI(c echo.Context) error {
 // PreviewPresetAPI parses one shipped preset without creating anything.
 // Owner only.
 // GET /campaigns/:id/calendars/presets/:name
-func (h *Handler) PreviewPresetAPI(c echo.Context) error {
+func (h *Handler) PreviewPresetAPI(c *echo.Context) error {
 	ir, err := h.svc.PreviewPreset(c.Request().Context(), c.Param("name"))
 	if err != nil {
 		return err
@@ -1213,7 +1213,7 @@ func (h *Handler) PreviewPresetAPI(c echo.Context) error {
 // exports that always specify a full current date. Same contract
 // CreateFromImportAPI enforces for an upload that might.
 // POST /campaigns/:id/calendars/presets/:name
-func (h *Handler) CreateFromPresetAPI(c echo.Context) error {
+func (h *Handler) CreateFromPresetAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		CurrentYear  *int `json:"current_year"`
@@ -1241,7 +1241,7 @@ func (h *Handler) CreateFromPresetAPI(c echo.Context) error {
 // PreviewImportAPI parses an uploaded calendar file without creating
 // anything. Owner only.
 // POST /campaigns/:id/calendars/import/preview (multipart, field "file")
-func (h *Handler) PreviewImportAPI(c echo.Context) error {
+func (h *Handler) PreviewImportAPI(c *echo.Context) error {
 	data, err := readCalendarImportFile(c)
 	if err != nil {
 		return err
@@ -1258,7 +1258,7 @@ func (h *Handler) PreviewImportAPI(c echo.Context) error {
 // fields alongside "file" — see CreateCalendarFromImportOptions's doc
 // comment on when current_month/current_day are required.
 // POST /campaigns/:id/calendars/import (multipart, field "file")
-func (h *Handler) CreateFromImportAPI(c echo.Context) error {
+func (h *Handler) CreateFromImportAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	data, err := readCalendarImportFile(c)
 	if err != nil {

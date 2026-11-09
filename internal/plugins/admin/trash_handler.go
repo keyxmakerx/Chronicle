@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -39,7 +39,7 @@ func (h *Handler) SetTrashService(svc TrashService) {
 // alone; a plain request is sent back to the full page so the action's result
 // is never a bare fragment. Every action answers 200 so HTMX swaps the notice
 // in even when the action was refused.
-func (h *Handler) trashRegion(c echo.Context, notice string, isErr bool) error {
+func (h *Handler) trashRegion(c *echo.Context, notice string, isErr bool) error {
 	data := TrashPageData{CSRFToken: middleware.GetCSRFToken(c), Notice: notice, Error: isErr}
 	ov, err := h.trash.Overview(c.Request().Context())
 	if err != nil {
@@ -55,7 +55,7 @@ func (h *Handler) trashRegion(c echo.Context, notice string, isErr bool) error {
 }
 
 // Trash renders the Trash page (GET /admin/trash).
-func (h *Handler) Trash(c echo.Context) error {
+func (h *Handler) Trash(c *echo.Context) error {
 	if h.trash == nil {
 		return apperror.NewMissingContext()
 	}
@@ -64,7 +64,7 @@ func (h *Handler) Trash(c echo.Context) error {
 
 // UndoTrashedCampaign brings a deleted campaign back
 // (POST /admin/trash/campaigns/:id/undo).
-func (h *Handler) UndoTrashedCampaign(c echo.Context) error {
+func (h *Handler) UndoTrashedCampaign(c *echo.Context) error {
 	if h.trash == nil {
 		return apperror.NewMissingContext()
 	}
@@ -86,7 +86,7 @@ func (h *Handler) UndoTrashedCampaign(c echo.Context) error {
 
 // UndoTrashedBatch brings a file clean-up back
 // (POST /admin/trash/batches/:id/undo).
-func (h *Handler) UndoTrashedBatch(c echo.Context) error {
+func (h *Handler) UndoTrashedBatch(c *echo.Context) error {
 	if h.trash == nil {
 		return apperror.NewMissingContext()
 	}
@@ -105,7 +105,7 @@ func (h *Handler) UndoTrashedBatch(c echo.Context) error {
 
 // SaveTrashRetention saves how long deleted things are kept
 // (POST /admin/trash/retention).
-func (h *Handler) SaveTrashRetention(c echo.Context) error {
+func (h *Handler) SaveTrashRetention(c *echo.Context) error {
 	if h.trash == nil || h.settingsService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -146,7 +146,7 @@ func (h *Handler) longTermView(ctx context.Context) LongTermView {
 // stay packed (POST /admin/trash/long-term). Each pack keeps the date it was
 // given, so no choice removes anything early and no password re-check is
 // needed.
-func (h *Handler) SaveLongTermTrash(c echo.Context) error {
+func (h *Handler) SaveLongTermTrash(c *echo.Context) error {
 	if h.trash == nil || h.settingsService == nil {
 		return apperror.NewMissingContext()
 	}
@@ -171,7 +171,7 @@ func (h *Handler) SaveLongTermTrash(c echo.Context) error {
 // EmptyTrash removes everything in the Trash for good (DELETE /admin/trash).
 // The route sits behind the password re-check, like every other admin action
 // that cannot be undone.
-func (h *Handler) EmptyTrash(c echo.Context) error {
+func (h *Handler) EmptyTrash(c *echo.Context) error {
 	if h.trash == nil {
 		return apperror.NewMissingContext()
 	}
@@ -190,7 +190,7 @@ func (h *Handler) EmptyTrash(c echo.Context) error {
 }
 
 // actor describes the signed-in admin for the "deleted by" copy.
-func (h *Handler) actor(c echo.Context) TrashActor {
+func (h *Handler) actor(c *echo.Context) TrashActor {
 	id := auth.GetUserID(c)
 	return TrashActor{UserID: id, Name: h.userLabel(c.Request().Context(), id)}
 }

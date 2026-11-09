@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -54,7 +54,7 @@ func (h *Handler) SetMentionHider(m sanitize.MentionHider) {
 // belong to the URL campaign (kills the cross-campaign IDOR) and the caller
 // must be able to view it (anon = RoleNone). Every post route runs it so a
 // private or foreign entity's posts can be neither read nor changed.
-func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignContext, entityID string) error {
+func (h *Handler) requireViewableEntity(c *echo.Context, cc *campaigns.CampaignContext, entityID string) error {
 	if h.entityGate == nil {
 		// Fail closed: a missing gate must never serve ungated posts.
 		return apperror.NewInternal(errors.New("posts: entity gate not configured"))
@@ -75,7 +75,7 @@ func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignCo
 
 // ListPosts returns all posts for an entity as JSON.
 // GET /campaigns/:id/entities/:eid/posts
-func (h *Handler) ListPosts(c echo.Context) error {
+func (h *Handler) ListPosts(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -111,7 +111,7 @@ func (h *Handler) ListPosts(c echo.Context) error {
 
 // CreatePost creates a new post attached to an entity.
 // POST /campaigns/:id/entities/:eid/posts
-func (h *Handler) CreatePost(c echo.Context) error {
+func (h *Handler) CreatePost(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -146,7 +146,7 @@ func (h *Handler) CreatePost(c echo.Context) error {
 
 // UpdatePost updates a post's name, content, or visibility.
 // PUT /campaigns/:id/entities/:eid/posts/:pid
-func (h *Handler) UpdatePost(c echo.Context) error {
+func (h *Handler) UpdatePost(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -192,7 +192,7 @@ func (h *Handler) UpdatePost(c echo.Context) error {
 
 // DeletePost removes a post.
 // DELETE /campaigns/:id/entities/:eid/posts/:pid
-func (h *Handler) DeletePost(c echo.Context) error {
+func (h *Handler) DeletePost(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -228,7 +228,7 @@ func (h *Handler) DeletePost(c echo.Context) error {
 
 // ReorderPosts updates the sort order for posts within an entity.
 // PUT /campaigns/:id/entities/:eid/posts/reorder
-func (h *Handler) ReorderPosts(c echo.Context) error {
+func (h *Handler) ReorderPosts(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

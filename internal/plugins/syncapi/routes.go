@@ -1,7 +1,7 @@
 package syncapi
 
 import (
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
@@ -408,22 +408,22 @@ func (a addonRoutes) with(m []echo.MiddlewareFunc) []echo.MiddlewareFunc {
 	return append([]echo.MiddlewareFunc{a.addon}, m...)
 }
 
-func (a addonRoutes) GET(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+func (a addonRoutes) GET(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) echo.RouteInfo {
 	return a.g.GET(path, h, a.with(m)...)
 }
 
-func (a addonRoutes) POST(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+func (a addonRoutes) POST(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) echo.RouteInfo {
 	return a.g.POST(path, h, a.with(m)...)
 }
 
-func (a addonRoutes) PUT(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+func (a addonRoutes) PUT(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) echo.RouteInfo {
 	return a.g.PUT(path, h, a.with(m)...)
 }
 
-func (a addonRoutes) PATCH(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+func (a addonRoutes) PATCH(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) echo.RouteInfo {
 	return a.g.PATCH(path, h, a.with(m)...)
 }
 
-func (a addonRoutes) DELETE(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+func (a addonRoutes) DELETE(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) echo.RouteInfo {
 	return a.g.DELETE(path, h, a.with(m)...)
 }

@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -123,7 +123,7 @@ func (h *SyncHistoryHandler) flowKeys(ctx context.Context, campaignID string) ma
 // Flow serves the call flow around one history row, for the Sync history
 // page: only the steps about the same thing.
 // GET /campaigns/:id/sync-history/flow/:eventID
-func (h *SyncHistoryHandler) Flow(c echo.Context) error {
+func (h *SyncHistoryHandler) Flow(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -158,7 +158,7 @@ func flowHistoryURL(campaignID string, eventID int64) string {
 // AdminFlow serves a campaign's call flow to site admins: around its latest
 // failure in the last day, else its latest row, with names hidden.
 // GET /admin/api/sync-flow/:campaignID
-func (h *SyncHistoryHandler) AdminFlow(c echo.Context) error {
+func (h *SyncHistoryHandler) AdminFlow(c *echo.Context) error {
 	campaignID := c.Param("campaignID")
 	ctx := c.Request().Context()
 	now := h.now()

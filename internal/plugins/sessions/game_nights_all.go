@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -37,7 +37,7 @@ type allNightsItem struct {
 // Upcoming, Played, Completed and Cancelled, for the calendar's Game nights
 // panel. Members only, like the rest of the game-night answers.
 // GET /campaigns/:id/sessions/all
-func (h *Handler) AllGameNightsAPI(c echo.Context) error {
+func (h *Handler) AllGameNightsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	list, err := h.svc.ListSessions(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {

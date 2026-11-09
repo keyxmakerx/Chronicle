@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -116,7 +116,7 @@ func csrfCookieName(isSecure bool) string {
 // subdomain cookie injection. Over plain HTTP (dev only) the prefix is omitted.
 func CSRF() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			req := c.Request()
 
 			// Skip CSRF for API routes and WebSocket upgrades. They use Bearer
@@ -224,7 +224,7 @@ func generateCSRFToken() (string, error) {
 
 // GetCSRFToken retrieves the CSRF token from the Echo context.
 // Use this in Templ templates to inject the token into forms.
-func GetCSRFToken(c echo.Context) string {
+func GetCSRFToken(c *echo.Context) string {
 	if token, ok := c.Get("csrf_token").(string); ok {
 		return token
 	}

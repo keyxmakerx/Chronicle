@@ -16,7 +16,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -62,7 +62,7 @@ func plainPlayerContext() *campaigns.CampaignContext {
 	}
 }
 
-func newNPCTestContext(method, path string) (echo.Context, *httptest.ResponseRecorder) {
+func newNPCTestContext(method, path string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, path, nil)
 	rec := httptest.NewRecorder()

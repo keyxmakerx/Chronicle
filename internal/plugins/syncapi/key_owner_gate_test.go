@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -75,7 +75,7 @@ func TestRequireKeyOwnerStillOwner_RESTPath(t *testing.T) {
 			campSvc := &fakeCampaignService{getMemberFn: tc.getMember}
 
 			e := echo.New()
-			e.HTTPErrorHandler = func(err error, c echo.Context) {
+			e.HTTPErrorHandler = func(c *echo.Context, err error) {
 				var appErr *apperror.AppError
 				if stderrors.As(err, &appErr) {
 					_ = c.JSON(appErr.Code, map[string]string{"error": appErr.Type, "message": appErr.Message})
@@ -87,7 +87,7 @@ func TestRequireKeyOwnerStillOwner_RESTPath(t *testing.T) {
 				RequireAPIKey(syncSvc),
 				RequireKeyOwnerStillOwner(campSvc, syncSvc),
 			)
-			g.GET("", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+			g.GET("", func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/campaigns/camp-1", nil)
 			req.Header.Set("Authorization", "Bearer "+rawKey)
@@ -125,7 +125,7 @@ func TestRequireKeyOwnerStillOwner_SkipsSyntheticSessionKeys(t *testing.T) {
 
 	mw := RequireKeyOwnerStillOwner(campSvc, syncSvc)
 	called := false
-	next := func(echo.Context) error { called = true; return nil }
+	next := func(*echo.Context) error { called = true; return nil }
 
 	c, _ := newRoleContext(&APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "user-1"})
 	if err := mw(next)(c); err != nil {

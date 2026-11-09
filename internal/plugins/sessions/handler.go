@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/email"
@@ -84,7 +84,7 @@ func (h *Handler) SetMailSender(ms MailSender, baseURL string) {
 
 // ShowSession renders a session detail page.
 // GET /campaigns/:id/sessions/:sid
-func (h *Handler) ShowSession(c echo.Context) error {
+func (h *Handler) ShowSession(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 
@@ -127,7 +127,7 @@ func (h *Handler) ShowSession(c echo.Context) error {
 
 // CreateSession creates a new session.
 // POST /campaigns/:id/sessions
-func (h *Handler) CreateSession(c echo.Context) error {
+func (h *Handler) CreateSession(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 
@@ -289,7 +289,7 @@ func (r updateSessionRequest) toInput() UpdateSessionInput {
 
 // UpdateSessionAPI updates a session.
 // PUT /campaigns/:id/sessions/:sid
-func (h *Handler) UpdateSessionAPI(c echo.Context) error {
+func (h *Handler) UpdateSessionAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 
@@ -353,7 +353,7 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 // responded. Their answer is kept, not cleared — RestoreSessionAPI below puts
 // it back exactly as it was.
 // DELETE /campaigns/:id/sessions/:sid
-func (h *Handler) DeleteSessionAPI(c echo.Context) error {
+func (h *Handler) DeleteSessionAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 
@@ -388,7 +388,7 @@ func (h *Handler) DeleteSessionAPI(c echo.Context) error {
 // and tells everyone who had answered before it was cancelled that it's back
 // on. The campaign Trash restores through the same service call.
 // POST /campaigns/:id/sessions/:sid/restore
-func (h *Handler) RestoreSessionAPI(c echo.Context) error {
+func (h *Handler) RestoreSessionAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sess, err := h.svc.RestoreAndAnnounce(c.Request().Context(), cc.Campaign.ID, c.Param("sid"))
 	if err != nil {
@@ -405,7 +405,7 @@ func (h *Handler) RestoreSessionAPI(c echo.Context) error {
 
 // GetRecapAPI returns the recap in the page editor's load contract.
 // GET /campaigns/:id/sessions/:sid/recap
-func (h *Handler) GetRecapAPI(c echo.Context) error {
+func (h *Handler) GetRecapAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	session, err := h.requireSessionInCampaign(c, c.Param("sid"), cc.Campaign.ID)
 	if err != nil {
@@ -423,7 +423,7 @@ func (h *Handler) GetRecapAPI(c echo.Context) error {
 // The page editor sends entry/entry_html; the calendar's plain box sends
 // recap/recap_html. A body with both uses the editor's.
 // PUT /campaigns/:id/sessions/:sid/recap
-func (h *Handler) UpdateRecapAPI(c echo.Context) error {
+func (h *Handler) UpdateRecapAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 
@@ -458,7 +458,7 @@ func (h *Handler) UpdateRecapAPI(c echo.Context) error {
 
 // RSVPSession updates the current user's attendance status.
 // POST /campaigns/:id/sessions/:sid/rsvp
-func (h *Handler) RSVPSession(c echo.Context) error {
+func (h *Handler) RSVPSession(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 	userID := auth.GetUserID(c)
@@ -512,7 +512,7 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 // service enforces that, this handler just passes the caller's own id and
 // campaign role through.
 // PUT /campaigns/:id/sessions/:sid/rsvp-exclude
-func (h *Handler) SetRSVPExcludedAPI(c echo.Context) error {
+func (h *Handler) SetRSVPExcludedAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 	userID := auth.GetUserID(c)
@@ -540,7 +540,7 @@ func (h *Handler) SetRSVPExcludedAPI(c echo.Context) error {
 
 // LinkEntityAPI links an entity to a session.
 // POST /campaigns/:id/sessions/:sid/entities
-func (h *Handler) LinkEntityAPI(c echo.Context) error {
+func (h *Handler) LinkEntityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 
@@ -565,7 +565,7 @@ func (h *Handler) LinkEntityAPI(c echo.Context) error {
 
 // UnlinkEntityAPI removes an entity link from a session.
 // DELETE /campaigns/:id/sessions/:sid/entities/:eid
-func (h *Handler) UnlinkEntityAPI(c echo.Context) error {
+func (h *Handler) UnlinkEntityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 	entityID := c.Param("eid")
@@ -626,7 +626,7 @@ func (h *Handler) sendRSVPEmails(ctx context.Context, session *Session, mc mailC
 // GET /rsvp/:token — no auth required, token is the credential. GET is a pure
 // read: it validates the token and shows a POST form; ApplyRSVPToken records
 // the RSVP, so a mail scanner prefetching the link can't auto-RSVP.
-func (h *Handler) RedeemRSVPToken(c echo.Context) error {
+func (h *Handler) RedeemRSVPToken(c *echo.Context) error {
 	tokenStr := c.Param("token")
 	if tokenStr == "" {
 		return c.HTML(http.StatusBadRequest, rsvpResultHTML("Invalid Link", "This RSVP link is invalid.", false))
@@ -648,7 +648,7 @@ func (h *Handler) RedeemRSVPToken(c echo.Context) error {
 
 // ApplyRSVPToken applies a one-click RSVP and consumes the token.
 // POST /rsvp/:token — the state-changing half of the token flow.
-func (h *Handler) ApplyRSVPToken(c echo.Context) error {
+func (h *Handler) ApplyRSVPToken(c *echo.Context) error {
 	tokenStr := c.Param("token")
 	if tokenStr == "" {
 		return c.HTML(http.StatusBadRequest, rsvpResultHTML("Invalid Link", "This RSVP link is invalid.", false))
@@ -786,7 +786,7 @@ button{font:inherit;font-weight:600;padding:.65rem 1.6rem;border:0;border-radius
 
 // GetFeedSettingsAPI reports whether this campaign's calendar feed is on.
 // GET /campaigns/:id/sessions/feed-settings
-func (h *Handler) GetFeedSettingsAPI(c echo.Context) error {
+func (h *Handler) GetFeedSettingsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	enabled, err := h.svc.IsCalendarFeedEnabled(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
@@ -797,7 +797,7 @@ func (h *Handler) GetFeedSettingsAPI(c echo.Context) error {
 
 // SetFeedSettingsAPI is the owner's campaign-wide kill switch.
 // PUT /campaigns/:id/sessions/feed-settings
-func (h *Handler) SetFeedSettingsAPI(c echo.Context) error {
+func (h *Handler) SetFeedSettingsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
 		Enabled bool `json:"enabled"`
@@ -814,7 +814,7 @@ func (h *Handler) SetFeedSettingsAPI(c echo.Context) error {
 // GetFeedTokenAPI returns (creating on first call) the caller's own private
 // feed URL.
 // POST /campaigns/:id/sessions/feed/token
-func (h *Handler) GetFeedTokenAPI(c echo.Context) error {
+func (h *Handler) GetFeedTokenAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	tok, err := h.svc.GetOrCreateFeedToken(c.Request().Context(), cc.Campaign.ID, userID)
@@ -827,7 +827,7 @@ func (h *Handler) GetFeedTokenAPI(c echo.Context) error {
 // ReplaceFeedTokenAPI mints a new token and drops the old one at once — "if
 // it gets out, replace it: the old link stops working immediately."
 // POST /campaigns/:id/sessions/feed/token/replace
-func (h *Handler) ReplaceFeedTokenAPI(c echo.Context) error {
+func (h *Handler) ReplaceFeedTokenAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	userID := auth.GetUserID(c)
 	tok, err := h.svc.ReplaceFeedToken(c.Request().Context(), cc.Campaign.ID, userID)
@@ -842,7 +842,7 @@ func (h *Handler) ReplaceFeedTokenAPI(c echo.Context) error {
 // — so an unknown token and a campaign-disabled feed both answer a plain 404
 // rather than distinguishing "wrong token" from "turned off" to a stranger.
 // GET /sessions/feed/:token(.ics)
-func (h *Handler) GameNightFeedICS(c echo.Context) error {
+func (h *Handler) GameNightFeedICS(c *echo.Context) error {
 	tokenStr := strings.TrimSuffix(c.Param("token"), ".ics")
 	campaignID, userID, err := h.svc.ResolveFeedToken(c.Request().Context(), tokenStr)
 	if err != nil {
@@ -874,7 +874,7 @@ func (h *Handler) GameNightFeedICS(c echo.Context) error {
 // is submitted, matching every other token route's GET-confirm/POST-apply
 // split (a mail scanner's background GET must never act).
 // GET /rsvp/:token/suggest
-func (h *Handler) RedeemSuggestToken(c echo.Context) error {
+func (h *Handler) RedeemSuggestToken(c *echo.Context) error {
 	tokenStr := c.Param("token")
 	token, err := h.svc.ValidateRSVPToken(c.Request().Context(), tokenStr)
 	if err != nil || token.Action != RSVPActionSuggest {
@@ -897,7 +897,7 @@ func (h *Handler) RedeemSuggestToken(c echo.Context) error {
 // SessionService.ValidateAndRecordSuggestion for the validate-before-consume
 // ordering — and tells the organizer.
 // POST /rsvp/:token/suggest
-func (h *Handler) ApplySuggestToken(c echo.Context) error {
+func (h *Handler) ApplySuggestToken(c *echo.Context) error {
 	tokenStr := c.Param("token")
 
 	preToken, err := h.svc.ValidateRSVPToken(c.Request().Context(), tokenStr)
@@ -962,7 +962,7 @@ button{margin-top:1.25rem;font:inherit;font-weight:600;padding:.65rem 1.6rem;bor
 // EmbedSessions returns an HTMX fragment for the dashboard session tracker block.
 // Shows upcoming planned sessions with RSVP counts in a compact format.
 // GET /campaigns/:id/sessions/embed
-func (h *Handler) EmbedSessions(c echo.Context) error {
+func (h *Handler) EmbedSessions(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	userID := auth.GetUserID(c)
@@ -1003,6 +1003,6 @@ func (h *Handler) EmbedSessions(c echo.Context) error {
 // --- Helpers ---
 
 // requireSessionInCampaign fetches a session and verifies it belongs to the campaign.
-func (h *Handler) requireSessionInCampaign(c echo.Context, sessionID, campaignID string) (*Session, error) {
+func (h *Handler) requireSessionInCampaign(c *echo.Context, sessionID, campaignID string) (*Session, error) {
 	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetSession, sessionID, campaignID, "session")
 }

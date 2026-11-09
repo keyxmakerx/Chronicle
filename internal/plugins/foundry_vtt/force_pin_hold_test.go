@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
@@ -46,12 +46,11 @@ func TestForcePinSetsAdminHold(t *testing.T) {
 	h := NewHandler(svc)
 	h.SetOwnerUpdates(NewOwnerUpdates(upd, rd))
 
-	run := func(path string, names, values []string, fn func(echo.Context) error) {
+	run := func(path string, names, values []string, fn func(*echo.Context) error) {
 		t.Helper()
 		rec := httptest.NewRecorder()
 		c := echo.New().NewContext(httptest.NewRequest(http.MethodPost, path, nil), rec)
-		c.SetParamNames(names...)
-		c.SetParamValues(values...)
+		c.SetPathValues(pathValuesOf(names, values))
 		auth.SetSession(c, &auth.Session{UserID: "admin", IsAdmin: true})
 		if err := fn(c); err != nil {
 			t.Fatalf("%s: %v", path, err)

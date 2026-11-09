@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -52,7 +52,7 @@ type layoutPreviewResponse struct {
 // POST /campaigns/:id/entity-types/:etid/layout-preview with
 // {"entityId": "...", "blocks": [{id, type, config}]}. With no entityId it
 // uses the most recently changed page. Nothing is saved.
-func (h *Handler) LayoutPreview(c echo.Context) error {
+func (h *Handler) LayoutPreview(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -5,7 +5,7 @@
 Handlers are thin: bind, call service, render. No business logic, repo calls, SQL or side effects.
 
 ```go
-func (h *CampaignHandler) Create(c echo.Context) error {
+func (h *CampaignHandler) Create(c *echo.Context) error {
     var req CreateCampaignRequest
     if err := c.Bind(&req); err != nil { return apperror.NewBadRequest("invalid request body") }
     if err := c.Validate(req); err != nil { return err }
@@ -15,6 +15,8 @@ func (h *CampaignHandler) Create(c echo.Context) error {
     return middleware.Render(c, http.StatusCreated, templates.CampaignShow(campaign))
 }
 ```
+
+Echo is v5: handlers take `*echo.Context`, and `c.Response()` is a plain `http.ResponseWriter`. Read the status, size or committed flag through `middleware.ResponseState(c)`. Serve a file from disk with `middleware.ServeFile` / `ServeAttachment`, not `c.File`, which only opens paths under the working directory. Check an error's status with `echo.StatusCode(err)`: Echo's own 404, 405 and 413 are not `*echo.HTTPError`.
 
 ## Service Pattern
 

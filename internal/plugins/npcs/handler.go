@@ -11,7 +11,7 @@ import (
 	"strconv"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -46,7 +46,7 @@ func (h *Handler) SetVisibilityToggler(vt VisibilityToggler) {
 // Index used to render the standalone NPC gallery; that page folded into the
 // unified entities Characters page (NPCs/Monsters section). The route now
 // redirects so existing links/bookmarks keep working.
-func (h *Handler) Index(c echo.Context) error {
+func (h *Handler) Index(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -114,7 +114,7 @@ func (h *Handler) buildListView(ctx context.Context, cc *campaigns.CampaignConte
 // returns the whole list part; later pages return just the next cards plus an
 // out-of-band footer so the client appends them. Direct (non-HTMX) hits go back
 // to the Characters page.
-func (h *Handler) SectionFragment(c echo.Context) error {
+func (h *Handler) SectionFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -137,7 +137,7 @@ func (h *Handler) SectionFragment(c echo.Context) error {
 // ToggleReveal handles POST /campaigns/:id/npcs/:eid/reveal.
 // Toggles an NPC's is_private flag. Only the owner and Co-DMs reveal or hide
 // NPCs: a Scribe sees what players see, so a hidden NPC is not theirs to know.
-func (h *Handler) ToggleReveal(c echo.Context) error {
+func (h *Handler) ToggleReveal(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -175,7 +175,7 @@ func (h *Handler) ToggleReveal(c echo.Context) error {
 
 // CountAPI returns the NPC count as JSON at GET /campaigns/:id/npcs/count.
 // Used by the sidebar badge and layout blocks.
-func (h *Handler) CountAPI(c echo.Context) error {
+func (h *Handler) CountAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

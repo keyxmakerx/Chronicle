@@ -6,7 +6,7 @@ package syncapi
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -23,7 +23,7 @@ func (h *SyncHistoryHandler) SetFoundryScenes(repo FoundrySceneRepository) {
 // client's report. Only an owner or DM-access key may send it: scene names
 // can give away what is coming.
 // POST /api/v1/campaigns/:id/sync/scenes
-func (h *SyncHistoryHandler) ReportScenes(c echo.Context) error {
+func (h *SyncHistoryHandler) ReportScenes(c *echo.Context) error {
 	if h.scenes == nil {
 		return apperror.NewNotFound("scene reports are not available")
 	}
@@ -57,7 +57,7 @@ type sceneJSON struct {
 // names can give away what is coming; a player's page shows a scene mention
 // as its plain name. `reported` is false when Foundry has never sent a list.
 // GET /campaigns/:id/foundry/scenes
-func (h *SyncHistoryHandler) ScenesJSON(c echo.Context) error {
+func (h *SyncHistoryHandler) ScenesJSON(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -21,7 +21,7 @@ type Handler struct{ svc Service }
 // NewHandler builds the handler.
 func NewHandler(svc Service) *Handler { return &Handler{svc: svc} }
 
-func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
+func viewerFrom(c *echo.Context) (campaignID string, v Viewer, err error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
@@ -30,7 +30,7 @@ func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
 }
 
 // List handles GET /campaigns/:id/pages/:eid/layers.
-func (h *Handler) List(c echo.Context) error {
+func (h *Handler) List(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -43,7 +43,7 @@ func (h *Handler) List(c echo.Context) error {
 }
 
 // Add handles POST /campaigns/:id/pages/:eid/layers.
-func (h *Handler) Add(c echo.Context) error {
+func (h *Handler) Add(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -65,7 +65,7 @@ func (h *Handler) Add(c echo.Context) error {
 }
 
 // Remove handles DELETE /campaigns/:id/layers/:lid.
-func (h *Handler) Remove(c echo.Context) error {
+func (h *Handler) Remove(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err

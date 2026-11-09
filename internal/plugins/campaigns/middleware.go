@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -30,7 +30,7 @@ const contextKeyCampaign = "campaign_context"
 // RequireCampaignAccess and RequireCampaignAccessEvenIfArchived so the two
 // can never drift on who counts as a member — they differ only in whether an
 // archived campaign additionally blocks the write.
-func resolveCampaignContext(c echo.Context, service CampaignService) (*CampaignContext, error) {
+func resolveCampaignContext(c *echo.Context, service CampaignService) (*CampaignContext, error) {
 	campaignID := c.Param("id")
 	if campaignID == "" {
 		return nil, apperror.NewBadRequest("campaign ID is required")
@@ -105,7 +105,7 @@ func isWriteMethod(method string) bool {
 // Must be applied AFTER auth.RequireAuth.
 func RequireCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			cc, err := resolveCampaignContext(c, service)
 			if err != nil {
 				return err
@@ -134,7 +134,7 @@ func RequireCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 // Must be applied AFTER auth.RequireAuth.
 func RequireCampaignAccessEvenIfArchived(service CampaignService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			cc, err := resolveCampaignContext(c, service)
 			if err != nil {
 				return err
@@ -173,7 +173,7 @@ func hasDmGrant(campaign *Campaign, userID string) bool {
 // Mutating routes should still use RequireCampaignAccess + RequireRole.
 func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			campaignID := c.Param("id")
 			if campaignID == "" {
 				return apperror.NewBadRequest("campaign ID is required")
@@ -244,7 +244,7 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 // Must be applied AFTER RequireCampaignAccess.
 func RequireRole(minRole Role) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			cc := GetCampaignContext(c)
 			if cc == nil {
 				return apperror.NewInternal(
@@ -277,7 +277,7 @@ func RequireRole(minRole Role) echo.MiddlewareFunc {
 // RequireRole.
 func RequireViewAccess() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			cc := GetCampaignContext(c)
 			if cc == nil {
 				return apperror.NewInternal(
@@ -301,7 +301,7 @@ func RequireViewAccess() echo.MiddlewareFunc {
 // 403 message on failure.
 func RequireCapability(check func(*CampaignContext) bool, denyMsg string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			cc := GetCampaignContext(c)
 			if cc == nil {
 				return apperror.NewInternal(
@@ -318,7 +318,7 @@ func RequireCapability(check func(*CampaignContext) bool, denyMsg string) echo.M
 
 // GetCampaignContext retrieves the campaign context from the Echo context.
 // Returns nil if RequireCampaignAccess middleware was not applied.
-func GetCampaignContext(c echo.Context) *CampaignContext {
+func GetCampaignContext(c *echo.Context) *CampaignContext {
 	cc, ok := c.Get(contextKeyCampaign).(*CampaignContext)
 	if !ok {
 		return nil

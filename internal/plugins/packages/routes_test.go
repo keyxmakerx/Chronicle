@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // TestRoutesGuardCodeChangingWrites pins that the package writes which change
@@ -13,7 +13,7 @@ import (
 func TestRoutesGuardCodeChangingWrites(t *testing.T) {
 	e := echo.New()
 	reauth := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error { return c.NoContent(http.StatusForbidden) }
+		return func(c *echo.Context) error { return c.NoContent(http.StatusForbidden) }
 	}
 	// A nil handler is safe: the stub refuses before any handler runs.
 	RegisterRoutes(e.Group("/admin"), nil, reauth)

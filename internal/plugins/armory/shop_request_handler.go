@@ -7,11 +7,11 @@ package armory
 import (
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // requestID reads the :rid path parameter.
-func requestID(c echo.Context) (int64, error) {
+func requestID(c *echo.Context) (int64, error) {
 	id, err := strconv.ParseInt(c.Param("rid"), 10, 64)
 	if err != nil || id < 1 {
 		return 0, notFound("request")
@@ -20,7 +20,7 @@ func requestID(c echo.Context) (int64, error) {
 }
 
 // ApproveRequest handles POST /armory/purchase-requests/:rid/approve.
-func (h *ShopBuyHandler) ApproveRequest(c echo.Context) error {
+func (h *ShopBuyHandler) ApproveRequest(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -40,7 +40,7 @@ func (h *ShopBuyHandler) ApproveRequest(c echo.Context) error {
 }
 
 // DeclineRequest handles POST /armory/purchase-requests/:rid/decline.
-func (h *ShopBuyHandler) DeclineRequest(c echo.Context) error {
+func (h *ShopBuyHandler) DeclineRequest(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
@@ -57,7 +57,7 @@ func (h *ShopBuyHandler) DeclineRequest(c echo.Context) error {
 
 // WithdrawRequest handles POST /armory/purchase-requests/:rid/withdraw. The
 // service lets only the requester or the Owner through.
-func (h *ShopBuyHandler) WithdrawRequest(c echo.Context) error {
+func (h *ShopBuyHandler) WithdrawRequest(c *echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err

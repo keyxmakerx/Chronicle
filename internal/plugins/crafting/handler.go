@@ -9,7 +9,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -32,7 +32,7 @@ type Handler struct {
 // NewHandler builds the handler; cal may be nil.
 func NewHandler(svc Service, cal CalendarSource) *Handler { return &Handler{svc: svc, cal: cal} }
 
-func viewerFrom(c echo.Context) (*campaigns.CampaignContext, Viewer, error) {
+func viewerFrom(c *echo.Context) (*campaigns.CampaignContext, Viewer, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, Viewer{}, apperror.NewMissingContext()
@@ -46,7 +46,7 @@ func viewerFrom(c echo.Context) (*campaigns.CampaignContext, Viewer, error) {
 }
 
 // bind reads a JSON body of at most MaxBodyBytes into dst.
-func bind(c echo.Context, dst any) error {
+func bind(c *echo.Context, dst any) error {
 	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, MaxBodyBytes+1))
 	if err != nil || len(raw) == 0 || len(raw) > MaxBodyBytes {
 		return apperror.NewBadRequest("request body is missing or too large")
@@ -59,7 +59,7 @@ func bind(c echo.Context, dst any) error {
 
 // Page renders GET /campaigns/:id/crafting: the Director's editors, or a
 // player's recipe book. The script reads everything else from the API.
-func (h *Handler) Page(c echo.Context) error {
+func (h *Handler) Page(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func (h *Handler) Page(c echo.Context) error {
 }
 
 // Library handles GET /campaigns/:id/crafting/library.
-func (h *Handler) Library(c echo.Context) error {
+func (h *Handler) Library(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func (h *Handler) Library(c echo.Context) error {
 }
 
 // Catalog handles GET /campaigns/:id/crafting/catalog.
-func (h *Handler) Catalog(c echo.Context) error {
+func (h *Handler) Catalog(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func (h *Handler) Catalog(c echo.Context) error {
 }
 
 // SaveSettings handles PUT /campaigns/:id/crafting/settings.
-func (h *Handler) SaveSettings(c echo.Context) error {
+func (h *Handler) SaveSettings(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func (h *Handler) SaveSettings(c echo.Context) error {
 }
 
 // ListRecipes handles GET /campaigns/:id/crafting/recipes.
-func (h *Handler) ListRecipes(c echo.Context) error {
+func (h *Handler) ListRecipes(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -131,7 +131,7 @@ func (h *Handler) ListRecipes(c echo.Context) error {
 }
 
 // GetRecipe handles GET /campaigns/:id/crafting/recipes/:rid.
-func (h *Handler) GetRecipe(c echo.Context) error {
+func (h *Handler) GetRecipe(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ func (h *Handler) GetRecipe(c echo.Context) error {
 }
 
 // CreateRecipe handles POST /campaigns/:id/crafting/recipes.
-func (h *Handler) CreateRecipe(c echo.Context) error {
+func (h *Handler) CreateRecipe(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -161,7 +161,7 @@ func (h *Handler) CreateRecipe(c echo.Context) error {
 }
 
 // UpdateRecipe handles PUT /campaigns/:id/crafting/recipes/:rid.
-func (h *Handler) UpdateRecipe(c echo.Context) error {
+func (h *Handler) UpdateRecipe(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func (h *Handler) UpdateRecipe(c echo.Context) error {
 }
 
 // SaveRules handles PUT /campaigns/:id/crafting/recipes/:rid/rules.
-func (h *Handler) SaveRules(c echo.Context) error {
+func (h *Handler) SaveRules(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -195,7 +195,7 @@ func (h *Handler) SaveRules(c echo.Context) error {
 }
 
 // Approve handles POST /campaigns/:id/crafting/recipes/:rid/approve.
-func (h *Handler) Approve(c echo.Context) error {
+func (h *Handler) Approve(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -208,7 +208,7 @@ func (h *Handler) Approve(c echo.Context) error {
 }
 
 // DeleteRecipe handles DELETE /campaigns/:id/crafting/recipes/:rid.
-func (h *Handler) DeleteRecipe(c echo.Context) error {
+func (h *Handler) DeleteRecipe(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -220,7 +220,7 @@ func (h *Handler) DeleteRecipe(c echo.Context) error {
 }
 
 // Book handles GET /campaigns/:id/crafting/book.
-func (h *Handler) Book(c echo.Context) error {
+func (h *Handler) Book(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -237,7 +237,7 @@ type tagsBody struct {
 }
 
 // SetTags handles PUT /campaigns/:id/crafting/materials/:eid.
-func (h *Handler) SetTags(c echo.Context) error {
+func (h *Handler) SetTags(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -254,7 +254,7 @@ func (h *Handler) SetTags(c echo.Context) error {
 }
 
 // SetKindPictures handles PUT /campaigns/:id/crafting/pictures.
-func (h *Handler) SetKindPictures(c echo.Context) error {
+func (h *Handler) SetKindPictures(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -276,7 +276,7 @@ type itemPictureBody struct {
 
 // SetItemPicture handles PUT /campaigns/:id/crafting/materials/:eid/picture;
 // a null picture makes the item follow its kind again.
-func (h *Handler) SetItemPicture(c echo.Context) error {
+func (h *Handler) SetItemPicture(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -293,7 +293,7 @@ func (h *Handler) SetItemPicture(c echo.Context) error {
 }
 
 // ListBenches handles GET /campaigns/:id/crafting/benches.
-func (h *Handler) ListBenches(c echo.Context) error {
+func (h *Handler) ListBenches(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -306,7 +306,7 @@ func (h *Handler) ListBenches(c echo.Context) error {
 }
 
 // GetBench handles GET /campaigns/:id/crafting/benches/:bid.
-func (h *Handler) GetBench(c echo.Context) error {
+func (h *Handler) GetBench(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -319,7 +319,7 @@ func (h *Handler) GetBench(c echo.Context) error {
 }
 
 // CreateBench handles POST /campaigns/:id/crafting/benches.
-func (h *Handler) CreateBench(c echo.Context) error {
+func (h *Handler) CreateBench(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -336,7 +336,7 @@ func (h *Handler) CreateBench(c echo.Context) error {
 }
 
 // UpdateBench handles PUT /campaigns/:id/crafting/benches/:bid.
-func (h *Handler) UpdateBench(c echo.Context) error {
+func (h *Handler) UpdateBench(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -353,7 +353,7 @@ func (h *Handler) UpdateBench(c echo.Context) error {
 }
 
 // SaveUpgrades handles PUT /campaigns/:id/crafting/benches/:bid/upgrades.
-func (h *Handler) SaveUpgrades(c echo.Context) error {
+func (h *Handler) SaveUpgrades(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -370,7 +370,7 @@ func (h *Handler) SaveUpgrades(c echo.Context) error {
 }
 
 // SaveArrangement handles PUT /campaigns/:id/crafting/benches/:bid/look/:skin.
-func (h *Handler) SaveArrangement(c echo.Context) error {
+func (h *Handler) SaveArrangement(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err
@@ -387,7 +387,7 @@ func (h *Handler) SaveArrangement(c echo.Context) error {
 }
 
 // DeleteBench handles DELETE /campaigns/:id/crafting/benches/:bid.
-func (h *Handler) DeleteBench(c echo.Context) error {
+func (h *Handler) DeleteBench(c *echo.Context) error {
 	cc, v, err := viewerFrom(c)
 	if err != nil {
 		return err

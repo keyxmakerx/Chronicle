@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -660,7 +660,7 @@ func TestPurchaseSummary(t *testing.T) {
 func TestShopRequestHandler(t *testing.T) {
 	cases := []struct {
 		name       string
-		call       func(*ShopBuyHandler, echo.Context) error
+		call       func(*ShopBuyHandler, *echo.Context) error
 		rid        string
 		htmx       bool
 		status     string
@@ -684,8 +684,7 @@ func TestShopRequestHandler(t *testing.T) {
 			svc := &fakeBuySvc{err: tc.err, answerStatus: tc.status}
 			h := NewShopBuyHandler(svc)
 			c, rec := roomCtx(http.MethodPost, "", campaigns.RolePlayer)
-			c.SetParamNames("id", "rid")
-			c.SetParamValues("camp-1", tc.rid)
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "rid", Value: tc.rid}})
 			if tc.htmx {
 				c.Request().Header.Set("HX-Request", "true")
 			}
@@ -708,8 +707,7 @@ func TestShopRequestHandler(t *testing.T) {
 	t.Run("answers as the caller's visibility role", func(t *testing.T) {
 		svc := &fakeBuySvc{}
 		c, _ := roomCtx(http.MethodPost, "", campaigns.RolePlayer)
-		c.SetParamNames("id", "rid")
-		c.SetParamValues("camp-1", "3")
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "rid", Value: "3"}})
 		_ = NewShopBuyHandler(svc).DeclineRequest(c)
 		if svc.actor.Role != rPlayer {
 			t.Errorf("role = %d", svc.actor.Role)

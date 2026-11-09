@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -268,13 +268,12 @@ func proposalTokenHandler(applied *bool, members []campaigns.CampaignMember) *Ha
 	return &Handler{svc: NewSessionService(repo, nil, nil), memberLister: &stubMemberLister{members: members}, userDir: &stubUserDir{tz: "UTC"}}
 }
 
-func tokenCtx(method, token string) (echo.Context, *httptest.ResponseRecorder) {
+func tokenCtx(method, token string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/proposals/respond/"+token, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("token")
-	c.SetParamValues(token)
+	c.SetPathValues(echo.PathValues{{Name: "token", Value: token}})
 	return c, rec
 }
 
@@ -357,8 +356,7 @@ func TestRSVPToken_GetDoesNotApply(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/rsvp/rt", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("token")
-	c.SetParamValues("rt")
+	c.SetPathValues(echo.PathValues{{Name: "token", Value: "rt"}})
 	if err := h.RedeemRSVPToken(c); err != nil {
 		t.Fatalf("GET RedeemRSVPToken: %v", err)
 	}
@@ -372,8 +370,7 @@ func TestRSVPToken_GetDoesNotApply(t *testing.T) {
 	// POST applies.
 	applied = false
 	c2 := e.NewContext(httptest.NewRequest(http.MethodPost, "/rsvp/rt", nil), httptest.NewRecorder())
-	c2.SetParamNames("token")
-	c2.SetParamValues("rt")
+	c2.SetPathValues(echo.PathValues{{Name: "token", Value: "rt"}})
 	if err := h.ApplyRSVPToken(c2); err != nil {
 		t.Fatalf("POST ApplyRSVPToken: %v", err)
 	}

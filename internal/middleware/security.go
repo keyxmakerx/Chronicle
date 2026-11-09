@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // SecurityHeaders returns middleware that sets security-related HTTP headers
@@ -12,7 +12,7 @@ import (
 // externally. These headers provide defense-in-depth at the application layer.
 func SecurityHeaders() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			h := c.Response().Header()
 
 			// Framing is refused, except a page Chronicle frames itself to

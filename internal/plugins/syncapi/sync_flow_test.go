@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -317,8 +317,7 @@ func TestSyncFlowHandlers(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.Header.Set("HX-Request", "true")
 		c := echo.New().NewContext(req, rec)
-		c.SetParamNames(names...)
-		c.SetParamValues(values...)
+		c.SetPathValues(pathValuesOf(names, values))
 		if cc != nil {
 			c.Set("campaign_context", cc)
 		}
@@ -344,8 +343,7 @@ func TestSyncFlowHandlers(t *testing.T) {
 				req.Header.Set(k, v)
 			}
 			c := echo.New().NewContext(req, rec)
-			c.SetParamNames("id", "eventID")
-			c.SetParamValues("c1", "2")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eventID", Value: "2"}})
 			c.Set("campaign_context", cc)
 			if err := h.Flow(c); err != nil {
 				t.Fatal(err)

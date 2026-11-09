@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -54,13 +54,12 @@ func (s *stubEntitySvcCapturingCreate) Create(_ context.Context, campaignID, _ s
 	return &entities.Entity{ID: "ent-new", CampaignID: campaignID, Name: input.Name, IsPrivate: input.IsPrivate}, nil
 }
 
-func newCreateAPIContext(path, body string) echo.Context {
+func newCreateAPIContext(path, body string) *echo.Context {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 	c := e.NewContext(req, httptest.NewRecorder())
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set(apiKeyContextKey, &APIKey{
 		ID:         synthKeySessionID,
 		CampaignID: "camp-1",

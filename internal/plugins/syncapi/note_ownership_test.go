@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -127,14 +127,13 @@ func newNoteOwnershipSvc() *stubNoteSvcForOwnership {
 // RequireAuthOrAPIKey puts on the context (a session-authed member gets a
 // synthetic key whose UserID is the session user and whose CampaignID is the
 // URL :id, so RequireCampaignMatch always passes for a member).
-func newNoteOwnershipContext(method, campaignID, noteID, userID string, body []byte) (echo.Context, *httptest.ResponseRecorder) {
+func newNoteOwnershipContext(method, campaignID, noteID, userID string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/api/v1/campaigns/"+campaignID+"/notes/"+noteID, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "noteID")
-	c.SetParamValues(campaignID, noteID)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: campaignID}, {Name: "noteID", Value: noteID}})
 	c.Set(apiKeyContextKey, &APIKey{
 		UserID:      userID,
 		CampaignID:  campaignID,
@@ -325,7 +324,7 @@ func TestNoteOwnership_ForeignCampaignStill404s(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		call func(echo.Context) error
+		call func(*echo.Context) error
 		verb string
 	}{
 		{"get", h.GetNote, http.MethodGet},
@@ -351,7 +350,7 @@ func TestNoteOwnership_MissingAPIKeyIs401(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		call func(echo.Context) error
+		call func(*echo.Context) error
 		verb string
 	}{
 		{"get", h.GetNote, http.MethodGet},

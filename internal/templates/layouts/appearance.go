@@ -407,15 +407,21 @@ func AppearanceCSS(ctx context.Context) string {
 	// a shade that reads on this page tone in each theme.
 	// An older separate button colour (Action) keeps its buttons until the
 	// owner saves Customize, which folds it into the accent.
-	if accent != "" && colour.ValidHex(accent) {
+	// With no accent picked the page uses the default, which falls just short
+	// of 4.5:1 as text and fill, so it is shaded by the same rule.
+	readable := accent
+	if readable == "" {
+		readable = czDefaultAccent
+	}
+	if colour.ValidHex(readable) {
 		light, night := a.tones(0), a.tones(1)
 		if GetAccentAction(ctx) == "" {
-			f := colour.FillFor(accent)
+			f := colour.FillFor(readable)
 			fmt.Fprintf(&root, "--color-accent-fill:%s;--color-accent-fill-hover:%s;--color-accent-on-fill:%s;",
 				f.Fill, colour.Mix(f.Fill, "#000000", 0.12), f.On)
 		}
-		fmt.Fprintf(&root, "--color-accent-link:%s;", colour.Readable(accent, []string{light.bg, light.card}, 4.5, true).Hex)
-		fmt.Fprintf(&dark, "--color-accent-link:%s;", colour.Readable(accent, []string{night.bg, night.card}, 4.5, false).Hex)
+		fmt.Fprintf(&root, "--color-accent-link:%s;", colour.Readable(readable, []string{light.bg, light.card}, 4.5, true).Hex)
+		fmt.Fprintf(&dark, "--color-accent-link:%s;", colour.Readable(readable, []string{night.bg, night.card}, 4.5, false).Hex)
 	}
 
 	// The menu is dark in both themes, so its tokens go in both blocks: the

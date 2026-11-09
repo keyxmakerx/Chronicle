@@ -43,8 +43,8 @@ templ SiteAuthStage(extraClass string) {
 templ SiteAuthMark() {
 	{{ look := GetSiteLook(ctx) }}
 	if !look.Configured {
-		<a href="/" class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent/10 dark:bg-accent/20 mb-4">
-			<i class="fa-solid fa-book-open text-lg text-accent"></i>
+		<a href="/" aria-label="Chronicle home" class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent/10 dark:bg-accent/20 mb-4">
+			<i class="fa-solid fa-book-open text-lg text-accent" aria-hidden="true"></i>
 		</a>
 	} else if look.Logo != "" {
 		<a href="/" aria-label={ look.DisplayName() } class="inline-flex items-center justify-center w-12 h-12 rounded-xl overflow-hidden mb-4">

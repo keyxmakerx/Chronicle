@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -60,8 +60,7 @@ func TestCreateRelation_ScopedToCampaign(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/campaigns/camp-1/entities/"+tc.source+"/relations", strings.NewReader(body))
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("camp-1", tc.source)
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: tc.source}})
 			// A Player: the hidden page needs Scribe or above to view.
 			c.Set("campaign_context", &campaigns.CampaignContext{
 				Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RolePlayer, IsMember: true,

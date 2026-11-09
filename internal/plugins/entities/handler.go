@@ -17,7 +17,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -279,7 +279,7 @@ func (h *Handler) SetCache(rdb *redis.Client) {
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
 // never block the primary operation.
-func (h *Handler) logAudit(c echo.Context, campaignID, action, entityID, entityName string) {
+func (h *Handler) logAudit(c *echo.Context, campaignID, action, entityID, entityName string) {
 	if h.auditSvc == nil {
 		return
 	}
@@ -298,7 +298,7 @@ func (h *Handler) logAudit(c echo.Context, campaignID, action, entityID, entityN
 
 // logAuditWithDetails is like logAudit but attaches a structured Details map
 // (e.g. the new owner on an ownership change). Fire-and-forget; never blocks.
-func (h *Handler) logAuditWithDetails(c echo.Context, campaignID, action, entityID, entityName string, details map[string]any) {
+func (h *Handler) logAuditWithDetails(c *echo.Context, campaignID, action, entityID, entityName string, details map[string]any) {
 	if h.auditSvc == nil {
 		return
 	}
@@ -319,7 +319,7 @@ func (h *Handler) logAuditWithDetails(c echo.Context, campaignID, action, entity
 // --- Entity CRUD ---
 
 // Index renders the entity list page (GET /campaigns/:id/entities).
-func (h *Handler) Index(c echo.Context) error {
+func (h *Handler) Index(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -449,7 +449,7 @@ func (h *Handler) Index(c echo.Context) error {
 // children, those children are passed through as layout variants so the form
 // can render a variant picker scoped to that category. Sub-category entity_types
 // are not navigable collections — they carry the layout differentiation.
-func (h *Handler) NewForm(c echo.Context) error {
+func (h *Handler) NewForm(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -520,7 +520,7 @@ func collectVariants(entityTypes []EntityType, preselect int) []EntityType {
 }
 
 // Create processes the entity creation form (POST /campaigns/:id/entities).
-func (h *Handler) Create(c echo.Context) error {
+func (h *Handler) Create(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -621,7 +621,7 @@ type showPage struct {
 }
 
 // Show renders the entity profile page (GET /campaigns/:id/entities/:eid).
-func (h *Handler) Show(c echo.Context) error {
+func (h *Handler) Show(c *echo.Context) error {
 	p, err := h.prepareShow(c)
 	if err != nil {
 		return err
@@ -640,7 +640,7 @@ func (h *Handler) Show(c echo.Context) error {
 // for the DM team and for Adventures pages only; anything else answers the
 // same not-found as a page that does not exist, so the route cannot be used to
 // probe for pages.
-func (h *Handler) Sheet(c echo.Context) error {
+func (h *Handler) Sheet(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -661,13 +661,13 @@ func (h *Handler) Sheet(c echo.Context) error {
 // prepareShow loads the page for the viewer and puts the render context on the
 // request. Every denial is the same not-found, so a hidden page is
 // indistinguishable from a missing one.
-func (h *Handler) prepareShow(c echo.Context) (*showPage, error) {
+func (h *Handler) prepareShow(c *echo.Context) (*showPage, error) {
 	return h.prepareShowFor(c, c.Param("eid"))
 }
 
 // prepareShowFor is prepareShow for a page named by the caller rather than
 // the route, so the Customizer's page layout can draw blocks as that page shows them.
-func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, error) {
+func (h *Handler) prepareShowFor(c *echo.Context, entityID string) (*showPage, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, apperror.NewInternal(fmt.Errorf("campaign context is nil for entity show"))
@@ -838,7 +838,7 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 // Clone creates a copy of an entity (POST /campaigns/:id/entities/:eid/clone).
 // Copies name (with " (Copy)" suffix), entry, fields, image, parent, privacy,
 // field overrides, popup config, and tags. Does NOT copy relations.
-func (h *Handler) Clone(c echo.Context) error {
+func (h *Handler) Clone(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewInternal(fmt.Errorf("campaign context is nil for entity clone"))
@@ -860,7 +860,7 @@ func (h *Handler) Clone(c echo.Context) error {
 // EditForm redirects to the entity show page. The separate edit form has been
 // replaced by inline editing on the show page (metadata panel + rich text editor).
 // Kept as a redirect for backwards compatibility with bookmarks and old links.
-func (h *Handler) EditForm(c echo.Context) error {
+func (h *Handler) EditForm(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -871,7 +871,7 @@ func (h *Handler) EditForm(c echo.Context) error {
 }
 
 // Update processes the entity edit form (PUT /campaigns/:id/entities/:eid).
-func (h *Handler) Update(c echo.Context) error {
+func (h *Handler) Update(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -949,7 +949,7 @@ func (h *Handler) Update(c echo.Context) error {
 }
 
 // Delete removes an entity (DELETE /campaigns/:id/entities/:eid).
-func (h *Handler) Delete(c echo.Context) error {
+func (h *Handler) Delete(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1005,7 +1005,7 @@ func (h *Handler) SetTrashNoteCounter(nc TrashNoteCounter) {
 
 // SearchPageHandler renders the dedicated search page with real-time filtering.
 // GET /campaigns/:id/search
-func (h *Handler) SearchPageHandler(c echo.Context) error {
+func (h *Handler) SearchPageHandler(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1023,7 +1023,7 @@ func (h *Handler) SearchPageHandler(c echo.Context) error {
 // SearchAPI handles entity search requests (GET /campaigns/:id/entities/search).
 // Returns HTML fragments for HTMX callers and JSON for API callers (e.g., the
 // @mention widget) based on the Accept header.
-func (h *Handler) SearchAPI(c echo.Context) error {
+func (h *Handler) SearchAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1250,7 +1250,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 
 // ReorderAPI updates an entity's parent and sort order for sidebar tree reordering.
 // PUT /campaigns/:id/entities/:eid/reorder
-func (h *Handler) ReorderAPI(c echo.Context) error {
+func (h *Handler) ReorderAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewForbidden("no campaign context")
@@ -1283,7 +1283,7 @@ func (h *Handler) ReorderAPI(c echo.Context) error {
 // QuickCreateAPI creates a new entity from a JSON request and returns its data.
 // POST /campaigns/:id/entities/quick-create
 // Used by the shop inventory widget to create items inline.
-func (h *Handler) QuickCreateAPI(c echo.Context) error {
+func (h *Handler) QuickCreateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1350,7 +1350,7 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 
 // BulkMoveAPI reparents multiple entities under a target parent (entity or folder node).
 // POST /campaigns/:id/entities/bulk-move
-func (h *Handler) BulkMoveAPI(c echo.Context) error {
+func (h *Handler) BulkMoveAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1410,7 +1410,7 @@ type bulkMovePlace struct {
 
 // BulkChangeTypeAPI changes the entity type for multiple entities.
 // POST /campaigns/:id/entities/bulk-type
-func (h *Handler) BulkChangeTypeAPI(c echo.Context) error {
+func (h *Handler) BulkChangeTypeAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1455,7 +1455,7 @@ func (h *Handler) BulkChangeTypeAPI(c echo.Context) error {
 
 // BulkTagsAPI assigns, removes, or sets tags on multiple entities.
 // POST /campaigns/:id/entities/bulk-tags
-func (h *Handler) BulkTagsAPI(c echo.Context) error {
+func (h *Handler) BulkTagsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1541,7 +1541,7 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 
 // BulkVisibilityAPI toggles privacy for multiple entities.
 // POST /campaigns/:id/entities/bulk-visibility
-func (h *Handler) BulkVisibilityAPI(c echo.Context) error {
+func (h *Handler) BulkVisibilityAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1585,7 +1585,7 @@ func (h *Handler) BulkVisibilityAPI(c echo.Context) error {
 
 // BulkDeleteAPI deletes multiple entities. Owner only.
 // POST /campaigns/:id/entities/bulk-delete
-func (h *Handler) BulkDeleteAPI(c echo.Context) error {
+func (h *Handler) BulkDeleteAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1657,7 +1657,7 @@ func mergeIntSets(a, b []int) []int {
 
 // ToggleFavoriteAPI adds or removes an entity from the user's favorites.
 // POST /campaigns/:id/entities/:eid/favorite
-func (h *Handler) ToggleFavoriteAPI(c echo.Context) error {
+func (h *Handler) ToggleFavoriteAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1687,7 +1687,7 @@ func (h *Handler) ToggleFavoriteAPI(c echo.Context) error {
 
 // ListFavoritesAPI returns the user's favorites for a campaign as JSON.
 // GET /campaigns/:id/favorites
-func (h *Handler) ListFavoritesAPI(c echo.Context) error {
+func (h *Handler) ListFavoritesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1727,7 +1727,7 @@ func (h *Handler) ListFavoritesAPI(c echo.Context) error {
 // FavoriteIDsAPI returns a set of entity IDs favorited by the user.
 // Used by the sidebar to mark starred entities.
 // GET /campaigns/:id/favorite-ids
-func (h *Handler) FavoriteIDsAPI(c echo.Context) error {
+func (h *Handler) FavoriteIDsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1766,7 +1766,7 @@ func (h *Handler) FavoriteIDsAPI(c echo.Context) error {
 
 // ListSavedFiltersAPI returns the user's saved tag filter presets.
 // GET /campaigns/:id/saved-filters
-func (h *Handler) ListSavedFiltersAPI(c echo.Context) error {
+func (h *Handler) ListSavedFiltersAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1785,7 +1785,7 @@ func (h *Handler) ListSavedFiltersAPI(c echo.Context) error {
 
 // CreateSavedFilterAPI creates a new saved tag filter preset.
 // POST /campaigns/:id/saved-filters
-func (h *Handler) CreateSavedFilterAPI(c echo.Context) error {
+func (h *Handler) CreateSavedFilterAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1826,7 +1826,7 @@ func (h *Handler) CreateSavedFilterAPI(c echo.Context) error {
 
 // DeleteSavedFilterAPI deletes a saved filter preset.
 // DELETE /campaigns/:id/saved-filters/:fid
-func (h *Handler) DeleteSavedFilterAPI(c echo.Context) error {
+func (h *Handler) DeleteSavedFilterAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1846,7 +1846,7 @@ func (h *Handler) DeleteSavedFilterAPI(c echo.Context) error {
 
 // CreateSidebarNodeAPI creates a new sidebar folder node.
 // POST /campaigns/:id/sidebar-nodes
-func (h *Handler) CreateSidebarNodeAPI(c echo.Context) error {
+func (h *Handler) CreateSidebarNodeAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1876,7 +1876,7 @@ func (h *Handler) CreateSidebarNodeAPI(c echo.Context) error {
 // DeleteSidebarNodeAPI deletes a sidebar folder node. Sub-folders move up
 // to its parent and its pages return to the top level of the category.
 // DELETE /campaigns/:id/sidebar-nodes/:nid
-func (h *Handler) DeleteSidebarNodeAPI(c echo.Context) error {
+func (h *Handler) DeleteSidebarNodeAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1891,7 +1891,7 @@ func (h *Handler) DeleteSidebarNodeAPI(c echo.Context) error {
 
 // RenameSidebarNodeAPI renames a sidebar folder node.
 // PUT /campaigns/:id/sidebar-nodes/:nid
-func (h *Handler) RenameSidebarNodeAPI(c echo.Context) error {
+func (h *Handler) RenameSidebarNodeAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1912,7 +1912,7 @@ func (h *Handler) RenameSidebarNodeAPI(c echo.Context) error {
 
 // ReorderSidebarNodeAPI updates a sidebar node's parent and sort order.
 // PUT /campaigns/:id/sidebar-nodes/:nid/reorder
-func (h *Handler) ReorderSidebarNodeAPI(c echo.Context) error {
+func (h *Handler) ReorderSidebarNodeAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1972,7 +1972,7 @@ func (h *Handler) ReorderSidebarNodeAPI(c echo.Context) error {
 // the order shown in the parent's +New variant picker and aggregated listing.
 // PUT /campaigns/:id/entity-types/:etid/reorder
 // Body: {"sort_order": <desired 0-based index among the parent's children>}.
-func (h *Handler) ReorderEntityTypeAPI(c echo.Context) error {
+func (h *Handler) ReorderEntityTypeAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -1998,7 +1998,7 @@ func (h *Handler) ReorderEntityTypeAPI(c echo.Context) error {
 
 // EntityTypesAPI returns entity types as JSON for widget dropdowns.
 // GET /campaigns/:id/entities/types
-func (h *Handler) EntityTypesAPI(c echo.Context) error {
+func (h *Handler) EntityTypesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2030,7 +2030,7 @@ func (h *Handler) EntityTypesAPI(c echo.Context) error {
 
 // GetEntry returns the entity's entry content as JSON.
 // GET /campaigns/:id/entities/:eid/entry
-func (h *Handler) GetEntry(c echo.Context) error {
+func (h *Handler) GetEntry(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2083,7 +2083,7 @@ func (h *Handler) GetEntry(c echo.Context) error {
 
 // UpdateEntryAPI saves the entity's entry content from the editor widget.
 // PUT /campaigns/:id/entities/:eid/entry
-func (h *Handler) UpdateEntryAPI(c echo.Context) error {
+func (h *Handler) UpdateEntryAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2159,7 +2159,7 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 
 // GetPlayerNotes returns the entity's player-facing notes as JSON.
 // GET /campaigns/:id/entities/:eid/player-notes
-func (h *Handler) GetPlayerNotes(c echo.Context) error {
+func (h *Handler) GetPlayerNotes(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2202,7 +2202,7 @@ func (h *Handler) GetPlayerNotes(c echo.Context) error {
 
 // UpdatePlayerNotesAPI updates only the entity's player-facing notes.
 // PUT /campaigns/:id/entities/:eid/player-notes
-func (h *Handler) UpdatePlayerNotesAPI(c echo.Context) error {
+func (h *Handler) UpdatePlayerNotesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2241,7 +2241,7 @@ func (h *Handler) UpdatePlayerNotesAPI(c echo.Context) error {
 
 // GetFieldsAPI returns the entity's custom field values and type definitions.
 // GET /campaigns/:id/entities/:eid/fields
-func (h *Handler) GetFieldsAPI(c echo.Context) error {
+func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2308,7 +2308,7 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 
 // webWriteContext marks a field write as coming from the web UI, so observers
 // can tell it apart from a sync client's or an extension's write.
-func webWriteContext(c echo.Context) context.Context {
+func webWriteContext(c *echo.Context) context.Context {
 	return changesource.With(c.Request().Context(), changesource.Source{
 		Kind: changesource.KindWeb, UserID: auth.GetUserID(c),
 	})
@@ -2316,7 +2316,7 @@ func webWriteContext(c echo.Context) context.Context {
 
 // UpdateFieldsAPI saves the entity's custom field values from the attributes widget.
 // PUT /campaigns/:id/entities/:eid/fields
-func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
+func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2419,7 +2419,7 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 // UpdateFieldOverridesAPI saves per-entity field customizations (added, hidden,
 // modified fields) from the attributes widget's gear menu.
 // PUT /campaigns/:id/entities/:eid/field-overrides
-func (h *Handler) UpdateFieldOverridesAPI(c echo.Context) error {
+func (h *Handler) UpdateFieldOverridesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2452,7 +2452,7 @@ func (h *Handler) UpdateFieldOverridesAPI(c echo.Context) error {
 // ResetFieldOverridesAPI clears all per-entity field customizations, restoring
 // the entity to its category's default field template.
 // DELETE /campaigns/:id/entities/:eid/field-overrides
-func (h *Handler) ResetFieldOverridesAPI(c echo.Context) error {
+func (h *Handler) ResetFieldOverridesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2481,7 +2481,7 @@ func (h *Handler) ResetFieldOverridesAPI(c echo.Context) error {
 
 // UpdateImageAPI updates the entity's header image path.
 // PUT /campaigns/:id/entities/:eid/image
-func (h *Handler) UpdateImageAPI(c echo.Context) error {
+func (h *Handler) UpdateImageAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2518,7 +2518,7 @@ func (h *Handler) UpdateImageAPI(c echo.Context) error {
 
 // UpdateCoverImageAPI updates the entity's cover/banner image path.
 // PUT /campaigns/:id/entities/:eid/cover-image
-func (h *Handler) UpdateCoverImageAPI(c echo.Context) error {
+func (h *Handler) UpdateCoverImageAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2554,7 +2554,7 @@ func (h *Handler) UpdateCoverImageAPI(c echo.Context) error {
 // PreviewAPI returns entity data for tooltip/popover display, respecting the
 // entity's popup_config to control which sections are included.
 // GET /campaigns/:id/entities/:eid/preview
-func (h *Handler) PreviewAPI(c echo.Context) error {
+func (h *Handler) PreviewAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2688,7 +2688,7 @@ func previewTokenPath(ctx context.Context, fieldsData map[string]any) string {
 
 // UpdatePopupConfigAPI saves the entity's hover preview tooltip configuration.
 // PUT /campaigns/:id/entities/:eid/popup-config
-func (h *Handler) UpdatePopupConfigAPI(c echo.Context) error {
+func (h *Handler) UpdatePopupConfigAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2720,7 +2720,7 @@ func (h *Handler) UpdatePopupConfigAPI(c echo.Context) error {
 // without touching entry content or field values. Used by the inline metadata
 // panel on the entity show page.
 // PUT /campaigns/:id/entities/:eid/metadata
-func (h *Handler) UpdateMetadataAPI(c echo.Context) error {
+func (h *Handler) UpdateMetadataAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -2826,7 +2826,7 @@ type setPermissionsRequest struct {
 // members, and permission grants, for the DM team. Member emails go to the
 // owner only; a co-DM picks members by name.
 // GET /campaigns/:id/entities/:eid/permissions
-func (h *Handler) GetPermissionsAPI(c echo.Context) error {
+func (h *Handler) GetPermissionsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return respondPermissionsError(c, apperror.NewMissingContext())
@@ -2928,7 +2928,7 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 // SetPermissionsAPI updates an entity's visibility mode and permission grants,
 // for the DM team.
 // PUT /campaigns/:id/entities/:eid/permissions
-func (h *Handler) SetPermissionsAPI(c echo.Context) error {
+func (h *Handler) SetPermissionsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return respondPermissionsError(c, apperror.NewMissingContext())
@@ -2960,7 +2960,7 @@ func (h *Handler) SetPermissionsAPI(c echo.Context) error {
 // GetMembersAPI returns campaign members as JSON for the permission user picker,
 // for the DM team.
 // GET /campaigns/:id/entities/members
-func (h *Handler) GetMembersAPI(c echo.Context) error {
+func (h *Handler) GetMembersAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3003,7 +3003,7 @@ const entityNamesCacheTTL = 5 * time.Minute
 // EntityNamesAPI returns a lightweight list of all visible entity names for
 // auto-linking in the editor. Results are cached in Redis for 5 minutes.
 // GET /campaigns/:id/entity-names
-func (h *Handler) EntityNamesAPI(c echo.Context) error {
+func (h *Handler) EntityNamesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3050,7 +3050,7 @@ func (h *Handler) EntityNamesAPI(c echo.Context) error {
 
 // EntityTypesPage renders the entity type management page.
 // GET /campaigns/:id/entity-types
-func (h *Handler) EntityTypesPage(c echo.Context) error {
+func (h *Handler) EntityTypesPage(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3085,7 +3085,7 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 
 // CreateEntityType processes the entity type creation form.
 // POST /campaigns/:id/entity-types
-func (h *Handler) CreateEntityType(c echo.Context) error {
+func (h *Handler) CreateEntityType(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3151,7 +3151,7 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 
 // UpdateEntityTypeAPI updates an entity type.
 // PUT /campaigns/:id/entity-types/:etid
-func (h *Handler) UpdateEntityTypeAPI(c echo.Context) error {
+func (h *Handler) UpdateEntityTypeAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3193,7 +3193,7 @@ func (h *Handler) UpdateEntityTypeAPI(c echo.Context) error {
 
 // DeleteEntityType removes an entity type.
 // DELETE /campaigns/:id/entity-types/:etid
-func (h *Handler) DeleteEntityType(c echo.Context) error {
+func (h *Handler) DeleteEntityType(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3237,7 +3237,7 @@ func (h *Handler) DeleteEntityType(c echo.Context) error {
 // filtered by which addons are enabled for the current campaign and
 // optionally by editor context (?context=dashboard|template|category).
 // GET /campaigns/:id/entity-types/block-types
-func (h *Handler) BlockTypesAPI(c echo.Context) error {
+func (h *Handler) BlockTypesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3300,7 +3300,7 @@ func hideRedundantCharacterSurface(types []BlockMeta, systemOwnsCharacterSheet b
 // TemplateEditor sends the old page-layout editor's address to the
 // category's Page layout tab in Customize, so saved links keep working.
 // GET /campaigns/:id/entity-types/:etid/template
-func (h *Handler) TemplateEditor(c echo.Context) error {
+func (h *Handler) TemplateEditor(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3327,7 +3327,7 @@ func (h *Handler) TemplateEditor(c echo.Context) error {
 // EntityTypeConfig sends the old category configuration page's address to
 // the category's Customize workspace, so saved links keep working.
 // GET /campaigns/:id/entity-types/:etid/config
-func (h *Handler) EntityTypeConfig(c echo.Context) error {
+func (h *Handler) EntityTypeConfig(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3355,7 +3355,7 @@ func (h *Handler) EntityTypeConfig(c echo.Context) error {
 // Hub's Categories tab. Contains identity settings, attribute field editor,
 // and category dashboard editor for a single entity type.
 // GET /campaigns/:id/entity-types/:etid/customize
-func (h *Handler) EntityTypeCustomizeFragment(c echo.Context) error {
+func (h *Handler) EntityTypeCustomizeFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3383,7 +3383,7 @@ func (h *Handler) EntityTypeCustomizeFragment(c echo.Context) error {
 // Hub's Extensions tab. Contains just the attribute field editor for a single
 // entity type.
 // GET /campaigns/:id/entity-types/:etid/attributes-fragment
-func (h *Handler) EntityTypeAttributesFragment(c echo.Context) error {
+func (h *Handler) EntityTypeAttributesFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3411,7 +3411,7 @@ func (h *Handler) EntityTypeAttributesFragment(c echo.Context) error {
 // still use today's editors: GET /campaigns/:id/entity-types/:etid/customize-tab/:tab
 // with tab "layout", "home" or "fields". Customize's category workspace
 // loads it under its own header.
-func (h *Handler) EntityTypeCustomizeTab(c echo.Context) error {
+func (h *Handler) EntityTypeCustomizeTab(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3476,7 +3476,7 @@ func (h *Handler) isNPCPage(ctx context.Context, campaignID string, entity *Enti
 
 // GetEntityTypeLayout returns the entity type's layout as JSON.
 // GET /campaigns/:id/entity-types/:etid/layout
-func (h *Handler) GetEntityTypeLayout(c echo.Context) error {
+func (h *Handler) GetEntityTypeLayout(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3505,7 +3505,7 @@ func (h *Handler) GetEntityTypeLayout(c echo.Context) error {
 
 // UpdateEntityTypeLayout saves the entity type's profile layout.
 // PUT /campaigns/:id/entity-types/:etid/layout
-func (h *Handler) UpdateEntityTypeLayout(c echo.Context) error {
+func (h *Handler) UpdateEntityTypeLayout(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3542,7 +3542,7 @@ func (h *Handler) UpdateEntityTypeLayout(c echo.Context) error {
 
 // UpdateEntityTypeColor saves the entity type's display color.
 // PUT /campaigns/:id/entity-types/:etid/color
-func (h *Handler) UpdateEntityTypeColor(c echo.Context) error {
+func (h *Handler) UpdateEntityTypeColor(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3580,7 +3580,7 @@ func (h *Handler) UpdateEntityTypeColor(c echo.Context) error {
 // UpdateEntityTypeDashboard updates the category dashboard description and,
 // when the body names them, its pinned pages
 // (PUT /campaigns/:id/entity-types/:etid/dashboard).
-func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
+func (h *Handler) UpdateEntityTypeDashboard(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3624,7 +3624,7 @@ func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
 
 // GetCategoryDashboardLayout returns the dashboard layout JSON for an entity type
 // (GET /campaigns/:id/entity-types/:etid/dashboard-layout).
-func (h *Handler) GetCategoryDashboardLayout(c echo.Context) error {
+func (h *Handler) GetCategoryDashboardLayout(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3659,7 +3659,7 @@ func (h *Handler) GetCategoryDashboardLayout(c echo.Context) error {
 
 // UpdateCategoryDashboardLayout saves a custom dashboard layout for an entity type
 // (PUT /campaigns/:id/entity-types/:etid/dashboard-layout).
-func (h *Handler) UpdateCategoryDashboardLayout(c echo.Context) error {
+func (h *Handler) UpdateCategoryDashboardLayout(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3695,7 +3695,7 @@ func (h *Handler) UpdateCategoryDashboardLayout(c echo.Context) error {
 
 // ResetCategoryDashboardLayout removes the custom dashboard layout for an entity type,
 // reverting to the hardcoded default (DELETE /campaigns/:id/entity-types/:etid/dashboard-layout).
-func (h *Handler) ResetCategoryDashboardLayout(c echo.Context) error {
+func (h *Handler) ResetCategoryDashboardLayout(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3726,7 +3726,7 @@ func (h *Handler) ResetCategoryDashboardLayout(c echo.Context) error {
 
 // parseFieldsFromForm collects field_<key> form parameters and builds a
 // map of field values.
-func (h *Handler) parseFieldsFromForm(c echo.Context, campaignID string, entityTypeID int) map[string]any {
+func (h *Handler) parseFieldsFromForm(c *echo.Context, campaignID string, entityTypeID int) map[string]any {
 	fieldsData := make(map[string]any)
 
 	et, err := h.service.GetEntityTypeByID(c.Request().Context(), entityTypeID)
@@ -3749,7 +3749,7 @@ func (h *Handler) parseFieldsFromForm(c echo.Context, campaignID string, entityT
 
 // GetAliasesAPI returns all aliases for an entity.
 // GET /campaigns/:id/entities/:eid/aliases
-func (h *Handler) GetAliasesAPI(c echo.Context) error {
+func (h *Handler) GetAliasesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3791,7 +3791,7 @@ func (h *Handler) GetAliasesAPI(c echo.Context) error {
 
 // SetAliasesAPI replaces all aliases for an entity.
 // PUT /campaigns/:id/entities/:eid/aliases
-func (h *Handler) SetAliasesAPI(c echo.Context) error {
+func (h *Handler) SetAliasesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3839,7 +3839,7 @@ const backlinksCacheTTL = 5 * time.Minute
 // BacklinksFragment returns the "Referenced by" section as an HTMX fragment
 // or JSON. Results are cached in Redis for 5 minutes.
 // GET /campaigns/:id/entities/:eid/backlinks
-func (h *Handler) BacklinksFragment(c echo.Context) error {
+func (h *Handler) BacklinksFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3941,7 +3941,7 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 }
 
 // isHTMX returns true if the request was sent by HTMX.
-func isHTMX(c echo.Context) bool {
+func isHTMX(c *echo.Context) bool {
 	return c.Request().Header.Get("HX-Request") != ""
 }
 
@@ -3964,7 +3964,7 @@ func (h *Handler) invalidateCachePattern(ctx context.Context, pattern string) {
 // bookmarks go there.
 //
 // Route: GET /campaigns/:id/me  (Player+ role required by the route group).
-func (h *Handler) MyCharacters(c echo.Context) error {
+func (h *Handler) MyCharacters(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4004,7 +4004,7 @@ func (h *Handler) SetCharacterLists(m CharacterListManager) { h.charLists = m }
 // Route: GET /campaigns/:id/characters  (anyone who can view the campaign, so
 // a public campaign's cast is visible signed out; every list below is
 // visibility-filtered for that viewer).
-func (h *Handler) Characters(c echo.Context) error {
+func (h *Handler) Characters(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4016,7 +4016,7 @@ func (h *Handler) Characters(c echo.Context) error {
 	return h.renderCast(c, cc, view)
 }
 
-func (h *Handler) renderCast(c echo.Context, cc *campaigns.CampaignContext, view CastView) error {
+func (h *Handler) renderCast(c *echo.Context, cc *campaigns.CampaignContext, view CastView) error {
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
 	}
@@ -4026,7 +4026,7 @@ func (h *Handler) renderCast(c echo.Context, cc *campaigns.CampaignContext, view
 // buildCastView gathers the page: the viewer's own characters, the party and
 // NPC bands narrowed to the page types the owner listed, and, for the owner
 // only, the controls to change those lists.
-func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (CastView, error) {
+func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) (CastView, error) {
 	ctx := c.Request().Context()
 	campaignID := cc.Campaign.ID
 	userID := auth.GetUserID(c)
@@ -4112,7 +4112,7 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 // and, when they may make one, the new hero's page type. nil when there is
 // nothing to build. A failed type lookup leaves the builder out rather than
 // breaking the page.
-func (h *Handler) buildHeroBuilder(c echo.Context, cc *campaigns.CampaignContext, yours []CastMember, charTypes []int, target *EntityType, access heroAccess) *HeroBuilderView {
+func (h *Handler) buildHeroBuilder(c *echo.Context, cc *campaigns.CampaignContext, yours []CastMember, charTypes []int, target *EntityType, access heroAccess) *HeroBuilderView {
 	types, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
 		slog.Warn("cast page: hero builder types failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
@@ -4210,7 +4210,7 @@ func (h *Handler) buildYours(ctx context.Context, campaignID, userID string) []C
 // this campaign. Answers with the refreshed page body for the HTMX swap.
 //
 // Route: POST /campaigns/:id/characters/lists
-func (h *Handler) UpdateCharacterLists(c echo.Context) error {
+func (h *Handler) UpdateCharacterLists(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4261,7 +4261,7 @@ func (h *Handler) UpdateCharacterLists(c echo.Context) error {
 // castRosterPage answers a roster change with the refreshed Characters page
 // body, the Players box left open. A non-HTMX post (no script) goes
 // back to the page instead.
-func (h *Handler) castRosterPage(c echo.Context, cc *campaigns.CampaignContext, notice string) error {
+func (h *Handler) castRosterPage(c *echo.Context, cc *campaigns.CampaignContext, notice string) error {
 	if !isHTMX(c) {
 		return c.Redirect(http.StatusSeeOther, fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID))
 	}
@@ -4276,7 +4276,7 @@ func (h *Handler) castRosterPage(c echo.Context, cc *campaigns.CampaignContext, 
 
 // castClaimedPage answers a claim made from the pick box with the refreshed
 // Characters page body and a notice; without script it goes back to the page.
-func (h *Handler) castClaimedPage(c echo.Context, cc *campaigns.CampaignContext, notice string) error {
+func (h *Handler) castClaimedPage(c *echo.Context, cc *campaigns.CampaignContext, notice string) error {
 	if !isHTMX(c) {
 		return c.Redirect(http.StatusSeeOther, fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID))
 	}
@@ -4290,7 +4290,7 @@ func (h *Handler) castClaimedPage(c echo.Context, cc *campaigns.CampaignContext,
 
 // requireRosterAddon hides the roster routes, as if absent, when Player
 // Character Claiming is off for the campaign.
-func (h *Handler) requireRosterAddon(c echo.Context, cc *campaigns.CampaignContext) error {
+func (h *Handler) requireRosterAddon(c *echo.Context, cc *campaigns.CampaignContext) error {
 	if !h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming) {
 		return apperror.NewNotFound("player character claiming is not enabled")
 	}
@@ -4298,7 +4298,7 @@ func (h *Handler) requireRosterAddon(c echo.Context, cc *campaigns.CampaignConte
 }
 
 // campaignEntity loads an entity and 404s when it belongs to another campaign.
-func (h *Handler) campaignEntity(c echo.Context, cc *campaigns.CampaignContext, entityID string) (*Entity, error) {
+func (h *Handler) campaignEntity(c *echo.Context, cc *campaigns.CampaignContext, entityID string) (*Entity, error) {
 	entity, err := h.service.GetByID(c.Request().Context(), entityID)
 	if err != nil {
 		return nil, err
@@ -4313,7 +4313,7 @@ func (h *Handler) campaignEntity(c echo.Context, cc *campaigns.CampaignContext, 
 // Characters page's Players list. Scribe+ (the route enforces it).
 //
 // Route: POST /campaigns/:id/characters/owner
-func (h *Handler) SetCharacterOwner(c echo.Context) error {
+func (h *Handler) SetCharacterOwner(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4355,7 +4355,7 @@ func (h *Handler) SetCharacterOwner(c echo.Context) error {
 // whom" list. Scribe+ (the route enforces it).
 //
 // Route: POST /campaigns/:id/characters/playable
-func (h *Handler) SetCharacterPlayable(c echo.Context) error {
+func (h *Handler) SetCharacterPlayable(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4400,7 +4400,7 @@ const finderLimit = 8
 // party's page types the viewer may see. Scribe+ (the route enforces it).
 //
 // Route: GET /campaigns/:id/characters/players/search?q=&for=
-func (h *Handler) SearchRosterFinder(c echo.Context) error {
+func (h *Handler) SearchRosterFinder(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4556,7 +4556,7 @@ func assembleCastParty(claimed, mine []Entity, ownerNames map[string]string, use
 // the type-shape check in the service is what prevents claiming a Location.
 //
 // Route: POST /campaigns/:id/entities/:eid/claim
-func (h *Handler) ClaimEntity(c echo.Context) error {
+func (h *Handler) ClaimEntity(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4630,7 +4630,7 @@ type assignOwnerRequest struct {
 // membership is validated here before delegating to the service.
 //
 // Route: PUT /campaigns/:id/entities/:eid/owner  (Scribe+ role required).
-func (h *Handler) AssignOwner(c echo.Context) error {
+func (h *Handler) AssignOwner(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4717,7 +4717,7 @@ type assignMapRequest struct {
 // wrong-campaign — that would silently succeed).
 //
 // Route: PUT /campaigns/:id/entities/:eid/map  (Scribe+ role required).
-func (h *Handler) AssignMap(c echo.Context) error {
+func (h *Handler) AssignMap(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4755,7 +4755,7 @@ func (h *Handler) AssignMap(c echo.Context) error {
 // GM can hide a claimed character from its player, and the claim alone must
 // not outlive that. A Scribe sees what players see, so the same holds for
 // them, and they must also be allowed to edit the page.
-func (h *Handler) requirePlayerCanView(c echo.Context, cc *campaigns.CampaignContext, entity *Entity) error {
+func (h *Handler) requirePlayerCanView(c *echo.Context, cc *campaigns.CampaignContext, entity *Entity) error {
 	if cc.CanAuthorDmOnly() {
 		return nil
 	}
@@ -4772,7 +4772,7 @@ func (h *Handler) requirePlayerCanView(c echo.Context, cc *campaigns.CampaignCon
 // SetSidebarOrderAPI sets how one sidebar container orders its rows: a
 // category's top level, a folder, or a page with pages under it.
 // PUT /campaigns/:id/sidebar-order
-func (h *Handler) SetSidebarOrderAPI(c echo.Context) error {
+func (h *Handler) SetSidebarOrderAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -4800,7 +4800,7 @@ func (h *Handler) SetSidebarOrderAPI(c echo.Context) error {
 // for a list ordered by hand. Naming the neighbour rather than an index
 // keeps the move right when the mover cannot see every sibling.
 // PUT /campaigns/:id/sidebar-order/move
-func (h *Handler) MoveSidebarRowAPI(c echo.Context) error {
+func (h *Handler) MoveSidebarRowAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

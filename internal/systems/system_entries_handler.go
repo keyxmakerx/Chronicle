@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -29,11 +29,11 @@ func NewSystemEntryHandler(svc SystemEntryService) *SystemEntryHandler {
 	return &SystemEntryHandler{svc: svc}
 }
 
-func entryActor(c echo.Context, cc *campaigns.CampaignContext) EntryActor {
+func entryActor(c *echo.Context, cc *campaigns.CampaignContext) EntryActor {
 	return EntryActor{UserID: auth.GetUserID(c), IsDirector: cc.CanAuthorDmOnly()}
 }
 
-func readEntryBody(c echo.Context, dst any) error {
+func readEntryBody(c *echo.Context, dst any) error {
 	data, err := io.ReadAll(io.LimitReader(c.Request().Body, maxSystemEntryBody+1))
 	if err != nil || len(data) > maxSystemEntryBody {
 		return apperror.NewBadRequest("the request is empty or too large")
@@ -44,7 +44,7 @@ func readEntryBody(c echo.Context, dst any) error {
 	return nil
 }
 
-func entryID(c echo.Context) (int64, error) {
+func entryID(c *echo.Context) (int64, error) {
 	id, err := strconv.ParseInt(c.Param("entryId"), 10, 64)
 	if err != nil || id <= 0 {
 		return 0, apperror.NewBadRequest("invalid entry id")
@@ -56,7 +56,7 @@ func entryID(c echo.Context) (int64, error) {
 // Directors-only ones.
 //
 // GET /campaigns/:id/system-entries?fieldKey=ancestry
-func (h *SystemEntryHandler) ListAPI(c echo.Context) error {
+func (h *SystemEntryHandler) ListAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -73,7 +73,7 @@ func (h *SystemEntryHandler) ListAPI(c echo.Context) error {
 // CreateAPI adds an entry.
 //
 // POST /campaigns/:id/system-entries
-func (h *SystemEntryHandler) CreateAPI(c echo.Context) error {
+func (h *SystemEntryHandler) CreateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -93,7 +93,7 @@ func (h *SystemEntryHandler) CreateAPI(c echo.Context) error {
 // their value, null clears, a value replaces.
 //
 // PUT /campaigns/:id/system-entries/:entryId
-func (h *SystemEntryHandler) UpdateAPI(c echo.Context) error {
+func (h *SystemEntryHandler) UpdateAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -117,7 +117,7 @@ func (h *SystemEntryHandler) UpdateAPI(c echo.Context) error {
 // stored.
 //
 // DELETE /campaigns/:id/system-entries/:entryId
-func (h *SystemEntryHandler) DeleteAPI(c echo.Context) error {
+func (h *SystemEntryHandler) DeleteAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -136,7 +136,7 @@ func (h *SystemEntryHandler) DeleteAPI(c echo.Context) error {
 // Director, the caller's own for a player.
 //
 // GET /campaigns/:id/system-entries/grants
-func (h *SystemEntryHandler) GrantsAPI(c echo.Context) error {
+func (h *SystemEntryHandler) GrantsAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -153,7 +153,7 @@ func (h *SystemEntryHandler) GrantsAPI(c echo.Context) error {
 // the permission.
 //
 // POST /campaigns/:id/system-entries/grants
-func (h *SystemEntryHandler) GrantAPI(c echo.Context) error {
+func (h *SystemEntryHandler) GrantAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -172,7 +172,7 @@ func (h *SystemEntryHandler) GrantAPI(c echo.Context) error {
 // RevokeGrantAPI takes a permission back.
 //
 // DELETE /campaigns/:id/system-entries/grants/:grantId
-func (h *SystemEntryHandler) RevokeGrantAPI(c echo.Context) error {
+func (h *SystemEntryHandler) RevokeGrantAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

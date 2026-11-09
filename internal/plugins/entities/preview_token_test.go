@@ -8,6 +8,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/labstack/echo/v5"
 )
 
 // A creature page's token picture reaches the hover card as a link, only when
@@ -48,8 +49,7 @@ func TestPreviewAPI_TokenPicture(t *testing.T) {
 			}}
 			h := &Handler{service: NewEntityService(entityRepo, typeRepo, &mockPermissionRepo{})}
 			c, rec := advCtx(tt.role, false, http.MethodGet, "/x")
-			c.SetParamNames("id", "eid")
-			c.SetParamValues("c1", "goblin")
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "goblin"}})
 			if err := h.PreviewAPI(c); err != nil {
 				t.Fatalf("PreviewAPI err = %v", err)
 			}

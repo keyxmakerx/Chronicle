@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -56,11 +56,10 @@ func recapHandler(recapHTML string, saved *bool) *Handler {
 	return h
 }
 
-func recapCtx(role campaigns.Role, dm bool, method, body string) (echo.Context, *httptest.ResponseRecorder) {
+func recapCtx(role campaigns.Role, dm bool, method, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(httptest.NewRequest(method, "/campaigns/camp-1/sessions/s1/recap", strings.NewReader(body)), rec)
-	c.SetParamNames("id", "sid")
-	c.SetParamValues("camp-1", "s1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "sid", Value: "s1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: role, IsDmGranted: dm, IsMember: true})
 	return c, rec
 }

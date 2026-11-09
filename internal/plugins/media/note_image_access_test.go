@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
@@ -79,7 +79,7 @@ func TestNoteImageAccess(t *testing.T) {
 			if tc.uploaderGone {
 				h.memberChecker = &stubMemberChecker{members: map[string]map[string]bool{testCampaignID: {noteReaderID: true}}}
 			}
-			var c echo.Context
+			var c *echo.Context
 			if tc.viewer == "" {
 				c = newAccessTestContext(nil, nil)
 			} else {

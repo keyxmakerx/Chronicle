@@ -18,7 +18,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -34,8 +34,7 @@ func serveRequestAnonymousWithRecorder(t *testing.T, h *Handler, id string) (*ap
 	req := httptest.NewRequest(http.MethodGet, "/media/"+id, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues(id)
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: id}})
 
 	err := h.Serve(c)
 	if err == nil {

@@ -56,9 +56,10 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 				<h2 class="text-lg font-semibold text-fg mb-4">Profile</h2>
 				<div class="space-y-3">
 					<div>
-						<label class="block text-sm font-medium text-fg-secondary mb-0.5">Display Name</label>
+						<label for="account-display-name" class="block text-sm font-medium text-fg-secondary mb-0.5">Display Name</label>
 						<div class="flex items-center gap-2">
 							<input
+								id="account-display-name"
 								type="text"
 								x-model="displayName"
 								class="input flex-1"
@@ -440,8 +441,8 @@ templ notifyPrefsCard(notify notifyprefs.Prefs) {
 							<span class="text-fg-body">Password resets, email changes, campaign invitations and hand-overs</span>
 							<span class="block text-xs text-fg-muted">These keep your account safe, so they can't be switched off</span>
 						</td>
-						<td class="py-2 text-center"><i class="fa-solid fa-lock text-fg-muted" aria-label="Always on"></i></td>
-						<td class="py-2 text-center"><i class="fa-solid fa-lock text-fg-muted" aria-label="Always on"></i></td>
+						<td class="py-2 text-center"><i class="fa-solid fa-lock text-fg-muted" role="img" aria-label="Always on"></i></td>
+						<td class="py-2 text-center"><i class="fa-solid fa-lock text-fg-muted" role="img" aria-label="Always on"></i></td>
 					</tr>
 				</tbody>
 			</table>

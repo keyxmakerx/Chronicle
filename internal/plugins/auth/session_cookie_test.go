@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
-func newCookieCtx(secure bool) (echo.Context, *httptest.ResponseRecorder) {
+func newCookieCtx(secure bool) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	if secure {

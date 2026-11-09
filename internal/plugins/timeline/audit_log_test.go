@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -123,7 +123,7 @@ func (s *stubTimelineSvc) DeleteConnection(_ context.Context, _ string, _ int) e
 
 // --- Helpers ---
 
-func newReqWithCC(method, path string, body []byte, params map[string]string, userID string) (echo.Context, *campaigns.CampaignContext) {
+func newReqWithCC(method, path string, body []byte, params map[string]string, userID string) (*echo.Context, *campaigns.CampaignContext) {
 	e := echo.New()
 	var req *http.Request
 	if body != nil {
@@ -140,8 +140,7 @@ func newReqWithCC(method, path string, body []byte, params map[string]string, us
 		names = append(names, k)
 		values = append(values, v)
 	}
-	c.SetParamNames(names...)
-	c.SetParamValues(values...)
+	c.SetPathValues(pathValuesOf(names, values))
 	cc := &campaigns.CampaignContext{
 		Campaign:   &campaigns.Campaign{ID: "camp-1"},
 		MemberRole: campaigns.RoleOwner,
@@ -170,8 +169,7 @@ func TestCreateAPI_EmitsTimelineCreated(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	recHTTP := httptest.NewRecorder()
 	c := e.NewContext(req, recHTTP)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set("campaign_context", &campaigns.CampaignContext{
 		Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner,
 	})

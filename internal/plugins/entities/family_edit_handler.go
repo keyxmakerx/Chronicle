@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -31,7 +31,7 @@ func RequireFamilyDirector() echo.MiddlewareFunc {
 	return campaigns.RequireCapability((*campaigns.CampaignContext).CanAuthorDmOnly, "only the Director can edit the family")
 }
 
-func familyActorOf(c echo.Context, cc *campaigns.CampaignContext) FamilyActor {
+func familyActorOf(c *echo.Context, cc *campaigns.CampaignContext) FamilyActor {
 	return FamilyActor{UserID: auth.GetUserID(c), MemberRole: int(cc.MemberRole), DmGranted: cc.IsDmGranted}
 }
 
@@ -45,7 +45,7 @@ type familyCandidateWire struct {
 
 // FamilyCandidatesAPI lists the pages the Director may add as family, bounded
 // and narrowed by ?q= (GET /campaigns/:id/entities/:eid/family/candidates).
-func (h *Handler) FamilyCandidatesAPI(c echo.Context) error {
+func (h *Handler) FamilyCandidatesAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -73,7 +73,7 @@ func (h *Handler) FamilyCandidatesAPI(c echo.Context) error {
 // (POST /campaigns/:id/entities/:eid/family). It answers 200 when every change
 // saved and 500 when some did not; both carry the fresh tree and which changes
 // did not save, so the page never has to guess.
-func (h *Handler) FamilyEditAPI(c echo.Context) error {
+func (h *Handler) FamilyEditAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

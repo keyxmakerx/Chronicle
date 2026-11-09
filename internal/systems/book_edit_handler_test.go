@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -56,11 +56,11 @@ func newBookEditHarness(t *testing.T, files map[string]string) *bookEditHarness 
 	h.SetBookEdits(newTestService(repo))
 
 	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		_ = c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 	mg := e.Group("/campaigns/:id/systems/:mod", func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: c.Param("id"), Name: "Test"}}
 			switch c.Request().Header.Get("X-Test-Role") {
 			case "owner":

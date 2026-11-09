@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -24,7 +24,7 @@ import (
 // (and, for handlers that already parsed it, campaign ID) and consult
 // settings.GetEffectiveLimits — exactly what the application-layer
 // quota check does inside the upload handler.
-type MaxUploadResolver func(c echo.Context) int64
+type MaxUploadResolver func(c *echo.Context) int64
 
 // RegisterRoutes sets up all media-related routes on the given Echo instance.
 // resolveMaxUpload is consulted on every upload to determine the body-size
@@ -129,7 +129,7 @@ func RegisterPageFileRoutes(e *echo.Echo, h *PageFileHandler, campaignSvc campai
 // handler-level enforcement in place.
 func dynamicBodyLimitMiddleware(resolver MaxUploadResolver) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if resolver == nil {
 				return next(c)
 			}

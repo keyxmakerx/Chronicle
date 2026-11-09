@@ -186,6 +186,9 @@ func craftRecipe(r *crafting.Recipe, tags map[string][]string) records.CraftReci
 	for _, rule := range r.Rules {
 		out.Rules = append(out.Rules, string(crafting.AIRuleData(rule)))
 	}
+	if e := r.Extras.Enchant; e != nil {
+		out.Enchant = &records.CraftEnchant{Line: e.Line, Name: e.Name, Slots: e.Slots}
+	}
 	if r.Template != "" {
 		laid, ok := crafting.LayTemplate(crafting.RecipeInput{Materials: r.Materials}, r.Template, tags)
 		out.ByHand = !ok || laid.Bench != r.Bench || !reflect.DeepEqual(laid.Steps, r.Steps) || len(laid.Materials) != len(r.Materials)
@@ -252,7 +255,10 @@ func bookPage(p crafting.BookPage) records.CraftBookPage {
 func (c aiCraftingAdapter) SaveRecipe(ctx context.Context, campaignID string, a records.Actor, in records.CraftRecipeInput, check bool) error {
 	r := crafting.AIRecipe{ID: in.ID, Name: in.Name, Method: in.Method, Result: crafting.Result{ItemID: in.ResultID, Qty: in.ResultQty},
 		Goal: in.Goal, Stat: in.Stat, Prerequisite: in.Prerequisite, Source: in.Source,
-		Cost: crafting.Cost{Amount: in.Cost, Currency: in.Currency}, Who: in.Who, Known: in.Known, Rules: in.Rules}
+		Cost: crafting.Cost{Amount: in.Cost, Currency: in.Currency}, Who: in.Who, Known: in.Known, Rules: in.Rules, SetEnchant: in.SetEnchant}
+	if e := in.Enchant; e != nil {
+		r.Enchant = &crafting.Enchant{Line: e.Line, Name: e.Name, Slots: e.Slots}
+	}
 	for _, m := range in.Materials {
 		r.Materials = append(r.Materials, crafting.Material{ItemID: m.ItemID, Tag: m.Tag, Qty: m.Qty})
 	}

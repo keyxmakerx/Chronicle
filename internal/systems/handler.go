@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -64,7 +64,7 @@ func (h *SystemHandler) SetAddonService(svc addonChecker) {
 //	GET /admin/diagnostics                      → the catalog (tiny menu, no payload)
 //	GET /admin/diagnostics?name=system.versions → run one named diagnostic
 //	GET /admin/diagnostics?name=system.files&arg=drawsteel
-func (h *SystemHandler) OperatorDiagnosticsAPI(c echo.Context) error {
+func (h *SystemHandler) OperatorDiagnosticsAPI(c *echo.Context) error {
 	cat := diagnosticCatalog()
 	name := c.QueryParam("name")
 	if name == "" {
@@ -88,7 +88,7 @@ func (h *SystemHandler) OperatorDiagnosticsAPI(c echo.Context) error {
 // file. Admin-gated. Lets an operator tell "registry didn't pick up the
 // install" (loaded_version disagrees) apart from "extraction is wrong"
 // (version agrees, file hash doesn't). GET /admin/extensions/health
-func (h *SystemHandler) ExtensionsHealthAPI(c echo.Context) error {
+func (h *SystemHandler) ExtensionsHealthAPI(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"systems": LoadedHealth(),
 	})
@@ -96,7 +96,7 @@ func (h *SystemHandler) ExtensionsHealthAPI(c echo.Context) error {
 
 // resolveSystem extracts the :mod param and looks up the live system.
 // Checks global registry first, then campaign-specific custom systems.
-func (h *SystemHandler) resolveSystem(c echo.Context) System {
+func (h *SystemHandler) resolveSystem(c *echo.Context) System {
 	sysID := c.Param("mod")
 
 	// Check global built-in systems first.
@@ -121,7 +121,7 @@ func (h *SystemHandler) resolveSystem(c echo.Context) System {
 
 // Index lists all categories for a system.
 // GET /campaigns/:id/systems/:mod
-func (h *SystemHandler) Index(c echo.Context) error {
+func (h *SystemHandler) Index(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -164,7 +164,7 @@ func (h *SystemHandler) Index(c echo.Context) error {
 
 // CategoryList lists items in a system category.
 // GET /campaigns/:id/systems/:mod/:cat
-func (h *SystemHandler) CategoryList(c echo.Context) error {
+func (h *SystemHandler) CategoryList(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -210,7 +210,7 @@ func (h *SystemHandler) CategoryList(c echo.Context) error {
 
 // ItemDetail shows a single reference item.
 // GET /campaigns/:id/systems/:mod/:cat/:item
-func (h *SystemHandler) ItemDetail(c echo.Context) error {
+func (h *SystemHandler) ItemDetail(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -257,7 +257,7 @@ func (h *SystemHandler) ItemDetail(c echo.Context) error {
 
 // SearchAPI returns JSON search results across all system categories.
 // GET /campaigns/:id/systems/:mod/search?q=...
-func (h *SystemHandler) SearchAPI(c echo.Context) error {
+func (h *SystemHandler) SearchAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -303,7 +303,7 @@ func (h *SystemHandler) SearchAPI(c echo.Context) error {
 
 // TooltipAPI returns a JSON tooltip payload for a specific item.
 // GET /campaigns/:id/systems/:mod/:cat/:item/tooltip
-func (h *SystemHandler) TooltipAPI(c echo.Context) error {
+func (h *SystemHandler) TooltipAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -358,7 +358,7 @@ func (h *SystemHandler) TooltipAPI(c echo.Context) error {
 
 // WidgetScriptAPI serves a system widget's JS file from the system directory.
 // GET /campaigns/:id/systems/:mod/widgets/:slug
-func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
+func (h *SystemHandler) WidgetScriptAPI(c *echo.Context) error {
 	mod := h.resolveSystem(c)
 	if mod == nil {
 		return apperror.NewNotFound("system not found")
@@ -436,7 +436,7 @@ func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
 // rather than erroring.
 //
 // GET /campaigns/:id/systems/:mod/rules-glossary
-func (h *SystemHandler) RulesGlossaryAPI(c echo.Context) error {
+func (h *SystemHandler) RulesGlossaryAPI(c *echo.Context) error {
 	mod := h.resolveSystem(c)
 	if mod == nil {
 		return apperror.NewNotFound("system not found")
@@ -482,7 +482,7 @@ var systemDataFilePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*\.json
 // file so callers degrade gracefully instead of erroring.
 //
 // GET /campaigns/:id/systems/:mod/data/:file
-func (h *SystemHandler) SystemDataAPI(c echo.Context) error {
+func (h *SystemHandler) SystemDataAPI(c *echo.Context) error {
 	mod := h.resolveSystem(c)
 	if mod == nil {
 		return apperror.NewNotFound("system not found")
@@ -519,7 +519,7 @@ func (h *SystemHandler) SystemDataAPI(c echo.Context) error {
 
 // systemDir is the on-disk folder of a resolved system: the global
 // install, or the campaign's custom upload. "" when it has none.
-func (h *SystemHandler) systemDir(c echo.Context, mod System) string {
+func (h *SystemHandler) systemDir(c *echo.Context, mod System) string {
 	sysDir := Dir(mod.Info().ID)
 	if sysDir == "" && h.campaignSystems != nil {
 		if cc := campaigns.GetCampaignContext(c); cc != nil {
@@ -535,7 +535,7 @@ func (h *SystemHandler) systemDir(c echo.Context, mod System) string {
 // shared, since the body depends on who asks.
 //
 // GET /campaigns/:id/systems/:mod/book
-func (h *SystemHandler) BookAPI(c echo.Context) error {
+func (h *SystemHandler) BookAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -581,7 +581,7 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 // the address directly, and nosniff stops a font being read as anything else.
 //
 // GET /campaigns/:id/systems/:mod/book/files/:name
-func (h *SystemHandler) BookFileAPI(c echo.Context) error {
+func (h *SystemHandler) BookFileAPI(c *echo.Context) error {
 	sysDir, _, _, err := h.viewerBookTarget(c)
 	if err != nil {
 		return err
@@ -601,7 +601,7 @@ func (h *SystemHandler) BookFileAPI(c echo.Context) error {
 // when a Director previews the player view), for the
 // rules-index endpoints. Campaign edits are not merged: generated chapters
 // can't be edited, so the package's are the ones readers see.
-func (h *SystemHandler) viewerBook(c echo.Context) (*Book, string, *SystemManifest, bool, error) {
+func (h *SystemHandler) viewerBook(c *echo.Context) (*Book, string, *SystemManifest, bool, error) {
 	sysDir, manifest, director, err := h.viewerBookTarget(c)
 	if err != nil {
 		return nil, "", nil, false, err
@@ -615,7 +615,7 @@ func (h *SystemHandler) viewerBook(c echo.Context) (*Book, string, *SystemManife
 
 // viewerBookTarget resolves which book a request reads and as whom, without
 // loading it, so the search can answer from its cached index.
-func (h *SystemHandler) viewerBookTarget(c echo.Context) (string, *SystemManifest, bool, error) {
+func (h *SystemHandler) viewerBookTarget(c *echo.Context) (string, *SystemManifest, bool, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return "", nil, false, apperror.NewMissingContext()
@@ -637,7 +637,7 @@ func (h *SystemHandler) viewerBookTarget(c echo.Context) (string, *SystemManifes
 // name a slice a page of the viewer's own book shows, so a player can only
 // list what their book lists (Director-only chapters are already gone).
 // GET /campaigns/:id/systems/:mod/book/index/:cat?key=&value=&from=&to=
-func (h *SystemHandler) BookIndexAPI(c echo.Context) error {
+func (h *SystemHandler) BookIndexAPI(c *echo.Context) error {
 	b, sysDir, manifest, director, err := h.viewerBook(c)
 	if err != nil {
 		return err
@@ -665,7 +665,7 @@ func (h *SystemHandler) BookIndexAPI(c echo.Context) error {
 
 // BookFindAPI searches the rules-index chapters the viewer's book shows.
 // GET /campaigns/:id/systems/:mod/book/find?q=
-func (h *SystemHandler) BookFindAPI(c echo.Context) error {
+func (h *SystemHandler) BookFindAPI(c *echo.Context) error {
 	sysDir, manifest, director, err := h.viewerBookTarget(c)
 	if err != nil {
 		return err

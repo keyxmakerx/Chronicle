@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
-	emw "github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	emw "github.com/labstack/echo/v5/middleware"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -33,8 +33,8 @@ func newRealWorldTestRouter(calRepo *fakeCalendarRepo) (*echo.Echo, *Handler) {
 	}
 	e := echo.New()
 	e.Use(emw.Recover())
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		if c.Response().Committed {
+	e.HTTPErrorHandler = func(c *echo.Context, err error) {
+		if c.Response().(*echo.Response).Committed {
 			return
 		}
 		if ae, ok := err.(*apperror.AppError); ok {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	mailbody "github.com/keyxmakerx/chronicle/internal/email"
@@ -50,7 +50,7 @@ type emailTestInput struct {
 // SendTestEmailAPI handles POST /campaigns/:id/appearance/email-test. It
 // sends the owner a sample game night invite in the picked layout, to the
 // address on their own account only, so the route can't mail anyone else.
-func (h *Handler) SendTestEmailAPI(c echo.Context) error {
+func (h *Handler) SendTestEmailAPI(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

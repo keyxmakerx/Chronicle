@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 const testUser = "user-1"
@@ -17,7 +17,7 @@ const testUser = "user-1"
 // newTestHandler returns a Handler whose current user is always testUser.
 func newTestHandler(svc Service) *Handler {
 	h := NewHandler(svc)
-	h.SetDownloadAuth("test-secret", func(echo.Context) string { return testUser })
+	h.SetDownloadAuth("test-secret", func(*echo.Context) string { return testUser })
 	return h
 }
 
@@ -82,8 +82,7 @@ func TestDownload_RequiresToken(t *testing.T) {
 			e := echo.New()
 			rec := httptest.NewRecorder()
 			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/x"+tt.query, nil), rec)
-			c.SetParamNames("name")
-			c.SetParamValues("a.gz")
+			c.SetPathValues(echo.PathValues{{Name: "name", Value: "a.gz"}})
 			err := h.Download(c)
 			code := rec.Code
 			if he, ok := err.(*echo.HTTPError); ok {
@@ -108,8 +107,7 @@ func TestDownload_UnwiredHandlerFailsClosed(t *testing.T) {
 	tok := h.signer.Issue("", "a.gz")
 	e := echo.New()
 	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/x?t="+url.QueryEscape(tok), nil), httptest.NewRecorder())
-	c.SetParamNames("name")
-	c.SetParamValues("a.gz")
+	c.SetPathValues(echo.PathValues{{Name: "name", Value: "a.gz"}})
 	if he, ok := h.Download(c).(*echo.HTTPError); !ok || he.Code != http.StatusForbidden {
 		t.Fatalf("want 403, got %v", he)
 	}
@@ -128,8 +126,7 @@ func TestDownloadLink(t *testing.T) {
 		req.Header.Set("HX-Request", "true")
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("name")
-		c.SetParamValues("a.gz")
+		c.SetPathValues(echo.PathValues{{Name: "name", Value: "a.gz"}})
 		if err := h.DownloadLink(c); err != nil {
 			t.Fatal(err)
 		}
@@ -145,8 +142,7 @@ func TestDownloadLink(t *testing.T) {
 	t.Run("traversal rejected", func(t *testing.T) {
 		e := echo.New()
 		c := e.NewContext(httptest.NewRequest(http.MethodPost, "/x", nil), httptest.NewRecorder())
-		c.SetParamNames("name")
-		c.SetParamValues("../etc/passwd")
+		c.SetPathValues(echo.PathValues{{Name: "name", Value: "../etc/passwd"}})
 		if he, ok := h.DownloadLink(c).(*echo.HTTPError); !ok || he.Code != http.StatusBadRequest {
 			t.Fatalf("want 400, got %v", he)
 		}
@@ -157,7 +153,7 @@ func TestDownloadLink(t *testing.T) {
 func TestRoutesGuardDownloadLink(t *testing.T) {
 	e := echo.New()
 	reauth := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error { return c.NoContent(http.StatusForbidden) }
+		return func(c *echo.Context) error { return c.NoContent(http.StatusForbidden) }
 	}
 	// A nil handler is safe: the stub refuses before any handler runs.
 	RegisterRoutes(e.Group("/admin"), nil, reauth)

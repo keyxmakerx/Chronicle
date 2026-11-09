@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -32,12 +32,12 @@ func NewHandler(service SettingsService) *Handler {
 
 // StorageSettings redirects to the combined storage page (GET /admin/storage/settings).
 // Limits live on the unified /admin/storage page under the Limits tab.
-func (h *Handler) StorageSettings(c echo.Context) error {
+func (h *Handler) StorageSettings(c *echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/admin/storage?tab=limits")
 }
 
 // UpdateStorageSettings saves global storage limits (POST /admin/storage/settings).
-func (h *Handler) UpdateStorageSettings(c echo.Context) error {
+func (h *Handler) UpdateStorageSettings(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Parse form values. Sizes are submitted in MB and converted to bytes.
@@ -89,7 +89,7 @@ func (h *Handler) UpdateStorageSettings(c echo.Context) error {
 
 // SetUserStorageLimit creates or updates a per-user storage override
 // (PUT /admin/users/:id/storage).
-func (h *Handler) SetUserStorageLimit(c echo.Context) error {
+func (h *Handler) SetUserStorageLimit(c *echo.Context) error {
 	userID := c.Param("id")
 	if userID == "" {
 		return apperror.NewBadRequest("user ID is required")
@@ -131,7 +131,7 @@ func (h *Handler) SetUserStorageLimit(c echo.Context) error {
 
 // DeleteUserStorageLimit removes a per-user storage override
 // (DELETE /admin/users/:id/storage).
-func (h *Handler) DeleteUserStorageLimit(c echo.Context) error {
+func (h *Handler) DeleteUserStorageLimit(c *echo.Context) error {
 	userID := c.Param("id")
 	if userID == "" {
 		return apperror.NewBadRequest("user ID is required")
@@ -153,7 +153,7 @@ func (h *Handler) DeleteUserStorageLimit(c echo.Context) error {
 
 // SetCampaignStorageLimit creates or updates a per-campaign storage override
 // (PUT /admin/campaigns/:id/storage).
-func (h *Handler) SetCampaignStorageLimit(c echo.Context) error {
+func (h *Handler) SetCampaignStorageLimit(c *echo.Context) error {
 	campaignID := c.Param("id")
 	if campaignID == "" {
 		return apperror.NewBadRequest("campaign ID is required")
@@ -193,7 +193,7 @@ func (h *Handler) SetCampaignStorageLimit(c echo.Context) error {
 
 // DeleteCampaignStorageLimit removes a per-campaign storage override
 // (DELETE /admin/campaigns/:id/storage).
-func (h *Handler) DeleteCampaignStorageLimit(c echo.Context) error {
+func (h *Handler) DeleteCampaignStorageLimit(c *echo.Context) error {
 	campaignID := c.Param("id")
 	if campaignID == "" {
 		return apperror.NewBadRequest("campaign ID is required")
@@ -217,7 +217,7 @@ func (h *Handler) DeleteCampaignStorageLimit(c echo.Context) error {
 
 // SetUserBypass sets a temporary bypass on a user's upload limit
 // (PUT /admin/users/:id/storage/bypass).
-func (h *Handler) SetUserBypass(c echo.Context) error {
+func (h *Handler) SetUserBypass(c *echo.Context) error {
 	userID := c.Param("id")
 	if userID == "" {
 		return apperror.NewBadRequest("user ID is required")
@@ -260,7 +260,7 @@ func (h *Handler) SetUserBypass(c echo.Context) error {
 
 // ClearUserBypass removes a temporary bypass from a user's storage limits
 // (DELETE /admin/users/:id/storage/bypass).
-func (h *Handler) ClearUserBypass(c echo.Context) error {
+func (h *Handler) ClearUserBypass(c *echo.Context) error {
 	userID := c.Param("id")
 	if userID == "" {
 		return apperror.NewBadRequest("user ID is required")
@@ -282,7 +282,7 @@ func (h *Handler) ClearUserBypass(c echo.Context) error {
 
 // SetCampaignBypass sets a temporary bypass on a campaign's storage limits
 // (PUT /admin/campaigns/:id/storage/bypass).
-func (h *Handler) SetCampaignBypass(c echo.Context) error {
+func (h *Handler) SetCampaignBypass(c *echo.Context) error {
 	campaignID := c.Param("id")
 	if campaignID == "" {
 		return apperror.NewBadRequest("campaign ID is required")
@@ -335,7 +335,7 @@ func (h *Handler) SetCampaignBypass(c echo.Context) error {
 
 // ClearCampaignBypass removes a temporary bypass from a campaign's storage limits
 // (DELETE /admin/campaigns/:id/storage/bypass).
-func (h *Handler) ClearCampaignBypass(c echo.Context) error {
+func (h *Handler) ClearCampaignBypass(c *echo.Context) error {
 	campaignID := c.Param("id")
 	if campaignID == "" {
 		return apperror.NewBadRequest("campaign ID is required")
@@ -357,7 +357,7 @@ func (h *Handler) ClearCampaignBypass(c echo.Context) error {
 
 // GetCORSOrigins returns the current CORS origin whitelist as JSON
 // (GET /admin/api/cors).
-func (h *Handler) GetCORSOrigins(c echo.Context) error {
+func (h *Handler) GetCORSOrigins(c *echo.Context) error {
 	origins, err := h.service.GetCORSOrigins(c.Request().Context())
 	if err != nil {
 		return err
@@ -372,7 +372,7 @@ func (h *Handler) GetCORSOrigins(c echo.Context) error {
 
 // UpdateCORSOrigins replaces the CORS origin whitelist
 // (POST /admin/api/cors).
-func (h *Handler) UpdateCORSOrigins(c echo.Context) error {
+func (h *Handler) UpdateCORSOrigins(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Accept both JSON and form data.
@@ -471,7 +471,7 @@ func parseIntField(s string) (int, error) {
 
 // UpdateTrashRetention saves how long deleted pages stay in a campaign's
 // Trash (POST /admin/storage/trash).
-func (h *Handler) UpdateTrashRetention(c echo.Context) error {
+func (h *Handler) UpdateTrashRetention(c *echo.Context) error {
 	days, err := strconv.Atoi(strings.TrimSpace(c.FormValue("trash_retention_days")))
 	if err != nil {
 		return apperror.NewBadRequest("invalid trash retention")

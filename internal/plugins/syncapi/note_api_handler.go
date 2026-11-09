@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -34,7 +34,7 @@ func (h *NoteAPIHandler) SetCampaignService(svc campaigns.CampaignService) {
 // user at their live campaign role, a co-DM grant counting as GM, like the
 // web routes' CampaignContext.VisibilityRole. A failed lookup falls back to a
 // plain member.
-func (h *NoteAPIHandler) viewer(c echo.Context, key *APIKey) permissions.Viewer {
+func (h *NoteAPIHandler) viewer(c *echo.Context, key *APIKey) permissions.Viewer {
 	role := permissions.RolePlayer
 	if h.campaignSvc != nil {
 		ctx := c.Request().Context()
@@ -63,7 +63,7 @@ func NewNoteAPIHandler(syncSvc SyncAPIService, noteSvc notes.NoteService) *NoteA
 
 // ListNotes returns all notes visible to the API key owner for a campaign.
 // GET /api/v1/campaigns/:id/notes
-func (h *NoteAPIHandler) ListNotes(c echo.Context) error {
+func (h *NoteAPIHandler) ListNotes(c *echo.Context) error {
 	campaignID := c.Param("id")
 	key := GetAPIKey(c)
 	if key == nil {
@@ -82,7 +82,7 @@ func (h *NoteAPIHandler) ListNotes(c echo.Context) error {
 
 // GetNote returns a single note by ID.
 // GET /api/v1/campaigns/:id/notes/:noteID
-func (h *NoteAPIHandler) GetNote(c echo.Context) error {
+func (h *NoteAPIHandler) GetNote(c *echo.Context) error {
 	noteID := c.Param("noteID")
 	key := GetAPIKey(c)
 	if key == nil {
@@ -125,7 +125,7 @@ type apiCreateNoteRequest struct {
 
 // CreateNote creates a new note in a campaign.
 // POST /api/v1/campaigns/:id/notes
-func (h *NoteAPIHandler) CreateNote(c echo.Context) error {
+func (h *NoteAPIHandler) CreateNote(c *echo.Context) error {
 	campaignID := c.Param("id")
 	key := GetAPIKey(c)
 	if key == nil {
@@ -182,7 +182,7 @@ type apiUpdateNoteRequest struct {
 
 // UpdateNote updates an existing note.
 // PUT /api/v1/campaigns/:id/notes/:noteID
-func (h *NoteAPIHandler) UpdateNote(c echo.Context) error {
+func (h *NoteAPIHandler) UpdateNote(c *echo.Context) error {
 	noteID := c.Param("noteID")
 	key := GetAPIKey(c)
 	if key == nil {
@@ -235,7 +235,7 @@ func (h *NoteAPIHandler) UpdateNote(c echo.Context) error {
 
 // DeleteNote removes a note.
 // DELETE /api/v1/campaigns/:id/notes/:noteID
-func (h *NoteAPIHandler) DeleteNote(c echo.Context) error {
+func (h *NoteAPIHandler) DeleteNote(c *echo.Context) error {
 	noteID := c.Param("noteID")
 	key := GetAPIKey(c)
 	if key == nil {

@@ -3,7 +3,7 @@ package maps
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -23,7 +23,7 @@ func NewHexHandler(svc HexService) *HexHandler {
 
 // GetHexes returns the map's hex layer with the cells the viewer may receive.
 // GET /campaigns/:id/maps/:mid/hexes
-func (h *HexHandler) GetHexes(c echo.Context) error {
+func (h *HexHandler) GetHexes(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -49,7 +49,7 @@ type hexCellRequest struct {
 
 // PatchHexCells changes a batch of hexes. Absent keys keep, null clears.
 // PATCH /campaigns/:id/maps/:mid/hexes/cells
-func (h *HexHandler) PatchHexCells(c echo.Context) error {
+func (h *HexHandler) PatchHexCells(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -84,7 +84,7 @@ func (h *HexHandler) PatchHexCells(c echo.Context) error {
 // absent miles_per_hex or miles_per_day keeps, null restores the default; an
 // absent art keeps, null restores Detailed.
 // PUT /campaigns/:id/maps/:mid/hexes/layer
-func (h *HexHandler) PutHexLayer(c echo.Context) error {
+func (h *HexHandler) PutHexLayer(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -114,7 +114,7 @@ func (h *HexHandler) PutHexLayer(c echo.Context) error {
 }
 
 // hexActor resolves who is writing, the same way for every hex write.
-func hexActor(c echo.Context, cc *campaigns.CampaignContext) HexActor {
+func hexActor(c *echo.Context, cc *campaigns.CampaignContext) HexActor {
 	return HexActor{UserID: getUserID(c), Role: int(cc.MemberRole), IsDM: cc.CanAuthorDmOnly()}
 }
 
@@ -135,7 +135,7 @@ func (p hexPos) cell() (HexFogCell, error) {
 // PostHexFog reveals or hides hexes, or hides them all. A body of
 // {"reset": true} hides every hex; otherwise {cells, explored} names them.
 // POST /campaigns/:id/maps/:mid/hexes/fog
-func (h *HexHandler) PostHexFog(c echo.Context) error {
+func (h *HexHandler) PostHexFog(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -180,7 +180,7 @@ func (h *HexHandler) PostHexFog(c echo.Context) error {
 
 // PutHexParty moves the party to a hex and returns the path it walked.
 // PUT /campaigns/:id/maps/:mid/hexes/party
-func (h *HexHandler) PutHexParty(c echo.Context) error {
+func (h *HexHandler) PutHexParty(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

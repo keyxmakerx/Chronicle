@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // --- Item 1: response shape ---

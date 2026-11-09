@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // stubService is a minimal Service test double for handler tests. The
@@ -61,8 +61,7 @@ func TestDownload_QuoteInBasenameIsEncoded(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/admin/backup/files/"+weirdName+"?t="+url.QueryEscape(h.signer.Issue(testUser, weirdName)), nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("name")
-	c.SetParamValues(weirdName)
+	c.SetPathValues(echo.PathValues{{Name: "name", Value: weirdName}})
 
 	if err := h.Download(c); err != nil {
 		t.Fatalf("Download returned error: %v", err)
@@ -94,8 +93,7 @@ func TestDownload_RejectsPathTraversal(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/admin/backup/files/foo", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("name")
-	c.SetParamValues("../etc/passwd")
+	c.SetPathValues(echo.PathValues{{Name: "name", Value: "../etc/passwd"}})
 
 	err := h.Download(c)
 	if err == nil {
@@ -167,7 +165,7 @@ func TestService_ESRCHToleranceCompiles(t *testing.T) {
 
 type recordingActivity struct{ actions []string }
 
-func (r *recordingActivity) RecordAdminChange(_ echo.Context, action, _, _, _ string) {
+func (r *recordingActivity) RecordAdminChange(_ *echo.Context, action, _, _, _ string) {
 	r.actions = append(r.actions, action)
 }
 

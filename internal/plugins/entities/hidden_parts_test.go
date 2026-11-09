@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -96,14 +96,13 @@ func scribeCC(dm bool) *campaigns.CampaignContext {
 	return &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleScribe, IsDmGranted: dm, IsMember: true}
 }
 
-func hiddenPartsCtx(cc *campaigns.CampaignContext, method, body string) (echo.Context, *httptest.ResponseRecorder) {
+func hiddenPartsCtx(cc *campaigns.CampaignContext, method, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/campaigns/c1/entities/e1/x", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "eid")
-	c.SetParamValues("c1", "e1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}, {Name: "eid", Value: "e1"}})
 	c.Set("auth_user_id", "u1")
 	c.Set("campaign_context", cc)
 	return c, rec
@@ -127,7 +126,7 @@ func TestRequirePageWrite(t *testing.T) {
 			h := &Handler{service: &hiddenPartsSvc{entity: &Entity{ID: "e1", CampaignID: "c1"}, access: tt.access}}
 			reached := false
 			c, _ := hiddenPartsCtx(tt.cc, http.MethodPut, "")
-			err := h.requirePageWrite(func(echo.Context) error { reached = true; return nil })(c)
+			err := h.requirePageWrite(func(*echo.Context) error { reached = true; return nil })(c)
 			if tt.want == 0 {
 				if err != nil || !reached {
 					t.Fatalf("err = %v, reached = %v; want passed through", err, reached)

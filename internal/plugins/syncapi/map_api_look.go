@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 )
@@ -26,7 +26,7 @@ type mapLookResponse struct {
 
 // GetMapLook returns the campaign's map look.
 // GET /api/v1/campaigns/:id/maps/look
-func (h *MapAPIHandler) GetMapLook(c echo.Context) error {
+func (h *MapAPIHandler) GetMapLook(c *echo.Context) error {
 	frame, err := h.mapSvc.GetCampaignFrame(c.Request().Context(), c.Param("id"))
 	if err != nil || !maps.IsValidFrame(frame) {
 		// The look is cosmetic: a failed lookup draws the default frame

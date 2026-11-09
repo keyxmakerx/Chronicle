@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -47,7 +47,7 @@ func (h *Handler) SetEntityViewGuard(g EntityViewGuard) {
 
 // Activity redirects to the unified settings page Activity tab.
 // GET /campaigns/:id/activity
-func (h *Handler) Activity(c echo.Context) error {
+func (h *Handler) Activity(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewInternal(fmt.Errorf("missing campaign context"))
@@ -58,7 +58,7 @@ func (h *Handler) Activity(c echo.Context) error {
 
 // ActivityFragment returns an HTMX fragment with stats and timeline for the
 // settings Activity tab. GET /campaigns/:id/activity/fragment
-func (h *Handler) ActivityFragment(c echo.Context) error {
+func (h *Handler) ActivityFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewInternal(fmt.Errorf("missing campaign context"))
@@ -88,7 +88,7 @@ func (h *Handler) ActivityFragment(c echo.Context) error {
 // EmbedActivity returns an HTMX fragment for the dashboard activity feed block.
 // Shows recent campaign activity entries in a compact feed format.
 // GET /campaigns/:id/activity/embed
-func (h *Handler) EmbedActivity(c echo.Context) error {
+func (h *Handler) EmbedActivity(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewInternal(fmt.Errorf("missing campaign context"))
@@ -121,7 +121,7 @@ func (h *Handler) EmbedActivity(c echo.Context) error {
 // EntityHistory returns JSON history for a specific entity
 // (GET /campaigns/:id/entities/:eid/history). Used by HTMX or API clients
 // to display per-entity change logs.
-func (h *Handler) EntityHistory(c echo.Context) error {
+func (h *Handler) EntityHistory(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()

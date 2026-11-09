@@ -10,7 +10,7 @@ import (
 	"net/http"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // Handler serves the Design Lab admin page.
@@ -23,7 +23,7 @@ func NewHandler() *Handler {
 
 // DesignLab renders the demo page. ?campaign_id=&calendar_id= point the crafting
 // bench's window at that calendar's sky.
-func (h *Handler) DesignLab(c echo.Context) error {
+func (h *Handler) DesignLab(c *echo.Context) error {
 	sky := NewBenchSky(c.QueryParam("campaign_id"), c.QueryParam("calendar_id"))
 	return middleware.Render(c, http.StatusOK, SurfaceDemoPage(sky))
 }

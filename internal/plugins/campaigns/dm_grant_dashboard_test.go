@@ -15,7 +15,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
@@ -58,7 +58,7 @@ func dashboardCoDmContext() *CampaignContext {
 // callShowCapturingRole drives h.Show(c), recovering from any panic in the
 // (unrelated) template render that follows the recentLister call, so the
 // capture made before that render still stands.
-func callShowCapturingRole(t *testing.T, h *Handler, c echo.Context) {
+func callShowCapturingRole(t *testing.T, h *Handler, c *echo.Context) {
 	t.Helper()
 	defer func() {
 		if r := recover(); r != nil {
@@ -80,8 +80,7 @@ func TestShow_RecentEntities_UsesPromotedVisibilityRole(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("camp-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
 	c.Set(contextKeyCampaign, dashboardCoDmContext())
 	auth.SetSession(c, &auth.Session{UserID: "codm-1"})
 
