@@ -89,6 +89,8 @@ func TestEnchant_Refusals(t *testing.T) {
 			use: map[int][]KeptPick{0: {{ID: 7, N: 1}}}, want: "already holds 2 enchantments"},
 		{name: "already has it", enchant: "Frostbite", kept: []Kept{{ID: 7, Qty: 1, Enchants: []string{"frostbite"}}},
 			use: map[int][]KeptPick{0: {{ID: 7, N: 1}}}, want: "already enchanted with Frostbite"},
+		{name: "gone off", enchant: "Frostbite", kept: []Kept{{ID: 7, Qty: 1, Marks: []string{"runed"}, Off: true}},
+			use: map[int][]KeptPick{0: {{ID: 7, N: 1}}}, want: "has gone off"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

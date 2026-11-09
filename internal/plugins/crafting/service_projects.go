@@ -559,6 +559,12 @@ func (s *service) enchantBase(ctx context.Context, campaignID string, e *EntityI
 	for _, u := range it.Use {
 		for _, k := range held.Kept {
 			if u.ID == k.ID && u.N > 0 && !picked {
+				// The Armory never spends a gone-off copy, so a pick of
+				// one would be dropped and another copy spent in its
+				// place while this one's memory went onto the result.
+				if k.Off {
+					return nil, errInvalid(fmt.Sprintf("that %s has gone off and can't be enchanted; pick another", it.Name))
+				}
 				c := k
 				base, picked = &c, true
 			}
@@ -780,9 +786,13 @@ func (s *service) rollOn(ctx context.Context, campaignID string, p Project, e, h
 		slog.Error("crafting: a roll was made but not recorded", slog.String("project_id", p.ID), slog.Any("error", err))
 	}
 	s.discover(ctx, campaignID, roller, fx, v, res)
+	// The roll is saved by now, so a failed name lookup must not turn it
+	// into an error: that would skip delivering a finished item and, for a
+	// helper, hand back a turn the roll already used.
 	names, err := s.itemNames(ctx, campaignID, v)
 	if err != nil {
-		return nil, err
+		slog.Error("crafting: a roll was saved but item names didn't load", slog.String("project_id", p.ID), slog.Any("error", err))
+		names = map[string]string{}
 	}
 	if res.Finished {
 		s.deliver(ctx, e, helper, &next, extra, x, day, names, v, res)
