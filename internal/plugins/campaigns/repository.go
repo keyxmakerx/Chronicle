@@ -643,7 +643,7 @@ func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string)
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
 	          INNER JOIN campaigns c ON c.id = cm.campaign_id AND c.deleted_at IS NULL
-	          LEFT JOIN entities e ON e.id = cm.character_entity_id AND e.deleted_at IS NULL
+	          LEFT JOIN entities e ON e.id = cm.character_entity_id AND e.campaign_id = cm.campaign_id AND e.deleted_at IS NULL
 	          WHERE cm.campaign_id = ?
 	          ORDER BY FIELD(cm.role, 'owner', 'scribe', 'player'), u.display_name`
 
@@ -783,6 +783,19 @@ func (r *campaignRepository) SetMemberLookPick(ctx context.Context, campaignID, 
 
 // UpdateMemberCharacter sets or clears the character entity assignment for a member.
 func (r *campaignRepository) UpdateMemberCharacter(ctx context.Context, campaignID, userID string, characterEntityID *string) error {
+	// The character must be a page of this campaign: the members list joins
+	// it by id and shows its name to every member.
+	if characterEntityID != nil && *characterEntityID != "" {
+		var inCampaign bool
+		if err := r.db.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM entities WHERE id = ? AND campaign_id = ? AND deleted_at IS NULL)`,
+			*characterEntityID, campaignID).Scan(&inCampaign); err != nil {
+			return fmt.Errorf("checking member character: %w", err)
+		}
+		if !inCampaign {
+			return apperror.NewNotFound("character not found")
+		}
+	}
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_members SET character_entity_id = ? WHERE campaign_id = ? AND user_id = ?`,
 		characterEntityID, campaignID, userID,

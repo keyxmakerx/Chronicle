@@ -248,6 +248,11 @@ func Load() (*Config, error) {
 		if len(cfg.Auth.SecretKey) < 32 {
 			return nil, fmt.Errorf("SECRET_KEY must be at least 32 characters in production")
 		}
+		// The published placeholders are long enough to pass the length check,
+		// and anyone can read them.
+		if isPublishedSecret(cfg.Auth.SecretKey) {
+			return nil, fmt.Errorf("SECRET_KEY is still the example value; generate one with: openssl rand -base64 32")
+		}
 		// Refuse to start with default database credentials in production.
 		if cfg.Database.Password == "chronicle" {
 			return nil, fmt.Errorf("DB_PASSWORD must be changed from the default value in production")
@@ -256,10 +261,31 @@ func Load() (*Config, error) {
 
 	// Provide a dev-only default secret so local dev works without .env.
 	if cfg.Auth.SecretKey == "" {
-		cfg.Auth.SecretKey = "dev-secret-key-do-not-use-in-production!!"
+		cfg.Auth.SecretKey = devSecretKey
 	}
 
 	return cfg, nil
+}
+
+// devSecretKey is the secret development falls back to when none is set.
+const devSecretKey = "dev-secret-key-do-not-use-in-production!!"
+
+// publishedSecrets are secret values that appear in this repository, so they
+// protect nothing. Production refuses them.
+var publishedSecrets = []string{
+	devSecretKey,
+	"change-me-generate-a-real-secret-key", // .env.example
+}
+
+// isPublishedSecret reports whether key is one of publishedSecrets.
+func isPublishedSecret(key string) bool {
+	key = strings.TrimSpace(key)
+	for _, p := range publishedSecrets {
+		if key == p {
+			return true
+		}
+	}
+	return false
 }
 
 // IsDevelopment returns true if running in development mode.
