@@ -50,7 +50,7 @@ func (h *TagAPIHandler) resolveRole(c *echo.Context) int {
 
 // resolveUserID returns the caller's user id: the key's maker, or the
 // signed-in member for a session caller.
-func (h *TagAPIHandler) resolveUserID(c echo.Context) string {
+func (h *TagAPIHandler) resolveUserID(c *echo.Context) string {
 	if key := GetAPIKey(c); key != nil {
 		return key.UserID
 	}

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -76,14 +76,13 @@ func (s *gateEntitySvc) TogglePrivate(context.Context, string) (bool, error) {
 	return !s.private, nil
 }
 
-func gateContext(method, body string) (echo.Context, *httptest.ResponseRecorder) {
+func gateContext(method, body string) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/api/v1/campaigns/camp-1/entities/ent-1", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("id", "entityID")
-	c.SetParamValues("camp-1", "ent-1")
+	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "entityID", Value: "ent-1"}})
 	c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "u-1"})
 	return c, rec
 }
@@ -101,10 +100,10 @@ func gateStatus(err error) int {
 }
 
 func TestSyncPageWrites_FollowWebRules(t *testing.T) {
-	type call func(h *APIHandler, c echo.Context) error
-	update := func(h *APIHandler, c echo.Context) error { return h.UpdateEntity(c) }
-	fields := func(h *APIHandler, c echo.Context) error { return h.UpdateEntityFields(c) }
-	reveal := func(h *APIHandler, c echo.Context) error { return h.ToggleEntityReveal(c) }
+	type call func(h *APIHandler, c *echo.Context) error
+	update := func(h *APIHandler, c *echo.Context) error { return h.UpdateEntity(c) }
+	fields := func(h *APIHandler, c *echo.Context) error { return h.UpdateEntityFields(c) }
+	reveal := func(h *APIHandler, c *echo.Context) error { return h.ToggleEntityReveal(c) }
 
 	cases := []struct {
 		name      string
