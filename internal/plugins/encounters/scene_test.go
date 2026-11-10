@@ -119,6 +119,7 @@ func TestValidateScene(t *testing.T) {
 		{"a page row needs its page", func(in *SaveInput) { in.Shows[0].EntityID = "" }, "page"},
 		{"a note needs its words", func(in *SaveInput) { in.Shows[1].Text = "  " }, "note"},
 		{"a note's words have a limit", func(in *SaveInput) { in.Shows[1].Text = long }, ""},
+		{"a reveal can't go to just one player", func(in *SaveInput) { in.Shows[2].To = "u-player" }, "everyone"},
 		{"rows need their own ids", func(in *SaveInput) { in.Shows[1].ID = "s1" }, ""},
 		{"an unknown kind is refused", func(in *SaveInput) { in.Shows[0].Kind = "song" }, ""},
 		{"too many rows", func(in *SaveInput) {
@@ -290,5 +291,22 @@ func TestShowRefusedForAFight(t *testing.T) {
 	}
 	if _, err := runs.Show(ctx, "c1", dm, RunShowInput{ShowID: "s1"}); statusOf(err) != 409 {
 		t.Errorf("show during a fight: want 409, got %v", err)
+	}
+}
+
+func TestSceneUpdateWithoutKindStaysAScene(t *testing.T) {
+	r := newSceneRig(t)
+	ctx := context.Background()
+	e, err := r.enc.Get(ctx, "c1", r.id, dm)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	in := SaveInput{Name: e.Name, Shows: []Show{}, Version: &e.Version}
+	got, err := r.enc.Update(ctx, "c1", r.id, dm, in)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got.Kind != KindScene {
+		t.Errorf("a save without kind turned the scene into %q", got.Kind)
 	}
 }

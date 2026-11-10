@@ -1526,6 +1526,8 @@
       } else if (!sh.entityId) {
         li.appendChild(h('p', 'enc-stage-warn', 'Its page has gone. Remove this row or add the page again.'));
       }
+      // A reveal un-hides the page for everyone, so it has no picker.
+      if (sh.kind === 'reveal') { list.appendChild(li); return; }
       var to = h('select', 'enc-sel', '', { 'aria-label': 'Who sees it', 'data-k': 'sw-' + k, disabled: !edit }, {
         change: function () { change(S, setShow(S.draft, k, 'to', to.value), 'sw-' + k); }
       });

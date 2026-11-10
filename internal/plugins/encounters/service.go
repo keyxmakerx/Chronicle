@@ -591,6 +591,13 @@ func (s *service) Update(ctx context.Context, campaignID, id string, v Viewer, i
 	if *in.Version != r.Version {
 		return nil, errConflict()
 	}
+	// A save that leaves kind out keeps the stored kind, so a client that
+	// predates scenes can't quietly turn one into a fight.
+	if in.Kind == "" {
+		if stored, err := decode(r); err == nil && stored.Kind == KindScene {
+			in.Kind = KindScene
+		}
+	}
 	name, d, err := validateInput(in)
 	if err != nil {
 		return nil, err

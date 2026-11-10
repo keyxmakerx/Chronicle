@@ -42,7 +42,8 @@ done
 if [ -z "$sql" ]; then cat >/dev/null; printf 'load\n' >> "$SQL_LOG"; exit 0; fi
 printf '%s\n' "$sql" >> "$SQL_LOG"
 case "$sql" in
-    *"COUNT(*)"*) printf '%s\n' "${STUB_TABLES:-5}" ;;
+    *"COUNT(*)"*) [ "${STUB_COUNT_FAIL:-0}" = "1" ] && { echo "mysql: gone away" >&2; exit 1; }
+        printf '%s\n' "${STUB_TABLES:-5}" ;;
     *schema_migrations*) printf '42/0\n' ;;
 esac
 exit 0
@@ -176,6 +177,17 @@ write_marker running "$TOKEN" "$(basename "$MANIFEST")"
 RUN_ENV=(STUB_HEALTH=up "STUB_HEALTH_BODY=$MAINT_BODY" "CHRONICLE_RESTORE_TOKEN=$TOKEN" STUB_DUMP_FAIL=1); RUN_ARGS=(--from-inside)
 run_case "safety copy fails" 2 "reason=safety_backup_failed" && expect_untouched "safety copy fails"
 ls "$BACKUPS"/chronicle_pre_restore_* >/dev/null 2>&1 && { echo "FAIL: partial safety files left behind"; FAIL=$((FAIL + 1)); }
+
+# 11b. A failed table count is not an empty database: stop before the drop.
+write_marker running "$TOKEN" "$(basename "$MANIFEST")"
+RUN_ENV=(STUB_HEALTH=up "STUB_HEALTH_BODY=$MAINT_BODY" "CHRONICLE_RESTORE_TOKEN=$TOKEN" STUB_COUNT_FAIL=1); RUN_ARGS=(--from-inside)
+run_case "table count fails" 2 "reason=safety_backup_failed" && expect_untouched "table count fails"
+grep -q 'reason=db_empty' <<<"$LAST_OUT" && { echo "FAIL: a failed count read as an empty database"; FAIL=$((FAIL + 1)); }
+
+# 11c. A non-numeric answer is refused the same way.
+write_marker running "$TOKEN" "$(basename "$MANIFEST")"
+RUN_ENV=(STUB_HEALTH=up "STUB_HEALTH_BODY=$MAINT_BODY" "CHRONICLE_RESTORE_TOKEN=$TOKEN" STUB_TABLES=oops); RUN_ARGS=(--from-inside)
+run_case "table count unreadable" 2 "reason=safety_backup_failed" && expect_untouched "table count unreadable"
 
 # 12. --no-safety-backup skips it.
 RUN_ENV=(STUB_HEALTH=up "STUB_HEALTH_BODY=$MAINT_BODY" "CHRONICLE_RESTORE_TOKEN=$TOKEN" STUB_DUMP_FAIL=1); RUN_ARGS=(--from-inside --no-safety-backup)

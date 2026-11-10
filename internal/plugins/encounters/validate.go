@@ -395,6 +395,11 @@ func validateShows(in []Show) ([]Show, error) {
 			if !validToken(sh.EntityID) {
 				return nil, errInvalid("pick the page to show")
 			}
+			// A reveal un-hides the page for every player, so it can't be
+			// aimed at just one.
+			if sh.Kind == ShowReveal && sh.To != "" {
+				return nil, errInvalid("a reveal shows the page to everyone; use a page row to show it to one player")
+			}
 		case ShowNote:
 			sh.EntityID = ""
 			if sh.Text == "" {

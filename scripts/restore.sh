@@ -246,11 +246,19 @@ fi
 # written as a manifest of its own so this script (and the admin restore
 # page) can put it back if the restored data turns out to be wrong.
 if [ "$MEDIA_ONLY" = "0" ] && [ "$NO_SAFETY" = "0" ]; then
-    safety_tables="$(MYSQL_PWD="$DB_PASSWORD" mysql \
-        -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -N -B \
-        -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB_NAME'" \
-        2>/dev/null || echo "0")"
-    if [ "${safety_tables:-0}" -gt 0 ]; then
+    # A failed count must not read as "empty": that would skip the copy
+    # and then drop the live database with nothing saved.
+    if ! safety_tables="$(MYSQL_PWD="$DB_PASSWORD" mysql \
+            -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -N -B \
+            -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB_NAME'" \
+            2>/dev/null)"; then
+        fail_pre safety_backup_failed "could not check the current database before saving a copy; nothing was changed (pass --no-safety-backup to restore anyway)"
+    fi
+    case "$safety_tables" in
+        ''|*[!0-9]*)
+            fail_pre safety_backup_failed "could not read the current database's table count; nothing was changed (pass --no-safety-backup to restore anyway)" ;;
+    esac
+    if [ "$safety_tables" -gt 0 ]; then
         command -v mysqldump >/dev/null 2>&1 || \
             fail_pre safety_backup_failed "mysqldump not on PATH; install mariadb-client or pass --no-safety-backup"
         command -v gzip >/dev/null 2>&1 || \
@@ -275,6 +283,10 @@ if [ "$MEDIA_ONLY" = "0" ] && [ "$NO_SAFETY" = "0" ]; then
             fail_pre safety_backup_failed "could not compress the saved copy; nothing was changed"
         fi
         rm -f "$BACKUP_DIR_ENV/$SAFE_DB.sql.partial"
+        if ! gzip -t "$BACKUP_DIR_ENV/$SAFE_DB.partial" 2>/dev/null; then
+            rm -f "$BACKUP_DIR_ENV/$SAFE_DB.partial"
+            fail_pre safety_backup_failed "the saved copy is unreadable; nothing was changed"
+        fi
         mv "$BACKUP_DIR_ENV/$SAFE_DB.partial" "$BACKUP_DIR_ENV/$SAFE_DB"
         SAFE_SHA="$(sha256sum "$BACKUP_DIR_ENV/$SAFE_DB" | awk '{print $1}')"
         SAFE_SIZE="$(wc -c < "$BACKUP_DIR_ENV/$SAFE_DB")"
