@@ -350,12 +350,15 @@ func validHexColor(s string) bool {
 		return false
 	}
 	for i := 1; i < 7; i++ {
-		c := s[i]
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+		if !isHexDigit(s[i]) {
 			return false
 		}
 	}
 	return true
+}
+
+func isHexDigit(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }
 
 // validRelationKey accepts a canonical decimal relation id: digits only, no
