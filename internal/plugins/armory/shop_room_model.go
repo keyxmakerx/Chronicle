@@ -42,6 +42,9 @@ type ShopRoomLayout struct {
 	// KeeperSpot is where the paper look's keeper stands behind the counter:
 	// "left", "middle" or "right". Empty is the middle, as before there was a choice.
 	KeeperSpot string `json:"keeperSpot,omitempty"`
+	// Counter is the counter look's theme. Nil means the starter for the
+	// shop's type, so a shop that never opened the builder is drawn as before.
+	Counter *ShopRoomCounter `json:"counter,omitempty"`
 	// Furnish asks the widget to lay out the furniture when the room opens,
 	// because something other than Arrange changed what the room is (the AI
 	// connection): "room" rebuilds it around pieces moved by hand, as
@@ -121,4 +124,38 @@ type ShopRoomItemLook struct {
 type ShopRoomPortrait struct {
 	Left float64 `json:"left"`
 	Top  float64 `json:"top"`
+}
+
+// ShopRoomCounter is the counter look's room as three layers: the skeleton
+// (back wall, opening, how goods are shown, the counter), the theme (wall
+// material, colours, light, outside) and the props. The widget draws every
+// part from these values, so each enum must match CM_OPT and CM_PROPS in
+// static/js/widgets/shop_room_counter.js.
+type ShopRoomCounter struct {
+	Name     string                  `json:"name"`
+	Version  int                     `json:"version"`
+	Skeleton ShopRoomCounterSkeleton `json:"skeleton"`
+	Theme    ShopRoomCounterTheme    `json:"theme"`
+	Props    []string                `json:"props"`
+}
+
+// ShopRoomCounterSkeleton is the room's shape, before any paint.
+type ShopRoomCounterSkeleton struct {
+	Shape   string `json:"shape"`
+	Opening string `json:"opening"`
+	Display string `json:"display"`
+	Counter string `json:"counter"`
+}
+
+// ShopRoomCounterTheme is the paint and the light. Colours are #rrggbb;
+// Warmth runs 0 (cool) to 1 (warm).
+type ShopRoomCounterTheme struct {
+	Wall    string  `json:"wall"`
+	Wood    string  `json:"wood"`
+	Cloth   string  `json:"cloth"`
+	Accent  string  `json:"accent"`
+	Trim    string  `json:"trim"`
+	Light   string  `json:"light"`
+	Warmth  float64 `json:"warmth"`
+	Outside string  `json:"outside"`
 }

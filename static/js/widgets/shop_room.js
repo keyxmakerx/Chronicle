@@ -1097,7 +1097,7 @@
   var KEEPER_SPOTS = { left: 1, middle: 1, right: 1 };
   // The layout as saved on the server, from the room state, and back.
   function toLayout(S) {
-    return {
+    var L = {
       version: 1, roomType: S.roomType, setting: S.setting, size: S.size, furniture: S.full, decorations: S.deco, palette: S.pal,
       seeds: { room: S.seeds.room, goods: S.seeds.goods, deco: S.seeds.deco },
       look: S.look === 'paper' || S.look === 'counter' ? S.look : 'lit',
@@ -1111,6 +1111,14 @@
       items: S.ov, portrait: S.portrait ? { left: S.portrait[0], top: S.portrait[1] } : null, lines: S.lines.slice(),
       manner: S.manner || '', moments: keptMoments(S.moments), keeperSpot: KEEPER_SPOTS[S.keeperSpot] ? S.keeperSpot : ''
     };
+    // Only a theme the owner made is saved; without one the shop type's starter is drawn.
+    if (S.counter) L.counter = counterTheme(S.counter);
+    return L;
+  }
+  // The counter's theme through the counter file's own normaliser, so an odd value never reaches the server or the drawing.
+  function counterTheme(t) {
+    var C = window.ShopRoomCounter;
+    return JSON.parse(JSON.stringify(C && C.normalise ? C.normalise(t) : t));
   }
   // Only moments with lines are saved; an empty one falls back to the manner.
   function keptMoments(m) {
@@ -1153,6 +1161,7 @@
     S.manner = KP && KP.MANNERS[L.manner] ? L.manner : '';
     S.moments = keptMoments(L.moments);
     S.keeperSpot = KEEPER_SPOTS[L.keeperSpot] ? L.keeperSpot : '';
+    S.counter = L.counter && typeof L.counter === 'object' ? counterTheme(L.counter) : null;
     // Set when the AI connection changed what the room is: lay out the
     // furniture for it on opening. toLayout never writes it back.
     S.furnish = L.furnish === 'room' || L.furnish === 'mood' ? L.furnish : '';
@@ -1535,7 +1544,7 @@
       var ds = el.dataset, canArrange = ds.canArrange === 'true', campaignUrl = ds.campaignUrl || '';
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
       var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy'), todayEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/today'), today = null;
-      var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
+      var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true, counter: null,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], manner: '', moments: {}, mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
       var campaignId = (campaignUrl.match(/\/campaigns\/([^/]+)/) || [])[1] || '', words = {};
@@ -1615,9 +1624,12 @@
       }
       function paperOn() { return S.look === 'paper' && !!window.ShopRoomPaper; }
       function counterOn() { return S.look === 'counter' && !!window.ShopRoomCounter; }
+      // The builder is for the owner, in Arrange, and only while the counter is the look.
+      function cbOn() { return canArrange && counterOn() && !!window.ShopRoomBuilder; }
       function counterModel() {
         return { its: S.its, basket: basket, icons: ICONS, image: ds.shopImage, name: S.name, roomType: S.roomType, time: (S.efx || moodEfx(S.mood)).time, lines: S.lines.length > 0,
-          today: today && today.today && today.today.length ? { line: dawnLine(today), said: TODAY_SAID } : null };
+          today: today && today.today && today.today.length ? { line: dawnLine(today), said: TODAY_SAID } : null,
+          counter: S.counter, edit: S.mode === 'arr' && cbPlace };
       }
       // The counter scene puts goods on the pile through the same rules as the wares list's Add.
       function addable(id) {
@@ -1635,7 +1647,22 @@
         remove: function (id) { var k = String(id); if (!basket[k]) return; if (!--basket[k]) delete basket[k]; note = ''; renderList(); },
         basketEl: function () { return cartBtn; },
         openList: function () { setOpen(true); },
-        talk: function (el, said) { talk(el, said); }
+        talk: function (el, said) { talk(el, said); },
+        // Place by hand: which props found a spot, and a press on the opening.
+        placed: function (m) { if (window.ShopRoomBuilder) window.ShopRoomBuilder.placed(m); },
+        opening: function () { if (window.ShopRoomBuilder) window.ShopRoomBuilder.opening(); }
+      };
+      /* The counter-room builder (shop_room_builder.js, owner only) reads and
+         writes the theme through this. A change is drawn at once and waits for
+         Save room like any other Arrange change; sliders and colour pickers
+         redraw after a short pause, because each redraw relights the room. */
+      var cbPlace = false, cbT = 0;
+      var cbApi = {
+        theme: function () { var C = window.ShopRoomCounter; return C.normalise(S.counter || C.starterFor(S.roomType)); },
+        custom: function () { return !!S.counter; },
+        set: function (t, soft) { S.counter = t; save(); clearTimeout(cbT); if (soft) cbT = setTimeout(draw, 140); else draw(); },
+        reset: function () { S.counter = null; save(); draw(); },
+        place: function (v) { if (v === undefined) return cbPlace; cbPlace = !!v; draw(); return cbPlace; }
       };
       // The scene keeps the drawing's shape and grows to the biggest size the
       // window leaves it, so the portrait and paper stay on their spots.
@@ -1860,7 +1887,7 @@
       }
 
       // ---- Arrange: drag furniture, drag the portrait, unpin, change an item's look ----
-      var drag = null, kd = null, picking = null, adding = null, addTab = 'm', bin = null, secOpen = { mood: true, add: true };
+      var drag = null, kd = null, picking = null, adding = null, addTab = 'm', bin = null, secOpen = { mood: true, add: true, cr: true };
       function svgPt(e) { var m = svg.getScreenCTM().inverse(), q = svg.createSVGPoint(); q.x = e.clientX; q.y = e.clientY; q = q.matrixTransform(m); return [q.x, q.y]; }
       function toFloor(q) { var a = q[0] / 32, b = q[1] / 16; return [(a + b) / 2, (b - a) / 2]; }
       function byId(id) { for (var i = 0; i < S.pieces.length; i++) if (S.pieces[i].id === id) return S.pieces[i]; return null; }
@@ -2177,7 +2204,7 @@
         var typeName = (ROOM_TYPES.filter(function (t) { return t[0] === S.roomType; })[0] || [0, ''])[1];
         var looks = [['lit', 'Lit room']].concat(window.ShopRoomPaper ? [['paper', 'Paper']] : [], window.ShopRoomCounter ? [['counter', 'Counter']] : []);
         var room1 = (looks.length > 1 ? '<div class="shr-field"><span>Look</span>' + seg('look', looks) + '</div>' : '') +
-          (S.look === 'counter' ? '<p class="shr-note">At the counter, the shop lays itself out from its goods. Furniture and moods shape the lit and paper rooms; the shop type picks the shop floor’s working piece, and the time of day colours the window.</p>' : '') +
+          (S.look === 'counter' ? '<p class="shr-note">At the counter, the shop lays itself out from its goods. Furniture and moods shape the lit and paper rooms; the Counter room section builds the counter room, the shop type picks the shop floor’s working piece, and the time of day colours the window.</p>' : '') +
           '<label class="shr-field"><span>Shop type</span><select data-sel="roomType">' + ROOM_TYPES.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.roomType ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<label class="shr-field"><span>Setting</span><select data-sel="setting">' + room.SETTINGS.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.setting ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<div class="shr-field"><span>Room size</span>' + seg('size', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) + '</div>' +
@@ -2204,6 +2231,7 @@
         var fineSum = S.efx ? 'Changed by you' : 'As the mood sets it';
         panel.innerHTML = '<div class="shr-ph"><h3>Arrange this room</h3><button type="button" class="shr-x" data-leave="1" aria-label="Close">✕</button></div><div class="shr-pb">' +
           sec('room', 'fa-house', 'Room', typeName + ' · ' + ({ paper: 'Paper', counter: 'Counter' }[S.look] || 'Lit room'), room1) +
+          (cbOn() ? sec('cr', 'fa-store', 'Counter room', cbApi.theme().name, '<div data-cb></div>') : '') +
           sec('mood', 'fa-masks-theater', 'Mood', M.name, mood1) +
           sec('add', 'fa-plus', 'Add pieces', 'Drag into the room', add1) +
           sec('fine', 'fa-sliders', 'Fine-tune', fineSum, fine1) +
@@ -2214,6 +2242,7 @@
           '<div class="shr-pf"><button type="button" data-discard="1">Cancel</button><button type="button" class="shr-save" data-saveroom="1"' + (dirty ? '' : ' disabled') + '>Save room</button></div>';
         panel.querySelector('[data-lines]').value = S.lines.join('\n');
         var ml = panel.querySelector('[data-moment-lines]'); if (ml) ml.value = (S.moments[momTab] || []).join('\n');
+        var cb = cbOn() && panel.querySelector('[data-cb]'); if (cb) window.ShopRoomBuilder.mount(cb, cbApi);
       }
       // Fold: animate to the body's real height, then let it size itself; Calm and Off open at once.
       function fold(id) {
@@ -2285,7 +2314,7 @@
         else if (t.dataset.lines) { S.lines = t.value.split('\n').map(function (s) { return s.trim().slice(0, 200); }).filter(Boolean).slice(0, 10); save(); }
       }
       function setMode() {
-        root.classList.toggle('arr', S.mode === 'arr'); if (S.mode === 'arr') tilt(0, 0);
+        root.classList.toggle('arr', S.mode === 'arr'); if (S.mode === 'arr') tilt(0, 0); else cbPlace = false;
         root.querySelectorAll('[data-mode]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.mode === S.mode); });
         if (canArrange && !panel) { panel = document.createElement('aside'); panel.className = 'shr-panel'; panel.setAttribute('aria-label', 'Arrange this room'); scene.appendChild(panel); panel.addEventListener('animationend', function () { panel.classList.remove('nag'); }); panel.addEventListener('pointerdown', onPanelDown); }
         if (panel) {
@@ -2444,7 +2473,7 @@
       el._shopRoom = {
         onDocDown: onDocDown, onDocKey: onDocKey,
         cleanup: function () {
-          clearInterval(typeT); clearInterval(aliveT); clearTimeout(sayT); clearTimeout(walkT); if (raf) cancelAnimationFrame(raf);
+          clearInterval(typeT); clearInterval(aliveT); clearTimeout(sayT); clearTimeout(walkT); clearTimeout(cbT); if (raf) cancelAnimationFrame(raf);
           dropHole(); if (dlg.open) dlg.close();
           themeObs.disconnect(); if (resizeObs) resizeObs.disconnect();
           window.removeEventListener('scroll', onScroll);

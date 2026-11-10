@@ -6774,7 +6774,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
 	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_paint", Scripts: []string{"/static/js/widgets/craft_paint.js", "/static/js/widgets/craft_paint_forge.js", "/static/js/widgets/craft_paint_stage.js"}},

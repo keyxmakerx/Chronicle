@@ -29,6 +29,10 @@ const (
 	// Effect levels are percentages of the default look; 250 leaves room to
 	// exaggerate without letting a client store an absurd value.
 	maxShopRoomEffect = 250
+	// The counter theme's name is a label, and its props are a short list of
+	// known ids, so both caps are far above anything a builder writes.
+	maxShopRoomCounterName  = 60
+	maxShopRoomCounterProps = 24
 )
 
 func setOf(vals ...string) map[string]bool {
@@ -64,6 +68,19 @@ var (
 		m[""] = true
 		return m
 	}()
+)
+
+// The counter look's layers; must match CM_OPT and CM_PROPS in
+// static/js/widgets/shop_room_counter.js.
+var (
+	shopRoomCounterShapes   = setOf("square", "round", "open-air", "alcove")
+	shopRoomCounterOpenings = setOf("none", "window-left", "window-right", "window-centre", "round-window", "doorway")
+	shopRoomCounterDisplays = setOf("shelves", "pegboard", "drawers", "pigeonholes", "domes")
+	shopRoomCounterCounters = setOf("straight", "curved", "stall-table")
+	shopRoomCounterWalls    = setOf("plaster", "stone", "timber", "brick", "canvas", "night-sky")
+	shopRoomCounterLights   = setOf("lamp", "forge", "candles", "lanterns", "moonlight")
+	shopRoomCounterOutsides = setOf("day", "dusk", "night", "rain")
+	shopRoomCounterProps    = setOf("anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes")
 )
 
 // NormalizeShopRoomLayout validates a client-supplied layout and returns the
@@ -213,6 +230,12 @@ func (l *ShopRoomLayout) validate() error {
 		}
 	}
 
+	if c := l.Counter; c != nil {
+		if err := c.validate(); err != nil {
+			return err
+		}
+	}
+
 	lines := make([]string, 0, len(l.Lines))
 	for _, s := range l.Lines {
 		s = strings.TrimSpace(s)
@@ -259,6 +282,80 @@ func (l *ShopRoomLayout) validate() error {
 	}
 	l.Moments = moments
 	return nil
+}
+
+// validate checks the counter theme and rewrites it canonical: trimmed name,
+// lowercase colours, warmth clamped to 0..1 and each prop once, in the order
+// given. Unknown values are rejected like every other enum here; the widget
+// always writes a complete, normalised theme.
+func (c *ShopRoomCounter) validate() error {
+	if c.Version != 1 {
+		return fmt.Errorf("unsupported counter version")
+	}
+	c.Name = strings.TrimSpace(c.Name)
+	if utf8.RuneCountInString(c.Name) > maxShopRoomCounterName {
+		return fmt.Errorf("counter name is too long")
+	}
+	enums := []struct {
+		name, val string
+		set       map[string]bool
+	}{
+		{"counter shape", c.Skeleton.Shape, shopRoomCounterShapes},
+		{"counter opening", c.Skeleton.Opening, shopRoomCounterOpenings},
+		{"counter display", c.Skeleton.Display, shopRoomCounterDisplays},
+		{"counter counter", c.Skeleton.Counter, shopRoomCounterCounters},
+		{"counter wall", c.Theme.Wall, shopRoomCounterWalls},
+		{"counter light", c.Theme.Light, shopRoomCounterLights},
+		{"counter outside", c.Theme.Outside, shopRoomCounterOutsides},
+	}
+	for _, e := range enums {
+		if !e.set[e.val] {
+			return fmt.Errorf("invalid %s", e.name)
+		}
+	}
+	for name, col := range map[string]*string{"wood": &c.Theme.Wood, "cloth": &c.Theme.Cloth, "accent": &c.Theme.Accent, "trim": &c.Theme.Trim} {
+		if !validHexColor(*col) {
+			return fmt.Errorf("invalid counter %s colour", name)
+		}
+		*col = strings.ToLower(*col)
+	}
+	// NaN fails both comparisons, so it lands on the lower bound.
+	switch w := c.Theme.Warmth; {
+	case w > 1:
+		c.Theme.Warmth = 1
+	case !(w >= 0):
+		c.Theme.Warmth = 0
+	}
+	if len(c.Props) > maxShopRoomCounterProps {
+		return fmt.Errorf("too many counter props")
+	}
+	props := make([]string, 0, len(c.Props))
+	seen := make(map[string]bool, len(c.Props))
+	for _, p := range c.Props {
+		if !shopRoomCounterProps[p] {
+			return fmt.Errorf("invalid counter prop")
+		}
+		if !seen[p] {
+			seen[p] = true
+			props = append(props, p)
+		}
+	}
+	c.Props = props
+	return nil
+}
+
+// validHexColor accepts exactly #rrggbb, either case.
+func validHexColor(s string) bool {
+	if len(s) != 7 || s[0] != '#' {
+		return false
+	}
+	for i := 1; i < 7; i++ {
+		c := s[i]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+			return false
+		}
+	}
+	return true
 }
 
 // validRelationKey accepts a canonical decimal relation id: digits only, no
