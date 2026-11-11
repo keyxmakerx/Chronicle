@@ -3138,6 +3138,16 @@ func (s *entityService) SetEntityPermissions(ctx context.Context, entityID strin
 	// For VisibilityDefault the IsPrivate field was already set on the entity at
 	// the top of that case branch (line 1769), so we only need to set Visibility.
 	entity.Visibility = input.Visibility
+	// The grant writes stamp updated_at in SQL, so the struct above carries
+	// the pre-save timestamp. Take the stored one for the broadcast; a client
+	// that compares versions would otherwise see the save as stale. Only the
+	// timestamp is copied: the fields above are already the saved values.
+	if fresh, err := s.entities.FindByID(ctx, entityID); err == nil {
+		entity.UpdatedAt = fresh.UpdatedAt
+	} else {
+		slog.Warn("re-read after permission change failed; broadcasting the pre-save entity",
+			slog.String("entity_id", entityID), slog.Any("error", err))
+	}
 	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
 
 	return nil

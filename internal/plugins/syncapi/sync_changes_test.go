@@ -23,6 +23,12 @@ type fakeChangeRepo struct {
 	pruned    int64
 	appendErr error
 	appended  []SyncChange
+	gaps      int
+}
+
+func (f *fakeChangeRepo) MarkGap(context.Context, string) error {
+	f.gaps++
+	return nil
 }
 
 func (f *fakeChangeRepo) Append(_ context.Context, _, rt, id, op string) (int64, error) {
@@ -46,11 +52,13 @@ func (f *fakeChangeRepo) List(_ context.Context, _ string, since int64, limit in
 
 func (f *fakeChangeRepo) PrunedThrough(context.Context, string) (int64, error) { return f.pruned, nil }
 
+// Head mirrors the real one: never below the watermark.
 func (f *fakeChangeRepo) Head(context.Context, string) (int64, error) {
-	if len(f.rows) == 0 {
-		return 0, nil
+	head := f.pruned
+	if len(f.rows) > 0 {
+		head = max(head, f.rows[len(f.rows)-1].Seq)
 	}
-	return f.rows[len(f.rows)-1].Seq, nil
+	return head, nil
 }
 
 func (f *fakeChangeRepo) PruneOlderThan(context.Context, time.Time) (int64, error) { return 0, nil }
@@ -102,6 +110,11 @@ func TestListChanges(t *testing.T) {
 		{name: "limit above max clamps", query: "limit=999999", rows: seqRows(1001), role: campaigns.RoleOwner, wantStatus: 200, wantLen: 1000, wantNext: 1000, wantMore: true},
 		{name: "default limit is 500", query: "", rows: seqRows(501), role: campaigns.RoleOwner, wantStatus: 200, wantLen: 500, wantNext: 500, wantMore: true},
 		{name: "since below watermark resets to head", query: "since=2", rows: seqRows(10), pruned: 5, role: campaigns.RoleOwner, wantStatus: 200, wantLen: 0, wantNext: 10, wantReset: true},
+		{name: "every row pruned resets to the watermark", query: "since=2", rows: nil, pruned: 9, role: campaigns.RoleOwner, wantStatus: 200, wantNext: 9, wantReset: true},
+		{name: "cursor at watermark of a fully pruned feed is current", query: "since=9", rows: nil, pruned: 9, role: campaigns.RoleOwner, wantStatus: 200, wantNext: 9},
+		{name: "cursor ahead of head resets", query: "since=50", rows: seqRows(10), role: campaigns.RoleOwner, wantStatus: 200, wantNext: 10, wantReset: true},
+		{name: "cursor ahead of an empty feed resets", query: "since=1", rows: nil, role: campaigns.RoleOwner, wantStatus: 200, wantNext: 0, wantReset: true},
+		{name: "cursor at head is current", query: "since=10", rows: seqRows(10), role: campaigns.RoleOwner, wantStatus: 200, wantNext: 10},
 		{name: "since at watermark is replayable", query: "since=5", rows: seqRows(7), pruned: 5, role: campaigns.RoleOwner, wantStatus: 200, wantLen: 2, wantNext: 7},
 		{name: "co-DM grant allowed", query: "since=0", rows: seqRows(1), role: campaigns.RolePlayer, granted: true, wantStatus: 200, wantLen: 1, wantNext: 1},
 		{name: "player forbidden", query: "since=0", rows: seqRows(1), role: campaigns.RolePlayer, wantStatus: 403},
@@ -165,6 +178,7 @@ func TestRecordingEventBus(t *testing.T) {
 		appendErr    error
 		wantRecorded *SyncChange
 		wantSeq      int64
+		wantGaps     int
 	}{
 		{name: "entity created", msg: ws.NewMessage(ws.MsgEntityCreated, "c1", "e1", nil), wantRecorded: &SyncChange{Seq: 1, Type: "entity", ResourceID: "e1", Op: "created"}, wantSeq: 1},
 		{name: "token moved is update", msg: ws.NewMessage(ws.MsgTokenMoved, "c1", "t1", nil), wantRecorded: &SyncChange{Seq: 1, Type: "token", ResourceID: "t1", Op: "updated"}, wantSeq: 1},
@@ -178,7 +192,8 @@ func TestRecordingEventBus(t *testing.T) {
 		{name: "calendar date not allowlisted", msg: ws.NewMessage(ws.MsgCalendarDateAdvanced, "c1", "", nil)},
 		{name: "sync control not allowlisted", msg: ws.NewMessage(ws.MsgSyncStatus, "c1", "", nil)},
 		{name: "missing campaign not recorded", msg: ws.NewMessage(ws.MsgEntityCreated, "", "e1", nil)},
-		{name: "record failure still publishes", msg: ws.NewMessage(ws.MsgEntityUpdated, "c1", "e1", nil), appendErr: errors.New("db down")},
+		{name: "record failure still publishes", msg: ws.NewMessage(ws.MsgEntityUpdated, "c1", "e1", nil), appendErr: errors.New("db down"), wantGaps: 1},
+		{name: "unrecorded type failure raises no gap", msg: ws.NewMessage(ws.MsgEntityNoteCreated, "c1", "n1", nil), appendErr: errors.New("db down")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -195,6 +210,9 @@ func TestRecordingEventBus(t *testing.T) {
 			}
 			if tt.msg.Seq != orig.Seq {
 				t.Fatal("caller's message was mutated")
+			}
+			if repo.gaps != tt.wantGaps {
+				t.Fatalf("gaps marked = %d, want %d", repo.gaps, tt.wantGaps)
 			}
 			switch {
 			case tt.wantRecorded == nil && len(repo.appended) != 0:

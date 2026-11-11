@@ -1291,7 +1291,15 @@ func (h *APIHandler) SetEntityPermissions(c *echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	// The save stamps updated_at in SQL, so read it back and return it: a
+	// client can then record the version its own write produced instead of
+	// treating the broadcast as a foreign edit. A failed read only drops the
+	// field; the write itself succeeded.
+	resp := map[string]string{"status": "ok"}
+	if saved, err := h.entitySvc.GetByID(ctx, entityID); err == nil {
+		resp["updated_at"] = saved.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 // SetAddonChecker injects the addon checker for system-aware endpoints.
