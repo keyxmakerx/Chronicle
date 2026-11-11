@@ -110,8 +110,9 @@ func (r *transactionRepository) queryTransactions(ctx context.Context, where str
 		return nil, 0, fmt.Errorf("counting transactions: %w", err)
 	}
 
-	// Fetch page.
-	query := fmt.Sprintf("SELECT %s %s %s ORDER BY t.created_at DESC LIMIT ? OFFSET ?",
+	// Fetch page. created_at has one-second resolution, so id breaks ties;
+	// without it a page boundary inside one second repeats or skips rows.
+	query := fmt.Sprintf("SELECT %s %s %s ORDER BY t.created_at DESC, t.id DESC LIMIT ? OFFSET ?",
 		txSelectColumns, txFromJoins, where)
 	pageArgs := append(args, opts.PerPage, opts.Offset())
 
