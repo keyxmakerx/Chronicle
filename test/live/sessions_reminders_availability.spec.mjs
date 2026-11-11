@@ -80,8 +80,11 @@ test('the player banner: timezone offer, unanswered night, answer clears it, no 
   // Answering clears it.
   await tz.getByRole('link', { name: 'Answer now' }).click();
   await havana.page.waitForURL(/\/sessions\//);
+  // Wait for the saved answer, not for the word "Going" on the page, which
+  // can be there before the answer is stored.
+  const answered = havana.page.waitForResponse((r) => /\/sessions\/[^/]+\/rsvp$/.test(new URL(r.url()).pathname) && r.request().method() === 'POST');
   await havana.page.getByRole('button', { name: /Going/ }).click();
-  await havana.page.locator('#attendee-list').getByText('Going', { exact: true }).first().waitFor();
+  assert.ok((await answered).ok(), 'the answer was not saved');
   await havana.go(`/campaigns/${cid}`);
   await havana.page.locator('.cta-host').waitFor({ state: 'attached' });
   await havana.page.waitForLoadState('networkidle');
