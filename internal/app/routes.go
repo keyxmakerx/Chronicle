@@ -4442,6 +4442,7 @@ func (a *App) RegisterRoutes() {
 		Auditor:    shareAudit,
 		Copies:     copyStore,
 		Places:     placeStore,
+		Members:    &armoryMemberDirectoryAdapter{svc: campaignService},
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.

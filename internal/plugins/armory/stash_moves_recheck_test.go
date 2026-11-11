@@ -55,6 +55,15 @@ func TestSettlePending_RechecksRequester(t *testing.T) {
 			to:     func(int) Endpoint { return charEP("c2") },
 			want:   "The requester can no longer see that character.",
 		},
+		{
+			name: "requester left the campaign",
+			change: func(f *fx, _ int) {
+				f.svc.(*stashService).Members = fakeMembers{roles: map[string]int{"gm": rOwner}}
+			},
+			from: func(int) Endpoint { return charEP("c1") },
+			to:   func(sid int) Endpoint { return StashEndpoint(sid) },
+			want: "The requester is no longer in the campaign.",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

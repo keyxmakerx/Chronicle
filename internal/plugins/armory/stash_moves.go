@@ -832,6 +832,15 @@ func (s *stashService) requesterStillAllowed(ctx context.Context, m *Move) (stri
 	if m.From == m.To {
 		return "", nil
 	}
+	if s.Members != nil {
+		_, ok, err := s.Members.MemberRole(ctx, m.CampaignID, m.RequestedBy)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "The requester is no longer in the campaign.", nil
+		}
+	}
 	a := Actor{UserID: m.RequestedBy, Role: permissions.RolePlayer}
 	if m.From.Kind == EndpointCharacter {
 		ok, err := s.canAct(ctx, m.CampaignID, a, m.From.ID)
