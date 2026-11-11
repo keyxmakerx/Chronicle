@@ -129,6 +129,12 @@ test-js: ## Run JS runtime tests (sidebar, availability, widgets — node --test
 test-e2e: ## Run Playwright browser tests (needs global playwright + chromium)
 	NODE_PATH="$${NODE_PATH:-$$(npm root -g)}" node --test test/e2e/*.spec.mjs
 
+# Starts the real binary on an EMPTIED scratch database (DB_NAME, default
+# chronicle_live) and runs the click-path checks in test/live against it.
+.PHONY: test-live
+test-live: ## Run the live checks against a scratch instance (needs MariaDB + Redis)
+	./tools/live-checks.sh
+
 # Crawls a RUNNING scratch instance (SMOKE_BASE, default localhost:8080) and
 # fails on any server error or page crash. It writes an account and a
 # campaign, so never point it at production.
