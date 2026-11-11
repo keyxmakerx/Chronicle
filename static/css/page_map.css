@@ -12,8 +12,8 @@
 .pm, .pm-pop {
   /* TODO(#1447): the style kits set these; until they land every kit uses
      the Material values. */
-  --pm-r-sheet: 12px;
-  --pm-r-ctl: 8px;
+  --pm-r-sheet: var(--shape-r-panel, 12px);
+  --pm-r-ctl: var(--shape-r-ctl, 8px);
   --pm-edge: 1px solid var(--color-border);
   --pm-map-edge: 0 solid transparent;
 
@@ -80,7 +80,7 @@
 .pm-quiet:hover { text-decoration: underline; }
 .pm-head .pm-quiet { font-size: 0.8rem; white-space: nowrap; margin: 0 8px; }
 .pm-btn {
-  border: 1px solid var(--pm-rule); background: var(--pm-sheet); border-radius: var(--pm-r-ctl);
+  border: var(--shape-edge, 1px) solid var(--pm-rule); background: var(--pm-sheet); border-radius: var(--pm-r-ctl);
   padding: 4px 12px; font-weight: 600; font-size: 12.5px; box-shadow: var(--elev-resting); color: var(--pm-text);
   transition: background-color var(--dur-micro, 120ms) var(--ease-out), transform 60ms var(--ease-out);
 }
@@ -181,10 +181,10 @@
 .pm-lgnone { font-size: 0.82rem; color: var(--pm-muted); padding: 4px 6px; line-height: 1.4; }
 
 /* ---------- Settings under the map: one fixed height, so nothing jumps ---------- */
-.pm-slot { border-top: 1px solid var(--pm-rule); margin-top: 12px; padding-top: 12px; }
+.pm-slot { border-top: var(--shape-rule, 1px) solid var(--pm-rule); margin-top: 12px; padding-top: 12px; }
 .pm-drape { display: flex; flex-direction: column; gap: 10px; min-height: 150px; }
 .pm-drape .pm-drow { margin-top: auto; }
-.pm-drape.empty { display: grid; place-items: center; border: 1.5px dashed var(--pm-rule); border-radius: 10px; background: var(--pm-sunk); padding: 12px; }
+.pm-drape.empty { display: grid; place-items: center; border: 1.5px dashed var(--pm-rule); border-radius: var(--shape-r-panel, 12px); background: var(--pm-sunk); padding: 12px; }
 .pm-emptyin { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .pm-emptyin .pm-fld { align-items: center; gap: 6px; }
 .pm-hint { font-size: 0.86rem; color: var(--pm-muted); margin: 0; text-align: center; max-width: 36em; }
@@ -196,10 +196,10 @@
 .pm-fld.grow { flex: 1; min-height: 0; }
 .pm-fld.grow textarea { flex: 1; min-height: 0; resize: none; }
 .pm-fld input:not([type]), .pm-fld input[type="text"], .pm-fld select, .pm-fld textarea {
-  border: 0; border-bottom: 1px solid var(--pm-rule); background: none; padding: 4px 0; font-size: 0.9rem;
+  border: 0; border-bottom: var(--shape-rule, 1px) solid var(--pm-rule); background: none; padding: 4px 0; font-size: 0.9rem;
   color: var(--pm-text); border-radius: 0; width: 100%;
 }
-.pm-fld textarea { border: 1px solid var(--color-input-border, var(--pm-rule)); border-radius: var(--pm-r-ctl); padding: 6px 8px; resize: vertical; }
+.pm-fld textarea { border: var(--shape-edge, 1px) solid var(--color-input-border, var(--pm-rule)); border-radius: var(--pm-r-ctl); padding: 6px 8px; resize: vertical; }
 .pm-fld input:focus, .pm-fld select:focus, .pm-fld textarea:focus { outline: none; border-color: var(--pm-acc); }
 .pm-fld select { background: var(--pm-sheet); }
 .pm-radios { display: flex; gap: 14px; font-size: 0.86rem; color: var(--pm-text); }
@@ -211,7 +211,7 @@
 .pm-sketch { font: 500 0.76rem/1.55 ui-monospace, Menlo, Consolas, monospace; min-height: 140px; }
 .pm-skerr, .pm-cerr { font-size: 12.5px; color: var(--pm-bad); margin: 0; }
 .pm-cerr:empty { display: none; }
-.pm-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--pm-rule); border-radius: var(--pm-r-ctl); padding: 2px; background: var(--pm-sheet); }
+.pm-seg { display: inline-flex; flex-wrap: wrap; border: var(--shape-edge, 1px) solid var(--pm-rule); border-radius: var(--pm-r-ctl); padding: 2px; background: var(--pm-sheet); }
 .pm-seg button { border: 0; background: none; border-radius: calc(var(--pm-r-ctl) - 2px); min-height: 30px; padding: 0 14px; font-weight: 600; font-size: 0.82rem; color: var(--pm-muted); }
 .pm-seg button[aria-pressed="true"] { background: var(--pm-acc-soft); color: var(--pm-acc); }
 
@@ -231,7 +231,7 @@
 .pm-pick { position: relative; }
 .pm-plist {
   position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; list-style: none; margin: 0; padding: 4px;
-  max-height: 248px; overflow: auto; background: var(--color-bg-secondary); border: 1px solid var(--pm-rule);
+  max-height: 248px; overflow: auto; background: var(--color-bg-secondary); border: var(--shape-edge, 1px) solid var(--pm-rule);
   border-radius: var(--pm-r-sheet); box-shadow: var(--elev-hover);
   transform-origin: top; animation: pm-grow var(--dur-standard, 200ms) var(--ease-out) both;
 }

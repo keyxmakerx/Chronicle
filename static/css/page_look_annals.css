@@ -68,7 +68,7 @@
   font-size: 0.9rem;
   color: var(--color-text-primary) !important;
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--annals-line);
+  border-bottom: var(--shape-rule, 1px) solid var(--annals-line);
 }
 [data-cz-page="annals"] .cb-head > i { color: var(--annals-acc); font-size: 0.8em; }
 
@@ -97,7 +97,7 @@
 /* Fact panels and tools keep their edge. */
 [data-cz-page="annals"] #main-content .cb-card:is(.cb-facts, .en-block) {
   border-color: var(--annals-line);
-  border-radius: 12px;
+  border-radius: var(--shape-r-panel, 12px);
   background: var(--color-card-bg);
   box-shadow: var(--elev-resting);
 }
@@ -107,7 +107,7 @@
 [data-cz-page="annals"] #main-content .en-head { border-bottom: 0; padding-bottom: 4px; }
 [data-cz-page="annals"] #main-content .en-head > .en-spacer { display: none; }
 /* Pictures keep their rounded frame, with no line round them. */
-[data-cz-page="annals"] #main-content .cb-card:has(> img) { border-radius: 12px; }
+[data-cz-page="annals"] #main-content .cb-card:has(> img) { border-radius: var(--shape-r-panel, 12px); }
 
 /* Rich text sits on the page until it is being edited. */
 [data-cz-page="annals"] #main-content .chronicle-editor:not(.chronicle-editor--editing) {
@@ -117,7 +117,7 @@
 [data-cz-page="annals"] #main-content .chronicle-editor .tiptap a:not([class]) {
   color: var(--annals-link);
   text-decoration: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--annals-link) 40%, transparent);
+  border-bottom: var(--shape-rule, 1px) solid color-mix(in srgb, var(--annals-link) 40%, transparent);
 }
 
 /* ---------- Fact sections and rows ---------- */
@@ -133,7 +133,7 @@
   grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
   gap: 12px;
   padding: 7px 0;
-  border-top: 1px solid var(--annals-line);
+  border-top: var(--shape-rule, 1px) solid var(--annals-line);
 }
 [data-cz-page="annals"] .cb-section > .cb-section-h + .cb-fact,
 [data-cz-page="annals"] .cb-section > .cb-fact:first-child { border-top: 0; }
@@ -166,7 +166,7 @@
   border-color: transparent;
   background: transparent;
   box-shadow: none;
-  border-radius: 8px;
+  border-radius: var(--shape-r-ctl, 8px);
   transition: background var(--dur-micro) var(--ease-out), box-shadow var(--dur-standard) var(--ease-out);
 }
 [data-cz-page="annals"] #main-content .rel-card.cb-card { overflow: visible; }
@@ -175,7 +175,7 @@
   background: var(--color-card-bg);
   box-shadow: var(--elev-resting);
 }
-[data-cz-page="annals"] .rel-item.cb-link .rel-icon { border-radius: 8px; }
+[data-cz-page="annals"] .rel-item.cb-link .rel-icon { border-radius: var(--shape-r-ctl, 8px); }
 [data-cz-page="annals"] .rel-item.cb-link .rel-name a { font-weight: 600; }
 
 /* ---------- Director-only marks ----------
@@ -352,7 +352,7 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
    keep their room at rest, and the edge is drawn outside the page. */
 [data-cz-page="annals"] [data-pe-page] {
   --pe-wline: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
-  border-radius: 12px;
+  border-radius: var(--shape-r-panel, 12px);
   outline: 2px solid transparent;
   outline-offset: 6px;
   transition: outline-color var(--dur-standard, 200ms) var(--ease-out);
@@ -380,7 +380,7 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
 }
 [data-cz-page="annals"] .pe-key {
   font: inherit; font-size: 11px; font-weight: 600; line-height: 1.4;
-  padding: 0 5px; border: 1px solid var(--color-border); border-bottom-width: 2px; border-radius: 4px;
+  padding: 0 5px; border: var(--shape-edge, 1px) solid var(--color-border); border-bottom-width: 2px; border-radius: var(--shape-r-tag, 4px);
   color: var(--color-text-primary); background: var(--color-card-bg);
 }
 [data-cz-page="annals"] button.pe-key { cursor: pointer; transition: border-color var(--dur-micro, 120ms), color var(--dur-micro, 120ms); }
@@ -410,7 +410,7 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
    outside the part so it never crosses the pen. */
 [data-cz-page="annals"] .pe-part { position: relative; }
 [data-cz-page="annals"] .pe-part::before {
-  content: ""; position: absolute; inset: -8px -10px; border-radius: 10px; pointer-events: none;
+  content: ""; position: absolute; inset: -8px -10px; border-radius: var(--shape-r-panel, 12px); pointer-events: none;
   box-shadow: 0 0 0 1px transparent;
   transition: box-shadow var(--dur-micro, 120ms) var(--ease-standard);
 }
@@ -425,7 +425,7 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
 /* The pen: an icon with no frame until hover, beside the part's heading. */
 [data-cz-page="annals"] .pe-pen {
   position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 8px;
+  width: 28px; height: 28px; padding: 0; border: var(--shape-edge, 1px) solid transparent; border-radius: var(--shape-r-ctl, 8px);
   background: none; color: var(--annals-acc); cursor: pointer; visibility: hidden;
   transition: border-color var(--dur-micro, 120ms), transform var(--dur-standard, 200ms) var(--ease-out);
 }
@@ -470,7 +470,7 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
 [data-cz-page="annals"] .pe-part.is-open .pe-drape-in { transform: none; }
 [data-cz-page="annals"] .pe-sheet {
   display: grid; gap: 10px; padding: 12px 14px;
-  background: var(--color-card-bg); border: 1px solid var(--annals-line); border-radius: 12px;
+  background: var(--color-card-bg); border: var(--shape-edge, 1px) solid var(--annals-line); border-radius: var(--shape-r-panel, 12px);
   box-shadow: var(--elev-hover);
 }
 [data-cz-page="annals"] .pe-row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 8px; align-items: center; min-height: 32px; }
@@ -483,7 +483,7 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
 [data-cz-page="annals"] .pe-fld {
   width: 100%; min-width: 0; padding: 6px 2px;
   font: inherit; font-size: 0.8125rem; color: var(--color-text-primary);
-  background: none; border: 0; border-bottom: 1px solid var(--pe-wline); border-radius: 0; box-shadow: none;
+  background: none; border: 0; border-bottom: var(--shape-rule, 1px) solid var(--pe-wline); border-radius: 0; box-shadow: none;
   transition: border-color var(--dur-micro, 120ms), box-shadow var(--dur-micro, 120ms);
 }
 [data-cz-page="annals"] .pe-fld:focus { outline: none; border-color: var(--annals-acc); box-shadow: inset 0 -1px 0 var(--annals-acc); }
@@ -495,9 +495,9 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
 [data-cz-page="annals"] .pe-list {
   position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 2;
   max-height: 13rem; overflow: auto; margin: 0; padding: 4px; list-style: none;
-  background: var(--color-card-bg); border: 1px solid var(--annals-line); border-radius: 8px; box-shadow: var(--elev-hover);
+  background: var(--color-card-bg); border: var(--shape-edge, 1px) solid var(--annals-line); border-radius: var(--shape-r-ctl, 8px); box-shadow: var(--elev-hover);
 }
-[data-cz-page="annals"] .pe-opt { padding: 6px 8px; border-radius: 6px; font-size: 0.8125rem; color: var(--color-text-primary); cursor: pointer; }
+[data-cz-page="annals"] .pe-opt { padding: 6px 8px; border-radius: var(--shape-r-small, 6px); font-size: 0.8125rem; color: var(--color-text-primary); cursor: pointer; }
 [data-cz-page="annals"] .pe-opt:hover,
 [data-cz-page="annals"] .pe-opt.is-active { background: color-mix(in srgb, var(--annals-acc) 10%, transparent); }
 [data-cz-page="annals"] .pe-opt[aria-selected="true"] { color: var(--annals-acc); font-weight: 600; }
@@ -508,7 +508,7 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
    icon, underlined on hover. */
 [data-cz-page="annals"] .pe-qws {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px;
-  padding-top: 10px; border-top: 1px solid var(--annals-line);
+  padding-top: 10px; border-top: var(--shape-rule, 1px) solid var(--annals-line);
 }
 [data-cz-page="annals"] .pe-sp { flex: 1; }
 [data-cz-page="annals"] .pe-qw {

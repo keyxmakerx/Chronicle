@@ -526,6 +526,11 @@ column's version; Off shows the end state.
   Customizer's own frames (tiles 14, the phone preview 28), which stand for
   a device, and the corners a style kit names (Sharp's square frames,
   Flowing's uneven rounded ones, Sketchbook's hand-drawn ones).
+- **Corners and edges are tokens** in `static/css/input.css`:
+  `--shape-r-tag` (4), `--shape-r-small` (6), `--shape-r-ctl` (8),
+  `--shape-r-panel` (12), `--shape-edge` (a box's edge) and `--shape-rule`
+  (a rule between rows). Page parts use them, never fixed values, so each
+  style kit sets them once in `style_kits.css`. Pills and circles stay fixed.
 - **Type**: headings in the campaign's heading face; when the owner picked
   none, pages under Annals use tall capitals (Oswald, 600, set by
   `AppearanceCSS`) and everything else Inter. Page titles 24 to 40 (fluid)
