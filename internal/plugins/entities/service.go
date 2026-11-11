@@ -1142,12 +1142,24 @@ func (s *entityService) MergeFields(ctx context.Context, entityID string, patch 
 	if entity.EntryHTML != nil {
 		entryHTML = *entity.EntryHTML
 	}
+	// Everything that queries the database runs before the row lock: the
+	// lock holds one pool connection, and a callback that needed a second
+	// could starve the pool when many patches arrive at once. Only the
+	// patch's own keys change, so checking them against the earlier read
+	// checks every value this write introduces.
+	if err := s.checkLinkValues(ctx, entity, entity.FieldsData, MergeFieldPatch(entity.FieldsData, patch)); err != nil {
+		return err
+	}
+	var typeFields []FieldDefinition
+	if et, err := s.types.FindByID(ctx, entity.EntityTypeID); err == nil && et != nil {
+		typeFields = et.Fields
+	}
 	oldFields, newFields, err := s.entities.MergeFieldsData(ctx, entityID, func(current map[string]any) (map[string]any, string, error) {
 		merged := MergeFieldPatch(current, patch)
-		if err := s.checkLinkValues(ctx, entity, current, merged); err != nil {
-			return nil, "", err
+		var searchFields map[string]any
+		if typeFields != nil && len(merged) > 0 {
+			searchFields = searchableFields(merged, typeFields, entity.FieldOverrides)
 		}
-		searchFields := s.searchFieldsOf(ctx, entity.EntityTypeID, entity.FieldOverrides, merged)
 		return merged, buildSearchText(entryHTML, searchFields), nil
 	})
 	if err != nil {

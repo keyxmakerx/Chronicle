@@ -672,7 +672,8 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 		slog.Error("ai-workspace: commit failed",
 			slog.String("campaign_id", cc.Campaign.ID),
 			slog.Any("error", err))
-		// Nothing was written, so the owner may try again or turn it down.
+		// No page was written (folders made first may have been), so the owner
+		// may try again or turn it down.
 		if claimedID != 0 {
 			if rerr := h.connector.ReleaseRequest(c.Request().Context(), cc.Campaign.ID, userID, claimedID); rerr != nil {
 				slog.Error("ai-workspace: releasing request after failed commit",
