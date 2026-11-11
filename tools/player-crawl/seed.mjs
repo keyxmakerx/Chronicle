@@ -4,9 +4,10 @@
 // that cannot be done on this build is reported and skipped, so a changed form
 // shows as "not seeded" instead of a silently weaker test.
 
+import { randomBytes } from 'node:crypto';
 import { Client } from './client.mjs';
 
-export const RUN = Math.random().toString(36).slice(2, 7).toUpperCase();
+export const RUN = randomBytes(4).toString('hex').toUpperCase();
 export const mk = (key) => `ZQ${RUN}${key}`;
 
 // Edits hidden things while viewers hold a socket open. Each edit carries a
