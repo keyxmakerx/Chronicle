@@ -624,9 +624,9 @@ func TestRestoreSessionAPI_SoftDeletedSessionIsReachable(t *testing.T) {
 		findByIDIncludingDeletedFn: func(_ context.Context, id string) (*Session, error) {
 			return &Session{ID: id, CampaignID: "camp-1", Name: "Weekly Game"}, nil
 		},
-		restoreSessionFn: func(_ context.Context, _ string) error {
+		restoreSessionFn: func(_ context.Context, _ string) (bool, error) {
 			restored = true
-			return nil
+			return true, nil
 		},
 		// FindByID can't see a soft-deleted session until it is restored.
 		findByIDFn: func(_ context.Context, id string) (*Session, error) {
@@ -665,9 +665,9 @@ func TestRestoreSessionAPI_CrossCampaign404s(t *testing.T) {
 		findByIDIncludingDeletedFn: func(_ context.Context, id string) (*Session, error) {
 			return &Session{ID: id, CampaignID: "camp-other", Name: "Someone Else's Game"}, nil
 		},
-		restoreSessionFn: func(_ context.Context, _ string) error {
+		restoreSessionFn: func(_ context.Context, _ string) (bool, error) {
 			restored = true
-			return nil
+			return true, nil
 		},
 	}
 	h := &Handler{svc: NewSessionService(repo, nil, nil)}
@@ -711,9 +711,9 @@ func TestRestoreAndAnnounce_OnlyATrashedSession(t *testing.T) {
 					}
 					return &Session{ID: id, CampaignID: tc.campaign, Name: "Weekly Game"}, nil
 				},
-				restoreSessionFn: func(_ context.Context, _ string) error {
+				restoreSessionFn: func(_ context.Context, _ string) (bool, error) {
 					restored = true
-					return nil
+					return true, nil
 				},
 			}
 			svc := NewSessionService(repo, nil, nil)

@@ -59,10 +59,10 @@ func TestEmailNightChange(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mailer := &listMailer{}
 			repo, _ := tokenRecorder()
-			repo.listGoingOrMaybeUserIDsFn = func(context.Context, string) ([]string, error) {
+			repo.listGoingOrMaybeUserIDsFn = func(context.Context, string, string) ([]string, error) {
 				return []string{"going", "maybe", "muted", "noaddr"}, nil
 			}
-			h := &Handler{svc: NewSessionService(repo, nil, nil), mailer: mailer, baseURL: "https://x.test",
+			h := &Handler{svc: serviceOn(repo, "2026-11-01"), mailer: mailer, baseURL: "https://x.test",
 				memberLister: &stubMemberLister{members: members}, recipients: muteFilter{muted: map[string]bool{"muted": true}}}
 			mc := mailCampaign{ID: "c1", Name: "Therin", GMTerm: "GM"}
 			h.emailNightChange(context.Background(), mc, tc.change, tc.before, tc.s, "owner")
@@ -97,8 +97,8 @@ func TestEmailNightChange(t *testing.T) {
 
 func TestEmailNightChange_ChatShowsWhoChangedIt(t *testing.T) {
 	mailer := &listMailer{}
-	repo := &mockSessionRepo{listGoingOrMaybeUserIDsFn: func(context.Context, string) ([]string, error) { return []string{"p"}, nil }}
-	h := &Handler{svc: NewSessionService(repo, nil, nil), mailer: mailer, baseURL: "https://x.test",
+	repo := &mockSessionRepo{listGoingOrMaybeUserIDsFn: func(context.Context, string, string) ([]string, error) { return []string{"p"}, nil }}
+	h := &Handler{svc: serviceOn(repo, "2026-11-01"), mailer: mailer, baseURL: "https://x.test",
 		memberLister: &stubMemberLister{members: []campaigns.CampaignMember{
 			{UserID: "o", DisplayName: "Kara", Role: campaigns.RoleOwner},
 			{UserID: "p", Email: "p@x.test"},
@@ -115,7 +115,7 @@ func TestEmailNightChange_ChatShowsWhoChangedIt(t *testing.T) {
 
 func TestEmailNightChange_NobodyToTell(t *testing.T) {
 	mailer := &listMailer{}
-	h := &Handler{svc: NewSessionService(&mockSessionRepo{}, nil, nil), mailer: mailer,
+	h := &Handler{svc: serviceOn(&mockSessionRepo{}, "2026-11-01"), mailer: mailer,
 		memberLister: &stubMemberLister{members: []campaigns.CampaignMember{{UserID: "p", Email: "p@x.test"}}}}
 	h.emailNightChange(context.Background(), mailCampaign{ID: "c1"}, nightCancelled, nil, &Session{ID: "s1"}, "")
 	if len(mailer.sent) != 0 {

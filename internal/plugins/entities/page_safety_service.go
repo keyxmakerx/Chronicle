@@ -220,6 +220,10 @@ type LongTermTrash interface {
 	// KeptPages returns the Trash item roots to keep. An error keeps every
 	// page this round: nothing is removed on a guess.
 	KeptPages(ctx context.Context) ([]string, error)
+	// PageRestored tells the keeper a page came back out of the Trash by any
+	// route, so it stops keeping it: a later delete must wait out its Trash
+	// days like any other page. It must not fail the restore.
+	PageRestored(ctx context.Context, campaignID, entityID string)
 }
 
 // SetLongTermTrash wires the keeper; see LongTermTrash.
@@ -418,6 +422,12 @@ func (p *pageSafetyService) RestoreFromTrash(ctx context.Context, campaignID, en
 		return nil, err
 	}
 	slog.Info("page restored from trash", slog.String("entity_id", entityID), slog.Int("sub_pages", item.SubPages))
+	// The ordinary Trash restores without going through "What players
+	// changed", so without this a player's old removal would keep the page
+	// out of the purge forever once the owner deletes it again.
+	if p.keeper != nil {
+		p.keeper.PageRestored(ctx, campaignID, entityID)
+	}
 	if p.svc != nil {
 		if e, err := p.entities.FindByID(ctx, entityID); err == nil {
 			p.svc.events.PublishEntityEvent("created", campaignID, entityID, e)

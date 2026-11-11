@@ -36,14 +36,20 @@ func (r *sessionRepository) SoftDeleteSession(ctx context.Context, id string) er
 	return nil
 }
 
-// RestoreSession is SoftDeleteSession's inverse, equally idempotent.
-func (r *sessionRepository) RestoreSession(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx,
+// RestoreSession is SoftDeleteSession's inverse, equally idempotent. The
+// bool says whether this call changed the row: the conditional update lets
+// exactly one of two simultaneous restores win.
+func (r *sessionRepository) RestoreSession(ctx context.Context, id string) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
 		`UPDATE sessions SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL`, id)
 	if err != nil {
-		return fmt.Errorf("restoring session: %w", err)
+		return false, fmt.Errorf("restoring session: %w", err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("restoring session: %w", err)
+	}
+	return n > 0, nil
 }
 
 // ListDeleted lists a campaign's soft-deleted sessions, newest first.
@@ -297,13 +303,16 @@ func (r *sessionRepository) MarkAllOccurrencesNeedsRecheck(ctx context.Context, 
 }
 
 // ListGoingOrMaybeUserIDs reads both answer stores, like respondedUserIDs,
-// because a repeating night's answers can sit in either.
-func (r *sessionRepository) ListGoingOrMaybeUserIDs(ctx context.Context, sessionID string) ([]string, error) {
+// because a repeating night's answers can sit in either. Per-night answers
+// count only from fromDate on: someone who answered a night long past has
+// nothing to learn from a cancel of the nights still to come. The attendee
+// store has no date, so those answers always count.
+func (r *sessionRepository) ListGoingOrMaybeUserIDs(ctx context.Context, sessionID, fromDate string) ([]string, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT user_id FROM session_attendees WHERE session_id = ? AND status IN (?, ?)
 		UNION
-		SELECT user_id FROM session_occurrence_rsvps WHERE session_id = ? AND status IN (?, ?)`,
-		sessionID, RSVPAccepted, RSVPTentative, sessionID, RSVPAccepted, RSVPTentative)
+		SELECT user_id FROM session_occurrence_rsvps WHERE session_id = ? AND status IN (?, ?) AND occurrence_date >= ?`,
+		sessionID, RSVPAccepted, RSVPTentative, sessionID, RSVPAccepted, RSVPTentative, fromDate)
 	if err != nil {
 		return nil, fmt.Errorf("listing going or maybe user ids: %w", err)
 	}
