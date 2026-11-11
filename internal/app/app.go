@@ -407,8 +407,10 @@ func (a *App) errorHandler(c *echo.Context, err error) {
 	// after the status is known and before anything is written, so it
 	// observes exactly the code and error the client is about to receive.
 	_ = observability.RecordHTTPError(code, c.Request().Method, c.Path(), c.Request().URL.Path, kind, err)
+	// Update health stores only the status, never the error text, which can
+	// carry values from the request or the database.
 	if code >= http.StatusInternalServerError {
-		updatehealth.Fail(c.Request().Method, c.Path(), err.Error())
+		updatehealth.Fail(c.Request().Method, c.Path(), fmt.Sprintf("%d %s", code, http.StatusText(code)))
 	}
 
 	// API requests always get JSON. `error` carries the MACHINE-READABLE

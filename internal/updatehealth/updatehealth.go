@@ -110,8 +110,7 @@ func (r *Recorder) RecordUse(method, path string) {
 }
 
 // RecordError counts a request that failed on the server's side (a 5xx).
-// msg is the error as the error log already keeps it; it is cut short here
-// too, since it is stored.
+// msg is stored, so callers pass the status, never the error's own text.
 func (r *Recorder) RecordError(method, path, msg string, at time.Time) {
 	for _, i := range r.Match(method, path) {
 		r.bump(r.features[i].ID, func(d *delta) {

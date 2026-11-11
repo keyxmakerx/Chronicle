@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
@@ -24,7 +25,7 @@ func updateHealthCounter() echo.MiddlewareFunc {
 			}
 			switch status := middleware.ResponseState(c).Status; {
 			case status >= http.StatusInternalServerError:
-				updatehealth.Fail(c.Request().Method, c.Path(), http.StatusText(status))
+				updatehealth.Fail(c.Request().Method, c.Path(), fmt.Sprintf("%d %s", status, http.StatusText(status)))
 			case status < http.StatusBadRequest:
 				updatehealth.Use(c.Request().Method, c.Path())
 			}
