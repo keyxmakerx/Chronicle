@@ -106,9 +106,6 @@ export function siteAdmin(opts = {}) {
   return person({ ...opts, ...ADMIN, tag: 'admin', register: false });
 }
 
-async function submitForm(page, field) {
-  await Promise.all([page.waitForLoadState('networkidle'), field.press('Enter')]);
-}
 
 /** Sign in, registering the account first when `register` is set and it is new. */
 export async function signIn(who, { register = true } = {}) {
@@ -116,7 +113,10 @@ export async function signIn(who, { register = true } = {}) {
   await page.goto(BASE + '/login');
   await page.fill('#email', who.email);
   await page.fill('#password', who.password);
-  await submitForm(page, page.locator('#password'));
+  await Promise.all([
+    page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 5000 }).catch(() => {}),
+    page.locator('#password').press('Enter'),
+  ]);
   if (!page.url().includes('/login')) return;
   if (!register) throw new Error('could not sign in as ' + who.email);
   await page.goto(BASE + '/register');
@@ -124,7 +124,12 @@ export async function signIn(who, { register = true } = {}) {
   await page.fill('#display_name', who.name);
   await page.fill('#password', who.password);
   await page.fill('#confirm', who.password);
-  await submitForm(page, page.locator('#confirm'));
+  // Sign-up answers through htmx and redirects after network-idle, so wait
+  // for the address to leave /register rather than for the network.
+  await Promise.all([
+    page.waitForURL((u) => !/\/(login|register)/.test(u.pathname), { timeout: 10000 }).catch(() => {}),
+    page.locator('#confirm').press('Enter'),
+  ]);
   if (/\/(login|register)/.test(page.url())) throw new Error('could not register ' + who.email + ' (landed on ' + page.url() + ')');
 }
 
