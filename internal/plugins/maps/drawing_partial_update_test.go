@@ -51,7 +51,7 @@ func (r *mockDrawingRepo) CreateToken(ctx context.Context, t *Token) error {
 func (r *mockDrawingRepo) GetToken(ctx context.Context, id string) (*Token, error) {
 	return r.getTokenFn(ctx, id)
 }
-func (r *mockDrawingRepo) UpdateToken(ctx context.Context, t *Token) error {
+func (r *mockDrawingRepo) UpdateToken(ctx context.Context, t *Token, _ []TokenColumn) error {
 	return r.updateTokenFn(ctx, t)
 }
 func (r *mockDrawingRepo) UpdateTokenPosition(context.Context, string, float64, float64) error {

@@ -780,6 +780,7 @@ type EntityRepository interface {
 	UpdateEntry(ctx context.Context, id, entryJSON, entryHTML, searchText string) error
 	UpdatePlayerNotes(ctx context.Context, id, notesJSON, notesHTML string) error
 	UpdateFields(ctx context.Context, id string, fieldsData map[string]any, searchText string) error
+	MergeFieldsData(ctx context.Context, id string, merge FieldsMergeFunc) (before, after map[string]any, err error)
 	UpdateFieldOverrides(ctx context.Context, id string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, id, imagePath string) error
 	UpdateCoverImage(ctx context.Context, id, coverImagePath string) error
@@ -1146,6 +1147,67 @@ func (r *entityRepository) UpdateFields(ctx context.Context, id string, fieldsDa
 		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
+}
+
+// FieldsMergeFunc computes the next fields_data (and the search_text that goes
+// with it) from the value stored at the moment the row is locked. It runs
+// inside the repository's transaction, so it must not write to the same row.
+type FieldsMergeFunc func(current map[string]any) (next map[string]any, searchText string, err error)
+
+// MergeFieldsData is the atomic read-merge-write for fields_data. The row is
+// locked with SELECT ... FOR UPDATE, merge sees the value as stored right now,
+// and the result is written before the lock is released, so two writers
+// patching different keys can no longer overwrite each other with stale
+// copies. A row lock plus a Go merge was chosen over JSON_SET/JSON_REMOVE
+// because the merge also has to recompute search_text and validate link
+// values from the whole merged map, and nested values need no path escaping.
+// It returns the fields before and after so callers can broadcast the change.
+func (r *entityRepository) MergeFieldsData(ctx context.Context, id string, merge FieldsMergeFunc) (before, after map[string]any, err error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var raw []byte
+	err = tx.QueryRowContext(ctx,
+		`SELECT fields_data FROM entities WHERE id = ? AND deleted_at IS NULL FOR UPDATE`, id).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, apperror.NewNotFound("entity not found")
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("locking entity fields: %w", err)
+	}
+	current := map[string]any{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &current); err != nil {
+			return nil, nil, fmt.Errorf("unmarshaling fields_data: %w", err)
+		}
+		if current == nil {
+			current = map[string]any{}
+		}
+	}
+
+	next, searchText, err := merge(current)
+	if err != nil {
+		return nil, nil, err
+	}
+	if next == nil {
+		next = map[string]any{}
+	}
+	fieldsJSON, err := json.Marshal(next)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshaling fields_data: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE entities SET fields_data = ?, search_text = ?, updated_at = NOW() WHERE id = ?`,
+		string(fieldsJSON), searchText, id); err != nil {
+		return nil, nil, fmt.Errorf("updating entity fields: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("commit fields merge: %w", err)
+	}
+	return current, next, nil
 }
 
 // UpdateFieldOverrides updates the per-entity field overrides JSON column.

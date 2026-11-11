@@ -31,7 +31,10 @@ func (r *idorRepo) GetLayer(_ context.Context, id string) (*Layer, error) {
 
 func (r *idorRepo) UpdateDrawing(context.Context, *Drawing) error { r.mutated = true; return nil }
 func (r *idorRepo) DeleteDrawing(context.Context, string) error   { r.mutated = true; return nil }
-func (r *idorRepo) UpdateToken(context.Context, *Token) error     { r.mutated = true; return nil }
+func (r *idorRepo) UpdateToken(context.Context, *Token, []TokenColumn) error {
+	r.mutated = true
+	return nil
+}
 func (r *idorRepo) UpdateTokenPosition(context.Context, string, float64, float64) error {
 	r.mutated = true
 	return nil

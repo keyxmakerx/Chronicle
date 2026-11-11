@@ -292,6 +292,23 @@ func (m *mockEntityRepo) UpdateFields(ctx context.Context, id string, fieldsData
 	return nil
 }
 
+func (m *mockEntityRepo) MergeFieldsData(ctx context.Context, id string, merge FieldsMergeFunc) (map[string]any, map[string]any, error) {
+	e, err := m.FindByID(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	next, searchText, err := merge(e.FieldsData)
+	if err != nil {
+		return nil, nil, err
+	}
+	if m.updateFieldsFn != nil {
+		if err := m.updateFieldsFn(ctx, id, next, searchText); err != nil {
+			return nil, nil, err
+		}
+	}
+	return e.FieldsData, next, nil
+}
+
 func (m *mockEntityRepo) UpdateFieldOverrides(ctx context.Context, id string, overrides *FieldOverrides) error {
 	return nil
 }

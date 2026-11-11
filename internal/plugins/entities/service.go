@@ -1134,7 +1134,27 @@ func (s *entityService) MergeFields(ctx context.Context, entityID string, patch 
 	if err != nil {
 		return err
 	}
-	return s.UpdateFields(ctx, entityID, MergeFieldPatch(entity.FieldsData, patch))
+
+	// The merge runs against the value the repository has locked, not the copy
+	// read above, so a concurrent patch to another key is kept. The row read
+	// above only supplies the parts the merge does not change.
+	var entryHTML string
+	if entity.EntryHTML != nil {
+		entryHTML = *entity.EntryHTML
+	}
+	oldFields, newFields, err := s.entities.MergeFieldsData(ctx, entityID, func(current map[string]any) (map[string]any, string, error) {
+		merged := MergeFieldPatch(current, patch)
+		if err := s.checkLinkValues(ctx, entity, current, merged); err != nil {
+			return nil, "", err
+		}
+		searchFields := s.searchFieldsOf(ctx, entity.EntityTypeID, entity.FieldOverrides, merged)
+		return merged, buildSearchText(entryHTML, searchFields), nil
+	})
+	if err != nil {
+		return err
+	}
+	s.afterFieldsWrite(ctx, entity, oldFields, newFields)
+	return nil
 }
 
 // MergeFieldPatch returns a new map: current with patch applied (nil value
@@ -1186,26 +1206,30 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 		return err
 	}
 
+	if entity != nil {
+		s.afterFieldsWrite(ctx, entity, cloneFields(entity.FieldsData), fieldsData)
+	}
+	slog.Info("entity fields updated", slog.String("entity_id", entityID))
+	return nil
+}
+
+// afterFieldsWrite broadcasts a completed fields_data write.
+func (s *entityService) afterFieldsWrite(ctx context.Context, entity *Entity, oldFields, fieldsData map[string]any) {
+	entityID := entity.ID
 	// Broadcast so live consumers — the web dynamic surface, other open clients,
 	// and the Foundry sync — see the field change immediately, mirroring
 	// Update/TogglePrivate/Claim. Without this, field pushes (e.g. a Foundry
 	// HP/condition update via PUT /entities/:id/fields) stayed invisible until a
 	// manual refresh, breaking the "one model, many consumers" contract (GAP-1).
-	// Carry the new fields on the payload; best-effort (only when the entity
-	// loaded), matching this method's existing tolerance of a load failure.
-	if entity != nil {
-		oldFields := cloneFields(entity.FieldsData)
-		// Re-read so the payload carries the row's new updated_at; consumers
-		// that version by it would otherwise sit one edit behind.
-		if fresh, err := s.entities.FindByID(ctx, entityID); err == nil && fresh != nil {
-			entity = fresh
-		}
-		entity.FieldsData = fieldsData
-		s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
-		s.notifyFieldsChanged(ctx, entity, oldFields, fieldsData)
+	// Carry the new fields on the payload.
+	// Re-read so the payload carries the row's new updated_at; consumers
+	// that version by it would otherwise sit one edit behind.
+	if fresh, err := s.entities.FindByID(ctx, entityID); err == nil && fresh != nil {
+		entity = fresh
 	}
-	slog.Info("entity fields updated", slog.String("entity_id", entityID))
-	return nil
+	entity.FieldsData = fieldsData
+	s.publishEntity(ctx, "updated", entity.CampaignID, entityID, entity)
+	s.notifyFieldsChanged(ctx, entity, oldFields, fieldsData)
 }
 
 // UpdateFieldOverrides persists per-entity field customizations (added, hidden,
