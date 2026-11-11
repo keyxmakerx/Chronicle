@@ -2,6 +2,7 @@ package ai_workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +27,11 @@ type reqRepo struct {
 	mu   sync.Mutex
 	reqs []*connector.Request
 	conn *connector.Connection
+	// race runs once before the first move, to stand in for a second Apply
+	// that wins between this one's read and its claim.
+	race func(*reqRepo)
+	// failMoveTo makes a move into that status fail, as a database error would.
+	failMoveTo string
 }
 
 func (r *reqRepo) Replace(context.Context, *connector.Connection) (int64, error) { return 1, nil }
@@ -113,12 +119,19 @@ func (r *reqRepo) Request(_ context.Context, campaignID, userID string, id int64
 	return nil, nil
 }
 
-func (r *reqRepo) FinishRequest(_ context.Context, campaignID, userID string, id int64, status, outcome string, _ time.Time) (bool, error) {
+func (r *reqRepo) MoveRequest(_ context.Context, campaignID, userID string, id int64, from, to, outcome string, _ time.Time) (bool, error) {
+	if race := r.race; race != nil {
+		r.race = nil
+		race(r)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if to == r.failMoveTo {
+		return false, errors.New("db down")
+	}
 	for _, q := range r.reqs {
-		if q.ID == id && q.CampaignID == campaignID && userID == r.owner() && q.Status == connector.RequestWaiting {
-			q.Status, q.Outcome = status, outcome
+		if q.ID == id && q.CampaignID == campaignID && userID == r.owner() && q.Status == from {
+			q.Status, q.Outcome = to, outcome
 			return true, nil
 		}
 	}
@@ -243,6 +256,58 @@ func TestRequest_ApplyTwiceWritesOnce(t *testing.T) {
 	}
 }
 
+// Two Applies that both read the request as waiting still write once: the
+// claim is one conditional update, and the loser is refused before it writes.
+func TestRequest_OverlappingApplyIsRefused(t *testing.T) {
+	h, repo, m, _ := requestRig(t)
+	repo.race = func(r *reqRepo) {
+		r.mu.Lock()
+		r.reqs[0].Status = connector.RequestApplying
+		r.mu.Unlock()
+	}
+	rec := post(t, h.CommitImport, "/x", url.Values{"markdown_source": {askedTable}, "rec_0_include": {"on"}, "ai_request": {"1"}})
+	if rec.Code == http.StatusOK || !strings.Contains(rec.Body.String(), "already being applied") {
+		t.Errorf("overlapping apply: %d %s", rec.Code, rec.Body)
+	}
+	if len(m.doc.Tables) != 0 {
+		t.Errorf("the loser wrote %d tables", len(m.doc.Tables))
+	}
+}
+
+// When settling fails after the changes are written, the request stays
+// claimed, so it can't be applied again, and the owner still sees the result.
+func TestRequest_SettleFailsAfterCommit(t *testing.T) {
+	h, repo, m, id := requestRig(t)
+	repo.failMoveTo = connector.RequestAnswered
+	form := url.Values{"markdown_source": {askedTable}, "rec_0_include": {"on"}, "ai_request": {"1"}}
+	rec := post(t, h.CommitImport, "/x", form)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Made 1 of 1 change.") {
+		t.Fatalf("apply: %d %s", rec.Code, rec.Body)
+	}
+	if q := repo.reqs[id-1]; q.Status != connector.RequestApplying {
+		t.Errorf("status = %q, want it still claimed", q.Status)
+	}
+	if rec := post(t, h.CommitImport, "/x", form); rec.Code == http.StatusOK || len(m.doc.Tables) != 1 {
+		t.Errorf("second apply: %d, tables = %d", rec.Code, len(m.doc.Tables))
+	}
+}
+
+// Turning a request down after it was applied says so instead of claiming
+// nothing changed.
+func TestRequest_TurnDownAfterApplyIsRefused(t *testing.T) {
+	h, repo, _, id := requestRig(t)
+	if rec := post(t, h.CommitImport, "/x", url.Values{"markdown_source": {askedTable}, "rec_0_include": {"on"}, "ai_request": {"1"}}); rec.Code != http.StatusOK {
+		t.Fatalf("apply: %d %s", rec.Code, rec.Body)
+	}
+	rec := post(t, h.TurnDownRequest, "/x", nil, "rid", "1")
+	if rec.Code == http.StatusOK || !strings.Contains(rec.Body.String(), "no longer waiting") {
+		t.Errorf("turn down: %d %s", rec.Code, rec.Body)
+	}
+	if q := repo.reqs[id-1]; q.Status != connector.RequestAnswered {
+		t.Errorf("status = %q", q.Status)
+	}
+}
+
 // A request's page text is one fold away in its review, escaped; a paste's
 // isn't (the owner already has it).
 func TestRequest_ReviewShowsText(t *testing.T) {
@@ -301,7 +366,7 @@ func TestRequest_TurnDownAndList(t *testing.T) {
 	if strings.Contains(html, "theirs") {
 		t.Error("listed another campaign's request")
 	}
-	if rec := post(t, h.TurnDownRequest, "/x", nil, "rid", "2"); rec.Code != http.StatusOK || repo.reqs[1].Status != connector.RequestWaiting {
+	if rec := post(t, h.TurnDownRequest, "/x", nil, "rid", "2"); rec.Code == http.StatusOK || repo.reqs[1].Status != connector.RequestWaiting {
 		t.Errorf("turned down another campaign's request: %d %+v", rec.Code, repo.reqs[1])
 	}
 	rec = post(t, h.TurnDownRequest, "/x", nil, "rid", "1")

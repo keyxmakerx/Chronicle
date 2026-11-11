@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 )
 
@@ -250,17 +252,62 @@ func TestService_RequestAnswers(t *testing.T) {
 	if err != nil || got.Body != goodBlocks {
 		t.Fatalf("got %+v, %v", got, err)
 	}
+	if err := svc.Answered(ctx, "camp-1", "owner-1", q.ID, "x"); err == nil {
+		t.Error("a request nobody claimed was settled")
+	}
+	if _, err := svc.ClaimRequest(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ClaimRequest(ctx, "camp-1", "owner-1", q.ID); err == nil {
+		t.Error("a claimed request was claimed again")
+	}
 	if err := svc.Answered(ctx, "camp-1", "owner-1", q.ID, "2 applied, 0 left out"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.WaitingRequest(ctx, "camp-1", "owner-1", q.ID); err == nil {
 		t.Error("an answered request opened again")
 	}
-	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); err != nil {
-		t.Fatal(err)
+	// It was applied, so turning it down must not say nothing changed.
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); !isConflict(err) {
+		t.Errorf("turn down after apply = %v, want a conflict", err)
 	}
 	if w, _ := svc.Waiting(ctx, "camp-1", "owner-1"); len(w) != 0 {
 		t.Errorf("still waiting: %+v", w)
+	}
+}
+
+func isConflict(err error) bool {
+	var ae *apperror.AppError
+	return errors.As(err, &ae) && ae.Code == http.StatusConflict
+}
+
+// A commit that fails gives the request back, so it can be applied or turned
+// down; a request still waiting turns down once.
+func TestService_ReleaseAndTurnDown(t *testing.T) {
+	s, sess, _ := askRig(t)
+	svc := s.Asks.(*Service)
+	ctx := context.Background()
+	q, err := svc.Ask(ctx, sess.Conn, "x", goodBlocks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ClaimRequest(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); !isConflict(err) {
+		t.Errorf("turn down while applying = %v, want a conflict", err)
+	}
+	if err := svc.ReleaseRequest(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.WaitingRequest(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Errorf("released request not waiting: %v", err)
+	}
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); !isConflict(err) {
+		t.Errorf("second turn down = %v, want a conflict", err)
 	}
 }
 

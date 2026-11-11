@@ -80,10 +80,10 @@ func TestRepoIntegration_PerPerson(t *testing.T) {
 	if q, _ := repo.Request(ctx, camp, owner, pq); q != nil {
 		t.Error("the owner opened the player's request")
 	}
-	if ok, _ := repo.FinishRequest(ctx, camp, owner, pq, RequestTurnedDown, "x", now); ok {
+	if ok, _ := repo.MoveRequest(ctx, camp, owner, pq, RequestWaiting, RequestTurnedDown, "x", now); ok {
 		t.Error("the owner answered the player's request")
 	}
-	if ok, err := repo.FinishRequest(ctx, camp, player, pq, RequestAnswered, "1 applied", now); err != nil || !ok {
+	if ok, err := repo.MoveRequest(ctx, camp, player, pq, RequestWaiting, RequestAnswered, "1 applied", now); err != nil || !ok {
 		t.Fatalf("the player's answer: %v %v", ok, err)
 	}
 

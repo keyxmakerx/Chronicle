@@ -95,7 +95,10 @@ type Request struct {
 
 // A request's status.
 const (
-	RequestWaiting    = "waiting"
+	RequestWaiting = "waiting"
+	// RequestApplying is held while an Apply writes, so a second Apply of
+	// the same request finds it taken instead of writing it twice.
+	RequestApplying   = "applying"
 	RequestAnswered   = "answered"
 	RequestTurnedDown = "turned_down"
 )

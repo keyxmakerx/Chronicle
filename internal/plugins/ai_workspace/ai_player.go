@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -338,6 +339,14 @@ func (h *Handler) PlayerApply(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// Claimed after the plan and before the first write: a second Apply of
+	// the same request is refused instead of patching the sheets again. A
+	// failed patch only counts as failed, so there is no commit to undo.
+	if rid > 0 {
+		if _, err := h.connector.ClaimRequest(ctx, cc.Campaign.ID, userID, rid); err != nil {
+			return err
+		}
+	}
 	applied, failed := 0, 0
 	var names []string
 	for _, ch := range changes {
@@ -357,7 +366,10 @@ func (h *Handler) PlayerApply(c *echo.Context) error {
 	}
 	if rid > 0 {
 		if err := h.connector.Answered(ctx, cc.Campaign.ID, userID, rid, outcome); err != nil {
-			return err
+			// The sheets are already patched; the request stays claimed so it
+			// cannot be applied again, and the audit entry below still lands.
+			slog.Error("ai-workspace: settling applied player request",
+				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		}
 	}
 	if h.audit != nil && applied > 0 {

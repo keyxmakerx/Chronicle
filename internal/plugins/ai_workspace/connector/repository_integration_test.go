@@ -298,13 +298,13 @@ func TestRepoIntegration_Requests(t *testing.T) {
 		t.Fatalf("request = %+v, %v", q, err)
 	}
 
-	if ok, err := repo.FinishRequest(ctx, other, otherUser, ids[0], RequestAnswered, "x", now); err != nil || ok {
+	if ok, err := repo.MoveRequest(ctx, other, otherUser, ids[0], RequestWaiting, RequestAnswered, "x", now); err != nil || ok {
 		t.Errorf("answered from another campaign: %v %v", ok, err)
 	}
-	if ok, err := repo.FinishRequest(ctx, camp, user, ids[0], RequestAnswered, "2 applied, 0 left out", now); err != nil || !ok {
+	if ok, err := repo.MoveRequest(ctx, camp, user, ids[0], RequestWaiting, RequestAnswered, "2 applied, 0 left out", now); err != nil || !ok {
 		t.Fatalf("answer: %v %v", ok, err)
 	}
-	if ok, _ := repo.FinishRequest(ctx, camp, user, ids[0], RequestTurnedDown, "y", now); ok {
+	if ok, _ := repo.MoveRequest(ctx, camp, user, ids[0], RequestWaiting, RequestTurnedDown, "y", now); ok {
 		t.Error("an answered request was answered again")
 	}
 	if q, _ := repo.Request(ctx, camp, user, ids[0]); q.Status != RequestAnswered || q.Outcome != "2 applied, 0 left out" || q.DecidedAt == nil {
@@ -313,7 +313,7 @@ func TestRepoIntegration_Requests(t *testing.T) {
 	if _, err := add(camp, conn, "room again"); err != nil {
 		t.Errorf("answering one should make room: %v", err)
 	}
-	if _, err := repo.FinishRequest(ctx, camp, user, ids[1], RequestTurnedDown, "nothing changed", now); err != nil {
+	if _, err := repo.MoveRequest(ctx, camp, user, ids[1], RequestWaiting, RequestTurnedDown, "nothing changed", now); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.PruneRequests(ctx, camp, user, 1); err != nil {

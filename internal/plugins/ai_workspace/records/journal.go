@@ -58,7 +58,7 @@ func (run *lookupRun) journal() ([]JournalNote, error) {
 	if run.l.Journal == nil {
 		return nil, badRequestf("notes can't be looked up on this server")
 	}
-	if !run.director() {
+	if !run.director() && !run.a.ReadsOwnNotes {
 		return nil, badRequestf("your notes are left out while your AI sees what players see; choose \"What you see\" to include them")
 	}
 	if !run.journalRead {
@@ -71,7 +71,8 @@ func (run *lookupRun) journal() ([]JournalNote, error) {
 // canChange reports whether a note another member wrote may be changed by a
 // `note` block (title and text), with its writer. Player Notes never may.
 func (run *lookupRun) canChange(n JournalNote) (NoteWriter, bool) {
-	if n.PlayerNote || n.AuthorID == run.a.UserID || run.l.NoteAccess == nil {
+	// A member's key never changes anything: note blocks are the owner's.
+	if n.PlayerNote || n.AuthorID == run.a.UserID || run.l.NoteAccess == nil || run.a.ReadsOwnNotes {
 		return NoteWriter{}, false
 	}
 	if run.access == nil {

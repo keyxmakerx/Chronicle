@@ -94,6 +94,12 @@ func TestPlayerKey_ReadsAsThePlayer(t *testing.T) {
 	if a.UserID != "player-1" || a.Role != int(campaigns.RolePlayer) || a.CanAuthorDmOnly() {
 		t.Fatalf("actor = %+v, want player-1 as a player", a)
 	}
+	if !a.ReadsOwnNotes {
+		t.Error("a player's key can't read the player's own notes")
+	}
+	if safe := actorFor(&Connection{UserID: "owner-1", Privacy: aiexport.PrivacyModeSafe}); safe.ReadsOwnNotes {
+		t.Error("the owner's players-view key reads notes")
+	}
 	own := actorFor(&Connection{UserID: "owner-1", Privacy: aiexport.PrivacyModePermitted})
 	if own.Role != int(campaigns.RoleOwner) {
 		t.Fatalf("owner's permitted key reads as role %d", own.Role)
@@ -133,8 +139,8 @@ func TestPlayerKey_OnePerPersonAndOwnRequests(t *testing.T) {
 	if _, err := svc.WaitingRequest(ctx, "camp-1", "owner-1", q.ID); err == nil {
 		t.Error("the owner opened the player's request")
 	}
-	if err := svc.TurnDown(ctx, "camp-1", "player-2", q.ID); err != nil {
-		t.Fatal(err)
+	if err := svc.TurnDown(ctx, "camp-1", "player-2", q.ID); err == nil {
+		t.Fatal("another player turned down player-1's request")
 	}
 	if w, _ := svc.Waiting(ctx, "camp-1", "player-1"); len(w) != 1 {
 		t.Error("another player turned down player-1's request")

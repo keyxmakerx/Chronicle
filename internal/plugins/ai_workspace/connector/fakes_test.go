@@ -238,13 +238,13 @@ func (r *memRepo) Request(_ context.Context, campaignID, userID string, id int64
 	return nil, nil
 }
 
-func (r *memRepo) FinishRequest(_ context.Context, campaignID, userID string, id int64, status, outcome string, at time.Time) (bool, error) {
+func (r *memRepo) MoveRequest(_ context.Context, campaignID, userID string, id int64, from, to, outcome string, at time.Time) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, q := range r.reqs {
-		if q.ID == id && q.CampaignID == campaignID && r.userOf(q.ConnectionID) == userID && q.Status == RequestWaiting {
+		if q.ID == id && q.CampaignID == campaignID && r.userOf(q.ConnectionID) == userID && q.Status == from {
 			t := at
-			q.Status, q.Outcome, q.DecidedAt = status, outcome, &t
+			q.Status, q.Outcome, q.DecidedAt = to, outcome, &t
 			return true, nil
 		}
 	}
