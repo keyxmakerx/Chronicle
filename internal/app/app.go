@@ -33,6 +33,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	"github.com/keyxmakerx/chronicle/internal/updatehealth"
 )
 
 // App holds all shared dependencies and the Echo HTTP server instance.
@@ -184,6 +185,11 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 // setupMiddleware registers global middleware on the Echo instance.
 // Order matters: outermost (recovery) runs first, innermost (CSRF) runs last.
 func (a *App) setupMiddleware() {
+	// Update health counts finished requests against the changed features.
+	// It sits outside panic recovery so a recovered panic, which leaves only
+	// a written 500 behind, is still counted as a failure.
+	a.Echo.Use(updateHealthCounter())
+
 	// Panic recovery -- must be outermost to catch panics from all other middleware.
 	a.Echo.Use(middleware.Recovery())
 
@@ -401,6 +407,9 @@ func (a *App) errorHandler(c *echo.Context, err error) {
 	// after the status is known and before anything is written, so it
 	// observes exactly the code and error the client is about to receive.
 	_ = observability.RecordHTTPError(code, c.Request().Method, c.Path(), c.Request().URL.Path, kind, err)
+	if code >= http.StatusInternalServerError {
+		updatehealth.Fail(c.Request().Method, c.Path(), err.Error())
+	}
 
 	// API requests always get JSON. `error` carries the MACHINE-READABLE
 	// condition (e.g. `sync_api_disabled`, `calendar_rebuilding`), `message`

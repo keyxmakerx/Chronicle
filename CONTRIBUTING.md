@@ -57,6 +57,13 @@ again; CI runs the same command.
   for. The CI "Live checks" job runs them on every pull request and compares
   the pictures they take with main's; a changed picture needs the
   `pictures-approved` label once someone has looked at the report.
+- A change to a feature people use adds an entry to `updatehealth.Changed`
+  (`internal/updatehealth/changed.go`): a new ID, the name a site admin knows
+  it by, the routes that serve it and a page to try it. After the update, the
+  server counts its uses and failures and Site admin Home's Needs you lists it
+  only if it fails, or if it is still short of 10 uses after 14 days. Remove
+  entries that have passed. `internal/wire` fails on a route that matches
+  nothing.
 - `make test-int-local` runs the database-backed tests against the local test
   MariaDB. Those tests skip when no database answers, so a plain `go test`
   can pass without running them. The CI "Database tests" job runs them over

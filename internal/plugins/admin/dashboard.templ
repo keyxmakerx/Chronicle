@@ -8,14 +8,14 @@ import (
 // AdminDashboardPage renders the admin overview: the new-version notice when
 // there is one, what needs attention, then one row of tiles per admin menu
 // section.
-templ AdminDashboardPage(groups []HomeGroup, needs []NeedsItem, recent []ActivityEntry, release *ReleaseNotice) {
+templ AdminDashboardPage(groups []HomeGroup, needs []NeedsItem, uh UpdateHealthView, recent []ActivityEntry, release *ReleaseNotice) {
 	@layouts.App("Home - Admin") {
 		<div class="max-w-5xl mx-auto space-y-6">
 			<h1 class="text-2xl font-bold text-fg">Home</h1>
 
 			@releaseNoticeCard(release)
 
-			@needsYouCard(needs)
+			@needsYouCard(needs, uh)
 
 			for _, g := range groups {
 				<div>
@@ -34,8 +34,9 @@ templ AdminDashboardPage(groups []HomeGroup, needs []NeedsItem, recent []Activit
 }
 
 // needsYouCard lists what the admin has to act on, most urgent first, each row
-// with one button to the page that fixes it.
-templ needsYouCard(items []NeedsItem) {
+// with one button to the page that fixes it. Changed features that passed by
+// use stay out of the list, behind one quiet line under it.
+templ needsYouCard(items []NeedsItem, uh UpdateHealthView) {
 	<div class="card">
 		<h2 class="text-sm font-semibold text-fg mb-3">Needs you</h2>
 		if len(items) == 0 {
@@ -47,13 +48,43 @@ templ needsYouCard(items []NeedsItem) {
 						<span class={ "shrink-0 min-w-[1.75rem] text-center font-mono tabular-nums text-xs font-semibold px-2 py-0.5 rounded-full",
 							templ.KV("bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300", it.Urgent()),
 							templ.KV("bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300", !it.Urgent()) }>{ needsCountLabel(it.Count) }</span>
-						<p class="text-sm text-fg flex-1">{ it.Text }</p>
+						<div class="flex-1 min-w-0">
+							<p class="text-sm text-fg">{ it.Text }</p>
+							if it.Detail != "" {
+								<p class="font-mono text-xs text-fg-muted mt-0.5 break-words">{ it.Detail }</p>
+							}
+						</div>
 						<a href={ templ.SafeURL(it.Href) } class="btn-secondary text-xs shrink-0">{ it.Button }</a>
 					</li>
 				}
 			</ul>
 		}
+		@updateHealthLine(uh)
 	</div>
+}
+
+// updateHealthLine is the quiet sentence about changed features that need
+// nobody, with the passed ones folded behind "Show them".
+templ updateHealthLine(uh UpdateHealthView) {
+	if uh.Line() != "" {
+		if len(uh.Passed) == 0 {
+			<p class="text-xs text-fg-muted pt-3" data-update-health>{ uh.Line() }</p>
+		} else {
+			<details class="pt-2" data-update-health>
+				<summary class="list-none text-xs text-fg-muted cursor-pointer [&::-webkit-details-marker]:hidden">
+					{ uh.Line() } <span class="quiet-word text-xs">Show them</span>
+				</summary>
+				<ul class="mt-1 space-y-1">
+					for _, f := range uh.Passed {
+						<li class="flex items-baseline justify-between gap-3 text-xs">
+							<span class="text-fg">{ f.Name }</span>
+							<span class="font-mono tabular-nums text-fg-muted">{ usesLabel(f.Uses) }</span>
+						</li>
+					}
+				</ul>
+			</details>
+		}
+	}
 }
 
 // recentActivityCard shows the latest admin changes and links to the full log.

@@ -19,6 +19,9 @@ type NeedsItem struct {
 	Count  int
 	Href   string
 	Button string
+	// Detail is an optional second line in small mono type, such as the
+	// last error of a changed feature that fails.
+	Detail string
 	// rank orders the list; lower is more urgent.
 	rank int
 }
@@ -124,6 +127,14 @@ func buildNeedsYou(in needsInput) []NeedsItem {
 	}
 	sort.SliceStable(items, func(i, j int) bool { return items[i].rank < items[j].rank })
 	return items
+}
+
+// mergeNeeds adds more rows to a built list and keeps it most urgent first;
+// rows of equal urgency keep their order, the built list's first.
+func mergeNeeds(items, more []NeedsItem) []NeedsItem {
+	out := append(append([]NeedsItem{}, items...), more...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].rank < out[j].rank })
+	return out
 }
 
 // plural picks the singular or plural sentence for a count and keeps the

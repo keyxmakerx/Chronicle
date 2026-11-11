@@ -80,6 +80,9 @@ type Handler struct {
 	longTerm LongTermTrashSizer
 	// releaseNotice is the new-version notice on Home; nil shows none.
 	releaseNotice *ReleaseNoticeService
+	// updateHealth reports the features this release changed; nil adds
+	// nothing to Needs you.
+	updateHealth UpdateHealthReporter
 	// checkup is the site check-up behind the top bar's shield; nil until wired.
 	checkup       *CheckupService
 	checkupRunCtx context.Context
@@ -450,7 +453,17 @@ func (h *Handler) Dashboard(c *echo.Context) error {
 		}
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, recent, h.releaseNotice.Notice(ctx, auth.GetUserID(c))))
+	var uh UpdateHealthView
+	if h.updateHealth != nil {
+		if statuses, err := h.updateHealth.Report(ctx); err != nil {
+			slog.Warn("admin dashboard: reading update health failed", slog.Any("error", err))
+		} else {
+			needs = mergeNeeds(needs, updateHealthNeeds(statuses, time.Now()))
+			uh = UpdateHealthView{Passed: passedFeatures(statuses), Counting: countingFeatures(statuses)}
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, uh, recent, h.releaseNotice.Notice(ctx, auth.GetUserID(c))))
 }
 
 // StatusFigures are the live figures on the Site admin status strip.
