@@ -120,7 +120,7 @@ var homeBlockTypes = []string{
 	"welcome_banner", "quick_actions", "category_grid", "recent_pages", "entity_list", "text_block",
 	"pinned_pages", "calendar_preview", "timeline_preview", "relations_graph", "calendar_full",
 	"timeline_full", "relations_graph_full", "map_full", "session_tracker", "coming_up",
-	"activity_feed", "sync_status",
+	"activity_feed", "sync_status", "start_here", "at_a_glance",
 }
 
 // homeTab is one home the Customizer's Home pages area offers. Label and

@@ -146,7 +146,8 @@ templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntiti
 			} else {
 				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
 					for ci, col := range row.Columns {
-						<div class={ dashColSpan(col.Width) }>
+						// Blocks stacked in one column keep the rows' own gap.
+						<div class={ dashColSpan(col.Width), "min-w-0 space-y-6" }>
 							for bi, block := range col.Blocks {
 								if !repeats[[3]int{ri, ci, bi}] {
 									@DashboardBlockSwitch(cc, block, recentEntities)

@@ -134,3 +134,43 @@ func TestLastNightToWriteUp(t *testing.T) {
 		})
 	}
 }
+
+func TestLastGameNight(t *testing.T) {
+	d := func(s string) *string { return &s }
+	tests := []struct {
+		name string
+		list []Session
+		want string
+	}{
+		{"latest past one-off, written or not", []Session{
+			{ID: "oct9", Status: StatusPlanned, ScheduledDate: d("2026-10-09")},
+			{ID: "oct20", Status: StatusCompleted, ScheduledDate: d("2026-10-20")},
+			{ID: "tonight", Status: StatusPlanned, ScheduledDate: d("2026-10-24")},
+			{ID: "weekly", Status: StatusPlanned, ScheduledDate: d("2026-10-22"), IsRecurring: true},
+			{ID: "off", Status: StatusCancelled, ScheduledDate: d("2026-10-23")},
+			{ID: "undated", Status: StatusPlanned},
+		}, "oct20"},
+		{"a night from long ago still counts", []Session{
+			{ID: "2024", Status: StatusCompleted, ScheduledDate: d("2024-01-05")},
+		}, "2024"},
+		{"nothing before today", []Session{
+			{ID: "soon", Status: StatusPlanned, ScheduledDate: d("2026-10-30")},
+		}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockSessionRepo{listByCampaignFn: func(context.Context, string) ([]Session, error) { return tt.list, nil }}
+			got, err := NewSessionService(repo, nil, nil).LastGameNight(context.Background(), "c1", "2026-10-24")
+			if err != nil {
+				t.Fatal(err)
+			}
+			id := ""
+			if got != nil {
+				id = got.ID
+			}
+			if id != tt.want {
+				t.Errorf("got %q, want %q", id, tt.want)
+			}
+		})
+	}
+}

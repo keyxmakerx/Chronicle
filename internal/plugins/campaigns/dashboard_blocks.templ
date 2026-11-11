@@ -15,7 +15,9 @@ package campaigns
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
+	"strings"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -59,6 +61,10 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			// Coming up replaced the session tracker; a layout saved with
 			// the old block shows the new card in its place.
 			@dashComingUp(cc)
+		case "start_here":
+			@dashStartHere(cc, block.Config)
+		case "at_a_glance":
+			@dashAtAGlance(cc)
 		case "activity_feed":
 			// The activity embed is the owner's (audit routes), so nobody
 			// else is shown a card that can only fail to load.
@@ -766,6 +772,44 @@ templ dashComingUp(cc *CampaignContext) {
 			<span class="inline-block w-48 h-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 		</div>
 	</div>
+}
+
+// dashStartHere is the "Start here" block's placeholder. The entities plugin
+// draws the page the owner picked (config entity_id), or nothing for a viewer
+// who can't open it; the owner gets a slot saying how to pick one.
+templ dashStartHere(cc *CampaignContext, config map[string]any) {
+	<div
+		data-block="start-here"
+		hx-get={ fmt.Sprintf("/campaigns/%s/start-here?page=%s", cc.Campaign.ID, url.QueryEscape(dashConfigString(config, "entity_id"))) }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+		aria-busy="true"
+	>
+		<span class="inline-block w-24 h-4 mb-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+		<span class="block h-16 rounded-xl bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+	</div>
+}
+
+// dashAtAGlance is the "At a glance" block's placeholder. The facts come from
+// several plugins, so internal/app serves them (at_a_glance.go); an empty
+// answer removes the block.
+templ dashAtAGlance(cc *CampaignContext) {
+	<div
+		data-block="at-a-glance"
+		hx-get={ fmt.Sprintf("/campaigns/%s/at-a-glance", cc.Campaign.ID) }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+		aria-busy="true"
+	>
+		<span class="inline-block w-24 h-4 mb-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+		<span class="block h-24 rounded-xl bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+	</div>
+}
+
+// dashConfigString reads a string option from a block's config, or "".
+func dashConfigString(config map[string]any, key string) string {
+	s, _ := config[key].(string)
+	return strings.TrimSpace(s)
 }
 
 // dashActivityFeed renders recent campaign activity (audit log) as a feed.

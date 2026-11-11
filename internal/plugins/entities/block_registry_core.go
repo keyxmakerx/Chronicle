@@ -414,6 +414,22 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
+		Type: "start_here", Label: "Start here", Icon: "fa-flag",
+		Description: "One page a new reader should open first",
+		Contexts: []string{"dashboard"},
+		ConfigFields: []ConfigFieldMeta{
+			// "page" renders as a page search in the Customizer.
+			{Key: "entity_id", Label: "Page", Type: "page", Hint: "Players see it only if they can open the page."},
+		},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "at_a_glance", Label: "At a glance", Icon: "fa-list-ul",
+		Description: "The game system, next game, last session and page count",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
 		Type: "activity_feed", Label: "Activity Feed", Icon: "fa-clock-rotate-left",
 		Description: "Recent campaign activity log",
 		Contexts: []string{"dashboard"},
