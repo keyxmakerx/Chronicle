@@ -17,6 +17,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/hostinfo"
 )
 
 // Service is the admin-facing backup operations interface. Hidden behind
@@ -155,8 +157,11 @@ func (s *service) RunBackupKeeping(ctx context.Context, keepDays int) (*RunResul
 		args = append(args, "--retention", strconv.Itoa(keepDays))
 	}
 	cmd := exec.CommandContext(runCtx, "sh", args...)
+	// The script stamps CHRONICLE_VERSION into the manifest; an image built
+	// without it would otherwise be recorded as "unknown".
+	cmd.Env = append(cmd.Environ(), "CHRONICLE_VERSION="+hostinfo.Version())
 	if s.cfg.BackupDir != "" {
-		cmd.Env = append(cmd.Environ(), "BACKUP_DIR="+s.cfg.BackupDir)
+		cmd.Env = append(cmd.Env, "BACKUP_DIR="+s.cfg.BackupDir)
 	}
 	// Run the shell in its own process group so any descendants spawned
 	// by the script (mysqldump, tar, gzip) are killed together when the

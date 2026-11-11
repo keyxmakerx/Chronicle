@@ -196,3 +196,19 @@ func TestRunBackup_ContextCancel(t *testing.T) {
 		t.Errorf("cancel did not stop child promptly: %s", elapsed)
 	}
 }
+
+// A build with CHRONICLE_VERSION unset must still hand the script a version,
+// or every manifest it writes says "unknown".
+func TestRunBackup_StampsVersion(t *testing.T) {
+	t.Setenv("CHRONICLE_VERSION", "")
+	script := writeShim(t, `echo "v=$CHRONICLE_VERSION"`, 0)
+	svc := NewService(Config{ScriptPath: script, Timeout: 5 * time.Second})
+
+	r, err := svc.RunBackup(context.Background())
+	if err != nil {
+		t.Fatalf("RunBackup: %v", err)
+	}
+	if strings.Contains(r.Stdout, "v=\n") || !strings.Contains(r.Stdout, "v=") {
+		t.Errorf("script saw no version: %q", r.Stdout)
+	}
+}
