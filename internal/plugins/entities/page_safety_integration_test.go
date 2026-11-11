@@ -73,7 +73,7 @@ func TestPageSafety_Integration(t *testing.T) {
 		if err := svc.UpdateEntry(asKim, mill.ID, j, h); err != nil {
 			t.Fatal(err)
 		}
-		hist, _, err := safety.History(ctx, mill.ID, "")
+		hist, _, err := safety.History(ctx, mill.ID, "", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -137,7 +137,7 @@ func TestPageSafety_Integration(t *testing.T) {
 	})
 
 	t.Run("restore puts an old version back as a new version", func(t *testing.T) {
-		hist, _, _ := safety.History(ctx, mill.ID, "")
+		hist, _, _ := safety.History(ctx, mill.ID, "", nil)
 		var sams *VersionView
 		for i := range hist {
 			if hist[i].UserName == "Sam" && strings.Contains(derefStr(hist[i].EntryHTML), "Lamp oil") &&
@@ -267,7 +267,7 @@ func TestPageSafety_Integration(t *testing.T) {
 		if err := svc.UpdateEntry(asKim, id, j, h); err != nil {
 			t.Fatal(err)
 		}
-		hist, _, _ := safety.History(ctx, id, "")
+		hist, _, _ := safety.History(ctx, id, "", nil)
 		if len(hist) != 2 || hist[1].Kind != VersionBaseline || derefStr(hist[1].EntryHTML) != "<p>old text</p>" {
 			t.Errorf("want edit + baseline of the old text, got %+v", hist)
 		}

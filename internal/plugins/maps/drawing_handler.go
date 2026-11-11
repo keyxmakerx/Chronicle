@@ -512,6 +512,7 @@ func (h *DrawingHandler) ListLayers(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	layers = VisibleLayers(layers, cc.VisibilityRole())
 	return c.JSON(http.StatusOK, layers)
 }
 

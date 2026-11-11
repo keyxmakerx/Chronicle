@@ -619,6 +619,13 @@ func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, ex
 // (S1 — matches ListMarkers).
 func (s *drawingService) ListDrawings(ctx context.Context, mapID string, role int, userID string) ([]Drawing, error) {
 	drawings, err := s.repo.ListDrawings(ctx, mapID, role, userID)
+	if err == nil && role < permissions.RoleOwner {
+		// Whatever sits on a "gm" layer is the Director's, whatever the
+		// drawing's own visibility says.
+		if drawings, err = s.withoutGMLayers(ctx, mapID, drawings); err != nil {
+			return nil, err
+		}
+	}
 	if err != nil || !shadowHidingApplies(role) {
 		return drawings, err
 	}
@@ -643,6 +650,45 @@ func (s *drawingService) ListDrawings(ctx context.Context, mapID string, role in
 		}
 	}
 	return kept, nil
+}
+
+// withoutGMLayers drops drawings that sit on a "gm" layer.
+func (s *drawingService) withoutGMLayers(ctx context.Context, mapID string, ds []Drawing) ([]Drawing, error) {
+	layers, err := s.repo.ListLayers(ctx, mapID)
+	if err != nil {
+		return nil, err
+	}
+	gm := map[string]bool{}
+	for _, l := range layers {
+		if l.LayerType == "gm" {
+			gm[l.ID] = true
+		}
+	}
+	if len(gm) == 0 {
+		return ds, nil
+	}
+	kept := make([]Drawing, 0, len(ds))
+	for _, d := range ds {
+		if d.LayerID == nil || !gm[*d.LayerID] {
+			kept = append(kept, d)
+		}
+	}
+	return kept, nil
+}
+
+// VisibleLayers is the layer list a viewer of that role may see: a "gm"
+// layer is the Director's own.
+func VisibleLayers(layers []Layer, role int) []Layer {
+	if role >= permissions.RoleOwner {
+		return layers
+	}
+	out := make([]Layer, 0, len(layers))
+	for _, l := range layers {
+		if l.LayerType != "gm" {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // WithholdImages implements DrawingService.
