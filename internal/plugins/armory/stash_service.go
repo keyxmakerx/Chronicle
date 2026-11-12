@@ -842,6 +842,15 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 	if !ok {
 		return nil, nil
 	}
+	// Acting for a hero is not seeing it: a page hidden from the viewer
+	// shows no panel, so its name and log never reach them.
+	seen, err := s.viewable(ctx, campaignID, a, ref.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !seen {
+		return nil, nil
+	}
 	open, err := s.IsDowntimeOpen(ctx, campaignID)
 	if err != nil {
 		return nil, err

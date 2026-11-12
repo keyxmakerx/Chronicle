@@ -211,3 +211,18 @@ func TestHeroLog_Renders(t *testing.T) {
 		}
 	}
 }
+
+// A viewer who may act for a hero still gets no panel for a page hidden from
+// them, so its name and log stay out of the response.
+func TestCharacterPanel_HiddenHeroGivesNoPanel(t *testing.T) {
+	f, _ := placesFx()
+	f.vis.hidden["c2"] = true
+	scribe := Actor{"u9", rScribe}
+	v, err := f.svc.CharacterPanel(context.Background(), "camp", scribe, "c2")
+	if err != nil || v != nil {
+		t.Fatalf("panel for a hidden hero: %v %v", v, err)
+	}
+	if v, err := f.svc.CharacterPanel(context.Background(), "camp", gm, "c2"); err != nil || v == nil {
+		t.Fatalf("owner should still see it: %v %v", v, err)
+	}
+}
