@@ -893,6 +893,8 @@ const (
 	BlockActivityFeed    = "activity_feed"    // Recent campaign activity log.
 	BlockSyncStatus      = "sync_status"      // Foundry VTT sync health/status.
 	BlockComingUp        = "coming_up"        // Next game nights, what the viewer owes the table, next events.
+	BlockStartHere       = "start_here"       // One page the owner picks, as the home's lead (entities plugin).
+	BlockAtAGlance       = "at_a_glance"      // System, next game, last session, page count (internal/app).
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -921,6 +923,8 @@ var ValidBlockTypes = map[string]bool{
 	BlockActivityFeed:    true,
 	BlockSyncStatus:      true,
 	BlockComingUp:        true,
+	BlockStartHere:       true,
+	BlockAtAGlance:       true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,

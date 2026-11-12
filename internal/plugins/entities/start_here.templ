@@ -1,0 +1,44 @@
+// start_here.templ draws the campaign home's "Start here" block, which the
+// home's placeholder (campaigns.dashStartHere) loads. It marks the shared
+// block parts so the Material page look can set it as the page's lead.
+package entities
+
+// startHereBlock replaces the placeholder (hx-swap outerHTML).
+templ startHereBlock(v startHereView) {
+	<section class="cb-start" data-block="start-here" aria-labelledby="start-here-label">
+		<h2 id="start-here-label" class="cb-head cb-start-label text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">
+			<i class="fa-solid fa-flag mr-1.5" aria-hidden="true"></i>Start here
+		</h2>
+		if v.Empty {
+			<div class="cb-start-slot border border-dashed border-edge rounded-lg px-4 py-3 text-sm text-fg-secondary">
+				if v.Gone {
+					<p>The page picked here was deleted. Pick another one for new readers to open first.</p>
+				} else {
+					<p>Pick the page a new reader should open first, like the setting or the party's first night.</p>
+				}
+				<p class="mt-1 text-xs text-fg-muted">
+					Only you see this until a page is picked.
+					<a href={ templ.SafeURL("/campaigns/" + v.CampaignID + "/customize/home") } class="text-accent hover:underline">Pick it in the Customizer</a>
+				</p>
+			</div>
+		} else {
+			<a
+				href={ templ.SafeURL(v.Href) }
+				class="cb-start-lead card block px-4 py-3 hover:shadow-md group"
+				if v.DMOnly {
+					data-dm-only
+				}
+			>
+				<span class="cb-start-name block font-semibold text-fg group-hover:text-accent transition-colors">
+					{ v.Name }
+					if v.DMOnly {
+						<i class="cb-dm fa-solid fa-lock ml-1 text-xs text-fg-muted" aria-label="Hidden from players"></i>
+					}
+				</span>
+				if v.Line != "" {
+					<span class="cb-start-line block mt-1 text-sm text-fg-secondary">{ v.Line }</span>
+				}
+			</a>
+		}
+	</section>
+}

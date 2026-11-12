@@ -612,7 +612,13 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
-	// The DM team's home starts with the setup steps (first_run_home.go).
+	// Members start on the front page, and the DM team's home adds the setup
+	// steps (first_run_home.go). Guests keep the built-in guest home.
+	if home, err := campaign.SetRoleDashboardJSON(HomeDefault, frontPageHome(false)); err == nil {
+		campaign.DashboardLayout = home
+	} else {
+		slog.Warn("new campaign: front page not saved", slog.Any("error", err))
+	}
 	if home, err := campaign.SetRoleDashboardJSON(HomeDirector, starterDirectorHome(campaign.ID)); err == nil {
 		campaign.DashboardLayout = home
 	} else {

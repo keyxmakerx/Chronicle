@@ -4293,6 +4293,27 @@ func (a *App) RegisterRoutes() {
 		},
 	}, campaignService, authService)
 
+	// The home page's "At a glance" sheet, wired here because its facts come
+	// from the addons, sessions and entities plugins.
+	registerAtAGlanceRoutes(e, &atAGlanceHandler{
+		src: glanceSources{
+			Addons: addonService,
+			Nights: sessionsService,
+			Pages:  entityService,
+			NightsHealthy: func() bool {
+				return a.PluginHealth == nil || (a.PluginHealth.IsHealthy(calendar.PluginSlug) && a.PluginHealth.IsHealthy(sessions.SessionsAddonSlug))
+			},
+		},
+		now: time.Now,
+		zone: func(ctx context.Context, userID string) *time.Location {
+			u, err := authService.GetUser(ctx, userID)
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		},
+	}, campaignService, authService)
+
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
 	timelineRepo := timeline.NewTimelineRepository(a.DB)
 	// Wires the calendar selector dropdown, event picker and era

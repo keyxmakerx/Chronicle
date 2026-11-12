@@ -97,6 +97,9 @@ type SessionService interface {
 	// LastNightToWriteUp is the latest one-off night of the past week that
 	// has no recap, for home's "Last night: write it up"; nil when none.
 	LastNightToWriteUp(ctx context.Context, campaignID, today string) (*Session, error)
+	// LastGameNight is the latest planned night dated before today, recap or
+	// not, for the campaign home's "At a glance"; nil when there is none.
+	LastGameNight(ctx context.Context, campaignID, today string) (*Session, error)
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
 	// Attendees / RSVP.
@@ -596,6 +599,30 @@ func (s *sessionService) LastNightToWriteUp(ctx context.Context, campaignID, tod
 		return nil, nil
 	}
 	return full, nil
+}
+
+// LastGameNight finds the latest one-off, not cancelled night dated before
+// today. Recurring nights are left out as LastNightToWriteUp leaves them out:
+// a series has no single night that was "the last session".
+func (s *sessionService) LastGameNight(ctx context.Context, campaignID, today string) (*Session, error) {
+	if _, err := time.Parse("2006-01-02", today); err != nil {
+		return nil, apperror.NewBadRequest("today must be YYYY-MM-DD")
+	}
+	list, err := s.repo.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing sessions for the last night: %w", err))
+	}
+	var latest *Session
+	for i := range list {
+		n := &list[i]
+		if n.IsRecurring || n.Status == StatusCancelled || n.ScheduledDate == nil {
+			continue
+		}
+		if d := *n.ScheduledDate; d < today && (latest == nil || d > *latest.ScheduledDate) {
+			latest = n
+		}
+	}
+	return latest, nil
 }
 
 // --- Attendees / RSVP ---
