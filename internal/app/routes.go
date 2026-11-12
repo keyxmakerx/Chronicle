@@ -5218,6 +5218,12 @@ func (a *App) RegisterRoutes() {
 		slog.Info("placed game-system panels on newer campaigns' creature types", slog.Int("layouts", n))
 	}
 
+	if n, err := repairPanelOnlyLayoutsOnce(context.Background(), settingsRepo, campaignService, entityService); err != nil {
+		slog.Error("repairing panel-only layouts failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("restored the default page on panel-only layouts", slog.Int("layouts", n))
+	}
+
 	// One-time: existing campaigns move to the Material page look
 	// (material_page_look.go). Only a failure to read the marker or list
 	// campaigns runs it again on the next boot.

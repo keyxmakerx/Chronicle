@@ -167,6 +167,8 @@ type PageExtrasPlan struct {
 // reports whether anything changed. Each block is added only when the layout
 // does not already place it, so running it again changes nothing.
 func placePageExtras(layout EntityTypeLayout, plan PageExtrasPlan) (EntityTypeLayout, bool) {
+	stored := layout
+	layout = startFromDefaultIfEmpty(layout)
 	changed := false
 	if plan.SystemPanels && !layoutPlacesBlock(layout, BlockSystemPanels) {
 		layout = insertAfterTitle(layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
@@ -188,7 +190,35 @@ func placePageExtras(layout EntityTypeLayout, plan PageExtrasPlan) (EntityTypeLa
 		layout.Rows = append(layout.Rows, fullWidthRow("row-page-extras", below...))
 		changed = true
 	}
+	if !changed {
+		return stored, false
+	}
 	return layout, changed
+}
+
+// startFromDefaultIfEmpty returns the default page for a layout with no rows.
+// An empty layout draws the default page, so adding a block to it as it stands
+// would leave a page holding only that block.
+func startFromDefaultIfEmpty(layout EntityTypeLayout) EntityTypeLayout {
+	if len(layout.Rows) == 0 {
+		return DefaultLayout()
+	}
+	return layout
+}
+
+// RepairPanelOnlyLayout turns a layout whose only content is the Game System
+// Panels block back into the default page with the block under the title.
+// Such layouts were written by placing the block on an empty layout. Any other
+// layout is returned unchanged with false.
+func RepairPanelOnlyLayout(layout EntityTypeLayout) (EntityTypeLayout, bool) {
+	if len(layout.Rows) != 1 || len(layout.Rows[0].Columns) != 1 {
+		return layout, false
+	}
+	blocks := layout.Rows[0].Columns[0].Blocks
+	if len(blocks) != 1 || blocks[0].Type != BlockSystemPanels {
+		return layout, false
+	}
+	return insertAfterTitle(DefaultLayout(), TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels}), true
 }
 
 // insertAfterTitle puts a block right after the first top-level title block,
@@ -299,7 +329,7 @@ func (s *entityService) PlaceSystemPanels(ctx context.Context, campaignID string
 		if !plans[types[i].ID].SystemPanels || layoutPlacesBlock(types[i].Layout, BlockSystemPanels) {
 			continue
 		}
-		layout := insertAfterTitle(types[i].Layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
+		layout := insertAfterTitle(startFromDefaultIfEmpty(types[i].Layout), TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
 		// Written as is, for the same reason as PlacePageExtras.
 		raw, err := json.Marshal(layout)
 		if err == nil {
