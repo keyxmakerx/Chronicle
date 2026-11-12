@@ -5792,8 +5792,10 @@
           ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, easing: 'ease-in', fill: 'forwards' }).finished.then(function () { if (P.ghost === ghost) P.ghost = null; ghost.remove(); }, function () {});
         } else {
           el.animate([{ transform: 'translate(' + (from.x - g.final.x).toFixed(1) + 'px,' + (from.y - g.final.y).toFixed(1) + 'px)' }, { transform: 'none' }], { duration: ms, easing: slideEase() });
+          // The words change as the card sets off, dimmed and never blank:
+          // an empty sheet in flight reads as a flash.
           var content = el.querySelectorAll('.lf1 > *, .lf2 > *'), fade = Math.round(ms * 0.6);
-          for (var i = 0; i < content.length; i++) content[i].animate([{ opacity: 0 }, { opacity: 1 }], { duration: fade, delay: Math.round(ms * 0.3), easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' });
+          for (var i = 0; i < content.length; i++) content[i].animate([{ opacity: 0.45 }, { opacity: 1 }], { duration: fade, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
         }
       } else if (ghost) { ghost.remove(); P.ghost = null; }
       if (had) el.focus({ preventScroll: true });
