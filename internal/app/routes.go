@@ -4864,6 +4864,7 @@ func (a *App) RegisterRoutes() {
 	}
 	pagePinService := entities.NewPagePinService(entities.NewPagePinRepository(a.DB), entityService, pinsHealthy)
 	entities.RegisterPagePinRoutes(e, entities.NewPagePinHandler(pagePinService), campaignService, authService)
+	entities.RegisterEntityListRoutes(e, entities.NewEntityListHandler(entityService), campaignService, authService)
 
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
