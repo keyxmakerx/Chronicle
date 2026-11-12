@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 // GalleryRepository is the persistence boundary for the gallery.
@@ -27,10 +29,16 @@ type GalleryRepository interface {
 	// Browse lists visible entries only, newest first, with the total.
 	Browse(ctx context.Context, q BrowseQuery) ([]GalleryEntry, int, error)
 	ByPublisher(ctx context.Context, publisher string) ([]GalleryEntry, error)
-	ByStatus(ctx context.Context, status string, limit, offset int) ([]GalleryEntry, int, error)
+	ByStatus(ctx context.Context, statuses []string, limit, offset int) ([]GalleryEntry, int, error)
 	// DuplicateExists is true when the publisher has another live entry with
 	// the same data hash.
 	DuplicateExists(ctx context.Context, publisher, hash, exceptID string) (bool, error)
+	// RefusedExists is true when the publisher has another entry with this data
+	// hash that an admin refused or took down.
+	RefusedExists(ctx context.Context, publisher, hash, exceptID string) (bool, error)
+	// FlagReported sends a still-visible entry back to review with these
+	// reasons, touching only status and reasons. It reports whether it did.
+	FlagReported(ctx context.Context, id string, reasons []string) (bool, error)
 	CountEvents(ctx context.Context, user string, since time.Time) (int, error)
 	AddEvent(ctx context.Context, user string) error
 	// AddReport returns false when this reporter already reported the entry.
@@ -39,6 +47,10 @@ type GalleryRepository interface {
 	ReportedBy(ctx context.Context, reporter string, ids []string) (map[string]bool, error)
 	ClearReports(ctx context.Context, entryID string) error
 }
+
+// ErrGalleryDuplicate is returned by Insert when the publisher already has an
+// entry for that library design (the unique key), so a race reads as a conflict.
+var ErrGalleryDuplicate = errors.New("gallery entry already exists")
 
 type sqlGalleryRepository struct{ db *sql.DB }
 
@@ -77,6 +89,10 @@ func (r *sqlGalleryRepository) Insert(ctx context.Context, e *GalleryEntry) erro
 		`INSERT INTO design_gallery (id, publisher_user_id, source_design_id, kind, system_id, name, note, maker_name, data, data_hash, status, reasons)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.PublisherUserID, src, e.Kind, e.SystemID, e.Name, e.Note, e.MakerName, string(e.Data), e.DataHash, e.Status, reasonsJSON(e.Reasons))
+	var me *mysql.MySQLError
+	if errors.As(err, &me) && me.Number == 1062 {
+		return ErrGalleryDuplicate
+	}
 	if err != nil {
 		return fmt.Errorf("inserting gallery entry: %w", err)
 	}
@@ -180,8 +196,32 @@ func (r *sqlGalleryRepository) ByPublisher(ctx context.Context, publisher string
 	return out, err
 }
 
-func (r *sqlGalleryRepository) ByStatus(ctx context.Context, status string, limit, offset int) ([]GalleryEntry, int, error) {
-	return r.list(ctx, `g.status = ?`, []any{status}, limit, offset)
+func (r *sqlGalleryRepository) ByStatus(ctx context.Context, statuses []string, limit, offset int) ([]GalleryEntry, int, error) {
+	args := make([]any, len(statuses))
+	for i, st := range statuses {
+		args[i] = st
+	}
+	return r.list(ctx, `g.status IN (`+strings.TrimSuffix(strings.Repeat("?,", len(statuses)), ",")+`)`, args, limit, offset)
+}
+
+func (r *sqlGalleryRepository) RefusedExists(ctx context.Context, publisher, hash, exceptID string) (bool, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM design_gallery WHERE publisher_user_id = ? AND data_hash = ? AND id <> ? AND status IN ('rejected','removed')`,
+		publisher, hash, exceptID).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("checking refused gallery data: %w", err)
+	}
+	return n > 0, nil
+}
+
+func (r *sqlGalleryRepository) FlagReported(ctx context.Context, id string, reasons []string) (bool, error) {
+	res, err := r.db.ExecContext(ctx, `UPDATE design_gallery SET status = 'pending', reasons = ? WHERE id = ? AND status = 'visible'`, reasonsJSON(reasons), id)
+	if err != nil {
+		return false, fmt.Errorf("flagging reported entry: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 func (r *sqlGalleryRepository) DuplicateExists(ctx context.Context, publisher, hash, exceptID string) (bool, error) {

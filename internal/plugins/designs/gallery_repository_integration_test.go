@@ -11,6 +11,7 @@ package designs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -64,7 +65,7 @@ func TestDBGalleryBrowseAndReports(t *testing.T) {
 	if page, _, _ := r.Browse(ctx, BrowseQuery{AnySys: true, Limit: 2, Offset: 2}); len(page) != 1 {
 		t.Fatalf("second page = %d", len(page))
 	}
-	if st, n, _ := r.ByStatus(ctx, StatusPending, 10, 0); n != 1 || st[0].Name != "Waiting" || st[0].Reasons[0] != ReasonLink {
+	if st, n, _ := r.ByStatus(ctx, []string{StatusPending}, 10, 0); n != 1 || st[0].Name != "Waiting" || st[0].Reasons[0] != ReasonLink {
 		t.Fatalf("pending = %+v", st)
 	}
 
@@ -117,8 +118,36 @@ func TestDBGalleryDuplicateAndEvents(t *testing.T) {
 	// The same library design cannot be published twice by one user.
 	twin := galleryEntry(alice, KindRoomTheme, "drawsteel", "B", StatusVisible)
 	twin.SourceDesignID = e.SourceDesignID
-	if err := r.Insert(ctx, twin); err == nil {
-		t.Fatal("unique source key not enforced")
+	if err := r.Insert(ctx, twin); !errors.Is(err, ErrGalleryDuplicate) {
+		t.Fatalf("unique source key: err = %v, want ErrGalleryDuplicate", err)
+	}
+	// Refused data is found by hash, whatever it is called now.
+	gone := galleryEntry(alice, KindRoomTheme, "drawsteel", "C", StatusRemoved)
+	gone.DataHash = strings.Repeat("b", 64)
+	if err := r.Insert(ctx, gone); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := r.RefusedExists(ctx, alice, gone.DataHash, ""); !ok {
+		t.Fatal("refused data not found")
+	}
+	if ok, _ := r.RefusedExists(ctx, alice, gone.DataHash, gone.ID); ok {
+		t.Fatal("an entry is not its own refusal")
+	}
+	if ok, _ := r.RefusedExists(ctx, alice, e.DataHash, ""); ok {
+		t.Fatal("visible data counted as refused")
+	}
+	// FlagReported touches only a visible entry, and only status and reasons.
+	if ok, _ := r.FlagReported(ctx, gone.ID, []string{ReasonReported}); ok {
+		t.Fatal("a removed entry was flagged")
+	}
+	if ok, _ := r.FlagReported(ctx, e.ID, []string{ReasonReported}); !ok {
+		t.Fatal("a visible entry was not flagged")
+	}
+	if got, _ := r.Get(ctx, e.ID); got.Status != StatusPending || got.Reasons[0] != ReasonReported || got.ReviewedBy != "" {
+		t.Fatalf("flagged = %+v", got)
+	}
+	if rows, n, _ := r.ByStatus(ctx, []string{StatusRejected, StatusRemoved}, 10, 0); n != 1 || rows[0].ID != gone.ID {
+		t.Fatalf("not approved list = %d", n)
 	}
 	for i := 0; i < 3; i++ {
 		if err := r.AddEvent(ctx, alice); err != nil {

@@ -1,6 +1,7 @@
 package designs
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 	"unicode"
@@ -140,4 +141,58 @@ func textReasons(l *maturityList, name, note, maker string) []string {
 		out = append(out, ReasonNameRepeat)
 	}
 	return out
+}
+
+// reHexColour is a colour value such as "#b00b5", which the leetspeak folding
+// would read as a word; colours are not free text.
+var reHexColour = regexp.MustCompile(`^#[0-9A-Fa-f]{3,8}$`)
+
+// dataStrings returns every string value inside a design's JSON, however deep.
+// Keys are the kind's own fixed words and are not read.
+func dataStrings(raw []byte) []string {
+	var v any
+	if json.Unmarshal(raw, &v) != nil {
+		return nil
+	}
+	var out []string
+	var walk func(any)
+	walk = func(x any) {
+		switch t := x.(type) {
+		case string:
+			out = append(out, t)
+		case []any:
+			for _, e := range t {
+				walk(e)
+			}
+		case map[string]any:
+			for _, e := range t {
+				walk(e)
+			}
+		}
+	}
+	walk(v)
+	return out
+}
+
+// dataMature runs the maturity rule, and only that rule, over the free text
+// inside a design: its own name, labels and the like.
+func dataMature(l *maturityList, raw []byte) bool {
+	for _, s := range dataStrings(raw) {
+		if !reHexColour.MatchString(s) && l.flags(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// dataName is the design's own "name" value, which can differ from the name it
+// is published under; an admin reads both.
+func dataName(raw []byte) string {
+	var m struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(raw, &m) != nil {
+		return ""
+	}
+	return cleanText(m.Name)
 }

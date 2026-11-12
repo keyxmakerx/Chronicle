@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designs"
 )
@@ -72,6 +73,20 @@ func (d designsDirectory) OwnedCampaigns(ctx context.Context, userID string) ([]
 		out = append(out, designs.CampaignInfo{ID: c.ID, Name: c.Name, SystemID: c.ParseSettings().SystemID})
 	}
 	return out, nil
+}
+
+// galleryUserNames gives the gallery's admin queue a publisher's real display
+// name, which can differ from the shown-as name they chose.
+type galleryUserNames struct{ auth auth.AuthService }
+
+var _ designs.UserNames = galleryUserNames{}
+
+func (n galleryUserNames) DisplayName(ctx context.Context, userID string) (string, error) {
+	u, err := n.auth.GetUser(ctx, userID)
+	if err != nil || u == nil {
+		return "", err
+	}
+	return u.DisplayName, nil
 }
 
 // roomThemeKind is the armory's say over designs of kind room-theme: the same

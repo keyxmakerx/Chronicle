@@ -50,3 +50,21 @@ test('a decision the server refuses is shown inline', { skip }, async (t) => {
   await p.click('[data-ga="approve"]');
   await p.waitForFunction(() => /no longer applies/.test(document.querySelector('[data-ga-err]').textContent));
 });
+
+test('who made it is shown, and a refusal can be undone from Not approved', { skip }, async (t) => {
+  const e1 = entry('e1', 'Forge', { publisherName: 'Alice Real-Name', makerName: 'The Smith', dataName: 'Inner Forge' });
+  const p = await admin(t, { seed: { pending: [e1] } });
+  await p.waitForSelector('article');
+  const text = await p.locator('article').innerText();
+  assert.match(text, /shown as The Smith \(account: Alice Real-Name\)/);
+  assert.match(text, /Named inside the design: Inner Forge/);
+  await p.click('[data-ga="reject"]');
+  await p.waitForSelector('text=Nothing is waiting for review.');
+  await p.click('[data-ga="tab"][data-v="rejected"]');
+  await p.waitForSelector('[data-ga="approve"]');
+  assert.match(await p.locator('article').innerText(), /Approve after all/);
+  assert.ok((await calls(p)).some((c) => /status=rejected/.test(c)));
+  await p.click('[data-ga="approve"]');
+  await p.waitForSelector('text=Nothing has been turned down.');
+  assert.ok((await calls(p)).includes('POST /admin/design-gallery/e1/approve'));
+});

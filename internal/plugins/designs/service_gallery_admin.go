@@ -12,13 +12,16 @@ func (g *gallery) AdminQueue(ctx context.Context, status string, page int) (*Adm
 	if status == "" {
 		status = StatusPending
 	}
-	if status != StatusPending && status != StatusVisible {
-		return nil, apperror.NewBadRequest("status must be pending or visible")
+	statuses := []string{status}
+	switch status {
+	case StatusPending, StatusVisible:
+	case StatusRejected:
+		statuses = []string{StatusRejected, StatusRemoved}
+	default:
+		return nil, apperror.NewBadRequest("status must be pending, visible or rejected")
 	}
-	if page < 1 {
-		page = 1
-	}
-	list, total, err := g.repo.ByStatus(ctx, status, GalleryPageSize, (page-1)*GalleryPageSize)
+	page = clampPage(page)
+	list, total, err := g.repo.ByStatus(ctx, statuses, GalleryPageSize, (page-1)*GalleryPageSize)
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}
@@ -42,14 +45,20 @@ func (g *gallery) adminEntry(ctx context.Context, e *GalleryEntry) (*AdminEntry,
 	for _, r := range e.Reasons {
 		words = append(words, ReasonText(r))
 	}
+	var publisher string
+	if g.names != nil {
+		// A failed lookup leaves the name blank rather than failing the queue.
+		publisher, _ = g.names.DisplayName(ctx, e.PublisherUserID)
+	}
 	return &AdminEntry{
+		PublisherName: publisher, DataName: dataName(e.Data),
 		ID: e.ID, Kind: e.Kind, SystemID: e.SystemID, Name: e.Name, Note: e.Note, MakerName: e.MakerName,
 		Summary: summarize(e.Data), Status: e.Status, ReasonCodes: append([]string{}, e.Reasons...), Reasons: words,
 		Reports: reports, PublishedAt: e.PublishedAt,
 	}, nil
 }
 
-// AdminDecide moves an entry: approve (waiting or refused to visible), reject
+// AdminDecide moves an entry: approve (waiting, refused or taken down to visible), reject
 // (waiting to refused) or remove (visible to removed). Anything else is a
 // conflict, so a double click or a stale page cannot undo a newer decision.
 func (g *gallery) AdminDecide(ctx context.Context, actorID, entryID, decision string) (*AdminEntry, error) {
@@ -62,7 +71,7 @@ func (g *gallery) AdminDecide(ctx context.Context, actorID, entryID, decision st
 	}
 	var to string
 	switch {
-	case decision == DecisionApprove && (e.Status == StatusPending || e.Status == StatusRejected):
+	case decision == DecisionApprove && e.Status != StatusVisible:
 		to = StatusVisible
 	case decision == DecisionReject && e.Status == StatusPending:
 		to = StatusRejected

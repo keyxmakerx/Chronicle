@@ -3,8 +3,9 @@
 #
 # A term matches as a whole word or phrase after the text is normalised
 # (accents stripped, leetspeak undone, repeated letters collapsed), so listing
-# "sex" does not flag "Essex". Terms of five letters or more are also matched
-# when a person splits them with spaces or punctuation. Keep ambiguous words
+# "sex" does not flag "Essex". Runs of three or more single letters ("s e x")
+# and punctuation-joined forms ("s.e.x") are also read. A term is never matched
+# inside a longer word or across two plain words. Keep ambiguous words
 # that are normal in a fantasy game (ass, bastard, hell, chink, coon, prick)
 # off this list: a hit only sends the entry to an admin, but every hit is a
 # person waiting.

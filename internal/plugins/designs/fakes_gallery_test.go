@@ -121,8 +121,8 @@ func (m *memGallery) ByPublisher(_ context.Context, p string) ([]GalleryEntry, e
 	return m.pick(func(e *GalleryEntry) bool { return e.PublisherUserID == p }), nil
 }
 
-func (m *memGallery) ByStatus(_ context.Context, status string, limit, offset int) ([]GalleryEntry, int, error) {
-	out, total := page(m.pick(func(e *GalleryEntry) bool { return e.Status == status }), limit, offset)
+func (m *memGallery) ByStatus(_ context.Context, statuses []string, limit, offset int) ([]GalleryEntry, int, error) {
+	out, total := page(m.pick(func(e *GalleryEntry) bool { return contains(statuses, e.Status) }), limit, offset)
 	return out, total, nil
 }
 
@@ -130,6 +130,21 @@ func (m *memGallery) DuplicateExists(_ context.Context, p, hash, except string) 
 	return len(m.pick(func(e *GalleryEntry) bool {
 		return e.PublisherUserID == p && e.DataHash == hash && e.ID != except && e.Status != StatusRemoved
 	})) > 0, nil
+}
+
+func (m *memGallery) RefusedExists(_ context.Context, p, hash, except string) (bool, error) {
+	return len(m.pick(func(e *GalleryEntry) bool {
+		return e.PublisherUserID == p && e.DataHash == hash && e.ID != except && (e.Status == StatusRejected || e.Status == StatusRemoved)
+	})) > 0, nil
+}
+
+func (m *memGallery) FlagReported(_ context.Context, id string, reasons []string) (bool, error) {
+	e := m.entries[id]
+	if e == nil || e.Status != StatusVisible {
+		return false, nil
+	}
+	e.Status, e.Reasons = StatusPending, append([]string{}, reasons...)
+	return true, nil
 }
 
 func (m *memGallery) CountEvents(_ context.Context, u string, since time.Time) (int, error) {

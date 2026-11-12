@@ -29,6 +29,8 @@ const (
 	ReportThreshold = 3
 	// MaxReportNoteLen caps the optional note on a report.
 	MaxReportNoteLen = 140
+	// MaxPage bounds a page number from a client.
+	MaxPage = 10000
 	// maxSummaryLen caps the one-line parts summary an admin or a card reads.
 	maxSummaryLen = 160
 )
@@ -150,12 +152,17 @@ type GalleryMine struct {
 // AdminEntry is an entry as the admin queue shows it: who made it, why it is
 // there and what has been reported.
 type AdminEntry struct {
-	ID          string          `json:"id"`
-	Kind        string          `json:"kind"`
-	SystemID    string          `json:"systemId"`
-	Name        string          `json:"name"`
-	Note        string          `json:"note"`
-	MakerName   string          `json:"makerName"`
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	SystemID  string `json:"systemId"`
+	Name      string `json:"name"`
+	Note      string `json:"note"`
+	MakerName string `json:"makerName"`
+	// PublisherName is the publisher's real display name, which can differ from
+	// the shown-as name they chose; only admins see it.
+	PublisherName string `json:"publisherName"`
+	// DataName is the "name" inside the design's own data.
+	DataName    string          `json:"dataName"`
 	Summary     string          `json:"summary"`
 	Status      string          `json:"status"`
 	ReasonCodes []string        `json:"reasonCodes"`

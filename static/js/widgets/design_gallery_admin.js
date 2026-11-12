@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  var TABS = [['pending', 'Waiting for review'], ['visible', 'Visible']];
+  var TABS = [['pending', 'Waiting for review'], ['visible', 'Visible'], ['rejected', 'Not approved']];
   var REPORT_WORDS = { adult: 'Adult or vulgar', spam: 'Spam or advertising', other: 'Something else' };
 
   function esc(t) {
@@ -20,7 +20,7 @@
   }
   function nice(v) { v = String(v || '').replace(/[-_]+/g, ' ').trim(); return v.charAt(0).toUpperCase() + v.slice(1); }
   function when(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
-  function tabOf(v) { return v === 'visible' ? 'visible' : 'pending'; }
+  function tabOf(v) { return v === 'visible' || v === 'rejected' ? v : 'pending'; }
   function byId(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
 
   function init(root) {
@@ -28,8 +28,9 @@
 
     function card(e) {
       var h = '<article class="card space-y-2" aria-label="' + esc(e.name) + '"><div class="flex flex-wrap items-baseline gap-2"><h2 class="text-base font-semibold text-fg">' + esc(e.name) + '</h2>' +
-        '<span class="text-xs text-fg-muted">by ' + esc(e.makerName) + ' · ' + esc(nice(e.kind)) + ' · ' + esc(e.systemId || 'no game system') + ' · ' + esc(when(e.publishedAt)) + '</span></div>';
+        '<span class="text-xs text-fg-muted">shown as ' + esc(e.makerName) + (e.publisherName ? ' (account: ' + esc(e.publisherName) + ')' : '') + ' · ' + esc(nice(e.kind)) + ' · ' + esc(e.systemId || 'no game system') + ' · ' + esc(when(e.publishedAt)) + '</span></div>';
       if (e.note) h += '<p class="text-sm text-fg">' + esc(e.note) + '</p>';
+      if (e.dataName && e.dataName !== e.name) h += '<p class="text-xs text-fg-muted">Named inside the design: ' + esc(e.dataName) + '</p>';
       if (e.summary) h += '<p class="text-xs text-fg-muted">Parts: ' + esc(e.summary) + '</p>';
       if (e.reasons && e.reasons.length) {
         h += '<div><p class="text-xs font-medium text-fg">Why it is here</p><ul class="text-sm text-fg-secondary list-disc pl-5">' + e.reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul></div>';
@@ -42,8 +43,10 @@
       if (e.status === 'pending') {
         h += '<button type="button" class="btn btn-primary btn-sm" data-ga="approve" data-id="' + esc(e.id) + '" aria-label="Approve ' + esc(e.name) + '">Approve</button>' +
           '<button type="button" class="btn btn-secondary btn-sm" data-ga="reject" data-id="' + esc(e.id) + '" aria-label="Reject ' + esc(e.name) + '">Reject</button>';
-      } else {
+      } else if (e.status === 'visible') {
         h += '<button type="button" class="btn btn-danger btn-sm" data-ga="remove" data-id="' + esc(e.id) + '" aria-label="Remove ' + esc(e.name) + '">Remove</button>';
+      } else {
+        h += '<button type="button" class="btn btn-secondary btn-sm" data-ga="approve" data-id="' + esc(e.id) + '" aria-label="Approve ' + esc(e.name) + ' after all">Approve after all</button>';
       }
       return h + '</div></article>';
     }
@@ -53,7 +56,7 @@
       }).join('') + '</div>';
       h += '<p class="text-sm text-fg" role="alert" data-ga-err></p><p class="text-sm text-fg-secondary" role="status" aria-live="polite" data-ga-msg></p>';
       if (!d) h += '<p class="text-sm text-fg-secondary">Loading…</p>';
-      else if (!d.entries.length) h += '<div class="card text-center py-10"><p class="text-sm text-fg-secondary">' + (st.status === 'pending' ? 'Nothing is waiting for review.' : 'No designs are shown in the gallery yet.') + '</p></div>';
+      else if (!d.entries.length) h += '<div class="card text-center py-10"><p class="text-sm text-fg-secondary">' + (st.status === 'pending' ? 'Nothing is waiting for review.' : st.status === 'rejected' ? 'Nothing has been turned down.' : 'No designs are shown in the gallery yet.') + '</p></div>';
       else {
         h += '<div class="space-y-3">' + d.entries.map(card).join('') + '</div>';
         var pages = Math.max(1, Math.ceil(d.total / d.perPage));

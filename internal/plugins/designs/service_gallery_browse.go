@@ -45,6 +45,18 @@ func summarize(raw json.RawMessage) string {
 	return s
 }
 
+// clampPage keeps a page number inside a sane range, so an absurd offset never
+// reaches the database.
+func clampPage(p int) int {
+	if p < 1 {
+		return 1
+	}
+	if p > MaxPage {
+		return MaxPage
+	}
+	return p
+}
+
 // browseQuery turns the sheet's filters into a repository query.
 func browseQuery(c *CampaignInfo, in BrowseInput) (BrowseQuery, int, error) {
 	q := BrowseQuery{SystemID: c.SystemID, AnySys: in.AllSystems, Limit: GalleryPageSize}
@@ -62,10 +74,7 @@ func browseQuery(c *CampaignInfo, in BrowseInput) (BrowseQuery, int, error) {
 		text = string([]rune(text)[:MaxNameLen])
 	}
 	q.Text = text
-	page := in.Page
-	if page < 1 {
-		page = 1
-	}
+	page := clampPage(in.Page)
 	q.Offset = (page - 1) * GalleryPageSize
 	return q, page, nil
 }
@@ -186,8 +195,9 @@ func (g *gallery) Report(ctx context.Context, campaignID, userID, entryID string
 		return apperror.NewInternal(err)
 	}
 	if len(reports) >= ReportThreshold {
-		e.Status, e.Reasons = StatusPending, []string{ReasonReported}
-		if err := g.repo.Save(ctx, e); err != nil {
+		// A narrow update, not a save of the entry read above: an admin or the
+		// publisher may have changed it since, and a stale save would undo that.
+		if _, err := g.repo.FlagReported(ctx, e.ID, []string{ReasonReported}); err != nil {
 			return apperror.NewInternal(err)
 		}
 	}

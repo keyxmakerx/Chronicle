@@ -12,7 +12,7 @@ export const entry = (id, name, extra) => Object.assign({ id, kind: 'room-theme'
   status: 'pending', reasonCodes: ['link'], reasons: ['The text contains a web address or invite link.'], reports: [], publishedAt: '2026-11-01T10:00:00Z' }, extra);
 
 const FAKE = `
-window.__srv = { pending: [], visible: [], calls: [], refuse: '' };
+window.__srv = { pending: [], visible: [], rejected: [], calls: [], refuse: '' };
 window.Chronicle = {
   register: function (n, impl) { window.__impl = impl; },
   escapeHtml: function (t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); },
@@ -20,14 +20,15 @@ window.Chronicle = {
     var s = window.__srv, m = (o && o.method) || 'GET';
     s.calls.push(m + ' ' + url);
     if (m === 'GET') {
-      var st = url.indexOf('status=visible') >= 0 ? 'visible' : 'pending', list = s[st];
+      var st = url.indexOf('status=visible') >= 0 ? 'visible' : url.indexOf('status=rejected') >= 0 ? 'rejected' : 'pending', list = s[st];
       return Promise.resolve(JSON.parse(JSON.stringify({ entries: list, total: list.length, page: 1, perPage: 12, status: st })));
     }
     if (s.refuse) return Promise.reject(new Error(s.refuse));
     var id = url.split('/')[3], act = url.split('/')[4];
-    var e = s.pending.concat(s.visible).filter(function (x) { return x.id === id; })[0];
-    s.pending = s.pending.filter(function (x) { return x.id !== id; }); s.visible = s.visible.filter(function (x) { return x.id !== id; });
+    var e = s.pending.concat(s.visible, s.rejected).filter(function (x) { return x.id === id; })[0];
+    s.pending = s.pending.filter(function (x) { return x.id !== id; }); s.visible = s.visible.filter(function (x) { return x.id !== id; }); s.rejected = s.rejected.filter(function (x) { return x.id !== id; });
     if (act === 'approve') { e.status = 'visible'; s.visible.push(e); }
+    if (act === 'reject') { e.status = 'rejected'; s.rejected.push(e); }
     return Promise.resolve({});
   }
 };`;

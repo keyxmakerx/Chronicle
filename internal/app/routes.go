@@ -6608,7 +6608,7 @@ func (a *App) RegisterRoutes() {
 	var aiDesigns records.DesignsAPI
 	if a.PluginHealth.IsHealthy(designs.PluginSlug) {
 		designsSvc := designs.NewService(designs.NewRepository(a.DB), designsDirectory{svc: campaignService}, designKinds)
-		designsGallery := designs.NewGalleryService(designs.NewRepository(a.DB), designs.NewGalleryRepository(a.DB), designsDirectory{svc: campaignService}, designKinds)
+		designsGallery := designs.NewGalleryService(designs.NewRepository(a.DB), designs.NewGalleryRepository(a.DB), designsDirectory{svc: campaignService}, designKinds, galleryUserNames{auth: authService})
 		galleryHandler := designs.NewGalleryHandler(designsGallery, adminActivity)
 		designs.RegisterRoutes(e, designs.NewHandler(designsSvc), galleryHandler, campaignService, authService)
 		designs.RegisterAdminRoutes(adminGroup, galleryHandler)

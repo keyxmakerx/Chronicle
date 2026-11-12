@@ -13,8 +13,9 @@ import (
 // app wiring. It only browses: publishing, reporting and moderating stay with
 // people, so nothing here can change the gallery.
 type GalleryAPI interface {
-	// Browse lists visible entries, newest first. kind is "", rooms or crafting.
-	Browse(ctx context.Context, campaignID string, a Actor, kind, text string, allSystems bool) ([]GalleryRef, error)
+	// Browse lists visible entries, newest first, and how many match in all;
+	// the list is one page. kind is "", rooms or crafting.
+	Browse(ctx context.Context, campaignID string, a Actor, kind, text string, allSystems bool) (list []GalleryRef, total int, err error)
 }
 
 // GalleryRef is a gallery entry as the lookup shows it. It carries no design
@@ -53,12 +54,16 @@ func (l GalleryLookup) Answer(ctx context.Context, campaignID string, a Actor, r
 		return chip, "", badRequestf("the design gallery is the campaign owner's")
 	}
 	all := strings.EqualFold(r.Str("all"), "yes")
-	list, err := l.Svc.Browse(ctx, campaignID, a, strings.ToLower(r.Str("kind")), r.Str("q"), all)
+	list, total, err := l.Svc.Browse(ctx, campaignID, a, strings.ToLower(r.Str("kind")), r.Str("q"), all)
 	if err != nil {
 		return chip, "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "## Shared designs (%d)\n\n", len(list))
+	if total > len(list) {
+		fmt.Fprintf(&b, "## Shared designs (%d of %d)\n\nOnly the newest %d are listed; narrow it with `kind` or `q`.\n\n", len(list), total, len(list))
+	} else {
+		fmt.Fprintf(&b, "## Shared designs (%d)\n\n", len(list))
+	}
 	if len(list) == 0 {
 		b.WriteString("Nothing matches in the gallery.\n")
 	}
