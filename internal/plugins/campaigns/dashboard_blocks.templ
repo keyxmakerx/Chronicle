@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -37,7 +38,7 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashEntityList(cc, block.Config)
 		case "text_block":
 			if note, show := setupNoteFor(ctx, cc, block); show {
-				@dashTextBlock(note.Config)
+				@dashTextBlock(cc, note.Config)
 			}
 		case "pinned_pages":
 			@dashPinnedPages(cc)
@@ -265,30 +266,57 @@ templ dashRecentPages(cc *CampaignContext, config map[string]any, recentEntities
 	}
 }
 
-// dashEntityList renders a filtered entity list for a specific category.
-// Config: entity_type_id (string), limit (int, default 8).
+// dashEntityList lists one category's pages. The entities plugin owns the
+// list (and the visibility rules), loaded with hx-get like Pinned Pages. With
+// no category picked, only the owner is shown the card, so players never see
+// a widget that is not set up.
+// Config: entity_type_id (string or number), limit (int, default 8).
 templ dashEntityList(cc *CampaignContext, config map[string]any) {
-	<div class="card p-4">
-		<div class="flex items-center gap-2 mb-2">
-			<i class="fa-solid fa-list text-xs text-fg-muted"></i>
-			<span class="text-sm font-semibold text-fg">Entity List</span>
+	if typeID := configInt(config, "entity_type_id", 0); typeID > 0 || cc.MemberRole >= RoleOwner {
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/entity-list?type=%d&limit=%d", cc.Campaign.ID, typeID, configInt(config, "limit", 8)) }
+			hx-trigger="load"
+			hx-swap="outerHTML"
+			aria-busy="true"
+		>
+			<span class="inline-block w-32 h-4 mb-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+			<div class="space-y-2" aria-hidden="true">
+				<span class="block h-5 rounded bg-fg-secondary/10 animate-pulse"></span>
+				<span class="block h-5 rounded bg-fg-secondary/10 animate-pulse"></span>
+			</div>
 		</div>
-		<p class="text-xs text-fg-secondary">
-			Filtered entity list block. Content will be loaded dynamically.
-		</p>
-	</div>
+	}
+}
+
+// configInt reads a block setting that may arrive as a JSON number or as the
+// string a select field saves; anything else is the fallback.
+func configInt(config map[string]any, key string, fallback int) int {
+	switch v := config[key].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case string:
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			return n
+		}
+	}
+	return fallback
 }
 
 // dashTextBlock renders custom HTML content.
 // Config: content (string). Content is sanitized to prevent stored XSS.
-templ dashTextBlock(config map[string]any) {
-	<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
-		if content, ok := config["content"].(string); ok && sanitize.TextBlock(content) != "" {
+// An empty block shows its placeholder only to the owner, who can fill it.
+templ dashTextBlock(cc *CampaignContext, config map[string]any) {
+	if content, ok := config["content"].(string); ok && sanitize.TextBlock(content) != "" {
+		<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
 			@templ.Raw(sanitize.TextBlock(content))
-		} else {
+		</div>
+	} else if cc.MemberRole >= RoleOwner {
+		<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
 			<p class="text-fg-muted text-sm italic">Empty text block</p>
-		}
-	</div>
+		</div>
+	}
 }
 
 // dashPinnedPages loads the Pinned Pages widget from the entities plugin

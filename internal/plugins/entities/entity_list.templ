@@ -1,0 +1,48 @@
+// entity_list.templ draws the campaign home's Entity List widget.
+//
+// dashEntityList (campaigns plugin) loads it with hx-get, so the campaigns
+// plugin never reads pages itself.
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// EntityListWidget lists one category's pages. With no category chosen, or
+// nothing the viewer may open, the Director is told what to do and everyone
+// else sees nothing.
+templ EntityListWidget(cc *campaigns.CampaignContext, et *EntityType, pages []Entity) {
+	<section class="cb-entity-list" data-entity-list>
+		if et == nil {
+			if cc.CanAuthorDmOnly() {
+				<div class="rounded-xl border border-dashed border-edge px-4 py-3 text-sm text-fg-secondary">
+					Pick a category for this list in Customize → Home pages.
+				</div>
+			}
+		} else if len(pages) > 0 {
+			<div class="flex items-center justify-between mb-2">
+				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">{ et.NamePlural }</h2>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, et.ID)) } class="cb-more text-xs text-accent hover:underline">View all</a>
+			</div>
+			<ul class="cb-pin-list">
+				for i := range pages {
+					<li class="cb-row rounded-lg hover:bg-surface-alt group">
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, pages[i].ID)) } class="cb-link flex items-center gap-2 min-w-0 px-2 py-1.5">
+							<span class="text-sm text-fg truncate group-hover:text-accent transition-colors">{ pages[i].Name }</span>
+							if pages[i].IsPrivate {
+								<span class="text-xs text-fg-muted shrink-0">GM only</span>
+							}
+						</a>
+					</li>
+				}
+			</ul>
+		} else if cc.CanAuthorDmOnly() {
+			<div class="rounded-xl border border-dashed border-edge px-4 py-3 text-sm text-fg-secondary">
+				{ fmt.Sprintf("No %s yet.", et.NamePlural) }
+			</div>
+		}
+	</section>
+}
