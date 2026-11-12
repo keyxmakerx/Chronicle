@@ -659,7 +659,7 @@ func (h *MapAPIHandler) ListLayers(c *echo.Context) error {
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("failed to list layers"))
 	}
-	return c.JSON(http.StatusOK, layers)
+	return c.JSON(http.StatusOK, maps.VisibleLayers(layers, h.viewRole(c)))
 }
 
 // CreateLayer creates a new layer on a map.

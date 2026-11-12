@@ -13,6 +13,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // PageSafetyHandler serves a page's History panel and the campaign Trash.
@@ -105,7 +106,7 @@ func (h *PageSafetyHandler) History(c *echo.Context) error {
 		return err
 	}
 	ctx := c.Request().Context()
-	versions, selected, err := h.svc.History(ctx, entity.ID, c.QueryParam("v"))
+	versions, selected, err := h.svc.History(ctx, entity.ID, c.QueryParam("v"), h.redactFor(c, cc))
 	if err != nil {
 		return err
 	}
@@ -119,6 +120,32 @@ func (h *PageSafetyHandler) History(c *echo.Context) error {
 		Now:        time.Now(),
 	}
 	return middleware.Render(c, http.StatusOK, HistoryPanel(data))
+}
+
+// redactFor strips each past version the way the page is served to this
+// reader: Director-only passages go, and a mention of a page they can't
+// open reads "a hidden page". The Owner and Co-DMs read versions whole.
+func (h *PageSafetyHandler) redactFor(c *echo.Context, cc *campaigns.CampaignContext) func(*EntityVersion) {
+	if cc.CanAuthorDmOnly() {
+		return nil
+	}
+	return func(v *EntityVersion) {
+		entry, entryHTML := v.Entry, v.EntryHTML
+		if entry != nil {
+			t := sanitize.StripSecretsJSON(*entry)
+			entry = &t
+		}
+		if entryHTML != nil {
+			t := sanitize.StripSecretsHTML(*entryHTML)
+			entryHTML = &t
+		}
+		// Fails closed: on an error every mention reads "a hidden page".
+		if _, err := h.entities.HideUnviewableMentions(c.Request().Context(), cc.Campaign.ID, int(cc.VisibilityRole()), auth.GetUserID(c), entry, entryHTML); err != nil {
+			slog.Warn("checking which mentioned pages a reader can open failed; all are hidden",
+				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		}
+		v.Entry, v.EntryHTML = entry, entryHTML
+	}
 }
 
 // roleLabels maps member user ids to their role word ("scribe"), for the
