@@ -107,3 +107,30 @@ func TestCreateEntityType_CreatureStartsWithSystemPanels(t *testing.T) {
 		})
 	}
 }
+
+// A type that stores no rows still draws the default layout once the panels
+// are placed, with the block under the title.
+func TestPlaceSystemPanels_EmptyLayoutKeepsDefault(t *testing.T) {
+	var got []string
+	repo := &mockEntityTypeRepo{
+		listByCampaignFn: func(context.Context, string) ([]EntityType, error) {
+			return []EntityType{{ID: 1}}, nil
+		},
+		updateLayoutFn: func(_ context.Context, _ int, raw string) error {
+			var l EntityTypeLayout
+			if err := json.Unmarshal([]byte(raw), &l); err != nil {
+				t.Fatal(err)
+			}
+			got = blockTypeOrder(l)
+			return nil
+		},
+	}
+	svc := newTestService(&mockEntityRepo{}, repo)
+	if _, err := svc.PlaceSystemPanels(context.Background(), "c", []int{1}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"title", "system_panels", "entry", "image", "attributes", "details"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("order = %v, want %v", got, want)
+	}
+}

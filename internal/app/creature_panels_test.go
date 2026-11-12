@@ -96,3 +96,24 @@ func TestPlaceCreaturePanelsOnNewCampaigns(t *testing.T) {
 		t.Fatalf("second run placed %d; want nothing", n)
 	}
 }
+
+type fakeRepairEntities struct{ repaired []string }
+
+func (f *fakeRepairEntities) RepairSystemPanelsLayouts(_ context.Context, id string) (int, error) {
+	f.repaired = append(f.repaired, id)
+	return 1, nil
+}
+
+func TestRepairSystemPanelsLayoutsOnce(t *testing.T) {
+	st := &fakeExtrasSettings{vals: map[string]string{}}
+	ents := &fakeRepairEntities{}
+	camps := fakeExtrasCampaigns{ids: []string{"c1", "c2"}}
+	n, err := repairSystemPanelsLayoutsOnce(context.Background(), st, camps, ents)
+	if err != nil || n != 2 {
+		t.Fatalf("first run: n=%d err=%v; want 2, nil", n, err)
+	}
+	n, err = repairSystemPanelsLayoutsOnce(context.Background(), st, camps, ents)
+	if err != nil || n != 0 || len(ents.repaired) != 2 {
+		t.Fatalf("second run: n=%d err=%v repaired=%v; want it skipped", n, err, ents.repaired)
+	}
+}

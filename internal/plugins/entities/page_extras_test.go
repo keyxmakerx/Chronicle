@@ -187,3 +187,81 @@ func TestWithCreaturePanels(t *testing.T) {
 		t.Errorf("input layout changed: %v -> %v", before, after)
 	}
 }
+
+// An empty stored layout means "use the default", so placing a block into it
+// must start from the default rather than leave the block alone.
+func TestPlaceIntoEmptyLayoutKeepsDefault(t *testing.T) {
+	tests := []struct {
+		name   string
+		layout EntityTypeLayout
+		want   []string
+	}{
+		{"empty layout", EntityTypeLayout{}, []string{"title", "system_panels", "entry", "image", "attributes", "details"}},
+		{"layout with a title", withPanelsFree(), []string{"title", "system_panels", "entry"}},
+		{"no title but other blocks", EntityTypeLayout{Rows: []TemplateRow{fullWidthRow("r", TemplateBlock{ID: "e", Type: "entry"})}}, []string{"system_panels", "entry"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, changed := placePageExtras(tt.layout, PageExtrasPlan{SystemPanels: true})
+			if !changed {
+				t.Fatal("expected a change")
+			}
+			var order []string
+			for _, ty := range blockTypeOrder(got) {
+				if ty != "children" && ty != "posts" && ty != "writing_prompts" && ty != "backlinks" {
+					order = append(order, ty)
+				}
+			}
+			if !reflect.DeepEqual(order, tt.want) {
+				t.Errorf("order = %v, want %v", order, tt.want)
+			}
+			if _, again := placePageExtras(got, PageExtrasPlan{SystemPanels: true}); again {
+				t.Error("second run changed the layout")
+			}
+		})
+	}
+}
+
+// withPanelsFree is a layout with a title and an entry only.
+func withPanelsFree() EntityTypeLayout {
+	return EntityTypeLayout{Rows: []TemplateRow{fullWidthRow("r", TemplateBlock{ID: "t", Type: "title"}, TemplateBlock{ID: "e", Type: "entry"})}}
+}
+
+func TestRepairSystemPanelsOnlyLayout(t *testing.T) {
+	broken := func(rows ...TemplateRow) EntityTypeLayout {
+		return EntityTypeLayout{Rows: append([]TemplateRow{fullWidthRow("row-system-panels", TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})}, rows...)}
+	}
+	items := fullWidthRow("row-character-items", TemplateBlock{ID: "blk-character-items", Type: BlockCharacterItems})
+	extras := fullWidthRow("row-page-extras", TemplateBlock{ID: "blk-children", Type: BlockSubPages})
+	tests := []struct {
+		name   string
+		layout EntityTypeLayout
+		want   []string
+	}{
+		{"panels only", broken(), []string{"title", "system_panels", "entry", "image", "attributes", "details"}},
+		{"with items and extras", broken(items, extras), []string{"title", "system_panels", "entry", "image", "attributes", "details", "character_items", "children"}},
+		{"extras only", broken(extras), []string{"title", "system_panels", "entry", "image", "attributes", "details", "children"}},
+		{"not repaired: other trailing row", broken(fullWidthRow("mine", TemplateBlock{ID: "x", Type: "entry"})), nil},
+		{"not repaired: extras before items", broken(extras, items), nil},
+		{"not repaired: panels beside another block", EntityTypeLayout{Rows: []TemplateRow{fullWidthRow("row-system-panels", TemplateBlock{ID: "a", Type: BlockSystemPanels}, TemplateBlock{ID: "b", Type: "entry"})}}, nil},
+		{"not repaired: owner layout", withPanels(), nil},
+		{"not repaired: empty", EntityTypeLayout{}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, changed := repairSystemPanelsOnlyLayout(tt.layout)
+			if changed != (tt.want != nil) {
+				t.Fatalf("changed = %v, want %v", changed, tt.want != nil)
+			}
+			if tt.want == nil {
+				return
+			}
+			if order := blockTypeOrder(got); !reflect.DeepEqual(order, tt.want) {
+				t.Errorf("order = %v, want %v", order, tt.want)
+			}
+			if _, again := repairSystemPanelsOnlyLayout(got); again {
+				t.Error("second run changed the layout")
+			}
+		})
+	}
+}

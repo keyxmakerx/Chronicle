@@ -78,6 +78,8 @@ type EntityService interface {
 	GetEntityTypes(ctx context.Context, campaignID string) ([]EntityType, error)
 	// PlacePageExtras places the page pieces drawn outside the layout into a campaign's entity types (see page_extras.go).
 	PlacePageExtras(ctx context.Context, campaignID string, plans map[int]PageExtrasPlan) (int, error)
+	// RepairSystemPanelsLayouts restores the default layout on types left with only the panels block (see page_extras.go).
+	RepairSystemPanelsLayouts(ctx context.Context, campaignID string) (int, error)
 	// PlaceSystemPanels adds only the Game System Panels block to the given
 	// types (see page_extras.go).
 	PlaceSystemPanels(ctx context.Context, campaignID string, typeIDs []int) (int, error)
