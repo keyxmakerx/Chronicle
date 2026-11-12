@@ -357,7 +357,6 @@ templ heroLog(v *CharacterPanelView) {
 			class="hl-write"
 			hx-post={ logURL(v.CampaignID, v.Character.ID) }
 			hx-swap="none"
-			hx-on::after-request="if (event.detail.successful) this.reset()"
 		>
 			<input type="text" name="body" maxlength="500" autocomplete="off" placeholder="Write a line for tonight…" aria-label="Write a line in the log" required/>
 			if len(v.Items) > 0 {
