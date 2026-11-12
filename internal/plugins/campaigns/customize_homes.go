@@ -216,7 +216,7 @@ func (h *Handler) homeEditorState(ctx context.Context, cc *CampaignContext, key 
 		layout = DefaultDashboardLayout()
 	}
 	tab := homeTabFor(key)
-	b, err := json.Marshal(map[string]any{
+	state := map[string]any{
 		"scope":      "home",
 		"unsaved":    !saved,
 		"campaignId": cc.Campaign.ID,
@@ -226,11 +226,34 @@ func (h *Handler) homeEditorState(ctx context.Context, cc *CampaignContext, key 
 		"only":       homeBlockTypes,
 		"blockTypes": base + "/entity-types/block-types?context=dashboard",
 		"preview":    base + "/customize/home-preview",
-	})
+	}
+	if s := homeSuggestions(key, saved); s != nil {
+		state["suggest"] = s
+	}
+	b, err := json.Marshal(state)
 	if err != nil {
 		return "{}"
 	}
 	return string(b)
+}
+
+// homeSuggestions lists, in order, the block types the players' starting home
+// holds, for a Players home that has no layout of its own yet. The editor shows
+// those the owner's current layout lacks as a faded draft to keep one by one;
+// nothing is saved until a block is kept. Every other home has none.
+func homeSuggestions(key string, saved bool) []string {
+	if key != HomePlayer || saved {
+		return nil
+	}
+	var out []string
+	for _, row := range playersHome().Rows {
+		for _, col := range row.Columns {
+			for _, b := range col.Blocks {
+				out = append(out, b.Type)
+			}
+		}
+	}
+	return out
 }
 
 const (

@@ -351,3 +351,13 @@ body.cpe-dragging .cpe-tile { animation: none !important; }
 
 /* The Page layout tab: the editor runs edge to edge under the tabs. */
 .czs-ped-host { padding-top: 12px; }
+
+/* The faded draft: suggested blocks under the page, kept one by one. */
+.cpe-draft { margin-bottom: 16px; padding: 12px; border: 1px dashed var(--color-border); border-radius: 10px; display: flex; flex-direction: column; gap: 10px; }
+.cpe-draft-lab { margin: 0; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-secondary); }
+.cpe-draft-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.cpe-sug { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--color-border); border-radius: 8px; opacity: 0.7; background: repeating-linear-gradient(135deg, transparent 0 8px, rgb(var(--color-accent-rgb) / 0.07) 8px 9px); font-size: 13px; }
+.cpe-sug-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cpe-sug-keep, .cpe-draft-q { border: 0; background: none; padding: 2px 4px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--cpe-accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.cpe-draft-q { color: var(--color-text-secondary); font-weight: 500; }
+.cpe-draft-acts { margin: 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
