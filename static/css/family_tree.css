@@ -35,7 +35,7 @@
   --fm-acc-soft: rgb(var(--color-accent-rgb, 99 102 241) / .12);
   --fm-acc-link: rgb(var(--color-accent-rgb, 99 102 241) / .42);
   --fm-dm: rgb(var(--color-warn-rgb, 217 119 6));
-  --fm-r: 14px;
+  --fm-r: var(--shape-r-panel, 12px);
   --fm-hit: 32px;
   --fm-surface: color-mix(in srgb, var(--fm-panel) 94%, var(--fm-acc));
   --fm-dock-bg: color-mix(in srgb, var(--fm-tint) 60%, var(--fm-surface));
@@ -60,7 +60,7 @@
 .fm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .fm-ic { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -2px; }
 
-.fm-dmtag { font-size: 10px; font-weight: 600; letter-spacing: .06em; line-height: 1.6; padding: 0 5px; border-radius: 4px; color: var(--fm-dm); background: color-mix(in srgb, var(--fm-dm) 14%, transparent); display: inline-block; white-space: nowrap; }
+.fm-dmtag { font-size: 10px; font-weight: 600; letter-spacing: .06em; line-height: 1.6; padding: 0 5px; border-radius: var(--shape-r-tag, 4px); color: var(--fm-dm); background: color-mix(in srgb, var(--fm-dm) 14%, transparent); display: inline-block; white-space: nowrap; }
 .fm-note { font-size: 12.5px; color: var(--fm-muted); display: flex; align-items: baseline; gap: 8px; }
 .fm-cut { margin-top: 6px; font-size: 12.5px; color: var(--fm-muted); }
 
@@ -76,7 +76,7 @@
 .fm-hs.fm-away { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 140ms ease 0s, visibility 0s linear 140ms; }
 .fm-hs-lab {
   flex: none; font-weight: 600; font-size: 14.5px; letter-spacing: .01em; color: var(--fm-ink); background: none; border: 0;
-  min-height: var(--fm-hit); padding: 0 8px; margin: -1px -8px 0 -8px; border-radius: 8px; cursor: pointer;
+  min-height: var(--fm-hit); padding: 0 8px; margin: -1px -8px 0 -8px; border-radius: var(--shape-r-ctl, 8px); cursor: pointer;
 }
 .fm-hs-lab:hover { background: var(--fm-acc-soft); color: var(--fm-acc); }
 .fm-hs-tr {
@@ -92,7 +92,7 @@
 .fm-hs-gap { flex: none; width: 14px; }
 .fm-hs-it, .fm-b {
   position: relative; flex: none; display: flex; flex-direction: column; align-items: center; background: none; border: 0; padding: 0 4px;
-  cursor: pointer; color: var(--fm-body); border-radius: 8px; text-align: center;
+  cursor: pointer; color: var(--fm-body); border-radius: var(--shape-r-ctl, 8px); text-align: center;
 }
 .fm-hs-it { width: 62px; --d: 32px; min-height: 58px; }
 .fm-hs-it.fm-me { --d: 44px; width: 72px; }
@@ -113,7 +113,7 @@
 .fm-pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .fm-pic.fm-ini { font: 600 calc(var(--d) * .38) / 1 Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif; letter-spacing: .06em; }
 .fm-pic.fm-ini i { font-style: normal; padding-left: .06em; position: relative; top: -.02em; }
-.fm-pic.fm-ini::before { content: ""; position: absolute; inset: calc(var(--d) * .085); border-radius: 50%; border: 1px solid hsl(var(--h, 220) 30% 46% / .32); }
+.fm-pic.fm-ini::before { content: ""; position: absolute; inset: calc(var(--d) * .085); border-radius: 50%; border: var(--shape-edge, 1px) solid hsl(var(--h, 220) 30% 46% / .32); }
 .fm-halo {
   position: absolute; inset: -9px; border-radius: 50%; background: var(--fm-acc-soft); opacity: 0; transform: scale(.45);
   transition: opacity var(--dur-standard, 200ms) var(--ease-out, ease-out), transform var(--dur-standard, 200ms) var(--ease-out, ease-out);
@@ -142,7 +142,7 @@
 .fm-ttl { font-weight: 600; font-size: 14.5px; color: var(--fm-ink); margin-right: 8px; }
 .fm-x {
   position: absolute; top: 50%; margin-top: -18px; right: 8px; width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: none;
-  border-radius: 8px; color: var(--fm-muted); cursor: pointer;
+  border-radius: var(--shape-r-ctl, 8px); color: var(--fm-muted); cursor: pointer;
 }
 .fm-x:hover { background: var(--fm-tint); color: var(--fm-ink); }
 .fm-x .fm-ic { width: 16px; height: 16px; }
@@ -150,7 +150,7 @@
 .fm-trail .fm-ic { width: 11px; height: 11px; color: var(--fm-line-strong); margin: 0 1px; }
 .fm-q {
   font-weight: 500; font-size: 12.5px; line-height: 1; color: var(--fm-muted); background: none; border: 0; min-height: var(--fm-hit); padding: 0 10px;
-  border-radius: 8px; cursor: pointer; white-space: nowrap; flex: none; display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--shape-r-ctl, 8px); cursor: pointer; white-space: nowrap; flex: none; display: inline-flex; align-items: center; gap: 6px;
 }
 .fm-q:hover { background: var(--fm-acc-soft); color: var(--fm-acc); }
 .fm-q[aria-pressed="true"] { color: var(--fm-acc); background: var(--fm-acc-soft); }
@@ -193,21 +193,21 @@ html[data-motion="calm"] .fm-dot.fm-new .fm-pw { animation: fm-fade 220ms both; 
 .fm-dk-top .fm-pw { --d: 56px; }
 .fm-dk-top b { display: block; font-size: 15px; line-height: 1.2; color: var(--fm-ink); overflow-wrap: anywhere; }
 .fm-dk-top .fm-r { font-size: 12px; color: var(--fm-muted); }
-.fm-dkx { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; border-radius: 8px; color: var(--fm-muted); cursor: pointer; }
+.fm-dkx { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; border-radius: var(--shape-r-ctl, 8px); color: var(--fm-muted); cursor: pointer; }
 .fm-dkx:hover { background: var(--fm-tint); color: var(--fm-ink); }
 .fm-dock p { margin: 0 0 10px; font-size: 13px; color: var(--fm-body); }
 .fm-fact { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 8px; padding: 6px 0; font-size: 12.5px; }
 .fm-fact span:first-child { color: var(--fm-muted); }
 .fm-fact span:last-child { color: var(--fm-ink); overflow-wrap: anywhere; }
-.fm-dmnote { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--fm-dm) 70%, transparent); padding: 7px 10px; margin: 12px 0; border-radius: 8px; font-size: 12.5px; color: var(--fm-ink); display: flex; gap: 10px; align-items: baseline; }
+.fm-dmnote { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--fm-dm) 70%, transparent); padding: 7px 10px; margin: 12px 0; border-radius: var(--shape-r-ctl, 8px); font-size: 12.5px; color: var(--fm-ink); display: flex; gap: 10px; align-items: baseline; }
 .fm-act { display: flex; gap: 6px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .fm-cmd {
-  font-weight: 500; font-size: 13px; line-height: 1; min-height: var(--fm-hit); padding: 0 13px; border-radius: 8px; border: 0; background: var(--fm-acc-soft);
+  font-weight: 500; font-size: 13px; line-height: 1; min-height: var(--fm-hit); padding: 0 13px; border-radius: var(--shape-r-ctl, 8px); border: 0; background: var(--fm-acc-soft);
   color: var(--fm-acc); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
 }
 .fm-cmd:hover { background: var(--fm-acc); color: #fff; }
 .fm-lnk {
-  font-weight: 500; font-size: 12.5px; color: var(--fm-acc); background: none; border: 0; min-height: var(--fm-hit); padding: 0 10px; border-radius: 8px;
+  font-weight: 500; font-size: 12.5px; color: var(--fm-acc); background: none; border: 0; min-height: var(--fm-hit); padding: 0 10px; border-radius: var(--shape-r-ctl, 8px);
   display: inline-flex; align-items: center; gap: 6px; text-decoration: underline; text-decoration-color: var(--fm-acc-link); text-underline-offset: 3px; cursor: pointer;
 }
 .fm-lnk:hover { background: var(--fm-acc-soft); }
@@ -258,7 +258,7 @@ html[data-motion="calm"] .fm-dot.fm-new .fm-pw { animation: fm-fade 220ms both; 
 /* The remove mark is hidden until the person is pointed at or focused, but stays in the tab order. */
 .fm .fm-rm {
   position: absolute; top: -1px; right: 12px; z-index: 3; width: 20px; height: 20px; border-radius: 50%; padding: 0; display: grid; place-items: center;
-  border: 1px solid var(--fm-line-strong); background: var(--fm-panel); color: var(--fm-muted); cursor: pointer; box-shadow: var(--fm-sh-sm);
+  border: var(--shape-edge, 1px) solid var(--fm-line-strong); background: var(--fm-panel); color: var(--fm-muted); cursor: pointer; box-shadow: var(--fm-sh-sm);
   opacity: 0; pointer-events: none; transition: opacity var(--dur-micro, 120ms);
 }
 .fm-rm::after { content: ""; position: absolute; inset: -7px; }
@@ -274,7 +274,7 @@ html[data-motion="calm"] .fm-dot.fm-new .fm-pw { animation: fm-fade 220ms both; 
 .fm-sp { flex: 0 0 0; }
 .fm .fm-q:disabled { opacity: .4; cursor: default; background: none; color: var(--fm-muted); }
 .fm .fm-pri {
-  font-weight: 600; font-size: 13px; line-height: 1; min-height: var(--fm-hit); padding: 0 16px; border-radius: 8px; border: 0;
+  font-weight: 600; font-size: 13px; line-height: 1; min-height: var(--fm-hit); padding: 0 16px; border-radius: var(--shape-r-ctl, 8px); border: 0;
   background: var(--fm-acc); color: #fff; cursor: pointer;
 }
 .fm .fm-pri:disabled { opacity: .4; cursor: default; }
@@ -290,20 +290,20 @@ html[data-motion="calm"] .fm-pick { animation: fm-fade 160ms both; }
 html[data-motion="off"] .fm-pick { animation: none; }
 .fm.fm-phone .fm-pick { width: 230px; }
 .fm-pick-h { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 13px; color: var(--fm-ink); margin-bottom: 4px; }
-.fm .fm-pkx { width: 32px; height: 32px; margin: -4px -6px -4px 0; border: 0; background: none; border-radius: 8px; color: var(--fm-muted); display: grid; place-items: center; cursor: pointer; }
+.fm .fm-pkx { width: 32px; height: 32px; margin: -4px -6px -4px 0; border: 0; background: none; border-radius: var(--shape-r-ctl, 8px); color: var(--fm-muted); display: grid; place-items: center; cursor: pointer; }
 .fm-pkx:hover { background: var(--fm-tint); color: var(--fm-ink); }
-.fm-seg { display: flex; width: 100%; margin: 2px 0 8px; background: var(--fm-tint); border-radius: 8px; padding: 2px; gap: 2px; }
-.fm .fm-seg button { flex: 1; min-height: 30px; padding: 0 6px; font-size: 12px; font-weight: 500; border: 0; border-radius: 6px; background: none; color: var(--fm-muted); cursor: pointer; }
+.fm-seg { display: flex; width: 100%; margin: 2px 0 8px; background: var(--fm-tint); border-radius: var(--shape-r-ctl, 8px); padding: 2px; gap: 2px; }
+.fm .fm-seg button { flex: 1; min-height: 30px; padding: 0 6px; font-size: 12px; font-weight: 500; border: 0; border-radius: var(--shape-r-small, 6px); background: none; color: var(--fm-muted); cursor: pointer; }
 .fm.fm-phone .fm-seg button { min-height: 40px; }
 .fm .fm-seg button[aria-pressed="true"] { background: var(--fm-panel); color: var(--fm-acc); box-shadow: var(--fm-sh-sm); }
 .fm-pick input {
-  width: 100%; min-height: 34px; border: 1px solid var(--fm-line-strong); border-radius: 8px; background: var(--fm-bg); color: var(--fm-ink); font: inherit; font-size: 13px; padding: 0 10px;
+  width: 100%; min-height: 34px; border: var(--shape-edge, 1px) solid var(--fm-line-strong); border-radius: var(--shape-r-ctl, 8px); background: var(--fm-bg); color: var(--fm-ink); font: inherit; font-size: 13px; padding: 0 10px;
 }
 .fm.fm-phone .fm-pick input { min-height: 44px; font-size: 16px; }
 .fm-pick input:focus { outline: 2px solid var(--fm-acc); outline-offset: 1px; }
 .fm-pl { max-height: 150px; overflow: auto; margin: 6px 0 2px; }
 .fm .fm-pl button, .fm .fm-mk {
-  display: flex; gap: 8px; align-items: baseline; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; background: none; border-radius: 8px; color: var(--fm-ink);
+  display: flex; gap: 8px; align-items: baseline; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; background: none; border-radius: var(--shape-r-ctl, 8px); color: var(--fm-ink);
   font-size: 13px; text-align: left; cursor: pointer;
 }
 .fm.fm-phone .fm-pl button, .fm.fm-phone .fm-mk { min-height: 44px; }
@@ -311,6 +311,6 @@ html[data-motion="off"] .fm-pick { animation: none; }
 .fm-pl .fm-pl-n { min-width: 0; overflow-wrap: anywhere; }
 .fm .fm-pl button small { color: var(--fm-muted); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
 .fm .fm-pl button:hover, .fm .fm-mk:hover { background: var(--fm-acc-soft); }
-.fm .fm-mk { margin-top: 2px; border-top: 1px solid var(--fm-line); border-radius: 0 0 8px 8px; color: var(--fm-acc); font-weight: 500; overflow-wrap: anywhere; }
+.fm .fm-mk { margin-top: 2px; border-top: var(--shape-rule, 1px) solid var(--fm-line); border-radius: 0 0 var(--shape-r-ctl, 8px) var(--shape-r-ctl, 8px); color: var(--fm-acc); font-weight: 500; overflow-wrap: anywhere; }
 .fm-none { padding: 6px 8px; font-size: 12px; color: var(--fm-muted); }
 .fm-pl .fm-dmtag { position: static; flex: none; }

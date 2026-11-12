@@ -183,6 +183,19 @@
     --elev-dragged:    0 16px 36px -8px rgb(0 0 0 / 0.22),
                        0 4px 12px -4px rgb(0 0 0 / 0.12);
 
+    /* Shape: corners and edge weights. Page parts take their corners and
+     * edges from these, so a style kit (style_kits.css) restyles every part
+     * by setting these values once. Each is a single length because parts
+     * build composites from them (`0 0 r r`, `calc(r - 1px)`). Material's
+     * values are the standard's numbers (ui-standard.md, "Look"). Pills and
+     * circles stay fixed: they are shapes, not corners. */
+    --shape-r-tag:     4px;      /* tags and small marks */
+    --shape-r-small:   6px;      /* small things: a segment inside a control */
+    --shape-r-ctl:     8px;      /* controls and rows */
+    --shape-r-panel:   12px;     /* panels, dialogs, drawers, pictures */
+    --shape-edge:      1px;      /* the edge around a box or control */
+    --shape-rule:      1px;      /* a rule between rows or sections */
+
     /* ──────────────────────────────────────────────────────────────────
      * Dynamic-surface token contract — the frame's PUBLIC styling API.
      *
