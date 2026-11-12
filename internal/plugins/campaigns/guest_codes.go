@@ -233,6 +233,11 @@ func (s *GuestCodeService) AdmitWithGuestCode(ctx context.Context, codeID, campa
 	if err := s.repo.SetUsedBy(ctx, codeID, userID); err != nil {
 		slog.Warn("recording guest code use", slog.String("code_id", codeID), slog.Any("error", err))
 	}
+	// A visitor joining with a player's code is a member now, so any pass
+	// they hold stops counting; removing them later must not leave it live.
+	if err := s.repo.ClearVisits(ctx, campaignID, userID); err != nil {
+		slog.Warn("clearing look-around pass", slog.String("user_id", userID), slog.Any("error", err))
+	}
 	slog.Info("joined with a guest code", slog.String("campaign_id", campaignID), slog.String("user_id", userID))
 	return nil
 }
@@ -276,7 +281,7 @@ func (s *GuestCodeService) MakeVisitorPlayer(ctx context.Context, campaignID, id
 			return apperror.NewInternal(fmt.Errorf("adding player: %w", err))
 		}
 	}
-	if err := s.repo.ClearVisit(ctx, gc.ID); err != nil {
+	if err := s.repo.ClearVisits(ctx, campaignID, *gc.UsedBy); err != nil {
 		return apperror.NewInternal(err)
 	}
 	slog.Info("visitor made a player", slog.String("campaign_id", campaignID), slog.String("user_id", *gc.UsedBy))
@@ -290,6 +295,12 @@ func (s *GuestCodeService) EndVisit(ctx context.Context, campaignID, id string) 
 		return err
 	}
 	return s.repo.EndVisit(ctx, campaignID, id, s.now())
+}
+
+// EndVisits ends the user's running passes for the campaign; the campaign
+// service calls it when a member is removed.
+func (s *GuestCodeService) EndVisits(ctx context.Context, campaignID, userID string) error {
+	return s.repo.EndVisitsFor(ctx, campaignID, userID, s.now())
 }
 
 // MoveGuestMembership is the campaign step of merging a guest.

@@ -26,6 +26,8 @@ func (s *stubVisitSvc) VisitPass(context.Context, string, string) (time.Time, bo
 	return s.until, s.live, s.found, nil
 }
 
+func (s *stubVisitSvc) EndVisits(context.Context, string, string) error { return nil }
+
 // A live pass opens a private campaign's view pages as a public visitor
 // would see them; an ended one says so; and no pass ever gets through the
 // write gate, which needs a membership.

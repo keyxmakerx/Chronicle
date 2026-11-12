@@ -108,8 +108,22 @@ func (m *memGuestCodes) EndVisit(_ context.Context, campaignID, id string, now t
 	return nil
 }
 
-func (m *memGuestCodes) ClearVisit(_ context.Context, id string) error {
-	m.byID(id).VisitUntil = nil
+func (m *memGuestCodes) ClearVisits(_ context.Context, campaignID, userID string) error {
+	for _, g := range m.byHash {
+		if g.CampaignID == campaignID && g.UsedBy != nil && *g.UsedBy == userID {
+			g.VisitUntil = nil
+		}
+	}
+	return nil
+}
+
+func (m *memGuestCodes) EndVisitsFor(_ context.Context, campaignID, userID string, now time.Time) error {
+	for _, g := range m.byHash {
+		if g.CampaignID == campaignID && g.UsedBy != nil && *g.UsedBy == userID && g.VisitUntil != nil && g.VisitUntil.After(now) {
+			n := now
+			g.VisitUntil = &n
+		}
+	}
 	return nil
 }
 
@@ -335,6 +349,33 @@ func TestGuestCodeVisit(t *testing.T) {
 	}
 	if repo.byID(id2).Status(start) != "visit_ended" {
 		t.Fatalf("status = %q", repo.byID(id2).Status(start))
+	}
+
+	// A visitor who joins with a player's code is a member now, so their
+	// pass stops counting and can't outlive a later removal.
+	visit, _ := svc.Create(ctx, "camp-1", "owner", "", 3)
+	vid, _, _ := svc.ClaimGuestCode(ctx, visit.Code)
+	if err := svc.AdmitWithGuestCode(ctx, vid, "camp-1", "bren"); err != nil {
+		t.Fatal(err)
+	}
+	join, _ := svc.Create(ctx, "camp-1", "owner", "", 0)
+	jid, _, _ := svc.ClaimGuestCode(ctx, join.Code)
+	if err := svc.AdmitWithGuestCode(ctx, jid, "camp-1", "bren"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, found, _ := svc.VisitPass(ctx, "camp-1", "bren"); found {
+		t.Fatal("joining as a player left the pass in place")
+	}
+
+	// EndVisits, run when a member is removed, ends every running pass.
+	again, _ := svc.Create(ctx, "camp-1", "owner", "", 7)
+	aid, _, _ := svc.ClaimGuestCode(ctx, again.Code)
+	_ = svc.AdmitWithGuestCode(ctx, aid, "camp-1", "orsa")
+	if err := svc.EndVisits(ctx, "camp-1", "orsa"); err != nil {
+		t.Fatal(err)
+	}
+	if _, live, _, _ := svc.VisitPass(ctx, "camp-1", "orsa"); live {
+		t.Fatal("EndVisits left a pass running")
 	}
 
 	// A player's code can't be ended or "made a player" again.

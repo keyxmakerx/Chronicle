@@ -32,8 +32,12 @@ type GuestCodeRepository interface {
 	FindVisit(ctx context.Context, campaignID, userID string) (*time.Time, error)
 	// EndVisit moves a running visit's end to now; an ended one is NotFound.
 	EndVisit(ctx context.Context, campaignID, id string, now time.Time) error
-	// ClearVisit removes the pass's end, once its visitor is a player.
-	ClearVisit(ctx context.Context, id string) error
+	// ClearVisits removes the end of every pass the user holds for the
+	// campaign, once they are a member.
+	ClearVisits(ctx context.Context, campaignID, userID string) error
+	// EndVisitsFor moves the end of the user's running passes for the
+	// campaign to now. Having none is not an error.
+	EndVisitsFor(ctx context.Context, campaignID, userID string, now time.Time) error
 	// MoveMembership hands a guest's place in a campaign to another account,
 	// keeping that account's role when it is already a member.
 	MoveMembership(ctx context.Context, campaignID, fromUserID, toUserID string) error
@@ -173,11 +177,24 @@ func (r *guestCodeRepository) EndVisit(ctx context.Context, campaignID, id strin
 	return nil
 }
 
-// ClearVisit removes a pass's end once its visitor became a player.
-func (r *guestCodeRepository) ClearVisit(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE campaign_guest_codes SET visit_until = NULL WHERE id = ?`, id)
+// ClearVisits removes a user's pass ends once they became a member.
+func (r *guestCodeRepository) ClearVisits(ctx context.Context, campaignID, userID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_guest_codes SET visit_until = NULL
+		  WHERE campaign_id = ? AND used_by = ? AND visit_until IS NOT NULL`, campaignID, userID)
 	if err != nil {
-		return fmt.Errorf("clearing visit: %w", err)
+		return fmt.Errorf("clearing visits: %w", err)
+	}
+	return nil
+}
+
+// EndVisitsFor ends a user's running passes now.
+func (r *guestCodeRepository) EndVisitsFor(ctx context.Context, campaignID, userID string, now time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_guest_codes SET visit_until = ?
+		  WHERE campaign_id = ? AND used_by = ? AND visit_until > ?`, now, campaignID, userID, now)
+	if err != nil {
+		return fmt.Errorf("ending visits: %w", err)
 	}
 	return nil
 }

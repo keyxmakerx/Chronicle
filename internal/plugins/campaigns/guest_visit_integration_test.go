@@ -101,4 +101,20 @@ func TestGuestVisit_Integration(t *testing.T) {
 	if _, err := NewGuestCodeRepository(db).FindByID(ctx, navPinsUUID(t), second); err == nil {
 		t.Fatal("another campaign read the code")
 	}
+
+	// Someone who became a member another way (an email invite) while their
+	// pass ran loses the pass along with the membership when removed.
+	tal := navPinsUUID(t)
+	navPinsExec(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+		tal, "visit-"+tal+"@example.test", "Tal", "x")
+	use(7, tal)
+	navPinsExec(t, db, `INSERT INTO campaign_members (campaign_id, user_id, role) VALUES (?, ?, 'player')`, campaignID, tal)
+	campSvc := NewCampaignService(campRepo, nil, nil, nil, "")
+	ConfigureVisitPasses(campSvc, svc)
+	if err := campSvc.RemoveMember(ctx, campaignID, tal); err != nil {
+		t.Fatalf("RemoveMember: %v", err)
+	}
+	if _, live, found, _ := svc.VisitPass(ctx, campaignID, tal); live || !found {
+		t.Fatalf("after removal: live %v found %v", live, found)
+	}
 }
