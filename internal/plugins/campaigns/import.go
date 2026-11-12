@@ -69,6 +69,9 @@ type IDMap struct {
 	// MediaIDs maps original media file ID → the restored file's new ID.
 	MediaIDs map[string]string
 
+	// MapIDs maps original map ID → new map ID.
+	MapIDs map[string]string
+
 	// CampaignID is the new campaign's ID.
 	CampaignID string
 
@@ -93,6 +96,7 @@ func NewIDMap(campaignID string) *IDMap {
 		MediaIDs:         make(map[string]string),
 		CalendarIDs:      make(map[string]string),
 		CalendarEventIDs: make(map[string]string),
+		MapIDs:           make(map[string]string),
 		CampaignID:       campaignID,
 	}
 }
