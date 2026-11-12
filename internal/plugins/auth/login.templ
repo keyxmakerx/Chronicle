@@ -51,16 +51,15 @@ func joiningCampaign(redirect string) bool {
 // provider button, and folds the password form away when the admin hid it.
 templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string, opts LoginOptions) {
 	@layouts.Base("Login") {
-		@layouts.SiteAuthStage("") {
-			<div class="w-full max-w-md">
-				<div class="text-center mb-8">
-					@layouts.SiteAuthMark()
+		@AuthDoors(layouts.DoorSignIn, redirect) {
+			<div>
+				<div class="doors-head">
 					if joiningCampaign(redirect) {
-						<h1 class="text-3xl font-bold text-fg">You&apos;re invited</h1>
-						<p class="text-fg-secondary mt-2">Sign in to join the campaign, or create an account if you&apos;re new to { layouts.SiteName(ctx) }.</p>
+						<h1>You&apos;re invited</h1>
+						<p>Sign in to join the campaign, or create an account if you&apos;re new to { layouts.SiteName(ctx) }.</p>
 					} else {
-						<h1 class="text-3xl font-bold text-fg">Welcome back</h1>
-						<p class="text-fg-secondary mt-2">Sign in to your { layouts.SiteName(ctx) } account</p>
+						<h1>Welcome back</h1>
+						<p>Sign in to your { layouts.SiteName(ctx) } account</p>
 					}
 					@layouts.SiteWelcomeLine()
 				</div>
@@ -104,7 +103,7 @@ templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string, opts Logi
 templ LoginForm_(csrfToken, email, errMsg, redirect string) {
 	<div id="login-form">
 		<form
-			class="card p-8 space-y-5"
+			class="space-y-4"
 			method="POST"
 			action="/login"
 			hx-post="/login"
@@ -164,14 +163,6 @@ templ LoginForm_(csrfToken, email, errMsg, redirect string) {
 			<button type="submit" class="btn-primary w-full py-2.5">
 				Sign In
 			</button>
-
-			<p class="text-center text-sm text-fg-secondary">
-				Don&apos;t have an account?
-				<a href={ templ.SafeURL(registerHref(redirect)) } class="text-accent hover:text-accent-hover font-medium" data-testid="create-account">
-					Create one
-				</a>
-			</p>
-			@layouts.HaveACodeLink(false)
 		</form>
 	</div>
 }

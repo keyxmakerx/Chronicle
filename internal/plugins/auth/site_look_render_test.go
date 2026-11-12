@@ -22,17 +22,35 @@ func renderAuthPage(t *testing.T, look sitelook.Settings, c templ.Component) str
 	return b.String()
 }
 
+func panelMarker(doors bool) string {
+	if doors {
+		return "doors-panel"
+	}
+	return "rounded-2xl"
+}
+
+// unsavedMarker is what a site that never saved a look renders: the built-in
+// scenes on the doors pages, the page colour elsewhere.
+func unsavedMarker(doors bool) string {
+	if doors {
+		return `data-mode="scenes"`
+	}
+	return "min-h-screen flex items-center justify-center bg-surface px-4"
+}
+
 // TestAuthPagesCarryTheSiteBrand renders all four pages that share the
 // sign-in stage, saved and unsaved.
 func TestAuthPagesCarryTheSiteBrand(t *testing.T) {
 	pages := []struct {
 		name string
 		page templ.Component
+		// doors pages sit on the three-door stage, the others on the plain stage.
+		doors bool
 	}{
-		{"login", LoginPage("tok", "", "", "", "", LoginOptions{})},
-		{"register", RegisterPage("tok", &RegisterRequest{}, "", "", false, "open")},
-		{"forgot password", ForgotPasswordPage("tok", "", "", true)},
-		{"reset password", ResetPasswordPage("tok", "t", "", "")},
+		{"login", LoginPage("tok", "", "", "", "", LoginOptions{}), true},
+		{"register", RegisterPage("tok", &RegisterRequest{}, "", "", false, "open"), true},
+		{"forgot password", ForgotPasswordPage("tok", "", "", true), false},
+		{"reset password", ResetPasswordPage("tok", "t", "", ""), false},
 	}
 	saved := sitelook.Settings{Configured: true, Name: "Dragon Hold", Look: "ember", Background: sitelook.BackgroundLook}
 	for _, p := range pages {
@@ -40,7 +58,7 @@ func TestAuthPagesCarryTheSiteBrand(t *testing.T) {
 			out := renderAuthPage(t, saved, p.page)
 			for _, want := range []string{
 				"<title>", "| Dragon Hold</title>", `aria-label="Dragon Hold"`, ">D<",
-				"linear-gradient(135deg, #1f2937, #4a1512)", "rounded-2xl",
+				"linear-gradient(135deg, #1f2937, #4a1512)", panelMarker(p.doors),
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %q", want)
@@ -52,7 +70,7 @@ func TestAuthPagesCarryTheSiteBrand(t *testing.T) {
 		})
 		t.Run(p.name+"/unsaved is as shipped", func(t *testing.T) {
 			out := renderAuthPage(t, sitelook.Settings{}, p.page)
-			for _, want := range []string{"| Chronicle</title>", "fa-book-open", "min-h-screen flex items-center justify-center bg-surface px-4"} {
+			for _, want := range []string{"| Chronicle</title>", "fa-book-open", unsavedMarker(p.doors)} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %q", want)
 				}
@@ -80,9 +98,11 @@ func TestLoginPageSiteLook(t *testing.T) {
 			[]string{`&lt;img src=x onerror=alert(1)&gt;`}, []string{"<img src=x"}},
 		{"name is escaped", sitelook.Settings{Configured: true, Name: `<script>x</script>`}, []string{`&lt;script&gt;x&lt;/script&gt;`}, []string{"<script>x"}},
 		{"picture background", sitelook.Settings{Configured: true, Background: sitelook.BackgroundPicture, Picture: "2026/10/bg.jpg"},
-			[]string{`<img src="/media/bg" alt="" aria-hidden="true"`}, nil},
+			[]string{`data-mode="picture"`, `<img src="/media/bg" alt="">`}, []string{"doors-set"}},
 		{"plain background keeps the page colour", sitelook.Settings{Configured: true, Look: "ember", Background: sitelook.BackgroundPlain},
-			[]string{"bg-surface px-4"}, []string{"linear-gradient(135deg"}},
+			[]string{`data-mode="plain"`}, []string{"linear-gradient(135deg", "doors-set"}},
+		{"never saved shows the scenes", sitelook.Settings{},
+			[]string{`data-mode="scenes"`, "castle-1-back", "dragon-4-action", "tavern-2-mid"}, nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

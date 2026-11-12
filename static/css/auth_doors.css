@@ -1,0 +1,140 @@
+/*
+ * auth_doors.css: the sign-in, "I'm new" and "I have a code" page
+ * (internal/templates/layouts/site_doors.templ, internal/plugins/auth).
+ *
+ * One floating surface panel sits over a scene that follows the open tab:
+ * castle, dragon, tavern. Each scene is four pre-blurred layers (the blur is
+ * baked into the images, so it scales with the picture) that drift sideways at
+ * different speeds; only transform and opacity ever animate. Durations come
+ * from the motion tokens in input.css. Calm and Off stop every drift (the
+ * global rules end a keyframe animation at once and, with no fill, it falls
+ * back to the resting position below); a still page or hidden tab pauses it.
+ */
+.doors {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow: hidden;
+  background: var(--color-bg-primary, #0b1020);
+}
+.doors[data-mode="plain"] { background: var(--color-bg-primary, #fff); }
+.doors[data-mode="picture"] { background: #0f172a; }
+
+/* Scenes ------------------------------------------------------------- */
+.doors-scene { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.doors-set {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--dur-slide, 360ms) var(--ease-standard, ease);
+}
+.doors[data-door="signin"] .doors-set[data-scene="castle"],
+.doors[data-door="new"] .doors-set[data-scene="dragon"],
+.doors[data-door="code"] .doors-set[data-scene="tavern"] { opacity: 1; }
+
+/* A layer is wider than the screen so its drift never shows an edge. --k
+   scales the loop: the back layer is the slowest, the front the quickest. */
+.doors-layer {
+  --drift: 3%;
+  --k: 1;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8%;
+  width: 116%;
+  will-change: transform;
+  animation: doors-drift calc(var(--dur-ambient, 40s) * var(--k)) ease-in-out infinite alternate;
+}
+.doors-layer img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.doors-layer[data-layer="back"]   { --drift: 1.5%; --k: 1.6; }
+.doors-layer[data-layer="mid"]    { --drift: 2.5%; --k: 1.25; }
+.doors-layer[data-layer="front"]  { --drift: 4%;   --k: 1; }
+.doors-layer[data-layer="action"] { --drift: 3%;   --k: 0.85; }
+
+/* The dragon's layer also sways on its own, on its image so the sideways
+   drift on the layer keeps running underneath. */
+.doors-set[data-scene="dragon"] .doors-layer[data-layer="action"] img {
+  animation: doors-sway calc(var(--dur-ambient, 40s) * 0.2) ease-in-out infinite alternate;
+  transform-origin: 60% 55%;
+}
+@keyframes doors-drift {
+  from { transform: translate3d(calc(var(--drift) * -1), 0, 0); }
+  to   { transform: translate3d(var(--drift), 0, 0); }
+}
+@keyframes doors-sway {
+  from { transform: translate3d(0, -1.2%, 0) rotate(-0.6deg); }
+  to   { transform: translate3d(0, 1.2%, 0) rotate(0.6deg); }
+}
+/* Still page or hidden tab: nothing is drawn. */
+.doors.is-still .doors-layer,
+.doors.is-still .doors-layer img { animation-play-state: paused; }
+
+/* The site admin's own picture: the same blur, scaled to the viewport, and
+   the same drift when the look's Move switch is on. */
+.doors-photo { position: absolute; top: 0; bottom: 0; left: -8%; width: 116%; will-change: transform; }
+.doors[data-move] .doors-photo { --drift: 3%; animation: doors-drift calc(var(--dur-ambient, 40s) * 0.75) ease-in-out infinite alternate; }
+.doors-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(1.6vmax) brightness(1.08) saturate(1.1);
+  transform: scale(1.12);
+}
+.doors.is-still .doors-photo { animation-play-state: paused; }
+
+/* A darkening wash keeps the panel's edge legible over bright scenes. */
+.doors-scene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgb(0 0 0 / 0) 35%, rgb(0 0 0 / .35) 100%);
+}
+
+/* The panel ---------------------------------------------------------- */
+.doors-panel {
+  position: relative;
+  width: 100%;
+  max-width: 28rem;
+  padding: 28px 28px 24px;
+  border-radius: var(--shape-r-panel, 12px);
+  background: var(--color-card-bg, #fff);
+  color: var(--color-text-body, #374151);
+  box-shadow: var(--elev-dragged, 0 16px 36px -8px rgb(0 0 0 / .22)), 0 0 0 var(--shape-edge, 1px) rgb(255 255 255 / .06);
+}
+.dark .doors-panel { background: var(--color-card-bg, #1f2937); }
+@media (max-width: 480px) { .doors-panel { padding: 22px 18px 20px; } }
+
+/* Tabs: small capitals, a hairline under, and up the left side of the open one. */
+.doors-tabs { display: flex; gap: 4px; margin: 0 0 20px; border-bottom: var(--shape-rule, 1px) solid var(--color-border-light, #e5e7eb); }
+.doors-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-secondary, #6b7280);
+  border-left: var(--shape-rule, 1px) solid transparent;
+  border-bottom: var(--shape-rule, 1px) solid transparent;
+  margin-bottom: calc(var(--shape-rule, 1px) * -1);
+  transition: color var(--dur-micro, 120ms) var(--ease-standard, ease), border-color var(--dur-micro, 120ms) var(--ease-standard, ease);
+}
+.doors-tab:hover { color: var(--color-text-primary, #111827); }
+.doors-tab[aria-selected="true"] { color: var(--color-accent, #6366f1); border-left-color: var(--color-accent, #6366f1); border-bottom-color: var(--color-accent, #6366f1); }
+.doors-tab:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; border-radius: var(--shape-r-tag, 4px); }
+@media (max-width: 380px) { .doors-tab { font-size: 11px; letter-spacing: .04em; } }
+
+/* The open door's heading, set into the panel. */
+.doors-head { text-align: center; margin-bottom: 20px; }
+.doors-head h1 { font-size: 1.5rem; font-weight: 700; color: var(--color-text-primary, #111827); }
+.doors-head p { margin-top: 6px; font-size: 14px; color: var(--color-text-secondary, #6b7280); }
