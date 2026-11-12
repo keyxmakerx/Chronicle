@@ -20,24 +20,14 @@ templ ArmoryGalleryPage(cc *campaigns.CampaignContext, cards []ItemCard, total i
 // ArmoryGalleryContent renders the gallery content (HTMX partial target).
 templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, tagOptions []ItemTagInfo, csrfToken string) {
 	<div id="armory-gallery">
-		<!-- Page header -->
-		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-			<div>
-				<h1 class="text-2xl font-bold text-fg">
-					if selected != nil {
-						<i class={ "fa-solid " + selected.Icon + " mr-2" } style={ "color:" + selected.Color }></i>
-						{ selected.Name }
-					} else {
-						<i class="fa-solid fa-shield-halved mr-2 text-fg-muted"></i>Armory
-					}
-				</h1>
-				<p class="text-sm text-fg-secondary mt-0.5">
-					{ fmt.Sprintf("%d", total) } items
-					if selected != nil && selected.Description != nil && *selected.Description != "" {
-						<span class="mx-1">&middot;</span>{ *selected.Description }
-					}
-				</p>
-			</div>
+		@layouts.AppFrame() {
+			@layouts.AppOpening(armoryOpening(ctx, total, opts, selected)) {
+				<span>{ armoryCount(total) }</span>
+				if selected != nil && selected.Description != nil && *selected.Description != "" {
+					<span>{ *selected.Description }</span>
+				}
+			}
+		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-end gap-4 mb-6">
 			<div class="flex items-center gap-3 flex-wrap">
 				<!-- Instance selector -->
 				if len(instances) > 0 {
@@ -156,24 +146,14 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 		<!-- Instance management panel (loaded via HTMX) -->
 		<div id="instance-manage-panel"></div>
 
-		<!-- Item Grid -->
+		<!-- Item Grid. A bare armory is covered by the opening itself. -->
 		if len(cards) == 0 {
-			<div class="text-center py-16">
-				<i class="fa-solid fa-shield-halved text-4xl text-fg-muted mb-4"></i>
-				<h3 class="text-lg font-semibold text-fg-secondary mb-1">No items found</h3>
-				if opts.Search != "" || opts.Tag != "" || opts.TypeID > 0 || opts.InstanceID > 0 {
+			if armoryFiltered(opts) {
+				<div class="text-center py-16">
+					<h3 class="text-lg font-semibold text-fg-secondary mb-1">No items found</h3>
 					<p class="text-sm text-fg-muted">Try adjusting your search or filters.</p>
-				} else if cc.MemberRole >= campaigns.RoleScribe {
-					<p class="text-sm text-fg-muted">
-						No item types configured. Enable a game system with item presets,
-						or create a custom entity type and set its category to "item."
-					</p>
-				} else {
-					<p class="text-sm text-fg-muted">
-						No items have been added to the armory yet.
-					</p>
-				}
-			</div>
+				</div>
+			}
 		} else {
 			<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
 				for _, card := range cards {
@@ -185,6 +165,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 			if total > opts.PerPage {
 				@armoryPagination(cc, total, opts)
 			}
+		}
 		}
 	</div>
 }
