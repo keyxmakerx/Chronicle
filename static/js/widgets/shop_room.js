@@ -1169,13 +1169,16 @@
   function shopItems(rels, ov, MAT, ICONS, words) {
     return rels.map(function (r) {
       var m = r.metadata || {}, o = ov[String(r.id)] || {}, q = m.quantity, price = Number(m.price) || 0, cur = m.currency || 'gp';
-      var out = m.in_stock === false || (q !== null && q !== undefined && !m.unlimited && Number(q) <= 0);
+      // Stock is read the way the sale reads it (parseShopMeta): a whole
+      // number from 0 up is a count, anything else (absent, -1) is unlimited.
+      var qty = m.unlimited || q === null || q === undefined || !(Number(q) >= 0) || Number(q) % 1 ? null : Number(q);
+      var out = m.in_stock === false || qty === 0;
       var coin = localCoin(words, cur);
       return {
         id: r.id, n: r.targetEntityId ? (r.targetEntityName || 'Item') : (m.custom_name || 'Unnamed item'), k: r.targetEntityType || 'Goods',
         ic: o.icon && ICONS[o.icon] ? o.icon : iconFor(r.targetEntityIcon, ICONS), mat: o.color || '',
         c: (o.color && MAT[o.color]) || safeHex(r.targetEntityColor) || MAT.steel, p: price, cur: cur, price: price + ' ' + coin.text, priceUsual: coin.usual ? price + ' ' + cur : '',
-        qty: q === null || q === undefined || m.unlimited ? null : Number(q), out: out, magic: false, entityId: r.targetEntityId || ''
+        qty: qty, out: out, magic: false, entityId: r.targetEntityId || ''
       };
     });
   }

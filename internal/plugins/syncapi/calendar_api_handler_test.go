@@ -23,8 +23,9 @@ import (
 type fakeCalendarSvcForAPI struct {
 	calendar.CalendarService
 
-	cal    *calendar.Calendar
-	events []calendar.Event
+	cal        *calendar.Calendar
+	events     []calendar.Event
+	dayWeather []calendar.DayWeather // when set, ListDayWeather answers these
 
 	defaultCampaign string
 	viewers         []permissions.Viewer
@@ -59,6 +60,9 @@ func (f *fakeCalendarSvcForAPI) ListEventsForMonth(_ context.Context, calendarID
 func (f *fakeCalendarSvcForAPI) ListDayWeather(_ context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]calendar.DayWeather, error) {
 	f.dayWeatherArgs = [4]any{calendarID, campaignID, year, month}
 	f.dayWeatherViewer = v
+	if f.dayWeather != nil {
+		return f.dayWeather, nil
+	}
 	return []calendar.DayWeather{{Year: year, Month: month, Day: 1}}, nil
 }
 
@@ -509,5 +513,41 @@ func TestCalendarAPI_ListDayWeather(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"total":1`) {
 		t.Errorf("body = %s", rec.Body.String())
+	}
+}
+
+// TestCalendarAPI_TodayWeather: the date read and the weather read give
+// today's own day reading, as the calendar page and DM screen do, and fall
+// back to the calendar's single stored reading only when today has none.
+func TestCalendarAPI_TodayWeather(t *testing.T) {
+	str := func(s string) *string { return &s }
+	legacy := &calendar.Weather{PresetLabel: str("Old drizzle")}
+	cases := []struct {
+		name string
+		days []calendar.DayWeather
+		want string
+		not  string
+	}{
+		{"day reading wins", []calendar.DayWeather{{Day: 3, PresetLabel: str("Other day")}, {Day: 7, PresetLabel: str("Festival sky")}}, "Festival sky", "Old drizzle"},
+		{"no reading today falls back", []calendar.DayWeather{{Day: 3, PresetLabel: str("Other day")}}, "Old drizzle", "Other day"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newCalendarFixture()
+			svc.cal.CurrentDay = 7
+			svc.cal.Weather = legacy
+			svc.dayWeather = tc.days
+			h := NewCalendarAPIHandler(nil, svc, &stubCampaignSvcForCalendarAPI{role: campaigns.RoleOwner})
+			for name, fn := range map[string]func(*echo.Context) error{"date": h.GetCurrentDate, "weather": h.GetWeather} {
+				rec, err := callCalendarAPI(t, h, fn, http.MethodGet, "/", "", sessionKey())
+				if err != nil {
+					t.Fatal(err)
+				}
+				body := rec.Body.String()
+				if !strings.Contains(body, tc.want) || strings.Contains(body, tc.not) {
+					t.Errorf("%s: body = %s, want %q and not %q", name, body, tc.want, tc.not)
+				}
+			}
+		})
 	}
 }

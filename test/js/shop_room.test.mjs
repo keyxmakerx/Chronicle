@@ -103,6 +103,18 @@ test('item look: the GM override, else the item icon, else a box; colours are ne
   assert.equal(its[2].out, true);
 });
 
+test('stock is read as the sale reads it: -1, absent and unlimited are endless', () => {
+  const room = SR.createRoom(state());
+  const its = SR.shopItems([
+    { id: 1, targetEntityId: 'a', metadata: { price: 1, quantity: -1 } },
+    { id: 2, targetEntityId: 'b', metadata: { price: 1 } },
+    { id: 3, targetEntityId: 'c', metadata: { price: 1, quantity: 0, unlimited: true } },
+    { id: 4, targetEntityId: 'd', metadata: { price: 1, quantity: '3' } },
+    { id: 5, targetEntityId: 'e', metadata: { price: 1, quantity: 0 } },
+  ], {}, room.MAT, room.ICONS);
+  assert.deepEqual(its.map((i) => [i.qty, i.out]), [[null, false], [null, false], [null, false], [3, false], [0, true]]);
+});
+
 test('layout round-trips through the saved form', () => {
   const S = state({ roomType: 'apothecary', setting: 'burrow', lines: ['Hello'] });
   const room = SR.createRoom(S);
