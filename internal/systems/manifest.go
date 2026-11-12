@@ -117,6 +117,11 @@ type SystemManifest struct {
 	// (crafting.go). Nil means DefaultCraftingRules.
 	Crafting *CraftingRules `json:"crafting,omitempty"`
 
+	// ShopTests is how a player's haggle or closer look at a shop counter is
+	// thrown (shop_tests.go). Nil falls back to the crafting block, then to a
+	// d20 against a DC.
+	ShopTests *ShopTestsDef `json:"shop_tests,omitempty"`
+
 	// Designs are saved designs the package ships (room themes, crafting
 	// designs). Campaigns on this system see them read-only under "From
 	// <system>" in the design library. See package_designs.go.
@@ -1073,6 +1078,10 @@ func ValidateManifest(m *SystemManifest) error {
 
 	if err := validateCrafting(m.Crafting); err != nil {
 		return fmt.Errorf("crafting: %w", err)
+	}
+
+	if err := validateShopTests(m.ShopTests); err != nil {
+		return fmt.Errorf("shop_tests: %w", err)
 	}
 
 	m.sanitizeDesigns()

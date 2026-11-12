@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -33,6 +34,10 @@ const (
 	// known ids, so both caps are far above anything a builder writes.
 	maxShopRoomCounterName  = 60
 	maxShopRoomCounterProps = 24
+	// A haggle's best and middling cut and a failed haggle's markup. A cut
+	// cannot reach 100% (a free good), and a failure may at most triple a price.
+	maxShopRollCut  = 90
+	maxShopRollPoor = 200
 )
 
 func setOf(vals ...string) map[string]bool {
@@ -59,6 +64,7 @@ var (
 	shopRoomKeeperSpots = setOf("", "left", "middle", "right")
 	shopRoomMoments     = setOf("hello", "look", "buy", "poor", "bye", "refuse")
 	shopRoomFurnish     = setOf("", "room", "mood")
+	shopRollStubborn    = setOf("easy", "usual", "hard")
 	shopRoomKinds       = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack",
 		"tentacle", "monolith", "circle", "cane", "gumdrop", "lolly", "ghost", "coffin", "gift", "pine", "coral", "kelp", "mushroom", "bloom", "urn", "palm", "pillar", "brazier")
 	shopRoomWalls   = setOf("Y", "X", "")
@@ -263,6 +269,12 @@ func (l *ShopRoomLayout) validate() error {
 		}
 	}
 
+	if r := l.Rolls; r != nil {
+		if err := r.validate(); err != nil {
+			return err
+		}
+	}
+
 	lines := make([]string, 0, len(l.Lines))
 	for _, s := range l.Lines {
 		s = strings.TrimSpace(s)
@@ -368,6 +380,32 @@ func (c *ShopRoomCounter) validate() error {
 		}
 	}
 	c.Props = props
+	return nil
+}
+
+// shopRollStatRe is a sheet field key: lowercase letters, digits, underscores.
+var shopRollStatRe = regexp.MustCompile(`^[a-z0-9_]{1,40}$`)
+
+// validate checks the counter roll settings. Stat keys are never looked up
+// here: a key the system does not list is allowed, since the sheet decides
+// whether it holds a number.
+func (r *ShopRoomRolls) validate() error {
+	if !shopRollStubborn[r.Stubborn] {
+		return fmt.Errorf("invalid rolls stubborn")
+	}
+	for name, k := range map[string]string{"haggleStat": r.HaggleStat, "lookStat": r.LookStat} {
+		if k != "" && !shopRollStatRe.MatchString(k) {
+			return fmt.Errorf("invalid rolls %s", name)
+		}
+	}
+	for name, v := range map[string]int{"great": r.Great, "middling": r.Middling} {
+		if v < 0 || v > maxShopRollCut {
+			return fmt.Errorf("invalid rolls %s", name)
+		}
+	}
+	if r.Poor < 0 || r.Poor > maxShopRollPoor {
+		return fmt.Errorf("invalid rolls poor")
+	}
 	return nil
 }
 

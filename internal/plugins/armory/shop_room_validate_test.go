@@ -482,3 +482,90 @@ func TestNormalizeShopRoomCounter(t *testing.T) {
 		})
 	}
 }
+
+func withRolls(r any) []byte {
+	return mutate(func(m map[string]any) { m["rolls"] = r })
+}
+
+func TestNormalizeShopRoomLayout_Rolls(t *testing.T) {
+	good := func() map[string]any {
+		return map[string]any{"haggle": true, "look": true, "stubborn": "hard", "haggleStat": "cha", "lookStat": "int_2",
+			"great": 25, "middling": 12, "poor": 15}
+	}
+	with := func(k string, v any) []byte {
+		r := good()
+		r[k] = v
+		return withRolls(r)
+	}
+	rejects := []struct {
+		name string
+		body []byte
+	}{
+		{"unknown stubborn", with("stubborn", "tough")},
+		{"stubborn in capitals", with("stubborn", "Hard")},
+		{"stat key with a capital", with("haggleStat", "Cha")},
+		{"stat key with a space", with("lookStat", "my stat")},
+		{"stat key with a hyphen", with("haggleStat", "a-b")},
+		{"stat key too long", with("haggleStat", strings.Repeat("a", 41))},
+		{"great over 90", with("great", 91)},
+		{"great negative", with("great", -1)},
+		{"middling over 90", with("middling", 100)},
+		{"poor over 200", with("poor", 201)},
+		{"poor negative", with("poor", -5)},
+		{"fractional percent", with("great", 20.5)},
+		{"percent as text", with("great", "20")},
+		{"switch as text", with("haggle", "yes")},
+		{"rolls not an object", withRolls("on")},
+	}
+	for _, tc := range rejects {
+		t.Run("rejects "+tc.name, func(t *testing.T) {
+			if _, err := NormalizeShopRoomLayout(tc.body); err == nil {
+				t.Error("expected an error")
+			}
+		})
+	}
+
+	t.Run("a full block is kept", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(withRolls(good()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var l ShopRoomLayout
+		if err := json.Unmarshal(out, &l); err != nil {
+			t.Fatal(err)
+		}
+		want := ShopRoomRolls{Haggle: true, Look: true, Stubborn: "hard", HaggleStat: "cha", LookStat: "int_2", Great: 25, Middling: 12, Poor: 15}
+		if l.Rolls == nil || *l.Rolls != want {
+			t.Errorf("rolls = %+v", l.Rolls)
+		}
+		again, err := NormalizeShopRoomLayout(out)
+		if err != nil || string(again) != string(out) {
+			t.Errorf("not idempotent: %v %s", err, again)
+		}
+	})
+	t.Run("the edges are accepted", func(t *testing.T) {
+		r := good()
+		r["great"], r["middling"], r["poor"], r["haggleStat"], r["lookStat"] = 90, 0, 200, "", strings.Repeat("z", 40)
+		if _, err := NormalizeShopRoomLayout(withRolls(r)); err != nil {
+			t.Error(err)
+		}
+	})
+	t.Run("left-out numbers keep their defaults and the switches stay off", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(withRolls(map[string]any{}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var l ShopRoomLayout
+		_ = json.Unmarshal(out, &l)
+		want := ShopRoomRolls{Stubborn: "usual", Great: 20, Middling: 10, Poor: 10}
+		if l.Rolls == nil || *l.Rolls != want {
+			t.Errorf("rolls = %+v", l.Rolls)
+		}
+	})
+	t.Run("absent rolls stays absent", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(mutate(func(map[string]any) {}))
+		if err != nil || strings.Contains(string(out), `"rolls"`) {
+			t.Errorf("rolls written for a layout without any: %v %s", err, out)
+		}
+	})
+}

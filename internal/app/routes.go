@@ -1263,8 +1263,8 @@ type navAppDef struct {
 	addons  []string // the app is on when any of these addons is enabled
 	needs   []string // and only while every one of these is enabled too
 	access  campaigns.NavAccess
-	pinned  bool // starts in Pinned for a campaign that never arranged its sidebar
-	system  bool // the enabled game system's reference; label, icon and path come from it
+	pinned  bool   // starts in Pinned for a campaign that never arranged its sidebar
+	system  bool   // the enabled game system's reference; label, icon and path come from it
 	group   string // the app drawer's group (navDrawerGroups)
 	line    string // the app drawer's one line on what the app is for
 }
@@ -4593,7 +4593,15 @@ func (a *App) RegisterRoutes() {
 		&shopSellsAdapter{svc: relService},
 		&shelfDayAdapter{cal: calendarService},
 	)
-	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB), shopTodaySvc)
+	// A price won at the counter is charged on the day it was won; the table
+	// exists only while the armory's own migration did.
+	var shopBuyOpts []armory.ShopBuyOption
+	var shopRollRepo armory.ShopRollRepository
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		shopRollRepo = armory.NewShopRollRepository(a.DB)
+		shopBuyOpts = append(shopBuyOpts, armory.WithHaggles(shopRollRepo))
+	}
+	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB), shopTodaySvc, shopBuyOpts...)
 	shopBuyHandler := armory.NewShopBuyHandler(shopBuySvc)
 	// The Foundry module buys through the sync API as the player at the table,
 	// with the same service and acting-as rule as the stash calls. Its routes
@@ -6403,14 +6411,30 @@ func (a *App) RegisterRoutes() {
 			{Name: "table", Scripts: []string{"js/table_dice.js", "js/table.js"}},
 		},
 	})
-	var rollLog crafting.RollLog // nil while the roll log is degraded
+	var rollLog crafting.RollLog          // nil while the roll log is degraded
+	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus})
 		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
 		syncAPIHandler.SetRolls(&rollsSyncAdapter{svc: rollsSvc}, foundryPlayerRepo)
 		rollLog = &craftingRollLog{svc: rollsSvc}
+		shopRollLogger = &shopRollLog{svc: rollsSvc}
 	} else {
 		slog.Warn("rolls plugin degraded — the Table tab's roll log is not available")
+	}
+
+	// Counter rolls at a shop (haggle, look closer) and the owner's hidden
+	// notes. They throw and log through the roll log when it is up, and exist
+	// only while the armory's own tables did.
+	if shopRollRepo != nil {
+		shopRollSvc := armory.NewShopRollService(armory.ShopRollDeps{
+			Repo: shopRollRepo, Rooms: armory.NewShopRoomRepository(a.DB), Stash: stashSvc,
+			Shops: &armoryShopCheckerAdapter{svc: entityService}, Rels: &armoryRelationFinderAdapter{svc: relService},
+			Listings: &shopSellsAdapter{svc: relService}, Today: shopTodaySvc,
+			Rules: &shopTestRulesAdapter{sys: systemHandler}, Sheets: &craftingSheetsAdapter{entities: entityService},
+			Log: shopRollLogger,
+		})
+		armory.RegisterShopRollRoutes(e, armory.NewShopRollHandler(shopRollSvc), campaignService, authService, addonService)
 	}
 
 	// Crafting: recipes, crafting tags on Armory items, benches, the

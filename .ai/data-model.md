@@ -437,6 +437,8 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 | `armory_item_copies` | Part of a holder's count of an item that remembers marks, a quality, a quirk, its maker or harvester, and when it goes off; the rest of the count is plain | PK `id`; `holder_kind` `character`/`stash` + `holder_id` (not FKs: two tables); `quantity`; `memory` TEXT (JSON the service cleans); FKs to `campaigns` and `entities` (`ON DELETE CASCADE`) |
 | `armory_move_picks` | The copy a waiting move request asked for, so it is still the one that goes when approved | PK `move_id` FK→`item_moves` CASCADE; `copy_id` FK→`armory_item_copies` CASCADE |
 | `armory_item_places` | Which container a hero carries an item in (`hand`, `worn`, `belt`); no row is the backpack | PK (`character_id`, `item_entity_id`); `place`; FKs to `campaigns` and `entities` (`ON DELETE CASCADE`) |
+| `shop_good_secrets` | The owner's hidden note and extra on a shop listing; players read them only through a counter-roll reveal | PK (`campaign_id`, `shop_entity_id`, `relation_id`); `note`, `extra` VARCHAR(400); FKs to `campaigns`, `entities`, `entity_relations` (`ON DELETE CASCADE`) |
+| `shop_counter_rolls` | A character's haggle or look closer on a listing for one shelf day; the unique key is the one-try-a-day rule | PK `id`; UNIQUE (`campaign_id`, `shop_entity_id`, `relation_id`, `character_id`, `action`, `shelf_day`); `tier`, `pct` (haggle price change), `roll_total`; FKs to `campaigns`, `entities` (shop, character), `entity_relations` (`ON DELETE CASCADE`) |
 
 ### rolltables (`internal/plugins/rolltables/migrations/`)
 

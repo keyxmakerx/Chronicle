@@ -45,6 +45,9 @@ type Service interface {
 	Report(ctx context.Context, campaignID string, in ReportInput) (id string, duplicate bool, err error)
 	// Log adds a roll another plugin made on the server.
 	Log(ctx context.Context, campaignID string, in LogInput) error
+	// Record is Log that also returns the new roll's id, for a caller that
+	// tells its own client which log row its roll became.
+	Record(ctx context.Context, campaignID string, in LogInput) (string, error)
 	// List is a page of the log as the viewer may see it, oldest first.
 	List(ctx context.Context, campaignID string, v Viewer, before string, limit int) (*Page, error)
 	// Settings is the table's dice look.
@@ -177,12 +180,17 @@ func (s *service) Report(ctx context.Context, campaignID string, in ReportInput)
 }
 
 func (s *service) Log(ctx context.Context, campaignID string, in LogInput) error {
+	_, err := s.Record(ctx, campaignID, in)
+	return err
+}
+
+func (s *service) Record(ctx context.Context, campaignID string, in LogInput) (string, error) {
 	mode := in.Mode
 	if mode == "" {
 		mode = ModePublic
 	}
 	if !validMode(mode) {
-		return errInvalid("unknown roll mode")
+		return "", errInvalid("unknown roll mode")
 	}
 	r := Roll{
 		ID: uuid.New().String(), CampaignID: campaignID, Origin: OriginChronicle, Source: in.Source,
@@ -192,10 +200,10 @@ func (s *service) Log(ctx context.Context, campaignID string, in LogInput) error
 		Mode: mode, CreatedAt: s.now().UTC(),
 	}
 	if _, _, err := s.repo.Insert(ctx, r); err != nil {
-		return err
+		return "", err
 	}
 	s.publish(r, false)
-	return nil
+	return r.ID, nil
 }
 
 func (s *service) List(ctx context.Context, campaignID string, v Viewer, before string, limit int) (*Page, error) {
