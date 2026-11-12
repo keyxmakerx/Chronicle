@@ -38,7 +38,7 @@ func TestCreate_StartsWithSetupStepsAndHiddenPages(t *testing.T) {
 func TestSetupSteps_RenderAsLinks(t *testing.T) {
 	block := starterDirectorHome("camp-9").Rows[1].Columns[0].Blocks[0]
 	var buf bytes.Buffer
-	if err := dashTextBlock(block.Config).Render(context.Background(), &buf); err != nil {
+	if err := dashTextBlock(&CampaignContext{Campaign: &Campaign{ID: "camp-9"}, MemberRole: RoleOwner}, block.Config).Render(context.Background(), &buf); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -50,5 +50,28 @@ func TestSetupSteps_RenderAsLinks(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered steps missing %s\n%s", want, out)
 		}
+	}
+}
+
+// An empty Text Block is a placeholder for the owner only; players get no card.
+func TestTextBlock_EmptyShowsOnlyToOwner(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		role Role
+		want bool
+	}{
+		{"owner", RoleOwner, true},
+		{"player", RolePlayer, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cc := &CampaignContext{Campaign: &Campaign{ID: "c1"}, MemberRole: tt.role}
+			var buf bytes.Buffer
+			if err := dashTextBlock(cc, map[string]any{"content": ""}).Render(context.Background(), &buf); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(buf.String(), "Empty text block"); got != tt.want {
+				t.Errorf("placeholder shown = %v, want %v:\n%s", got, tt.want, buf.String())
+			}
+		})
 	}
 }

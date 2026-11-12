@@ -37,7 +37,7 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 		case "entity_list":
 			@dashEntityList(cc, block.Config)
 		case "text_block":
-			@dashTextBlock(block.Config)
+			@dashTextBlock(cc, block.Config)
 		case "pinned_pages":
 			@dashPinnedPages(cc)
 		case "calendar_preview":
@@ -304,14 +304,17 @@ func configInt(config map[string]any, key string, fallback int) int {
 
 // dashTextBlock renders custom HTML content.
 // Config: content (string). Content is sanitized to prevent stored XSS.
-templ dashTextBlock(config map[string]any) {
-	<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
-		if content, ok := config["content"].(string); ok && sanitize.TextBlock(content) != "" {
+// An empty block shows its placeholder only to the owner, who can fill it.
+templ dashTextBlock(cc *CampaignContext, config map[string]any) {
+	if content, ok := config["content"].(string); ok && sanitize.TextBlock(content) != "" {
+		<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
 			@templ.Raw(sanitize.TextBlock(content))
-		} else {
+		</div>
+	} else if cc.MemberRole >= RoleOwner {
+		<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
 			<p class="text-fg-muted text-sm italic">Empty text block</p>
-		}
-	</div>
+		</div>
+	}
 }
 
 // dashPinnedPages loads the Pinned Pages widget from the entities plugin
