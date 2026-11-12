@@ -149,3 +149,19 @@ func RegisterShelfRoutes(e *echo.Echo, h *ShopTodayHandler, campaignSvc campaign
 	)
 	cg.PUT("/armory/shops/:eid/today", h.Put, campaigns.RequireRole(campaigns.RoleOwner))
 }
+
+// RegisterShopRollRoutes sets up the counter rolls and the owner's hidden
+// notes. Players reach the rolls at Player+; what a caller may roll for is
+// decided in the service (the buyers rule), and only the campaign Owner reads
+// or writes a note, so a player can never fetch one except through a reveal.
+func RegisterShopRollRoutes(e *echo.Echo, h *ShopRollHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, AddonSlug),
+	)
+	cg.GET("/armory/shops/:eid/rolls", h.Rolls, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/shops/:eid/rolls", h.Roll, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/armory/shops/:eid/secrets", h.Secrets, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/armory/shops/:eid/secrets/:rel", h.PutSecret, campaigns.RequireRole(campaigns.RoleOwner))
+}

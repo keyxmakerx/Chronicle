@@ -184,6 +184,62 @@
       },
       "additionalProperties": false,
       "description": "How the game rolls and counts a crafting project. Recipes and benches are the campaign's own; this is only the arithmetic."
+    },
+    "shop_tests": {
+      "type": "object",
+      "properties": {
+        "dice": {"type": "string", "pattern": "^[1-4]d(4|6|8|10|12|20)$", "description": "The dice thrown at a shop counter, like \"1d20\". Absent: 1d20."},
+        "style": {"type": "string", "enum": ["tiers", "dc"], "description": "How the total reads: \"dc\" (meet the DC for the middle outcome, beat it by 5 for the best) or \"tiers\" (cut-offs in tiers). Absent: dc."},
+        "stats": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "required": ["key", "label"],
+            "properties": {
+              "key": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$", "description": "The character sheet field the test adds."},
+              "label": {"type": "string", "maxLength": 40, "pattern": "^\\p{L}[\\p{L}\\p{N} '\u2019.-]*$", "description": "The name shown to players."},
+              "score": {"type": "boolean", "description": "true for a D&D ability score: the test adds floor((value - 10) / 2) instead of the value."}
+            },
+            "additionalProperties": false
+          },
+          "description": "The sheet numbers a shop test may add. Absent: nothing is added."
+        },
+        "haggle": {"type": "string", "description": "Default stat key for Haggle; must be a key in stats. Absent: presence if listed, else the first stat."},
+        "look": {"type": "string", "description": "Default stat key for Look closer; must be a key in stats. Absent: reason if listed, else the first stat."},
+        "tiers": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": 1}, "description": "Style tiers: the highest totals of the worst and middle outcome, rising. Absent: [11, 16]."},
+        "edge": {"type": "integer", "minimum": -10, "maximum": 10, "description": "Style tiers: what an easy keeper adds. Absent: 2."},
+        "bane": {"type": "integer", "minimum": -10, "maximum": 10, "description": "Style tiers: what a hard keeper adds. Absent: -2."},
+        "dc": {
+          "type": "object",
+          "properties": {
+            "easy": {"type": "integer", "minimum": 1, "maximum": 40},
+            "usual": {"type": "integer", "minimum": 1, "maximum": 40},
+            "hard": {"type": "integer", "minimum": 1, "maximum": 40}
+          },
+          "additionalProperties": false,
+          "description": "Style dc: the difficulty for an easy, usual and hard keeper, rising. Absent: 10, 15, 20."
+        }
+      },
+      "additionalProperties": false,
+      "description": "The test a player throws to haggle or look closer at a shop counter. Absent: the crafting block's dice and characteristics, else a d20 against a DC."
+    },
+    "designs": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": ["kind", "name", "file"],
+        "properties": {
+          "kind": {"type": "string", "description": "A kind of design the server knows, such as \"room-theme\". An unknown kind skips the entry."},
+          "name": {"type": "string", "minLength": 1, "maxLength": 60},
+          "note": {"type": "string", "maxLength": 140},
+          "maker": {"type": "string", "maxLength": 100, "description": "Credit shown with the design."},
+          "file": {"type": "string", "pattern": "^[^\\\\/][^\\\\]*\\.json$", "description": "A .json file inside the package holding the design's data: relative, no .., at most 16 KB. Keep it outside data/."}
+        },
+        "additionalProperties": false
+      },
+      "description": "Saved designs (room themes, crafting designs) the package ships. Campaigns on this system see them read-only under \"From <system>\" in the design library and can save their own copy. A bad entry is skipped with a warning, never failing the package."
     }
   },
   "additionalProperties": false,

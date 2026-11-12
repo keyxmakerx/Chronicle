@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -65,6 +66,23 @@ type shopBuyService struct {
 	// today refuses a good that only turns up on some days when it is not
 	// out today; nil sells every listing as before.
 	today ShopTodayService
+	// haggles holds the price changes won at the counter; nil charges the
+	// listed price. It needs today as well, for the shelf day a haggle holds on.
+	haggles HaggleReader
+}
+
+// HaggleReader reads the price changes a character has won at a shop on one
+// shelf day, in percent by relation id. Implemented by ShopRollRepository.
+type HaggleReader interface {
+	Haggles(ctx context.Context, campaignID, shopEntityID, characterID string, shelfDay int64) (map[int]int, error)
+}
+
+// ShopBuyOption adds an optional part to the buy flow.
+type ShopBuyOption func(*shopBuyService)
+
+// WithHaggles makes the buy flow charge a haggled price on the day it was won.
+func WithHaggles(h HaggleReader) ShopBuyOption {
+	return func(s *shopBuyService) { s.haggles = h }
 }
 
 // NewShopBuyService wires the buy flow. It takes the concrete stash and
@@ -76,8 +94,11 @@ type shopBuyService struct {
 // the downtime-open sweep and the stashes page. Opening downtime lives in the
 // stash service and runs under the campaign lock, so the sweep must be
 // reachable from there without the stash service importing this one.
-func NewShopBuyService(stash *stashService, tx *transactionService, shops ShopEntityChecker, requests PurchaseRequestRepository, today ShopTodayService) ShopRequestService {
+func NewShopBuyService(stash *stashService, tx *transactionService, shops ShopEntityChecker, requests PurchaseRequestRepository, today ShopTodayService, opts ...ShopBuyOption) ShopRequestService {
 	s := &shopBuyService{stash: stash, tx: tx, shops: shops, requests: requests, today: today}
+	for _, o := range opts {
+		o(s)
+	}
 	stash.purchases = s
 	return s
 }
@@ -93,8 +114,11 @@ type buyLine struct {
 	relationID int
 	itemID     string
 	quantity   int
-	unit       Cents
-	input      CreateTransactionInput
+	// unit is what one is charged: the listed price after any haggle. listed
+	// is the price the shop's listing states, which the stock step reads back.
+	unit   Cents
+	listed Cents
+	input  CreateTransactionInput
 }
 
 func (s *shopBuyService) Buyers(ctx context.Context, campaignID, shopEntityID string, a Actor) (*BuyersView, error) {
@@ -215,18 +239,24 @@ func (s *shopBuyService) candidates(ctx context.Context, campaignID string, a Ac
 // for a character they have claimed and may act as. A Scribe's wider edit
 // rights deliberately do not extend to spending another player's coins.
 func (s *shopBuyService) authorizeBuyer(ctx context.Context, campaignID string, a Actor, characterID string) error {
+	return authorizeBuyerFor(ctx, s.stash, campaignID, a, characterID)
+}
+
+// authorizeBuyerFor is the buyers rule, shared by buying and the counter
+// rolls so a player can roll only for a character they could pay with.
+func authorizeBuyerFor(ctx context.Context, stash *stashService, campaignID string, a Actor, characterID string) error {
 	if a.IsOwner() {
 		return nil
 	}
 	deny := apperror.NewForbidden("You can only buy for your own character.")
-	owned, err := s.stash.Directory.OwnedCharacterIDs(ctx, campaignID, a.UserID)
+	owned, err := stash.Directory.OwnedCharacterIDs(ctx, campaignID, a.UserID)
 	if err != nil {
 		return err
 	}
-	if !owned[characterID] || s.stash.Actor == nil {
+	if !owned[characterID] || stash.Actor == nil {
 		return deny
 	}
-	ok, err := s.stash.Actor.CanUserActAsBuyer(ctx, campaignID, characterID, a.UserID, a.Role)
+	ok, err := stash.Actor.CanUserActAsBuyer(ctx, campaignID, characterID, a.UserID, a.Role)
 	if err != nil {
 		return err
 	}
@@ -340,7 +370,7 @@ func highestUnit(lines []buyLine) Cents {
 func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntityID string, a Actor, buyer *EntityRef, in BuyInput, quote *basketQuote) (*BuyResult, error) {
 	// A request the GM approves was asked for while its goods were out, so it
 	// is honoured after the shelf has changed.
-	lines, currency, total, err := s.priceBasket(ctx, campaignID, shopEntityID, a, in, quote == nil)
+	lines, currency, total, err := s.priceBasket(ctx, campaignID, shopEntityID, a, buyer.ID, in, quote == nil)
 	if err != nil {
 		return nil, err
 	}
@@ -431,10 +461,16 @@ func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntity
 		// The listing may have been edited between pricing and reserving;
 		// never charge a figure other than the one the coins were checked for.
 		// Compare unit prices: a sub-cent price times a quantity rounds differently
-		// from the rounded unit price times that quantity.
-		if Cents(math.Round(l.input.PriceNumeric/float64(l.quantity)*100)) != l.unit || normCurrency(l.input.Currency) != currency {
+		// from the rounded unit price times that quantity. The listing's own
+		// price is read back, not the haggled one the coins were checked for.
+		if Cents(math.Round(l.input.PriceNumeric/float64(l.quantity)*100)) != l.listed || normCurrency(l.input.Currency) != currency {
 			rollback()
 			return nil, apperror.NewConflict("The shop changed its prices. Try again.")
+		}
+		if l.unit != l.listed {
+			// The purchase is logged at what was charged, not the shelf price.
+			l.input.PriceNumeric = float64(l.unit*Cents(l.quantity)) / 100
+			l.input.PricePaid = strconv.FormatFloat(l.input.PriceNumeric, 'f', -1, 64) + " " + l.input.Currency
 		}
 	}
 
@@ -546,27 +582,24 @@ func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntity
 // them. It changes nothing. A relation that is not one of this shop's
 // "sells" listings in this campaign, a hidden listing, or a good the caller
 // cannot see all read as not found. With checkShelf, a good that only turns
-// up on some days is refused when it is not out today.
-func (s *shopBuyService) priceBasket(ctx context.Context, campaignID, shopEntityID string, a Actor, in BuyInput, checkShelf bool) ([]buyLine, string, Cents, error) {
+// up on some days is refused when it is not out today. A price the buyer won
+// by haggling today replaces the listed one for that good.
+func (s *shopBuyService) priceBasket(ctx context.Context, campaignID, shopEntityID string, a Actor, buyerID string, in BuyInput, checkShelf bool) ([]buyLine, string, Cents, error) {
 	if s.tx.relationFinder == nil {
 		return nil, "", 0, apperror.NewInternal(errors.New("shop relations are not wired"))
+	}
+	haggles, err := s.todaysHaggles(ctx, campaignID, shopEntityID, buyerID)
+	if err != nil {
+		return nil, "", 0, err
 	}
 	lines := make([]buyLine, 0, len(in.Items))
 	itemIDs := make([]string, 0, len(in.Items))
 	var total Cents
 	currency := ""
 	for _, it := range in.Items {
-		rel, err := s.tx.relationFinder.GetByID(ctx, int(it.RelationID))
+		rel, err := findShopListing(ctx, s.tx.relationFinder, campaignID, shopEntityID, a, int(it.RelationID))
 		if err != nil {
-			var ae *apperror.AppError
-			if errors.As(err, &ae) && ae.Code == 404 {
-				return nil, "", 0, notFound("shop item")
-			}
-			return nil, "", 0, apperror.NewInternal(err)
-		}
-		if rel == nil || rel.CampaignID != campaignID || rel.SourceEntityID != shopEntityID ||
-			rel.RelationType != shopSellsRelation || (rel.DmOnly && !a.SeesDmOnly()) {
-			return nil, "", 0, notFound("shop item")
+			return nil, "", 0, err
 		}
 		meta := parseShopMeta(rel.Metadata)
 		if checkShelf && s.today != nil {
@@ -578,9 +611,13 @@ func (s *shopBuyService) priceBasket(ctx context.Context, campaignID, shopEntity
 				return nil, "", 0, apperror.NewBadRequest(notOnShelfMessage)
 			}
 		}
-		unit, err := unitPriceCents(meta.Price)
+		listed, err := unitPriceCents(meta.Price)
 		if err != nil {
 			return nil, "", 0, err
+		}
+		unit := listed
+		if pct, ok := haggles[int(it.RelationID)]; ok {
+			unit = haggledUnit(listed, pct)
 		}
 		cur := normCurrency(meta.Currency)
 		if currency == "" {
@@ -590,7 +627,7 @@ func (s *shopBuyService) priceBasket(ctx context.Context, campaignID, shopEntity
 		}
 		total += unit * Cents(it.Quantity)
 		itemIDs = append(itemIDs, rel.TargetEntityID)
-		lines = append(lines, buyLine{relationID: int(it.RelationID), itemID: rel.TargetEntityID, quantity: it.Quantity, unit: unit})
+		lines = append(lines, buyLine{relationID: int(it.RelationID), itemID: rel.TargetEntityID, quantity: it.Quantity, unit: unit, listed: listed})
 	}
 	// Owner visibility sees every entity, so only others are filtered.
 	if !a.IsOwner() {
@@ -608,6 +645,55 @@ func (s *shopBuyService) priceBasket(ctx context.Context, campaignID, shopEntity
 		}
 	}
 	return lines, currency, total, nil
+}
+
+// todaysHaggles is the buyer's haggled price changes for today's shelf day, by
+// relation id; nil when nothing is wired or there is no buyer to look up. The
+// shelf day is the one the haggle row was written under, so a price won
+// yesterday no longer applies once the shelf has changed.
+func (s *shopBuyService) todaysHaggles(ctx context.Context, campaignID, shopEntityID, buyerID string) (map[int]int, error) {
+	if s.haggles == nil || s.today == nil || buyerID == "" {
+		return nil, nil
+	}
+	day, err := s.today.ShelfDayIndex(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	h, err := s.haggles.Haggles(ctx, campaignID, shopEntityID, buyerID, day)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return h, nil
+}
+
+// haggledUnit applies a haggle's percentage change to a unit price in cents,
+// rounding to the nearest cent and never going below one: a great haggle
+// cannot make a good free.
+func haggledUnit(unit Cents, pct int) Cents {
+	c := (int64(unit)*int64(100+pct) + 50) / 100
+	if c < 1 {
+		c = 1
+	}
+	return Cents(c)
+}
+
+// findShopListing loads one relation and confirms it is a "sells" listing of
+// this shop in this campaign that the caller may see. Anything else, including
+// a hidden listing, reads as not found so a listing is never confirmed.
+func findShopListing(ctx context.Context, finder RelationFinder, campaignID, shopEntityID string, a Actor, relationID int) (*RelationInfo, error) {
+	rel, err := finder.GetByID(ctx, relationID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == 404 {
+			return nil, notFound("shop item")
+		}
+		return nil, apperror.NewInternal(err)
+	}
+	if rel == nil || rel.CampaignID != campaignID || rel.SourceEntityID != shopEntityID ||
+		rel.RelationType != shopSellsRelation || (rel.DmOnly && !a.SeesDmOnly()) {
+		return nil, notFound("shop item")
+	}
+	return rel, nil
 }
 
 // unitPriceCents turns a listed price into cents. A listing with no usable

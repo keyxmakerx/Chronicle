@@ -88,6 +88,7 @@ var adminNav = AdminNavTree{
 		{ID: "community", Label: "Community", Items: []AdminNavItem{
 			{Label: "People", Href: "/admin/users", Icon: "fa-users"},
 			{Label: "Campaigns", Href: "/admin/campaigns", Icon: "fa-book-open"},
+			{Label: "Shared designs", Href: "/admin/design-gallery", Icon: "fa-images"},
 		}},
 		// Everything an admin adds to the site, in one group.
 		{ID: "packages", Label: "Add-ons", Items: []AdminNavItem{

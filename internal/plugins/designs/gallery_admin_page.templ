@@ -1,0 +1,21 @@
+package designs
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// GalleryAdminPage is the moderation queue for the server gallery. The widget
+// (design_gallery_admin.js) loads the entries as JSON and posts decisions, so
+// the page itself carries no entry text.
+templ GalleryAdminPage() {
+	@layouts.App("Shared designs - Admin") {
+		<div class="max-w-4xl mx-auto space-y-4">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Shared designs</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					Designs Owners shared to this server's gallery. Clean ones show straight away; the ones here
+					were held for a look, or reported by other Owners.
+				</p>
+			</div>
+			<div data-widget="design_gallery_admin"></div>
+		</div>
+	}
+}

@@ -22,6 +22,10 @@ type SystemManifest struct {
 	// finds nothing new) so the diagnostics report can show it.
 	PlayWarnings []string `json:"-"`
 
+	// DesignWarnings lists designs entries dropped at load (package_designs.go),
+	// kept for the diagnostics report like PlayWarnings. Never serialized.
+	DesignWarnings []string `json:"-"`
+
 	// ID is the unique machine-readable identifier (e.g., "dnd5e").
 	ID string `json:"id"`
 
@@ -112,6 +116,16 @@ type SystemManifest struct {
 	// Crafting is how the system rolls and counts a crafting project
 	// (crafting.go). Nil means DefaultCraftingRules.
 	Crafting *CraftingRules `json:"crafting,omitempty"`
+
+	// ShopTests is how a player's haggle or closer look at a shop counter is
+	// thrown (shop_tests.go). Nil falls back to the crafting block, then to a
+	// d20 against a DC.
+	ShopTests *ShopTestsDef `json:"shop_tests,omitempty"`
+
+	// Designs are saved designs the package ships (room themes, crafting
+	// designs). Campaigns on this system see them read-only under "From
+	// <system>" in the design library. See package_designs.go.
+	Designs []DesignDef `json:"designs,omitempty"`
 }
 
 // ManifestTerms are a system's names for Chronicle's roles. An empty field
@@ -766,6 +780,7 @@ func (m *SystemManifest) BuildValidationReport() *ValidationReport {
 
 	// Play blocks dropped at load.
 	r.Warnings = append(r.Warnings, m.PlayWarnings...)
+	r.Warnings = append(r.Warnings, m.DesignWarnings...)
 
 	// Generate warnings.
 	if r.CategoryCount == 0 {
@@ -1064,6 +1079,12 @@ func ValidateManifest(m *SystemManifest) error {
 	if err := validateCrafting(m.Crafting); err != nil {
 		return fmt.Errorf("crafting: %w", err)
 	}
+
+	if err := validateShopTests(m.ShopTests); err != nil {
+		return fmt.Errorf("shop_tests: %w", err)
+	}
+
+	m.sanitizeDesigns()
 
 	// Text stays as written. Every place it is shown escapes it on output
 	// (templ, escapeHtml, textContent); escaping here as well showed players

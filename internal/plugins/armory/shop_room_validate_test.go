@@ -314,3 +314,258 @@ func TestShopRoomIconsUnique(t *testing.T) {
 		seen[n] = true
 	}
 }
+
+// goodCounter is a valid counter theme as a generic map, so each case can
+// break one field.
+func goodCounter() map[string]any {
+	return map[string]any{
+		"name": "  The Smithy ", "version": 1,
+		"skeleton": map[string]any{"shape": "square", "opening": "window-right", "display": "pegboard", "counter": "straight"},
+		"theme": map[string]any{"wall": "stone", "wood": "#4A3220", "cloth": "#5a3a22", "accent": "#ff9a50", "trim": "#9aa0a8",
+			"light": "forge", "warmth": 0.9, "outside": "dusk"},
+		"props": []any{"anvil", "sparks", "anvil"},
+	}
+}
+
+func withCounter(f func(c map[string]any)) []byte {
+	return mutate(func(m map[string]any) {
+		c := goodCounter()
+		f(c)
+		m["counter"] = c
+	})
+}
+
+func counterField(group, k string, v any) func(c map[string]any) {
+	return func(c map[string]any) { c[group].(map[string]any)[k] = v }
+}
+
+func TestNormalizeShopRoomLayout_CounterTheme(t *testing.T) {
+	rejects := []struct {
+		name string
+		body []byte
+	}{
+		{"bad version", withCounter(func(c map[string]any) { c["version"] = 2 })},
+		{"name too long", withCounter(func(c map[string]any) { c["name"] = strings.Repeat("é", maxShopRoomCounterName+1) })},
+		{"unknown shape", withCounter(counterField("skeleton", "shape", "hexagon"))},
+		{"empty shape", withCounter(counterField("skeleton", "shape", ""))},
+		{"unknown opening", withCounter(counterField("skeleton", "opening", "skylight"))},
+		{"unknown display", withCounter(counterField("skeleton", "display", "racks"))},
+		{"unknown counter", withCounter(counterField("skeleton", "counter", "bar"))},
+		{"unknown wall", withCounter(counterField("theme", "wall", "marble"))},
+		{"unknown light", withCounter(counterField("theme", "light", "neon"))},
+		{"unknown outside", withCounter(counterField("theme", "outside", "snow"))},
+		{"colour without hash", withCounter(counterField("theme", "wood", "4a3220"))},
+		{"colour too short", withCounter(counterField("theme", "cloth", "#fff"))},
+		{"colour not hex", withCounter(counterField("theme", "accent", "#gggggg"))},
+		{"colour injection", withCounter(counterField("theme", "trim", `#000000" onload="x`))},
+		{"unknown prop", withCounter(func(c map[string]any) { c["props"] = []any{"anvil", "dragon"} })},
+		{"too many props", withCounter(func(c map[string]any) {
+			ps := make([]any, maxShopRoomCounterProps+1)
+			for i := range ps {
+				ps[i] = "anvil"
+			}
+			c["props"] = ps
+		})},
+		{"counter is not an object", mutate(func(m map[string]any) { m["counter"] = "plain" })},
+	}
+	for _, tc := range rejects {
+		t.Run("rejects "+tc.name, func(t *testing.T) {
+			out, err := NormalizeShopRoomLayout(tc.body)
+			if err == nil {
+				t.Fatalf("expected rejection, got %s", out)
+			}
+			var ae *apperror.AppError
+			if !errors.As(err, &ae) || ae.Code != http.StatusBadRequest {
+				t.Fatalf("want bad request, got %v", err)
+			}
+		})
+	}
+
+	accepts := []struct {
+		name string
+		body []byte
+		want func(t *testing.T, c *ShopRoomCounter)
+	}{
+		{"canonical form", withCounter(func(map[string]any) {}), func(t *testing.T, c *ShopRoomCounter) {
+			if c.Name != "The Smithy" || c.Theme.Wood != "#4a3220" {
+				t.Errorf("name or colour not canonical: %q %q", c.Name, c.Theme.Wood)
+			}
+			if len(c.Props) != 2 || c.Props[0] != "anvil" || c.Props[1] != "sparks" {
+				t.Errorf("props not de-duplicated in order: %v", c.Props)
+			}
+		}},
+		{"warmth clamped high", withCounter(counterField("theme", "warmth", 7)), func(t *testing.T, c *ShopRoomCounter) {
+			if c.Theme.Warmth != 1 {
+				t.Errorf("warmth = %v", c.Theme.Warmth)
+			}
+		}},
+		{"warmth clamped low", withCounter(counterField("theme", "warmth", -3)), func(t *testing.T, c *ShopRoomCounter) {
+			if c.Theme.Warmth != 0 {
+				t.Errorf("warmth = %v", c.Theme.Warmth)
+			}
+		}},
+		{"no props becomes an empty list", withCounter(func(c map[string]any) { delete(c, "props") }), func(t *testing.T, c *ShopRoomCounter) {
+			if c.Props == nil || len(c.Props) != 0 {
+				t.Errorf("props = %#v", c.Props)
+			}
+		}},
+		{"every option accepted", withCounter(func(c map[string]any) {
+			c["skeleton"] = map[string]any{"shape": "open-air", "opening": "round-window", "display": "domes", "counter": "stall-table"}
+			c["theme"] = map[string]any{"wall": "night-sky", "wood": "#000000", "cloth": "#FFFFFF", "accent": "#0a0B0c", "trim": "#123456", "light": "moonlight", "warmth": 0, "outside": "rain"}
+			c["props"] = []any{"anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes"}
+		}), func(t *testing.T, c *ShopRoomCounter) {
+			if len(c.Props) != 15 || c.Theme.Cloth != "#ffffff" {
+				t.Errorf("unexpected: %+v", c)
+			}
+		}},
+	}
+	for _, tc := range accepts {
+		t.Run("accepts "+tc.name, func(t *testing.T) {
+			out, err := NormalizeShopRoomLayout(tc.body)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var l ShopRoomLayout
+			if err := json.Unmarshal(out, &l); err != nil || l.Counter == nil {
+				t.Fatalf("counter lost: %v %s", err, out)
+			}
+			tc.want(t, l.Counter)
+			again, err := NormalizeShopRoomLayout(out)
+			if err != nil || string(again) != string(out) {
+				t.Errorf("not idempotent: %v %s", err, again)
+			}
+		})
+	}
+
+	t.Run("no counter stays absent", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(mutate(func(map[string]any) {}))
+		if err != nil || strings.Contains(string(out), `"counter"`) {
+			t.Errorf("counter written for a layout without one: %v %s", err, out)
+		}
+	})
+	t.Run("null counter reads as the starter", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(mutate(func(m map[string]any) { m["counter"] = nil }))
+		if err != nil || strings.Contains(string(out), `"counter"`) {
+			t.Errorf("null counter stored: %v %s", err, out)
+		}
+	})
+}
+
+func TestNormalizeShopRoomCounter(t *testing.T) {
+	starter := ShopRoomCounterStarter("forge")
+	tests := []struct {
+		name    string
+		raw     func() []byte
+		wantErr bool
+	}{
+		{"a starter theme is accepted", func() []byte { return starter }, false},
+		{"garbage is refused", func() []byte { return []byte("not json") }, true},
+		{"trailing data is refused", func() []byte { return append(append([]byte{}, starter...), []byte(` {}`)...) }, true},
+		{"an unknown prop is refused", func() []byte {
+			var m map[string]any
+			_ = json.Unmarshal(starter, &m)
+			m["props"] = []string{"no-such-prop"}
+			b, _ := json.Marshal(m)
+			return b
+		}, true},
+		{"too large is refused", func() []byte { return []byte(strings.Repeat(" ", maxShopRoomBytes+1)) }, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := NormalizeShopRoomCounter(tt.raw())
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil && !json.Valid(out) {
+				t.Errorf("output is not JSON: %s", out)
+			}
+		})
+	}
+}
+
+func withRolls(r any) []byte {
+	return mutate(func(m map[string]any) { m["rolls"] = r })
+}
+
+func TestNormalizeShopRoomLayout_Rolls(t *testing.T) {
+	good := func() map[string]any {
+		return map[string]any{"haggle": true, "look": true, "stubborn": "hard", "haggleStat": "cha", "lookStat": "int-2",
+			"great": 25, "middling": 12, "poor": 15}
+	}
+	with := func(k string, v any) []byte {
+		r := good()
+		r[k] = v
+		return withRolls(r)
+	}
+	rejects := []struct {
+		name string
+		body []byte
+	}{
+		{"unknown stubborn", with("stubborn", "tough")},
+		{"stubborn in capitals", with("stubborn", "Hard")},
+		{"stat key with a capital", with("haggleStat", "Cha")},
+		{"stat key with a space", with("lookStat", "my stat")},
+		{"stat key starting with a hyphen", with("haggleStat", "-ab")},
+		{"stat key too long", with("haggleStat", strings.Repeat("a", 41))},
+		{"great over 90", with("great", 91)},
+		{"great negative", with("great", -1)},
+		{"middling over 90", with("middling", 100)},
+		{"poor over 200", with("poor", 201)},
+		{"poor negative", with("poor", -5)},
+		{"fractional percent", with("great", 20.5)},
+		{"percent as text", with("great", "20")},
+		{"switch as text", with("haggle", "yes")},
+		{"rolls not an object", withRolls("on")},
+	}
+	for _, tc := range rejects {
+		t.Run("rejects "+tc.name, func(t *testing.T) {
+			if _, err := NormalizeShopRoomLayout(tc.body); err == nil {
+				t.Error("expected an error")
+			}
+		})
+	}
+
+	t.Run("a full block is kept", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(withRolls(good()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var l ShopRoomLayout
+		if err := json.Unmarshal(out, &l); err != nil {
+			t.Fatal(err)
+		}
+		want := ShopRoomRolls{Haggle: true, Look: true, Stubborn: "hard", HaggleStat: "cha", LookStat: "int-2", Great: 25, Middling: 12, Poor: 15}
+		if l.Rolls == nil || *l.Rolls != want {
+			t.Errorf("rolls = %+v", l.Rolls)
+		}
+		again, err := NormalizeShopRoomLayout(out)
+		if err != nil || string(again) != string(out) {
+			t.Errorf("not idempotent: %v %s", err, again)
+		}
+	})
+	t.Run("the edges are accepted", func(t *testing.T) {
+		r := good()
+		r["great"], r["middling"], r["poor"], r["haggleStat"], r["lookStat"] = 90, 0, 200, "", strings.Repeat("z", 40)
+		if _, err := NormalizeShopRoomLayout(withRolls(r)); err != nil {
+			t.Error(err)
+		}
+	})
+	t.Run("left-out numbers keep their defaults and the switches stay off", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(withRolls(map[string]any{}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var l ShopRoomLayout
+		_ = json.Unmarshal(out, &l)
+		want := ShopRoomRolls{Stubborn: "usual", Great: 20, Middling: 10, Poor: 10}
+		if l.Rolls == nil || *l.Rolls != want {
+			t.Errorf("rolls = %+v", l.Rolls)
+		}
+	})
+	t.Run("absent rolls stays absent", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(mutate(func(map[string]any) {}))
+		if err != nil || strings.Contains(string(out), `"rolls"`) {
+			t.Errorf("rolls written for a layout without any: %v %s", err, out)
+		}
+	})
+}

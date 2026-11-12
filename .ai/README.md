@@ -29,7 +29,7 @@ Each has an `.ai.md` (purpose, files, routes, rules, footguns).
 
 - **Plugins** (`internal/plugins/<name>/`): addons, admin, ai_workspace (and
   ai_workspace/aiexport), armory, audit, auth, backup, bestiary, calendar,
-  campaigns, crafting, designlab, dmscreen, encounters, entities, fieldrules, foundry_vtt, homebrew, maps, media, npcs,
+  campaigns, crafting, designlab, designs, dmscreen, encounters, entities, fieldrules, foundry_vtt, homebrew, maps, media, npcs,
   packages, pageblocks, quests, restore, rolltables, rumours, sessions, settings, smtp, syncapi,
   systemstate, timeline, trackers, vault_import, widgetbindings.
   calendar's V5 rebuild (#741) is landing in parts — its `.ai.md` says

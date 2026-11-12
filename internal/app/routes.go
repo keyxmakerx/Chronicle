@@ -44,6 +44,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
+	"github.com/keyxmakerx/chronicle/internal/plugins/designs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -1262,8 +1263,8 @@ type navAppDef struct {
 	addons  []string // the app is on when any of these addons is enabled
 	needs   []string // and only while every one of these is enabled too
 	access  campaigns.NavAccess
-	pinned  bool // starts in Pinned for a campaign that never arranged its sidebar
-	system  bool // the enabled game system's reference; label, icon and path come from it
+	pinned  bool   // starts in Pinned for a campaign that never arranged its sidebar
+	system  bool   // the enabled game system's reference; label, icon and path come from it
 	group   string // the app drawer's group (navDrawerGroups)
 	line    string // the app drawer's one line on what the app is for
 }
@@ -4606,7 +4607,15 @@ func (a *App) RegisterRoutes() {
 		&shopSellsAdapter{svc: relService},
 		&shelfDayAdapter{cal: calendarService},
 	)
-	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB), shopTodaySvc)
+	// A price won at the counter is charged on the day it was won; the table
+	// exists only while the armory's own migration did.
+	var shopBuyOpts []armory.ShopBuyOption
+	var shopRollRepo armory.ShopRollRepository
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		shopRollRepo = armory.NewShopRollRepository(a.DB)
+		shopBuyOpts = append(shopBuyOpts, armory.WithHaggles(shopRollRepo))
+	}
+	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB), shopTodaySvc, shopBuyOpts...)
 	shopBuyHandler := armory.NewShopBuyHandler(shopBuySvc)
 	// The Foundry module buys through the sync API as the player at the table,
 	// with the same service and acting-as rule as the stash calls. Its routes
@@ -6427,14 +6436,30 @@ func (a *App) RegisterRoutes() {
 			{Name: "table", Scripts: []string{"js/table_dice.js", "js/table.js"}},
 		},
 	})
-	var rollLog crafting.RollLog // nil while the roll log is degraded
+	var rollLog crafting.RollLog          // nil while the roll log is degraded
+	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus})
 		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
 		syncAPIHandler.SetRolls(&rollsSyncAdapter{svc: rollsSvc}, foundryPlayerRepo)
 		rollLog = &craftingRollLog{svc: rollsSvc}
+		shopRollLogger = &shopRollLog{svc: rollsSvc}
 	} else {
 		slog.Warn("rolls plugin degraded — the Table tab's roll log is not available")
+	}
+
+	// Counter rolls at a shop (haggle, look closer) and the owner's hidden
+	// notes. They throw and log through the roll log when it is up, and exist
+	// only while the armory's own tables did.
+	if shopRollRepo != nil {
+		shopRollSvc := armory.NewShopRollService(armory.ShopRollDeps{
+			Repo: shopRollRepo, Rooms: armory.NewShopRoomRepository(a.DB), Stash: stashSvc,
+			Shops: &armoryShopCheckerAdapter{svc: entityService}, Rels: &armoryRelationFinderAdapter{svc: relService},
+			Listings: &shopSellsAdapter{svc: relService}, Today: shopTodaySvc,
+			Rules: &shopTestRulesAdapter{sys: systemHandler}, Sheets: &craftingSheetsAdapter{entities: entityService},
+			Log: shopRollLogger,
+		})
+		armory.RegisterShopRollRoutes(e, armory.NewShopRollHandler(shopRollSvc), campaignService, authService, addonService)
 	}
 
 	// Crafting: recipes, crafting tags on Armory items, benches, the
@@ -6459,6 +6484,8 @@ func (a *App) RegisterRoutes() {
 	// The Homebrew service is built further down; the hook is filled in then.
 	craftingRespites := &craftingRespiteHook{}
 	var craftingListener respiteListener // nil while crafting is degraded
+	// The registry saved designs are checked by; crafting adds its kinds here.
+	designKinds := newDesignKinds()
 	var craftingFights encounters.FightListener
 	var aiCrafting records.CraftingAPI    // nil while crafting is degraded
 	var craftingWorkshop crafting.Service // nil while crafting is degraded
@@ -6628,6 +6655,22 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
 		aiShopLooks = aiShopLooksAdapter{rooms: shopRoomService, fronts: shopStreetService, today: shopTodaySvc}
 	}
+	// Saved designs: the campaign library and its sharing. The kind registry is
+	// the seam features add their design kinds to; the AI sees the library only
+	// while the plugin's tables are up.
+	var aiDesigns records.DesignsAPI
+	if a.PluginHealth.IsHealthy(designs.PluginSlug) {
+		// Package designs are validated by the same kinds as saved ones.
+		systems.SetDesignKinds(designKindChecker{kinds: designKinds})
+		designsSvc := designs.NewService(designs.NewRepository(a.DB), designsDirectory{svc: campaignService}, designKinds, designsPackageSource{})
+		designsGallery := designs.NewGalleryService(designs.NewRepository(a.DB), designs.NewGalleryRepository(a.DB), designsDirectory{svc: campaignService}, designKinds, galleryUserNames{auth: authService})
+		galleryHandler := designs.NewGalleryHandler(designsGallery, adminActivity)
+		designs.RegisterRoutes(e, designs.NewHandler(designsSvc), galleryHandler, campaignService, authService)
+		designs.RegisterAdminRoutes(adminGroup, galleryHandler)
+		aiDesigns = aiDesignsAdapter{svc: designsSvc, gallery: designsGallery}
+	} else {
+		slog.Warn("designs plugin degraded — routes not registered")
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -6665,6 +6708,7 @@ func (a *App) RegisterRoutes() {
 		Crafting:        aiCrafting,
 		ShopLooks:       aiShopLooks,
 		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
+		Designs:         aiDesigns,
 		Layers:          layersSvc,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
@@ -6803,7 +6847,9 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/design_library.js", "/static/js/widgets/design_library_gallery.js", "/static/js/widgets/design_library_suggest.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_rolls.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "design_library", Scripts: []string{"/static/js/widgets/design_library.js"}},
+	{Name: "design_gallery_admin", Scripts: []string{"/static/js/widgets/design_gallery_admin.js"}},
 	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_paint", Scripts: []string{"/static/js/widgets/craft_paint.js", "/static/js/widgets/craft_paint_forge.js", "/static/js/widgets/craft_paint_stage.js"}},

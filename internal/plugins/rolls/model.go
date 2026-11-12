@@ -24,6 +24,7 @@ const (
 const (
 	SourceTable    = "table"
 	SourceCrafting = "crafting"
+	SourceShop     = "shop"
 	SourceFoundry  = "foundry"
 )
 

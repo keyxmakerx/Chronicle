@@ -94,9 +94,99 @@ Validation lives in `internal/systems/manifest.go` (`ValidateManifest`).
 | widget `host_mounted` | `true` for a widget Chronicle mounts itself elsewhere (the encounter builder's budget panel); the Customizer doesn't offer it. A widget the package's book places is left out the same way. | `internal/systems/handler.go` |
 | `dm_screen` | Party tracker and conditions on the DM Screen | `internal/systems/manifest_dm_screen.go` |
 | `terms.gm` | The game's name for the game master ("Director"), used across the campaign; default "GM" | `internal/systems/manifest.go` |
+| `shop_tests` | The dice a player throws to haggle or look closer at a shop counter (see "Shop tests" below) | `internal/systems/shop_tests.go` |
+| `designs` | Saved designs the package ships (see "Shipping designs" below) | `internal/systems/package_designs.go` |
 | `foundry_system_id` | Matches Foundry's `game.system.id` for character sync | Foundry module |
 | `tooltip_template` | Go `text/template` for hover tooltips | `internal/systems/generic_tooltip.go` |
 | field `choices` | Names the data file a character field picks from | `internal/systems/character_choices.go` |
+
+## Shop tests
+
+At a shop's counter a player can **Haggle** over a good or **Look closer** at
+it. Chronicle throws the dice on the server; `shop_tests` says which dice, what
+the character's sheet adds, and how the total reads. Every part is optional,
+and the shop's owner can change the stat, the keeper's stubbornness and the
+price changes for their own shop.
+
+```json
+"shop_tests": {
+  "dice": "1d20",
+  "style": "dc",
+  "stats": [{ "key": "cha", "label": "Charisma", "score": true },
+            { "key": "int", "label": "Intelligence", "score": true }],
+  "haggle": "cha",
+  "look": "int",
+  "tiers": [11, 16],
+  "edge": 2,
+  "bane": -2,
+  "dc": { "easy": 10, "usual": 15, "hard": 20 }
+}
+```
+
+- `dice` is one to four d4, d6, d8, d10, d12 or d20, written like `2d10`.
+  Absent: `1d20`.
+- `style` is `"dc"` or `"tiers"`. With `dc`, a total that meets the difficulty
+  is the middle outcome and one that beats it by 5 is the best; anything lower
+  is the worst. With `tiers`, a total up to `tiers[0]` is the worst, up to
+  `tiers[1]` the middle, anything higher the best. Absent: `dc`.
+- `stats` lists the character sheet fields a test may add, each with the
+  field `key`, a plain-words `label` (up to 40 characters) and `score`. A
+  `score: true` field is a D&D ability score and adds its modifier,
+  `floor((value - 10) / 2)`; otherwise the field's number is added as it is. A
+  sheet field with no number adds 0 and the player is told. At most 12 stats.
+- `haggle` and `look` are the default stat keys for each action and must be
+  keys from `stats`. Absent: the stat `presence` (haggle) or `reason` (look)
+  if listed, else the first stat, else nothing is added.
+- `tiers` (style `tiers`): two rising totals. Absent: `[11, 16]`.
+- `edge` and `bane` (style `tiers`): what an easy or a hard keeper adds to the
+  total, -10 to 10. Absent: +2 and -2. A usual keeper adds nothing.
+- `dc` (style `dc`): the three difficulties an easy, usual or hard keeper sets,
+  1 to 40, rising. Absent: 10, 15, 20.
+
+With no `shop_tests` block, Chronicle uses your `crafting` block (its dice,
+`characteristics` as stats, `edge`, `bane` and `tiers`, in the `tiers` style),
+and with neither a d20 against a DC that adds nothing from the sheet. A bad
+`shop_tests` block fails the manifest with a message naming `shop_tests`.
+
+## Shipping designs
+
+`designs` lists saved designs (a shop counter room theme, a crafting design)
+that every campaign on your system sees under **From <your system>** in the
+design library, read only. An Owner picks one to use it, or uses **Save as my
+design** to keep their own copy; the copy never follows later releases.
+
+```json
+"designs": [
+  { "kind": "room-theme", "name": "Ashgate Forge", "note": "Warm oak and iron",
+    "maker": "Your Name", "file": "designs/ashgate-forge.json" }
+]
+```
+
+- `kind` is a design kind the server knows (`room-theme`, `crafting-circle`,
+  `crafting-item-look`, `crafting-bench`). `name` is up to 60 characters,
+  `note` 140, `maker` 100 (both optional).
+- `file` is a `.json` file in the package: a relative path, no `..`, not
+  absolute, at most 16 KB, holding the design's data. Keep it outside `data/`,
+  which is served raw. Use at most 100 designs.
+- The data must pass the kind's own checks. Any entry that fails is skipped and
+  named in `/campaigns/:id/systems/status` and Admin > Health & diagnostics;
+  the rest of the package still loads.
+- Designs are read from a loaded package, not from a campaign's uploaded custom
+  system.
+
+Owners can send you designs: in the library, **Suggest for <your system>**
+downloads one JSON file:
+
+```json
+{ "format": "chronicle-design-suggestion:v1", "system": "yourgame",
+  "designs": [ { "kind": "room-theme", "name": "...", "note": "...", "maker": "...", "file": "designs/name.json" } ],
+  "data": { "designs/name.json": { } },
+  "messageForMaintainer": "optional note, up to 240 characters" }
+```
+
+Paste each `designs` entry into your manifest, save each `data` value as the
+file named by its key, and release. `maker` is present only if the Owner chose
+to be credited.
 
 ## Install and test
 
