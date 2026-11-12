@@ -72,6 +72,11 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			if cc.IsMember {
 				@dashFragment("your-hero", fmt.Sprintf("/campaigns/%s/your-hero", cc.Campaign.ID), "h-20")
 			}
+		case "getting_started":
+			// Steps are a member's own; a visitor has none to do.
+			if cc.IsMember {
+				@dashFragment("getting-started", fmt.Sprintf("/campaigns/%s/getting-started", cc.Campaign.ID), "h-24")
+			}
 		case "when_we_play":
 			// Availability is the table's own business, as game nights are.
 			if cc.IsMember {

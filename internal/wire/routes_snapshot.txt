@@ -917,6 +917,7 @@ GET	/campaigns/:id/foundry/players	session	plugins/syncapi.(*SyncHistoryHandler)
 GET	/campaigns/:id/foundry/problems	session	plugins/syncapi.(*SyncHistoryHandler).ProblemsFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/foundry/scenes	session	plugins/syncapi.(*SyncHistoryHandler).ScenesJSON	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/game-nights	public-capable	plugins/sessions.(*Handler).GameNightsLink	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/getting-started	session	plugins/sessions.(*Handler).GettingStartedBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/groups	session	plugins/campaigns.(*Handler).ListGroupsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/groups	session	plugins/campaigns.(*Handler).CreateGroupAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/groups/:gid	session	plugins/campaigns.(*Handler).DeleteGroupAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

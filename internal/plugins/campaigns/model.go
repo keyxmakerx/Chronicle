@@ -897,6 +897,7 @@ const (
 	BlockWhereWePlay     = "where_we_play"    // The owner's Foundry address and voice channel, typed in the block's config.
 	BlockHouseRules      = "house_rules"      // The rulebook's house chapters (systems).
 	BlockLastTime        = "last_time"        // The latest session's recap, as its viewer may read it (sessions plugin).
+	BlockGettingStarted  = "getting_started"  // A new player's steps, ticked as they are done (sessions plugin).
 	BlockYourHero        = "your_hero"        // The viewer's own claimed hero, or a way to choose one (entities plugin).
 
 	// Category dashboard blocks.
@@ -934,6 +935,7 @@ var ValidBlockTypes = map[string]bool{
 	BlockHouseRules:      true,
 	BlockLastTime:        true,
 	BlockYourHero:        true,
+	BlockGettingStarted:  true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,

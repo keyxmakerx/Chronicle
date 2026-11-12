@@ -65,3 +65,32 @@ func recapParagraphs(excerpt string) []string {
 	}
 	return out
 }
+
+// gettingStartedBlock replaces the placeholder (hx-swap outerHTML).
+templ gettingStartedBlock(steps []startStep, done int) {
+	<section class="cb-info cb-start" data-block="getting-started" aria-labelledby="getting-started-h">
+		<div class="cb-info-top flex items-baseline justify-between mb-3">
+			<h2 id="getting-started-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				Getting started
+				<span class="cb-n ml-1 font-normal normal-case tracking-normal text-fg-muted">{ fmt.Sprintf("%d of %d done", done, len(steps)) }</span>
+			</h2>
+		</div>
+		<div class="cb-info-rows card cb-card divide-y divide-edge px-4">
+			for _, s := range steps {
+				<div class="cb-line flex items-center gap-3 py-2 text-sm">
+					if s.Done {
+						<i class="fa-solid fa-circle-check text-accent" aria-hidden="true"></i>
+						<span class="cb-line-main min-w-0 flex-1 text-fg-muted line-through">{ s.Title }<span class="sr-only"> (done)</span></span>
+					} else {
+						<i class="fa-regular fa-circle text-fg-muted" aria-hidden="true"></i>
+						<span class="cb-line-main min-w-0 flex-1">
+							<span class="cb-line-name block font-semibold text-fg">{ s.Title }</span>
+							<span class="cb-line-sub block text-xs text-fg-muted">{ s.Hint }</span>
+						</span>
+						<a href={ templ.SafeURL(s.Href) } class="cb-more text-xs text-accent hover:underline">{ s.Label }</a>
+					}
+				</div>
+			}
+		</div>
+	</section>
+}

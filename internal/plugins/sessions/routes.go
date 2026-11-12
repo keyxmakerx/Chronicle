@@ -69,6 +69,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// The home's blocks: the times most of the table is free, and last time.
 	cg.GET("/when-we-play", h.WhenWePlayBlock, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/last-time", h.LastTimeBlock, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/getting-started", h.GettingStartedBlock, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/sessions/nights", h.ListGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Every night and series, grouped, for the calendar's "All game nights".
 	cg.GET("/sessions/all", h.AllGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))

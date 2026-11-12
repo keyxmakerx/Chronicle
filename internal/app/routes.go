@@ -4220,6 +4220,7 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMentionHider(entityService)
+	sessionsHandler.SetHeroChecker(&heroCheckerAdapter{svc: entityService, addons: addonService})
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
 	// People's notification choices (Account settings) filter the bell and
 	// the game-night emails.

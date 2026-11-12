@@ -442,6 +442,12 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
+		Type: "getting_started", Label: "Getting started", Icon: "fa-list-check",
+		Description: "A new player's steps: choose a hero, say when you are free. Goes away when done",
+		Addon: "sessions", Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
 		Type: "when_we_play", Label: "When we play", Icon: "fa-calendar-check",
 		Description: "The times most of the table is free",
 		Addon: "sessions", Contexts: []string{"dashboard"},
