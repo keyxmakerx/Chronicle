@@ -217,3 +217,14 @@ func TestRenderCallout_BothKindsCanBeDismissed(t *testing.T) {
 		}
 	}
 }
+
+// On a phone the timezone banner is one line, so it carries a short sentence
+// beside the full one; phone_shell.css shows whichever fits.
+func TestRenderCallout_TimezoneCarriesAShortSentence(t *testing.T) {
+	got := renderCallout(Callout{Kind: CalloutTimezone, Message: "the long message"})
+	for _, want := range []string{`class="cta-long">the long message<`, `class="cta-short">Times aren&#39;t in your time zone yet<`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}

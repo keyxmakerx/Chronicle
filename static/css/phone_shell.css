@@ -1,0 +1,115 @@
+/* phone_shell.css: the app shell and its lists on a phone.
+ *
+ * Plain CSS, linked after app.css and unlayered so it outranks the Tailwind
+ * component rules it adjusts. Each block is gated by a width or a coarse
+ * pointer, so the desktop header and the wide-screen lists draw as before.
+ */
+
+/* Header controls get a 44 by 44 hit area on touch. Only the box grows; the
+   icon keeps its drawn size, and the desktop header height is unchanged. */
+@media (pointer: coarse) {
+  #app-topbar .btn-icon,
+  #app-topbar #user-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: 44px;
+    min-block-size: 44px;
+  }
+  /* An on-screen keyboard has no Esc. */
+  #app-topbar .tb-esc { display: none; }
+}
+
+/* Under 480 wide the bell steps into the account menu, which frees its width
+   for the campaign name. The menu row opens the bell's own list. */
+.tb-menu-notif { display: none; }
+.tb-menu-count {
+  margin-inline-start: auto;
+  min-inline-size: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-accent-fill, var(--color-accent, #6366f1));
+  color: var(--color-accent-on-fill, #fff);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.tb-menu-count[hidden] { display: none; }
+@media (max-width: 479.98px) {
+  #app-topbar .tb-bell { display: none; }
+  .tb-menu-notif { display: flex; align-items: center; }
+}
+
+/* The time zone question is one line under 480 wide: a short sentence, the
+   accept word as a quiet word, and the close icon. Choose stays only when the
+   browser gave no zone to accept, since it is then the whole offer. */
+.cta-short { display: none; }
+@media (max-width: 479.98px) {
+  .cta-bar[data-cta="timezone"] {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 4px 12px;
+  }
+  .cta-bar[data-cta="timezone"] .cta-ico { display: none; }
+  .cta-bar[data-cta="timezone"] .cta-msg {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cta-bar[data-cta="timezone"] .cta-long { display: none; }
+  .cta-bar[data-cta="timezone"] .cta-short { display: inline; }
+  .cta-bar[data-cta="timezone"] .cta-go {
+    min-block-size: 44px;
+    margin-block: -8px;
+    padding: 0 4px;
+    background: none;
+    border-color: transparent;
+    color: var(--color-accent-link, var(--color-accent, #6366f1));
+    font-weight: 500;
+    white-space: nowrap;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .cta-bar[data-cta="timezone"] .cta-go:hover { background: none; }
+  .cta-bar[data-cta="timezone"] [data-cta-tz-accept]:not([hidden]) ~ .cta-alt { display: none; }
+  .cta-bar[data-cta="timezone"] .cta-x { margin-block: -10px; inline-size: 44px; block-size: 44px; }
+}
+
+/* Page lists draw as rows under 640 wide: name, kind in muted words and the
+   Director's lock at the end, 44 tall, on hairlines with no band and no card.
+   The grid, table and tree switch is unchanged on wider screens. */
+@media (max-width: 639.98px) {
+  #entity-list .ec-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-block-size: 44px;
+    padding: 0 4px;
+    overflow: visible;
+    border: 0;
+    border-block-end: 1px solid var(--color-border-light, #f3f4f6);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  #entity-list .ec-card:hover { background: var(--color-bg-tertiary, rgba(127, 127, 127, 0.08)); box-shadow: none; }
+  #entity-list .ec-band,
+  #entity-list .ec-tags { display: none; }
+  /* The body and head wrappers step aside so the name, kind and lock line up
+     as one row. */
+  #entity-list .ec-body,
+  #entity-list .ec-head { display: contents; }
+  #entity-list .ec-head > h3 { order: 1; flex: 1 1 auto; min-inline-size: 0; margin: 0; }
+  #entity-list .ec-kind { order: 2; flex: 0 1 auto; min-inline-size: 0; }
+  #entity-list .ec-head > :not(h3) { order: 3; flex: 0 0 auto; }
+  #entity-list .ec-pill {
+    padding: 0;
+    background: transparent !important;
+    color: var(--color-text-muted, #6b7280) !important;
+    font-weight: 400;
+  }
+  #entity-list .ec-pill > i { display: none; }
+}
