@@ -224,8 +224,6 @@
 .cal-v5 .ib:hover{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
 .cal-v5 .h-mid{justify-content:space-between;margin-top:6px}
 .cal-v5 .mtitle{margin:0;font:500 36px/1.08 var(--serif);letter-spacing:-.012em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.cal-v5 .mtitle.swap{animation:cal5-titleIn .42s var(--ease) both}
-@keyframes cal5-titleIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .cal-v5 .myear{color:var(--mut);font-weight:400}
 .cal-v5 .mnav{display:flex;align-items:center;gap:2px;flex:none}
 .cal-v5 .h-sub{margin-top:7px;flex-wrap:wrap;gap:4px 12px}
@@ -260,19 +258,10 @@
 .cal-v5 .dow .s{display:none}
 /* The grid lays itself out from the structure: --cols is the week length, never a fixed 7. */
 .cal-v5 .stage{padding:0 var(--gx) 14px}
-.cal-v5 .month.entering{position:absolute;left:var(--gx);right:var(--gx);top:0}
 .cal-v5 .month{position:relative}
 .cal-v5 .month.leaving{position:absolute;left:var(--gx);right:var(--gx);top:0;pointer-events:none}
-.cal-v5 .month.in-l{animation:cal5-inL .42s var(--ease) both}
-.cal-v5 .month.in-r{animation:cal5-inR .42s var(--ease) both}
-.cal-v5 .month.out-l{animation:cal5-outL .3s var(--ease) both}
-.cal-v5 .month.out-r{animation:cal5-outR .3s var(--ease) both}
-.cal-v5 .month.fadein{animation:cal5-fadeIn .3s ease both}
-.cal-v5 .month.fadeout{animation:cal5-fadeOut .25s ease both}
-@keyframes cal5-inL{from{opacity:0;transform:translate3d(30px,0,0)}to{opacity:1;transform:none}}
-@keyframes cal5-inR{from{opacity:0;transform:translate3d(-30px,0,0)}to{opacity:1;transform:none}}
-@keyframes cal5-outL{to{opacity:0;transform:translate3d(-30px,0,0)}}
-@keyframes cal5-outR{to{opacity:0;transform:translate3d(30px,0,0)}}
+/* While the month rolls the stage clips what has left it; the script holds its height at the taller month. */
+.cal-v5 .stage.rolling{overflow:hidden}
 @keyframes cal5-fadeIn{from{opacity:0}}
 .cal-v5 .wk{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));border-top:1px solid var(--hair)}
 .cal-v5 .day{position:relative;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;min-height:var(--cellH);padding:8px 9px 0 10px;color:var(--ink2);border-left:1px solid var(--hair2);transition:opacity .3s}
@@ -896,9 +885,7 @@
 .rm .cal-v5 .toast{transform:translate(-50%,0)!important}
 .rm .cal-v5 .drawer{opacity:0}
 .rm .cal-v5 .drawer.open{opacity:1}
-.rm .cal-v5 .month.in-l, .rm .cal-v5 .month.in-r{animation:cal5-fadeIn .25s ease both!important}
-.rm .cal-v5 .month.out-l, .rm .cal-v5 .month.out-r{animation:cal5-fadeOut .2s ease both!important}
-.rm .cal-v5 .mtitle.swap, .rm .cal-v5 .todaypill .td.bump, .rm .cal-v5 .today .num.pop, .rm .cal-v5 .tog::after{animation:none!important;transition:none!important}
+.rm .cal-v5 .todaypill .td.bump, .rm .cal-v5 .today .num.pop, .rm .cal-v5 .tog::after{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion:reduce){.cal-v5 .bleed{animation:none!important}
 }
 /* ── Moons on the grid: the main moon's silhouette rests in each day's top-right corner, a flat disc of ink. ── */

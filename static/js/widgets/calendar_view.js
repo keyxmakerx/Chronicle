@@ -197,6 +197,21 @@
 
     monthCount: function (cal) { return (cal.months || []).length || 12; },
 
+    // sharedRow says whether month b, the one right after month a, begins
+    // in the week row where a ends, so the grid draws that row once. A band
+    // (intercalary) month fills whole rows of its own, and a month that
+    // starts in the first column or in another column than a's last day
+    // leaves has no row in common.
+    sharedRow: function (cal, a, b) {
+      var mc = CalDate.monthCount(cal), defs = cal.months || [];
+      var da = defs[((a.m - 1) % mc + mc) % mc], db = defs[((b.m - 1) % mc + mc) % mc];
+      if ((da && da.is_intercalary) || (db && db.is_intercalary)) return false;
+      var lead = CalDate.gridLead(cal, b.y, b.m);
+      if (lead === 0) return false;
+      var end = (CalDate.gridLead(cal, a.y, a.m) + CalDate.monthDays(cal, ((a.m - 1) % mc + mc) % mc, a.y)) % CalDate.weekLen(cal);
+      return end === lead;
+    },
+
     // addDays walks {y,m,d} (month 1-based) forward/backward by delta real
     // days, using the leap-aware month lengths — the same "add N days"
     // Calendar.AbsoluteDay's callers would use, just inverted by stepping
@@ -608,11 +623,22 @@
   }
   function menuOpenMs() { return tokenMs('--dur-everyday', 120); }
   function menuCloseMs() { return tokenMs('--dur-everyday-out', menuOpenMs() * 2 / 3); }
+  // The month roll and the day card's move are signed at 260 and 200 ms at
+  // the standard speed; each scales with the token it sits beside.
+  function rollMs() { return Math.round(260 * tokenMs('--dur-large', 280) / 280); }
+  function travelMs() { return Math.round(tokenMs('--dur-standard', 200)); }
+  function slideEase() {
+    try {
+      var v = window.getComputedStyle(document.documentElement).getPropertyValue('--ease-slide').trim();
+      if (v) return v;
+    } catch (e) { /* the default stands */ }
+    return 'cubic-bezier(0.22, 0.8, 0.24, 1)';
+  }
   // A key that opens or closes something skips the motion: the move would
   // only make the keyboard wait. A click fired by Enter or Space lands just
   // after its key, so the last key is remembered for a moment.
   var lastKeyAt = -1000;
-  var MOVE_KEYS = { Enter: 1, ' ': 1, Escape: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1 };
+  var MOVE_KEYS = { Enter: 1, ' ': 1, Escape: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, PageUp: 1, PageDown: 1 };
   function noteKey(e) { if (MOVE_KEYS[e.key]) lastKeyAt = Date.now(); }
   function byKey() { return Date.now() - lastKeyAt < 120; }
   if (typeof document !== 'undefined') {
@@ -880,6 +906,10 @@
   // the base time for an ordinary card, more for a longer drop, so the
   // paper moves at one speed whatever the card's length.
   function leafTime(h, base) { return Math.round(clampN(base * (0.6 + (h.full - h.cap) / 500), base * 0.75, base * 1.6)); }
+  // The film plays this much faster than it was drawn; a card that is
+  // genuinely tall is the only one that still holds its second leaf.
+  var FOLD_SPEED = 1.65;
+  var HOLD_ABOVE = 520;
   var SPRING = 'cubic-bezier(.34,1.3,.4,1)';
   var EASE = 'cubic-bezier(.22,.8,.24,1)';
   function isPhone() { return window.matchMedia('(max-width:600px)').matches; }
@@ -4743,6 +4773,7 @@
       this._skyDay();
       this._gnSpin();
       if (this._pollDraft) this._pollPaintPicks();
+      if (ri) this._startRoll(ri);
     },
 
     _dayBandHTML: function (y, m, d, monthDef, totalDays) {
@@ -5196,12 +5227,70 @@
     // Navigation
     // --------------------------------------------------------------
     goMonth: function (delta) {
+      // A roll still running ends at once before the next step.
+      this._endRoll();
       // A day's card belongs to its day; changing the month puts it away.
       if (this.wingFor) this.closeWing({ instant: true, quiet: true });
-      var next = CalDate.shiftMonth(this.cal, this.view.y, this.view.m, delta);
+      var from = this.view, next = CalDate.shiftMonth(this.cal, this.view.y, this.view.m, delta);
+      // One step rolls; a longer jump, a key and Off swap at once.
+      var old = (delta === 1 || delta === -1) && !byKey() && !motionOff() ? this.stageEl.querySelector('.month') : null;
+      if (old) {
+        var rows = $$('.wk', old), last = rows[rows.length - 1];
+        this._rollIn = { old: old, dir: delta, from: from, to: next, lastTop: last ? last.offsetTop : 0, stageH: this.stageEl.offsetHeight, oldH: old.offsetHeight };
+      }
       this.view = next;
       this._eraFade = true;
       this.renderMonth();
+      this._rollIn = null;
+    },
+
+    // The month changes as one strip: the earlier month sits above the later
+    // one and the strip moves, so the months seem to join. The new month is
+    // the grid itself, drawn at once and still fetching as ever; the old one
+    // stays beside it only to leave. The week row both months share is drawn
+    // once, where the two overlap. Calm cross-fades in place. A press while
+    // it runs ends it first, so two months never stay on screen.
+    _startRoll: function (ri) {
+      var stage = this.stageEl, month = stage.querySelector('.month'), old = ri.old;
+      if (!month || !old) return;
+      var calm = reducedMotion(), dir = ri.dir, ms = rollMs(), ease = slideEase();
+      var rows = $$('.wk', month), last = rows[rows.length - 1];
+      var earlier = dir > 0 ? ri.from : ri.to, later = dir > 0 ? ri.to : ri.from;
+      var shared = !calm && CalDate.sharedRow(this.cal, earlier, later);
+      // How far the strip moves: the earlier month's height, less the row
+      // the two share.
+      var shift = dir > 0 ? (shared ? ri.lastTop : ri.oldH) : (shared && last ? last.offsetTop : month.offsetHeight);
+      old.classList.add('leaving');
+      old.classList.remove('dim');
+      old.setAttribute('aria-hidden', 'true');
+      old.inert = true;
+      $$('[data-key]', old).forEach(function (n) { n.removeAttribute('data-key'); });
+      stage.appendChild(old);
+      // The stage clips while it rolls and is as tall as the taller month.
+      if (ri.stageH > stage.offsetHeight) stage.style.minHeight = ri.stageH + 'px';
+      stage.classList.add('rolling');
+      var o = { duration: ms, easing: ease, fill: 'both' }, anims = [];
+      var arrive = calm ? [{ opacity: 0 }, { opacity: 1 }] : [{ transform: 'translateY(' + (dir > 0 ? shift : -shift) + 'px)', opacity: 0 }, { transform: 'none', opacity: 1 }];
+      anims.push(old.animate(calm ? [{ opacity: 1 }, { opacity: 0 }] : [{ transform: 'none', opacity: 1 }, { transform: 'translateY(' + (dir > 0 ? -shift : shift) + 'px)', opacity: 0 }], o), month.animate(arrive, o));
+      // The era colours behind the days travel and arrive with the month;
+      // the old month's colours are not carried along.
+      var field = this.eraField;
+      if (field && field.cv) anims.push(field.cv.animate(arrive, o));
+      if (field && field.fade) { field.fade.style.transition = 'none'; field.fade.style.opacity = '0'; }
+      var self = this, tok = (this._rollTok = (this._rollTok || 0) + 1);
+      this._strip = { month: month, old: old, view: ri.to, anims: anims };
+      Promise.all(anims.map(function (a) { return a.finished; })).then(function () { if (tok === self._rollTok) self._endRoll(); }, function () {});
+    },
+
+    _endRoll: function () {
+      var r = this._strip;
+      if (!r) return;
+      this._strip = null;
+      this._rollTok = (this._rollTok || 0) + 1;
+      r.anims.forEach(function (a) { a.cancel(); });
+      if (r.old.parentNode) r.old.parentNode.removeChild(r.old);
+      this.stageEl.classList.remove('rolling');
+      this.stageEl.style.minHeight = '';
     },
 
     goToday: function () {
@@ -5538,7 +5627,10 @@
       var buttons = $$('.day[data-key]', this.stageEl);
       var idx = buttons.findIndex(function (b) { return b === document.activeElement; });
       var next = buttons[Math.max(0, Math.min(buttons.length - 1, (idx < 0 ? 0 : idx) + delta))];
-      if (next) next.focus({ preventScroll: false });
+      if (!next) return;
+      next.focus({ preventScroll: false });
+      // An open card goes with the focus, at once: it is a key.
+      if (next.dataset.key && this.wingFor && next.dataset.key !== this.wingFor) this._followWing(next.dataset.key);
     },
 
     anyPanelOpen: function () {
@@ -5577,6 +5669,9 @@
         return;
       }
       if (this.wingFor && this._rollHolds()) return;
+      // A press (not Enter or Space, which toggle) on another day while a
+      // card lies open carries the card over instead of folding it away.
+      if (this.wingFor && !highlightEventId && !byKey() && this._followWing(key)) return;
       var go = function () { if (!self.wingFor) self._showWing(key, highlightEventId); };
       if (this.wingFor) this.closeWing({ quiet: true, fast: true }).then(go);
       else if (this._pf.state !== 'closed') this.closeFlap({ quiet: true }).then(go);
@@ -5617,6 +5712,73 @@
         if (row && row.isConnected) row.classList.add('pulse');
         var n = P.next; P.next = null; if (n) n();
       });
+    },
+
+    // A card that is fully open, with nothing being filled in, moves to the
+    // day pressed (or arrowed to) instead of folding away and out again.
+    // False means it did not: the caller closes and opens as before.
+    _canFollow: function () {
+      var P = this._pw;
+      return !!(this.wingFor && P.state === 'open' && P.g && !isPhone() && !this._roll && !this._awayForm &&
+        !this.calEl.classList.contains('editing') && !this.wingEl.querySelector('form') && !this.evpEl.classList.contains('open') &&
+        !(window.Chronicle && Chronicle.isDirty && Chronicle.isDirty()));
+    },
+
+    _followWing: function (key) {
+      if (!this._canFollow()) return false;
+      var P = this._pw, el = this.wingEl, calEl = this.calEl, btn = this.stageEl.querySelector('.day[data-key="' + key + '"]'), old = P.src;
+      if (!btn || btn === old) return false;
+      var instant = byKey() || motionOff(), calm = !instant && reducedMotion();
+      var from = relRect(el, calEl), had = el.contains(document.activeElement), ghost = null;
+      settleMoved(P);
+      if (calm) {
+        // The old place fades out under the new one fading in.
+        ghost = el.cloneNode(true);
+        ghost.removeAttribute('id');
+        ghost.setAttribute('aria-hidden', 'true');
+        ghost.inert = true;
+        ghost.style.pointerEvents = 'none';
+        calEl.insertBefore(ghost, el);
+        P.ghost = ghost;
+      }
+      stopAnims(el, true);
+      if (old && old.isConnected) { unpackMarks(old); old.classList.remove('sel'); old.removeAttribute('aria-expanded'); }
+      this._planFor = null;
+      this._gnChooseFor = null;
+      this._pollPicking = null;
+      el.innerHTML = this._wingHTML(parseDayKey(key));
+      this.wingFor = key;
+      this._markOpenDay(btn);
+      el.style.maxHeight = '';
+      var g = wingGeometry(el, btn, calEl), depth = pressDepth(btn);
+      placeCard(el, g);
+      P.src = btn;
+      P.g = g;
+      P.press = [{ el: btn.querySelector('.dc'), depth: depth }, { el: btn, pseudo: '::before', depth: depth }];
+      P.pairs = [];
+      P.carried = false;
+      // The new day's marks are already in the card's icons: no flight.
+      if (!instant && !calm && btn.querySelector('.mk')) {
+        btn.classList.add('packed');
+        $$('.mk, .more', btn).forEach(function (m) { stopAnims(m); });
+        P.carried = true;
+      }
+      if (!instant) {
+        var ms = travelMs();
+        P.moved = true;
+        if (calm) {
+          el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'ease-out' });
+          ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, easing: 'ease-in', fill: 'forwards' }).finished.then(function () { if (P.ghost === ghost) P.ghost = null; ghost.remove(); }, function () {});
+        } else {
+          el.animate([{ transform: 'translate(' + (from.x - g.final.x).toFixed(1) + 'px,' + (from.y - g.final.y).toFixed(1) + 'px)' }, { transform: 'none' }], { duration: ms, easing: slideEase() });
+          var content = el.querySelectorAll('.lf1 > *, .lf2 > *'), fade = Math.round(ms * 0.6);
+          for (var i = 0; i < content.length; i++) content[i].animate([{ opacity: 0 }, { opacity: 1 }], { duration: fade, delay: Math.round(ms * 0.3), easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' });
+        }
+      } else if (ghost) { ghost.remove(); P.ghost = null; }
+      if (had) el.focus({ preventScroll: true });
+      var d = parseDayKey(key), n = this.eventsOnDay(d.y, d.m, d.d).length;
+      this._announce(this._dateLabel(d.y, d.m, d.d) + '. ' + (n ? n + (n === 1 ? ' event' : ' events') : 'Nothing on the calendar') + '.');
+      return true;
     },
 
     // The open day turns to paper and the rest of the month recedes.
