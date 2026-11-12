@@ -233,6 +233,9 @@ test('the wide banner keeps both sentences\' long form and both buttons', async 
 test('page lists draw as 44-tall rows under 640 and as cards above', async () => {
   const list = `<div id="entity-list">${row('Brother Quill', 'Character')}${row('The Ashen Reach', 'Location')}</div>`;
   const narrow = await open(page(list));
+  // The pointer starts at the page origin, over the first row; park it below so
+  // the resting colours are measured, not the hover tint.
+  await narrow.p.mouse.move(380, 840);
   const n = await narrow.p.evaluate(() => {
     const a = document.querySelector('.ec-card');
     const q = (s) => a.querySelector(s);
