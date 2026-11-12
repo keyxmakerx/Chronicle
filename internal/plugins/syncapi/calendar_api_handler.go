@@ -227,13 +227,37 @@ func (h *CalendarAPIHandler) GetCurrentDate(c *echo.Context) error {
 		}
 		result["current_moon_phases"] = phases
 	}
-	if cal.Weather != nil {
-		result["current_weather"] = cal.Weather
+	if w := h.todayWeather(c, cal, h.readViewer(c)); w != nil {
+		result["current_weather"] = w
 	}
 	if playersAudience(c) {
 		result["audience"] = audiencePlayers
 	}
 	return c.JSON(http.StatusOK, result)
+}
+
+// todayWeather is today's reading as the calendar page and DM screen show
+// it: the day's own reading, else the calendar's single stored reading. The
+// day reading is shaped like Weather so the module reads one form either way.
+// A failed day read falls back rather than failing the date read.
+func (h *CalendarAPIHandler) todayWeather(c *echo.Context, cal *calendar.Calendar, v permissions.Viewer) any {
+	days, err := h.calendarSvc.ListDayWeather(c.Request().Context(), cal.ID, cal.CampaignID, cal.CurrentYear, cal.CurrentMonth, v)
+	if err == nil {
+		for _, d := range days {
+			if d.Day == cal.CurrentDay {
+				return calendar.Weather{
+					CalendarID: cal.ID, PresetID: d.PresetID, PresetLabel: d.PresetLabel, Icon: d.Icon,
+					Color: d.Color, TemperatureCelsius: d.TemperatureCelsius, Wind: d.Wind,
+					Precipitation: d.Precipitation, ZoneID: d.ZoneID, ZoneName: d.ZoneName,
+					Description: d.Description, UpdatedAt: d.UpdatedAt,
+				}
+			}
+		}
+	}
+	if cal.Weather != nil {
+		return cal.Weather
+	}
+	return nil
 }
 
 // confirmDateRequest is the JSON body for POST /calendar/date/confirm.
@@ -321,14 +345,16 @@ func (h *CalendarAPIHandler) GetStructure(c *echo.Context) error {
 // GetWeather returns today's weather, or {} when none is set.
 // GET /api/v1/campaigns/:id/calendar/weather
 func (h *CalendarAPIHandler) GetWeather(c *echo.Context) error {
-	cal, err := h.defaultCalendar(c, h.viewer(c))
+	v := h.viewer(c)
+	cal, err := h.defaultCalendar(c, v)
 	if err != nil {
 		return err
 	}
-	if cal.Weather == nil {
+	w := h.todayWeather(c, cal, v)
+	if w == nil {
 		return c.JSON(http.StatusOK, map[string]any{})
 	}
-	return c.JSON(http.StatusOK, cal.Weather)
+	return c.JSON(http.StatusOK, w)
 }
 
 // ListDayWeather returns one month's day readings. A viewer below the
