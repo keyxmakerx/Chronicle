@@ -134,3 +134,24 @@ func TestPlaceSystemPanels_EmptyLayoutKeepsDefault(t *testing.T) {
 		t.Errorf("order = %v, want %v", got, want)
 	}
 }
+
+func TestRepairPanelOnlyLayout(t *testing.T) {
+	panelOnly := EntityTypeLayout{Rows: []TemplateRow{fullWidthRow("row-system-panels", TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})}}
+	got, ok := RepairPanelOnlyLayout(panelOnly)
+	if !ok || !reflect.DeepEqual(blockTypeOrder(got), []string{"title", "system_panels", "entry", "image", "attributes", "details"}) {
+		t.Errorf("panel-only layout: ok=%v blocks=%v", ok, blockTypeOrder(got))
+	}
+	for name, l := range map[string]EntityTypeLayout{
+		"empty":   {},
+		"default": DefaultLayout(),
+		"panels with a title": {Rows: []TemplateRow{fullWidthRow("r",
+			TemplateBlock{ID: "t", Type: "title"}, TemplateBlock{ID: "p", Type: BlockSystemPanels})}},
+	} {
+		if _, ok := RepairPanelOnlyLayout(l); ok {
+			t.Errorf("%s layout was changed", name)
+		}
+	}
+	if _, ok := RepairPanelOnlyLayout(got); ok {
+		t.Error("repair is not idempotent")
+	}
+}

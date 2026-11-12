@@ -46,6 +46,13 @@ func TestPlacePageExtras(t *testing.T) {
 			changed: true,
 		},
 		{
+			name:    "empty layout starts from the default page",
+			layout:  EntityTypeLayout{},
+			plan:    PageExtrasPlan{SystemPanels: true},
+			want:    []string{"title", "system_panels", "entry", "image", "attributes", "details", "children", "posts", "writing_prompts", "backlinks"},
+			changed: true,
+		},
+		{
 			name:    "no title puts system panels in a row at the top",
 			layout:  EntityTypeLayout{Rows: []TemplateRow{fullWidthRow("r", TemplateBlock{ID: "e", Type: "entry"})}},
 			plan:    PageExtrasPlan{SystemPanels: true},

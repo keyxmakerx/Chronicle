@@ -244,6 +244,21 @@ func repairSystemPanelsOnlyLayout(layout EntityTypeLayout) (EntityTypeLayout, bo
 	return fixed, true
 }
 
+// RepairPanelOnlyLayout turns a layout whose only content is the Game System
+// Panels block back into the default page with the block under the title.
+// Such layouts were written by placing the block on an empty layout. Any other
+// layout is returned unchanged with false.
+func RepairPanelOnlyLayout(layout EntityTypeLayout) (EntityTypeLayout, bool) {
+	if len(layout.Rows) != 1 || len(layout.Rows[0].Columns) != 1 {
+		return layout, false
+	}
+	blocks := layout.Rows[0].Columns[0].Blocks
+	if len(blocks) != 1 || blocks[0].Type != BlockSystemPanels {
+		return layout, false
+	}
+	return insertAfterTitle(DefaultLayout(), TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels}), true
+}
+
 // insertAfterTitle puts a block right after the first top-level title block,
 // where the panels sit, or in a row of its own at the top.
 func insertAfterTitle(layout EntityTypeLayout, b TemplateBlock) EntityTypeLayout {
