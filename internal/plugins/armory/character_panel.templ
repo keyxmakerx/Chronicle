@@ -109,9 +109,17 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 		<div class="ag-fold" data-move-fold></div>
 		</div>
 
+		if v.HasLog {
+			@heroLog(v)
+		}
+
 		<div class="mt-3 pt-3 border-t border-border">
 			<div class="flex items-center justify-between mb-1.5">
-				<h4 class="text-xs font-semibold text-fg-secondary">Recent moves</h4>
+				if v.HasLog {
+					<h4 class="text-xs font-semibold text-fg-secondary">Money and requests</h4>
+				} else {
+					<h4 class="text-xs font-semibold text-fg-secondary">Recent moves</h4>
+				}
 				if len(v.History) > 0 {
 					<button
 						type="button"
@@ -337,4 +345,80 @@ templ heldCopies(copies []Copy, total int) {
 			<li><span class="ag-copy-n">{ fmt.Sprintf("%d plain", n) }</span></li>
 		}
 	</ul>
+}
+
+// heroLog is the hero's log: a line to write, then what happened and what was
+// written, newest first under each game night. The panel reloads itself after
+// a line is added or removed (armory-moved), so the form only posts.
+templ heroLog(v *CharacterPanelView) {
+	<div class="hl" data-hero-log>
+		<h4 class="hl-lab">{ v.Character.Name }'s log</h4>
+		<form
+			class="hl-write"
+			hx-post={ logURL(v.CampaignID, v.Character.ID) }
+			hx-swap="none"
+			hx-on::after-request="if (event.detail.successful) this.reset()"
+		>
+			<input type="text" name="body" maxlength="500" autocomplete="off" placeholder="Write a line for tonight…" aria-label="Write a line in the log" required/>
+			if len(v.Items) > 0 {
+				<select name="item_id" aria-label="About an item (optional)">
+					<option value="">About…</option>
+					for _, it := range v.Items {
+						<option value={ it.ItemID }>{ it.Name }</option>
+					}
+				</select>
+			}
+			if v.CanDirect {
+				<label class="hl-dm"><input type="checkbox" name="director_only" value="1"/>Director only</label>
+			}
+		</form>
+		if len(v.Log) == 0 {
+			<p class="hl-empty">Nothing in the log yet. Items gained, given or crafted appear here, and so do your lines.</p>
+		}
+		for _, n := range v.Log {
+			<div class="hl-night">
+				<span class="hl-when">
+					if n.Name == "" {
+						Before the first night
+					} else {
+						{ n.Name }
+						if n.Tonight {
+							<br/>tonight
+						}
+					}
+				</span>
+				<div>
+					for _, e := range n.Entries {
+						@heroLogEntry(v, e)
+					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+templ heroLogEntry(v *CharacterPanelView, e LogEntry) {
+	<div class={ logEntryClass(e) }>
+		<span>
+			{ e.Before }
+			if e.Bold != "" {
+				<b>{ e.Bold }</b>{ e.After }
+			}
+			if e.About != "" {
+				<small class="hl-about">about { e.About }</small>
+			}
+			if e.DirectorOnly {
+				<small class="hl-about">Director only</small>
+			}
+		</span>
+		if e.CanDelete {
+			<button
+				type="button"
+				class="hl-x"
+				aria-label="Remove this line"
+				hx-post={ logDeleteURL(v.CampaignID, v.Character.ID, e.NoteID) }
+				hx-swap="none"
+			><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+		}
+	</div>
 }
