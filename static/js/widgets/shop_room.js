@@ -1534,6 +1534,9 @@
       injectStyle();
       var ds = el.dataset, canArrange = ds.canArrange === 'true', campaignUrl = ds.campaignUrl || '';
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
+      // keyOf(eid) seeds each shop's generated room, so eid keeps its old
+      // "<id>/room" tail; the local-words read needs the bare shop id.
+      var shopId = eid.split('/')[0];
       var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy'), todayEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/today'), today = null;
       var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], manner: '', moments: {}, mode: 'shop', its: [],
@@ -2462,7 +2465,7 @@
         loadGoods(),
         loadBuyers(),
         loadToday(),
-        window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, eid).then(function (w) { words = w || {}; }) : null
+        window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, shopId).then(function (w) { words = w || {}; }) : null
       ]).then(function (res) {
         openRoom(S, room, res[0] && res[0].layout);
         savedLayout = toLayout(S);
