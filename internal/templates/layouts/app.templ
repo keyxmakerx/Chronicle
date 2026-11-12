@@ -206,7 +206,7 @@ templ Sidebar() {
 		@mouseenter="hovered = true"
 		@mouseleave="hovered = false"
 		@chronicle:nav-editing.window="editing = $event.detail"
-		class={ "nav-sb fixed inset-y-0 left-0 z-40 w-64 bg-sidebar-bg text-sidebar-text flex flex-col -translate-x-full md:translate-x-0 transition-[width,transform] duration-300 ease-in-out md:static md:z-auto md:shrink-0",
+		class={ "nav-sb fixed inset-y-0 left-0 z-40 w-64 bg-sidebar-bg text-sidebar-text flex flex-col -translate-x-full md:translate-x-0 transition-transform duration-[var(--dur-large)] ease-out md:transition-[width,transform] md:duration-300 md:ease-in-out md:static md:z-auto md:shrink-0",
 			templ.KV("nav-admin-mode", InSiteAdmin(ctx)), templ.KV("nav-tools-gated", NavToolsWordSection(ctx) != "") }
 		:class="[
 			sidebarOpen ? 'sidebar-mobile-open shadow-2xl' : '',
@@ -763,12 +763,12 @@ templ Topbar() {
 						<div
 							x-show="open"
 							x-cloak
-							x-transition:enter="transition ease-out duration-100"
-							x-transition:enter-start="opacity-0 scale-95"
-							x-transition:enter-end="opacity-100 scale-100"
-							x-transition:leave="transition ease-in duration-75"
-							x-transition:leave-start="opacity-100 scale-100"
-							x-transition:leave-end="opacity-0 scale-95"
+							x-transition:enter="mn-enter"
+							x-transition:enter-start="mn-from"
+							x-transition:enter-end="mn-to"
+							x-transition:leave="mn-leave"
+							x-transition:leave-start="mn-to"
+							x-transition:leave-end="mn-from"
 							class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
 							hx-get="/campaigns/picker"
 							hx-trigger="intersect once"
@@ -801,12 +801,12 @@ templ Topbar() {
 						<div
 							x-show="open"
 							x-cloak
-							x-transition:enter="transition ease-out duration-100"
-							x-transition:enter-start="opacity-0 scale-95"
-							x-transition:enter-end="opacity-100 scale-100"
-							x-transition:leave="transition ease-in duration-75"
-							x-transition:leave-start="opacity-100 scale-100"
-							x-transition:leave-end="opacity-0 scale-95"
+							x-transition:enter="mn-enter"
+							x-transition:enter-start="mn-from"
+							x-transition:enter-end="mn-to"
+							x-transition:leave="mn-leave"
+							x-transition:leave-start="mn-to"
+							x-transition:leave-end="mn-from"
 							class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
 						>
 							for _, uc := range GetUserCampaigns(ctx) {
@@ -841,12 +841,12 @@ templ Topbar() {
 						<div
 							x-show="open"
 							x-cloak
-							x-transition:enter="transition ease-out duration-100"
-							x-transition:enter-start="opacity-0 scale-95"
-							x-transition:enter-end="opacity-100 scale-100"
-							x-transition:leave="transition ease-in duration-75"
-							x-transition:leave-start="opacity-100 scale-100"
-							x-transition:leave-end="opacity-0 scale-95"
+							x-transition:enter="mn-enter"
+							x-transition:enter-start="mn-from"
+							x-transition:enter-end="mn-to"
+							x-transition:leave="mn-leave"
+							x-transition:leave-start="mn-to"
+							x-transition:leave-end="mn-from"
 							class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
 							hx-get="/campaigns/picker"
 							hx-trigger="intersect once"
@@ -865,7 +865,7 @@ templ Topbar() {
 
 		<!-- Center: Customizable content area (quick-links, quote, or empty) -->
 		if InCampaign(ctx) {
-			<div id="topbar-content" class="tb-slot flex-1 flex items-center justify-center min-w-0 overflow-hidden transition-all duration-200">
+			<div id="topbar-content" class="tb-slot flex-1 flex items-center justify-center min-w-0 overflow-hidden">
 				@topbarCenterContent(ctx)
 			</div>
 
@@ -1067,12 +1067,12 @@ templ Topbar() {
 						id="user-menu-panel"
 						x-show="open"
 						x-cloak
-						x-transition:enter="transition ease-out duration-100"
-						x-transition:enter-start="opacity-0 scale-95"
-						x-transition:enter-end="opacity-100 scale-100"
-						x-transition:leave="transition ease-in duration-75"
-						x-transition:leave-start="opacity-100 scale-100"
-						x-transition:leave-end="opacity-0 scale-95"
+						x-transition:enter="mn-enter"
+						x-transition:enter-start="mn-from"
+						x-transition:enter-end="mn-to"
+						x-transition:leave="mn-leave"
+						x-transition:leave-start="mn-to"
+						x-transition:leave-end="mn-from"
 						class="absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-1rem)] bg-surface rounded-lg shadow-lg border border-edge z-50 py-1"
 					>
 						<!-- Under 480 wide the bell steps into this menu to leave the

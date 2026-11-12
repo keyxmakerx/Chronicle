@@ -212,7 +212,7 @@ The tree is not plain-`gofmt` clean, so `gofmt -w` over a package or glob reform
 | Guard | File | Mode | Enforces |
 |---|---|---|---|
 | Plugin isolation grep | `tools/check-plugin-isolation.sh` | diff-scoped FAIL | T-B2: no new `foundry-vtt`/`foundry-module`/`foundry_vtt` literals outside `internal/plugins/foundry_vtt/*` |
-| Motion discipline | `tools/check-v2-motion-discipline.sh` | diff-scoped FAIL | No new `transition: all`/`transition-all` in calendar/timeline/ai_workspace/campaigns sources; opt out per line with `/* OK exempt: … */` |
+| Motion discipline | `tools/check-v2-motion-discipline.sh` | diff-scoped FAIL, plus a whole-tree check on the shell | No new `transition: all`/`transition-all` in calendar/timeline/ai_workspace/campaigns sources; none of that, nor `duration-75`/`duration-100`, anywhere in `internal/templates/layouts/`; opt out per line with `/* OK exempt: … */` |
 | Wire-contract conformance | `internal/wire/wire_contract_test.go` + `routes_snapshot.txt` | FAIL (snapshot) | T-O2: every route the real `RegisterRoutes` registers is in the curated snapshot with its resolved path, auth class, handler and middleware chain |
 | Foundry public rate-limit pin | `internal/wire/foundry_public_ratelimit_test.go` | FAIL | T-B1: two AST assertions pin the Foundry public manifest rate-limit wiring (`g.Use(rateLimit)` in `foundry_vtt.RegisterPublicRoutes`) and call site (`middleware.RateLimit(...)` in `app.RegisterRoutes`) |
 | Sanitize-on-write invariant | `internal/sanitize/invariant_test.go` + snapshot | FAIL (snapshot + invariant) | T-B1: every `internal/plugins/*/service.go` (+ widgets) declaring HTML-typed inputs must call `sanitize.HTML` |
