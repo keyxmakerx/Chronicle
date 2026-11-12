@@ -76,6 +76,10 @@ Validation lives in `internal/systems/manifest.go` (`ValidateManifest`).
   `%v`. Keep displayed properties scalar: a nested object prints as
   `map[...]`. See [../system-package-rendering.md](../system-package-rendering.md).
 - A data file whose category isn't in the manifest is loaded but never shown.
+- Check files before you publish against the JSON Schemas in
+  `docs/repo-templates/chronicle-systems/schema/` (`manifest.schema.json`,
+  `reference-item.schema.json`). Chronicle's own checks are stricter in places,
+  so still read `/admin/systems` after install.
 - Widgets can read any data file raw at
   `GET /campaigns/:id/systems/<id>/data/<file>.json`.
 
@@ -83,7 +87,7 @@ Validation lives in `internal/systems/manifest.go` (`ValidateManifest`).
 
 | Key | What it does | Read by |
 |---|---|---|
-| `entity_presets` | Entity types (with fields) a campaign gets when it adopts the system | `internal/systems/manifest.go` |
+| `entity_presets` | Entity types (with fields) a campaign gets when it adopts the system. Give the character one `"category": "character"`; a slug ending `-character` is the older fallback. | `internal/systems/manifest.go` |
 | `relation_presets` | Relation types (with reverse names) | same |
 | `widgets`, `text_renderers` | Browser JS; renderers load first | `internal/systems/handler.go` |
 | `renderers`, `entity_panels` | Widgets Chronicle mounts itself on entity pages | `internal/systems/handler.go` |
