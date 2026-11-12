@@ -40,6 +40,8 @@
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
   function hourLabel(h) {
+    // 24 is the end of the day, which reads as midnight, not "12 PM".
+    h = h % 24;
     var s = h < 12 ? 'AM' : 'PM';
     var hh = h % 12; if (hh === 0) hh = 12;
     return hh + ' ' + s;
@@ -977,7 +979,14 @@
       function minuteAt(e) {
         var rect = col.getBoundingClientRect();
         var yy = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
-        return Math.round(yy / hpx) * 60; // snap to the hour
+        return yy / hpx * 60; // raw minute; the hour snap happens in span()
+      }
+      // A slot covers every hour row the drag touched: the start rounds down
+      // and the end rounds up, so pressing anywhere inside an hour picks that
+      // hour rather than the next one.
+      function span(m0, m1) {
+        var lo = Math.min(m0, m1), hi = Math.max(m0, m1);
+        return { a: Math.floor(lo / 60) * 60, b: Math.ceil(hi / 60) * 60 };
       }
       col.addEventListener('mousedown', function (e) {
         e.preventDefault();
@@ -986,15 +995,14 @@
       });
       col.addEventListener('mousemove', function (e) {
         if (!drag || !selEl) return;
-        var cur = minuteAt(e);
-        var a = Math.min(drag.start, cur), b = Math.max(drag.start, cur);
+        var sp = span(drag.start, minuteAt(e)), a = sp.a, b = sp.b;
+        if (b <= a) b = a + 60;
         selEl.style.top = (a / 60 * hpx) + 'px';
         selEl.style.height = Math.max((b - a) / 60 * hpx, hpx) + 'px';
       });
       col.addEventListener('mouseup', function (e) {
         if (!drag) return;
-        var cur = minuteAt(e);
-        var a = Math.min(drag.start, cur), b = Math.max(drag.start, cur);
+        var sp = span(drag.start, minuteAt(e)), a = sp.a, b = sp.b;
         if (b <= a) b = a + 60;
         if (b > 1440) b = 1440;
         if (selEl && selEl.parentNode) selEl.parentNode.removeChild(selEl);
