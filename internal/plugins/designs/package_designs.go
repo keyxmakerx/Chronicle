@@ -163,6 +163,14 @@ func (s *service) Suggest(ctx context.Context, campaignID, userID, id string, in
 	if err != nil {
 		return nil, err
 	}
+	// Only the Owner's own work goes to a maintainer: a copy carries someone
+	// else's choices, and crediting it to the exporter would misattribute it.
+	if d.Origin != OriginMade {
+		return nil, apperror.NewBadRequest("only a design you made yourself can be suggested; this one is a copy")
+	}
+	if d.SystemID != "" && d.SystemID != c.SystemID {
+		return nil, apperror.NewBadRequest("this design was made for another game system")
+	}
 	msg, err := checkLabel("note", in.Note, MaxSuggestNoteLen, false)
 	if err != nil {
 		return nil, err

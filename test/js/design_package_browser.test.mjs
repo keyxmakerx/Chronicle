@@ -81,10 +81,11 @@ test('Suggest: choose, note, credit, export, then the sent-it note', { skip }, a
   assert.equal(await p.locator('#dsg-note b').count(), 0, 'the note was never parsed as markup');
 });
 
-test('Suggest without credit sends credit false, and an empty library says to save one first', { skip }, async (t) => {
-  const p = await arranged(t, { seed: { pkg: PKG } });
+test('Suggest without credit sends credit false; copies are not offered, and with none of your own it says to save one', { skip }, async (t) => {
+  const copy = Object.assign(mine('c1', 'Someone Else’s'), { origin: 'gallery', makerName: 'Bea' });
+  const p = await arranged(t, { seed: { pkg: PKG, mine: [copy] } });
   await p.click('[data-dl-do="suggest"]');
-  assert.match(await p.locator('#dl-suggest').innerText(), /Save a design of your own first/);
+  assert.match(await p.locator('#dl-suggest').innerText(), /Only designs you made yourself can be suggested/);
   await p.click('[data-dsg="close"]');
   assert.equal(await p.locator('#dsg-design').count(), 0);
 

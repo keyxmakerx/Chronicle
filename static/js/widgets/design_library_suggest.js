@@ -38,11 +38,13 @@
 
   function esc(t) { return env.esc(t); }
 
+  // Only designs the Owner made can be suggested; a copy is someone else's work and the server refuses it.
+  function own(list) { return list.filter(function (m) { return (m.origin || 'made') === 'made'; }); }
   function html() {
-    var mine = env.mine(), label = env.systemLabel(), sys = env.system();
+    var mine = own(env.mine()), label = env.systemLabel(), sys = env.system();
     var h = '<div class="dl-card" role="group" aria-label="Suggest a design for ' + esc(label) + '"><h4>Suggest a design for ' + esc(label) + ' <button type="button" class="dl-link" data-dsg="close">Close</button></h4>';
     h += '<p class="dl-ok" role="status" aria-live="polite" data-dsg-done></p>';
-    if (!mine.length) return h + '<p class="dl-ok">Save a design of your own first, then suggest it here.</p></div>';
+    if (!mine.length) return h + '<p class="dl-ok">Only designs you made yourself can be suggested. Save one of your own first.</p></div>';
     h += '<label class="dl-lab" for="dsg-design">Design to suggest</label><select id="dsg-design" class="dl-in">' +
       mine.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + ' (' + esc(env.kindLabel(m.kind)) + ')</option>'; }).join('') + '</select>';
     h += '<label class="dl-lab" for="dsg-note">Note for the maintainer <span class="dl-sub">optional</span></label><textarea id="dsg-note" rows="2" cols="1" maxlength="' + MAX_NOTE + '"></textarea>';
@@ -73,7 +75,7 @@
   function paint() {
     if (!box) return;
     if (!env.open()) { box.innerHTML = ''; return; }
-    var mine = env.mine();
+    var mine = own(env.mine());
     if (!byId(mine, Z.id)) Z.id = (byId(mine, env.selected()) || mine[0] || {}).id || '';
     box.innerHTML = html();
     // Everything typed or chosen goes back as values and properties, never markup.

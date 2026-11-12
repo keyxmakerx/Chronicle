@@ -246,6 +246,23 @@ func TestSuggestRefusals(t *testing.T) {
 	s.dir.(*fakeDir).owners["A4"] = "alice"
 	_, err = s.Suggest(ctx, "A4", "alice", d.ID, SuggestInput{})
 	wantCode(t, err, http.StatusBadRequest)
+	// A copy of someone else's design, or one made for another system, is not
+	// the Owner's to send: crediting it would misattribute it.
+	for _, tc := range []struct{ name, origin, system string }{
+		{"gallery copy", OriginGallery, "drawsteel"},
+		{"package copy", OriginPackage, "drawsteel"},
+		{"code copy", OriginCode, "drawsteel"},
+		{"shared copy", OriginShared, "drawsteel"},
+		{"other system", OriginMade, "dnd5e"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := mustSave(t, s, "Copy "+tc.name, "oak")
+			row := s.repo.(*memRepo).designs[c.ID]
+			row.Origin, row.SystemID = tc.origin, tc.system
+			_, err := s.Suggest(ctx, "A1", "alice", c.ID, SuggestInput{Credit: true})
+			wantCode(t, err, http.StatusBadRequest)
+		})
+	}
 	// Data the kind now refuses is never exported.
 	s.repo.(*memRepo).designs[d.ID].Data = json.RawMessage(`{"part":"lava"}`)
 	_, err = s.Suggest(ctx, "A1", "alice", d.ID, SuggestInput{})

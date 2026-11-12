@@ -176,14 +176,15 @@ func readInsidePackage(root, rel string) (json.RawMessage, string) {
 	if full != root && !strings.HasPrefix(full, root+string(os.PathSeparator)) {
 		return nil, "the file is outside the package"
 	}
+	// Checked before opening: opening a FIFO would block the request.
+	if st, err := os.Stat(full); err != nil || !st.Mode().IsRegular() {
+		return nil, "the file is not a regular file"
+	}
 	f, err := os.Open(full)
 	if err != nil {
 		return nil, "the file could not be read"
 	}
 	defer f.Close()
-	if st, err := f.Stat(); err != nil || !st.Mode().IsRegular() {
-		return nil, "the file is not a regular file"
-	}
 	// One byte past the cap tells "exactly at the cap" from "over it".
 	raw, err := io.ReadAll(io.LimitReader(f, MaxPackageDesignBytes+1))
 	if err != nil {
