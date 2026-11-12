@@ -809,7 +809,9 @@
         S.rep.end = t.dataset.rend;
         $('#cal5-edRepEnd', el).innerHTML = self._repEndHTML();
         self._schedulePreview();
-      } else if (t.dataset.r) self._ruleClick(t);
+      // The roll section sits inside this drawer and names its own buttons
+      // with data-r too; those are the roll's, never a repeat-rule action.
+      } else if (t.dataset.r && !t.closest('#cal5-edRoll')) self._ruleClick(t);
     });
     // The "more" details keeps its own open state; remember it so a redraw
     // of the rule box does not fold it shut.
