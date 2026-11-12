@@ -15,6 +15,7 @@ var appPagesOnTheSharedOpening = []string{
 	"internal/plugins/crafting/page.templ",
 	"internal/plugins/armory/gallery.templ",
 	"internal/plugins/calendar/calendars_list.templ",
+	"internal/plugins/campaigns/your_look.templ",
 }
 
 func TestAppPages_UseTheSharedFrameAndOpening(t *testing.T) {
