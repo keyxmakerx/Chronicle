@@ -29,9 +29,7 @@ import (
 // characters_boosted_nav_test.go; do not put it back.
 templ CharactersPage(cc *campaigns.CampaignContext, view CastView) {
 	@layouts.App("Characters - " + cc.Campaign.Name) {
-		<div class="max-w-screen-2xl mx-auto px-4 py-6" id="characters-root">
-			@CharactersContent(cc, view)
-		</div>
+		@CharactersContent(cc, view)
 	}
 }
 
@@ -41,18 +39,10 @@ templ CharactersPage(cc *campaigns.CampaignContext, view CastView) {
 // whole region (#cast-content) after each change.
 templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 	<div id="cast-content">
-		<div class="mb-6 flex flex-wrap items-end justify-between gap-3">
-			<div>
-				<h1 class="text-2xl font-bold text-fg">Characters</h1>
-				<p class="mt-1 text-sm text-fg-secondary">The cast of { cc.Campaign.Name }.</p>
-			</div>
-			if view.CanCreateHero {
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/new", cc.Campaign.ID)) } class="btn-primary gap-2" data-create-hero="true">
-					<i class="fa-solid fa-feather-pointed" aria-hidden="true"></i>
-					Create hero
-				</a>
-			}
-		</div>
+		@layouts.AppFrame() {
+		@layouts.AppOpening(charactersOpening(cc, view)) {
+			<span>{ fmt.Sprintf("The cast of %s.", cc.Campaign.Name) }</span>
+		}
 		if view.Builder != nil {
 			@heroBuilder(view.Builder)
 		}
@@ -110,6 +100,7 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 				<i class="fa-solid fa-circle-check" aria-hidden="true"></i>
 				<span>{ view.Notice }</span>
 			</div>
+		}
 		}
 	</div>
 }

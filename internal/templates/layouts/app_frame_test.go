@@ -17,6 +17,7 @@ var appPagesOnTheSharedOpening = []string{
 	"internal/plugins/calendar/calendars_list.templ",
 	"internal/plugins/campaigns/your_look.templ",
 	"internal/plugins/entities/category_dashboard.templ",
+	"internal/plugins/entities/characters.templ",
 }
 
 func TestAppPages_UseTheSharedFrameAndOpening(t *testing.T) {
