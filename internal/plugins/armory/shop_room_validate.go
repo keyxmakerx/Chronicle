@@ -383,7 +383,7 @@ func (c *ShopRoomCounter) validate() error {
 	return nil
 }
 
-// shopRollStatRe is a sheet field key: lowercase letters, digits, underscores.
+// shopRollStatRe is a sheet field key, the same slug a game system names its stats with.
 var shopRollStatRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 
 // validate checks the counter roll settings. Stat keys are never looked up
