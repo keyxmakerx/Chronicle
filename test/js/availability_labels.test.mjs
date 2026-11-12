@@ -72,3 +72,22 @@ test('DM slot-builder chip labels a picked slot as a 12-hour clock range', async
   assert.match(text, /6 PM.*10 PM/, `chip reads a clock range, got: ${text}`);
   assert.ok(!hasStrayH(text), `chip label must not contain a stray "h": ${text}`);
 });
+
+test('a press inside an hour picks that hour, and a slot ending at midnight reads 12 AM', async () => {
+  const { doc } = boot();
+  await wait(20);
+  doc.querySelector('[data-avail-tab="overlay"]').click();
+  await wait(40);
+  doc.querySelector('[data-ov-build-toggle]').click();
+  await wait(30);
+  const col = doc.querySelector('[data-ov-grid] .ov-daycol');
+  col.getBoundingClientRect = () => ({ top: 0, left: 0, right: 100, bottom: 624, width: 100, height: 624 });
+  col.__fire('mousedown', { clientX: 5, clientY: 20 * 26 + 13 });
+  col.__fire('mouseup', { clientX: 5, clientY: 20 * 26 + 13 });
+  col.__fire('mousedown', { clientX: 5, clientY: 23 * 26 + 13 });
+  col.__fire('mouseup', { clientX: 5, clientY: 23 * 26 + 13 });
+  await wait(20);
+  const chips = doc.querySelectorAll('[data-ov-builder] .ov-slotchip').map((c) => c.textContent);
+  assert.match(chips[0], /8 PM–9 PM/, `mid-row press picks that hour, got: ${chips[0]}`);
+  assert.match(chips[1], /11 PM–12 AM/, `last hour ends at midnight, got: ${chips[1]}`);
+});
