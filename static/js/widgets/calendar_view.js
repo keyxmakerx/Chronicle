@@ -316,13 +316,52 @@
         if (e.recurrence_max_occurrences != null && Math.floor(nM / stepM) >= e.recurrence_max_occurrences) return false;
         return true;
       }
+      var weeks = CalDate.recurrenceWeeks(rt, e.recurrence_interval);
+      if (cal.month_starts_new_week && !CalDate.usesRealTime(cal) && (cal.weekdays || []).length > 0) {
+        return CalDate.occursOnGridWeek(cal, e, year, month, day, weeks);
+      }
       var wl = CalDate.weekLen(cal);
-      var stride = wl * CalDate.recurrenceWeeks(rt, e.recurrence_interval);
+      var stride = wl * weeks;
       if (stride <= 0) return onBase;
       var diff = target - base;
       if (diff % stride !== 0) return false;
       if (e.recurrence_max_occurrences != null && Math.floor(diff / stride) >= e.recurrence_max_occurrences) return false;
       return true;
+    },
+
+    // occursOnGridWeek mirrors Event.occursOnGridWeek: on a calendar where
+    // each month starts a new week, a weekly repeat is a day in the base
+    // date's weekday column every `weeks` grid rows, never a festival day.
+    occursOnGridWeek: function (cal, e, year, month, day, weeks) {
+      var baseCol = CalDate.weekdayCol(cal, e.year, e.month, e.day);
+      if (baseCol < 0) return e.year === year && e.month === month && e.day === day;
+      if (CalDate.weekdayCol(cal, year, month, day) !== baseCol) return false;
+      var diff = CalDate.weekRowIndex(cal, year, month, day) - CalDate.weekRowIndex(cal, e.year, e.month, e.day);
+      if (diff < 0 || diff % weeks !== 0) return false;
+      return e.recurrence_max_occurrences == null || Math.floor(diff / weeks) < e.recurrence_max_occurrences;
+    },
+
+    // monthRows mirrors Calendar.monthRows: the week rows a month grid draws
+    // for a month of `days` days; an intercalary month draws none.
+    monthRows: function (cal, month0, days) {
+      var wl = (cal.weekdays || []).length;
+      if (wl <= 0 || cal.months[month0].is_intercalary) return 0;
+      return Math.floor((days + wl - 1) / wl);
+    },
+
+    // weekRowIndex mirrors Calendar.weekRowIndex: grid week rows numbered
+    // continuously, whole years in closed form, years <= 0 common-year only.
+    weekRowIndex: function (cal, year, month1, day) {
+      var months = cal.months || [], common = 0, leap = 0, i;
+      for (i = 0; i < months.length; i++) {
+        var base = months[i].days;
+        common += CalDate.monthRows(cal, i, base);
+        leap += CalDate.monthRows(cal, i, base + (months[i].leap_year_days || 0));
+      }
+      var total = year * common;
+      if (year > 0) total += (leap - common) * CalDate.leapYearsBefore(cal, year);
+      for (i = 0; i < month1 - 1 && i < months.length; i++) total += CalDate.monthRows(cal, i, CalDate.monthDays(cal, i, year));
+      return total + Math.floor((day - 1) / (cal.weekdays || []).length);
     },
 
     // Whole-range containment for a (possibly non-recurring) multi-day
@@ -4569,7 +4608,9 @@
     seasonForDate: function (month, day) {
       var seasons = this.cal.seasons || [];
       for (var i = 0; i < seasons.length; i++) {
-        var s = seasons[i], startVal = s.start_month * 100 + s.start_day, endVal = s.end_month * 100 + s.end_day, dateVal = month * 100 + day;
+        // The month's weight is above the longest month allowed (3660 days),
+        // as in Season.ContainsDate.
+        var s = seasons[i], startVal = s.start_month * 10000 + s.start_day, endVal = s.end_month * 10000 + s.end_day, dateVal = month * 10000 + day;
         var hit = startVal <= endVal ? (dateVal >= startVal && dateVal <= endVal) : (dateVal >= startVal || dateVal <= endVal);
         if (hit) return s;
       }

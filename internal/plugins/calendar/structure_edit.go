@@ -45,6 +45,10 @@ type StructureEdit struct {
 	Moons         []MoonInput
 	Seasons       []Season
 	LeapYearEvery int
+	// MonthStartsNewWeek is the calendar's "each month starts a new week"
+	// switch. nil keeps the stored value, so a submission that does not
+	// mention it (an older editor page, the assistant) never flips it.
+	MonthStartsNewWeek *bool
 	// Warnings are clamp notes from validating the submitted structure,
 	// passed through to the preview so the owner sees them before saving.
 	Warnings []string
@@ -55,12 +59,13 @@ type StructureEdit struct {
 // and keeps only the parts a structure save writes.
 func StructureEditFromImport(ir *ImportResult) StructureEdit {
 	return StructureEdit{
-		Months:        ir.Months,
-		Weekdays:      ir.Weekdays,
-		Moons:         ir.Moons,
-		Seasons:       ir.Seasons,
-		LeapYearEvery: ir.Settings.LeapYearEvery,
-		Warnings:      ir.Warnings,
+		Months:             ir.Months,
+		Weekdays:           ir.Weekdays,
+		Moons:              ir.Moons,
+		Seasons:            ir.Seasons,
+		LeapYearEvery:      ir.Settings.LeapYearEvery,
+		MonthStartsNewWeek: ir.Settings.MonthStartsNewWeek,
+		Warnings:           ir.Warnings,
 	}
 }
 
@@ -145,10 +150,13 @@ type StructureWrite struct {
 	Moons         []MoonInput
 	Seasons       []Season
 	LeapYearEvery int
-	CurrentMonth  int
-	CurrentDay    int
-	MonthRemap    map[int]int
-	RuleUpdates   []RuleUpdate
+	// MonthStartsNewWeek is the resolved switch to store (the edit's value,
+	// or the stored one when the edit left it out).
+	MonthStartsNewWeek bool
+	CurrentMonth       int
+	CurrentDay         int
+	MonthRemap         map[int]int
+	RuleUpdates        []RuleUpdate
 }
 
 // structurePlan is planStructureEdit's result: the preview plus what the
@@ -159,6 +167,16 @@ type structurePlan struct {
 	currentMonth int
 	currentDay   int
 	ruleUpdates  []RuleUpdate
+	// monthStartsNewWeek is the switch the save stores.
+	monthStartsNewWeek bool
+}
+
+// newWeekSwitch is the switch a save of edit would leave on cal.
+func (e StructureEdit) newWeekSwitch(cal *Calendar) bool {
+	if e.MonthStartsNewWeek == nil {
+		return cal.MonthStartsNewWeek
+	}
+	return *e.MonthStartsNewWeek
 }
 
 // reconcileMonths maps each old month (0-based) to its new 1-based
@@ -222,17 +240,18 @@ func dateLabel(cal *Calendar, year, month, day int) string {
 // compute exactly the same thing from the same state.
 func planStructureEdit(cal *Calendar, events []Event, weather []DayDate, rules []StructureRule, overrides []StructureOverride, edit StructureEdit) structurePlan {
 	next := &Calendar{
-		Mode:           cal.Mode,
-		LeapYearEvery:  edit.LeapYearEvery,
-		LeapYearOffset: cal.LeapYearOffset,
-		Months:         make([]Month, len(edit.Months)),
+		Mode:               cal.Mode,
+		LeapYearEvery:      edit.LeapYearEvery,
+		LeapYearOffset:     cal.LeapYearOffset,
+		MonthStartsNewWeek: edit.newWeekSwitch(cal),
+		Months:             make([]Month, len(edit.Months)),
 	}
 	for i, m := range edit.Months {
 		next.Months[i] = Month{Name: m.Name, Days: m.Days, SortOrder: i, IsIntercalary: m.IsIntercalary, LeapYearDays: m.LeapYearDays}
 	}
 
 	mapping := reconcileMonths(cal.Months, edit.Months)
-	plan := structurePlan{remap: map[int]int{}}
+	plan := structurePlan{remap: map[int]int{}, monthStartsNewWeek: next.MonthStartsNewWeek}
 	p := &plan.preview
 	p.CalendarName = cal.Name
 	p.Warnings = edit.Warnings
@@ -479,6 +498,12 @@ func otherStructureNotes(cal *Calendar, edit StructureEdit) []string {
 			}
 		}
 	}
+	switch was, now := cal.MonthStartsNewWeek, edit.newWeekSwitch(cal); {
+	case now && !was:
+		notes = append(notes, "Weekdays will restart at the start of every month, and festival days will sit between weeks. Weekly events follow, so they land on the same weekday of each week.")
+	case was && !now:
+		notes = append(notes, "Weekdays will run on through month and festival boundaries instead of restarting each month. Weekly events follow, counting plain days again.")
+	}
 	if edit.LeapYearEvery != cal.LeapYearEvery {
 		switch {
 		case edit.LeapYearEvery <= 0:
@@ -520,7 +545,7 @@ func otherStructureNotes(cal *Calendar, edit StructureEdit) []string {
 // whatever order they were read in.
 func structureFingerprint(cal *Calendar, events []Event, weather []DayDate, rules []StructureRule, overrides []StructureOverride) string {
 	h := sha256.New()
-	_, _ = fmt.Fprintf(h, "leap %d %d|now %d %d %d|", cal.LeapYearEvery, cal.LeapYearOffset, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
+	_, _ = fmt.Fprintf(h, "leap %d %d|now %d %d %d|week %t|", cal.LeapYearEvery, cal.LeapYearOffset, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, cal.MonthStartsNewWeek)
 	for _, m := range cal.Months {
 		_, _ = fmt.Fprintf(h, "m %q %d %d %t|", m.Name, m.Days, m.LeapYearDays, m.IsIntercalary)
 	}
@@ -748,14 +773,15 @@ func structureWriteFor(edit StructureEdit, plan structurePlan) *StructureWrite {
 		weekdays[i] = w
 	}
 	return &StructureWrite{
-		Months:        months,
-		Weekdays:      weekdays,
-		Moons:         moons,
-		Seasons:       seasons,
-		LeapYearEvery: edit.LeapYearEvery,
-		CurrentMonth:  plan.currentMonth,
-		CurrentDay:    plan.currentDay,
-		MonthRemap:    plan.remap,
-		RuleUpdates:   plan.ruleUpdates,
+		Months:             months,
+		Weekdays:           weekdays,
+		Moons:              moons,
+		Seasons:            seasons,
+		LeapYearEvery:      edit.LeapYearEvery,
+		MonthStartsNewWeek: plan.monthStartsNewWeek,
+		CurrentMonth:       plan.currentMonth,
+		CurrentDay:         plan.currentDay,
+		MonthRemap:         plan.remap,
+		RuleUpdates:        plan.ruleUpdates,
 	}
 }

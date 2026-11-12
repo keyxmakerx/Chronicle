@@ -138,9 +138,13 @@ type ImportedSettings struct {
 	RealTimeZone   *string `json:"real_time_zone,omitempty"`
 	// Also Chronicle-native only: external formats have no concept of a
 	// hemisphere, forecast toggle or week-start rule.
-	Hemisphere         *string `json:"hemisphere,omitempty"`
-	ForecastsEnabled   bool    `json:"forecasts_enabled,omitempty"`
-	MonthStartsNewWeek bool    `json:"month_starts_new_week,omitempty"`
+	Hemisphere       *string `json:"hemisphere,omitempty"`
+	ForecastsEnabled bool    `json:"forecasts_enabled,omitempty"`
+	// MonthStartsNewWeek is a pointer so a structure save can tell "the
+	// editor said off" from "the submission never mentioned it" (an older
+	// page): absent keeps the stored switch, as every partial update does.
+	// A new calendar reads nil as off.
+	MonthStartsNewWeek *bool `json:"month_starts_new_week,omitempty"`
 	// EraLook is Chronicle-native only too; nil keeps the defaults.
 	EraLook *EraLook `json:"era_look,omitempty"`
 	// Sun is Chronicle-native only too; nil keeps the yellow sun.
@@ -249,7 +253,7 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 			RealTimeZone:       export.Calendar.RealTimeZone,
 			Hemisphere:         export.Calendar.Hemisphere,
 			ForecastsEnabled:   export.Calendar.ForecastsEnabled,
-			MonthStartsNewWeek: export.Calendar.MonthStartsNewWeek,
+			MonthStartsNewWeek: &export.Calendar.MonthStartsNewWeek,
 			EraLook:            normalizeEraLook(export.Calendar.EraLook),
 			Sun:                export.Calendar.Sun,
 		},

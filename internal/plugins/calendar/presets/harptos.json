@@ -16,6 +16,7 @@
     "leap_year_every": 4,
     "leap_year_offset": 0,
     "tracks_real_time": false,
+    "month_starts_new_week": true,
     "months": [
       {
         "name": "Hammer",

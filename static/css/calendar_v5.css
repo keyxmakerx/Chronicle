@@ -289,6 +289,7 @@ html[data-theme="dark"] .calv5 {
    see wizardRealWorldReviewBody/wizardBuildBody's own comments for why. */
 .calv5-toggle-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; font: 500 12.5px/1.4 var(--sans, sans-serif); color: var(--ink2); }
 .calv5-toggle-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--ink); }
+.calv5-toggle-row b { font-weight: 650; color: var(--ink); }
 
 /* "Build your own": one labelled section per structure part, each holding a
    list of rows (name + number fields) with plain-text reorder/remove
