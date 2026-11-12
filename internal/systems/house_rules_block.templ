@@ -1,0 +1,42 @@
+// house_rules_block.templ draws the campaign home's "House rules" block, which
+// the home's placeholder (campaigns.dashFragment) loads. Each chapter is a
+// native fold-out, so it opens with the keyboard and without script; the
+// Material page look sets the parts it marks (cb-info, cb-rule).
+package systems
+
+import "fmt"
+
+// houseRulesBlock replaces the placeholder (hx-swap outerHTML).
+templ houseRulesBlock(v houseRulesView) {
+	<section class="cb-info cb-rules" data-block="house-rules" aria-labelledby="house-rules-h">
+		<div class="cb-info-top flex items-baseline justify-between mb-3">
+			<h2 id="house-rules-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				House rules
+				<span class="cb-n ml-1 font-normal normal-case tracking-normal text-fg-muted">{ fmt.Sprint(v.Total) }</span>
+			</h2>
+			<a href={ templ.SafeURL(v.BookHref) } class="cb-more text-xs text-accent hover:underline">
+				if v.Total > len(v.Rules) {
+					All { fmt.Sprint(v.Total) } in the rulebook
+				} else {
+					In the rulebook
+				}
+			</a>
+		</div>
+		<div class="cb-info-rows card cb-card divide-y divide-edge px-4">
+			for _, r := range v.Rules {
+				<details class="cb-rule group py-1">
+					<summary class="cb-rule-sum flex min-h-8 cursor-pointer list-none items-center gap-2 py-1.5 text-sm font-semibold text-fg">
+						<span class="min-w-0 flex-1">{ r.Title }</span>
+						<i class="fa-solid fa-chevron-down text-[10px] text-fg-muted transition-transform group-open:rotate-180" aria-hidden="true"></i>
+					</summary>
+					<div class="cb-rule-body pb-2 text-sm text-fg-secondary">
+						if r.Intro != "" {
+							<p class="max-w-prose">{ r.Intro }</p>
+						}
+						<a href={ templ.SafeURL(r.Href) } class="cb-more text-xs text-accent hover:underline">Read it in the rulebook</a>
+					</div>
+				</details>
+			}
+		</div>
+	</section>
+}

@@ -27,7 +27,7 @@ func TestCreate_StartsWithSetupStepsAndHiddenPages(t *testing.T) {
 	if first.ID != setupStepsBlockID || first.Type != BlockTextBlock {
 		t.Fatalf("first block = %+v, want the setup steps text block", first)
 	}
-	for _, aud := range []string{HomePlayer, HomeScribe, HomeGuest} {
+	for _, aud := range []string{HomeScribe, HomeGuest} {
 		if created.HasSavedHome(aud) {
 			t.Errorf("%s home should not have a layout of its own", aud)
 		}
@@ -58,7 +58,6 @@ func TestCreate_StartsOnTheFrontPage(t *testing.T) {
 	tests := []struct {
 		audience, main, side string
 	}{
-		{HomePlayer, "start_here,recent_pages", "at_a_glance,category_grid"},
 		{HomeScribe, "start_here,recent_pages", "at_a_glance,category_grid"},
 		{HomeDirector, "start_here,recent_pages,activity_feed", "at_a_glance,category_grid,quick_actions"},
 	}
@@ -85,6 +84,52 @@ func TestCreate_StartsOnTheFrontPage(t *testing.T) {
 	}
 	if guest, own := created.HomeLayout(HomeGuest); own || guest.Rows[len(guest.Rows)-1].Columns[0].Blocks[0].Type == BlockStartHere {
 		t.Error("guests keep the built-in guest home")
+	}
+}
+
+// New campaigns start Players on the signed players' home: the page to start
+// on, last time and the latest pages beside the next game, the party, when and
+// where we play and the house rules. The layout must validate, and holds no
+// owner-only block, since every block in it draws for a player.
+func TestCreate_StartsPlayersOnThePlayersHome(t *testing.T) {
+	var created *Campaign
+	repo := &mockCampaignRepo{createFn: func(_ context.Context, c *Campaign) error { created = c; return nil }}
+	svc := newTestCampaignServiceFull(repo, &mockUserFinder{}, nil, &mockSeeder{})
+	if _, err := svc.Create(context.Background(), "user-1", CreateCampaignInput{Name: "Test"}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	home, own := created.HomeLayout(HomePlayer)
+	if !own {
+		t.Fatal("players should start on a home of their own")
+	}
+	if err := validateDashboardLayout(context.Background(), created.ID, home); err != nil {
+		t.Fatalf("layout does not validate: %v", err)
+	}
+	row := home.Rows[len(home.Rows)-1]
+	if len(row.Columns) != 2 || row.Columns[0].Width != 7 || row.Columns[1].Width != 5 {
+		t.Fatalf("players row = %+v, want a 7 and 5 column pair", row.Columns)
+	}
+	var main, side []string
+	for _, b := range row.Columns[0].Blocks {
+		main = append(main, b.Type)
+	}
+	for _, b := range row.Columns[1].Blocks {
+		side = append(side, b.Type)
+	}
+	if got := strings.Join(main, ","); got != "start_here,last_time,recent_pages" {
+		t.Errorf("main column = %s", got)
+	}
+	if got := strings.Join(side, ","); got != "coming_up,party,when_we_play,where_we_play,house_rules" {
+		t.Errorf("side column = %s", got)
+	}
+	for _, r := range home.Rows {
+		for _, c := range r.Columns {
+			for _, b := range c.Blocks {
+				if b.Type == BlockActivityFeed || b.Type == BlockQuickActions {
+					t.Errorf("%s is the DM team's, not a player's", b.Type)
+				}
+			}
+		}
 	}
 }
 

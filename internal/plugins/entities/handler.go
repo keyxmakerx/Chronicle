@@ -4070,7 +4070,7 @@ func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) 
 		view.Builder = h.buildHeroBuilder(c, cc, view.Yours, charTypes, heroType, heroAcc)
 	}
 	if pcOn {
-		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID), charTypes)
+		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID, int(cc.VisibilityRole())), charTypes)
 		h.fillCastRoster(ctx, cc, userID, charTypes, &view)
 		// Only a member with no party yet needs a pointer to where claiming happens.
 		if view.IsMember && len(view.Party) == 0 {
@@ -4459,9 +4459,8 @@ func (h *Handler) SearchRosterFinder(c *echo.Context) error {
 // characters (ListByOwner — unfiltered, so a player always sees their own PC
 // even if it was marked private). Owner names are resolved best-effort; the page
 // must never fail on a roster lookup.
-func (h *Handler) buildCastParty(ctx context.Context, cc *campaigns.CampaignContext, userID string) []CastMember {
+func (h *Handler) buildCastParty(ctx context.Context, cc *campaigns.CampaignContext, userID string, role int) []CastMember {
 	campaignID := cc.Campaign.ID
-	role := cc.VisibilityRole()
 
 	// Player display names are for members only: a signed-out visitor (or a
 	// non-member viewing a public campaign) sees the characters, not who plays them.

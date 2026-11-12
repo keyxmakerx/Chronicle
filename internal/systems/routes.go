@@ -63,6 +63,17 @@ func registerBookEditorRoutes(mg *echo.Group, h *SystemHandler) {
 	mg.POST("/book/chapters/:chapter/pages/:key/keep", h.BookPageKeep)
 }
 
+// RegisterHouseRulesRoute mounts the campaign home's House rules block. It is
+// campaign-scoped rather than system-scoped because the home does not know the
+// campaign's game system; the handler reads it from the campaign's settings.
+func RegisterHouseRulesRoute(e *echo.Echo, h *SystemHandler, authSvc auth.AuthService, campaignSvc campaigns.CampaignService) {
+	g := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+	)
+	g.GET("/house-rules", h.HouseRulesBlock, campaigns.RequireRole(campaigns.RolePlayer))
+}
+
 // RegisterCustomSystemRoutes sets up campaign owner routes for uploading
 // and managing custom game systems.
 func RegisterCustomSystemRoutes(e *echo.Echo, ch *CampaignSystemHandler, authSvc auth.AuthService, campaignSvc campaigns.CampaignService) {

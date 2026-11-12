@@ -1,0 +1,67 @@
+// home_blocks.templ draws the campaign home's "When we play" and "Last time"
+// blocks, which the home's placeholders (campaigns.dashFragment) load. They
+// mark the shared block parts (cb-info, cb-line) so the Material page look
+// sets them as hairline rows and a quiet read-on link.
+package sessions
+
+import (
+	"fmt"
+	"strings"
+)
+
+// whenWePlayBlock replaces the placeholder (hx-swap outerHTML).
+templ whenWePlayBlock(campaignID string, times []playTime, zone string) {
+	<section class="cb-info cb-when" data-block="when-we-play" aria-labelledby="when-we-play-h">
+		<div class="cb-info-top flex items-baseline justify-between mb-3">
+			<h2 id="when-we-play-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">When we play</h2>
+			<a href={ templ.SafeURL("/campaigns/" + campaignID + "/availability") } class="cb-more text-xs text-accent hover:underline">Change my times</a>
+		</div>
+		<div class="cb-info-rows card cb-card divide-y divide-edge px-4">
+			for _, t := range times {
+				<div class="cb-line flex items-center gap-3 py-2 text-sm">
+					<span class="cb-line-name font-semibold text-fg">{ t.Day() }</span>
+					<span class="cb-line-sub min-w-0 flex-1 text-fg-secondary">{ t.Span() }</span>
+					<span class="cb-line-end whitespace-nowrap text-xs tabular-nums text-fg-muted">{ fmt.Sprintf("%d of %d free", t.Free, t.Total) }</span>
+					<span class="cb-bar h-1.5 w-16 flex-none overflow-hidden rounded-full bg-surface-alt" aria-hidden="true">
+						<i class="block h-full rounded-full bg-accent" style={ fmt.Sprintf("width:%d%%", t.Percent()) }></i>
+					</span>
+				</div>
+			}
+		</div>
+		<p class="cb-hint mt-2 text-xs text-fg-muted">The times most of the table is free, in { zone }. Nobody's own answers are shown.</p>
+	</section>
+}
+
+// lastTimeBlock replaces the placeholder (hx-swap outerHTML).
+templ lastTimeBlock(v lastTimeView) {
+	<section class="cb-info cb-last" data-block="last-time" aria-labelledby="last-time-h">
+		<div class="cb-info-top flex items-baseline justify-between mb-3">
+			<h2 id="last-time-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				Last time
+				<span class="cb-n ml-1 font-normal normal-case tracking-normal text-fg-muted">
+					{ v.Name }
+					if v.Date != "" {
+						<span aria-hidden="true"> · </span>{ v.Date }
+					}
+				</span>
+			</h2>
+		</div>
+		<div class="cb-last-body text-sm text-fg-secondary">
+			for _, p := range recapParagraphs(v.Excerpt) {
+				<p class="mb-2 max-w-prose">{ p }</p>
+			}
+		</div>
+		<a href={ templ.SafeURL(v.Href) } class="cb-more text-sm text-accent hover:underline">Read the whole recap</a>
+	</section>
+}
+
+// recapParagraphs splits the excerpt back into its paragraphs.
+func recapParagraphs(excerpt string) []string {
+	var out []string
+	for _, p := range strings.Split(excerpt, "\n\n") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}

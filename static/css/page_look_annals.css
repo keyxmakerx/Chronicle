@@ -306,6 +306,51 @@
 [data-cz-page="annals"] .cb-glance-link { color: inherit; text-decoration: none; }
 [data-cz-page="annals"] .cb-glance-link:hover { color: var(--annals-link); text-decoration: underline; text-underline-offset: 3px; }
 
+/* The players' home blocks (the party, when and where we play, house rules,
+   last time) share one set of parts: a heading with a quiet word at its end,
+   then hairline rows. The card they sit in under the Standard look steps
+   aside here, as At a glance's does. */
+[data-cz-page="annals"] .cb-info .cb-info-top {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--annals-line);
+  margin-bottom: 4px;
+}
+[data-cz-page="annals"] .cb-info .cb-info-top .cb-head { padding-bottom: 0; border-bottom: 0; }
+[data-cz-page="annals"] #main-content .cb-info .cb-info-rows {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  --tw-divide-y-reverse: 0;
+}
+[data-cz-page="annals"] #main-content .cb-info .cb-info-rows > * {
+  border-color: var(--color-border-light);
+  border-top-width: var(--shape-rule, 1px);
+  border-bottom-width: 0;
+  padding-inline: 8px;
+  margin-inline: -8px;
+  border-radius: 0;
+}
+[data-cz-page="annals"] #main-content .cb-info .cb-info-rows > :first-child { border-top-width: 0; }
+[data-cz-page="annals"] #main-content .cb-info .cb-line { min-height: 32px; }
+[data-cz-page="annals"] #main-content .cb-info .cb-line:hover { background: var(--color-bg-tertiary); }
+[data-cz-page="annals"] .cb-info .cb-line-name { font-size: 0.9rem; }
+[data-cz-page="annals"] .cb-info .cb-line.cb-you {
+  box-shadow: inset 2px 0 0 var(--annals-acc);
+  background: color-mix(in srgb, var(--annals-acc) 8%, transparent);
+}
+[data-cz-page="annals"] .cb-info .cb-more { font-weight: 500; }
+[data-cz-page="annals"] .cb-info .cb-n { font-family: var(--font-body, inherit); }
+[data-cz-page="annals"] .cb-info .cb-rule-sum::-webkit-details-marker { display: none; }
+[data-cz-page="annals"] .cb-last .cb-last-body { max-width: 66ch; }
+/* Where we play's address is an address: it keeps its own face and is cut
+   with an ellipsis rather than wrapped. */
+[data-cz-page="annals"] .cb-where .cb-line-sub { overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) {
+  [data-cz-page="annals"] .cb-info .cb-rule i { transition: none; }
+}
+
 /* ---------- Following a connection ----------
    static/js/annals_pull.js runs a view transition and names its parts: the
    page (annals-page), the connections block (annals-rail) and each of its

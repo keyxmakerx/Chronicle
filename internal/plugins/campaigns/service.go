@@ -591,6 +591,11 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 	} else {
 		slog.Warn("new campaign: front page not saved", slog.Any("error", err))
 	}
+	if home, err := campaign.SetRoleDashboardJSON(HomePlayer, playersHome()); err == nil {
+		campaign.DashboardLayout = home
+	} else {
+		slog.Warn("new campaign: players' home not saved", slog.Any("error", err))
+	}
 	if home, err := campaign.SetRoleDashboardJSON(HomeDirector, starterDirectorHome(campaign.ID)); err == nil {
 		campaign.DashboardLayout = home
 	} else {
