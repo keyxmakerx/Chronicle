@@ -489,7 +489,7 @@ func withRolls(r any) []byte {
 
 func TestNormalizeShopRoomLayout_Rolls(t *testing.T) {
 	good := func() map[string]any {
-		return map[string]any{"haggle": true, "look": true, "stubborn": "hard", "haggleStat": "cha", "lookStat": "int_2",
+		return map[string]any{"haggle": true, "look": true, "stubborn": "hard", "haggleStat": "cha", "lookStat": "int-2",
 			"great": 25, "middling": 12, "poor": 15}
 	}
 	with := func(k string, v any) []byte {
@@ -505,7 +505,7 @@ func TestNormalizeShopRoomLayout_Rolls(t *testing.T) {
 		{"stubborn in capitals", with("stubborn", "Hard")},
 		{"stat key with a capital", with("haggleStat", "Cha")},
 		{"stat key with a space", with("lookStat", "my stat")},
-		{"stat key with a hyphen", with("haggleStat", "a-b")},
+		{"stat key starting with a hyphen", with("haggleStat", "-ab")},
 		{"stat key too long", with("haggleStat", strings.Repeat("a", 41))},
 		{"great over 90", with("great", 91)},
 		{"great negative", with("great", -1)},
@@ -534,7 +534,7 @@ func TestNormalizeShopRoomLayout_Rolls(t *testing.T) {
 		if err := json.Unmarshal(out, &l); err != nil {
 			t.Fatal(err)
 		}
-		want := ShopRoomRolls{Haggle: true, Look: true, Stubborn: "hard", HaggleStat: "cha", LookStat: "int_2", Great: 25, Middling: 12, Poor: 15}
+		want := ShopRoomRolls{Haggle: true, Look: true, Stubborn: "hard", HaggleStat: "cha", LookStat: "int-2", Great: 25, Middling: 12, Poor: 15}
 		if l.Rolls == nil || *l.Rolls != want {
 			t.Errorf("rolls = %+v", l.Rolls)
 		}

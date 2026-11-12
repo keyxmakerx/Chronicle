@@ -1113,6 +1113,8 @@
     };
     // Only a theme the owner made is saved; without one the shop type's starter is drawn.
     if (S.counter) L.counter = counterTheme(S.counter);
+    // Rolls are saved only once the owner switched one on.
+    if (S.rolls && (S.rolls.haggle || S.rolls.look)) L.rolls = normRolls(S.rolls);
     return L;
   }
   // The counter's theme through the counter file's own normaliser, so an odd value never reaches the server or the drawing.
@@ -1138,6 +1140,7 @@
     S.deco = L.decorations || 'some'; S.pal = L.palette || S.pal;
     S.look = L.look === 'paper' || L.look === 'counter' ? L.look : 'lit';
     S.mood = MOODS[L.mood] ? L.mood : '';
+    S.rolls = L.rolls ? normRolls(L.rolls) : null;
     S.efx = null;
     // The server checks these too; clamping here keeps a stray value from ever reaching the drawing.
     if (L.effects) {
@@ -1201,6 +1204,29 @@
     return its.filter(function (it) { return !pool[String(it.id)] || out[String(it.id)]; }).map(function (it) {
       if (out[String(it.id)]) it.today = true;
       return it;
+    });
+  }
+  // The owner's roll settings for this counter, as the server keeps them: unknown values fall back
+  // to the defaults, so an odd value never reaches the server or the sheet.
+  function normRolls(r) {
+    r = r || {};
+    var pct = function (v, d, max) { v = Math.round(Number(v)); return isFinite(v) && v >= 0 && v <= max ? v : d; };
+    var stat = function (v) { return /^[a-z0-9][a-z0-9_-]{0,39}$/.test(v || '') ? v : ''; };
+    return { haggle: r.haggle === true, look: r.look === true, stubborn: ['easy', 'usual', 'hard'].indexOf(r.stubborn) >= 0 ? r.stubborn : 'usual',
+      haggleStat: stat(r.haggleStat), lookStat: stat(r.lookStat), great: pct(r.great, 20, 90), middling: pct(r.middling, 10, 90), poor: pct(r.poor, 10, 200) };
+  }
+  // Today's haggled prices for the paying character: goods is the rolls answer's
+  // { relationId: { haggle: { price } } }. The good keeps what it cost before as was.
+  function haggled(its, goods) {
+    if (!goods) return its;
+    return its.map(function (it) {
+      var g = goods[String(it.id)], h = g && g.haggle;
+      if (!h || !(Number(h.price) > 0) || Number(h.price) === it.p) return it;
+      var o = {}; for (var k in it) if (Object.prototype.hasOwnProperty.call(it, k)) o[k] = it[k];
+      var tail = it.price.slice(String(it.p).length);
+      o.was = it.price; o.p = Number(h.price); o.price = o.p + tail;
+      if (it.priceUsual) o.priceUsual = o.p + it.priceUsual.slice(String(it.p).length);
+      return o;
     });
   }
   // The slate's second line: when the shelf changes, with the hours left
@@ -1270,7 +1296,7 @@
     };
   }
 
-  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -1366,6 +1392,8 @@
     '.shr-tab[aria-pressed="true"]{color:var(--shr-acc);background:color-mix(in srgb,var(--shr-acc) 12%,transparent);font-weight:600}',
     '.shr-list{display:grid;gap:2px;max-height:320px;overflow:auto}',
     '.shr-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:6px 8px;border-radius:6px}',
+    '.shr-rnotes{display:grid;gap:6px;margin-top:6px}.shr-rnote{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--color-border,#e5e7eb);border-radius:8px}.shr-rnote.ed{display:grid}.shr-rnote small{color:var(--color-text-secondary,#6b7280)}',
+    '.shr-rolls{grid-column:2/-1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:-2px}.shr-rolls:empty{display:none}.shr-seen{flex-basis:100%;font-style:italic}.shr-price s{opacity:.6;font-weight:400}',
     '.shr-row:hover,.shr-row.hl{background:var(--color-bg-tertiary,#f3f4f6)}',
     '.shr-row.out{opacity:.55}',
     '.shr-ic{width:30px;height:30px;border-radius:6px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 18%,transparent);color:color-mix(in srgb,var(--c),var(--color-text-primary,#111827) 25%)}',
@@ -1543,7 +1571,7 @@
       injectStyle();
       var ds = el.dataset, canArrange = ds.canArrange === 'true', campaignUrl = ds.campaignUrl || '';
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
-      var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy'), todayEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/today'), today = null;
+      var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy'), todayEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/today'), today = null, shopBase = (ds.roomEndpoint || '').replace(/\/room$/, ''), rollsState = null;
       var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true, counter: null,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], manner: '', moments: {}, mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
@@ -1586,7 +1614,7 @@
         S.dark = document.documentElement.classList.contains('dark');
         // Arranging shows every good, so a GM can place one that is not out today.
         S.its = shopItems(rels, S.ov, room.MAT, ICONS, words);
-        if (S.mode !== 'arr') S.its = todayShelf(S.its, today);
+        if (S.mode !== 'arr') S.its = haggled(todayShelf(S.its, today), rollsState && rollsState.goods);
         view = room.draw();
         svg.setAttribute('viewBox', view.viewBox.join(' '));
         fitScene();
@@ -1646,6 +1674,15 @@
         add: function (id) { if (addable(id)) return false; basket[String(id)] = (basket[String(id)] || 0) + 1; note = ''; renderList(); picked(); return true; },
         remove: function (id) { var k = String(id); if (!basket[k]) return; if (!--basket[k]) delete basket[k]; note = ''; renderList(); },
         basketEl: function () { return cartBtn; },
+        rollActs: function (id) {
+          var rs = rollsState, it = null; S.its.forEach(function (x) { if (String(x.id) === String(id)) it = x; });
+          if (!rs || !it || !buy || !buy.buyers.length || !window.ShopRolls) return '';
+          var g = (rs.goods || {})[String(it.id)] || {}, h = '';
+          if (rs.haggle && it.p > 0 && !it.out && !g.haggle) h += '<button type="button" class="src-btn" data-act="roll:haggle:' + esc(it.id) + '">Haggle</button>';
+          if (rs.look && !(g.look && (g.look.today || g.look.tier >= 3))) h += '<button type="button" class="src-btn" data-act="roll:look:' + esc(it.id) + '">Look closer</button>';
+          return h;
+        },
+        roll: function (action, id, b) { openRoll(action, id, b); },
         openList: function () { setOpen(true); },
         talk: function (el, said) { talk(el, said); },
         // Place by hand: which props found a spot, and a press on the opening.
@@ -1699,7 +1736,7 @@
           var name = it.entityId ? '<a class="shr-nm" href="' + esc(campaignUrl + '/entities/' + it.entityId) + '" data-hx-boost="true">' + esc(it.n) + '</a>' : '<span class="shr-nm">' + esc(it.n) + '</span>';
           var stock = it.out ? 'Sold out' : it.qty === null ? '' : it.qty + ' left';
           if (it.today) stock = stock ? stock + ', only today' : 'Only today';
-          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price"' + (it.priceUsual ? ' title="' + esc(it.priceUsual) + '"' : '') + '>' + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + '</div>';
+          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price"' + (it.priceUsual ? ' title="' + esc(it.priceUsual) + '"' : '') + '>' + (it.was ? '<s>' + esc(it.was) + '</s> ' : '') + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + rollBtns(it) + '</div>';
         });
         root.querySelector('.shr-list').innerHTML = rows.join('') || '<p class="shr-empty">' + (canArrange ? 'Nothing for sale yet. Add goods in the shop inventory below.' : 'Nothing for sale right now.') + '</p>';
         root.querySelectorAll('.shr-fx button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.fx === S.fx); });
@@ -1714,6 +1751,29 @@
         if (!(it.p > 0)) return '<button type="button" class="shr-add" disabled>No price</button>';
         return '<button type="button" class="shr-add" data-add="' + esc(it.id) + '"' + (q >= max ? ' disabled' : '') + '>' + (q ? 'Add another (' + q + ')' : 'Add') + '</button>';
       }
+      // Haggle and Look closer, when the owner switched them on and the payer hasn't tried today.
+      // A note the payer already noticed is shown under the buttons.
+      function rollBtns(it) {
+        var rs = rollsState; if (!rs || !buy || !buy.buyers.length || !window.ShopRolls || (!rs.haggle && !rs.look)) return '';
+        var g = (rs.goods || {})[String(it.id)] || {}, h = '';
+        if (rs.haggle && it.p > 0 && !it.out) h += g.haggle ? '<span class="shr-m">Haggled today</span>' : '<button type="button" class="shr-add" data-haggle="' + esc(it.id) + '">Haggle</button>';
+        if (rs.look && !(g.look && (g.look.today || g.look.tier >= 3))) h += '<button type="button" class="shr-add" data-look="' + esc(it.id) + '">Look closer</button>';
+        var seen = g.look && g.look.tier >= 2 ? [g.look.note, g.look.extra].filter(Boolean).join(' ') : '';
+        return '<span class="shr-rolls">' + h + (seen ? '<span class="shr-m shr-seen">You noticed: ' + esc(seen) + '</span>' : '') + '</span>';
+      }
+      function openRoll(action, id, b) {
+        var it = null; S.its.forEach(function (x) { if (String(x.id) === String(id)) it = x; });
+        if (!it || !window.ShopRolls) return;
+        window.ShopRolls.open({ base: shopBase, goodId: it.id, goodName: it.n, price: it.price, action: action, characters: buy ? buy.buyers : [], characterId: payer, returnFocus: b });
+      }
+      function loadRolls() {
+        if (!payer || !window.ShopRolls) { rollsState = null; return Promise.resolve(); }
+        return Chronicle.apiFetch(shopBase + '/rolls?character=' + encodeURIComponent(payer)).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
+          rollsState = j && typeof j === 'object' ? j : null;
+        });
+      }
+      // A roll in the sheet changes a price or shows a note: read today's rolls again and redraw.
+      function onRollResult() { loadRolls().then(function () { draw(); renderList(); }); }
       function buyer() { var b = null; (buy ? buy.buyers : []).forEach(function (x) { if (x.id === payer) b = x; }); return b; }
       // The basket line in the bar: what's in it, who pays, and Buy.
       function renderBasket() {
@@ -1779,7 +1839,7 @@
             }
             basket = {};
             if (j.status !== 'requested') bought = true;
-            return Promise.all([loadGoods(), loadBuyers()]);
+            return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]);
           });
         }).catch(function (e) {
           // A network failure's own text ("Failed to fetch") means nothing
@@ -2199,8 +2259,66 @@
         }
         return h + '<label class="shr-field"><span>When someone presses the keeper (one line each)</span><textarea rows="3" data-lines="1" maxlength="2200"></textarea></label>';
       }
+      // The Rolls section: what players may roll here, how stubborn the keeper is, and the hidden
+      // notes Look closer can turn up. The notes are saved at once, apart from Save room, and never
+      // go into the room layout, which players can read.
+      var rollsMeta = null, secrets = null, noteEdit = '', noteMsg = '', ownerRollsAsked = false;
+      function loadOwnerRolls() {
+        if (ownerRollsAsked || !canArrange) return; ownerRollsAsked = true;
+        Promise.all([
+          Chronicle.apiFetch(shopBase + '/rolls').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+          Chronicle.apiFetch(shopBase + '/secrets').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+        ]).then(function (res) { rollsMeta = res[0]; secrets = res[1] && typeof res[1] === 'object' ? res[1] : {}; if (panel && !panel.contains(document.activeElement)) renderPanel(); });
+      }
+      function rollsSum() {
+        var R = S.rolls || normRolls(null), on = [R.haggle ? 'Haggle' : '', R.look ? 'Look closer' : ''].filter(Boolean);
+        return on.length ? on.join(' and ') + ' on' : 'Off';
+      }
+      function rollsBody() {
+        var R = S.rolls || normRolls(null), h = '<p class="shr-note">Players roll your game system’s test from the wares list and at the counter. Every roll is logged at the Table.</p>';
+        h += '<div class="shr-tgl" role="group" aria-label="Rolls players may make here"><button type="button" data-rsw="haggle" aria-pressed="' + R.haggle + '">Haggle</button><button type="button" data-rsw="look" aria-pressed="' + R.look + '">Look closer</button></div>';
+        if (!R.haggle && !R.look) return h;
+        h += '<div class="shr-field"><span>How stubborn is the keeper?</span><span class="shr-seg" role="group" style="display:grid">' + [['easy', 'Easy'], ['usual', 'Usual'], ['hard', 'Hard']].map(function (o) { return '<button type="button" data-rstub="' + o[0] + '" aria-pressed="' + (R.stubborn === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</span></div>';
+        var stats = rollsMeta && Array.isArray(rollsMeta.stats) ? rollsMeta.stats : [], defs = (rollsMeta && rollsMeta.defaults) || {};
+        var statSel = function (k, label) {
+          if (!stats.length) return '';
+          var dl = (stats.filter(function (x) { return x.key === defs[k]; })[0] || {}).label;
+          return '<label class="shr-field"><span>' + label + '</span><select data-rstat="' + k + '"><option value="">' + esc(dl ? 'Game system’s choice (' + dl + ')' : 'Game system’s choice') + '</option>' +
+            stats.map(function (x) { return '<option value="' + esc(x.key) + '"' + (R[k + 'Stat'] === x.key ? ' selected' : '') + '>' + esc(x.label) + '</option>'; }).join('') + '</select></label>';
+        };
+        if (R.haggle) {
+          h += statSel('haggle', 'Haggling rolls');
+          var num = function (k, label, max) { return '<label class="shr-field"><span>' + label + '</span><span><input type="number" min="0" max="' + max + '" step="1" data-rpct="' + k + '" value="' + R[k] + '" style="width:5em"> %</span></label>'; };
+          h += num('great', 'A great roll takes off', 90) + num('middling', 'A fair roll takes off', 90) + num('poor', 'A poor roll puts on', 200);
+          h += '<small class="shr-hint">A haggled price holds for that character until the shelf changes at dawn. A poor roll ends haggling over that good until then.</small>';
+        }
+        if (R.look) {
+          h += statSel('look', 'Look closer rolls');
+          h += '<div class="shr-field"><span>Hidden notes</span></div><small class="shr-hint">A fair roll shows the note, a great roll the extra too. Only the player who rolled sees them.</small>';
+          if (secrets === null) h += '<p class="shr-note">Loading the notes…</p>';
+          else h += '<div class="shr-rnotes">' + shopItems(rels, S.ov, room.MAT, ICONS, words).map(function (it) {
+            var sct = secrets[String(it.id)] || {}, has = !!(sct.note || sct.extra), id = String(it.id);
+            if (noteEdit === id) return '<div class="shr-rnote ed"><b>' + esc(it.n) + '</b><label class="shr-field"><span>What a fair roll notices</span><textarea rows="2" maxlength="400" data-rnote-note="1"></textarea></label>' +
+              '<label class="shr-field"><span>What a great roll adds</span><textarea rows="2" maxlength="400" data-rnote-extra="1"></textarea></label>' +
+              '<span class="shr-tgl"><button type="button" data-rnsave="' + esc(id) + '">Save note</button><button type="button" data-rncancel="1">Cancel</button></span></div>';
+            return '<div class="shr-rnote"><span>' + esc(it.n) + '<br><small>' + (has ? 'Has a hidden note' : 'No hidden note') + '</small></span><button type="button" class="shr-link" data-rnote="' + esc(id) + '">' + (has ? 'Change' : 'Add a note') + '</button></div>';
+          }).join('') + '</div>';
+          h += '<span class="shr-status" aria-live="polite" data-rnmsg></span>';
+        }
+        return h;
+      }
+      function rollsSet(k, v) { S.rolls = normRolls(S.rolls); S.rolls[k] = v; S.rolls = normRolls(S.rolls); }
+      function saveNote(id) {
+        var n = panel.querySelector('[data-rnote-note]'), x = panel.querySelector('[data-rnote-extra]');
+        var body = { note: (n ? n.value : '').trim().slice(0, 400), extra: (x ? x.value : '').trim().slice(0, 400) };
+        Chronicle.apiFetch(shopBase + '/secrets/' + encodeURIComponent(id), { method: 'PUT', body: body })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j && j.message || 'The note wasn’t saved. Try again.'); }); })
+          .then(function () { secrets[id] = body; noteEdit = ''; noteMsg = 'Note saved.'; renderPanel(); var b = panel.querySelector('[data-rnote="' + id + '"]'); if (b) b.focus(); })
+          .catch(function (e) { noteMsg = e.message; var m = panel.querySelector('[data-rnmsg]'); if (m) m.textContent = noteMsg; });
+      }
       function renderPanel() {
         if (!panel) return;
+        if (canArrange) loadOwnerRolls();
         var pins = S.pieces.filter(function (p) { return p.pinned; }).length, mood = MOODS[S.mood] ? S.mood : 'cozy', M = MOODS[mood], e = efxNow();
         var typeName = (ROOM_TYPES.filter(function (t) { return t[0] === S.roomType; })[0] || [0, ''])[1];
         var looks = [['lit', 'Lit room']].concat(window.ShopRoomPaper ? [['paper', 'Paper']] : [], window.ShopRoomCounter ? [['counter', 'Counter']] : []);
@@ -2238,12 +2356,15 @@
           sec('fine', 'fa-sliders', 'Fine-tune', fineSum, fine1) +
           sec('gen', 'fa-dice', 'Generate', 'Reroll parts', gen1) +
           sec('keeper', 'fa-comment', 'Keeper', keeperSum(), keeperBody()) +
+          sec('rolls', 'fa-dice-d20', 'Rolls at the counter', rollsSum(), rollsBody()) +
           '<span class="shr-status" aria-live="polite">' + (S.look === 'paper' ? (S.keeperSpot ? 'The keeper stands at the ' + S.keeperSpot + ' of the counter.' : '') : S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
           '<div class="shr-warn" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>Not saved yet</span><button type="button" data-discard="1">Discard</button></div>' +
           '<div class="shr-pf"><button type="button" data-discard="1">Cancel</button><button type="button" class="shr-save" data-saveroom="1"' + (dirty ? '' : ' disabled') + '>Save room</button></div>';
         panel.querySelector('[data-lines]').value = S.lines.join('\n');
         var ml = panel.querySelector('[data-moment-lines]'); if (ml) ml.value = (S.moments[momTab] || []).join('\n');
         var cb = cbOn() && panel.querySelector('[data-cb]'); if (cb) window.ShopRoomBuilder.mount(cb, cbApi);
+        if (noteEdit && secrets) { var sct = secrets[noteEdit] || {}, nn = panel.querySelector('[data-rnote-note]'), nx = panel.querySelector('[data-rnote-extra]'); if (nn) nn.value = sct.note || ''; if (nx) nx.value = sct.extra || ''; }
+        var nm = panel.querySelector('[data-rnmsg]'); if (nm) nm.textContent = noteMsg;
       }
       // Fold: animate to the body's real height, then let it size itself; Calm and Off open at once.
       function fold(id) {
@@ -2266,6 +2387,11 @@
         if (b.dataset.addtab) { addTab = b.dataset.addtab; renderPanel(); return; }
         if (b.dataset.manner !== undefined) { S.manner = b.dataset.manner; renderPanel(); save(); return; }
         if (b.dataset.moment) { momTab = b.dataset.moment; renderPanel(); return; }
+        if (b.dataset.rsw) { var R0 = normRolls(S.rolls); rollsSet(b.dataset.rsw, !R0[b.dataset.rsw]); renderPanel(); save(); var rb = panel.querySelector('[data-rsw="' + b.dataset.rsw + '"]'); if (rb) rb.focus(); return; }
+        if (b.dataset.rstub) { rollsSet('stubborn', b.dataset.rstub); renderPanel(); save(); return; }
+        if (b.dataset.rnote) { noteEdit = b.dataset.rnote; noteMsg = ''; renderPanel(); var ta = panel.querySelector('[data-rnote-note]'); if (ta) ta.focus(); return; }
+        if (b.dataset.rncancel) { var was = noteEdit; noteEdit = ''; renderPanel(); var cbk = panel.querySelector('[data-rnote="' + was + '"]'); if (cbk) cbk.focus(); return; }
+        if (b.dataset.rnsave) { saveNote(b.dataset.rnsave); return; }
         if (b.dataset.sec) { fold(b.dataset.sec); return; }
         if (b.dataset.mode) { if (b.dataset.mode === 'shop') tryLeave(); else if (S.mode !== 'arr') { S.mode = 'arr'; setMode(); } return; }
         if (b.dataset.leave) { tryLeave(); return; }
@@ -2278,6 +2404,8 @@
         if (b.dataset.add) { basket[b.dataset.add] = (basket[b.dataset.add] || 0) + 1; note = ''; renderList(); picked(); return; }
         if (b.dataset.empty) { basket = {}; note = ''; renderList(); return; }
         if (b.dataset.buy) { doBuy(); return; }
+        if (b.dataset.haggle) { openRoll('haggle', b.dataset.haggle, b); return; }
+        if (b.dataset.look) { openRoll('look', b.dataset.look, b); return; }
         if (b === keeper) { onKeeperClick(); return; }
         if (!canArrange) return;
         var k = b.dataset.k;
@@ -2305,7 +2433,9 @@
       function onRootChange(e) {
         var t = e.target;
         if (t.dataset.efx) { renderPanel(); return; }
-        if (t.dataset.payer) { payer = t.value; note = ''; renderBasket(); return; }
+        if (t.dataset.rpct) { rollsSet(t.dataset.rpct, t.value); t.value = S.rolls[t.dataset.rpct]; save(); return; }
+        if (t.dataset.rstat) { rollsSet(t.dataset.rstat + 'Stat', t.value); save(); return; }
+        if (t.dataset.payer) { payer = t.value; note = ''; renderBasket(); loadRolls().then(function () { draw(); renderList(); }); return; }
         if (t.dataset.sel) { S[t.dataset.sel] = t.value; if (t.dataset.sel === 'setting') S.portrait = null; room.generate(); draw(); renderPanel(); save(); }
         else if (t.dataset.momentLines) {
           var ls = t.value.split('\n').map(function (x) { return x.trim().slice(0, 200); }).filter(Boolean).slice(0, 5);
@@ -2469,6 +2599,7 @@
       }) : null;
       if (resizeObs) { resizeObs.observe(scene); resizeObs.observe(stage); }
       document.addEventListener('keydown', onDocKey);
+      document.addEventListener('shop-rolls:result', onRollResult);
       window.addEventListener('scroll', onScroll, { passive: true });
 
       el._shopRoom = {
@@ -2478,7 +2609,7 @@
           dropHole(); if (dlg.open) dlg.close();
           themeObs.disconnect(); if (resizeObs) resizeObs.disconnect();
           window.removeEventListener('scroll', onScroll);
-          document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointermove', onAddMove); document.removeEventListener('pointerup', onAddUp); if (adding) adding.ghost.remove(); document.removeEventListener('keydown', onDocKey);
+          document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointermove', onAddMove); document.removeEventListener('pointerup', onAddUp); if (adding) adding.ghost.remove(); document.removeEventListener('keydown', onDocKey); document.removeEventListener('shop-rolls:result', onRollResult); if (window.ShopRolls) window.ShopRolls.close();
           if (window.ShopRoomCounter) window.ShopRoomCounter.destroy(cel);
           tip.remove(); say.remove(); pick.remove();
         }
@@ -2490,7 +2621,7 @@
       Promise.all([
         Chronicle.apiFetch(ds.roomEndpoint).then(function (r) { if (!r.ok) throw new Error('room ' + r.status); return r.json(); }),
         loadGoods(),
-        loadBuyers(),
+        loadBuyers().then(loadRolls),
         loadToday(),
         window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, eid).then(function (w) { words = w || {}; }) : null
       ]).then(function (res) {

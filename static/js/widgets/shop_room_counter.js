@@ -1275,7 +1275,7 @@
       if (held && held.phase === 'rest') {
         var it = R.item(held.id), can = R.canAdd(held.id);
         R.say('<span>The keeper sets the ' + esc(it ? it.n : 'good') + ' on the cloth.' + (can ? ' Drag it onto your pile, or:' : ' ' + esc(R.why(held.id))) + '</span><span class="src-acts">' +
-          (can ? '<button type="button" class="src-btn primary" data-act="take">Add to my pile</button>' : '') + '<button type="button" class="src-btn" data-act="back">Put it back</button></span>');
+          (can ? '<button type="button" class="src-btn primary" data-act="take">Add to my pile</button>' : '') + R.rollActs(held.id) + '<button type="button" class="src-btn" data-act="back">Put it back</button></span>');
       } else R.say(R.model.its.length ? '<span>Press a good ' + (WHERE[t.sk.display] || 'on the shelves') + ' and the keeper brings it to the counter.' + (R.place.case.length ? ' Finer goods are in the case.' : '') + '</span>' : '<span>Nothing for sale right now.</span>');
     }
     function menu(k) {
@@ -1603,7 +1603,7 @@
       if (held && held.phase !== 'return') {
         var it = R.item(held.id), can = R.canAdd(held.id);
         R.say('<span>You pick up the ' + esc(it ? it.n : 'good') + '.' + (can ? ' Drag it to your basket, or:' : ' ' + esc(R.why(held.id))) + '</span><span class="src-acts">' +
-          (can ? '<button type="button" class="src-btn primary" data-act="take">Add to my pile</button>' : '') + '<button type="button" class="src-btn" data-act="back">Put it back</button></span>');
+          (can ? '<button type="button" class="src-btn primary" data-act="take">Add to my pile</button>' : '') + R.rollActs(held.id) + '<button type="button" class="src-btn" data-act="back">Put it back</button></span>');
       } else R.say(R.place.cabinet.length + R.place.barrel.length ? '<span>Press anything for sale to pick it up. The counter is behind you.</span>' : '<span>Nothing for sale on this side. The counter is behind you.</span>');
     }
     function heldSvg() {
@@ -1774,7 +1774,7 @@
       if (up && up.phase === 'rest') {
         var it = R.item(up.id), can = R.canAdd(up.id);
         R.say('<span>' + esc(it ? it.n + ', ' + it.price : '') + (can ? '' : '. ' + esc(R.why(up.id))) + '</span><span class="src-acts">' + (can ? '<button type="button" class="src-btn primary" data-act="take">Add to my pile</button>' : '') +
-          '<button type="button" class="src-btn" data-act="back">Back in the case</button></span>');
+          R.rollActs(up.id) + '<button type="button" class="src-btn" data-act="back">Back in the case</button></span>');
       } else R.say('<span>Hover a good to lift it. Press it to take it out of the case.</span><span class="src-acts"><button type="button" class="src-btn" data-act="counter">Back to the counter</button></span>');
     }
     function rewares() { var g = R.svg.querySelector('#srcc-wares'); if (g) { g.innerHTML = wares(); R.tab(g); } }
@@ -1887,6 +1887,8 @@
     R.inBasket = function (id) { return +R.model.basket[String(id)] || 0; };
     R.stock = function (it) { return it.qty === null || it.qty === undefined ? null : Math.max(0, it.qty - R.inBasket(it.id)); };
     R.canAdd = function (id) { return !!hooks.canAdd(id); };
+    // Haggle and Look closer for the good in hand, as the shop room offers them (escaped there).
+    R.rollActs = function (id) { return (hooks.rollActs && hooks.rollActs(id)) || ''; };
     R.why = function (id) { return (hooks.why && hooks.why(id)) || 'That can’t go on your pile.'; };
     R.add = function (id) { if (!R.canAdd(id)) { R.pop(R.why(id), 600, 420); return false; } return hooks.add(id) !== false; };
     R.remove = function (id) { hooks.remove(id); };
@@ -1986,7 +1988,11 @@
     function onLeave() { if (hov) hov.classList.remove('src-hov'); hov = null; if (!pinned) hideCard(); }
     function onClick(e) {
       var b = e.target.closest && e.target.closest('[data-act]');
-      if (b && stage.contains(b)) { if (view && view.act) view.act(b.getAttribute('data-act')); return; }
+      if (b && stage.contains(b)) {
+        var act = b.getAttribute('data-act'), rm = /^roll:(haggle|look):(.+)$/.exec(act);
+        if (rm) { if (hooks.roll) hooks.roll(rm[1], rm[2], b); return; }
+        if (view && view.act) view.act(act); return;
+      }
       if (busy || !view || !R.svg || !R.svg.contains(e.target)) return;
       var t = target(e); closeMenu();
       if (!t) { hideCard(); if (cam.z > 1.01 && !R.dragging) stepBack(); return; }

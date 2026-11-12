@@ -384,7 +384,7 @@ func (c *ShopRoomCounter) validate() error {
 }
 
 // shopRollStatRe is a sheet field key: lowercase letters, digits, underscores.
-var shopRollStatRe = regexp.MustCompile(`^[a-z0-9_]{1,40}$`)
+var shopRollStatRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 
 // validate checks the counter roll settings. Stat keys are never looked up
 // here: a key the system does not list is allowed, since the sheet decides
