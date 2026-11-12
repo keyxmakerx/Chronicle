@@ -35,6 +35,7 @@ templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, en
 // Uses the same 12-column grid system as campaign dashboards.
 templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, layout *campaigns.DashboardLayout, entities []Entity, total int) {
 	<div id="entity-list">
+		@layouts.AppFrame() {
 		for _, row := range layout.Rows {
 			if row.Kind == "tiles" {
 				@categoryTileSection(row, cc, et, entities, total)
@@ -50,6 +51,7 @@ templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, lay
 				</div>
 			}
 		}
+		}
 	</div>
 }
 
@@ -61,51 +63,19 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 		x-data={ fmt.Sprintf("{ view: localStorage.getItem('chronicle_cat_view_%d') || 'grid' }", et.ID) }
 		x-effect={ fmt.Sprintf("localStorage.setItem('chronicle_cat_view_%d', view)", et.ID) }
 	>
-		<!-- Category header -->
-		<div class="mb-5">
-			<div class="flex items-center justify-between mb-2">
-				<div class="flex items-center gap-3">
-					<span
-						class="w-10 h-10 rounded-lg flex items-center justify-center"
-						style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-					>
-						if et.Icon != "" {
-							<i class={ "fa-solid " + et.Icon, "text-lg" }></i>
-						}
-					</span>
-					<div>
-						<h1 class="text-2xl font-bold text-fg">{ et.NamePlural }</h1>
-						<p class="text-sm text-fg-secondary">
-							{ fmt.Sprintf("%d", total) }
-							if total == 1 {
-								page
-							} else {
-								pages
-							}
-						</p>
-					</div>
-				</div>
-				<div class="flex items-center gap-2">
-					if cc.MemberRole >= campaigns.RoleScribe {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
-							class="btn-primary text-sm"
-						>
-							<i class="fa-solid fa-plus text-xs"></i> New Page
-						</a>
-					}
-				</div>
+		@layouts.AppFrame() {
+		@layouts.AppOpening(categoryOpening(ctx, cc, et, total, opts)) {
+			<span>{ categoryCount(total) }</span>
+		}
+		<!-- Category description (editable rich text) -->
+		if et.Description != nil && *et.Description != "" {
+			<div class="text-sm text-fg-body -mt-3 mb-5 max-w-3xl">
+				{ *et.Description }
 			</div>
-
-			<!-- Category description (editable rich text) -->
-			if et.Description != nil && *et.Description != "" {
-				<div class="text-sm text-fg-body mt-2 max-w-3xl">
-					{ *et.Description }
-				</div>
-			}
-		</div>
+		}
 		@renderCategoryLead(cc, et)
-		<!-- Tag filter bar + View toggle -->
+		<!-- Tag filter bar + View toggle. A bare category has nothing to filter. -->
+		if !categoryBare(total, opts) {
 		<div class="flex items-center justify-between mb-4 border-b border-edge pb-3">
 			<div class="flex items-center gap-2 overflow-x-auto">
 				<!-- Quick search within category -->
@@ -168,6 +138,7 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 				</button>
 			</div>
 		</div>
+		}
 
 		<!-- Pinned pages -->
 		if len(et.PinnedEntityIDs) > 0 {
@@ -189,27 +160,9 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 		<!-- Entity content area -->
 		<div>
 			if len(entities) == 0 {
-				<div class="empty-state">
-					<div class="empty-state__icon">
-						if et.Icon != "" {
-							<i class={ "fa-solid " + et.Icon, "text-fg-muted" }></i>
-						} else {
-							<i class="fa-solid fa-scroll text-fg-muted"></i>
-						}
-					</div>
-					<div class="empty-state__title">No { et.NamePlural } yet</div>
-					<div class="empty-state__description mb-4">
-						Create your first page in this category to get started.
-					</div>
-					if cc.MemberRole >= campaigns.RoleScribe {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
-							class="btn-primary"
-						>
-							<i class="fa-solid fa-plus text-xs"></i> Create { et.Name }
-						</a>
-					}
-				</div>
+				if !categoryBare(total, opts) {
+					<p class="py-10 text-center text-sm text-fg-muted">Nothing matches. Try other words or filters.</p>
+				}
 			} else {
 				<!-- Grid view -->
 				<div x-show="view === 'grid'" x-cloak>
@@ -263,6 +216,7 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 				})
 			}
 		</div>
+		}
 	</div>
 }
 
