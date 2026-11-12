@@ -499,6 +499,40 @@ func (h *StashHandler) CharacterPanel(c *echo.Context) error {
 	return middleware.Render(c, http.StatusOK, CharacterPanel(view, middleware.GetCSRFToken(c)))
 }
 
+// AddLogNote handles POST /armory/characters/:eid/log: a line in the hero's
+// log. The panel reloads itself on the armory-moved signal.
+func (h *StashHandler) AddLogNote(c *echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	err = h.svc.AddLogNote(c.Request().Context(), cc.Campaign.ID, a, c.Param("eid"), LogNoteInput{
+		Body:         c.FormValue("body"),
+		ItemID:       strings.TrimSpace(c.FormValue("item_id")),
+		DirectorOnly: c.FormValue("director_only") != "",
+	})
+	if err != nil {
+		return err
+	}
+	return done(c, cc, "")
+}
+
+// DeleteLogNote handles POST /armory/characters/:eid/log/:nid/delete.
+func (h *StashHandler) DeleteLogNote(c *echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	id, err := strconv.ParseInt(c.Param("nid"), 10, 64)
+	if err != nil {
+		return notFound("note")
+	}
+	if err := h.svc.DeleteLogNote(c.Request().Context(), cc.Campaign.ID, a, c.Param("eid"), id); err != nil {
+		return err
+	}
+	return done(c, cc, "")
+}
+
 // CharacterHistory handles GET /armory/characters/:eid/history.
 func (h *StashHandler) CharacterHistory(c *echo.Context) error {
 	cc, a, err := caller(c)

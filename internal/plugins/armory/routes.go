@@ -101,6 +101,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	cg.POST("/armory/downtime", sh.SetDowntime, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/characters/:eid/panel", sh.CharacterPanel, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/characters/:eid/history", sh.CharacterHistory, campaigns.RequireRole(campaigns.RolePlayer))
+	// The hero's log: Player+ at the route; the service lets only the
+	// character's player or a GM write, and only the author or Owner remove.
+	cg.POST("/armory/characters/:eid/log", sh.AddLogNote, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/characters/:eid/log/:nid/delete", sh.DeleteLogNote, campaigns.RequireRole(campaigns.RolePlayer))
 	// Sharing a hidden item a character holds: Player+ at the route; the
 	// service lets only the holder's player or Owner visibility through.
 	cg.GET("/armory/characters/:eid/items/:iid/share", sh.ShareBox, campaigns.RequireRole(campaigns.RolePlayer))

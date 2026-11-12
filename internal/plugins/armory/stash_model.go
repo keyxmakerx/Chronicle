@@ -320,6 +320,11 @@ type CharacterPanelView struct {
 	// or the claiming player) with crafting on; Bench says the page asked for
 	// the bench, which only a game system's hero page does.
 	CanCraft    bool
+	// HasLog turns the hero's log on; CanDirect lets the viewer mark a line
+	// Director only.
+	HasLog    bool
+	CanDirect bool
+	Log       []LogNight
 	Bench       bool
 	Items       []HeldItem
 	HasMoney    bool

@@ -4443,6 +4443,11 @@ func (a *App) RegisterRoutes() {
 		Copies:     copyStore,
 		Places:     placeStore,
 	})
+	// The hero's log reads game nights from sessions and keeps written lines in
+	// the armory's own table, so it is off while that migration is unhealthy.
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		stashSvc.SetHeroLog(armory.NewHeroLogRepository(a.DB), &armoryNightsAdapter{svc: sessionsService})
+	}
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.
 	armoryObserver := &armoryMoneyObserver{history: armory.NewMoneyHistory(
