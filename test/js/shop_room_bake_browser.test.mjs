@@ -89,12 +89,21 @@ test('a second visit shows the kept drawings and draws nothing', { skip }, async
   const before = await storeSettled(p, n);
 
   const again = await ctx.newPage();
-  // Counts the layers this visit has to draw: each one is an SVG handed to an image.
-  await again.addInitScript(() => { window.__drawn = 0; const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src'); Object.defineProperty(HTMLImageElement.prototype, 'src', { set(v) { if (String(v).indexOf('data:image/svg+xml') === 0) window.__drawn++; d.set.call(this, v); }, get() { return d.get.call(this); } }); });
+  /* Counts the layers drawn before the room shows: each one is an SVG handed
+     to an image. The count is read the moment the room stops waiting, because
+     the views out of sight are drawn after that and may not have been kept
+     yet when the first visit ended. */
+  await again.addInitScript(() => {
+    window.__drawn = 0;
+    const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    Object.defineProperty(HTMLImageElement.prototype, 'src', { set(v) { if (String(v).indexOf('data:image/svg+xml') === 0) window.__drawn++; d.set.call(this, v); }, get() { return d.get.call(this); } });
+    new MutationObserver((ms) => { for (const m of ms) if (window.__atReady === undefined && /src-baking/.test(m.oldValue || '') && m.target.classList.contains('src-stage') && !m.target.classList.contains('src-baking')) window.__atReady = window.__drawn; })
+      .observe(document, { attributes: true, attributeFilter: ['class'], attributeOldValue: true, subtree: true });
+  });
   await again.goto(ORIGIN);
   await enter(again);
   assert.deepEqual(await sharpness(again), Array(n).fill(2), 'sharp from the first moment');
-  assert.equal(await again.evaluate(() => window.__drawn), 0, 'nothing on screen was drawn again');
+  assert.equal(await again.evaluate(() => window.__atReady), 0, 'nothing on screen was drawn again');
   assert.ok(await stored(again) >= before, 'the kept drawings are still kept');
 });
 
