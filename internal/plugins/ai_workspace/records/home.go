@@ -345,9 +345,7 @@ func stripMarkdown(l HomeLayout) HomeLayout {
 			nc := HomeColumn{ID: c.ID, Width: c.Width}
 			for _, b := range c.Blocks {
 				cfg := cloneConfig(b.Config)
-				if _, ok := cfg["_md"]; ok {
-					delete(cfg, "_md")
-				}
+				delete(cfg, "_md")
 				nc.Blocks = append(nc.Blocks, HomeBlock{ID: b.ID, Type: b.Type, Config: cfg})
 			}
 			nr.Columns = append(nr.Columns, nc)

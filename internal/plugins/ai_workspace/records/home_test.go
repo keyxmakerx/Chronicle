@@ -7,11 +7,10 @@ import (
 )
 
 type fakeHome struct {
-	owner  string
-	homes  map[string]HomeLayout
-	saved  map[string]HomeLayout
-	reset  []string
-	failOn string
+	owner string
+	homes map[string]HomeLayout
+	saved map[string]HomeLayout
+	reset []string
 }
 
 func (f *fakeHome) IsOwner(_ context.Context, _, u string) (bool, error) { return u == f.owner, nil }

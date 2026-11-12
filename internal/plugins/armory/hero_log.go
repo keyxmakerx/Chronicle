@@ -259,7 +259,7 @@ func (s *stashService) DeleteLogNote(ctx context.Context, campaignID string, a A
 		if n.ID != id {
 			continue
 		}
-		if (n.DirectorOnly && !a.SeesDmOnly()) || !(a.IsOwner() || n.AuthorID == a.UserID) {
+		if (n.DirectorOnly && !a.SeesDmOnly()) || (!a.IsOwner() && n.AuthorID != a.UserID) {
 			return notFound("note")
 		}
 		_, _, err := s.notes.Delete(ctx, campaignID, ref.ID, id)
