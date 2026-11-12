@@ -314,11 +314,12 @@ var czElevation = map[string]struct {
 		[2]string{"0 2px 4px rgb(16 24 40 / .06), 0 18px 36px -12px rgb(ACC / .42), 0 0 0 1px rgb(ACC / .12)", "0 2px 4px rgb(0 0 0 / .45), 0 20px 40px -12px rgb(ACC / .5), 0 0 0 1px rgb(ACC / .2)"}},
 }
 
-// czSpeeds retime Chronicle's chrome durations (micro, standard, large) and
-// the paper moves (slide-out, page turn).
-var czSpeeds = map[string]struct{ micro, std, large, slide, turn int }{
-	"snappy":    {80, 130, 180, 240, 380},
-	"leisurely": {200, 330, 460, 520, 760},
+// czSpeeds retime Chronicle's chrome durations (micro, standard, large), the
+// paper moves (slide-out, page turn) and the everyday moves (menus, another
+// page), which follow micro and the page fade at three quarters of it.
+var czSpeeds = map[string]struct{ micro, std, large, slide, turn, everyday, page int }{
+	"snappy":    {80, 130, 180, 240, 380, 80, 60},
+	"leisurely": {200, 330, 460, 520, 760, 200, 150},
 }
 
 // czHeadingFaces is each heading face's weight, letter-spacing and size
@@ -444,7 +445,7 @@ func AppearanceCSS(ctx context.Context) string {
 	}
 
 	if s, ok := czSpeeds[a.MotionSpeed]; ok {
-		fmt.Fprintf(&root, "--dur-micro:%dms;--dur-standard:%dms;--dur-large:%dms;--dur-slide:%dms;--dur-turn:%dms;", s.micro, s.std, s.large, s.slide, s.turn)
+		fmt.Fprintf(&root, "--dur-micro:%dms;--dur-standard:%dms;--dur-large:%dms;--dur-slide:%dms;--dur-turn:%dms;--dur-everyday:%dms;--dur-page:%dms;", s.micro, s.std, s.large, s.slide, s.turn, s.everyday, s.page)
 	}
 
 	if stack, ok := czFontStacks[a.BodyFont]; ok && a.BodyFont != "inter" {

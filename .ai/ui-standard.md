@@ -365,7 +365,7 @@ place, and Off shows the end state.
 | Slide-out | sheet tabs, creator steps, slips, an editor from behind its part | out from behind its surface, then in front of it, `--dur-slide`, `--ease-slide` | appears in place with a fade |
 | Pull | following a connection, opening a list row's peek | the new content slides out from under the block that holds the link while the old stays and dims, `--dur-slide` × 1.22, `--ease-slide` | fade only |
 | Page turn | the Handbook only | a turn with a soft crease, `--dur-turn`, `--ease-turn` | the new spread fades in |
-| Settle | moving to a new page or tab | fade and a 6px rise, `--dur-large`, `--ease-out` | fade only |
+| Settle | a step of a form or a new view that shows where it came from | fade and a 6px rise, `--dur-large`, `--ease-out` | fade only |
 | Glow | something new or something you came from | an accent glow that fades over about 1.2s | the same |
 
 - **Slide-out means from behind, then in front.** The moving surface starts
@@ -458,6 +458,14 @@ place, and Off shows the end state.
 Each interaction maps onto the moves above with these timings. Calm is the
 column's version; Off shows the end state.
 
+**Speed follows how often.** A move made many times a session takes 120ms or
+less: menus and pickers, a tab switch, another page (`--dur-everyday`,
+`--dur-everyday-out`, `--dur-page`, retimed by the owner's Motion speed like the
+rest). Anything started from the keyboard is instant. A move that shows where
+something came from keeps its full timing: drawers, pull-downs, peeks, pulls,
+folds and slide-outs. Nothing a roll plays on every use runs past half a
+second; the dice settle in under 480ms.
+
 | Interaction | When | Full | Timing | Calm |
 |---|---|---|---|---|
 | Hover on a row | pointer over a link row, list row or connection | a soft fill; under Annals also the resting shadow, no movement | 120ms | colour only |
@@ -466,15 +474,15 @@ column's version; Off shows the end state.
 | Heavy press | Site admin, Publish, Delete, Send invites only | sinks 10%, lets go slowly | 70ms down, 280ms up on `--ease-slide` | colour only |
 | Keyboard focus | tabbing onto anything | accent ring | 80ms, no movement | same |
 | Switch | a setting on or off | knob slides, track fills | 160ms in-out | knob jumps, colour fades |
-| Menu or picker | dropdowns, a row's ⋯ menu | Grow out of its button | opens 200ms ease-out, closes 120ms ease-in | fade |
+| Menu or picker | dropdowns, a row's ⋯ menu | Grow out of its button; from the keyboard it appears at once | opens 120ms ease-out (`--dur-everyday`), closes 80ms ease-in | fade |
 | Dialog | confirming, a small form on top | backdrop fades; dialog grows from 96% and rises 6px | opens 200ms, closes 150ms | fade |
 | Drawer | the phone menu, an edge panel | slides in from its own edge | 280ms ease-out | fade |
 | Docked panel | a peek, the AI helper, a docked editor | the page narrows as the panel slides out from behind its edge | 200ms ease-out | fade |
 | Hover card | resting on a name or rule word | Peek after 250ms | 120ms | fade |
 | Fold | sections, groups, more details | to its real height; arrow turns | 200ms ease-out | opens at once |
 | Pull-down | a title's drawer, a small widget's full list | Drape from its edge over the page | 200ms ease-out, 150ms back up | fade |
-| Tab switch | changing tab or view | Settle | 280ms ease-out | fade |
-| Another page | any link to a new page | thin accent progress line, then Settle; the menu stays. Under Annals a connection Pulls instead | 280ms settle | line and fade |
+| Tab switch | changing tab or view | a fade, no rise | 90ms (`--dur-page`) | the same |
+| Another page | any link to a new page | thin accent progress line, then a fade with no rise; the menu stays. Under Annals a connection Pulls instead | 90ms (`--dur-page`) | line and fade |
 | Adding to a list | a new page, a tag | the row Folds open, fades in, Glows | 200ms, glow fades over 1.2s | fade and glow |
 | Removing from a list | deleting, unlinking | the row fades and Folds closed | 160ms ease-in | fade, space closes at once |
 | Dragging | reordering, moving between groups | lifts to depth 3 with a slight tilt; drops into place | 120ms pick up, 200ms drop | lift shadow only |

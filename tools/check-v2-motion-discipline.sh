@@ -23,6 +23,24 @@ ta3="trans""ition-all"          # Tailwind utility (matches `transition-all` tok
                                  # including inside a longer class list because the
                                  # following char is whitespace or quote)
 
+# Everyday motion in the app shell (.ai/ui-standard.md, "Every interaction"):
+# menus and pickers use the .mn-* classes, which read --dur-everyday, so the
+# owner's Motion speed reaches them. Tailwind's fixed 75ms and 100ms
+# durations, and transition-all, fail here. Whole-tree, not diff-scoped: the
+# layouts hold none today.
+d1="dura""tion-75"
+d2="dura""tion-100"
+shell_hits=$(grep -nE "(^|[^a-zA-Z0-9-])(${d1}|${d2}|${ta3})([^a-zA-Z0-9-]|$)" internal/templates/layouts/*.templ 2>/dev/null | grep -v "OK exempt:" || true)
+if [[ -n "${shell_hits}" ]]; then
+  echo "ERROR: fixed menu timings or transition-all in internal/templates/layouts:"
+  echo
+  echo "${shell_hits}"
+  echo
+  echo "Use x-transition classes mn-enter / mn-leave (static/css/input.css) for"
+  echo "menus, and name the properties instead of transition-all."
+  exit 1
+fi
+
 # V2-scope directories — only these are linted. Adding a directory here only
 # affects code added by future PRs; pre-existing `transition: all` inside an
 # in-scope directory is grandfathered.

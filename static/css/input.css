@@ -135,6 +135,9 @@
 
     --dur-instant:     80ms;     /* keyboard-driven actions */
     --dur-micro:       120ms;    /* button/hover feedback */
+    --dur-everyday:    120ms;    /* menus, pickers and row menus open: a move made many times a session */
+    --dur-everyday-out: calc(var(--dur-everyday) * 2 / 3); /* the same, closing (80ms) */
+    --dur-page:        90ms;     /* another page, a tab or view switch: a fade, no rise */
     --dur-standard:    200ms;    /* modal, dropdown, panel */
     --dur-large:       280ms;    /* view-level transitions */
     --dur-slide:       360ms;    /* a tab or sheet sliding out from under paper */
@@ -281,12 +284,18 @@
   /* ---- Buttons ---- */
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium
-           text-sm transition-all duration-200 cursor-pointer
+           text-sm cursor-pointer
            focus:outline-none focus:ring-2 focus:ring-offset-2
            active:scale-[0.98];
     position: relative;
     overflow: visible;
+    /* Named properties, no outline: colour answers in --dur-micro, the lift in
+       --dur-standard, and the focus ring below arrives almost at once. */
+    transition-property: background-color, color, border-color, box-shadow, transform;
+    transition-duration: var(--dur-micro), var(--dur-micro), var(--dur-micro), var(--dur-standard), var(--dur-standard);
+    transition-timing-function: var(--ease-out);
   }
+  .btn:focus { transition-duration: var(--dur-instant); }
   /* bg-action/hover/focus/shadow fall back through bg-accent's own values
    * when the action slot is unset (tailwind.config.js nests the var()
    * chain), so this is a zero-visual-change swap until an owner
@@ -325,6 +334,18 @@
   }
   .quiet-word:hover,
   .quiet-word:focus-visible { text-decoration-color: currentColor; outline: none; }
+
+  /* Menus and pickers open and close (Alpine x-transition classes): a fade and
+     a small grow in --dur-everyday, out in --dur-everyday-out, retimed by the
+     owner's Motion speed. Calm drops the grow and Off drops both, through the
+     guards further down. A menu opened from the keyboard appears at once. */
+  /* menu-motion:start */
+  .mn-enter { transition: opacity var(--dur-everyday) var(--ease-out), transform var(--dur-everyday) var(--ease-out); }
+  .mn-leave { transition: opacity var(--dur-everyday-out) var(--ease-in), transform var(--dur-everyday-out) var(--ease-in); }
+  .mn-from { opacity: 0; transform: scale(0.95); }
+  .mn-to { opacity: 1; transform: scale(1); }
+  :has(> :focus-visible) > :is(.mn-enter, .mn-leave) { transition-duration: 0s; }
+  /* menu-motion:end */
   .btn:disabled,
   .btn[disabled] {
     @apply opacity-50 cursor-not-allowed pointer-events-none;
@@ -2896,6 +2917,8 @@
 
 /* ============================================================ */
 /* @starting-style on .htmx-added — HTMX-injected fragments fade in instead of popping.
+   This is also another page and a tab switch: a short fade with no rise,
+   because both happen many times a session (.ai/ui-standard.md, "Every interaction").
    HTMX adds .htmx-added to newly-inserted elements during the settle phase then
    removes it; the transition triggers on class removal. @starting-style provides
    the entry state. `transition-behavior: allow-discrete` is required for the
@@ -2903,12 +2926,10 @@
 @layer utilities {
   .htmx-added {
     opacity: 1;
-    transform: translateY(0);
-    transition: opacity 150ms ease, transform 150ms ease;
+    transition: opacity var(--dur-page) var(--ease-out);
     transition-behavior: allow-discrete;
     @starting-style {
       opacity: 0;
-      transform: translateY(2px);
     }
   }
 }
