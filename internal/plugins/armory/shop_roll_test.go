@@ -328,7 +328,7 @@ func TestShopRoll_Refusals(t *testing.T) {
 		{"not one of this shop's listings", rollsOn, pU1, "c1", 4, RollHaggle, nil, 404},
 		{"not a sells listing", rollsOn, pU1, "c1", 5, RollHaggle, nil, 404},
 		{"a hidden listing", rollsOn, pU1, "c1", 7, RollHaggle, nil, 404},
-		{"a good the player cannot see", rollsOn, pU1, "c1", 2, RollHaggle, func(f *rollFx) { f.fx.vis.hidden["i2"] = true }, 404},
+		{"a good the player cannot see", rollsOn, pU1, "c1", 2, RollHaggle, func(f *rollFx) { f.vis.hidden["i2"] = true }, 404},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -515,7 +515,7 @@ func TestShopRoll_OverviewHidesGoodsTheCharacterCannotSee(t *testing.T) {
 	if _, err := f.roll(pU1, "c1", 2, RollLook, 18); err != nil {
 		t.Fatal(err)
 	}
-	f.fx.vis.hidden["i2"] = true
+	f.vis.hidden["i2"] = true
 	v, _ := f.rolls(pU1, "c1")
 	if len(v.Goods) != 0 {
 		t.Errorf("a hidden good's reveal is shown: %+v", v.Goods)
@@ -584,7 +584,7 @@ func TestShopRoll_Overview(t *testing.T) {
 	})
 	t.Run("a shop the player cannot see", func(t *testing.T) {
 		f := newRollFx(dcRules(), rollsOn)
-		f.fx.vis.hidden["shop-1"] = true
+		f.vis.hidden["shop-1"] = true
 		if _, err := f.rolls(pU1, "c1"); code(err) != 404 {
 			t.Errorf("code = %d", code(err))
 		}
