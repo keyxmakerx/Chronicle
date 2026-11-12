@@ -430,12 +430,9 @@ func (c *Calendar) monthIsIntercalary(month int) bool {
 // directly, so MonthStartsNewWeek's reset/no-week rules apply everywhere or
 // nowhere.
 //
-// LIMITATION: OccursOn's week-based recurrence (weekly/biweekly/custom) does
-// NOT read MonthStartsNewWeek — it steps by continuous absDayIndex days
-// regardless, so on a MonthStartsNewWeek calendar a weekly-recurring event
-// lands in a different column of the month grid once a month whose length is
-// not a whole number of weeks, or an intercalary month, has passed.
-// TODO(#2199): make week-based recurrence follow the grid's weeks.
+// OccursOn's week-based recurrence (weekly/biweekly/custom) reads the same
+// switch through weekRowIndex, so a repeating event keeps its column in the
+// month grid.
 //
 // Real-time calendars ignore MonthStartsNewWeek entirely: Gregorian weeks are
 // always continuous, matching this method's own MonthStartsNewWeek=false
@@ -581,7 +578,11 @@ func (e Event) OccursOn(cal *Calendar, year, month, day int) bool {
 
 	// Week-based (weekly / biweekly / custom).
 	wl := cal.WeekLength()
-	stride := wl * recurrenceWeeks(*e.RecurrenceType, e.RecurrenceInterval)
+	weeks := recurrenceWeeks(*e.RecurrenceType, e.RecurrenceInterval)
+	if cal.MonthStartsNewWeek && !cal.UsesRealTime() && wl > 0 {
+		return e.occursOnGridWeek(cal, year, month, day, weeks)
+	}
+	stride := wl * weeks
 	if stride <= 0 {
 		return onBase
 	}
@@ -593,6 +594,71 @@ func (e Event) OccursOn(cal *Calendar, year, month, day int) bool {
 		return false // occurrence index (0-based) past the cap
 	}
 	return true
+}
+
+// occursOnGridWeek is the week-based expansion for a MonthStartsNewWeek
+// calendar: an occurrence is a day in the base date's weekday column, every
+// `weeks` grid rows from the base row. Counting rows (not days) is what keeps
+// the event in one column when months are not a whole number of weeks long.
+// The caller has already applied the forward-only and end-date checks.
+func (e Event) occursOnGridWeek(cal *Calendar, year, month, day, weeks int) bool {
+	baseCol := cal.WeekdayIndex(e.Year, e.Month, e.Day)
+	if baseCol < 0 {
+		// A festival day has no weekday to repeat on.
+		return e.Year == year && e.Month == month && e.Day == day
+	}
+	if cal.WeekdayIndex(year, month, day) != baseCol {
+		return false
+	}
+	diff := cal.weekRowIndex(year, month, day) - cal.weekRowIndex(e.Year, e.Month, e.Day)
+	if diff < 0 || diff%weeks != 0 {
+		return false
+	}
+	return e.RecurrenceMaxOccurrences == nil || diff/weeks < *e.RecurrenceMaxOccurrences
+}
+
+// configuredMonthDays is a month's length in a leap or common year, before any
+// real-time override. Bounded here for the same reason MonthDays is.
+func (c *Calendar) configuredMonthDays(monthIdx int, leap bool) int {
+	days := c.Months[monthIdx].Days
+	if leap {
+		days += c.Months[monthIdx].LeapYearDays
+	}
+	return min(days, maxCalendarMonthDays)
+}
+
+// monthRows is how many week rows the month grid draws for a month of days
+// days; an intercalary month draws none (its days belong to no week).
+func (c *Calendar) monthRows(monthIdx, days int) int {
+	if c.Months[monthIdx].IsIntercalary || c.WeekLength() <= 0 {
+		return 0
+	}
+	return (days + c.WeekLength() - 1) / c.WeekLength()
+}
+
+// weekRowIndex numbers the grid's week rows continuously across months and
+// years, for a MonthStartsNewWeek calendar. Only differences are meaningful.
+//
+// The whole-year part is closed form like AbsoluteDay (a common year's rows
+// plus the extra rows of each leap year before it) so a far-future date costs
+// the same as a near one; only the months of the date's own year are summed.
+// A leap day can lengthen a month past a row boundary, so rows per year differ
+// between common and leap years. Years <= 0 count common years only, matching
+// absDayIndex's leap-unaware branch, which keeps rows monotonic across year 0.
+func (c *Calendar) weekRowIndex(year, month, day int) int {
+	common, leap := 0, 0
+	for i := range c.Months {
+		common += c.monthRows(i, c.configuredMonthDays(i, false))
+		leap += c.monthRows(i, c.configuredMonthDays(i, true))
+	}
+	total := year * common
+	if year > 0 {
+		total += (leap - common) * c.leapYearsBefore(year)
+	}
+	for i := 0; i < month-1 && i < len(c.Months); i++ {
+		total += c.monthRows(i, c.MonthDays(i, year))
+	}
+	return total + (day-1)/c.WeekLength()
 }
 
 // recurrenceWeeks maps a week-based recurrence type to its week interval.
