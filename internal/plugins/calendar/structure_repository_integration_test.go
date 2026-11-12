@@ -58,6 +58,30 @@ func TestApplyStructure_Integration(t *testing.T) {
 		return cal, moons[0].ID, seasons[0].ID
 	}
 
+	t.Run("a save stores the week switch with the rest of the structure", func(t *testing.T) {
+		cal, _, _ := setup(t)
+		w := StructureWrite{
+			Months:             []MonthInput{{Name: "Alpha", Days: 30, SortOrder: 0}},
+			Weekdays:           []WeekdayInput{{Name: "One", SortOrder: 0}},
+			MonthStartsNewWeek: true,
+			CurrentMonth:       1, CurrentDay: 1,
+		}
+		if err := repo.ApplyStructure(ctx, cal.ID, fixed(w)); err != nil {
+			t.Fatalf("ApplyStructure: %v", err)
+		}
+		got, _ := repo.GetByID(ctx, cal.ID)
+		if !got.MonthStartsNewWeek {
+			t.Error("month_starts_new_week was not saved")
+		}
+		w.MonthStartsNewWeek = false
+		if err := repo.ApplyStructure(ctx, cal.ID, fixed(w)); err != nil {
+			t.Fatalf("ApplyStructure: %v", err)
+		}
+		if got, _ = repo.GetByID(ctx, cal.ID); got.MonthStartsNewWeek {
+			t.Error("month_starts_new_week was not cleared")
+		}
+	})
+
 	t.Run("a save keeps moon and season rows, remaps positions and sets today", func(t *testing.T) {
 		cal, moonID, seasonID := setup(t)
 		end := 3

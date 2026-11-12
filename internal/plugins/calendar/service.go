@@ -1466,7 +1466,7 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 	// manage after the fact.
 	cal.Hemisphere = ir.Settings.Hemisphere
 	cal.ForecastsEnabled = ir.Settings.ForecastsEnabled
-	cal.MonthStartsNewWeek = ir.Settings.MonthStartsNewWeek
+	cal.MonthStartsNewWeek = ir.Settings.MonthStartsNewWeek != nil && *ir.Settings.MonthStartsNewWeek
 	if ir.Settings.TracksRealTime {
 		if ir.Settings.RealTimeZone == nil || *ir.Settings.RealTimeZone == "" {
 			return nil, cleanupOnFailure(apperror.NewValidation("real_time_zone is required when tracks_real_time is set"))
