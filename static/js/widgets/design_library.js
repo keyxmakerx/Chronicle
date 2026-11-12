@@ -345,12 +345,14 @@
       '<label class="dl-lab" for="dl-q">Add an owner on this server</label><input id="dl-q" class="dl-in" data-dl-q="1" placeholder="Search by display name" autocomplete="off">' +
       (S.q.length >= 2 && !S.hits.length ? '<p class="dl-ok" data-dl-none="1"></p>' : '') + (hits ? '<ul class="dl-hits">' + hits + '</ul>' : '');
   }
+  // A tab name read back from the page is only ever one of these constants, so it never reaches markup as page text.
+  function tabId(t) { return t === 'link' ? 'link' : t === 'owners' ? 'owners' : 'code'; }
   function sheetHtml(d) {
     var tabs = [['code', 'Share code'], ['link', 'Anyone with the link'], ['owners', 'Named owners']];
     return '<div class="dl-sh"><h3 id="dl-sh-t" tabindex="-1">Share “' + esc(d.name) + '”</h3><button type="button" class="dl-btn" data-dl-sh="close">Close</button></div>' +
       '<div class="dl-sb"><div class="dl-tabs" role="tablist" aria-label="How to share">' + tabs.map(function (t) {
         return '<button type="button" role="tab" id="dl-tab-' + t[0] + '" aria-selected="' + (S.tab === t[0]) + '" aria-controls="dl-pane" data-dl-sh="tab" data-tab="' + t[0] + '" tabindex="' + (S.tab === t[0] ? 0 : -1) + '">' + t[1] + '</button>';
-      }).join('') + '</div><div id="dl-pane" role="tabpanel" aria-labelledby="dl-tab-' + S.tab + '" style="display:grid;gap:10px">' + tabBody(d) + '</div>' +
+      }).join('') + '</div><div id="dl-pane" role="tabpanel" aria-labelledby="dl-tab-' + tabId(S.tab) + '" style="display:grid;gap:10px">' + tabBody(d) + '</div>' +
       '<p class="dl-err" role="alert">' + esc(S.shareErr) + '</p><p class="dl-ok" role="status" aria-live="polite">' + esc(S.shareMsg) + '</p></div>' +
       '<div class="dl-sf"><button type="button" class="dl-link dl-bad" data-dl-sh="stop">Stop sharing</button><span>Copies already taken stay with their owners.</span></div>';
   }
@@ -392,7 +394,7 @@
     var b = e.target.closest && e.target.closest('button'); if (!b) return;
     var act = b.getAttribute('data-dl-sh'), uid = b.getAttribute('data-uid'), id = function (d) { return '/designs/' + encodeURIComponent(d.id) + '/share'; };
     if (act === 'close') closeSheet();
-    else if (act === 'tab') { S.tab = b.getAttribute('data-tab'); S.shareErr = ''; S.shareMsg = ''; paintSheet(); }
+    else if (act === 'tab') { S.tab = tabId(b.getAttribute('data-tab')); S.shareErr = ''; S.shareMsg = ''; paintSheet(); }
     else if (act === 'copy-code') copy(S.share.code, '#dl-code');
     else if (act === 'copy-link') copy(shareUrl(location.origin, S.share.linkUrl), '#dl-url');
     else if (act === 'link') sharing(function (d) { return call('PUT', id(d) + '/link', { on: !S.share.linkOn }); });
