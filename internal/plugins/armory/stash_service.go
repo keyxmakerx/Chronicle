@@ -197,7 +197,20 @@ type stashService struct {
 	// waiting purchase requests, and how the stashes page and character history
 	// show them. Nil when buying is not wired (tests, a bus-less setup).
 	purchases purchaseRequests
+	// crafts says whether the hero page carries the crafting bench; set by
+	// SetCraftGate once the crafting plugin is built, nil while it is off.
+	crafts CraftGate
 }
+
+// CraftGate answers whether the viewer may work crafting for a character and
+// the campaign has crafting on. It keeps the armory from importing the
+// crafting plugin; the answer is the Crafting block's own rule.
+type CraftGate interface {
+	CanCraft(ctx context.Context, campaignID, characterID string, a Actor) bool
+}
+
+// SetCraftGate turns the "On the bench" container on for character panels.
+func (s *stashService) SetCraftGate(g CraftGate) { s.crafts = g }
 
 // purchaseRequests is the stash service's view of the shop-buy side. The
 // sweep runs with the campaign lock already held by the caller.
@@ -851,6 +864,7 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 		}
 	}
 	view.Items = held
+	view.CanCraft = s.crafts != nil && s.crafts.CanCraft(ctx, campaignID, ref.ID, a)
 
 	if ref.MoneyKey != "" {
 		bal, err := s.characterMoney(ctx, ref)

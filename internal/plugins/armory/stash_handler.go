@@ -495,6 +495,7 @@ func (h *StashHandler) CharacterPanel(c *echo.Context) error {
 	if view == nil {
 		return c.NoContent(http.StatusOK)
 	}
+	view.Bench = view.CanCraft && c.QueryParam("bench") == "1"
 	return middleware.Render(c, http.StatusOK, CharacterPanel(view, middleware.GetCSRFToken(c)))
 }
 

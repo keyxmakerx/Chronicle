@@ -525,6 +525,29 @@ func (l *craftingRespiteListener) RespitePressed(ctx context.Context, campaignID
 	return l.svc.RespitePressed(ctx, campaignID, crafting.Viewer{UserID: by.UserID, Director: by.Director, VisibilityRole: by.VisibilityRole})
 }
 
+// armoryCraftGate tells the Armory's hero panel whether to carry the crafting
+// bench: crafting is on for the campaign and the viewer is the Director or the
+// player who claimed the hero, the same check the Crafting block makes.
+type armoryCraftGate struct {
+	svc     crafting.Service
+	enabled func(ctx context.Context, campaignID string) bool
+}
+
+func (g armoryCraftGate) CanCraft(ctx context.Context, campaignID, characterID string, a armory.Actor) bool {
+	if !g.enabled(ctx, campaignID) {
+		return false
+	}
+	ok, err := g.svc.CanCraftFor(ctx, campaignID, characterID, crafting.Viewer{
+		UserID: a.UserID, MemberRole: a.Role, VisibilityRole: a.Role, Director: a.IsOwner(),
+	})
+	if err != nil {
+		slog.Error("crafting: cannot tell who may craft for the pack",
+			slog.String("entity_id", characterID), slog.Any("error", err))
+		return false
+	}
+	return ok
+}
+
 // registerCraftingBlock adds the Crafting block a character page can carry:
 // the hero's projects and the recipes they know. It renders for the
 // Director and for the player who claimed the character, and for no one

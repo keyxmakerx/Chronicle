@@ -5,6 +5,8 @@ package armory
 import (
 	"fmt"
 	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // CharacterPanel shows what a character carries and lets its player move it.
@@ -17,7 +19,11 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 	<section
 		id={ "armory-panel-" + v.Character.ID }
 		class="card p-4 md:p-5 mb-4 md:mb-6"
-		hx-get={ panelURL(v.CampaignID, v.Character.ID) }
+		if v.Bench {
+			hx-get={ benchPanelURL(v.CampaignID, v.Character.ID) }
+		} else {
+			hx-get={ panelURL(v.CampaignID, v.Character.ID) }
+		}
 		hx-trigger="armory-moved from:body"
 		hx-swap="outerHTML"
 	>
@@ -44,24 +50,37 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 		}
 		if len(v.Items) == 0 {
 			<p class="text-xs text-fg-muted mb-3">No items carried.</p>
-		} else {
-			<div
-				class="hp-boxes"
-				data-widget="hero-pack"
-				data-hero-pack
-				if v.CanPlace {
-					data-place-url={ placeURLBase(v.CampaignID, v.Character.ID) }
-				}
-			>
-				for _, pl := range Places {
-					@placeBox(v, self, pl)
+		}
+		if len(v.Items) > 0 || v.Bench {
+			<div class="hp-wrap">
+				<div
+					class="hp-boxes"
+					data-widget="hero-pack"
+					data-hero-pack
+					if v.CanPlace {
+						data-place-url={ placeURLBase(v.CampaignID, v.Character.ID) }
+					}
+				>
+					if v.Bench {
+						@benchBox(v)
+					}
+					if len(v.Items) > 0 {
+						for _, pl := range Places {
+							@placeBox(v, self, pl)
+						}
+					}
+				</div>
+				if v.Bench {
+					<div class="hb-drape" id={ "hb-drape-" + v.Character.ID } data-hb-drape hidden></div>
 				}
 			</div>
-			<div class="hp-details" data-hp-details>
-				for _, it := range v.Items {
-					@heldDetail(v, self, it)
-				}
-			</div>
+			if len(v.Items) > 0 {
+				<div class="hp-details" data-hp-details>
+					for _, it := range v.Items {
+						@heldDetail(v, self, it)
+					}
+				</div>
+			}
 		}
 
 		<div data-money-row data-holder={ destValue(self) } data-move-host>
@@ -108,6 +127,38 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 			</div>
 		</div>
 	</section>
+}
+
+// benchBox is "On the bench", first in the hero's row: a tile for each project
+// being made, drawn by the hero-bench widget from the Crafting app's own
+// answer for this hero. Pressing it drapes the crafting app down over the
+// page. Only a viewer CanCraft is true for gets it, so nobody sees an empty
+// box.
+templ benchBox(v *CharacterPanelView) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/crafting.css") }/>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/crafting/css/spoils.css") }/>
+	<div
+		class="hp-box hp-bench"
+		data-widget="hero-bench"
+		data-campaign-id={ v.CampaignID }
+		data-entity-id={ v.Character.ID }
+		data-hp-bench
+	>
+		<div class="hp-box-h">
+			<span><i class="fa-solid fa-flask" aria-hidden="true"></i>On the bench</span>
+			<span class="hp-n" data-hb-n></span>
+		</div>
+		<button
+			type="button"
+			class="hb-face"
+			data-hb-face
+			aria-expanded="false"
+			aria-controls={ "hb-drape-" + v.Character.ID }
+		>
+			<span class="hb-tiles" data-hb-tiles><span class="hp-empty">Loading&hellip;</span></span>
+			<span class="hb-hint" data-hb-hint>Open crafting</span>
+		</button>
+	</div>
 }
 
 // placeBox is one of the hero's containers: its items as tiles, dragged

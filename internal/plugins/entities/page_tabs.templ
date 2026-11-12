@@ -76,7 +76,7 @@ templ systemPageTabs(cc *campaigns.CampaignContext, entity *Entity, entityType *
 							</div>
 						}
 					case "items":
-						@blockCharacterItems()
+						@blockCharacterItems(true)
 					case "files":
 						@pageFilesMount(cc, entity)
 					case "posts":
