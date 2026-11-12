@@ -11,6 +11,7 @@ import (
 // AppFrame and AppOpening. Each app's pull request adds its own.
 var appPagesOnTheSharedOpening = []string{
 	"internal/plugins/maps/maps.templ",
+	"internal/plugins/timeline/timeline.templ",
 }
 
 func TestAppPages_UseTheSharedFrameAndOpening(t *testing.T) {

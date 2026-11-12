@@ -91,50 +91,21 @@ templ TimelineListFragment(cc *campaigns.CampaignContext, data TimelineListData)
 
 // timelineListContent renders the timeline list body.
 templ timelineListContent(cc *campaigns.CampaignContext, data TimelineListData) {
-	<div class="sm:max-w-screen-2xl mx-auto py-6 px-2 sm:px-4">
-		@components.Breadcrumbs([]components.BreadcrumbItem{
-			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
-			{Label: "Timelines"},
-		})
-		<div class="flex items-center justify-between mb-6">
-			<div>
-				<h1 class="text-xl font-bold text-fg">Timelines</h1>
-				<p class="text-sm text-fg-secondary mt-1">
-					if len(data.Timelines) == 0 {
-						No timelines yet. Create one to get started.
-					} else {
-						{ fmt.Sprintf("%d timeline(s)", len(data.Timelines)) }
-					}
-				</p>
-			</div>
-			if data.IsOwner {
-				<button
-					class="btn-primary text-sm"
-					onclick="document.getElementById('create-timeline-modal').classList.remove('hidden')"
-				>
-					<i class="fa-solid fa-plus"></i> New Timeline
-				</button>
-			}
-		</div>
+	@layouts.AppFrame() {
+		@layouts.AppOpening(timelinesOpening(ctx, data)) {
+			<span>{ timelineCount(len(data.Timelines)) }</span>
+		}
 		if len(data.Timelines) > 0 {
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
 				for _, t := range data.Timelines {
 					@timelineCard(data.CampaignID, t)
 				}
 			</div>
-		} else {
-			<div class="card p-16 text-center">
-				<i class="fa-solid fa-timeline text-5xl text-fg-muted mb-4"></i>
-				<p class="text-fg-secondary">No timelines yet.</p>
-				if data.IsOwner {
-					<p class="text-sm text-fg-muted mt-2">Click "New Timeline" to create your first timeline.</p>
-				}
-			</div>
 		}
 		if data.IsOwner {
 			@createTimelineModal(data)
 		}
-	</div>
+	}
 }
 
 // timelineCard renders a single timeline card in the list grid.
