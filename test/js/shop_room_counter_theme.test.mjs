@@ -84,3 +84,16 @@ test('the widget offers the options the server accepts', () => {
   assert.deepEqual([...O.props].sort(), goSet('shopRoomCounterProps'));
   for (const p of O.props) assert.ok(O.slots[O.propAt[p].at], p + ' has a slot to be placed in');
 });
+
+test('the server starters in Go are the widget starters', () => {
+  const src = readFileSync(join(root, 'internal', 'plugins', 'armory', 'shop_room_counter_starters.go'), 'utf8');
+  const lit = src.match(/shopRoomCounterStartersJSON = `([^`]*)`/);
+  assert.ok(lit, 'starters literal');
+  assert.deepEqual(JSON.parse(lit[1]), plain(C.starters));
+  const map = src.match(/shopRoomCounterStarterFor = map\[string\]int\{([^}]*)\}/);
+  assert.ok(map, 'type mapping');
+  const goFor = Object.fromEntries([...map[1].matchAll(/"([^"]*)":\s*(\d+)/g)].map((x) => [x[1], +x[2]]));
+  for (const type of ['forge', 'apothecary', 'jeweler', 'library', 'market', 'general', '']) {
+    assert.equal(C.starters[goFor[type] || 0].name, C.starterFor(type).name, type);
+  }
+});

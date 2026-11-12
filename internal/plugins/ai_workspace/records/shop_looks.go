@@ -24,6 +24,9 @@ type ShopLooksAPI interface {
 	// while it has none.
 	Front(ctx context.Context, campaignID, shopID string, a Actor) (front json.RawMessage, saved bool, err error)
 	SaveFront(ctx context.Context, campaignID, shopID string, a Actor, front json.RawMessage, check bool) error
+	// CounterStarter is the counter theme a room of this type is drawn with
+	// until one is saved: the base of an edit when the room has none.
+	CounterStarter(roomType string) json.RawMessage
 }
 
 // shopLook is what the shop-room and storefront kinds share: the shop page
@@ -181,9 +184,10 @@ func (ShopRoomKind) Doc() string {
 		"`look` (lit, the lit room; paper, a pop-up book; counter, standing at the counter), `mood` (cozy, eldritch, candy, haunted, festive, underwater, fey, desert, dwarven, or none), " +
 		"`manner` (the keeper's manner, which gives them lines for every moment: warm, gruff, shrewd, nervous, grand, or none), " +
 		"`says` (the keeper's own lines for a moment of the visit, up to 5 each, which win over the manner's: `hello` on arriving, `look` when something goes on the pile, `buy` after a purchase, `poor` when the pile outgrows the purse, `bye` on leaving, `refuse` for a shop that won't serve the party; `none` gives a moment back to the manner) " +
-		"and `chatter` (up to 10 lines the keeper says when pressed). " +
+		"`chatter` (up to 10 lines the keeper says when pressed) and `counter` (the theme of the counter look, below). " +
 		"A key you leave out keeps what the room has; `says` changes only the moments it names. Changing `type`, `setting`, `size`, `furniture` or `mood` lays the furniture out again the next time the room opens, keeping every piece the owner moved by hand; the goods, prices and stock are `shop-stock`. A room can't be removed by a block.\n\n" +
-		"```\n---\nkind: shop-room\nshop: The Rusty Anchor\ntype: general\nmood: cozy\nmanner: gruff\nsays:\n  hello: [\"Wipe your boots.\", \"We're open. Barely.\"]\n  poor: [\"Coin first, then rope.\"]\nchatter: [\"Storm's coming. Always is.\"]\n---\n```"
+		counterDoc + "\n\n" +
+		"```\n---\nkind: shop-room\nshop: The Rusty Anchor\ntype: general\nmood: cozy\nmanner: gruff\nsays:\n  hello: [\"Wipe your boots.\", \"We're open. Barely.\"]\n  poor: [\"Coin first, then rope.\"]\nchatter: [\"Storm's coming. Always is.\"]\ncounter:\n  start: smithy\n  display: pegboard\n  accent: \"#ff9a50\"\n  add: [sparks]\n---\n```"
 }
 
 // Title names the review row: "Room of The Rusty Anchor".
@@ -300,6 +304,15 @@ func (k ShopRoomKind) plan(ctx context.Context, campaignID string, a Actor, r Re
 			said = append(said, plural(len(ls), "line", "lines")+" of chatter")
 		}
 	}
+	if r.Has("counter") {
+		note, err := k.counter(room, r.Fields["counter"])
+		if err != nil {
+			return Plan{Error: planError(err)}, "", nil
+		}
+		if note != "" {
+			said = append(said, note)
+		}
+	}
 	switch {
 	case shape:
 		room["furnish"] = "room"
@@ -345,6 +358,7 @@ func roomBlock(shop string, raw json.RawMessage) string {
 		RoomType, Setting, Size, Furniture, Decorations, Palette, Look, Mood, Manner string
 		Moments                                                                      map[string][]string
 		Lines                                                                        []string
+		Counter                                                                      json.RawMessage
 	}
 	if json.Unmarshal(raw, &room) != nil {
 		return ""
@@ -368,6 +382,7 @@ func roomBlock(shop string, raw json.RawMessage) string {
 	if len(room.Lines) > 0 {
 		b.WriteString("chatter: " + quotedList(room.Lines) + "\n")
 	}
+	b.WriteString(counterBlock(room.Counter))
 	b.WriteString("---\n")
 	return b.String()
 }

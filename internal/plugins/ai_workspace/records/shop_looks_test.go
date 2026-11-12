@@ -29,6 +29,12 @@ func (f *fakeShopLooks) SaveRoom(_ context.Context, _, id string, _ Actor, layou
 	}
 	return nil
 }
+func (f *fakeShopLooks) CounterStarter(roomType string) json.RawMessage {
+	if c, ok := map[string]string{"forge": smithyCounter, "library": arcaneCounter, "market": marketCounter}[roomType]; ok {
+		return json.RawMessage(c)
+	}
+	return json.RawMessage(plainCounter)
+}
 func (f *fakeShopLooks) Front(_ context.Context, _, id string, _ Actor) (json.RawMessage, bool, error) {
 	if fr, ok := f.fronts[id]; ok {
 		return fr, true, nil
