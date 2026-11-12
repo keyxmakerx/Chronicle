@@ -9,7 +9,7 @@
  * chosen days' row (calendar_editor.js).
  *
  * Nothing is written until Save: the panel keeps a draft, and a close with
- * unsaved changes shakes the panel and says so (Discard leaves). Days painted
+ * unsaved changes stays open and says so (Discard leaves). Days painted
  * by hand and pinned days are never replaced by a roll; a pin is saved as the
  * day's lock. Saving and Undo belong to the editor (opts.save); this file only
  * shapes what would be saved. The weather itself is chronicle_gen.js, loaded
@@ -20,7 +20,8 @@
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function esc(s) { return Chronicle.escapeHtml(s); }
-  function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  // Calm and Off both count as reduced, read at call time so a My view change applies at once.
+  function reducedMotion() { var h = document.documentElement; return !!(h.hasAttribute('data-motion') || h.hasAttribute('data-cz-reduce') || h.getAttribute('data-view-motion') === 'calm' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)); }
 
   // Six common kinds sit in the palette; More weather… opens the whole list,
   // and a kind picked there joins the palette while the panel is open.
@@ -158,7 +159,7 @@
   Panel.prototype.close = function (quiet) {
     if (!this.isOpen()) return;
     var back = this.state && this.state.back;
-    this.el.classList.remove('open', 'nag');
+    this.el.classList.remove('open');
     this.view.dockEl.classList.remove('on');
     this.state = null;
     this._preview();
@@ -170,15 +171,14 @@
     return !!S && (Object.keys(S.draft).length > 0 || Object.keys(S.pins).length > 0);
   };
 
-  // tryClose closes when nothing is unsaved; otherwise the panel shakes and
-  // shows "Not saved yet", and stays.
+  // tryClose closes when nothing is unsaved; otherwise the panel shows
+  // "Not saved yet", and stays.
   Panel.prototype.tryClose = function () {
     if (!this.isOpen()) return;
     if (!this.dirty()) { this.close(); return; }
     var S = this.state, el = this.el;
     S.nag = true;
     this._renderFoot();
-    if (!reducedMotion()) { el.classList.remove('nag'); void el.offsetWidth; el.classList.add('nag'); }
     var w = $('.wxc-warn', el);
     if (w) w.focus({ preventScroll: true });
   };
@@ -713,7 +713,6 @@
     var self = this, el = this.el;
     this.scrim.addEventListener('click', function () { if (self.isOpen()) self.tryClose(); });
     el.addEventListener('animationend', function (e) {
-      if (e.target === el) el.classList.remove('nag');
       if (e.target.classList && e.target.classList.contains('roll')) e.target.classList.remove('roll');
     });
     el.addEventListener('keydown', function (e) {

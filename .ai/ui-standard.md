@@ -379,7 +379,7 @@ place, and Off shows the end state.
 |---|---|---|---|
 | Peek | hover cards, the sidebar peek, availability bars | fade and a 4px rise, `--dur-micro`, `--ease-out` | fade only |
 | Grow | menus, pickers, dialogs, pop-out editors, out of the thing clicked | scale from the clicked edge, `--dur-standard`, `--ease-out` | fade only |
-| Fold | sections, rows that join or leave a list, calendar months | to the content's real height, pushing what follows down, `--dur-standard` in, `--dur-micro` + 40ms out | opens at once |
+| Fold | sections, rows that join or leave a list | to the content's real height, pushing what follows down, `--dur-standard` in, `--dur-micro` + 40ms out | opens at once |
 | Drape | pull-downs: a title's drawer, a widget's longer list or settings | unrolls down from the edge it hangs from, over the page with its shadow, nothing below moves; rolls back up, `--dur-standard`, `--ease-out` | fade only |
 | Slide-out | sheet tabs, creator steps, slips, an editor from behind its part | out from behind its surface, then in front of it, `--dur-slide`, `--ease-slide` | appears in place with a fade |
 | Pull | following a connection, opening a list row's peek | the new content slides out from under the block that holds the link while the old stays and dims, `--dur-slide` × 1.22, `--ease-slide` | fade only |
@@ -443,6 +443,17 @@ place, and Off shows the end state.
   built from `opacity` plus `transform` becomes its Calm version by itself.
   Script-driven motion checks `data-motion` (or the older flags) and does the
   same.
+- **The calendar's month rolls as one strip.** One step forward moves the
+  weeks up and one back moves them down over 260 ms (scaled by Motion speed),
+  `--ease-slide`, transform and opacity only: the earlier month sits above the
+  later one, a week row both share is drawn once and travels, and the leaving
+  month fades as the arriving one does. A key, a jump of more than one month
+  and Off swap at once; Calm cross-fades in place.
+- **A day's card follows the next press.** An open card moves to another
+  day pressed with the mouse in 200 ms (`--ease-slide`, transform only) and
+  its words fade in; with the arrow keys it moves at once; Calm cross-fades.
+  A card holding a form, a card mid-move, a phone's sheet and Edit mode close
+  and open as before. The fold plays 1.65 times quicker than it was drawn.
 - **Folds measure their content.** A fold, roll or unfurl animates to the
   content's real height (measure `scrollHeight`, animate, then release to
   `auto`), so it never clips, jumps, or expands after a cut-off frame. No

@@ -43,9 +43,10 @@
   // A form that grows inside a card can run past the edge of whatever is
   // scrolling it (the page, or a calendar opened out on the Calendars page),
   // so it is brought into view as it opens.
-  function reducedMotionNow() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  // Calm and Off both count as reduced, read at call time so a My view change applies at once.
+  function reducedMotionNow() { var h = document.documentElement; return !!(h.hasAttribute('data-motion') || h.hasAttribute('data-cz-reduce') || h.getAttribute('data-view-motion') === 'calm' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)); }
   function reveal(el) {
-    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var still = reducedMotionNow();
     el.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
   }
   function esc(s) { return Chronicle.escapeHtml(s); }
@@ -220,7 +221,8 @@
     view.renderHeader();
     if (!on) { this.selection = {}; this._syncPicks(); this._renderBar(); if (view._pf.state !== 'closed') view.closeFlap({ quiet: true }); }
     this._paintDeck();
-    view.say(on ? 'Editing on. Click or drag across days to choose them.' : 'Editing off.');
+    // The deck already says how to choose days, so turning on is only announced.
+    if (on) view._announce('Editing on. Click or drag across days to choose them.'); else view.say('Editing off.');
   };
 
   // ------------------------------------------------------------------

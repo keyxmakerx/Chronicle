@@ -24,7 +24,8 @@
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
   function esc(s) { return Chronicle.escapeHtml(s); }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
-  function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  // Calm and Off both count as reduced, read at call time so a My view change applies at once.
+  function reducedMotion() { var h = document.documentElement; return !!(h.hasAttribute('data-motion') || h.hasAttribute('data-cz-reduce') || h.getAttribute('data-view-motion') === 'calm' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)); }
   function isIso(s) { return /^\d{4}-\d{2}-\d{2}$/.test(s || ''); }
 
   // How a game night can repeat: the sessions plugin's recurrence types.
@@ -275,11 +276,7 @@
   };
 
   Drawer.prototype._warnUnsaved = function () {
-    var e = $('#cal5-gnErr', this.el);
     this._error('Not saved yet. Save it, or press Close to throw the changes away.');
-    e.classList.remove('shake');
-    void e.offsetWidth;
-    if (!reducedMotion()) e.classList.add('shake');
   };
 
   Drawer.prototype._error = function (msg) {

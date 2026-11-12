@@ -22,8 +22,7 @@
 /* Tokens: ink and paper do the work; the only colour is the era/season field. */
 :root{
   color-scheme:light;
-  --spring:cubic-bezier(.34,1.3,.4,1);
-  --ease:cubic-bezier(.22,.8,.24,1);
+  --ease:var(--ease-slide,cubic-bezier(.22,.8,.24,1));
   --sweep:cubic-bezier(.3,.1,.3,1);
   --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","Liberation Sans",Arial,sans-serif;
   --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Charter,"Bitstream Charter",Georgia,"Liberation Serif",serif;
@@ -179,15 +178,8 @@
 @keyframes cal5-fadeOut{to{opacity:0}}
 /* A faint crest rides the sweep edge, so the wash reads even when two months' colours are close. */
 .cal-v5 .crest{position:absolute;top:-10%;left:0;width:40%;height:120%;z-index:1;pointer-events:none;will-change:transform}
-.cal-v5 .crest.to-l{animation:cal5-crestL .95s var(--sweep) forwards}
-.cal-v5 .crest.to-r{animation:cal5-crestR .95s var(--sweep) forwards}
-@keyframes cal5-crestL{from{transform:translate3d(225%,0,0)}to{transform:translate3d(-75%,0,0)}}
-@keyframes cal5-crestR{from{transform:translate3d(-75%,0,0)}to{transform:translate3d(225%,0,0)}}
 .cal-v5 .crest svg{display:block;width:100%;height:100%}
-.cal-v5 .fx-sky, .cal-v5 .fx-light, .cal-v5 .fx-grain{position:absolute;inset:0;z-index:2}
-.cal-v5 .fx-sky{opacity:0;transition:opacity .8s var(--ease)}
-.cal-v5 .cal[data-sky="night"] .fx-sky{opacity:1;background:linear-gradient(180deg,var(--night),transparent 62%)}
-.cal-v5 .cal[data-sky="dawn"] .fx-sky{opacity:1;background:radial-gradient(120% 75% at 0% 100%,var(--dawn),transparent 62%)}
+.cal-v5 .fx-light, .cal-v5 .fx-grain{position:absolute;inset:0;z-index:2}
 .cal-v5 .fx-light{background:radial-gradient(90% 70% at 8% -8%,var(--light),transparent 62%)}
 .cal-v5 .fx-grain{opacity:var(--grainOp);mix-blend-mode:var(--grainBlend);background-size:160px 160px;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
@@ -200,7 +192,7 @@
 .cal-v5 .hub{display:inline-flex;align-items:center;gap:6px;font:550 12.5px/1 var(--sans);color:var(--ink2);padding:8px 9px 8px 10px;margin-left:-10px;border-radius:9px;white-space:nowrap;min-width:0}
 .cal-v5 .hub span{overflow:hidden;text-overflow:ellipsis}
 .cal-v5 .hub:hover, .cal-v5 .hub[aria-expanded="true"]{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
-.cal-v5 .hub .i, .cal-v5 .erabtn .i{width:13px;height:13px;transition:transform .35s var(--spring)}
+.cal-v5 .hub .i, .cal-v5 .erabtn .i{width:13px;height:13px;transition:transform var(--dur-standard,200ms) var(--ease-out)}
 .cal-v5 .hub[aria-expanded="true"] .i, .cal-v5 .erabtn[aria-expanded="true"] .i{transform:rotate(180deg)}
 .cal-v5 .h-acts{display:flex;align-items:center;gap:4px;min-width:0;flex:none}
 .cal-v5 .tbtn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:9px;font:550 12.5px/1 var(--sans);color:var(--ink2);white-space:nowrap}
@@ -232,8 +224,6 @@
 .cal-v5 .ib:hover{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
 .cal-v5 .h-mid{justify-content:space-between;margin-top:6px}
 .cal-v5 .mtitle{margin:0;font:500 36px/1.08 var(--serif);letter-spacing:-.012em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.cal-v5 .mtitle.swap{animation:cal5-titleIn .42s var(--ease) both}
-@keyframes cal5-titleIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .cal-v5 .myear{color:var(--mut);font-weight:400}
 .cal-v5 .mnav{display:flex;align-items:center;gap:2px;flex:none}
 .cal-v5 .h-sub{margin-top:7px;flex-wrap:wrap;gap:4px 12px}
@@ -250,7 +240,7 @@
 .cal-v5 .todaypill.step{box-shadow:0 0 0 1px var(--hair);background:var(--lift);padding:0 3px}
 /* Inside the pill the label needs room from the rounded end. */
 .cal-v5 .todaypill.step .tl{margin-left:10px}
-.cal-v5 .todaypill .td.bump{animation:cal5-bump .45s var(--spring)}
+.cal-v5 .todaypill .td.bump{animation:cal5-bump var(--dur-large,280ms) var(--ease-out)}
 .cal-v5 .todaypill .tdset{height:26px;padding:0 8px;border-radius:8px;font:600 12.5px/1 var(--sans);color:var(--ink)}
 .cal-v5 .todaypill .tdset:hover{background:var(--hair)}
 .cal-v5 .todaypill .tdset:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
@@ -262,26 +252,16 @@
 .cal-v5 .settoday .stn{margin:0;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
 .cal-v5 .settoday .sterr{margin:0;font:550 12px/1.4 var(--sans);color:var(--bldT)}
 .cal-v5 .settoday .sta{display:flex;gap:8px}
-.cal-v5 .settoday .sterr.shake{animation:cal5-wxNag .4s ease}
 @keyframes cal5-bump{from{opacity:.2;transform:translateY(5px)}to{opacity:1;transform:none}}
 .cal-v5 .dow{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));padding:8px var(--gx) 0}
 .cal-v5 .dow span{padding:0 10px 9px;font:650 9.5px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--mut);white-space:nowrap;overflow:hidden}
 .cal-v5 .dow .s{display:none}
 /* The grid lays itself out from the structure: --cols is the week length, never a fixed 7. */
 .cal-v5 .stage{padding:0 var(--gx) 14px}
-.cal-v5 .month.entering{position:absolute;left:var(--gx);right:var(--gx);top:0}
 .cal-v5 .month{position:relative}
 .cal-v5 .month.leaving{position:absolute;left:var(--gx);right:var(--gx);top:0;pointer-events:none}
-.cal-v5 .month.in-l{animation:cal5-inL .42s var(--ease) both}
-.cal-v5 .month.in-r{animation:cal5-inR .42s var(--ease) both}
-.cal-v5 .month.out-l{animation:cal5-outL .3s var(--ease) both}
-.cal-v5 .month.out-r{animation:cal5-outR .3s var(--ease) both}
-.cal-v5 .month.fadein{animation:cal5-fadeIn .3s ease both}
-.cal-v5 .month.fadeout{animation:cal5-fadeOut .25s ease both}
-@keyframes cal5-inL{from{opacity:0;transform:translate3d(30px,0,0)}to{opacity:1;transform:none}}
-@keyframes cal5-inR{from{opacity:0;transform:translate3d(-30px,0,0)}to{opacity:1;transform:none}}
-@keyframes cal5-outL{to{opacity:0;transform:translate3d(-30px,0,0)}}
-@keyframes cal5-outR{to{opacity:0;transform:translate3d(30px,0,0)}}
+/* While the month rolls the stage clips what has left it; the script holds its height at the taller month. */
+.cal-v5 .stage.rolling{overflow:hidden}
 @keyframes cal5-fadeIn{from{opacity:0}}
 .cal-v5 .wk{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));border-top:1px solid var(--hair)}
 .cal-v5 .day{position:relative;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;min-height:var(--cellH);padding:8px 9px 0 10px;color:var(--ink2);border-left:1px solid var(--hair2);transition:opacity .3s}
@@ -296,21 +276,21 @@
 .cal-v5 .num{position:relative;display:grid;place-items:center;width:25px;height:25px;margin:-3px 0 0 -5px;border-radius:50%;font:500 13px/1 var(--sans);font-variant-numeric:tabular-nums;color:var(--ink)}
 .cal-v5 .past .num{color:var(--mut)}
 .cal-v5 .today .num{background:var(--ink);color:var(--paper);font-weight:650}
-.cal-v5 .today .num.pop{animation:cal5-todayPop .5s var(--spring)}
+.cal-v5 .today .num.pop{animation:cal5-todayPop var(--dur-large,280ms) var(--ease-out)}
 @keyframes cal5-todayPop{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
 /* Events are marks: their category's line icon in its muted hue. An event may carry its own icon instead. */
 .cal-v5 .marks{display:flex;flex-wrap:wrap;gap:3px 4px;min-width:0;max-width:100%}
 .cal-v5 .mk{position:relative;display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:50%;color:oklch(var(--icL) var(--icC) var(--h,260))}
 .cal-v5 .mk>.ci{width:16px;height:16px}
 .cal-v5 .edot{display:block;width:7px;height:7px;border-radius:50%;background:currentColor}
-.cal-v5 .mk::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity .15s}
+.cal-v5 .mk::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity var(--dur-micro,120ms)}
 .cal-v5 .mk.hot::before{opacity:1}
 @media (hover:hover){.cal-v5 .mk:hover::before{opacity:1}
 }
 .cal-v5 .ci{position:relative;width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
 /* Director view only: a dashed ring marks what players can't see. */
 .cal-v5 .mk.dir::after, .cal-v5 .ric.dir::after, .cal-v5 .flyer.dir::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px dashed currentColor;opacity:.75;pointer-events:none}
-.cal-v5 .more{font:600 10.5px/22px var(--sans);color:var(--mut);padding:0 2px;white-space:nowrap;transition:opacity .15s}
+.cal-v5 .more{font:600 10.5px/22px var(--sans);color:var(--mut);padding:0 2px;white-space:nowrap;transition:opacity var(--dur-micro,120ms)}
 /* While a day's card is open, its marks are in the card, not the cell. */
 .cal-v5 .day.packed .mk, .cal-v5 .mk.away{visibility:hidden}
 .cal-v5 .day.packed .more{opacity:0}
@@ -339,10 +319,10 @@
 .cal-v5 .band.today .bn{text-decoration:underline;text-underline-offset:4px}
 /* While a day is open, it turns to paper and the rest recede a little. */
 .cal-v5 .month.dim .day:not(.sel){opacity:.5}
-/* Glance cards: they grow out of what is hovered in about 140ms, never take the pointer, and vanish the instant it leaves. */
+/* Glance cards: they fade in with a short rise, never take the pointer, and vanish the instant it leaves. */
 .cal-v5 .hc{position:absolute;z-index:30;left:0;top:0;width:256px;padding:12px 14px;background:var(--paper);border:1px solid var(--edge);border-radius:12px;box-shadow:var(--shadow-l);pointer-events:none;
-  opacity:0;visibility:hidden;transform:scale(.6);transform-origin:0 0;transition:none}
-.cal-v5 .hc.on{opacity:1;visibility:visible;transform:none;transition:opacity .14s var(--ease),transform .14s var(--ease)}
+  opacity:0;visibility:hidden;transform:translateY(4px);transition:none}
+.cal-v5 .hc.on{opacity:1;visibility:visible;transform:none;transition:opacity var(--dur-micro,120ms) var(--ease-out),transform var(--dur-micro,120ms) var(--ease-out)}
 .cal-v5 .hc.ev{width:252px;padding:11px 13px 12px}
 .cal-v5 .gh{display:flex;align-items:flex-start;gap:8px;min-width:0}
 .cal-v5 .gh b{font:600 13px/1.35 var(--sans);color:var(--ink);min-width:0;padding-top:2px;overflow-wrap:anywhere}
@@ -376,8 +356,8 @@
 /* The calendar switcher drops like the rulebook's flaps. */
 .cal-v5 .pop{position:absolute;left:0;top:0;z-index:40;border:1px solid var(--edge);box-shadow:var(--shadow-l);color:var(--ink);
   --hg:linear-gradient(transparent,transparent);background:var(--hg),var(--paper);background-repeat:no-repeat;
-  opacity:0;visibility:hidden;pointer-events:none;transition:transform .52s var(--spring),opacity .22s var(--ease),visibility 0s linear .52s}
-.cal-v5 .pop.open{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:transform .52s var(--spring),opacity .2s var(--ease),visibility 0s}
+  opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--dur-everyday-out,80ms) var(--ease-in),visibility 0s linear var(--dur-everyday-out,80ms)}
+.cal-v5 .pop.open{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:opacity var(--dur-everyday,120ms) var(--ease-out),visibility 0s}
 /* The day's card and the era's card unfold out of the edge of what was pressed. Each is laid out at full size first,
    scrollbar and all, and the unfold only moves a clip, so no text ever reflows. */
 .cal-v5 .wing, .cal-v5 .flap{position:absolute;left:0;top:0;z-index:40;border:1px solid var(--edge);box-shadow:var(--shadow-l);color:var(--ink);
@@ -531,7 +511,7 @@
 .cal-v5 .qinput{font:600 13.5px/1.3 var(--sans);color:var(--ink);background:var(--paper2);border:0;border-radius:6px;padding:2px 6px;margin:-2px -6px -2px -4px;min-width:0;flex:1;outline:1.5px solid var(--ink)}
 .cal-v5 .qinput.qtm{font:500 11.5px/1.4 var(--sans);color:var(--ink2);flex:0 1 150px;margin:0;padding:1px 6px}
 /* The Director's event icon is also the kind control. */
-.cal-v5 button.ric::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity .15s}
+.cal-v5 button.ric::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity var(--dur-micro,120ms)}
 .cal-v5 button.ric:hover::before, .cal-v5 button.ric[aria-expanded="true"]::before{opacity:1}
 .cal-v5 .acts{margin-left:auto;display:flex;align-items:center;flex:none;opacity:.55;transition:opacity .2s}
 .cal-v5 .evd:hover .acts, .cal-v5 .acts:focus-within{opacity:1}
@@ -558,7 +538,7 @@
    reader, as a steep fixed-depth turn did. The clip reaches past the sides so a fold-out's shadow is never cut. */
 @keyframes cal5-foldDown{from{opacity:0;clip-path:inset(-40px -40px 100% -40px);transform:perspective(1400px) rotateX(-12deg)}
   to{opacity:1;clip-path:inset(-40px -40px -40px -40px);transform:none}}
-.cal-v5 .kinds{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px 30px;padding:8px;border-radius:10px;background:var(--paper2);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .kinds{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px 30px;padding:8px;border-radius:10px;background:var(--paper2);transform-origin:top;animation:cal5-foldDown var(--dur-large,280ms) var(--ease-out) both}
 .cal-v5 .kinds button{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;border-radius:99px;font:550 11.5px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
 .cal-v5 .kinds button:hover{color:var(--ink)}
 .cal-v5 .kinds button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
@@ -573,10 +553,8 @@
 .cal-v5 .chip .cx:hover{background:var(--hair);color:var(--ink)}
 .cal-v5 .chip .cx .i{width:10px;height:10px}
 .cal-v5 .evlist{display:flex;flex-direction:column}
-.cal-v5 .evd.rowin{animation:cal5-rowIn .45s var(--spring) both}
+.cal-v5 .evd.rowin{animation:cal5-rowIn var(--dur-large,280ms) var(--ease-out) both}
 @keyframes cal5-rowIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
-.cal-v5 .evd.rowout{animation:cal5-rowOut .26s var(--ease) both;pointer-events:none}
-@keyframes cal5-rowOut{to{opacity:0;transform:translateX(14px)}}
 /* An event's full page grows out of its box in the day's card and covers the card. Players read it; the Director edits from it. */
 .cal-v5 .evp{position:absolute;left:0;top:0;z-index:43;display:flex;flex-direction:column;border-radius:14px;box-shadow:var(--shadow-l);color:var(--ink);visibility:hidden;pointer-events:none}
 .cal-v5 .evp::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
@@ -613,8 +591,8 @@
 .cal-v5 .qmore:hover{background:var(--hair2);color:var(--ink)}
 /* Undo toast: inside the widget, never a confirm dialog. */
 .cal-v5 .toast{position:absolute;left:50%;bottom:16px;z-index:60;display:flex;align-items:center;gap:12px;max-width:calc(100% - 32px);padding:8px 8px 8px 14px;border-radius:12px;background:var(--ink);color:var(--paper);
-  font:500 12.5px/1.3 var(--sans);box-shadow:var(--shadow-l);opacity:0;visibility:hidden;transform:translate(-50%,14px);transition:transform .38s var(--spring),opacity .2s var(--ease),visibility 0s linear .38s}
-.cal-v5 .toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:transform .38s var(--spring),opacity .2s var(--ease),visibility 0s}
+  font:500 12.5px/1.3 var(--sans);box-shadow:var(--shadow-l);opacity:0;visibility:hidden;transform:translate(-50%,14px);transition:transform var(--dur-everyday-out,80ms) var(--ease-in),opacity var(--dur-everyday-out,80ms) var(--ease-in),visibility 0s linear var(--dur-everyday-out,80ms)}
+.cal-v5 .toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:transform var(--dur-standard,200ms) var(--ease-out),opacity var(--dur-standard,200ms) var(--ease-out),visibility 0s}
 .cal-v5 .toast span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .toast button{flex:none;font:650 12px/1 var(--sans);color:var(--paper);padding:7px 10px;border-radius:8px;box-shadow:inset 0 0 0 1px oklch(1 0 0 / .28)}
 .cal-v5 .toast button:hover{background:oklch(1 0 0 / .1)}
@@ -673,11 +651,11 @@
 .cal-v5 .btn.danger{border-color:transparent;background:transparent;color:oklch(.55 .11 28)}
 /* Drawers slide out of the widget's own edges; the dock clips them to the widget. */
 .cal-v5 .dock{position:absolute;inset:0;z-index:50;border-radius:inherit;overflow:hidden;overflow:clip;pointer-events:none}
-.cal-v5 .dscrim{position:absolute;inset:0;background:var(--scrim);opacity:0;transition:opacity .3s var(--ease)}
-.cal-v5 .dock.on .dscrim{opacity:.7;pointer-events:auto}
+.cal-v5 .dscrim{position:absolute;inset:0;background:var(--scrim);opacity:0;transition:opacity var(--dur-standard,200ms) var(--ease-in)}
+.cal-v5 .dock.on .dscrim{opacity:.7;pointer-events:auto;transition:opacity var(--dur-large,280ms) var(--ease-out)}
 .cal-v5 .drawer{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;background:var(--paper);box-shadow:var(--shadow-l);pointer-events:auto;visibility:hidden;
-  transition:transform .55s var(--spring),visibility 0s linear .55s}
-.cal-v5 .drawer.open{visibility:visible;transform:none;transition:transform .55s var(--spring),visibility 0s}
+  transition:transform var(--dur-standard,200ms) var(--ease-in),visibility 0s linear var(--dur-standard,200ms)}
+.cal-v5 .drawer.open{visibility:visible;transform:none;transition:transform var(--dur-large,280ms) var(--ease-out),visibility 0s}
 .cal-v5 .ddir{left:-28px;width:368px;padding-left:28px;border-right:1px solid var(--edge);border-radius:0 18px 18px 0;transform:translate3d(-104%,0,0)}
 .cal-v5 .ded{right:-28px;width:428px;padding-right:28px;border-left:1px solid var(--edge);border-radius:18px 0 0 18px;transform:translate3d(104%,0,0)}
 .cal-v5 .drawer .crease{position:relative;background:transparent}
@@ -704,9 +682,9 @@
 .cal-v5 .sw small{display:block;color:var(--mut);font-size:11px}
 .cal-v5 .tog{position:relative;width:34px;height:20px;border-radius:99px;background:var(--hair);flex:none;box-shadow:inset 0 0 0 1px var(--edge)}
 /* The "on" colour is its own layer, so switching fades opacity rather than a colour. */
-.cal-v5 .tog::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--ink);opacity:0;transition:opacity .2s}
+.cal-v5 .tog::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--ink);opacity:0;transition:opacity var(--dur-standard,200ms)}
 .cal-v5 .tog[aria-checked="true"]::before{opacity:1}
-.cal-v5 .tog::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--paper);box-shadow:0 1px 2px oklch(0 0 0 / .25);transition:transform .35s var(--spring)}
+.cal-v5 .tog::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--paper);box-shadow:0 1px 2px oklch(0 0 0 / .25);transition:transform 160ms var(--ease-in-out)}
 .cal-v5 .tog[aria-checked="true"]::after{transform:translateX(14px)}
 .cal-v5 .ebody{flex:1;overflow:auto;overscroll-behavior:contain;padding:14px 18px 18px;display:flex;flex-direction:column;gap:14px}
 .cal-v5 .fld .etitle{height:auto;padding:4px 0 8px;border:0;border-bottom:1px solid var(--edge);border-radius:0;background:transparent;font:500 22px/1.2 var(--serif)}
@@ -806,7 +784,7 @@
 .cal-v5 .lpick{position:relative}
 .cal-v5 .lin{width:100%;height:34px;padding:0 10px;border-radius:9px;border:1px dashed var(--edge);background:transparent;font:500 12.5px/1 var(--sans);color:var(--ink)}
 .cal-v5 .lin:focus{outline:none;border-style:solid;border-color:var(--ink)}
-.cal-v5 .lsug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;padding:4px;border-radius:10px;background:var(--paper);box-shadow:var(--shadow-l);border:1px solid var(--edge);transform-origin:top;animation:cal5-foldDown .3s var(--spring) both}
+.cal-v5 .lsug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;padding:4px;border-radius:10px;background:var(--paper);box-shadow:var(--shadow-l);border:1px solid var(--edge);transform-origin:top;animation:cal5-foldDown var(--dur-large,280ms) var(--ease-out) both}
 .cal-v5 .lsug button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;border-radius:7px;font:550 12.5px/1.2 var(--sans);color:var(--ink)}
 .cal-v5 .lsug button .i{width:13px;height:13px;color:var(--mut)}
 .cal-v5 .lsug button small{margin-left:auto;font:500 11px/1 var(--sans);color:var(--mut)}
@@ -814,9 +792,9 @@
 .cal-v5 .lsug .none{padding:8px 9px}
 .cal-v5 .moreb{display:flex;align-items:center;gap:6px;width:100%;padding:14px 0 12px;border-top:1px solid var(--hair);font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
 .cal-v5 .moreb:hover{color:var(--ink)}
-.cal-v5 .moreb .i{width:13px;height:13px;transition:transform .3s var(--spring)}
+.cal-v5 .moreb .i{width:13px;height:13px;transition:transform var(--dur-standard,200ms) var(--ease-out)}
 .cal-v5 .moreb[aria-expanded="true"] .i{transform:rotate(180deg)}
-.cal-v5 .moresec{display:flex;flex-direction:column;gap:12px;padding-bottom:12px;transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .moresec{display:flex;flex-direction:column;gap:12px;padding-bottom:12px;transform-origin:top;animation:cal5-foldDown var(--dur-large,280ms) var(--ease-out) both}
 .cal-v5 .scrim{position:fixed;inset:0;z-index:38;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .3s var(--ease);display:none}
 /* A changed day flashes once: its surface turns to paper and fades back. */
 .cal-v5 .day.flash::before{background:var(--paper);animation:cal5-flash 1.8s ease}
@@ -897,24 +875,22 @@
 
 }
 /* Reduced motion: no travel, no drift; everything is a short cross-fade. */
-.cal-v5 .rm .bleed{animation:none!important}
-.cal-v5 .rm .pop, .cal-v5 .rm .drawer, .cal-v5 .rm .toast{transform:none!important;transition:opacity .18s ease,visibility 0s linear .18s!important}
-.cal-v5 .rm .pop.open, .cal-v5 .rm .drawer.open, .cal-v5 .rm .toast.on{transition:opacity .18s ease,visibility 0s!important}
-.cal-v5 .rm .hc{transform:none!important}
-.cal-v5 .rm .hc.on{transition:opacity .12s ease!important}
-.cal-v5 .rm .kinds, .cal-v5 .rm .lsug, .cal-v5 .rm .moresec, .cal-v5 .rm .evd.rowin, .cal-v5 .rm .evd.rowout{animation:cal5-fadeIn .15s ease both!important}
-.cal-v5 .rm .evd.hl.pulse::after{animation:none!important;opacity:0}
-.cal-v5 .rm .toast{transform:translate(-50%,0)!important}
-.cal-v5 .rm .drawer{opacity:0}
-.cal-v5 .rm .drawer.open{opacity:1}
-.cal-v5 .rm .month.in-l, .cal-v5 .rm .month.in-r{animation:cal5-fadeIn .25s ease both!important}
-.cal-v5 .rm .month.out-l, .cal-v5 .rm .month.out-r{animation:cal5-fadeOut .2s ease both!important}
-.cal-v5 .rm .mtitle.swap, .cal-v5 .rm .todaypill .td.bump, .cal-v5 .rm .today .num.pop, .cal-v5 .rm .tog::after{animation:none!important;transition:none!important}
+.rm .cal-v5 .bleed{animation:none!important}
+.rm .cal-v5 .pop, .rm .cal-v5 .drawer, .rm .cal-v5 .toast{transform:none!important;transition:opacity .18s ease,visibility 0s linear .18s!important}
+.rm .cal-v5 .pop.open, .rm .cal-v5 .drawer.open, .rm .cal-v5 .toast.on{transition:opacity .18s ease,visibility 0s!important}
+.rm .cal-v5 .hc{transform:none!important}
+.rm .cal-v5 .hc.on{transition:opacity .12s ease!important}
+.rm .cal-v5 .kinds, .rm .cal-v5 .lsug, .rm .cal-v5 .moresec, .rm .cal-v5 .evd.rowin{animation:cal5-fadeIn .15s ease both!important}
+.rm .cal-v5 .evd.hl.pulse::after{animation:none!important;opacity:0}
+.rm .cal-v5 .toast{transform:translate(-50%,0)!important}
+.rm .cal-v5 .drawer{opacity:0}
+.rm .cal-v5 .drawer.open{opacity:1}
+.rm .cal-v5 .todaypill .td.bump, .rm .cal-v5 .today .num.pop, .rm .cal-v5 .tog::after{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion:reduce){.cal-v5 .bleed{animation:none!important}
 }
 /* ── Moons on the grid: the main moon's silhouette rests in each day's top-right corner, a flat disc of ink. ── */
 .cal-v5 .msil{position:absolute;top:6px;right:6px;z-index:2;width:22px;height:22px;display:grid;place-items:center;border-radius:50%;--sb:var(--silB);--ss:var(--silS);--sl:var(--silL)}
-.cal-v5 .msil::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity .15s}
+.cal-v5 .msil::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity var(--dur-micro,120ms)}
 .cal-v5 .msil.hot::before{opacity:1}
 @media (hover:hover){.cal-v5 .msil:hover::before{opacity:1}
 }
@@ -937,7 +913,9 @@
 .cal-v5 .hc .gm b{font-weight:600;color:var(--ink)}
 .cal-v5 .hc .gm + .gm{margin-top:4px}
 .cal-v5 .hc .gmd{width:7px;height:7px;border-radius:50%;background:var(--silL);flex:none}
-.cal-v5 .day.packed .msil, .cal-v5 .msil.away{visibility:hidden}
+.cal-v5 .msil.away{visibility:hidden}
+/* A packed day's moon fades with its other marks (the .25s opacity transition on .day .msil) instead of vanishing on the last frame of the fold. */
+.cal-v5 .day.packed .msil{opacity:0;pointer-events:none}
 /* A silhouette in flight into the day's card turns into the realistic moon it lands as. */
 .cal-v5 .flyer.mflyer{--sb:var(--silB);--ss:var(--silS);--sl:var(--silL)}
 .cal-v5 .flyer.mflyer.blood{--sb:var(--bldB);--ss:var(--bldS);--sl:var(--bldL)}
@@ -1098,8 +1076,6 @@
 .cal-v5 .gx.mo{transform:none;font:550 10px/12px var(--sans);color:var(--gtx2);padding-left:4px;border-left:1px solid var(--gln)}
 .cal-v5 .gx.tdot{top:-4px;width:7px;height:7px;border-radius:50%;background:var(--gtx)}
 .cal-v5 .gx.sdot{top:-5px;width:9px;height:9px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--gsel)}
-.cal-v5 .gpulse{position:absolute;z-index:6;pointer-events:none;border-radius:10px;box-shadow:0 0 0 2px var(--gsel);opacity:0;animation:cal5-gPulse 1.7s var(--ease) 2}
-@keyframes cal5-gPulse{0%{opacity:0;transform:scale(1.1)}30%{opacity:.9;transform:none}100%{opacity:0;transform:scale(1.03)}}
 
 /* .gtick: this port's own day-tick strip (calendar_view.js's _mvGraphHTML),
    standing in for the mockups' ambient canvas graph (#794). Deliberately
@@ -1231,9 +1207,9 @@
 
 }
 /* Reduced motion: the stars stand still; the lanes' moving layer is drawn once, as one still moment. */
-.cal-v5 .rm .gcanvas .mg-stars{animation:none!important}
-.cal-v5 .rm .gnight{transition:none}
-.cal-v5 .rm .moonsec.hl.pulse::after, .cal-v5 .rm .gpulse{animation:none!important;opacity:0}
+.rm .cal-v5 .gcanvas .mg-stars{animation:none!important}
+.rm .cal-v5 .gnight{transition:none}
+.rm .cal-v5 .moonsec.hl.pulse::after{animation:none!important;opacity:0}
 /* ── v6: owner editing. Edit mode, the bulk bar, the recipe sheet and Settings. ── */
 :root{--pickBg:oklch(.56 .08 250 / .13);--pickRing:oklch(.46 .1 252 / .62);--ghost:oklch(.5 .06 265 / .9);
   --wxClear:oklch(.86 .09 85 / .55);--wxCloud:oklch(.8 .015 265 / .6);--wxRain:oklch(.78 .06 240 / .55);--wxSnow:oklch(.9 .03 230 / .8);--wxStorm:oklch(.72 .06 290 / .5);--wxFog:oklch(.84 .02 180 / .6);
@@ -1314,11 +1290,6 @@
 .cal-v5 .cpt.in{animation:cal5-ghostWx .32s var(--ease) both}
 @keyframes cal5-ghostWx{from{opacity:0}}
 .cal-v5 .cwx.in{animation:cal5-fadeIn .32s var(--ease) both}
-.cal-v5 .cwx.solid-in{animation:cal5-solidWx .7s var(--ease) both}
-@keyframes cal5-solidWx{from{opacity:.45}to{opacity:1}}
-.cal-v5 .cpt.solid-in{animation:cal5-solidPt .7s var(--ease) both}
-@keyframes cal5-solidPt{from{opacity:.62}to{opacity:0}}
-.cal-v5 .cal.wxon .cpt.hand.solid-in{animation:none}
 /* Locks and hidden days: small marks in the day, for the Director only. */
 .cal-v5 .clk, .cal-v5 .chd{position:absolute;z-index:2;display:grid;place-items:center;width:15px;height:15px;color:var(--mut);pointer-events:none}
 .cal-v5 .clk{left:32px;top:9px}
@@ -1346,11 +1317,6 @@
 .cal-v5 .mk.ghost .ci{stroke-dasharray:2.2 1.5}
 .cal-v5 .mk.ghost.in{animation:cal5-ghostIn .3s var(--ease) both}
 @keyframes cal5-ghostIn{from{opacity:0}}
-.cal-v5 .mk.solid-in{animation:cal5-solidIn .7s var(--ease) backwards}
-@keyframes cal5-solidIn{from{opacity:.4}to{opacity:1}}
-/* While editing, what an Apply made turns solid, holds a moment, then steps back with the other marks. */
-.cal-v5 .cal.editing .mk.solid-in{animation:cal5-solidInEd 2.4s var(--ease) backwards}
-@keyframes cal5-solidInEd{0%{opacity:.4}25%{opacity:1}75%{opacity:1}100%{opacity:.14}}
 .cal-v5 .mk.moving{opacity:.3}
 .cal-v5 .span.ghost{background:none;border-top:1.5px dashed oklch(var(--mkL) var(--mkC) var(--h,260));height:0}
 .cal-v5 .span.ghost.in{animation:cal5-ghostIn .3s var(--ease) both}
@@ -1474,7 +1440,7 @@
 .cal-v5 .wxc-mon{display:flex;align-items:center;gap:6px}
 .cal-v5 .wxc-mon h3{margin:0;flex:1;min-width:0;font:500 22px/1.1 var(--serif);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .wxc-mon h3 span{color:var(--mut)}
-.cal-v5 .wxc-nav{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);transition:background .15s var(--ease),color .15s var(--ease)}
+.cal-v5 .wxc-nav{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);transition:background var(--dur-micro,120ms) var(--ease),color var(--dur-micro,120ms) var(--ease)}
 .cal-v5 .wxc-nav:hover{background:var(--hair2);color:var(--ink)}
 .cal-v5 .wxc-seas{display:flex;gap:6px;flex-wrap:wrap;margin-top:-4px}
 .cal-v5 .wxc-seas:empty{display:none}
@@ -1489,7 +1455,7 @@
 .cal-v5 .wxc-d:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
 .cal-v5 .wxc-d .n{position:absolute;left:4px;top:3px;font:600 9.5px/1 var(--sans);color:var(--ink2)}
 .cal-v5 .wxc-d.today .n{background:var(--ink);color:var(--paper);border-radius:99px;padding:2px 4px;margin:-2px 0 0 -2px}
-.cal-v5 .wxc-d .wi{font-size:15px;color:var(--wc,var(--mut));margin-top:4px;transition:transform .25s var(--spring),opacity .2s}
+.cal-v5 .wxc-d .wi{font-size:15px;color:var(--wc,var(--mut));margin-top:4px;transition:transform var(--dur-standard,200ms) var(--ease-out),opacity var(--dur-standard,200ms)}
 .cal-v5 .wxc-d .sk{position:absolute;right:3px;top:3px;font-size:8.5px;line-height:1;color:var(--ink2)}
 .cal-v5 .wxc-d .sk svg{display:block}
 .cal-v5 .wxc-d.blood .sk, .cal-v5 .wxc-key .blood i{color:oklch(.55 .17 28)}
@@ -1498,7 +1464,7 @@
 .cal-v5 .wxc-d.chg::after{content:"";position:absolute;right:4px;bottom:6px;width:4px;height:4px;border-radius:50%;background:var(--gold)}
 .cal-v5 .wxc-d.sel{box-shadow:inset 0 -3px 0 var(--sc,transparent),inset 0 0 0 2px var(--ink)}
 .cal-v5 .wxc-d.drop{transform:scale(1.08);box-shadow:inset 0 0 0 2px var(--ink),0 6px 16px -8px oklch(0 0 0 / .5)}
-.cal-v5 .wxc-d.roll .wi{animation:cal5-wxRoll .45s var(--spring)}
+.cal-v5 .wxc-d.roll .wi{animation:cal5-wxRoll var(--dur-large,280ms) var(--ease-out)}
 @keyframes cal5-wxRoll{0%{transform:rotate(-90deg) scale(.4);opacity:0}100%{transform:none;opacity:1}}
 .cal-v5 .wxc-key{display:flex;flex-wrap:wrap;gap:4px 12px;font:500 11px/1.3 var(--sans);color:var(--mut)}
 .cal-v5 .wxc-key:empty{display:none}
@@ -1538,12 +1504,10 @@
 .cal-v5 .wxc-warn button{color:inherit;font:inherit;text-decoration:underline;padding:4px}
 .cal-v5 .wxc-warn:focus{outline:none}
 @keyframes cal5-wxWarnIn{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
-.cal-v5 .drawer.wxcal.nag{animation:cal5-wxNag .42s cubic-bezier(.36,.07,.19,.97)}
-@keyframes cal5-wxNag{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(3px)}30%,50%,70%{transform:translateX(-5px)}40%,60%{transform:translateX(5px)}}
 /* The dragged weather follows the pointer; it lives in the panel but is drawn fixed. */
 .cal-v5 .wxc-ghost{position:fixed;z-index:999;pointer-events:none;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:99px;background:var(--paper);box-shadow:0 10px 24px -10px oklch(0 0 0 / .5),inset 0 0 0 1px var(--edge);font:600 12px/1 var(--sans);color:var(--ink);transform:translate(-50%,-50%) rotate(-4deg)}
-@media (prefers-reduced-motion:reduce){.cal-v5 .wxc-d, .cal-v5 .wxc-d .wi, .cal-v5 .wxc-pal button, .cal-v5 .wxc-warn, .cal-v5 .drawer.wxcal.nag{transition:none!important;animation:none!important}}
-.rm .cal-v5 .wxc-d, .rm .cal-v5 .wxc-d .wi, .rm .cal-v5 .wxc-pal button, .rm .cal-v5 .wxc-warn, .rm .cal-v5 .drawer.wxcal.nag{transition:none!important;animation:none!important}
+@media (prefers-reduced-motion:reduce){.cal-v5 .wxc-d, .cal-v5 .wxc-d .wi, .cal-v5 .wxc-pal button, .cal-v5 .wxc-warn{transition:none!important;animation:none!important}}
+.rm .cal-v5 .wxc-d, .rm .cal-v5 .wxc-d .wi, .rm .cal-v5 .wxc-pal button, .rm .cal-v5 .wxc-warn{transition:none!important;animation:none!important}
 /* ── Settings: the calendar's own door. ── */
 .cal-v5 .gset{width:452px}
 .cal-v5 .stl{display:flex;flex-direction:column}
@@ -1620,10 +1584,9 @@
 .cal-v5 .dock.on.ghosting .dscrim{opacity:.22}
 .cal-v5 .cal.editing .day.pick.flash::before{animation:none}
 /* Reduced motion: ghosts and fills simply appear; the rest are cross-fades handled where they run. */
-.cal-v5 .rm .mk.ghost.in, .cal-v5 .rm .span.ghost.in, .cal-v5 .rm .cwx.in, .cal-v5 .rm .cpt.in{animation:cal5-fadeIn .15s ease both!important}
-.cal-v5 .rm .mk.solid-in, .cal-v5 .rm .cwx.solid-in, .cal-v5 .rm .cpt.solid-in{animation:cal5-fadeIn .18s ease both!important}
-.cal-v5 .rm .rc.pulse::after{animation:none!important}
-.cal-v5 .rm .day .mk, .cal-v5 .rm .day .span, .cal-v5 .rm .day .msil, .cal-v5 .rm .dkdrawer{transition-duration:.12s!important}
+.rm .cal-v5 .mk.ghost.in, .rm .cal-v5 .span.ghost.in, .rm .cal-v5 .cwx.in, .rm .cal-v5 .cpt.in{animation:cal5-fadeIn .15s ease both!important}
+.rm .cal-v5 .rc.pulse::after{animation:none!important}
+.rm .cal-v5 .day .mk, .rm .cal-v5 .day .span, .rm .cal-v5 .day .msil, .rm .cal-v5 .dkdrawer{transition-duration:.12s!important}
 /* v6: your weather and your kinds of event. The six swatches paint days in the same soft register as the weather tints. */
 :root{--wk-violet:oklch(.78 .09 290 / .55);--wk-teal:oklch(.8 .07 185 / .55);--wk-rose:oklch(.8 .08 355 / .5);--wk-amber:oklch(.84 .1 75 / .55);--wk-moss:oklch(.82 .08 125 / .55);--wk-slate:oklch(.76 .03 255 / .55)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--wk-violet:oklch(.5 .1 290 / .45);--wk-teal:oklch(.52 .07 185 / .42);--wk-rose:oklch(.52 .09 355 / .42);--wk-amber:oklch(.58 .09 75 / .36);--wk-moss:oklch(.55 .08 125 / .38);--wk-slate:oklch(.5 .03 255 / .45)}
@@ -1679,7 +1642,7 @@
 .cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{box-shadow:none;border:1px dashed var(--edge);background:transparent;color:var(--ink2)}
 .cal-v5 .kinds .nkb:hover, .cal-v5 .chips .nkb:hover{color:var(--ink);background:var(--paper)}
 .cal-v5 .kinds .nkb[aria-expanded="true"], .cal-v5 .chips .nkb[aria-expanded="true"]{border-style:solid;border-color:var(--ink);color:var(--ink);background:var(--paper)}
-.cal-v5 .wxmore{margin:3px 0 4px 22px;padding:8px;border-radius:10px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .wxmore{margin:3px 0 4px 22px;padding:8px;border-radius:10px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair);transform-origin:top;animation:cal5-foldDown var(--dur-large,280ms) var(--ease-out) both}
 .cal-v5 .dsec .wxmore{margin:8px 0 0}
 .cal-v5 .wxmb2{margin-top:8px}
 .cal-v5 .wxq{display:block;width:100%;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--edge);background:var(--paper2);font:500 12.5px/1 var(--sans);color:var(--ink)}
@@ -1697,12 +1660,12 @@
 .cal-v5 .wmg{flex:none;font:600 10.5px/1 var(--sans);color:var(--mgTag)}
 .cal-v5 .wmg.yt{color:var(--mut)}
 .cal-v5 .wxnone{margin:8px;font:500 12px/1.4 var(--sans);color:var(--mut)}
-.cal-v5 .rm .wxmore, .cal-v5 .rm .nkf{animation:cal5-fadeIn .15s ease both!important}
+.rm .cal-v5 .wxmore, .rm .cal-v5 .nkf{animation:cal5-fadeIn .15s ease both!important}
 /* A new kind of event, right where kinds are picked: a name, an icon and a colour. It is the campaign's, like the ones
    made in Settings. */
 .cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{display:inline-flex;align-items:center;gap:6px}
 .cal-v5 .kinds .nkb .i, .cal-v5 .chips .nkb .i{width:13px;height:13px}
-.cal-v5 .nkf{flex:1 1 100%;display:flex;flex-direction:column;gap:9px;margin-top:3px;padding:10px;border-radius:10px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair);font:500 12px/1.3 var(--sans);color:var(--ink2);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .nkf{flex:1 1 100%;display:flex;flex-direction:column;gap:9px;margin-top:3px;padding:10px;border-radius:10px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair);font:500 12px/1.3 var(--sans);color:var(--ink2);transform-origin:top;animation:cal5-foldDown var(--dur-large,280ms) var(--ease-out) both}
 .cal-v5 .chips + .nkf{margin-top:8px}
 .cal-v5 .nkf .nkt{font:600 12.5px/1.3 var(--sans);color:var(--ink)}
 .cal-v5 .nkf .nkt small{display:block;font-weight:500;font-size:11px;color:var(--mut);margin-top:1px}
@@ -1944,11 +1907,10 @@
 .cal-v5 .fvawl li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--hair);font:550 12.5px/1.3 var(--sans);color:var(--ink)}
 .cal-v5 .fvawl li:first-child{border-top:0}
 .cal-v5 .fvaway .fnote{margin:0 0 8px}
-.cal-v5 .fvawf{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;border-radius:10px;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .fvawf{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;border-radius:10px;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair);transform-origin:top;animation:cal5-foldDown var(--dur-large,280ms) var(--ease-out) both}
 .cal-v5 .fvawf .fld input{height:32px;background:var(--paper);font-size:12.5px}
 .cal-v5 .fvawf .gperr, .cal-v5 .fvawa{grid-column:1/-1}
 .cal-v5 .fvawa{display:flex;gap:6px}
-.cal-v5 .gperr.shake{animation:cal5-wxNag .42s cubic-bezier(.36,.07,.19,.97)}
 .cal-v5 .fvbody .fnote{margin:8px 0 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
 .cal-v5 .fvsw{display:inline-flex;align-items:center;gap:8px;font:550 12.5px/1.2 var(--sans);color:var(--ink);cursor:pointer}
 /* A switch, not a raw checkbox: the native box ignores the panel's tokens and draws the browser's own outline. The input stays for the change handler and screen readers. */
@@ -2108,7 +2070,6 @@
 .cal-v5 .gnwhen{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:8px}
 .cal-v5 .gnnext{margin:0;font:500 11.5px/1.5 var(--sans);color:var(--mut)}
 .cal-v5 .gnnext b{color:var(--ink);font-weight:600}
-.cal-v5 .gnd .err.shake{animation:cal5-wxNag .42s cubic-bezier(.36,.07,.19,.97)}
 /* A night's page: Edit beside the way back, the recap and its linked pages. */
 .cal-v5 .evp .crease [data-gn-edit]{margin-left:auto}
 .cal-v5 .gnrecap .notes{margin:0 0 8px}
@@ -2185,7 +2146,7 @@
 .cal-v5 .waitbtn .wcount{font:650 12.5px/1 var(--sans);font-variant-numeric:tabular-nums}
 .cal-v5 .waitbtn:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
 .cal-v5 .waitpop{position:absolute;right:0;top:calc(100% + 6px);z-index:40;width:min(360px, calc(100vw - 24px));background:var(--paper);border-radius:12px;
-  box-shadow:0 1px 2px oklch(.2 .02 265 / .08),0 12px 32px -12px oklch(.2 .02 265 / .3),inset 0 0 0 1px var(--hair);padding:6px;max-height:min(420px, 70vh);overflow-y:auto;overscroll-behavior:contain;transform-origin:top right;animation:calWaitIn .16s var(--ease)}
+  box-shadow:0 1px 2px oklch(.2 .02 265 / .08),0 12px 32px -12px oklch(.2 .02 265 / .3),inset 0 0 0 1px var(--hair);padding:6px;max-height:min(420px, 70vh);overflow-y:auto;overscroll-behavior:contain;transform-origin:top right;animation:calWaitIn var(--dur-everyday,120ms) var(--ease-out)}
 .cal-v5 .waitpop[hidden]{display:none}
 .cal-v5 .wlist{list-style:none;margin:0;padding:0}
 .cal-v5 .wrow{display:flex;align-items:center;gap:10px;width:100%;padding:7px 8px;border-radius:9px;text-align:left;color:var(--ink);text-decoration:none;background:none;border:0;font:inherit;cursor:pointer}
@@ -2420,8 +2381,8 @@
 .cal-v5 .stsw b{display:block;font:600 13px/1.3 var(--sans)}
 .cal-v5 .stsw small{display:block;font:500 11.5px/1.35 var(--sans);color:var(--mut)}
 .cal-v5 .stsw:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px;border-radius:8px}
-.cal-v5 .sttrack{position:relative;flex:none;width:36px;height:20px;border-radius:99px;background:var(--edge);transition:background .15s var(--ease)}
-.cal-v5 .sttrack::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--paper);box-shadow:0 1px 2px oklch(0 0 0 / .3);transition:transform .15s var(--ease)}
+.cal-v5 .sttrack{position:relative;flex:none;width:36px;height:20px;border-radius:99px;background:var(--edge);transition:background var(--dur-micro,120ms) var(--ease)}
+.cal-v5 .sttrack::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--paper);box-shadow:0 1px 2px oklch(0 0 0 / .3);transition:transform var(--dur-micro,120ms) var(--ease)}
 .cal-v5 .stsw[aria-checked="true"] .sttrack{background:var(--ink)}
 .cal-v5 .stsw[aria-checked="true"] .sttrack::after{transform:translateX(16px)}
 .rm .cal-v5 .sttrack, .rm .cal-v5 .sttrack::after{transition:none}

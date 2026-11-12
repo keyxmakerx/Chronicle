@@ -197,6 +197,7 @@
       var mq = window.matchMedia('(prefers-reduced-motion: reduce)');
       var onChange = function () { broadcast(function (p) { p.refresh(); }); };
       if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
+      if (window.MutationObserver && document.documentElement) new MutationObserver(onChange).observe(document.documentElement, { attributes: true, attributeFilter: ['data-motion', 'data-cz-reduce', 'data-view-motion'] });
       var dq = window.matchMedia('(prefers-color-scheme: dark)');
       if (dq.addEventListener) dq.addEventListener('change', onChange); else if (dq.addListener) dq.addListener(onChange);
     }
@@ -259,7 +260,10 @@
 
   Painter.prototype.reduced = function () {
     if (this.opts.reduced) return this.opts.reduced();
-    return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Calm and Off keep the texture still, as the device setting does.
+    var h = typeof document !== 'undefined' && document.documentElement;
+    return !!((h && h.hasAttribute && (h.hasAttribute('data-motion') || h.hasAttribute('data-cz-reduce') || h.getAttribute('data-view-motion') === 'calm')) ||
+      (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches));
   };
   Painter.prototype.light = function () { return this.limited || this.measured.slow; };
 
