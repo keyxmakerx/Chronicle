@@ -94,7 +94,7 @@ func (s *service) SetLink(ctx context.Context, campaignID, userID, id string, on
 		return nil, apperror.NewInternal(err)
 	}
 	switch {
-	case on && !(wasOn && token != ""):
+	case on && (!wasOn || token == ""):
 		if token, err = newToken(); err != nil {
 			return nil, apperror.NewInternal(err)
 		}

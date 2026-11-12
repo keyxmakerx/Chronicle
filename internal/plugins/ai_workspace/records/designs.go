@@ -265,7 +265,7 @@ func (DesignsLookup) LookupInfo() aiplug.LookupInfo {
 
 func (l DesignsLookup) Answer(ctx context.Context, campaignID string, a Actor, _ Record) (string, string, error) {
 	chip := "Saved designs"
-	if err := (DesignKind{Svc: l.Svc, Owners: l.Owners}).owner(ctx, campaignID, a); err != nil {
+	if err := DesignKind(l).owner(ctx, campaignID, a); err != nil {
 		return chip, "", badRequestf("saved designs are the campaign owner's")
 	}
 	list, err := l.Svc.List(ctx, campaignID, a)
