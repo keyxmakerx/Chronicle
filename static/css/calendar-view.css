@@ -913,7 +913,9 @@
 .cal-v5 .hc .gm b{font-weight:600;color:var(--ink)}
 .cal-v5 .hc .gm + .gm{margin-top:4px}
 .cal-v5 .hc .gmd{width:7px;height:7px;border-radius:50%;background:var(--silL);flex:none}
-.cal-v5 .day.packed .msil, .cal-v5 .msil.away{visibility:hidden}
+.cal-v5 .msil.away{visibility:hidden}
+/* A packed day's moon fades with its other marks (the .25s opacity transition on .day .msil) instead of vanishing on the last frame of the fold. */
+.cal-v5 .day.packed .msil{opacity:0;pointer-events:none}
 /* A silhouette in flight into the day's card turns into the realistic moon it lands as. */
 .cal-v5 .flyer.mflyer{--sb:var(--silB);--ss:var(--silS);--sl:var(--silL)}
 .cal-v5 .flyer.mflyer.blood{--sb:var(--bldB);--ss:var(--bldS);--sl:var(--bldL)}

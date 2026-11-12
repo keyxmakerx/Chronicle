@@ -1003,7 +1003,7 @@
     var g = P.g, L1 = P.el.querySelector('.lf1'), L2 = P.el.querySelector('.lf2');
     if (!g || (g.side !== 'right' && g.side !== 'left') || !L1 || !L2) return null;
     var cap = Math.round(Math.max(FOLD.leafMin, L1.offsetHeight * FOLD.leafRatio)), full = L2.offsetHeight;
-    return full > cap + 24 ? { el: P.el, L2: L2, cap: cap, full: full, shift: Math.round(clampN(g.cell.y - g.final.y, 0, full - cap)) } : null;
+    return full > Math.max(cap + 24, HOLD_ABOVE) ? { el: P.el, L2: L2, cap: cap, full: full, shift: Math.round(clampN(g.cell.y - g.final.y, 0, full - cap)) } : null;
   }
   function holdLeaf(h, px) { h.L2.style.maxHeight = px + 'px'; h.L2.style.overflow = 'hidden'; h.el.style.transform = h.shift ? 'translateY(' + h.shift + 'px)' : ''; }
   function freeLeaf(h) { h.L2.style.maxHeight = ''; h.L2.style.overflow = ''; h.el.style.transform = ''; }
@@ -1166,8 +1166,14 @@
   // A card's state: which element, what opened it, where it lies, the
   // marks it carries, and a token so a later open or close supersedes an
   // earlier one.
-  function cardState(el, carry) { return { el: el, carry: carry || null, state: 'closed', seq: 0, next: null, g: null, src: null, press: null, pairs: null, carried: false, closing: null }; }
+  function cardState(el, carry) { return { el: el, carry: carry || null, state: 'closed', seq: 0, next: null, g: null, src: null, press: null, pairs: null, carried: false, closing: null, moved: false, ghost: null }; }
   function resetCard(el) { stopAnims(el, true); el.classList.remove('live', 'open'); el.removeAttribute('style'); }
+  // A card that moved to another day leaves a running slide and fade and,
+  // under Calm, a ghost of where it was; closing starts from where it lies.
+  function settleMoved(P) {
+    if (P.ghost) { P.ghost.remove(); P.ghost = null; }
+    if (P.moved) { stopAnims(P.el, true); P.moved = false; }
+  }
   // Resolves true once the card is fully open, false if something
   // superseded it.
   function openCard(P, calEl) {
@@ -1180,24 +1186,24 @@
       run = anim(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' }).finished;
     } else if (isPhone() || !P.g) {
       if (P.src) originOn(el, P.src);
-      pressIn(P.press);
-      var fl = fly(P, false, { delay: 60, dur: 420, stagger: 26 }, calEl);
-      run = settleAll([anim(el, [{ transform: 'scale(.08)' }, { transform: 'scale(1)' }], { duration: 360, delay: 40, easing: EASE, fill: 'both' })].concat(fl));
-      anim(el, [{ opacity: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 1 }], { duration: 360, delay: 40, easing: 'linear', fill: 'both' });
+      pressIn(P.press, { dur: 420 / FOLD_SPEED });
+      var fl = fly(P, false, { delay: 60 / FOLD_SPEED, dur: 420 / FOLD_SPEED, stagger: 26 / FOLD_SPEED }, calEl);
+      run = settleAll([anim(el, [{ transform: 'scale(.08)' }, { transform: 'scale(1)' }], { duration: 360 / FOLD_SPEED, delay: 40 / FOLD_SPEED, easing: EASE, fill: 'both' })].concat(fl));
+      anim(el, [{ opacity: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 1 }], { duration: 360 / FOLD_SPEED, delay: 40 / FOLD_SPEED, easing: 'linear', fill: 'both' });
     } else {
       // The marks are aimed at the card as it will lie, before its leaves
       // turn; each lands after its leaf lies flat.
       var held = foldShort(P);
       if (held) holdLeaf(held, held.cap);
-      var F = foldGeo(P, calEl), marks = fly(P, false, { delay: 110, dur: 390, stagger: 30 }, calEl);
-      pressIn(P.press);
-      run = settleAll(foldRun(F, false, 1).concat(marks));
+      var F = foldGeo(P, calEl), marks = fly(P, false, { delay: 110 / FOLD_SPEED, dur: 390 / FOLD_SPEED, stagger: 30 / FOLD_SPEED }, calEl);
+      pressIn(P.press, { dur: 420 / FOLD_SPEED });
+      run = settleAll(foldRun(F, false, FOLD_SPEED).concat(marks));
     }
     return run.then(function () {
       if (tok !== P.seq) throw new Error('superseded');
       stopAnims(el, true);
       land(P, false);
-      if (held) { freeLeaf(held); slideLeaf(held, held.cap, held.full, leafTime(held, FOLD.letDown)); }
+      if (held) { freeLeaf(held); slideLeaf(held, held.cap, held.full, leafTime(held, FOLD.letDown) / FOLD_SPEED); }
       P.state = 'open';
       el.classList.add('open');
       return true;
@@ -1205,8 +1211,9 @@
   }
   function closeCard(P, calEl, o) {
     o = o || {};
-    var tok = ++P.seq, el = P.el, sp = o.fast ? 1.8 : 1, run;
+    var tok = ++P.seq, el = P.el, sp = FOLD_SPEED * (o.fast ? 1.8 : 1), run;
     P.state = 'closing';
+    settleMoved(P);
     el.classList.remove('open');
     // Marks still flying in are dropped; the ones in the card fly back
     // from where they are.
@@ -1537,9 +1544,9 @@
             '<div class="h-row h-mid">' +
               '<h2 class="mtitle" id="cal5-mtitle"></h2>' +
               '<nav class="mnav" aria-label="Change month">' +
-                '<button type="button" class="ib" id="cal5-prev" aria-label="Previous month"><i class="fa-solid fa-chevron-left"></i></button>' +
+                '<button type="button" class="ib" id="cal5-prev" aria-label="Previous month"><i class="fa-solid fa-chevron-up"></i></button>' +
                 '<button type="button" class="tbtn plain" id="cal5-todaybtn">Today</button>' +
-                '<button type="button" class="ib" id="cal5-next" aria-label="Next month"><i class="fa-solid fa-chevron-right"></i></button>' +
+                '<button type="button" class="ib" id="cal5-next" aria-label="Next month"><i class="fa-solid fa-chevron-down"></i></button>' +
               '</nav>' +
             '</div>' +
             '<div class="h-row h-subw">' +
@@ -4697,6 +4704,9 @@
 
     renderMonth: function () {
       var self = this, cal = this.cal;
+      // Any other change of month ends a roll; a refresh of the month it
+      // is rolling to repaints into it.
+      if (this._strip && !this._rollIn && (this._strip.view.y !== this.view.y || this._strip.view.m !== this.view.m)) this._endRoll();
       this.renderHeader();
       var vy = this.view.y, vm = this.view.m;
       Promise.all([this.fetchMonth(vy, vm).then(function () { return self.fetchRolls(vy, vm); }), this.fetchWeatherYear(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
@@ -4759,7 +4769,18 @@
         }
         html += '</div>';
       }
-      this.stageEl.innerHTML = '<div class="month">' + html + '</div>';
+      var ri = this._rollIn;
+      this._rollIn = null;
+      if (this._strip && !ri) {
+        // Marks, weather and the rest arrive mid-roll: they are drawn into
+        // the month that is moving, which keeps moving.
+        var live = this._strip.month;
+        live.className = 'month';
+        live.innerHTML = html;
+      } else {
+        if (ri && ri.old.parentNode === this.stageEl) this.stageEl.removeChild(ri.old);
+        this.stageEl.innerHTML = '<div class="month">' + html + '</div>';
+      }
       // An open day's card follows its day into the redrawn grid (not one
       // on its way out: that one is put away with its old cell).
       var ps = this._pw.state, open = (ps === 'open' || ps === 'opening') && this.stageEl.querySelector('.day[data-key="' + this.wingFor + '"]');
