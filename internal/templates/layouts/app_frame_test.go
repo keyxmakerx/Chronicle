@@ -13,6 +13,7 @@ var appPagesOnTheSharedOpening = []string{
 	"internal/plugins/maps/maps.templ",
 	"internal/plugins/timeline/timeline.templ",
 	"internal/plugins/crafting/page.templ",
+	"internal/plugins/armory/gallery.templ",
 }
 
 func TestAppPages_UseTheSharedFrameAndOpening(t *testing.T) {
