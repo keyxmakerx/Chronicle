@@ -64,13 +64,26 @@ const (
 )
 
 var (
-	reLink = regexp.MustCompile(`(?i)\b(?:https?|ftp)://|\bwww\.|discord\.gg|discord(?:app)?\.com/invite`)
+	reLink = regexp.MustCompile(`(?i)\b(?:https?|ftp)://|\bwww\.`)
+	// Invite links are looked for anywhere in the text: this is a spam test,
+	// not a host allowlist, so a plain substring search is the intent.
+	inviteHosts = []string{"discord.gg", "discord.com/invite", "discordapp.com/invite"}
 	// Domain-like text: a label, a dot and a common top-level domain. The list
 	// is short on purpose; "e.g." and "St. John" are not domains.
 	reDomain = regexp.MustCompile(`(?i)\b[a-z0-9][a-z0-9-]*\.(?:com|net|org|gg|io|co|me|xyz|ly|tv|app|dev|info|biz|ru|cn|tk|link|site|online|shop|store|club|top|live|fun|to|cc|us|uk|de|gl|ws)\b`)
 	reEmail  = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`)
 	reHandle = regexp.MustCompile(`(?:^|[\s(])@[A-Za-z0-9_.]{2,}`)
 )
+
+func hasInvite(s string) bool {
+	low := strings.ToLower(s)
+	for _, h := range inviteHosts {
+		if strings.Contains(low, h) {
+			return true
+		}
+	}
+	return false
+}
 
 // capsHeavy is true for 8+ letters of which more than 70% are capitals.
 func capsHeavy(s string) bool {
@@ -132,7 +145,7 @@ func textReasons(l *maturityList, name, note, maker string) []string {
 		}
 	}
 	add(ReasonMaturity, l.flags)
-	add(ReasonLink, func(s string) bool { return reLink.MatchString(s) || reDomain.MatchString(s) })
+	add(ReasonLink, func(s string) bool { return reLink.MatchString(s) || hasInvite(s) || reDomain.MatchString(s) })
 	add(ReasonEmail, reEmail.MatchString)
 	add(ReasonHandle, reHandle.MatchString)
 	add(ReasonCaps, capsHeavy)
