@@ -30,11 +30,15 @@ test('Home pages: tabs, the real home, and a Players change saved and seen', asy
   assert.equal(await page.locator('.czs-legacy, button:has-text("Save Layout")').count(), 0, 'the old grid with its own Save Layout is back');
   await picture(page, 'customize-home-pages', { check: '#1545', about: 'Home pages, Everyone tab drawn as the real home', mask: ['.cpe-page'] });
 
-  // A tab never arranged says what it shows.
-  await owner.go(`/campaigns/${cid}/customize/home/player`);
+  // A tab never arranged says what it shows. New campaigns start with their
+  // own Players home, so the Scribes tab stands in for an unarranged one.
+  await owner.go(`/campaigns/${cid}/customize/home/scribe`);
   await page.locator('.cpe-sec').first().waitFor();
   const borrowing = (await page.locator('.czs-home-hint').innerText()).trim();
-  assert.match(borrowing, /instead of the Everyone home|Everyone/i, 'an unarranged tab does not say what it shows');
+  assert.match(borrowing, /same as the Everyone home until you change it/i, 'an unarranged tab does not say what it shows');
+
+  await owner.go(`/campaigns/${cid}/customize/home/player`);
+  await page.locator('.cpe-sec').first().waitFor();
 
   // 3. Add a widget on the Players tab; it goes through the save bar.
   await page.getByRole('tab', { name: 'Add widgets' }).click();
@@ -52,7 +56,7 @@ test('Home pages: tabs, the real home, and a Players change saved and seen', asy
   await owner.go(`/campaigns/${cid}/customize/home/player`);
   await page.locator('.cpe-sec').first().waitFor();
   const after = (await page.locator('.czs-home-hint').innerText()).trim();
-  assert.notEqual(after, borrowing, 'the Players tab still says it borrows the Everyone home');
+  assert.doesNotMatch(after, /until you change it/i, 'the Players tab still says it borrows the Everyone home');
 
   // Undo for step 3: remove the widget on the same tab and save again.
   await page.locator('.cpe-blk:has([data-type="text_block"]), .cpe-tile:has([data-type="text_block"])').first().click();

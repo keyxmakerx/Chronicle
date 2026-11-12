@@ -59,9 +59,9 @@ test('a player with no visible calendar loses the sidebar row and sees an honest
 
   // Step 3: the page says nothing is shared, not that none was set up.
   await player.go(`/campaigns/${hidden}/calendars`);
-  const empty = player.page.locator('.calv5-empty');
+  const empty = player.page.locator('[data-app-opening="empty"]');
   await empty.waitFor();
-  assert.match(await empty.innerText(), /No calendars shared with you/);
+  assert.match(await empty.innerText(), /shares a calendar with you/i);
   assert.doesNotMatch(await empty.innerText(), /No calendars yet|set up/);
   // The header's one-line subtitle still reads "No calendars yet." for a
   // player, which says the same thing the empty box was fixed not to.
@@ -79,7 +79,7 @@ test('a player with no visible calendar loses the sidebar row and sees an honest
   player.assertClean();
 });
 
-test('the header subtitle for a player who sees none does not claim there are none', { todo: 'the subtitle reads "No calendars yet." for a player whose calendars are all hidden' }, () => {
+test('the header subtitle for a player who sees none does not claim there are none', () => {
   assert.equal(hiddenCampaign.subtitleShown, false);
 });
 

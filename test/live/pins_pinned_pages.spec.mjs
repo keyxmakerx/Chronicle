@@ -44,6 +44,8 @@ test('the Director pins a page and the home shows it under From the GM', async (
     assert.ok(r.ok, `showing a page answered ${r.status}`);
   }
   await addWidget(owner, cid, 'dashboard-layout');
+  // New campaigns give players their own home, so it needs the widget too.
+  await addWidget(owner, cid, 'dashboard-layout?role=player');
   await addWidget(owner, cid, 'owner-dashboard-layout');
   w = { owner, player, cid, ids };
 
