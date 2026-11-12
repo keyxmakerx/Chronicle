@@ -4195,6 +4195,9 @@
   .jnl :where(.jnl-list) button { border: 0; background: none; padding: 0; margin: 0; cursor: pointer; text-align: left; -webkit-appearance: none; appearance: none; }
 
   .nl-bar { flex-shrink: 0; padding: 10px 10px 8px; display: flex; align-items: center; gap: 5px; }
+  /* The Journal's name, in the page heading face, as the first thing in the list bar; the narrow list keeps its room for search. */
+  .nl-name { flex-shrink: 0; margin: 0 6px 0 2px; font-family: var(--font-heading, var(--serif)); font-size: 1.05rem; font-weight: 700; line-height: 1; color: var(--ink); }
+  .jnl-list[data-size="compact"] .nl-name { display: none; }
   .nl-search {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
     height: 34px; padding: 0 8px; border-radius: var(--jnl-r-ctl); border: 1px solid var(--color-input-border); background: var(--color-input-bg);
