@@ -133,3 +133,60 @@ func TestPartyBlockHandler(t *testing.T) {
 		}
 	}
 }
+
+// Your hero shows the viewer's own claimed hero and nobody else's, and a way
+// to choose one when they have none; a visitor and a campaign that does not
+// let players claim heroes get nothing, so the block is removed.
+func TestYourHeroBlock(t *testing.T) {
+	me, other := "u1", "u2"
+	typ := EntityType{ID: 7, CampaignID: "c1", Slug: "pc", Name: "Player Character", Enabled: true, Fields: []FieldDefinition{
+		{Key: "ancestry"}, {Key: "class", GMOnly: true}, {Key: "level"},
+	}}
+	heroes := func(mineToo bool) []Entity {
+		out := []Entity{{ID: "h2", CampaignID: "c1", EntityTypeID: 7, Name: "Brannoch Ironvein", OwnerUserID: &other,
+			FieldsData: map[string]any{"ancestry": "Dwarf", "level": float64(3)}}}
+		if mineToo {
+			out = append(out, Entity{ID: "h1", CampaignID: "c1", EntityTypeID: 7, Name: "Ysolde Vane", OwnerUserID: &me,
+				FieldsData: map[string]any{"ancestry": "High Elf", "class": "Elementalist", "level": float64(3)}})
+		}
+		return out
+	}
+	build := func(mineToo, addonOn bool) *Handler {
+		repo := &mockEntityRepo{listClaimedFn: func(context.Context, string, int, string) ([]Entity, error) { return heroes(mineToo), nil }}
+		typeRepo := &mockEntityTypeRepo{listByCampaignFn: func(context.Context, string) ([]EntityType, error) { return []EntityType{typ}, nil }}
+		h := NewHandler(NewEntityService(repo, typeRepo, &mockPermissionRepo{}))
+		h.SetCharacterLists(&fakeCastLists{chars: []int{7}})
+		h.SetMemberLister(rosterMembers{})
+		h.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: addonOn}})
+		return h
+	}
+
+	c, rec := advCtx(campaigns.RolePlayer, false, http.MethodGet, "/campaigns/c1/your-hero")
+	if err := build(true, true).YourHeroBlock(c); err != nil {
+		t.Fatal(err)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"Ysolde Vane", "High Elf", "Level 3", "Open sheet", "/campaigns/c1/entities/h1"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q:\n%s", want, body)
+		}
+	}
+	for _, not := range []string{"Brannoch", "Elementalist", "Choose a hero"} {
+		if strings.Contains(body, not) {
+			t.Errorf("body should not hold %q:\n%s", not, body)
+		}
+	}
+
+	c, rec = advCtx(campaigns.RolePlayer, false, http.MethodGet, "/campaigns/c1/your-hero")
+	if err := build(false, true).YourHeroBlock(c); err != nil {
+		t.Fatal(err)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "Choose a hero") || strings.Contains(body, "Brannoch") {
+		t.Errorf("no hero of their own should offer a choice and show nobody else's:\n%s", body)
+	}
+
+	c, rec = advCtx(campaigns.RolePlayer, false, http.MethodGet, "/campaigns/c1/your-hero")
+	if err := build(true, false).YourHeroBlock(c); err != nil || rec.Body.String() != "" {
+		t.Errorf("addon off: err %v body %q", err, rec.Body.String())
+	}
+}

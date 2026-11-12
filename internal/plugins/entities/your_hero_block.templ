@@ -1,0 +1,35 @@
+// your_hero_block.templ draws the campaign home's "Your hero" block, which the
+// home's placeholder (campaigns.dashFragment) loads. It marks the shared block
+// parts (cb-info, cb-line) so the Material page look sets it like the party.
+package entities
+
+// yourHeroBlock replaces the placeholder (hx-swap outerHTML).
+templ yourHeroBlock(v yourHeroView) {
+	<section class="cb-info cb-your-hero" data-block="your_hero" aria-labelledby="your-hero-h">
+		<div class="cb-info-top flex items-baseline justify-between mb-3">
+			<h2 id="your-hero-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">Your hero</h2>
+			if v.Hero != nil {
+				<a href={ templ.SafeURL(v.Hero.Href) } class="cb-more text-xs text-accent hover:underline">Open sheet</a>
+			} else {
+				<a href={ templ.SafeURL("/campaigns/" + v.CampaignID + "/characters") } class="cb-more text-xs text-accent hover:underline">Choose a hero</a>
+			}
+		</div>
+		<div class="cb-info-rows card cb-card divide-y divide-edge px-4">
+			if v.Hero != nil {
+				<div class="cb-line cb-you flex items-baseline gap-3 py-2 text-sm">
+					<span class="cb-line-main min-w-0 flex-1">
+						<a href={ templ.SafeURL(v.Hero.Href) } class="cb-line-name block truncate font-semibold text-fg hover:text-accent">{ v.Hero.Name }</a>
+						if v.Hero.Line != "" {
+							<span class="cb-line-sub block truncate text-xs text-fg-muted">{ v.Hero.Line }</span>
+						}
+					</span>
+					if v.Hero.Level != "" {
+						<span class="cb-line-end whitespace-nowrap text-xs tabular-nums text-fg-muted">{ v.Hero.Level }</span>
+					}
+				</div>
+			} else {
+				<p class="cb-line py-2 text-sm text-fg-muted">You are not playing a hero yet. Pick one from the Characters page.</p>
+			}
+		</div>
+	</section>
+}

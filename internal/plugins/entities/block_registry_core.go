@@ -436,6 +436,12 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
+		Type: "your_hero", Label: "Your hero", Icon: "fa-user-shield",
+		Description: "The viewer's own hero, or a way to choose one",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
 		Type: "when_we_play", Label: "When we play", Icon: "fa-calendar-check",
 		Description: "The times most of the table is free",
 		Addon: "sessions", Contexts: []string{"dashboard"},

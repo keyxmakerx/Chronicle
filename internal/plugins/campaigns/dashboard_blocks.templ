@@ -67,6 +67,11 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashAtAGlance(cc)
 		case "party":
 			@dashFragment("party", fmt.Sprintf("/campaigns/%s/party", cc.Campaign.ID), "h-28")
+		case "your_hero":
+			// A hero is a member's; a visitor has none to show or choose.
+			if cc.IsMember {
+				@dashFragment("your-hero", fmt.Sprintf("/campaigns/%s/your-hero", cc.Campaign.ID), "h-20")
+			}
 		case "when_we_play":
 			// Availability is the table's own business, as game nights are.
 			if cc.IsMember {

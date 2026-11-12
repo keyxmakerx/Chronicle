@@ -1259,6 +1259,7 @@ GET	/campaigns/:id/worldbuilding-prompts	session	plugins/entities.(*Worldbuildin
 POST	/campaigns/:id/worldbuilding-prompts	session	plugins/entities.(*WorldbuildingPromptHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/worldbuilding-prompts/:pid	session	plugins/entities.(*WorldbuildingPromptHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/worldbuilding-prompts/:pid	session	plugins/entities.(*WorldbuildingPromptHandler).UpdateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/your-hero	public-capable	plugins/entities.(*Handler).YourHeroBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/import	session	plugins/campaigns.(*ExportHandler).ImportCampaignForm	plugins/auth.RequireAuth
 POST	/campaigns/import	session	plugins/campaigns.(*ExportHandler).ImportCampaign	plugins/auth.RequireAuth > middleware.RateLimit
 GET	/campaigns/new	session	plugins/campaigns.(*Handler).NewForm	plugins/auth.RequireAuth
