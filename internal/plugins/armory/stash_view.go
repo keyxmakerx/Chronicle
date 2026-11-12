@@ -129,6 +129,12 @@ func panelURL(campaignID, characterID string) string {
 	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/panel"
 }
 
+// benchPanelURL is the panel route for a page that carries the bench, so the
+// panel's own reloads keep it.
+func benchPanelURL(campaignID, characterID string) string {
+	return panelURL(campaignID, characterID) + "?bench=1"
+}
+
 func characterHistoryURL(campaignID, characterID string) string {
 	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/history"
 }

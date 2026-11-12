@@ -6422,6 +6422,7 @@ func (a *App) RegisterRoutes() {
 		Widgets: []PluginWidget{
 			{Name: "crafting", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_upgrades.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
 			{Name: "crafting-block", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_turns.js", "js/crafting_block.js"}},
+			{Name: "hero-bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_turns.js", "js/crafting_block.js", "js/hero_bench.js"}},
 			{Name: "crafting-item", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_pick.js", "js/crafting_item.js"}},
 			{Name: "crafting-recipes-part", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_pick.js", "js/crafting_part_more.js", "js/crafting_part.js"}},
 		},
@@ -6465,6 +6466,7 @@ func (a *App) RegisterRoutes() {
 		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
 		aiCrafting = aiCraftingAdapter{svc: craftingSvc, addons: addonService}
 		craftingAPI.attach(craftingSvc)
+		stashSvc.SetCraftGate(armoryCraftGate{svc: craftingSvc, enabled: craftingOn})
 	} else {
 		slog.Warn("crafting plugin degraded — the Crafting app is not available")
 	}

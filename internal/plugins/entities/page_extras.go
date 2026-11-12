@@ -30,7 +30,7 @@ const (
 
 // RenderCharacterItemsBlock renders the Items & Money block: the page panel
 // set with SetCharacterPagePanel, when its addon is on.
-func RenderCharacterItemsBlock(BlockRenderContext) templ.Component { return blockCharacterItems() }
+func RenderCharacterItemsBlock(BlockRenderContext) templ.Component { return blockCharacterItems(false) }
 
 type pageChildrenKey struct{}
 

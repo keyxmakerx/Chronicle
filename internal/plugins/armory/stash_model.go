@@ -315,7 +315,12 @@ type CharacterPanelView struct {
 	// and maps.
 	CanGive bool
 	// CanPlace lets the viewer drag items between the hero's containers.
-	CanPlace    bool
+	CanPlace bool
+	// CanCraft says the viewer may work crafting for this hero (the Director
+	// or the claiming player) with crafting on; Bench says the page asked for
+	// the bench, which only a game system's hero page does.
+	CanCraft    bool
+	Bench       bool
 	Items       []HeldItem
 	HasMoney    bool
 	Money       Cents

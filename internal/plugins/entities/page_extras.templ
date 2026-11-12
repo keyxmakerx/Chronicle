@@ -46,8 +46,14 @@ templ pageFilesMount(cc *campaigns.CampaignContext, entity *Entity) {
 
 // blockCharacterItems loads the items-and-money panel another plugin serves;
 // it renders nothing when that plugin is off or the page is not a character.
-templ blockCharacterItems() {
+// bench asks for the crafting bench in the pack, which only a game system's
+// hero page wants; a layout page keeps its Crafting block instead.
+templ blockCharacterItems(bench bool) {
 	if u := pagePanelURL(ctx); u != "" {
-		<div hx-get={ u } hx-trigger="load" hx-swap="outerHTML"></div>
+		if bench {
+			<div hx-get={ u + "?bench=1" } hx-trigger="load" hx-swap="outerHTML"></div>
+		} else {
+			<div hx-get={ u } hx-trigger="load" hx-swap="outerHTML"></div>
+		}
 	}
 }

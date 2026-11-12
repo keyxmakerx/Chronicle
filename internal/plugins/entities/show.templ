@@ -165,7 +165,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				// The items-and-money panel on player-character pages whose layout
 				// does not place it; every other page gets it only as a block.
 				if autoPagePanel(ctx) {
-					@blockCharacterItems()
+					@blockCharacterItems(false)
 				}
 				// The Files section closes every page, served by the media plugin
 				// over this page's own visibility. Members only: the files routes
