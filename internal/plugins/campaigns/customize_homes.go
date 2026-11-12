@@ -301,3 +301,14 @@ func renderHomePreviewBlock(ctx context.Context, cc *CampaignContext, b Dashboar
 	}
 	return sb.String()
 }
+
+// ValidateHomeLayout checks a layout against the rules every home is saved
+// under, and cleans its Text Block content in place, so a change that doesn't
+// come through the Customizer (an AI's) is held to the same ones.
+func ValidateHomeLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error {
+	return validateDashboardLayout(ctx, campaignID, layout)
+}
+
+// HomeBlockTypes lists the widgets a campaign home can hold, in the order the
+// Customizer's palette offers them.
+func HomeBlockTypes() []string { return append([]string(nil), homeBlockTypes...) }
