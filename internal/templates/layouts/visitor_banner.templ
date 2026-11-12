@@ -1,0 +1,41 @@
+// visitor_banner.templ renders the strip a look-around visitor sees on every
+// page of the campaign they are visiting.
+
+package layouts
+
+import (
+	"fmt"
+	"math"
+	"time"
+)
+
+// VisitorBanner says the viewer is looking around on a pass, how long it has
+// left, and how to stay. It takes the place of the guest strip: there is no
+// account worth keeping until they are a player.
+templ VisitorBanner(until time.Time, now time.Time) {
+	<div class="cta-bar" data-cta="visitor" role="status">
+		<i class="fa-solid fa-binoculars cta-ico" aria-hidden="true"></i>
+		<span class="cta-msg">
+			You're looking around. { visitLeft(until, now) }.
+			<span class="text-fg-secondary">To play, ask your { GMTerm(ctx) } to make you a player.</span>
+		</span>
+	</div>
+}
+
+// visitLeft says how much of a pass remains in whole days, or hours on its
+// last day, rounded up so "1 day left" never means "ending now".
+func visitLeft(until, now time.Time) string {
+	left := until.Sub(now)
+	switch {
+	case left <= time.Hour:
+		return "Less than an hour left"
+	case left < 24*time.Hour:
+		return fmt.Sprintf("%d hours left", int(math.Ceil(left.Hours())))
+	default:
+		days := int(math.Ceil(left.Hours() / 24))
+		if days == 1 {
+			return "1 day left"
+		}
+		return fmt.Sprintf("%d days left", days)
+	}
+}

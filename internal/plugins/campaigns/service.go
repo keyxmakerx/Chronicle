@@ -282,6 +282,34 @@ type campaignService struct {
 	// campaignDeleted runs after a campaign is purged, for accounts that
 	// existed only for it (guests).
 	campaignDeleted []func(ctx context.Context, campaignID string)
+	// visits answers whether a non-member holds a look-around pass. Nil
+	// means no one is let in that way.
+	visits VisitPasses
+}
+
+// VisitPasses is the guest-code side of look-around passes, as the access
+// middleware needs it.
+type VisitPasses interface {
+	VisitPass(ctx context.Context, campaignID, userID string) (until time.Time, live, found bool, err error)
+	// EndVisits ends every running pass the user holds for the campaign.
+	EndVisits(ctx context.Context, campaignID, userID string) error
+}
+
+// ConfigureVisitPasses lets look-around passes open a campaign's view
+// pages to their holders.
+func ConfigureVisitPasses(svc CampaignService, v VisitPasses) {
+	if s, ok := svc.(*campaignService); ok {
+		s.visits = v
+	}
+}
+
+// VisitPass reports a non-member's look-around pass, or found false when
+// passes aren't wired.
+func (s *campaignService) VisitPass(ctx context.Context, campaignID, userID string) (time.Time, bool, bool, error) {
+	if s.visits == nil {
+		return time.Time{}, false, false, nil
+	}
+	return s.visits.VisitPass(ctx, campaignID, userID)
 }
 
 // OnMemberRemoved registers fn to run after a user is removed from a campaign.
@@ -949,6 +977,16 @@ func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID s
 	// hands them RoleOwner over every dm_only object.
 	if err := s.revokeDmGrant(ctx, campaignID, userID); err != nil {
 		return err
+	}
+
+	// Nor a look-around pass: someone who became a member some other way
+	// while visiting still holds one, and without this they would read the
+	// campaign as a visitor until it ran out. Failing here, like the grant,
+	// lets the owner retry rather than leave access behind.
+	if s.visits != nil {
+		if err := s.visits.EndVisits(ctx, campaignID, userID); err != nil {
+			return apperror.NewInternal(fmt.Errorf("ending look-around pass: %w", err))
+		}
 	}
 
 	// Unconditional, not just for a held grant: cached Role governs the

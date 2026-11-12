@@ -29,6 +29,23 @@ const (
 	guestCodeLen      = 8
 )
 
+// guestVisitDays are the look-around lengths an owner can pick. Zero means
+// the code makes a player, as before.
+var guestVisitDays = []int{1, 3, 7}
+
+// validVisitDays reports whether days is a length the card offers.
+func validVisitDays(days int) bool {
+	if days == 0 {
+		return true
+	}
+	for _, d := range guestVisitDays {
+		if d == days {
+			return true
+		}
+	}
+	return false
+}
+
 // GuestCode is one code an owner made. The code itself is never stored.
 type GuestCode struct {
 	ID         string
@@ -40,11 +57,24 @@ type GuestCode struct {
 	UsedAt     *time.Time
 	CreatedAt  time.Time
 	UsedByName string
+	// VisitDays is the look-around length; zero for a code that makes a player.
+	VisitDays int
+	// VisitUntil is when the visitor's access ends. Nil before the code is
+	// used, and again once the owner made them a player.
+	VisitUntil *time.Time
 }
 
-// Status is what the owner's list shows for the code.
+// IsVisit reports whether the code is a look-around pass.
+func (g GuestCode) IsVisit() bool { return g.VisitDays > 0 }
+
+// Status is what the owner's list shows for the code: open, expired, used,
+// or for a used look-around pass visiting or visit_ended.
 func (g GuestCode) Status(now time.Time) string {
 	switch {
+	case g.UsedAt != nil && g.IsVisit() && g.VisitUntil != nil && now.Before(*g.VisitUntil):
+		return "visiting"
+	case g.UsedAt != nil && g.IsVisit() && g.VisitUntil != nil:
+		return "visit_ended"
 	case g.UsedAt != nil:
 		return "used"
 	case !now.Before(g.ExpiresAt):
@@ -106,11 +136,15 @@ func randomGuestCode() (string, error) {
 	return string(b), nil
 }
 
-// Create makes a one-use code for a campaign.
-func (s *GuestCodeService) Create(ctx context.Context, campaignID, createdBy, note string) (*NewGuestCode, error) {
+// Create makes a one-use code for a campaign. visitDays above zero makes a
+// look-around pass of that many days instead of a player's code.
+func (s *GuestCodeService) Create(ctx context.Context, campaignID, createdBy, note string, visitDays int) (*NewGuestCode, error) {
 	note = strings.TrimSpace(note)
 	if utf8.RuneCountInString(note) > 100 {
 		return nil, apperror.NewBadRequest("keep the note to 100 characters")
+	}
+	if !validVisitDays(visitDays) {
+		return nil, apperror.NewBadRequest("pick 1, 3 or 7 days to look around")
 	}
 	now := s.now()
 	live, err := s.repo.CountLive(ctx, campaignID, now)
@@ -126,12 +160,12 @@ func (s *GuestCodeService) Create(ctx context.Context, campaignID, createdBy, no
 	}
 	gc := GuestCode{
 		ID: generateUUID(), CampaignID: campaignID, Note: note, CreatedBy: createdBy,
-		ExpiresAt: now.Add(guestCodeLife), CreatedAt: now,
+		ExpiresAt: now.Add(guestCodeLife), CreatedAt: now, VisitDays: visitDays,
 	}
 	if err := s.repo.Create(ctx, &gc, hashGuestCode(code)); err != nil {
 		return nil, apperror.NewInternal(err)
 	}
-	slog.Info("guest code made", slog.String("campaign_id", campaignID), slog.String("code_id", gc.ID))
+	slog.Info("guest code made", slog.String("campaign_id", campaignID), slog.String("code_id", gc.ID), slog.Int("visit_days", visitDays))
 	return &NewGuestCode{GuestCode: gc, Code: code}, nil
 }
 
@@ -173,10 +207,23 @@ func (s *GuestCodeService) ReleaseGuestCode(ctx context.Context, codeID string) 
 	}
 }
 
-// AdmitWithGuestCode makes the user a player in the campaign.
+// AdmitWithGuestCode makes the user a player in the campaign, or for a
+// look-around pass starts their visit; a visitor is never made a member.
 func (s *GuestCodeService) AdmitWithGuestCode(ctx context.Context, codeID, campaignID, userID string) error {
 	if _, err := s.campaigns.FindMember(ctx, campaignID, userID); err == nil {
 		return apperror.NewConflict("you're already in that campaign")
+	}
+	days, err := s.repo.VisitDays(ctx, codeID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	if days > 0 {
+		until := s.now().Add(time.Duration(days) * 24 * time.Hour)
+		if err := s.repo.StartVisit(ctx, codeID, userID, until); err != nil {
+			return apperror.NewInternal(err)
+		}
+		slog.Info("visiting with a guest code", slog.String("campaign_id", campaignID), slog.String("user_id", userID))
+		return nil
 	}
 	if err := s.campaigns.AddMember(ctx, &CampaignMember{
 		CampaignID: campaignID, UserID: userID, Role: RolePlayer, JoinedAt: s.now(),
@@ -186,8 +233,74 @@ func (s *GuestCodeService) AdmitWithGuestCode(ctx context.Context, codeID, campa
 	if err := s.repo.SetUsedBy(ctx, codeID, userID); err != nil {
 		slog.Warn("recording guest code use", slog.String("code_id", codeID), slog.Any("error", err))
 	}
+	// A visitor joining with a player's code is a member now, so any pass
+	// they hold stops counting; removing them later must not leave it live.
+	if err := s.repo.ClearVisits(ctx, campaignID, userID); err != nil {
+		slog.Warn("clearing look-around pass", slog.String("user_id", userID), slog.Any("error", err))
+	}
 	slog.Info("joined with a guest code", slog.String("campaign_id", campaignID), slog.String("user_id", userID))
 	return nil
+}
+
+// VisitPass reports a non-member's look-around pass for the campaign: when
+// it ends, and whether it is still running. found is false when they never
+// had one, or the owner has since made them a player.
+func (s *GuestCodeService) VisitPass(ctx context.Context, campaignID, userID string) (until time.Time, live, found bool, err error) {
+	u, err := s.repo.FindVisit(ctx, campaignID, userID)
+	if err != nil || u == nil {
+		return time.Time{}, false, false, err
+	}
+	return *u, s.now().Before(*u), true, nil
+}
+
+// visitCode loads a used look-around pass of this campaign, for the
+// owner's buttons on it.
+func (s *GuestCodeService) visitCode(ctx context.Context, campaignID, id string) (*GuestCode, error) {
+	gc, err := s.repo.FindByID(ctx, campaignID, id)
+	if err != nil {
+		return nil, err
+	}
+	if !gc.IsVisit() || gc.UsedBy == nil || gc.VisitUntil == nil {
+		return nil, apperror.NewNotFound("nobody is looking around with that code")
+	}
+	return gc, nil
+}
+
+// MakeVisitorPlayer turns a visitor, current or ended, into a player. The
+// membership comes first: if clearing the pass then fails, membership
+// already outranks it.
+func (s *GuestCodeService) MakeVisitorPlayer(ctx context.Context, campaignID, id string) error {
+	gc, err := s.visitCode(ctx, campaignID, id)
+	if err != nil {
+		return err
+	}
+	if _, err := s.campaigns.FindMember(ctx, campaignID, *gc.UsedBy); err != nil {
+		if err := s.campaigns.AddMember(ctx, &CampaignMember{
+			CampaignID: campaignID, UserID: *gc.UsedBy, Role: RolePlayer, JoinedAt: s.now(),
+		}); err != nil {
+			return apperror.NewInternal(fmt.Errorf("adding player: %w", err))
+		}
+	}
+	if err := s.repo.ClearVisits(ctx, campaignID, *gc.UsedBy); err != nil {
+		return apperror.NewInternal(err)
+	}
+	slog.Info("visitor made a player", slog.String("campaign_id", campaignID), slog.String("user_id", *gc.UsedBy))
+	return nil
+}
+
+// EndVisit ends a running visit now. The pass stays listed, so the owner
+// can still make them a player later.
+func (s *GuestCodeService) EndVisit(ctx context.Context, campaignID, id string) error {
+	if _, err := s.visitCode(ctx, campaignID, id); err != nil {
+		return err
+	}
+	return s.repo.EndVisit(ctx, campaignID, id, s.now())
+}
+
+// EndVisits ends the user's running passes for the campaign; the campaign
+// service calls it when a member is removed.
+func (s *GuestCodeService) EndVisits(ctx context.Context, campaignID, userID string) error {
+	return s.repo.EndVisitsFor(ctx, campaignID, userID, s.now())
 }
 
 // MoveGuestMembership is the campaign step of merging a guest.
