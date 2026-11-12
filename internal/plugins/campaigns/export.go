@@ -39,6 +39,11 @@ type CampaignExport struct {
 	Notes       []ExportNote        `json:"notes,omitempty"`
 	Addons      []ExportAddon       `json:"addons,omitempty"`
 	Media       []ExportMediaFile   `json:"media,omitempty"`
+	// RollTables is the campaign's rolling-tables document, kept as the
+	// plugin's own JSON so restoring it runs the plugin's validation.
+	RollTables json.RawMessage `json:"roll_tables,omitempty"`
+	Quests     []ExportQuest   `json:"quests,omitempty"`
+	Recipes    []ExportRecipe  `json:"recipes,omitempty"`
 
 	// ExportedAt records when this export was generated.
 	ExportedAt time.Time `json:"exported_at"`
@@ -829,4 +834,24 @@ type ExportMediaFile struct {
 	// manifest without it is paired by OriginalID, which the stored file
 	// is named after.
 	Filename string `json:"filename,omitempty"`
+}
+
+// --- Quests and crafting ---
+
+// ExportQuest is one page's quest sheet. EntityID is the page's original id;
+// Sheet is the stored document, whose page and map references are original ids
+// that import rewrites.
+type ExportQuest struct {
+	EntityID string          `json:"entity_id"`
+	Name     string          `json:"name,omitempty"`
+	Sheet    json.RawMessage `json:"sheet"`
+}
+
+// ExportRecipe is one crafting recipe with its rules, looks and known list.
+// Recipe is the crafting plugin's own JSON; item and character references in it
+// are original page ids that import rewrites.
+type ExportRecipe struct {
+	Name   string          `json:"name"`
+	Draft  bool            `json:"draft,omitempty"`
+	Recipe json.RawMessage `json:"recipe"`
 }

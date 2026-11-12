@@ -30,6 +30,9 @@ var requiredExportSetters = []string{
 	"SetGroupExporter", "SetGroupImporter",
 	"SetPostExporter", "SetPostImporter",
 	"SetMediaExporter", "SetMediaBundler", "SetMediaImporter",
+	"SetRollTableExporter", "SetRollTableImporter",
+	"SetQuestExporter", "SetQuestImporter",
+	"SetRecipeExporter", "SetRecipeImporter",
 }
 
 // TestExportAdapters_AllSectionsWired fails if app/routes.go stops calling

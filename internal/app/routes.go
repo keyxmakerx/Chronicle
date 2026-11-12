@@ -6265,6 +6265,8 @@ func (a *App) RegisterRoutes() {
 	rollTablesSvc := rolltables.NewService(rolltables.NewRepository(a.DB))
 	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
 		rolltables.RegisterRoutes(e, rolltables.NewHandler(rollTablesSvc), campaignService, authService)
+		exportSvc.SetRollTableExporter(&rollTableExportAdapter{svc: rollTablesSvc})
+		exportSvc.SetRollTableImporter(&rollTableImportAdapter{svc: rollTablesSvc})
 	} else {
 		slog.Warn("rolltables plugin degraded — routes not registered")
 	}
@@ -6303,6 +6305,9 @@ func (a *App) RegisterRoutes() {
 		// After the announcer, so a board that fills itself redraws when a
 		// quest's status moves it on or off.
 		questSvc = quests.WithBoardFill(questSvc, boardSvc)
+		questArchive := quests.NewArchive(questRepo, questEntities, questMaps, questCal)
+		exportSvc.SetQuestExporter(&questExportAdapter{archive: questArchive})
+		exportSvc.SetQuestImporter(&questImportAdapter{archive: questArchive})
 		aiQuests, aiBoards = questSvc, boardSvc
 		questEntityEvts.attach(questSvc)
 		questPicker := quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
@@ -6461,6 +6466,8 @@ func (a *App) RegisterRoutes() {
 		registerCraftingBlock(blockRegistry, craftingSvc)
 		registerCraftingItemBlock(blockRegistry)
 		craftingWorkshop = craftingSvc
+		exportSvc.SetRecipeExporter(&recipeExportAdapter{svc: craftingSvc})
+		exportSvc.SetRecipeImporter(&recipeImportAdapter{svc: craftingSvc})
 		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
 		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
 		aiCrafting = aiCraftingAdapter{svc: craftingSvc, addons: addonService}

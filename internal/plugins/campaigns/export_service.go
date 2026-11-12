@@ -109,6 +109,22 @@ type PostExporter interface {
 	ExportPosts(ctx context.Context, campaignID string, entitySlugLookup func(string) string) ([]ExportPost, error)
 }
 
+// RollTableExporter returns the campaign's rolling-tables document, or nil
+// when it has none.
+type RollTableExporter interface {
+	ExportRollTables(ctx context.Context, campaignID string) (json.RawMessage, error)
+}
+
+// QuestExporter gathers every quest sheet for a campaign export.
+type QuestExporter interface {
+	ExportQuests(ctx context.Context, campaignID string) ([]ExportQuest, error)
+}
+
+// RecipeExporter gathers crafting recipes for a campaign export.
+type RecipeExporter interface {
+	ExportRecipes(ctx context.Context, campaignID string) ([]ExportRecipe, error)
+}
+
 // --- Import adapter interfaces ---
 
 // EntityImporter creates entities from import data, recording their new
@@ -153,6 +169,23 @@ type GroupImporter interface {
 	ImportGroups(ctx context.Context, campaignID string, data []ExportGroup, report *ImportReport) error
 }
 
+// RollTableImporter restores the rolling-tables document.
+type RollTableImporter interface {
+	ImportRollTables(ctx context.Context, campaignID, userID string, data json.RawMessage, report *ImportReport) error
+}
+
+// QuestImporter restores quest sheets onto the imported pages, using idMap to
+// point their page, map and calendar-event references at the new campaign.
+type QuestImporter interface {
+	ImportQuests(ctx context.Context, campaignID, userID string, data []ExportQuest, idMap *IDMap, report *ImportReport) error
+}
+
+// RecipeImporter restores crafting recipes, using idMap for the item and
+// character pages they name.
+type RecipeImporter interface {
+	ImportRecipes(ctx context.Context, campaignID, userID string, data []ExportRecipe, idMap *IDMap, report *ImportReport) error
+}
+
 // PostImporter creates entity posts from import data.
 type PostImporter interface {
 	ImportPosts(ctx context.Context, campaignID, userID string, data []ExportPost, idMap *IDMap, report *ImportReport) error
@@ -176,6 +209,9 @@ type ExportImportService struct {
 	mediaBundler MediaBundler
 	groupExp    GroupExporter
 	postExp     PostExporter
+	tableExp    RollTableExporter
+	questExp    QuestExporter
+	recipeExp   RecipeExporter
 
 	// Import adapters.
 	entityImp   EntityImporter
@@ -187,6 +223,9 @@ type ExportImportService struct {
 	addonImp    AddonImporter
 	groupImp    GroupImporter
 	postImp     PostImporter
+	tableImp    RollTableImporter
+	questImp    QuestImporter
+	recipeImp   RecipeImporter
 	mediaImp    MediaImporter
 }
 
@@ -261,6 +300,24 @@ func (s *ExportImportService) SetPostExporter(e PostExporter) { s.postExp = e }
 
 // SetPostImporter wires the post import adapter.
 func (s *ExportImportService) SetPostImporter(i PostImporter) { s.postImp = i }
+
+// SetRollTableExporter wires the rolling-tables export adapter.
+func (s *ExportImportService) SetRollTableExporter(e RollTableExporter) { s.tableExp = e }
+
+// SetRollTableImporter wires the rolling-tables import adapter.
+func (s *ExportImportService) SetRollTableImporter(i RollTableImporter) { s.tableImp = i }
+
+// SetQuestExporter wires the quest sheet export adapter.
+func (s *ExportImportService) SetQuestExporter(e QuestExporter) { s.questExp = e }
+
+// SetQuestImporter wires the quest sheet import adapter.
+func (s *ExportImportService) SetQuestImporter(i QuestImporter) { s.questImp = i }
+
+// SetRecipeExporter wires the crafting recipe export adapter.
+func (s *ExportImportService) SetRecipeExporter(e RecipeExporter) { s.recipeExp = e }
+
+// SetRecipeImporter wires the crafting recipe import adapter.
+func (s *ExportImportService) SetRecipeImporter(i RecipeImporter) { s.recipeImp = i }
 
 // SetMediaImporter wires the media import adapter.
 func (s *ExportImportService) SetMediaImporter(i MediaImporter) { s.mediaImp = i }
@@ -412,6 +469,31 @@ func (s *ExportImportService) Export(ctx context.Context, campaignID string) (*C
 			slog.Warn("export posts skipped", slog.Any("error", err))
 		} else {
 			export.Posts = posts
+		}
+	}
+
+	if s.tableExp != nil {
+		raw, err := s.tableExp.ExportRollTables(ctx, campaignID)
+		if err != nil {
+			slog.Warn("export rolling tables skipped", slog.Any("error", err))
+		} else {
+			export.RollTables = raw
+		}
+	}
+	if s.questExp != nil {
+		quests, err := s.questExp.ExportQuests(ctx, campaignID)
+		if err != nil {
+			slog.Warn("export quest sheets skipped", slog.Any("error", err))
+		} else {
+			export.Quests = quests
+		}
+	}
+	if s.recipeExp != nil {
+		recipes, err := s.recipeExp.ExportRecipes(ctx, campaignID)
+		if err != nil {
+			slog.Warn("export crafting recipes skipped", slog.Any("error", err))
+		} else {
+			export.Recipes = recipes
 		}
 	}
 
@@ -576,6 +658,30 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		if err := s.postImp.ImportPosts(ctx, campaignID, userID, data.Posts, idMap, report); err != nil {
 			slog.Warn("import posts failed", slog.Any("error", err))
 			report.Fail("posts", "post", "", apperror.SafeMessage(err))
+		}
+	}
+
+	if s.tableImp != nil && len(data.RollTables) > 0 {
+		if err := s.tableImp.ImportRollTables(ctx, campaignID, userID, data.RollTables, report); err != nil {
+			slog.Warn("import rolling tables failed", slog.Any("error", err))
+			report.Fail(SectionRollTables, KindRollTables, "", apperror.SafeMessage(err))
+		}
+	}
+
+	// Recipes name Armory item and character pages, so they follow the pages.
+	if s.recipeImp != nil && len(data.Recipes) > 0 {
+		if err := s.recipeImp.ImportRecipes(ctx, campaignID, userID, data.Recipes, idMap, report); err != nil {
+			slog.Warn("import crafting recipes failed", slog.Any("error", err))
+			report.Fail(SectionRecipes, KindRecipe, "", apperror.SafeMessage(err))
+		}
+	}
+
+	// Quest sheets name pages, maps and the due-date calendar events, so they
+	// come after all three.
+	if s.questImp != nil && len(data.Quests) > 0 {
+		if err := s.questImp.ImportQuests(ctx, campaignID, userID, data.Quests, idMap, report); err != nil {
+			slog.Warn("import quest sheets failed", slog.Any("error", err))
+			report.Fail(SectionQuests, KindQuest, "", apperror.SafeMessage(err))
 		}
 	}
 

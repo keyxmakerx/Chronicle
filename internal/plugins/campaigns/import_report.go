@@ -50,6 +50,17 @@ const (
 	KindTimeline = "timeline"
 )
 
+// Section and kind labels for the rolling tables, quest sheets and crafting
+// recipes in an export. Worded to differ from the plugin slugs.
+const (
+	SectionRollTables = "rolling tables"
+	KindRollTables    = "rolling tables"
+	SectionQuests     = "quest sheets"
+	KindQuest         = "quest sheet"
+	SectionRecipes    = "crafting recipes"
+	KindRecipe        = "crafting recipe"
+)
+
 // ImportFailure records one object the import could not create.
 type ImportFailure struct {
 	// Section is the export envelope section the object came from,
