@@ -86,8 +86,9 @@ type Service struct {
 // ChangesCheck looks at what the connection's AI asks for against the
 // campaign, as its maker could apply it, and returns the problems it can fix
 // itself; nil means none. An error only skips the check, since the review
-// checks everything again.
-type ChangesCheck func(ctx context.Context, c *Connection, changes string) ([]string, error)
+// checks everything again. did is the line for "What it did" when a refusal
+// can name the page, and "" otherwise.
+type ChangesCheck func(ctx context.Context, c *Connection, changes string) (problems []string, did string, err error)
 
 // SetCheck adds a check that runs when an AI asks for changes. Optional.
 func (s *Service) SetCheck(f ChangesCheck) { s.check = f }
@@ -357,11 +358,11 @@ func (s *Service) Ask(ctx context.Context, c *Connection, summary, changes strin
 		return nil, err
 	}
 	if s.check != nil {
-		problems, err := s.check(ctx, c, changes)
+		problems, did, err := s.check(ctx, c, changes)
 		if err != nil {
 			slog.Warn("ai-connector: changes check failed", slog.String("campaign_id", c.CampaignID), slog.Any("error", err))
 		} else if len(problems) > 0 {
-			return nil, unusable(problems)
+			return nil, unusable(problems, did)
 		}
 	}
 	app := c.ClientName
@@ -488,7 +489,7 @@ func checkChanges(changes string) (counts string, blocks int, err error) {
 		}
 	}
 	if len(problems) > 0 {
-		return "", 0, unusable(problems)
+		return "", 0, unusable(problems, "")
 	}
 	blocks = add + change + remove
 	if blocks == 0 {
@@ -507,16 +508,16 @@ func checkChanges(changes string) (counts string, blocks int, err error) {
 }
 
 // unusable refuses a request with its first few problems, for the AI to fix.
-func unusable(problems []string) error {
+func unusable(problems []string, did string) error {
 	if len(problems) > 5 {
 		problems = append(problems[:5:5], fmt.Sprintf("and %d more", len(problems)-5))
 	}
-	return &unusableError{"Chronicle couldn't use it: " + strings.Join(problems, "; ")}
+	return &unusableError{msg: "Chronicle couldn't use it: " + strings.Join(problems, "; "), did: did}
 }
 
 // unusableError is a refusal for the AI to fix, so "What it did" can say the
 // request was refused rather than asked.
-type unusableError struct{ msg string }
+type unusableError struct{ msg, did string }
 
 func (e *unusableError) Error() string { return e.msg }
 

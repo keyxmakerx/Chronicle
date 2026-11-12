@@ -1123,20 +1123,31 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Con
 // player, gets the folder check alone, so a refusal never tells it a hidden
 // page exists; the page checks look pages up by name, so they are left out too.
 func (h *Handler) ConnectorCheck(ctx context.Context, conn *connector.Connection, changes string) ([]string, error) {
+	out, _, err := h.ConnectorCheckDid(ctx, conn, changes)
+	return out, err
+}
+
+// ConnectorCheckDid is ConnectorCheck plus the line "What it did" shows for
+// a refusal. The line names a page only when a page problem was found, which
+// is only looked for on a key that already reads as the owner; otherwise it
+// is "" and the log keeps its generic wording.
+func (h *Handler) ConnectorCheckDid(ctx context.Context, conn *connector.Connection, changes string) ([]string, string, error) {
 	if conn.ForPlayer {
-		return h.playerCheck(ctx, conn, changes)
+		out, err := h.playerCheck(ctx, conn, changes)
+		return out, "", err
 	}
 	campaignID := conn.CampaignID
 	if h.importLookup == nil || h.importFolders == nil {
-		return nil, nil
+		return nil, "", nil
 	}
 	pages, recs := splitImport(importer.Parse(changes))
 	slips, err := importer.NewClassifier(h.importLookup, campaignID).
 		WithFolders(h.importFolders, pendingFolderNames(recs)).
 		NewPageFolderSlips(ctx, pages)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	did := ""
 	out := make([]string, 0, len(slips))
 	for _, s := range slips {
 		out = append(out, folderSlipLine(s))
@@ -1146,14 +1157,17 @@ func (h *Handler) ConnectorCheck(ctx context.Context, conn *connector.Connection
 			WithFolders(h.importFolders, pendingFolderNames(recs)).
 			PageProblems(ctx, pages)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		for _, p := range pageProblems {
 			out = append(out, p.Line())
 		}
+		if len(pageProblems) > 0 {
+			did = pageProblems[0].Did()
+		}
 		out = append(out, h.recordProblems(ctx, campaignID, conn.UserID, pages, recs)...)
 	}
-	return out, nil
+	return out, did, nil
 }
 
 // recordProblems plans the request's record blocks as the review screen

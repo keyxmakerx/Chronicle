@@ -266,6 +266,9 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 		case errors.Is(err, ErrCannotAsk):
 		case isUnusable(err):
 			line.Summary = "Asked for changes, refused: “" + oneLine(args["summary"], 120) + "”"
+			if did := unusableDid(err); did != "" {
+				line.Summary = did
+			}
 		case isAppError(err):
 			msg = "Chronicle couldn't keep the request just now. Try again in a moment"
 		}
@@ -376,4 +379,13 @@ func toolResult(id json.RawMessage, text string, isError bool) Outcome {
 func isUnusable(err error) bool {
 	var u *unusableError
 	return errors.As(err, &u)
+}
+
+// unusableDid is the refusal's own "What it did" line, "" when it has none.
+func unusableDid(err error) string {
+	var u *unusableError
+	if errors.As(err, &u) {
+		return u.did
+	}
+	return ""
 }

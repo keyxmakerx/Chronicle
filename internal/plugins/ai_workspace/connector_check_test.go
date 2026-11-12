@@ -201,6 +201,9 @@ func TestConnectorCheckPageProblems(t *testing.T) {
 				}
 				return
 			}
+			if _, did, _ := h.ConnectorCheckDid(context.Background(), &connector.Connection{CampaignID: "camp-1", UserID: "owner-1", Privacy: tt.privacy}, tt.changes); !strings.HasPrefix(did, "Asked to ") || !strings.Contains(did, "Nobody Here, refused: ") {
+				t.Errorf("did = %q", did)
+			}
 			if len(got) != 1 || !strings.Contains(got[0], tt.want) || !strings.HasPrefix(got[0], "block 1 (Nobody Here): ") {
 				t.Errorf("got %q, want one line with %q", got, tt.want)
 			}

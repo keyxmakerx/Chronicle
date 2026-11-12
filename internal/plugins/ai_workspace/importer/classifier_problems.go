@@ -11,7 +11,25 @@ import (
 type PageProblem struct {
 	Block  int
 	Page   string
+	Action string
 	Reason string
+}
+
+// Did is the problem as one "What it did" line, such as "Asked to change
+// Nobody Here, refused: no such page".
+func (p PageProblem) Did() string {
+	verb, why := "change", "its sheet fields don't fit the category"
+	switch p.Action {
+	case ActionDelete:
+		verb = "remove"
+	case ActionUpdate:
+	default:
+		verb = "add"
+	}
+	if strings.HasPrefix(p.Reason, "Cannot ") {
+		why = "no such page"
+	}
+	return fmt.Sprintf("Asked to %s %s, refused: %s", verb, p.Page, why)
 }
 
 // Line is the problem in the AI's own terms.
@@ -37,7 +55,7 @@ func (c *Classifier) PageProblems(ctx context.Context, pages []ParsedPage) ([]Pa
 			(k.Status == StatusFieldProblem && !k.IsNewCategory && !p.FrontMatter.IsEra() &&
 				strings.HasPrefix(k.Reason, "These sheet fields don't fit"))
 		if unfixable {
-			out = append(out, PageProblem{Block: p.SourceIndex + 1, Page: p.Name, Reason: k.Reason})
+			out = append(out, PageProblem{Block: p.SourceIndex + 1, Page: p.Name, Action: p.FrontMatter.Action, Reason: k.Reason})
 		}
 	}
 	return out, nil
