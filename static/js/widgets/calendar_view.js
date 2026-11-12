@@ -591,7 +591,36 @@
   function writeZoneMode(mode) {
     try { window.localStorage.setItem(GN_ZONE_KEY, mode); } catch (e) { /* remembered for this page only */ }
   }
-  function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  // Off ends every move at its end state; Calm keeps only the cross-fade.
+  function motionOff() {
+    return document.documentElement.getAttribute('data-motion') === 'off' ||
+      !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+  // A menu's open and close times come from the --dur-everyday tokens, read
+  // when the move starts so the owner's Motion speed applies.
+  function tokenMs(name, fallback) {
+    try {
+      var v = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      var m = /^([\d.]+)(ms|s)$/.exec(v);
+      if (m) return parseFloat(m[1]) * (m[2] === 's' ? 1000 : 1);
+    } catch (e) { /* the fallback stands */ }
+    return fallback;
+  }
+  function menuOpenMs() { return tokenMs('--dur-everyday', 120); }
+  function menuCloseMs() { return tokenMs('--dur-everyday-out', menuOpenMs() * 2 / 3); }
+  // A key that opens or closes something skips the motion: the move would
+  // only make the keyboard wait. A click fired by Enter or Space lands just
+  // after its key, so the last key is remembered for a moment.
+  var lastKeyAt = -1000;
+  var MOVE_KEYS = { Enter: 1, ' ': 1, Escape: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1 };
+  function noteKey(e) { if (MOVE_KEYS[e.key]) lastKeyAt = Date.now(); }
+  function byKey() { return Date.now() - lastKeyAt < 120; }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('keydown', noteKey, true);
+    document.addEventListener('keyup', noteKey, true);
+  }
+  // Calm and Off both count as reduced, read at call time so a My view change applies at once.
+  function reducedMotion() { var h = document.documentElement; return !!(h.hasAttribute('data-motion') || h.hasAttribute('data-cz-reduce') || h.getAttribute('data-view-motion') === 'calm' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)); }
 
   // Event category icon: an event's own icon falls back to its kind's icon,
   // then a generic dot.
@@ -763,7 +792,9 @@
     if (opts.cover) {
       var ct = ar.top - cr.top;
       panel.style.width = ar.width + 'px';
-      panel.style.minHeight = ar.height + 'px';
+      // It covers the card's width and top edge but is only as tall as its
+      // content (scrolling past the card's room), so a short event is not a
+      // mostly empty sheet.
       panel.style.maxHeight = Math.max(ar.height, B.vbot - ct) + 'px';
       panel.style.left = (ar.left - cr.left) + 'px';
       panel.style.top = ct + 'px';
@@ -789,6 +820,8 @@
   }
 
   function growOpen(panel, anchorEl, containerEl, opts) {
+    // A finished move holds its last frame; a new open starts clean.
+    panel.getAnimations().forEach(function (a) { a.cancel(); });
     positionPanel(panel, anchorEl, containerEl, opts);
     panel.classList.add('live');
     // Force layout so the browser has committed the panel's final box
@@ -800,29 +833,33 @@
       panel.style.transformOrigin = ox + 'px ' + oy + 'px';
     }
     panel.classList.add('open');
+    if ((opts && opts.instant) || byKey() || motionOff()) return Promise.resolve();
+    var ms = menuOpenMs();
     if (reducedMotion()) {
-      var fa = panel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out', fill: 'both' });
+      var fa = panel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' });
       return fa.finished.catch(function () {});
     }
     var anim = panel.animate(
       [{ opacity: 0, transform: 'scale(.82)' }, { opacity: 1, transform: 'none' }],
-      { duration: 220, easing: 'cubic-bezier(.22,.8,.24,1)', fill: 'both' }
+      { duration: ms, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' }
     );
     return anim.finished.catch(function () {});
   }
 
-  function growClose(panel, opener) {
+  function growClose(panel, opener, opts) {
     var had = panel.contains(document.activeElement);
-    var frames = reducedMotion()
-      ? [{ opacity: 1 }, { opacity: 0 }]
-      : [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.88)' }];
-    var anim = panel.animate(frames, { duration: reducedMotion() ? 120 : 180, easing: 'cubic-bezier(.22,.8,.24,1)', fill: 'both' });
-    return anim.finished.catch(function () {}).then(function () {
+    var finish = function () {
       panel.classList.remove('open', 'live');
       panel.removeAttribute('style');
       panel.innerHTML = '';
       if (had && opener) opener.focus({ preventScroll: true });
-    });
+    };
+    if ((opts && opts.instant) || byKey() || motionOff()) { panel.getAnimations().forEach(function (a) { a.cancel(); }); finish(); return Promise.resolve(); }
+    var frames = reducedMotion()
+      ? [{ opacity: 1 }, { opacity: 0 }]
+      : [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.88)' }];
+    var anim = panel.animate(frames, { duration: menuCloseMs(), easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'both' });
+    return anim.finished.catch(function () {}).then(finish);
   }
 
   // ---------------------------------------------------------------
@@ -1107,7 +1144,9 @@
     var tok = ++P.seq, el = P.el, run;
     P.state = 'opening';
     el.classList.add('live');
-    if (reducedMotion()) {
+    if (byKey() || motionOff()) {
+      run = Promise.resolve();
+    } else if (reducedMotion()) {
       run = anim(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' }).finished;
     } else if (isPhone() || !P.g) {
       if (P.src) originOn(el, P.src);
@@ -1142,6 +1181,7 @@
     // Marks still flying in are dropped; the ones in the card fly back
     // from where they are.
     clearCarry(P);
+    if (!o.instant && (byKey() || motionOff())) o = Object.assign({}, o, { instant: true });
     var moving = !o.instant && P.src && P.src.isConnected && !reducedMotion();
     if (moving && P.carried) {
       P.pairs = carryPairs(P.src, el);
@@ -1388,7 +1428,6 @@
       this.eventsByMonth[this.cal.current_year + '_' + this.cal.current_month] = initialEvents;
 
       this.view = { y: this.cal.current_year || 1, m: this.cal.current_month || 1 };
-      this.rm = reducedMotion();
       this.wingFor = null; // key of the day whose wing is open, or null
       this._roll = null;   // the open "Roll one" roller in the day card, or null
       this._wingStale = null; // the open day's card, redrawn once it finishes unfolding
@@ -1427,6 +1466,7 @@
       if (window.Chronicle && Chronicle.calendarGameNight) Chronicle.calendarGameNight.destroy(this);
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
       if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
+      if (this._rmObs) { this._rmObs.disconnect(); this._rmObs = null; }
       if (this._mvOffHandler) document.removeEventListener('pointerdown', this._mvOffHandler, true);
       if (this._plUp) document.removeEventListener('pointerup', this._plUp);
       if (this._gnRaf) cancelAnimationFrame(this._gnRaf);
@@ -1502,7 +1542,17 @@
         '</div>' +
         '<div class="sr" id="cal5-live" aria-live="polite"></div>';
 
-      if (this.rm) document.documentElement.classList.add('rm');
+      // html.rm follows the page's motion level, so a My view change reaches
+      // the stylesheet's reduced-motion rules without a reload.
+      var self = this, syncRm = function () {
+        self.rm = reducedMotion();
+        document.documentElement.classList.toggle('rm', self.rm);
+      };
+      syncRm();
+      if (window.MutationObserver) {
+        this._rmObs = new MutationObserver(syncRm);
+        this._rmObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-motion', 'data-cz-reduce', 'data-view-motion'] });
+      }
 
       this.calEl = $('#cal5-cal', this.el);
       this.dowEl = $('#cal5-dow', this.el);
@@ -4044,8 +4094,6 @@
       if (form) { this._awayForm.from = form.elements.from.value; this._awayForm.to = form.elements.to.value; }
       this._awayForm.error = 'You haven’t marked these days yet. Press Mark me away, or Cancel.';
       redraw();
-      var err = root && root.querySelector('[data-away-form] .gperr');
-      if (err) err.classList.add('shake');
       return true;
     },
 
@@ -5269,7 +5317,7 @@
         if (!mk || mk === self._hoverAnchor) return;
         clearTimeout(hoverTimer);
         self._hoverAnchor = mk;
-        hoverTimer = setTimeout(function () { self.showGlance(mk); }, 350);
+        hoverTimer = setTimeout(function () { self.showGlance(mk); }, 250);
       });
       this.stageEl.addEventListener('mouseleave', function () {
         clearTimeout(hoverTimer);
@@ -5554,7 +5602,7 @@
       // card's icons wait for them.
       P.pairs = [];
       P.carried = false;
-      if (!reducedMotion() && btn.querySelector('.mk')) {
+      if (!reducedMotion() && !byKey() && btn.querySelector('.mk')) {
         P.pairs = carryPairs(btn, this.wingEl);
         if (highlightEventId) P.pairs.sort(function (a, b) { return (b.id === highlightEventId) - (a.id === highlightEventId); });
         P.pairs.forEach(function (p) { p.ric.classList.add('wait'); });
@@ -5916,7 +5964,6 @@
       var pr = this.calEl.getBoundingClientRect(), r = mk.getBoundingClientRect();
       this.hcEl.style.left = Math.max(8, r.left - pr.left) + 'px';
       this.hcEl.style.top = (r.bottom - pr.top + 6) + 'px';
-      this.hcEl.style.transformOrigin = (r.left - pr.left + r.width / 2) + 'px 0px';
       this.hcEl.classList.add('on');
     },
 
@@ -6374,7 +6421,6 @@
         var err = form.querySelector('.sterr');
         err.textContent = 'You haven’t set this date yet. Press Set today, or Cancel.';
         err.hidden = false;
-        err.classList.remove('shake'); void err.offsetWidth; err.classList.add('shake');
         return;
       }
       this.closePop();
