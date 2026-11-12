@@ -84,8 +84,8 @@ test('the preview says the system differs, then what the campaign lacks', () => 
 test('links and owner search hits', () => {
   assert.equal(U.shareUrl('https://chronicle.test/', '/designs/link/abc'), 'https://chronicle.test/designs/link/abc');
   assert.equal(U.shareUrl('https://chronicle.test', ''), '');
-  const hit = { campaigns: [{ name: 'A', systemId: 'drawsteel' }, { name: 'B', systemId: 'dnd5e' }] };
-  assert.deepEqual(plain(U.onSystem(hit, 'dnd5e')).map((c) => c.name), ['B']);
+  const hit = { systems: ['drawsteel', 'dnd5e'] };
+  assert.deepEqual(plain(U.onSystem(hit, 'dnd5e')), ['dnd5e']);
   assert.deepEqual(plain(U.onSystem(hit, 'other')), []);
   assert.deepEqual(plain(U.onSystem(null, 'x')), []);
 });

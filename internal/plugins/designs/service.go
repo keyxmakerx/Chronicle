@@ -23,6 +23,10 @@ type CampaignDirectory interface {
 	// not a co-DM) and the display name to put on what they make. A user who is
 	// not a member is (name "", owner false).
 	Member(ctx context.Context, campaignID, userID string) (name string, owner bool, err error)
+	// Live says whether the campaign exists and is neither in the Trash nor
+	// archived. A design from a campaign that is not live is not offered to
+	// anyone else, as if it had never been shared.
+	Live(ctx context.Context, id string) (bool, error)
 	// OwnedCampaigns lists the live, unarchived campaigns userID is Owner of.
 	OwnedCampaigns(ctx context.Context, userID string) ([]CampaignInfo, error)
 }

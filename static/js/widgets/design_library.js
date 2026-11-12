@@ -70,13 +70,14 @@
     return out;
   }
   function shareUrl(origin, linkUrl) { return linkUrl ? String(origin || '').replace(/\/+$/, '') + linkUrl : ''; }
-  // The campaigns of a search hit that run the design's game system.
+  // The game systems of a search hit that match the design's; a hit lists
+  // systems only, never campaign names.
   function onSystem(owner, systemId) {
-    return ((owner && owner.campaigns) || []).filter(function (c) { return c.systemId === systemId; });
+    return ((owner && owner.systems) || []).filter(function (s) { return s === systemId; });
   }
   function esc(t) {
     t = String(t == null ? '' : t);
-    return window.Chronicle && window.Chronicle.escapeHtml ? window.Chronicle.escapeHtml(t) : t.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+    return window.Chronicle && window.Chronicle.escapeHtml ? window.Chronicle.escapeHtml(t) : t.replace(/[^\w #.,:'’-]/g, '');
   }
 
   /* ---- State: one library view at a time (the builder mounts one) ---- */
@@ -331,7 +332,7 @@
       return '<span class="dl-chipx">' + esc(o.name || 'Owner') + '<button type="button" data-dl-sh="remove" data-uid="' + esc(o.userId) + '" aria-label="Remove ' + esc(o.name || 'owner') + '">×</button></span>';
     }).join('') : '<span class="dl-ok">Nobody is named yet.</span>';
     var hits = S.hits.map(function (o) {
-      var ok = onSystem(o, d.systemId).length > 0, camps = o.campaigns.map(function (c) { return esc(c.name) + ' · ' + esc(systemName(c.systemId)); }).join(', ');
+      var ok = onSystem(o, d.systemId).length > 0, camps = (o.systems || []).map(function (s) { return esc(systemName(s)); }).join(' · ');
       var named = st.owners.some(function (x) { return x.userId === o.userId; });
       return '<li><div><b>' + esc(o.displayName) + '</b><span>' + camps + '</span>' + (ok ? '' : '<span class="dl-err">No campaign on ' + esc(systemName(d.systemId)) + '</span>') + '</div>' +
         '<button type="button" class="dl-btn" data-dl-sh="add" data-uid="' + esc(o.userId) + '"' + (ok && !named ? '' : ' disabled') + ' aria-label="Add ' + esc(o.displayName) + '">' + (named ? 'Added' : 'Add') + '</button></li>';

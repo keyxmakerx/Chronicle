@@ -136,13 +136,13 @@ func TestDBLibraryAndShares(t *testing.T) {
 		}
 	})
 
-	t.Run("search finds owners by display name and gives no campaign ids", func(t *testing.T) {
+	t.Run("search finds owners by display name and gives systems, no campaign names or ids", func(t *testing.T) {
 		hits, err := repo.SearchOwners(ctx, "marsh", alice, 10)
-		if err != nil || len(hits) != 1 || hits[0].DisplayName != "Bob Marsh" || len(hits[0].Campaigns) != 1 || hits[0].Campaigns[0].Name != "Bramble" || hits[0].Campaigns[0].SystemID != "drawsteel" {
+		if err != nil || len(hits) != 1 || hits[0].DisplayName != "Bob Marsh" || len(hits[0].Systems) != 1 || hits[0].Systems[0] != "drawsteel" {
 			t.Fatalf("hits = %+v, %v", hits, err)
 		}
 		raw, _ := json.Marshal(hits)
-		if string(raw) != `[{"userId":"`+bob+`","displayName":"Bob Marsh","campaigns":[{"name":"Bramble","systemId":"drawsteel"}]}]` {
+		if string(raw) != `[{"userId":"`+bob+`","displayName":"Bob Marsh","systems":["drawsteel"]}]` {
 			t.Errorf("a hit carries more than a name and its campaigns: %s", raw)
 		}
 		if h, _ := repo.SearchOwners(ctx, "quill", alice, 10); len(h) != 0 {

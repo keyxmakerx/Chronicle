@@ -128,7 +128,7 @@ func (m *memRepo) SharedWith(_ context.Context, user, system, kind, except strin
 	for _, id := range m.order {
 		d := m.designs[id]
 		if d != nil && m.owners[id][user] && d.SystemID == system && d.CampaignID != except && (kind == "" || d.Kind == kind) {
-			out = append(out, SharedDesign{ID: id, Kind: d.Kind, Name: d.Name, MakerName: d.MakerName})
+			out = append(out, SharedDesign{ID: id, Kind: d.Kind, Name: d.Name, MakerName: d.MakerName, campaignID: d.CampaignID})
 		}
 	}
 	return out, nil
@@ -150,6 +150,7 @@ type fakeDir struct {
 	owners    map[string]string // campaign id -> owner user id
 	names     map[string]string // user id -> display name
 	members   map[string]bool   // "campaign/user" for non-owner members
+	archived  map[string]bool   // campaigns that exist but are archived
 }
 
 func (f *fakeDir) Campaign(_ context.Context, id string) (*CampaignInfo, error) {
@@ -158,6 +159,11 @@ func (f *fakeDir) Campaign(_ context.Context, id string) (*CampaignInfo, error) 
 		return nil, nil
 	}
 	return &c, nil
+}
+
+func (f *fakeDir) Live(_ context.Context, id string) (bool, error) {
+	_, ok := f.campaigns[id]
+	return ok && !f.archived[id], nil
 }
 
 func (f *fakeDir) Member(_ context.Context, campaignID, userID string) (string, bool, error) {

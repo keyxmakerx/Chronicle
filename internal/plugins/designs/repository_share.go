@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -104,7 +105,7 @@ func (r *sqlRepository) StopSharing(ctx context.Context, id string) error {
 }
 
 func (r *sqlRepository) SharedWith(ctx context.Context, userID, systemID, kind, exceptCampaignID string) ([]SharedDesign, error) {
-	q := `SELECT d.id, d.kind, d.name, d.maker_name, COALESCE(c.name,'')
+	q := `SELECT d.id, d.kind, d.name, d.maker_name, COALESCE(c.name,''), d.campaign_id
 	        FROM design_share_owners o
 	        JOIN design_library d ON d.id = o.design_id
 	        LEFT JOIN campaigns c ON c.id = d.campaign_id
@@ -122,7 +123,7 @@ func (r *sqlRepository) SharedWith(ctx context.Context, userID, systemID, kind, 
 	out := []SharedDesign{}
 	for rows.Next() {
 		var s SharedDesign
-		if err := rows.Scan(&s.ID, &s.Kind, &s.Name, &s.MakerName, &s.FromCampaign); err != nil {
+		if err := rows.Scan(&s.ID, &s.Kind, &s.Name, &s.MakerName, &s.FromCampaign, &s.campaignID); err != nil {
 			return nil, fmt.Errorf("scanning shared design: %w", err)
 		}
 		out = append(out, s)
@@ -137,12 +138,12 @@ func likeEscape(s string) string {
 
 func (r *sqlRepository) SearchOwners(ctx context.Context, query, exceptUserID string, limit int) ([]OwnerMatch, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT u.id, u.display_name, c.name, c.settings
+		`SELECT u.id, u.display_name, c.settings
 		   FROM users u
 		   JOIN campaign_members m ON m.user_id = u.id AND m.role = 'owner'
 		   JOIN campaigns c ON c.id = m.campaign_id AND c.deleted_at IS NULL AND c.archived_at IS NULL
 		  WHERE u.is_disabled = FALSE AND u.id <> ? AND u.display_name LIKE ? ESCAPE '|'
-		  ORDER BY u.display_name, u.id, c.name LIMIT 400`, exceptUserID, "%"+likeEscape(query)+"%")
+		  ORDER BY u.display_name, u.id, c.id LIMIT 400`, exceptUserID, "%"+likeEscape(query)+"%")
 	if err != nil {
 		return nil, fmt.Errorf("searching owners: %w", err)
 	}
@@ -150,8 +151,8 @@ func (r *sqlRepository) SearchOwners(ctx context.Context, query, exceptUserID st
 	var out []OwnerMatch
 	at := map[string]int{}
 	for rows.Next() {
-		var uid, name, cname, settings string
-		if err := rows.Scan(&uid, &name, &cname, &settings); err != nil {
+		var uid, name, settings string
+		if err := rows.Scan(&uid, &name, &settings); err != nil {
 			return nil, fmt.Errorf("scanning owner: %w", err)
 		}
 		i, ok := at[uid]
@@ -161,9 +162,11 @@ func (r *sqlRepository) SearchOwners(ctx context.Context, query, exceptUserID st
 			}
 			i = len(out)
 			at[uid] = i
-			out = append(out, OwnerMatch{UserID: uid, DisplayName: name, Campaigns: []OwnerCampaign{}})
+			out = append(out, OwnerMatch{UserID: uid, DisplayName: name, Systems: []string{}})
 		}
-		out[i].Campaigns = append(out[i].Campaigns, OwnerCampaign{Name: cname, SystemID: systemOf(settings)})
+		if sys := systemOf(settings); sys != "" && !slices.Contains(out[i].Systems, sys) {
+			out[i].Systems = append(out[i].Systems, sys)
+		}
 	}
 	return out, rows.Err()
 }

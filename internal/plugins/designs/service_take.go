@@ -108,10 +108,9 @@ func (s *service) copyInto(ctx context.Context, target *CampaignInfo, src *Desig
 	if err != nil {
 		return nil, err
 	}
-	ref := ""
-	if from, _ := s.dir.Campaign(ctx, src.CampaignID); from != nil {
-		ref = from.Name
-	}
+	// The maker's name is already shown with the copy; the source campaign's
+	// name is not the receiver's to learn.
+	ref := in.makerName
 	return s.store(ctx, target, newDesign{
 		kind: in.kind, name: p.Name, note: in.note, data: data,
 		makerUser: in.makerUser, makerName: in.makerName, origin: OriginShared, ref: ref,
@@ -128,7 +127,23 @@ func (s *service) byLink(ctx context.Context, token string) (*Design, error) {
 	if d == nil || !on {
 		return nil, apperror.NewNotFound(msgLinkGone)
 	}
+	if err := s.sourceLive(ctx, d, msgLinkGone); err != nil {
+		return nil, err
+	}
 	return d, nil
+}
+
+// sourceLive turns a design whose campaign is in the Trash or archived into
+// NotFound, so shared copies disappear with their source until it returns.
+func (s *service) sourceLive(ctx context.Context, d *Design, msg string) error {
+	ok, err := s.dir.Live(ctx, d.CampaignID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	if !ok {
+		return apperror.NewNotFound(msg)
+	}
+	return nil
 }
 
 // linkReader checks the reader owns a campaign at all before the token is
@@ -198,7 +213,21 @@ func (s *service) SharedWithMe(ctx context.Context, campaignID, userID, kind str
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}
-	return out, nil
+	live := map[string]bool{}
+	kept := out[:0]
+	for _, d := range out {
+		ok, seen := live[d.campaignID]
+		if !seen {
+			if ok, err = s.dir.Live(ctx, d.campaignID); err != nil {
+				return nil, apperror.NewInternal(err)
+			}
+			live[d.campaignID] = ok
+		}
+		if ok {
+			kept = append(kept, d)
+		}
+	}
+	return kept, nil
 }
 
 // named is a design shared to this user by name, or NotFound: a design that is
@@ -217,6 +246,9 @@ func (s *service) named(ctx context.Context, userID, designID string) (*Design, 
 	}
 	if !ok {
 		return nil, apperror.NewNotFound(msgNotFound)
+	}
+	if err := s.sourceLive(ctx, d, msgNotFound); err != nil {
+		return nil, err
 	}
 	return d, nil
 }

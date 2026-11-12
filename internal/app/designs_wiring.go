@@ -27,6 +27,19 @@ func (d designsDirectory) Campaign(ctx context.Context, id string) (*designs.Cam
 	return &designs.CampaignInfo{ID: c.ID, Name: c.Name, SystemID: c.ParseSettings().SystemID}, nil
 }
 
+// Live is true for a campaign that exists, is not in the Trash and is not
+// archived.
+func (d designsDirectory) Live(ctx context.Context, id string) (bool, error) {
+	c, err := d.svc.GetByID(ctx, id)
+	if err != nil {
+		if isNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return !c.IsArchived(), nil
+}
+
 // Member counts only the Owner role. A co-DM shares the Owner's visibility
 // role but is not the campaign's Owner, and saved designs are the Owner's.
 func (d designsDirectory) Member(ctx context.Context, campaignID, userID string) (string, bool, error) {

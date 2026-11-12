@@ -114,7 +114,7 @@ test('a pasted code is checked and previewed before it is added', { skip }, asyn
 });
 
 test('the Share sheet: code, link and named owners', { skip }, async (t) => {
-  const hits = [{ userId: 'u1', displayName: 'Marrow Quill', campaigns: [{ name: 'Ashgate Apothecary', systemId: 'drawsteel' }] }, { userId: 'u2', displayName: 'Marrow Vale', campaigns: [{ name: 'Cairn', systemId: 'dnd5e' }] }];
+  const hits = [{ userId: 'u1', displayName: 'Marrow Quill', systems: ['drawsteel', 'dnd5e'] }, { userId: 'u2', displayName: 'Marrow Vale', systems: ['dnd5e'] }];
   const p = await arranged(t, { seed: { mine: [mine('m1', 'Cinderhold Forge')], hits } });
   await p.click('[data-dl-pick="m1"]');
   await p.click('[data-dl-do="share"]');
@@ -141,6 +141,7 @@ test('the Share sheet: code, link and named owners', { skip }, async (t) => {
   const rows = await p.evaluate(() => Array.from(document.querySelectorAll('.dl-hits li'), (li) => li.querySelector('b').textContent + ' ' + li.querySelector('button').disabled));
   assert.deepEqual(rows, ['Marrow Quill false', 'Marrow Vale true']);
   assert.match(await p.textContent('.dl-hits li:nth-child(2)'), /No campaign on Draw Steel/);
+  assert.match(await p.textContent('.dl-hits li:nth-child(1)'), /Draw Steel · D&D 5e/);
   await p.click('[aria-label="Add Marrow Quill"]');
   await p.waitForSelector('.dl-chipx');
   await p.click('.dl-chipx button');

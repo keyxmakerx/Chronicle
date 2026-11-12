@@ -89,19 +89,13 @@ type CampaignInfo struct {
 	SystemID string `json:"systemId"`
 }
 
-// OwnerMatch is a search hit: an owner on this instance and the campaigns they
-// own, nothing else about them.
+// OwnerMatch is a search hit: an owner on this instance and the game systems
+// they run a campaign on. Campaign names and ids stay private, because a name
+// can give away a table the searcher was never invited to.
 type OwnerMatch struct {
-	UserID      string          `json:"userId"`
-	DisplayName string          `json:"displayName"`
-	Campaigns   []OwnerCampaign `json:"campaigns"`
-}
-
-// OwnerCampaign is a campaign as a search shows it: its name and game system
-// only, so a search never hands out campaign ids.
-type OwnerCampaign struct {
-	Name     string `json:"name"`
-	SystemID string `json:"systemId"`
+	UserID      string   `json:"userId"`
+	DisplayName string   `json:"displayName"`
+	Systems     []string `json:"systems"`
 }
 
 // Preview is what a reader sees before taking a design: who made it, what it
@@ -138,6 +132,9 @@ type SharedDesign struct {
 	Name         string `json:"name"`
 	MakerName    string `json:"makerName"`
 	FromCampaign string `json:"fromCampaign"`
+	// campaignID lets the service drop designs whose source campaign is gone;
+	// it is never sent to the client.
+	campaignID string
 }
 
 // codeBody is the JSON inside a share code. It is unsigned on purpose so a

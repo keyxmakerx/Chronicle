@@ -448,7 +448,7 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `design_library` | A campaign's saved designs (room themes now, crafting designs later); a copy taken from a code or another campaign is its own row | PK `id`; `campaign_id` FK→`campaigns` CASCADE, index (`campaign_id`, `kind`); `kind`; `system_id` copied from the campaign when saved; `name` (60), `note` (140); `maker_user_id` (no FK, so a design outlives its maker) and `maker_name`; `data` LONGTEXT JSON; `origin` `made`/`code`/`shared`, `origin_ref` text label |
+| `design_library` | A campaign's saved designs (room themes now, crafting designs later); a copy taken from a code or another campaign is its own row | PK `id`; `campaign_id` FK→`campaigns` CASCADE, index (`campaign_id`, `kind`); `kind`; `system_id` copied from the campaign when saved; `name` (60), `note` (140); `maker_user_id` (no FK, so a design outlives its maker) and `maker_name`; `data` LONGTEXT JSON; `origin` `made`/`code`/`shared`, `origin_ref` text label (the maker's display name; never a campaign name) |
 | `design_shares` | The link for a shared design | PK `design_id` FK→`design_library` CASCADE; `link_token` UNIQUE, NULL while off; `link_on` |
 | `design_share_owners` | Owners a design is named to | PK (`design_id`, `user_id`); FKs to `design_library` and `users` (`ON DELETE CASCADE`) |
 
