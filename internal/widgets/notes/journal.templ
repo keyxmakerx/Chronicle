@@ -36,7 +36,6 @@ templ journalContent(cc *campaigns.CampaignContext, view JournalView) {
 		data-gm={ fmt.Sprint(view.IsGM) }
 		data-note-id={ view.NoteID }
 	>
-		<h1 class="sr-only">Journal</h1>
 		<div class="jnl-panetabs" role="tablist" aria-label="Journal panes">
 			<button type="button" role="tab" data-pane="list" aria-selected="true"><i class="fa-solid fa-folder" aria-hidden="true"></i> Notes</button>
 			<button type="button" role="tab" data-pane="note" aria-selected="false"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> Note</button>
@@ -45,6 +44,7 @@ templ journalContent(cc *campaigns.CampaignContext, view JournalView) {
 		<div class="jnl-row">
 			<section class="jnl-list" id="jnl-list" aria-label="Notes">
 				<div class="nl-bar">
+					<h1 class="nl-name cb-title">Journal</h1>
 					<div class="nl-search">
 						<i class="fa-solid fa-magnifying-glass nl-ico" aria-hidden="true"></i>
 						<div class="nl-search-field" contenteditable="true" role="searchbox" aria-label="Search notes" data-placeholder="Search…" spellcheck="false"></div>
