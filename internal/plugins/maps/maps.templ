@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -28,36 +27,11 @@ templ MapListFragment(cc *campaigns.CampaignContext, data MapListData) {
 
 // mapListContent renders the map list body.
 templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
-	<div class="max-w-screen-2xl mx-auto py-6 px-4">
+	@layouts.AppFrame() {
 		@mapFrameStyles()
-		@components.Breadcrumbs([]components.BreadcrumbItem{
-			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
-			{Label: "Maps"},
-		})
-		<div class="flex items-center justify-between mb-6">
-			<div>
-				<h1 class="text-xl font-bold text-fg">Maps</h1>
-				<p class="text-sm text-fg-secondary mt-1">
-					if len(data.Maps) == 0 {
-						No maps yet. Create one to get started.
-					} else {
-						if len(data.Maps) == 1 {
-							1 map
-						} else {
-							{ fmt.Sprintf("%d maps", len(data.Maps)) }
-						}
-					}
-				</p>
-			</div>
-			if data.IsOwner {
-				<button
-					class="btn-primary text-sm"
-					onclick="document.getElementById('create-map-modal').classList.remove('hidden')"
-				>
-					<i class="fa-solid fa-plus"></i> New Map
-				</button>
-			}
-		</div>
+		@layouts.AppOpening(mapsOpening(ctx, data)) {
+			<span>{ mapCount(len(data.Maps)) }</span>
+		}
 		if len(data.Maps) > 0 {
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
 				for _, m := range data.Maps {
@@ -90,19 +64,11 @@ templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
 					</a>
 				}
 			</div>
-		} else {
-			<div class="card p-12 text-center">
-				<i class="fa-solid fa-map text-4xl text-fg-muted mb-4"></i>
-				<p class="text-fg-secondary">No maps yet.</p>
-				if data.IsOwner {
-					<p class="text-sm text-fg-muted mt-2">Click "New Map" to create your first map.</p>
-				}
-			</div>
 		}
 		if data.IsOwner {
 			@createMapModal(data)
 		}
-	</div>
+	}
 }
 
 // createMapModal renders the form to create a new map.

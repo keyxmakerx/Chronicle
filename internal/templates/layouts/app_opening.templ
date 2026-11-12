@@ -1,0 +1,64 @@
+// app_opening.templ is the opening every app page shares, and the frame it
+// sits in. It lives beside manage_header.templ so each plugin's app page can
+// use it without importing another plugin.
+
+package layouts
+
+// AppFrame is the one width and left edge every app page sits in.
+templ AppFrame() {
+	<div class="max-w-screen-2xl mx-auto px-4 py-6" data-app-frame>
+		{ children... }
+	</div>
+}
+
+// AppOpening draws the page's introduction in one of two sizes. Empty for
+// this viewer: the name and a plain sentence written for them, with the one
+// action they can take, or none. With content: a single title line with the
+// tools (the children) beside it and the main action at its end. There is no
+// box and no placeholder icon: the sentence is the empty state.
+templ AppOpening(d AppOpeningData) {
+	if d.Empty {
+		<header class="cb-head mb-6" data-app-opening="empty">
+			<h1 class="cb-title text-2xl font-bold text-fg">{ d.Name }</h1>
+			<p class="mt-2 max-w-prose text-sm leading-relaxed text-fg">{ d.Intros.For(AppAudienceOf(ctx)) }</p>
+			if d.Action != nil {
+				<p class="mt-3">
+					@appOpeningAction(d.Action)
+				</p>
+			} else {
+				<p class="mt-2 text-xs text-fg-muted">Nothing to do yet.</p>
+			}
+		</header>
+	} else {
+		<header class="cb-head mb-6 flex flex-wrap items-center gap-x-4 gap-y-2" data-app-opening="full">
+			<h1 class="cb-title text-2xl font-bold text-fg">{ d.Name }</h1>
+			<div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 text-sm text-fg-secondary">
+				{ children... }
+			</div>
+			if d.Action != nil {
+				<div class="ml-auto">
+					@appOpeningAction(d.Action)
+				</div>
+			}
+		</header>
+	}
+}
+
+// appOpeningAction draws the main action as a link or a button.
+templ appOpeningAction(a *AppAction) {
+	if a.Href != "" {
+		<a href={ templ.SafeURL(a.Href) } class="btn-primary text-sm gap-2" { a.Attrs... }>
+			if a.Icon != "" {
+				<i class={ "fa-solid " + a.Icon } aria-hidden="true"></i>
+			}
+			{ a.Label }
+		</a>
+	} else {
+		<button type="button" class="btn-primary text-sm gap-2" { a.Attrs... }>
+			if a.Icon != "" {
+				<i class={ "fa-solid " + a.Icon } aria-hidden="true"></i>
+			}
+			{ a.Label }
+		</button>
+	}
+}

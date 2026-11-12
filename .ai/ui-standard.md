@@ -82,6 +82,19 @@ Every screen is one of two kinds, and is designed in that kind's register.
   calendar grid, maps, game nights, settings, Customize, admin, dialogs and
   forms use the theme tokens.
 
+### How an app page opens
+
+Every app page (Maps, Timelines, Crafting, Armory, Characters, Calendars and
+the rest) sits in `layouts.AppFrame`, one width and one left edge, and opens
+with `layouts.AppOpening`, one component in two sizes. Empty for this viewer:
+the app's name and a plain sentence written for them, with the one action
+they can take, or none. With content: a single title line, the tools beside
+it and the main action at its end. There is no box and no placeholder icon in
+the empty size; the sentence is the empty state. Each app writes three
+sentences (player, co-DM, owner) that say what will show there and who adds
+it, never offer an action the reader can't take, and name the game master
+with `GMTerm`. Manage pages keep `ManageHeader`.
+
 ## The material rules
 
 How the physical idea turns into pixels. Each rule names what a real sheet
