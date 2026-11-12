@@ -6608,8 +6608,11 @@ func (a *App) RegisterRoutes() {
 	var aiDesigns records.DesignsAPI
 	if a.PluginHealth.IsHealthy(designs.PluginSlug) {
 		designsSvc := designs.NewService(designs.NewRepository(a.DB), designsDirectory{svc: campaignService}, designKinds)
-		designs.RegisterRoutes(e, designs.NewHandler(designsSvc), campaignService, authService)
-		aiDesigns = aiDesignsAdapter{svc: designsSvc}
+		designsGallery := designs.NewGalleryService(designs.NewRepository(a.DB), designs.NewGalleryRepository(a.DB), designsDirectory{svc: campaignService}, designKinds)
+		galleryHandler := designs.NewGalleryHandler(designsGallery, adminActivity)
+		designs.RegisterRoutes(e, designs.NewHandler(designsSvc), galleryHandler, campaignService, authService)
+		designs.RegisterAdminRoutes(adminGroup, galleryHandler)
+		aiDesigns = aiDesignsAdapter{svc: designsSvc, gallery: designsGallery}
 	} else {
 		slog.Warn("designs plugin degraded — routes not registered")
 	}
@@ -6789,8 +6792,9 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/design_library.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/design_library.js", "/static/js/widgets/design_library_gallery.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
 	{Name: "design_library", Scripts: []string{"/static/js/widgets/design_library.js"}},
+	{Name: "design_gallery_admin", Scripts: []string{"/static/js/widgets/design_gallery_admin.js"}},
 	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_paint", Scripts: []string{"/static/js/widgets/craft_paint.js", "/static/js/widgets/craft_paint_forge.js", "/static/js/widgets/craft_paint_stage.js"}},

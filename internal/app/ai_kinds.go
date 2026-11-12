@@ -217,6 +217,9 @@ func (d *aiDeps) plugged() []aiplug.Lookup {
 	out := append(d.CalLookups.All(), d.Nights)
 	if d.Designs != nil {
 		out = append(out, records.DesignsLookup{Svc: d.Designs, Owners: aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities}})
+		if g, ok := d.Designs.(records.GalleryAPI); ok {
+			out = append(out, records.GalleryLookup{Svc: g, Owners: aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities}})
+		}
 	}
 	if d.LayersAI != nil {
 		out = append(out, d.LayersAI)

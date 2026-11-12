@@ -451,6 +451,9 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 | `design_library` | A campaign's saved designs (room themes now, crafting designs later); a copy taken from a code or another campaign is its own row | PK `id`; `campaign_id` FK→`campaigns` CASCADE, index (`campaign_id`, `kind`); `kind`; `system_id` copied from the campaign when saved; `name` (60), `note` (140); `maker_user_id` (no FK, so a design outlives its maker) and `maker_name`; `data` LONGTEXT JSON; `origin` `made`/`code`/`shared`, `origin_ref` text label (the maker's display name; never a campaign name) |
 | `design_shares` | The link for a shared design | PK `design_id` FK→`design_library` CASCADE; `link_token` UNIQUE, NULL while off; `link_on` |
 | `design_share_owners` | Owners a design is named to | PK (`design_id`, `user_id`); FKs to `design_library` and `users` (`ON DELETE CASCADE`) |
+| `design_gallery` | The server gallery: a snapshot copy of a library design published for every Owner on the instance | PK `id`; UNIQUE (`publisher_user_id`, `source_design_id`) so a library design is published once; no FK on either (an entry outlives its library design and its account); `kind`, `system_id`, `name` (60), `note` (140), `maker_name` (100), `data`, `data_hash` (sha256 of kind + canonical data, for the duplicate rule); `status` `visible`/`pending`/`rejected`/`removed`; `reasons` JSON array of codes; `reviewed_by`, `reviewed_at` |
+| `design_gallery_reports` | One Owner's report of an entry | PK (`entry_id`, `reporter_user_id`); `reason` `adult`/`spam`/`other`, `note` (140); FK→`design_gallery` CASCADE |
+| `design_gallery_events` | Every publish or update attempt, for the 24-hour rate rule; kept apart so unpublishing never resets the count | PK `id`; index (`user_id`, `created_at`); rows older than two days are pruned on write |
 
 ### ai_workspace (`internal/plugins/ai_workspace/migrations/`)
 

@@ -44,6 +44,20 @@ window.Chronicle = {
     if (m === 'POST' && p === '/designs/code/take') { var c = { id: 'd' + (++s.n), kind: 'room-theme', name: s.preview.name, note: '', systemId: s.system, makerName: s.preview.makerName, data: s.takeData, origin: 'code', shared: false }; s.mine.unshift(c); return done(c); }
     if (m === 'GET' && /^\\/designs\\/shared\\/[^/]+\\/preview$/.test(p)) return done(s.preview);
     if (m === 'POST' && /^\\/designs\\/shared\\/[^/]+\\/take$/.test(p)) { var t = { id: 'd' + (++s.n), kind: 'room-theme', name: s.preview.name, note: '', systemId: s.system, makerName: s.preview.makerName, data: s.takeData, origin: 'shared', shared: false }; s.mine.unshift(t); return done(t); }
+    var gal = s.gal = s.gal || { own: [], cards: [], status: 'visible', reasons: [] }, gp = p.split('/');
+    if (p === '/designs/gallery/mine' && m === 'GET') return done({ entries: gal.own });
+    if (p === '/designs/gallery' && m === 'GET') { s.calls.push('QUERY ' + url.split('?')[1]); return done({ entries: gal.cards, total: gal.total == null ? gal.cards.length : gal.total, page: Number((url.split('page=')[1] || '1').split('&')[0]), perPage: 12, systemId: s.system }); }
+    if (gp[2] === 'gallery' && gp[4] === 'copy') { var cc = gal.cards.filter(function (x) { return x.id === gp[3]; })[0]; var cp = { id: 'd' + (++s.n), kind: cc.kind, name: cc.name, note: '', systemId: s.system, makerName: cc.makerName, data: s.takeData, origin: 'gallery', shared: false }; s.mine.unshift(cp); return done(cp); }
+    if (gp[2] === 'gallery' && gp[4] === 'report') return gal.reportErr ? refuse(gal.reportErr) : done({});
+    if (gp[2] === 'gallery' && m === 'DELETE') { gal.own = gal.own.filter(function (x) { return x.id !== gp[3]; }); return done({}); }
+    if (gp[3] === 'gallery' && (m === 'POST' || m === 'PUT')) {
+      if (gal.refuse) return refuse(gal.refuse);
+      var src = s.mine.filter(function (x) { return x.id === gp[2]; })[0], old = gal.own.filter(function (x) { return x.sourceDesignId === gp[2]; })[0];
+      var ent = old || { id: 'g' + (++s.n), sourceDesignId: gp[2], kind: src.kind, systemId: src.systemId, reasons: [] };
+      ent.name = b.name; ent.note = b.note || ''; ent.makerName = b.makerName || 'Alice'; ent.status = gal.status; ent.reasons = gal.status === 'visible' ? [] : gal.reasons;
+      if (!old) gal.own.unshift(ent);
+      return done(ent);
+    }
     if (!d) return refuse('that design was not found');
     if (m === 'PATCH') { if (b.name != null) d.name = b.name; return done(d); }
     if (m === 'DELETE' && p === '/designs/' + id) { s.mine = s.mine.filter(function (x) { return x !== d; }); return done({}); }
@@ -64,7 +78,7 @@ export async function openArranged(browser, { width = 1200, height = 800, seed =
   page.on('pageerror', (e) => errors.push(e.message));
   await page.setContent(HOST);
   await page.addScriptTag({ content: FAKE + '\nObject.assign(window.__srv, ' + JSON.stringify(seed) + ');' });
-  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_counter.js', 'design_library.js', 'shop_room_builder.js', 'shop_room.js']) await page.addScriptTag({ content: read(f) });
+  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_counter.js', 'design_library.js', 'design_library_gallery.js', 'shop_room_builder.js', 'shop_room.js']) await page.addScriptTag({ content: read(f) });
   await page.waitForSelector('#w:not([hidden]) .shr-front');
   await page.click('.shr-front');
   await page.waitForSelector('.src-svg [data-k="keeper"]');

@@ -133,7 +133,7 @@
   /* ---- Drawing the groups ---- */
   function originLine(d) {
     var by = d.makerName ? ' by ' + d.makerName : '';
-    var how = d.origin === 'code' ? 'Added from a code' + by : d.origin === 'shared' ? 'Shared' + by : 'Made in this campaign';
+    var how = d.origin === 'code' ? 'Added from a code' + by : d.origin === 'shared' ? 'Shared' + by : d.origin === 'gallery' ? 'Copied from the gallery' + by : 'Made in this campaign';
     return kindLabel(d.kind) + ' · ' + how;
   }
   function chip(id, name, pressed, extra) {
@@ -177,6 +177,7 @@
     h += '<div><label class="dl-lab" for="dl-paste">Paste a code</label><textarea id="dl-paste" data-dl-key="paste" rows="3" cols="1" spellcheck="false" placeholder="' + PREFIX + '…"></textarea>' +
       '<div class="dl-row" style="margin-top:6px"><button type="button" class="dl-btn" data-dl-do="preview"' + (S.busy ? ' disabled' : '') + '>Preview</button></div></div>';
     h += card();
+    h += '<div data-dl-gallery></div>';
     return h + '<p class="dl-err" role="alert" data-dl-err></p><p class="dl-ok" role="status" aria-live="polite" data-dl-msg></p></div>';
   }
   function paintMsg() {
@@ -194,6 +195,7 @@
     var rn = el.querySelector('#dl-rename'), pa = el.querySelector('#dl-paste');
     if (rn) rn.value = S.draft;
     if (pa) pa.value = S.paste;
+    if (window.DesignGallery) window.DesignGallery.redraw(el.querySelector('[data-dl-gallery]'));
     paintMsg();
     var again = key ? el.querySelector('[data-dl-key="' + key + '"]') : pick ? el.querySelector('[data-dl-pick="' + pick + '"]') :
       act ? el.querySelector('[data-dl-do="' + act + '"]') : null;
@@ -426,6 +428,13 @@
   }
 
   /* ---- Mounting ---- */
+  // What the gallery file may use of this one: its calls and lists, never its state.
+  function galleryEnv() {
+    return {
+      call: call, esc: esc, systemName: systemName, kindLabel: kindLabel, host: host, reload: load,
+      kind: function () { return H.kind; }, mine: function () { return S.mine; }, selected: function () { return S.sel; }, system: function () { return S.system; }
+    };
+  }
   function mount(box, host_) {
     style();
     if (H !== host_ && H && H.kind !== host_.kind) S.mine = [];
@@ -433,6 +442,8 @@
     if (sheetEl) { sheetEl.remove(); sheetEl = null; }
     if (!box._dl) { box._dl = 1; box.addEventListener('click', onClick); box.addEventListener('input', onInput); box.addEventListener('keydown', onKey); }
     box.innerHTML = html(); paintMsg();
+    // The server gallery lives in its own file; it draws into the placeholder.
+    if (window.DesignGallery) window.DesignGallery.attach(box.querySelector('[data-dl-gallery]'), galleryEnv());
     // The panel redraws on some changes; the sheet is put back with it.
     if (S.sheet && curDesign()) paintSheet();
     load();

@@ -11,7 +11,10 @@ import (
 // aiDesignsAdapter implements records.DesignsAPI over the designs service,
 // which keeps every rule: the owner gate, the labels and the kind's own
 // validator. The AI saves and renames; sharing stays with the owner.
-type aiDesignsAdapter struct{ svc designs.Service }
+type aiDesignsAdapter struct {
+	svc     designs.Service
+	gallery designs.Gallery
+}
 
 var _ records.DesignsAPI = aiDesignsAdapter{}
 
@@ -57,4 +60,21 @@ func (a aiDesignsAdapter) Rename(ctx context.Context, campaignID string, act rec
 	}
 	_, err := a.svc.Update(ctx, campaignID, act.UserID, id, in)
 	return err
+}
+
+// Browse reads the server gallery for the `gallery` lookup. It is the only
+// gallery call the AI has: no publish, report or moderation reaches it.
+func (a aiDesignsAdapter) Browse(ctx context.Context, campaignID string, act records.Actor, kind, text string, allSystems bool) ([]records.GalleryRef, error) {
+	if a.gallery == nil {
+		return nil, nil
+	}
+	page, err := a.gallery.Browse(ctx, campaignID, act.UserID, designs.BrowseInput{AllSystems: allSystems, Kind: kind, Q: text})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]records.GalleryRef, len(page.Entries))
+	for i, g := range page.Entries {
+		out[i] = records.GalleryRef{Name: g.Name, Note: g.Note, Kind: g.Kind, SystemID: g.SystemID, Maker: g.MakerName, Summary: g.Summary, Lacks: g.Lacks}
+	}
+	return out, nil
 }

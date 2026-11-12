@@ -1,0 +1,118 @@
+# Gallery maturity list. Edit freely: one word or phrase per line, lowercase
+# letters and single spaces, no punctuation. Lines starting with # are notes.
+#
+# A term matches as a whole word or phrase after the text is normalised
+# (accents stripped, leetspeak undone, repeated letters collapsed), so listing
+# "sex" does not flag "Essex". Terms of five letters or more are also matched
+# when a person splits them with spaces or punctuation. Keep ambiguous words
+# that are normal in a fantasy game (ass, bastard, hell, chink, coon, prick)
+# off this list: a hit only sends the entry to an admin, but every hit is a
+# person waiting.
+
+[terms]
+# Sexual and adult
+sex
+sexy
+sexual
+porn
+porno
+pornography
+nsfw
+nude
+nudes
+erotic
+orgy
+dildo
+vagina
+penis
+boobs
+tits
+slut
+slutty
+whore
+hentai
+fetish
+bdsm
+blowjob
+blow job
+handjob
+hand job
+horny
+cumshot
+milf
+incest
+pedophile
+paedophile
+rapist
+rape
+jizz
+anal sex
+sex toy
+sex toys
+dick pic
+dickhead
+asshole
+arsehole
+# Strong profanity
+fuck
+fucker
+fucking
+fucked
+motherfucker
+shit
+shitty
+bullshit
+cunt
+twat
+wanker
+bitch
+bitches
+# Slurs
+nigger
+nigga
+faggot
+fag
+retard
+retarded
+tranny
+kike
+spic
+gook
+wetback
+paki
+towelhead
+raghead
+beaner
+
+[allow]
+# Whole words that are fine even though they contain or sit near a listed term.
+assassin
+assassins
+scunthorpe
+cockatrice
+cockatrices
+dick
+dicks
+analysis
+analyst
+therapist
+therapists
+grape
+grapes
+grapevine
+class
+classic
+assume
+assumed
+bass
+mass
+passage
+essex
+sussex
+middlesex
+cocktail
+peacock
+shiitake
+sextant
+sextet
+sexton
