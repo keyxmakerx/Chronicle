@@ -511,8 +511,14 @@ func unusable(problems []string) error {
 	if len(problems) > 5 {
 		problems = append(problems[:5:5], fmt.Sprintf("and %d more", len(problems)-5))
 	}
-	return errors.New("Chronicle couldn't use it: " + strings.Join(problems, "; "))
+	return &unusableError{"Chronicle couldn't use it: " + strings.Join(problems, "; ")}
 }
+
+// unusableError is a refusal for the AI to fix, so "What it did" can say the
+// request was refused rather than asked.
+type unusableError struct{ msg string }
+
+func (e *unusableError) Error() string { return e.msg }
 
 // cleanClientName keeps the plain characters of an app's name, cut short.
 func cleanClientName(s string) string {

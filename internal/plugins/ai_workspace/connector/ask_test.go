@@ -304,6 +304,11 @@ func TestAsk_CampaignCheck(t *testing.T) {
 			if gotCampaign != "camp-1" || gotChanges != goodBlocks {
 				t.Errorf("check saw campaign %q changes %q", gotCampaign, gotChanges)
 			}
+			if tt.wantKept == 0 && len(tt.problems) > 0 {
+				if out.Called == nil || out.Called.OK || out.Called.Summary != "Asked for changes, refused: “Coral Court”" || !strings.Contains(out.Called.Note, tt.problems[0]) {
+					t.Errorf("log line = %+v, want a refusal", out.Called)
+				}
+			}
 		})
 	}
 }

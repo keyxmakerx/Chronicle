@@ -1112,7 +1112,8 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Con
 
 // ConnectorCheck is what a connected AI is told about the changes it asks
 // for before they wait for the owner: new pages filed in a folder their
-// category doesn't have, and every other block the review screen would mark
+// category doesn't have, pages to update or delete that don't exist, sheet
+// fields their category lacks, and every other block the review screen would mark
 // as unusable, with the review's own reason. The AI can fix its own request,
 // where the owner would otherwise find a broken row at review.
 //
@@ -1120,7 +1121,7 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Con
 // reason can name what the owner can see. That is only told to a key that
 // already reads as the owner (any privacy but Safe); a Safe key, which reads as a
 // player, gets the folder check alone, so a refusal never tells it a hidden
-// page exists.
+// page exists; the page checks look pages up by name, so they are left out too.
 func (h *Handler) ConnectorCheck(ctx context.Context, conn *connector.Connection, changes string) ([]string, error) {
 	if conn.ForPlayer {
 		return h.playerCheck(ctx, conn, changes)
@@ -1141,6 +1142,15 @@ func (h *Handler) ConnectorCheck(ctx context.Context, conn *connector.Connection
 		out = append(out, folderSlipLine(s))
 	}
 	if conn.Privacy != aiexport.PrivacyModeSafe {
+		pageProblems, err := importer.NewClassifier(h.importLookup, campaignID).
+			WithFolders(h.importFolders, pendingFolderNames(recs)).
+			PageProblems(ctx, pages)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range pageProblems {
+			out = append(out, p.Line())
+		}
 		out = append(out, h.recordProblems(ctx, campaignID, conn.UserID, pages, recs)...)
 	}
 	return out, nil
