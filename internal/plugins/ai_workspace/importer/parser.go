@@ -84,7 +84,7 @@ func Parse(input string) []ParsedPage {
 // them odd/even to identify openers, then slice between consecutive
 // openers (or to EOF for the last).
 func splitPages(input string) []string {
-	input = strings.TrimSpace(input)
+	input = strings.TrimSpace(unwrapFences(input))
 	if input == "" {
 		return nil
 	}

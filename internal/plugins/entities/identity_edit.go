@@ -124,7 +124,8 @@ func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignI
 	for k, v := range patch {
 		listed, isStep := picks[k]
 		if gmOnly[k] || (!ownerIdentityFieldKeys[k] && !isStep) {
-			return apperror.NewForbidden("you can only change your character's identity fields")
+			// Naming the key lets a player's AI drop it and resend the rest.
+			return apperror.NewForbidden(fmt.Sprintf("you can only change your character's identity fields, and %q isn't one", k))
 		}
 		switch val := v.(type) {
 		case nil:
