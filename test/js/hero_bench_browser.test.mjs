@@ -42,6 +42,7 @@ async function page(t, character) {
     window.CraftingBlock = { blockers: (r) => (r.blocked ? ['no'] : []) };
     window.Chronicle = {
       register: (n, impl) => { window.impl = impl; },
+      escapeHtml: (x) => x.replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';'),
       apiFetch: (url) => { window.fetched.push(url); return Promise.resolve({ ok: true, json: () => Promise.resolve(character) }); },
       mountWidget: () => { window.mounted++; },
       destroyWidget: () => {}
@@ -134,7 +135,7 @@ test('a tap opens it where there is no hover', { skip }, async (t) => {
   await p.setContent('<!doctype html><html><body>' + PANEL + '</body></html>');
   await p.evaluate((c) => {
     window.mounted = 0;
-    window.Chronicle = { register: (n, i) => { window.impl = i; }, apiFetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(c) }), mountWidget: () => { window.mounted++; }, destroyWidget: () => {} };
+    window.Chronicle = { escapeHtml: (x) => x, register: (n, i) => { window.impl = i; }, apiFetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(c) }), mountWidget: () => { window.mounted++; }, destroyWidget: () => {} };
   }, busy);
   await p.addScriptTag({ content: JS });
   await p.evaluate(() => window.impl.init(document.querySelector('[data-widget="hero-bench"]'), { campaignId: 'c', entityId: 'h' }));

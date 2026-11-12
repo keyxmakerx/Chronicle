@@ -22,11 +22,7 @@
   var MAX_TILES = 4;
   var PEEK_IN = 140, PEEK_OUT = 200;
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
-    });
-  }
+  function esc(s) { return Chronicle.escapeHtml(String(s == null ? '' : s)); }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
   function hoverable() {
     return !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
