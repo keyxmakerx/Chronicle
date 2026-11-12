@@ -2462,7 +2462,7 @@
         loadGoods(),
         loadBuyers(),
         loadToday(),
-        window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, eid).then(function (w) { words = w || {}; }) : null
+        window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, eid.split('/')[0]).then(function (w) { words = w || {}; }) : null
       ]).then(function (res) {
         openRoom(S, room, res[0] && res[0].layout);
         savedLayout = toLayout(S);
