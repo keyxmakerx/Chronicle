@@ -433,11 +433,9 @@ func (c *Calendar) monthIsIntercalary(month int) bool {
 // LIMITATION: OccursOn's week-based recurrence (weekly/biweekly/custom) does
 // NOT read MonthStartsNewWeek — it steps by continuous absDayIndex days
 // regardless, so on a MonthStartsNewWeek calendar a weekly-recurring event
-// can land in a different WeekdayIndex column than it started in once an
-// intercalary month has passed. Reconciling the two needs OccursOn's stride
-// math to skip intercalary days the same way WeekdayIndex does, which is
-// deferred: WeekdayIndex has no production caller yet (a future grid render
-// is the first one), so nothing surfaces the mismatch today.
+// lands in a different column of the month grid once a month whose length is
+// not a whole number of weeks, or an intercalary month, has passed.
+// TODO(#2199): make week-based recurrence follow the grid's weeks.
 //
 // Real-time calendars ignore MonthStartsNewWeek entirely: Gregorian weeks are
 // always continuous, matching this method's own MonthStartsNewWeek=false
@@ -993,12 +991,19 @@ type Season struct {
 	WeatherEffect *string `json:"weather_effect,omitempty"`
 }
 
+// monthDayKey orders month+day pairs within a year. The month's weight is
+// above the longest month a calendar may have (maxCalendarMonthDays), so a
+// late day of one month never sorts after an early day of the next.
+func monthDayKey(month, day int) int {
+	return month*10000 + day
+}
+
 // ContainsDate returns true if the given month+day falls within this season.
 // Handles wrap-around (e.g. Winter: month 11 day 1 → month 2 day 28).
 func (s *Season) ContainsDate(month, day int) bool {
-	startVal := s.StartMonth*100 + s.StartDay
-	endVal := s.EndMonth*100 + s.EndDay
-	dateVal := month*100 + day
+	startVal := monthDayKey(s.StartMonth, s.StartDay)
+	endVal := monthDayKey(s.EndMonth, s.EndDay)
+	dateVal := monthDayKey(month, day)
 
 	if startVal <= endVal {
 		// Normal range (e.g. Spring: 3/1 → 5/31).

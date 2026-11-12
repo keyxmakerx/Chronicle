@@ -51,6 +51,20 @@ test('calendar maths mirrors the Go model (AbsoluteDay, weekday column, round tr
   }
 });
 
+test('a month longer than 99 days keeps its days in its own season', () => {
+  // Mirrors TestSeasonContainsDateLongMonths in the calendar plugin.
+  const c = G.cal.from({
+    months: [{ name: 'First', days: 120 }, { name: 'Second', days: 120 }],
+    weekdays: [{ name: 'A' }, { name: 'B' }],
+    seasons: [
+      { name: 'Dry', start_month: 1, start_day: 1, end_month: 1, end_day: 120 },
+      { name: 'Wet', start_month: 2, start_day: 1, end_month: 2, end_day: 120 },
+    ],
+  });
+  assert.equal(c.seasonAt(1, 120).name, 'Dry');
+  assert.equal(c.seasonAt(2, 5).name, 'Wet');
+});
+
 test('the calendar, names and moons generators are deterministic by seed, and differ across seeds', () => {
   const runs = {
     calendar: (seed) => G.calendar.generate({ seed, recipe: 'calendar.wild' }).preset,

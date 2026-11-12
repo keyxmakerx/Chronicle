@@ -434,7 +434,7 @@ function makeCal(input, opts) {
     return { index: i, name: s.name, sm: s.start_month, sd: s.start_day, em: s.end_month, ed: s.end_day, color: s.color, type: t, description: s.description || '' };
   });
   function containsDate(s, m, d) {
-    var a = s.sm * 100 + s.sd, b = s.em * 100 + s.ed, v = m * 100 + d;
+    var a = s.sm * 10000 + s.sd, b = s.em * 10000 + s.ed, v = m * 10000 + d;
     return a <= b ? (v >= a && v <= b) : (v >= a || v <= b);
   }
   cal.seasonAt = function (m, d) {
@@ -533,7 +533,7 @@ function makeCal(input, opts) {
   /* The occurrence of a season that starts in year y. */
   cal.seasonSpan = function (y, s) {
     var start = cal.abs(y, s.sm, Math.min(s.sd, Math.max(1, cal.monthDays(s.sm, y))));
-    var endYear = (s.sm * 100 + s.sd) <= (s.em * 100 + s.ed) ? y : y + 1;
+    var endYear = (s.sm * 10000 + s.sd) <= (s.em * 10000 + s.ed) ? y : y + 1;
     var end = cal.abs(endYear, s.em, Math.min(s.ed, Math.max(1, cal.monthDays(s.em, endYear))));
     return [start, end];
   };
@@ -4531,8 +4531,8 @@ function runEvents(opts) {
     if (cal.isIntercalary(d.month)) { var nxt = cal.fromAbs(regularDay(cal, cal.absOf(d))); d = nxt; }
     var kindMk = f.anchor === 'harvest' ? mk.harvest : f.anchor === 'remembrance' ? mk.remembrance : mk['season-festivals'];
     if (!freqGate(f.anchor, kindMk)) return;
-    while (festivalDays[d.month * 100 + d.day]) d = cal.fromAbs(cal.absOf(d) + 2);
-    festivalDays[d.month * 100 + d.day] = 1;
+    while (festivalDays[d.month * 10000 + d.day]) d = cal.fromAbs(cal.absOf(d) + 2);
+    festivalDays[d.month * 10000 + d.day] = 1;
     var t = firstIn(d.month, d.day);
     if (t == null || nearLocked('festival', t, 1)) return;
     var r = makeRng(seed, 'ev-fest', f.anchor);
