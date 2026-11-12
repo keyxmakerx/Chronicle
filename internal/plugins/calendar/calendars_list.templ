@@ -25,62 +25,60 @@ templ CalendarsListFragment(data CalendarsListData) {
 	     page's sheet; loading it here means the calendar's first frame is
 	     already styled. -->
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-view.css") }/>
-	<div
-		class="calv5"
-		x-data="{}"
-		data-created-name={ data.JustCreated }
-		data-created-id={ data.NewCalendarID }
-		x-init={ calv5CreatedInit }
-	>
-		<div class="calv5-wrap list">
-			<div class="calv5-dhead">
-				<p class="kicker">{ fmt.Sprintf("Campaign · %s", data.CampaignName) }</p>
-				<h1 class="calv5-dtitle">Calendars</h1>
-				<p class="calv5-dsub">{ calendarsSubtitle(data.Calendars) }</p>
-				if data.IsOwner {
-					<div class="calv5-dacts">
-						<button
-							type="button"
-							class="btn"
-							hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/import", data.CampaignID) }
-							hx-target="#calv5-wizard-root"
-							hx-swap="outerHTML"
-							onclick="window.__calv5Opener=this"
-						>
-							<i class="fa-solid fa-file-import"></i> Import
-						</button>
-						<button
-							type="button"
-							class="btn primary"
-							hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard", data.CampaignID) }
-							hx-target="#calv5-wizard-root"
-							hx-swap="outerHTML"
-							onclick="window.__calv5Opener=this"
-						>
-							<i class="fa-solid fa-plus"></i> New calendar
-						</button>
+	@layouts.AppFrame() {
+		<div
+			class="calv5"
+			x-data="{}"
+			data-created-name={ data.JustCreated }
+			data-created-id={ data.NewCalendarID }
+			x-init={ calv5CreatedInit }
+		>
+			<div class="calv5-wrap list">
+				@layouts.AppOpening(calendarsOpening(ctx, data)) {
+					<span>{ calendarsSubtitle(data.Calendars) }</span>
+					if data.IsOwner {
+						@calendarImportButton(data)
+					}
+				}
+				if len(data.Calendars) == 0 {
+					if data.IsOwner {
+						<p class="-mt-3 mb-6">
+							@calendarImportButton(data)
+						</p>
+					}
+				} else {
+					<div class="calv5-cards" id="calv5-cards">
+						for _, cal := range data.Calendars {
+							@calendarCard(data, cal)
+						}
 					</div>
 				}
+				<p class="caption" style="margin-top:20px;font-size:12px;color:var(--mut);text-align:center">
+					Each card is a calendar in this campaign. Hover over or tap one to peek at its month, open it to see the whole calendar, or manage it from its menu.
+				</p>
 			</div>
-			if len(data.Calendars) == 0 {
-				@calendarsEmptyState(data)
+			if data.OpenWizard != "" {
+				<div id="calv5-wizard-root" hx-get={ data.OpenWizard } hx-trigger="load" hx-swap="outerHTML"></div>
 			} else {
-				<div class="calv5-cards" id="calv5-cards">
-					for _, cal := range data.Calendars {
-						@calendarCard(data, cal)
-					}
-				</div>
+				<div id="calv5-wizard-root"></div>
 			}
-			<p class="caption" style="margin-top:20px;font-size:12px;color:var(--mut);text-align:center">
-				Each card is a calendar in this campaign. Hover over or tap one to peek at its month, open it to see the whole calendar, or manage it from its menu.
-			</p>
 		</div>
-		if data.OpenWizard != "" {
-			<div id="calv5-wizard-root" hx-get={ data.OpenWizard } hx-trigger="load" hx-swap="outerHTML"></div>
-		} else {
-			<div id="calv5-wizard-root"></div>
-		}
-	</div>
+	}
+}
+
+// calendarImportButton is the owner's quiet second action beside "New
+// calendar".
+templ calendarImportButton(data CalendarsListData) {
+	<button
+		type="button"
+		class="btn"
+		hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/import", data.CampaignID) }
+		hx-target="#calv5-wizard-root"
+		hx-swap="outerHTML"
+		onclick="window.__calv5Opener=this"
+	>
+		<i class="fa-solid fa-file-import"></i> Import
+	</button>
 }
 
 // calendarsSubtitle summarizes the count + which calendar is the campaign's
@@ -106,21 +104,6 @@ func calendarsSubtitle(cals []Calendar) string {
 		return fmt.Sprintf("%d calendars · %s is the main calendar", len(cals), mainName)
 	}
 	return fmt.Sprintf("%d calendars · no main calendar set", len(cals))
-}
-
-// calendarsEmptyState renders when the viewer can see no calendar. For anyone
-// but the owner that may mean every calendar is hidden from them, so it never
-// claims there is none.
-templ calendarsEmptyState(data CalendarsListData) {
-	<div class="calv5-empty">
-		if data.IsOwner {
-			<p style="font:500 15px var(--serif, serif);color:var(--ink);margin:0 0 4px">No calendars yet</p>
-			<p style="margin:0">Start from a preset or import one from Simple Calendar, Calendaria or a Chronicle export.</p>
-		} else {
-			<p style="font:500 15px var(--serif, serif);color:var(--ink);margin:0 0 4px">No calendars shared with you</p>
-			<p style="margin:0">When the { layouts.GMTerm(ctx) } shares a calendar with you, it shows here.</p>
-		}
-	</div>
 }
 
 // calendarCard renders one calendar's card: badge, main moon, name, world

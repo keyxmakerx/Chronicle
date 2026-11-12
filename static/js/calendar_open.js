@@ -664,7 +664,7 @@
     var st = e.state || {};
     if (st.calv5List) {
       if (S.list && S.phase === 'open') close();
-      else if (S.phase === 'idle' && !document.querySelector('#main-content .calv5-cards, #main-content .calv5-empty')) {
+      else if (S.phase === 'idle' && !document.querySelector('#main-content .calv5-cards, #main-content [data-app-opening="empty"]')) {
         // The list kept for the way back is gone (another page came in
         // between): load it as a page.
         window.location.reload();
