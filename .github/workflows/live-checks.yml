@@ -1,0 +1,140 @@
+# ============================================================================
+# Live checks
+# ============================================================================
+# Boots the real Chronicle binary on an empty MariaDB and Redis and drives it
+# with a browser, running the click-path checks in test/live that used to wait
+# for the operator (see tools/live-checks.sh).
+#
+# Pictures: the checks also take pictures of the screens they visit. A run on
+# main keeps its pictures as the live-pictures artifact; a pull request
+# compares against the newest successful main run's. A changed picture fails
+# this job until someone looks at the live-pictures-report artifact and adds
+# the pictures-approved label, which re-runs the job; labelled and unlabelled
+# events are listened for here, and not in ci.yml, so a label re-runs only
+# this job.
+# ============================================================================
+
+name: Live checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read  # to download main's pictures from an earlier run
+
+concurrency:
+  group: live-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  live:
+    name: Live checks
+    # Pinned with the Browser tests job in ci.yml: Playwright 1.56.1 has no
+    # Chromium build for newer images. Pictures compare only within one image.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: chronicle
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1100
+
+      - name: Generate templ files and CSS
+        run: |
+          templ generate
+          make tailwind
+
+      - name: Build
+        run: go build -o bin/chronicle-live ./cmd/server
+
+      # The backup checks run scripts/backup.sh, which needs MariaDB's own
+      # mysqldump as the Chronicle image ships it: the runner's MySQL 8 client
+      # asks MariaDB for a table it doesn't have and fails.
+      - name: Install the MariaDB client
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mariadb-client
+          mysqldump --version
+
+      - name: Install Playwright and Chromium
+        run: |
+          npm install -g playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Fetch main's pictures
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # No earlier main run (or an expired artifact) leaves every picture
+        # "new", which passes: there is nothing to compare with.
+        run: |
+          run_id=$(gh run list -R "$GITHUB_REPOSITORY" --workflow live-checks.yml --branch main --event push --status success --limit 1 --json databaseId -q '.[0].databaseId')
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" -R "$GITHUB_REPOSITORY" -n live-pictures -D "$RUNNER_TEMP/baseline" || echo "main's pictures could not be downloaded; every picture counts as new"
+          fi
+
+      - name: Live checks
+        env:
+          CHRONICLE_BIN: bin/chronicle-live
+          DB_HOST: 127.0.0.1:3306
+          DB_ROOT_PASSWORD: chronicle
+          REDIS_URL: redis://localhost:6379
+          LIVE_BASELINE: ${{ runner.temp }}/baseline
+          LIVE_PICTURES_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'pictures-approved') && '1' || '' }}
+        run: tools/live-checks.sh
+
+      - name: Keep the pictures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-pictures
+          path: |
+            test-results/live/pictures/*.png
+            !test-results/live/pictures/*.diff.png
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Keep the picture report and server log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-pictures-report
+          path: |
+            test-results/live/pictures.html
+            test-results/live/server.log
+          if-no-files-found: ignore
