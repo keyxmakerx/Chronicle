@@ -243,6 +243,12 @@ func TestRepositoryIntegration(t *testing.T) {
 		if kept, _ = repo.KeptPages(ctx, keep.AddDate(0, 0, 1)); containsAll(kept, ruin) {
 			t.Error("a kept page past its day is no longer kept")
 		}
+		if err := repo.MarkPageRemovalsUndone(ctx, campaign, mill, owner, now); err != nil {
+			t.Fatal(err)
+		}
+		if kept, _ = repo.KeptPages(ctx, now); contains(kept, mill) {
+			t.Error("a page restored from the ordinary Trash is no longer kept")
+		}
 		if err := repo.ForgetPage(ctx, campaign, ruin); err != nil {
 			t.Fatal(err)
 		}

@@ -428,25 +428,68 @@ func (s *Service) WaitingRequest(ctx context.Context, campaignID, userID string,
 	return q, nil
 }
 
-// Answered marks a request reviewed and applied; outcome says what was.
-// Answering one twice changes nothing.
+// ClaimRequest takes a waiting request for an Apply before anything is
+// written, so two overlapping Applies (a double click, two tabs) cannot both
+// write it. The loser gets a conflict. The status moves in one conditional
+// UPDATE; reading first only supplies the blocks and a readable not-found.
+func (s *Service) ClaimRequest(ctx context.Context, campaignID, userID string, id int64) (*Request, error) {
+	q, err := s.WaitingRequest(ctx, campaignID, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	won, err := s.repo.MoveRequest(ctx, campaignID, userID, id, RequestWaiting, RequestApplying, "", s.now())
+	if err != nil {
+		return nil, err
+	}
+	if !won {
+		return nil, apperror.NewConflict("that request is already being applied or was answered")
+	}
+	return q, nil
+}
+
+// ReleaseRequest puts a claimed request back to waiting when the commit
+// failed, so the owner can try again or turn it down. It runs detached from
+// the caller's cancellation: a dropped connection is when the release matters.
+func (s *Service) ReleaseRequest(ctx context.Context, campaignID, userID string, id int64) error {
+	_, err := s.repo.MoveRequest(context.WithoutCancel(ctx), campaignID, userID, id, RequestApplying, RequestWaiting, "", s.now())
+	return err
+}
+
+// Answered settles a claimed request as applied; outcome says what was.
+// It fails when the request was not claimed, which a caller that already
+// wrote its changes should log loudly: the request stays claimed, so it
+// still cannot be applied a second time.
 func (s *Service) Answered(ctx context.Context, campaignID, userID string, id int64, outcome string) error {
-	return s.finish(ctx, campaignID, userID, id, RequestAnswered, outcome)
-}
-
-// TurnDown answers a request No as a whole, applying nothing.
-func (s *Service) TurnDown(ctx context.Context, campaignID, userID string, id int64) error {
-	return s.finish(ctx, campaignID, userID, id, RequestTurnedDown, "nothing changed")
-}
-
-func (s *Service) finish(ctx context.Context, campaignID, userID string, id int64, status, outcome string) error {
-	if _, err := s.repo.FinishRequest(ctx, campaignID, userID, id, status, oneLine(outcome, outcomeMax), s.now()); err != nil {
+	ok, err := s.repo.MoveRequest(context.WithoutCancel(ctx), campaignID, userID, id, RequestApplying, RequestAnswered, oneLine(outcome, outcomeMax), s.now())
+	if err != nil {
 		return err
 	}
+	if !ok {
+		return apperror.NewConflict("that request was not being applied")
+	}
+	s.prune(ctx, campaignID, userID)
+	return nil
+}
+
+// TurnDown answers a request No as a whole, applying nothing. A request an
+// Apply already took, or that was answered, is a conflict so the owner is
+// never told "turned down" over changes that were applied.
+func (s *Service) TurnDown(ctx context.Context, campaignID, userID string, id int64) error {
+	ok, err := s.repo.MoveRequest(ctx, campaignID, userID, id, RequestWaiting, RequestTurnedDown, "nothing changed", s.now())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return apperror.NewConflict("that request is no longer waiting; it may already have been applied")
+	}
+	s.prune(ctx, campaignID, userID)
+	return nil
+}
+
+func (s *Service) prune(ctx context.Context, campaignID, userID string) {
 	if err := s.repo.PruneRequests(ctx, campaignID, userID, requestsKept); err != nil {
 		slog.Warn("ai connector: pruning requests", slog.Any("error", err))
 	}
-	return nil
 }
 
 // checkChanges reads a request's blocks as the review screen will, and

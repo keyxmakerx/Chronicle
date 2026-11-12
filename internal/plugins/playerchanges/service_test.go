@@ -86,6 +86,16 @@ func (f *fakeRepo) MarkUndone(_ context.Context, campaignID string, id int64, by
 	return false, nil
 }
 
+func (f *fakeRepo) MarkPageRemovalsUndone(_ context.Context, campaignID, entityID, by string, at time.Time) error {
+	for i := range f.rows {
+		r := &f.rows[i]
+		if r.CampaignID == campaignID && r.EntityID == entityID && r.Kind == KindRemoved && r.UndoneAt == nil {
+			r.UndoneAt, r.UndoneBy = &at, by
+		}
+	}
+	return nil
+}
+
 func (f *fakeRepo) Recent(context.Context, string, time.Time) ([]Suggestion, []Suggestion, error) {
 	return []Suggestion{{Kind: "page", Value: "e1", Label: "Tyne"}}, nil, nil
 }
@@ -115,10 +125,18 @@ func (f *fakeRepo) RewritePack(_ context.Context, k PackKey, rows []Change) erro
 	}
 	return nil
 }
-func (f *fakeRepo) PrunePacks(context.Context, time.Time) (int, error)     { return 0, nil }
-func (f *fakeRepo) KeptPages(context.Context, time.Time) ([]string, error) { return nil, nil }
-func (f *fakeRepo) MonthlyBytes(context.Context) (int64, bool, error)      { return 0, false, nil }
-func (f *fakeRepo) ForgetPage(context.Context, string, string) error       { return nil }
+func (f *fakeRepo) PrunePacks(context.Context, time.Time) (int, error) { return 0, nil }
+func (f *fakeRepo) KeptPages(context.Context, time.Time) ([]string, error) {
+	var out []string
+	for _, r := range f.rows {
+		if r.Kind == KindRemoved && r.UndoneAt == nil {
+			out = append(out, r.EntityID)
+		}
+	}
+	return out, nil
+}
+func (f *fakeRepo) MonthlyBytes(context.Context) (int64, bool, error) { return 0, false, nil }
+func (f *fakeRepo) ForgetPage(context.Context, string, string) error  { return nil }
 
 // fakePages is one page with sheet fields, and a Trash.
 type fakePages struct {
@@ -393,4 +411,57 @@ func TestSuggestions_EndWithKinds(t *testing.T) {
 	if len(got) != 3 || got[1].Label != "by an AI" || got[2].Label != "removed things" {
 		t.Fatalf("suggestions = %+v", got)
 	}
+}
+
+// A page the owner brings back through the ordinary Trash, not Undo, must stop
+// being kept, or deleting it again would leave it out of the purge for good.
+func TestPageRestored_StopsKeepingThePage(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeRepo{}
+	s := newTestService(repo, &fakePages{}, t0)
+	_ = repo.Insert(ctx, Change{CampaignID: "c1", EntityID: "e1", UserID: "u1", Kind: KindRemoved, CreatedAt: t0})
+	_ = repo.Insert(ctx, Change{CampaignID: "c1", EntityID: "e2", UserID: "u1", Kind: KindRemoved, CreatedAt: t0})
+
+	if kept, _ := s.KeptPages(ctx); len(kept) != 2 {
+		t.Fatalf("kept before the restore = %v, want both pages", kept)
+	}
+	s.PageRestored(ctx, "c1", "e1")
+	kept, _ := s.KeptPages(ctx)
+	if len(kept) != 1 || kept[0] != "e2" {
+		t.Errorf("kept after restoring e1 = %v, want only e2", kept)
+	}
+}
+
+// Undo restores through the same path, so the restore's own PageRestored must
+// credit the owner who pressed Undo and leave Undo nothing left to mark.
+func TestUndo_BringBackCreditsOwnerOnce(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeRepo{}
+	pages := &restoringPages{fakePages: &fakePages{trashed: true}}
+	s := newTestService(repo, pages, t0)
+	pages.onRestore = func(ctx context.Context) { s.PageRestored(ctx, "c1", "e1") }
+	_ = repo.Insert(ctx, Change{CampaignID: "c1", EntityID: "e1", UserID: "u1", Kind: KindRemoved, CreatedAt: t0})
+
+	c, err := s.Undo(ctx, "c1", "owner", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.UndoneBy != "owner" || repo.rows[0].UndoneBy != "owner" || repo.rows[0].UndoneAt == nil {
+		t.Errorf("undone by %q (stored %q), want the owner", c.UndoneBy, repo.rows[0].UndoneBy)
+	}
+}
+
+// restoringPages runs a hook inside the page restore, as the page safety
+// service's restore calls the keeper.
+type restoringPages struct {
+	*fakePages
+	onRestore func(ctx context.Context)
+}
+
+func (p *restoringPages) RestorePage(ctx context.Context, c, e string) error {
+	if err := p.fakePages.RestorePage(ctx, c, e); err != nil {
+		return err
+	}
+	p.onRestore(ctx)
+	return nil
 }

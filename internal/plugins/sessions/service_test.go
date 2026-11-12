@@ -36,7 +36,7 @@ type mockSessionRepo struct {
 	markReadForLinkFn          func(ctx context.Context, userID, ntype, link string) error
 	removeAttendeeFn           func(ctx context.Context, sessionID, userID string) error
 	listAttendeesFn            func(ctx context.Context, sessionID string) ([]Attendee, error)
-	listGoingOrMaybeUserIDsFn  func(ctx context.Context, sessionID string) ([]string, error)
+	listGoingOrMaybeUserIDsFn  func(ctx context.Context, sessionID, fromDate string) ([]string, error)
 	linkEntityFn               func(ctx context.Context, sessionID, entityID, role string) error
 	unlinkEntityFn             func(ctx context.Context, sessionID, entityID string) error
 	listSessionEntitiesFn      func(ctx context.Context, sessionID string) ([]SessionEntity, error)
@@ -82,7 +82,7 @@ type mockSessionRepo struct {
 	markSeriesNeedsRecheckFn            func(ctx context.Context, sessionID string) error
 	listRespondedUserIDsFn              func(ctx context.Context, sessionID string) ([]string, error)
 	softDeleteSessionFn                 func(ctx context.Context, id string) error
-	restoreSessionFn                    func(ctx context.Context, id string) error
+	restoreSessionFn                    func(ctx context.Context, id string) (bool, error)
 	upsertOccurrenceRSVPFn              func(ctx context.Context, sessionID, userID, occurrenceDate, status string, note *string) error
 	listOccurrenceRSVPsFn               func(ctx context.Context, sessionID, occurrenceDate string) ([]OccurrenceRSVP, error)
 	setOccurrenceExcludedFn             func(ctx context.Context, sessionID, userID, occurrenceDate string, excluded bool) error
@@ -141,11 +141,11 @@ func (m *mockSessionRepo) PurgeDeletedBefore(ctx context.Context, cutoff time.Ti
 	return 0, nil
 }
 
-func (m *mockSessionRepo) RestoreSession(ctx context.Context, id string) error {
+func (m *mockSessionRepo) RestoreSession(ctx context.Context, id string) (bool, error) {
 	if m.restoreSessionFn != nil {
 		return m.restoreSessionFn(ctx, id)
 	}
-	return nil
+	return true, nil
 }
 
 func (m *mockSessionRepo) UpsertOccurrenceRSVP(ctx context.Context, sessionID, userID, occurrenceDate, status string, note *string) error {
@@ -190,9 +190,9 @@ func (m *mockSessionRepo) MarkAllOccurrencesNeedsRecheck(ctx context.Context, se
 	return nil
 }
 
-func (m *mockSessionRepo) ListGoingOrMaybeUserIDs(ctx context.Context, sessionID string) ([]string, error) {
+func (m *mockSessionRepo) ListGoingOrMaybeUserIDs(ctx context.Context, sessionID, fromDate string) ([]string, error) {
 	if m.listGoingOrMaybeUserIDsFn != nil {
-		return m.listGoingOrMaybeUserIDsFn(ctx, sessionID)
+		return m.listGoingOrMaybeUserIDsFn(ctx, sessionID, fromDate)
 	}
 	return nil, nil
 }

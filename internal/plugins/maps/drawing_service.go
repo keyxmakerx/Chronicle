@@ -1032,11 +1032,47 @@ func (s *drawingService) UpdateToken(ctx context.Context, id, mapID string, isDM
 	t.StatusEffects = input.StatusEffects.Val(t.StatusEffects)
 	t.Flags = input.Flags.Val(t.Flags)
 
-	if err := s.repo.UpdateToken(ctx, t); err != nil {
+	if err := s.repo.UpdateToken(ctx, t, touchedTokenColumns(input)); err != nil {
 		return err
 	}
 	s.events.PublishTokenEvent("updated", s.campaignForMap(ctx, t.MapID), t)
 	return nil
+}
+
+// touchedTokenColumns lists the columns the caller actually sent, so the
+// write leaves every other column to whoever else is saving it.
+func touchedTokenColumns(in UpdateTokenInput) []TokenColumn {
+	var cols []TokenColumn
+	add := func(present bool, c TokenColumn) {
+		if present {
+			cols = append(cols, c)
+		}
+	}
+	add(in.Name != "", "name")
+	add(in.ImagePath.Present(), "image_path")
+	add(in.X.Present(), "x")
+	add(in.Y.Present(), "y")
+	add(in.Width.Present(), "width")
+	add(in.Height.Present(), "height")
+	add(in.Rotation.Present(), "rotation")
+	add(in.Scale.Present(), "scale")
+	add(in.IsHidden.Present(), "is_hidden")
+	add(in.IsLocked.Present(), "is_locked")
+	add(in.Bar1Value.Present(), "bar1_value")
+	add(in.Bar1Max.Present(), "bar1_max")
+	add(in.Bar2Value.Present(), "bar2_value")
+	add(in.Bar2Max.Present(), "bar2_max")
+	add(in.AuraRadius.Present(), "aura_radius")
+	add(in.AuraColor.Present(), "aura_color")
+	add(in.LightRadius.Present(), "light_radius")
+	add(in.LightDimRadius.Present(), "light_dim_radius")
+	add(in.LightColor.Present(), "light_color")
+	add(in.VisionEnabled.Present(), "vision_enabled")
+	add(in.VisionRange.Present(), "vision_range")
+	add(in.Elevation.Present(), "elevation")
+	add(in.StatusEffects.Present(), "status_effects")
+	add(in.Flags.Present(), "flags")
+	return cols
 }
 
 // UpdateTokenPosition updates only the position (optimized for drag).

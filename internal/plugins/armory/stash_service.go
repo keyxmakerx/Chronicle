@@ -96,6 +96,9 @@ type StashDeps struct {
 	// Places keeps which container a hero carries each item in (places.go);
 	// nil leaves everything in the backpack and the page can't rearrange.
 	Places PlaceStore
+	// Members re-checks that a waiting request's author is still in the
+	// campaign when it is finally settled; nil skips that check.
+	Members MemberDirectory
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's

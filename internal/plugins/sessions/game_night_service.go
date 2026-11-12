@@ -63,25 +63,38 @@ func (s *sessionService) cancelOrDeleteSession(ctx context.Context, id string) (
 	if err := s.repo.SoftDeleteSession(ctx, id); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("deleting session: %w", err))
 	}
+	// Answers stay flagged either way, but nobody is told a night that has
+	// already been played is cancelled.
+	if _, upcoming := upcomingNight(session, s.today()); !upcoming {
+		return nil, nil
+	}
 	return responded, nil
 }
 
 // RestoreSession undoes a soft delete and returns the same "who had
 // responded" set as DeleteSession, for a symmetrical re-notify ("this session
-// is back on").
-func (s *sessionService) RestoreSession(ctx context.Context, id string) (*Session, []string, error) {
-	if err := s.repo.RestoreSession(ctx, id); err != nil {
-		return nil, nil, apperror.NewInternal(fmt.Errorf("restoring session: %w", err))
+// is back on"). changed is false when another restore got there first; the
+// caller must then announce nothing, or the night's people hear it twice.
+func (s *sessionService) RestoreSession(ctx context.Context, id string) (*Session, []string, bool, error) {
+	changed, err := s.repo.RestoreSession(ctx, id)
+	if err != nil {
+		return nil, nil, false, apperror.NewInternal(fmt.Errorf("restoring session: %w", err))
 	}
 	session, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
+	}
+	if !changed {
+		return session, nil, false, nil
+	}
+	if _, upcoming := upcomingNight(session, s.today()); !upcoming {
+		return session, nil, true, nil
 	}
 	responded, err := s.respondedUserIDs(ctx, session)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
-	return session, responded, nil
+	return session, responded, true, nil
 }
 
 // RestoreAndAnnounce restores a deleted session of this campaign and tells
@@ -100,9 +113,14 @@ func (s *sessionService) RestoreAndAnnounce(ctx context.Context, campaignID, id 
 	if _, err := s.repo.FindByID(ctx, id); err == nil {
 		return nil, apperror.NewNotFound("that game night isn't in the Trash")
 	}
-	sess, responded, err := s.RestoreSession(ctx, id)
+	sess, responded, changed, err := s.RestoreSession(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if !changed {
+		// Two restores passed the check above together; the other one won
+		// and is announcing it.
+		return nil, apperror.NewNotFound("that game night isn't in the Trash")
 	}
 	if len(responded) > 0 {
 		msg := "\"" + sess.Name + "\" is back on."
@@ -114,14 +132,26 @@ func (s *sessionService) RestoreAndAnnounce(ctx context.Context, campaignID, id 
 	return sess, nil
 }
 
-// GoingOrMaybe lists who answered Going or Maybe to the session or any of
-// its nights.
-func (s *sessionService) GoingOrMaybe(ctx context.Context, sessionID string) ([]string, error) {
-	ids, err := s.repo.ListGoingOrMaybeUserIDs(ctx, sessionID)
+// NightChangeAudience says who a cancel, move or back-on email goes to. A
+// night that is over gets none, and a repeating series is announced by its
+// next night, to those who answered a night still to come, so a long-time
+// player's old answers neither earn them a notice nor put the series' first
+// date in it.
+func (s *sessionService) NightChangeAudience(ctx context.Context, sess *Session) (*NightAudience, error) {
+	today := s.today()
+	date, upcoming := upcomingNight(sess, today)
+	if !upcoming {
+		return nil, nil
+	}
+	ids, err := s.repo.ListGoingOrMaybeUserIDs(ctx, sess.ID, today)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("listing going or maybe: %w", err))
 	}
-	return ids, nil
+	night := *sess
+	if sess.IsRecurring && date != "" {
+		night.ScheduledDate = &date
+	}
+	return &NightAudience{UserIDs: ids, Night: &night}, nil
 }
 
 // ListTrashedSessions lists the campaign's deleted sessions for the Trash.

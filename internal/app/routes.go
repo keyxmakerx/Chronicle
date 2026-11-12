@@ -4450,6 +4450,7 @@ func (a *App) RegisterRoutes() {
 		Auditor:    shareAudit,
 		Copies:     copyStore,
 		Places:     placeStore,
+		Members:    &armoryMemberDirectoryAdapter{svc: campaignService},
 	})
 	// The hero's log reads game nights from sessions and keeps written lines in
 	// the armory's own table, so it is off while that migration is unhealthy.

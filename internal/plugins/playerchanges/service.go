@@ -53,6 +53,9 @@ type Service interface {
 	// KeptPages lists the pages players removed that the campaign Trash
 	// keeps past its days (Long-term trash).
 	KeptPages(ctx context.Context) ([]string, error)
+	// PageRestored closes a page's open removals once it is back out of the
+	// Trash by any route, so the Trash no longer keeps it.
+	PageRestored(ctx context.Context, campaignID, entityID string)
 	// MonthlyBytes estimates one packed month's size, for the Site admin
 	// setting.
 	MonthlyBytes(ctx context.Context) (int64, bool, error)
@@ -191,7 +194,7 @@ func (s *service) Undo(ctx context.Context, campaignID, ownerID string, id int64
 	case KindText:
 		return nil, errTextUndo
 	case KindRemoved:
-		if err := s.pages.RestorePage(ctx, campaignID, c.EntityID); err != nil {
+		if err := s.pages.RestorePage(context.WithValue(ctx, undoerKey{}, ownerID), campaignID, c.EntityID); err != nil {
 			var ae *apperror.AppError
 			if errors.As(err, &ae) && ae.Code == 404 {
 				return nil, errDeepTrash
@@ -303,6 +306,24 @@ func (s *service) PackDue(ctx context.Context) error {
 	}
 	_, err = s.repo.PrunePacks(ctx, now)
 	return err
+}
+
+// undoerKey carries the owner through the page restore that Undo triggers, so
+// the restore's own PageRestored call credits them instead of nobody.
+type undoerKey struct{}
+
+// PageRestored runs when the page safety service restores a page, including
+// the one Undo asks for; the open removals are marked undone either way so
+// KeptPages stops returning the page. Failures are logged: the page is
+// already back, and a stale row only delays a purge.
+func (s *service) PageRestored(ctx context.Context, campaignID, entityID string) {
+	by, _ := ctx.Value(undoerKey{}).(string)
+	if err := s.repo.MarkPageRemovalsUndone(ctx, campaignID, entityID, by, s.now().UTC()); err != nil {
+		slog.Warn("player changes: closing a restored page's removals", slog.Any("error", err))
+	}
+	if err := s.repo.ForgetPage(ctx, campaignID, entityID); err != nil {
+		slog.Warn("player changes: forgetting a restored page", slog.Any("error", err))
+	}
 }
 
 func (s *service) KeptPages(ctx context.Context) ([]string, error) {

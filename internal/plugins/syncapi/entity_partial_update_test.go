@@ -35,6 +35,14 @@ func (stubCampaignSvcOwner) GetMember(_ context.Context, campaignID, userID stri
 type stubEntityServiceForPartialUpdate struct {
 	entities.EntityService
 	updates []entities.UpdateEntityInput
+	merges  []map[string]any
+}
+
+// MergeFields records the patch the handler hands the service; the merge
+// itself is the service's job, under a row lock.
+func (s *stubEntityServiceForPartialUpdate) MergeFields(_ context.Context, _ string, patch map[string]any) error {
+	s.merges = append(s.merges, patch)
+	return nil
 }
 
 func (s *stubEntityServiceForPartialUpdate) GetByID(_ context.Context, id string) (*entities.Entity, error) {
@@ -224,51 +232,59 @@ func TestAPIUpdateEntityRequest_AbsentKeysStayAbsent(t *testing.T) {
 	}
 }
 
-// fields_data on the update doors is a patch: a key replaces, a null clears,
-// an untouched key keeps its stored value.
-func TestUpdateEntity_FieldsDataMergesIntoStored(t *testing.T) {
-	want := map[string]any{"hp": float64(12), "ac": 14}
-	body := `{"fields_data":{"hp":12}}`
+// fields_data on the update doors is a patch handed to MergeFields unchanged:
+// merging against the copy read earlier in the request would let two
+// overlapping saves undo each other. Update never carries fields.
+func TestUpdateEntity_FieldsDataIsPatchedAtomically(t *testing.T) {
+	tests := []struct {
+		name      string
+		method    string
+		path      string
+		body      string
+		call      func(h *APIHandler, c *echo.Context) error
+		wantPatch map[string]any
+		wantNoUpd bool
+	}{
+		{"single fields only", http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1",
+			`{"fields_data":{"hp":12}}`, (*APIHandler).UpdateEntity, map[string]any{"hp": float64(12)}, true},
+		{"single null clears one key", http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1",
+			`{"fields_data":{"ac":null}}`, (*APIHandler).UpdateEntity, map[string]any{"ac": nil}, true},
+		{"single name and fields", http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1",
+			`{"name":"x","fields_data":{"hp":12}}`, (*APIHandler).UpdateEntity, map[string]any{"hp": float64(12)}, false},
+		{"batch fields only", http.MethodPost, "/api/v1/campaigns/camp-1/sync",
+			`{"changes":[{"action":"update","entity_id":"ent-1","fields_data":{"hp":12}}]}`, (*APIHandler).Sync, map[string]any{"hp": float64(12)}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &stubEntityServiceForPartialUpdate{}
+			h := NewAPIHandler(nil, svc, stubCampaignSvcOwner{}, nil)
+			c, _ := newPartialUpdateContext(tt.method, tt.path, tt.body)
+			if err := tt.call(h, c); err != nil {
+				t.Fatal(err)
+			}
+			if len(svc.merges) != 1 || !reflect.DeepEqual(svc.merges[0], tt.wantPatch) {
+				t.Fatalf("merges = %v, want one patch %v", svc.merges, tt.wantPatch)
+			}
+			if tt.wantNoUpd && len(svc.updates) != 0 {
+				t.Errorf("a fields-only update should not rewrite the row via Update, got %d calls", len(svc.updates))
+			}
+			for _, u := range svc.updates {
+				if u.FieldsData != nil {
+					t.Errorf("Update carried FieldsData %v; fields must go through MergeFields", u.FieldsData)
+				}
+			}
+		})
+	}
 
-	t.Run("single update", func(t *testing.T) {
+	t.Run("absent fields_data merges nothing", func(t *testing.T) {
 		svc := &stubEntityServiceForPartialUpdate{}
 		h := NewAPIHandler(nil, svc, stubCampaignSvcOwner{}, nil)
-		c, _ := newPartialUpdateContext(http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1", body)
+		c, _ := newPartialUpdateContext(http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1", `{"name":"x"}`)
 		if err := h.UpdateEntity(c); err != nil {
 			t.Fatal(err)
 		}
-		if got := svc.updates[0].FieldsData; !reflect.DeepEqual(got, want) {
-			t.Fatalf("FieldsData = %v, want %v", got, want)
-		}
-	})
-	t.Run("batch update", func(t *testing.T) {
-		svc := &stubEntityServiceForPartialUpdate{}
-		h := NewAPIHandler(nil, svc, stubCampaignSvcOwner{}, nil)
-		c, _ := newPartialUpdateContext(http.MethodPost, "/api/v1/campaigns/camp-1/sync",
-			`{"changes":[{"action":"update","entity_id":"ent-1","fields_data":{"hp":12}}]}`)
-		if err := h.Sync(c); err != nil {
-			t.Fatal(err)
-		}
-		if got := svc.updates[0].FieldsData; !reflect.DeepEqual(got, want) {
-			t.Fatalf("FieldsData = %v, want %v", got, want)
-		}
-	})
-	t.Run("null clears one key and absent leaves the map alone", func(t *testing.T) {
-		svc := &stubEntityServiceForPartialUpdate{}
-		h := NewAPIHandler(nil, svc, stubCampaignSvcOwner{}, nil)
-		c, _ := newPartialUpdateContext(http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1", `{"fields_data":{"ac":null}}`)
-		if err := h.UpdateEntity(c); err != nil {
-			t.Fatal(err)
-		}
-		if got := svc.updates[0].FieldsData; !reflect.DeepEqual(got, map[string]any{"hp": 10}) {
-			t.Fatalf("FieldsData = %v", got)
-		}
-		c, _ = newPartialUpdateContext(http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1", `{"name":"x"}`)
-		if err := h.UpdateEntity(c); err != nil {
-			t.Fatal(err)
-		}
-		if svc.updates[1].FieldsData != nil {
-			t.Fatalf("absent fields_data became %v", svc.updates[1].FieldsData)
+		if len(svc.merges) != 0 || len(svc.updates) != 1 {
+			t.Fatalf("merges=%v updates=%d", svc.merges, len(svc.updates))
 		}
 	})
 }

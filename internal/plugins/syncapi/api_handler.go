@@ -647,6 +647,27 @@ func (h *APIHandler) CreateEntity(c *echo.Context) error {
 	return c.JSON(http.StatusCreated, entity)
 }
 
+// applyEntityUpdate writes a sync update whose fields_data is a patch. The
+// non-field columns go through Update (which rewrites the whole row, so any
+// ExpectedUpdatedAt check must run before the fields change updated_at), and
+// the field patch goes through MergeFields, which merges under a row lock.
+// Merging in the handler from an earlier read would let two overlapping saves
+// to different keys undo each other.
+func (h *APIHandler) applyEntityUpdate(ctx context.Context, entityID string, in entities.UpdateEntityInput, fieldsPatch map[string]any) (*entities.Entity, error) {
+	onlyFields := !in.Name.Present() && !in.TypeLabel.Present() && !in.ParentID.Present() &&
+		in.IsPrivate == nil && !in.Entry.Present() && in.PlayerNotes == nil && in.ExpectedUpdatedAt == nil
+	if fieldsPatch == nil || !onlyFields {
+		updated, err := h.entitySvc.Update(ctx, entityID, in)
+		if err != nil || fieldsPatch == nil {
+			return updated, err
+		}
+	}
+	if err := h.entitySvc.MergeFields(ctx, entityID, fieldsPatch); err != nil {
+		return nil, err
+	}
+	return h.entitySvc.GetByID(ctx, entityID)
+}
+
 // apiUpdateEntityRequest is the JSON body for updating an entity via the API.
 // This is a PARTIAL update: an ABSENT key preserves the stored value, an
 // EXPLICIT null clears it, a present value replaces it. patch.Field is what
@@ -692,29 +713,27 @@ func (h *APIHandler) UpdateEntity(c *echo.Context) error {
 		return apperror.NewForbidden("only the owner or a Co-DM can hide or show pages")
 	}
 
-	// Update replaces the whole fields map, so a present fields_data is merged
-	// into the stored one first; absent leaves it nil and the service skips it.
-	fieldsData := req.FieldsData
-	if fieldsData != nil {
-		if err := h.checkFields(ctx, entity.CampaignID, entity.EntityTypeID, entity.FieldsData, fieldsData); err != nil {
+	// A present fields_data is a patch. It is validated here against the copy
+	// read above, but merged by applyEntityUpdate under the row lock, so a
+	// save to another key made in between is kept.
+	if req.FieldsData != nil {
+		if err := h.checkFields(ctx, entity.CampaignID, entity.EntityTypeID, entity.FieldsData, req.FieldsData); err != nil {
 			return err
 		}
-		fieldsData = entities.MergeFieldPatch(entity.FieldsData, fieldsData)
 	}
 
 	// is_private: absent (and an explicit null, which a NOT NULL column has
 	// no room for) yields a nil pointer, which the service reads as
 	// "preserve"; a present true/false is written.
-	updated, err := h.entitySvc.Update(entities.WithSyncActor(ctx, h.resolveUserID(c)), entityID, entities.UpdateEntityInput{
+	updated, err := h.applyEntityUpdate(entities.WithSyncActor(ctx, h.resolveUserID(c)), entityID, entities.UpdateEntityInput{
 		Name:              req.Name,
 		TypeLabel:         req.TypeLabel,
 		ParentID:          req.ParentID,
 		IsPrivate:         req.IsPrivate.Ptr(nil),
 		Entry:             req.Entry,
 		PlayerNotes:       req.PlayerNotes,
-		FieldsData:        fieldsData,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
-	})
+	}, req.FieldsData)
 	if err != nil {
 		return err
 	}
@@ -1057,23 +1076,20 @@ func (h *APIHandler) Sync(c *echo.Context) error {
 				// single-entity PUT: absent preserves, a present value
 				// writes. is_private absent yields a nil pointer, which the
 				// service preserves.
-				// Same merge as the single-entity PUT: Update replaces the map.
-				fieldsData := change.FieldsData
-				if fieldsData != nil {
-					if err := h.checkFields(ctx, campaignID, existing.EntityTypeID, existing.FieldsData, fieldsData); err != nil {
+				// Same field handling as the single-entity PUT.
+				if change.FieldsData != nil {
+					if err := h.checkFields(ctx, campaignID, existing.EntityTypeID, existing.FieldsData, change.FieldsData); err != nil {
 						result.Status, result.Error = "error", apperror.SafeMessage(err)
 						break
 					}
-					fieldsData = entities.MergeFieldPatch(existing.FieldsData, fieldsData)
 				}
-				_, err := h.entitySvc.Update(entities.WithSyncActor(ctx, h.resolveUserID(c)), change.EntityID, entities.UpdateEntityInput{
-					Name:       change.Name,
-					TypeLabel:  change.TypeLabel,
-					ParentID:   change.ParentID,
-					IsPrivate:  change.IsPrivate.Ptr(nil),
-					Entry:      change.Entry,
-					FieldsData: fieldsData,
-				})
+				_, err := h.applyEntityUpdate(entities.WithSyncActor(ctx, h.resolveUserID(c)), change.EntityID, entities.UpdateEntityInput{
+					Name:      change.Name,
+					TypeLabel: change.TypeLabel,
+					ParentID:  change.ParentID,
+					IsPrivate: change.IsPrivate.Ptr(nil),
+					Entry:     change.Entry,
+				}, change.FieldsData)
 				if err != nil {
 					result.Status = "error"
 					result.Error = apperror.SafeMessage(err)
@@ -1291,7 +1307,15 @@ func (h *APIHandler) SetEntityPermissions(c *echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	// The save stamps updated_at in SQL, so read it back and return it: a
+	// client can then record the version its own write produced instead of
+	// treating the broadcast as a foreign edit. A failed read only drops the
+	// field; the write itself succeeded.
+	resp := map[string]string{"status": "ok"}
+	if saved, err := h.entitySvc.GetByID(ctx, entityID); err == nil {
+		resp["updated_at"] = saved.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 // SetAddonChecker injects the addon checker for system-aware endpoints.

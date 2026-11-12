@@ -66,9 +66,11 @@ type Repository interface {
 	Requests(ctx context.Context, campaignID, userID, status string, limit int) ([]Request, error)
 	// Request is one of userID's requests with its blocks, or nil.
 	Request(ctx context.Context, campaignID, userID string, id int64) (*Request, error)
-	// FinishRequest moves one of userID's waiting requests to status. It
-	// reports whether the request was still waiting.
-	FinishRequest(ctx context.Context, campaignID, userID string, id int64, status, outcome string, at time.Time) (bool, error)
+	// MoveRequest moves one of userID's requests from one status to another
+	// in a single conditional UPDATE, and reports whether it was in from.
+	// That one statement is what lets only one of two overlapping Applies
+	// win the request.
+	MoveRequest(ctx context.Context, campaignID, userID string, id int64, from, to, outcome string, at time.Time) (bool, error)
 	// PruneRequests keeps userID's newest keep requests that are no longer
 	// waiting.
 	PruneRequests(ctx context.Context, campaignID, userID string, keep int) error
@@ -449,12 +451,12 @@ func (r *repository) Request(ctx context.Context, campaignID, userID string, id 
 	return q, nil
 }
 
-func (r *repository) FinishRequest(ctx context.Context, campaignID, userID string, id int64, status, outcome string, at time.Time) (bool, error) {
+func (r *repository) MoveRequest(ctx context.Context, campaignID, userID string, id int64, from, to, outcome string, at time.Time) (bool, error) {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE ai_connection_requests q JOIN ai_connections c ON c.id = q.connection_id
 		 SET q.status = ?, q.outcome = ?, q.decided_at = ?
 		 WHERE q.campaign_id = ? AND c.user_id = ? AND q.id = ? AND q.status = ?`,
-		status, outcome, at.UTC(), campaignID, userID, id, RequestWaiting)
+		to, outcome, at.UTC(), campaignID, userID, id, from)
 	if err != nil {
 		return false, dbError("finishing request", err)
 	}
@@ -468,8 +470,8 @@ func (r *repository) FinishRequest(ctx context.Context, campaignID, userID strin
 func (r *repository) PruneRequests(ctx context.Context, campaignID, userID string, keep int) error {
 	var cut int64
 	err := r.db.QueryRowContext(ctx,
-		`SELECT q.id`+ofPerson+` AND q.status <> ?
-		 ORDER BY q.id DESC LIMIT 1 OFFSET ?`, campaignID, userID, RequestWaiting, keep-1).Scan(&cut)
+		`SELECT q.id`+ofPerson+` AND q.status NOT IN (?, ?)
+		 ORDER BY q.id DESC LIMIT 1 OFFSET ?`, campaignID, userID, RequestWaiting, RequestApplying, keep-1).Scan(&cut)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -478,8 +480,8 @@ func (r *repository) PruneRequests(ctx context.Context, campaignID, userID strin
 	}
 	if _, err := r.db.ExecContext(ctx,
 		`DELETE q FROM ai_connection_requests q JOIN ai_connections c ON c.id = q.connection_id
-		 WHERE q.campaign_id = ? AND c.user_id = ? AND q.status <> ? AND q.id < ?`,
-		campaignID, userID, RequestWaiting, cut); err != nil {
+		 WHERE q.campaign_id = ? AND c.user_id = ? AND q.status NOT IN (?, ?) AND q.id < ?`,
+		campaignID, userID, RequestWaiting, RequestApplying, cut); err != nil {
 		return dbError("pruning requests", err)
 	}
 	return nil

@@ -31,7 +31,58 @@ type fakeKeeper struct {
 	err error
 }
 
-func (k fakeKeeper) KeptPages(context.Context) ([]string, error) { return k.ids, k.err }
+func (k fakeKeeper) KeptPages(context.Context) ([]string, error)  { return k.ids, k.err }
+func (k fakeKeeper) PageRestored(context.Context, string, string) {}
+
+// openRemovals keeps a page while a player's removal of it is open, and lets
+// it go when told the page was restored, like the player changes keeper.
+type openRemovals struct{ open map[string]bool }
+
+func (k *openRemovals) KeptPages(context.Context) ([]string, error) {
+	var out []string
+	for id := range k.open {
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func (k *openRemovals) PageRestored(_ context.Context, _, id string) { delete(k.open, id) }
+
+func (r *purgeRepo) FindTrashItem(_ context.Context, _, id string) (*TrashItem, error) {
+	return &TrashItem{ID: id}, nil
+}
+
+func (r *purgeRepo) RestoreTrashItem(context.Context, string, string) (int, error) { return 1, nil }
+
+// A player removes a page, the owner restores it from the ordinary Trash and
+// deletes it again: the page must wait out its Trash days like any other
+// instead of being kept for good by the player's old removal.
+func TestRestoreFromTrash_ReleasesKeptPage(t *testing.T) {
+	ctx := context.Background()
+	for _, tt := range []struct {
+		name     string
+		restore  bool
+		wantKeep []string
+	}{
+		{"never restored: still kept", false, []string{"tyne"}},
+		{"restored then deleted again: purged", true, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &purgeRepo{}
+			p := &pageSafetyService{repo: repo}
+			p.SetLongTermTrash(&openRemovals{open: map[string]bool{"tyne": true}})
+			if tt.restore {
+				if _, err := p.RestoreFromTrash(ctx, "c1", "tyne"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			p.purgeOnce(ctx)
+			if len(repo.keep) != len(tt.wantKeep) {
+				t.Errorf("keep = %v, want %v", repo.keep, tt.wantKeep)
+			}
+		})
+	}
+}
 
 func TestLongTermTrash_Purge(t *testing.T) {
 	tests := []struct {

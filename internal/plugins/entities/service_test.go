@@ -292,6 +292,23 @@ func (m *mockEntityRepo) UpdateFields(ctx context.Context, id string, fieldsData
 	return nil
 }
 
+func (m *mockEntityRepo) MergeFieldsData(ctx context.Context, id string, merge FieldsMergeFunc) (map[string]any, map[string]any, error) {
+	e, err := m.FindByID(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	next, searchText, err := merge(e.FieldsData)
+	if err != nil {
+		return nil, nil, err
+	}
+	if m.updateFieldsFn != nil {
+		if err := m.updateFieldsFn(ctx, id, next, searchText); err != nil {
+			return nil, nil, err
+		}
+	}
+	return e.FieldsData, next, nil
+}
+
 func (m *mockEntityRepo) UpdateFieldOverrides(ctx context.Context, id string, overrides *FieldOverrides) error {
 	return nil
 }
@@ -2043,6 +2060,34 @@ func (p *capturingEntityEventPublisher) PublishEntityEvent(eventType, campaignID
 }
 
 func (p *capturingEntityEventPublisher) PublishEntityTypeEvent(string, string, *EntityType) {}
+
+// TestSetEntityPermissions_BroadcastsStoredUpdatedAt pins that the broadcast
+// carries the timestamp the save stamped, not the one read before it.
+func TestSetEntityPermissions_BroadcastsStoredUpdatedAt(t *testing.T) {
+	before := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	stored := before.Add(time.Hour)
+	reads := 0
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			reads++
+			// The first read precedes the save; later ones see its stamp.
+			if reads == 1 {
+				return &Entity{ID: "ent-1", CampaignID: "camp-1", UpdatedAt: before}, nil
+			}
+			return &Entity{ID: "ent-1", CampaignID: "camp-1", UpdatedAt: stored}, nil
+		},
+	}
+	pub := &capturingEntityEventPublisher{}
+	svc := NewEntityService(entityRepo, &mockEntityTypeRepo{}, &mockPermissionRepo{})
+	svc.SetEventPublisher(pub)
+
+	if err := svc.SetEntityPermissions(context.Background(), "ent-1", SetPermissionsInput{Visibility: VisibilityDefault}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pub.events) != 1 || !pub.events[0].entity.UpdatedAt.Equal(stored) {
+		t.Fatalf("broadcast = %+v, want one event stamped %v", pub.events, stored)
+	}
+}
 
 // TestSetEntityPermissions_PublishesUpdatedEvent verifies that SetEntityPermissions
 // emits an "updated" entity event for both visibility modes and that the

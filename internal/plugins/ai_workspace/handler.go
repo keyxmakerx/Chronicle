@@ -563,13 +563,20 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 	if strings.TrimSpace(source) == "" {
 		return apperror.NewBadRequest("Your import session expired. Please paste your markdown again.")
 	}
-	// A connected AI's request is applied once: a second Apply (a double
-	// click, or the same review open in two tabs) would add its new pages and
-	// records again, so it is refused before anything is written.
+	// A connected AI's request is applied once. It is claimed before anything
+	// is written, in one conditional update, so a second Apply (a double
+	// click, the same review open in two tabs) is refused even when it
+	// arrives while the first is still writing.
+	var claimedID int64
 	if raw := c.FormValue("ai_request"); raw != "" && h.connector != nil {
-		if _, err := h.waitingRequest(c, cc, raw); err != nil {
+		id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		if err != nil || id <= 0 {
+			return apperror.NewBadRequest("that request isn't here any more")
+		}
+		if _, err := h.connector.ClaimRequest(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id); err != nil {
 			return err
 		}
+		claimedID = id
 	}
 
 	// Re-parse from scratch so the indexes match what the review
@@ -665,6 +672,14 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 		slog.Error("ai-workspace: commit failed",
 			slog.String("campaign_id", cc.Campaign.ID),
 			slog.Any("error", err))
+		// No page was written (folders made first may have been), so the owner
+		// may try again or turn it down.
+		if claimedID != 0 {
+			if rerr := h.connector.ReleaseRequest(c.Request().Context(), cc.Campaign.ID, userID, claimedID); rerr != nil {
+				slog.Error("ai-workspace: releasing request after failed commit",
+					slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", rerr))
+			}
+		}
 		return apperror.NewInternal(err)
 	}
 	// Records run after pages, so a record may name a page this same
@@ -694,10 +709,12 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 	}
 
 	res := ImportResultData{CampaignID: cc.Campaign.ID, Result: result}
-	if id, perr := strconv.ParseInt(c.FormValue("ai_request"), 10, 64); perr == nil && id > 0 && h.connector != nil {
+	if claimedID != 0 {
 		outcome := requestOutcome(result)
-		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id, outcome); err != nil {
-			slog.Warn("ai-workspace: marking request answered",
+		// The changes are written, so a failure here is only logged: the
+		// request stays claimed and cannot be applied a second time.
+		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, userID, claimedID, outcome); err != nil {
+			slog.Error("ai-workspace: settling applied request",
 				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		}
 		v, err := h.connectView(c, cc)

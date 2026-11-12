@@ -29,8 +29,16 @@ type SyncChangeRepository interface {
 	// PrunedThrough is the highest seq retention has deleted for the
 	// campaign, or 0 if nothing has been pruned.
 	PrunedThrough(ctx context.Context, campaignID string) (int64, error)
-	// Head is the highest seq recorded for the campaign, or 0 if none.
+	// Head is the highest seq the campaign's feed has reached: the larger of
+	// its newest row and its prune watermark. Taking the watermark in matters
+	// because retention can delete every row, and a head below the watermark
+	// would send a client resetting forever.
 	Head(ctx context.Context, campaignID string) (int64, error)
+	// MarkGap records that a change happened which the feed could not store.
+	// It raises the watermark to a freshly allocated seq, so every client
+	// whose cursor is behind it is told to resync, while later rows still
+	// get higher seqs and stay replayable.
+	MarkGap(ctx context.Context, campaignID string) error
 	// PruneOlderThan deletes rows older than cutoff and raises each affected
 	// campaign's watermark first, so a crash between the two steps leaves a
 	// watermark that over-reports a gap rather than hiding one. Returns the
@@ -106,11 +114,36 @@ func (r *syncChangeRepo) PrunedThrough(ctx context.Context, campaignID string) (
 func (r *syncChangeRepo) Head(ctx context.Context, campaignID string) (int64, error) {
 	var n int64
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(seq), 0) FROM sync_changes WHERE campaign_id = ?`, campaignID).Scan(&n)
+		`SELECT GREATEST(
+		   COALESCE((SELECT MAX(seq) FROM sync_changes WHERE campaign_id = ?), 0),
+		   COALESCE((SELECT pruned_through FROM sync_change_watermarks WHERE campaign_id = ?), 0))`,
+		campaignID, campaignID).Scan(&n)
 	if err != nil {
 		return 0, apperror.NewInternal(fmt.Errorf("read sync head: %w", err))
 	}
 	return n, nil
+}
+
+// gapResourceType labels the placeholder row MarkGap inserts. The row exists
+// only to burn a seq from the table's counter; it sits at or below the
+// watermark, so List never serves it and the pruner reclaims it.
+const gapResourceType = "gap"
+
+func (r *syncChangeRepo) MarkGap(ctx context.Context, campaignID string) error {
+	// The watermark must be a seq no later row can reuse, or a client that
+	// resumed from it would skip that row. Only the table's own counter
+	// guarantees that, so allocate one rather than computing head+1.
+	seq, err := r.Append(ctx, campaignID, gapResourceType, "", "updated")
+	if err != nil {
+		return err
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO sync_change_watermarks (campaign_id, pruned_through) VALUES (?, ?)
+		 ON DUPLICATE KEY UPDATE pruned_through = GREATEST(pruned_through, VALUES(pruned_through))`,
+		campaignID, seq); err != nil {
+		return apperror.NewInternal(fmt.Errorf("raise sync watermark for gap: %w", err))
+	}
+	return nil
 }
 
 func (r *syncChangeRepo) PruneOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {

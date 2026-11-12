@@ -81,6 +81,9 @@ func classifyChange(t ws.MessageType) (resourceType, op string, ok bool) {
 // ChangeRecorder is the write side of the change feed.
 type ChangeRecorder interface {
 	Append(ctx context.Context, campaignID, resourceType, resourceID, op string) (int64, error)
+	// MarkGap makes the next feed read report resetRequired to clients
+	// behind this point.
+	MarkGap(ctx context.Context, campaignID string) error
 }
 
 // RecordingEventBus wraps the real bus so every allowlisted event lands in
@@ -112,6 +115,7 @@ func (b *RecordingEventBus) Publish(msg *ws.Message) {
 				slog.String("type", string(msg.Type)),
 				slog.String("campaign_id", msg.CampaignID),
 				slog.Any("error", err))
+			b.markGap(msg.CampaignID)
 		} else {
 			cp := *msg
 			cp.Seq = seq
@@ -119,6 +123,21 @@ func (b *RecordingEventBus) Publish(msg *ws.Message) {
 		}
 	}
 	b.next.Publish(out)
+}
+
+// markGap tells the feed that a change went unrecorded, so clients whose
+// cursor looks current are sent to resync. It gets its own timeout because
+// the failed append may itself have been a timeout. If even this fails the
+// gap is only logged: the database is unreachable, which nothing here can
+// repair.
+func (b *RecordingEventBus) markGap(campaignID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), changeRecordTimeout)
+	defer cancel()
+	if err := b.recorder.MarkGap(ctx, campaignID); err != nil {
+		slog.Error("sync change gap not marked; clients may miss an update until their next full resync",
+			slog.String("campaign_id", campaignID),
+			slog.Any("error", err))
+	}
 }
 
 // changeRetention is how long feed rows are kept. A client offline longer

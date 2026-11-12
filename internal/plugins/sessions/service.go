@@ -77,14 +77,18 @@ type SessionService interface {
 	// RestoreSession undoes a soft delete, returning the restored session and
 	// the same "who had responded" list DeleteSession returned, for a
 	// symmetrical re-notify.
-	RestoreSession(ctx context.Context, id string) (*Session, []string, error)
+	// changed is false when the session was not deleted (a restore that lost
+	// a race), in which case nothing should be announced.
+	RestoreSession(ctx context.Context, id string) (sess *Session, responded []string, changed bool, err error)
 	// RestoreAndAnnounce restores a deleted session of this campaign and
 	// tells everyone who had answered that it is back on. A session of
 	// another campaign, or one not deleted, is not found.
 	RestoreAndAnnounce(ctx context.Context, campaignID, id string) (*Session, error)
-	// GoingOrMaybe lists who answered Going or Maybe to the session or any of
-	// its nights, deleted or not: who hears by email that it changed.
-	GoingOrMaybe(ctx context.Context, sessionID string) ([]string, error)
+	// NightChangeAudience says who hears by email that the night changed:
+	// those who answered Going or Maybe to it or, for a repeating series, to
+	// a night still to come, with the night to name. Nil when every night is
+	// already over. The session may be deleted.
+	NightChangeAudience(ctx context.Context, s *Session) (*NightAudience, error)
 	// ListTrashedSessions lists the campaign's deleted sessions for the Trash.
 	ListTrashedSessions(ctx context.Context, campaignID string) ([]TrashedSession, error)
 	// PurgeTrashedSessions removes for good sessions deleted before cutoff.
@@ -269,6 +273,8 @@ type sessionService struct {
 	// recipients drops people who switched a kind of message off. Nil
 	// delivers to everyone, as in tests.
 	recipients RecipientFilter
+	// clock tells the time for "is this night over"; nil is the real clock.
+	clock func() time.Time
 }
 
 // RecipientFilter narrows recipients to those whose notification choices
@@ -304,6 +310,14 @@ func (s *sessionService) bellRecipients(ctx context.Context, ids []string, ntype
 // never touch entity linking or the session detail page.
 func NewSessionService(repo SessionRepository, ec EntityCampaignChecker, ev EntityVisibilityFilter) SessionService {
 	return &sessionService{repo: repo, entityChecker: ec, entityVisibility: ev}
+}
+
+// today is the calendar day a night must reach to count as still to come.
+func (s *sessionService) today() string {
+	if s.clock != nil {
+		return nightsToday(s.clock())
+	}
+	return nightsToday(time.Now())
 }
 
 // CreateSession validates input and creates a new session.
