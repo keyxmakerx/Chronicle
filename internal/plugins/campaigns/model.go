@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -895,6 +896,13 @@ const (
 	BlockComingUp        = "coming_up"        // Next game nights, what the viewer owes the table, next events.
 	BlockStartHere       = "start_here"       // One page the owner picks, as the home's lead (entities plugin).
 	BlockAtAGlance       = "at_a_glance"      // System, next game, last session, page count (internal/app).
+	BlockParty           = "party"            // The claimed heroes: name, ancestry, class, level, player (entities plugin).
+	BlockWhenWePlay      = "when_we_play"     // The times most of the table is free (sessions plugin).
+	BlockWhereWePlay     = "where_we_play"    // The owner's Foundry address and voice channel, typed in the block's config.
+	BlockHouseRules      = "house_rules"      // The rulebook's house chapters (systems).
+	BlockLastTime        = "last_time"        // The latest session's recap, as its viewer may read it (sessions plugin).
+	BlockGettingStarted  = "getting_started"  // A new player's steps, ticked as they are done (sessions plugin).
+	BlockYourHero        = "your_hero"        // The viewer's own claimed hero, or a way to choose one (entities plugin).
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -925,6 +933,13 @@ var ValidBlockTypes = map[string]bool{
 	BlockComingUp:        true,
 	BlockStartHere:       true,
 	BlockAtAGlance:       true,
+	BlockParty:           true,
+	BlockWhenWePlay:      true,
+	BlockWhereWePlay:     true,
+	BlockHouseRules:      true,
+	BlockLastTime:        true,
+	BlockYourHero:        true,
+	BlockGettingStarted:  true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,
@@ -1107,4 +1122,41 @@ func Slugify(name string) string {
 		slug = "campaign"
 	}
 	return slug
+}
+
+// WhereWeLink is a typed-in address as the block draws it: the text to show
+// and, only when it is a safe web address, the link to open.
+type WhereWeLink struct {
+	Text string
+	Href string
+}
+
+// maxWhereWePlayLen bounds an address typed into the block.
+const maxWhereWePlayLen = 300
+
+// WhereWePlayLink turns what the owner typed into the Foundry row. A bare
+// host ("foundry.example.com") gets https; only http and https addresses
+// become links, so a javascript: or data: address is shown as text and never
+// opened. Over-long input is shown cut.
+func WhereWePlayLink(raw string) WhereWeLink {
+	text := strings.TrimSpace(raw)
+	if len(text) > maxWhereWePlayLen {
+		text = text[:maxWhereWePlayLen]
+	}
+	if text == "" || strings.ContainsAny(text, " \t\r\n") {
+		return WhereWeLink{Text: text}
+	}
+	candidate := text
+	if !strings.Contains(candidate, "://") {
+		if strings.Contains(candidate, ":") && !strings.Contains(candidate, ".") && !strings.HasPrefix(candidate, "localhost") {
+			// "javascript:alert(1)" and the like have a scheme but no host.
+			return WhereWeLink{Text: text}
+		}
+		candidate = "https://" + candidate
+	}
+	u, err := url.Parse(candidate)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return WhereWeLink{Text: text}
+	}
+	return WhereWeLink{Text: text, Href: u.String()}
 }

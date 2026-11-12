@@ -4229,6 +4229,7 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMentionHider(entityService)
+	sessionsHandler.SetHeroChecker(&heroCheckerAdapter{svc: entityService, addons: addonService})
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
 	// People's notification choices (Account settings) filter the bell and
 	// the game-night emails.
@@ -5684,6 +5685,7 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetAddonService(addonService)
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
+	systems.RegisterHouseRulesRoute(e, systemHandler, authService, campaignService)
 	// The campaign's own pick-list entries, merged into the pick lists below.
 	// The manifest is the campaign's custom upload, else its chosen built-in.
 	manifestFor := campaignManifest(func(ctx context.Context, campaignID string) *systems.SystemManifest {

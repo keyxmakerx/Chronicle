@@ -67,6 +67,35 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashStartHere(cc, block.Config)
 		case "at_a_glance":
 			@dashAtAGlance(cc)
+		case "party":
+			@dashFragment("party", fmt.Sprintf("/campaigns/%s/party", cc.Campaign.ID), "h-28")
+		case "your_hero":
+			// A hero is a member's; a visitor has none to show or choose.
+			if cc.IsMember {
+				@dashFragment("your-hero", fmt.Sprintf("/campaigns/%s/your-hero", cc.Campaign.ID), "h-20")
+			}
+		case "getting_started":
+			// Steps are a member's own; a visitor has none to do.
+			if cc.IsMember {
+				@dashFragment("getting-started", fmt.Sprintf("/campaigns/%s/getting-started", cc.Campaign.ID), "h-24")
+			}
+		case "when_we_play":
+			// Availability is the table's own business, as game nights are.
+			if cc.IsMember {
+				@dashFragment("when-we-play", fmt.Sprintf("/campaigns/%s/when-we-play", cc.Campaign.ID), "h-24")
+			}
+		case "where_we_play":
+			@dashWhereWePlay(cc, block.Config)
+		case "house_rules":
+			// The rulebook is members' reading.
+			if cc.IsMember {
+				@dashFragment("house-rules", fmt.Sprintf("/campaigns/%s/house-rules", cc.Campaign.ID), "h-24")
+			}
+		case "last_time":
+			// Recaps are the table's own business, as game nights are.
+			if cc.IsMember {
+				@dashFragment("last-time", fmt.Sprintf("/campaigns/%s/last-time", cc.Campaign.ID), "h-20")
+			}
 		case "activity_feed":
 			// The activity embed is the owner's (audit routes), so nobody
 			// else is shown a card that can only fail to load.
@@ -833,6 +862,72 @@ templ dashAtAGlance(cc *CampaignContext) {
 		<span class="inline-block w-24 h-4 mb-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 		<span class="block h-24 rounded-xl bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 	</div>
+}
+
+// dashFragment is the placeholder for a block another plugin draws: it
+// loads the plugin's fragment on page load, and an empty answer removes the
+// block. slug names the block for tests and styles; skeleton is the height of
+// the loading bar.
+templ dashFragment(slug, href, skeleton string) {
+	<div
+		data-block={ slug }
+		hx-get={ href }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+		aria-busy="true"
+	>
+		<span class="inline-block w-24 h-4 mb-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+		<span class={ "block rounded-xl bg-fg-secondary/10 animate-pulse", skeleton } aria-hidden="true"></span>
+	</div>
+}
+
+// dashWhereWePlay is the "Where we play" block: the Foundry address and the
+// voice channel the owner types into the block's settings. Nothing is looked
+// up, so it needs no fragment. The address becomes a link only when it is an
+// http or https address; anything else is shown as plain text, never as a
+// link. A block with nothing typed in is removed for players, and the owner
+// gets a dashed slot saying where to type it.
+templ dashWhereWePlay(cc *CampaignContext, config map[string]any) {
+	{{ foundry := WhereWePlayLink(dashConfigString(config, "foundry_url")) }}
+	{{ voice := dashConfigString(config, "voice") }}
+	if foundry.Text != "" || voice != "" {
+		<section class="cb-info cb-where" data-block="where-we-play" aria-labelledby="where-we-play-h">
+			<div class="cb-info-top flex items-baseline justify-between mb-3">
+				<h2 id="where-we-play-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">Where we play</h2>
+			</div>
+			<div class="cb-info-rows card cb-card divide-y divide-edge px-4">
+				if foundry.Text != "" {
+					<div class="cb-line flex items-center gap-3 py-2 text-sm">
+						<span class="cb-line-main min-w-0 flex-1">
+							<span class="cb-line-name block font-semibold text-fg">Foundry</span>
+							<span class="cb-line-sub block truncate font-mono text-xs text-fg-muted">{ foundry.Text }</span>
+						</span>
+						if foundry.Href != "" {
+							<a href={ templ.SafeURL(foundry.Href) } target="_blank" rel="noopener noreferrer" class="cb-line-end btn-primary text-xs">
+								<i class="fa-solid fa-arrow-up-right-from-square mr-1" aria-hidden="true"></i>Open the game
+							</a>
+						}
+					</div>
+				}
+				if voice != "" {
+					<div class="cb-line flex items-baseline gap-3 py-2 text-sm">
+						<span class="cb-line-name font-semibold text-fg">Voice</span>
+						<span class="cb-line-sub min-w-0 text-fg-secondary">{ voice }</span>
+					</div>
+				}
+			</div>
+		</section>
+	} else if cc.CanAuthorDmOnly() && !layouts.IsViewingAsPlayer(ctx) {
+		<section class="cb-info cb-where" data-block="where-we-play" data-dm-only>
+			<div class="cb-start-slot border border-dashed border-edge rounded-lg px-4 py-3 text-sm text-fg-secondary">
+				<p>Tell your players where to find the game: type your Foundry address in this block.</p>
+				<p class="mt-1 text-xs text-fg-muted">
+					Only you see this until something is typed in.
+					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/customize/home") } class="text-accent hover:underline">Type it in the Customizer</a>
+				</p>
+			</div>
+		</section>
+	}
 }
 
 // dashConfigString reads a string option from a block's config, or "".

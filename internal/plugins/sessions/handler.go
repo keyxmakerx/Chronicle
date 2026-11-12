@@ -51,6 +51,8 @@ type Handler struct {
 	nightEntries NightEntryService
 	// mentions hides mentions of pages a reader can't open in the recap.
 	mentions sanitize.MentionHider
+	// heroes tells the Getting started block whether a member plays a hero.
+	heroes HeroChecker
 }
 
 // SetRecipientFilter wires people's notification choices into the emails.

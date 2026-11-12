@@ -295,6 +295,9 @@
     // arrangement; the editor starts from it, and Save stores it once changed.
     var shown = canon(S.layout);
     var saved = S.unsaved ? { rows: [] } : shown;
+    // Block types the starting arrangement holds that a home with no layout of
+    // its own can borrow: shown as a faded draft, kept one by one.
+    var SUG = HOME && S.unsaved && Array.isArray(S.suggest) ? S.suggest : [];
     // A category's named layouts besides its main one (page_layouts.go):
     // each page wears one. VAR is the one being arranged, 'main' the
     // category's main layout. A home has none.
@@ -783,6 +786,31 @@
     function insHTML(at, last) {
       return '<div class="cpe-ins' + (last ? ' always' : '') + '" data-at="' + at + '"><button type="button" data-act="addsec" data-at="' + at + '">' + ic('fa-plus') + ' Add section</button></div>';
     }
+    // ghosts are the suggested widgets the layout does not hold yet and this
+    // campaign offers, until the draft is dismissed.
+    function ghosts() {
+      if (!SUG.length || UI.sugOff || UI.reading || paletteState !== 'ready') return [];
+      var have = {};
+      L.rows.forEach(function (r) {
+        r.columns.forEach(function (c) { c.blocks.forEach(function (b) { have[b.type] = true; }); });
+        (r.tiles || []).forEach(function (t) { have[t.type] = true; });
+      });
+      return SUG.filter(function (t, i) { return !have[t] && W[t] && !W[t].missing && SUG.indexOf(t) === i; });
+    }
+    // draftHTML is the faded draft under the page: each suggestion with a quiet
+    // Keep, and one word to keep them all or put the draft away. Nothing is in
+    // the layout, or saved, until a block is kept.
+    function draftHTML() {
+      var g = ghosts();
+      if (!g.length) return '';
+      return '<section class="cpe-draft" aria-label="Suggested blocks"><p class="cpe-draft-lab">Draft · faded blocks are suggestions</p><div class="cpe-draft-grid">' +
+        g.map(function (t) {
+          return '<div class="cpe-sug">' + ic(W[t].icon || 'fa-puzzle-piece') + '<span class="cpe-sug-name">' + esc(W[t].name) + '</span>' +
+            '<button type="button" class="cpe-sug-keep" data-act="sugkeep" data-v="' + esc(t) + '" aria-label="Keep ' + esc(W[t].name) + '">Keep</button></div>';
+        }).join('') +
+        '</div><p class="cpe-draft-acts"><button type="button" class="btn-primary btn-sm" data-act="sugall">Keep all suggestions</button> ' +
+        '<button type="button" class="cpe-draft-q" data-act="sugno">Dismiss draft</button></p></section>';
+    }
     function canvasHTML() {
       var h = '<div class="cpe-pagehead">' + ic('fa-file-lines') + '<span>';
       if (PV.failed) h += 'The page couldn’t be drawn here, so widgets show their names.';
@@ -796,7 +824,7 @@
       room = room && !UI.reading;
       L.rows.forEach(function (r, i) { h += (room ? insHTML(i) : '') + rowHTML(r); });
       if (!UI.reading) h += room ? insHTML(L.rows.length, true) : '<p class="cpe-hint cpe-full">A page holds ' + MAX_ROWS + ' sections at most. Remove one to add another.</p>';
-      return '<div class="cpe-frame ' + UI.device + '"><div class="cpe-page" data-page>' + h + '</div></div>';
+      return '<div class="cpe-frame ' + UI.device + '">' + draftHTML() + '<div class="cpe-page" data-page>' + h + '</div></div>';
     }
 
     /* ---------- Layouts ----------
@@ -1714,6 +1742,14 @@
           case 'as': UI.viewAs = v; render(); return;
           case 'look': UI.look = v === 'annals' ? 'annals' : 'standard'; showLook(UI.look); render(); fadeFrame(); return;
           case 'read': readMode(!UI.reading); return;
+          case 'sugkeep': UI.sel = null; addWidget(v); return;
+          case 'sugall': {
+            // Each kept block lands beside the last, so they stay together.
+            UI.sel = null;
+            ghosts().forEach(function (t) { addWidget(t); });
+            return;
+          }
+          case 'sugno': UI.sugOff = true; render(); return;
           case 'insp': UI.insp = v; render(); return;
           case 'sheet': UI.sheet = !UI.sheet; $('.cpe-insp').classList.toggle('open', UI.sheet); return;
           case 'galtiles': UI.galTiles = !UI.galTiles; render(); return;

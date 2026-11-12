@@ -953,6 +953,7 @@ GET	/campaigns/:id/foundry/players	session	plugins/syncapi.(*SyncHistoryHandler)
 GET	/campaigns/:id/foundry/problems	session	plugins/syncapi.(*SyncHistoryHandler).ProblemsFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/foundry/scenes	session	plugins/syncapi.(*SyncHistoryHandler).ScenesJSON	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/game-nights	public-capable	plugins/sessions.(*Handler).GameNightsLink	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/getting-started	session	plugins/sessions.(*Handler).GettingStartedBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/groups	session	plugins/campaigns.(*Handler).ListGroupsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/groups	session	plugins/campaigns.(*Handler).CreateGroupAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/groups/:gid	session	plugins/campaigns.(*Handler).DeleteGroupAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -987,6 +988,7 @@ GET	/campaigns/:id/homebrew/words	session	plugins/fieldrules.(*Handler).ListWord
 POST	/campaigns/:id/homebrew/words	session	plugins/fieldrules.(*Handler).SaveWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 DELETE	/campaigns/:id/homebrew/words/:wid	session	plugins/fieldrules.(*Handler).DeleteWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 PUT	/campaigns/:id/homebrew/words/:wid	session	plugins/fieldrules.(*Handler).SaveWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+GET	/campaigns/:id/house-rules	session	systems.(*SystemHandler).HouseRulesBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/import	session	plugins/vault_import.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/import/markdown/dropzone	session	plugins/vault_import.(*Handler).DropZone	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/import/markdown/jobs/:job	session	plugins/vault_import.(*Handler).Job	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1002,6 +1004,7 @@ POST	/campaigns/:id/join-code	session	plugins/campaigns.(*Handler).GenerateJoinC
 GET	/campaigns/:id/journal	session	widgets/notes.(*Handler).ShowJournal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/journal/:noteId	session	widgets/notes.(*Handler).ShowJournal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/last-night	public-capable	app.(*lastNightHandler).Show	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/last-time	session	plugins/sessions.(*Handler).LastTimeBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/layers/:lid	session	plugins/transformations.(*Handler).Remove	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon
 GET	/campaigns/:id/layout-presets	session	plugins/entities.(*LayoutPresetHandler).ListAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/layout-presets	session	plugins/entities.(*LayoutPresetHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1124,6 +1127,7 @@ GET	/campaigns/:id/pages/:eid/layers	session	plugins/transformations.(*Handler).
 POST	/campaigns/:id/pages/:eid/layers	session	plugins/transformations.(*Handler).Add	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon
 GET	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+GET	/campaigns/:id/party	public-capable	plugins/entities.(*Handler).PartyBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/pinned-pages	public-capable	plugins/entities.(*PagePinHandler).Widget	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 DELETE	/campaigns/:id/pinned-pages/everyone/:eid	session	plugins/entities.(*PagePinHandler).UnpinShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 DELETE	/campaigns/:id/pinned-pages/mine/:eid	session	plugins/entities.(*PagePinHandler).UnpinOwn	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1289,10 +1293,12 @@ POST	/campaigns/:id/trash/:eid/restore	session	plugins/entities.(*PageSafetyHand
 POST	/campaigns/:id/trash/:kind/:tid/restore	session	plugins/entities.(*PageSafetyHandler).RestoreOtherFromTrash	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/unarchive	session	plugins/campaigns.(*Handler).UnarchiveCampaign	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccessEvenIfArchived > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/welcome-message	session	plugins/campaigns.(*Handler).UpdateWelcomeMessageAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/when-we-play	session	plugins/sessions.(*Handler).WhenWePlayBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/worldbuilding-prompts	session	plugins/entities.(*WorldbuildingPromptHandler).ListAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/worldbuilding-prompts	session	plugins/entities.(*WorldbuildingPromptHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/worldbuilding-prompts/:pid	session	plugins/entities.(*WorldbuildingPromptHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/worldbuilding-prompts/:pid	session	plugins/entities.(*WorldbuildingPromptHandler).UpdateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/your-hero	public-capable	plugins/entities.(*Handler).YourHeroBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/import	session	plugins/campaigns.(*ExportHandler).ImportCampaignForm	plugins/auth.RequireAuth
 POST	/campaigns/import	session	plugins/campaigns.(*ExportHandler).ImportCampaign	plugins/auth.RequireAuth > middleware.RateLimit
 GET	/campaigns/new	session	plugins/campaigns.(*Handler).NewForm	plugins/auth.RequireAuth

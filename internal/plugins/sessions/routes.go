@@ -66,6 +66,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.PUT("/sessions/:sid/rsvp-exclude", h.SetRSVPExcludedAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Game nights with every member's answer and note, for the calendar's
 	// day card. Members only: the roster and notes stay inside the table.
+	// The home's blocks: the times most of the table is free, and last time.
+	cg.GET("/when-we-play", h.WhenWePlayBlock, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/last-time", h.LastTimeBlock, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/getting-started", h.GettingStartedBlock, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/sessions/nights", h.ListGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Every night and series, grouped, for the calendar's "All game nights".
 	cg.GET("/sessions/all", h.AllGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))

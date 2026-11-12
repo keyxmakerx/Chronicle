@@ -201,3 +201,26 @@ func TestHomeBlockTypesAreSaveable(t *testing.T) {
 		}
 	}
 }
+
+// Only a Players home with no layout of its own is offered the players'
+// starting blocks as a draft; a saved one, or any other home, is not.
+func TestHomeSuggestions(t *testing.T) {
+	got := homeSuggestions(HomePlayer, false)
+	for _, want := range []string{"start_here", "party", "where_we_play", "house_rules", "last_time"} {
+		found := false
+		for _, g := range got {
+			found = found || g == want
+		}
+		if !found {
+			t.Errorf("suggestions %v lack %s", got, want)
+		}
+	}
+	for _, c := range []struct {
+		key   string
+		saved bool
+	}{{HomePlayer, true}, {HomeDefault, false}, {HomeScribe, false}, {HomeDirector, false}, {HomeGuest, false}, {HomeDM, false}} {
+		if s := homeSuggestions(c.key, c.saved); s != nil {
+			t.Errorf("%s (saved %v) got suggestions %v", c.key, c.saved, s)
+		}
+	}
+}

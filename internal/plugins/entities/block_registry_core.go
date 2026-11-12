@@ -430,6 +430,52 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
+		Type: "party", Label: "The party", Icon: "fa-users",
+		Description: "The players' heroes: name, ancestry, class, level and who plays them",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "your_hero", Label: "Your hero", Icon: "fa-user-shield",
+		Description: "The viewer's own hero, or a way to choose one",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "getting_started", Label: "Getting started", Icon: "fa-list-check",
+		Description: "A new player's steps: choose a hero, say when you are free. Goes away when done",
+		Addon: "sessions", Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "when_we_play", Label: "When we play", Icon: "fa-calendar-check",
+		Description: "The times most of the table is free",
+		Addon: "sessions", Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "where_we_play", Label: "Where we play", Icon: "fa-location-dot",
+		Description: "The Foundry address and voice channel you type in",
+		Contexts: []string{"dashboard"},
+		ConfigFields: []ConfigFieldMeta{
+			{Key: "foundry_url", Label: "Foundry address", Type: "text", Hint: "Where players open the game, like foundry.example.com."},
+			{Key: "voice", Label: "Voice", Type: "text", Hint: "Where you talk, like \"Discord, the Ember Coast channel\"."},
+		},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "house_rules", Label: "House rules", Icon: "fa-scroll",
+		Description: "The house chapters of the rulebook, as players can read them",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "last_time", Label: "Last time", Icon: "fa-clock-rotate-left",
+		Description: "The latest session's recap, as players can read it",
+		Addon: "sessions", Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
 		Type: "activity_feed", Label: "Activity Feed", Icon: "fa-clock-rotate-left",
 		Description: "Recent campaign activity log",
 		Contexts: []string{"dashboard"},

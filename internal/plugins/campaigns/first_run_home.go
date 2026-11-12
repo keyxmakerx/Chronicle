@@ -45,6 +45,37 @@ func frontPageHome(director bool) *DashboardLayout {
 	}}
 }
 
+// playersHome is the arrangement a new campaign's Players home starts from,
+// the signed players' home: the name across the top, then a main column (the
+// page to start on, last time, the latest pages) beside a side column of what
+// a player needs to sit down at the table (the next game, the party, when we
+// play, where we play, the house rules). Every block draws only what a player
+// may read, so it is the same arrangement the Director previews with the eye.
+// It is an ordinary layout the owner rearranges in the Customizer; campaigns
+// made before it keep the homes they have.
+func playersHome() *DashboardLayout {
+	return &DashboardLayout{Rows: []DashboardRow{
+		{ID: "row-welcome", Columns: []DashboardColumn{{
+			ID: "col-welcome", Width: 12,
+			Blocks: []DashboardBlock{{ID: "blk-welcome", Type: BlockWelcomeBanner}},
+		}}},
+		{ID: "row-players", Columns: []DashboardColumn{
+			{ID: "col-players-main", Width: 7, Blocks: []DashboardBlock{
+				{ID: "blk-start-here", Type: BlockStartHere},
+				{ID: "blk-last-time", Type: BlockLastTime},
+				{ID: "blk-recent", Type: BlockRecentPages, Config: map[string]any{"limit": 4}},
+			}},
+			{ID: "col-players-side", Width: 5, Blocks: []DashboardBlock{
+				{ID: "blk-coming-up", Type: BlockComingUp},
+				{ID: "blk-party", Type: BlockParty},
+				{ID: "blk-when-we-play", Type: BlockWhenWePlay},
+				{ID: "blk-where-we-play", Type: BlockWhereWePlay},
+				{ID: "blk-house-rules", Type: BlockHouseRules},
+			}},
+		}},
+	}}
+}
+
 // starterDirectorHome is the home a new campaign's owner and co-DMs land on:
 // the Director's front page with an ordinary Text Block of setup steps under
 // the welcome banner. It is a normal layout, so the owner edits or removes the
