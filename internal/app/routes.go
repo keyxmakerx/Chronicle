@@ -5339,7 +5339,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
-		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheck)
+		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheckDid)
 		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)
 			if err != nil || u == nil || u.Timezone == nil {
