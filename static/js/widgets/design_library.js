@@ -144,7 +144,7 @@
     if (!d) return '';
     var h = '<div class="dl-detail" role="group" aria-label="' + esc(d.name) + '"><b>' + esc(d.name) + (d.shared ? ' <span class="dl-tag">Shared</span>' : '') + '</b><span class="dl-sub">' + esc(originLine(d)) + (d.note ? '. ' + esc(d.note) : '') + '</span>';
     if (S.mode === 'rename') {
-      h += '<div class="dl-row"><input class="dl-in" id="dl-rename" data-dl-key="rename" maxlength="60" aria-label="New name for ' + esc(d.name) + '" value="' + esc(S.draft) + '"><button type="button" class="dl-btn pri" data-dl-do="rename-ok">Rename</button><button type="button" class="dl-btn" data-dl-do="cancel">Cancel</button></div>';
+      h += '<div class="dl-row"><input class="dl-in" id="dl-rename" data-dl-key="rename" maxlength="60" aria-label="New name for ' + esc(d.name) + '"><button type="button" class="dl-btn pri" data-dl-do="rename-ok">Rename</button><button type="button" class="dl-btn" data-dl-do="cancel">Cancel</button></div>';
     } else if (S.mode === 'delete') {
       h += '<p class="dl-ok">Delete “' + esc(d.name) + '”? Copies others already took stay with them.</p><div class="dl-acts"><button type="button" class="dl-bad" data-dl-do="delete-ok">Delete</button><button type="button" data-dl-do="cancel">Keep it</button></div>';
     } else {
@@ -174,7 +174,7 @@
     h += '</span></div>';
     h += '<div><label class="dl-lab" for="dl-save">Save as my design</label><div class="dl-row"><input class="dl-in" id="dl-save" data-dl-key="save" maxlength="60" placeholder="Name this room" value="' + esc(S.mode === '' ? S.draft : '') + '">' +
       '<button type="button" class="dl-btn pri" data-dl-do="save"' + (S.busy ? ' disabled' : '') + '>Save as my design</button></div></div>';
-    h += '<div><label class="dl-lab" for="dl-paste">Paste a code</label><textarea id="dl-paste" data-dl-key="paste" rows="3" cols="1" spellcheck="false" placeholder="' + PREFIX + '…">' + esc(S.paste) + '</textarea>' +
+    h += '<div><label class="dl-lab" for="dl-paste">Paste a code</label><textarea id="dl-paste" data-dl-key="paste" rows="3" cols="1" spellcheck="false" placeholder="' + PREFIX + '…"></textarea>' +
       '<div class="dl-row" style="margin-top:6px"><button type="button" class="dl-btn" data-dl-do="preview"' + (S.busy ? ' disabled' : '') + '>Preview</button></div></div>';
     h += card();
     return h + '<p class="dl-err" role="alert" data-dl-err></p><p class="dl-ok" role="status" aria-live="polite" data-dl-msg></p></div>';
@@ -190,6 +190,10 @@
     var a = document.activeElement, key = a && el.contains(a) && a.getAttribute('data-dl-key'), pos = key && a.selectionStart;
     var pick = a && el.contains(a) && a.getAttribute('data-dl-pick'), act = a && el.contains(a) && a.getAttribute('data-dl-do');
     el.innerHTML = html();
+    // Typed text goes back in as values, never through markup.
+    var rn = el.querySelector('#dl-rename'), pa = el.querySelector('#dl-paste');
+    if (rn) rn.value = S.draft;
+    if (pa) pa.value = S.paste;
     paintMsg();
     var again = key ? el.querySelector('[data-dl-key="' + key + '"]') : pick ? el.querySelector('[data-dl-pick="' + pick + '"]') :
       act ? el.querySelector('[data-dl-do="' + act + '"]') : null;
@@ -338,8 +342,8 @@
         '<button type="button" class="dl-btn" data-dl-sh="add" data-uid="' + esc(o.userId) + '"' + (ok && !named ? '' : ' disabled') + ' aria-label="Add ' + esc(o.displayName) + '">' + (named ? 'Added' : 'Add') + '</button></li>';
     }).join('');
     return '<div class="shr-chips" role="group" aria-label="Named owners" style="display:flex;flex-wrap:wrap;gap:6px">' + chips + '</div>' +
-      '<label class="dl-lab" for="dl-q">Add an owner on this server</label><input id="dl-q" class="dl-in" data-dl-q="1" placeholder="Search by display name" autocomplete="off" value="' + esc(S.q) + '">' +
-      (S.q.length >= 2 && !S.hits.length ? '<p class="dl-ok">No owner found for “' + esc(S.q) + '”.</p>' : '') + (hits ? '<ul class="dl-hits">' + hits + '</ul>' : '');
+      '<label class="dl-lab" for="dl-q">Add an owner on this server</label><input id="dl-q" class="dl-in" data-dl-q="1" placeholder="Search by display name" autocomplete="off">' +
+      (S.q.length >= 2 && !S.hits.length ? '<p class="dl-ok" data-dl-none="1"></p>' : '') + (hits ? '<ul class="dl-hits">' + hits + '</ul>' : '');
   }
   function sheetHtml(d) {
     var tabs = [['code', 'Share code'], ['link', 'Anyone with the link'], ['owners', 'Named owners']];
@@ -360,6 +364,10 @@
       host().appendChild(sheetEl);
     }
     sheetEl.innerHTML = sheetHtml(d);
+    // What the owner is typing goes back in as text, never through markup.
+    var qf = sheetEl.querySelector('[data-dl-q]'), none = sheetEl.querySelector('[data-dl-none]');
+    if (qf) qf.value = S.q;
+    if (none) none.textContent = 'No owner found for “' + S.q + '”.';
     var act = a && sheetEl.contains(a) && a.getAttribute('data-dl-sh'), uid = a && a.getAttribute && a.getAttribute('data-uid');
     var again = tab ? sheetEl.querySelector('[data-tab="' + tab + '"]') : id ? sheetEl.querySelector('#' + id) :
       act ? sheetEl.querySelector('[data-dl-sh="' + act + '"]' + (uid ? '[data-uid="' + uid + '"]' : '')) : null;
