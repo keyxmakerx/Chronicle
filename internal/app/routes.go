@@ -3032,6 +3032,7 @@ func (a *App) RegisterRoutes() {
 	guestCodeService := campaigns.NewGuestCodeService(campaigns.NewGuestCodeRepository(a.DB), campaignRepo)
 	campaigns.RegisterGuestCodeRoutes(e, campaigns.NewGuestCodeHandler(guestCodeService, a.Config.BaseURL), campaignService, authService)
 	auth.ConfigureGuests(authService, guestCodeService)
+	campaigns.ConfigureVisitPasses(campaignService, guestCodeService)
 	auth.OnGuestMerged(authService, guestCodeService.MoveGuestMembership)
 	campaigns.OnMemberRemoved(campaignService, authService.EndGuest)
 	campaigns.OnCampaignDeleted(campaignService, authService.EndCampaignGuests)
@@ -5921,6 +5922,7 @@ func (a *App) RegisterRoutes() {
 			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
+			ctx = layouts.SetVisitUntil(ctx, cc.VisitUntil)
 
 			// Entity types, per-type counts and the enabled addons: what the
 			// sidebar is built from. Use the request context (not the

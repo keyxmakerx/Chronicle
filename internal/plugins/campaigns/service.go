@@ -282,6 +282,32 @@ type campaignService struct {
 	// campaignDeleted runs after a campaign is purged, for accounts that
 	// existed only for it (guests).
 	campaignDeleted []func(ctx context.Context, campaignID string)
+	// visits answers whether a non-member holds a look-around pass. Nil
+	// means no one is let in that way.
+	visits VisitPasses
+}
+
+// VisitPasses is the guest-code side of look-around passes, as the access
+// middleware needs it.
+type VisitPasses interface {
+	VisitPass(ctx context.Context, campaignID, userID string) (until time.Time, live, found bool, err error)
+}
+
+// ConfigureVisitPasses lets look-around passes open a campaign's view
+// pages to their holders.
+func ConfigureVisitPasses(svc CampaignService, v VisitPasses) {
+	if s, ok := svc.(*campaignService); ok {
+		s.visits = v
+	}
+}
+
+// VisitPass reports a non-member's look-around pass, or found false when
+// passes aren't wired.
+func (s *campaignService) VisitPass(ctx context.Context, campaignID, userID string) (time.Time, bool, bool, error) {
+	if s.visits == nil {
+		return time.Time{}, false, false, nil
+	}
+	return s.visits.VisitPass(ctx, campaignID, userID)
 }
 
 // OnMemberRemoved registers fn to run after a user is removed from a campaign.

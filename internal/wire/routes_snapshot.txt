@@ -927,6 +927,8 @@ GET	/campaigns/:id/groups/manage	session	plugins/campaigns.(*Handler).GroupsPage
 GET	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Card	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
 DELETE	/campaigns/:id/guest-codes/:gcid	session	plugins/campaigns.(*GuestCodeHandler).Remove	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/guest-codes/:gcid/end	session	plugins/campaigns.(*GuestCodeHandler).EndVisit	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/guest-codes/:gcid/player	session	plugins/campaigns.(*GuestCodeHandler).MakePlayer	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/handover-setting	session	plugins/campaigns.(*Handler).UpdateHandoverSettingAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew	session	plugins/homebrew.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/catalog	session	plugins/homebrew.(*Handler).Catalog	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

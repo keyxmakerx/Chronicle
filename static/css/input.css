@@ -3097,6 +3097,27 @@
     background: color-mix(in srgb, var(--color-accent, #6366f1) 8%, var(--color-bg-secondary, #fff));
   }
   .cta-bar[data-cta="guest"] .cta-ico { color: var(--color-accent, #6366f1); }
+  /* A visitor's strip counts down a pass, so it reads like the guest one:
+     steady accent, not the gold of something the table needs now. */
+  .cta-bar[data-cta="visitor"] {
+    background: color-mix(in srgb, var(--color-accent, #6366f1) 8%, var(--color-bg-secondary, #fff));
+  }
+  .cta-bar[data-cta="visitor"] .cta-ico { color: var(--color-accent, #6366f1); }
+
+  /* Guest codes card: a two- or three-part picker built from radios, and the
+     row labels. Tokens only, so it follows the campaign's colours. */
+  .gc-seg { display: inline-flex; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; background: var(--color-bg-secondary); box-shadow: var(--elev-resting); }
+  .gc-seg label { position: relative; display: inline-flex; align-items: center; min-height: 32px; padding: 6px 12px; font-size: 0.82rem; font-weight: 600; color: var(--color-text-secondary); cursor: pointer; }
+  .gc-seg label + label { border-left: 1px solid var(--color-border); }
+  .gc-seg label:hover { color: var(--color-text-primary); }
+  .gc-seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .gc-seg label:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+  .gc-seg label:has(input:checked) { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); }
+  .gc-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+  .gc-pill-live { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); }
+  .gc-pill-ok { background: rgb(var(--color-ok-rgb) / 0.12); color: rgb(var(--color-ok-rgb)); }
+  .gc-remove { font-size: 0.75rem; color: var(--color-danger-strong); }
+  .gc-remove:hover { text-decoration: underline; }
 
   .cta-ico { font-size: 13px; color: var(--color-text-secondary, #6b7280); }
   .cta-msg { flex: 1 1 auto; min-width: 0; }

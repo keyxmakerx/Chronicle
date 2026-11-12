@@ -260,6 +260,10 @@ type CampaignContext struct {
 	// (logged-out public-campaign visitor). Implies !IsMember. Used by the
 	// glance badge to label content "visible to the public".
 	IsAnonymous bool
+	// VisitUntil is set for a signed-in non-member reading the campaign on a
+	// look-around pass: when the pass ends. They see what a public visitor
+	// sees (RoleNone), and write routes refuse them like any non-member.
+	VisitUntil *time.Time
 }
 
 // PlayerPreview is a copy of cc that draws a page as a player sees it, for an

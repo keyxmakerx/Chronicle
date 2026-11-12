@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ctxKey is a private type for context keys to prevent collisions.
@@ -23,6 +24,7 @@ const (
 	keyUserAvatarPath      ctxKey = "layout_user_avatar_path"
 	keyIsAdmin             ctxKey = "layout_is_admin"
 	keyIsGuest             ctxKey = "layout_is_guest"
+	keyVisitUntil          ctxKey = "layout_visit_until"
 	keyIsPane              ctxKey = "layout_is_pane"
 	keyCampaignID          ctxKey = "layout_campaign_id"
 	keyCampaignName        ctxKey = "layout_campaign_name"
@@ -117,6 +119,18 @@ func SetIsGuest(ctx context.Context, isGuest bool) context.Context {
 // IsGuest reports whether the signed-in person is a guest.
 func IsGuest(ctx context.Context) bool {
 	v, _ := ctx.Value(keyIsGuest).(bool)
+	return v
+}
+
+// SetVisitUntil records when the viewer's look-around pass for this
+// campaign ends; nil for anyone not visiting on a pass.
+func SetVisitUntil(ctx context.Context, until *time.Time) context.Context {
+	return context.WithValue(ctx, keyVisitUntil, until)
+}
+
+// VisitUntil is when the viewer's look-around pass ends, or nil.
+func VisitUntil(ctx context.Context) *time.Time {
+	v, _ := ctx.Value(keyVisitUntil).(*time.Time)
 	return v
 }
 

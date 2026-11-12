@@ -11,6 +11,7 @@ import "context"
 import "fmt"
 import "strconv"
 import "strings"
+import "time"
 
 import "github.com/keyxmakerx/chronicle/internal/colour"
 import "github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -110,7 +111,9 @@ templ fullApp(title string) {
 				<!-- Flash messages -->
 				@FlashMessages()
 
-				if IsGuest(ctx) {
+				if until := VisitUntil(ctx); until != nil {
+					@VisitorBanner(*until, time.Now())
+				} else if IsGuest(ctx) {
 					@GuestBanner()
 				}
 
