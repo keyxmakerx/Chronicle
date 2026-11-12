@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -449,12 +450,9 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 	normalizeImportIcons(data, report)
 
 	if len(data.Campaign.DashboardLayout) > 0 {
-		var dashLayout DashboardLayout
-		if err := json.Unmarshal(data.Campaign.DashboardLayout, &dashLayout); err == nil {
-			if err := s.campaigns.UpdateDashboardLayout(ctx, campaignID, &dashLayout); err != nil {
-				slog.Warn("import dashboard layout failed", slog.Any("error", err))
-				report.Fail("campaign", "dashboard layout", data.Campaign.Name, apperror.SafeMessage(err))
-			}
+		if err := s.importDashboardLayout(ctx, campaignID, data.Campaign.DashboardLayout); err != nil {
+			slog.Warn("import dashboard layout failed", slog.Any("error", err))
+			report.Fail("campaign", "dashboard layout", data.Campaign.Name, apperror.SafeMessage(err))
 		}
 	}
 
@@ -705,4 +703,39 @@ func ptrToString(s *string) string {
 		return *s
 	}
 	return ""
+}
+
+// campaignLinkRe matches "/campaigns/<id>" inside a saved home.
+var campaignLinkRe = regexp.MustCompile(`(/campaigns/)[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+
+// importDashboardLayout saves an exported campaign home. The column holds
+// either one layout or the role-keyed shape; reading the second as the first
+// succeeds with no rows and would blank every home, so the keyed shape is
+// tried first and each role's layout is validated like a Customizer save.
+func (s *ExportImportService) importDashboardLayout(ctx context.Context, campaignID string, raw json.RawMessage) error {
+	// The default home links into its own campaign; a copy must link to
+	// itself, not to the campaign it was exported from.
+	raw = campaignLinkRe.ReplaceAll(raw, []byte("${1}"+campaignID))
+	var roles RoleDashboardLayouts
+	if err := json.Unmarshal(raw, &roles); err == nil && !roles.isEmpty() {
+		for _, l := range []*DashboardLayout{roles.Default, roles.Player, roles.Scribe, roles.Director, roles.Guest} {
+			if l == nil {
+				continue
+			}
+			if err := validateDashboardLayout(ctx, campaignID, l); err != nil {
+				return err
+			}
+		}
+		out, err := json.Marshal(&roles)
+		if err != nil {
+			return fmt.Errorf("marshaling imported home layouts: %w", err)
+		}
+		str := string(out)
+		return s.campaigns.UpdateDashboardLayoutRaw(ctx, campaignID, &str)
+	}
+	var single DashboardLayout
+	if err := json.Unmarshal(raw, &single); err != nil {
+		return nil
+	}
+	return s.campaigns.UpdateDashboardLayout(ctx, campaignID, &single)
 }
