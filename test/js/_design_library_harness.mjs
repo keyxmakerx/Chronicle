@@ -21,7 +21,7 @@ const HOST = `<!doctype html><html data-motion="calm"><head><style>[hidden] { di
 // The in-page fake. It keeps what the routes would keep and records every
 // call, so a test can say what the widget asked for.
 const FAKE = `
-window.__srv = { system: 'drawsteel', mine: [], shared: [], hits: [], preview: null, previewErr: '', calls: [], n: 0,
+window.__srv = { system: 'drawsteel', pkg: { systemId: 'drawsteel', systemName: 'Draw Steel', you: 'Alice', designs: [] }, mine: [], shared: [], hits: [], preview: null, previewErr: '', calls: [], n: 0,
   share: { code: 'chronicle-design:v1:eyJraW5kIjoicm9vbS10aGVtZSJ9', linkOn: false, linkUrl: '', owners: [] } };
 function done(v) { return Promise.resolve(JSON.parse(JSON.stringify(v == null ? {} : v))); }
 function refuse(m) { return Promise.reject(new Error(m)); }
@@ -37,6 +37,17 @@ window.Chronicle = {
     s.calls.push(m + ' ' + p + (b ? ' ' + JSON.stringify(b) : ''));
     var id = (p.match(/^\\/designs\\/([^/]+)/) || [])[1], d = s.mine.filter(function (x) { return x.id === id; })[0];
     if (m === 'GET' && p === '/designs') return done({ designs: s.mine, systemId: s.system });
+    if (m === 'GET' && p === '/designs/package') return s.pkgErr ? refuse(s.pkgErr) : done(s.pkg);
+    if (m === 'POST' && /^\\/designs\\/package\\/[^/]+\\/copy$/.test(p)) {
+      var pd = s.pkg.designs.filter(function (x) { return x.id === p.split('/')[3]; })[0];
+      if (!pd) return refuse('that design was not found');
+      var pc = { id: 'd' + (++s.n), kind: pd.kind, name: pd.name, note: pd.note || '', systemId: s.system, makerName: pd.makerName || s.pkg.systemName, data: pd.data, origin: 'package', shared: false }; s.mine.unshift(pc); return done(pc);
+    }
+    if (m === 'POST' && /^\\/designs\\/[^/]+\\/suggestion$/.test(p)) {
+      if (s.suggestErr) return refuse(s.suggestErr);
+      var sd = s.mine.filter(function (x) { return x.id === p.split('/')[2]; })[0];
+      return done({ filename: 'drawsteel-design-' + sd.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.json', suggestion: { format: 'chronicle-design-suggestion:v1', system: s.system, designs: [{ kind: sd.kind, name: sd.name, maker: b.credit ? s.pkg.you : undefined, file: 'designs/x.json' }], data: { 'designs/x.json': sd.data }, messageForMaintainer: b.note || undefined } });
+    }
     if (m === 'GET' && p === '/designs/shared-with-me') return done({ designs: s.shared });
     if (m === 'POST' && p === '/designs') { var n = { id: 'd' + (++s.n), kind: b.kind, name: b.name, note: '', systemId: s.system, makerName: 'Alice', data: b.data, origin: 'made', shared: false }; s.mine.unshift(n); return done(n); }
     if (m === 'GET' && p === '/designs/owners') return done({ owners: s.hits.filter(function (h) { return h.displayName.toLowerCase().indexOf(decodeURIComponent(q).toLowerCase()) >= 0; }) });
@@ -78,7 +89,7 @@ export async function openArranged(browser, { width = 1200, height = 800, seed =
   page.on('pageerror', (e) => errors.push(e.message));
   await page.setContent(HOST);
   await page.addScriptTag({ content: FAKE + '\nObject.assign(window.__srv, ' + JSON.stringify(seed) + ');' });
-  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_counter.js', 'design_library.js', 'design_library_gallery.js', 'shop_room_builder.js', 'shop_room.js']) await page.addScriptTag({ content: read(f) });
+  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_counter.js', 'design_library.js', 'design_library_gallery.js', 'design_library_suggest.js', 'shop_room_builder.js', 'shop_room.js']) await page.addScriptTag({ content: read(f) });
   await page.waitForSelector('#w:not([hidden]) .shr-front');
   await page.click('.shr-front');
   await page.waitForSelector('.src-svg [data-k="keeper"]');

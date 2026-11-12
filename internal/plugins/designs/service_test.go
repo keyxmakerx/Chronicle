@@ -29,7 +29,7 @@ func newWorld() (*service, *memRepo, *fakeDir) {
 	}
 	kinds := NewKinds()
 	kinds.Register(KindRoomTheme, themeKind{lack: map[string]bool{"B1": true}})
-	return NewService(repo, dir, kinds).(*service), repo, dir
+	return NewService(repo, dir, kinds, nil).(*service), repo, dir
 }
 
 func code(t *testing.T, s *service, id string) string {

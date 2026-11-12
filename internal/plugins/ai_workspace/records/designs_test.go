@@ -13,6 +13,8 @@ import (
 // kind's validator would refuse an unknown part.
 type fakeDesigns struct {
 	list   []DesignRef
+	sys    string
+	pkg    []DesignRef
 	saved  []DesignValue
 	rename map[string][2]*string
 }
@@ -30,6 +32,9 @@ func (f *fakeDesigns) Check(_ context.Context, _ string, _ Actor, v DesignValue)
 func (f *fakeDesigns) Save(_ context.Context, _ string, _ Actor, v DesignValue) error {
 	f.saved = append(f.saved, v)
 	return nil
+}
+func (f *fakeDesigns) Package(context.Context, string, Actor) (string, []DesignRef, error) {
+	return f.sys, f.pkg, nil
 }
 func (f *fakeDesigns) Rename(_ context.Context, _ string, _ Actor, id string, name, note *string) error {
 	f.rename[id] = [2]*string{name, note}
@@ -124,5 +129,34 @@ func TestDesignsLookup(t *testing.T) {
 	}
 	if info := l.LookupInfo(); info.What != "designs" || !info.Tool.Owner {
 		t.Errorf("info = %+v", info)
+	}
+}
+
+func TestDesignsLookupShowsPackageReadOnly(t *testing.T) {
+	k, f := designKind(true)
+	f.sys = "Draw Steel"
+	f.pkg = []DesignRef{{ID: "pkg-1", Kind: "room-theme", Name: "Ashgate Forge", Note: "shipped", Maker: "MCDM fan", Data: json.RawMessage(`{"version":1}`)}}
+	l := DesignsLookup{Svc: f, Owners: k.Owners}
+	_, text, err := l.Answer(context.Background(), "c1", designOwner, Record{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := strings.Index(text, "## From Draw Steel (1, read only)")
+	if i < 0 {
+		t.Fatalf("no package section:\n%s", text)
+	}
+	section := text[i:]
+	for _, want := range []string{"Ashgate Forge", "made by MCDM fan", `{"version":1}`} {
+		if !strings.Contains(section, want) {
+			t.Errorf("section lacks %q", want)
+		}
+	}
+	// A package design offers no block, so nothing can be sent back to change it.
+	if strings.Contains(section, "kind: design") {
+		t.Error("a package design was offered as a changeable block")
+	}
+	// The AI kind cannot rename a package design: its id is not a library row.
+	if err := k.Apply(context.Background(), "c1", designOwner, Record{Action: ActionUpdate, Name: "Ashgate Forge", Fields: map[string]any{"rename": "x"}}); err == nil && len(f.rename) > 0 {
+		t.Error("a package design was renamed")
 	}
 }

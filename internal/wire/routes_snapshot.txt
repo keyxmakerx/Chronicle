@@ -753,6 +753,7 @@ GET	/campaigns/:id/designs/:did/share	session	plugins/designs.(*Handler).ShareSt
 PUT	/campaigns/:id/designs/:did/share/link	session	plugins/designs.(*Handler).SetLink	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/designs/:did/share/owners	session	plugins/designs.(*Handler).AddOwner	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/designs/:did/share/owners/:uid	session	plugins/designs.(*Handler).RemoveOwner	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/:did/suggestion	session	plugins/designs.(*Handler).Suggest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/designs/code/preview	session	plugins/designs.(*Handler).PreviewCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/designs/code/take	session	plugins/designs.(*Handler).TakeCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs/gallery	session	plugins/designs.(*GalleryHandler).Browse	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -761,6 +762,8 @@ POST	/campaigns/:id/designs/gallery/:gid/copy	session	plugins/designs.(*GalleryH
 POST	/campaigns/:id/designs/gallery/:gid/report	session	plugins/designs.(*GalleryHandler).Report	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs/gallery/mine	session	plugins/designs.(*GalleryHandler).Mine	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs/owners	session	plugins/designs.(*Handler).SearchOwners	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/package	session	plugins/designs.(*Handler).Package	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/package/:pid/copy	session	plugins/designs.(*Handler).CopyPackage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs/shared-with-me	session	plugins/designs.(*Handler).SharedWithMe	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs/shared/:did/preview	session	plugins/designs.(*Handler).PreviewShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/designs/shared/:did/take	session	plugins/designs.(*Handler).TakeShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

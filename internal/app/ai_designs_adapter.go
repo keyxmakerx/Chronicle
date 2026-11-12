@@ -78,3 +78,17 @@ func (a aiDesignsAdapter) Browse(ctx context.Context, campaignID string, act rec
 	}
 	return out, page.Total, nil
 }
+
+// Package reads the game system package's designs for the `designs` lookup.
+// It is read only: the service has no call here that changes a package.
+func (a aiDesignsAdapter) Package(ctx context.Context, campaignID string, act records.Actor) (string, []records.DesignRef, error) {
+	g, err := a.svc.Package(ctx, campaignID, act.UserID, "")
+	if err != nil {
+		return "", nil, err
+	}
+	out := make([]records.DesignRef, len(g.Designs))
+	for i, d := range g.Designs {
+		out[i] = records.DesignRef{ID: d.ID, Kind: d.Kind, Name: d.Name, Note: d.Note, SystemID: g.SystemID, Maker: d.MakerName, Origin: designs.OriginPackage, Data: d.Data}
+	}
+	return g.SystemName, out, nil
+}

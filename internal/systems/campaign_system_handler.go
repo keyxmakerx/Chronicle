@@ -220,6 +220,11 @@ func (h *CampaignSystemHandler) buildDiagnostics(ctx context.Context, campaignID
 	// Validation warnings.
 	report := manifest.BuildValidationReport()
 	diag.Warnings = report.Warnings
+	// Designs are read from files, so what the kind registry refuses only
+	// shows up here, not in the manifest report.
+	if _, skipped := PackageDesignsFor(ctx, manifest.ID); len(skipped) > 0 {
+		diag.Warnings = append(diag.Warnings, skipped...)
+	}
 
 	return diag
 }

@@ -6607,7 +6607,9 @@ func (a *App) RegisterRoutes() {
 	// while the plugin's tables are up.
 	var aiDesigns records.DesignsAPI
 	if a.PluginHealth.IsHealthy(designs.PluginSlug) {
-		designsSvc := designs.NewService(designs.NewRepository(a.DB), designsDirectory{svc: campaignService}, designKinds)
+		// Package designs are validated by the same kinds as saved ones.
+		systems.SetDesignKinds(designKindChecker{kinds: designKinds})
+		designsSvc := designs.NewService(designs.NewRepository(a.DB), designsDirectory{svc: campaignService}, designKinds, designsPackageSource{})
 		designsGallery := designs.NewGalleryService(designs.NewRepository(a.DB), designs.NewGalleryRepository(a.DB), designsDirectory{svc: campaignService}, designKinds, galleryUserNames{auth: authService})
 		galleryHandler := designs.NewGalleryHandler(designsGallery, adminActivity)
 		designs.RegisterRoutes(e, designs.NewHandler(designsSvc), galleryHandler, campaignService, authService)
@@ -6792,7 +6794,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/design_library.js", "/static/js/widgets/design_library_gallery.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/design_library.js", "/static/js/widgets/design_library_gallery.js", "/static/js/widgets/design_library_suggest.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
 	{Name: "design_library", Scripts: []string{"/static/js/widgets/design_library.js"}},
 	{Name: "design_gallery_admin", Scripts: []string{"/static/js/widgets/design_gallery_admin.js"}},
 	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},

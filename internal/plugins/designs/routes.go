@@ -22,6 +22,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, gh *GalleryHandler, campaignSvc ca
 	cg.GET("/designs", h.List, owner)
 	cg.POST("/designs", h.Save, owner)
 	// Fixed paths first so they never read as a design id.
+	cg.GET("/designs/package", h.Package, owner)
+	cg.POST("/designs/package/:pid/copy", h.CopyPackage, owner)
 	cg.GET("/designs/gallery", gh.Browse, owner)
 	cg.GET("/designs/gallery/mine", gh.Mine, owner)
 	cg.POST("/designs/gallery/:gid/copy", gh.Copy, owner)
@@ -42,6 +44,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, gh *GalleryHandler, campaignSvc ca
 	cg.POST("/designs/:did/share/owners", h.AddOwner, owner)
 	cg.DELETE("/designs/:did/share/owners/:uid", h.RemoveOwner, owner)
 	cg.DELETE("/designs/:did/share", h.StopSharing, owner)
+	cg.POST("/designs/:did/suggestion", h.Suggest, owner)
 	cg.POST("/designs/:did/gallery", gh.Publish, owner)
 	cg.PUT("/designs/:did/gallery", gh.Republish, owner)
 

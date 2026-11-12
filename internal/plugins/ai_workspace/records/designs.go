@@ -24,6 +24,9 @@ type DesignsAPI interface {
 	Save(ctx context.Context, campaignID string, a Actor, v DesignValue) error
 	// Rename changes the name and/or note; nil leaves one as it is.
 	Rename(ctx context.Context, campaignID string, a Actor, id string, name, note *string) error
+	// Package is the designs the campaign's game system package ships, with the
+	// system's name. Read only: nothing here changes a package.
+	Package(ctx context.Context, campaignID string, a Actor) (system string, list []DesignRef, err error)
 }
 
 // DesignValue is a design to save: its kind of design, labels and data.
@@ -255,7 +258,7 @@ type DesignsLookup struct {
 func (DesignsLookup) LookupInfo() aiplug.LookupInfo {
 	return aiplug.LookupInfo{
 		What: "designs", Aliases: []string{"design", "design-library"}, Keys: "none",
-		Brief: "the campaign's saved designs (shop counter room themes): name, kind, game system, maker, whether shared, and each as a block (owner only)",
+		Brief: "the campaign's saved designs (shop counter room themes): name, kind, game system, maker, whether shared, and each as a block, then the game system package's own designs, read only (owner only)",
 		Tool: aiplug.Tool{
 			Name: "designs", Title: "Saved designs", Did: "Listed the saved designs", Owner: true,
 			Desc: "The campaign's library of saved designs: each with its kind, game system, maker and whether it is shared, and a block to send back changed.",
@@ -283,6 +286,23 @@ func (l DesignsLookup) Answer(ctx context.Context, campaignID string, a Actor, _
 			share = "shared"
 		}
 		fmt.Fprintf(&b, "### %s\n\n%s, game system %s, made by %s, %s.\n\n```\n%s```\n\n", d.Name, d.Kind, nonEmpty(d.SystemID, "none"), nonEmpty(d.Maker, "unknown"), share, designBlock(d))
+	}
+	// The game system package's own designs are read only: no block is offered
+	// to send back, because a block saves a new library design and never
+	// changes the package.
+	sys, pkg, err := l.Svc.Package(ctx, campaignID, a)
+	if err != nil {
+		return chip, "", err
+	}
+	if len(pkg) > 0 {
+		fmt.Fprintf(&b, "## From %s (%d, read only)\n\nThese ship with the game system package. They cannot be renamed, changed or deleted; the owner can save a copy as their own design.\n\n", nonEmpty(sys, "the game system"), len(pkg))
+		for _, d := range pkg {
+			fmt.Fprintf(&b, "### %s\n\n%s, made by %s.\n\n", d.Name, d.Kind, nonEmpty(d.Maker, "the package"))
+			if d.Note != "" {
+				fmt.Fprintf(&b, "%s\n\n", d.Note)
+			}
+			fmt.Fprintf(&b, "```\n%s\n```\n\n", d.Data)
+		}
 	}
 	return chip, b.String(), nil
 }

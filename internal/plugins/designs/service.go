@@ -44,6 +44,13 @@ type Service interface {
 	Update(ctx context.Context, campaignID, userID, id string, in UpdateDesignInput) (*Design, error)
 	Delete(ctx context.Context, campaignID, userID, id string) error
 
+	// Package is the read-only group of designs the campaign's game system
+	// package ships; CopyPackage makes an independent library row from one;
+	// Suggest builds the file an Owner sends a package maintainer.
+	Package(ctx context.Context, campaignID, userID, kind string) (*PackageGroup, error)
+	CopyPackage(ctx context.Context, campaignID, userID, id string) (*Design, error)
+	Suggest(ctx context.Context, campaignID, userID, id string, in SuggestInput) (*Suggestion, error)
+
 	ShareState(ctx context.Context, campaignID, userID, id string) (*ShareState, error)
 	SetLink(ctx context.Context, campaignID, userID, id string, on bool) (*ShareState, error)
 	SearchOwners(ctx context.Context, campaignID, userID, query string) ([]OwnerMatch, error)
@@ -64,11 +71,13 @@ type service struct {
 	repo  Repository
 	dir   CampaignDirectory
 	kinds KindRegistry
+	pkgs  PackageSource
 }
 
-// NewService creates the service.
-func NewService(repo Repository, dir CampaignDirectory, kinds KindRegistry) Service {
-	return &service{repo: repo, dir: dir, kinds: kinds}
+// NewService creates the service. pkgs may be nil: the campaign then simply has
+// no package group.
+func NewService(repo Repository, dir CampaignDirectory, kinds KindRegistry, pkgs PackageSource) Service {
+	return &service{repo: repo, dir: dir, kinds: kinds, pkgs: pkgs}
 }
 
 const (

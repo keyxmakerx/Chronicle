@@ -83,7 +83,7 @@
   /* ---- State: one library view at a time (the builder mounts one) ---- */
   var H = null;        // the host that mounted us
   var el = null;       // the element we draw the groups in
-  var S = { mine: [], shared: [], system: '', loaded: false, sel: '', mode: '', msg: '', err: '', draft: '', paste: '',
+  var S = { mine: [], shared: [], pkg: { systemId: '', systemName: '', you: '', designs: [] }, selPkg: '', suggest: false, system: '', loaded: false, sel: '', mode: '', msg: '', err: '', draft: '', paste: '',
     preview: null, previewFrom: null, sheet: false, tab: 'code', share: null, q: '', hits: [], busy: false, shareErr: '', shareMsg: '' };
   var searchT = 0, opener = null;
 
@@ -93,6 +93,8 @@
   }
   function say(t) { S.msg = t || ''; S.err = ''; if (H && H.say) H.say(t || ''); paintMsg(); }
   function fail(e) { S.err = (e && e.message) || 'Something went wrong. Try again.'; S.msg = ''; paintMsg(); }
+  function pkgById(id) { for (var i = 0; i < S.pkg.designs.length; i++) if (S.pkg.designs[i].id === id) return S.pkg.designs[i]; return null; }
+  function pkgName() { return S.pkg.systemName || systemName(S.system); }
   function mineById(id) { for (var i = 0; i < S.mine.length; i++) if (S.mine[i].id === id) return S.mine[i]; return null; }
 
   var CSS = [
@@ -133,7 +135,7 @@
   /* ---- Drawing the groups ---- */
   function originLine(d) {
     var by = d.makerName ? ' by ' + d.makerName : '';
-    var how = d.origin === 'code' ? 'Added from a code' + by : d.origin === 'shared' ? 'Shared' + by : d.origin === 'gallery' ? 'Copied from the gallery' + by : 'Made in this campaign';
+    var how = d.origin === 'code' ? 'Added from a code' + by : d.origin === 'shared' ? 'Shared' + by : d.origin === 'gallery' ? 'Copied from the gallery' + by : d.origin === 'package' ? 'Copied from the game system package' + by : 'Made in this campaign';
     return kindLabel(d.kind) + ' · ' + how;
   }
   function chip(id, name, pressed, extra) {
@@ -163,8 +165,28 @@
     previewNotes(p, S.system).forEach(function (n) { h += '<div class="dl-note" role="note">' + esc(n.text) + '</div>'; });
     return h + '<div class="dl-row"><button type="button" class="dl-btn pri" data-dl-do="take"' + (S.busy ? ' disabled' : '') + '>Add to my designs</button><button type="button" class="dl-btn" data-dl-do="cancel-preview">Cancel</button></div></div>';
   }
+  // The game system package's designs: a read-only group and, for the one in
+  // use, the strip that says why it cannot be renamed or deleted here.
+  function pkgHtml() {
+    var list = S.pkg.designs, name = pkgName(), h = '';
+    if (list.length) {
+      h += '<div><small class="dl-g">From ' + esc(name) + ' <span class="dl-sub">shipped with the game system</span></small><span class="shr-chips" role="group" aria-label="From ' + esc(name) + '">' +
+        list.map(function (d) { return chip('p:' + d.id, d.name, d.id === S.selPkg, d.makerName ? 'by ' + d.makerName : ''); }).join('') + '</span></div>';
+    }
+    var cur = pkgById(S.selPkg);
+    if (cur) {
+      h += '<div class="dl-detail" role="group" aria-label="' + esc(cur.name) + '"><b>' + esc(cur.name) + '</b><span class="dl-sub">' + esc(kindLabel(cur.kind)) + (cur.note ? ' · ' + esc(cur.note) : '') + '</span>' +
+        '<span class="dl-sub"><b>From ' + esc(name) + '.</b> Part of the game system package, so it can’t be renamed or deleted here. Change it and use Save as my design to keep your own version.</span>' +
+        '<div class="dl-acts"><button type="button" data-dl-do="save-pkg">Save as my design</button></div></div>';
+    }
+    if (S.system && S.system.indexOf('custom:') !== 0) {
+      h += '<div><button type="button" class="dl-btn" data-dl-do="suggest" aria-expanded="' + (S.suggest ? 'true' : 'false') + '" aria-controls="dl-suggest">Suggest for ' + esc(name) + '</button></div>' +
+        '<div id="dl-suggest" data-dl-suggest></div>';
+    }
+    return h;
+  }
   function html() {
-    var h = '<div class="dl"><div><small class="dl-g">My designs</small><span class="shr-chips" role="group" aria-label="My designs">';
+    var h = '<div class="dl">' + pkgHtml() + '<div><small class="dl-g">My designs</small><span class="shr-chips" role="group" aria-label="My designs">';
     h += S.mine.length ? S.mine.map(function (d) { return chip(d.id, d.name, d.id === S.sel, ''); }).join('') :
       '<span class="dl-ok">' + (S.loaded ? 'Nothing saved yet. Name this room below to keep it.' : 'Loading…') + '</span>';
     h += '</span></div>' + detail();
@@ -196,6 +218,7 @@
     if (rn) rn.value = S.draft;
     if (pa) pa.value = S.paste;
     if (window.DesignGallery) window.DesignGallery.redraw(el.querySelector('[data-dl-gallery]'));
+    if (window.DesignSuggest) window.DesignSuggest.redraw(el.querySelector('[data-dl-suggest]'));
     paintMsg();
     var again = key ? el.querySelector('[data-dl-key="' + key + '"]') : pick ? el.querySelector('[data-dl-pick="' + pick + '"]') :
       act ? el.querySelector('[data-dl-do="' + act + '"]') : null;
@@ -205,24 +228,41 @@
   /* ---- Loading and acting ---- */
   function load() {
     var q = '?kind=' + encodeURIComponent(H.kind);
-    return Promise.all([call('GET', '/designs' + q), call('GET', '/designs/shared-with-me' + q)]).then(function (r) {
+    // The package group is optional: if it cannot be read the library still works.
+    var pkg = call('GET', '/designs/package' + q).catch(function () { return null; });
+    return Promise.all([call('GET', '/designs' + q), call('GET', '/designs/shared-with-me' + q), pkg]).then(function (r) {
       S.mine = r[0].designs || []; S.system = r[0].systemId || ''; S.shared = r[1].designs || []; S.loaded = true;
+      var g = r[2] || {};
+      S.pkg = { systemId: g.systemId || '', systemName: g.systemName || '', you: g.you || '', designs: g.designs || [] };
       if (S.sel && !mineById(S.sel)) S.sel = '';
+      if (S.selPkg && !pkgById(S.selPkg)) S.selPkg = '';
       paint();
     }).catch(function (e) { S.loaded = true; fail(e); paint(); });
   }
   function busy(on) { S.busy = on; if (el) Array.prototype.forEach.call(el.querySelectorAll('[data-dl-do="save"],[data-dl-do="preview"],[data-dl-do="take"]'), function (b) { b.disabled = on; }); }
   function pick(id) {
     S.mode = ''; S.err = ''; S.preview = null;
-    if (id.indexOf('s:') === 0) { return previewShared(id.slice(2)); }
+    if (id.indexOf('s:') === 0) { S.selPkg = ''; return previewShared(id.slice(2)); }
+    if (id.indexOf('p:') === 0) {
+      var pd = pkgById(id.slice(2)); if (!pd) return;
+      S.selPkg = pd.id; S.sel = ''; S.draft = '';
+      H.apply(pd.data); say('Using “' + pd.name + '”. Save room to keep it.'); paint(); return;
+    }
     var d = mineById(id); if (!d) return;
-    S.sel = d.id; S.draft = '';
+    S.sel = d.id; S.selPkg = ''; S.draft = '';
     H.apply(d.data); say('Using “' + d.name + '”. Save room to keep it.'); paint();
   }
   function previewShared(id) {
     busy(true);
     return call('GET', '/designs/shared/' + encodeURIComponent(id) + '/preview').then(function (p) {
       S.preview = { p: p, source: 'shared', id: id }; S.sel = ''; busy(false); paint();
+    }).catch(function (e) { busy(false); fail(e); });
+  }
+  function savePkg() {
+    var pd = pkgById(S.selPkg); if (!pd) return;
+    busy(true);
+    call('POST', '/designs/package/' + encodeURIComponent(pd.id) + '/copy').then(function (d) {
+      S.selPkg = ''; S.sel = d.id; busy(false); say('Saved “' + d.name + '” to your designs. It is yours to rename or change.'); return load();
     }).catch(function (e) { busy(false); fail(e); });
   }
   function save() {
@@ -280,6 +320,8 @@
     var d = mineById(S.sel);
     switch (act) {
       case 'save': save(); break;
+      case 'save-pkg': savePkg(); break;
+      case 'suggest': S.suggest = !S.suggest; paint(); if (S.suggest && window.DesignSuggest) window.DesignSuggest.focus(); break;
       case 'rename': S.mode = 'rename'; S.draft = d ? d.name : ''; paint(); break;
       case 'rename-ok': rename(); break;
       case 'delete': S.mode = 'delete'; paint(); break;
@@ -432,7 +474,8 @@
   function galleryEnv() {
     return {
       call: call, esc: esc, systemName: systemName, kindLabel: kindLabel, host: host, reload: load,
-      kind: function () { return H.kind; }, mine: function () { return S.mine; }, selected: function () { return S.sel; }, system: function () { return S.system; }
+      kind: function () { return H.kind; }, mine: function () { return S.mine; }, selected: function () { return S.sel; }, system: function () { return S.system; },
+      systemLabel: pkgName, you: function () { return S.pkg.you; }, open: function () { return S.suggest; }, close: function () { S.suggest = false; paint(); }
     };
   }
   function mount(box, host_) {
@@ -444,6 +487,7 @@
     box.innerHTML = html(); paintMsg();
     // The server gallery lives in its own file; it draws into the placeholder.
     if (window.DesignGallery) window.DesignGallery.attach(box.querySelector('[data-dl-gallery]'), galleryEnv());
+    if (window.DesignSuggest) window.DesignSuggest.attach(box.querySelector('[data-dl-suggest]'), galleryEnv());
     // The panel redraws on some changes; the sheet is put back with it.
     if (S.sheet && curDesign()) paintSheet();
     load();

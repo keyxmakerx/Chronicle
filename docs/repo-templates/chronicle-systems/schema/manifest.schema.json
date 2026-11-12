@@ -184,6 +184,23 @@
       },
       "additionalProperties": false,
       "description": "How the game rolls and counts a crafting project. Recipes and benches are the campaign's own; this is only the arithmetic."
+    },
+    "designs": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": ["kind", "name", "file"],
+        "properties": {
+          "kind": {"type": "string", "description": "A kind of design the server knows, such as \"room-theme\". An unknown kind skips the entry."},
+          "name": {"type": "string", "minLength": 1, "maxLength": 60},
+          "note": {"type": "string", "maxLength": 140},
+          "maker": {"type": "string", "maxLength": 100, "description": "Credit shown with the design."},
+          "file": {"type": "string", "pattern": "^[^\\\\/][^\\\\]*\\.json$", "description": "A .json file inside the package holding the design's data: relative, no .., at most 16 KB. Keep it outside data/."}
+        },
+        "additionalProperties": false
+      },
+      "description": "Saved designs (room themes, crafting designs) the package ships. Campaigns on this system see them read-only under \"From <system>\" in the design library and can save their own copy. A bad entry is skipped with a warning, never failing the package."
     }
   },
   "additionalProperties": false,

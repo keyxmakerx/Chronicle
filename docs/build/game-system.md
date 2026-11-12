@@ -90,9 +90,50 @@ Validation lives in `internal/systems/manifest.go` (`ValidateManifest`).
 | widget `host_mounted` | `true` for a widget Chronicle mounts itself elsewhere (the encounter builder's budget panel); the Customizer doesn't offer it. A widget the package's book places is left out the same way. | `internal/systems/handler.go` |
 | `dm_screen` | Party tracker and conditions on the DM Screen | `internal/systems/manifest_dm_screen.go` |
 | `terms.gm` | The game's name for the game master ("Director"), used across the campaign; default "GM" | `internal/systems/manifest.go` |
+| `designs` | Saved designs the package ships (see "Shipping designs" below) | `internal/systems/package_designs.go` |
 | `foundry_system_id` | Matches Foundry's `game.system.id` for character sync | Foundry module |
 | `tooltip_template` | Go `text/template` for hover tooltips | `internal/systems/generic_tooltip.go` |
 | field `choices` | Names the data file a character field picks from | `internal/systems/character_choices.go` |
+
+## Shipping designs
+
+`designs` lists saved designs (a shop counter room theme, a crafting design)
+that every campaign on your system sees under **From <your system>** in the
+design library, read only. An Owner picks one to use it, or uses **Save as my
+design** to keep their own copy; the copy never follows later releases.
+
+```json
+"designs": [
+  { "kind": "room-theme", "name": "Ashgate Forge", "note": "Warm oak and iron",
+    "maker": "Your Name", "file": "designs/ashgate-forge.json" }
+]
+```
+
+- `kind` is a design kind the server knows (`room-theme`, `crafting-circle`,
+  `crafting-item-look`, `crafting-bench`). `name` is up to 60 characters,
+  `note` 140, `maker` 100 (both optional).
+- `file` is a `.json` file in the package: a relative path, no `..`, not
+  absolute, at most 16 KB, holding the design's data. Keep it outside `data/`,
+  which is served raw. Use at most 100 designs.
+- The data must pass the kind's own checks. Any entry that fails is skipped and
+  named in `/campaigns/:id/systems/status` and Admin > Health & diagnostics;
+  the rest of the package still loads.
+- Designs are read from a loaded package, not from a campaign's uploaded custom
+  system.
+
+Owners can send you designs: in the library, **Suggest for <your system>**
+downloads one JSON file:
+
+```json
+{ "format": "chronicle-design-suggestion:v1", "system": "yourgame",
+  "designs": [ { "kind": "room-theme", "name": "...", "note": "...", "maker": "...", "file": "designs/name.json" } ],
+  "data": { "designs/name.json": { } },
+  "messageForMaintainer": "optional note, up to 240 characters" }
+```
+
+Paste each `designs` entry into your manifest, save each `data` value as the
+file named by its key, and release. `maker` is present only if the Owner chose
+to be credited.
 
 ## Install and test
 

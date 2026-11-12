@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designs"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 // designsDirectory answers the saved-designs plugin's questions about
@@ -111,4 +113,38 @@ func newDesignKinds() *designs.Kinds {
 	k := designs.NewKinds()
 	k.Register(designs.KindRoomTheme, roomThemeKind{})
 	return k
+}
+
+// designsPackageSource reads the designs a game system package ships, over
+// the systems package's validated loader, so the designs plugin never imports
+// it. Package designs are only read for a loaded system.
+type designsPackageSource struct{}
+
+var _ designs.PackageSource = designsPackageSource{}
+
+func (designsPackageSource) Package(ctx context.Context, systemID string) (string, []designs.PackageItem) {
+	m := systems.Find(systemID)
+	if m == nil {
+		return "", nil
+	}
+	loaded, _ := systems.PackageDesignsFor(ctx, systemID)
+	items := make([]designs.PackageItem, len(loaded))
+	for i, d := range loaded {
+		items[i] = designs.PackageItem{Kind: d.Kind, Name: d.Name, Note: d.Note, Maker: d.Maker, File: d.File, Data: d.Data}
+	}
+	return m.Name, items
+}
+
+// designKindChecker lends the designs kind registry to the systems loader, so
+// a package's design files are held to the same rules as a saved one.
+type designKindChecker struct{ kinds designs.KindRegistry }
+
+var _ systems.DesignKindChecker = designKindChecker{}
+
+func (c designKindChecker) ValidateDesign(_ context.Context, kind string, raw json.RawMessage) (json.RawMessage, error) {
+	k, ok := c.kinds.Kind(kind)
+	if !ok {
+		return nil, fmt.Errorf("%q is not a kind of design this server knows", kind)
+	}
+	return k.Validate(raw)
 }
