@@ -185,6 +185,6 @@ test('picking something shared with me previews it, and Add copies it into My de
   await p.click('.dl-card [data-dl-do="take"]');
   await p.waitForSelector('.dl-detail');
   assert.match(await p.textContent('.dl-detail'), /Ember Sigil/);
-  assert.match(await p.textContent('.dl-detail'), /Shared by Marrow Quill, from Elsewhere/);
+  assert.match(await p.textContent('.dl-detail'), /Shared by Marrow Quill/);
   assert.ok((await calls(p)).includes('POST /designs/shared/s1/take'));
 });

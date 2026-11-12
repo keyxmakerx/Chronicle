@@ -43,7 +43,7 @@ window.Chronicle = {
     if (m === 'POST' && p === '/designs/code/preview') return s.previewErr ? refuse(s.previewErr) : done(s.preview);
     if (m === 'POST' && p === '/designs/code/take') { var c = { id: 'd' + (++s.n), kind: 'room-theme', name: s.preview.name, note: '', systemId: s.system, makerName: s.preview.makerName, data: s.takeData, origin: 'code', shared: false }; s.mine.unshift(c); return done(c); }
     if (m === 'GET' && /^\\/designs\\/shared\\/[^/]+\\/preview$/.test(p)) return done(s.preview);
-    if (m === 'POST' && /^\\/designs\\/shared\\/[^/]+\\/take$/.test(p)) { var t = { id: 'd' + (++s.n), kind: 'room-theme', name: s.preview.name, note: '', systemId: s.system, makerName: s.preview.makerName, data: s.takeData, origin: 'shared', originRef: 'Elsewhere', shared: false }; s.mine.unshift(t); return done(t); }
+    if (m === 'POST' && /^\\/designs\\/shared\\/[^/]+\\/take$/.test(p)) { var t = { id: 'd' + (++s.n), kind: 'room-theme', name: s.preview.name, note: '', systemId: s.system, makerName: s.preview.makerName, data: s.takeData, origin: 'shared', shared: false }; s.mine.unshift(t); return done(t); }
     if (!d) return refuse('that design was not found');
     if (m === 'PATCH') { if (b.name != null) d.name = b.name; return done(d); }
     if (m === 'DELETE' && p === '/designs/' + id) { s.mine = s.mine.filter(function (x) { return x !== d; }); return done({}); }

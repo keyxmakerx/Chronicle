@@ -122,7 +122,7 @@ func TestDBLibraryAndShares(t *testing.T) {
 		if ok, _ := repo.IsNamedOwner(ctx, d.ID, alice); ok {
 			t.Error("alice is named on her own design")
 		}
-		if l, _ := repo.SharedWith(ctx, bob, "drawsteel", KindRoomTheme, b1); len(l) != 1 || l[0].ID != d.ID || l[0].FromCampaign != "Ashgate" {
+		if l, _ := repo.SharedWith(ctx, bob, "drawsteel", KindRoomTheme, b1); len(l) != 1 || l[0].ID != d.ID || l[0].MakerName != "Alice Quill" {
 			t.Errorf("shared with bob = %+v", l)
 		}
 		if l, _ := repo.SharedWith(ctx, bob, "dnd5e", "", b1); len(l) != 0 {

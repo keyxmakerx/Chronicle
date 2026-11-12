@@ -105,10 +105,9 @@ func (r *sqlRepository) StopSharing(ctx context.Context, id string) error {
 }
 
 func (r *sqlRepository) SharedWith(ctx context.Context, userID, systemID, kind, exceptCampaignID string) ([]SharedDesign, error) {
-	q := `SELECT d.id, d.kind, d.name, d.maker_name, COALESCE(c.name,''), d.campaign_id
+	q := `SELECT d.id, d.kind, d.name, d.maker_name, d.campaign_id
 	        FROM design_share_owners o
 	        JOIN design_library d ON d.id = o.design_id
-	        LEFT JOIN campaigns c ON c.id = d.campaign_id
 	       WHERE o.user_id = ? AND d.system_id = ? AND d.campaign_id <> ?`
 	args := []any{userID, systemID, exceptCampaignID}
 	if kind != "" {
@@ -123,7 +122,7 @@ func (r *sqlRepository) SharedWith(ctx context.Context, userID, systemID, kind, 
 	out := []SharedDesign{}
 	for rows.Next() {
 		var s SharedDesign
-		if err := rows.Scan(&s.ID, &s.Kind, &s.Name, &s.MakerName, &s.FromCampaign, &s.campaignID); err != nil {
+		if err := rows.Scan(&s.ID, &s.Kind, &s.Name, &s.MakerName, &s.campaignID); err != nil {
 			return nil, fmt.Errorf("scanning shared design: %w", err)
 		}
 		out = append(out, s)

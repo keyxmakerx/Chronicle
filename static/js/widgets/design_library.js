@@ -133,7 +133,7 @@
   /* ---- Drawing the groups ---- */
   function originLine(d) {
     var by = d.makerName ? ' by ' + d.makerName : '';
-    var how = d.origin === 'code' ? 'Added from a code' + by : d.origin === 'shared' ? 'Shared' + by + (d.originRef ? ', from ' + d.originRef : '') : 'Made in this campaign';
+    var how = d.origin === 'code' ? 'Added from a code' + by : d.origin === 'shared' ? 'Shared' + by : 'Made in this campaign';
     return kindLabel(d.kind) + ' · ' + how;
   }
   function chip(id, name, pressed, extra) {

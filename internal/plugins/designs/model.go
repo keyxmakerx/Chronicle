@@ -127,11 +127,10 @@ type LinkTarget struct {
 
 // SharedDesign is a design shared to the current user by name.
 type SharedDesign struct {
-	ID           string `json:"id"`
-	Kind         string `json:"kind"`
-	Name         string `json:"name"`
-	MakerName    string `json:"makerName"`
-	FromCampaign string `json:"fromCampaign"`
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	MakerName string `json:"makerName"`
 	// campaignID lets the service drop designs whose source campaign is gone;
 	// it is never sent to the client.
 	campaignID string
