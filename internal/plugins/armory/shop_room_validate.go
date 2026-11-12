@@ -109,6 +109,33 @@ func NormalizeShopRoomLayout(raw []byte) (json.RawMessage, error) {
 	return out, nil
 }
 
+// NormalizeShopRoomCounter validates one counter theme on its own and returns
+// its canonical JSON. The saved-designs library keeps counter themes as
+// designs of kind room-theme, and this is its authority for them: the same
+// rules a room's `counter` field is held to, so a design can never hold a part
+// the counter look would refuse.
+func NormalizeShopRoomCounter(raw []byte) (json.RawMessage, error) {
+	if len(raw) > maxShopRoomBytes {
+		return nil, apperror.NewBadRequest("counter theme is too large")
+	}
+	var c ShopRoomCounter
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if err := dec.Decode(&c); err != nil {
+		return nil, apperror.NewBadRequest("counter theme is not valid JSON of the expected shape")
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, apperror.NewBadRequest("counter theme has trailing data")
+	}
+	if err := c.validate(); err != nil {
+		return nil, apperror.NewBadRequest(err.Error())
+	}
+	out, err := json.Marshal(c)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return out, nil
+}
+
 // validate checks every field and rewrites l into its canonical form (empty
 // collections instead of null, trimmed lines).
 func (l *ShopRoomLayout) validate() error {

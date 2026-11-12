@@ -74,6 +74,7 @@ type aiDeps struct {
 	ShopLooks       records.ShopLooksAPI             // nil while the armory is degraded
 	Carried         records.CarriedAPI               // the Armory's give and take for carried items; nil writes relations
 	Layers          transformations.Service          // nil while the transformations plugin is degraded
+	Designs         records.DesignsAPI               // nil while the designs plugin is degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      calendarai.EventRollAPI // the calendar's roll half; nil without one
@@ -214,6 +215,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 // plugged are the lookups features bring themselves, in the prompt's order.
 func (d *aiDeps) plugged() []aiplug.Lookup {
 	out := append(d.CalLookups.All(), d.Nights)
+	if d.Designs != nil {
+		out = append(out, records.DesignsLookup{Svc: d.Designs, Owners: aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities}})
+	}
 	if d.LayersAI != nil {
 		out = append(out, d.LayersAI)
 	}

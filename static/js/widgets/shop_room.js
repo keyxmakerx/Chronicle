@@ -1662,7 +1662,8 @@
         custom: function () { return !!S.counter; },
         set: function (t, soft) { S.counter = t; save(); clearTimeout(cbT); if (soft) cbT = setTimeout(draw, 140); else draw(); },
         reset: function () { S.counter = null; save(); draw(); },
-        place: function (v) { if (v === undefined) return cbPlace; cbPlace = !!v; draw(); return cbPlace; }
+        place: function (v) { if (v === undefined) return cbPlace; cbPlace = !!v; draw(); return cbPlace; },
+        campaign: function () { return { url: campaignUrl, csrf: ds.csrfToken }; }
       };
       // The scene keeps the drawing's shape and grows to the biggest size the
       // window leaves it, so the portrait and paper stay on their spots.

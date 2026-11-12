@@ -736,6 +736,22 @@ DELETE	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).Rese
 GET	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).GetDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).UpdateDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/default-visibility	session	plugins/campaigns.(*Handler).UpdateDefaultVisibilityAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs	session	plugins/designs.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs	session	plugins/designs.(*Handler).Save	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/designs/:did	session	plugins/designs.(*Handler).Delete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/:did	session	plugins/designs.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PATCH	/campaigns/:id/designs/:did	session	plugins/designs.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/designs/:did/share	session	plugins/designs.(*Handler).StopSharing	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/:did/share	session	plugins/designs.(*Handler).ShareState	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/designs/:did/share/link	session	plugins/designs.(*Handler).SetLink	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/:did/share/owners	session	plugins/designs.(*Handler).AddOwner	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/designs/:did/share/owners/:uid	session	plugins/designs.(*Handler).RemoveOwner	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/code/preview	session	plugins/designs.(*Handler).PreviewCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/code/take	session	plugins/designs.(*Handler).TakeCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/owners	session	plugins/designs.(*Handler).SearchOwners	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/shared-with-me	session	plugins/designs.(*Handler).SharedWithMe	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/shared/:did/preview	session	plugins/designs.(*Handler).PreviewShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/shared/:did/take	session	plugins/designs.(*Handler).TakeShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dm-grants	session	plugins/campaigns.(*Handler).GetDmGrantsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/dm-grants	session	plugins/campaigns.(*Handler).UpdateDmGrantsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dm-screen	session	plugins/dmscreen.(*Handler).Show	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
@@ -1259,6 +1275,8 @@ GET	/campaigns/new	session	plugins/campaigns.(*Handler).NewForm	plugins/auth.Req
 GET	/campaigns/picker	session	plugins/campaigns.(*Handler).Picker	plugins/auth.RequireAuth
 POST	/csp-report	none	middleware.CSPReportHandler	middleware.RateLimit
 GET	/dashboard	session	app.(*App).RegisterRoutes	plugins/auth.RequireAuth
+GET	/designs/link/:token	session	plugins/designs.(*Handler).Link	plugins/auth.RequireAuth
+POST	/designs/link/:token/take	session	plugins/designs.(*Handler).TakeLink	plugins/auth.RequireAuth
 GET	/embed/campaigns/:id/notes/:mode	none	widgets/notes.(*AppGrantHandler).ShowEmbed	-
 GET	/extensions/:extID/assets/*	none	extensions.(*Handler).ServeAsset	-
 GET	/forgot-password	none	plugins/auth.(*Handler).ForgotPasswordForm	-

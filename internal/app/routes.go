@@ -44,6 +44,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
+	"github.com/keyxmakerx/chronicle/internal/plugins/designs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -6433,6 +6434,8 @@ func (a *App) RegisterRoutes() {
 	// The Homebrew service is built further down; the hook is filled in then.
 	craftingRespites := &craftingRespiteHook{}
 	var craftingListener respiteListener // nil while crafting is degraded
+	// The registry saved designs are checked by; crafting adds its kinds here.
+	designKinds := newDesignKinds()
 	var craftingFights encounters.FightListener
 	var aiCrafting records.CraftingAPI    // nil while crafting is degraded
 	var craftingWorkshop crafting.Service // nil while crafting is degraded
@@ -6599,6 +6602,17 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
 		aiShopLooks = aiShopLooksAdapter{rooms: shopRoomService, fronts: shopStreetService, today: shopTodaySvc}
 	}
+	// Saved designs: the campaign library and its sharing. The kind registry is
+	// the seam features add their design kinds to; the AI sees the library only
+	// while the plugin's tables are up.
+	var aiDesigns records.DesignsAPI
+	if a.PluginHealth.IsHealthy(designs.PluginSlug) {
+		designsSvc := designs.NewService(designs.NewRepository(a.DB), designsDirectory{svc: campaignService}, designKinds)
+		designs.RegisterRoutes(e, designs.NewHandler(designsSvc), campaignService, authService)
+		aiDesigns = aiDesignsAdapter{svc: designsSvc}
+	} else {
+		slog.Warn("designs plugin degraded — routes not registered")
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -6636,6 +6650,7 @@ func (a *App) RegisterRoutes() {
 		Crafting:        aiCrafting,
 		ShopLooks:       aiShopLooks,
 		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
+		Designs:         aiDesigns,
 		Layers:          layersSvc,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
@@ -6774,7 +6789,8 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/design_library.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "design_library", Scripts: []string{"/static/js/widgets/design_library.js"}},
 	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_paint", Scripts: []string{"/static/js/widgets/craft_paint.js", "/static/js/widgets/craft_paint_forge.js", "/static/js/widgets/craft_paint_stage.js"}},

@@ -195,6 +195,7 @@ Avoid restating the code, unexplained commented-out code, and the obvious (`// D
 | Sessions | Player | Scribe | Scribe | Owner | -- |
 | Notes | Player+ | Player+ | Player+ | Player+ | -- |
 | Groups | Owner | Owner | Owner | Owner | -- |
+| Saved designs (library, share code, link, named owners) | Owner | Owner | Owner | Owner | -- |
 
 \* Player sees content unless dm_only or custom permissions restrict it.
 \+ Notes: own notes, plus notes shared with the party, with you by name, or (for the Owner and members with DM access) with the GM. A private note is private from the GM too.

@@ -14,6 +14,7 @@
  *   set(t, soft)   draw and keep t; soft waits a moment, for sliders and pickers
  *   reset()        drop the saved theme, back to the shop type's starter
  *   place(v)       read or set place-by-hand mode
+ *   campaign()     { url, csrf } for the saved-designs library (design_library.js)
  * Every change redraws the room in place; players never load this file's UI.
  */
 (function () {
@@ -82,9 +83,10 @@
   }
   function group(title, body, open) { return '<details' + (open === false ? '' : ' open') + '><summary>' + title + '</summary>' + body + '</details>'; }
   function startChips() {
-    return '<div class="shr-field"><span>Starting from</span><span class="shr-chips" role="group" aria-label="Starting from">' +
+    return '<div class="shr-field"><span>Starting from</span><small class="dl-g" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-muted,#6b7280)">Built in</small><span class="shr-chips" role="group" aria-label="Built in">' +
       C.starters.map(function (s, i) { return '<button type="button" class="shr-chip" data-cb-start="' + i + '" aria-pressed="false">' + esc(s.name) + '</button>'; }).join('') + '</span>' +
-      '<button type="button" class="shr-link" data-cb-reset="1" hidden>Back to this shop type’s starter</button></div>';
+      '<button type="button" class="shr-link" data-cb-reset="1" hidden>Back to this shop type’s starter</button>' +
+      '<div data-dl></div></div>';
   }
   function html() {
     var O = C.options, place = mode === 'place', h = '';
@@ -187,6 +189,14 @@
     if (!box._cb) { box._cb = 1; box.addEventListener('click', onClick); box.addEventListener('input', onInput); box.addEventListener('change', onInput); box.addEventListener('dragstart', onDrag); box.addEventListener('dragend', function () { armed = ''; sync(); }); }
     var pn = box.closest('.shr-panel'); if (pn) pn.classList.toggle('cbp', mode === 'place');
     sync();
+    // The owner's saved designs sit with the starting points; the library file loads on sight and is optional.
+    var dl = box.querySelector('[data-dl]');
+    if (dl && window.DesignLibrary && api.campaign) {
+      window.DesignLibrary.mount(dl, {
+        kind: 'room-theme', campaign: api.campaign, say: say, theme: function () { return clone(cur.api.theme()); },
+        apply: function (data) { cur.api.set(C.normalise(clone(data))); sync(); }
+      });
+    }
   }
   function onDrag(e) {
     var c = e.target.closest && e.target.closest('[data-cb-tray]'); if (!c) return;

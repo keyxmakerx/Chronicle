@@ -450,3 +450,35 @@ func TestNormalizeShopRoomLayout_CounterTheme(t *testing.T) {
 		}
 	})
 }
+
+func TestNormalizeShopRoomCounter(t *testing.T) {
+	starter := ShopRoomCounterStarter("forge")
+	tests := []struct {
+		name    string
+		raw     func() []byte
+		wantErr bool
+	}{
+		{"a starter theme is accepted", func() []byte { return starter }, false},
+		{"garbage is refused", func() []byte { return []byte("not json") }, true},
+		{"trailing data is refused", func() []byte { return append(append([]byte{}, starter...), []byte(` {}`)...) }, true},
+		{"an unknown prop is refused", func() []byte {
+			var m map[string]any
+			_ = json.Unmarshal(starter, &m)
+			m["props"] = []string{"no-such-prop"}
+			b, _ := json.Marshal(m)
+			return b
+		}, true},
+		{"too large is refused", func() []byte { return []byte(strings.Repeat(" ", maxShopRoomBytes+1)) }, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := NormalizeShopRoomCounter(tt.raw())
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil && !json.Valid(out) {
+				t.Errorf("output is not JSON: %s", out)
+			}
+		})
+	}
+}
