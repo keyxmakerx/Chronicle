@@ -52,3 +52,82 @@ func TestSetupSteps_RenderAsLinks(t *testing.T) {
 		}
 	}
 }
+
+// The setup note is the owner's checklist; a co-DM gets their own short note
+// whose links they can open, and a player gets neither.
+func TestSetupNote_ByRole(t *testing.T) {
+	block := starterDirectorHome("camp-9").Rows[1].Columns[0].Blocks[0]
+	ownerLinks := []string{"/extensions", "/members", "/customize/look", "/customize/home/director"}
+	tests := []struct {
+		name     string
+		cc       *CampaignContext
+		wantLink []string
+		noLink   []string
+		wantText []string
+		nothing  bool
+	}{
+		{
+			name:     "owner gets the four owner steps",
+			cc:       &CampaignContext{Campaign: &Campaign{ID: "camp-9"}, MemberRole: RoleOwner},
+			wantLink: append([]string{"/entities/new"}, ownerLinks...),
+			wantText: []string{"Get your table ready"},
+		},
+		{
+			name:     "a scribe with DM access gets their own note and none of the owner's pages",
+			cc:       &CampaignContext{Campaign: &Campaign{ID: "camp-9"}, MemberRole: RoleScribe, IsDmGranted: true},
+			wantLink: []string{"/campaigns/camp-9/entities/new"},
+			noLink:   []string{"/extensions", "/members", "/customize"},
+			wantText: []string{"amber edge", "eye button", "The owner sets the game, the look and who&#39;s invited"},
+		},
+		{
+			name:    "a player gets neither note",
+			cc:      &CampaignContext{Campaign: &Campaign{ID: "camp-9"}, MemberRole: RolePlayer},
+			nothing: true,
+		},
+		{
+			name:    "a scribe without DM access gets neither note",
+			cc:      &CampaignContext{Campaign: &Campaign{ID: "camp-9"}, MemberRole: RoleScribe},
+			nothing: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := DashboardBlockSwitch(tt.cc, block, nil).Render(context.Background(), &buf); err != nil {
+				t.Fatal(err)
+			}
+			out := buf.String()
+			if tt.nothing {
+				if strings.TrimSpace(out) != "" {
+					t.Errorf("expected nothing, got:\n%s", out)
+				}
+				return
+			}
+			for _, l := range tt.wantLink {
+				if !strings.Contains(out, "/campaigns/camp-9"+strings.TrimPrefix(l, "/campaigns/camp-9")) {
+					t.Errorf("missing link %s\n%s", l, out)
+				}
+			}
+			for _, l := range tt.noLink {
+				if strings.Contains(out, l) {
+					t.Errorf("a co-DM is shown %s, which refuses them:\n%s", l, out)
+				}
+			}
+			for _, w := range tt.wantText {
+				if !strings.Contains(out, w) {
+					t.Errorf("missing %q\n%s", w, out)
+				}
+			}
+		})
+	}
+}
+
+// A co-DM keeps text the owner rewrote without the owner-only links.
+func TestSetupNote_CoDMKeepsTheOwnersRewrite(t *testing.T) {
+	cc := &CampaignContext{Campaign: &Campaign{ID: "c"}, MemberRole: RoleScribe, IsDmGranted: true}
+	block := DashboardBlock{ID: setupStepsBlockID, Type: BlockTextBlock, Config: map[string]any{"content": "<p>House rules below.</p>"}}
+	got, show := setupNoteFor(context.Background(), cc, block)
+	if !show || got.Config["content"] != "<p>House rules below.</p>" {
+		t.Errorf("rewritten note changed: show=%v %v", show, got.Config)
+	}
+}

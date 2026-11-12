@@ -36,7 +36,9 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 		case "entity_list":
 			@dashEntityList(cc, block.Config)
 		case "text_block":
-			@dashTextBlock(block.Config)
+			if note, show := setupNoteFor(ctx, cc, block); show {
+				@dashTextBlock(note.Config)
+			}
 		case "pinned_pages":
 			@dashPinnedPages(cc)
 		case "calendar_preview":
