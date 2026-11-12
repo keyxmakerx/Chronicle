@@ -2,7 +2,7 @@
 // page with the site stylesheet, against an in-page fake of the admin routes,
 // for the browser test and the screenshot script.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -38,7 +38,9 @@ export async function openAdmin(browser, { width = 1100, height = 800, dark = fa
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.setContent('<!doctype html><html' + (dark ? ' class="dark" data-theme="dark"' : '') + '><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body class="bg-page text-fg" style="margin:0;padding:16px"><div style="max-width:56rem;margin:0 auto"><h1 class="text-2xl font-bold text-fg">Shared designs</h1><p class="text-sm text-fg-secondary mt-1 mb-4">Designs Owners shared to this server\'s gallery. Clean ones show straight away; the ones here were held for a look, or reported by other Owners.</p><div id="r"></div></div></body></html>');
-  await page.addStyleTag({ content: readFileSync(join(root, 'static/css/app.css'), 'utf8') });
+  // app.css is a Tailwind build output, absent on a fresh CI checkout; the tests read behaviour, not looks.
+  const css = join(root, 'static/css/app.css');
+  if (existsSync(css)) await page.addStyleTag({ content: readFileSync(css, 'utf8') });
   await page.addScriptTag({ content: FAKE + '\nObject.assign(window.__srv, ' + JSON.stringify(seed) + ');' });
   await page.addScriptTag({ content: readFileSync(join(root, 'static/js/widgets/design_gallery_admin.js'), 'utf8') });
   await page.evaluate(() => window.__impl.init(document.getElementById('r')));
