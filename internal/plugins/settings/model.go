@@ -216,3 +216,25 @@ const (
 func IsValidRegistrationMode(m string) bool {
 	return m == RegistrationOpen || m == RegistrationInvite || m == RegistrationClosed
 }
+
+// KeyClientIPHeader chooses which request header Chronicle believes for the
+// visitor's address (one of the ClientIP values). Absent reads as auto.
+const KeyClientIPHeader = "network.client_ip_header"
+
+// Values for KeyClientIPHeader. The middleware package holds the same strings
+// because it cannot import this plugin; app passes the stored value across.
+const (
+	ClientIPAuto         = "auto"            // X-Real-IP if sent, else X-Forwarded-For from the right.
+	ClientIPRealIP       = "x-real-ip"       // X-Real-IP only.
+	ClientIPForwardedFor = "x-forwarded-for" // X-Forwarded-For only, from the right.
+	ClientIPDirect       = "direct"          // No proxy: the connection's own address.
+)
+
+// IsValidClientIPHeader reports whether m is one of the four known values.
+func IsValidClientIPHeader(m string) bool {
+	switch m {
+	case ClientIPAuto, ClientIPRealIP, ClientIPForwardedFor, ClientIPDirect:
+		return true
+	}
+	return false
+}

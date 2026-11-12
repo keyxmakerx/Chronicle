@@ -78,6 +78,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// Security dashboard.
 	admin.GET("/security", h.Security)
 	admin.POST("/security/registration", h.UpdateRegistrationMode, reauth)
+	admin.POST("/security/visitor-addresses", h.SaveVisitorAddresses, reauth)
 	admin.POST("/security/update-check", h.SaveUpdateCheck, reauth)
 	admin.POST("/security/sign-in-provider", h.SaveSignInProvider, reauth)
 	admin.POST("/security/sign-in-provider/test", h.TestSignInProvider, reauth)

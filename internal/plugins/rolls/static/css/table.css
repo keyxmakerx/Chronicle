@@ -226,3 +226,12 @@ html[data-motion="off"] .tt-island { transform: none; }
   .tt-icon { width: 44px; }
   .tt-dbtn { min-width: 44px; }
 }
+
+/* Tonight: what the director has shown. A row is read, not pressed. */
+.tt-shown { padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+.tt-shead { display: flex; align-items: center; gap: 8px; }
+.tt-shead b { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--color-text-primary); font-size: 14px; }
+.tt-time { font-size: 12px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.tt-note { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--color-text-primary); overflow-wrap: anywhere; white-space: pre-line; }
+.tt-open { align-self: flex-start; display: inline-flex; align-items: center; text-decoration: none; }
+.tt-isl-detail .tt-note { max-width: 36ch; }

@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -22,13 +25,39 @@ type RunService interface {
 	// End ends the fight and says what it left, as the fight listener
 	// tells it; ending no fight reports nothing.
 	End(ctx context.Context, campaignID string, v Viewer) (*EndReport, error)
+	// Show shows one row of the running scene to its players.
+	Show(ctx context.Context, campaignID string, v Viewer, in RunShowInput) (*RunView, error)
+	// Shown lists what scenes showed since, as this viewer may see it: the
+	// DM team sees every row, a player the rows for everyone or for them.
+	// Unlike every other method it answers any member.
+	Shown(ctx context.Context, campaignID string, v Viewer, since time.Time) ([]ShownItem, error)
 }
+
+// RunShowInput names the scene row to show.
+type RunShowInput struct {
+	ShowID string `json:"showId"`
+}
+
+// MaxShownList bounds one read of the shown log.
+const MaxShownList = 200
 
 type runService struct {
 	repo   RunRepository
 	enc    Service
 	pages  PageDirectory
 	listen FightListener
+	scenes SceneDirectory
+	shown  ShownRepository
+	pub    ShowPublisher
+	now    func() time.Time
+	newID  func() string
+}
+
+// SetShowing wires what running scenes need: the scene directory, the shown
+// log and the publisher. Until it is called a scene starts but every Show is
+// refused. It is set once while the app is wired, before any request.
+func (s *runService) SetShowing(d SceneDirectory, shown ShownRepository, pub ShowPublisher) {
+	s.scenes, s.shown, s.pub = d, shown, pub
 }
 
 // SetFightListener sets who hears about fights; nil for nobody. It is set
@@ -38,7 +67,7 @@ func (s *runService) SetFightListener(l FightListener) { s.listen = l }
 // NewRunService builds the run service over the encounter service, which
 // decides which encounters the viewer may start.
 func NewRunService(repo RunRepository, enc Service, pages PageDirectory) RunService {
-	return &runService{repo: repo, enc: enc, pages: pages}
+	return &runService{repo: repo, enc: enc, pages: pages, now: time.Now, newID: uuid.NewString}
 }
 
 func errRunChanged() error {
@@ -72,6 +101,11 @@ func (s *runService) Current(ctx context.Context, campaignID string, v Viewer) (
 		}
 		out.Run, out.Version = run, row.Version
 		out.Leaves = s.leaves(ctx, campaignID, run, v)
+		if run.Kind == KindScene && s.scenes != nil {
+			if ps, err := s.scenes.Players(ctx, campaignID); err == nil {
+				out.Players = ps
+			}
+		}
 	} else {
 		list, _, err := s.enc.Search(ctx, campaignID, "", MaxSearchLimit, v)
 		if err != nil {
@@ -168,6 +202,7 @@ func (s *runService) Save(ctx context.Context, campaignID string, v Viewer, in R
 		pages[l.ID] = l.EntityID
 	}
 	run.EncounterID, run.Name = stored.EncounterID, stored.Name
+	run.Kind, run.Shows = stored.Kind, stored.Shows
 	for i := range run.Lines {
 		run.Lines[i].EntityID = pages[run.Lines[i].ID]
 	}
@@ -206,7 +241,7 @@ func (s *runService) End(ctx context.Context, campaignID string, v Viewer) (*End
 		return out, nil
 	}
 	out.Name = run.Name
-	if s.listen == nil {
+	if s.listen == nil || run.Kind == KindScene {
 		return out, nil
 	}
 	rep, err := s.listen.FightEnded(context.WithoutCancel(ctx), campaignID, v, endedFight(run))
@@ -245,4 +280,104 @@ func (s *runService) leaves(ctx context.Context, campaignID string, run *Run, v 
 		return nil
 	}
 	return out
+}
+
+// Show shows one scene row. A page row needs a page every player it goes to
+// may already open; a reveal row un-hides its NPC or creature page first. The
+// item is logged before it is sent, and the row's time is saved last, so a
+// lost race on the run never loses what players were shown.
+func (s *runService) Show(ctx context.Context, campaignID string, v Viewer, in RunShowInput) (*RunView, error) {
+	if err := requireDM(v); err != nil {
+		return nil, err
+	}
+	if s.shown == nil || s.pub == nil {
+		return nil, apperror.NewConflict("showing things to players isn’t available right now")
+	}
+	row, found, err := s.repo.GetRun(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	if !found {
+		return nil, apperror.NewConflict("no scene is running; start one first")
+	}
+	run, err := decodeRun(row)
+	if err != nil {
+		return nil, err
+	}
+	if run.Kind != KindScene {
+		return nil, apperror.NewConflict("a fight is running, not a scene")
+	}
+	at := -1
+	for i, sh := range run.Shows {
+		if sh.ID == in.ShowID {
+			at = i
+		}
+	}
+	if at < 0 {
+		return nil, errNotFound("thing to show")
+	}
+	sh := run.Shows[at].Show
+	item := ShownItem{ID: s.newID(), Kind: sh.Kind, Label: sh.Label, Text: sh.Text, To: sh.To, Scene: run.Name, ShownAt: s.now().UTC()}
+	switch sh.Kind {
+	case ShowPage, ShowReveal:
+		if sh.EntityID == "" || s.scenes == nil {
+			return nil, errInvalid("this row's page has gone; pick another in the builder")
+		}
+		names, err := s.pages.Names(ctx, campaignID, []string{sh.EntityID}, v)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
+		name, ok := names[sh.EntityID]
+		if !ok {
+			return nil, errInvalid("this row's page has gone; pick another in the builder")
+		}
+		if sh.Kind == ShowReveal {
+			if name, err = s.scenes.Reveal(ctx, campaignID, sh.EntityID); err != nil {
+				return nil, err
+			}
+		}
+		can, err := s.scenes.PlayerCanView(ctx, campaignID, sh.EntityID, sh.To)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
+		if !can {
+			return nil, errInvalid(name + " is hidden from the players. Show it to them on the page first, or make this a reveal row.")
+		}
+		item.EntityID = sh.EntityID
+		if item.Label == "" {
+			item.Label = name
+		}
+	}
+	if err := s.shown.AddShown(ctx, campaignID, item, v.UserID); err != nil {
+		return nil, apperrorInternal(err)
+	}
+	s.pub.Shown(campaignID, item)
+	shownAt := item.ShownAt
+	run.Shows[at].ShownAt = &shownAt
+	if raw, err := json.Marshal(run); err == nil {
+		if _, err := s.repo.UpdateRun(ctx, campaignID, raw, row.Version, v.UserID); err != nil {
+			slog.Warn("encounters: a shown row's time wasn't saved", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		}
+	}
+	return s.Current(ctx, campaignID, v)
+}
+
+func (s *runService) Shown(ctx context.Context, campaignID string, v Viewer, since time.Time) ([]ShownItem, error) {
+	if s.shown == nil {
+		return []ShownItem{}, nil
+	}
+	all, err := s.shown.ListShown(ctx, campaignID, since, MaxShownList)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	if isDM(v) {
+		return all, nil
+	}
+	out := make([]ShownItem, 0, len(all))
+	for _, it := range all {
+		if it.To == "" || it.To == v.UserID {
+			out = append(out, it)
+		}
+	}
+	return out, nil
 }

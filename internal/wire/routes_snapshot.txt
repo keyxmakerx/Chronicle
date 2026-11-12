@@ -136,6 +136,7 @@ POST	/admin/packages/settings	site-admin	plugins/packages.(*Handler).SaveSecurit
 POST	/admin/release-notice/later	site-admin	plugins/admin.(*Handler).ReleaseNoticeLater	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/restore	site-admin	plugins/restore.(*Handler).Page	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/restore/run	site-admin	plugins/restore.(*Handler).Run	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth > middleware.RateLimit
+GET	/admin/restore/status	site-admin	plugins/restore.(*Handler).Status	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/security	site-admin	plugins/admin.(*Handler).Security	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/security/registration	site-admin	plugins/admin.(*Handler).UpdateRegistrationMode	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 DELETE	/admin/security/sessions/:hash	site-admin	plugins/admin.(*Handler).TerminateSession	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
@@ -146,6 +147,7 @@ PUT	/admin/security/users/:id/disable	site-admin	plugins/admin.(*Handler).Disabl
 PUT	/admin/security/users/:id/enable	site-admin	plugins/admin.(*Handler).EnableUser	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 POST	/admin/security/users/:id/force-logout	site-admin	plugins/admin.(*Handler).ForceLogoutUser	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 PUT	/admin/security/users/:id/two-factor/off	site-admin	plugins/admin.(*Handler).DisableTwoFactor	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
+POST	/admin/security/visitor-addresses	site-admin	plugins/admin.(*Handler).SaveVisitorAddresses	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 GET	/admin/site-look	site-admin	plugins/admin.(*Handler).SiteLook	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/site-look	site-admin	plugins/admin.(*Handler).SaveSiteLook	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > github.com/labstack/echo/v5/middleware.BodyLimitConfig.ToMiddleware
 GET	/admin/smtp	site-admin	plugins/smtp.(*Handler).Settings	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
@@ -789,6 +791,7 @@ DELETE	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).End
 GET	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).Current	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).Start	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 PUT	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).Save	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+POST	/campaigns/:id/encounter-run/show	session	plugins/encounters.(*RunHandler).Show	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 DELETE	/campaigns/:id/encounters/:encid	session	plugins/encounters.(*Handler).Delete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/encounters/:encid	session	plugins/encounters.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 PUT	/campaigns/:id/encounters/:encid	session	plugins/encounters.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
@@ -1233,6 +1236,7 @@ GET	/campaigns/:id/systems/custom	session	systems.(*CampaignSystemHandler).GetCu
 POST	/campaigns/:id/systems/preview	session	systems.(*CampaignSystemHandler).PreviewSystem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/systems/status	session	systems.(*CampaignSystemHandler).SystemStatus	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/systems/upload	session	systems.(*CampaignSystemHandler).UploadSystem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+GET	/campaigns/:id/table/shown	session	plugins/encounters.(*RunHandler).Shown	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/tags	public-capable	widgets/tags.(*Handler).ListTags	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/tags	session	widgets/tags.(*Handler).CreateTag	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/tags/:tagId	session	widgets/tags.(*Handler).DeleteTag	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

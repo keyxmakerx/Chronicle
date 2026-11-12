@@ -20,8 +20,8 @@
 
   // The sections a leaf can show. Rules, Conditions, Party and Notes join
   // this list as they are built (TODO(#1475)).
-  var SECTIONS = [['rolls', 'Rolls'], ['dice', 'My dice']];
-  var SECTION_NAME = { rolls: 'Rolls', dice: 'My dice' };
+  var SECTIONS = [['rolls', 'Rolls'], ['tonight', 'Tonight'], ['dice', 'My dice']];
+  var SECTION_NAME = { rolls: 'Rolls', tonight: 'Tonight', dice: 'My dice' };
   var LOOKS = [['quick', 'Quick 2D'], ['rune', 'Rune 3D'], ['none', 'Numbers only']];
   var QUICK = [4, 6, 8, 10, 12, 20];
   // Rune dice come in these sizes; any other die plays as quick 2D.
@@ -92,6 +92,10 @@
     this.tableLook = 'quick';
     this.rolls = [];
     this.byId = {};
+    // What the director has shown tonight, oldest first.
+    this.shown = [];
+    this.shownById = {};
+    this.shownLoaded = false;
     this.more = false;
     this.loaded = false;
     this.open = false;
@@ -168,6 +172,7 @@
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (msg && msg.type === 'roll.made' && msg.payload) self.receive(msg.payload, true);
+      if (msg && msg.type === 'table.shown' && msg.payload) self.receiveShown(msg.payload, true);
     });
     sock.addEventListener('close', function () {
       if (!self.alive) return;
@@ -222,7 +227,89 @@
     });
   };
 
-  Table.prototype.reload = function () { if (this.open || this.sheet) this.load(); else this.loaded = false; };
+  Table.prototype.reload = function () {
+    if (this.open || this.sheet) { this.load(); this.loadShown(); } else { this.loaded = false; this.shownLoaded = false; }
+  };
+
+  // ---------- Tonight: what the director shows ----------
+
+  // receiveShown takes an item the director showed. Each one is listed once;
+  // a live one also slides out the island.
+  Table.prototype.receiveShown = function (it, live) {
+    if (!it || !it.id || this.shownById[it.id]) return;
+    it.shown = true;
+    this.shownById[it.id] = it;
+    this.shown.push(it);
+    if (!live) return;
+    if (this.open) this.renderSection('tonight');
+    if (this.leafShowing('tonight')) {
+      var li = $('#tt-tonight li[data-id="' + (W.CSS && CSS.escape ? CSS.escape(it.id) : it.id) + '"]');
+      if (li) li.classList.add('tt-fresh');
+    } else {
+      this.notice(it);
+    }
+  };
+
+  Table.prototype.loadShown = function () {
+    var self = this;
+    return C.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/table/shown').then(function (res) {
+      if (!res.ok) throw new Error('status ' + res.status);
+      return res.json();
+    }).then(function (out) {
+      self.shownLoaded = true;
+      var known = self.shownById;
+      self.shown = [];
+      self.shownById = {};
+      ((out && out.items) || []).forEach(function (it) { self.receiveShown(it, false); });
+      Object.keys(known).forEach(function (id) { if (!self.shownById[id]) self.receiveShown(known[id], false); });
+      self.shown.sort(function (a, b) { return a.shownAt < b.shownAt ? -1 : a.shownAt > b.shownAt ? 1 : 0; });
+      self.shownError = '';
+      if (self.open) self.renderSection('tonight');
+    }).catch(function () {
+      self.shownError = 'What was shown tonight could not be read. Close the Table and open it again to retry.';
+      if (self.open) self.renderSection('tonight');
+    });
+  };
+
+  // leafShowing says whether a section is on screen now: open, in a leaf,
+  // and on a phone the leaf that is picked.
+  Table.prototype.leafShowing = function (sec) {
+    var i = this.leaves.indexOf(sec);
+    if (!this.open || i < 0) return false;
+    if (this.sheet) return this.h === 'full' && this.phoneLeaf === i;
+    var b = document.getElementById('tt-lb-' + i);
+    return !!b && b.offsetParent !== null;
+  };
+
+  Table.prototype.pageURL = function (it) {
+    return '/campaigns/' + encodeURIComponent(this.campaignId) + '/entities/' + encodeURIComponent(it.entityId);
+  };
+
+  Table.prototype.shownWhat = function (it) {
+    return it.label || (it.kind === 'note' ? 'A note' : 'A page');
+  };
+
+  // shownBody is the same under a Tonight row and under the island: the
+  // note's words, or a link to the page.
+  Table.prototype.shownBody = function (it) {
+    var out = '';
+    if (it.text) out += '<p class="tt-note">' + esc(it.text) + '</p>';
+    if (it.entityId) out += '<a class="tt-quiet tt-open" href="' + esc(this.pageURL(it)) + '">Open the page</a>';
+    return out;
+  };
+
+  Table.prototype.tonightHTML = function () {
+    var self = this, rows;
+    if (this.shownError) rows = '<li class="tt-empty">' + esc(this.shownError) + '</li>';
+    else if (!this.shownLoaded) rows = '<li class="tt-empty">Reading…</li>';
+    else if (!this.shown.length) rows = '<li class="tt-empty">Nothing shown yet. When the ' + esc(this.gm) + ' shows you a page or a note, it lands here.</li>';
+    else rows = this.shown.map(function (it) {
+      return '<li class="tt-shown" data-id="' + esc(it.id) + '"><div class="tt-shead"><b>' + esc(self.shownWhat(it)) + '</b>' +
+        (it.to ? '<span class="tt-chip">Only you</span>' : '') + '<span class="tt-time">' + esc(timeOf(it.shownAt)) + '</span></div>' +
+        self.shownBody(it) + '</li>';
+    }).join('');
+    return '<ul class="tt-log tt-tonight" id="tt-tonight" aria-label="Shown tonight">' + rows + '</ul>';
+  };
 
   Table.prototype.older = function () {
     var self = this, first = this.rolls[0];
@@ -346,6 +433,7 @@
 
   Table.prototype.sectionHTML = function (id) {
     if (id === 'rolls') return this.logHTML() + this.rollerHTML();
+    if (id === 'tonight') return this.tonightHTML();
     return this.diceHTML();
   };
 
@@ -571,6 +659,7 @@
       d.addEventListener('animationend', function () { d.classList.remove('tt-opening'); }, { once: true });
     }
     if (!this.loaded) this.load();
+    if (!this.shownLoaded) this.loadShown();
     this.scrollLog();
     this.seen();
   };
@@ -762,6 +851,7 @@
   // notice slides the island out from behind the Table tab, waits, and slides
   // it back in. While a roll's details are open, new rolls wait their turn.
   Table.prototype.notice = function (r) {
+    if (r.shown) { this.noticeShown(r); return; }
     var who = r.hidden ? 'You rolled blind' : this.who(r) + (r.origin === 'foundry' ? ' in Foundry' : '');
     var num = r.hidden ? '?' : String(r.total);
     var what = (r.label || r.formula) + (!r.hidden && r.outcome ? ' · ' + r.outcome : '');
@@ -781,6 +871,28 @@
     this.isl = me;
     requestAnimationFrame(function () { requestAnimationFrame(function () { b.classList.add('tt-in'); }); });
     me.timer = setTimeout(function () { if (!me.expanded) self.retire(me); }, ISLAND_STAY);
+    b.addEventListener('click', function () { if (me.expanded) self.collapse(me); else self.expand(me); });
+  };
+
+  // noticeShown is the island for something the director showed. It stays
+  // out twice as long as a roll, since there is something to open.
+  Table.prototype.noticeShown = function (it) {
+    var who = 'The ' + this.gm + ' shows' + (it.to ? ' you' : '');
+    var what = this.shownWhat(it);
+    this.say(who + ': ' + what);
+    if (this.isl && this.isl.expanded) { this.queue.push(it); return; }
+    this.retire(this.isl, true);
+    var self = this, c = this.clip(), b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tt-island tt-shown-isl';
+    b.setAttribute('aria-expanded', 'false');
+    b.setAttribute('aria-label', who + ': ' + what + '. Show it');
+    b.innerHTML = '<span class="tt-who2">' + esc(who) + '</span><span class="tt-what2">' + esc(what) + '</span>' + CHEV;
+    c.appendChild(b);
+    var me = { el: b, r: it, timer: 0, expanded: false };
+    this.isl = me;
+    requestAnimationFrame(function () { requestAnimationFrame(function () { b.classList.add('tt-in'); }); });
+    me.timer = setTimeout(function () { if (!me.expanded) self.retire(me); }, ISLAND_STAY * 2);
     b.addEventListener('click', function () { if (me.expanded) self.collapse(me); else self.expand(me); });
   };
 
@@ -811,6 +923,14 @@
     d.setAttribute('aria-label', 'Roll details');
     d.style.right = Math.max(10, W.innerWidth - a.right) + 'px';
     var r = me.r;
+    if (r.shown) {
+      d.setAttribute('aria-label', 'What was shown');
+      d.innerHTML = '<div class="tt-dhd"><b>' + esc(this.shownWhat(r)) + '</b></div>' + this.shownBody(r) +
+        '<div class="tt-foot"><button type="button" class="tt-quiet" data-tt-totonight>See tonight’s list</button><button type="button" class="tt-quiet" data-tt-iclose>Done</button></div>';
+      document.body.appendChild(d);
+      me.detail = d;
+      return;
+    }
     d.innerHTML = '<div class="tt-dhd"><b>' + esc(r.label || r.formula) + '</b><span class="tt-bignum">' + (r.hidden ? '?' : esc(r.total)) + '</span></div>' + this.detailHTML(r) +
       '<div class="tt-foot"><button type="button" class="tt-quiet" data-tt-tolog>Open in the roll log</button><button type="button" class="tt-quiet" data-tt-iclose>Done</button></div>';
     document.body.appendChild(d);
@@ -896,6 +1016,11 @@
         return;
       }
       if (b.hasAttribute('data-tt-iclose')) { if (self.isl) self.collapse(self.isl); return; }
+      if (b.hasAttribute('data-tt-totonight')) {
+        if (self.isl) self.collapse(self.isl);
+        self.openTable('tonight');
+        return;
+      }
       if (b.hasAttribute('data-tt-tolog')) {
         var me = self.isl;
         if (me) { self.openRow = me.r.id; self.collapse(me); }

@@ -5,53 +5,12 @@ package pages
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
-
-// relativeTime formats a time.Time as a human-readable relative string
-// (e.g., "2 hours ago", "3 days ago"). Used for campaign card timestamps.
-func relativeTime(t time.Time) string {
-	d := time.Since(t)
-
-	switch {
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		mins := int(math.Floor(d.Minutes()))
-		if mins == 1 {
-			return "1 minute ago"
-		}
-		return fmt.Sprintf("%d minutes ago", mins)
-	case d < 24*time.Hour:
-		hours := int(math.Floor(d.Hours()))
-		if hours == 1 {
-			return "1 hour ago"
-		}
-		return fmt.Sprintf("%d hours ago", hours)
-	case d < 30*24*time.Hour:
-		days := int(math.Floor(d.Hours() / 24))
-		if days == 1 {
-			return "1 day ago"
-		}
-		return fmt.Sprintf("%d days ago", days)
-	case d < 365*24*time.Hour:
-		months := int(math.Floor(d.Hours() / 24 / 30))
-		if months == 1 {
-			return "1 month ago"
-		}
-		return fmt.Sprintf("%d months ago", months)
-	default:
-		years := int(math.Floor(d.Hours() / 24 / 365))
-		if years == 1 {
-			return "1 year ago"
-		}
-		return fmt.Sprintf("%d years ago", years)
-	}
-}
 
 // truncateDescription trims a description string to maxLen characters,
 // appending an ellipsis if truncated. Returns the empty string for nil input.
@@ -172,14 +131,11 @@ templ discoverCampaignCard(campaign *campaigns.Campaign) {
 					<p class="mt-1 text-sm text-fg-secondary line-clamp-2">
 						{ truncateDescription(campaign.Description, 100) }
 					</p>
-				} else {
-					<p class="mt-1 text-sm text-fg-muted italic">No description</p>
 				}
 			</div>
 		</div>
-		<div class="mt-3 flex items-center text-xs text-fg-muted">
-			<i class="fa-regular fa-clock mr-1.5"></i>
-			Updated { relativeTime(campaign.UpdatedAt) }
+		<div class="mt-3 text-xs text-fg-secondary">
+			<time datetime={ campaign.UpdatedAt.UTC().Format(time.RFC3339) } title={ campaign.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>{ timeutil.EditedAgo(campaign.UpdatedAt, time.Now()) }</time>
 		</div>
 	</a>
 }

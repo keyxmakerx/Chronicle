@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -87,4 +88,38 @@ func (h *RunHandler) End(c *echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, out)
+}
+
+// Show handles POST /campaigns/:id/encounter-run/show.
+func (h *RunHandler) Show(c *echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	var in RunShowInput
+	if err := bindJSON(c, 1<<10, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.Show(c.Request().Context(), cid, v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// TonightWindow is how far back a player's Table lists what was shown: long
+// enough for one evening's session, short enough that last week's is gone.
+const TonightWindow = 12 * time.Hour
+
+// Shown handles GET /campaigns/:id/table/shown, the Table's Tonight list.
+func (h *RunHandler) Shown(c *echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Shown(c.Request().Context(), cid, v, time.Now().Add(-TonightWindow))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"items": out})
 }

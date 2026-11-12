@@ -11,6 +11,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // CategoryDashboardPage renders the full category dashboard.
@@ -319,9 +320,9 @@ templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
 			}
 		</td>
 		<td class="px-4 py-2.5 hidden lg:table-cell">
-			<span class="text-xs text-fg-secondary" title={ entity.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
-				{ relativeTime(entity.UpdatedAt) }
-			</span>
+			<time class="text-xs text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ entity.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+				{ timeutil.Ago(entity.UpdatedAt, time.Now()) }
+			</time>
 		</td>
 		if visibilityGlanceVisible(cc) {
 			<td class="px-4 py-2.5 text-center">
@@ -501,31 +502,3 @@ templ entityTreeLevel(cc *campaigns.CampaignContext, nodes []EntityTreeNode, dep
 	}
 }
 
-// relativeTime returns a human-friendly relative time string (e.g., "2h ago", "3d ago").
-func relativeTime(t time.Time) string {
-	d := time.Since(t)
-	switch {
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		m := int(d.Minutes())
-		if m == 1 {
-			return "1m ago"
-		}
-		return fmt.Sprintf("%dm ago", m)
-	case d < 24*time.Hour:
-		h := int(d.Hours())
-		if h == 1 {
-			return "1h ago"
-		}
-		return fmt.Sprintf("%dh ago", h)
-	case d < 30*24*time.Hour:
-		days := int(d.Hours() / 24)
-		if days == 1 {
-			return "1d ago"
-		}
-		return fmt.Sprintf("%dd ago", days)
-	default:
-		return t.Format("Jan 2, 2006")
-	}
-}

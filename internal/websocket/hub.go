@@ -439,6 +439,14 @@ func (h *Hub) RevokeUserEverywhere(userID string) {
 	h.revokeAcrossCampaigns(func(c *Client) bool { return c.UserID == userID })
 }
 
+// RevokeAll force-disconnects every client in every campaign. Call this when
+// the database is about to be replaced: nothing connected before can be
+// trusted to still belong to a campaign afterwards, and clients reconnect (or
+// are refused) through the normal handshake.
+func (h *Hub) RevokeAll() {
+	h.revokeAcrossCampaigns(func(*Client) bool { return true })
+}
+
 // revokeAcrossCampaigns closes every client in every campaign for which
 // match returns true.
 func (h *Hub) revokeAcrossCampaigns(match func(*Client) bool) {

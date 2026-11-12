@@ -129,3 +129,14 @@ test('a creature’s drop chip says what its page leaves, and nothing when no pa
   ];
   for (const c of cases) assert.equal(H.dropNote(c.leaves, c.line), c.want, c.name);
 });
+
+test('a scene run keeps its rows and when each was shown; an old run reads as a fight', () => {
+  const H = load();
+  assert.equal(fight(H).kind, 'fight');
+  const r = H.normaliseRun({ name: 'The Gilded Flagon', kind: 'scene', shows: [
+    { id: 's1', kind: 'page', entityId: 'p1', label: 'Lastwell', shownAt: '2026-11-08T20:00:00Z' },
+    { id: 's2', kind: 'note', label: 'A vial', text: 'Pine.', to: 'u-ash' }
+  ] });
+  assert.equal(r.kind, 'scene');
+  assert.deepEqual(plain(r.shows.map((s) => [s.id, !!s.shownAt, s.to || ''])), [['s1', true, ''], ['s2', false, 'u-ash']]);
+});

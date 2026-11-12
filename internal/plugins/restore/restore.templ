@@ -1,12 +1,14 @@
-// restore.templ renders the admin restore dashboard. Lists parsed
-// manifests and exposes a per-row "Restore from this" button gated by
-// a typed-in RESTORE confirmation. Heavy red warning banner makes
-// clear that the running site will be unavailable during restore.
+// restore.templ renders the admin restore dashboard and the standalone page
+// the restoring admin sees while the site is closed. The dashboard lists
+// parsed manifests with a per-row "Restore from this" button gated by a
+// typed-in RESTORE confirmation. The standalone page uses no layout, because
+// the layout reads the database, which is being replaced.
 package restore
 
 import (
 	"fmt"
 
+	"github.com/keyxmakerx/chronicle/internal/maintenance"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -16,9 +18,20 @@ type RestorePageData struct {
 	BackupDir  string
 	Manifests  []ManifestSummary
 	ListError  string
-	LastRun    *RunResult
-	RunningNow bool
-	CSRFToken  string
+	// Status is the state of the last restore this process knows of.
+	Status maintenance.Snapshot
+	// HandCommand restores Status.Safety by hand; empty when there is none.
+	HandCommand string
+	RunningNow  bool
+	CSRFToken   string
+}
+
+// MaintenancePageData is what the closed-site page needs. LeaveToken is
+// empty unless leaving maintenance is allowed (failed or interrupted).
+type MaintenancePageData struct {
+	Status      maintenance.Snapshot
+	HandCommand string
+	LeaveToken  string
 }
 
 templ RestorePage(d RestorePageData) {
@@ -26,13 +39,13 @@ templ RestorePage(d RestorePageData) {
 		<div class="max-w-5xl mx-auto space-y-6">
 			@components.AdminGroupHeading(components.AdminTabsBackup, "/admin/restore")
 			<p class="text-sm text-fg-secondary">
-				Restoring puts your site back to how it was when a backup was made. The site is unavailable while it runs.
+				Restoring puts your site back to how it was when a backup was made. While it runs, everyone sees a "Back in a few minutes" page. It usually takes a few minutes; a large site takes longer.
 			</p>
 
 			@warningBanner()
 
-			if d.LastRun != nil {
-				@lastRunStatus(d.LastRun)
+			if d.Status.Phase != "" && d.Status.Phase != maintenance.PhaseIdle {
+				@lastRunStatus(d.Status, d.HandCommand)
 			}
 
 			if d.ListError != "" {
@@ -61,39 +74,47 @@ templ warningBanner() {
 		</p>
 		<ul class="text-xs text-red-700 dark:text-red-300 list-disc ml-5 space-y-0.5">
 			<li>Erases the live database and loads the one saved in the backup.</li>
-			<li>Replaces your uploaded files with the ones saved in the backup.</li>
-			<li>Brings back saved sessions if the backup has them, so everyone may be logged out.</li>
-			<li>This cannot be undone except by restoring a different backup. Make a fresh backup first if the site is still in decent shape.</li>
+			<li>Puts back the uploaded files saved in the backup. Files uploaded since then stay on disk but are no longer linked to anything.</li>
+			<li>Anyone whose account is not in the backup is signed out. Everyone else stays signed in.</li>
+			<li>A copy of the current database is saved first, listed below as "Before a restore", so you can undo this by restoring it.</li>
 		</ul>
 	</div>
 }
 
 // lastRunStatus renders the most-recent-restore summary block.
-templ lastRunStatus(r *RunResult) {
-	<div class="card p-4 border-l-4 border-edge text-sm">
-		if r.Succeeded() {
+templ lastRunStatus(st maintenance.Snapshot, handCommand string) {
+	<div class="card p-4 border-l-4 border-edge text-sm space-y-2">
+		if st.Phase == maintenance.PhaseDone {
 			<div class="text-green-700 dark:text-green-300">
 				<i class="fa-solid fa-circle-check mr-1"></i>
-				Last restore succeeded — { r.FinishedAt.Format("2006-01-02 15:04:05") }
-				<span class="text-fg-muted ml-2">({ r.Duration().Round(1e9).String() })</span>
-				<span class="text-fg-muted ml-2">from { r.ManifestName }</span>
+				Last restore finished { st.FinishedAt.Format("2006-01-02 15:04:05") }
+				<span class="text-fg-muted ml-2">({ st.FinishedAt.Sub(st.StartedAt).Round(1e9).String() })</span>
+				<span class="text-fg-muted ml-2">from { st.Manifest }</span>
 			</div>
-		} else if r.TimedOut {
-			<div class="text-red-700 dark:text-red-300">
-				<i class="fa-solid fa-clock mr-1"></i>
-				Last restore timed out — { r.FinishedAt.Format("2006-01-02 15:04:05") }
-			</div>
+			<p class="text-fg-body">{ st.Summary }</p>
 		} else {
 			<div class="text-red-700 dark:text-red-300">
 				<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-				Last restore failed — exit { fmt.Sprintf("%d", r.ExitCode) } at { r.FinishedAt.Format("2006-01-02 15:04:05") }
+				if st.Left {
+					Last restore did not finish, and an admin reopened the site.
+				} else {
+					Last restore did not finish.
+				}
+				<span class="text-fg-muted ml-2">from { st.Manifest }</span>
 			</div>
-		}
-		if r.Stderr != "" {
-			<details class="mt-2">
-				<summary class="cursor-pointer text-xs text-fg-muted">Show technical details</summary>
-				<pre class="mt-2 p-2 bg-surface-alt text-xs text-fg-body whitespace-pre-wrap">{ r.Stderr }</pre>
-			</details>
+			<p class="text-fg-body">{ st.Summary }</p>
+			if st.Safety != "" {
+				<p class="text-fg-body">The site as it was just before this restore is saved as <code>{ st.Safety }</code>. It is listed below as "Before a restore".</p>
+			}
+			if handCommand != "" {
+				<pre class="p-2 bg-surface-alt text-xs text-fg-body whitespace-pre-wrap">{ handCommand }</pre>
+			}
+			if st.Tail != "" {
+				<details>
+					<summary class="cursor-pointer text-xs text-fg-muted">Show technical details</summary>
+					<pre class="mt-2 p-2 bg-surface-alt text-xs text-fg-body whitespace-pre-wrap">{ st.Tail }</pre>
+				</details>
+			}
 		}
 	</div>
 }
@@ -131,11 +152,16 @@ templ manifestRow(m ManifestSummary, runningNow bool, csrfToken string) {
 					if m.PreUpdate {
 						<span class="badge-amber text-xs">Before update</span>
 					}
+					if m.PreRestore {
+						<span class="badge-amber text-xs">Before a restore</span>
+					}
 				</div>
 				if m.PreUpdate && m.MigrationVersion == "0" {
 					<div class="text-xs text-fg-muted mt-0.5">Saved automatically before the site was first set up, so it holds an empty site.</div>
 				} else if m.PreUpdate {
 					<div class="text-xs text-fg-muted mt-0.5">Saved automatically just before an update changed the database. Use it to go back if an update went wrong.</div>
+				} else if m.PreRestore {
+					<div class="text-xs text-fg-muted mt-0.5">Saved automatically just before a restore replaced the database. Use it to undo that restore. It holds the database only, not uploaded files.</div>
 				}
 				<div class="text-xs text-fg-muted mt-0.5">
 					{ m.ModTime.Format("2006-01-02 15:04:05") }
@@ -169,7 +195,7 @@ templ manifestRow(m ManifestSummary, runningNow bool, csrfToken string) {
 			method="POST"
 			action="/admin/restore/run"
 			hx-post="/admin/restore/run"
-			hx-confirm={ fmt.Sprintf("This will overwrite the live database and media with the contents of %s. Are you sure?", m.Name) }
+			hx-confirm={ fmt.Sprintf("This will close the site for everyone and replace its database and uploaded files with the contents of %s. Are you sure?", m.Name) }
 			class="flex flex-wrap items-center gap-2 pt-2 border-t border-edge"
 		>
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
@@ -185,7 +211,7 @@ templ manifestRow(m ManifestSummary, runningNow bool, csrfToken string) {
 			if runningNow {
 				<button type="button" class="btn-danger text-sm opacity-50 cursor-not-allowed" disabled>
 					<i class="fa-solid fa-spinner fa-spin"></i>
-					Restore in progress…
+					A restore is in progress
 				</button>
 			} else {
 				<button type="submit" class="btn-danger text-sm">
@@ -195,4 +221,126 @@ templ manifestRow(m ManifestSummary, runningNow bool, csrfToken string) {
 			}
 		</form>
 	</div>
+}
+
+// MaintenancePage is what the restoring admin sees while the site is closed:
+// progress while it runs, and the way out if it stops. It is standalone and
+// reads no database. The inline script polls the status endpoint and reloads
+// the page when the restore stops running, so the server decides what each
+// state looks like.
+templ MaintenancePage(d MaintenancePageData) {
+	<!DOCTYPE html>
+	<html lang="en" class="h-full">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>Restoring the site</title>
+			<script>
+				(function(){try{var t=localStorage.getItem('chronicle-theme');if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();
+			</script>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/app.css") }/>
+		</head>
+		<body class="min-h-screen bg-page text-fg-body">
+			<main id="main-content" class="max-w-2xl mx-auto px-4 py-10 space-y-5">
+				switch d.Status.Phase {
+					case maintenance.PhaseRunning:
+						@maintenanceRunning(d)
+					case maintenance.PhaseInterrupted:
+						@maintenanceStopped(d, "Chronicle restarted during a restore")
+					default:
+						@maintenanceStopped(d, "The restore stopped")
+				}
+			</main>
+		</body>
+	</html>
+}
+
+templ maintenanceRunning(d MaintenancePageData) {
+	<p class="text-xs font-semibold uppercase tracking-wider text-fg-muted">Site closed for a restore</p>
+	<h1 class="text-2xl font-semibold text-fg">Restoring your site</h1>
+	<div class="card p-4 space-y-2" id="restore-progress" data-status-url="/admin/restore/status" data-started={ d.Status.StartedAt.UTC().Format("2006-01-02T15:04:05Z") }>
+		<p class="text-sm text-fg">
+			<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i>
+			<span id="restore-step" role="status">{ d.Status.Step }</span>
+		</p>
+		<p class="text-xs text-fg-muted">From <code>{ d.Status.Manifest }</code>. Running for <span id="restore-elapsed">0s</span>.</p>
+		<p class="text-xs text-amber-700 dark:text-amber-300 hidden" id="restore-lost">Lost contact with Chronicle. If it restarted, reload this page.</p>
+	</div>
+	<p class="text-sm text-fg-secondary">Everyone else sees a "Back in a few minutes" page. This page updates by itself and moves on when the restore finishes. You can close it; the restore carries on without you.</p>
+	<script>
+		(function(){
+			var box=document.getElementById('restore-progress');
+			if(!box)return;
+			var step=document.getElementById('restore-step'),el=document.getElementById('restore-elapsed'),lost=document.getElementById('restore-lost');
+			var started=Date.parse(box.getAttribute('data-started'))||Date.now(),fails=0;
+			function fmt(s){var m=Math.floor(s/60);return m>0?m+'m '+(s%60)+'s':s+'s'}
+			setInterval(function(){el.textContent=fmt(Math.max(0,Math.round((Date.now()-started)/1000)))},1000);
+			function poll(){
+				fetch(box.getAttribute('data-status-url'),{credentials:'same-origin',headers:{'Accept':'application/json'}}).then(function(r){
+					if(!r.ok||(r.headers.get('content-type')||'').indexOf('json')<0)throw new Error('bad');
+					return r.json();
+				}).then(function(s){
+					fails=0;lost.classList.add('hidden');
+					if(s.phase!=='running'){location.reload();return}
+					if(s.step)step.textContent=s.step;
+				}).catch(function(){
+					fails++;
+					if(fails>=5)lost.classList.remove('hidden');
+					if(fails>=30)location.reload();
+				}).then(function(){setTimeout(poll,2000)});
+			}
+			setTimeout(poll,1500);
+		})();
+	</script>
+}
+
+templ maintenanceStopped(d MaintenancePageData, title string) {
+	<p class="text-xs font-semibold uppercase tracking-wider text-fg-muted">Site still closed</p>
+	<h1 class="text-2xl font-semibold text-fg">{ title }</h1>
+	<div class="card p-4 border-l-4 border-red-500 space-y-2 text-sm">
+		<p class="text-fg">{ d.Status.Summary }</p>
+		if d.Status.Manifest != "" {
+			<p class="text-xs text-fg-muted">Restoring from <code>{ d.Status.Manifest }</code>. Everyone else still sees "Back in a few minutes".</p>
+		}
+	</div>
+	if d.Status.Safety != "" {
+		<div class="space-y-2 text-sm">
+			<h2 class="text-base font-semibold text-fg">Your safety copy</h2>
+			<p>The site as it was just before this restore is saved as <code>{ d.Status.Safety }</code>. To put it back by hand, run these on the server:</p>
+			<pre class="p-2 bg-surface-alt text-xs text-fg-body whitespace-pre-wrap">{ d.HandCommand }</pre>
+		</div>
+	} else if d.Status.DBTouched {
+		<p class="text-sm text-fg-secondary">No safety copy was saved, because the database was empty or the copy could not be made.</p>
+	}
+	if d.Status.Tail != "" {
+		<details class="text-sm">
+			<summary class="cursor-pointer text-fg-muted">Show what the restore printed</summary>
+			<pre class="mt-2 p-2 bg-surface-alt text-xs text-fg-body whitespace-pre-wrap">{ d.Status.Tail }</pre>
+		</details>
+	}
+	if d.LeaveToken != "" {
+		<form method="POST" action="/admin/restore/leave" class="pt-4 border-t border-edge space-y-2" id="restore-leave" data-touched?={ d.Status.DBTouched }>
+			<input type="hidden" name="leave_token" value={ d.LeaveToken }/>
+			<p class="text-sm text-fg-secondary">
+				if d.Status.DBTouched {
+					The database was being replaced when this stopped. Opening the site now may show incomplete data. Put the safety copy back first if you can.
+				} else {
+					Nothing was changed, so it is safe to open the site again.
+				}
+			</p>
+			<button type="submit" class="btn-danger text-sm">
+				<i class="fa-solid fa-door-open"></i>
+				Leave maintenance anyway
+			</button>
+		</form>
+		<script>
+			(function(){
+				var f=document.getElementById('restore-leave');
+				if(!f)return;
+				f.addEventListener('submit',function(e){
+					if(f.hasAttribute('data-touched')&&!window.confirm('The restore did not finish and the data may be incomplete. Open the site anyway?'))e.preventDefault();
+				});
+			})();
+		</script>
+	}
 }

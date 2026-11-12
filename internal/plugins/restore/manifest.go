@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -44,6 +45,10 @@ type ManifestSummary struct {
 	// changed the database, so the list can say why it exists.
 	PreUpdate bool
 
+	// PreRestore marks the copy of the database that restore.sh saves just
+	// before replacing it, so a restore can be undone.
+	PreRestore bool
+
 	// SizeBytes is the manifest file size itself. Ancillary; the bundled
 	// artifact sizes appear in the manifest body but we don't surface
 	// them in the list view to keep the UI scannable.
@@ -64,12 +69,23 @@ const manifestPrefix = "chronicle_manifest_"
 // leaving it out hid the one backup an admin most needs after a bad update.
 const preUpdateManifestPrefix = "chronicle_pre_migrate_manifest_"
 
+// preRestoreManifestPrefix names the manifest restore.sh writes for the copy
+// of the live database it saves before replacing it. Same format as
+// backup.sh's, so the script can restore it.
+const preRestoreManifestPrefix = "chronicle_pre_restore_manifest_"
+
+// manifestChars is every character a manifest name may hold: the scripts
+// write a prefix, a UTC timestamp and .txt, so anything else is refused.
+var manifestChars = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
 // isManifestName reports whether name is a restorable manifest basename.
 func isManifestName(name string) bool {
-	if !strings.HasSuffix(name, ".txt") {
+	if !strings.HasSuffix(name, ".txt") || !manifestChars.MatchString(name) {
 		return false
 	}
-	return strings.HasPrefix(name, manifestPrefix) || strings.HasPrefix(name, preUpdateManifestPrefix)
+	return strings.HasPrefix(name, manifestPrefix) ||
+		strings.HasPrefix(name, preUpdateManifestPrefix) ||
+		strings.HasPrefix(name, preRestoreManifestPrefix)
 }
 
 // ListManifests scans BACKUP_DIR for backup and pre-update manifests,
@@ -102,10 +118,11 @@ func (s *service) ListManifests() ([]ManifestSummary, error) {
 			continue
 		}
 		summary := ManifestSummary{
-			Name:      name,
-			ModTime:   info.ModTime(),
-			SizeBytes: info.Size(),
-			PreUpdate: strings.HasPrefix(name, preUpdateManifestPrefix),
+			Name:       name,
+			ModTime:    info.ModTime(),
+			SizeBytes:  info.Size(),
+			PreUpdate:  strings.HasPrefix(name, preUpdateManifestPrefix),
+			PreRestore: strings.HasPrefix(name, preRestoreManifestPrefix),
 		}
 		if err := parseManifestInto(&summary, filepath.Join(dir, name)); err != nil {
 			summary.ParseError = err.Error()
@@ -136,6 +153,8 @@ func parseManifestInto(s *ManifestSummary, path string) error {
 		switch {
 		case line == "chronicle_pre_migrate=1":
 			s.PreUpdate = true
+		case line == "chronicle_pre_restore=1":
+			s.PreRestore = true
 		case strings.HasPrefix(line, "chronicle_version="):
 			s.ChronicleVersion = strings.TrimPrefix(line, "chronicle_version=")
 		case strings.HasPrefix(line, "migration_version="):
@@ -168,7 +187,7 @@ func firstToken(line, prefix string) string {
 // ResolveManifestPath validates a manifest basename against BACKUP_DIR,
 // rejects path-traversal attempts, and returns the absolute path. Same
 // shape as backup.ResolveArtifactPath but additionally enforces that
-// the file is a backup or pre-update manifest — restore.sh would refuse
+// the file is a backup, pre-update or pre-restore manifest — restore.sh would refuse
 // other inputs anyway, but failing fast at the HTTP boundary surfaces
 // the wrong-file error to the operator rather than burying it in a
 // shell exit code.
@@ -185,17 +204,21 @@ func ResolveManifestPath(backupDir, name string) (string, error) {
 	if !isManifestName(name) {
 		return "", fmt.Errorf("not a chronicle backup manifest")
 	}
-	full := filepath.Clean(filepath.Join(backupDir, name))
 	cleanDir := filepath.Clean(backupDir)
-	if !strings.HasPrefix(full, cleanDir+string(os.PathSeparator)) && full != cleanDir {
-		return "", fmt.Errorf("path escapes backup directory")
-	}
-	info, err := os.Stat(full)
+	// The path handed to restore.sh is built from the directory listing,
+	// never from the request: the requested name only picks an entry.
+	entries, err := os.ReadDir(cleanDir)
 	if err != nil {
 		return "", err
 	}
-	if info.IsDir() {
-		return "", fmt.Errorf("not a file")
+	for _, e := range entries {
+		if e.Name() != name {
+			continue
+		}
+		if e.IsDir() {
+			return "", fmt.Errorf("not a file")
+		}
+		return filepath.Join(cleanDir, e.Name()), nil
 	}
-	return full, nil
+	return "", fmt.Errorf("manifest %q: %w", name, os.ErrNotExist)
 }

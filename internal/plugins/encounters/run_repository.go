@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // RunRow is a stored run: its JSON document and edit version.
@@ -109,4 +110,51 @@ func (s *sqlRunRepository) EndRun(ctx context.Context, campaignID string) (RunRo
 	}
 	r.Data = []byte(data)
 	return r, true, nil
+}
+
+// ShownRepository keeps what scenes showed to players, for the players'
+// Table and the night's record.
+type ShownRepository interface {
+	// AddShown records one shown item.
+	AddShown(ctx context.Context, campaignID string, item ShownItem, userID string) error
+	// ListShown returns the campaign's items shown since, oldest first, at
+	// most limit of the newest.
+	ListShown(ctx context.Context, campaignID string, since time.Time, limit int) ([]ShownItem, error)
+}
+
+type sqlShownRepository struct{ db *sql.DB }
+
+// NewShownRepository creates a MariaDB-backed shown log.
+func NewShownRepository(db *sql.DB) ShownRepository { return &sqlShownRepository{db: db} }
+
+func (s *sqlShownRepository) AddShown(ctx context.Context, campaignID string, it ShownItem, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO encounter_shown (id, campaign_id, kind, label, text, entity_id, to_user, scene, shown_by, shown_at)
+		 VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, NULLIF(?, ''), ?)`,
+		it.ID, campaignID, it.Kind, it.Label, it.Text, it.EntityID, it.To, it.Scene, userID, it.ShownAt.UTC())
+	if err != nil {
+		return fmt.Errorf("add shown item: %w", err)
+	}
+	return nil
+}
+
+func (s *sqlShownRepository) ListShown(ctx context.Context, campaignID string, since time.Time, limit int) ([]ShownItem, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, kind, label, text, COALESCE(entity_id, ''), COALESCE(to_user, ''), scene, shown_at
+		 FROM (SELECT * FROM encounter_shown WHERE campaign_id = ? AND shown_at >= ?
+		       ORDER BY shown_at DESC, id DESC LIMIT ?) newest
+		 ORDER BY shown_at, id`, campaignID, since.UTC(), limit)
+	if err != nil {
+		return nil, fmt.Errorf("list shown items: %w", err)
+	}
+	defer rows.Close()
+	out := []ShownItem{}
+	for rows.Next() {
+		var it ShownItem
+		if err := rows.Scan(&it.ID, &it.Kind, &it.Label, &it.Text, &it.EntityID, &it.To, &it.Scene, &it.ShownAt); err != nil {
+			return nil, fmt.Errorf("scan shown item: %w", err)
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
 }

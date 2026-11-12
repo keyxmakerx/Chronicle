@@ -25,7 +25,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 }
 
 // RegisterRunRoutes mounts the Fight tab's routes, with the same gates as
-// RegisterRoutes; the run service refuses anyone below Owner visibility.
+// RegisterRoutes; the run service refuses anyone below Owner visibility on
+// every route but the Table's shown list.
 func RegisterRunRoutes(e *echo.Echo, h *RunHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
@@ -35,4 +36,7 @@ func RegisterRunRoutes(e *echo.Echo, h *RunHandler, campaignSvc campaigns.Campai
 	cg.POST("/encounter-run", h.Start)
 	cg.PUT("/encounter-run", h.Save)
 	cg.DELETE("/encounter-run", h.End)
+	cg.POST("/encounter-run/show", h.Show)
+	// Any member reads what was shown to them; the service filters rows.
+	cg.GET("/table/shown", h.Shown)
 }

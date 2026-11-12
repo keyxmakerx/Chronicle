@@ -89,6 +89,11 @@ jobs:
       - name: Comment clutter guard self-tests
         run: ./tools/test-comment-clutter.sh
 
+      - name: Restore script self-test
+        # Stub mysql/wget: pins the refusal logic and the safety backup of
+        # scripts/restore.sh without a database.
+        run: ./tools/test-restore-script.sh
+
       - name: Comment clutter guard
         # Diff-scoped FAIL: new comments may not carry tracking IDs, archive
         # paths, file:line pointers or dates (.ai/conventions.md, Comment
