@@ -329,6 +329,8 @@ function makeCal(input, opts) {
   wds.sort(function (a, b) { var sa = a.w.sort_order != null ? a.w.sort_order : a.i, sb = b.w.sort_order != null ? b.w.sort_order : b.i; return sa - sb || a.i - b.i; });
   cal.weekdays = wds.map(function (x, i) { return { index: i, name: x.w.name || ('Day ' + (i + 1)), rest: !!x.w.is_rest_day }; });
   cal.weekLength = cal.weekdays.length;
+  /* Mirrors Calendar.MonthStartsNewWeek: every month restarts the week and festival days sit outside it. */
+  cal.monthStartsNewWeek = !!c.month_starts_new_week && !cal.realTime;
   cal.moons = (c.moons || []).map(function (m, i) {
     return {
       index: i, name: m.name || ('Moon ' + (i + 1)), cycle: +m.cycle_days || 0, offset: +m.phase_offset || 0,
@@ -402,6 +404,10 @@ function makeCal(input, opts) {
     var wl = cal.weekLength;
     if (!wl) return -1;
     if (typeof opts.weekdayOf === 'function') return mod(opts.weekdayOf(y, m, d), wl);
+    if (cal.monthStartsNewWeek) {
+      var Mw = cal.months[m - 1];
+      return Mw && Mw.intercalary ? -1 : mod(d - 1, wl);
+    }
     if (cal.realTime) return mod(gregorianJDN(y, m, d) + 0, wl); // JDN%7: 0 = Monday
     return mod(cal.constLenIndex(y, m, d), wl);
   };
@@ -528,6 +534,8 @@ function makeCal(input, opts) {
   cal.yearSpan = function (y) { return [cal.abs(y, 1, 1), cal.abs(y, 1, 1) + cal.yearLength(y) - 1]; };
   cal.weekSpan = function (y, m, d) {
     var n = cal.abs(y, m, d), wl = cal.weekLength || 7, w = cal.weekLength ? cal.weekday(y, m, d) : 0;
+    if (w < 0) return [n, n]; /* a festival day is its own band, between weeks */
+    if (cal.monthStartsNewWeek) return [n - w, Math.min(n - w + wl - 1, cal.abs(y, m, cal.monthDays(m, y)))];
     return [n - w, n - w + wl - 1];
   };
   /* The occurrence of a season that starts in year y. */
@@ -5195,7 +5203,7 @@ var CAL_TEMPLATES = {
 var CAL_YEAR = { pastoral: [1100, 1600], nautical: [300, 700], dwarven: [3000, 5000], elven: [200, 900], desert: [800, 1500], imperial: [600, 1300], fey: [60, 400], grim: [900, 1400] };
 var SEASON_COLOURS = { winter: 'oklch(0.65 0.05 240)', spring: 'oklch(0.65 0.10 140)', summer: 'oklch(0.72 0.12 85)', autumn: 'oklch(0.58 0.12 40)', wet: 'oklch(0.60 0.10 205)', dry: 'oklch(0.70 0.10 80)' };
 var EXPORT_KEYS = {
-  calendar: 'name description mode epoch_name current_year current_month current_day current_hour current_minute hours_per_day minutes_per_hour seconds_per_minute leap_year_every leap_year_offset tracks_real_time real_time_zone months weekdays moons seasons eras cycles festivals weather',
+  calendar: 'name description mode epoch_name current_year current_month current_day current_hour current_minute hours_per_day minutes_per_hour seconds_per_minute leap_year_every leap_year_offset tracks_real_time real_time_zone month_starts_new_week months weekdays moons seasons eras cycles festivals weather',
   month: 'name days sort_order is_intercalary leap_year_days', weekday: 'name sort_order is_rest_day', moon: 'name cycle_days phase_offset color',
   season: 'name start_month start_day end_month end_day description color weather_effect', era: 'name start_year end_year description color sort_order',
   festival: 'name month day after_month description color icon sort_order'
@@ -5358,6 +5366,8 @@ function runCalendarGen(opts) {
     seasons: seasonsOut.map(function (s) { return { name: s.name, start_month: s.start_month, start_day: s.start_day, end_month: s.end_month, end_day: s.end_day, color: s.color }; }),
     eras: [{ name: eraName, start_year: 1, color: oklch(0.56, 0.08, er.int(0, 359)), sort_order: 0, description: epoch }]
   };
+  /* Tendays restart each month and festival days sit between them, as the Harptos preset ships. */
+  if (tpl === 'harptos-like') cal.month_starts_new_week = true;
   if (mk.festivals && cal.seasons.length) {
     var fcal = makeCal(cal, { seasonTypes: seasonTypeMap }), an = fcal.anchorDays(ry), fr = R('festivals'), fests = [];
     [['winterSolstice', an.winterSolstice], ['springEquinox', an.springEquinox], ['summerSolstice', an.summerSolstice], ['autumnEquinox', an.autumnEquinox]].forEach(function (x) {
@@ -5664,7 +5674,7 @@ function massShift(events, o) {
     if (e.end_year != null) { var ed = cal.fromAbs(cal.abs(e.end_year, e.end_month, e.end_day) + n); c.end_year = ed.year; c.end_month = ed.month; c.end_day = ed.day; }
     if (e.recurrence_end_year != null) { var rd = cal.fromAbs(cal.abs(e.recurrence_end_year, e.recurrence_end_month, e.recurrence_end_day) + n); c.recurrence_end_year = rd.year; c.recurrence_end_month = rd.month; c.recurrence_end_day = rd.day; }
     if (c.is_recurring && c.recurrence_type === 'yearly' && cal.isLeapOnly(d.year, d.month, d.day)) notes.push(e.name + ' now falls on a leap day, so it will only come round in leap years.');
-    if (c.is_recurring && (c.recurrence_type === 'weekly' || c.recurrence_type === 'biweekly') && cal.weekLength && cal.weekdayOfAbs(a) !== cal.weekdayOfAbs(itemAbs(cal, e))) notes.push(e.name + ' now repeats on ' + cal.weekdays[cal.weekdayOfAbs(a)].name + 's.');
+    if (c.is_recurring && (c.recurrence_type === 'weekly' || c.recurrence_type === 'biweekly') && cal.weekLength && cal.weekdayOfAbs(a) >= 0 && cal.weekdayOfAbs(a) !== cal.weekdayOfAbs(itemAbs(cal, e))) notes.push(e.name + ' now repeats on ' + cal.weekdays[cal.weekdayOfAbs(a)].name + 's.');
     if (c.gen) c.gen = Object.assign({}, c.gen, { shiftedBy: (e.gen.shiftedBy || 0) + n });
     moved++;
     return c;
