@@ -102,7 +102,8 @@
     var canUpdate = !!byId(env.mine(), e.sourceDesignId);
     return h + '<div class="dl-acts">' +
       (canUpdate ? '<button type="button" data-dg="update" data-id="' + esc(e.id) + '" aria-label="Update ' + esc(e.name) + ' in gallery">Update in gallery</button>' : '') +
-      '<button type="button" class="dl-bad" data-dg="unpublish" data-id="' + esc(e.id) + '" aria-label="Unpublish ' + esc(e.name) + '">Unpublish</button></div></li>';
+      // The server keeps a held entry so taking it down cannot wipe its review; only a visible one offers Unpublish.
+      (e.status === 'visible' ? '<button type="button" class="dl-bad" data-dg="unpublish" data-id="' + esc(e.id) + '" aria-label="Unpublish ' + esc(e.name) + '">Unpublish</button>' : '') + '</div></li>';
   }
   function sectionHtml() {
     var h = '<small class="dl-g">Server gallery</small><p class="dl-ok">Share a design with other campaigns on this server, or copy one they made.</p>' +

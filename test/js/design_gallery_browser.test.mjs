@@ -70,17 +70,18 @@ test('a refusal from the server shows inline and the sheet stays open', { skip }
   assert.equal(await sheet(p).count(), 0);
 });
 
-test('Update in gallery re-sends, and Unpublish asks first', { skip }, async (t) => {
+test('Update in gallery re-sends; Unpublish shows only when visible and asks first', { skip }, async (t) => {
   const own = [{ id: 'g1', sourceDesignId: 'm1', kind: 'room-theme', systemId: 'drawsteel', name: 'Forge', note: 'old', makerName: 'Alice', status: 'rejected', reasons: ['An admin took this design down.'] }];
-  const p = await arranged(t, { seed: { mine: [mine('m1', 'Forge')], gal: { own, cards: [], status: 'pending', reasons: ['A design that was not approved was sent in again.'] } } });
+  const p = await arranged(t, { seed: { mine: [mine('m1', 'Forge')], gal: { own, cards: [], status: 'visible', reasons: [] } } });
   await p.waitForSelector('.dg-row');
   assert.match(await p.locator('.dg-row').innerText(), /Not approved/);
+  assert.equal(await p.locator('[data-dg="unpublish"]').count(), 0);
   await p.click('[data-dg="update"]');
   assert.equal(await p.inputValue('#dg-note'), 'old');
   assert.equal(await p.locator('#dg-design').isDisabled(), true);
   await p.fill('#dg-note', 'new note');
   await p.click('[data-dgs="publish"]');
-  await p.waitForFunction(() => /Waiting for review/.test(document.querySelector('.dg-row').textContent));
+  await p.waitForFunction(() => /Visible/.test(document.querySelector('.dg-row').textContent));
   assert.ok((await calls(p)).includes('PUT /designs/m1/gallery {"name":"Forge","note":"new note","makerName":"Alice"}'));
   await p.click('[data-dg="unpublish"]');
   assert.match(await p.locator('.dg-row').innerText(), /Copies already made stay with their owners/);
