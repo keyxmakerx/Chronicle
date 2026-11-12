@@ -15,7 +15,8 @@ var fenceLineRe = regexp.MustCompile("^ {0,3}(`{3,})[^`]*$")
 // A fence counts as a wrapper only when the next line that isn't blank is a
 // front-matter `---` line, so a code block inside a page body is never
 // touched. It closes at the first fence line with at least as many backticks,
-// as Markdown does. An unclosed wrapper is left alone.
+// as Markdown does. An unclosed wrapper is left alone, along with all that
+// follows it, so the scan stays linear in the input.
 func unwrapFences(input string) string {
 	if !strings.Contains(input, "```") {
 		return input
@@ -38,8 +39,11 @@ func unwrapFences(input string) string {
 			}
 		}
 		if closer < 0 {
-			out = append(out, lines[i])
-			continue
+			// Nothing after an unclosed wrapper can close another one, so the
+			// rest is kept as is; looking again from every later fence would
+			// make a large request cost quadratic time.
+			out = append(out, lines[i:]...)
+			break
 		}
 		out = append(out, lines[i+1:closer]...)
 		wrapped = true

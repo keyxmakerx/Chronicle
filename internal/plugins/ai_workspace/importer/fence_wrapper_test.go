@@ -3,6 +3,7 @@ package importer
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParse_CodeFenceWrapperIsNotPageText(t *testing.T) {
@@ -32,5 +33,18 @@ func TestParse_CodeFenceWrapperIsNotPageText(t *testing.T) {
 				t.Errorf("second body = %q", pages[1].Body)
 			}
 		})
+	}
+}
+
+// Many fences that never close must not cost time quadratic in the input: a
+// player's AI can send a request of a quarter megabyte.
+func TestUnwrapFences_UnclosedWrappersStayLinear(t *testing.T) {
+	input := strings.Repeat("```a\n---\n", 30000)
+	start := time.Now()
+	if got := unwrapFences(input); got != input {
+		t.Fatal("unclosed wrappers must leave the input as it was")
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("took %v for %d bytes", d, len(input))
 	}
 }
