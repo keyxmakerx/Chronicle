@@ -1,4 +1,4 @@
--- 007_hero_log_notes: the lines a player (or the Director) writes in a hero's
+-- 008_hero_log_notes: the lines a player (or the Director) writes in a hero's
 -- log. What happened to the hero (items gained, given, crafted) is read from
 -- item_moves, never copied here, so this table holds only the written words.
 -- character_id is the hero's entity id; item_entity_id optionally names an item
