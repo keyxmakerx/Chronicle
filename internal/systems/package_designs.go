@@ -56,7 +56,7 @@ func cleanDesignFile(p string) (string, error) {
 	}
 	for _, seg := range strings.Split(p, "/") {
 		if seg == ".." {
-			return "", fmt.Errorf("file %q must not use ..", p)
+			return "", fmt.Errorf("file %q must not climb out with a .. segment", p)
 		}
 	}
 	c := filepath.ToSlash(filepath.Clean(p))
