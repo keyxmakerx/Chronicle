@@ -9,12 +9,11 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // already signed in, who joins with their own account and needs no name.
 templ JoinPage(csrfToken, code, name, errMsg, signedInAs string) {
 	@layouts.Base("Join a campaign") {
-		@layouts.SiteAuthStage("") {
-			<div class="w-full max-w-md">
-				<div class="text-center mb-8">
-					@layouts.SiteAuthMark()
-					<h1 class="text-3xl font-bold text-fg">Join a campaign</h1>
-					<p class="text-fg-secondary mt-2">Type the code your game master gave you</p>
+		@AuthDoors(layouts.DoorCode, "/join") {
+			<div>
+				<div class="doors-head">
+					<h1>Join a campaign</h1>
+					<p>Type the code your game master gave you</p>
 				</div>
 				@JoinForm_(csrfToken, code, name, errMsg, signedInAs)
 			</div>
@@ -26,7 +25,7 @@ templ JoinPage(csrfToken, code, name, errMsg, signedInAs string) {
 templ JoinForm_(csrfToken, code, name, errMsg, signedInAs string) {
 	<div id="join-form" class="step-settle">
 		<form
-			class="card p-8 space-y-5"
+			class="space-y-4"
 			method="POST"
 			action="/join"
 			hx-post="/join"
@@ -80,12 +79,6 @@ templ JoinForm_(csrfToken, code, name, errMsg, signedInAs string) {
 			<button type="submit" class="btn-primary w-full py-2.5">
 				Join
 			</button>
-			if signedInAs == "" {
-				<p class="text-center text-sm text-fg-secondary">
-					Already have an account?
-					<a href="/login?redirect=/join" class="text-accent hover:text-accent-hover font-medium">Sign in first</a>
-				</p>
-			}
 		</form>
 	</div>
 }

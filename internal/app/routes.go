@@ -2892,6 +2892,13 @@ func (a *App) RegisterRoutes() {
 	authService := auth.NewAuthService(authRepo, a.Redis, a.Config.Auth.SessionTTL)
 	authHandler := auth.NewHandler(authService, a.Config.Auth.SessionTTL)
 	auth.RegisterRoutes(e, authHandler)
+	// The scene behind the sign-in tabs loads only where its mount appears.
+	a.registerPlugin(PluginRegistration{
+		Slug: "auth",
+		Widgets: []PluginWidget{
+			{Name: "signin-scene", Scripts: []string{"/static/js/widgets/signin_scene.js"}},
+		},
+	})
 
 	// SMTP plugin: outbound email for transfers, password resets.
 	smtpRepo := smtp.NewSMTPRepository(a.DB)

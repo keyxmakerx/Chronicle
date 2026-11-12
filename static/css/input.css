@@ -147,6 +147,7 @@
     --ease-turn:       cubic-bezier(0.45, 0.05, 0.25, 1); /* lifts slowly, lands softly */
     --dur-arrive:      820ms;    /* entering Site admin: rise from the bottom, three bounces */
     --dur-leave:       460ms;    /* leaving Site admin: it falls away down the screen */
+    --dur-ambient:     40s;      /* one there-and-back drift of a slow background loop; layers scale it */
 
     /* ──────────────────────────────────────────────────────────────────
      * V2 widget-animation durations — the `--motion-*` family, consumed

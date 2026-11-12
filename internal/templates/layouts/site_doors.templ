@@ -1,0 +1,53 @@
+// site_doors.templ is the stage behind the sign-in, "I'm new" and "I have a
+// code" doors: a floating panel over a scene that follows the open door.
+
+package layouts
+
+// SiteDoorsStage wraps one door's content. door is DoorSignIn, DoorNew or
+// DoorCode. The built-in scenes are drawn only when the site has no saved
+// look; a look's picture or colours, or a saved plain look, win over them.
+templ SiteDoorsStage(door string) {
+	{{ mode := siteDoorsMode(ctx) }}
+	<div
+		id="doors-stage"
+		class="doors"
+		data-door={ door }
+		data-mode={ mode }
+		data-widget="signin-scene"
+		if mode == "picture" && GetSiteLook(ctx).Move {
+			data-move
+		}
+		if mode == "gradient" {
+			style={ siteAuthGradient(ctx) }
+		}
+	>
+		<link rel="stylesheet" href={ AssetURL("/static/css/auth_doors.css") }/>
+		switch mode {
+			case "scenes":
+				<div class="doors-scene" aria-hidden="true">
+					for _, s := range doorScenes {
+						<div class="doors-set" data-scene={ s.Scene }>
+							for _, l := range doorLayers {
+								<div class="doors-layer" data-layer={ l.Name }>
+									<img src={ doorLayerURL(s.Scene, l.N, l.Name) } alt="" decoding="async"/>
+								</div>
+							}
+						</div>
+					}
+				</div>
+			case "picture":
+				<div class="doors-scene" aria-hidden="true">
+					<div class="doors-photo"><img src={ siteAuthPicture(ctx) } alt=""/></div>
+				</div>
+			case "gradient":
+				if mv := siteAuthMovingStyle(ctx); mv != "" {
+					<div class="absolute inset-0 overflow-hidden" aria-hidden="true">
+						<div data-widget="header-motion" data-axis="x" style={ mv }></div>
+					</div>
+				}
+		}
+		<div class="doors-panel">
+			{ children... }
+		</div>
+	</div>
+}
