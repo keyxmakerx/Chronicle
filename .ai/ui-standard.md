@@ -193,7 +193,13 @@ would do.
   opens the table and R the rolls, never while typing; each person has quick
   2D dice. The Handbook's Rules ribbon and its
   P key stay as they are. The Table shows Rolls and My dice; Rules,
-  Conditions, Party and Notes leaves are TODO(#1475).
+  Conditions, Party and Notes leaves are TODO(#1475). On a phone (under 640
+  wide, or a touch screen under 900) the same drawer is a sheet on the bottom
+  edge and the header button is gone: Resting is a 38 px line with the last
+  roll, Lifted is the dice and the roll field at about 60% of the screen, Full
+  is the leaves under the header. A tap lifts one height, a drag follows the
+  finger, a roll changes the line and never lifts it, and the page keeps room
+  for the line. It moves by transform only; Calm fades between heights.
 - **Who sees what follows one check.** DM-only content is visible to everyone
   who can write it: the owner and members with DM access
   (`CampaignContext.VisibilityRole()` to see it, `CanAuthorDmOnly()` to write
