@@ -257,10 +257,33 @@
   function ware(it, sd, icons) { return (ART[family(it.ic)] || ART.crate)(safeHex(it.c), sd === 'L' ? 'L' : 'R', it.ic, icons); }
 
   /* ---- Baking: each [data-bake] group is drawn once, filters and all, into
-     an image at twice the scene's resolution and swapped in. If a browser
-     refuses, the live drawing stays, only slower to repaint. Images are kept
-     by their source, so turning back to a view already seen is instant. */
-  var BAKED = {};
+     an image and swapped in. If a browser refuses, the live drawing stays,
+     only slower to repaint. The wait for a room is the cost of that drawing,
+     and it grows with the number of pixels, so a layer is first drawn at the
+     scene's own size and shown, then drawn again at twice that out of sight
+     and swapped in. The sharp images are kept in memory by their source, so
+     turning back to a view already seen is instant, and in the browser's
+     cache storage, so the next visit to the same room does not draw at all. */
+  var BAKED = {}, SHARP = {}, LIVE = {}, sharpQ = [], sharpBusy = false;
+  var BAKE_STORE = 'chronicle-shop-room-v1', BAKE_KEEP = 24;
+  // Names a layer by what it is drawn from, so changed art never finds an old picture.
+  function bakeKey(s) {
+    var a = 0x811c9dc5, b = 0x1b873593, i, c;
+    for (i = 0; i < s.length; i++) { c = s.charCodeAt(i); a = Math.imul(a ^ c, 0x01000193); b = Math.imul(b + c, 0x5bd1e995) ^ (b >>> 13); }
+    return '/shop-room-bake/' + (a >>> 0).toString(16) + (b >>> 0).toString(16) + s.length.toString(16);
+  }
+  /* Cache storage exists only on a secure origin, and a browser may refuse it
+     in a private window; a room then draws on every visit, as it always did. */
+  function bakeStore() { try { return window.caches ? caches.open(BAKE_STORE) : Promise.reject(); } catch (e) { return Promise.reject(e); } }
+  function kept(key) { return bakeStore().then(function (c) { return c.match(key); }).then(function (r) { return r ? r.blob() : Promise.reject(); }); }
+  // Keeps the newest BAKE_KEEP layers: a few rooms' worth, so the store cannot grow without end.
+  function keep(key, blob) {
+    bakeStore().then(function (c) {
+      return c.put(key, new Response(blob, { headers: { 'Content-Type': blob.type || 'image/png' } })).then(function () { return c.keys(); }).then(function (ks) {
+        return Promise.all(ks.slice(0, Math.max(0, ks.length - BAKE_KEEP)).map(function (k) { return c.delete(k); }));
+      });
+    }).catch(function () { /* a full or refused store only means the next visit draws again */ });
+  }
   /* Lights and encodes one baked image off the page's thread: a canvas's
      toBlob holds the page up to two seconds for the largest layers, and
      drawing the SVG straight into a canvas paints its filters on the page's
@@ -270,35 +293,68 @@
     return createImageBitmap(img).then(function (bmp) {
       var oc = new OffscreenCanvas(bmp.width, bmp.height);
       oc.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
-      return oc.convertToBlob({ type: 'image/png' });
+      // WebP where the browser can write it: a layer is a fifth the size or less, which matters once it is kept. Others answer with PNG.
+      return oc.convertToBlob({ type: 'image/webp', quality: 0.92 });
     });
+  }
+  // Draws one layer at k times the scene's size. Gives { blob }, or { url } of the undrawn SVG where no canvas will take it.
+  function bakeAt(L, k) {
+    return new Promise(function (ok, no) {
+      var img = new Image();
+      img.onload = function () {
+        offBake(img).then(function (b) { ok({ blob: b }); }, function () {
+          try { var cv = document.createElement('canvas'); cv.width = L.w * k; cv.height = L.h * k; cv.getContext('2d').drawImage(img, 0, 0); cv.toBlob(function (b) { ok(b ? { blob: b } : { url: img.src }); }); }
+          catch (e) { ok({ url: img.src }); }
+        });
+      };
+      img.onerror = no;
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="' + NS + '" viewBox="' + L.x + ' ' + L.y + ' ' + L.w + ' ' + L.h + '" width="' + L.w * k + '" height="' + L.h * k + '">' + L.body + '</svg>');
+    });
+  }
+  /* The sharp drawings, one at a time and only when the page is idle, so a
+     visitor already looking round the room is not held up by them. */
+  function sharpen() {
+    if (sharpBusy) return;
+    var L = sharpQ.shift(); if (!L) return;
+    sharpBusy = true;
+    function next() { sharpBusy = false; sharpen(); }
+    function go() {
+      bakeAt(L, 2).then(function (r) {
+        if (!r.blob) return;
+        var u = URL.createObjectURL(r.blob), old = BAKED[L.id], ims = LIVE[L.id] || [], pre = new Image();
+        BAKED[L.id] = u; SHARP[L.id] = true; delete LIVE[L.id]; keep(L.key, r.blob);
+        function put() {
+          ims.forEach(function (im) { if (im.isConnected) im.setAttribute('href', u); });
+          if (old && old.indexOf('blob:') === 0) setTimeout(function () { URL.revokeObjectURL(old); }, 5000);
+        }
+        // Decoded first, so the swap never shows a blank layer.
+        pre.src = u; (pre.decode ? pre.decode() : Promise.reject()).then(put, put);
+      }).then(next, next);
+    }
+    if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 1500 }); else setTimeout(go, 200);
   }
   function bake(svg, defs, done) {
     var groups = svg.querySelectorAll('[data-bake]'), left = groups.length;
-    function one() { if (!--left && done) done(); }
+    function one() { if (!--left) { if (done) done(); sharpen(); } }
     if (!left && done) done();
     Array.prototype.forEach.call(groups, function (g) {
       var bb; try { bb = g.getBBox(); } catch (e) { bb = null; }
       if (!bb || !bb.width) { one(); return; }
-      var p = 24, x = Math.floor(bb.x - p), y = Math.floor(bb.y - p), w = Math.ceil(bb.width + 2 * p), h = Math.ceil(bb.height + 2 * p), k = 2;
-      var src = '<svg xmlns="' + NS + '" viewBox="' + x + ' ' + y + ' ' + w + ' ' + h + '" width="' + w * k + '" height="' + h * k + '"><defs>' + defs + '</defs>' + g.innerHTML + '</svg>', img = new Image();
+      var p = 24, L = { x: Math.floor(bb.x - p), y: Math.floor(bb.y - p), w: Math.ceil(bb.width + 2 * p), h: Math.ceil(bb.height + 2 * p), body: '<defs>' + defs + '</defs>' + g.innerHTML };
+      L.id = L.x + ' ' + L.y + ' ' + L.w + ' ' + L.h + L.body; L.key = bakeKey(L.id);
       function swap(u) {
-        BAKED[src] = u; if (!g.isConnected) { one(); return; }
+        BAKED[L.id] = u; if (!g.isConnected) { one(); return; }
         var im = document.createElementNS(NS, 'image');
-        [['href', u], ['x', x], ['y', y], ['width', w], ['height', h], ['preserveAspectRatio', 'none']].forEach(function (a) { im.setAttribute(a[0], a[1]); });
+        [['href', u], ['x', L.x], ['y', L.y], ['width', L.w], ['height', L.h], ['preserveAspectRatio', 'none']].forEach(function (a) { im.setAttribute(a[0], a[1]); });
         im.addEventListener('load', function () { Array.prototype.slice.call(g.childNodes).forEach(function (n) { if (n !== im) g.removeChild(n); }); one(); });
         im.addEventListener('error', one);
+        if (!SHARP[L.id]) (LIVE[L.id] = LIVE[L.id] || []).push(im);
         g.appendChild(im);
       }
-      if (BAKED[src]) { swap(BAKED[src]); return; }
-      img.onload = function () {
-        offBake(img).then(function (b) { swap(URL.createObjectURL(b)); }, function () {
-          try { var cv = document.createElement('canvas'); cv.width = w * k; cv.height = h * k; cv.getContext('2d').drawImage(img, 0, 0); cv.toBlob(function (b) { swap(b ? URL.createObjectURL(b) : img.src); }); }
-          catch (e) { swap(img.src); }
-        });
-      };
-      img.onerror = one;
-      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
+      if (BAKED[L.id]) { swap(BAKED[L.id]); return; }
+      kept(L.key).then(function (b) { SHARP[L.id] = true; swap(URL.createObjectURL(b)); }, function () {
+        bakeAt(L, 1).then(function (r) { swap(r.blob ? URL.createObjectURL(r.blob) : r.url); if (r.blob) sharpQ.push(L); }, one);
+      });
     });
   }
   // Film grain over the frame, so the drawn shapes sit in one photograph.
