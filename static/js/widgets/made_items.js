@@ -89,7 +89,6 @@ window.MadeItems = (function () {
     knot: ["Nameless thing", '#8a8f98', '#5a4a7a', '#b07bff', 143, 90, 154, 1],
     pelt: ["Shifting pelt", '#b0703c', '#6a4a32', '#2c1f1a', 125, 90, 90, 0],
     skull: ["Horned skull", '#ddd3bd', '#6a5a48', '#5dff9a', 200, 93, 195, 1],
-    /* The ten added items. */
     meat: ["Cuts of meat", '#8e2a2a', '#b9a583', '#5d7a3a', 90, 167, 106, 0],
     hand: ["Skeletal hand", '#b7a888', '#c9a23f', '#7dffc0', 169, 162, 200, 1],
     geode: ["Stone eye", '#5a5148', '#2f7f96', '#8fe8ff', 90, 106, 200, 1],
@@ -100,8 +99,6 @@ window.MadeItems = (function () {
     mandrake: ["Mandrake root", '#8a6a48', '#b8a47a', '#3f6a34', 112, 165, 90, 0],
     egg: ["Dragon egg", '#3f5a4a', '#c2a25a', '#ff9a3a', 90, 163, 173, 1],
     wing: ["Pixie wing", '#bfe6ff', '#3a2f4a', '#ffe08a', 200, 90, 200, 1],
-    /* Eight more, not yet signed off: delete these rows, their Go rows
-       (waiting in internal/madeitems) and their pictures to leave them out. */
     potion: ["Healing potion", '#d8e4e0', '#5e1616', '#c8182e', 200, 90, 90, 1],
     ore: ["Lump of ore", '#5c5a58', '#e2ded6', '#d4a23f', 90, 200, 166, 0],
     bolt: ["Bolt of cloth", '#1f6a6a', '#c9a23f', '#8a6238', 90, 162, 105, 0],

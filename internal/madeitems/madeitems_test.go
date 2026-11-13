@@ -47,14 +47,8 @@ func TestEveryItemHasWords(t *testing.T) {
 }
 
 func TestFromName(t *testing.T) {
-	// The healing potion is one of the eight waiting items; without it a
-	// potion is a bottle.
-	potion := "bottle"
-	if Has("potion") {
-		potion = "potion"
-	}
 	for _, c := range []struct{ name, want string }{
-		{"Potion of Giant Strength", potion},
+		{"Potion of Giant Strength", "potion"},
 		{"Vial of venom", "bottle"},
 		{"Dragon scale armour", "breastplate"},
 		{"Dragonscale", "scale"},

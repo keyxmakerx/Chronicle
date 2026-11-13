@@ -16,10 +16,8 @@ type Item struct {
 	Key, Body, Trim, Detail string
 }
 
-// Items are the painted items in the order the set was signed.
-var Items = append(append(append([]Item{}, signed...), added...), waiting...)
-
-var signed = []Item{
+// Items are the painted items, in the order of the signed set.
+var Items = []Item{
 	{"sword", "#aab3bd", "#b98a3a", "#3f2a22"},
 	{"dagger", "#8f99a6", "#c9a23f", "#7a3fd0"},
 	{"spear", "#9aa4ae", "#7b5331", "#b0302c"},
@@ -82,11 +80,6 @@ var signed = []Item{
 	{"knot", "#8a8f98", "#5a4a7a", "#b07bff"},
 	{"pelt", "#b0703c", "#6a4a32", "#2c1f1a"},
 	{"skull", "#ddd3bd", "#6a5a48", "#5dff9a"},
-}
-
-// added are the ten items made after the set was signed, kept apart so they
-// can be left out as one.
-var added = []Item{
 	{"meat", "#8e2a2a", "#b9a583", "#5d7a3a"},
 	{"hand", "#b7a888", "#c9a23f", "#7dffc0"},
 	{"geode", "#5a5148", "#2f7f96", "#8fe8ff"},
@@ -97,11 +90,6 @@ var added = []Item{
 	{"mandrake", "#8a6a48", "#b8a47a", "#3f6a34"},
 	{"egg", "#3f5a4a", "#c2a25a", "#ff9a3a"},
 	{"wing", "#bfe6ff", "#3a2f4a", "#ffe08a"},
-}
-
-// waiting are eight more, not yet signed off; leaving them out is deleting
-// this list, its rows in made_items.js and their pictures.
-var waiting = []Item{
 	{"potion", "#d8e4e0", "#5e1616", "#c8182e"},
 	{"ore", "#5c5a58", "#e2ded6", "#d4a23f"},
 	{"bolt", "#1f6a6a", "#c9a23f", "#8a6238"},

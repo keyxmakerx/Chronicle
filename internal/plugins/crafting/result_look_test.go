@@ -1,18 +1,8 @@
 package crafting
 
-import (
-	"testing"
-
-	"github.com/keyxmakerx/chronicle/internal/madeitems"
-)
+import "testing"
 
 func TestLookShape(t *testing.T) {
-	// The healing potion is one of the waiting painted items; without it a
-	// tonic is a bottle.
-	tonic := "bottle"
-	if madeitems.Has("potion") {
-		tonic = "potion"
-	}
 	cases := []struct {
 		name string
 		own  *MaterialPicture
@@ -20,12 +10,12 @@ func TestLookShape(t *testing.T) {
 		want string
 	}{
 		{"own picture wins", &MaterialPicture{Picture: "vial", Tint: "#123456"}, "Iron Sword", "bottle"},
-		{"own picture with no shape falls to the name", &MaterialPicture{Picture: "leaf", Tint: "#123456"}, "Frost tonic", tonic},
+		{"own picture with no shape falls to the name", &MaterialPicture{Picture: "leaf", Tint: "#123456"}, "Frost tonic", "potion"},
 		{"shield before blade", nil, "Swordbreaker Buckler", "shield"},
 		{"blade", nil, "Ember Shortsword", "sword"},
 		{"ring", nil, "Ring of Clear Water", "ring"},
-		{"tonic", nil, "Frost Tonic", tonic},
-		{"case-blind", nil, "ELIXIR OF LIFE", tonic},
+		{"tonic", nil, "Frost Tonic", "potion"},
+		{"case-blind", nil, "ELIXIR OF LIFE", "potion"},
 		{"anything else", nil, "Ranger's Kit", "bundle"},
 	}
 	for _, c := range cases {
@@ -76,10 +66,6 @@ func TestKeptWithOnlyALookIsRemembered(t *testing.T) {
 }
 
 func TestLookShapeMatchesWholeWords(t *testing.T) {
-	potion := "bottle"
-	if madeitems.Has("potion") {
-		potion = "potion"
-	}
 	tests := []struct{ name, want string }{
 		{"Boiled leather", "pelt"},
 		{"Bandage", "bundle"},
@@ -88,7 +74,7 @@ func TestLookShapeMatchesWholeWords(t *testing.T) {
 		{"Longsword", "sword"},
 		{"Throwing daggers", "dagger"},
 		{"Silver earring", "ring"},
-		{"Healing potions", potion},
+		{"Healing potions", "potion"},
 		{"Oil of slipperiness", "bottle"},
 		{"Dragonscale shield", "shield"},
 		{"Dragonscale", "scale"},
