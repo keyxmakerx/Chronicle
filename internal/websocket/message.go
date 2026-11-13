@@ -137,6 +137,13 @@ const (
 	// and deliberately not a change-feed type: the state is read through
 	// its own route, not replayed from the feed.
 	MsgSystemStateUpdated MessageType = "system_state.updated"
+
+	// MsgHeroLayersChanged tells the GM side that a layer was put on or
+	// taken off a page. ResourceID is the entity id and there is no
+	// payload; the layers are read through their own route. Always
+	// published RequiresDM, and not a change-feed type: a reconnecting
+	// module reads the layers of the heroes it links instead.
+	MsgHeroLayersChanged MessageType = "hero_layers.changed"
 )
 
 // Quest messages. They carry ids only (and a quest's version), so a page
