@@ -141,8 +141,8 @@ const (
 	// MsgHeroLayersChanged tells the GM side that a layer was put on or
 	// taken off a page. ResourceID is the entity id and there is no
 	// payload; the layers are read through their own route. Always
-	// published RequiresDM, and not a change-feed type: a reconnecting
-	// module reads the layers of the heroes it links instead.
+	// published RequiresDM, and recorded in the change feed as
+	// `hero_layers` so a reconnecting module re-reads only those heroes.
 	MsgHeroLayersChanged MessageType = "hero_layers.changed"
 )
 

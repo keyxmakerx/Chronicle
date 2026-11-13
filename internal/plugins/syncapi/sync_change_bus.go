@@ -33,6 +33,7 @@ var changeFeedTypes = map[string]string{
 	"calendar.event": "calendar_event",
 	"stash":          "stash",
 	"downtime":       "downtime",
+	"hero_layers":    "hero_layers",
 }
 
 // recordedTypes is changeFeedTypes' resource types, sorted, as the feed
@@ -67,8 +68,8 @@ func classifyChange(t ws.MessageType) (resourceType, op string, ok bool) {
 		op = "created"
 	case "updated", "moved", "settled", "money_changed", "changed", "metadata_updated":
 		// A token move changes the token, a relation's metadata write the
-		// relation; a stash move, a request's answer and a downtime switch
-		// change the view. The client refetches either way.
+		// relation; a stash move, a request's answer, a downtime switch and
+		// a hero's layers change the view. The client refetches either way.
 		op = "updated"
 	case "deleted":
 		op = "deleted"

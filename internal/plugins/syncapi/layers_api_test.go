@@ -7,6 +7,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
 
 type fakeLayers struct {
@@ -63,5 +64,17 @@ func TestLayersAPI_PassesPageAndRole(t *testing.T) {
 	c, _ := dmScreenContext(http.MethodGet, "", 42, "entityID", "hidden")
 	if got := dmStatusOf(t, h.GetEntityLayers(c)); got != http.StatusNotFound {
 		t.Fatalf("hidden page status = %d, want 404", got)
+	}
+}
+
+// A reconnecting module re-reads only the heroes whose layers changed, so
+// the change must be in the feed, and must not collide with map layers.
+func TestClassifyChange_HeroLayers(t *testing.T) {
+	rt, op, ok := classifyChange(ws.MsgHeroLayersChanged)
+	if rt != "hero_layers" || op != "updated" || !ok {
+		t.Fatalf("hero_layers.changed = %q %q %v", rt, op, ok)
+	}
+	if rt, _, _ := classifyChange(ws.MsgLayerCreated); rt != "layer" {
+		t.Fatalf("map layer classified as %q", rt)
 	}
 }
