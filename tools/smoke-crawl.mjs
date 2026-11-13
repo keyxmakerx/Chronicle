@@ -41,6 +41,9 @@ let at = '';
 page.on('pageerror', (e) => problems.push(`${at}: page error: ${e.message}`));
 page.on('response', (r) => {
   if (!r.url().startsWith(BASE)) return;
+  // Report-only CSP sends a report per would-be block, and the endpoint
+  // rate-limits them; a refused report is not a page fault.
+  if (new URL(r.url()).pathname === '/csp-report') return;
   // A page that loads fine but asks the server for something missing is a
   // bug; a 4xx on the page itself is usually just a route the walk guessed.
   const own = r.request().isNavigationRequest();
