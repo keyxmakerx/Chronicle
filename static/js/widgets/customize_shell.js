@@ -70,6 +70,11 @@
   Chronicle.customizeFlush = function () {
     return active ? active.flush() : Promise.resolve(true);
   };
+  // The last frame's toast stack. An area that reads itself again after a
+  // Save (a category does) swaps the whole frame, toast stack included, a
+  // moment after "Saved." appears; the new frame takes over the notes still
+  // showing so they stay long enough to read.
+  var lastToasts = null;
 
   function mount(el) {
     var CID = el.getAttribute('data-campaign-id');
@@ -320,10 +325,21 @@
       else save.removeAttribute('data-reload');
     }
     var toasts = $('[data-czs-toasts]');
+    if (toasts && lastToasts && lastToasts !== toasts && !lastToasts.isConnected) {
+      // A note with Undo is left behind: its Undo belongs to the old frame.
+      while (lastToasts.firstChild) {
+        var t0 = lastToasts.firstChild;
+        if (t0.nodeType !== 1 || t0.hasAttribute('data-undo')) { t0.remove(); continue; }
+        t0.classList.add('is-carried');
+        toasts.appendChild(t0);
+      }
+    }
+    if (toasts) lastToasts = toasts;
     function toast(msg, bad, undoFn) {
       if (!toasts) return;
       var t = document.createElement('div');
       t.className = 'czs-toast' + (bad ? ' is-bad' : '');
+      if (undoFn) t.setAttribute('data-undo', '');
       t.innerHTML = '<span></span>' + (undoFn ? '<button type="button">Undo</button>' : '') +
         (bad ? '<button type="button" aria-label="Dismiss">Close</button>' : '');
       t.firstChild.textContent = msg;
