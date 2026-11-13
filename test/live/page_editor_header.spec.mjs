@@ -114,7 +114,9 @@ test('Edit page, the header sheet, saving as you go, other names, parent', async
     stored = JSON.stringify(await aliasesOf(owner, cid, eid));
   }
   assert.match(stored, /tide/i, 'Tide was not stored: ' + stored);
-  assert.match(await page.locator('[data-pe-page]').innerText(), /Tide/);
+  // The name chips mount again after the save and fetch their own list, so
+  // they can still be on the way when the stored value is already there.
+  await page.waitForFunction(() => /Tide/.test(document.querySelector('[data-pe-page]').innerText), null, { timeout: 5000 });
 
   // 5. Parent page: a list that never offers this page; picking saves and the trail changes.
   const parent = page.locator('[data-pe-part="header"] [data-pe-f="parent"]');
