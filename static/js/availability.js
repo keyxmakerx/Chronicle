@@ -342,7 +342,9 @@
           cell.setAttribute('aria-label', DISPLAY_DAYS[col] + ' ' + hourLabel(hour) + ', unavailable');
           cell.addEventListener('mousedown', function (e) { e.preventDefault(); self.beginPaint(cell); });
           cell.addEventListener('mouseenter', function () { if (self.painting) self.applyPaint(cell); });
-          cell.addEventListener('click', function () { if (!self.painting) self.togglePaint(cell); });
+          // A mouse click already painted on mousedown; only a click with no
+          // pointer behind it (detail 0, from a screen reader) toggles here.
+          cell.addEventListener('click', function (e) { if (!self.painting && e.detail === 0) self.togglePaint(cell); });
           cell.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); self.togglePaint(cell); }
           });

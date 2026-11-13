@@ -168,6 +168,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> restore.sh self-test";          ./tools/test-restore-script.sh
 	@echo "==> guard: migration-immutability"; ./tools/check-migration-immutability.sh
 	@echo "==> guard: migration-numbers";     ./tools/check-migration-numbers.sh
+	@echo "==> guard: live-check todos";      ./tools/check-live-todos.sh
 	@echo "==> guard: v2-motion-discipline";   ./tools/check-v2-motion-discipline.sh
 	@echo "==> guard: page-scripts";           ./tools/check-page-scripts.sh
 	@echo "==> guard: decision-citations";     ./tools/check-decision-citations.sh

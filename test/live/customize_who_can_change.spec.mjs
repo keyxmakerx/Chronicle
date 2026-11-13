@@ -59,7 +59,7 @@ test('owner sees who can change; DM Screen never offers Everyone', async () => {
   assert.deepEqual(labels, ['Only me', 'Me and co-DMs'], 'the DM Screen offers a wider setting than co-DMs');
 });
 
-test('opening a row on the People screen raises no page error', { todo: 'clicking a People row throws "Cannot read properties of undefined" in fzRects (customize_look.js): the People room has no focus-zone entry for the part it opens' }, async () => {
+test('opening a row on the People screen raises no page error', async () => {
   const owner = await person({ tag: 'wcv', name: 'Mara Vell', context: { viewport: { width: 1500, height: 1000 } } });
   const cid = await newCampaign(owner, 'Who Can Change Errors');
   await owner.go(`/campaigns/${cid}/customize/look#people`);

@@ -2002,7 +2002,11 @@
     var fzLock = false, fzLastFlash = {}, fzRaf = 0, fzHovSec = null;
     function fzSite(){ return $('#site-wrap .site'); }
     function fzRects(sec){
-      var site = fzSite(), F = FZ[sec], sel = F[ui.page] || F.all, sr = site.getBoundingClientRect(), s = sr.width / 880, out = [];
+      // A section with no parts on the example (People, Hover tiles on some
+      // pages) has nothing to outline.
+      var site = fzSite(), F = FZ[sec], sel = F && (F[ui.page] || F.all), out = [];
+      if (!site || !sel) return out;
+      var sr = site.getBoundingClientRect(), s = sr.width / 880;
       if (!s) return out;
       sel.forEach(function(q){
         $$(q, site).forEach(function(el){
@@ -2071,7 +2075,7 @@
     // Opening a section from its tab keeps a focus going, or briefly shows its parts.
     function fzSection(id){
       if (fzLock) return;
-      if (ui.focus){ ui.focus = id; fzQueue(); }
+      if (ui.focus){ ui.focus = FZ[id] ? id : null; fzQueue(); }
       else if (ui.zoom === 'site') fzFlash(id + '.');
     }
     function fzFlash(k){
