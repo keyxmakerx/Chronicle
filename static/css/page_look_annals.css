@@ -460,6 +460,9 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
    at rest so showing them moves nothing (a reason not saved goes to a
    notice); a narrow screen, seldom on a keyboard, leaves the keys out. */
 [data-cz-page="annals"] .pe-bar { display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-height: 2rem; }
+/* The visibility chip is an icon at rest and a labelled chip while editing;
+   its box keeps one height so pressing Edit page moves nothing below. */
+[data-cz-page="annals"] .pe-bar > [data-entity-access] { display: flex; align-items: center; height: 2rem; }
 [data-cz-page="annals"] .pe-hint {
   font-size: 0.78rem; color: var(--color-text-muted); white-space: nowrap;
   visibility: hidden; opacity: 0;

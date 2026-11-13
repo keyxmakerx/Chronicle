@@ -8,10 +8,9 @@
 // package installed (turning one on answers 400). The same switch drives both
 // parts, so narrowing is proven here on the DM Screen.
 //
-// Findings against the issue's wording (see the todo below): the screen now
-// lists Character sheet, Pages, Hover cards and DM Screen, not two rows; and
-// "co-DM" means the owner or a member given DM access, so a plain scribe is
-// not offered the DM Screen look.
+// The screen lists Character sheet, Pages, Hover cards and DM Screen, not the
+// two rows the issue names. A co-DM is the owner or a member given DM access;
+// a plain scribe is not offered the DM Screen look, and the screen says so.
 //
 // RUN: tools/live-checks.sh test/live/customize_who_can_change.spec.mjs
 
@@ -84,13 +83,23 @@ test('a player is offered no DM Screen look and no link they cannot use', async 
   assert.ok(res.status >= 400 && res.status < 500, `a player's DM Screen pick answered ${res.status}`);
 });
 
-test('a plain scribe is offered the DM Screen look', { todo: 'the screen says a co-DM is a scribe, but only the owner and members given DM access are offered it (isCoDM in look_access.go)' }, async () => {
-  const owner = await person({ tag: 'wcr', name: 'Mara Vell' });
+test('a plain scribe is not offered the DM Screen look, and the People screen says why', async () => {
+  const owner = await person({ tag: 'wcr', name: 'Mara Vell', context: { viewport: { width: 1500, height: 1000 } } });
   const scribe = await person({ tag: 'wcs', name: 'Ines Cole' });
   const cid = await newCampaign(owner, 'Who Can Change Scribe');
   await addMember(owner, cid, scribe, 'scribe');
   await scribe.go(`/campaigns/${cid}/my-look`);
-  await scribe.page.locator('[data-look-part="dmscreen"]').waitFor({ timeout: 3000 });
+  assert.equal(await scribe.page.locator('[data-look-part="dmscreen"]').count(), 0, 'a plain scribe is offered the DM Screen look');
+
+  await owner.go(`/campaigns/${cid}/customize/look#people`);
+  await owner.page.locator('#pp-rows .pp-row').first().waitFor();
+  assert.match(await owner.page.locator('#pp-rows').locator('xpath=..').innerText(), /A co-DM is a member you gave DM access\. Scribes pick what players pick\./);
+  assert.doesNotMatch(await owner.page.locator('main').innerText(), /co-DM is a scribe/i, 'the screen still says a scribe is a co-DM');
+  // Viewing as a co-DM lists the DM Screen; viewing as a player does not.
+  await owner.page.locator('[data-viewas="codm"]').click();
+  assert.ok(await owner.page.locator('#pp-rows .pp-row', { hasText: 'DM Screen' }).count(), 'viewing as a co-DM does not list the DM Screen');
+  await owner.page.locator('[data-viewas="player"]').click();
+  assert.equal(await owner.page.locator('#pp-rows .pp-row', { hasText: 'DM Screen' }).count(), 0, 'viewing as a player lists the DM Screen');
 });
 
 test('a co-DM picks a DM Screen look; narrowing access takes it away and widening brings it back', async () => {

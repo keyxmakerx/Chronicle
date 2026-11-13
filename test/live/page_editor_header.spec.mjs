@@ -27,7 +27,7 @@ async function setup(tag, context) {
   return { owner, cid, eid };
 }
 
-test('Edit page moves nothing, not even the title', { todo: 'the title rises 2px when Edit page is pressed (161 to 159 at 1280 wide), against "nothing else on the page shifts"' }, async () => {
+test('Edit page moves nothing, not even the title', async () => {
   const { owner } = await setup('pem');
   const { page } = owner;
   const title = page.locator('[data-page-h1]');
@@ -186,7 +186,7 @@ test('Calm motion fades the sheet; the campaign switch does the same', async () 
   await page.waitForFunction(() => document.documentElement.getAttribute('data-view-motion') !== 'calm');
 });
 
-test('a player who claimed a character edits only the name', { todo: 'a character page has no editable header part in the Annals look, so a claiming player is shown no Edit page button (data-pe-part is absent)' }, async () => {
+test('a player who claimed a character edits only the name', async () => {
   const owner = await person({ tag: 'pel', name: 'Mara Vell' });
   const player = await person({ tag: 'pep', name: 'Tomas Reed' });
   const cid = await newCampaign(owner, 'Header Player');
