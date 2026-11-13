@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-LIVE_TODO_BUDGET=11
+LIVE_TODO_BUDGET=5
 
 count=$(grep -ho '{ *todo:' test/live/*.spec.mjs | wc -l | tr -d ' ')
 if (( count > LIVE_TODO_BUDGET )); then
