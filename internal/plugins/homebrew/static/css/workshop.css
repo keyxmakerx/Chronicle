@@ -52,6 +52,7 @@
 .hbw-ic:hover { color: var(--hb-ink); background: var(--hb-tint); }
 .hbw-q { font: inherit; font-size: 13px; min-height: 32px; padding: 0 4px; border: 0; background: none; color: var(--hb-acc); cursor: pointer; }
 .hbw-q:hover { text-decoration: underline; }
+a.hbw-link { display: inline-flex; align-items: center; text-decoration: none; } a.hbw-link:hover { text-decoration: underline; }
 .hbw-q.hbw-danger { color: var(--hb-muted); } .hbw-q.hbw-danger:hover { color: var(--hb-bad); }
 
 /* Library and palette. */

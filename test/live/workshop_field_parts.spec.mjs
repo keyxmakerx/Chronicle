@@ -7,8 +7,8 @@
 // installed system (none on a scratch server), so these open it by address.
 // Covers steps 2-6 by saving recipes through the Workshop's own recipe API,
 // because the Field, Item fields and Local words parts have no form in the
-// Workshop yet (the inspector only says they are set up where they live): the
-// subtest that expects a form is marked todo. Step 1 (the Rulebook > More
+// Workshop by design: the inspector names where each is set up and links
+// there, which the last subtest checks. Step 1 (the Rulebook > More
 // route) needs an installed system package.
 //
 // RUN: tools/live-checks.sh test/live/workshop_field_parts.spec.mjs
@@ -193,13 +193,24 @@ test('6. turning a text field into a number field is refused by name, and the sh
   assert.equal(f && f.type, 'text', 'the sheet field changed type');
 });
 
-test('the Workshop opens by address and its Field part has a form for category, label and rule', { todo: 'the Field, Item fields and Local words parts have no form in the Workshop; the inspector says they are set up where they live, so the steps cannot be done by clicking' }, async () => {
+test('the Workshop opens by address and its Field part says where it is set up, with a link that loads', async () => {
   const { owner, cid } = await world();
   const { page } = owner;
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  const saved = await save(owner, cid, 'Notes', [part('rank_note', 'field', 'Rank note', { category: 'Characters', label: 'Rank note', type: 'text' })]);
+  assert.equal(saved.status, 201, JSON.stringify(saved.body));
   await owner.go(`/campaigns/${cid}/homebrew`);
-  await page.locator('.hbw').getByRole('button', { name: 'Field', exact: true }).click();
-  await page.locator('.hbw-card, .hbw-node').first().click().catch(() => {});
-  await picture(page, 'workshop-field-part', { check: '#1638', about: 'Workshop with a Field part selected' });
-  const inspector = page.locator('.hbw');
-  assert.ok(await inspector.getByLabel(/Category/i).count() > 0, 'no Category input for the Field part');
+  await page.locator('.hbw-item').filter({ hasText: 'Notes' }).first().click();
+  await page.locator('.hbw-card, .hbw-node').filter({ hasText: 'Rank note' }).first().click();
+  const where = page.locator('.hbw p').filter({ hasText: /is set on the/i });
+  await where.first().waitFor();
+  assert.match(await where.first().innerText(), /Rank note is set on the Characters sheet/);
+  assert.equal(await page.locator('.hbw input[aria-label*="Category" i], .hbw label:has-text("Category")').count(), 0, 'the Field part grew a form');
+  await picture(page, 'workshop-field-part', { check: '#1638', about: 'Workshop with a Field part selected, naming where it is set up' });
+  const href = await where.first().getByRole('link').getAttribute('href');
+  assert.ok(href && href.startsWith(`/campaigns/${cid}/`), 'the link points somewhere else: ' + href);
+  const res = await owner.go(href);
+  assert.equal(res.status(), 200, 'the link answered ' + res.status());
+  assert.deepEqual(errors, [], 'page errors: ' + errors.join('; '));
 });

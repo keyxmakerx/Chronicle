@@ -964,6 +964,23 @@
     ]);
   }
 
+  // livesAt says where a part with no form of its own is set up, and links
+  // to that spot. It opens in a new tab so the recipe being edited is not lost.
+  // Categories are named in a recipe, not numbered, so field and item parts
+  // link to the category list; a words part links to its place when it has one.
+  function livesAt(S, p) {
+    var m = /^\/campaigns\/([^/]+)\//.exec(S.cfg.endpoint || ''), base = m ? '/campaigns/' + m[1] : '';
+    var d = p.data || {}, cat = d.category ? String(d.category) : '', where, text, href = base + '/entity-types';
+    if (p.kind === 'field') { where = ' is set on the ' + (cat ? cat + ' ' : '') + 'sheet. '; text = 'Open the categories'; }
+    else if (p.kind === 'item') { where = ' is set on the ' + (cat ? cat + ' ' : '') + 'item sheet. '; text = 'Open the categories'; }
+    else if (p.kind === 'words' && d.placeId) { where = ' are set on the place\'s own page. '; text = 'Open the place'; href = base + '/entities/' + encodeURIComponent(d.placeId); }
+    else if (p.kind === 'words') { where = ' are set on a place\'s page. '; text = 'Open the categories'; }
+    else { where = ' is set up where it lives in the campaign. '; text = ''; }
+    var line = h('p', 'hbw-muted', p.label + where);
+    if (text && base) line.appendChild(h('a', 'hbw-q hbw-link', text, { href: href, target: '_blank', rel: 'noopener' }));
+    return line;
+  }
+
   function partForm(S, box, p, k) {
     var forced = k && k.forceSee;
     append(box, [
@@ -976,7 +993,7 @@
       shapeForm(S, box, p);
       box.appendChild(h('p', 'hbw-muted', 'Saving the recipe saves this as a tracker kind of the same name, kept in step with the recipe.'));
     }
-    else if (!(k && k.widget)) box.appendChild(h('p', 'hbw-muted', 'This kind of part is set up where it lives in the campaign.'));
+    else if (!(k && k.widget)) box.appendChild(livesAt(S, p));
     if (k && k.widget) box.appendChild(ownerMount(S, p, k, 'inspector'));
     var uses = usesOf(S.cur.doc, p.key);
     append(box, [
