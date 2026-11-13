@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/madeitems"
 )
 
 // Where a copy is held.
@@ -101,8 +103,11 @@ func FirstLookJSON(copies []Copy) string {
 	return ""
 }
 
-// LookShapes are the shapes craft_results.js draws.
+// LookShapes are the shapes craft_results.js draws; a look may also name
+// one of the painted items (internal/madeitems).
 var LookShapes = map[string]bool{"potion": true, "vial": true, "blade": true, "shield": true, "ring": true, "bundle": true}
+
+func lookShapeKnown(s string) bool { return LookShapes[s] || madeitems.Has(s) }
 
 var lookColour = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 var lookPicture = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,23}$`)
@@ -111,7 +116,7 @@ var lookPicture = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,23}$`)
 // and #rrggbb colours. A bad mark is dropped on its own; anything else bad
 // drops the whole look, and the copy shows the plain icon.
 func (l *CraftLook) clean() *CraftLook {
-	if l == nil || !LookShapes[l.Shape] || !lookColour.MatchString(l.Body) || !lookColour.MatchString(l.Trim) || !lookColour.MatchString(l.Detail) {
+	if l == nil || !lookShapeKnown(l.Shape) || !lookColour.MatchString(l.Body) || !lookColour.MatchString(l.Trim) || !lookColour.MatchString(l.Detail) {
 		return nil
 	}
 	out := &CraftLook{Shape: l.Shape, Body: strings.ToLower(l.Body), Trim: strings.ToLower(l.Trim), Detail: strings.ToLower(l.Detail)}

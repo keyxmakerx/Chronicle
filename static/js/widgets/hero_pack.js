@@ -27,11 +27,13 @@
       var look;
       try { look = JSON.parse(el.getAttribute('data-craft-look')); } catch (e) { return; }
       var tile = el.hasAttribute('data-hp-tile');
+      // An opened copy shows the painted picture large, and moving if it moves.
+      var big = !tile && CraftResults.isPainted && CraftResults.isPainted();
       var svg;
-      try { svg = CraftResults.svg(look, tile ? 28 : 48); } catch (e) { return; }
+      try { svg = CraftResults.svg(look, tile ? 28 : (big ? 180 : 48), {move: big}); } catch (e) { return; }
       if (!svg) return;
       var pic = document.createElement('span');
-      pic.className = tile ? 'hp-pic hp-look' : 'hp-card-pic';
+      pic.className = tile ? 'hp-pic hp-look' : 'hp-card-pic' + (big ? ' is-big' : '');
       pic.setAttribute('aria-hidden', 'true');
       if (typeof svg === 'string') pic.innerHTML = svg; else pic.appendChild(svg);
       var old = tile && el.querySelector('i.hp-pic');

@@ -1,0 +1,13 @@
+import { DEMO } from './demo.js';
+import * as weapons from './weapons.js';
+import * as worn from './worn.js';
+import * as tools from './tools.js';
+import * as magic from './magic.js';
+import * as food from './food.js';
+import * as goods from './goods.js';
+import * as remnant from './remnant.js';
+import * as more from './more.js';
+import * as more2 from './more2.js';
+import * as more3 from './more3.js';
+export const ITEMS = Object.assign({}, weapons, worn, tools, magic, food, goods, remnant, more, more2, more3);
+export { DEMO };

@@ -6183,6 +6183,18 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .hp-look svg { width: 28px; height: 28px; display: block; }
 .hp-card-pic { flex: none; width: 48px; height: 48px; }
 .hp-card-pic svg { width: 48px; height: 48px; display: block; }
+.hp-card-pic.is-big { flex-basis: 100%; width: 100%; height: auto; }
+.hp-card-pic.is-big .mi-move, .hp-card-pic.is-big > .mi-pic { width: 100%; height: auto; aspect-ratio: 1; border-radius: 8px; }
+.hp-look .mi-pic { width: 28px; height: 28px; }
+/* Dark painted made-item pictures (made_items.js): each fades in once its
+   recipe colours are worked out; a moving one plays over its still. */
+.mi-pic { display: block; max-width: 100%; opacity: 0; transition: opacity .18s ease-out; border-radius: 6px; background: #120d0a; }
+.mi-pic.mi-in { opacity: 1; }
+.mi-move { position: relative; display: inline-block; vertical-align: middle; max-width: 100%; border-radius: 6px; overflow: hidden; }
+.mi-move .mi-pic { width: 100%; height: auto; aspect-ratio: 1; border-radius: 0; }
+.mi-move canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .3s ease-out; }
+.mi-move canvas.mi-on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .mi-pic, .mi-move canvas { transition: none; } }
 .hp-name { max-width: 100%; overflow-wrap: anywhere; }
 .hp-ct { position: absolute; top: 3px; right: 6px; font-size: 11px; font-weight: 700; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 .hp-empty { margin: 0; font-size: 12px; color: var(--color-text-muted); }

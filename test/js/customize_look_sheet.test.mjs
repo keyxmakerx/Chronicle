@@ -44,7 +44,7 @@ test('the made-item picture choice matches the server and saves with the sheet',
   assert.ok(m, 'AppearanceCraftArts not found in appearance.go');
   assert.deepEqual(arts.map((x) => x[0]), [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]));
   assert.match(src, /'sheet\.craftArt', 'sh-craft-l', CRAFT_ARTS/, 'a control must bind sheet.craftArt');
-  assert.match(src, /if \(!d\.sheet\.craftArt\) d\.sheet\.craftArt = 'lifelike'/, 'fromServer must default to lifelike');
+  assert.match(src, /if \(!d\.sheet\.craftArt\) d\.sheet\.craftArt = 'painted'/, 'fromServer must default to the Dark painted set');
 });
 
 test('the preview has a character sheet page drawn in the draft style', () => {
