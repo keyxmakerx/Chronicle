@@ -34,6 +34,10 @@ func reviewProblems(d ImportReviewData) []reviewProblem {
 	}
 	for _, r := range d.Records {
 		if r.Plan.Error != "" {
+			if say := alreadyHaveSay(d, r); say != "" {
+				out = append(out, reviewProblem{Block: r.Block, Say: say})
+				continue
+			}
 			say := r.Plan.Error
 			if r.title() != "" {
 				say = r.title() + ": " + say
@@ -250,6 +254,21 @@ func repeatWarning(d ImportReviewData) string {
 		return "1 block in this paste was already applied."
 	}
 	return fmt.Sprintf("%d blocks in this paste were already applied.", n)
+}
+
+// alreadyHaveSay words a pasted-again block that would make something the
+// campaign already has. The refusal's own wording ("use action: update") is
+// meant for the AI; the person reviewing gets a plain sentence. "" for any
+// other problem.
+func alreadyHaveSay(d ImportReviewData, r RecordRow) string {
+	if d.Repeats[r.Block-1] == "" || (r.Action != "" && r.Action != records.ActionCreate) || !strings.HasSuffix(r.Plan.Error, "; use action: update") {
+		return ""
+	}
+	thing := strings.ToLower(r.Label)
+	if r.Name != "" {
+		thing += " " + r.Name
+	}
+	return "You already have the " + strings.TrimSpace(thing) + ". Nothing was added."
 }
 
 // repeatSay leads a problem with when its block was applied before, which is

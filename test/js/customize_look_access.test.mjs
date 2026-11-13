@@ -72,12 +72,12 @@ test('quick setups set every row the way the brief names them', () => {
   for (const [, m] of quick) assert.notEqual(m.dmscreen, 'everyone');
 });
 
-test('viewing as follows the server rule: co-DM is a scribe or above', () => {
+test('viewing as follows the server rule: a co-DM is a member given DM access', () => {
   const a = src.indexOf('function mayPickAs(');
   const b = src.indexOf('\n    }', a) + 6;
   const mayPickAs = vm.runInNewContext('(' + src.slice(a, b).replace('function mayPickAs', 'function') + ')');
   const cases = [
-    ['owner', 'everyone', false], ['scribe', 'owner', false], ['scribe', 'codm', true], ['scribe', 'everyone', true],
+    ['owner', 'everyone', false], ['codm', 'owner', false], ['codm', 'codm', true], ['codm', 'everyone', true],
     ['player', 'owner', false], ['player', 'codm', false], ['player', 'everyone', true],
   ];
   for (const [role, setting, want] of cases) assert.equal(mayPickAs(role, setting), want, role + ' ' + setting);

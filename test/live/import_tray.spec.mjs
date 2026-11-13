@@ -72,11 +72,11 @@ test('parts out of order wait in the tray, the last part opens one review, a rep
   await page.locator('#ai-import-tray.air-tray-host').waitFor({ state: 'attached' });
   assert.equal(await page.locator('#ai-import-tray .air-tray-row').count(), 0, 'the tray row should be gone after applying');
 
-  // 3. The same paste again is flagged. (The row-starts-on-No half is its own
-  // subtest below, because a repeated table is refused rather than listed.)
+  // 3. The same paste again is flagged, and each table it would make again
+  // says so in plain words (the subtest below covers that wording).
   await review(owner, part(1, 'Tray check', 'Tray check one'));
   await host.getByText('You already applied this paste, on').waitFor();
-  await host.getByText(/Already applied on/).first().waitFor();
+  await host.getByText(/You already have the rolling table Tray check one\. Nothing was added\./).first().waitFor();
   assert.equal(await host.locator('.air-yn input[value=on]:checked').count(), 0, 'a repeated row starts on Yes');
   await picture(page, 'import-tray-already-applied', { check: '#1654', about: 'Review of a paste that was applied before', locator: page.locator('.aip-body'), mask: ['.aip-body time'] });
 
@@ -93,7 +93,7 @@ test('parts out of order wait in the tray, the last part opens one review, a rep
   owner.assertClean();
 });
 
-test('a repeated paste lists its row on No, to be answered Yes only on purpose', { todo: 'a table that already exists is refused ("use action: update") so no Yes/No row is listed; nothing is made twice, but the row cannot start on No' }, async () => {
+test('pasting a table you already have says so in plain words and adds nothing', async () => {
   const owner = await person({ tag: 'trayrep', name: 'Tray Repeat' });
   const cid = await newCampaign(owner, 'Tray repeat campaign');
   const { page } = owner;
@@ -105,7 +105,7 @@ test('a repeated paste lists its row on No, to be answered Yes only on purpose',
   await openPaste(owner, cid);
   await review(owner, one);
   const host = page.locator('#ai-import-review-host');
-  await host.getByText(/Already applied on/).first().waitFor();
-  const no = host.locator('.air-yn input[value=off]:checked');
-  assert.equal(await no.count(), 1, 'the repeated row should be listed and start on No');
+  await host.getByText(/You already have the rolling table Repeat table\. Nothing was added\./i).first().waitFor();
+  assert.doesNotMatch(await host.innerText(), /use action/i, 'the review still shows the wording meant for the AI');
+  owner.assertClean();
 });

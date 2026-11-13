@@ -116,6 +116,11 @@ jobs:
         # number and pass alone; re-run CI on the second after the first merges.
         run: ./tools/check-migration-numbers.sh
 
+      - name: Live-check todo budget
+        # Known-bug todo subtests in test/live report without failing, so
+        # their number may only go down (issue #2143 lists them).
+        run: ./tools/check-live-todos.sh
+
       - name: V2 motion-discipline guard (§B2)
         # Diff-scoped FAIL: no NEW `transition: all` / `transition-all` in
         # calendar / timeline / ai_workspace / campaigns sources — only

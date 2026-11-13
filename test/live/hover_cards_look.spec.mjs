@@ -100,6 +100,6 @@ test('Customize > Hover cards > Night makes the card dark with gold lettering', 
   customizeErrors = owner.errors.splice(before);
 });
 
-test('picking a hover card look raises no script errors', { todo: 'choosing a Hover cards tile throws "Cannot read properties of undefined (reading \'city\')" from the Customize page\'s click-to-focus code' }, () => {
+test('picking a hover card look raises no script errors', () => {
   assert.deepEqual(customizeErrors, []);
 });

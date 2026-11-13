@@ -224,7 +224,7 @@ test('the group heatmap loads in the Havana spring-forward week, and a zone set 
   havana.assertClean();
 });
 
-test('one click on an empty grid cell leaves it painted', { todo: 'a single click paints on mousedown and the click handler toggles it straight back off' }, async () => {
+test('one click on an empty grid cell leaves it painted', async () => {
   const { empty, cid } = w;
   await empty.go(`/campaigns/${cid}/availability`);
   await empty.page.waitForLoadState('networkidle');

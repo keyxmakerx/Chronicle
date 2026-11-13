@@ -366,7 +366,7 @@ func TestImportParts_RepeatPaste(t *testing.T) {
 	review := parsePaste(t, h, clauses)
 	for _, want := range []string{
 		"You already applied this paste, on " + today + ".",
-		"Already applied on " + today + ". Contract clauses:", "1 already applied",
+		"You already have the rolling table Contract clauses. Nothing was added.", "1 already applied",
 	} {
 		if !strings.Contains(review, want) {
 			t.Errorf("repeat review missing %q", want)

@@ -27,7 +27,7 @@ async function setup(tag, context) {
   return { owner, cid, eid };
 }
 
-test('Edit page moves nothing, not even the title', { todo: 'the title rises 2px when Edit page is pressed (161 to 159 at 1280 wide), against "nothing else on the page shifts"' }, async () => {
+test('Edit page moves nothing, not even the title', async () => {
   const { owner } = await setup('pem');
   const { page } = owner;
   const title = page.locator('[data-page-h1]');
@@ -114,7 +114,9 @@ test('Edit page, the header sheet, saving as you go, other names, parent', async
     stored = JSON.stringify(await aliasesOf(owner, cid, eid));
   }
   assert.match(stored, /tide/i, 'Tide was not stored: ' + stored);
-  assert.match(await page.locator('[data-pe-page]').innerText(), /Tide/);
+  // The name chips mount again after the save and fetch their own list, so
+  // they can still be on the way when the stored value is already there.
+  await page.waitForFunction(() => /Tide/.test(document.querySelector('[data-pe-page]').innerText), null, { timeout: 5000 });
 
   // 5. Parent page: a list that never offers this page; picking saves and the trail changes.
   const parent = page.locator('[data-pe-part="header"] [data-pe-f="parent"]');
@@ -186,7 +188,7 @@ test('Calm motion fades the sheet; the campaign switch does the same', async () 
   await page.waitForFunction(() => document.documentElement.getAttribute('data-view-motion') !== 'calm');
 });
 
-test('a player who claimed a character edits only the name', { todo: 'a character page has no editable header part in the Annals look, so a claiming player is shown no Edit page button (data-pe-part is absent)' }, async () => {
+test('a player who claimed a character edits only the name', async () => {
   const owner = await person({ tag: 'pel', name: 'Mara Vell' });
   const player = await person({ tag: 'pep', name: 'Tomas Reed' });
   const cid = await newCampaign(owner, 'Header Player');

@@ -397,11 +397,12 @@
       ['table', 'Table', 'Players pick their sheet. Co-DMs also pick pages and the DM Screen.', { sheet:'everyone', page:'codm', hover:'owner', dmscreen:'codm' }],
       ['open', 'Open', 'Everyone picks sheets, pages and hover cards. Co-DMs pick the DM Screen.', { sheet:'everyone', page:'everyone', hover:'everyone', dmscreen:'codm' }]
     ];
-    var VIEW_AS = [['owner', 'Owner'], ['scribe', 'Scribe'], ['player', 'Player']];
-    // Same rule as the server: co-DM is a scribe or above (or a member given DM access).
+    var VIEW_AS = [['owner', 'Owner'], ['codm', 'Co-DM'], ['player', 'Player']];
+    // Same rule as the server: a co-DM is a member the owner gave DM access;
+    // anyone else, a plain Scribe included, picks only what Everyone may.
     function mayPickAs(role, setting){
       if (role === 'owner') return false;
-      return setting === 'everyone' || (setting === 'codm' && role === 'scribe');
+      return setting === 'everyone' || (setting === 'codm' && role === 'codm');
     }
     // Same ids as the server's AppearanceSheetStyles, in that order.
     var SHEET_STYLES = [['modern', 'Modern'], ['parchment', 'Parchment'], ['ledger', 'Ledger'], ['journal', 'Field journal'], ['vellum', 'Vellum'], ['night', 'Night'],
@@ -939,7 +940,7 @@
           return '<button type="button" class="part" data-viewas="' + v[0] + '" aria-pressed="' + (v[0] === ui.viewAs) + '">' + esc(v[1]) + '</button>';
         }).join('') + '</div><p class="hint" id="pp-as-d" aria-live="polite"></p>') +
         '<div class="pp-rows" id="pp-rows"></div>' +
-        '<p class="hint">A co-DM is a scribe, the owner, or a member given DM access. The owner’s own choice is the campaign’s look.</p></div></section>';
+        '<p class="hint">A co-DM is a member you gave DM access. Scribes pick what players pick. The owner’s own choice is the campaign’s look.</p></div></section>';
     }
     /* ---------- Building the preview ----------
        Real chrome at a small size: the navigation (pinned rows and folding
@@ -2002,7 +2003,11 @@
     var fzLock = false, fzLastFlash = {}, fzRaf = 0, fzHovSec = null;
     function fzSite(){ return $('#site-wrap .site'); }
     function fzRects(sec){
-      var site = fzSite(), F = FZ[sec], sel = F[ui.page] || F.all, sr = site.getBoundingClientRect(), s = sr.width / 880, out = [];
+      // A section with no parts on the example (People, Hover tiles on some
+      // pages) has nothing to outline.
+      var site = fzSite(), F = FZ[sec], sel = F && (F[ui.page] || F.all), out = [];
+      if (!site || !sel) return out;
+      var sr = site.getBoundingClientRect(), s = sr.width / 880;
       if (!s) return out;
       sel.forEach(function(q){
         $$(q, site).forEach(function(el){
@@ -2071,7 +2076,7 @@
     // Opening a section from its tab keeps a focus going, or briefly shows its parts.
     function fzSection(id){
       if (fzLock) return;
-      if (ui.focus){ ui.focus = id; fzQueue(); }
+      if (ui.focus){ ui.focus = FZ[id] ? id : null; fzQueue(); }
       else if (ui.zoom === 'site') fzFlash(id + '.');
     }
     function fzFlash(k){
@@ -2162,7 +2167,7 @@
       setText($('#pp-quick-d'), cur ? cur[2] : 'Custom: the rows were set one by one.');
       var list = ACCESS_PARTS.filter(function(p){ return role === 'owner' || mayPickAs(role, a[p[0]]); });
       setText($('#pp-as-d'), role === 'owner' ? 'The owner sets these. Each row shows who else may pick their own.' :
-        (role === 'scribe' ? 'A scribe' : 'A player') + ' can pick these for themselves:');
+        (role === 'codm' ? 'A co-DM' : 'A player, or a Scribe,') + ' can pick these for themselves:');
       setHTML(rows, list.length ? list.map(function(p){
         var lv = ACCESS_LEVELS.filter(function(l){ return l[0] === a[p[0]]; })[0][1];
         return '<button type="button" class="pp-row" data-open="' + (p[0] === 'dmscreen' ? 'page' : p[0]) + '"><span>' + esc(p[1]) + '</span><span class="pp-tag">' +
