@@ -79,6 +79,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
+	"github.com/keyxmakerx/chronicle/internal/updatehealth"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -3736,6 +3737,14 @@ func (a *App) RegisterRoutes() {
 	releaseNotice := admin.NewReleaseNoticeService(settingsRepo, newChronicleReleaseSource(), hostinfo.Version)
 	adminHandler.SetReleaseNoticeService(releaseNotice)
 	go releaseNotice.RunScheduler(a.ShutdownCtx)
+
+	// Update health: count uses and failures of the features this release
+	// changed, and show the ones that need a site admin in Needs you.
+	updateHealthRecorder := updatehealth.NewRecorder(updatehealth.Changed)
+	updatehealth.SetDefault(updateHealthRecorder)
+	updateHealth := updatehealth.NewService(updateHealthRecorder, updatehealth.NewRepository(a.DB))
+	adminHandler.SetUpdateHealth(updateHealth)
+	go updateHealth.Run(a.ShutdownCtx)
 
 	// The site check-up behind the admin top bar's shield: a weekly backup
 	// read-back, sign-up, password reset and updates. Admin reaches the
