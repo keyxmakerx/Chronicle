@@ -121,8 +121,12 @@ async function visit(u) {
 }
 
 // Many links differ only by id; three of each shape is enough to catch a
-// broken template without walking every page of a big campaign.
+// broken template without walking every page of a big campaign. The walk
+// stays under its start: on a shared server the campaign list also links
+// other people's public campaigns, which this account sees as a stranger,
+// and that is the player-eyes crawl's job, not this one's.
 async function walk(start) {
+  const within = new URL(start).pathname;
   const seen = new Set();
   const shapes = {};
   const queue = [start];
@@ -136,7 +140,10 @@ async function walk(start) {
     if (shapes[shape] > 3) continue;
     if (!(await visit(key))) continue;
     const links = await page.$$eval('a[href]', (as) => as.map((a) => a.href)).catch(() => []);
-    for (const l of links) if (l.startsWith(BASE) && !SKIP.test(l)) queue.push(l);
+    for (const l of links) {
+      if (!l.startsWith(BASE) || SKIP.test(l)) continue;
+      if (new URL(l).pathname.startsWith(within)) queue.push(l);
+    }
   }
   return seen.size;
 }
