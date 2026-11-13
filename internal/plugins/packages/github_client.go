@@ -3,6 +3,7 @@ package packages
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,6 +46,49 @@ type GitHubClient struct {
 	// hostAllowed decides which hosts a download may reach, on the first
 	// request and on every redirect; nil means isGitHubDownloadURL.
 	hostAllowed func(*url.URL) bool
+	// apiBase is the GitHub API root; empty means https://api.github.com.
+	apiBase string
+}
+
+// GitHubAPIError is a failed release lookup, worded for the admin page.
+// GitHub's response body is never part of the message: on an outage it is
+// an HTML error page, and on other failures it says nothing an admin can act
+// on. Status is 0 when GitHub could not be reached at all.
+type GitHubAPIError struct {
+	Status      int
+	RateLimited bool
+	Cause       error // transport error, for the logs only
+}
+
+func (e *GitHubAPIError) Error() string {
+	switch {
+	case e.Status == 0:
+		return "GitHub didn't respond; it will be tried again later"
+	case e.Status >= 500:
+		return fmt.Sprintf("GitHub had a temporary problem (HTTP %d); it will be tried again later", e.Status)
+	case e.RateLimited:
+		return "GitHub's rate limit was reached; it resets within the hour, and a GITHUB_TOKEN raises it"
+	case e.Status == http.StatusNotFound:
+		return "GitHub has no such repository, or it is private"
+	case e.Status == http.StatusUnauthorized:
+		return "GitHub refused the GITHUB_TOKEN"
+	default:
+		return fmt.Sprintf("GitHub refused the request (HTTP %d)", e.Status)
+	}
+}
+
+func (e *GitHubAPIError) Unwrap() error { return e.Cause }
+
+// isTemporaryGitHubError reports whether err is GitHub being down or slow
+// (a 5xx answer or no answer), which fixes itself and needs nothing from an
+// admin. A rate limit is not temporary in this sense: if it keeps happening
+// the server needs a token.
+func isTemporaryGitHubError(err error) bool {
+	var ge *GitHubAPIError
+	if !errors.As(err, &ge) {
+		return false
+	}
+	return ge.Status == 0 || ge.Status >= 500
 }
 
 // NewGitHubClient creates a GitHub API client. It reads GITHUB_TOKEN
@@ -103,7 +147,11 @@ func (c *GitHubClient) ListReleases(ctx context.Context, repoURL string) ([]GitH
 		return nil, err
 	}
 
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=50", owner, repo)
+	base := c.apiBase
+	if base == "" {
+		base = "https://api.github.com"
+	}
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=50", base, owner, repo)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -117,13 +165,20 @@ func (c *GitHubClient) ListReleases(ctx context.Context, repoURL string) ([]GitH
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetching releases: %w", err)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, &GitHubAPIError{Cause: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, string(body))
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		return nil, &GitHubAPIError{
+			Status: resp.StatusCode,
+			RateLimited: resp.StatusCode == http.StatusTooManyRequests ||
+				(resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0"),
+		}
 	}
 
 	var releases []GitHubRelease

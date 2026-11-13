@@ -51,6 +51,12 @@ func TestPreviewExcerpt_Truncates(t *testing.T) {
 		{"empty", "", ""},
 		{"short kept whole", "<p>Short   text</p>", "Short text"},
 		{"long cut at a word", "<p>" + strings.Repeat("word ", 40) + "</p>", strings.TrimSpace(strings.Repeat("word ", 30)) + "..."},
+		// Entities are decoded once here; the cards escape on render, so a
+		// leftover entity would show as "&#34;" text.
+		{"entities decoded", `<p>Dalia Crest &#34;The Bulwark.&#34; Saltreach&#39;s shield &amp; ward</p>`, `Dalia Crest "The Bulwark." Saltreach's shield & ward`},
+		{"markup-like text stays text", `<p>&lt;b&gt;not bold&lt;/b&gt;</p>`, `<b>not bold</b>`},
+		{"paragraphs keep a space", `<p>One.</p><p>Two.</p>`, "One. Two."},
+		{"long multibyte cut on a character", "<p>" + strings.Repeat("é", 200) + "</p>", strings.Repeat("é", 150) + "..."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
