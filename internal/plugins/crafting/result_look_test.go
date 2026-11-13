@@ -9,12 +9,12 @@ func TestLookShape(t *testing.T) {
 		item string
 		want string
 	}{
-		{"own picture wins", &MaterialPicture{Picture: "vial", Tint: "#123456"}, "Iron Sword", "vial"},
-		{"own picture with no shape falls to the name", &MaterialPicture{Picture: "leaf", Tint: "#123456"}, "Healing Potion", "potion"},
+		{"own picture wins", &MaterialPicture{Picture: "vial", Tint: "#123456"}, "Iron Sword", "bottle"},
+		{"own picture with no shape falls to the name", &MaterialPicture{Picture: "leaf", Tint: "#123456"}, "Frost tonic", "potion"},
 		{"shield before blade", nil, "Swordbreaker Buckler", "shield"},
-		{"blade", nil, "Ember Shortsword", "blade"},
+		{"blade", nil, "Ember Shortsword", "sword"},
 		{"ring", nil, "Ring of Clear Water", "ring"},
-		{"vial", nil, "Frost Tonic", "vial"},
+		{"tonic", nil, "Frost Tonic", "potion"},
 		{"case-blind", nil, "ELIXIR OF LIFE", "potion"},
 		{"anything else", nil, "Ranger's Kit", "bundle"},
 	}
@@ -41,9 +41,12 @@ func TestComposeLook(t *testing.T) {
 		{"one material is its own mark", "blade", []MaterialPicture{moss},
 			ItemLook{Shape: "blade", Body: "#c3223a", Trim: "#c9a24a", Detail: "#7a4a2a", Mark: &LookMark{Picture: "moss", Tint: "#c3223a"}}},
 		{"unusable pictures are skipped", "ring", []MaterialPicture{{Picture: "nope", Tint: "#ffffff"}, {}, leaf},
-			ItemLook{Shape: "ring", Body: "#9fc7e8", Trim: "#d1ad52", Detail: "#d1ad52", Mark: &LookMark{Picture: "leaf", Tint: "#9fc7e8"}}},
-		{"no materials, defaults", "shield", nil, ItemLook{Shape: "shield", Body: "#3f9a84", Trim: "#8c96a3", Detail: "#a8743e"}},
+			ItemLook{Shape: "ring", Body: "#9fc7e8", Trim: "#c9a23f", Detail: "#1f7a4a", Mark: &LookMark{Picture: "leaf", Tint: "#9fc7e8"}}},
+		{"no materials, defaults", "vial", nil, ItemLook{Shape: "vial", Body: "#4a9a6a", Trim: "#9a7650", Detail: "#f4ecd6"}},
+		{"a painted shield is the painted item's colours", "shield", nil, ItemLook{Shape: "shield", Body: "#2f4f7a", Trim: "#aab3bd", Detail: "#d8c070"}},
 		{"unknown shape is a bundle", "castle", nil, ItemLook{Shape: "bundle", Body: "#7a6a9a", Trim: "#c9a54a", Detail: "#efe6d2"}},
+		{"a painted item keeps its own colours", "sword", []MaterialPicture{moss},
+			ItemLook{Shape: "sword", Body: "#c3223a", Trim: "#b98a3a", Detail: "#3f2a22", Mark: &LookMark{Picture: "moss", Tint: "#c3223a"}}},
 	}
 	for _, c := range cases {
 		got := composeLook(c.shape, c.mats)
@@ -64,15 +67,18 @@ func TestKeptWithOnlyALookIsRemembered(t *testing.T) {
 
 func TestLookShapeMatchesWholeWords(t *testing.T) {
 	tests := []struct{ name, want string }{
-		{"Boiled leather", "bundle"},
+		{"Boiled leather", "pelt"},
 		{"Bandage", "bundle"},
 		{"Spring trap", "bundle"},
-		{"Waxed cloak", "bundle"},
-		{"Longsword", "blade"},
-		{"Throwing daggers", "blade"},
+		{"Waxed cloak", "cloak"},
+		{"Longsword", "sword"},
+		{"Throwing daggers", "dagger"},
 		{"Silver earring", "ring"},
 		{"Healing potions", "potion"},
-		{"Oil of slipperiness", "vial"},
+		{"Oil of slipperiness", "bottle"},
+		{"Dragonscale shield", "shield"},
+		{"Dragonscale", "scale"},
+		{"Greataxe", "axe"},
 	}
 	for _, tt := range tests {
 		if got := lookShape(nil, tt.name); got != tt.want {

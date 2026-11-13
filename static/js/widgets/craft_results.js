@@ -251,8 +251,10 @@ window.CraftResults = (function () {
   DEFAULTS.bundle = ['#7a6a9a', '#c9a54a', '#efe6d2'];
 
   /* The ways of drawing the same shapes: "drawn" is the illustrated set
-     above, and craft_results_real.js adds the lifelike "real" set, which is
-     the default once it is loaded. A style must draw every shape. */
+     above, and craft_results_real.js adds the lifelike "real" set. A style
+     must draw every shape. The Dark painted pictures (made_items.js) are not
+     a style here but whole items of their own, and the default wherever that
+     script is loaded. */
   var STYLES = {drawn: SHAPES};
   function addStyle(name, shapes) {
     for (var k in SHAPES) if (typeof shapes[k] !== 'function') return;
@@ -260,26 +262,33 @@ window.CraftResults = (function () {
   }
   /* The campaign's Customize choice rides on <html data-craft-art>, in
      the owner's words; the styles here keep their own names. */
-  var ART_ATTR = {illustrated: 'drawn', lifelike: 'real'};
-  function styleOf(o) {
+  var ART_ATTR = {illustrated: 'drawn', lifelike: 'real', painted: 'painted'};
+  function styleName(o) {
     var want = o && o.style;
-    if (!want && typeof document !== 'undefined') want = ART_ATTR[document.documentElement.getAttribute('data-craft-art')];
-    if (want && Object.prototype.hasOwnProperty.call(STYLES, want)) return STYLES[want];
-    return STYLES.real || SHAPES;
+    if (!want && typeof document !== 'undefined' && document.documentElement) want = ART_ATTR[document.documentElement.getAttribute('data-craft-art')];
+    if (want && want !== 'painted' && Object.prototype.hasOwnProperty.call(STYLES, want)) return want;
+    if (painted()) return 'painted';
+    return STYLES.real ? 'real' : 'drawn';
   }
+  function painted() { return typeof window !== 'undefined' && window.MadeItems; }
 
   /* spec: {shape, body, trim, detail, mark: {picture, tint}}. Tints are hex. */
   function draw(spec, opts) {
+    var name = styleName(opts);
+    if (name === 'painted') name = STYLES.real ? 'real' : 'drawn';
     var s = clean(spec);
+    if (!SHAPES[s.shape]) s.shape = painted() ? window.MadeItems.oldShape(s.shape) : 'bundle';
+    if (!SHAPES[s.shape]) s.shape = 'bundle';
     U = 'crx' + (++seq) + '-';
-    return styleOf(opts)[s.shape](s);
+    return STYLES[name][s.shape](s);
   }
   /* Every look is someone's data (a stored copy, an AI's recipe), and the
      markup is inserted as HTML: only a known shape, #rrggbb colours and a
      picture key from CraftPictures' own list get through. */
   function clean(spec) {
-    var s = spec && typeof spec === 'object' ? spec : {};
-    var shape = Object.prototype.hasOwnProperty.call(SHAPES, s.shape) ? s.shape : 'bundle', d = DEFAULTS[shape];
+    var s = spec && typeof spec === 'object' ? spec : {}, MI = painted();
+    var shape = Object.prototype.hasOwnProperty.call(SHAPES, s.shape) || (MI && MI.has(s.shape)) ? s.shape : 'bundle';
+    var d = DEFAULTS[shape] || [MI.item(shape).body, MI.item(shape).trim, MI.item(shape).detail];
     function col(v, dflt) { return typeof v === 'string' && HEX.test(v) ? v : dflt; }
     var m = s.mark && typeof s.mark === 'object' ? s.mark : null, CP = window.CraftPictures;
     return {
@@ -287,8 +296,17 @@ window.CraftResults = (function () {
       mark: m && typeof m.picture === 'string' && CP && CP.has(m.picture) ? {picture: m.picture, tint: col(m.tint, '#8a8a8a')} : null
     };
   }
+  /* svg is a made item's picture as markup. With the painted pictures it is
+     an image that colours itself in (made_items.js); o.move lets an item that
+     moves play where it is shown large. */
   function svg(spec, size, opts) {
     var z = size || 64, o = opts || {};
+    if (styleName(o) === 'painted') {
+      // made_items.js checks the key and colours itself, and fills what a
+      // look leaves out with the painted item's own colours.
+      var out = window.MadeItems.html(spec && typeof spec === 'object' ? spec : {}, z, {cls: o.cls, label: o.label, move: o.move});
+      if (out) return out;
+    }
     return '<svg class="crx' + (o.cls ? ' ' + o.cls : '') + '" viewBox="0 0 120 120" width="' + z + '" height="' + z + '"' +
       (o.label ? ' role="img" aria-label="' + String(o.label).replace(/[&<>"]/g, '') + '"' : ' aria-hidden="true"') + '>' + draw(spec, o) + '</svg>';
   }
@@ -307,6 +325,6 @@ window.CraftResults = (function () {
     };
   }
 
-  return {svg: svg, draw: draw, clean: clean, fromMaterials: fromMaterials, addStyle: addStyle,
+  return {svg: svg, draw: draw, isPainted: function () { return styleName() === 'painted'; }, clean: clean, fromMaterials: fromMaterials, addStyle: addStyle,
     shapes: function () { return Object.keys(SHAPES); }, styles: function () { return Object.keys(STYLES); }, _shapes: SHAPES, _defaults: DEFAULTS, _mix: mix, _h: {id: id, url: url, grad: grad, rgrad: rgrad, blur: blur, floor: floor, mark: mark}};
 })();

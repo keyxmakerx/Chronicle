@@ -72,7 +72,7 @@ type customizeDraft struct {
 	} `json:"hover"`
 	Sheet struct {
 		Style    string `json:"style"`
-		CraftArt string `json:"craftArt"` // "lifelike" or "illustrated".
+		CraftArt string `json:"craftArt"` // "painted", "lifelike" or "illustrated".
 	} `json:"sheet"`
 	Page struct {
 		Look  string `json:"look"`

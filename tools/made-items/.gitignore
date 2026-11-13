@@ -1,0 +1,6 @@
+node_modules/
+dist/
+out/
+pub2/
+gen-*.txt
+__pycache__/

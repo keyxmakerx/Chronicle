@@ -408,7 +408,7 @@
     var SHEET_STYLES = [['modern', 'Modern'], ['parchment', 'Parchment'], ['ledger', 'Ledger'], ['journal', 'Field journal'], ['vellum', 'Vellum'], ['night', 'Night'],
       ['deck', 'Card deck'], ['pencil', 'Pencil'], ['starship', 'Starship'], ['neon', 'Neon terminal'], ['runes', 'Rune slate'], ['brass', 'Brass gauges']];
     // Same ids as the server's AppearanceCraftArts, in that order.
-    var CRAFT_ARTS = [['lifelike', 'Lifelike'], ['illustrated', 'Illustrated']];
+    var CRAFT_ARTS = [['painted', 'Dark painted'], ['lifelike', 'Lifelike'], ['illustrated', 'Illustrated']];
     // Same ids as the server's AppearancePageLooks, in that order. Annals is
     // the Material page look in the UI standard, so the owner sees that name.
     var PAGE_LOOKS = [['standard', 'Standard'], ['annals', 'Material']];
@@ -486,7 +486,7 @@
       if (!d.sidebar.banner) d.sidebar.banner = 'none';
       if (!d.hover) d.hover = { look:'paper' };
       if (!d.sheet) d.sheet = { style:'modern' };
-      if (!d.sheet.craftArt) d.sheet.craftArt = 'lifelike';
+      if (!d.sheet.craftArt) d.sheet.craftArt = 'painted';
       d.access = Object.assign({}, ACCESS_DEFAULT, d.access || {});
       if (!d.page) d.page = { look:'', kit:'material' };
       if (!d.page.kit) d.page.kit = 'material';
@@ -883,7 +883,7 @@
         fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES) +
           '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>') +
         fld('sh-craft', 'Made items', 'Crafted items on sheets and in the Crafting block', opts('sh-craft', 'sheet.craftArt', 'sh-craft-l', CRAFT_ARTS) +
-          '<p class="hint">Lifelike draws what a hero crafts the way the crafting bench draws its glass and brass. Illustrated is the softer painted set.</p>'));
+          '<p class="hint">Dark painted shows each made item as an oil-painted object in its recipe\'s colours. Lifelike draws it the way the crafting bench draws its glass and brass; Illustrated is the softer drawn set.</p>'));
       return '';
     }
     // "Who else may pick their own?" for one part, written to the draft's

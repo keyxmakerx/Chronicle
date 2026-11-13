@@ -891,6 +891,13 @@
     }
     function icon(name, x, y, sz, fill, o) {
       o = o || {};
+      // With full effects a good whose icon has a painted item stands on the
+      // shelf as that picture (made_items.js); an owner's colour paints its body.
+      var MI = typeof window !== 'undefined' && window.MadeItems, mk = 'made' in o && S.fx === 'full' && MI && MI.forIcon && MI.forIcon(name);
+      if (mk) {
+        var w = sz * 1.7, im = MI.svgImage(mk, x - w / 2, y - w * .86, w, o.made);
+        return o.rot ? '<g transform="rotate(' + o.rot + ' ' + x.toFixed(1) + ' ' + (y - sz / 2).toFixed(1) + ')"' + (o.op ? ' opacity="' + o.op + '"' : '') + '>' + im + '</g>' : (o.op ? '<g opacity="' + o.op + '">' + im + '</g>' : im);
+      }
       // Items get a lit, slightly glossy gradient in their own colour instead of a flat fill.
       if (S.fx === 'full' && /^#[0-9a-f]{6}$/i.test(fill)) { var gid = 'gm' + fill.slice(1); GRAD[gid] = fill; fill = 'url(#' + gid + ')'; }
       if (!ICONS[name]) name = 'box';
@@ -908,7 +915,7 @@
       var it = S.its[i], pt = P(a.x, a.y, a.z), sz = 21 * a.s, s = '<g class="it item' + (it.out ? ' out' : '') + '" data-i="' + i + '" tabindex="0" role="button" aria-label="' + esc(it.n + ', ' + it.price + (it.out ? ', sold out' : '') + (it.today ? ', only today' : '')) + '">';
       s += '<ellipse cx="' + pt[0].toFixed(1) + '" cy="' + pt[1].toFixed(1) + '" rx="' + (sz * .38).toFixed(1) + '" ry="' + (sz * .14).toFixed(1) + '" fill="rgba(0,0,0,.32)"/>';
       if (it.magic) s += '<circle cx="' + pt[0].toFixed(1) + '" cy="' + (pt[1] - sz / 2).toFixed(1) + '" r="' + (sz * .85).toFixed(1) + '" fill="url(#gMagic)"/>';
-      s += icon(it.ic, pt[0], pt[1], sz, it.c, { rot: a.rot });
+      s += icon(it.ic, pt[0], pt[1], sz, it.c, { rot: a.rot, made: it.mat ? { body: it.c } : null });
       if (it.today) s += todayTag(pt[0], pt[1] + 3, sz / 21);
       return s + '<circle class="ring" cx="' + pt[0].toFixed(1) + '" cy="' + (pt[1] - sz / 2).toFixed(1) + '" r="' + (sz * .62).toFixed(1) + '" fill="transparent" stroke="none"/></g>';
     }
@@ -1401,6 +1408,7 @@
     '.shr-row.out{opacity:.55}',
     '.shr-ic{width:30px;height:30px;border-radius:6px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 18%,transparent);color:color-mix(in srgb,var(--c),var(--color-text-primary,#111827) 25%)}',
     '.shr-ic svg{width:18px;height:18px;fill:currentColor}',
+    '.shr-ic .mi-pic{width:30px;height:30px}',
     '.shr-nm{color:var(--color-text-primary,#111827);font-weight:600;text-decoration:none}',
     'a.shr-nm:hover{text-decoration:underline}',
     '.shr-m{font-size:.76rem;color:var(--color-text-secondary,#6b7280)}',
@@ -1561,6 +1569,12 @@
   function injectStyle() {
     if (document.getElementById('shr-style')) return;
     var st = document.createElement('style'); st.id = 'shr-style'; st.textContent = CSS; document.head.appendChild(st);
+  }
+  // A ware's picture in the list: its painted item when it has one and the
+  // room runs full effects, else its icon.
+  function rowPic(it, fx, ICONS) {
+    var MI = window.MadeItems, k = fx === 'full' && MI && MI.forIcon && MI.forIcon(it.ic);
+    return k ? MI.html({ shape: k, body: it.mat ? it.c : '' }, 28, { zoom: 's' }) : iconSvg(it.ic, ICONS);
   }
   function iconSvg(name, ICONS) { var g = ICONS[name] || ICONS.box; return g ? '<svg viewBox="0 0 ' + g[0] + ' 512" aria-hidden="true"><path d="' + g[1] + '"/></svg>' : ''; }
   function readFx() { try { return localStorage.getItem(FX_KEY) === 'light' ? 'light' : 'full'; } catch (e) { return 'full'; } }
@@ -1739,7 +1753,7 @@
           var name = it.entityId ? '<a class="shr-nm" href="' + esc(campaignUrl + '/entities/' + it.entityId) + '" data-hx-boost="true">' + esc(it.n) + '</a>' : '<span class="shr-nm">' + esc(it.n) + '</span>';
           var stock = it.out ? 'Sold out' : it.qty === null ? '' : it.qty + ' left';
           if (it.today) stock = stock ? stock + ', only today' : 'Only today';
-          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price"' + (it.priceUsual ? ' title="' + esc(it.priceUsual) + '"' : '') + '>' + (it.was ? '<s>' + esc(it.was) + '</s> ' : '') + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + rollBtns(it) + '</div>';
+          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + rowPic(it, S.fx, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price"' + (it.priceUsual ? ' title="' + esc(it.priceUsual) + '"' : '') + '>' + (it.was ? '<s>' + esc(it.was) + '</s> ' : '') + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + rollBtns(it) + '</div>';
         });
         root.querySelector('.shr-list').innerHTML = rows.join('') || '<p class="shr-empty">' + (canArrange ? 'Nothing for sale yet. Add goods in the shop inventory below.' : 'Nothing for sale right now.') + '</p>';
         root.querySelectorAll('.shr-fx button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.fx === S.fx); });
