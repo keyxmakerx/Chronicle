@@ -53,7 +53,7 @@ func startHereFirstLine(entryHTML string) string {
 		if headingOpen.MatchString(chunk) {
 			continue
 		}
-		plain := html.UnescapeString(htmlTagPattern.ReplaceAllString(chunk, " "))
+		plain := html.UnescapeString(htmlTagRegex.ReplaceAllString(chunk, " "))
 		plain = strings.Join(strings.Fields(plain), " ")
 		if plain == "" {
 			continue
