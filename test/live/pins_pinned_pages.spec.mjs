@@ -101,6 +101,6 @@ test('a player sees their own star under Your pins and never the Director-only p
   player.assertClean();
 });
 
-test("the Director's own home shows the widget once it is on the Everyone home", { todo: "the widget was added through the layout endpoints and the Director's home (/campaigns/<id>) never drew it, though a player's home did; confirm by hand with Customize > Home pages" }, () => {
+test("the Director's own home shows the widget once it is on the Everyone home", () => {
   assert.equal(gmHomeHasWidget, true);
 });

@@ -75,6 +75,9 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 				@playersHomeStrip(cc, csrfToken)
 			}
 			{{ layout, _ := cc.Campaign.HomeLayout(audience) }}
+			if audience == HomeDirector {
+				{{ layout = cc.Campaign.DirectorHome() }}
+			}
 			@customDashboard(cc, layout, recentEntities)
 
 			<!-- Footer meta -->

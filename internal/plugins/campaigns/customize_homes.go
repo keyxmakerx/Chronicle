@@ -146,7 +146,7 @@ var homeTabs = []homeTab{
 	{HomeDefault, "Everyone", "fa-users", "Every member sees this home unless their role has one of its own."},
 	{HomePlayer, "Players", "fa-user", "Players see this instead of the Everyone home."},
 	{HomeScribe, "Scribes", "fa-feather", "Scribes see this instead of the Everyone home."},
-	{HomeDirector, "{gm} team", "fa-crown", "You and your co-{gm}s land here instead of the Everyone home."},
+	{HomeDirector, "{gm} team", "fa-crown", "You and your co-{gm}s land here. It is the Everyone home plus whatever you add here."},
 	{HomeGuest, "Guests", "fa-door-open", "Visitors who aren't members see this. It never falls back to a members' home."},
 	{HomeDM, "Overview", "fa-user-shield", "The Overview under Manage, seen only by you and your co-{gm}s."},
 }
@@ -211,6 +211,11 @@ func (h *Handler) homeEditorState(ctx context.Context, cc *CampaignContext, key 
 		}
 	} else {
 		layout, saved = cc.Campaign.HomeLayout(key)
+		if key == HomeDirector {
+			// The editor starts from the home the DM team sees, so a widget
+			// added to Everyone shows here and is not saved away by accident.
+			layout = cc.Campaign.DirectorHome()
+		}
 	}
 	if layout == nil {
 		layout = DefaultDashboardLayout()
