@@ -506,7 +506,7 @@ templ settingsAPIKeysTab(cc *CampaignContext, baseURL string) {
 templ SettingsDataSection(cc *CampaignContext) {
 	<div class="card p-4">
 		<h2 class="text-sm font-semibold text-fg mb-3">Data Export</h2>
-		<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file, or as a ZIP that adds an archive of your media files, for backup or migration.</p>
+		<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file, or as a ZIP that adds an archive of your media files, to move it to another Chronicle or keep a copy of your pages.</p>
 		<div class="flex flex-wrap items-center gap-3">
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
 				<i class="fa-solid fa-download text-xs"></i> Export JSON
@@ -519,7 +519,10 @@ templ SettingsDataSection(cc *CampaignContext) {
 			The ZIP contains <code>campaign.json</code> plus a <code>media/</code> folder holding your image
 			files. Importing the ZIP (Settings › Import) restores the campaign with its pictures in place.
 			The JSON-only export carries no pictures at all, so a campaign imported from it has none; use
-			the ZIP for a backup you can restore in full.
+			the ZIP to keep the pictures. The export holds pages, categories, tags, relations, calendars,
+			timelines, sessions, maps, notes, groups, quest sheets, crafting recipes, rolling tables and
+			add-on choices. Shops, encounters, trackers, quest boards, benches and the Customizer's other
+			settings are not in it; a site admin's Backups page saves everything.
 		</p>
 	</div>
 

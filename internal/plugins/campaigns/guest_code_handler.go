@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,8 @@ func RegisterGuestCodeRoutes(e *echo.Echo, h *GuestCodeHandler, svc CampaignServ
 	cg.GET("/guest-codes", h.Card, RequireRole(RoleOwner))
 	cg.POST("/guest-codes", h.Create, RequireRole(RoleOwner), middleware.RateLimit(30, time.Minute))
 	cg.DELETE("/guest-codes/:gcid", h.Remove, RequireRole(RoleOwner))
+	cg.POST("/guest-codes/:gcid/player", h.MakePlayer, RequireRole(RoleOwner))
+	cg.POST("/guest-codes/:gcid/end", h.EndVisit, RequireRole(RoleOwner))
 }
 
 // Card renders the card (GET /campaigns/:id/guest-codes).
@@ -42,7 +45,15 @@ func (h *GuestCodeHandler) Create(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	fresh, err := h.svc.Create(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), c.FormValue("note"))
+	visitDays := 0
+	if v := c.FormValue("visit_days"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return h.render(c, nil, "pick 1, 3 or 7 days to look around")
+		}
+		visitDays = n
+	}
+	fresh, err := h.svc.Create(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), c.FormValue("note"), visitDays)
 	if err != nil {
 		return h.render(c, nil, apperror.UserMessage(err, "the code couldn't be made"))
 	}
@@ -57,6 +68,32 @@ func (h *GuestCodeHandler) Remove(c *echo.Context) error {
 	}
 	if err := h.svc.Remove(c.Request().Context(), cc.Campaign.ID, c.Param("gcid")); err != nil {
 		return h.render(c, nil, apperror.UserMessage(err, "the code couldn't be removed"))
+	}
+	return h.render(c, nil, "")
+}
+
+// MakePlayer turns a visitor into a player
+// (POST /campaigns/:id/guest-codes/:gcid/player).
+func (h *GuestCodeHandler) MakePlayer(c *echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if err := h.svc.MakeVisitorPlayer(c.Request().Context(), cc.Campaign.ID, c.Param("gcid")); err != nil {
+		return h.render(c, nil, apperror.UserMessage(err, "they couldn't be made a player"))
+	}
+	return h.render(c, nil, "")
+}
+
+// EndVisit ends a look-around visit now
+// (POST /campaigns/:id/guest-codes/:gcid/end).
+func (h *GuestCodeHandler) EndVisit(c *echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if err := h.svc.EndVisit(c.Request().Context(), cc.Campaign.ID, c.Param("gcid")); err != nil {
+		return h.render(c, nil, apperror.UserMessage(err, "the visit couldn't be ended"))
 	}
 	return h.render(c, nil, "")
 }

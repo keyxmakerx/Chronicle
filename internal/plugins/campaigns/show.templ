@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // CampaignShowPage renders the campaign dashboard. If the campaign has a custom
@@ -55,7 +56,7 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 			// "Last night: write it up", for those who write recaps. It joins
 			// game nights, which this plugin may not import, so internal/app
 			// serves it; an empty answer removes the slot.
-			if cc.IsMember && cc.MemberRole >= RoleScribe {
+			if cc.IsMember && cc.MemberRole >= RoleScribe && !layouts.IsViewingAsPlayer(ctx) {
 				<div
 					data-block="last-night"
 					hx-get={ fmt.Sprintf("/campaigns/%s/last-night", cc.Campaign.ID) }
@@ -66,7 +67,14 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 
 			// The viewer's own home (Director, guest or their role), with the
 			// same fallbacks the Customizer shows, so both draw one layout.
-			{{ layout, _ := cc.Campaign.HomeLayout(cc.HomeAudience()) }}
+			// The eye (View as player) takes the DM team to the players' home,
+			// the page a player lands on, with a strip saying so.
+			{{ audience := cc.HomeAudience() }}
+			if audience == HomeDirector && layouts.IsViewingAsPlayer(ctx) {
+				{{ audience = HomePlayer }}
+				@playersHomeStrip(cc, csrfToken)
+			}
+			{{ layout, _ := cc.Campaign.HomeLayout(audience) }}
 			@customDashboard(cc, layout, recentEntities)
 
 			<!-- Footer meta -->
@@ -79,6 +87,26 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 			</div>
 		</div>
 	}
+}
+
+// playersHomeStrip tells the DM team they are looking at the players' home
+// and offers the two ways on: arranging it (the owner's Customizer) and going
+// back to their own home, which is the same switch as the header's eye.
+templ playersHomeStrip(cc *CampaignContext, csrfToken string) {
+	<div class="cb-pv-strip mb-6 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-fg" role="status">
+		<i class="fa-solid fa-eye text-amber-500" aria-hidden="true"></i>
+		<span>You are seeing the players' home, as a player sees it.</span>
+		if cc.MemberRole >= RoleOwner {
+			<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/customize/home/player") } class="text-accent hover:underline">Arrange this page</a>
+		}
+		<button
+			type="button"
+			hx-post={ "/campaigns/" + cc.Campaign.ID + "/toggle-view-mode" }
+			hx-headers={ `{"X-CSRF-Token":"` + csrfToken + `"}` }
+			data-pv-toggle
+			class="text-accent hover:underline"
+		>Back to your own home</button>
+	</div>
 }
 
 // welcomeMessageBanner renders a dismissible MOTD banner. Uses localStorage
@@ -146,7 +174,8 @@ templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntiti
 			} else {
 				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
 					for ci, col := range row.Columns {
-						<div class={ dashColSpan(col.Width) }>
+						// Blocks stacked in one column keep the rows' own gap.
+						<div class={ dashColSpan(col.Width), "min-w-0 space-y-6" }>
 							for bi, block := range col.Blocks {
 								if !repeats[[3]int{ri, ci, bi}] {
 									@DashboardBlockSwitch(cc, block, recentEntities)
@@ -334,41 +363,12 @@ templ RecentEntityCard(cc *CampaignContext, re *RecentEntity) {
 					}
 					{ re.TypeName }
 				</span>
-				<span class="text-[10px] text-fg-muted" title={ re.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
-					{ dashboardRelativeTime(re.UpdatedAt) }
-				</span>
+				<time class="text-[10px] text-fg-secondary" datetime={ re.UpdatedAt.UTC().Format(time.RFC3339) } title={ re.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+					{ timeutil.EditedAgo(re.UpdatedAt, time.Now()) }
+				</time>
 			</div>
 		</div>
 	</a>
-}
-
-// dashboardRelativeTime returns a human-friendly relative time for the dashboard.
-func dashboardRelativeTime(t time.Time) string {
-	d := time.Since(t)
-	switch {
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		m := int(d.Minutes())
-		if m == 1 {
-			return "1m ago"
-		}
-		return fmt.Sprintf("%dm ago", m)
-	case d < 24*time.Hour:
-		h := int(d.Hours())
-		if h == 1 {
-			return "1h ago"
-		}
-		return fmt.Sprintf("%dh ago", h)
-	case d < 30*24*time.Hour:
-		days := int(d.Hours() / 24)
-		if days == 1 {
-			return "1d ago"
-		}
-		return fmt.Sprintf("%dd ago", days)
-	default:
-		return t.Format("Jan 2")
-	}
 }
 
 // dashColSpan returns the Tailwind CSS class for a 12-column grid span.

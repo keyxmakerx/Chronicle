@@ -77,6 +77,7 @@ var contractGoverned = map[string]string{
 	"armory.UpdateInstanceInput":           "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
 	"posts.UpdatePostRequest":              "PUT .../entities/:eid/posts/:pid — a rename and the privacy toggle each send one key, so the post's content must survive; every field is a pointer or raw JSON, nil means absent",
 	"rumours.UpdateRumourInput":            "PUT .../entities/:eid/rumours/:rid — an edit that names only the sureness must keep the words, and one that names only the speaker must keep the rumour; all three fields are required columns, so an explicit null preserves rather than blanks (born governed, no incident)",
+	"designs.UpdateDesignInput":            "PATCH /campaigns/:id/designs/:did — a rename must not clear the note, and a note edit must not rename (born governed, no incident)",
 	"auth.UpdateViewPrefsInput":            "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
 }
 

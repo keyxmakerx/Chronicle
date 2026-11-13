@@ -100,9 +100,9 @@ func TestIPExtractor_TrustsOnlyTheNamedProxy(t *testing.T) {
 			want: client,
 		},
 		{
-			name:    "X-Forwarded-For is read leftmost when it is all there is",
+			name:    "X-Forwarded-For is read from the right when it is all there is",
 			trusted: []string{proxy},
-			peer:    proxy, xff: client + ", 198.51.100.9",
+			peer:    proxy, xff: "198.51.100.9, " + client,
 			want: client,
 		},
 		{

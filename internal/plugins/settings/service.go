@@ -97,6 +97,19 @@ type SettingsService interface {
 	// UpdateRegistrationMode validates and persists the site registration mode.
 	UpdateRegistrationMode(ctx context.Context, mode string) error
 
+	// GetClientIPHeader returns which header is believed for the visitor's
+	// address, defaulting to "auto" when unset or invalid.
+	GetClientIPHeader(ctx context.Context) (string, error)
+
+	// UpdateClientIPHeader validates and persists that choice.
+	UpdateClientIPHeader(ctx context.Context, mode string) error
+
+	// MaxUploadCeiling is the largest per-file upload size any request could
+	// be allowed: the site limit and every per-person override or active
+	// bypass. A limit of 0 at a tier means "use fallback", as the upload
+	// route resolves it. It lets a size cap run before anyone is signed in.
+	MaxUploadCeiling(ctx context.Context, fallback int64) (int64, error)
+
 	// GetSiteLook returns the saved site look. A site that never saved one
 	// gets the zero value (Configured false), which renders as before. Reads
 	// are cached briefly because every page render asks for it.
@@ -409,6 +422,66 @@ func (s *settingsService) UpdateRegistrationMode(ctx context.Context, mode strin
 		return apperror.NewBadRequest("registration mode must be open, invite, or closed")
 	}
 	return s.repo.Set(ctx, KeyRegistrationMode, mode)
+}
+
+// --- Visitor address header ---
+
+// GetClientIPHeader returns the saved header choice. An install that never
+// picked, or holds an unrecognised value, reads as "auto".
+func (s *settingsService) GetClientIPHeader(ctx context.Context) (string, error) {
+	raw, err := s.repo.Get(ctx, KeyClientIPHeader)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == 404 {
+			return ClientIPAuto, nil
+		}
+		return ClientIPAuto, err
+	}
+	if !IsValidClientIPHeader(raw) {
+		return ClientIPAuto, nil
+	}
+	return raw, nil
+}
+
+// UpdateClientIPHeader validates and persists the header choice.
+func (s *settingsService) UpdateClientIPHeader(ctx context.Context, mode string) error {
+	if !IsValidClientIPHeader(mode) {
+		return apperror.NewBadRequest("visitor address header must be auto, x-real-ip, x-forwarded-for or direct")
+	}
+	return s.repo.Set(ctx, KeyClientIPHeader, mode)
+}
+
+// MaxUploadCeiling returns the largest per-file upload size the upload route
+// could resolve for anyone, mirroring GetEffectiveLimits: the site limit,
+// each person's own limit, and each unexpired bypass, where 0 at any tier
+// resolves to fallback.
+func (s *settingsService) MaxUploadCeiling(ctx context.Context, fallback int64) (int64, error) {
+	global, err := s.GetStorageLimits(ctx)
+	if err != nil {
+		return 0, err
+	}
+	resolve := func(v int64) int64 {
+		if v <= 0 {
+			return fallback
+		}
+		return v
+	}
+	ceiling := resolve(global.MaxUploadSize)
+
+	users, err := s.repo.ListUserLimits(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for i := range users {
+		u := &users[i].UserStorageLimit
+		if u.MaxUploadSize != nil {
+			ceiling = max(ceiling, resolve(*u.MaxUploadSize))
+		}
+		if u.HasActiveBypass() && u.BypassMaxUpload != nil {
+			ceiling = max(ceiling, resolve(*u.BypassMaxUpload))
+		}
+	}
+	return ceiling, nil
 }
 
 // --- CORS Origin Management ---

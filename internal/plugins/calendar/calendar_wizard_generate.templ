@@ -644,7 +644,9 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 					</template>
 				</div>
 			</div>
+			<!-- Alpine draws this form after htmx has finished with the step, so htmx has to be told about it. -->
 			<form
+				x-init="window.htmx && htmx.process($el)"
 				hx-post={ fmt.Sprintf("/campaigns/%s/calendars/wizard/generate/preview", campaignID) }
 				hx-target="#calv5-wizard-root"
 				hx-swap="outerHTML"

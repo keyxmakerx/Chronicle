@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 )
 
@@ -250,17 +252,62 @@ func TestService_RequestAnswers(t *testing.T) {
 	if err != nil || got.Body != goodBlocks {
 		t.Fatalf("got %+v, %v", got, err)
 	}
+	if err := svc.Answered(ctx, "camp-1", "owner-1", q.ID, "x"); err == nil {
+		t.Error("a request nobody claimed was settled")
+	}
+	if _, err := svc.ClaimRequest(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ClaimRequest(ctx, "camp-1", "owner-1", q.ID); err == nil {
+		t.Error("a claimed request was claimed again")
+	}
 	if err := svc.Answered(ctx, "camp-1", "owner-1", q.ID, "2 applied, 0 left out"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.WaitingRequest(ctx, "camp-1", "owner-1", q.ID); err == nil {
 		t.Error("an answered request opened again")
 	}
-	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); err != nil {
-		t.Fatal(err)
+	// It was applied, so turning it down must not say nothing changed.
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); !isConflict(err) {
+		t.Errorf("turn down after apply = %v, want a conflict", err)
 	}
 	if w, _ := svc.Waiting(ctx, "camp-1", "owner-1"); len(w) != 0 {
 		t.Errorf("still waiting: %+v", w)
+	}
+}
+
+func isConflict(err error) bool {
+	var ae *apperror.AppError
+	return errors.As(err, &ae) && ae.Code == http.StatusConflict
+}
+
+// A commit that fails gives the request back, so it can be applied or turned
+// down; a request still waiting turns down once.
+func TestService_ReleaseAndTurnDown(t *testing.T) {
+	s, sess, _ := askRig(t)
+	svc := s.Asks.(*Service)
+	ctx := context.Background()
+	q, err := svc.Ask(ctx, sess.Conn, "x", goodBlocks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ClaimRequest(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); !isConflict(err) {
+		t.Errorf("turn down while applying = %v, want a conflict", err)
+	}
+	if err := svc.ReleaseRequest(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.WaitingRequest(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Errorf("released request not waiting: %v", err)
+	}
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.TurnDown(ctx, "camp-1", "owner-1", q.ID); !isConflict(err) {
+		t.Errorf("second turn down = %v, want a conflict", err)
 	}
 }
 
@@ -271,24 +318,26 @@ func TestAsk_CampaignCheck(t *testing.T) {
 	tests := []struct {
 		name     string
 		problems []string
+		did      string
 		err      error
 		wantText string
 		wantKept int
 	}{
 		{"problems refuse the request", []string{`block 1 (Coral Court): the Places category has no folder "Docks"`},
-			nil, `Not sent: Chronicle couldn't use it: block 1 (Coral Court): the Places category has no folder "Docks".`, 0},
-		{"many problems are cut short", []string{"a", "b", "c", "d", "e", "f", "g"}, nil, "a; b; c; d; e; and 2 more.", 0},
-		{"no problems", nil, nil, "Sent to the owner for review", 1},
-		{"a failed check is skipped", nil, errors.New("db down"), "Sent to the owner for review", 1},
+			"", nil, `Not sent: Chronicle couldn't use it: block 1 (Coral Court): the Places category has no folder "Docks".`, 0},
+		{"many problems are cut short", []string{"a", "b", "c", "d", "e", "f", "g"}, "", nil, "a; b; c; d; e; and 2 more.", 0},
+		{"a page problem names the page in the log", []string{"block 1 (Nobody Here): Cannot update"}, "Asked to change Nobody Here, refused: no such page", nil, "Cannot update.", 0},
+		{"no problems", nil, "", nil, "Sent to the owner for review", 1},
+		{"a failed check is skipped", nil, "", errors.New("db down"), "Sent to the owner for review", 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, sess, repo := askRig(t)
 			var gotCampaign, gotChanges string
-			s.Asks.(*Service).SetCheck(func(_ context.Context, conn *Connection, changes string) ([]string, error) {
+			s.Asks.(*Service).SetCheck(func(_ context.Context, conn *Connection, changes string) ([]string, string, error) {
 				campaignID := conn.CampaignID
 				gotCampaign, gotChanges = campaignID, changes
-				return tt.problems, tt.err
+				return tt.problems, tt.did, tt.err
 			})
 			out := s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "Coral Court", "changes": goodBlocks}))
 			tr := toolText(t, out)
@@ -304,6 +353,15 @@ func TestAsk_CampaignCheck(t *testing.T) {
 			if gotCampaign != "camp-1" || gotChanges != goodBlocks {
 				t.Errorf("check saw campaign %q changes %q", gotCampaign, gotChanges)
 			}
+			if tt.wantKept == 0 && len(tt.problems) > 0 {
+				wantSummary := "Asked for changes, refused: “Coral Court”"
+				if tt.did != "" {
+					wantSummary = tt.did
+				}
+				if out.Called == nil || out.Called.OK || out.Called.Summary != wantSummary || !strings.Contains(out.Called.Note, tt.problems[0]) {
+					t.Errorf("log line = %+v, want a refusal", out.Called)
+				}
+			}
 		})
 	}
 }
@@ -313,7 +371,10 @@ func TestAsk_CampaignCheck(t *testing.T) {
 func TestAsk_TooManyBlocks(t *testing.T) {
 	s, sess, repo := askRig(t)
 	checked := false
-	s.Asks.(*Service).SetCheck(func(context.Context, *Connection, string) ([]string, error) { checked = true; return nil, nil })
+	s.Asks.(*Service).SetCheck(func(context.Context, *Connection, string) ([]string, string, error) {
+		checked = true
+		return nil, "", nil
+	})
 	block := "---\nname: P%d\n---\n\nx\n\n"
 	var b strings.Builder
 	for i := 0; i <= blocksMax; i++ {

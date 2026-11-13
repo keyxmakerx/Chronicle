@@ -621,6 +621,30 @@
   --perm-panel-r: 4px; --perm-panel-edge: 1.5px solid var(--k-line);
 }
 
+/* ---------- Corners and edges of every page part ----------
+   Page parts (blocks, the page map, family tree, standing, rumours and the
+   rest) take their corners and edges from the shape tokens (input.css), so
+   each kit here is values only, taken from the corners it already gives its
+   boxes and rows. The tokens are single lengths, so Flowing's and
+   Sketchbook's uneven corners stay on the parts drawn above; here they are
+   their rounder and smaller averages. Material keeps input.css's values. */
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content {
+  --shape-r-tag: 0px; --shape-r-small: 0px; --shape-r-ctl: 0px; --shape-r-panel: 0px;
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content {
+  --shape-r-tag: 2px; --shape-r-small: 4px; --shape-r-ctl: 6px; --shape-r-panel: 8px;
+}
+[data-cz-page="annals"][data-cz-kit="flowing"] #main-content {
+  --shape-r-tag: 8px; --shape-r-small: 12px; --shape-r-ctl: 16px; --shape-r-panel: 22px;
+}
+[data-cz-page="annals"][data-cz-kit="lumen"] #main-content {
+  --shape-r-tag: 4px; --shape-r-small: 6px; --shape-r-ctl: 8px; --shape-r-panel: 10px;
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #main-content {
+  --shape-r-tag: 3px; --shape-r-small: 4px; --shape-r-ctl: 6px; --shape-r-panel: 8px;
+  --shape-edge: 1.5px;
+}
+
 /* ---------- The Director's mark is the same in every kit ----------
    A kit may restyle a row's edge and shadow, never the amber edge on what
    only the Director sees. */

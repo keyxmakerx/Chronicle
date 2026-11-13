@@ -28,16 +28,18 @@ func (h *Handler) emailNightChange(ctx context.Context, mc mailCampaign, change 
 	if h.mailer == nil || h.memberLister == nil || s == nil || !h.mailer.IsConfigured(ctx) {
 		return
 	}
-	ids, err := h.svc.GoingOrMaybe(ctx, s.ID)
+	aud, err := h.svc.NightChangeAudience(ctx, s)
 	if err != nil {
 		slog.Warn("listing who to email about a changed game night", slog.Any("error", err), slog.String("session_id", s.ID))
 		return
 	}
-	if len(ids) == 0 {
+	if aud == nil || len(aud.UserIDs) == 0 {
 		return
 	}
-	want := make(map[string]bool, len(ids))
-	for _, id := range ids {
+	// A repeating series is described by its next night, not its first.
+	s = aud.Night
+	want := make(map[string]bool, len(aud.UserIDs))
+	for _, id := range aud.UserIDs {
 		want[id] = true
 	}
 	members, err := h.memberLister.ListMembers(ctx, mc.ID)

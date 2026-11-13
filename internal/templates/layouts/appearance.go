@@ -239,19 +239,26 @@ func (a *AppearanceData) tones(theme int) czTone {
 	return t
 }
 
-// toneVars writes one theme's tokens. Hints and faint text are mixed toward
-// the page so they stay a step quieter than labels on every tone.
+// hintContrast is the contrast a hint, date or label must reach on the page,
+// card and alt-row fills of its tone.
+const hintContrast = 4.5
+
+// toneVars writes one theme's tokens. Hints are the tone's grey nudged until
+// they read at 4.5:1 on every fill; labels sit a step stronger, so the two
+// stay apart without either going faint. Faint is for disabled controls only.
 func toneVars(t czTone, dark bool) string {
 	input := t.card
 	borderLight := t.alt
 	if dark {
 		input, borderLight = t.bg, t.line2
 	}
+	hint := colour.Readable(t.muted, []string{t.bg, t.card, t.alt}, hintContrast, !dark).Hex
+	label := colour.Mix(hint, t.text, 0.45)
 	return fmt.Sprintf("--color-bg-primary:%s;--color-bg-secondary:%s;--color-card-bg:%s;--color-bg-tertiary:%s;"+
 		"--color-border:%s;--color-border-light:%s;--color-input-border:%s;--color-input-bg:%s;"+
 		"--color-text-primary:%s;--color-text-body:%s;--color-text-secondary:%s;--color-text-muted:%s;--color-text-faint:%s;",
 		t.bg, t.card, t.card, t.alt, t.line, borderLight, t.line2, input,
-		t.text, t.body, t.muted, colour.Mix(t.muted, t.bg, 0.35), colour.Mix(t.muted, t.bg, 0.6))
+		t.text, t.body, label, hint, colour.Mix(hint, t.bg, 0.6))
 }
 
 // czMenu is one menu colour with the shades the menu derives from it.
@@ -314,11 +321,12 @@ var czElevation = map[string]struct {
 		[2]string{"0 2px 4px rgb(16 24 40 / .06), 0 18px 36px -12px rgb(ACC / .42), 0 0 0 1px rgb(ACC / .12)", "0 2px 4px rgb(0 0 0 / .45), 0 20px 40px -12px rgb(ACC / .5), 0 0 0 1px rgb(ACC / .2)"}},
 }
 
-// czSpeeds retime Chronicle's chrome durations (micro, standard, large) and
-// the paper moves (slide-out, page turn).
-var czSpeeds = map[string]struct{ micro, std, large, slide, turn int }{
-	"snappy":    {80, 130, 180, 240, 380},
-	"leisurely": {200, 330, 460, 520, 760},
+// czSpeeds retime Chronicle's chrome durations (micro, standard, large), the
+// paper moves (slide-out, page turn) and the everyday moves (menus, another
+// page), which follow micro and the page fade at three quarters of it.
+var czSpeeds = map[string]struct{ micro, std, large, slide, turn, everyday, page int }{
+	"snappy":    {80, 130, 180, 240, 380, 80, 60},
+	"leisurely": {200, 330, 460, 520, 760, 200, 150},
 }
 
 // czHeadingFaces is each heading face's weight, letter-spacing and size
@@ -444,7 +452,7 @@ func AppearanceCSS(ctx context.Context) string {
 	}
 
 	if s, ok := czSpeeds[a.MotionSpeed]; ok {
-		fmt.Fprintf(&root, "--dur-micro:%dms;--dur-standard:%dms;--dur-large:%dms;--dur-slide:%dms;--dur-turn:%dms;", s.micro, s.std, s.large, s.slide, s.turn)
+		fmt.Fprintf(&root, "--dur-micro:%dms;--dur-standard:%dms;--dur-large:%dms;--dur-slide:%dms;--dur-turn:%dms;--dur-everyday:%dms;--dur-page:%dms;", s.micro, s.std, s.large, s.slide, s.turn, s.everyday, s.page)
 	}
 
 	if stack, ok := czFontStacks[a.BodyFont]; ok && a.BodyFont != "inter" {

@@ -2,9 +2,11 @@ package app
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
+	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
 
 func TestKeepRowIDs(t *testing.T) {
@@ -49,5 +51,31 @@ func TestCarryStagesForAIUpdate(t *testing.T) {
 	}
 	if len(got[0].Arrive) != 0 || len(got[0].Forms) != 1 || got[0].When.Row != "r1" {
 		t.Fatalf("s1 = %+v", got[0])
+	}
+}
+
+func TestEncountersShowPublisherAudience(t *testing.T) {
+	tests := []struct {
+		name    string
+		to      string
+		public  bool
+		allowed []string
+	}{
+		{"shown to everyone", "", true, nil},
+		{"shown to one player", "u-ash", false, []string{"u-ash"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bus := &stashCaptureBus{}
+			p := &encountersShowPublisher{bus: bus}
+			p.Shown("c1", encounters.ShownItem{ID: "i1", Kind: encounters.ShowNote, Label: "A vial", To: tt.to})
+			if len(bus.msgs) != 1 {
+				t.Fatalf("want one message, got %d", len(bus.msgs))
+			}
+			m := bus.msgs[0]
+			if m.Type != ws.MsgTableShown || m.Public != tt.public || !slices.Equal(m.AllowedUsers, tt.allowed) || m.StrictAudience {
+				t.Errorf("got type %q public %v allowed %v strict %v", m.Type, m.Public, m.AllowedUsers, m.StrictAudience)
+			}
+		})
 	}
 }

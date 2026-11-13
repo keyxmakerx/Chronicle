@@ -6,14 +6,11 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // themselves. A choice here is seen by this person only.
 templ YourLookPage(cc *CampaignContext, parts []yourLookPart) {
 	@layouts.App(cc.Campaign.Name + " - Your look") {
-		<div class="max-w-2xl mx-auto">
-			<header class="mb-6">
-				<h1 class="text-2xl font-bold text-fg">Your look</h1>
-				<p class="text-sm text-fg-secondary mt-1">What you pick here changes only what you see. Nobody else sees your choice.</p>
-			</header>
-			if len(parts) == 0 {
-				<p class="text-fg-secondary">The owner has not let you change any part of the look in this campaign.</p>
+		@layouts.AppFrame() {
+			@layouts.AppOpening(yourLookOpening(ctx, len(parts))) {
+				<span>What you pick here changes only what you see. Nobody else sees your choice.</span>
 			}
+			<div class="max-w-2xl">
 			for _, p := range parts {
 				<section class="card p-4 mb-4" data-look-part={ p.Part.Key } aria-labelledby={ "look-" + p.Part.Key }>
 					<h2 id={ "look-" + p.Part.Key } class="text-sm font-semibold text-fg mb-3">{ p.Part.Label }</h2>
@@ -44,7 +41,8 @@ templ YourLookPage(cc *CampaignContext, parts []yourLookPart) {
 					</div>
 				</section>
 			}
-		</div>
+			</div>
+		}
 	}
 }
 

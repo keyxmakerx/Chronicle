@@ -96,6 +96,9 @@ type StashDeps struct {
 	// Places keeps which container a hero carries each item in (places.go);
 	// nil leaves everything in the backpack and the page can't rearrange.
 	Places PlaceStore
+	// Members re-checks that a waiting request's author is still in the
+	// campaign when it is finally settled; nil skips that check.
+	Members MemberDirectory
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's
@@ -162,6 +165,8 @@ type StashService interface {
 	// character's items and money (not a character, or not theirs).
 	CharacterPanel(ctx context.Context, campaignID string, a Actor, characterID string) (*CharacterPanelView, error)
 	CharacterHistory(ctx context.Context, campaignID string, a Actor, characterID string) ([]MoveLine, error)
+	AddLogNote(ctx context.Context, campaignID string, a Actor, characterID string, in LogNoteInput) error
+	DeleteLogNote(ctx context.Context, campaignID string, a Actor, characterID string, id int64) error
 	// SetPlace puts an item the character holds in one of their containers.
 	// The character's player or a GM only; it changes no count.
 	SetPlace(ctx context.Context, campaignID string, a Actor, characterID, itemID string, p Place) error
@@ -197,7 +202,23 @@ type stashService struct {
 	// waiting purchase requests, and how the stashes page and character history
 	// show them. Nil when buying is not wired (tests, a bus-less setup).
 	purchases purchaseRequests
+	// crafts says whether the hero page carries the crafting bench; set by
+	// SetCraftGate once the crafting plugin is built, nil while it is off.
+	crafts CraftGate
+	// notes and nights feed the hero's log (hero_log.go); nil while off.
+	notes  HeroLogStore
+	nights NightLister
 }
+
+// CraftGate answers whether the viewer may work crafting for a character and
+// the campaign has crafting on. It keeps the armory from importing the
+// crafting plugin; the answer is the Crafting block's own rule.
+type CraftGate interface {
+	CanCraft(ctx context.Context, campaignID, characterID string, a Actor) bool
+}
+
+// SetCraftGate turns the "On the bench" container on for character panels.
+func (s *stashService) SetCraftGate(g CraftGate) { s.crafts = g }
 
 // purchaseRequests is the stash service's view of the shop-buy side. The
 // sweep runs with the campaign lock already held by the caller.
@@ -821,6 +842,15 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 	if !ok {
 		return nil, nil
 	}
+	// Acting for a hero is not seeing it: a page hidden from the viewer
+	// shows no panel, so its name and log never reach them.
+	seen, err := s.viewable(ctx, campaignID, a, ref.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !seen {
+		return nil, nil
+	}
 	open, err := s.IsDowntimeOpen(ctx, campaignID)
 	if err != nil {
 		return nil, err
@@ -851,6 +881,13 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 		}
 	}
 	view.Items = held
+	view.CanCraft = s.crafts != nil && s.crafts.CanCraft(ctx, campaignID, ref.ID, a)
+	if s.notes != nil {
+		view.HasLog, view.CanDirect = true, a.SeesDmOnly()
+		if view.Log, err = s.heroLog(ctx, campaignID, a, ref); err != nil {
+			return nil, err
+		}
+	}
 
 	if ref.MoneyKey != "" {
 		bal, err := s.characterMoney(ctx, ref)
@@ -879,6 +916,17 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 	if len(lines) > panelHistorySize {
 		view.HistoryMore = true
 		lines = lines[:panelHistorySize]
+	}
+	if view.HasLog {
+		// The log carries the item facts; money edits, purchase requests and
+		// anything not yet applied stay here.
+		kept := lines[:0:0]
+		for _, l := range lines {
+			if l.Purchase || l.Kind == MoveKindMoney || l.Status != MoveApplied {
+				kept = append(kept, l)
+			}
+		}
+		lines = kept
 	}
 	view.History = lines
 	return view, nil

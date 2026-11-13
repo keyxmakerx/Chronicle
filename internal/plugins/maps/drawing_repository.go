@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -29,7 +31,7 @@ type DrawingRepository interface {
 	// Token CRUD.
 	CreateToken(ctx context.Context, t *Token) error
 	GetToken(ctx context.Context, id string) (*Token, error)
-	UpdateToken(ctx context.Context, t *Token) error
+	UpdateToken(ctx context.Context, t *Token, cols []TokenColumn) error
 	UpdateTokenPosition(ctx context.Context, id string, x, y float64) error
 	DeleteToken(ctx context.Context, id string) error
 	ListTokens(ctx context.Context, mapID string, role int) ([]Token, error)
@@ -321,35 +323,77 @@ func (r *drawingRepo) GetToken(ctx context.Context, id string) (*Token, error) {
 	return &t, nil
 }
 
-// UpdateToken updates a token's full state.
-func (r *drawingRepo) UpdateToken(ctx context.Context, t *Token) error {
-	statusJSON, _ := json.Marshal(t.StatusEffects)
-	flagsJSON, _ := json.Marshal(t.Flags)
+// TokenColumn names a map_tokens column a partial update may write. It is a
+// closed set so a column name never comes from request data.
+type TokenColumn string
 
-	result, err := r.db.ExecContext(ctx, `
-		UPDATE map_tokens SET name = ?, image_path = ?, x = ?, y = ?,
-			width = ?, height = ?, rotation = ?, scale = ?,
-			is_hidden = ?, is_locked = ?,
-			bar1_value = ?, bar1_max = ?, bar2_value = ?, bar2_max = ?,
-			aura_radius = ?, aura_color = ?,
-			light_radius = ?, light_dim_radius = ?, light_color = ?,
-			vision_enabled = ?, vision_range = ?, elevation = ?,
-			status_effects = ?, flags = ?
-		WHERE id = ?`,
-		t.Name, t.ImagePath, t.X, t.Y,
-		t.Width, t.Height, t.Rotation, t.Scale,
-		t.IsHidden, t.IsLocked,
-		t.Bar1Value, t.Bar1Max, t.Bar2Value, t.Bar2Max,
-		t.AuraRadius, t.AuraColor,
-		t.LightRadius, t.LightDimRadius, t.LightColor,
-		t.VisionEnabled, t.VisionRange, t.Elevation,
-		statusJSON, flagsJSON, t.ID,
-	)
+// tokenColumnValues maps each writable column to the value taken from a Token.
+// A table keeps the SET list and its arguments from drifting apart.
+var tokenColumnValues = map[TokenColumn]func(t *Token) any{
+	"name":             func(t *Token) any { return t.Name },
+	"image_path":       func(t *Token) any { return t.ImagePath },
+	"x":                func(t *Token) any { return t.X },
+	"y":                func(t *Token) any { return t.Y },
+	"width":            func(t *Token) any { return t.Width },
+	"height":           func(t *Token) any { return t.Height },
+	"rotation":         func(t *Token) any { return t.Rotation },
+	"scale":            func(t *Token) any { return t.Scale },
+	"is_hidden":        func(t *Token) any { return t.IsHidden },
+	"is_locked":        func(t *Token) any { return t.IsLocked },
+	"bar1_value":       func(t *Token) any { return t.Bar1Value },
+	"bar1_max":         func(t *Token) any { return t.Bar1Max },
+	"bar2_value":       func(t *Token) any { return t.Bar2Value },
+	"bar2_max":         func(t *Token) any { return t.Bar2Max },
+	"aura_radius":      func(t *Token) any { return t.AuraRadius },
+	"aura_color":       func(t *Token) any { return t.AuraColor },
+	"light_radius":     func(t *Token) any { return t.LightRadius },
+	"light_dim_radius": func(t *Token) any { return t.LightDimRadius },
+	"light_color":      func(t *Token) any { return t.LightColor },
+	"vision_enabled":   func(t *Token) any { return t.VisionEnabled },
+	"vision_range":     func(t *Token) any { return t.VisionRange },
+	"elevation":        func(t *Token) any { return t.Elevation },
+	"status_effects":   func(t *Token) any { return t.StatusEffects },
+	"flags":            func(t *Token) any { return t.Flags },
+}
+
+// UpdateToken writes only the named columns. The service reads the token,
+// merges the request, then writes; writing every column would put the values
+// read at the start back over anything another request saved in between (a
+// drag's x,y against a bar edit). Naming the touched columns makes two
+// requests that touch different ones independent.
+func (r *drawingRepo) UpdateToken(ctx context.Context, t *Token, cols []TokenColumn) error {
+	if len(cols) == 0 {
+		// Nothing to write, but a missing row must still read as not found.
+		_, err := r.GetToken(ctx, t.ID)
+		return err
+	}
+	sets := make([]string, 0, len(cols))
+	args := make([]any, 0, len(cols)+1)
+	for _, c := range cols {
+		val, ok := tokenColumnValues[c]
+		if !ok {
+			return apperror.NewInternal(fmt.Errorf("unknown token column %q", c))
+		}
+		sets = append(sets, string(c)+" = ?")
+		v := val(t)
+		if c == "status_effects" || c == "flags" {
+			raw, _ := json.Marshal(v)
+			v = raw
+		}
+		args = append(args, v)
+	}
+	args = append(args, t.ID)
+
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE map_tokens SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)
 	if err != nil {
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("token not found: " + t.ID)
+		// MariaDB reports 0 for a no-op write too, so confirm the row exists.
+		if _, err := r.GetToken(ctx, t.ID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

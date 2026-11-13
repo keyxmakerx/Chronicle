@@ -50,6 +50,13 @@ again; CI runs the same command.
   Run it before you push. CI splits the JS tests into groups on separate
   runners (`tools/js-test-files.sh`); locally they run as one suite.
 - `make test-e2e` runs the Playwright specs in `test/e2e/` against Chromium.
+- `make test-live` runs the live checks in `test/live/`: it starts the real
+  binary on an emptied scratch database (`tools/live-checks.sh`; defaults suit
+  `make test-db-up` and a local `redis-server`) and drives it in a browser, as
+  the operator's click-path checks do. Each check names the issue it stands in
+  for. The CI "Live checks" job runs them on every pull request and compares
+  the pictures they take with main's; a changed picture needs the
+  `pictures-approved` label once someone has looked at the report.
 - `make test-int-local` runs the database-backed tests against the local test
   MariaDB. Those tests skip when no database answers, so a plain `go test`
   can pass without running them. The CI "Database tests" job runs them over

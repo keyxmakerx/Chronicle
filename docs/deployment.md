@@ -122,7 +122,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `MEDIA_SIGNING_SECRET` | (auto) | HMAC-SHA256 key for signed media URLs; generated if empty. |
 | `MEDIA_SIGNING_SECRET_FILE` | `./data/.signing-secret` | Where the generated secret is persisted. |
 | `MEDIA_SERVE_RATE_LIMIT` | `300` | Requests/min/IP for `GET /media/:id`; per-IP only works if `TRUSTED_PROXY_CIDRS` is right. |
-| `TRUSTED_PROXY_CIDRS` | loopback + private ranges | Comma-separated CIDRs or addresses whose `X-Real-IP` / `X-Forwarded-For` are believed. **Replaces** the default. See "Client IP behind a reverse proxy". |
+| `TRUSTED_PROXY_CIDRS` | loopback + private ranges | Comma-separated CIDRs or addresses whose `X-Real-IP` / `X-Forwarded-For` are believed (which header: Admin > Security > Visitor addresses). **Replaces** the default. See "Client IP behind a reverse proxy". |
 | `BACKUP_DIR` | `/app/data/backups` | Empty is unsupported: the admin UI reports "not configured" and the pre-migration backup is skipped. |
 | `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The pre-migration rotator has its own fixed 7 days. |
 | `BACKUP_REQUIRED` | `0` (binary), `1` (compose) | `1`/`true` makes the pre-migration backup mandatory: any failure (no `mysqldump`, empty dump, manifest write failure) aborts startup before migrations apply, for pending core and plugin migrations. Default is warn and proceed. Use `1` in production. |
@@ -152,6 +152,15 @@ Then set the new value in `.env` so the healthcheck and backup tooling agree.
 Echo's `IPExtractor` believes `X-Real-IP` / `X-Forwarded-For` **only** from a
 peer inside `TRUSTED_PROXY_CIDRS`; otherwise it records the peer. Per-IP rate
 limits, the media serve limit and the address on every audit row depend on it.
+
+Which header is believed is a site setting under **Admin > Security > Visitor
+addresses** (`/admin/security?tab=addresses`): `X-Real-IP`, `X-Forwarded-For`
+read from the right (the first address not in the trusted list, so an entry the
+visitor wrote ahead of the proxy's own is never used), the connection's own
+address when nothing sits in front, or Automatic (`X-Real-IP` if sent, else
+`X-Forwarded-For` from the right), which is what a site that never chose uses.
+The same page shows how your own request was read and warns when the proxy's
+header is missing or the proxy is not in the trusted list.
 
 The default covers loopback and private ranges: right for a proxy on the same
 Docker network, wrong for one arriving over a **mesh VPN** (e.g.
@@ -441,6 +450,27 @@ least one offsite copy before a release or a risky migration.
 
 ## 9. Restore procedure
 
+### From the admin page
+
+Site admin > Backups & restore > Restore lists every backup. Type `RESTORE` on
+the row and confirm. Chronicle then shows everyone else a "Back in a few
+minutes" page (HTTP 503 with `Retry-After`; JSON for API and Foundry callers),
+saves the current database as a "Before a restore" backup, restores, brings the
+restored data up to date with the running version, re-checks every sign-in and
+opens again. Your own page follows the progress and shows the result.
+
+If it stops, the site stays closed. The page shows what the script printed,
+whether the database had been touched, the safety copy's name and the command to
+put it back by hand, and a "Leave maintenance anyway" button. If Chronicle is
+restarted mid-restore it comes back closed and the page says so. As a last resort
+delete `/app/data/backups/.chronicle-maintenance` and restart the container. A
+restore finished by hand (below) clears that file itself.
+
+`GET /healthz` answers `{"status":"maintenance"}` (HTTP 200) while the site is
+closed, so container health checks do not report a restore as an outage.
+
+### By hand
+
 `scripts/restore.sh` refuses to run unless its preconditions hold.
 
 ```sh
@@ -477,12 +507,16 @@ End to end: log in as a player whose character predates the backup, open
 - `--media-only`: skip the DB restore.
 - `--yes`: skip the RESTORE prompt; required unattended.
 - `--force`: restore over a non-empty target. The default refuses if the DB has tables or `MEDIA_PATH` is non-empty.
+- `--no-safety-backup`: skip saving the current database first. The script otherwise writes `chronicle_pre_restore_manifest_<TS>.txt` before dropping anything, and stops if it cannot; use this only when the current database is too broken to dump.
+- `--from-inside` (or `CHRONICLE_RESTORE_IN_PROCESS=1`): used by the admin page. It lifts the "server is running" refusal only when Chronicle's maintenance marker, a run token and `/healthz` all agree, so it does nothing for a human at a shell.
 
 ### Unhappy paths
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `RESTORE=failed reason=server_running` | Chronicle still answers `/healthz`. | `docker compose stop chronicle`, retry. |
+| `RESTORE=failed reason=server_running` | Chronicle still answers `/healthz`. | `docker compose stop chronicle`, retry. Or use the admin page. |
+| `RESTORE=failed reason=maintenance_not_confirmed` | `--from-inside` was given but Chronicle is not in maintenance for this manifest. | Run it from the admin page, or stop Chronicle and run without the flag. |
+| `RESTORE=failed reason=safety_backup_failed` | The current database could not be saved first; nothing was changed. | Fix the disk or `mysqldump` problem, or pass `--no-safety-backup`. |
 | `RESTORE=failed reason=sha_mismatch` | Manifest paired with a different artifact than on disk. | Use another manifest, or re-run `backup.sh`. |
 | `RESTORE=failed reason=target_not_empty` | Target DB or media dir has data. | Confirm intent, re-run with `--force`. |
 | `RESTORE=failed reason=tarball_unsafe` | Media tarball has absolute paths or `..`. | Do not use it; it is tampered or corrupt. |

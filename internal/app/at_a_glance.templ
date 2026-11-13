@@ -1,0 +1,34 @@
+// at_a_glance.templ draws the campaign home's "At a glance" sheet around the
+// facts buildAtAGlance worded. The home's placeholder (campaigns.dashAtAGlance)
+// loads it. It marks the shared fact parts (cb-facts, cb-section, cb-fact), so
+// the Material page look sets it as the signed fact sheet.
+package app
+
+// atAGlanceFragment replaces the placeholder (hx-swap outerHTML).
+templ atAGlanceFragment(facts []glanceFact) {
+	<section class="cb-glance" data-block="at-a-glance">
+		<h2 class="cb-head cb-glance-top text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">
+			<i class="fa-solid fa-list-ul mr-1.5" aria-hidden="true"></i>At a glance
+		</h2>
+		<div class="card cb-card cb-facts px-4 py-1">
+			<div class="cb-section">
+				<p class="cb-section-h">At a glance</p>
+				for i, f := range facts {
+					<div class={ "cb-fact flex items-baseline justify-between gap-3 py-2 text-sm", templ.KV("border-t border-edge", i > 0) }>
+						<span class="cb-fact-l text-fg-muted">{ f.Label }</span>
+						<span class="cb-fact-v min-w-0 text-right text-fg">
+							if f.Href != "" {
+								<a href={ templ.SafeURL(f.Href) } class="cb-glance-link hover:text-accent hover:underline">{ f.Value }</a>
+							} else {
+								{ f.Value }
+							}
+							if f.Note != "" {
+								<span class="cb-glance-note text-fg-muted">, { f.Note }</span>
+							}
+						</span>
+					</div>
+				}
+			</div>
+		</div>
+	</section>
+}

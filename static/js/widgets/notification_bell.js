@@ -32,12 +32,25 @@
   // Types only a DM is sent carry the Director's amber edge.
   var DM_TYPES = { game_night_checkin: true };
 
+  // syncMenuCount copies the unread count into the account menu's
+  // Notifications row, which stands in for the bell on a narrow phone.
+  function syncMenuCount(el) {
+    var badge = $('[data-count]', el);
+    var n = badge ? badge.getAttribute('data-count') : '';
+    var label = badge ? badge.textContent : '';
+    var spots = document.querySelectorAll('[data-notif-menu-count]');
+    for (var i = 0; i < spots.length; i++) {
+      spots[i].textContent = n ? label : '';
+      spots[i].hidden = !n;
+    }
+  }
+
   function refreshBadge(el) {
     var badge = $('[data-notif-badge]', el);
     if (!badge) return;
     Chronicle.apiFetch('/notifications/badge')
       .then(function (r) { return r.ok ? r.text() : ''; })
-      .then(function (html) { badge.innerHTML = html || ''; })
+      .then(function (html) { badge.innerHTML = html || ''; syncMenuCount(el); })
       .catch(function () { /* non-fatal */ });
   }
 
@@ -174,6 +187,10 @@
       var panel = $('[data-notif-panel]', el);
       var markAll = $('[data-notif-markall]', el);
       if (!toggle || !panel) return;
+
+      // The badge is swapped in by the bell button's own HTMX poll.
+      toggle.addEventListener('htmx:afterSwap', function () { syncMenuCount(el); });
+      syncMenuCount(el);
 
       function open() { panel.hidden = false; loadList(el); }
       function close() { panel.hidden = true; }

@@ -28,6 +28,15 @@ func TestErrorPage(t *testing.T) {
 			want: []string{`href="/login" class="btn-primary"`, "Create an account"},
 		},
 		{
+			name: "a refusal drops the bare permissions line", code: 403, message: "insufficient permissions",
+			want:    []string{"Not open to you", "ask the campaign&#39;s owner"},
+			notWant: []string{"insufficient permissions"},
+		},
+		{
+			name: "a refusal keeps a message that says something", code: 403, message: "Only the owner can do that",
+			want: []string{"Not open to you", "Only the owner can do that"},
+		},
+		{
 			name: "server error keeps its message", code: 500, message: "An unexpected error occurred",
 			want:    []string{"An unexpected error occurred", "Try again in a moment"},
 			notWant: []string{"bg-red-500", "btn-secondary"},

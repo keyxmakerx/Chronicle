@@ -161,8 +161,8 @@ func (r *calendarRepo) ApplyStructure(ctx context.Context, calendarID string, pl
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE calendars SET leap_year_every = ?, current_month = ?, current_day = ? WHERE id = ?`,
-		w.LeapYearEvery, w.CurrentMonth, w.CurrentDay, calendarID,
+		`UPDATE calendars SET leap_year_every = ?, month_starts_new_week = ?, current_month = ?, current_day = ? WHERE id = ?`,
+		w.LeapYearEvery, w.MonthStartsNewWeek, w.CurrentMonth, w.CurrentDay, calendarID,
 	); err != nil {
 		return fmt.Errorf("update calendar: %w", err)
 	}

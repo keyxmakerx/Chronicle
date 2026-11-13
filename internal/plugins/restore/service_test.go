@@ -295,6 +295,13 @@ func TestListManifests_IncludesPreUpdate(t *testing.T) {
 // malicious admin point restore.sh at an arbitrary file.
 func TestResolveManifestPath_RejectsTraversal(t *testing.T) {
 	backupDir := t.TempDir()
+	good := filepath.Join(backupDir, "chronicle_manifest_20260101T100000Z.txt")
+	if err := os.WriteFile(good, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := ResolveManifestPath(backupDir, filepath.Base(good)); err != nil || got != good {
+		t.Fatalf("good manifest: got %q, %v", got, err)
+	}
 	for _, bad := range []string{
 		"../etc/passwd",
 		"chronicle_manifest_../whatever.txt",
@@ -303,8 +310,14 @@ func TestResolveManifestPath_RejectsTraversal(t *testing.T) {
 		"manifest.txt",                            // missing prefix
 		"chronicle_pre_migrate_db_x.sql.gz",       // pre-update data file, not its manifest
 		"chronicle_pre_migrate_manifest_../x.txt", // traversal behind the pre-update prefix
+		"chronicle_manifest_$(id).txt",            // shell characters, even for a file that exists
+		"chronicle_manifest_a b.txt",
+		"chronicle_manifest_missing.txt", // a good name with no such file
 		"",
 	} {
+		if bad != "" && !strings.Contains(bad, "/") && !strings.Contains(bad, "missing") {
+			_ = os.WriteFile(filepath.Join(backupDir, bad), []byte("x"), 0o644)
+		}
 		if _, err := ResolveManifestPath(backupDir, bad); err == nil {
 			t.Errorf("expected rejection for %q", bad)
 		}

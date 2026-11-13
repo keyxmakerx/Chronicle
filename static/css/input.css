@@ -69,9 +69,13 @@
     --color-bg-tertiary:   #f3f4f6;  /* gray-100 -- alt rows, hover */
     --color-text-primary:  #111827;  /* gray-900 -- headings */
     --color-text-body:     #374151;  /* gray-700 -- body text */
-    --color-text-secondary:#6b7280;  /* gray-500 -- labels */
-    --color-text-muted:    #9ca3af;  /* gray-400 -- hints, timestamps */
-    --color-text-faint:    #d1d5db;  /* gray-300 -- disabled, very subtle */
+    /* Labels and hints both clear 4.5:1 on the page, card and alt-row fills;
+       they differ by a step of grey plus the size/italic each use carries.
+       Faint is for disabled controls and decoration only, never for words
+       a reader needs. */
+    --color-text-secondary:#4b5563;  /* gray-600 -- labels, 7.2:1 on the page */
+    --color-text-muted:    #646b78;  /* hints, dates, 4.9:1 on the alt row */
+    --color-text-faint:    #d1d5db;  /* gray-300 -- disabled, decoration */
     --color-border:        #e5e7eb;  /* gray-200 */
     --color-border-light:  #f3f4f6;  /* gray-100 */
     --color-card-bg:       #ffffff;
@@ -135,6 +139,9 @@
 
     --dur-instant:     80ms;     /* keyboard-driven actions */
     --dur-micro:       120ms;    /* button/hover feedback */
+    --dur-everyday:    120ms;    /* menus, pickers and row menus open: a move made many times a session */
+    --dur-everyday-out: calc(var(--dur-everyday) * 2 / 3); /* the same, closing (80ms) */
+    --dur-page:        90ms;     /* another page, a tab or view switch: a fade, no rise */
     --dur-standard:    200ms;    /* modal, dropdown, panel */
     --dur-large:       280ms;    /* view-level transitions */
     --dur-slide:       360ms;    /* a tab or sheet sliding out from under paper */
@@ -144,6 +151,7 @@
     --ease-turn:       cubic-bezier(0.45, 0.05, 0.25, 1); /* lifts slowly, lands softly */
     --dur-arrive:      820ms;    /* entering Site admin: rise from the bottom, three bounces */
     --dur-leave:       460ms;    /* leaving Site admin: it falls away down the screen */
+    --dur-ambient:     40s;      /* one there-and-back drift of a slow background loop; layers scale it */
 
     /* ──────────────────────────────────────────────────────────────────
      * V2 widget-animation durations — the `--motion-*` family, consumed
@@ -178,6 +186,19 @@
                        0 2px 6px -2px rgb(0 0 0 / 0.08);
     --elev-dragged:    0 16px 36px -8px rgb(0 0 0 / 0.22),
                        0 4px 12px -4px rgb(0 0 0 / 0.12);
+
+    /* Shape: corners and edge weights. Page parts take their corners and
+     * edges from these, so a style kit (style_kits.css) restyles every part
+     * by setting these values once. Each is a single length because parts
+     * build composites from them (`0 0 r r`, `calc(r - 1px)`). Material's
+     * values are the standard's numbers (ui-standard.md, "Look"). Pills and
+     * circles stay fixed: they are shapes, not corners. */
+    --shape-r-tag:     4px;      /* tags and small marks */
+    --shape-r-small:   6px;      /* small things: a segment inside a control */
+    --shape-r-ctl:     8px;      /* controls and rows */
+    --shape-r-panel:   12px;     /* panels, dialogs, drawers, pictures */
+    --shape-edge:      1px;      /* the edge around a box or control */
+    --shape-rule:      1px;      /* a rule between rows or sections */
 
     /* ──────────────────────────────────────────────────────────────────
      * Dynamic-surface token contract — the frame's PUBLIC styling API.
@@ -232,9 +253,9 @@
     --color-bg-tertiary:   #374151;  /* gray-700 */
     --color-text-primary:  #f9fafb;  /* gray-50  */
     --color-text-body:     #d1d5db;  /* gray-300 */
-    --color-text-secondary:#9ca3af;  /* gray-400 */
-    --color-text-muted:    #6b7280;  /* gray-500 */
-    --color-text-faint:    #4b5563;  /* gray-600 */
+    --color-text-secondary:#c4c9d2;  /* labels, 8.8:1 on a card */
+    --color-text-muted:    #a8afbb;  /* hints, dates, 4.7:1 on the alt row */
+    --color-text-faint:    #4b5563;  /* gray-600 -- disabled, decoration */
     --color-border:        #374151;  /* gray-700 */
     --color-border-light:  #4b5563;  /* gray-600 */
     --color-card-bg:       #1f2937;  /* gray-800 */
@@ -281,12 +302,18 @@
   /* ---- Buttons ---- */
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium
-           text-sm transition-all duration-200 cursor-pointer
+           text-sm cursor-pointer
            focus:outline-none focus:ring-2 focus:ring-offset-2
            active:scale-[0.98];
     position: relative;
     overflow: visible;
+    /* Named properties, no outline: colour answers in --dur-micro, the lift in
+       --dur-standard, and the focus ring below arrives almost at once. */
+    transition-property: background-color, color, border-color, box-shadow, transform;
+    transition-duration: var(--dur-micro), var(--dur-micro), var(--dur-micro), var(--dur-standard), var(--dur-standard);
+    transition-timing-function: var(--ease-out);
   }
+  .btn:focus { transition-duration: var(--dur-instant); }
   /* bg-action/hover/focus/shadow fall back through bg-accent's own values
    * when the action slot is unset (tailwind.config.js nests the var()
    * chain), so this is a zero-visual-change swap until an owner
@@ -325,6 +352,18 @@
   }
   .quiet-word:hover,
   .quiet-word:focus-visible { text-decoration-color: currentColor; outline: none; }
+
+  /* Menus and pickers open and close (Alpine x-transition classes): a fade and
+     a small grow in --dur-everyday, out in --dur-everyday-out, retimed by the
+     owner's Motion speed. Calm drops the grow and Off drops both, through the
+     guards further down. A menu opened from the keyboard appears at once. */
+  /* menu-motion:start */
+  .mn-enter { transition: opacity var(--dur-everyday) var(--ease-out), transform var(--dur-everyday) var(--ease-out); }
+  .mn-leave { transition: opacity var(--dur-everyday-out) var(--ease-in), transform var(--dur-everyday-out) var(--ease-in); }
+  .mn-from { opacity: 0; transform: scale(0.95); }
+  .mn-to { opacity: 1; transform: scale(1); }
+  :has(> :focus-visible) > :is(.mn-enter, .mn-leave) { transition-duration: 0s; }
+  /* menu-motion:end */
   .btn:disabled,
   .btn[disabled] {
     @apply opacity-50 cursor-not-allowed pointer-events-none;
@@ -2896,6 +2935,8 @@
 
 /* ============================================================ */
 /* @starting-style on .htmx-added — HTMX-injected fragments fade in instead of popping.
+   This is also another page and a tab switch: a short fade with no rise,
+   because both happen many times a session (.ai/ui-standard.md, "Every interaction").
    HTMX adds .htmx-added to newly-inserted elements during the settle phase then
    removes it; the transition triggers on class removal. @starting-style provides
    the entry state. `transition-behavior: allow-discrete` is required for the
@@ -2903,12 +2944,10 @@
 @layer utilities {
   .htmx-added {
     opacity: 1;
-    transform: translateY(0);
-    transition: opacity 150ms ease, transform 150ms ease;
+    transition: opacity var(--dur-page) var(--ease-out);
     transition-behavior: allow-discrete;
     @starting-style {
       opacity: 0;
-      transform: translateY(2px);
     }
   }
 }
@@ -3097,6 +3136,27 @@
     background: color-mix(in srgb, var(--color-accent, #6366f1) 8%, var(--color-bg-secondary, #fff));
   }
   .cta-bar[data-cta="guest"] .cta-ico { color: var(--color-accent, #6366f1); }
+  /* A visitor's strip counts down a pass, so it reads like the guest one:
+     steady accent, not the gold of something the table needs now. */
+  .cta-bar[data-cta="visitor"] {
+    background: color-mix(in srgb, var(--color-accent, #6366f1) 8%, var(--color-bg-secondary, #fff));
+  }
+  .cta-bar[data-cta="visitor"] .cta-ico { color: var(--color-accent, #6366f1); }
+
+  /* Guest codes card: a two- or three-part picker built from radios, and the
+     row labels. Tokens only, so it follows the campaign's colours. */
+  .gc-seg { display: inline-flex; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; background: var(--color-bg-secondary); box-shadow: var(--elev-resting); }
+  .gc-seg label { position: relative; display: inline-flex; align-items: center; min-height: 32px; padding: 6px 12px; font-size: 0.82rem; font-weight: 600; color: var(--color-text-secondary); cursor: pointer; }
+  .gc-seg label + label { border-left: 1px solid var(--color-border); }
+  .gc-seg label:hover { color: var(--color-text-primary); }
+  .gc-seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .gc-seg label:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+  .gc-seg label:has(input:checked) { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); }
+  .gc-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+  .gc-pill-live { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); }
+  .gc-pill-ok { background: rgb(var(--color-ok-rgb) / 0.12); color: rgb(var(--color-ok-rgb)); }
+  .gc-remove { font-size: 0.75rem; color: var(--color-danger-strong); }
+  .gc-remove:hover { text-decoration: underline; }
 
   .cta-ico { font-size: 13px; color: var(--color-text-secondary, #6b7280); }
   .cta-msg { flex: 1 1 auto; min-width: 0; }
@@ -3203,6 +3263,9 @@
     --nav-text: var(--cz-sb-text, #cbd5e1);
     --nav-text-2: var(--cz-sb-text-2, #8b93a1);
     --nav-text-3: var(--cz-sb-text-3, #5f6776);
+    /* Group names are words, so they take the label grey (5.5:1 on Charcoal)
+       rather than the 3:1 grey that counts and glyphs use. */
+    --nav-head: var(--nav-text-2);
     --nav-hi: #ffffff;
     --nav-strong: #f3f4f6;
     --nav-line: rgb(255 255 255 / 0.07);
@@ -3593,7 +3656,7 @@
   .nav-gh {
     position: relative; width: 100%; height: 30px; margin-top: 8px; display: flex; align-items: center; gap: 8px;
     padding: 0 10px 0 14px; text-align: left; white-space: nowrap;
-    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nav-text-3);
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nav-head);
   }
   button.nav-gh:hover { color: var(--nav-text); }
   button.nav-gh:active .nav-gh-l { transform: translateY(1px); }
@@ -3785,7 +3848,7 @@
   }
   .nav-drill-tags-list { min-height: 0; overflow-y: auto; padding: 4px; }
   .nav-drill-tags-label {
-    padding: 6px 8px 3px; font-size: 10px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--nav-text-3);
+    padding: 6px 8px 3px; font-size: 10px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--nav-head);
   }
   .nav-drill-tag-row {
     width: 100%; display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 8px; border: 0; border-radius: 8px;
@@ -3830,7 +3893,7 @@
   }
   .nav-tree-skel { padding: 8px 14px; display: flex; flex-direction: column; gap: 6px; }
   .nav-drill-fav-h, .nav-drill-recent-h {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nav-text-3);
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nav-head);
   }
   .nav-drill-fav-h { padding: 10px 14px 2px; display: flex; align-items: center; gap: 5px; }
   .nav-drill-fav-h i { color: #fbbf24; font-size: 9px; }
@@ -4004,7 +4067,7 @@
   .nav-addg:active { transform: translateY(1px) scale(0.99); }
   .nav-off { margin: 12px 12px 0; padding: 6px 0 8px; border-radius: 10px; border: 1px solid var(--nav-line); background: rgb(255 255 255 / 0.025); }
   .nav-off-h {
-    padding: 2px 10px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nav-text-3);
+    padding: 2px 10px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nav-head);
   }
   .nav-off .nav-row { padding-left: 10px; cursor: default; color: var(--nav-text-2); }
   .nav-off .nav-row::before, .nav-off .nav-row::after { display: none; }
@@ -4174,6 +4237,9 @@
   .jnl :where(.jnl-list) button { border: 0; background: none; padding: 0; margin: 0; cursor: pointer; text-align: left; -webkit-appearance: none; appearance: none; }
 
   .nl-bar { flex-shrink: 0; padding: 10px 10px 8px; display: flex; align-items: center; gap: 5px; }
+  /* The Journal's name, in the page heading face, as the first thing in the list bar; the narrow list keeps its room for search. */
+  .nl-name { flex-shrink: 0; margin: 0 6px 0 2px; font-family: var(--font-heading, var(--serif)); font-size: 1.05rem; font-weight: 700; line-height: 1; color: var(--ink); }
+  .jnl-list[data-size="compact"] .nl-name { display: none; }
   .nl-search {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
     height: 34px; padding: 0 8px; border-radius: var(--jnl-r-ctl); border: 1px solid var(--color-input-border); background: var(--color-input-bg);
@@ -6137,6 +6203,54 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .hp-carry button[aria-pressed="true"] { color: var(--color-text-primary); font-weight: 600; border-bottom-color: var(--color-accent); text-decoration: none; }
 @media (prefers-reduced-motion: reduce) { .hp-card { animation: none; } .hp-tile, .hp-box { transition: none; } }
 .nav-rm .hp-card { animation: none; }
+/* "On the bench": the crafting container first in the pack, and the drape that hangs from it (hero_bench.js). */
+.hp-wrap { position: relative; }
+.hp-bench { grid-column: 1 / -1; }
+@media (min-width: 640px) { .hp-bench { grid-column: span 2; } }
+.hb-face { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; text-align: left; color: inherit; border-radius: 10px; }
+.hb-face:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.hb-tiles { display: flex; flex-wrap: wrap; gap: 6px; min-height: 8px; }
+.hb-tile { position: relative; overflow: hidden; width: 104px; min-height: 76px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; padding: 6px 8px 6px; border-radius: 10px; border: 1.5px dashed var(--color-border); background: var(--color-card-bg); font-size: 11px; line-height: 1.25; color: var(--color-text-primary); }
+.hb-tile::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--hb-fill, 0%); background: rgb(var(--color-accent-rgb) / .16); transition: height .3s ease; }
+.hb-tile > * { position: relative; }
+.hb-tile.is-ready { border-color: var(--color-accent); border-style: solid; }
+.hb-tile.is-slot { width: auto; min-width: 150px; justify-content: center; color: var(--color-text-secondary); }
+.hb-tile.is-more { width: auto; justify-content: center; color: var(--color-text-secondary); }
+.hb-tile.is-slot::before, .hb-tile.is-more::before { display: none; }
+.hb-name { overflow-wrap: anywhere; font-weight: 600; }
+.hb-pts { font-variant-numeric: tabular-nums; color: var(--color-text-secondary); }
+.hb-hint { font-size: 12px; color: var(--color-accent); }
+.hp-bench:hover .hb-hint, .hb-face:focus-visible .hb-hint { text-decoration: underline; }
+.hp-bench.is-open { box-shadow: inset 0 0 0 2px var(--color-accent); }
+.hb-drape { position: absolute; left: 0; right: 0; z-index: 30; max-height: min(78vh, 760px); overflow: auto; padding: 14px 14px 16px; border-radius: 12px; background: var(--color-card-bg); border: 1px solid var(--color-border-light); box-shadow: var(--elev-hover, 0 14px 34px -10px rgba(0,0,0,.35)); transform-origin: top center; opacity: 0; transform: translateY(-8px) scaleY(.96); transition: opacity .18s ease, transform .18s cubic-bezier(.2,.7,.2,1); }
+.hb-drape.is-in { opacity: 1; transform: none; }
+.hb-drape.is-leaving { opacity: 0; transform: translateY(-6px) scaleY(.97); transition-duration: .14s; }
+.hb-close { position: absolute; top: 6px; right: 6px; z-index: 1; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; color: var(--color-text-muted); }
+.hb-close:hover { color: var(--color-text-primary); background: var(--color-bg-tertiary); }
+@media (prefers-reduced-motion: reduce) { .hb-drape, .hb-tile::before { transition: none; } }
+.nav-rm .hb-drape, .nav-rm .hb-tile::before { transition: none; }
+/* The hero's log under the pack: facts and the player's own lines, by game night. */
+.hl { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-border-light); }
+.hl-lab { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-secondary); }
+.hl-write { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 10px; }
+.hl-write input[type="text"] { flex: 1 1 220px; min-width: 0; padding: 7px 2px; border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; background: transparent; font-size: 13.5px; color: var(--color-text-primary); }
+.hl-write input[type="text"]:focus { outline: none; border-bottom-color: var(--color-accent); }
+.hl-write select { max-width: 150px; padding: 4px 0; border: 0; background: transparent; font-size: 12px; color: var(--color-text-secondary); }
+.hl-dm { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--color-text-secondary); }
+.hl-empty { margin: 0; font-size: 12px; color: var(--color-text-muted); }
+.hl-night { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--color-border-light); }
+.hl-night:first-of-type { border-top: 0; }
+.hl-when { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; line-height: 1.4; color: var(--color-text-muted); }
+.hl-ev { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 2px 0 2px 8px; font-size: 13px; line-height: 1.5; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.hl-ev b { font-weight: 600; color: var(--color-text-primary); }
+.hl-note { border-left: 3px solid var(--color-accent); margin: 3px 0; color: var(--color-text-primary); }
+.hl-dm-note { border-left-color: #d97706; }
+.hl-about { margin-left: 6px; font-size: 11px; color: var(--color-text-muted); }
+.hl-x { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: var(--color-text-muted); opacity: 0; }
+.hl-ev:hover .hl-x, .hl-x:focus-visible { opacity: 1; }
+.hl-x:hover { color: var(--color-text-primary); background: var(--color-bg-tertiary); }
+@media (hover: none) { .hl-x { opacity: 1; } }
+@media (max-width: 520px) { .hl-night { grid-template-columns: minmax(0, 1fr); } }
 .ag-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 10px; }
 .ag-checks label { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 13.5px; color: var(--color-text-primary); cursor: pointer; border-radius: 7px; }
 .ag-checks label:hover { background: var(--color-bg-tertiary); }

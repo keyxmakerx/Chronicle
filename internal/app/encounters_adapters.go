@@ -13,10 +13,12 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/systems"
+	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
 
 // encountersPageAdapter implements encounters.PageDirectory.
@@ -169,7 +171,20 @@ func (a *syncEncounterAPIAdapter) Search(ctx context.Context, campaignID, userID
 	if a.svc == nil {
 		return nil, 0, apperror.NewNotFound("encounters are not available")
 	}
-	return a.svc.Search(ctx, campaignID, q, limit, encounterAPIViewer(userID))
+	list, total, err := a.svc.Search(ctx, campaignID, q, limit, encounterAPIViewer(userID))
+	if err != nil {
+		return nil, 0, err
+	}
+	// Foundry loads fights; a scene has nothing for it to set up.
+	out := make([]encounters.Summary, 0, len(list))
+	for _, s := range list {
+		if s.Kind == encounters.KindScene {
+			total--
+			continue
+		}
+		out = append(out, s)
+	}
+	return out, total, nil
 }
 
 func (a *syncEncounterAPIAdapter) Get(ctx context.Context, campaignID, userID, id string) (any, error) {
@@ -446,4 +461,74 @@ func (a aiEncountersAdapter) All(ctx context.Context, campaignID string, act rec
 		out = append(out, aiEncounterRef(*e))
 	}
 	return out, nil
+}
+
+// encountersSceneAdapter implements encounters.SceneDirectory: the
+// campaign's players from its member list, a player's view of a page from
+// the page's own rules, and un-hiding through the DM Screen's Reveal, so a
+// scene can reveal exactly what the Reveal card can.
+type encountersSceneAdapter struct {
+	members campaignMemberLister
+	svc     entities.EntityService
+	cards   entities.PageCards
+	reveal  *dmHiddenAdapter
+}
+
+// campaignMemberLister is the one campaigns method the scene adapter needs.
+type campaignMemberLister interface {
+	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
+}
+
+func (a *encountersSceneAdapter) Players(ctx context.Context, campaignID string) ([]encounters.Player, error) {
+	ms, err := a.members.ListMembers(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := []encounters.Player{}
+	for _, m := range ms {
+		if m.Role >= campaigns.RoleOwner {
+			continue
+		}
+		name := m.DisplayName
+		if m.CharacterName != nil && *m.CharacterName != "" {
+			name = *m.CharacterName + " (" + m.DisplayName + ")"
+		}
+		out = append(out, encounters.Player{UserID: m.UserID, Name: name})
+	}
+	return out, nil
+}
+
+func (a *encountersSceneAdapter) PlayerCanView(ctx context.Context, campaignID, entityID, userID string) (bool, error) {
+	cards, err := a.cards.InCampaign(ctx, campaignID, []string{entityID})
+	if err != nil {
+		return false, err
+	}
+	if _, ok := cards[entityID]; !ok {
+		return false, nil
+	}
+	ep, err := a.svc.CheckEntityAccess(ctx, entityID, permissions.RolePlayer, userID)
+	if err != nil {
+		return false, err
+	}
+	return ep.CanView, nil
+}
+
+func (a *encountersSceneAdapter) Reveal(ctx context.Context, campaignID, entityID string) (string, error) {
+	return a.reveal.Reveal(ctx, entityID, campaignID)
+}
+
+// encountersShowPublisher sends a shown item over the WebSocket hub: to
+// everyone, or to its one player, whom the DM team joins by the hub's rule.
+type encountersShowPublisher struct {
+	bus ws.EventBus
+}
+
+func (p *encountersShowPublisher) Shown(campaignID string, item encounters.ShownItem) {
+	msg := ws.NewMessage(ws.MsgTableShown, campaignID, item.ID, item)
+	if item.To == "" {
+		msg.Public = true
+	} else {
+		msg.AllowedUsers = []string{item.To}
+	}
+	p.bus.Publish(msg)
 }

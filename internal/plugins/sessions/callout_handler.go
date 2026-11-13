@@ -56,6 +56,10 @@ func (h *Handler) CalloutAPI(c *echo.Context) error {
 	return c.HTML(http.StatusOK, renderCallout(out))
 }
 
+// timezoneShortMessage is the timezone sentence on a phone, where the banner
+// is one line (phone_shell.css shows it in place of the full message).
+const timezoneShortMessage = "Times aren't in your time zone yet"
+
 // renderCallout builds the banner fragment.
 //
 // Every interpolation must be escaped: Link and Message come from a stored
@@ -89,12 +93,12 @@ func renderCallout(o Callout) string {
 		return fmt.Sprintf(
 			`<div class="cta-bar" data-cta="timezone" role="status">`+
 				`<i class="fa-solid fa-clock cta-ico" aria-hidden="true"></i>`+
-				`<span class="cta-msg">%s</span>`+
+				`<span class="cta-msg"><span class="cta-long">%s</span><span class="cta-short">%s</span></span>`+
 				`<button type="button" class="cta-go" data-cta-tz-accept hidden>`+
 				`Use <span data-cta-zone>my timezone</span></button>%s`+
 				`<button type="button" class="cta-x" data-cta-dismiss aria-label="Dismiss">`+
 				`<i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>`,
-			html.EscapeString(o.Message), choose)
+			html.EscapeString(o.Message), html.EscapeString(timezoneShortMessage), choose)
 	}
 	return ""
 }

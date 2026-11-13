@@ -75,6 +75,12 @@ func (r Record) BodyEntry() (doc, html *string, err error) {
 type Actor struct {
 	UserID string
 	Role   int // visibility role (campaigns.CampaignContext.VisibilityRole)
+	// ReadsOwnNotes marks a campaign member's own key. It reads at the
+	// player role like an owner's "what players see" key does, but the notes
+	// it reaches are the member's own plus those shared with them, which is
+	// all the notes widget's visibility rule lets a player viewer open. The
+	// owner's players-view key leaves it false and still gets no notes.
+	ReadsOwnNotes bool
 }
 
 // Viewer is the Actor as the services' permission model sees them.

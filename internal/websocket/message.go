@@ -155,6 +155,11 @@ const (
 // through its own route.
 const MsgRollMade MessageType = "roll.made"
 
+// MsgTableShown carries one thing a running scene showed, to everyone or to
+// one player (and the DM team). Not a change-feed type: a player who was
+// offline reads the night's list through its own route.
+const MsgTableShown MessageType = "table.shown"
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"

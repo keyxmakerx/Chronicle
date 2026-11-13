@@ -14,12 +14,12 @@ import (
 templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-		class="card p-0 overflow-hidden hover:shadow-md transition-shadow block group"
+		class="ec-card card p-0 overflow-hidden hover:shadow-md transition-shadow block group"
 		data-entity-preview={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, entity.ID) }
 	>
 		<!-- Image or placeholder header -->
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
-			<div class="h-28 bg-surface-alt overflow-hidden">
+			<div class="ec-band h-28 bg-surface-alt overflow-hidden">
 				<img
 					src={ layouts.MediaURL(ctx, *entity.ImagePath) }
 					alt={ entity.Name }
@@ -27,7 +27,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 				/>
 			</div>
 		} else {
-			<div class="h-14 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", entity.TypeColor) }>
+			<div class="ec-band h-14 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", entity.TypeColor) }>
 				if entity.TypeIcon != "" {
 					<i class={ "fa-solid " + entity.TypeIcon, "text-lg opacity-30" } style={ fmt.Sprintf("color: %s", entity.TypeColor) }></i>
 				}
@@ -35,15 +35,15 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 		}
 
 		<!-- Card body -->
-		<div class="px-3 py-2.5">
-			<div class="flex items-start justify-between mb-1">
+		<div class="ec-body px-3 py-2.5">
+			<div class="ec-head flex items-start justify-between mb-1">
 				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{ entity.Name }</h3>
 				@entityVisibilityBadge(cc, entity)
 			</div>
 
-			<div class="flex items-center gap-1.5">
+			<div class="ec-kind flex items-center gap-1.5">
 				<span
-					class="inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[11px] font-medium"
+					class="ec-pill inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[11px] font-medium"
 					style={ fmt.Sprintf("background-color: %s; color: %s", entity.TypeColor, contrastTextColor(entity.TypeColor)) }
 				>
 					if entity.TypeIcon != "" {
@@ -58,7 +58,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 
 			<!-- Tag chips -->
 			if len(entity.Tags) > 0 {
-				<div class="flex flex-wrap gap-0.5 mt-1.5">
+				<div class="ec-tags flex flex-wrap gap-0.5 mt-1.5">
 					for _, tag := range entity.Tags {
 						<span
 							class="inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"

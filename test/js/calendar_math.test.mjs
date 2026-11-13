@@ -232,3 +232,15 @@ test('a real-world calendar grid starts on Sunday', () => {
   assert.equal(CalDate.gridFirst(fantasy), 0);
   assert.equal(CalDate.gridWeekdays(fantasy)[0].name, 'Monday');
 });
+
+// The month roll draws one week row for two months only when the later month
+// starts in the column right after the earlier one's last day.
+test('CalDate.sharedRow: a row is shared only when the months join mid-week', () => {
+  const { CalDate } = loadCalendarMath();
+  const c = trackedRealWorld;
+  assert.equal(CalDate.sharedRow(c, { y: 2026, m: 9 }, { y: 2026, m: 10 }), true, 'September ends where October begins');
+  assert.equal(CalDate.sharedRow(c, { y: 2026, m: 1 }, { y: 2026, m: 2 }), false, 'February starts in the first column');
+  const withBand = { mode: 'fantasy', weekdays: realWorldWeekdays, months: [{ name: 'A', days: 10 }, { name: 'Fest', days: 1, is_intercalary: true }, { name: 'B', days: 10 }] };
+  assert.equal(CalDate.sharedRow(withBand, { y: 1, m: 1 }, { y: 1, m: 2 }), false, 'a band has rows of its own');
+  assert.equal(CalDate.sharedRow(withBand, { y: 1, m: 2 }, { y: 1, m: 3 }), false, 'nothing joins a band');
+});

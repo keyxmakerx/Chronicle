@@ -190,7 +190,10 @@
   var dwell = 0;            // the hover-prefetch timer
 
   function mainEl() { return document.getElementById('main-content'); }
-  function reduced() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  // Calm and Off both count as reduced, read at call time so a My view change applies at once.
+  // Off ends at the end state at once; Calm keeps the one cross-fade.
+  function plainMs() { var h = document.documentElement; return h.getAttribute('data-motion') === 'off' ? 0 : T.PLAIN; }
+  function reduced() { var h = document.documentElement; return !!(h.hasAttribute('data-motion') || h.hasAttribute('data-cz-reduce') || h.getAttribute('data-view-motion') === 'calm' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)); }
   function capable() { return !!(window.fetch && window.DOMParser && window.history && history.pushState && Element.prototype.animate); }
   function sameDoc(url) {
     try { return new URL(url, location.href).origin === location.origin; } catch (e) { return false; }
@@ -363,9 +366,9 @@
     }
 
     if (reduced() || fromHistory) {
-      anim(lift, [{ opacity: 1 }, { opacity: 0 }], { duration: T.PLAIN, fill: 'forwards' });
-      anim(main, [{ opacity: 0 }, { opacity: 1 }], { duration: T.PLAIN });
-      later(function () { stop(); }, T.PLAIN + 20);
+      anim(lift, [{ opacity: 1 }, { opacity: 0 }], { duration: plainMs(), fill: 'forwards' });
+      anim(main, [{ opacity: 0 }, { opacity: 1 }], { duration: plainMs() });
+      later(function () { stop(); }, plainMs() + 20);
       return;
     }
     assemble(main, lift, src, colours);
@@ -537,9 +540,9 @@
     if (card) card.focus({ preventScroll: true });
     var done = function () { stop(); S.phase = 'idle'; };
     if (reduced()) {
-      anim(lift, [{ opacity: 1 }, { opacity: 0 }], { duration: T.PLAIN, fill: 'forwards' });
-      anim(main, [{ opacity: 0 }, { opacity: 1 }], { duration: T.PLAIN });
-      later(done, T.PLAIN + 20);
+      anim(lift, [{ opacity: 1 }, { opacity: 0 }], { duration: plainMs(), fill: 'forwards' });
+      anim(main, [{ opacity: 0 }, { opacity: 1 }], { duration: plainMs() });
+      later(done, plainMs() + 20);
       return;
     }
     anim(lift, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.985)' }], { duration: T.CLOSE_OUT, easing: 'ease-in', fill: 'forwards' });
@@ -664,7 +667,7 @@
     var st = e.state || {};
     if (st.calv5List) {
       if (S.list && S.phase === 'open') close();
-      else if (S.phase === 'idle' && !document.querySelector('#main-content .calv5-cards, #main-content .calv5-empty')) {
+      else if (S.phase === 'idle' && !document.querySelector('#main-content .calv5-cards, #main-content [data-app-opening="empty"]')) {
         // The list kept for the way back is gone (another page came in
         // between): load it as a page.
         window.location.reload();

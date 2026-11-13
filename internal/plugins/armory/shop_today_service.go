@@ -84,6 +84,9 @@ type ShopTodayService interface {
 	// OnShelf reports whether a listing may be bought today: true for every
 	// good that is not flagged for today's shelf.
 	OnShelf(ctx context.Context, campaignID, shopEntityID string, relationID int, meta shopMeta) (bool, error)
+	// ShelfDayIndex is the day number today's shelf is set for, the same for
+	// every viewer. Counter rolls hold for one such day.
+	ShelfDayIndex(ctx context.Context, campaignID string) (int64, error)
 }
 
 type shopTodayService struct {
@@ -142,6 +145,14 @@ func (s *shopTodayService) OnShelf(ctx context.Context, campaignID, shopEntityID
 		}
 	}
 	return false, nil
+}
+
+func (s *shopTodayService) ShelfDayIndex(ctx context.Context, campaignID string) (int64, error) {
+	d, err := s.shelfDay(ctx, campaignID, shelfSystem)
+	if err != nil {
+		return 0, err
+	}
+	return d.Index, nil
 }
 
 // shelf works out the shelf with nothing filtered for the viewer; pool maps

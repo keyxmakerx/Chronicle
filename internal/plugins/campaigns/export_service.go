@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -108,6 +109,22 @@ type PostExporter interface {
 	ExportPosts(ctx context.Context, campaignID string, entitySlugLookup func(string) string) ([]ExportPost, error)
 }
 
+// RollTableExporter returns the campaign's rolling-tables document, or nil
+// when it has none.
+type RollTableExporter interface {
+	ExportRollTables(ctx context.Context, campaignID string) (json.RawMessage, error)
+}
+
+// QuestExporter gathers every quest sheet for a campaign export.
+type QuestExporter interface {
+	ExportQuests(ctx context.Context, campaignID string) ([]ExportQuest, error)
+}
+
+// RecipeExporter gathers crafting recipes for a campaign export.
+type RecipeExporter interface {
+	ExportRecipes(ctx context.Context, campaignID string) ([]ExportRecipe, error)
+}
+
 // --- Import adapter interfaces ---
 
 // EntityImporter creates entities from import data, recording their new
@@ -152,6 +169,23 @@ type GroupImporter interface {
 	ImportGroups(ctx context.Context, campaignID string, data []ExportGroup, report *ImportReport) error
 }
 
+// RollTableImporter restores the rolling-tables document.
+type RollTableImporter interface {
+	ImportRollTables(ctx context.Context, campaignID, userID string, data json.RawMessage, report *ImportReport) error
+}
+
+// QuestImporter restores quest sheets onto the imported pages, using idMap to
+// point their page, map and calendar-event references at the new campaign.
+type QuestImporter interface {
+	ImportQuests(ctx context.Context, campaignID, userID string, data []ExportQuest, idMap *IDMap, report *ImportReport) error
+}
+
+// RecipeImporter restores crafting recipes, using idMap for the item and
+// character pages they name.
+type RecipeImporter interface {
+	ImportRecipes(ctx context.Context, campaignID, userID string, data []ExportRecipe, idMap *IDMap, report *ImportReport) error
+}
+
 // PostImporter creates entity posts from import data.
 type PostImporter interface {
 	ImportPosts(ctx context.Context, campaignID, userID string, data []ExportPost, idMap *IDMap, report *ImportReport) error
@@ -175,6 +209,9 @@ type ExportImportService struct {
 	mediaBundler MediaBundler
 	groupExp    GroupExporter
 	postExp     PostExporter
+	tableExp    RollTableExporter
+	questExp    QuestExporter
+	recipeExp   RecipeExporter
 
 	// Import adapters.
 	entityImp   EntityImporter
@@ -186,6 +223,9 @@ type ExportImportService struct {
 	addonImp    AddonImporter
 	groupImp    GroupImporter
 	postImp     PostImporter
+	tableImp    RollTableImporter
+	questImp    QuestImporter
+	recipeImp   RecipeImporter
 	mediaImp    MediaImporter
 }
 
@@ -260,6 +300,24 @@ func (s *ExportImportService) SetPostExporter(e PostExporter) { s.postExp = e }
 
 // SetPostImporter wires the post import adapter.
 func (s *ExportImportService) SetPostImporter(i PostImporter) { s.postImp = i }
+
+// SetRollTableExporter wires the rolling-tables export adapter.
+func (s *ExportImportService) SetRollTableExporter(e RollTableExporter) { s.tableExp = e }
+
+// SetRollTableImporter wires the rolling-tables import adapter.
+func (s *ExportImportService) SetRollTableImporter(i RollTableImporter) { s.tableImp = i }
+
+// SetQuestExporter wires the quest sheet export adapter.
+func (s *ExportImportService) SetQuestExporter(e QuestExporter) { s.questExp = e }
+
+// SetQuestImporter wires the quest sheet import adapter.
+func (s *ExportImportService) SetQuestImporter(i QuestImporter) { s.questImp = i }
+
+// SetRecipeExporter wires the crafting recipe export adapter.
+func (s *ExportImportService) SetRecipeExporter(e RecipeExporter) { s.recipeExp = e }
+
+// SetRecipeImporter wires the crafting recipe import adapter.
+func (s *ExportImportService) SetRecipeImporter(i RecipeImporter) { s.recipeImp = i }
 
 // SetMediaImporter wires the media import adapter.
 func (s *ExportImportService) SetMediaImporter(i MediaImporter) { s.mediaImp = i }
@@ -414,6 +472,31 @@ func (s *ExportImportService) Export(ctx context.Context, campaignID string) (*C
 		}
 	}
 
+	if s.tableExp != nil {
+		raw, err := s.tableExp.ExportRollTables(ctx, campaignID)
+		if err != nil {
+			slog.Warn("export rolling tables skipped", slog.Any("error", err))
+		} else {
+			export.RollTables = raw
+		}
+	}
+	if s.questExp != nil {
+		quests, err := s.questExp.ExportQuests(ctx, campaignID)
+		if err != nil {
+			slog.Warn("export quest sheets skipped", slog.Any("error", err))
+		} else {
+			export.Quests = quests
+		}
+	}
+	if s.recipeExp != nil {
+		recipes, err := s.recipeExp.ExportRecipes(ctx, campaignID)
+		if err != nil {
+			slog.Warn("export crafting recipes skipped", slog.Any("error", err))
+		} else {
+			export.Recipes = recipes
+		}
+	}
+
 	return export, nil
 }
 
@@ -449,12 +532,9 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 	normalizeImportIcons(data, report)
 
 	if len(data.Campaign.DashboardLayout) > 0 {
-		var dashLayout DashboardLayout
-		if err := json.Unmarshal(data.Campaign.DashboardLayout, &dashLayout); err == nil {
-			if err := s.campaigns.UpdateDashboardLayout(ctx, campaignID, &dashLayout); err != nil {
-				slog.Warn("import dashboard layout failed", slog.Any("error", err))
-				report.Fail("campaign", "dashboard layout", data.Campaign.Name, apperror.SafeMessage(err))
-			}
+		if err := s.importDashboardLayout(ctx, campaignID, data.Campaign.DashboardLayout); err != nil {
+			slog.Warn("import dashboard layout failed", slog.Any("error", err))
+			report.Fail("campaign", "dashboard layout", data.Campaign.Name, apperror.SafeMessage(err))
 		}
 	}
 
@@ -578,6 +658,30 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		if err := s.postImp.ImportPosts(ctx, campaignID, userID, data.Posts, idMap, report); err != nil {
 			slog.Warn("import posts failed", slog.Any("error", err))
 			report.Fail("posts", "post", "", apperror.SafeMessage(err))
+		}
+	}
+
+	if s.tableImp != nil && len(data.RollTables) > 0 {
+		if err := s.tableImp.ImportRollTables(ctx, campaignID, userID, data.RollTables, report); err != nil {
+			slog.Warn("import rolling tables failed", slog.Any("error", err))
+			report.Fail(SectionRollTables, KindRollTables, "", apperror.SafeMessage(err))
+		}
+	}
+
+	// Recipes name Armory item and character pages, so they follow the pages.
+	if s.recipeImp != nil && len(data.Recipes) > 0 {
+		if err := s.recipeImp.ImportRecipes(ctx, campaignID, userID, data.Recipes, idMap, report); err != nil {
+			slog.Warn("import crafting recipes failed", slog.Any("error", err))
+			report.Fail(SectionRecipes, KindRecipe, "", apperror.SafeMessage(err))
+		}
+	}
+
+	// Quest sheets name pages, maps and the due-date calendar events, so they
+	// come after all three.
+	if s.questImp != nil && len(data.Quests) > 0 {
+		if err := s.questImp.ImportQuests(ctx, campaignID, userID, data.Quests, idMap, report); err != nil {
+			slog.Warn("import quest sheets failed", slog.Any("error", err))
+			report.Fail(SectionQuests, KindQuest, "", apperror.SafeMessage(err))
 		}
 	}
 
@@ -705,4 +809,39 @@ func ptrToString(s *string) string {
 		return *s
 	}
 	return ""
+}
+
+// campaignLinkRe matches "/campaigns/<id>" inside a saved home.
+var campaignLinkRe = regexp.MustCompile(`(/campaigns/)[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+
+// importDashboardLayout saves an exported campaign home. The column holds
+// either one layout or the role-keyed shape; reading the second as the first
+// succeeds with no rows and would blank every home, so the keyed shape is
+// tried first and each role's layout is validated like a Customizer save.
+func (s *ExportImportService) importDashboardLayout(ctx context.Context, campaignID string, raw json.RawMessage) error {
+	// The default home links into its own campaign; a copy must link to
+	// itself, not to the campaign it was exported from.
+	raw = campaignLinkRe.ReplaceAll(raw, []byte("${1}"+campaignID))
+	var roles RoleDashboardLayouts
+	if err := json.Unmarshal(raw, &roles); err == nil && !roles.isEmpty() {
+		for _, l := range []*DashboardLayout{roles.Default, roles.Player, roles.Scribe, roles.Director, roles.Guest} {
+			if l == nil {
+				continue
+			}
+			if err := validateDashboardLayout(ctx, campaignID, l); err != nil {
+				return err
+			}
+		}
+		out, err := json.Marshal(&roles)
+		if err != nil {
+			return fmt.Errorf("marshaling imported home layouts: %w", err)
+		}
+		str := string(out)
+		return s.campaigns.UpdateDashboardLayoutRaw(ctx, campaignID, &str)
+	}
+	var single DashboardLayout
+	if err := json.Unmarshal(raw, &single); err != nil {
+		return nil
+	}
+	return s.campaigns.UpdateDashboardLayout(ctx, campaignID, &single)
 }

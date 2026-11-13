@@ -3,9 +3,11 @@
 //
 // An encounter belongs to one page. It names the heroes it was built for and
 // one row per creature: which creature page, how many, its initiative group
-// and how it starts the fight (seen, hidden or arriving later). Everything
-// here is the DM's: no route answers a viewer below Owner visibility, so a
-// planned ambush never reaches a player.
+// and how it starts the fight (seen, hidden or arriving later). A scene is an
+// encounter with things to show instead of creatures. Planning is the DM's:
+// no planning route answers a viewer below Owner visibility, so a planned
+// ambush never reaches a player. What a running scene shows is the one thing
+// that does, and only once the DM presses Show.
 package encounters
 
 import "embed"

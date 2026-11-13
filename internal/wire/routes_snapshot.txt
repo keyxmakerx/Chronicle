@@ -75,6 +75,11 @@ GET	/admin/database	site-admin	plugins/admin.(*Handler).Database	plugins/auth.Re
 POST	/admin/database/migrations/apply	site-admin	plugins/admin.(*Handler).ApplyMigrationsAPI	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 GET	/admin/database/schema	site-admin	plugins/admin.(*Handler).DatabaseSchemaAPI	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/database/status	site-admin	plugins/admin.(*Handler).DatabaseStatusAPI	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+GET	/admin/design-gallery	site-admin	plugins/designs.(*GalleryHandler).AdminPage	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/design-gallery/:gid/approve	site-admin	plugins/designs.(*GalleryHandler).Approve	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/design-gallery/:gid/reject	site-admin	plugins/designs.(*GalleryHandler).Reject	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/design-gallery/:gid/remove	site-admin	plugins/designs.(*GalleryHandler).Remove	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+GET	/admin/design-gallery/entries	site-admin	plugins/designs.(*GalleryHandler).AdminEntries	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/design-lab	site-admin	plugins/designlab.(*Handler).DesignLab	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/diagnostics	site-admin	systems.(*SystemHandler).OperatorDiagnosticsAPI	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/diagnostics/workspace	site-admin	plugins/admin.(*Handler).DiagnosticsWorkspace	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
@@ -131,6 +136,7 @@ POST	/admin/packages/settings	site-admin	plugins/packages.(*Handler).SaveSecurit
 POST	/admin/release-notice/later	site-admin	plugins/admin.(*Handler).ReleaseNoticeLater	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/restore	site-admin	plugins/restore.(*Handler).Page	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/restore/run	site-admin	plugins/restore.(*Handler).Run	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth > middleware.RateLimit
+GET	/admin/restore/status	site-admin	plugins/restore.(*Handler).Status	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/security	site-admin	plugins/admin.(*Handler).Security	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/security/registration	site-admin	plugins/admin.(*Handler).UpdateRegistrationMode	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 DELETE	/admin/security/sessions/:hash	site-admin	plugins/admin.(*Handler).TerminateSession	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
@@ -141,6 +147,7 @@ PUT	/admin/security/users/:id/disable	site-admin	plugins/admin.(*Handler).Disabl
 PUT	/admin/security/users/:id/enable	site-admin	plugins/admin.(*Handler).EnableUser	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 POST	/admin/security/users/:id/force-logout	site-admin	plugins/admin.(*Handler).ForceLogoutUser	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 PUT	/admin/security/users/:id/two-factor/off	site-admin	plugins/admin.(*Handler).DisableTwoFactor	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
+POST	/admin/security/visitor-addresses	site-admin	plugins/admin.(*Handler).SaveVisitorAddresses	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 GET	/admin/site-look	site-admin	plugins/admin.(*Handler).SiteLook	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 POST	/admin/site-look	site-admin	plugins/admin.(*Handler).SaveSiteLook	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > github.com/labstack/echo/v5/middleware.BodyLimitConfig.ToMiddleware
 GET	/admin/smtp	site-admin	plugins/smtp.(*Handler).Settings	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
@@ -493,6 +500,8 @@ GET	/campaigns/:id/armory/characters/:eid/history	session	plugins/armory.(*Stash
 POST	/campaigns/:id/armory/characters/:eid/items/:iid/place	session	plugins/armory.(*StashHandler).SetPlace	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/armory/characters/:eid/items/:iid/share	session	plugins/armory.(*StashHandler).ShareBox	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 POST	/campaigns/:id/armory/characters/:eid/items/:iid/share	session	plugins/armory.(*StashHandler).Share	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+POST	/campaigns/:id/armory/characters/:eid/log	session	plugins/armory.(*StashHandler).AddLogNote	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+POST	/campaigns/:id/armory/characters/:eid/log/:nid/delete	session	plugins/armory.(*StashHandler).DeleteLogNote	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/armory/characters/:eid/panel	session	plugins/armory.(*StashHandler).CharacterPanel	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/armory/count	public-capable	plugins/armory.(*Handler).CountAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/armory/downtime	session	plugins/armory.(*StashHandler).SetDowntime	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
@@ -519,8 +528,12 @@ POST	/campaigns/:id/armory/purchase-requests/:rid/withdraw	session	plugins/armor
 POST	/campaigns/:id/armory/shops/:eid/buy	session	plugins/armory.(*ShopBuyHandler).Buy	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/armory/shops/:eid/buyers	session	plugins/armory.(*ShopBuyHandler).Buyers	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/armory/shops/:eid/front	session	plugins/armory.(*ShopStreetHandler).PutFront	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/armory/shops/:eid/rolls	session	plugins/armory.(*ShopRollHandler).Rolls	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+POST	/campaigns/:id/armory/shops/:eid/rolls	session	plugins/armory.(*ShopRollHandler).Roll	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/armory/shops/:eid/room	public-capable	plugins/armory.(*ShopRoomHandler).Get	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 PUT	/campaigns/:id/armory/shops/:eid/room	session	plugins/armory.(*ShopRoomHandler).Put	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/armory/shops/:eid/secrets	session	plugins/armory.(*ShopRollHandler).Secrets	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/armory/shops/:eid/secrets/:rel	session	plugins/armory.(*ShopRollHandler).PutSecret	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/armory/shops/:eid/today	public-capable	plugins/armory.(*ShopTodayHandler).Get	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 PUT	/campaigns/:id/armory/shops/:eid/today	session	plugins/armory.(*ShopTodayHandler).Put	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/armory/shops/:eid/transactions	session	plugins/armory.(*TransactionHandler).ListShopTransactions	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
@@ -534,6 +547,7 @@ POST	/campaigns/:id/armory/stashes/:sid/items	session	plugins/armory.(*StashHand
 PUT	/campaigns/:id/armory/stashes/:sid/viewers	session	plugins/armory.(*StashHandler).SetViewers	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/armory/transactions	session	plugins/armory.(*TransactionHandler).ListTransactions	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 POST	/campaigns/:id/armory/transactions	session	plugins/armory.(*TransactionHandler).CreateTransaction	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/at-a-glance	public-capable	app.(*atAGlanceHandler).Show	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/availability	session	plugins/sessions.(*Handler).ShowAvailability	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/availability/answers	session	plugins/sessions.(*Handler).AvailabilityAnswersAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/availability/away	session	plugins/sessions.(*Handler).MarkAwayAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
@@ -736,6 +750,32 @@ DELETE	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).Rese
 GET	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).GetDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).UpdateDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/default-visibility	session	plugins/campaigns.(*Handler).UpdateDefaultVisibilityAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs	session	plugins/designs.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs	session	plugins/designs.(*Handler).Save	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/designs/:did	session	plugins/designs.(*Handler).Delete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/:did	session	plugins/designs.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PATCH	/campaigns/:id/designs/:did	session	plugins/designs.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/:did/gallery	session	plugins/designs.(*GalleryHandler).Publish	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/designs/:did/gallery	session	plugins/designs.(*GalleryHandler).Republish	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/designs/:did/share	session	plugins/designs.(*Handler).StopSharing	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/:did/share	session	plugins/designs.(*Handler).ShareState	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/designs/:did/share/link	session	plugins/designs.(*Handler).SetLink	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/:did/share/owners	session	plugins/designs.(*Handler).AddOwner	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/designs/:did/share/owners/:uid	session	plugins/designs.(*Handler).RemoveOwner	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/:did/suggestion	session	plugins/designs.(*Handler).Suggest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/code/preview	session	plugins/designs.(*Handler).PreviewCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/code/take	session	plugins/designs.(*Handler).TakeCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/gallery	session	plugins/designs.(*GalleryHandler).Browse	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/designs/gallery/:gid	session	plugins/designs.(*GalleryHandler).Unpublish	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/gallery/:gid/copy	session	plugins/designs.(*GalleryHandler).Copy	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/gallery/:gid/report	session	plugins/designs.(*GalleryHandler).Report	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/gallery/mine	session	plugins/designs.(*GalleryHandler).Mine	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/owners	session	plugins/designs.(*Handler).SearchOwners	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/package	session	plugins/designs.(*Handler).Package	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/package/:pid/copy	session	plugins/designs.(*Handler).CopyPackage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/shared-with-me	session	plugins/designs.(*Handler).SharedWithMe	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/designs/shared/:did/preview	session	plugins/designs.(*Handler).PreviewShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/designs/shared/:did/take	session	plugins/designs.(*Handler).TakeShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dm-grants	session	plugins/campaigns.(*Handler).GetDmGrantsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/dm-grants	session	plugins/campaigns.(*Handler).UpdateDmGrantsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dm-screen	session	plugins/dmscreen.(*Handler).Show	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
@@ -753,6 +793,7 @@ DELETE	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).End
 GET	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).Current	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).Start	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 PUT	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).Save	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+POST	/campaigns/:id/encounter-run/show	session	plugins/encounters.(*RunHandler).Show	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 DELETE	/campaigns/:id/encounters/:encid	session	plugins/encounters.(*Handler).Delete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/encounters/:encid	session	plugins/encounters.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 PUT	/campaigns/:id/encounters/:encid	session	plugins/encounters.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
@@ -854,6 +895,7 @@ POST	/campaigns/:id/entities/quick-create	session	plugins/entities.(*Handler).Qu
 GET	/campaigns/:id/entities/search	public-capable	plugins/entities.(*Handler).SearchAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/entities/types	session	plugins/entities.(*Handler).EntityTypesAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/entities/viewable	public-capable	plugins/entities.(*Handler).ViewableIDsAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/entity-list	public-capable	plugins/entities.(*EntityListHandler).Widget	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/entity-names	session	plugins/entities.(*Handler).EntityNamesAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/entity-types	session	plugins/entities.(*Handler).EntityTypesPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/entity-types	session	plugins/entities.(*Handler).CreateEntityType	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
@@ -916,6 +958,7 @@ GET	/campaigns/:id/foundry/players	session	plugins/syncapi.(*SyncHistoryHandler)
 GET	/campaigns/:id/foundry/problems	session	plugins/syncapi.(*SyncHistoryHandler).ProblemsFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/foundry/scenes	session	plugins/syncapi.(*SyncHistoryHandler).ScenesJSON	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/game-nights	public-capable	plugins/sessions.(*Handler).GameNightsLink	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/getting-started	session	plugins/sessions.(*Handler).GettingStartedBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/groups	session	plugins/campaigns.(*Handler).ListGroupsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/groups	session	plugins/campaigns.(*Handler).CreateGroupAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/groups/:gid	session	plugins/campaigns.(*Handler).DeleteGroupAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -927,6 +970,8 @@ GET	/campaigns/:id/groups/manage	session	plugins/campaigns.(*Handler).GroupsPage
 GET	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Card	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
 DELETE	/campaigns/:id/guest-codes/:gcid	session	plugins/campaigns.(*GuestCodeHandler).Remove	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/guest-codes/:gcid/end	session	plugins/campaigns.(*GuestCodeHandler).EndVisit	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/guest-codes/:gcid/player	session	plugins/campaigns.(*GuestCodeHandler).MakePlayer	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/handover-setting	session	plugins/campaigns.(*Handler).UpdateHandoverSettingAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew	session	plugins/homebrew.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/catalog	session	plugins/homebrew.(*Handler).Catalog	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -948,6 +993,7 @@ GET	/campaigns/:id/homebrew/words	session	plugins/fieldrules.(*Handler).ListWord
 POST	/campaigns/:id/homebrew/words	session	plugins/fieldrules.(*Handler).SaveWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 DELETE	/campaigns/:id/homebrew/words/:wid	session	plugins/fieldrules.(*Handler).DeleteWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 PUT	/campaigns/:id/homebrew/words/:wid	session	plugins/fieldrules.(*Handler).SaveWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+GET	/campaigns/:id/house-rules	session	systems.(*SystemHandler).HouseRulesBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/import	session	plugins/vault_import.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/import/markdown/dropzone	session	plugins/vault_import.(*Handler).DropZone	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/import/markdown/jobs/:job	session	plugins/vault_import.(*Handler).Job	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -963,6 +1009,7 @@ POST	/campaigns/:id/join-code	session	plugins/campaigns.(*Handler).GenerateJoinC
 GET	/campaigns/:id/journal	session	widgets/notes.(*Handler).ShowJournal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/journal/:noteId	session	widgets/notes.(*Handler).ShowJournal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/last-night	public-capable	app.(*lastNightHandler).Show	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/last-time	session	plugins/sessions.(*Handler).LastTimeBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/layers/:lid	session	plugins/transformations.(*Handler).Remove	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon
 GET	/campaigns/:id/layout-presets	session	plugins/entities.(*LayoutPresetHandler).ListAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/layout-presets	session	plugins/entities.(*LayoutPresetHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1085,6 +1132,7 @@ GET	/campaigns/:id/pages/:eid/layers	session	plugins/transformations.(*Handler).
 POST	/campaigns/:id/pages/:eid/layers	session	plugins/transformations.(*Handler).Add	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon
 GET	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+GET	/campaigns/:id/party	public-capable	plugins/entities.(*Handler).PartyBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/pinned-pages	public-capable	plugins/entities.(*PagePinHandler).Widget	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 DELETE	/campaigns/:id/pinned-pages/everyone/:eid	session	plugins/entities.(*PagePinHandler).UnpinShared	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 DELETE	/campaigns/:id/pinned-pages/mine/:eid	session	plugins/entities.(*PagePinHandler).UnpinOwn	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1150,6 +1198,7 @@ PUT	/campaigns/:id/sidebar-nodes/:nid/reorder	session	plugins/entities.(*Handler
 PUT	/campaigns/:id/sidebar-order	session	plugins/entities.(*Handler).SetSidebarOrderAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/sidebar-order/move	session	plugins/entities.(*Handler).MoveSidebarRowAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/sidebar/drill/:slug	public-capable	plugins/campaigns.(*Handler).SidebarDrill	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/start-here	public-capable	plugins/entities.(*Handler).StartHere	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/sync-history	session	plugins/syncapi.(*SyncHistoryHandler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/sync-history/flow/:eventID	session	plugins/syncapi.(*SyncHistoryHandler).Flow	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/sync-status	session	plugins/syncapi.(*Handler).SyncStatusEmbed	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1189,6 +1238,7 @@ GET	/campaigns/:id/systems/custom	session	systems.(*CampaignSystemHandler).GetCu
 POST	/campaigns/:id/systems/preview	session	systems.(*CampaignSystemHandler).PreviewSystem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/systems/status	session	systems.(*CampaignSystemHandler).SystemStatus	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/systems/upload	session	systems.(*CampaignSystemHandler).UploadSystem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+GET	/campaigns/:id/table/shown	session	plugins/encounters.(*RunHandler).Shown	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/tags	public-capable	widgets/tags.(*Handler).ListTags	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/tags	session	widgets/tags.(*Handler).CreateTag	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/tags/:tagId	session	widgets/tags.(*Handler).DeleteTag	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1249,16 +1299,20 @@ POST	/campaigns/:id/trash/:eid/restore	session	plugins/entities.(*PageSafetyHand
 POST	/campaigns/:id/trash/:kind/:tid/restore	session	plugins/entities.(*PageSafetyHandler).RestoreOtherFromTrash	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/unarchive	session	plugins/campaigns.(*Handler).UnarchiveCampaign	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccessEvenIfArchived > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/welcome-message	session	plugins/campaigns.(*Handler).UpdateWelcomeMessageAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/when-we-play	session	plugins/sessions.(*Handler).WhenWePlayBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/worldbuilding-prompts	session	plugins/entities.(*WorldbuildingPromptHandler).ListAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/worldbuilding-prompts	session	plugins/entities.(*WorldbuildingPromptHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/worldbuilding-prompts/:pid	session	plugins/entities.(*WorldbuildingPromptHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/worldbuilding-prompts/:pid	session	plugins/entities.(*WorldbuildingPromptHandler).UpdateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/your-hero	public-capable	plugins/entities.(*Handler).YourHeroBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/import	session	plugins/campaigns.(*ExportHandler).ImportCampaignForm	plugins/auth.RequireAuth
 POST	/campaigns/import	session	plugins/campaigns.(*ExportHandler).ImportCampaign	plugins/auth.RequireAuth > middleware.RateLimit
 GET	/campaigns/new	session	plugins/campaigns.(*Handler).NewForm	plugins/auth.RequireAuth
 GET	/campaigns/picker	session	plugins/campaigns.(*Handler).Picker	plugins/auth.RequireAuth
 POST	/csp-report	none	middleware.CSPReportHandler	middleware.RateLimit
 GET	/dashboard	session	app.(*App).RegisterRoutes	plugins/auth.RequireAuth
+GET	/designs/link/:token	session	plugins/designs.(*Handler).Link	plugins/auth.RequireAuth
+POST	/designs/link/:token/take	session	plugins/designs.(*Handler).TakeLink	plugins/auth.RequireAuth
 GET	/embed/campaigns/:id/notes/:mode	none	widgets/notes.(*AppGrantHandler).ShowEmbed	-
 GET	/extensions/:extID/assets/*	none	extensions.(*Handler).ServeAsset	-
 GET	/forgot-password	none	plugins/auth.(*Handler).ForgotPasswordForm	-

@@ -49,6 +49,11 @@ func (s aiShopLooksAdapter) SaveRoom(ctx context.Context, campaignID, shopID str
 	return err
 }
 
+// CounterStarter is the armory's starter, so the AI edits what the widget draws.
+func (aiShopLooksAdapter) CounterStarter(roomType string) json.RawMessage {
+	return armory.ShopRoomCounterStarter(roomType)
+}
+
 func (s aiShopLooksAdapter) Front(ctx context.Context, campaignID, shopID string, _ records.Actor) (json.RawMessage, bool, error) {
 	return s.fronts.Front(ctx, campaignID, shopID)
 }

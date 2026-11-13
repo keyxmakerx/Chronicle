@@ -58,12 +58,12 @@ func TestAIKindsPromptOrder(t *testing.T) {
 			name: "everything wired",
 			deps: aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
 				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}},
-			want: "calendar event weather roll_night moon table shop-stock carried-item pin map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order material recipe drops bench shop-room storefront page-map generator",
+			want: "calendar event weather roll_night moon table shop-stock carried-item pin map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order home material recipe drops bench shop-room storefront page-map generator",
 		},
 		{
 			name: "optional plugins degraded",
 			deps: aiDeps{Health: degraded},
-			want: "calendar event weather shop-stock carried-item pin map note house-rule system-entry category-field folder game-night tag menu-order generator",
+			want: "calendar event weather shop-stock carried-item pin map note house-rule system-entry category-field folder game-night tag menu-order home generator",
 		},
 	}
 	for _, tt := range tests {

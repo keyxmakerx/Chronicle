@@ -129,6 +129,12 @@ func panelURL(campaignID, characterID string) string {
 	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/panel"
 }
 
+// benchPanelURL is the panel route for a page that carries the bench, so the
+// panel's own reloads keep it.
+func benchPanelURL(campaignID, characterID string) string {
+	return panelURL(campaignID, characterID) + "?bench=1"
+}
+
 func characterHistoryURL(campaignID, characterID string) string {
 	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/history"
 }
@@ -305,4 +311,23 @@ func boolStr(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func logURL(campaignID, characterID string) string {
+	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/log"
+}
+
+func logDeleteURL(campaignID, characterID string, id int64) string {
+	return logURL(campaignID, characterID) + "/" + strconv.FormatInt(id, 10) + "/delete"
+}
+
+// logEntryClass marks a written line; a Director-only line takes the amber rule.
+func logEntryClass(e LogEntry) string {
+	switch {
+	case e.DirectorOnly:
+		return "hl-ev hl-note hl-dm-note"
+	case e.Note:
+		return "hl-ev hl-note"
+	}
+	return "hl-ev"
 }

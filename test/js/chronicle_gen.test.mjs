@@ -43,12 +43,28 @@ test('calendar maths mirrors the Go model (AbsoluteDay, weekday column, round tr
   const c = G.cal.from(h);
   assert.equal(c.abs(1523, 1, 1), 556277);
   assert.equal(c.abs(1524, 10, 2), 556855); // the leap day of Midsummer in a leap year
-  assert.equal(c.weekday(1523, 3, 15), 1);
+  // The preset starts each month on the first weekday: day 15 is the fifth of a ten-day week.
+  assert.equal(c.weekday(1523, 3, 15), 4);
+  assert.equal(c.weekday(1523, 2, 1), -1); // Midwinter, a festival day, is in no week
   for (let n = c.abs(1522, 1, 1); n < c.abs(1530, 1, 1); n++) {
     const d = c.fromAbs(n);
     assert.equal(c.abs(d.year, d.month, d.day), n);
     assert.ok(c.valid(d.year, d.month, d.day));
   }
+});
+
+test('a month longer than 99 days keeps its days in its own season', () => {
+  // Mirrors TestSeasonContainsDateLongMonths in the calendar plugin.
+  const c = G.cal.from({
+    months: [{ name: 'First', days: 120 }, { name: 'Second', days: 120 }],
+    weekdays: [{ name: 'A' }, { name: 'B' }],
+    seasons: [
+      { name: 'Dry', start_month: 1, start_day: 1, end_month: 1, end_day: 120 },
+      { name: 'Wet', start_month: 2, start_day: 1, end_month: 2, end_day: 120 },
+    ],
+  });
+  assert.equal(c.seasonAt(1, 120).name, 'Dry');
+  assert.equal(c.seasonAt(2, 5).name, 'Wet');
 });
 
 test('the calendar, names and moons generators are deterministic by seed, and differ across seeds', () => {
@@ -235,4 +251,16 @@ test('fromSky: an out-of-range sky input is clamped, not rejected or crashed on'
   assert.ok(out.extras.sky.suns <= 3 && out.extras.sky.suns >= 1);
   assert.equal(out.preset.calendar.moons.length, 0);
   assert.ok(out.extras.sky.planets <= 7);
+});
+
+test('the harptos-like recipe starts each month on a new week, and the other recipes keep continuous weeks', () => {
+  const hl = G.calendar.generate({ seed: 's1', recipe: 'calendar.harptos-like' });
+  assert.equal(hl.preset.calendar.month_starts_new_week, true);
+  assert.ok(hl.extras.validation.ok, JSON.stringify(hl.extras.validation.errors));
+  const c = G.cal.from(hl.preset);
+  const fest = hl.preset.calendar.months.findIndex((m) => m.is_intercalary) + 1;
+  assert.equal(c.weekday(1500, fest, 1), -1);
+  assert.equal(c.weekSpan(1500, fest, 1)[0], c.weekSpan(1500, fest, 1)[1]);
+  const wild = G.calendar.generate({ seed: 's1', recipe: 'calendar.wild' });
+  assert.equal(wild.preset.calendar.month_starts_new_week, undefined);
 });

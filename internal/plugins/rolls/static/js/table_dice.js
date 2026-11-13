@@ -85,7 +85,8 @@
         el.innerHTML = svg(d.sides, m === 'calm' ? d.value : '');
         tray.appendChild(el);
         var text = el.querySelector('text');
-        var dur = 820 + i * 50;
+        // Under half a second: a throw plays on every roll.
+        var dur = 440 + Math.min(i, 4) * 10;
         longest = Math.max(longest, m === 'calm' ? 200 : dur);
         if (m === 'calm') {
           el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });

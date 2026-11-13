@@ -2764,6 +2764,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 		}
 		if m.Ref != "" {
 			refs[m.Ref] = newMap.ID
+			idMap.MapIDs[m.Ref] = newMap.ID
 		}
 
 		// Create layers first (needed for drawing/token references).

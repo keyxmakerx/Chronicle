@@ -184,3 +184,29 @@ func TestDefaultRealLifeSeasonsContainsDate(t *testing.T) {
 		}
 	}
 }
+
+// TestSeasonContainsDateLongMonths pins that a month longer than 99 days
+// keeps its days inside its own season: a late day of one month must not
+// compare as later than an early day of the next.
+func TestSeasonContainsDateLongMonths(t *testing.T) {
+	dry := Season{Name: "Dry", StartMonth: 1, StartDay: 1, EndMonth: 1, EndDay: 120}
+	wet := Season{Name: "Wet", StartMonth: 2, StartDay: 1, EndMonth: 2, EndDay: 120}
+	tests := []struct {
+		month, day int
+		dry, wet   bool
+	}{
+		{1, 1, true, false},
+		{1, 120, true, false},
+		{2, 1, false, true},
+		{2, 5, false, true},
+		{2, 120, false, true},
+	}
+	for _, tt := range tests {
+		if got := dry.ContainsDate(tt.month, tt.day); got != tt.dry {
+			t.Errorf("Dry.ContainsDate(%d, %d) = %v, want %v", tt.month, tt.day, got, tt.dry)
+		}
+		if got := wet.ContainsDate(tt.month, tt.day); got != tt.wet {
+			t.Errorf("Wet.ContainsDate(%d, %d) = %v, want %v", tt.month, tt.day, got, tt.wet)
+		}
+	}
+}

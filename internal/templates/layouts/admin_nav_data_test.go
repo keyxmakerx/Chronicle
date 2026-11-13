@@ -17,6 +17,7 @@ func TestAdminNavCurrent(t *testing.T) {
 		{"/admin/users", "community", "/admin/users"},
 		{"/admin/users/abc", "community", "/admin/users"},
 		{"/admin/campaigns", "community", "/admin/campaigns"},
+		{"/admin/design-gallery", "community", "/admin/design-gallery"},
 		{"/admin/packages", "packages", "/admin/packages"},
 		{"/admin/packages/pending", "packages", "/admin/packages"},
 		{"/admin/packages/settings", "packages", "/admin/packages/settings"},

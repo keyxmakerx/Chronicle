@@ -164,16 +164,59 @@
   .tt-isl-detail { left: 10px; right: 10px !important; width: auto; }
 }
 
+/* ---------- Phone: the drawer is a sheet resting on the bottom edge ----------
+   The same drawer as above, set at the bottom instead of hanging from the
+   header. It is always as tall as the full height and moves by transform
+   only: Resting shows the grab line, Lifted about 60% of the screen, Full
+   everything under the header. html[data-tt-sheet] is set by table.js from
+   the same query it uses to build the sheet, so the two never disagree. */
+html[data-tt-sheet] { --tt-rest: calc(38px + env(safe-area-inset-bottom, 0px)); }
+html[data-tt-sheet] .tt-tab { display: none; }
+html[data-tt-sheet] #main-content { padding-bottom: var(--tt-rest); }
+html[data-tt-sheet] .jot-tab { bottom: calc(1.5rem + var(--tt-rest)); }
+.tt-drawer.tt-sheet { position: fixed; top: auto; bottom: 0; left: 0; right: 0; max-width: none; margin: 0; height: calc(100dvh - 56px); max-height: none; z-index: 60;
+  border: 1px solid var(--color-border); border-bottom: 0; border-radius: 16px 16px 0 0; clip-path: none; box-shadow: var(--elev-dragged);
+  transform: translateY(calc(100% - var(--tt-rest))); transition: transform var(--dur-slide) var(--ease-slide); will-change: transform; animation: none; }
+.tt-sheet[data-h="lift"] { transform: translateY(calc(100% - 60dvh)); }
+.tt-sheet[data-h="full"] { transform: none; }
+.tt-sheet.tt-drag { transition: none; }
+.tt-sheet.tt-away { transform: translateY(100%); }
+[data-cz-kit="sharp"] .tt-sheet { border-radius: 0; border-color: var(--color-text-primary); }
+.tt-grab { position: relative; flex-shrink: 0; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 0 16px; border: 0; background: none; color: var(--color-text-body);
+  font: inherit; font-size: 13px; text-align: left; cursor: grab; touch-action: none; user-select: none; }
+.tt-sheet[data-h="rest"] .tt-grab { padding-bottom: env(safe-area-inset-bottom, 0px); }
+/* The press area reaches 6px above the line, so it answers over 44px. */
+.tt-grab::before { content: ""; position: absolute; left: 0; right: 0; top: -6px; height: 6px; }
+.tt-grip { position: absolute; left: 50%; top: 6px; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--color-border); }
+.tt-last { flex: 1; min-width: 0; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transform-origin: left center; color: var(--color-text-primary); }
+.tt-gn { margin-top: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--color-accent-fill, var(--color-accent)); color: var(--color-accent-on-fill, #fff); font-size: 11px; display: inline-grid; place-items: center; }
+.tt-gn[hidden] { display: none; }
+.tt-last.tt-grow { animation: tt-grow var(--dur-large) var(--ease-out); }
+.tt-sheetbody { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tt-sheet .tt-leaves { grid-template-columns: 1fr; padding: 0 8px 8px; }
+.tt-sheet .tt-leaf { display: none; border-radius: 12px !important; border-left: 1px solid var(--color-border) !important; max-height: none; }
+.tt-sheet .tt-leaf.tt-on-phone { display: flex; }
+.tt-sheet .tt-phone-sw { display: flex; gap: 2px; padding: 0 10px 6px; }
+.tt-sheet .tt-ptab { height: 44px; padding: 0 10px; border: 0; background: none; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-secondary); border-bottom: 1px solid var(--color-border); }
+.tt-sheet .tt-ptab[aria-pressed="true"] { color: var(--color-accent-link, var(--color-accent)); border-bottom-color: var(--color-accent); }
+.tt-sheet .tt-ltabs { display: none; }
+/* Lifted: the dice and the roll field only; the leaves and the log wait for Full. */
+.tt-sheet[data-h="lift"] :is(.tt-log, .tt-phone-sw) { display: none; }
+.tt-sheet[data-h="lift"] .tt-dhead h2 { visibility: hidden; }
+
 /* ---------- Motion: Calm fades in place, Off shows the end state ---------- */
 html[data-motion="calm"] .tt-drawer.tt-opening, html[data-motion="calm"] .tt-isl-detail.tt-opening { animation: tt-fade var(--dur-standard) linear; }
 html[data-motion="calm"] .tt-island { transform: none; opacity: 0; transition: opacity var(--dur-standard) linear; }
 html[data-motion="calm"] .tt-island.tt-in { opacity: 1; }
 html[data-motion="calm"] .tt-island.tt-out { transform: none; opacity: 0; }
 @keyframes tt-fade { from { opacity: 0; } to { opacity: 1; } }
-html[data-motion="off"] :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .tt-n) { animation: none !important; transition: none !important; }
+/* Calm: the sheet changes height at once and the new height fades in. */
+html[data-motion="calm"] .tt-sheet { transition: none; }
+html[data-motion="calm"] .tt-sheet.tt-fadein { animation: tt-fade var(--dur-standard) linear; }
+html[data-motion="off"] :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .tt-n, .tt-last) { animation: none !important; transition: none !important; }
 html[data-motion="off"] .tt-island { transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .tt-n) { animation: none !important; transition: none !important; }
+  :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .tt-n, .tt-last) { animation: none !important; transition: none !important; }
   .tt-island { transform: none; }
 }
 
@@ -181,4 +224,14 @@ html[data-motion="off"] .tt-island { transform: none; }
 @media (pointer: coarse) {
   :is(.tt-icon, .tt-quiet, .tt-dbtn, .tt-lpick, .tt-ptab, .tt-seg button, .tt-lmenu button, .tt-go, .tt-mode, .tt-field) { min-height: 44px; }
   .tt-icon { width: 44px; }
+  .tt-dbtn { min-width: 44px; }
 }
+
+/* Tonight: what the director has shown. A row is read, not pressed. */
+.tt-shown { padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+.tt-shead { display: flex; align-items: center; gap: 8px; }
+.tt-shead b { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--color-text-primary); font-size: 14px; }
+.tt-time { font-size: 12px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.tt-note { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--color-text-primary); overflow-wrap: anywhere; white-space: pre-line; }
+.tt-open { align-self: flex-start; display: inline-flex; align-items: center; text-decoration: none; }
+.tt-isl-detail .tt-note { max-width: 36ch; }

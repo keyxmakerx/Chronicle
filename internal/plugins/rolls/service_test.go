@@ -303,6 +303,22 @@ func TestLogFromAnotherPlugin(t *testing.T) {
 	}
 }
 
+// Record is Log that tells the caller which row its roll became.
+func TestRecordReturnsTheLoggedRollsID(t *testing.T) {
+	s, repo, pub := newTestService()
+	id, err := s.Record(context.Background(), "c1", LogInput{Source: SourceShop, RollerName: "Thorin", Label: "Haggle: Potion",
+		Formula: "1d20", Dice: []Die{{20, 18}}, Modifier: 2, Total: 20, Outcome: "20% off", From: "The Gilded Cup"})
+	if err != nil || id == "" {
+		t.Fatalf("id %q err %v", id, err)
+	}
+	if len(repo.rolls) != 1 || repo.rolls[0].ID != id || repo.rolls[0].Source != SourceShop || repo.rolls[0].Mode != ModePublic || len(pub.got) != 1 {
+		t.Fatalf("stored %+v sent %+v", repo.rolls, pub.got)
+	}
+	if _, err := s.Record(context.Background(), "c1", LogInput{Mode: "loud"}); err == nil {
+		t.Error("an unknown mode was recorded")
+	}
+}
+
 func TestSettings(t *testing.T) {
 	s, _, _ := newTestService()
 	ctx := context.Background()

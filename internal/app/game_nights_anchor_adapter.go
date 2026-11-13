@@ -7,6 +7,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 )
@@ -110,4 +111,26 @@ func (a *sessionsDefaultCalendarAdapter) DefaultCalendarID(ctx context.Context, 
 		return "", err
 	}
 	return cal.ID, nil
+}
+
+// armoryNightsAdapter satisfies armory.NightLister: a hero's log groups its
+// lines under the campaign's game nights that have a date and were not
+// cancelled.
+type armoryNightsAdapter struct {
+	svc sessions.SessionService
+}
+
+func (a *armoryNightsAdapter) Nights(ctx context.Context, campaignID string) ([]armory.Night, error) {
+	list, err := a.svc.ListSessions(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]armory.Night, 0, len(list))
+	for _, s := range list {
+		if s.Status == sessions.StatusCancelled || s.ScheduledDate == nil || *s.ScheduledDate == "" {
+			continue
+		}
+		out = append(out, armory.Night{ID: s.ID, Name: s.Name, Date: *s.ScheduledDate})
+	}
+	return out, nil
 }

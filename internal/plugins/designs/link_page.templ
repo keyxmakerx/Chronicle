@@ -1,0 +1,16 @@
+package designs
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// LinkPage is what a design link opens to. It holds no design data itself: the
+// design_library widget (static/js/widgets/design_library.js, loaded on sight)
+// asks the server for the preview, which answers only a signed-in campaign
+// owner, so the page cannot be used to learn whether a token is live.
+templ LinkPage(token string) {
+	@layouts.App("Shared design") {
+		<div class="max-w-xl mx-auto p-4" data-widget="design_library" data-token={ token }>
+			<h1 class="text-xl font-bold text-fg">A shared design</h1>
+			<p class="text-sm text-fg-secondary" role="status">Loading…</p>
+		</div>
+	}
+}

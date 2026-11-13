@@ -29,6 +29,7 @@ const (
 	EventTwoFactorFailed        = "login.two_factor_failed"
 	EventTwoFactorAdminOff      = "admin.two_factor_disabled"
 	EventProviderSaved          = "admin.sign_in_provider_saved"
+	EventVisitorAddressSaved    = "admin.visitor_address_saved"
 	EventSignInLinked           = "sign_in.linked"
 	EventSignInUnlinked         = "sign_in.unlinked"
 	EventGuestJoined            = "guest.joined"
@@ -59,12 +60,12 @@ type SecurityEvent struct {
 
 // SecurityStats holds aggregate statistics for the admin security dashboard.
 type SecurityStats struct {
-	TotalEvents        int `json:"totalEvents"`
-	FailedLogins24h    int `json:"failedLogins24h"`
+	TotalEvents         int `json:"totalEvents"`
+	FailedLogins24h     int `json:"failedLogins24h"`
 	SuccessfulLogins24h int `json:"successfulLogins24h"`
-	ActiveSessions     int `json:"activeSessions"`
-	DisabledUsers      int `json:"disabledUsers"`
-	UniqueIPs24h       int `json:"uniqueIps24h"`
+	ActiveSessions      int `json:"activeSessions"`
+	DisabledUsers       int `json:"disabledUsers"`
+	UniqueIPs24h        int `json:"uniqueIps24h"`
 }
 
 // EventTypeLabel returns a human-readable label for a security event type.
@@ -91,6 +92,7 @@ func EventTypeLabel(eventType string) string {
 		EventTwoFactorFailed:        "Wrong Two-factor Code",
 		EventTwoFactorAdminOff:      "Two-factor Switched Off by Admin",
 		EventProviderSaved:          "Sign-in Provider Changed",
+		EventVisitorAddressSaved:    "Visitor Address Setting Changed",
 		EventSignInLinked:           "Sign-in Linked",
 		EventSignInUnlinked:         "Sign-in Unlinked",
 		EventGuestJoined:            "Guest Joined",
@@ -130,6 +132,7 @@ func EventTypeIcon(eventType string) string {
 		EventTwoFactorFailed:        "fa-solid fa-triangle-exclamation text-red-500",
 		EventTwoFactorAdminOff:      "fa-solid fa-mobile-screen text-red-500",
 		EventProviderSaved:          "fa-solid fa-right-to-bracket text-purple-500",
+		EventVisitorAddressSaved:    "fa-solid fa-location-dot text-purple-500",
 		EventSignInLinked:           "fa-solid fa-link text-emerald-500",
 		EventSignInUnlinked:         "fa-solid fa-link-slash text-amber-500",
 		EventGuestJoined:            "fa-solid fa-ticket text-blue-500",
@@ -148,18 +151,19 @@ func EventTypeIcon(eventType string) string {
 // Tabs of the Sign-ins & sessions page. Each is a real link (?tab=…) so the
 // page works without JavaScript and under hx-boost.
 const (
-	SecurityTabOverview = "overview"
-	SecurityTabSessions = "sessions"
-	SecurityTabLog      = "log"
-	SecurityTabSignup   = "signup"
-	SecurityTabProvider = "provider"
+	SecurityTabOverview  = "overview"
+	SecurityTabSessions  = "sessions"
+	SecurityTabLog       = "log"
+	SecurityTabSignup    = "signup"
+	SecurityTabProvider  = "provider"
+	SecurityTabAddresses = "addresses"
 )
 
 // normalizeSecurityTab whitelists the ?tab= value; anything unknown falls back
 // to the overview so a hand-edited URL never renders a blank page.
 func normalizeSecurityTab(raw string) string {
 	switch raw {
-	case SecurityTabSessions, SecurityTabLog, SecurityTabSignup, SecurityTabProvider:
+	case SecurityTabSessions, SecurityTabLog, SecurityTabSignup, SecurityTabProvider, SecurityTabAddresses:
 		return raw
 	default:
 		return SecurityTabOverview

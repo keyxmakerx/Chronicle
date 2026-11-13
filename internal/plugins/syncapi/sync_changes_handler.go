@@ -86,13 +86,17 @@ func (h *SyncChangesHandler) ListChanges(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if since < pruned {
-		// The gap cannot be replayed. Hand back the head so the client can
-		// resume from it after its full resync.
-		head, err := h.repo.Head(ctx, campaignID)
-		if err != nil {
-			return err
-		}
+	head, err := h.repo.Head(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	// A cursor behind the watermark has a gap that cannot be replayed; one
+	// ahead of the head came from a feed that has since lost rows (a
+	// restored backup, a recreated campaign) and would otherwise wait
+	// forever for seqs that were never issued here. Either way the client
+	// resyncs and resumes from the head, which never sits below the
+	// watermark, so the very next read does not reset again.
+	if since < pruned || since > head {
 		return c.JSON(http.StatusOK, syncChangesResponse{Changes: []SyncChange{}, Next: head, ResetRequired: true, Types: recordedTypes})
 	}
 

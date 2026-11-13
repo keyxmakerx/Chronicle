@@ -682,6 +682,10 @@ templ structureEditorForm(cfg structureEditorConfig, csrfToken, formError string
 				</template>
 			</div>
 			<button type="button" class="btn sm quiet" @click="addWeekday()" x-bind:disabled="weekdays.length>=30">Add weekday</button>
+			<label class="calv5-toggle-row">
+				<input type="checkbox" x-model="newWeek"/>
+				<span><b>Each month starts a new week.</b> Festival days sit between weeks.</span>
+			</label>
 		</div>
 		<div class="calv5-bsec">
 			<h4>Leap rule</h4>

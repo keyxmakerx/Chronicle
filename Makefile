@@ -129,6 +129,12 @@ test-js: ## Run JS runtime tests (sidebar, availability, widgets — node --test
 test-e2e: ## Run Playwright browser tests (needs global playwright + chromium)
 	NODE_PATH="$${NODE_PATH:-$$(npm root -g)}" node --test test/e2e/*.spec.mjs
 
+# Starts the real binary on an EMPTIED scratch database (DB_NAME, default
+# chronicle_live) and runs the click-path checks in test/live against it.
+.PHONY: test-live
+test-live: ## Run the live checks against a scratch instance (needs MariaDB + Redis)
+	./tools/live-checks.sh
+
 # Crawls a RUNNING scratch instance (SMOKE_BASE, default localhost:8080) and
 # fails on any server error or page crash. It writes an account and a
 # campaign, so never point it at production.
@@ -159,6 +165,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: plugin-isolation";       ./tools/check-plugin-isolation.sh
 	@echo "==> guard: comment-clutter (self-test)"; ./tools/test-comment-clutter.sh
 	@echo "==> guard: comment-clutter";        ./tools/check-comment-clutter.sh
+	@echo "==> restore.sh self-test";          ./tools/test-restore-script.sh
 	@echo "==> guard: migration-immutability"; ./tools/check-migration-immutability.sh
 	@echo "==> guard: migration-numbers";     ./tools/check-migration-numbers.sh
 	@echo "==> guard: v2-motion-discipline";   ./tools/check-v2-motion-discipline.sh
@@ -253,6 +260,10 @@ docker-all-local: ## Start full stack from a LOCAL source build (chronicle:local
 # Same script CI runs. Uses its own compose project and throwaway secrets, and
 # deletes what it created; refuses to run beside a stack that uses the fixed
 # container names.
+.PHONY: player-crawl
+player-crawl: ## Seed hidden content in a scratch instance, walk it as player, scribe and stranger (CRAWL_BASE=url)
+	CRAWL_BASE="$(or $(CRAWL_BASE),http://localhost:8080)" node tools/player-crawl/run.mjs
+
 .PHONY: full-stack-check
 full-stack-check: ## Build from source, boot the full compose stack, wait for /healthz, tear down
 	./tools/full-stack-check.sh

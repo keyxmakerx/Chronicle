@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 const (
@@ -711,11 +712,27 @@ func (s *stashService) Approve(ctx context.Context, campaignID string, a Actor, 
 }
 
 // settlePending runs a pending move now and records how it went.
+//
+// The request was authorised once, when it was made. It may have waited
+// through a hero changing owner or a stash dropping its viewers, so the
+// requester's access is checked again here and a move they could no longer
+// make is failed with a plain reason instead of run.
 func (s *stashService) settlePending(ctx context.Context, m *Move, decidedBy, okReason string) error {
 	refs, err := s.refsFor(ctx, m)
 	if err != nil {
 		m.Status, m.Reason = MoveFailed, "That character no longer exists."
+	} else if denied, err := s.requesterStillAllowed(ctx, m); err != nil {
+		// A real fault: leave the request waiting rather than fail it for a
+		// reason that is not the requester's.
+		return err
+	} else if denied != "" {
+		m.Status, m.Reason = MoveFailed, denied
 	} else {
+		// The row does not store what the requester could see, and this
+		// settles on the server's own authority, as give and craft do. The
+		// requester's access was re-checked above; leaving this unset would
+		// hide a destination's DM-only line and make the credit conflict.
+		m.seesDmOnly = true
 		m.Status, m.Reason = s.run(ctx, m, refs)
 		if m.Status == MoveApplied {
 			m.Reason = okReason
@@ -801,6 +818,67 @@ func (s *stashService) SetDowntime(ctx context.Context, campaignID string, a Act
 		res.Failed += failed
 	}
 	return res, nil
+}
+
+// requesterStillAllowed re-runs the checks validate made for the requester and
+// returns a reason when one no longer passes. Only players wait for approval
+// (a GM's move runs at once), so they are checked at the narrowest role: a
+// role is not stored, and the narrowest reading is the safe one. An error is a
+// fault in the lookup, not a refusal.
+func (s *stashService) requesterStillAllowed(ctx context.Context, m *Move) (string, error) {
+	// A row whose two ends match is a give or a sheet edit written by the
+	// GM, never a player's request (validate refuses it); run refuses to
+	// replay it.
+	if m.From == m.To {
+		return "", nil
+	}
+	if s.Members != nil {
+		_, ok, err := s.Members.MemberRole(ctx, m.CampaignID, m.RequestedBy)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "The requester is no longer in the campaign.", nil
+		}
+	}
+	a := Actor{UserID: m.RequestedBy, Role: permissions.RolePlayer}
+	if m.From.Kind == EndpointCharacter {
+		ok, err := s.canAct(ctx, m.CampaignID, a, m.From.ID)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "The requester no longer controls that character.", nil
+		}
+	} else if reason, err := s.stashRefusal(ctx, m.CampaignID, a, m.From); err != nil || reason != "" {
+		return reason, err
+	}
+	if m.To.Kind == EndpointCharacter {
+		ok, err := s.viewable(ctx, m.CampaignID, a, m.To.ID)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "The requester can no longer see that character.", nil
+		}
+	} else if reason, err := s.stashRefusal(ctx, m.CampaignID, a, m.To); err != nil || reason != "" {
+		return reason, err
+	}
+	return "", nil
+}
+
+// stashRefusal turns "not visible" into a reason and keeps real faults as
+// errors.
+func (s *stashService) stashRefusal(ctx context.Context, campaignID string, a Actor, e Endpoint) (string, error) {
+	err := s.requireVisibleStash(ctx, campaignID, a, e)
+	if err == nil {
+		return "", nil
+	}
+	var ae *apperror.AppError
+	if errors.As(err, &ae) && ae.Code == 404 {
+		return "The requester can no longer see that stash.", nil
+	}
+	return "", err
 }
 
 // --- move dialog ---

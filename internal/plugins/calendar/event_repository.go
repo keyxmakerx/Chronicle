@@ -519,14 +519,14 @@ func (r *eventRepo) ListEventsForDateRange(ctx context.Context, calendarID strin
 		FROM calendar_events e `+eventJoins+`
 		WHERE e.calendar_id = ?
 		  AND (
-		    (e.year = ? AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?)
+		    (e.year = ? AND (e.month * 10000 + e.day) >= ? AND (e.month * 10000 + e.day) <= ?)
 		    OR `+recurringCandidateClause+`
 		  )
 		  %s
 		ORDER BY e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
-	startVal := startMonth*100 + startDay
-	endVal := endMonth*100 + endDay
+	startVal := monthDayKey(startMonth, startDay)
+	endVal := monthDayKey(endMonth, endDay)
 
 	rows, err := r.db.QueryContext(ctx, query, calendarID, year, startVal, endVal)
 	if err != nil {

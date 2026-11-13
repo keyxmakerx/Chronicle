@@ -1,0 +1,61 @@
+// party_block.templ draws the campaign home's "The party" block, which the
+// home's placeholder (campaigns.dashFragment) loads. It marks the shared
+// block parts (cb-info, cb-line) so the Material page look sets it as hairline
+// rows, like the other blocks that list a few facts.
+package entities
+
+import "fmt"
+
+// partyBlock replaces the placeholder (hx-swap outerHTML).
+templ partyBlock(v partyView) {
+	<section class="cb-info cb-party" data-block="party" aria-labelledby="party-h">
+		<div class="cb-info-top flex items-baseline justify-between mb-3">
+			<h2 id="party-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				The party
+				<span class="cb-n ml-1 font-normal normal-case tracking-normal text-fg-muted">{ partyCount(len(v.Heroes) + v.More) }</span>
+			</h2>
+			<a href={ templ.SafeURL("/campaigns/" + v.CampaignID + "/characters") } class="cb-more text-xs text-accent hover:underline">
+				if v.More > 0 {
+					All { fmt.Sprint(len(v.Heroes) + v.More) }
+				} else {
+					Characters
+				}
+			</a>
+		</div>
+		<div class="cb-info-rows card cb-card divide-y divide-edge px-4">
+			for _, h := range v.Heroes {
+				<div class={ "cb-line flex items-baseline gap-3 py-2 text-sm", templ.KV("cb-you", h.You) }>
+					<span class="cb-line-main min-w-0 flex-1">
+						<a href={ templ.SafeURL(h.Href) } class="cb-line-name block truncate font-semibold text-fg hover:text-accent">{ h.Name }</a>
+						if h.Line != "" || h.Player != "" {
+							<span class="cb-line-sub block truncate text-xs text-fg-muted">
+								{ h.Line }
+								if h.Line != "" && h.Player != "" {
+									<span aria-hidden="true"> · </span>
+								}
+								if h.Player != "" {
+									if h.You {
+										played by you
+									} else {
+										played by { h.Player }
+									}
+								}
+							</span>
+						}
+					</span>
+					if h.Level != "" {
+						<span class="cb-line-end whitespace-nowrap text-xs tabular-nums text-fg-muted">{ h.Level }</span>
+					}
+				</div>
+			}
+		</div>
+	</section>
+}
+
+// partyCount words how many heroes the party has.
+func partyCount(n int) string {
+	if n == 1 {
+		return "1 hero"
+	}
+	return fmt.Sprintf("%d heroes", n)
+}

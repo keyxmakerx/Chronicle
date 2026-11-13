@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -39,7 +40,13 @@ type service struct {
 	repo    Repository
 	pages   PageDirectory
 	results ResultDirectory
+	scenes  SceneDirectory
 }
+
+// SetSceneDirectory sets how scenes find players and check pages; nil
+// leaves scenes to notes for everyone. It is set once while the app is
+// wired, before any request.
+func (s *service) SetSceneDirectory(d SceneDirectory) { s.scenes = d }
 
 // NewService builds the service. results may be nil when the Tests block is
 // unavailable: versions still save and play, but none can be picked by a
@@ -93,6 +100,14 @@ func (s *service) checkPages(ctx context.Context, campaignID string, d doc, v Vi
 			ids = append(ids, c.EntityID)
 		}
 	}
+	for _, sh := range d.Shows {
+		if sh.EntityID != "" {
+			ids = append(ids, sh.EntityID)
+		}
+	}
+	if err := s.checkPlayers(ctx, campaignID, d.Shows); err != nil {
+		return err
+	}
 	if len(ids) == 0 {
 		return nil
 	}
@@ -108,6 +123,38 @@ func (s *service) checkPages(ctx context.Context, campaignID string, d doc, v Vi
 	for _, c := range rows {
 		if _, ok := names[c.EntityID]; c.EntityID != "" && !ok {
 			return errInvalid(c.Name + " is not a page in this campaign")
+		}
+	}
+	for _, sh := range d.Shows {
+		if _, ok := names[sh.EntityID]; sh.EntityID != "" && !ok {
+			return errInvalid("a thing to show is not a page in this campaign")
+		}
+	}
+	return nil
+}
+
+// checkPlayers refuses a scene row meant for someone who doesn't play in
+// the campaign, and any page or reveal row when pages can't be checked.
+func (s *service) checkPlayers(ctx context.Context, campaignID string, shows []Show) error {
+	needDir := false
+	for _, sh := range shows {
+		if sh.To != "" || sh.EntityID != "" {
+			needDir = true
+		}
+	}
+	if !needDir {
+		return nil
+	}
+	if s.scenes == nil {
+		return errInvalid("scenes can only show notes to everyone right now")
+	}
+	players, err := s.scenes.Players(ctx, campaignID)
+	if err != nil {
+		return apperrorInternal(err)
+	}
+	for _, sh := range shows {
+		if sh.To != "" && !slices.ContainsFunc(players, func(p Player) bool { return p.UserID == sh.To }) {
+			return errInvalid("a thing to show names someone who doesn't play in this campaign")
 		}
 	}
 	return nil
@@ -298,6 +345,11 @@ func (s *service) present(ctx context.Context, campaignID string, rows []Row, v 
 				ids = append(ids, c.EntityID)
 			}
 		}
+		for _, sh := range d.Shows {
+			if sh.EntityID != "" {
+				ids = append(ids, sh.EntityID)
+			}
+		}
 		tests = append(tests, pickTests(d.Versions)...)
 	}
 	outs := s.outcomes(ctx, campaignID, tests, v)
@@ -311,8 +363,18 @@ func (s *service) present(ctx context.Context, campaignID string, rows []Row, v 
 	out := make([]Encounter, len(rows))
 	for i, r := range rows {
 		e := Encounter{
-			ID: r.ID, Page: Page{ID: r.EntityID, Name: names[r.EntityID]}, Name: r.Name, Ready: r.Ready,
-			Heroes: []Hero{}, Creatures: []Creature{}, Stages: []Stage{}, Versions: []Version{}, Version: r.Version, UpdatedAt: r.UpdatedAt,
+			ID: r.ID, Page: Page{ID: r.EntityID, Name: names[r.EntityID]}, Name: r.Name, Kind: kindOf(docs[i].Kind), Ready: r.Ready,
+			Heroes: []Hero{}, Creatures: []Creature{}, Stages: []Stage{}, Versions: []Version{}, Shows: []Show{}, Version: r.Version, UpdatedAt: r.UpdatedAt,
+		}
+		// A row whose page has gone keeps its label and loses its link, so
+		// the DM sees what it was and can pick another page.
+		for _, sh := range docs[i].Shows {
+			if n, ok := names[sh.EntityID]; sh.EntityID != "" && !ok {
+				sh.EntityID = ""
+			} else if sh.Label == "" {
+				sh.Label = n
+			}
+			e.Shows = append(e.Shows, sh)
 		}
 		for _, id := range docs[i].Heroes {
 			if n, ok := names[id]; ok {
@@ -415,7 +477,14 @@ func (s *service) ListForPage(ctx context.Context, campaignID, entityID string, 
 	if err != nil {
 		return nil, err
 	}
-	out := &PageList{Encounters: list, CanEdit: a.CanEdit, HeroTypeIDs: []int{}, CreatureTypeIDs: []int{}, StatBlocks: []StatBlock{}}
+	out := &PageList{Encounters: list, CanEdit: a.CanEdit, HeroTypeIDs: []int{}, CreatureTypeIDs: []int{}, StatBlocks: []StatBlock{}, Players: []Player{}}
+	if s.scenes != nil {
+		if ps, err := s.scenes.Players(ctx, campaignID); err != nil {
+			slog.Warn("encounters: players unavailable for scenes", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		} else if ps != nil {
+			out.Players = ps
+		}
+	}
 	// Best effort: without the types the pickers are empty, and a creature
 	// can still be added by name.
 	if pt, err := s.pages.PickerTypes(ctx, campaignID); err != nil {
@@ -522,6 +591,13 @@ func (s *service) Update(ctx context.Context, campaignID, id string, v Viewer, i
 	if *in.Version != r.Version {
 		return nil, errConflict()
 	}
+	// A save that leaves kind out keeps the stored kind, so a client that
+	// predates scenes can't quietly turn one into a fight.
+	if in.Kind == "" {
+		if stored, err := decode(r); err == nil && stored.Kind == KindScene {
+			in.Kind = KindScene
+		}
+	}
 	name, d, err := validateInput(in)
 	if err != nil {
 		return nil, err
@@ -609,8 +685,8 @@ func (s *service) Search(ctx context.Context, campaignID, q string, limit int, v
 			n += c.Count
 		}
 		out = append(out, Summary{
-			ID: r.ID, Page: Page{ID: r.EntityID, Name: r.PageName}, Name: r.Name,
-			Ready: r.Ready, CreatureCount: n, UpdatedAt: r.UpdatedAt,
+			ID: r.ID, Page: Page{ID: r.EntityID, Name: r.PageName}, Name: r.Name, Kind: kindOf(d.Kind),
+			Ready: r.Ready, CreatureCount: n, ShowCount: len(d.Shows), UpdatedAt: r.UpdatedAt,
 		})
 	}
 	return out, total, nil

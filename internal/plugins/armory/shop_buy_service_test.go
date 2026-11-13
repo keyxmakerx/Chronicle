@@ -72,8 +72,11 @@ func sells(source, target, meta string) *RelationInfo {
 	return &RelationInfo{CampaignID: "camp", SourceEntityID: source, TargetEntityID: target, RelationType: "sells", Metadata: json.RawMessage(meta)}
 }
 
-func newBuyFx() *buyFx {
-	f := &buyFx{fx: newFx()}
+func newBuyFx() *buyFx { return newBuyFxWith(nil) }
+
+// newBuyFxWith is newBuyFx with today's shelf and haggles wired in.
+func newBuyFxWith(today ShopTodayService, opts ...ShopBuyOption) *buyFx {
+	f := &buyFx{fx: newFx(), today: today}
 	f.listings = &fakeShopRels{rels: map[int]*RelationInfo{
 		1: sells("shop-1", "i1", `{"price":10,"currency":"gp","quantity":5,"note":"keep me"}`),
 		2: sells("shop-1", "i2", `{"price":2.5,"currency":"gp"}`),
@@ -99,7 +102,7 @@ func newBuyFx() *buyFx {
 	txSvc.SetRelationMetadataUpdater(f.listings)
 	f.reqs = newFakePurchaseRepo()
 	f.dir.ents["shop-1"] = &EntityRef{ID: "shop-1", Name: "The Gilded Cup"}
-	f.svc = NewShopBuyService(f.fx.svc.(*stashService), txSvc, buyShops{}, f.reqs, f.today)
+	f.svc = NewShopBuyService(f.fx.svc.(*stashService), txSvc, buyShops{}, f.reqs, f.today, opts...)
 	return f
 }
 

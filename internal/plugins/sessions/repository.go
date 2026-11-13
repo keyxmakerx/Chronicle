@@ -68,7 +68,9 @@ type SessionRepository interface {
 	// methods are idempotent no-ops when the row is already in the target
 	// state, matching this file's existing same-state-resubmit convention.
 	SoftDeleteSession(ctx context.Context, id string) error
-	RestoreSession(ctx context.Context, id string) error
+	// RestoreSession reports whether it brought the session back, so of two
+	// restores racing for the same night only one announces it.
+	RestoreSession(ctx context.Context, id string) (bool, error)
 	// ListDeleted lists a campaign's soft-deleted sessions, newest first,
 	// for the campaign Trash.
 	ListDeleted(ctx context.Context, campaignID string) ([]TrashedSession, error)
@@ -90,9 +92,10 @@ type SessionRepository interface {
 	MarkAllOccurrencesNeedsRecheck(ctx context.Context, sessionID string) error
 	ListAllOccurrenceRespondedUserIDs(ctx context.Context, sessionID string) ([]string, error)
 	// ListGoingOrMaybeUserIDs returns who answered Going or Maybe to the
-	// session or any one of its nights: who a cancel, move or back-on email
-	// goes to. Deleted sessions included, since a cancel reads it after.
-	ListGoingOrMaybeUserIDs(ctx context.Context, sessionID string) ([]string, error)
+	// session or to a night on or after fromDate (YYYY-MM-DD): who a cancel,
+	// move or back-on email goes to. Answers to nights already played are
+	// left out. Deleted sessions included, since a cancel reads it after.
+	ListGoingOrMaybeUserIDs(ctx context.Context, sessionID, fromDate string) ([]string, error)
 
 	// "Suggest another time" (session_reschedule_suggestions).
 	CreateRescheduleSuggestion(ctx context.Context, s *RescheduleSuggestion) error

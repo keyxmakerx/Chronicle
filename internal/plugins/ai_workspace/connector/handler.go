@@ -78,7 +78,7 @@ func actorFor(c *Connection) records.Actor {
 	if c.ForPlayer || c.Privacy == aiexport.PrivacyModeSafe {
 		role = int(campaigns.RolePlayer)
 	}
-	return records.Actor{UserID: c.UserID, Role: role}
+	return records.Actor{UserID: c.UserID, Role: role, ReadsOwnNotes: c.ForPlayer}
 }
 
 func refuse(c *echo.Context, status int, msg string) error {

@@ -13,15 +13,14 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // registrant returns to the invite after their account is created.
 templ RegisterPage(csrfToken string, req *RegisterRequest, errMsg, redirect string, gated bool, mode string) {
 	@layouts.Base("Register") {
-		@layouts.SiteAuthStage("py-12") {
-			<div class="w-full max-w-md">
-				<div class="text-center mb-8">
-					@layouts.SiteAuthMark()
-					<h1 class="text-3xl font-bold text-fg">Get started</h1>
+		@AuthDoors(layouts.DoorNew, redirect) {
+			<div>
+				<div class="doors-head">
+					<h1>Get started</h1>
 					if joiningCampaign(redirect) {
-						<p class="text-fg-secondary mt-2">Create your { layouts.SiteName(ctx) } account, then you&apos;ll join the campaign you were invited to.</p>
+						<p>Create your { layouts.SiteName(ctx) } account, then you&apos;ll join the campaign you were invited to.</p>
 					} else {
-						<p class="text-fg-secondary mt-2">Create your { layouts.SiteName(ctx) } account</p>
+						<p>Create your { layouts.SiteName(ctx) } account</p>
 					}
 				</div>
 				if gated {
@@ -38,7 +37,7 @@ templ RegisterPage(csrfToken string, req *RegisterRequest, errMsg, redirect stri
 // shown when the site is in invite-only or closed mode and this visitor lacks a
 // valid invite. Offers a sign-in link (existing users can always log in).
 templ registrationGatedPanel(mode, redirect string) {
-	<div id="register-form" class="card p-8 space-y-5 text-center">
+	<div id="register-form" class="space-y-4 text-center">
 		<div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-accent/10 dark:bg-accent/20 mx-auto">
 			<i class="fa-solid fa-lock text-lg text-accent"></i>
 		</div>
@@ -54,16 +53,6 @@ templ registrationGatedPanel(mode, redirect string) {
 				This instance isn't accepting new accounts right now.
 			</p>
 		}
-		<p class="text-center text-sm text-fg-secondary">
-			Already have an account?
-			<a
-				href={ templ.SafeURL(loginHref(redirect)) }
-				class="text-accent hover:text-accent-hover font-medium"
-			>
-				Sign in
-			</a>
-		</p>
-		@layouts.HaveACodeLink(false)
 	</div>
 }
 
@@ -72,7 +61,7 @@ templ registrationGatedPanel(mode, redirect string) {
 templ RegisterFormComponent(csrfToken string, req *RegisterRequest, errMsg, redirect string) {
 	<div id="register-form">
 		<form
-			class="card p-8 space-y-5"
+			class="space-y-4"
 			method="POST"
 			action="/register"
 			hx-post="/register"
@@ -165,17 +154,6 @@ templ RegisterFormComponent(csrfToken string, req *RegisterRequest, errMsg, redi
 			<button type="submit" class="btn-primary w-full py-2.5">
 				Create Account
 			</button>
-
-			<p class="text-center text-sm text-fg-secondary">
-				Already have an account?
-				<a
-					href={ templ.SafeURL(loginHref(redirect)) }
-					class="text-accent hover:text-accent-hover font-medium"
-				>
-					Sign in
-				</a>
-			</p>
-			@layouts.HaveACodeLink(false)
 		</form>
 	</div>
 }

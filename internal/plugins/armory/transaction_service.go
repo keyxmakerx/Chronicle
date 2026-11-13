@@ -6,8 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -122,6 +124,33 @@ func (s *transactionService) SetBuyerAccessChecker(b BuyerAccessChecker) {
 	s.buyerAccess = b
 }
 
+// Column widths of shop_transactions. An over-long value fails the insert,
+// which for a purchase would leave the sale done but unrecorded, so each is
+// checked before anything is changed.
+const (
+	maxTxCurrencyLen  = 50
+	maxTxPricePaidLen = 100
+	maxTxTypeLen      = 20
+)
+
+// checkTxText refuses values the transaction columns cannot hold. Lengths are
+// in characters, as the columns count them.
+func checkTxText(typ, currency, pricePaid string) error {
+	for _, f := range []struct {
+		name, v string
+		max     int
+	}{
+		{"transaction type", typ, maxTxTypeLen},
+		{"currency", currency, maxTxCurrencyLen},
+		{"price paid", pricePaid, maxTxPricePaidLen},
+	} {
+		if utf8.RuneCountInString(f.v) > f.max {
+			return apperror.NewBadRequest(fmt.Sprintf("%s must be at most %d characters", f.name, f.max))
+		}
+	}
+	return nil
+}
+
 // Purchase validates stock, creates the transaction, decrements shop stock,
 // and optionally deducts currency from the buyer entity.
 func (s *transactionService) Purchase(ctx context.Context, campaignID, userID string, role int, input CreateTransactionInput) (*PurchaseResult, error) {
@@ -147,6 +176,9 @@ func (s *transactionService) Purchase(ctx context.Context, campaignID, userID st
 	}
 	if input.TransactionType == "" {
 		input.TransactionType = TxPurchase
+	}
+	if err := checkTxText(input.TransactionType, input.Currency, input.PricePaid); err != nil {
+		return nil, err
 	}
 
 	// The shop listing is the source of truth for stock and price; a
@@ -196,6 +228,9 @@ func (s *transactionService) Purchase(ctx context.Context, campaignID, userID st
 func (s *transactionService) CreateTransaction(ctx context.Context, campaignID, userID string, input CreateTransactionInput) (*Transaction, error) {
 	if input.TransactionType == "" {
 		return nil, apperror.NewBadRequest("transaction type is required")
+	}
+	if err := checkTxText(input.TransactionType, input.Currency, input.PricePaid); err != nil {
+		return nil, err
 	}
 
 	tx := &Transaction{
@@ -278,13 +313,21 @@ func (s *transactionService) reserveStock(ctx context.Context, campaignID string
 			)
 		}
 
-		// Charge the listed price, never one the client sends.
-		input.PriceNumeric = meta.Price * float64(input.Quantity)
+		// Charge the listed price, never one the client sends. The ledger
+		// records what Buy takes: a whole number of cents per unit times the
+		// quantity, not the unrounded listing price.
+		unitCents := Cents(math.Round(meta.Price * 100))
+		input.PriceNumeric = centsToFloat(unitCents * Cents(input.Quantity))
 		input.Currency = meta.Currency
 		if input.Currency == "" {
 			input.Currency = "gp"
 		}
 		input.PricePaid = strconv.FormatFloat(input.PriceNumeric, 'f', -1, 64) + " " + input.Currency
+		// The listing's own currency is what gets recorded, so check it
+		// before stock is taken.
+		if err := checkTxText(input.TransactionType, input.Currency, input.PricePaid); err != nil {
+			return 0, err
+		}
 
 		if meta.Quantity < 0 || s.metadataUpdater == nil {
 			return -1, nil

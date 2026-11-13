@@ -14,6 +14,39 @@ const (
 	StartLater  = "later"
 )
 
+// What an encounter is. A fight has creature rows; a scene has things to
+// show the players instead, run from the same DM Screen card.
+const (
+	KindFight = "fight"
+	KindScene = "scene"
+)
+
+// What a scene's row shows. A page row points players at a page they may
+// already open; a reveal row un-hides an NPC or creature page and points at
+// it; a note row carries the DM's own words.
+const (
+	ShowPage   = "page"
+	ShowReveal = "reveal"
+	ShowNote   = "note"
+)
+
+// Show is one thing a scene can show. To is empty for everyone, or the user
+// id of the one player who gets it.
+type Show struct {
+	ID       string `json:"id"`
+	Kind     string `json:"kind"`
+	EntityID string `json:"entityId"`
+	Label    string `json:"label"`
+	Text     string `json:"text"`
+	To       string `json:"to"`
+}
+
+// Player is a campaign member a scene row can be shown to alone.
+type Player struct {
+	UserID string `json:"userId"`
+	Name   string `json:"name"`
+}
+
 // Viewer is who is asking, taken from the campaign context in the handler.
 type Viewer struct {
 	UserID string
@@ -143,11 +176,13 @@ type Encounter struct {
 	ID        string     `json:"id"`
 	Page      Page       `json:"page"`
 	Name      string     `json:"name"`
+	Kind      string     `json:"kind"`
 	Ready     bool       `json:"ready"`
 	Heroes    []Hero     `json:"heroes"`
 	Creatures []Creature `json:"creatures"`
 	Stages    []Stage    `json:"stages"`
 	Versions  []Version  `json:"versions"`
+	Shows     []Show     `json:"shows"`
 	// Picked is set only for an encounter that has versions, and only
 	// while the tests that pick them can be read.
 	Picked    *Picked   `json:"picked,omitempty"`
@@ -160,8 +195,10 @@ type Summary struct {
 	ID            string    `json:"id"`
 	Page          Page      `json:"page"`
 	Name          string    `json:"name"`
+	Kind          string    `json:"kind"`
 	Ready         bool      `json:"ready"`
 	CreatureCount int       `json:"creatureCount"`
+	ShowCount     int       `json:"showCount"`
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
@@ -175,6 +212,9 @@ type PageList struct {
 	CreatureTypeIDs []int `json:"creatureTypeIds"`
 	// The game system's stat block widgets, for the creature fold-out.
 	StatBlocks []StatBlock `json:"statBlocks"`
+	// Players a scene row can be shown to alone; empty without a scene
+	// directory.
+	Players []Player `json:"players"`
 }
 
 // SaveInput is a create or update body. The builder always sends the whole
@@ -182,20 +222,32 @@ type PageList struct {
 // rather than read as "no row yet".
 type SaveInput struct {
 	Name      string     `json:"name"`
+	Kind      string     `json:"kind"`
 	Ready     bool       `json:"ready"`
 	Heroes    []string   `json:"heroes"`
 	Creatures []Creature `json:"creatures"`
 	Stages    []Stage    `json:"stages"`
 	Versions  []Version  `json:"versions"`
+	Shows     []Show     `json:"shows"`
 	Version   *int       `json:"version"`
 }
 
 // doc is the JSON stored in the data column.
-// Documents saved before stages or versions existed have no such member and
-// read as having none.
+// Documents saved before stages, versions or scenes existed have no such
+// member and read as having none; a document with no kind is a fight.
 type doc struct {
+	Kind      string     `json:"kind,omitempty"`
 	Heroes    []string   `json:"heroes"`
 	Creatures []Creature `json:"creatures"`
 	Stages    []Stage    `json:"stages"`
 	Versions  []Version  `json:"versions,omitempty"`
+	Shows     []Show     `json:"shows,omitempty"`
+}
+
+// kindOf reads a stored kind; anything but a scene is a fight.
+func kindOf(k string) string {
+	if k == KindScene {
+		return KindScene
+	}
+	return KindFight
 }

@@ -120,7 +120,8 @@ var homeBlockTypes = []string{
 	"welcome_banner", "quick_actions", "category_grid", "recent_pages", "entity_list", "text_block",
 	"pinned_pages", "calendar_preview", "timeline_preview", "relations_graph", "calendar_full",
 	"timeline_full", "relations_graph_full", "map_full", "session_tracker", "coming_up",
-	"activity_feed", "sync_status",
+	"activity_feed", "sync_status", "start_here", "at_a_glance",
+	"party", "when_we_play", "where_we_play", "house_rules", "last_time", "your_hero", "getting_started",
 }
 
 // homeTab is one home the Customizer's Home pages area offers. Label and
@@ -215,7 +216,7 @@ func (h *Handler) homeEditorState(ctx context.Context, cc *CampaignContext, key 
 		layout = DefaultDashboardLayout()
 	}
 	tab := homeTabFor(key)
-	b, err := json.Marshal(map[string]any{
+	state := map[string]any{
 		"scope":      "home",
 		"unsaved":    !saved,
 		"campaignId": cc.Campaign.ID,
@@ -225,11 +226,34 @@ func (h *Handler) homeEditorState(ctx context.Context, cc *CampaignContext, key 
 		"only":       homeBlockTypes,
 		"blockTypes": base + "/entity-types/block-types?context=dashboard",
 		"preview":    base + "/customize/home-preview",
-	})
+	}
+	if s := homeSuggestions(key, saved); s != nil {
+		state["suggest"] = s
+	}
+	b, err := json.Marshal(state)
 	if err != nil {
 		return "{}"
 	}
 	return string(b)
+}
+
+// homeSuggestions lists, in order, the block types the players' starting home
+// holds, for a Players home that has no layout of its own yet. The editor shows
+// those the owner's current layout lacks as a faded draft to keep one by one;
+// nothing is saved until a block is kept. Every other home has none.
+func homeSuggestions(key string, saved bool) []string {
+	if key != HomePlayer || saved {
+		return nil
+	}
+	var out []string
+	for _, row := range playersHome().Rows {
+		for _, col := range row.Columns {
+			for _, b := range col.Blocks {
+				out = append(out, b.Type)
+			}
+		}
+	}
+	return out
 }
 
 const (
@@ -300,3 +324,14 @@ func renderHomePreviewBlock(ctx context.Context, cc *CampaignContext, b Dashboar
 	}
 	return sb.String()
 }
+
+// ValidateHomeLayout checks a layout against the rules every home is saved
+// under, and cleans its Text Block content in place, so a change that doesn't
+// come through the Customizer (an AI's) is held to the same ones.
+func ValidateHomeLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error {
+	return validateDashboardLayout(ctx, campaignID, layout)
+}
+
+// HomeBlockTypes lists the widgets a campaign home can hold, in the order the
+// Customizer's palette offers them.
+func HomeBlockTypes() []string { return append([]string(nil), homeBlockTypes...) }

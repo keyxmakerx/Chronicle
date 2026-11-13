@@ -1,0 +1,63 @@
+// auth_doors.templ is the shell shared by the three doors in: Sign in,
+// I'm new and I have a code. /login, /register and /join stay separate URLs,
+// each opening its own tab, so links, password managers and the redirect
+// handling keep working. A tab click swaps only the panel in place (HTMX) and
+// pushes the URL; without script it is an ordinary link.
+
+package auth
+
+import (
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// joinHref is the "I have a code" tab's link.
+const joinHref = "/join"
+
+// AuthDoors wraps one door's content in the stage, the brand mark and the
+// tab row. door is one of layouts.DoorSignIn, DoorNew and DoorCode; redirect
+// is the already-sanitized post-login destination the other doors carry.
+templ AuthDoors(door, redirect string) {
+	@layouts.SiteDoorsStage(door) {
+		<div class="text-center">
+			@layouts.SiteAuthMark()
+		</div>
+		@authDoorTabs(door, redirect)
+		<div id="doors-panel" role="tabpanel" aria-labelledby={ "doors-tab-" + door }>
+			{ children... }
+		</div>
+	}
+}
+
+// authDoorTabs is the tab row: small capitals with a hairline, the open one
+// in the accent. The row is also swapped out-of-band with the panel so the
+// open tab follows the URL.
+templ authDoorTabs(door, redirect string) {
+	<nav id="doors-tabs" class="doors-tabs" role="tablist" aria-label="Ways in" data-active={ door }>
+		@authDoorTab(layouts.DoorSignIn, "Sign in", loginHref(redirect), door)
+		@authDoorTab(layouts.DoorNew, "I'm new", registerHref(redirect), door)
+		@authDoorTab(layouts.DoorCode, "I have a code", joinHref, door)
+	</nav>
+}
+
+templ authDoorTab(name, label, href, open string) {
+	<a
+		id={ "doors-tab-" + name }
+		class="doors-tab"
+		role="tab"
+		href={ templ.SafeURL(href) }
+		data-door={ name }
+		aria-selected={ strconv.FormatBool(name == open) }
+		aria-controls="doors-panel"
+		if name != open {
+			tabindex="0"
+		}
+		hx-get={ href }
+		hx-target="#doors-panel"
+		hx-select="#doors-panel"
+		hx-select-oob="#doors-tabs"
+		hx-swap="outerHTML"
+		hx-push-url="true"
+	>{ label }</a>
+}

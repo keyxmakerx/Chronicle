@@ -44,6 +44,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
+	"github.com/keyxmakerx/chronicle/internal/plugins/designs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -1262,8 +1263,8 @@ type navAppDef struct {
 	addons  []string // the app is on when any of these addons is enabled
 	needs   []string // and only while every one of these is enabled too
 	access  campaigns.NavAccess
-	pinned  bool // starts in Pinned for a campaign that never arranged its sidebar
-	system  bool // the enabled game system's reference; label, icon and path come from it
+	pinned  bool   // starts in Pinned for a campaign that never arranged its sidebar
+	system  bool   // the enabled game system's reference; label, icon and path come from it
 	group   string // the app drawer's group (navDrawerGroups)
 	line    string // the app drawer's one line on what the app is for
 }
@@ -1425,6 +1426,13 @@ func entityNoteAudience(note *entity_notes.Note) (allowed []string, strict, admi
 // connections, so the field needs no mutex.
 type wsRevokerHolder struct {
 	hub *ws.Hub
+}
+
+// RevokeAll disconnects every socket, for a restore that replaces the database.
+func (h *wsRevokerHolder) RevokeAll() {
+	if h.hub != nil {
+		h.hub.RevokeAll()
+	}
 }
 
 func (h *wsRevokerHolder) RevokeAPIKeyClients(campaignID string) {
@@ -2856,6 +2864,12 @@ func (a *App) RegisterRoutes() {
 	// Pings both MariaDB and Redis to report actual infrastructure health.
 	// Registered on both /healthz (Kubernetes convention) and /health (common alias).
 	healthHandler := func(c *echo.Context) error {
+		// While a restore has the site closed the database is being replaced,
+		// so probing it would report a healthy site as down. The answer also
+		// tells scripts/restore.sh that Chronicle itself is in maintenance.
+		if a.Maintenance != nil && a.Maintenance.Active() {
+			return c.JSON(http.StatusOK, map[string]string{"status": "maintenance"})
+		}
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
 
@@ -2892,6 +2906,13 @@ func (a *App) RegisterRoutes() {
 	authService := auth.NewAuthService(authRepo, a.Redis, a.Config.Auth.SessionTTL)
 	authHandler := auth.NewHandler(authService, a.Config.Auth.SessionTTL)
 	auth.RegisterRoutes(e, authHandler)
+	// The scene behind the sign-in tabs loads only where its mount appears.
+	a.registerPlugin(PluginRegistration{
+		Slug: "auth",
+		Widgets: []PluginWidget{
+			{Name: "signin-scene", Scripts: []string{"/static/js/widgets/signin_scene.js"}},
+		},
+	})
 
 	// SMTP plugin: outbound email for transfers, password resets.
 	smtpRepo := smtp.NewSMTPRepository(a.DB)
@@ -3032,6 +3053,7 @@ func (a *App) RegisterRoutes() {
 	guestCodeService := campaigns.NewGuestCodeService(campaigns.NewGuestCodeRepository(a.DB), campaignRepo)
 	campaigns.RegisterGuestCodeRoutes(e, campaigns.NewGuestCodeHandler(guestCodeService, a.Config.BaseURL), campaignService, authService)
 	auth.ConfigureGuests(authService, guestCodeService)
+	campaigns.ConfigureVisitPasses(campaignService, guestCodeService)
 	auth.OnGuestMerged(authService, guestCodeService.MoveGuestMembership)
 	campaigns.OnMemberRemoved(campaignService, authService.EndGuest)
 	campaigns.OnCampaignDeleted(campaignService, authService.EndCampaignGuests)
@@ -3328,10 +3350,20 @@ func (a *App) RegisterRoutes() {
 	restoreSvc := restore.NewService(restore.Config{
 		ScriptPath: a.Config.RestoreScriptPath,
 		BackupDir:  a.Config.BackupDir,
+		State:      a.Maintenance,
+		Activity:   adminActivity,
+		Hooks: &restoreHooks{
+			db:      a.DB,
+			maxIdle: a.Config.Database.MaxIdleConns,
+			rdb:     a.Redis,
+			auth:    authService,
+			ws:      wsRevoker,
+			migrate: a.PostRestoreSchema,
+		},
 	})
 	restoreHandler := restore.NewHandler(restoreSvc)
-	restoreHandler.SetActivityRecorder(adminActivity)
-	restore.RegisterRoutes(adminGroup, restoreHandler, auth.RequireReauth(authService))
+	restoreHandler.SetActor(auth.GetUserID)
+	restore.RegisterRoutes(adminGroup, restoreHandler, auth.RequireReauth(authService), a.Maintenance)
 
 	// Settings plugin route registration. The service + repo were
 	// constructed earlier (above the media routes) so the body-limit
@@ -4220,6 +4252,7 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMentionHider(entityService)
+	sessionsHandler.SetHeroChecker(&heroCheckerAdapter{svc: entityService, addons: addonService})
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
 	// People's notification choices (Account settings) filter the bell and
 	// the game-night emails.
@@ -4275,6 +4308,27 @@ func (a *App) RegisterRoutes() {
 		addons:  addonService,
 		healthy: func(slug string) bool { return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug) },
 		now:     time.Now,
+		zone: func(ctx context.Context, userID string) *time.Location {
+			u, err := authService.GetUser(ctx, userID)
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		},
+	}, campaignService, authService)
+
+	// The home page's "At a glance" sheet, wired here because its facts come
+	// from the addons, sessions and entities plugins.
+	registerAtAGlanceRoutes(e, &atAGlanceHandler{
+		src: glanceSources{
+			Addons: addonService,
+			Nights: sessionsService,
+			Pages:  entityService,
+			NightsHealthy: func() bool {
+				return a.PluginHealth == nil || (a.PluginHealth.IsHealthy(calendar.PluginSlug) && a.PluginHealth.IsHealthy(sessions.SessionsAddonSlug))
+			},
+		},
+		now: time.Now,
 		zone: func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)
 			if err != nil || u == nil || u.Timezone == nil {
@@ -4442,7 +4496,13 @@ func (a *App) RegisterRoutes() {
 		Auditor:    shareAudit,
 		Copies:     copyStore,
 		Places:     placeStore,
+		Members:    &armoryMemberDirectoryAdapter{svc: campaignService},
 	})
+	// The hero's log reads game nights from sessions and keeps written lines in
+	// the armory's own table, so it is off while that migration is unhealthy.
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		stashSvc.SetHeroLog(armory.NewHeroLogRepository(a.DB), &armoryNightsAdapter{svc: sessionsService})
+	}
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.
 	armoryObserver := &armoryMoneyObserver{history: armory.NewMoneyHistory(
@@ -4592,7 +4652,15 @@ func (a *App) RegisterRoutes() {
 		&shopSellsAdapter{svc: relService},
 		&shelfDayAdapter{cal: calendarService},
 	)
-	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB), shopTodaySvc)
+	// A price won at the counter is charged on the day it was won; the table
+	// exists only while the armory's own migration did.
+	var shopBuyOpts []armory.ShopBuyOption
+	var shopRollRepo armory.ShopRollRepository
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		shopRollRepo = armory.NewShopRollRepository(a.DB)
+		shopBuyOpts = append(shopBuyOpts, armory.WithHaggles(shopRollRepo))
+	}
+	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB), shopTodaySvc, shopBuyOpts...)
 	shopBuyHandler := armory.NewShopBuyHandler(shopBuySvc)
 	// The Foundry module buys through the sync API as the player at the table,
 	// with the same service and acting-as rule as the stash calls. Its routes
@@ -4864,6 +4932,7 @@ func (a *App) RegisterRoutes() {
 	}
 	pagePinService := entities.NewPagePinService(entities.NewPagePinRepository(a.DB), entityService, pinsHealthy)
 	entities.RegisterPagePinRoutes(e, entities.NewPagePinHandler(pagePinService), campaignService, authService)
+	entities.RegisterEntityListRoutes(e, entities.NewEntityListHandler(entityService), campaignService, authService)
 
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
@@ -5217,6 +5286,17 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("placed game-system panels on newer campaigns' creature types", slog.Int("layouts", n))
 	}
+	if n, err := repairSystemPanelsLayoutsOnce(context.Background(), settingsRepo, campaignService, entityService); err != nil {
+		slog.Error("repairing system-panels-only layouts failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("restored the default layout on categories that held only game-system panels", slog.Int("layouts", n))
+	}
+
+	if n, err := repairPanelOnlyLayoutsOnce(context.Background(), settingsRepo, campaignService, entityService); err != nil {
+		slog.Error("repairing panel-only layouts failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("restored the default page on panel-only layouts", slog.Int("layouts", n))
+	}
 
 	// One-time: existing campaigns move to the Material page look
 	// (material_page_look.go). Only a failure to read the marker or list
@@ -5329,7 +5409,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
-		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheck)
+		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheckDid)
 		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)
 			if err != nil || u == nil || u.Timezone == nil {
@@ -5628,6 +5708,7 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetAddonService(addonService)
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
+	systems.RegisterHouseRulesRoute(e, systemHandler, authService, campaignService)
 	// The campaign's own pick-list entries, merged into the pick lists below.
 	// The manifest is the campaign's custom upload, else its chosen built-in.
 	manifestFor := campaignManifest(func(ctx context.Context, campaignID string) *systems.SystemManifest {
@@ -5921,6 +6002,7 @@ func (a *App) RegisterRoutes() {
 			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
+			ctx = layouts.SetVisitUntil(ctx, cc.VisitUntil)
 
 			// Entity types, per-type counts and the enabled addons: what the
 			// sidebar is built from. Use the request context (not the
@@ -6265,6 +6347,8 @@ func (a *App) RegisterRoutes() {
 	rollTablesSvc := rolltables.NewService(rolltables.NewRepository(a.DB))
 	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
 		rolltables.RegisterRoutes(e, rolltables.NewHandler(rollTablesSvc), campaignService, authService)
+		exportSvc.SetRollTableExporter(&rollTableExportAdapter{svc: rollTablesSvc})
+		exportSvc.SetRollTableImporter(&rollTableImportAdapter{svc: rollTablesSvc})
 	} else {
 		slog.Warn("rolltables plugin degraded — routes not registered")
 	}
@@ -6303,6 +6387,9 @@ func (a *App) RegisterRoutes() {
 		// After the announcer, so a board that fills itself redraws when a
 		// quest's status moves it on or off.
 		questSvc = quests.WithBoardFill(questSvc, boardSvc)
+		questArchive := quests.NewArchive(questRepo, questEntities, questMaps, questCal)
+		exportSvc.SetQuestExporter(&questExportAdapter{archive: questArchive})
+		exportSvc.SetQuestImporter(&questImportAdapter{archive: questArchive})
 		aiQuests, aiBoards = questSvc, boardSvc
 		questEntityEvts.attach(questSvc)
 		questPicker := quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
@@ -6402,14 +6489,30 @@ func (a *App) RegisterRoutes() {
 			{Name: "table", Scripts: []string{"js/table_dice.js", "js/table.js"}},
 		},
 	})
-	var rollLog crafting.RollLog // nil while the roll log is degraded
+	var rollLog crafting.RollLog          // nil while the roll log is degraded
+	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus})
 		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
 		syncAPIHandler.SetRolls(&rollsSyncAdapter{svc: rollsSvc}, foundryPlayerRepo)
 		rollLog = &craftingRollLog{svc: rollsSvc}
+		shopRollLogger = &shopRollLog{svc: rollsSvc}
 	} else {
 		slog.Warn("rolls plugin degraded — the Table tab's roll log is not available")
+	}
+
+	// Counter rolls at a shop (haggle, look closer) and the owner's hidden
+	// notes. They throw and log through the roll log when it is up, and exist
+	// only while the armory's own tables did.
+	if shopRollRepo != nil {
+		shopRollSvc := armory.NewShopRollService(armory.ShopRollDeps{
+			Repo: shopRollRepo, Rooms: armory.NewShopRoomRepository(a.DB), Stash: stashSvc,
+			Shops: &armoryShopCheckerAdapter{svc: entityService}, Rels: &armoryRelationFinderAdapter{svc: relService},
+			Listings: &shopSellsAdapter{svc: relService}, Today: shopTodaySvc,
+			Rules: &shopTestRulesAdapter{sys: systemHandler}, Sheets: &craftingSheetsAdapter{entities: entityService},
+			Log: shopRollLogger,
+		})
+		armory.RegisterShopRollRoutes(e, armory.NewShopRollHandler(shopRollSvc), campaignService, authService, addonService)
 	}
 
 	// Crafting: recipes, crafting tags on Armory items, benches, the
@@ -6422,6 +6525,7 @@ func (a *App) RegisterRoutes() {
 		Widgets: []PluginWidget{
 			{Name: "crafting", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_recipes.js", "js/crafting_materials.js", "js/crafting_upgrades.js", "js/crafting_benches.js", "js/crafting_book.js", "js/crafting_projects.js", "js/crafting_tray.js", "js/crafting_spoils.js", "js/crafting.js"}},
 			{Name: "crafting-block", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_turns.js", "js/crafting_block.js"}},
+			{Name: "hero-bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "js/crafting_lib.js", "js/crafting_tray.js", "js/crafting_turns.js", "js/crafting_block.js", "js/hero_bench.js"}},
 			{Name: "crafting-item", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_pick.js", "js/crafting_item.js"}},
 			{Name: "crafting-recipes-part", Scripts: []string{"/static/js/widgets/craft_pictures.js", "js/crafting_lib.js", "js/crafting_pick.js", "js/crafting_part_more.js", "js/crafting_part.js"}},
 		},
@@ -6433,6 +6537,8 @@ func (a *App) RegisterRoutes() {
 	// The Homebrew service is built further down; the hook is filled in then.
 	craftingRespites := &craftingRespiteHook{}
 	var craftingListener respiteListener // nil while crafting is degraded
+	// The registry saved designs are checked by; crafting adds its kinds here.
+	designKinds := newDesignKinds()
 	var craftingFights encounters.FightListener
 	var aiCrafting records.CraftingAPI    // nil while crafting is degraded
 	var craftingWorkshop crafting.Service // nil while crafting is degraded
@@ -6461,10 +6567,13 @@ func (a *App) RegisterRoutes() {
 		registerCraftingBlock(blockRegistry, craftingSvc)
 		registerCraftingItemBlock(blockRegistry)
 		craftingWorkshop = craftingSvc
+		exportSvc.SetRecipeExporter(&recipeExportAdapter{svc: craftingSvc})
+		exportSvc.SetRecipeImporter(&recipeImportAdapter{svc: craftingSvc})
 		craftingListener = &craftingRespiteListener{svc: craftingSvc, enabled: craftingOn}
 		craftingFights = &craftingFightListener{svc: craftingSvc, enabled: craftingOn}
 		aiCrafting = aiCraftingAdapter{svc: craftingSvc, addons: addonService}
 		craftingAPI.attach(craftingSvc)
+		stashSvc.SetCraftGate(armoryCraftGate{svc: craftingSvc, enabled: craftingOn})
 	} else {
 		slog.Warn("crafting plugin degraded — the Crafting app is not available")
 	}
@@ -6561,6 +6670,22 @@ func (a *App) RegisterRoutes() {
 		encounterAPI.attach(encounterSvc)
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 		runSvc := encounters.NewRunService(encounters.NewRunRepository(a.DB), encounterSvc, encounterPages)
+		// Scenes show things to players: pages they may open, NPCs the
+		// Reveal card can un-hide, and the DM's notes.
+		scenes := &encountersSceneAdapter{
+			members: campaignService, svc: entityService, cards: entities.NewPageCards(a.DB),
+			reveal: &dmHiddenAdapter{entities: entityService, lists: characterListService},
+		}
+		if d, ok := encounterSvc.(interface {
+			SetSceneDirectory(encounters.SceneDirectory)
+		}); ok {
+			d.SetSceneDirectory(scenes)
+		}
+		if r, ok := runSvc.(interface {
+			SetShowing(encounters.SceneDirectory, encounters.ShownRepository, encounters.ShowPublisher)
+		}); ok {
+			r.SetShowing(scenes, encounters.NewShownRepository(a.DB), &encountersShowPublisher{bus: wsEventBus})
+		}
 		// A fight that ends drops its defeated creatures' spoils.
 		if l, ok := runSvc.(interface {
 			SetFightListener(encounters.FightListener)
@@ -6599,6 +6724,22 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
 		aiShopLooks = aiShopLooksAdapter{rooms: shopRoomService, fronts: shopStreetService, today: shopTodaySvc}
 	}
+	// Saved designs: the campaign library and its sharing. The kind registry is
+	// the seam features add their design kinds to; the AI sees the library only
+	// while the plugin's tables are up.
+	var aiDesigns records.DesignsAPI
+	if a.PluginHealth.IsHealthy(designs.PluginSlug) {
+		// Package designs are validated by the same kinds as saved ones.
+		systems.SetDesignKinds(designKindChecker{kinds: designKinds})
+		designsSvc := designs.NewService(designs.NewRepository(a.DB), designsDirectory{svc: campaignService}, designKinds, designsPackageSource{})
+		designsGallery := designs.NewGalleryService(designs.NewRepository(a.DB), designs.NewGalleryRepository(a.DB), designsDirectory{svc: campaignService}, designKinds, galleryUserNames{auth: authService})
+		galleryHandler := designs.NewGalleryHandler(designsGallery, adminActivity)
+		designs.RegisterRoutes(e, designs.NewHandler(designsSvc), galleryHandler, campaignService, authService)
+		designs.RegisterAdminRoutes(adminGroup, galleryHandler)
+		aiDesigns = aiDesignsAdapter{svc: designsSvc, gallery: designsGallery}
+	} else {
+		slog.Warn("designs plugin degraded — routes not registered")
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -6636,6 +6777,7 @@ func (a *App) RegisterRoutes() {
 		Crafting:        aiCrafting,
 		ShopLooks:       aiShopLooks,
 		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
+		Designs:         aiDesigns,
 		Layers:          layersSvc,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
@@ -6774,7 +6916,9 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/design_library.js", "/static/js/widgets/design_library_gallery.js", "/static/js/widgets/design_library_suggest.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_rolls.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "design_library", Scripts: []string{"/static/js/widgets/design_library.js"}},
+	{Name: "design_gallery_admin", Scripts: []string{"/static/js/widgets/design_gallery_admin.js"}},
 	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_paint", Scripts: []string{"/static/js/widgets/craft_paint.js", "/static/js/widgets/craft_paint_forge.js", "/static/js/widgets/craft_paint_stage.js"}},

@@ -197,6 +197,21 @@
 
     monthCount: function (cal) { return (cal.months || []).length || 12; },
 
+    // sharedRow says whether month b, the one right after month a, begins
+    // in the week row where a ends, so the grid draws that row once. A band
+    // (intercalary) month fills whole rows of its own, and a month that
+    // starts in the first column or in another column than a's last day
+    // leaves has no row in common.
+    sharedRow: function (cal, a, b) {
+      var mc = CalDate.monthCount(cal), defs = cal.months || [];
+      var da = defs[((a.m - 1) % mc + mc) % mc], db = defs[((b.m - 1) % mc + mc) % mc];
+      if ((da && da.is_intercalary) || (db && db.is_intercalary)) return false;
+      var lead = CalDate.gridLead(cal, b.y, b.m);
+      if (lead === 0) return false;
+      var end = (CalDate.gridLead(cal, a.y, a.m) + CalDate.monthDays(cal, ((a.m - 1) % mc + mc) % mc, a.y)) % CalDate.weekLen(cal);
+      return end === lead;
+    },
+
     // addDays walks {y,m,d} (month 1-based) forward/backward by delta real
     // days, using the leap-aware month lengths — the same "add N days"
     // Calendar.AbsoluteDay's callers would use, just inverted by stepping
@@ -301,13 +316,52 @@
         if (e.recurrence_max_occurrences != null && Math.floor(nM / stepM) >= e.recurrence_max_occurrences) return false;
         return true;
       }
+      var weeks = CalDate.recurrenceWeeks(rt, e.recurrence_interval);
+      if (cal.month_starts_new_week && !CalDate.usesRealTime(cal) && (cal.weekdays || []).length > 0) {
+        return CalDate.occursOnGridWeek(cal, e, year, month, day, weeks);
+      }
       var wl = CalDate.weekLen(cal);
-      var stride = wl * CalDate.recurrenceWeeks(rt, e.recurrence_interval);
+      var stride = wl * weeks;
       if (stride <= 0) return onBase;
       var diff = target - base;
       if (diff % stride !== 0) return false;
       if (e.recurrence_max_occurrences != null && Math.floor(diff / stride) >= e.recurrence_max_occurrences) return false;
       return true;
+    },
+
+    // occursOnGridWeek mirrors Event.occursOnGridWeek: on a calendar where
+    // each month starts a new week, a weekly repeat is a day in the base
+    // date's weekday column every `weeks` grid rows, never a festival day.
+    occursOnGridWeek: function (cal, e, year, month, day, weeks) {
+      var baseCol = CalDate.weekdayCol(cal, e.year, e.month, e.day);
+      if (baseCol < 0) return e.year === year && e.month === month && e.day === day;
+      if (CalDate.weekdayCol(cal, year, month, day) !== baseCol) return false;
+      var diff = CalDate.weekRowIndex(cal, year, month, day) - CalDate.weekRowIndex(cal, e.year, e.month, e.day);
+      if (diff < 0 || diff % weeks !== 0) return false;
+      return e.recurrence_max_occurrences == null || Math.floor(diff / weeks) < e.recurrence_max_occurrences;
+    },
+
+    // monthRows mirrors Calendar.monthRows: the week rows a month grid draws
+    // for a month of `days` days; an intercalary month draws none.
+    monthRows: function (cal, month0, days) {
+      var wl = (cal.weekdays || []).length;
+      if (wl <= 0 || cal.months[month0].is_intercalary) return 0;
+      return Math.floor((days + wl - 1) / wl);
+    },
+
+    // weekRowIndex mirrors Calendar.weekRowIndex: grid week rows numbered
+    // continuously, whole years in closed form, years <= 0 common-year only.
+    weekRowIndex: function (cal, year, month1, day) {
+      var months = cal.months || [], common = 0, leap = 0, i;
+      for (i = 0; i < months.length; i++) {
+        var base = months[i].days;
+        common += CalDate.monthRows(cal, i, base);
+        leap += CalDate.monthRows(cal, i, base + (months[i].leap_year_days || 0));
+      }
+      var total = year * common;
+      if (year > 0) total += (leap - common) * CalDate.leapYearsBefore(cal, year);
+      for (i = 0; i < month1 - 1 && i < months.length; i++) total += CalDate.monthRows(cal, i, CalDate.monthDays(cal, i, year));
+      return total + Math.floor((day - 1) / (cal.weekdays || []).length);
     },
 
     // Whole-range containment for a (possibly non-recurring) multi-day
@@ -591,7 +645,47 @@
   function writeZoneMode(mode) {
     try { window.localStorage.setItem(GN_ZONE_KEY, mode); } catch (e) { /* remembered for this page only */ }
   }
-  function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  // Off ends every move at its end state; Calm keeps only the cross-fade.
+  function motionOff() {
+    return document.documentElement.getAttribute('data-motion') === 'off' ||
+      !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+  // A menu's open and close times come from the --dur-everyday tokens, read
+  // when the move starts so the owner's Motion speed applies.
+  function tokenMs(name, fallback) {
+    try {
+      var v = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      var m = /^([\d.]+)(ms|s)$/.exec(v);
+      if (m) return parseFloat(m[1]) * (m[2] === 's' ? 1000 : 1);
+    } catch (e) { /* the fallback stands */ }
+    return fallback;
+  }
+  function menuOpenMs() { return tokenMs('--dur-everyday', 120); }
+  function menuCloseMs() { return tokenMs('--dur-everyday-out', menuOpenMs() * 2 / 3); }
+  // The month roll and the day card's move are signed at 260 and 200 ms at
+  // the standard speed; each scales with the token it sits beside.
+  function rollMs() { return Math.round(260 * tokenMs('--dur-large', 280) / 280); }
+  function travelMs() { return Math.round(tokenMs('--dur-standard', 200)); }
+  function slideEase() {
+    try {
+      var v = window.getComputedStyle(document.documentElement).getPropertyValue('--ease-slide').trim();
+      if (v) return v;
+    } catch (e) { /* the default stands */ }
+    return 'cubic-bezier(0.22, 0.8, 0.24, 1)';
+  }
+  // A key that opens or closes something skips the motion: the move would
+  // only make the keyboard wait. A click fired by Enter or Space lands just
+  // after its key, so the last key is remembered for a moment.
+  var lastKeyAt = -1000;
+  var MOVE_KEYS = { Enter: 1, ' ': 1, Escape: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, PageUp: 1, PageDown: 1 };
+  function noteKey(e) { if (MOVE_KEYS[e.key]) lastKeyAt = Date.now(); }
+  function byKey() { return Date.now() - lastKeyAt < 120; }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('keydown', noteKey, true);
+    document.addEventListener('keyup', noteKey, true);
+  }
+  // Calm and Off both count as reduced, read at call time so a My view change applies at once.
+  function reducedMotion() { var h = document.documentElement; return !!(h.hasAttribute('data-motion') || h.hasAttribute('data-cz-reduce') || h.getAttribute('data-view-motion') === 'calm' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)); }
 
   // Event category icon: an event's own icon falls back to its kind's icon,
   // then a generic dot.
@@ -763,7 +857,9 @@
     if (opts.cover) {
       var ct = ar.top - cr.top;
       panel.style.width = ar.width + 'px';
-      panel.style.minHeight = ar.height + 'px';
+      // It covers the card's width and top edge but is only as tall as its
+      // content (scrolling past the card's room), so a short event is not a
+      // mostly empty sheet.
       panel.style.maxHeight = Math.max(ar.height, B.vbot - ct) + 'px';
       panel.style.left = (ar.left - cr.left) + 'px';
       panel.style.top = ct + 'px';
@@ -789,6 +885,8 @@
   }
 
   function growOpen(panel, anchorEl, containerEl, opts) {
+    // A finished move holds its last frame; a new open starts clean.
+    panel.getAnimations().forEach(function (a) { a.cancel(); });
     positionPanel(panel, anchorEl, containerEl, opts);
     panel.classList.add('live');
     // Force layout so the browser has committed the panel's final box
@@ -800,29 +898,33 @@
       panel.style.transformOrigin = ox + 'px ' + oy + 'px';
     }
     panel.classList.add('open');
+    if ((opts && opts.instant) || byKey() || motionOff()) return Promise.resolve();
+    var ms = menuOpenMs();
     if (reducedMotion()) {
-      var fa = panel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out', fill: 'both' });
+      var fa = panel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' });
       return fa.finished.catch(function () {});
     }
     var anim = panel.animate(
       [{ opacity: 0, transform: 'scale(.82)' }, { opacity: 1, transform: 'none' }],
-      { duration: 220, easing: 'cubic-bezier(.22,.8,.24,1)', fill: 'both' }
+      { duration: ms, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' }
     );
     return anim.finished.catch(function () {});
   }
 
-  function growClose(panel, opener) {
+  function growClose(panel, opener, opts) {
     var had = panel.contains(document.activeElement);
-    var frames = reducedMotion()
-      ? [{ opacity: 1 }, { opacity: 0 }]
-      : [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.88)' }];
-    var anim = panel.animate(frames, { duration: reducedMotion() ? 120 : 180, easing: 'cubic-bezier(.22,.8,.24,1)', fill: 'both' });
-    return anim.finished.catch(function () {}).then(function () {
+    var finish = function () {
       panel.classList.remove('open', 'live');
       panel.removeAttribute('style');
       panel.innerHTML = '';
       if (had && opener) opener.focus({ preventScroll: true });
-    });
+    };
+    if ((opts && opts.instant) || byKey() || motionOff()) { panel.getAnimations().forEach(function (a) { a.cancel(); }); finish(); return Promise.resolve(); }
+    var frames = reducedMotion()
+      ? [{ opacity: 1 }, { opacity: 0 }]
+      : [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.88)' }];
+    var anim = panel.animate(frames, { duration: menuCloseMs(), easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'both' });
+    return anim.finished.catch(function () {}).then(finish);
   }
 
   // ---------------------------------------------------------------
@@ -843,6 +945,10 @@
   // the base time for an ordinary card, more for a longer drop, so the
   // paper moves at one speed whatever the card's length.
   function leafTime(h, base) { return Math.round(clampN(base * (0.6 + (h.full - h.cap) / 500), base * 0.75, base * 1.6)); }
+  // The film plays this much faster than it was drawn; a card that is
+  // genuinely tall is the only one that still holds its second leaf.
+  var FOLD_SPEED = 1.65;
+  var HOLD_ABOVE = 520;
   var SPRING = 'cubic-bezier(.34,1.3,.4,1)';
   var EASE = 'cubic-bezier(.22,.8,.24,1)';
   function isPhone() { return window.matchMedia('(max-width:600px)').matches; }
@@ -936,7 +1042,7 @@
     var g = P.g, L1 = P.el.querySelector('.lf1'), L2 = P.el.querySelector('.lf2');
     if (!g || (g.side !== 'right' && g.side !== 'left') || !L1 || !L2) return null;
     var cap = Math.round(Math.max(FOLD.leafMin, L1.offsetHeight * FOLD.leafRatio)), full = L2.offsetHeight;
-    return full > cap + 24 ? { el: P.el, L2: L2, cap: cap, full: full, shift: Math.round(clampN(g.cell.y - g.final.y, 0, full - cap)) } : null;
+    return full > Math.max(cap + 24, HOLD_ABOVE) ? { el: P.el, L2: L2, cap: cap, full: full, shift: Math.round(clampN(g.cell.y - g.final.y, 0, full - cap)) } : null;
   }
   function holdLeaf(h, px) { h.L2.style.maxHeight = px + 'px'; h.L2.style.overflow = 'hidden'; h.el.style.transform = h.shift ? 'translateY(' + h.shift + 'px)' : ''; }
   function freeLeaf(h) { h.L2.style.maxHeight = ''; h.L2.style.overflow = ''; h.el.style.transform = ''; }
@@ -1099,36 +1205,44 @@
   // A card's state: which element, what opened it, where it lies, the
   // marks it carries, and a token so a later open or close supersedes an
   // earlier one.
-  function cardState(el, carry) { return { el: el, carry: carry || null, state: 'closed', seq: 0, next: null, g: null, src: null, press: null, pairs: null, carried: false, closing: null }; }
+  function cardState(el, carry) { return { el: el, carry: carry || null, state: 'closed', seq: 0, next: null, g: null, src: null, press: null, pairs: null, carried: false, closing: null, moved: false, ghost: null }; }
   function resetCard(el) { stopAnims(el, true); el.classList.remove('live', 'open'); el.removeAttribute('style'); }
+  // A card that moved to another day leaves a running slide and fade and,
+  // under Calm, a ghost of where it was; closing starts from where it lies.
+  function settleMoved(P) {
+    if (P.ghost) { P.ghost.remove(); P.ghost = null; }
+    if (P.moved) { stopAnims(P.el, true); P.moved = false; }
+  }
   // Resolves true once the card is fully open, false if something
   // superseded it.
   function openCard(P, calEl) {
     var tok = ++P.seq, el = P.el, run;
     P.state = 'opening';
     el.classList.add('live');
-    if (reducedMotion()) {
+    if (byKey() || motionOff()) {
+      run = Promise.resolve();
+    } else if (reducedMotion()) {
       run = anim(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' }).finished;
     } else if (isPhone() || !P.g) {
       if (P.src) originOn(el, P.src);
-      pressIn(P.press);
-      var fl = fly(P, false, { delay: 60, dur: 420, stagger: 26 }, calEl);
-      run = settleAll([anim(el, [{ transform: 'scale(.08)' }, { transform: 'scale(1)' }], { duration: 360, delay: 40, easing: EASE, fill: 'both' })].concat(fl));
-      anim(el, [{ opacity: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 1 }], { duration: 360, delay: 40, easing: 'linear', fill: 'both' });
+      pressIn(P.press, { dur: 420 / FOLD_SPEED });
+      var fl = fly(P, false, { delay: 60 / FOLD_SPEED, dur: 420 / FOLD_SPEED, stagger: 26 / FOLD_SPEED }, calEl);
+      run = settleAll([anim(el, [{ transform: 'scale(.08)' }, { transform: 'scale(1)' }], { duration: 360 / FOLD_SPEED, delay: 40 / FOLD_SPEED, easing: EASE, fill: 'both' })].concat(fl));
+      anim(el, [{ opacity: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 1 }], { duration: 360 / FOLD_SPEED, delay: 40 / FOLD_SPEED, easing: 'linear', fill: 'both' });
     } else {
       // The marks are aimed at the card as it will lie, before its leaves
       // turn; each lands after its leaf lies flat.
       var held = foldShort(P);
       if (held) holdLeaf(held, held.cap);
-      var F = foldGeo(P, calEl), marks = fly(P, false, { delay: 110, dur: 390, stagger: 30 }, calEl);
-      pressIn(P.press);
-      run = settleAll(foldRun(F, false, 1).concat(marks));
+      var F = foldGeo(P, calEl), marks = fly(P, false, { delay: 110 / FOLD_SPEED, dur: 390 / FOLD_SPEED, stagger: 30 / FOLD_SPEED }, calEl);
+      pressIn(P.press, { dur: 420 / FOLD_SPEED });
+      run = settleAll(foldRun(F, false, FOLD_SPEED).concat(marks));
     }
     return run.then(function () {
       if (tok !== P.seq) throw new Error('superseded');
       stopAnims(el, true);
       land(P, false);
-      if (held) { freeLeaf(held); slideLeaf(held, held.cap, held.full, leafTime(held, FOLD.letDown)); }
+      if (held) { freeLeaf(held); slideLeaf(held, held.cap, held.full, leafTime(held, FOLD.letDown) / FOLD_SPEED); }
       P.state = 'open';
       el.classList.add('open');
       return true;
@@ -1136,12 +1250,14 @@
   }
   function closeCard(P, calEl, o) {
     o = o || {};
-    var tok = ++P.seq, el = P.el, sp = o.fast ? 1.8 : 1, run;
+    var tok = ++P.seq, el = P.el, sp = FOLD_SPEED * (o.fast ? 1.8 : 1), run;
     P.state = 'closing';
+    settleMoved(P);
     el.classList.remove('open');
     // Marks still flying in are dropped; the ones in the card fly back
     // from where they are.
     clearCarry(P);
+    if (!o.instant && (byKey() || motionOff())) o = Object.assign({}, o, { instant: true });
     var moving = !o.instant && P.src && P.src.isConnected && !reducedMotion();
     if (moving && P.carried) {
       P.pairs = carryPairs(P.src, el);
@@ -1388,7 +1504,6 @@
       this.eventsByMonth[this.cal.current_year + '_' + this.cal.current_month] = initialEvents;
 
       this.view = { y: this.cal.current_year || 1, m: this.cal.current_month || 1 };
-      this.rm = reducedMotion();
       this.wingFor = null; // key of the day whose wing is open, or null
       this._roll = null;   // the open "Roll one" roller in the day card, or null
       this._wingStale = null; // the open day's card, redrawn once it finishes unfolding
@@ -1427,6 +1542,7 @@
       if (window.Chronicle && Chronicle.calendarGameNight) Chronicle.calendarGameNight.destroy(this);
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
       if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
+      if (this._rmObs) { this._rmObs.disconnect(); this._rmObs = null; }
       if (this._mvOffHandler) document.removeEventListener('pointerdown', this._mvOffHandler, true);
       if (this._plUp) document.removeEventListener('pointerup', this._plUp);
       if (this._gnRaf) cancelAnimationFrame(this._gnRaf);
@@ -1467,9 +1583,9 @@
             '<div class="h-row h-mid">' +
               '<h2 class="mtitle" id="cal5-mtitle"></h2>' +
               '<nav class="mnav" aria-label="Change month">' +
-                '<button type="button" class="ib" id="cal5-prev" aria-label="Previous month"><i class="fa-solid fa-chevron-left"></i></button>' +
+                '<button type="button" class="ib" id="cal5-prev" aria-label="Previous month"><i class="fa-solid fa-chevron-up"></i></button>' +
                 '<button type="button" class="tbtn plain" id="cal5-todaybtn">Today</button>' +
-                '<button type="button" class="ib" id="cal5-next" aria-label="Next month"><i class="fa-solid fa-chevron-right"></i></button>' +
+                '<button type="button" class="ib" id="cal5-next" aria-label="Next month"><i class="fa-solid fa-chevron-down"></i></button>' +
               '</nav>' +
             '</div>' +
             '<div class="h-row h-subw">' +
@@ -1502,7 +1618,17 @@
         '</div>' +
         '<div class="sr" id="cal5-live" aria-live="polite"></div>';
 
-      if (this.rm) document.documentElement.classList.add('rm');
+      // html.rm follows the page's motion level, so a My view change reaches
+      // the stylesheet's reduced-motion rules without a reload.
+      var self = this, syncRm = function () {
+        self.rm = reducedMotion();
+        document.documentElement.classList.toggle('rm', self.rm);
+      };
+      syncRm();
+      if (window.MutationObserver) {
+        this._rmObs = new MutationObserver(syncRm);
+        this._rmObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-motion', 'data-cz-reduce', 'data-view-motion'] });
+      }
 
       this.calEl = $('#cal5-cal', this.el);
       this.dowEl = $('#cal5-dow', this.el);
@@ -4044,8 +4170,6 @@
       if (form) { this._awayForm.from = form.elements.from.value; this._awayForm.to = form.elements.to.value; }
       this._awayForm.error = 'You haven’t marked these days yet. Press Mark me away, or Cancel.';
       redraw();
-      var err = root && root.querySelector('[data-away-form] .gperr');
-      if (err) err.classList.add('shake');
       return true;
     },
 
@@ -4484,7 +4608,9 @@
     seasonForDate: function (month, day) {
       var seasons = this.cal.seasons || [];
       for (var i = 0; i < seasons.length; i++) {
-        var s = seasons[i], startVal = s.start_month * 100 + s.start_day, endVal = s.end_month * 100 + s.end_day, dateVal = month * 100 + day;
+        // The month's weight is above the longest month allowed (3660 days),
+        // as in Season.ContainsDate.
+        var s = seasons[i], startVal = s.start_month * 10000 + s.start_day, endVal = s.end_month * 10000 + s.end_day, dateVal = month * 10000 + day;
         var hit = startVal <= endVal ? (dateVal >= startVal && dateVal <= endVal) : (dateVal >= startVal || dateVal <= endVal);
         if (hit) return s;
       }
@@ -4619,6 +4745,9 @@
 
     renderMonth: function () {
       var self = this, cal = this.cal;
+      // Any other change of month ends a roll; a refresh of the month it
+      // is rolling to repaints into it.
+      if (this._strip && !this._rollIn && (this._strip.view.y !== this.view.y || this._strip.view.m !== this.view.m)) this._endRoll();
       this.renderHeader();
       var vy = this.view.y, vm = this.view.m;
       Promise.all([this.fetchMonth(vy, vm).then(function () { return self.fetchRolls(vy, vm); }), this.fetchWeatherYear(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
@@ -4681,7 +4810,18 @@
         }
         html += '</div>';
       }
-      this.stageEl.innerHTML = '<div class="month">' + html + '</div>';
+      var ri = this._rollIn;
+      this._rollIn = null;
+      if (this._strip && !ri) {
+        // Marks, weather and the rest arrive mid-roll: they are drawn into
+        // the month that is moving, which keeps moving.
+        var live = this._strip.month;
+        live.className = 'month';
+        live.innerHTML = html;
+      } else {
+        if (ri && ri.old.parentNode === this.stageEl) this.stageEl.removeChild(ri.old);
+        this.stageEl.innerHTML = '<div class="month">' + html + '</div>';
+      }
       // An open day's card follows its day into the redrawn grid (not one
       // on its way out: that one is put away with its old cell).
       var ps = this._pw.state, open = (ps === 'open' || ps === 'opening') && this.stageEl.querySelector('.day[data-key="' + this.wingFor + '"]');
@@ -4695,6 +4835,7 @@
       this._skyDay();
       this._gnSpin();
       if (this._pollDraft) this._pollPaintPicks();
+      if (ri) this._startRoll(ri);
     },
 
     _dayBandHTML: function (y, m, d, monthDef, totalDays) {
@@ -5148,12 +5289,70 @@
     // Navigation
     // --------------------------------------------------------------
     goMonth: function (delta) {
+      // A roll still running ends at once before the next step.
+      this._endRoll();
       // A day's card belongs to its day; changing the month puts it away.
       if (this.wingFor) this.closeWing({ instant: true, quiet: true });
-      var next = CalDate.shiftMonth(this.cal, this.view.y, this.view.m, delta);
+      var from = this.view, next = CalDate.shiftMonth(this.cal, this.view.y, this.view.m, delta);
+      // One step rolls; a longer jump, a key and Off swap at once.
+      var old = (delta === 1 || delta === -1) && !byKey() && !motionOff() ? this.stageEl.querySelector('.month') : null;
+      if (old) {
+        var rows = $$('.wk', old), last = rows[rows.length - 1];
+        this._rollIn = { old: old, dir: delta, from: from, to: next, lastTop: last ? last.offsetTop : 0, stageH: this.stageEl.offsetHeight, oldH: old.offsetHeight };
+      }
       this.view = next;
       this._eraFade = true;
       this.renderMonth();
+      this._rollIn = null;
+    },
+
+    // The month changes as one strip: the earlier month sits above the later
+    // one and the strip moves, so the months seem to join. The new month is
+    // the grid itself, drawn at once and still fetching as ever; the old one
+    // stays beside it only to leave. The week row both months share is drawn
+    // once, where the two overlap. Calm cross-fades in place. A press while
+    // it runs ends it first, so two months never stay on screen.
+    _startRoll: function (ri) {
+      var stage = this.stageEl, month = stage.querySelector('.month'), old = ri.old;
+      if (!month || !old) return;
+      var calm = reducedMotion(), dir = ri.dir, ms = rollMs(), ease = slideEase();
+      var rows = $$('.wk', month), last = rows[rows.length - 1];
+      var earlier = dir > 0 ? ri.from : ri.to, later = dir > 0 ? ri.to : ri.from;
+      var shared = !calm && CalDate.sharedRow(this.cal, earlier, later);
+      // How far the strip moves: the earlier month's height, less the row
+      // the two share.
+      var shift = dir > 0 ? (shared ? ri.lastTop : ri.oldH) : (shared && last ? last.offsetTop : month.offsetHeight);
+      old.classList.add('leaving');
+      old.classList.remove('dim');
+      old.setAttribute('aria-hidden', 'true');
+      old.inert = true;
+      $$('[data-key]', old).forEach(function (n) { n.removeAttribute('data-key'); });
+      stage.appendChild(old);
+      // The stage clips while it rolls and is as tall as the taller month.
+      if (ri.stageH > stage.offsetHeight) stage.style.minHeight = ri.stageH + 'px';
+      stage.classList.add('rolling');
+      var o = { duration: ms, easing: ease, fill: 'both' }, anims = [];
+      var arrive = calm ? [{ opacity: 0 }, { opacity: 1 }] : [{ transform: 'translateY(' + (dir > 0 ? shift : -shift) + 'px)', opacity: 0 }, { transform: 'none', opacity: 1 }];
+      anims.push(old.animate(calm ? [{ opacity: 1 }, { opacity: 0 }] : [{ transform: 'none', opacity: 1 }, { transform: 'translateY(' + (dir > 0 ? -shift : shift) + 'px)', opacity: 0 }], o), month.animate(arrive, o));
+      // The era colours behind the days travel and arrive with the month;
+      // the old month's colours are not carried along.
+      var field = this.eraField;
+      if (field && field.cv) anims.push(field.cv.animate(arrive, o));
+      if (field && field.fade) { field.fade.style.transition = 'none'; field.fade.style.opacity = '0'; }
+      var self = this, tok = (this._rollTok = (this._rollTok || 0) + 1);
+      this._strip = { month: month, old: old, view: ri.to, anims: anims };
+      Promise.all(anims.map(function (a) { return a.finished; })).then(function () { if (tok === self._rollTok) self._endRoll(); }, function () {});
+    },
+
+    _endRoll: function () {
+      var r = this._strip;
+      if (!r) return;
+      this._strip = null;
+      this._rollTok = (this._rollTok || 0) + 1;
+      r.anims.forEach(function (a) { a.cancel(); });
+      if (r.old.parentNode) r.old.parentNode.removeChild(r.old);
+      this.stageEl.classList.remove('rolling');
+      this.stageEl.style.minHeight = '';
     },
 
     goToday: function () {
@@ -5269,7 +5468,7 @@
         if (!mk || mk === self._hoverAnchor) return;
         clearTimeout(hoverTimer);
         self._hoverAnchor = mk;
-        hoverTimer = setTimeout(function () { self.showGlance(mk); }, 350);
+        hoverTimer = setTimeout(function () { self.showGlance(mk); }, 250);
       });
       this.stageEl.addEventListener('mouseleave', function () {
         clearTimeout(hoverTimer);
@@ -5490,7 +5689,10 @@
       var buttons = $$('.day[data-key]', this.stageEl);
       var idx = buttons.findIndex(function (b) { return b === document.activeElement; });
       var next = buttons[Math.max(0, Math.min(buttons.length - 1, (idx < 0 ? 0 : idx) + delta))];
-      if (next) next.focus({ preventScroll: false });
+      if (!next) return;
+      next.focus({ preventScroll: false });
+      // An open card goes with the focus, at once: it is a key.
+      if (next.dataset.key && this.wingFor && next.dataset.key !== this.wingFor) this._followWing(next.dataset.key);
     },
 
     anyPanelOpen: function () {
@@ -5529,6 +5731,9 @@
         return;
       }
       if (this.wingFor && this._rollHolds()) return;
+      // A press (not Enter or Space, which toggle) on another day while a
+      // card lies open carries the card over instead of folding it away.
+      if (this.wingFor && !highlightEventId && !byKey() && this._followWing(key)) return;
       var go = function () { if (!self.wingFor) self._showWing(key, highlightEventId); };
       if (this.wingFor) this.closeWing({ quiet: true, fast: true }).then(go);
       else if (this._pf.state !== 'closed') this.closeFlap({ quiet: true }).then(go);
@@ -5554,7 +5759,7 @@
       // card's icons wait for them.
       P.pairs = [];
       P.carried = false;
-      if (!reducedMotion() && btn.querySelector('.mk')) {
+      if (!reducedMotion() && !byKey() && btn.querySelector('.mk')) {
         P.pairs = carryPairs(btn, this.wingEl);
         if (highlightEventId) P.pairs.sort(function (a, b) { return (b.id === highlightEventId) - (a.id === highlightEventId); });
         P.pairs.forEach(function (p) { p.ric.classList.add('wait'); });
@@ -5569,6 +5774,75 @@
         if (row && row.isConnected) row.classList.add('pulse');
         var n = P.next; P.next = null; if (n) n();
       });
+    },
+
+    // A card that is fully open, with nothing being filled in, moves to the
+    // day pressed (or arrowed to) instead of folding away and out again.
+    // False means it did not: the caller closes and opens as before.
+    _canFollow: function () {
+      var P = this._pw;
+      return !!(this.wingFor && P.state === 'open' && P.g && !isPhone() && !this._roll && !this._awayForm &&
+        !this.calEl.classList.contains('editing') && !this.wingEl.querySelector('form') && !this.evpEl.classList.contains('open') &&
+        !(window.Chronicle && Chronicle.isDirty && Chronicle.isDirty()));
+    },
+
+    _followWing: function (key) {
+      if (!this._canFollow()) return false;
+      var P = this._pw, el = this.wingEl, calEl = this.calEl, btn = this.stageEl.querySelector('.day[data-key="' + key + '"]'), old = P.src;
+      if (!btn || btn === old) return false;
+      var instant = byKey() || motionOff(), calm = !instant && reducedMotion();
+      var from = relRect(el, calEl), had = el.contains(document.activeElement), ghost = null;
+      settleMoved(P);
+      if (calm) {
+        // The old place fades out under the new one fading in.
+        ghost = el.cloneNode(true);
+        ghost.removeAttribute('id');
+        ghost.setAttribute('aria-hidden', 'true');
+        ghost.inert = true;
+        ghost.style.pointerEvents = 'none';
+        calEl.insertBefore(ghost, el);
+        P.ghost = ghost;
+      }
+      stopAnims(el, true);
+      if (old && old.isConnected) { unpackMarks(old); old.classList.remove('sel'); old.removeAttribute('aria-expanded'); }
+      this._planFor = null;
+      this._gnChooseFor = null;
+      this._pollPicking = null;
+      el.innerHTML = this._wingHTML(parseDayKey(key));
+      this.wingFor = key;
+      this._markOpenDay(btn);
+      el.style.maxHeight = '';
+      var g = wingGeometry(el, btn, calEl), depth = pressDepth(btn);
+      placeCard(el, g);
+      P.src = btn;
+      P.g = g;
+      P.press = [{ el: btn.querySelector('.dc'), depth: depth }, { el: btn, pseudo: '::before', depth: depth }];
+      P.pairs = [];
+      P.carried = false;
+      // The new day's marks are already in the card's icons: no flight.
+      if (!instant && !calm && btn.querySelector('.mk')) {
+        btn.classList.add('packed');
+        $$('.mk, .more', btn).forEach(function (m) { stopAnims(m); });
+        P.carried = true;
+      }
+      if (!instant) {
+        var ms = travelMs();
+        P.moved = true;
+        if (calm) {
+          el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'ease-out' });
+          ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, easing: 'ease-in', fill: 'forwards' }).finished.then(function () { if (P.ghost === ghost) P.ghost = null; ghost.remove(); }, function () {});
+        } else {
+          el.animate([{ transform: 'translate(' + (from.x - g.final.x).toFixed(1) + 'px,' + (from.y - g.final.y).toFixed(1) + 'px)' }, { transform: 'none' }], { duration: ms, easing: slideEase() });
+          // The words change as the card sets off, dimmed and never blank:
+          // an empty sheet in flight reads as a flash.
+          var content = el.querySelectorAll('.lf1 > *, .lf2 > *'), fade = Math.round(ms * 0.6);
+          for (var i = 0; i < content.length; i++) content[i].animate([{ opacity: 0.45 }, { opacity: 1 }], { duration: fade, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+        }
+      } else if (ghost) { ghost.remove(); P.ghost = null; }
+      if (had) el.focus({ preventScroll: true });
+      var d = parseDayKey(key), n = this.eventsOnDay(d.y, d.m, d.d).length;
+      this._announce(this._dateLabel(d.y, d.m, d.d) + '. ' + (n ? n + (n === 1 ? ' event' : ' events') : 'Nothing on the calendar') + '.');
+      return true;
     },
 
     // The open day turns to paper and the rest of the month recedes.
@@ -5916,7 +6190,6 @@
       var pr = this.calEl.getBoundingClientRect(), r = mk.getBoundingClientRect();
       this.hcEl.style.left = Math.max(8, r.left - pr.left) + 'px';
       this.hcEl.style.top = (r.bottom - pr.top + 6) + 'px';
-      this.hcEl.style.transformOrigin = (r.left - pr.left + r.width / 2) + 'px 0px';
       this.hcEl.classList.add('on');
     },
 
@@ -6374,7 +6647,6 @@
         var err = form.querySelector('.sterr');
         err.textContent = 'You haven’t set this date yet. Press Set today, or Cancel.';
         err.hidden = false;
-        err.classList.remove('shake'); void err.offsetWidth; err.classList.add('shake');
         return;
       }
       this.closePop();

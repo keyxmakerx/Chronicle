@@ -51,6 +51,9 @@ type Repository interface {
 	RewritePack(ctx context.Context, k PackKey, rows []Change) error
 	// PrunePacks removes packs, and kept pages, whose keep_until has passed.
 	PrunePacks(ctx context.Context, today time.Time) (int, error)
+	// MarkPageRemovalsUndone marks every open removal of the page undone, by
+	// the person (empty when unknown), so the page stops being kept.
+	MarkPageRemovalsUndone(ctx context.Context, campaignID, entityID, by string, at time.Time) error
 	// KeptPages lists the pages players removed that the Trash must keep:
 	// every live, not undone removal, and every kept page whose keep_until
 	// is today or later.
@@ -206,6 +209,19 @@ func (r *repository) MarkUndone(ctx context.Context, campaignID string, id int64
 	}
 	n, _ := res.RowsAffected()
 	return n == 1, nil
+}
+
+func (r *repository) MarkPageRemovalsUndone(ctx context.Context, campaignID, entityID, by string, at time.Time) error {
+	var who sql.NullString
+	if by != "" {
+		who = sql.NullString{String: by, Valid: true}
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE player_changes SET undone_at = ?, undone_by = ?
+		WHERE campaign_id = ? AND entity_id = ? AND kind = ? AND undone_at IS NULL`,
+		at.UTC(), who, campaignID, entityID, KindRemoved); err != nil {
+		return fmt.Errorf("marking a page's removals undone: %w", err)
+	}
+	return nil
 }
 
 func (r *repository) Recent(ctx context.Context, campaignID string, since time.Time) ([]Suggestion, []Suggestion, error) {

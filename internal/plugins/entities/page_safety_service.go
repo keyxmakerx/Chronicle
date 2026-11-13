@@ -162,7 +162,10 @@ type PageSafetyService interface {
 	// picked by selectedID (the newest when empty or unknown). Only that
 	// version carries a word diff: it is the only one shown, and diffing
 	// every version of a long page on each open is costly.
-	History(ctx context.Context, entityID, selectedID string) ([]VersionView, int, error)
+	// History lists a page's versions. redact, when set, edits each version's
+	// text before the diffs are made, so a reader never gets a part of a
+	// page they could not see on the page itself.
+	History(ctx context.Context, entityID, selectedID string, redact func(*EntityVersion)) ([]VersionView, int, error)
 	// RestoreVersion puts a version's title and text back on the page,
 	// saved as a new version so the restore can be undone too.
 	RestoreVersion(ctx context.Context, entityID, versionID string) error
@@ -220,6 +223,10 @@ type LongTermTrash interface {
 	// KeptPages returns the Trash item roots to keep. An error keeps every
 	// page this round: nothing is removed on a guess.
 	KeptPages(ctx context.Context) ([]string, error)
+	// PageRestored tells the keeper a page came back out of the Trash by any
+	// route, so it stops keeping it: a later delete must wait out its Trash
+	// days like any other page. It must not fail the restore.
+	PageRestored(ctx context.Context, campaignID, entityID string)
 }
 
 // SetLongTermTrash wires the keeper; see LongTermTrash.
@@ -233,7 +240,7 @@ func NewPageSafetyService(repo PageSafetyRepository, entities EntityRepository, 
 	return &pageSafetyService{repo: repo, entities: entities, svc: es, retention: retention}
 }
 
-func (p *pageSafetyService) History(ctx context.Context, entityID, selectedID string) ([]VersionView, int, error) {
+func (p *pageSafetyService) History(ctx context.Context, entityID, selectedID string, redact func(*EntityVersion)) ([]VersionView, int, error) {
 	versions, err := p.repo.ListVersions(ctx, entityID, MaxVersionsPerPage)
 	if err != nil {
 		return nil, 0, apperror.NewInternal(err)
@@ -246,6 +253,9 @@ func (p *pageSafetyService) History(ctx context.Context, entityID, selectedID st
 	}
 	texts := make([]string, len(versions))
 	for i := range versions {
+		if redact != nil {
+			redact(&versions[i])
+		}
 		texts[i] = versionText(&versions[i])
 	}
 	out := make([]VersionView, len(versions))
@@ -418,6 +428,12 @@ func (p *pageSafetyService) RestoreFromTrash(ctx context.Context, campaignID, en
 		return nil, err
 	}
 	slog.Info("page restored from trash", slog.String("entity_id", entityID), slog.Int("sub_pages", item.SubPages))
+	// The ordinary Trash restores without going through "What players
+	// changed", so without this a player's old removal would keep the page
+	// out of the purge forever once the owner deletes it again.
+	if p.keeper != nil {
+		p.keeper.PageRestored(ctx, campaignID, entityID)
+	}
 	if p.svc != nil {
 		if e, err := p.entities.FindByID(ctx, entityID); err == nil {
 			p.svc.events.PublishEntityEvent("created", campaignID, entityID, e)

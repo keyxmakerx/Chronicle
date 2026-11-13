@@ -295,6 +295,9 @@
     // arrangement; the editor starts from it, and Save stores it once changed.
     var shown = canon(S.layout);
     var saved = S.unsaved ? { rows: [] } : shown;
+    // Block types the starting arrangement holds that a home with no layout of
+    // its own can borrow: shown as a faded draft, kept one by one.
+    var SUG = HOME && S.unsaved && Array.isArray(S.suggest) ? S.suggest : [];
     // A category's named layouts besides its main one (page_layouts.go):
     // each page wears one. VAR is the one being arranged, 'main' the
     // category's main layout. A home has none.
@@ -304,7 +307,7 @@
     var VAR = 'main';
     var W = {};               // palette entries by key (type, or ext_widget:slug)
     var paletteState = 'loading';
-    var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, sheet: false, reading: false, look: lookNow(), addAt: null, peekKeep: false };
+    var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, sheet: false, reading: false, look: lookNow(), addAt: null, peekKeep: false, pageQ: '', pageHits: null };
     // The page the layout is drawn with, and each widget's look on it, by
     // pvKey. A look is a node, or null when the widget draws nothing there.
     var PV = { entityId: '', pages: [], looks: {}, idx: {}, n: 0, pending: {}, busy: false, failed: false, loaded: false, timer: 0 };
@@ -783,6 +786,31 @@
     function insHTML(at, last) {
       return '<div class="cpe-ins' + (last ? ' always' : '') + '" data-at="' + at + '"><button type="button" data-act="addsec" data-at="' + at + '">' + ic('fa-plus') + ' Add section</button></div>';
     }
+    // ghosts are the suggested widgets the layout does not hold yet and this
+    // campaign offers, until the draft is dismissed.
+    function ghosts() {
+      if (!SUG.length || UI.sugOff || UI.reading || paletteState !== 'ready') return [];
+      var have = {};
+      L.rows.forEach(function (r) {
+        r.columns.forEach(function (c) { c.blocks.forEach(function (b) { have[b.type] = true; }); });
+        (r.tiles || []).forEach(function (t) { have[t.type] = true; });
+      });
+      return SUG.filter(function (t, i) { return !have[t] && W[t] && !W[t].missing && SUG.indexOf(t) === i; });
+    }
+    // draftHTML is the faded draft under the page: each suggestion with a quiet
+    // Keep, and one word to keep them all or put the draft away. Nothing is in
+    // the layout, or saved, until a block is kept.
+    function draftHTML() {
+      var g = ghosts();
+      if (!g.length) return '';
+      return '<section class="cpe-draft" aria-label="Suggested blocks"><p class="cpe-draft-lab">Draft · faded blocks are suggestions</p><div class="cpe-draft-grid">' +
+        g.map(function (t) {
+          return '<div class="cpe-sug">' + ic(W[t].icon || 'fa-puzzle-piece') + '<span class="cpe-sug-name">' + esc(W[t].name) + '</span>' +
+            '<button type="button" class="cpe-sug-keep" data-act="sugkeep" data-v="' + esc(t) + '" aria-label="Keep ' + esc(W[t].name) + '">Keep</button></div>';
+        }).join('') +
+        '</div><p class="cpe-draft-acts"><button type="button" class="btn-primary btn-sm" data-act="sugall">Keep all suggestions</button> ' +
+        '<button type="button" class="cpe-draft-q" data-act="sugno">Dismiss draft</button></p></section>';
+    }
     function canvasHTML() {
       var h = '<div class="cpe-pagehead">' + ic('fa-file-lines') + '<span>';
       if (PV.failed) h += 'The page couldn’t be drawn here, so widgets show their names.';
@@ -796,7 +824,7 @@
       room = room && !UI.reading;
       L.rows.forEach(function (r, i) { h += (room ? insHTML(i) : '') + rowHTML(r); });
       if (!UI.reading) h += room ? insHTML(L.rows.length, true) : '<p class="cpe-hint cpe-full">A page holds ' + MAX_ROWS + ' sections at most. Remove one to add another.</p>';
-      return '<div class="cpe-frame ' + UI.device + '"><div class="cpe-page" data-page>' + h + '</div></div>';
+      return '<div class="cpe-frame ' + UI.device + '">' + draftHTML() + '<div class="cpe-page" data-page>' + h + '</div></div>';
     }
 
     /* ---------- Layouts ----------
@@ -1017,12 +1045,54 @@
           inp = '<select class="cpe-inp" id="' + id + '" data-cfg="' + esc(key) + '">' + opts.map(function (o) {
             return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(v) ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
           }).join('') + '</select>';
+        } else if (fd.type === 'page') {
+          inp = pagePickHTML(id, key, cfg);
         } else {
           inp = '<input class="cpe-inp" type="text" id="' + id + '" data-cfg="' + esc(key) + '" value="' + esc(v) + '">';
         }
         var hint = fd.hint ? '<span class="cpe-hint">' + esc(fd.hint) + '</span>' : '';
         return '<div class="cpe-grp"><label class="cpe-lab" for="' + id + '">' + esc(fd.label || humanize(key)) + '</label>' + inp + hint + '</div>';
       }).join('');
+    }
+    // pagePickHTML is a "page" setting: the page picked now, with Clear, over a
+    // search of the campaign's pages, since a campaign can hold hundreds. The
+    // page's name rides along in the config (key + "_name") only so this
+    // panel can say what is picked; the page itself reads the id.
+    function pagePickHTML(id, key, cfg) {
+      var picked = cfg[key] ? String(cfg[key + '_name'] || 'A page') : '';
+      var h = picked
+        ? '<p class="cpe-pp-now">' + ic('fa-file-lines') + '<b>' + esc(picked) + '</b><button type="button" class="cpe-pp-clear" data-act="pageclr" data-k="' + esc(key) + '">Clear</button></p>'
+        : '<p class="cpe-hint">No page picked yet.</p>';
+      h += '<input class="cpe-inp" type="search" id="' + id + '" data-pagepick="' + esc(key) + '" value="' + esc(UI.pageQ) + '" placeholder="' + (picked ? 'Pick another page' : 'Search pages') + '" autocomplete="off">';
+      var hits = UI.pageHits;
+      if (UI.pageQ.trim().length >= 2 && hits) {
+        h += hits === false ? '<p class="cpe-hint">The search didn’t answer. Try again in a moment.</p>'
+          : !hits.length ? '<p class="cpe-hint">No page matches “' + esc(UI.pageQ.trim()) + '”.</p>'
+          : '<div class="cpe-pp-hits">' + hits.map(function (x) {
+            return '<button type="button" class="cpe-pp-hit" data-act="pagepick" data-k="' + esc(key) + '" data-v="' + esc(x.id) + '" data-n="' + esc(x.name) + '">' +
+              '<span>' + esc(x.name) + '</span>' + (x.type ? '<small>' + esc(x.type) + '</small>' : '') + '</button>';
+          }).join('') + '</div>';
+      }
+      return h;
+    }
+    var pageSeq = 0, pageTimer = 0;
+    function searchPages(q) {
+      clearTimeout(pageTimer);
+      UI.pageQ = q;
+      var seq = ++pageSeq;
+      if (q.trim().length < 2) { UI.pageHits = null; render(); return; }
+      pageTimer = setTimeout(function () {
+        Chronicle.apiFetch('/campaigns/' + encodeURIComponent(CID) + '/entities/search?q=' + encodeURIComponent(q.trim()), { headers: { Accept: 'application/json' } })
+          .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+          .then(function (b) {
+            if (!alive || seq !== pageSeq) return;
+            UI.pageHits = ((b && b.results) || []).filter(function (x) { return x.id && /\/entities\//.test(x.url || ''); })
+              .slice(0, 8).map(function (x) { return { id: String(x.id), name: x.name || '(unnamed)', type: x.type_name || '' }; });
+            UI.keepInsp = true;
+            render();
+          })
+          .catch(function () { if (alive && seq === pageSeq) { UI.pageHits = false; UI.keepInsp = true; render(); } });
+      }, 200);
     }
     function needOptions(type) {
       var k = type === 'map' ? 'maps' : 'types';
@@ -1066,7 +1136,7 @@
     function render() {
       if (!alive) return;
       var cv = $('.cpe-canvas'), top = cv ? cv.scrollTop : 0, ib = $('.cpe-insp-body'), itop = ib ? ib.scrollTop : 0;
-      var ae = document.activeElement, fid = ae && el.contains(ae) ? ae.id : '', pos = fid === 'cpe-q' ? ae.selectionStart : null;
+      var ae = document.activeElement, fid = ae && el.contains(ae) ? ae.id : '', pos = fid === 'cpe-q' || (ae && ae.hasAttribute('data-pagepick')) ? ae.selectionStart : null;
       // The canvas carries the player-view mark while it shows a player's
       // view, so marked Director-only parts inside drawn widgets hide too.
       el.innerHTML = '<div class="cpe' + (UI.reading ? ' reading' : '') + '">' + layoutsHTML() + notices() + '<div class="cpe-editor"><div class="cpe-main">' + toolbarHTML() +
@@ -1117,6 +1187,7 @@
     function select(sel) {
       UI.sel = sel;
       UI.addAt = null;
+      UI.pageQ = ''; UI.pageHits = null;
       UI.insp = sel ? 'sel' : 'add';
       if (sel) UI.sheet = true;
       render();
@@ -1671,6 +1742,14 @@
           case 'as': UI.viewAs = v; render(); return;
           case 'look': UI.look = v === 'annals' ? 'annals' : 'standard'; showLook(UI.look); render(); fadeFrame(); return;
           case 'read': readMode(!UI.reading); return;
+          case 'sugkeep': UI.sel = null; addWidget(v); return;
+          case 'sugall': {
+            // Each kept block lands beside the last, so they stay together.
+            UI.sel = null;
+            ghosts().forEach(function (t) { addWidget(t); });
+            return;
+          }
+          case 'sugno': UI.sugOff = true; render(); return;
           case 'insp': UI.insp = v; render(); return;
           case 'sheet': UI.sheet = !UI.sheet; $('.cpe-insp').classList.toggle('open', UI.sheet); return;
           case 'galtiles': UI.galTiles = !UI.galTiles; render(); return;
@@ -1682,6 +1761,16 @@
           case 'laynew': e.stopPropagation(); layoutNameMenu(b, ''); return;
           case 'layren': e.stopPropagation(); layoutNameMenu(b, VAR); return;
           case 'layrm': removeLayout(); return;
+          case 'pagepick':
+          case 'pageclr': {
+            var pk = b.getAttribute('data-k'), pn = b.getAttribute('data-n');
+            UI.keepInsp = true; UI.pageQ = ''; UI.pageHits = null; pageSeq++;
+            edit(function (lay) {
+              var c = cfgOf(findSel(lay).item);
+              if (act === 'pagepick') { c[pk] = v; c[pk + '_name'] = pn; } else { delete c[pk]; delete c[pk + '_name']; }
+            });
+            return;
+          }
           case 'vis': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.visibility = v; else delete c.visibility; }); return;
           case 'size': UI.keepInsp = true; edit(function (lay) { findSel(lay).item.size = v; }); return;
           case 'height': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.minHeight = v; else delete c.minHeight; }); return;
@@ -1740,6 +1829,7 @@
     });
     on(el, 'input', function (e) {
       if (e.target.id === 'cpe-q') { UI.galQ = e.target.value; render(); }
+      else if (e.target.hasAttribute && e.target.hasAttribute('data-pagepick')) searchPages(e.target.value);
     });
     on(el, 'change', function (e) {
       var t = e.target;
@@ -1773,6 +1863,7 @@
     return function destroy() {
       alive = false;
       clearTimeout(PV.timer);
+      clearTimeout(pageTimer);
       closePop();
       if (DRAG) { DRAG.ghost.remove(); DRAG = null; document.body.classList.remove('cpe-dragging'); }
       showLook(LOOK0);

@@ -5,6 +5,7 @@ package pages
 
 import (
 	"fmt"
+	"strings"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -21,9 +22,11 @@ templ ErrorPage(statusCode int, message string) {
 				<h1 class="text-2xl font-semibold text-fg mb-3">
 					{ errorTitle(statusCode) }
 				</h1>
-				<p class="text-fg-body leading-relaxed mb-2">
-					{ errorMessage(statusCode, message) }
-				</p>
+				if msg := errorMessage(statusCode, message); msg != "" {
+					<p class="text-fg-body leading-relaxed mb-2">
+						{ msg }
+					</p>
+				}
 				if hint := errorHint(statusCode); hint != "" {
 					<p class="text-sm text-fg-muted leading-relaxed">{ hint }</p>
 				}
@@ -43,10 +46,15 @@ templ ErrorPage(statusCode int, message string) {
 
 // errorMessage is the page's main sentence. A not-found page never repeats
 // the error's own text: a page hidden from someone answers exactly like a
-// missing one, and the wording covers both without saying which.
+// missing one, and the wording covers both without saying which. A refusal
+// drops the bare "insufficient permissions" the services return, which only
+// repeats the heading; the hint under it says what to do.
 func errorMessage(code int, message string) string {
 	if code == 404 {
 		return "This page isn't shared with you, or doesn't exist."
+	}
+	if code == 403 && strings.HasPrefix(strings.ToLower(strings.TrimSpace(message)), "insufficient permissions") {
+		return ""
 	}
 	return message
 }

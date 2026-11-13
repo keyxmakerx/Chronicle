@@ -101,6 +101,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	cg.POST("/armory/downtime", sh.SetDowntime, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/characters/:eid/panel", sh.CharacterPanel, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/characters/:eid/history", sh.CharacterHistory, campaigns.RequireRole(campaigns.RolePlayer))
+	// The hero's log: Player+ at the route; the service lets only the
+	// character's player or a GM write, and only the author or Owner remove.
+	cg.POST("/armory/characters/:eid/log", sh.AddLogNote, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/characters/:eid/log/:nid/delete", sh.DeleteLogNote, campaigns.RequireRole(campaigns.RolePlayer))
 	// Sharing a hidden item a character holds: Player+ at the route; the
 	// service lets only the holder's player or Owner visibility through.
 	cg.GET("/armory/characters/:eid/items/:iid/share", sh.ShareBox, campaigns.RequireRole(campaigns.RolePlayer))
@@ -144,4 +148,20 @@ func RegisterShelfRoutes(e *echo.Echo, h *ShopTodayHandler, campaignSvc campaign
 		addons.RequireAddon(addonSvc, AddonSlug),
 	)
 	cg.PUT("/armory/shops/:eid/today", h.Put, campaigns.RequireRole(campaigns.RoleOwner))
+}
+
+// RegisterShopRollRoutes sets up the counter rolls and the owner's hidden
+// notes. Players reach the rolls at Player+; what a caller may roll for is
+// decided in the service (the buyers rule), and only the campaign Owner reads
+// or writes a note, so a player can never fetch one except through a reveal.
+func RegisterShopRollRoutes(e *echo.Echo, h *ShopRollHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, AddonSlug),
+	)
+	cg.GET("/armory/shops/:eid/rolls", h.Rolls, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/shops/:eid/rolls", h.Roll, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/armory/shops/:eid/secrets", h.Secrets, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/armory/shops/:eid/secrets/:rel", h.PutSecret, campaigns.RequireRole(campaigns.RoleOwner))
 }

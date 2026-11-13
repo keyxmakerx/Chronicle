@@ -619,6 +619,13 @@ func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, ex
 // (S1 — matches ListMarkers).
 func (s *drawingService) ListDrawings(ctx context.Context, mapID string, role int, userID string) ([]Drawing, error) {
 	drawings, err := s.repo.ListDrawings(ctx, mapID, role, userID)
+	if err == nil && role < permissions.RoleOwner {
+		// Whatever sits on a "gm" layer is the Director's, whatever the
+		// drawing's own visibility says.
+		if drawings, err = s.withoutGMLayers(ctx, mapID, drawings); err != nil {
+			return nil, err
+		}
+	}
 	if err != nil || !shadowHidingApplies(role) {
 		return drawings, err
 	}
@@ -643,6 +650,45 @@ func (s *drawingService) ListDrawings(ctx context.Context, mapID string, role in
 		}
 	}
 	return kept, nil
+}
+
+// withoutGMLayers drops drawings that sit on a "gm" layer.
+func (s *drawingService) withoutGMLayers(ctx context.Context, mapID string, ds []Drawing) ([]Drawing, error) {
+	layers, err := s.repo.ListLayers(ctx, mapID)
+	if err != nil {
+		return nil, err
+	}
+	gm := map[string]bool{}
+	for _, l := range layers {
+		if l.LayerType == "gm" {
+			gm[l.ID] = true
+		}
+	}
+	if len(gm) == 0 {
+		return ds, nil
+	}
+	kept := make([]Drawing, 0, len(ds))
+	for _, d := range ds {
+		if d.LayerID == nil || !gm[*d.LayerID] {
+			kept = append(kept, d)
+		}
+	}
+	return kept, nil
+}
+
+// VisibleLayers is the layer list a viewer of that role may see: a "gm"
+// layer is the Director's own.
+func VisibleLayers(layers []Layer, role int) []Layer {
+	if role >= permissions.RoleOwner {
+		return layers
+	}
+	out := make([]Layer, 0, len(layers))
+	for _, l := range layers {
+		if l.LayerType != "gm" {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // WithholdImages implements DrawingService.
@@ -986,11 +1032,47 @@ func (s *drawingService) UpdateToken(ctx context.Context, id, mapID string, isDM
 	t.StatusEffects = input.StatusEffects.Val(t.StatusEffects)
 	t.Flags = input.Flags.Val(t.Flags)
 
-	if err := s.repo.UpdateToken(ctx, t); err != nil {
+	if err := s.repo.UpdateToken(ctx, t, touchedTokenColumns(input)); err != nil {
 		return err
 	}
 	s.events.PublishTokenEvent("updated", s.campaignForMap(ctx, t.MapID), t)
 	return nil
+}
+
+// touchedTokenColumns lists the columns the caller actually sent, so the
+// write leaves every other column to whoever else is saving it.
+func touchedTokenColumns(in UpdateTokenInput) []TokenColumn {
+	var cols []TokenColumn
+	add := func(present bool, c TokenColumn) {
+		if present {
+			cols = append(cols, c)
+		}
+	}
+	add(in.Name != "", "name")
+	add(in.ImagePath.Present(), "image_path")
+	add(in.X.Present(), "x")
+	add(in.Y.Present(), "y")
+	add(in.Width.Present(), "width")
+	add(in.Height.Present(), "height")
+	add(in.Rotation.Present(), "rotation")
+	add(in.Scale.Present(), "scale")
+	add(in.IsHidden.Present(), "is_hidden")
+	add(in.IsLocked.Present(), "is_locked")
+	add(in.Bar1Value.Present(), "bar1_value")
+	add(in.Bar1Max.Present(), "bar1_max")
+	add(in.Bar2Value.Present(), "bar2_value")
+	add(in.Bar2Max.Present(), "bar2_max")
+	add(in.AuraRadius.Present(), "aura_radius")
+	add(in.AuraColor.Present(), "aura_color")
+	add(in.LightRadius.Present(), "light_radius")
+	add(in.LightDimRadius.Present(), "light_dim_radius")
+	add(in.LightColor.Present(), "light_color")
+	add(in.VisionEnabled.Present(), "vision_enabled")
+	add(in.VisionRange.Present(), "vision_range")
+	add(in.Elevation.Present(), "elevation")
+	add(in.StatusEffects.Present(), "status_effects")
+	add(in.Flags.Present(), "flags")
+	return cols
 }
 
 // UpdateTokenPosition updates only the position (optimized for drag).

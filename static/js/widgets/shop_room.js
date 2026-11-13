@@ -1097,7 +1097,7 @@
   var KEEPER_SPOTS = { left: 1, middle: 1, right: 1 };
   // The layout as saved on the server, from the room state, and back.
   function toLayout(S) {
-    return {
+    var L = {
       version: 1, roomType: S.roomType, setting: S.setting, size: S.size, furniture: S.full, decorations: S.deco, palette: S.pal,
       seeds: { room: S.seeds.room, goods: S.seeds.goods, deco: S.seeds.deco },
       look: S.look === 'paper' || S.look === 'counter' ? S.look : 'lit',
@@ -1111,6 +1111,16 @@
       items: S.ov, portrait: S.portrait ? { left: S.portrait[0], top: S.portrait[1] } : null, lines: S.lines.slice(),
       manner: S.manner || '', moments: keptMoments(S.moments), keeperSpot: KEEPER_SPOTS[S.keeperSpot] ? S.keeperSpot : ''
     };
+    // Only a theme the owner made is saved; without one the shop type's starter is drawn.
+    if (S.counter) L.counter = counterTheme(S.counter);
+    // Rolls are saved only once the owner switched one on.
+    if (S.rolls && (S.rolls.haggle || S.rolls.look)) L.rolls = normRolls(S.rolls);
+    return L;
+  }
+  // The counter's theme through the counter file's own normaliser, so an odd value never reaches the server or the drawing.
+  function counterTheme(t) {
+    var C = window.ShopRoomCounter;
+    return JSON.parse(JSON.stringify(C && C.normalise ? C.normalise(t) : t));
   }
   // Only moments with lines are saved; an empty one falls back to the manner.
   function keptMoments(m) {
@@ -1130,6 +1140,7 @@
     S.deco = L.decorations || 'some'; S.pal = L.palette || S.pal;
     S.look = L.look === 'paper' || L.look === 'counter' ? L.look : 'lit';
     S.mood = MOODS[L.mood] ? L.mood : '';
+    S.rolls = L.rolls ? normRolls(L.rolls) : null;
     S.efx = null;
     // The server checks these too; clamping here keeps a stray value from ever reaching the drawing.
     if (L.effects) {
@@ -1153,6 +1164,7 @@
     S.manner = KP && KP.MANNERS[L.manner] ? L.manner : '';
     S.moments = keptMoments(L.moments);
     S.keeperSpot = KEEPER_SPOTS[L.keeperSpot] ? L.keeperSpot : '';
+    S.counter = L.counter && typeof L.counter === 'object' ? counterTheme(L.counter) : null;
     // Set when the AI connection changed what the room is: lay out the
     // furniture for it on opening. toLayout never writes it back.
     S.furnish = L.furnish === 'room' || L.furnish === 'mood' ? L.furnish : '';
@@ -1169,13 +1181,16 @@
   function shopItems(rels, ov, MAT, ICONS, words) {
     return rels.map(function (r) {
       var m = r.metadata || {}, o = ov[String(r.id)] || {}, q = m.quantity, price = Number(m.price) || 0, cur = m.currency || 'gp';
-      var out = m.in_stock === false || (q !== null && q !== undefined && !m.unlimited && Number(q) <= 0);
+      // Stock is read the way the sale reads it (parseShopMeta): a whole
+      // number from 0 up is a count, anything else (absent, -1) is unlimited.
+      var qty = m.unlimited || q === null || q === undefined || !(Number(q) >= 0) || Number(q) % 1 ? null : Number(q);
+      var out = m.in_stock === false || qty === 0;
       var coin = localCoin(words, cur);
       return {
         id: r.id, n: r.targetEntityId ? (r.targetEntityName || 'Item') : (m.custom_name || 'Unnamed item'), k: r.targetEntityType || 'Goods',
         ic: o.icon && ICONS[o.icon] ? o.icon : iconFor(r.targetEntityIcon, ICONS), mat: o.color || '',
         c: (o.color && MAT[o.color]) || safeHex(r.targetEntityColor) || MAT.steel, p: price, cur: cur, price: price + ' ' + coin.text, priceUsual: coin.usual ? price + ' ' + cur : '',
-        qty: q === null || q === undefined || m.unlimited ? null : Number(q), out: out, magic: false, entityId: r.targetEntityId || ''
+        qty: qty, out: out, magic: false, entityId: r.targetEntityId || ''
       };
     });
   }
@@ -1192,6 +1207,29 @@
     return its.filter(function (it) { return !pool[String(it.id)] || out[String(it.id)]; }).map(function (it) {
       if (out[String(it.id)]) it.today = true;
       return it;
+    });
+  }
+  // The owner's roll settings for this counter, as the server keeps them: unknown values fall back
+  // to the defaults, so an odd value never reaches the server or the sheet.
+  function normRolls(r) {
+    r = r || {};
+    var pct = function (v, d, max) { v = Math.round(Number(v)); return isFinite(v) && v >= 0 && v <= max ? v : d; };
+    var stat = function (v) { return /^[a-z0-9][a-z0-9_-]{0,39}$/.test(v || '') ? v : ''; };
+    return { haggle: r.haggle === true, look: r.look === true, stubborn: ['easy', 'usual', 'hard'].indexOf(r.stubborn) >= 0 ? r.stubborn : 'usual',
+      haggleStat: stat(r.haggleStat), lookStat: stat(r.lookStat), great: pct(r.great, 20, 90), middling: pct(r.middling, 10, 90), poor: pct(r.poor, 10, 200) };
+  }
+  // Today's haggled prices for the paying character: goods is the rolls answer's
+  // { relationId: { haggle: { price } } }. The good keeps what it cost before as was.
+  function haggled(its, goods) {
+    if (!goods) return its;
+    return its.map(function (it) {
+      var g = goods[String(it.id)], h = g && g.haggle;
+      if (!h || !(Number(h.price) > 0) || Number(h.price) === it.p) return it;
+      var o = {}; for (var k in it) if (Object.prototype.hasOwnProperty.call(it, k)) o[k] = it[k];
+      var tail = it.price.slice(String(it.p).length);
+      o.was = it.price; o.p = Number(h.price); o.price = o.p + tail;
+      if (it.priceUsual) o.priceUsual = o.p + it.priceUsual.slice(String(it.p).length);
+      return o;
     });
   }
   // The slate's second line: when the shelf changes, with the hours left
@@ -1261,7 +1299,7 @@
     };
   }
 
-  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -1357,6 +1395,8 @@
     '.shr-tab[aria-pressed="true"]{color:var(--shr-acc);background:color-mix(in srgb,var(--shr-acc) 12%,transparent);font-weight:600}',
     '.shr-list{display:grid;gap:2px;max-height:320px;overflow:auto}',
     '.shr-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:6px 8px;border-radius:6px}',
+    '.shr-rnotes{display:grid;gap:6px;margin-top:6px}.shr-rnote{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--color-border,#e5e7eb);border-radius:8px}.shr-rnote.ed{display:grid}.shr-rnote small{color:var(--color-text-secondary,#6b7280)}',
+    '.shr-rolls{grid-column:2/-1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:-2px}.shr-rolls:empty{display:none}.shr-seen{flex-basis:100%;font-style:italic}.shr-price s{opacity:.6;font-weight:400}',
     '.shr-row:hover,.shr-row.hl{background:var(--color-bg-tertiary,#f3f4f6)}',
     '.shr-row.out{opacity:.55}',
     '.shr-ic{width:30px;height:30px;border-radius:6px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 18%,transparent);color:color-mix(in srgb,var(--c),var(--color-text-primary,#111827) 25%)}',
@@ -1534,8 +1574,8 @@
       injectStyle();
       var ds = el.dataset, canArrange = ds.canArrange === 'true', campaignUrl = ds.campaignUrl || '';
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
-      var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy'), todayEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/today'), today = null;
-      var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
+      var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy'), todayEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/today'), today = null, shopBase = (ds.roomEndpoint || '').replace(/\/room$/, ''), rollsState = null;
+      var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true, counter: null,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], manner: '', moments: {}, mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
       var campaignId = (campaignUrl.match(/\/campaigns\/([^/]+)/) || [])[1] || '', words = {};
@@ -1577,7 +1617,7 @@
         S.dark = document.documentElement.classList.contains('dark');
         // Arranging shows every good, so a GM can place one that is not out today.
         S.its = shopItems(rels, S.ov, room.MAT, ICONS, words);
-        if (S.mode !== 'arr') S.its = todayShelf(S.its, today);
+        if (S.mode !== 'arr') S.its = haggled(todayShelf(S.its, today), rollsState && rollsState.goods);
         view = room.draw();
         svg.setAttribute('viewBox', view.viewBox.join(' '));
         fitScene();
@@ -1615,9 +1655,12 @@
       }
       function paperOn() { return S.look === 'paper' && !!window.ShopRoomPaper; }
       function counterOn() { return S.look === 'counter' && !!window.ShopRoomCounter; }
+      // The builder is for the owner, in Arrange, and only while the counter is the look.
+      function cbOn() { return canArrange && counterOn() && !!window.ShopRoomBuilder; }
       function counterModel() {
         return { its: S.its, basket: basket, icons: ICONS, image: ds.shopImage, name: S.name, roomType: S.roomType, time: (S.efx || moodEfx(S.mood)).time, lines: S.lines.length > 0,
-          today: today && today.today && today.today.length ? { line: dawnLine(today), said: TODAY_SAID } : null };
+          today: today && today.today && today.today.length ? { line: dawnLine(today), said: TODAY_SAID } : null,
+          counter: S.counter, edit: S.mode === 'arr' && cbPlace };
       }
       // The counter scene puts goods on the pile through the same rules as the wares list's Add.
       function addable(id) {
@@ -1634,8 +1677,33 @@
         add: function (id) { if (addable(id)) return false; basket[String(id)] = (basket[String(id)] || 0) + 1; note = ''; renderList(); picked(); return true; },
         remove: function (id) { var k = String(id); if (!basket[k]) return; if (!--basket[k]) delete basket[k]; note = ''; renderList(); },
         basketEl: function () { return cartBtn; },
+        rollActs: function (id) {
+          var rs = rollsState, it = null; S.its.forEach(function (x) { if (String(x.id) === String(id)) it = x; });
+          if (!rs || !it || !buy || !buy.buyers.length || !window.ShopRolls) return '';
+          var g = (rs.goods || {})[String(it.id)] || {}, h = '';
+          if (rs.haggle && it.p > 0 && !it.out && !g.haggle) h += '<button type="button" class="src-btn" data-act="roll:haggle:' + esc(it.id) + '">Haggle</button>';
+          if (rs.look && !(g.look && (g.look.today || g.look.tier >= 3))) h += '<button type="button" class="src-btn" data-act="roll:look:' + esc(it.id) + '">Look closer</button>';
+          return h;
+        },
+        roll: function (action, id, b) { openRoll(action, id, b); },
         openList: function () { setOpen(true); },
-        talk: function (el, said) { talk(el, said); }
+        talk: function (el, said) { talk(el, said); },
+        // Place by hand: which props found a spot, and a press on the opening.
+        placed: function (m) { if (window.ShopRoomBuilder) window.ShopRoomBuilder.placed(m); },
+        opening: function () { if (window.ShopRoomBuilder) window.ShopRoomBuilder.opening(); }
+      };
+      /* The counter-room builder (shop_room_builder.js, owner only) reads and
+         writes the theme through this. A change is drawn at once and waits for
+         Save room like any other Arrange change; sliders and colour pickers
+         redraw after a short pause, because each redraw relights the room. */
+      var cbPlace = false, cbT = 0;
+      var cbApi = {
+        theme: function () { var C = window.ShopRoomCounter; return C.normalise(S.counter || C.starterFor(S.roomType)); },
+        custom: function () { return !!S.counter; },
+        set: function (t, soft) { S.counter = t; save(); clearTimeout(cbT); if (soft) cbT = setTimeout(draw, 140); else draw(); },
+        reset: function () { S.counter = null; save(); draw(); },
+        place: function (v) { if (v === undefined) return cbPlace; cbPlace = !!v; draw(); return cbPlace; },
+        campaign: function () { return { url: campaignUrl, csrf: ds.csrfToken }; }
       };
       // The scene keeps the drawing's shape and grows to the biggest size the
       // window leaves it, so the portrait and paper stay on their spots.
@@ -1671,7 +1739,7 @@
           var name = it.entityId ? '<a class="shr-nm" href="' + esc(campaignUrl + '/entities/' + it.entityId) + '" data-hx-boost="true">' + esc(it.n) + '</a>' : '<span class="shr-nm">' + esc(it.n) + '</span>';
           var stock = it.out ? 'Sold out' : it.qty === null ? '' : it.qty + ' left';
           if (it.today) stock = stock ? stock + ', only today' : 'Only today';
-          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price"' + (it.priceUsual ? ' title="' + esc(it.priceUsual) + '"' : '') + '>' + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + '</div>';
+          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price"' + (it.priceUsual ? ' title="' + esc(it.priceUsual) + '"' : '') + '>' + (it.was ? '<s>' + esc(it.was) + '</s> ' : '') + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + rollBtns(it) + '</div>';
         });
         root.querySelector('.shr-list').innerHTML = rows.join('') || '<p class="shr-empty">' + (canArrange ? 'Nothing for sale yet. Add goods in the shop inventory below.' : 'Nothing for sale right now.') + '</p>';
         root.querySelectorAll('.shr-fx button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.fx === S.fx); });
@@ -1686,6 +1754,29 @@
         if (!(it.p > 0)) return '<button type="button" class="shr-add" disabled>No price</button>';
         return '<button type="button" class="shr-add" data-add="' + esc(it.id) + '"' + (q >= max ? ' disabled' : '') + '>' + (q ? 'Add another (' + q + ')' : 'Add') + '</button>';
       }
+      // Haggle and Look closer, when the owner switched them on and the payer hasn't tried today.
+      // A note the payer already noticed is shown under the buttons.
+      function rollBtns(it) {
+        var rs = rollsState; if (!rs || !buy || !buy.buyers.length || !window.ShopRolls || (!rs.haggle && !rs.look)) return '';
+        var g = (rs.goods || {})[String(it.id)] || {}, h = '';
+        if (rs.haggle && it.p > 0 && !it.out) h += g.haggle ? '<span class="shr-m">Haggled today</span>' : '<button type="button" class="shr-add" data-haggle="' + esc(it.id) + '">Haggle</button>';
+        if (rs.look && !(g.look && (g.look.today || g.look.tier >= 3))) h += '<button type="button" class="shr-add" data-look="' + esc(it.id) + '">Look closer</button>';
+        var seen = g.look && g.look.tier >= 2 ? [g.look.note, g.look.extra].filter(Boolean).join(' ') : '';
+        return '<span class="shr-rolls">' + h + (seen ? '<span class="shr-m shr-seen">You noticed: ' + esc(seen) + '</span>' : '') + '</span>';
+      }
+      function openRoll(action, id, b) {
+        var it = null; S.its.forEach(function (x) { if (String(x.id) === String(id)) it = x; });
+        if (!it || !window.ShopRolls) return;
+        window.ShopRolls.open({ base: shopBase, goodId: it.id, goodName: it.n, price: it.price, action: action, characters: buy ? buy.buyers : [], characterId: payer, returnFocus: b });
+      }
+      function loadRolls() {
+        if (!payer || !window.ShopRolls) { rollsState = null; return Promise.resolve(); }
+        return Chronicle.apiFetch(shopBase + '/rolls?character=' + encodeURIComponent(payer)).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
+          rollsState = j && typeof j === 'object' ? j : null;
+        });
+      }
+      // A roll in the sheet changes a price or shows a note: read today's rolls again and redraw.
+      function onRollResult() { loadRolls().then(function () { draw(); renderList(); }); }
       function buyer() { var b = null; (buy ? buy.buyers : []).forEach(function (x) { if (x.id === payer) b = x; }); return b; }
       // The basket line in the bar: what's in it, who pays, and Buy.
       function renderBasket() {
@@ -1751,7 +1842,7 @@
             }
             basket = {};
             if (j.status !== 'requested') bought = true;
-            return Promise.all([loadGoods(), loadBuyers()]);
+            return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]);
           });
         }).catch(function (e) {
           // A network failure's own text ("Failed to fetch") means nothing
@@ -1860,7 +1951,7 @@
       }
 
       // ---- Arrange: drag furniture, drag the portrait, unpin, change an item's look ----
-      var drag = null, kd = null, picking = null, adding = null, addTab = 'm', bin = null, secOpen = { mood: true, add: true };
+      var drag = null, kd = null, picking = null, adding = null, addTab = 'm', bin = null, secOpen = { mood: true, add: true, cr: true };
       function svgPt(e) { var m = svg.getScreenCTM().inverse(), q = svg.createSVGPoint(); q.x = e.clientX; q.y = e.clientY; q = q.matrixTransform(m); return [q.x, q.y]; }
       function toFloor(q) { var a = q[0] / 32, b = q[1] / 16; return [(a + b) / 2, (b - a) / 2]; }
       function byId(id) { for (var i = 0; i < S.pieces.length; i++) if (S.pieces[i].id === id) return S.pieces[i]; return null; }
@@ -2171,13 +2262,71 @@
         }
         return h + '<label class="shr-field"><span>When someone presses the keeper (one line each)</span><textarea rows="3" data-lines="1" maxlength="2200"></textarea></label>';
       }
+      // The Rolls section: what players may roll here, how stubborn the keeper is, and the hidden
+      // notes Look closer can turn up. The notes are saved at once, apart from Save room, and never
+      // go into the room layout, which players can read.
+      var rollsMeta = null, secrets = null, noteEdit = '', noteMsg = '', ownerRollsAsked = false;
+      function loadOwnerRolls() {
+        if (ownerRollsAsked || !canArrange) return; ownerRollsAsked = true;
+        Promise.all([
+          Chronicle.apiFetch(shopBase + '/rolls').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+          Chronicle.apiFetch(shopBase + '/secrets').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+        ]).then(function (res) { rollsMeta = res[0]; secrets = res[1] && typeof res[1] === 'object' ? res[1] : {}; if (panel && !panel.contains(document.activeElement)) renderPanel(); });
+      }
+      function rollsSum() {
+        var R = S.rolls || normRolls(null), on = [R.haggle ? 'Haggle' : '', R.look ? 'Look closer' : ''].filter(Boolean);
+        return on.length ? on.join(' and ') + ' on' : 'Off';
+      }
+      function rollsBody() {
+        var R = S.rolls || normRolls(null), h = '<p class="shr-note">Players roll your game system’s test from the wares list and at the counter. Every roll is logged at the Table.</p>';
+        h += '<div class="shr-tgl" role="group" aria-label="Rolls players may make here"><button type="button" data-rsw="haggle" aria-pressed="' + R.haggle + '">Haggle</button><button type="button" data-rsw="look" aria-pressed="' + R.look + '">Look closer</button></div>';
+        if (!R.haggle && !R.look) return h;
+        h += '<div class="shr-field"><span>How stubborn is the keeper?</span><span class="shr-seg" role="group" style="display:grid">' + [['easy', 'Easy'], ['usual', 'Usual'], ['hard', 'Hard']].map(function (o) { return '<button type="button" data-rstub="' + o[0] + '" aria-pressed="' + (R.stubborn === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</span></div>';
+        var stats = rollsMeta && Array.isArray(rollsMeta.stats) ? rollsMeta.stats : [], defs = (rollsMeta && rollsMeta.defaults) || {};
+        var statSel = function (k, label) {
+          if (!stats.length) return '';
+          var dl = (stats.filter(function (x) { return x.key === defs[k]; })[0] || {}).label;
+          return '<label class="shr-field"><span>' + label + '</span><select data-rstat="' + k + '"><option value="">' + esc(dl ? 'Game system’s choice (' + dl + ')' : 'Game system’s choice') + '</option>' +
+            stats.map(function (x) { return '<option value="' + esc(x.key) + '"' + (R[k + 'Stat'] === x.key ? ' selected' : '') + '>' + esc(x.label) + '</option>'; }).join('') + '</select></label>';
+        };
+        if (R.haggle) {
+          h += statSel('haggle', 'Haggling rolls');
+          var num = function (k, label, max) { return '<label class="shr-field"><span>' + label + '</span><span><input type="number" min="0" max="' + max + '" step="1" data-rpct="' + k + '" value="' + R[k] + '" style="width:5em"> %</span></label>'; };
+          h += num('great', 'A great roll takes off', 90) + num('middling', 'A fair roll takes off', 90) + num('poor', 'A poor roll puts on', 200);
+          h += '<small class="shr-hint">A haggled price holds for that character until the shelf changes at dawn. A poor roll ends haggling over that good until then.</small>';
+        }
+        if (R.look) {
+          h += statSel('look', 'Look closer rolls');
+          h += '<div class="shr-field"><span>Hidden notes</span></div><small class="shr-hint">A fair roll shows the note, a great roll the extra too. Only the player who rolled sees them.</small>';
+          if (secrets === null) h += '<p class="shr-note">Loading the notes…</p>';
+          else h += '<div class="shr-rnotes">' + shopItems(rels, S.ov, room.MAT, ICONS, words).map(function (it) {
+            var sct = secrets[String(it.id)] || {}, has = !!(sct.note || sct.extra), id = String(it.id);
+            if (noteEdit === id) return '<div class="shr-rnote ed"><b>' + esc(it.n) + '</b><label class="shr-field"><span>What a fair roll notices</span><textarea rows="2" maxlength="400" data-rnote-note="1"></textarea></label>' +
+              '<label class="shr-field"><span>What a great roll adds</span><textarea rows="2" maxlength="400" data-rnote-extra="1"></textarea></label>' +
+              '<span class="shr-tgl"><button type="button" data-rnsave="' + esc(id) + '">Save note</button><button type="button" data-rncancel="1">Cancel</button></span></div>';
+            return '<div class="shr-rnote"><span>' + esc(it.n) + '<br><small>' + (has ? 'Has a hidden note' : 'No hidden note') + '</small></span><button type="button" class="shr-link" data-rnote="' + esc(id) + '">' + (has ? 'Change' : 'Add a note') + '</button></div>';
+          }).join('') + '</div>';
+          h += '<span class="shr-status" aria-live="polite" data-rnmsg></span>';
+        }
+        return h;
+      }
+      function rollsSet(k, v) { S.rolls = normRolls(S.rolls); S.rolls[k] = v; S.rolls = normRolls(S.rolls); }
+      function saveNote(id) {
+        var n = panel.querySelector('[data-rnote-note]'), x = panel.querySelector('[data-rnote-extra]');
+        var body = { note: (n ? n.value : '').trim().slice(0, 400), extra: (x ? x.value : '').trim().slice(0, 400) };
+        Chronicle.apiFetch(shopBase + '/secrets/' + encodeURIComponent(id), { method: 'PUT', body: body })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j && j.message || 'The note wasn’t saved. Try again.'); }); })
+          .then(function () { secrets[id] = body; noteEdit = ''; noteMsg = 'Note saved.'; renderPanel(); var b = panel.querySelector('[data-rnote="' + id + '"]'); if (b) b.focus(); })
+          .catch(function (e) { noteMsg = e.message; var m = panel.querySelector('[data-rnmsg]'); if (m) m.textContent = noteMsg; });
+      }
       function renderPanel() {
         if (!panel) return;
+        if (canArrange) loadOwnerRolls();
         var pins = S.pieces.filter(function (p) { return p.pinned; }).length, mood = MOODS[S.mood] ? S.mood : 'cozy', M = MOODS[mood], e = efxNow();
         var typeName = (ROOM_TYPES.filter(function (t) { return t[0] === S.roomType; })[0] || [0, ''])[1];
         var looks = [['lit', 'Lit room']].concat(window.ShopRoomPaper ? [['paper', 'Paper']] : [], window.ShopRoomCounter ? [['counter', 'Counter']] : []);
         var room1 = (looks.length > 1 ? '<div class="shr-field"><span>Look</span>' + seg('look', looks) + '</div>' : '') +
-          (S.look === 'counter' ? '<p class="shr-note">At the counter, the shop lays itself out from its goods. Furniture and moods shape the lit and paper rooms; the shop type picks the shop floor’s working piece, and the time of day colours the window.</p>' : '') +
+          (S.look === 'counter' ? '<p class="shr-note">At the counter, the shop lays itself out from its goods. Furniture and moods shape the lit and paper rooms; the Counter room section builds the counter room, the shop type picks the shop floor’s working piece, and the time of day colours the window.</p>' : '') +
           '<label class="shr-field"><span>Shop type</span><select data-sel="roomType">' + ROOM_TYPES.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.roomType ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<label class="shr-field"><span>Setting</span><select data-sel="setting">' + room.SETTINGS.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.setting ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<div class="shr-field"><span>Room size</span>' + seg('size', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) + '</div>' +
@@ -2204,16 +2353,21 @@
         var fineSum = S.efx ? 'Changed by you' : 'As the mood sets it';
         panel.innerHTML = '<div class="shr-ph"><h3>Arrange this room</h3><button type="button" class="shr-x" data-leave="1" aria-label="Close">✕</button></div><div class="shr-pb">' +
           sec('room', 'fa-house', 'Room', typeName + ' · ' + ({ paper: 'Paper', counter: 'Counter' }[S.look] || 'Lit room'), room1) +
+          (cbOn() ? sec('cr', 'fa-store', 'Counter room', cbApi.theme().name, '<div data-cb></div>') : '') +
           sec('mood', 'fa-masks-theater', 'Mood', M.name, mood1) +
           sec('add', 'fa-plus', 'Add pieces', 'Drag into the room', add1) +
           sec('fine', 'fa-sliders', 'Fine-tune', fineSum, fine1) +
           sec('gen', 'fa-dice', 'Generate', 'Reroll parts', gen1) +
           sec('keeper', 'fa-comment', 'Keeper', keeperSum(), keeperBody()) +
+          sec('rolls', 'fa-dice-d20', 'Rolls at the counter', rollsSum(), rollsBody()) +
           '<span class="shr-status" aria-live="polite">' + (S.look === 'paper' ? (S.keeperSpot ? 'The keeper stands at the ' + S.keeperSpot + ' of the counter.' : '') : S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
           '<div class="shr-warn" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>Not saved yet</span><button type="button" data-discard="1">Discard</button></div>' +
           '<div class="shr-pf"><button type="button" data-discard="1">Cancel</button><button type="button" class="shr-save" data-saveroom="1"' + (dirty ? '' : ' disabled') + '>Save room</button></div>';
         panel.querySelector('[data-lines]').value = S.lines.join('\n');
         var ml = panel.querySelector('[data-moment-lines]'); if (ml) ml.value = (S.moments[momTab] || []).join('\n');
+        var cb = cbOn() && panel.querySelector('[data-cb]'); if (cb) window.ShopRoomBuilder.mount(cb, cbApi);
+        if (noteEdit && secrets) { var sct = secrets[noteEdit] || {}, nn = panel.querySelector('[data-rnote-note]'), nx = panel.querySelector('[data-rnote-extra]'); if (nn) nn.value = sct.note || ''; if (nx) nx.value = sct.extra || ''; }
+        var nm = panel.querySelector('[data-rnmsg]'); if (nm) nm.textContent = noteMsg;
       }
       // Fold: animate to the body's real height, then let it size itself; Calm and Off open at once.
       function fold(id) {
@@ -2236,6 +2390,11 @@
         if (b.dataset.addtab) { addTab = b.dataset.addtab; renderPanel(); return; }
         if (b.dataset.manner !== undefined) { S.manner = b.dataset.manner; renderPanel(); save(); return; }
         if (b.dataset.moment) { momTab = b.dataset.moment; renderPanel(); return; }
+        if (b.dataset.rsw) { var R0 = normRolls(S.rolls); rollsSet(b.dataset.rsw, !R0[b.dataset.rsw]); renderPanel(); save(); var rb = panel.querySelector('[data-rsw="' + b.dataset.rsw + '"]'); if (rb) rb.focus(); return; }
+        if (b.dataset.rstub) { rollsSet('stubborn', b.dataset.rstub); renderPanel(); save(); return; }
+        if (b.dataset.rnote) { noteEdit = b.dataset.rnote; noteMsg = ''; renderPanel(); var ta = panel.querySelector('[data-rnote-note]'); if (ta) ta.focus(); return; }
+        if (b.dataset.rncancel) { var was = noteEdit; noteEdit = ''; renderPanel(); var cbk = panel.querySelector('[data-rnote="' + was + '"]'); if (cbk) cbk.focus(); return; }
+        if (b.dataset.rnsave) { saveNote(b.dataset.rnsave); return; }
         if (b.dataset.sec) { fold(b.dataset.sec); return; }
         if (b.dataset.mode) { if (b.dataset.mode === 'shop') tryLeave(); else if (S.mode !== 'arr') { S.mode = 'arr'; setMode(); } return; }
         if (b.dataset.leave) { tryLeave(); return; }
@@ -2248,6 +2407,8 @@
         if (b.dataset.add) { basket[b.dataset.add] = (basket[b.dataset.add] || 0) + 1; note = ''; renderList(); picked(); return; }
         if (b.dataset.empty) { basket = {}; note = ''; renderList(); return; }
         if (b.dataset.buy) { doBuy(); return; }
+        if (b.dataset.haggle) { openRoll('haggle', b.dataset.haggle, b); return; }
+        if (b.dataset.look) { openRoll('look', b.dataset.look, b); return; }
         if (b === keeper) { onKeeperClick(); return; }
         if (!canArrange) return;
         var k = b.dataset.k;
@@ -2275,7 +2436,9 @@
       function onRootChange(e) {
         var t = e.target;
         if (t.dataset.efx) { renderPanel(); return; }
-        if (t.dataset.payer) { payer = t.value; note = ''; renderBasket(); return; }
+        if (t.dataset.rpct) { rollsSet(t.dataset.rpct, t.value); t.value = S.rolls[t.dataset.rpct]; save(); return; }
+        if (t.dataset.rstat) { rollsSet(t.dataset.rstat + 'Stat', t.value); save(); return; }
+        if (t.dataset.payer) { payer = t.value; note = ''; renderBasket(); loadRolls().then(function () { draw(); renderList(); }); return; }
         if (t.dataset.sel) { S[t.dataset.sel] = t.value; if (t.dataset.sel === 'setting') S.portrait = null; room.generate(); draw(); renderPanel(); save(); }
         else if (t.dataset.momentLines) {
           var ls = t.value.split('\n').map(function (x) { return x.trim().slice(0, 200); }).filter(Boolean).slice(0, 5);
@@ -2285,7 +2448,7 @@
         else if (t.dataset.lines) { S.lines = t.value.split('\n').map(function (s) { return s.trim().slice(0, 200); }).filter(Boolean).slice(0, 10); save(); }
       }
       function setMode() {
-        root.classList.toggle('arr', S.mode === 'arr'); if (S.mode === 'arr') tilt(0, 0);
+        root.classList.toggle('arr', S.mode === 'arr'); if (S.mode === 'arr') tilt(0, 0); else cbPlace = false;
         root.querySelectorAll('[data-mode]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.mode === S.mode); });
         if (canArrange && !panel) { panel = document.createElement('aside'); panel.className = 'shr-panel'; panel.setAttribute('aria-label', 'Arrange this room'); scene.appendChild(panel); panel.addEventListener('animationend', function () { panel.classList.remove('nag'); }); panel.addEventListener('pointerdown', onPanelDown); }
         if (panel) {
@@ -2439,16 +2602,17 @@
       }) : null;
       if (resizeObs) { resizeObs.observe(scene); resizeObs.observe(stage); }
       document.addEventListener('keydown', onDocKey);
+      document.addEventListener('shop-rolls:result', onRollResult);
       window.addEventListener('scroll', onScroll, { passive: true });
 
       el._shopRoom = {
         onDocDown: onDocDown, onDocKey: onDocKey,
         cleanup: function () {
-          clearInterval(typeT); clearInterval(aliveT); clearTimeout(sayT); clearTimeout(walkT); if (raf) cancelAnimationFrame(raf);
+          clearInterval(typeT); clearInterval(aliveT); clearTimeout(sayT); clearTimeout(walkT); clearTimeout(cbT); if (raf) cancelAnimationFrame(raf);
           dropHole(); if (dlg.open) dlg.close();
           themeObs.disconnect(); if (resizeObs) resizeObs.disconnect();
           window.removeEventListener('scroll', onScroll);
-          document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointermove', onAddMove); document.removeEventListener('pointerup', onAddUp); if (adding) adding.ghost.remove(); document.removeEventListener('keydown', onDocKey);
+          document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointermove', onAddMove); document.removeEventListener('pointerup', onAddUp); if (adding) adding.ghost.remove(); document.removeEventListener('keydown', onDocKey); document.removeEventListener('shop-rolls:result', onRollResult); if (window.ShopRolls) window.ShopRolls.close();
           if (window.ShopRoomCounter) window.ShopRoomCounter.destroy(cel);
           tip.remove(); say.remove(); pick.remove();
         }
@@ -2460,9 +2624,9 @@
       Promise.all([
         Chronicle.apiFetch(ds.roomEndpoint).then(function (r) { if (!r.ok) throw new Error('room ' + r.status); return r.json(); }),
         loadGoods(),
-        loadBuyers(),
+        loadBuyers().then(loadRolls),
         loadToday(),
-        window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, eid).then(function (w) { words = w || {}; }) : null
+        window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, eid.split('/')[0]).then(function (w) { words = w || {}; }) : null
       ]).then(function (res) {
         openRoom(S, room, res[0] && res[0].layout);
         savedLayout = toLayout(S);

@@ -107,3 +107,51 @@ func TestCreateEntityType_CreatureStartsWithSystemPanels(t *testing.T) {
 		})
 	}
 }
+
+// A type that stores no rows still draws the default layout once the panels
+// are placed, with the block under the title.
+func TestPlaceSystemPanels_EmptyLayoutKeepsDefault(t *testing.T) {
+	var got []string
+	repo := &mockEntityTypeRepo{
+		listByCampaignFn: func(context.Context, string) ([]EntityType, error) {
+			return []EntityType{{ID: 1}}, nil
+		},
+		updateLayoutFn: func(_ context.Context, _ int, raw string) error {
+			var l EntityTypeLayout
+			if err := json.Unmarshal([]byte(raw), &l); err != nil {
+				t.Fatal(err)
+			}
+			got = blockTypeOrder(l)
+			return nil
+		},
+	}
+	svc := newTestService(&mockEntityRepo{}, repo)
+	if _, err := svc.PlaceSystemPanels(context.Background(), "c", []int{1}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"title", "system_panels", "entry", "image", "attributes", "details"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("order = %v, want %v", got, want)
+	}
+}
+
+func TestRepairPanelOnlyLayout(t *testing.T) {
+	panelOnly := EntityTypeLayout{Rows: []TemplateRow{fullWidthRow("row-system-panels", TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})}}
+	got, ok := RepairPanelOnlyLayout(panelOnly)
+	if !ok || !reflect.DeepEqual(blockTypeOrder(got), []string{"title", "system_panels", "entry", "image", "attributes", "details"}) {
+		t.Errorf("panel-only layout: ok=%v blocks=%v", ok, blockTypeOrder(got))
+	}
+	for name, l := range map[string]EntityTypeLayout{
+		"empty":   {},
+		"default": DefaultLayout(),
+		"panels with a title": {Rows: []TemplateRow{fullWidthRow("r",
+			TemplateBlock{ID: "t", Type: "title"}, TemplateBlock{ID: "p", Type: BlockSystemPanels})}},
+	} {
+		if _, ok := RepairPanelOnlyLayout(l); ok {
+			t.Errorf("%s layout was changed", name)
+		}
+	}
+	if _, ok := RepairPanelOnlyLayout(got); ok {
+		t.Error("repair is not idempotent")
+	}
+}

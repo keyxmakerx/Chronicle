@@ -20,8 +20,8 @@
 
   // The sections a leaf can show. Rules, Conditions, Party and Notes join
   // this list as they are built (TODO(#1475)).
-  var SECTIONS = [['rolls', 'Rolls'], ['dice', 'My dice']];
-  var SECTION_NAME = { rolls: 'Rolls', dice: 'My dice' };
+  var SECTIONS = [['rolls', 'Rolls'], ['tonight', 'Tonight'], ['dice', 'My dice']];
+  var SECTION_NAME = { rolls: 'Rolls', tonight: 'Tonight', dice: 'My dice' };
   var LOOKS = [['quick', 'Quick 2D'], ['rune', 'Rune 3D'], ['none', 'Numbers only']];
   var QUICK = [4, 6, 8, 10, 12, 20];
   // Rune dice come in these sizes; any other die plays as quick 2D.
@@ -30,6 +30,15 @@
   var PAGE = 50;
   // How long the island stays out, in ms.
   var ISLAND_STAY = 3400;
+  // On a phone the drawer is a sheet resting on the bottom edge instead of
+  // hanging from the header. Same drawer, same leaves, same data.
+  var SHEET_QUERY = '(max-width: 639px), (pointer: coarse) and (max-width: 899px)';
+  var HEIGHTS = ['rest', 'lift', 'full'];
+  // The resting line is this tall, plus the phone's safe area.
+  var REST_PX = 38;
+  // The lifted sheet covers this much of the screen. It shows the dice only;
+  // the character's key numbers wait on a system's headline fields (TODO(#2193)).
+  var LIFT_SHARE = 0.6;
 
   // Dice figures go into markup unescaped, so anything that isn't a whole
   // number becomes 0 rather than trusting the payload's shape.
@@ -65,6 +74,7 @@
   // ---------- One table per page ----------
 
   function Table(host) {
+    var me = this;
     this.host = host;
     this.campaignId = host.getAttribute('data-campaign-id');
     this.userId = host.getAttribute('data-user-id');
@@ -82,6 +92,10 @@
     this.tableLook = 'quick';
     this.rolls = [];
     this.byId = {};
+    // What the director has shown tonight, oldest first.
+    this.shown = [];
+    this.shownById = {};
+    this.shownLoaded = false;
     this.more = false;
     this.loaded = false;
     this.open = false;
@@ -93,9 +107,14 @@
     this.wsDelay = 0;
     this.alive = true;
     this.handlers = [];
+    this.sheet = false;
+    this.h = 'rest';
+    this.mql = W.matchMedia ? W.matchMedia(SHEET_QUERY) : { matches: false };
     this.wire();
     this.connect();
     this.loadSettings();
+    this.syncSheet();
+    if (this.mql.addEventListener) this.on(this.mql, 'change', function () { me.syncSheet(); });
   }
 
   // A remembered layout keeps only sections that exist, each once.
@@ -118,6 +137,7 @@
     clearTimeout(this.wsRetry);
     if (this.ws) { try { this.ws.close(); } catch (e) { /* already closed */ } }
     var d = $('#tt-drawer'); if (d) d.remove();
+    document.documentElement.removeAttribute('data-tt-sheet');
     var c = $('.tt-isl-clip', this.header); if (c) c.remove();
     var t = $('#tt-tray'); if (t) t.remove();
     var det = $('#tt-isl-detail'); if (det) det.remove();
@@ -152,6 +172,7 @@
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (msg && msg.type === 'roll.made' && msg.payload) self.receive(msg.payload, true);
+      if (msg && msg.type === 'table.shown' && msg.payload) self.receiveShown(msg.payload, true);
     });
     sock.addEventListener('close', function () {
       if (!self.alive) return;
@@ -199,13 +220,96 @@
       self.rolls.sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0; });
       self.loadError = '';
       self.refreshLog();
+      self.refreshGrab(false);
     }).catch(function () {
       self.loadError = 'The roll log could not be read. Close the Table and open it again to retry.';
       self.refreshLog();
     });
   };
 
-  Table.prototype.reload = function () { if (this.open) this.load(); else this.loaded = false; };
+  Table.prototype.reload = function () {
+    if (this.open || this.sheet) { this.load(); this.loadShown(); } else { this.loaded = false; this.shownLoaded = false; }
+  };
+
+  // ---------- Tonight: what the director shows ----------
+
+  // receiveShown takes an item the director showed. Each one is listed once;
+  // a live one also slides out the island.
+  Table.prototype.receiveShown = function (it, live) {
+    if (!it || !it.id || this.shownById[it.id]) return;
+    it.shown = true;
+    this.shownById[it.id] = it;
+    this.shown.push(it);
+    if (!live) return;
+    if (this.open) this.renderSection('tonight');
+    if (this.leafShowing('tonight')) {
+      var li = $('#tt-tonight li[data-id="' + (W.CSS && CSS.escape ? CSS.escape(it.id) : it.id) + '"]');
+      if (li) li.classList.add('tt-fresh');
+    } else {
+      this.notice(it);
+    }
+  };
+
+  Table.prototype.loadShown = function () {
+    var self = this;
+    return C.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/table/shown').then(function (res) {
+      if (!res.ok) throw new Error('status ' + res.status);
+      return res.json();
+    }).then(function (out) {
+      self.shownLoaded = true;
+      var known = self.shownById;
+      self.shown = [];
+      self.shownById = {};
+      ((out && out.items) || []).forEach(function (it) { self.receiveShown(it, false); });
+      Object.keys(known).forEach(function (id) { if (!self.shownById[id]) self.receiveShown(known[id], false); });
+      self.shown.sort(function (a, b) { return a.shownAt < b.shownAt ? -1 : a.shownAt > b.shownAt ? 1 : 0; });
+      self.shownError = '';
+      if (self.open) self.renderSection('tonight');
+    }).catch(function () {
+      self.shownError = 'What was shown tonight could not be read. Close the Table and open it again to retry.';
+      if (self.open) self.renderSection('tonight');
+    });
+  };
+
+  // leafShowing says whether a section is on screen now: open, in a leaf,
+  // and on a phone the leaf that is picked.
+  Table.prototype.leafShowing = function (sec) {
+    var i = this.leaves.indexOf(sec);
+    if (!this.open || i < 0) return false;
+    if (this.sheet) return this.h === 'full' && this.phoneLeaf === i;
+    var b = document.getElementById('tt-lb-' + i);
+    return !!b && b.offsetParent !== null;
+  };
+
+  Table.prototype.pageURL = function (it) {
+    return '/campaigns/' + encodeURIComponent(this.campaignId) + '/entities/' + encodeURIComponent(it.entityId);
+  };
+
+  Table.prototype.shownWhat = function (it) {
+    return it.label || (it.kind === 'note' ? 'A note' : 'A page');
+  };
+
+  // shownBody is the same under a Tonight row and under the island: the
+  // note's words, or a link to the page.
+  Table.prototype.shownBody = function (it) {
+    var out = '';
+    if (it.text) out += '<p class="tt-note">' + esc(it.text) + '</p>';
+    if (it.entityId) out += '<a class="tt-quiet tt-open" href="' + esc(this.pageURL(it)) + '">Open the page</a>';
+    return out;
+  };
+
+  Table.prototype.tonightHTML = function () {
+    var self = this, rows;
+    if (this.shownError) rows = '<li class="tt-empty">' + esc(this.shownError) + '</li>';
+    else if (!this.shownLoaded) rows = '<li class="tt-empty">Reading…</li>';
+    else if (!this.shown.length) rows = '<li class="tt-empty">Nothing shown yet. When the ' + esc(this.gm) + ' shows you a page or a note, it lands here.</li>';
+    else rows = this.shown.map(function (it) {
+      return '<li class="tt-shown" data-id="' + esc(it.id) + '"><div class="tt-shead"><b>' + esc(self.shownWhat(it)) + '</b>' +
+        (it.to ? '<span class="tt-chip">Only you</span>' : '') + '<span class="tt-time">' + esc(timeOf(it.shownAt)) + '</span></div>' +
+        self.shownBody(it) + '</li>';
+    }).join('');
+    return '<ul class="tt-log tt-tonight" id="tt-tonight" aria-label="Shown tonight">' + rows + '</ul>';
+  };
 
   Table.prototype.older = function () {
     var self = this, first = this.rolls[0];
@@ -329,6 +433,7 @@
 
   Table.prototype.sectionHTML = function (id) {
     if (id === 'rolls') return this.logHTML() + this.rollerHTML();
+    if (id === 'tonight') return this.tonightHTML();
     return this.diceHTML();
   };
 
@@ -351,8 +456,168 @@
     var sw = '<div class="tt-phone-sw" role="group" aria-label="Leaves">' + this.leaves.map(function (s, i) {
       return '<button type="button" class="tt-ptab" data-tt-phone="' + i + '" aria-pressed="' + (self.phoneLeaf === i) + '">' + SECTION_NAME[s] + '</button>';
     }).join('') + '</div>';
-    return '<div class="tt-dhead"><h2>Table</h2><button type="button" class="tt-icon" data-tt-close aria-label="Close the Table">' + X + '</button></div>' + sw +
+    var body = '<div class="tt-dhead"><h2>Table</h2><button type="button" class="tt-icon" data-tt-close aria-label="Close the Table">' + X + '</button></div>' + sw +
       '<div class="tt-leaves" style="--tt-n:' + this.leaves.length + '">' + this.leaves.map(function (s, i) { return self.leafHTML(i); }).join('') + '</div>';
+    if (!this.sheet) return body;
+    // Resting, the sheet's contents sit off screen: inert keeps them out of
+    // the tab order until it is lifted.
+    return this.grabHTML() + '<div class="tt-sheetbody" id="tt-sheetbody"' + (this.h === 'rest' ? ' inert' : '') + '>' + body + '</div>';
+  };
+
+  // ---------- The phone's sheet ----------
+
+  Table.prototype.syncSheet = function () {
+    var on = !!this.mql.matches;
+    if (on === this.sheet) return;
+    this.sheet = on;
+    var d = this.drawer(); if (d) d.remove();
+    this.open = false;
+    this.h = 'rest';
+    this.tab.setAttribute('aria-expanded', 'false');
+    if (on) {
+      document.documentElement.setAttribute('data-tt-sheet', '');
+      this.ensureSheet();
+      if (!this.loaded) this.load();
+    } else {
+      document.documentElement.removeAttribute('data-tt-sheet');
+    }
+  };
+
+  Table.prototype.ensureSheet = function () {
+    var d = this.drawer();
+    if (d && d.classList.contains('tt-sheet')) return d;
+    if (d) d.remove();
+    d = document.createElement('div');
+    d.id = 'tt-drawer';
+    d.className = 'tt-drawer tt-sheet';
+    d.dataset.h = this.h;
+    d.setAttribute('role', 'region');
+    d.setAttribute('aria-label', 'Table');
+    d.innerHTML = this.drawerHTML();
+    document.body.appendChild(d);
+    this.wireSheet(d);
+    this.refreshGrab(false);
+    return d;
+  };
+
+  Table.prototype.grabHTML = function () {
+    return '<button type="button" class="tt-grab" data-tt-grab aria-expanded="' + (this.h !== 'rest') + '" aria-controls="tt-sheetbody" aria-label="The table: rolls and dice">' +
+      '<span class="tt-grip" aria-hidden="true"></span><span class="tt-last" data-tt-last>' + esc(this.lastRollText()) + '</span>' +
+      '<span class="tt-gn" data-tt-gcount hidden></span></button>';
+  };
+
+  // The resting line: who rolled last and what came up.
+  Table.prototype.lastRollText = function () {
+    var r = this.rolls[this.rolls.length - 1];
+    if (!r) return 'The table';
+    return this.who(r) + ' · ' + (r.label || r.formula) + ' · ' + (r.hidden ? '?' : r.total);
+  };
+
+  // refreshGrab redraws only the line's words and count, so a drag on it is
+  // never interrupted; move is true for a new roll, which nudges the text.
+  Table.prototype.refreshGrab = function (move) {
+    var last = $('[data-tt-last]'), n = $('[data-tt-gcount]');
+    if (!last) return;
+    var text = this.lastRollText();
+    if (last.textContent !== text) {
+      last.textContent = text;
+      if (move && motion() !== 'off') { last.classList.remove('tt-grow'); void last.offsetWidth; last.classList.add('tt-grow'); }
+    }
+    if (n) {
+      n.hidden = !this.unseen;
+      n.textContent = this.unseen > 99 ? '99+' : String(this.unseen);
+    }
+  };
+
+  Table.prototype.leafTo = function (sec) {
+    var i = this.leaves.indexOf(sec);
+    if (i < 0 || this.phoneLeaf === i) return;
+    this.phoneLeaf = i;
+    var keep = this.keepForm(), d = this.drawer();
+    if (d) d.innerHTML = this.drawerHTML();
+    this.restoreForm(keep);
+  };
+
+  // setHeight moves the sheet to a height. The move itself is CSS: a
+  // transform on [data-h], so dragging and letting go share one path.
+  Table.prototype.setHeight = function (h) {
+    var d = this.ensureSheet();
+    this.h = h;
+    d.dataset.h = h;
+    d.style.transform = '';
+    d.classList.remove('tt-drag');
+    this.open = h !== 'rest';
+    if (motion() === 'calm') { d.classList.remove('tt-fadein'); void d.offsetWidth; d.classList.add('tt-fadein'); }
+    if (h === 'lift') this.leafTo('rolls');
+    var body = $('.tt-sheetbody', d), grab = $('[data-tt-grab]', d);
+    if (body) { if (h === 'rest') body.setAttribute('inert', ''); else body.removeAttribute('inert'); }
+    if (grab) grab.setAttribute('aria-expanded', String(h !== 'rest'));
+    this.closeMenus();
+    if (h === 'rest') {
+      var a = document.activeElement;
+      if (a && d.contains(a) && a !== grab && a.blur) a.blur();
+    } else if (h === 'full') {
+      this.scrollLog();
+    }
+    this.seen();
+    this.refreshGrab(false);
+  };
+
+  Table.prototype.stepSheet = function (dir) {
+    var i = HEIGHTS.indexOf(this.h);
+    if (dir === undefined) dir = this.h === 'full' ? -1 : 1;
+    this.setHeight(HEIGHTS[Math.max(0, Math.min(2, i + dir))]);
+  };
+
+  // The three resting places, as how far down the sheet's own height each sits.
+  Table.prototype.offsets = function (d) {
+    var H = d.offsetHeight, probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)';
+    document.body.appendChild(probe);
+    var safe = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+    probe.remove();
+    return { rest: Math.max(0, H - REST_PX - safe), lift: Math.max(0, H - LIFT_SHARE * W.innerHeight), full: 0 };
+  };
+
+  // Dragging follows the finger 1:1 and lets go to the nearest height; a
+  // quick flick goes one height in its direction; a tap goes one up.
+  Table.prototype.wireSheet = function (d) {
+    var self = this, st = null;
+    d.addEventListener('pointerdown', function (ev) {
+      var g = ev.target.closest && ev.target.closest('[data-tt-grab]');
+      if (!g || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+      var off = self.offsets(d);
+      st = { id: ev.pointerId, y0: ev.clientY, from: off[self.h], off: off, moved: false, t0: Date.now(), samples: [[Date.now(), ev.clientY]] };
+      try { g.setPointerCapture(ev.pointerId); } catch (e) { /* the drag still follows the sheet */ }
+    });
+    d.addEventListener('pointermove', function (ev) {
+      if (!st || ev.pointerId !== st.id) return;
+      var dy = ev.clientY - st.y0;
+      if (!st.moved && Math.abs(dy) < 6) return;
+      st.moved = true;
+      d.classList.add('tt-drag');
+      var y = Math.max(0, Math.min(st.off.rest, st.from + dy));
+      d.style.transform = 'translateY(' + y + 'px)';
+      st.y = y;
+      st.samples.push([Date.now(), ev.clientY]);
+      if (st.samples.length > 6) st.samples.shift();
+    });
+    var end = function (ev) {
+      if (!st || ev.pointerId !== st.id) return;
+      var s = st; st = null;
+      if (!s.moved) { if (ev.type === 'pointerup') self.stepSheet(); return; }
+      var a = s.samples[0], b = s.samples[s.samples.length - 1];
+      var v = b[0] > a[0] ? (b[1] - a[1]) / (b[0] - a[0]) : 0;
+      var idx = HEIGHTS.indexOf(self.h), to;
+      if (Math.abs(v) > 0.5) to = Math.max(0, Math.min(2, idx + (v < 0 ? 1 : -1)));
+      else {
+        to = 0;
+        HEIGHTS.forEach(function (h, i) { if (Math.abs(s.off[h] - s.y) < Math.abs(s.off[HEIGHTS[to]] - s.y)) to = i; });
+      }
+      self.setHeight(HEIGHTS[to]);
+    };
+    d.addEventListener('pointerup', end);
+    d.addEventListener('pointercancel', end);
   };
 
   // ---------- Opening, closing, leaves ----------
@@ -360,6 +625,16 @@
   Table.prototype.drawer = function () { return document.getElementById('tt-drawer'); };
 
   Table.prototype.openTable = function (sec) {
+    if (this.sheet) {
+      if (sec) {
+        var k = this.leaves.indexOf(sec);
+        if (k < 0) { k = this.leaves.length - 1; this.leaves[k] = sec; this.saveLeaves(); }
+        if (sec !== 'rolls') this.phoneLeaf = k;
+      }
+      this.setHeight(sec && sec !== 'rolls' ? 'full' : this.h === 'full' ? 'full' : 'lift');
+      if (!this.loaded) this.load();
+      return;
+    }
     if (sec) {
       var i = this.leaves.indexOf(sec);
       if (i < 0) { i = this.leaves.length - 1; this.leaves[i] = sec; this.saveLeaves(); }
@@ -384,6 +659,7 @@
       d.addEventListener('animationend', function () { d.classList.remove('tt-opening'); }, { once: true });
     }
     if (!this.loaded) this.load();
+    if (!this.shownLoaded) this.loadShown();
     this.scrollLog();
     this.seen();
   };
@@ -393,6 +669,11 @@
   // where the person pressed.
   Table.prototype.closeTable = function (refocus) {
     if (!this.open) return;
+    if (this.sheet) {
+      // The sheet stays on the page, so a half-typed roll stays in its field.
+      this.setHeight('rest');
+      return;
+    }
     var self = this, d = this.drawer();
     var keep = this.keepForm();
     this.draft = keep.fx || keep.mode ? { fx: keep.fx, mode: keep.mode } : null;
@@ -464,6 +745,7 @@
     if (!this.open) return false;
     var i = this.leaves.indexOf('rolls');
     if (i < 0) return false;
+    if (this.sheet) return this.h === 'full' && this.phoneLeaf === i;
     return W.matchMedia('(min-width: 761px)').matches || this.phoneLeaf === i;
   };
 
@@ -522,7 +804,17 @@
     var self = this;
     this.throwDice(r).then(function () {
       if (!self.alive) return;
-      if (self.open) self.refreshLog();
+      if (self.open || self.sheet) self.refreshLog();
+      if (self.sheet) {
+        // The sheet never lifts for a roll: the resting line changes.
+        if (!self.logVisible()) self.bump();
+        self.refreshGrab(true);
+        if (self.logVisible()) {
+          var row = $('#tt-log li[data-id="' + (W.CSS && CSS.escape ? CSS.escape(r.id) : r.id) + '"]');
+          if (row) row.classList.add('tt-fresh');
+        }
+        return;
+      }
       if (self.logVisible()) {
         var li = $('#tt-log li[data-id="' + (W.CSS && CSS.escape ? CSS.escape(r.id) : r.id) + '"]');
         if (li) li.classList.add('tt-fresh');
@@ -559,6 +851,7 @@
   // notice slides the island out from behind the Table tab, waits, and slides
   // it back in. While a roll's details are open, new rolls wait their turn.
   Table.prototype.notice = function (r) {
+    if (r.shown) { this.noticeShown(r); return; }
     var who = r.hidden ? 'You rolled blind' : this.who(r) + (r.origin === 'foundry' ? ' in Foundry' : '');
     var num = r.hidden ? '?' : String(r.total);
     var what = (r.label || r.formula) + (!r.hidden && r.outcome ? ' · ' + r.outcome : '');
@@ -578,6 +871,28 @@
     this.isl = me;
     requestAnimationFrame(function () { requestAnimationFrame(function () { b.classList.add('tt-in'); }); });
     me.timer = setTimeout(function () { if (!me.expanded) self.retire(me); }, ISLAND_STAY);
+    b.addEventListener('click', function () { if (me.expanded) self.collapse(me); else self.expand(me); });
+  };
+
+  // noticeShown is the island for something the director showed. It stays
+  // out twice as long as a roll, since there is something to open.
+  Table.prototype.noticeShown = function (it) {
+    var who = 'The ' + this.gm + ' shows' + (it.to ? ' you' : '');
+    var what = this.shownWhat(it);
+    this.say(who + ': ' + what);
+    if (this.isl && this.isl.expanded) { this.queue.push(it); return; }
+    this.retire(this.isl, true);
+    var self = this, c = this.clip(), b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tt-island tt-shown-isl';
+    b.setAttribute('aria-expanded', 'false');
+    b.setAttribute('aria-label', who + ': ' + what + '. Show it');
+    b.innerHTML = '<span class="tt-who2">' + esc(who) + '</span><span class="tt-what2">' + esc(what) + '</span>' + CHEV;
+    c.appendChild(b);
+    var me = { el: b, r: it, timer: 0, expanded: false };
+    this.isl = me;
+    requestAnimationFrame(function () { requestAnimationFrame(function () { b.classList.add('tt-in'); }); });
+    me.timer = setTimeout(function () { if (!me.expanded) self.retire(me); }, ISLAND_STAY * 2);
     b.addEventListener('click', function () { if (me.expanded) self.collapse(me); else self.expand(me); });
   };
 
@@ -608,6 +923,14 @@
     d.setAttribute('aria-label', 'Roll details');
     d.style.right = Math.max(10, W.innerWidth - a.right) + 'px';
     var r = me.r;
+    if (r.shown) {
+      d.setAttribute('aria-label', 'What was shown');
+      d.innerHTML = '<div class="tt-dhd"><b>' + esc(this.shownWhat(r)) + '</b></div>' + this.shownBody(r) +
+        '<div class="tt-foot"><button type="button" class="tt-quiet" data-tt-totonight>See tonight’s list</button><button type="button" class="tt-quiet" data-tt-iclose>Done</button></div>';
+      document.body.appendChild(d);
+      me.detail = d;
+      return;
+    }
     d.innerHTML = '<div class="tt-dhd"><b>' + esc(r.label || r.formula) + '</b><span class="tt-bignum">' + (r.hidden ? '?' : esc(r.total)) + '</span></div>' + this.detailHTML(r) +
       '<div class="tt-foot"><button type="button" class="tt-quiet" data-tt-tolog>Open in the roll log</button><button type="button" class="tt-quiet" data-tt-iclose>Done</button></div>';
     document.body.appendChild(d);
@@ -659,6 +982,9 @@
       if (!b || !(b.closest('#tt-drawer') || b.closest('#tt-isl-detail'))) return;
       var d = b.dataset;
       if (b.hasAttribute('data-tt-close')) { self.closeTable(); return; }
+      // A press on the line is handled by its pointer events; a click with no
+      // pointer behind it is the keyboard.
+      if (b.hasAttribute('data-tt-grab')) { if (!ev.detail) self.stepSheet(); return; }
       if (d.ttPick !== undefined) {
         var m = document.getElementById('tt-lm-' + d.ttPick), opening = m.hidden;
         self.closeMenus();
@@ -690,6 +1016,11 @@
         return;
       }
       if (b.hasAttribute('data-tt-iclose')) { if (self.isl) self.collapse(self.isl); return; }
+      if (b.hasAttribute('data-tt-totonight')) {
+        if (self.isl) self.collapse(self.isl);
+        self.openTable('tonight');
+        return;
+      }
       if (b.hasAttribute('data-tt-tolog')) {
         var me = self.isl;
         if (me) { self.openRow = me.r.id; self.collapse(me); }
@@ -745,6 +1076,20 @@
     });
 
     this.on(W, 'resize', function () { if ($('.tt-isl-clip', self.header)) self.clip(); });
+
+    // With a text field on the page focused and the keyboard up, the sheet
+    // steps aside and comes back after.
+    this.on(document, 'focusin', function (ev) {
+      var d = self.drawer();
+      if (!self.sheet || !d || !typing(ev.target) || d.contains(ev.target) || !W.matchMedia('(pointer: coarse)').matches) return;
+      d.classList.add('tt-away');
+    });
+    this.on(document, 'focusout', function () {
+      setTimeout(function () {
+        var d = self.drawer();
+        if (d && !typing(document.activeElement)) d.classList.remove('tt-away');
+      }, 0);
+    });
   };
 
   Table.prototype.toggleRow = function (b, id) {

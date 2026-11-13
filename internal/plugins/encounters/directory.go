@@ -58,3 +58,18 @@ type TestOutcome struct {
 	Results  map[string]string
 	Recorded string
 }
+
+// SceneDirectory is what a scene needs beyond pages: the campaign's players,
+// whether a player may open a page, and un-hiding an NPC or creature page.
+// It is implemented in internal/app; while it is nil a scene can show notes
+// to everyone but nothing that needs a page or a player.
+type SceneDirectory interface {
+	// Players lists the campaign's members who play (not the DM team).
+	Players(ctx context.Context, campaignID string) ([]Player, error)
+	// PlayerCanView reports whether a player may open the page. userID ""
+	// asks about a player with no access granted to them by name.
+	PlayerCanView(ctx context.Context, campaignID, entityID, userID string) (bool, error)
+	// Reveal un-hides an NPC or creature page of the campaign and returns
+	// its name; any other page is not found.
+	Reveal(ctx context.Context, campaignID, entityID string) (string, error)
+}

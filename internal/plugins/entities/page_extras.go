@@ -30,7 +30,7 @@ const (
 
 // RenderCharacterItemsBlock renders the Items & Money block: the page panel
 // set with SetCharacterPagePanel, when its addon is on.
-func RenderCharacterItemsBlock(BlockRenderContext) templ.Component { return blockCharacterItems() }
+func RenderCharacterItemsBlock(BlockRenderContext) templ.Component { return blockCharacterItems(false) }
 
 type pageChildrenKey struct{}
 
@@ -166,7 +166,8 @@ type PageExtrasPlan struct {
 // placePageExtras adds the blocks drawn outside a layout and
 // reports whether anything changed. Each block is added only when the layout
 // does not already place it, so running it again changes nothing.
-func placePageExtras(layout EntityTypeLayout, plan PageExtrasPlan) (EntityTypeLayout, bool) {
+func placePageExtras(stored EntityTypeLayout, plan PageExtrasPlan) (EntityTypeLayout, bool) {
+	layout := layoutOrDefault(stored)
 	changed := false
 	if plan.SystemPanels && !layoutPlacesBlock(layout, BlockSystemPanels) {
 		layout = insertAfterTitle(layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
@@ -188,7 +189,74 @@ func placePageExtras(layout EntityTypeLayout, plan PageExtrasPlan) (EntityTypeLa
 		layout.Rows = append(layout.Rows, fullWidthRow("row-page-extras", below...))
 		changed = true
 	}
-	return layout, changed
+	if !changed {
+		return stored, false
+	}
+	return layout, true
+}
+
+// layoutOrDefault is the layout a page draws with: the stored one, or the
+// default when the type stores no rows (which means "use the default").
+// Placing a block into an empty layout without this would leave a layout of
+// that block alone, and the default would never apply again. The rows are
+// copied because the caller edits blocks in place.
+func layoutOrDefault(layout EntityTypeLayout) EntityTypeLayout {
+	if len(layout.Rows) == 0 {
+		layout = DefaultLayout()
+	}
+	rows := make([]TemplateRow, len(layout.Rows))
+	for r, row := range layout.Rows {
+		cols := make([]TemplateColumn, len(row.Columns))
+		copy(cols, row.Columns)
+		row.Columns = cols
+		rows[r] = row
+	}
+	layout.Rows = rows
+	return layout
+}
+
+// repairSystemPanelsOnlyLayout fixes the layout an empty type was left with
+// when panels were placed before the default applied: a first row holding
+// only the Game System Panels block, then at most the rows placePageExtras
+// appends. Only that exact shape is matched, so a layout an owner arranged is
+// never touched. The appended rows are kept as they are.
+func repairSystemPanelsOnlyLayout(layout EntityTypeLayout) (EntityTypeLayout, bool) {
+	rows := layout.Rows
+	if len(rows) == 0 || rows[0].ID != "row-system-panels" || len(rows[0].Columns) != 1 ||
+		len(rows[0].Columns[0].Blocks) != 1 || rows[0].Columns[0].Blocks[0].Type != BlockSystemPanels {
+		return layout, false
+	}
+	// The trailing rows may only be the two placePageExtras adds, in its order.
+	rest := rows[1:]
+	order := []string{"row-character-items", "row-page-extras"}
+	for _, row := range rest {
+		for len(order) > 0 && order[0] != row.ID {
+			order = order[1:]
+		}
+		if len(order) == 0 {
+			return layout, false
+		}
+		order = order[1:]
+	}
+	fixed := layoutOrDefault(EntityTypeLayout{})
+	fixed = insertAfterTitle(fixed, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
+	fixed.Rows = append(fixed.Rows, rest...)
+	return fixed, true
+}
+
+// RepairPanelOnlyLayout turns a layout whose only content is the Game System
+// Panels block back into the default page with the block under the title.
+// Such layouts were written by placing the block on an empty layout. Any other
+// layout is returned unchanged with false.
+func RepairPanelOnlyLayout(layout EntityTypeLayout) (EntityTypeLayout, bool) {
+	if len(layout.Rows) != 1 || len(layout.Rows[0].Columns) != 1 {
+		return layout, false
+	}
+	blocks := layout.Rows[0].Columns[0].Blocks
+	if len(blocks) != 1 || blocks[0].Type != BlockSystemPanels {
+		return layout, false
+	}
+	return insertAfterTitle(DefaultLayout(), TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels}), true
 }
 
 // insertAfterTitle puts a block right after the first top-level title block,
@@ -224,18 +292,7 @@ func withCreaturePanels(et EntityType, layout EntityTypeLayout) EntityTypeLayout
 	if !isCreatureType(et) || layoutPlacesBlock(layout, BlockSystemPanels) {
 		return layout
 	}
-	if len(layout.Rows) == 0 {
-		layout = DefaultLayout()
-	}
-	rows := make([]TemplateRow, len(layout.Rows))
-	for r, row := range layout.Rows {
-		cols := make([]TemplateColumn, len(row.Columns))
-		copy(cols, row.Columns)
-		row.Columns = cols
-		rows[r] = row
-	}
-	layout.Rows = rows
-	return insertAfterTitle(layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
+	return insertAfterTitle(layoutOrDefault(layout), TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
 }
 
 // fullWidthRow builds a one-column row holding the given blocks.
@@ -299,7 +356,7 @@ func (s *entityService) PlaceSystemPanels(ctx context.Context, campaignID string
 		if !plans[types[i].ID].SystemPanels || layoutPlacesBlock(types[i].Layout, BlockSystemPanels) {
 			continue
 		}
-		layout := insertAfterTitle(types[i].Layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
+		layout := insertAfterTitle(layoutOrDefault(types[i].Layout), TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
 		// Written as is, for the same reason as PlacePageExtras.
 		raw, err := json.Marshal(layout)
 		if err == nil {
@@ -307,6 +364,35 @@ func (s *entityService) PlaceSystemPanels(ctx context.Context, campaignID string
 		}
 		if err != nil {
 			return changed, fmt.Errorf("placing system panels on entity type %d: %w", types[i].ID, err)
+		}
+		changed++
+	}
+	return changed, nil
+}
+
+// RepairSystemPanelsLayouts rewrites the layouts that hold only the Game
+// System Panels block (see repairSystemPanelsOnlyLayout) as the default layout
+// with that block placed. Returns the number of layouts changed; running it
+// again changes none.
+func (s *entityService) RepairSystemPanelsLayouts(ctx context.Context, campaignID string) (int, error) {
+	types, err := s.types.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return 0, fmt.Errorf("listing entity types: %w", err)
+	}
+	changed := 0
+	for i := range types {
+		layout, ok := repairSystemPanelsOnlyLayout(types[i].Layout)
+		if !ok {
+			continue
+		}
+		raw, err := json.Marshal(layout)
+		if err == nil {
+			err = s.types.UpdateLayout(ctx, types[i].ID, string(raw))
+		}
+		if err != nil {
+			slog.Warn("repairing system panels layout failed",
+				slog.String("campaign_id", campaignID), slog.Int("entity_type_id", types[i].ID), slog.Any("error", err))
+			continue
 		}
 		changed++
 	}

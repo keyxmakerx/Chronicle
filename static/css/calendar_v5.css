@@ -16,8 +16,7 @@
  * mockup's own simpler crescent silhouette (.sil/.db/.dl), which WAS kept.
  */
 .calv5 {
-  --spring: cubic-bezier(0.34, 1.3, 0.4, 1);
-  --ease: cubic-bezier(0.22, 0.8, 0.24, 1);
+  --ease: var(--ease-slide, cubic-bezier(0.22, 0.8, 0.24, 1));
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Charter, "Bitstream Charter", Georgia, "Liberation Serif", serif;
   --page: oklch(0.968 0.004 85);
   --ink: oklch(0.24 0.012 265);
@@ -132,13 +131,8 @@ html[data-theme="dark"] .calv5 {
 /* ── The Calendars dashboard ── */
 .calv5-wrap { max-width: 1100px; margin: 0 auto; padding: 18px 20px 48px; }
 /* The list is a card grid, so it grows with the window like the other gallery pages. */
-.calv5-wrap.list { max-width: 1536px; }
-.calv5-dhead { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "k k" "t a" "s s"; align-items: center; column-gap: 16px; margin: 6px 4px 20px; }
-.calv5-dhead .kicker { grid-area: k; }
+.calv5-wrap.list { max-width: none; padding: 0 0 48px; }
 .calv5 .kicker { margin: 0; font: 650 9.5px/1 var(--sans, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mut); }
-.calv5-dtitle { grid-area: t; margin: 8px 0 0; font: 500 34px/1.1 var(--serif); letter-spacing: -0.012em; color: var(--ink); }
-.calv5-dacts { grid-area: a; display: flex; gap: 8px; margin-top: 8px; }
-.calv5-dsub { grid-area: s; margin: 6px 0 0; font: 500 12.5px/1.4 var(--sans, sans-serif); color: var(--mut); }
 
 .calv5-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); grid-auto-rows: 160px; gap: 16px; }
 /* A card and the month it peeks. The peek comes first in the markup, so the
@@ -148,8 +142,8 @@ html[data-theme="dark"] .calv5 {
 .calv5-slot > .calv5-ccard { height: 100%; }
 .calv5-slot.peeking, .calv5-slot:focus-within { z-index: 5; }
 @media (hover: hover) { .calv5-slot:hover { z-index: 5; } }
-.calv5-peek { position: absolute; left: 10px; right: 10px; top: 100%; margin-top: 8px; max-height: 172px; overflow: hidden; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--edge); background: var(--paper); box-shadow: 0 8px 20px -12px oklch(0.2 0.03 265 / 0.5); pointer-events: none; opacity: 0; transform: translateY(calc(-100% - 8px)); transition: transform 0.32s cubic-bezier(0.3, 1.25, 0.5, 1), opacity 0.18s; }
-.calv5-slot > .calv5-ccard { transition: transform 0.2s cubic-bezier(0.3, 1.3, 0.5, 1); }
+.calv5-peek { position: absolute; left: 10px; right: 10px; top: 100%; margin-top: 8px; max-height: 172px; overflow: hidden; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--edge); background: var(--paper); box-shadow: 0 8px 20px -12px oklch(0.2 0.03 265 / 0.5); pointer-events: none; opacity: 0; transform: translateY(calc(-100% - 8px)); transition: transform var(--dur-large, 280ms) var(--ease-out), opacity 0.18s; }
+.calv5-slot > .calv5-ccard { transition: transform var(--dur-standard, 200ms) var(--ease-out); }
 .calv5-slot.peeking > .calv5-ccard, .calv5-slot:has(.calv5-cc-open:focus-visible) > .calv5-ccard { transform: translateY(-4px); box-shadow: 0 10px 22px -12px oklch(0.2 0.03 265 / 0.45); }
 @media (hover: hover) { .calv5-slot:hover > .calv5-ccard { transform: translateY(-4px); box-shadow: 0 10px 22px -12px oklch(0.2 0.03 265 / 0.45); } }
 .calv5-slot.peeking .calv5-peek, .calv5-slot:has(.calv5-cc-open:focus-visible) .calv5-peek { opacity: 1; transform: none; }
@@ -167,7 +161,7 @@ html[data-theme="dark"] .calv5 {
 .calv5-pk-grid i.e::after { content: ""; position: absolute; right: 1px; top: 1px; width: 4px; height: 4px; border-radius: 50%; background: var(--gold); }
 .calv5-pk-grid i.t.e::after { background: var(--paper); }
 .calv5-ccard { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr) 28px; grid-template-rows: 18px minmax(0, 1fr) 18px; grid-template-areas: "bdg bdg menu" "moon name name" "foot foot foot"; column-gap: 14px; min-width: 0; padding: 15px 14px 15px 18px; border-radius: 16px; border: 1px solid var(--edge); background: var(--pageField); box-shadow: var(--shadow-s); }
-.calv5-ccard.enter { animation: calv5CardIn 0.5s var(--spring) both; }
+.calv5-ccard.enter { animation: calv5CardIn var(--dur-large, 280ms) var(--ease-out) both; }
 @keyframes calv5CardIn { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
 .calv5-cc-badge { grid-area: bdg; display: flex; align-items: center; min-width: 0; }
 .calv5-badge-main { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 99px; font: 650 9px/1 var(--sans, sans-serif); letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper); background: var(--ink); white-space: nowrap; }
@@ -295,6 +289,7 @@ html[data-theme="dark"] .calv5 {
    see wizardRealWorldReviewBody/wizardBuildBody's own comments for why. */
 .calv5-toggle-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; font: 500 12.5px/1.4 var(--sans, sans-serif); color: var(--ink2); }
 .calv5-toggle-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--ink); }
+.calv5-toggle-row b { font-weight: 650; color: var(--ink); }
 
 /* "Build your own": one labelled section per structure part, each holding a
    list of rows (name + number fields) with plain-text reorder/remove
@@ -401,7 +396,7 @@ html[data-theme="dark"] .calv5 {
  * slides in at its foot (the reduced-motion rule below stills both). */
 .calv5-panel.nag { animation: calv5Nag 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
 @keyframes calv5Nag { 0%, 100% { translate: 0; } 20% { translate: -9px; } 40% { translate: 7px; } 60% { translate: -4px; } 80% { translate: 2px; } }
-.calv5-unsaved { display: flex; align-items: center; gap: 8px; flex: none; margin: 0 14px 14px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--goldBg); box-shadow: inset 0 0 0 1px var(--goldRing); font: 600 12.5px/1.3 var(--sans, sans-serif); color: var(--ink); animation: calv5WarnIn 0.28s var(--spring) both; }
+.calv5-unsaved { display: flex; align-items: center; gap: 8px; flex: none; margin: 0 14px 14px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--goldBg); box-shadow: inset 0 0 0 1px var(--goldRing); font: 600 12.5px/1.3 var(--sans, sans-serif); color: var(--ink); animation: calv5WarnIn var(--dur-large, 280ms) var(--ease-out) both; }
 .calv5-unsaved .fa-triangle-exclamation { color: var(--gold); }
 .calv5-unsaved .btn { margin-left: auto; }
 @keyframes calv5WarnIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -413,10 +408,6 @@ html[data-theme="dark"] .calv5 {
 
 @media (max-width: 640px) {
   .calv5-wrap { padding: 12px 12px 32px; }
-  .calv5-dhead { grid-template-columns: minmax(0, 1fr); grid-template-areas: "k" "t" "s" "a"; }
-  .calv5-dtitle { font-size: 26px; }
-  .calv5-dacts { width: 100%; margin-top: 14px; }
-  .calv5-dacts .btn { flex: 1; }
   .calv5-cards { grid-template-columns: 1fr; grid-auto-rows: 128px; gap: 12px; }
   .calv5-tiles, .calv5-presets, .calv5-report, .calv5-rv { grid-template-columns: 1fr; }
   .calv5-panel { max-width: 100% !important; }

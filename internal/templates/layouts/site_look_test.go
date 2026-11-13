@@ -323,3 +323,24 @@ func TestApplySiteLook_MovingTopbar(t *testing.T) {
 		t.Error("the outside-campaign top bar should drift when Move is on")
 	}
 }
+
+func TestSiteDoorsMode(t *testing.T) {
+	tests := []struct {
+		name string
+		look sitelook.Settings
+		want string
+	}{
+		{"never saved shows the scenes", sitelook.Settings{}, "scenes"},
+		{"saved plain shows the page colour", sitelook.Settings{Configured: true, Background: sitelook.BackgroundPlain}, "plain"},
+		{"look colours", sitelook.Settings{Configured: true, Look: "ember", Background: sitelook.BackgroundLook}, "gradient"},
+		{"picture", sitelook.Settings{Configured: true, Background: sitelook.BackgroundPicture, Picture: "2026/10/bg.jpg"}, "picture"},
+		{"picture without a file falls back to plain", sitelook.Settings{Configured: true, Background: sitelook.BackgroundPicture}, "plain"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := siteDoorsMode(SetSiteLook(context.Background(), tc.look)); got != tc.want {
+				t.Errorf("mode = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -525,3 +525,48 @@ func TestBenches(t *testing.T) {
 		t.Fatalf("a deleted bench: %v", err)
 	}
 }
+
+// A recipe exported as JSON is restored by creating it from its input fields and
+// saving the rules, looks and extras on top; nothing may be lost on the way.
+func TestRecipeReplaysFromExportedJSON(t *testing.T) {
+	s, _, _ := newTestService()
+	ctx := context.Background()
+	r, err := s.CreateRecipe(ctx, "c", director, RecipeInput{Name: "Healing potion", Materials: []Material{{ItemID: "moss", Qty: 1}, {Tag: "liquid", Qty: 1}},
+		Steps:  []Step{{T: "add", Material: idx(0), To: "mortar"}, {T: "grind"}, {T: "tip"}, {T: "pour", Material: idx(1)}},
+		Result: Result{ItemID: "potion", Qty: 1}, Goal: 30, Stat: "Reason", Who: "learned", Known: []string{"mira"}, Draft: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules := json.RawMessage(`[{"when":[{"kind":"moon","moon":"Pale","phase":"full"}],"then":{"kind":"edge"},"players":"secret"}]`)
+	src, err := s.SaveRules(ctx, "c", r.ID, director, RulesInput{Rules: rules, Looks: json.RawMessage(`{"success":{"spots":{"result":{"look":"bloom"}}}}`), Version: r.Version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var in Recipe
+	if err := json.Unmarshal(raw, &in); err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.CreateRecipe(ctx, "c2", director, RecipeInput{
+		Name: "Healing potion, restored", Template: in.Template, Bench: in.Bench, Materials: in.Materials, Steps: in.Steps,
+		Result: in.Result, Goal: in.Goal, Stat: in.Stat, Prerequisite: in.Prerequisite, Source: in.Source,
+		Cost: in.Cost, Who: in.Who, Known: in.Known, Colors: in.Colors, Draft: in.Draft,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rj, _ := json.Marshal(in.Rules)
+	lj, _ := json.Marshal(in.Looks)
+	ej, _ := json.Marshal(in.Extras)
+	got, err := s.SaveRules(ctx, "c2", created.ID, director, RulesInput{Rules: rj, Looks: lj, Extras: ej, Version: created.Version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Draft || len(got.Rules) != len(src.Rules) || got.Looks["success"] == nil || len(got.Known) != 1 || got.Goal != 30 {
+		t.Fatalf("replayed %+v, want the rules, looks, draft flag and known list of %+v", got, src)
+	}
+}

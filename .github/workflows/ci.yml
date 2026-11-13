@@ -89,6 +89,11 @@ jobs:
       - name: Comment clutter guard self-tests
         run: ./tools/test-comment-clutter.sh
 
+      - name: Restore script self-test
+        # Stub mysql/wget: pins the refusal logic and the safety backup of
+        # scripts/restore.sh without a database.
+        run: ./tools/test-restore-script.sh
+
       - name: Comment clutter guard
         # Diff-scoped FAIL: new comments may not carry tracking IDs, archive
         # paths, file:line pointers or dates (.ai/conventions.md, Comment
@@ -542,6 +547,80 @@ jobs:
         run: npm audit --audit-level=high
 
   # --- Full compose stack boot ---
+  # --- Player-eyes crawl ---
+  # Seeds a campaign with marked hidden content (hidden page, Director-only
+  # passages, hidden calendar and timeline events, gm map layer, notes and
+  # more), then walks every campaign GET route as a player, a second player,
+  # a scribe and a signed-out visitor, and holds a socket open while the owner
+  # edits. It fails if any marker reaches a viewer who may not see it, or if a
+  # viewer never saw the visible text it should (a blind walk proves nothing).
+  playercrawl:
+    name: Player-eyes crawl
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: chronicle
+          MARIADB_DATABASE: chronicle
+          MARIADB_USER: chronicle
+          MARIADB_PASSWORD: chronicle
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1100
+
+      - name: Generate templ files
+        run: templ generate
+
+      - name: Build and start the server
+        shell: bash
+        env:
+          DB_HOST: 127.0.0.1:3306
+          DB_USER: chronicle
+          DB_PASSWORD: chronicle
+          DB_NAME: chronicle
+          REDIS_URL: redis://127.0.0.1:6379
+          SECRET_KEY: ci-only-secret-key-ci-only-secret-key-0000
+          ENV: development
+          PORT: '8080'
+          BASE_URL: http://localhost:8080
+        run: |
+          go build -o chronicle ./cmd/server
+          ./chronicle > server.log 2>&1 &
+          for _ in $(seq 1 90); do
+            curl -fsS http://localhost:8080/healthz >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          cat server.log
+          exit 1
+
+      - name: Crawl as a player
+        run: node tools/player-crawl/run.mjs
+        env:
+          CRAWL_BASE: http://localhost:8080
+
   # Builds the image from source, starts app + MariaDB + Redis exactly as
   # docker-compose.yml defines them, and waits for /healthz. Catches Dockerfile,
   # entrypoint, empty-database migration and compose breakage that the Go tests

@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -197,8 +198,15 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 				if err == nil {
 					cc.MemberRole = member.Role
 					cc.IsMember = true
+				} else if until, live, found := visitPassOf(c, service, campaignID, session.UserID); live {
+					// A look-around pass reads like a public visit, on a
+					// private campaign too; write routes still refuse them.
+					cc.MemberRole = RoleNone
+					cc.VisitUntil = &until
 				} else if session.IsAdmin {
 					cc.MemberRole = RoleNone
+				} else if !campaign.IsPublic && found {
+					return apperror.NewForbidden("Your look-around pass for this campaign has ended. Ask the game master to make you a player.")
 				} else if !campaign.IsPublic {
 					return apperror.NewForbidden("you are not a member of this campaign")
 				} else {
@@ -235,6 +243,22 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+// visitPassOf asks the campaign service about a look-around pass when it
+// knows about them; test doubles of CampaignService don't, and admit no one.
+// A failed read admits no one either, rather than failing the page.
+func visitPassOf(c *echo.Context, service CampaignService, campaignID, userID string) (until time.Time, live, found bool) {
+	v, ok := service.(VisitPasses)
+	if !ok {
+		return time.Time{}, false, false
+	}
+	until, live, found, err := v.VisitPass(c.Request().Context(), campaignID, userID)
+	if err != nil {
+		slog.Warn("reading look-around pass", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return time.Time{}, false, false
+	}
+	return until, live, found
 }
 
 // RequireRole returns middleware that checks the user's membership role
@@ -285,7 +309,7 @@ func RequireViewAccess() echo.MiddlewareFunc {
 				)
 			}
 
-			if cc.IsMember || cc.IsSiteAdmin || cc.Campaign.IsPublic {
+			if cc.IsMember || cc.IsSiteAdmin || cc.Campaign.IsPublic || cc.VisitUntil != nil {
 				return next(c)
 			}
 

@@ -11,12 +11,18 @@
   "$defs": {
     "ReferenceItem": {
       "type": "object",
-      "required": ["id", "name"],
+      "required": ["name"],
+      "anyOf": [{"required": ["id"]}, {"required": ["slug"]}],
       "properties": {
         "id": {
           "type": "string",
           "pattern": "^[a-z0-9-]+$",
           "description": "Unique identifier within category. URL-safe slug (e.g., 'acid-splash')."
+        },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "description": "Identifier used instead of id by packages that key by slug (Draw Steel). One of id or slug is required."
         },
         "name": {
           "type": "string",

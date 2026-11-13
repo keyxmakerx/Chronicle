@@ -54,11 +54,12 @@ func TestViewPrefAttrs_OffWritesCalmFlag(t *testing.T) {
 	}
 }
 
-// Motion speed retimes the paper moves along with the chrome durations.
+// Motion speed retimes the paper moves and the everyday moves along with the
+// chrome durations.
 func TestAppearanceCSS_SpeedRetimesPaperMoves(t *testing.T) {
 	cases := []struct{ speed, want string }{
-		{"snappy", "--dur-slide:240ms;--dur-turn:380ms;"},
-		{"leisurely", "--dur-slide:520ms;--dur-turn:760ms;"},
+		{"snappy", "--dur-slide:240ms;--dur-turn:380ms;--dur-everyday:80ms;--dur-page:60ms;"},
+		{"leisurely", "--dur-slide:520ms;--dur-turn:760ms;--dur-everyday:200ms;--dur-page:150ms;"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.speed, func(t *testing.T) {

@@ -82,6 +82,19 @@ Every screen is one of two kinds, and is designed in that kind's register.
   calendar grid, maps, game nights, settings, Customize, admin, dialogs and
   forms use the theme tokens.
 
+### How an app page opens
+
+Every app page (Maps, Timelines, Crafting, Armory, Characters, Calendars and
+the rest) sits in `layouts.AppFrame`, one width and one left edge, and opens
+with `layouts.AppOpening`, one component in two sizes. Empty for this viewer:
+the app's name and a plain sentence written for them, with the one action
+they can take, or none. With content: a single title line, the tools beside
+it and the main action at its end. There is no box and no placeholder icon in
+the empty size; the sentence is the empty state. Each app writes three
+sentences (player, co-DM, owner) that say what will show there and who adds
+it, never offer an action the reader can't take, and name the game master
+with `GMTerm`. Manage pages keep `ManageHeader`.
+
 ## The material rules
 
 How the physical idea turns into pixels. Each rule names what a real sheet
@@ -193,7 +206,13 @@ would do.
   opens the table and R the rolls, never while typing; each person has quick
   2D dice. The Handbook's Rules ribbon and its
   P key stay as they are. The Table shows Rolls and My dice; Rules,
-  Conditions, Party and Notes leaves are TODO(#1475).
+  Conditions, Party and Notes leaves are TODO(#1475). On a phone (under 640
+  wide, or a touch screen under 900) the same drawer is a sheet on the bottom
+  edge and the header button is gone: Resting is a 38 px line with the last
+  roll, Lifted is the dice and the roll field at about 60% of the screen, Full
+  is the leaves under the header. A tap lifts one height, a drag follows the
+  finger, a roll changes the line and never lifts it, and the page keeps room
+  for the line. It moves by transform only; Calm fades between heights.
 - **Who sees what follows one check.** DM-only content is visible to everyone
   who can write it: the owner and members with DM access
   (`CampaignContext.VisibilityRole()` to see it, `CanAuthorDmOnly()` to write
@@ -360,12 +379,12 @@ place, and Off shows the end state.
 |---|---|---|---|
 | Peek | hover cards, the sidebar peek, availability bars | fade and a 4px rise, `--dur-micro`, `--ease-out` | fade only |
 | Grow | menus, pickers, dialogs, pop-out editors, out of the thing clicked | scale from the clicked edge, `--dur-standard`, `--ease-out` | fade only |
-| Fold | sections, rows that join or leave a list, calendar months | to the content's real height, pushing what follows down, `--dur-standard` in, `--dur-micro` + 40ms out | opens at once |
+| Fold | sections, rows that join or leave a list | to the content's real height, pushing what follows down, `--dur-standard` in, `--dur-micro` + 40ms out | opens at once |
 | Drape | pull-downs: a title's drawer, a widget's longer list or settings | unrolls down from the edge it hangs from, over the page with its shadow, nothing below moves; rolls back up, `--dur-standard`, `--ease-out` | fade only |
 | Slide-out | sheet tabs, creator steps, slips, an editor from behind its part | out from behind its surface, then in front of it, `--dur-slide`, `--ease-slide` | appears in place with a fade |
 | Pull | following a connection, opening a list row's peek | the new content slides out from under the block that holds the link while the old stays and dims, `--dur-slide` × 1.22, `--ease-slide` | fade only |
 | Page turn | the Handbook only | a turn with a soft crease, `--dur-turn`, `--ease-turn` | the new spread fades in |
-| Settle | moving to a new page or tab | fade and a 6px rise, `--dur-large`, `--ease-out` | fade only |
+| Settle | a step of a form or a new view that shows where it came from | fade and a 6px rise, `--dur-large`, `--ease-out` | fade only |
 | Glow | something new or something you came from | an accent glow that fades over about 1.2s | the same |
 
 - **Slide-out means from behind, then in front.** The moving surface starts
@@ -424,6 +443,17 @@ place, and Off shows the end state.
   built from `opacity` plus `transform` becomes its Calm version by itself.
   Script-driven motion checks `data-motion` (or the older flags) and does the
   same.
+- **The calendar's month rolls as one strip.** One step forward moves the
+  weeks up and one back moves them down over 260 ms (scaled by Motion speed),
+  `--ease-slide`, transform and opacity only: the earlier month sits above the
+  later one, a week row both share is drawn once and travels, and the leaving
+  month fades as the arriving one does. A key, a jump of more than one month
+  and Off swap at once; Calm cross-fades in place.
+- **A day's card follows the next press.** An open card moves to another
+  day pressed with the mouse in 200 ms (`--ease-slide`, transform only) and
+  its words fade in; with the arrow keys it moves at once; Calm cross-fades.
+  A card holding a form, a card mid-move, a phone's sheet and Edit mode close
+  and open as before. The fold plays 1.65 times quicker than it was drawn.
 - **Folds measure their content.** A fold, roll or unfurl animates to the
   content's real height (measure `scrollHeight`, animate, then release to
   `auto`), so it never clips, jumps, or expands after a cut-off frame. No
@@ -458,6 +488,14 @@ place, and Off shows the end state.
 Each interaction maps onto the moves above with these timings. Calm is the
 column's version; Off shows the end state.
 
+**Speed follows how often.** A move made many times a session takes 120ms or
+less: menus and pickers, a tab switch, another page (`--dur-everyday`,
+`--dur-everyday-out`, `--dur-page`, retimed by the owner's Motion speed like the
+rest). Anything started from the keyboard is instant. A move that shows where
+something came from keeps its full timing: drawers, pull-downs, peeks, pulls,
+folds and slide-outs. Nothing a roll plays on every use runs past half a
+second; the dice settle in under 480ms.
+
 | Interaction | When | Full | Timing | Calm |
 |---|---|---|---|---|
 | Hover on a row | pointer over a link row, list row or connection | a soft fill; under Annals also the resting shadow, no movement | 120ms | colour only |
@@ -466,15 +504,15 @@ column's version; Off shows the end state.
 | Heavy press | Site admin, Publish, Delete, Send invites only | sinks 10%, lets go slowly | 70ms down, 280ms up on `--ease-slide` | colour only |
 | Keyboard focus | tabbing onto anything | accent ring | 80ms, no movement | same |
 | Switch | a setting on or off | knob slides, track fills | 160ms in-out | knob jumps, colour fades |
-| Menu or picker | dropdowns, a row's ⋯ menu | Grow out of its button | opens 200ms ease-out, closes 120ms ease-in | fade |
+| Menu or picker | dropdowns, a row's ⋯ menu | Grow out of its button; from the keyboard it appears at once | opens 120ms ease-out (`--dur-everyday`), closes 80ms ease-in | fade |
 | Dialog | confirming, a small form on top | backdrop fades; dialog grows from 96% and rises 6px | opens 200ms, closes 150ms | fade |
 | Drawer | the phone menu, an edge panel | slides in from its own edge | 280ms ease-out | fade |
 | Docked panel | a peek, the AI helper, a docked editor | the page narrows as the panel slides out from behind its edge | 200ms ease-out | fade |
 | Hover card | resting on a name or rule word | Peek after 250ms | 120ms | fade |
 | Fold | sections, groups, more details | to its real height; arrow turns | 200ms ease-out | opens at once |
 | Pull-down | a title's drawer, a small widget's full list | Drape from its edge over the page | 200ms ease-out, 150ms back up | fade |
-| Tab switch | changing tab or view | Settle | 280ms ease-out | fade |
-| Another page | any link to a new page | thin accent progress line, then Settle; the menu stays. Under Annals a connection Pulls instead | 280ms settle | line and fade |
+| Tab switch | changing tab or view | a fade, no rise | 90ms (`--dur-page`) | the same |
+| Another page | any link to a new page | thin accent progress line, then a fade with no rise; the menu stays. Under Annals a connection Pulls instead | 90ms (`--dur-page`) | line and fade |
 | Adding to a list | a new page, a tag | the row Folds open, fades in, Glows | 200ms, glow fades over 1.2s | fade and glow |
 | Removing from a list | deleting, unlinking | the row fades and Folds closed | 160ms ease-in | fade, space closes at once |
 | Dragging | reordering, moving between groups | lifts to depth 3 with a slight tilt; drops into place | 120ms pick up, 200ms drop | lift shadow only |
@@ -495,13 +533,31 @@ column's version; Off shows the end state.
 - The corner, depth, glow and face rules below describe the base kit,
   Material. Another style kit may replace them on the pages it dresses, only
   as its own row under **Style kits** says.
+- **The sign-in page is three doors over a scene.** *Sign in*, *I'm new* and
+  *I have a code* are tabs (`/login`, `/register`, `/join` each open their
+  own) on one floating panel with no box around the form. A painted,
+  pre-blurred scene sits behind it and follows the tab (castle, dragon,
+  tavern); its four layers drift on `--dur-ambient` and hold still under Calm
+  and Off. A site admin's picture or colours replace the scenes, and a saved
+  plain look shows the panel on the page colour
+  (`internal/templates/layouts/site_doors.templ`, `static/css/auth_doors.css`;
+  art rebuilt by `tools/build-signin-scenes.mjs`).
 - Theme tokens (`bg-surface`, `text-fg`, `text-fg-muted`, `border-edge`,
   `text-accent`), never hard-coded colours, and both light and dark. Dark mode
   uses the same rules with lighter surfaces and a lighter accent, not glows
   (Lumen's glow is its kit's character and the one exception).
 - **Colour roles**: page `--color-bg-primary`, panel `--color-bg-secondary`,
   hover and alternate rows `--color-bg-tertiary`, menu `--color-sidebar-bg`,
-  headings `--color-text-primary`, labels `--color-text-secondary`.
+  headings `--color-text-primary`, labels `--color-text-secondary`, hints and
+  dates `--color-text-muted`. Both text greys reach 4.5:1 on the page, panel
+  and alternate-row fills in light and dark (a custom page tone is nudged to
+  match), so nothing a reader needs is faint. `--color-text-faint` is for
+  disabled controls and decoration only. A card says when it was last changed
+  as "Edited 2 days ago" in the label grey, with the exact time in the
+  element's `title` and `datetime`, and never fills a missing description
+  with "No description"; a standing instruction sits behind a quiet word
+  ("How linking works") and a short placeholder says only what the field is.
+  Menu group names use the menu's label grey, not its 3:1 count grey.
 - **One accent.** The accent (`--color-accent`, the campaign's colour) marks
   what you can act on and where you are: links (underlined at 40%), the
   selected row's edge, focus, the title's rule, group and section labels, and
@@ -526,6 +582,11 @@ column's version; Off shows the end state.
   Customizer's own frames (tiles 14, the phone preview 28), which stand for
   a device, and the corners a style kit names (Sharp's square frames,
   Flowing's uneven rounded ones, Sketchbook's hand-drawn ones).
+- **Corners and edges are tokens** in `static/css/input.css`:
+  `--shape-r-tag` (4), `--shape-r-small` (6), `--shape-r-ctl` (8),
+  `--shape-r-panel` (12), `--shape-edge` (a box's edge) and `--shape-rule`
+  (a rule between rows). Page parts use them, never fixed values, so each
+  style kit sets them once in `style_kits.css`. Pills and circles stay fixed.
 - **Type**: headings in the campaign's heading face; when the owner picked
   none, pages under Annals use tall capitals (Oswald, 600, set by
   `AppearanceCSS`) and everything else Inter. Page titles 24 to 40 (fluid)

@@ -563,13 +563,20 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 	if strings.TrimSpace(source) == "" {
 		return apperror.NewBadRequest("Your import session expired. Please paste your markdown again.")
 	}
-	// A connected AI's request is applied once: a second Apply (a double
-	// click, or the same review open in two tabs) would add its new pages and
-	// records again, so it is refused before anything is written.
+	// A connected AI's request is applied once. It is claimed before anything
+	// is written, in one conditional update, so a second Apply (a double
+	// click, the same review open in two tabs) is refused even when it
+	// arrives while the first is still writing.
+	var claimedID int64
 	if raw := c.FormValue("ai_request"); raw != "" && h.connector != nil {
-		if _, err := h.waitingRequest(c, cc, raw); err != nil {
+		id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		if err != nil || id <= 0 {
+			return apperror.NewBadRequest("that request isn't here any more")
+		}
+		if _, err := h.connector.ClaimRequest(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id); err != nil {
 			return err
 		}
+		claimedID = id
 	}
 
 	// Re-parse from scratch so the indexes match what the review
@@ -665,6 +672,14 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 		slog.Error("ai-workspace: commit failed",
 			slog.String("campaign_id", cc.Campaign.ID),
 			slog.Any("error", err))
+		// No page was written (folders made first may have been), so the owner
+		// may try again or turn it down.
+		if claimedID != 0 {
+			if rerr := h.connector.ReleaseRequest(c.Request().Context(), cc.Campaign.ID, userID, claimedID); rerr != nil {
+				slog.Error("ai-workspace: releasing request after failed commit",
+					slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", rerr))
+			}
+		}
 		return apperror.NewInternal(err)
 	}
 	// Records run after pages, so a record may name a page this same
@@ -694,10 +709,12 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 	}
 
 	res := ImportResultData{CampaignID: cc.Campaign.ID, Result: result}
-	if id, perr := strconv.ParseInt(c.FormValue("ai_request"), 10, 64); perr == nil && id > 0 && h.connector != nil {
+	if claimedID != 0 {
 		outcome := requestOutcome(result)
-		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), id, outcome); err != nil {
-			slog.Warn("ai-workspace: marking request answered",
+		// The changes are written, so a failure here is only logged: the
+		// request stays claimed and cannot be applied a second time.
+		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, userID, claimedID, outcome); err != nil {
+			slog.Error("ai-workspace: settling applied request",
 				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		}
 		v, err := h.connectView(c, cc)
@@ -1112,7 +1129,8 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Con
 
 // ConnectorCheck is what a connected AI is told about the changes it asks
 // for before they wait for the owner: new pages filed in a folder their
-// category doesn't have, and every other block the review screen would mark
+// category doesn't have, pages to update or delete that don't exist, sheet
+// fields their category lacks, and every other block the review screen would mark
 // as unusable, with the review's own reason. The AI can fix its own request,
 // where the owner would otherwise find a broken row at review.
 //
@@ -1120,30 +1138,53 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Con
 // reason can name what the owner can see. That is only told to a key that
 // already reads as the owner (any privacy but Safe); a Safe key, which reads as a
 // player, gets the folder check alone, so a refusal never tells it a hidden
-// page exists.
+// page exists; the page checks look pages up by name, so they are left out too.
 func (h *Handler) ConnectorCheck(ctx context.Context, conn *connector.Connection, changes string) ([]string, error) {
+	out, _, err := h.ConnectorCheckDid(ctx, conn, changes)
+	return out, err
+}
+
+// ConnectorCheckDid is ConnectorCheck plus the line "What it did" shows for
+// a refusal. The line names a page only when a page problem was found, which
+// is only looked for on a key that already reads as the owner; otherwise it
+// is "" and the log keeps its generic wording.
+func (h *Handler) ConnectorCheckDid(ctx context.Context, conn *connector.Connection, changes string) ([]string, string, error) {
 	if conn.ForPlayer {
-		return h.playerCheck(ctx, conn, changes)
+		out, err := h.playerCheck(ctx, conn, changes)
+		return out, "", err
 	}
 	campaignID := conn.CampaignID
 	if h.importLookup == nil || h.importFolders == nil {
-		return nil, nil
+		return nil, "", nil
 	}
 	pages, recs := splitImport(importer.Parse(changes))
 	slips, err := importer.NewClassifier(h.importLookup, campaignID).
 		WithFolders(h.importFolders, pendingFolderNames(recs)).
 		NewPageFolderSlips(ctx, pages)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	did := ""
 	out := make([]string, 0, len(slips))
 	for _, s := range slips {
 		out = append(out, folderSlipLine(s))
 	}
 	if conn.Privacy != aiexport.PrivacyModeSafe {
+		pageProblems, err := importer.NewClassifier(h.importLookup, campaignID).
+			WithFolders(h.importFolders, pendingFolderNames(recs)).
+			PageProblems(ctx, pages)
+		if err != nil {
+			return nil, "", err
+		}
+		for _, p := range pageProblems {
+			out = append(out, p.Line())
+		}
+		if len(pageProblems) > 0 {
+			did = pageProblems[0].Did()
+		}
 		out = append(out, h.recordProblems(ctx, campaignID, conn.UserID, pages, recs)...)
 	}
-	return out, nil
+	return out, did, nil
 }
 
 // recordProblems plans the request's record blocks as the review screen

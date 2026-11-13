@@ -59,8 +59,10 @@ type editorState struct {
 	Seasons   []editorSeason
 	LeapOn    bool
 	LeapEvery int
-	EraName   string
-	EraYear   int
+	// NewWeek is the "each month starts a new week" switch.
+	NewWeek bool
+	EraName string
+	EraYear int
 	// CampaignID is where the moon rows' lore page search looks; empty for a
 	// new calendar, whose moons have no picker.
 	CampaignID string
@@ -83,7 +85,7 @@ func newCalendarEditorState() editorState {
 // calendarEditorState prefills the editor from an existing calendar, which
 // must have Months, Weekdays, Moons and Seasons loaded.
 func calendarEditorState(cal *Calendar) editorState {
-	st := editorState{LeapOn: cal.LeapYearEvery > 0, LeapEvery: cal.LeapYearEvery, CampaignID: cal.CampaignID}
+	st := editorState{LeapOn: cal.LeapYearEvery > 0, LeapEvery: cal.LeapYearEvery, NewWeek: cal.MonthStartsNewWeek, CampaignID: cal.CampaignID}
 	if st.LeapEvery <= 0 {
 		st.LeapEvery = 4
 	}
@@ -160,6 +162,7 @@ moons: %s,
 seasons: %s,
 leapOn: %t,
 leapEvery: %d,
+newWeek: %t,
 eraName: %s,
 eraYear: %d,
 nextKey: %d,
@@ -190,8 +193,8 @@ buildJSON(){
   var eras=this.eraName?[{name:this.eraName, start_year:(parseInt(this.eraYear,10)||1), start_month:1, start_day:1, color:'#6366f1'}]:[];
   var year=parseInt(this.eraYear,10)||1;
   return JSON.stringify({format:'built', calendar_name:'My calendar', months:months, weekdays:weekdays, moons:moons, seasons:seasons, eras:eras,
-    settings:{mode:'fantasy', current_year:year, hours_per_day:24, minutes_per_hour:60, seconds_per_minute:60, leap_year_every:(this.leapOn?(parseInt(this.leapEvery,10)||0):0), leap_year_offset:0},
+    settings:{mode:'fantasy', current_year:year, hours_per_day:24, minutes_per_hour:60, seconds_per_minute:60, leap_year_every:(this.leapOn?(parseInt(this.leapEvery,10)||0):0), leap_year_offset:0, month_starts_new_week:!!this.newWeek},
     today:{year:year}});
 }
-}`, monthsJSON, weekdaysJSON, moonsJSON, seasonsJSON, st.LeapOn, st.LeapEvery, eraJSON, st.EraYear, len(st.Months), slotJSON, campaignJSON)
+}`, monthsJSON, weekdaysJSON, moonsJSON, seasonsJSON, st.LeapOn, st.LeapEvery, st.NewWeek, eraJSON, st.EraYear, len(st.Months), slotJSON, campaignJSON)
 }
