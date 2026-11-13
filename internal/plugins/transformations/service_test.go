@@ -167,3 +167,36 @@ func TestValidation(t *testing.T) {
 		})
 	}
 }
+
+type recordNotifier struct{ got []string }
+
+func (r *recordNotifier) LayersChanged(campaignID, entityID string) {
+	r.got = append(r.got, campaignID+"/"+entityID)
+}
+
+// Foundry redraws a hero's effects from this signal, so it must follow
+// every stored change and never a refused one.
+func TestNotifier(t *testing.T) {
+	ctx := context.Background()
+	n := &recordNotifier{}
+	pages := fakePages{pages: map[string]fakePage{
+		"mirela": {campaign: "c1", playersSee: true, dmEdits: true},
+	}}
+	svc := NewService(newMemRepo(), pages, WithNotifier(n))
+	if _, err := svc.Add(ctx, "c1", "mirela", player, revenant()); err == nil {
+		t.Fatal("a player put a layer on")
+	}
+	l, err := svc.Add(ctx, "c1", "mirela", dm, revenant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code(svc.Remove(ctx, "c1", l.ID, player)) != 403 {
+		t.Fatal("a player took a layer off")
+	}
+	if err := svc.Remove(ctx, "c1", l.ID, dm); err != nil {
+		t.Fatal(err)
+	}
+	if len(n.got) != 2 || n.got[0] != "c1/mirela" || n.got[1] != "c1/mirela" {
+		t.Fatalf("notified %v, want one put on and one taken off", n.got)
+	}
+}
