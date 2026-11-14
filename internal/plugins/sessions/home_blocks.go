@@ -104,7 +104,8 @@ func playTimesFrom(weeks []WeekOverlay, today string) []playTime {
 	var all []playTime
 	seen := map[time.Weekday]bool{}
 	for _, w := range weeks {
-		if w.TotalMembers < 2 {
+		// A table this small would point at a person, as in When we could play.
+		if w.TotalMembers <= couldPlaySmallTable {
 			continue
 		}
 		for _, d := range w.Days {

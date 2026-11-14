@@ -37,7 +37,9 @@ templ whenWeCouldPlayBlock(v couldPlayView) {
 	<section class="cb-info cb-could" data-block="when-we-could-play" data-open="0" aria-labelledby="when-we-could-play-h">
 		<div class="cb-info-top flex items-baseline justify-between mb-3">
 			<h2 id="when-we-could-play-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">When we could play</h2>
-			<a href={ templ.SafeURL(v.GameNightsHref) } class="cb-more text-xs text-accent hover:underline">Open Game nights</a>
+			if !v.Guest {
+				<a href={ templ.SafeURL(v.GameNightsHref) } class="cb-more text-xs text-accent hover:underline">Open Game nights</a>
+			}
 		</div>
 		if len(v.Rows) == 0 {
 			<p class="text-sm text-fg-muted">
@@ -79,14 +81,27 @@ templ whenWeCouldPlayBlock(v couldPlayView) {
 					onclick={ couldPlayToggle() }
 				>{ v.MoreWord() }</button>
 			}
-			<div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-muted" data-extra hidden>
-				<span class="inline-flex items-center gap-1.5"><i class="inline-block h-2.5 w-4 rounded-sm bg-accent" aria-hidden="true"></i>Game night</span>
-				if !v.Guest {
-					<span>Darker means more of the table is usually free</span>
+			if !v.Guest {
+				// The legend folds with the extra days when there are any; a
+				// short block has nothing to open, so it shows the legend outright.
+				if v.ExtraN > 0 {
+					<div data-extra hidden>
+						@couldPlayLegend()
+					</div>
+				} else {
+					@couldPlayLegend()
 				}
-			</div>
+			}
 		}
 	</section>
+}
+
+// couldPlayLegend names the two marks on the bars.
+templ couldPlayLegend() {
+	<div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-muted">
+		<span class="inline-flex items-center gap-1.5"><i class="inline-block h-2.5 w-4 rounded-sm bg-accent" aria-hidden="true"></i>Game night</span>
+		<span>Darker means more of the table is usually free</span>
+	</div>
 }
 
 // couldPlayRowView is one day: its label, the bar, and the words under it.
