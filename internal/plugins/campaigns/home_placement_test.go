@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 func TestHomeHasBlock(t *testing.T) {
@@ -143,6 +145,50 @@ func TestBlockFragmentURL(t *testing.T) {
 	for _, bt := range PlaceableBlockTypes() {
 		if _, ok := BlockFragmentURL("c1", bt, ""); !ok {
 			t.Errorf("%s has no fragment address", bt)
+		}
+	}
+}
+
+// OwnerCardVisible is the check the activity and sync cards make themselves:
+// the owner only, and not while looking as a player. A co-Director is not
+// shown them, because the routes behind them answer the owner alone.
+func TestOwnerCardVisible(t *testing.T) {
+	camp := &Campaign{ID: "c1"}
+	tests := []struct {
+		name string
+		cc   *CampaignContext
+		ctx  context.Context
+		want bool
+	}{
+		{"owner", &CampaignContext{Campaign: camp, MemberRole: RoleOwner, IsMember: true}, context.Background(), true},
+		{"owner looking as a player", &CampaignContext{Campaign: camp, MemberRole: RoleOwner, IsMember: true}, layouts.SetViewingAsPlayer(context.Background(), true), false},
+		{"co-Director", &CampaignContext{Campaign: camp, MemberRole: RolePlayer, IsMember: true, IsDmGranted: true}, context.Background(), false},
+		{"scribe", &CampaignContext{Campaign: camp, MemberRole: RoleScribe, IsMember: true}, context.Background(), false},
+		{"player", &CampaignContext{Campaign: camp, MemberRole: RolePlayer, IsMember: true}, context.Background(), false},
+		{"guest", &CampaignContext{Campaign: camp, MemberRole: RoleNone}, context.Background(), false},
+		{"no context", nil, context.Background(), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := OwnerCardVisible(tt.ctx, tt.cc); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// The home draws the activity and sync cards through the same check, marked
+// for the Director team, and an owner looking as a player is shown neither.
+func TestOwnerCardsOnTheHomeAreMarkedAndHiddenFromAPlayersView(t *testing.T) {
+	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RoleOwner, IsMember: true}
+	for _, bt := range []string{"activity_feed", "sync_status"} {
+		out := renderCardWithCtx(t, context.Background(), DashboardBlockSwitch(cc, DashboardBlock{Type: bt}, nil))
+		if !strings.Contains(out, "data-dm-only") {
+			t.Errorf("%s: not marked for the Director team:\n%s", bt, out)
+		}
+		out = renderCardWithCtx(t, layouts.SetViewingAsPlayer(context.Background(), true), DashboardBlockSwitch(cc, DashboardBlock{Type: bt}, nil))
+		if strings.TrimSpace(out) != "" {
+			t.Errorf("%s: shown to an owner looking as a player:\n%s", bt, out)
 		}
 	}
 }

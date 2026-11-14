@@ -939,7 +939,7 @@ GET	/campaigns/:id/favorites	session	plugins/entities.(*Handler).ListFavoritesAP
 GET	/campaigns/:id/foundry	session	plugins/campaigns.(*Handler).FoundryPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/foundry-presence	session	plugins/foundry_vtt.(*Handler).GetFoundryPresenceAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/foundry-vtt/apps-row	session	plugins/foundry_vtt.(*Handler).AppsUpdateRowHandler	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/foundry-vtt/dashboard-sync-block	session	plugins/foundry_vtt.(*Handler).DashboardSyncBlockHandler	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+GET	/campaigns/:id/foundry-vtt/dashboard-sync-block	session	plugins/foundry_vtt.(*Handler).DashboardSyncBlockHandler	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/foundry-vtt/install-url	session	plugins/foundry_vtt.(*Handler).InstallURLAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/foundry-vtt/npc-spotlight/:eid	session	plugins/foundry_vtt.(*Handler).NPCSpotlightButtonHandler	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 POST	/campaigns/:id/foundry-vtt/npc-spotlight/:eid	session	plugins/foundry_vtt.(*Handler).NPCSpotlightAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability

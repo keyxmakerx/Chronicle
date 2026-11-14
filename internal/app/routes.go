@@ -4945,6 +4945,8 @@ func (a *App) RegisterRoutes() {
 	// This drives validation, rendering, and the template editor palette.
 	blockRegistry := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blockRegistry)
+	// Recent Pages on an ordinary page reads its pages as the home does.
+	blockRegistry.SetRecentPagesLister(&recentEntityListerAdapter{svc: entityService})
 	// The Standing block and its routes exist only while its tables migrated
 	// (its script loads on sight from the entities plugin's assets).
 	if a.PluginHealth.IsHealthy(entities.StandingPluginSlug) {

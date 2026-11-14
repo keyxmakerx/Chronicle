@@ -3,6 +3,8 @@ package campaigns
 import (
 	"context"
 	"net/url"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // HomeHasBlock reports whether a home layout places blockType in a column or
@@ -130,4 +132,14 @@ func BlockFragmentURL(campaignID, blockType, onEntityID string) (string, bool) {
 		href += "?on=" + url.QueryEscape(onEntityID)
 	}
 	return href, true
+}
+
+// OwnerCardVisible reports whether a card that reads the owner's own routes
+// (the activity log, the Foundry sync status) is drawn for this viewer. Those
+// routes answer only the owner, so anyone else is shown nothing rather than a
+// card that can only fail to load, and an owner looking as a player sees what
+// a player sees. The block asks this itself, so it holds on any page it is
+// placed on, not only on the owner's home.
+func OwnerCardVisible(ctx context.Context, cc *CampaignContext) bool {
+	return cc != nil && cc.MemberRole >= RoleOwner && !layouts.IsViewingAsPlayer(ctx)
 }

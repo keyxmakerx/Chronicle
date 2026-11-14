@@ -12,8 +12,10 @@ func IntPtr(n int) *int { return &n }
 // RegisterCoreBlocks adds core block types to the registry. Called during
 // NewBlockRegistry or app startup before plugins register their own blocks.
 func RegisterCoreBlocks(r *BlockRegistry) {
-	// The blocks other plugins draw can also sit on a category's home.
+	// The blocks other plugins draw can also sit on a category's home, as can
+	// the older home blocks the campaigns plugin draws.
 	registerPlaceableCategoryBlocks()
+	registerHomeCategoryBlocks()
 
 	// ---------------------------------------------------------------
 	// Template (entity page) blocks — Contexts: ["template"]
@@ -336,7 +338,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "pinned_pages", Label: "Pinned Pages", Icon: "fa-thumbtack",
-		Description: "Pages pinned for everyone; on a campaign home, each viewer's starred pages too",
+		Description: "Pages pinned for everyone; on a campaign home or a page, each viewer's starred pages too",
 		Contexts:    []string{"dashboard"},
 	}, nil)
 
@@ -550,4 +552,10 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		Description: "Search input for filtering",
 		Contexts: []string{"dashboard"},
 	}, nil)
+
+	// Every home block can also sit on an ordinary page. Done last so each
+	// keeps the label, icon, addon, settings and tile sizes registered above.
+	for _, t := range pageHomeBlockTypes {
+		r.offerOnPages(t)
+	}
 }

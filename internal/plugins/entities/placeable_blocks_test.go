@@ -84,7 +84,7 @@ func TestPlaceableBlockPlaceholderCarriesThePage(t *testing.T) {
 	}
 	// The category home draws it with no page to name.
 	var sb strings.Builder
-	if err := renderExtraCategoryBlock(cc, &EntityType{}, "next_game").Render(context.Background(), &sb); err != nil {
+	if err := renderExtraCategoryBlock(cc, &EntityType{}, "next_game", nil).Render(context.Background(), &sb); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(sb.String(), `hx-get="/campaigns/camp%2F1/next-game"`) {

@@ -134,9 +134,9 @@ func (h *Handler) OwnerTabFragmentHandler(c *echo.Context) error {
 
 // DashboardSyncBlockHandler serves the per-campaign dashboard "Foundry
 // VTT Sync" block. Lazy-loaded by campaigns/dashboard_blocks.templ when
-// the dashboard layout includes a sync_status block. Campaign-member
-// access; the inner /sync-status hx-get is owner-gated by syncapi, so
-// non-owners see the outer chrome but the inner status fails.
+// the dashboard layout includes a sync_status block. Owner only, like the
+// inner /sync-status hx-get it loads, so a block placed on any page shows
+// nobody else its chrome.
 //
 // GET /campaigns/:id/foundry-vtt/dashboard-sync-block
 func (h *Handler) DashboardSyncBlockHandler(c *echo.Context) error {

@@ -124,15 +124,17 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			}
 		case "activity_feed":
 			// The activity embed is the owner's (audit routes), so nobody
-			// else is shown a card that can only fail to load.
-			if cc.MemberRole >= RoleOwner {
+			// else is shown a card that can only fail to load, wherever the
+			// block sits.
+			if OwnerCardVisible(ctx, cc) {
 				@dashActivityFeed(cc, block.Config)
 			}
 		case "sync_status":
 			// Lazy-loaded from foundry_vtt (DashboardSyncBlock) to keep
 			// this plugin VTT-agnostic; shows a loading skeleton until
 			// the fragment swaps in. Its status read is owner-only.
-			if cc.MemberRole >= RoleOwner {
+			if OwnerCardVisible(ctx, cc) {
+			<div data-dm-only>
 			<div
 				hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/dashboard-sync-block", cc.Campaign.ID) }
 				hx-trigger="load"
@@ -147,6 +149,7 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 						<span class="inline-block w-48 h-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 					</div>
 				</div>
+			</div>
 			</div>
 			}
 	}
@@ -979,7 +982,7 @@ func dashConfigString(config map[string]any, key string) string {
 // Lazy-loads via HTMX from the audit plugin embed endpoint.
 // Config: limit (int, default 10).
 templ dashActivityFeed(cc *CampaignContext, config map[string]any) {
-	<div>
+	<div data-dm-only>
 		<div class="flex items-center justify-between mb-3">
 			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-clock-rotate-left mr-1.5"></i>Recent Activity
