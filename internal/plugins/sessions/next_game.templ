@@ -5,7 +5,7 @@ package sessions
 // nextGameBlock replaces the placeholder (hx-swap outerHTML).
 templ nextGameBlock(v nextGameView) {
 	<section class="cb-info cb-next-game" data-block="next-game" aria-labelledby="next-game-h">
-		<div class="cb-info-top flex items-baseline justify-between mb-3">
+		<div class="cb-info-top flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-3">
 			<h2 id="next-game-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">Next game</h2>
 			if !v.Guest {
 				<a href={ templ.SafeURL(v.GameNightsHref) } class="cb-more text-xs text-accent hover:underline">Open Game nights</a>
@@ -24,13 +24,13 @@ templ nextGameBlock(v nextGameView) {
 					}
 					<span class="min-w-0 flex-1">
 						if v.Today != "" {
-							<span class="block text-lg font-semibold text-fg">{ v.Today }</span>
+							<span class="block break-words text-lg font-semibold text-fg">{ v.Today }</span>
 						}
 						if v.Title != "" {
 							<span class="block truncate font-semibold text-fg">{ v.Title }</span>
 							<span class="block text-xs text-fg-muted">{ v.When }</span>
 						} else if v.Today == "" {
-							<span class="block font-semibold text-fg">{ v.When }</span>
+							<span class="block break-words font-semibold text-fg">{ v.When }</span>
 						}
 						if v.Owes {
 							<a href={ templ.SafeURL(v.Href) } class="mt-1 inline-block text-xs text-accent hover:underline">Answer</a>

@@ -4924,6 +4924,12 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("page layout tables degraded — each category has only its main layout")
 	}
 
+	// Home blocks that can sit on a page ask this before answering a guest,
+	// so a block shows only where the owner placed it and the guest may open.
+	blockPlacement := entities.NewBlockPlacementChecker(entityService, pageLayoutService)
+	sessionsHandler.SetPlacementChecker(blockPlacement)
+	calendarHandler.SetPlacementChecker(blockPlacement)
+
 	// The home's Pinned Pages widget: each member's starred pages always, and
 	// the Director's pins for everyone while their table migrated.
 	pinsHealthy := a.PluginHealth.IsHealthy(pinschema.PluginSlug)
@@ -6397,7 +6403,9 @@ func (a *App) RegisterRoutes() {
 			names: &questMemberNamesAdapter{svc: campaignService},
 		})
 		questAPI.attach(questSvc, boardSvc, questPicker)
-		quests.RegisterRoutes(e, quests.NewHandler(questSvc, boardSvc, questPicker), campaignService, authService)
+		questsHandler := quests.NewHandler(questSvc, boardSvc, questPicker)
+		questsHandler.SetPlacementChecker(blockPlacement)
+		quests.RegisterRoutes(e, questsHandler, campaignService, authService)
 	} else {
 		slog.Warn("quests plugin degraded — routes not registered")
 	}
@@ -6498,7 +6506,9 @@ func (a *App) RegisterRoutes() {
 		trackersSvc = trackers.NewService(trackers.NewRepository(a.DB),
 			&trackersEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)},
 			&trackersClockAdapter{svc: calendarService})
-		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
+		trackersHandler := trackers.NewHandler(trackersSvc)
+		trackersHandler.SetPlacementChecker(blockPlacement)
+		trackers.RegisterRoutes(e, trackersHandler, campaignService, authService)
 		registerTrackersBlock(blockRegistry)
 		registerRecipeBlock(blockRegistry)
 	} else {

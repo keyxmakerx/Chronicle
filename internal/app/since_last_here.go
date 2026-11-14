@@ -322,7 +322,9 @@ func (h *sinceHandler) Show(c *echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
-	if !cc.IsMember || userID == "" {
+	// Members only, wherever the block is placed: the same rule every
+	// placeable block asks, which never lets a guest through for this one.
+	if !campaigns.BlockVisibleTo(c.Request().Context(), cc, nil, campaigns.BlockSinceLastHere, c.QueryParam("on"), userID) || userID == "" {
 		return c.HTML(http.StatusOK, "")
 	}
 	ctx, cancel := context.WithTimeout(c.Request().Context(), comingUpTimeout)

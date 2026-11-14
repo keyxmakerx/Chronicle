@@ -504,13 +504,10 @@ func (h *Handler) WhenWeCouldPlayBlock(c *echo.Context) error {
 	guest := !cc.IsMember
 	// A visitor sees game nights only where the owner chose to show them: the
 	// route is reachable on any public campaign, so placement is the consent.
-	if guest {
-		home, _ := cc.Campaign.HomeLayout(campaigns.HomeGuest)
-		if !homeHasBlock(home, campaigns.BlockWhenWeCouldPlay) {
-			return c.HTML(http.StatusOK, "")
-		}
-	}
 	userID := auth.GetUserID(c)
+	if !campaigns.BlockVisibleTo(ctx, cc, h.placement, campaigns.BlockWhenWeCouldPlay, c.QueryParam("on"), userID) {
+		return c.HTML(http.StatusOK, "")
+	}
 	tz := "UTC"
 	if !guest {
 		tz = h.resolveViewerTZ(c, userID)

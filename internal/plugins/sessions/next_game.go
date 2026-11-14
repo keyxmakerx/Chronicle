@@ -107,15 +107,12 @@ func (h *Handler) NextGameBlock(c *echo.Context) error {
 	}
 	ctx := c.Request().Context()
 	guest := !cc.IsMember
-	// The route is reachable on any public campaign, so placement on the
-	// Guests home is the owner's consent to show a visitor game nights.
-	if guest {
-		home, _ := cc.Campaign.HomeLayout(campaigns.HomeGuest)
-		if !homeHasBlock(home, campaigns.BlockNextGame) {
-			return c.HTML(http.StatusOK, "")
-		}
-	}
+	// The route is reachable on any public campaign, so placement is the
+	// owner's consent to show a visitor game nights.
 	userID := auth.GetUserID(c)
+	if !campaigns.BlockVisibleTo(ctx, cc, h.placement, campaigns.BlockNextGame, c.QueryParam("on"), userID) {
+		return c.HTML(http.StatusOK, "")
+	}
 	tz := "UTC"
 	if !guest {
 		tz = h.resolveViewerTZ(c, userID)

@@ -27,6 +27,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -165,9 +166,10 @@ func (h *Handler) TodayInWorldBlock(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	// A visitor sees the block only where the owner placed it on the Guests
-	// home; the route itself is reachable on any public campaign.
-	if !cc.IsMember && !campaigns.GuestHomeHasBlock(cc.Campaign, campaigns.BlockTodayInWorld) {
+	// A visitor sees the block only where the owner placed it (the Guests home
+	// or a page they may open); the route itself is reachable on any public
+	// campaign.
+	if !campaigns.BlockVisibleTo(c.Request().Context(), cc, h.placement, campaigns.BlockTodayInWorld, c.QueryParam("on"), auth.GetUserID(c)) {
 		return c.HTML(http.StatusOK, "")
 	}
 	ctx, cancel := context.WithTimeout(c.Request().Context(), todayTimeout)

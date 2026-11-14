@@ -12,6 +12,9 @@ func IntPtr(n int) *int { return &n }
 // RegisterCoreBlocks adds core block types to the registry. Called during
 // NewBlockRegistry or app startup before plugins register their own blocks.
 func RegisterCoreBlocks(r *BlockRegistry) {
+	// The blocks other plugins draw can also sit on a category's home.
+	registerPlaceableCategoryBlocks()
+
 	// ---------------------------------------------------------------
 	// Template (entity page) blocks — Contexts: ["template"]
 	// ---------------------------------------------------------------
@@ -456,38 +459,38 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	r.Register(BlockMeta{
 		Type: "when_we_could_play", Label: "When we could play", Icon: "fa-calendar-week",
 		Description: "The next weeks: set game nights and roughly when the table tends to be free",
-		Addon: "sessions", Contexts: []string{"dashboard"},
-	}, nil)
+		Addon: "sessions", Contexts: []string{"dashboard", "template"},
+	}, placeableBlockRenderer("when_we_could_play"))
 
 	r.Register(BlockMeta{
 		Type: "next_game", Label: "Next game", Icon: "fa-hourglass-half",
 		Description: "How many days until the next set game night, and your own answer",
-		Addon: "sessions", Contexts: []string{"dashboard"},
-	}, nil)
+		Addon: "sessions", Contexts: []string{"dashboard", "template"},
+	}, placeableBlockRenderer("next_game"))
 
 	r.Register(BlockMeta{
 		Type: "today_in_world", Label: "Today in the world", Icon: "fa-sun",
 		Description: "The date in your world, today's weather and moons, and the next event on the calendar",
-		Addon: addonCalendar, Contexts: []string{"dashboard"},
-	}, nil)
+		Addon: addonCalendar, Contexts: []string{"dashboard", "template"},
+	}, placeableBlockRenderer("today_in_world"))
 
 	r.Register(BlockMeta{
 		Type: "open_quests", Label: "Open quests", Icon: "fa-scroll",
 		Description: "The three open quests that most need attention: due soonest, then newest",
-		Contexts: []string{"dashboard"},
-	}, nil)
+		Contexts: []string{"dashboard", "template"},
+	}, placeableBlockRenderer("open_quests"))
 
 	r.Register(BlockMeta{
 		Type: "world_clocks", Label: "The world's clocks", Icon: "fa-stopwatch",
 		Description: "Trackers you show to everyone, drawn small as rings",
-		Contexts: []string{"dashboard"},
-	}, nil)
+		Contexts: []string{"dashboard", "template"},
+	}, placeableBlockRenderer("world_clocks"))
 
 	r.Register(BlockMeta{
 		Type: "since_last_here", Label: "Since you were last here", Icon: "fa-envelope-open-text",
 		Description: "What is new for each member since they last pressed Mark as seen: recaps, pages, quests and game nights they may open",
-		Contexts: []string{"dashboard"},
-	}, nil)
+		Contexts: []string{"dashboard", "template"},
+	}, placeableBlockRenderer("since_last_here"))
 
 	r.Register(BlockMeta{
 		Type: "where_we_play", Label: "Where we play", Icon: "fa-location-dot",

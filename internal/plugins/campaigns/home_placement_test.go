@@ -1,6 +1,10 @@
 package campaigns
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+)
 
 func TestHomeHasBlock(t *testing.T) {
 	col := &DashboardLayout{Rows: []DashboardRow{{Columns: []DashboardColumn{{Blocks: []DashboardBlock{{Type: "party"}, {Type: BlockNextGame}}}}}}}
@@ -48,5 +52,97 @@ func TestGuestHomeHasBlock(t *testing.T) {
 	members.DashboardLayout = full
 	if GuestHomeHasBlock(members, BlockNextGame) {
 		t.Error("a block on the Players home must not reach guests")
+	}
+}
+
+type placementFake struct {
+	ok    bool
+	calls int
+	got   []string
+	role  int
+}
+
+func (p *placementFake) GuestMaySee(_ context.Context, campaignID, blockType, on, userID string, role int) bool {
+	p.calls++
+	p.got = []string{campaignID, blockType, on, userID}
+	p.role = role
+	return p.ok
+}
+
+// BlockVisibleTo is the one rule behind every placeable fragment.
+func TestBlockVisibleTo(t *testing.T) {
+	placed := &Campaign{ID: "c1", IsPublic: true}
+	full, err := placed.SetRoleDashboardJSON(HomeGuest, &DashboardLayout{Rows: []DashboardRow{{Columns: []DashboardColumn{{Blocks: []DashboardBlock{{Type: BlockNextGame}, {Type: BlockSinceLastHere}}}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	placed.DashboardLayout = full
+	plain := &Campaign{ID: "c1", IsPublic: true}
+	guest := func(c *Campaign) *CampaignContext { return &CampaignContext{Campaign: c} }
+	member := &CampaignContext{Campaign: plain, IsMember: true, MemberRole: RolePlayer}
+
+	tests := []struct {
+		name      string
+		cc        *CampaignContext
+		checker   *placementFake
+		block, on string
+		want      bool
+		wantAsked bool
+	}{
+		{"member passes anywhere", member, &placementFake{}, BlockNextGame, "", true, false},
+		{"member passes on a page", member, &placementFake{}, BlockNextGame, "p1", true, false},
+		{"member passes since_last_here", member, &placementFake{}, BlockSinceLastHere, "p1", true, false},
+		{"guest on the Guests home", guest(placed), &placementFake{}, BlockNextGame, "", true, false},
+		{"guest on a page the checker allows", guest(plain), &placementFake{ok: true}, BlockNextGame, "p1", true, true},
+		{"guest on a page the checker refuses", guest(plain), &placementFake{}, BlockNextGame, "p1", false, true},
+		{"guest with no placement", guest(plain), &placementFake{ok: true}, BlockNextGame, "", false, false},
+		{"guest on the home never reaches the checker for another block", guest(placed), &placementFake{}, BlockOpenQuests, "", false, false},
+		{"since_last_here: guest on the Guests home", guest(placed), &placementFake{ok: true}, BlockSinceLastHere, "", false, false},
+		{"since_last_here: guest on a page", guest(plain), &placementFake{ok: true}, BlockSinceLastHere, "p1", false, false},
+		{"missing context", nil, &placementFake{ok: true}, BlockNextGame, "p1", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BlockVisibleTo(context.Background(), tt.cc, tt.checker, tt.block, tt.on, "u9")
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+			if (tt.checker.calls > 0) != tt.wantAsked {
+				t.Errorf("checker asked = %v, want %v", tt.checker.calls > 0, tt.wantAsked)
+			}
+			if tt.wantAsked {
+				if want := []string{"c1", tt.block, tt.on, "u9"}; strings.Join(tt.checker.got, "|") != strings.Join(want, "|") || tt.checker.role != 0 {
+					t.Errorf("checker asked %v role %d, want %v role 0", tt.checker.got, tt.checker.role, want)
+				}
+			}
+		})
+	}
+	// No checker wired: only the Guests home counts.
+	if BlockVisibleTo(context.Background(), guest(plain), nil, BlockNextGame, "p1", "") {
+		t.Error("with no checker a page placement must not count")
+	}
+}
+
+func TestBlockFragmentURL(t *testing.T) {
+	tests := []struct {
+		campaign, block, on, want string
+		ok                        bool
+	}{
+		{"c1", BlockNextGame, "", "/campaigns/c1/next-game", true},
+		{"c1", BlockNextGame, "p 1&x", "/campaigns/c1/next-game?on=p+1%26x", true},
+		{"a/b", BlockWorldClocks, "p1", "/campaigns/a%2Fb/world-clocks?on=p1", true},
+		{"c1", "party", "p1", "", false},
+	}
+	for _, tt := range tests {
+		got, ok := BlockFragmentURL(tt.campaign, tt.block, tt.on)
+		if got != tt.want || ok != tt.ok {
+			t.Errorf("BlockFragmentURL(%q,%q,%q) = %q,%v want %q,%v", tt.campaign, tt.block, tt.on, got, ok, tt.want, tt.ok)
+		}
+	}
+	// The home draws the same fragment, without "on".
+	for _, bt := range PlaceableBlockTypes() {
+		if _, ok := BlockFragmentURL("c1", bt, ""); !ok {
+			t.Errorf("%s has no fragment address", bt)
+		}
 	}
 }

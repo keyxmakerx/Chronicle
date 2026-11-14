@@ -35,7 +35,7 @@ func couldPlayPill(tone string) string {
 // whenWeCouldPlayBlock replaces the placeholder (hx-swap outerHTML).
 templ whenWeCouldPlayBlock(v couldPlayView) {
 	<section class="cb-info cb-could" data-block="when-we-could-play" data-open="0" aria-labelledby="when-we-could-play-h">
-		<div class="cb-info-top flex items-baseline justify-between mb-3">
+		<div class="cb-info-top flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-3">
 			<h2 id="when-we-could-play-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">When we could play</h2>
 			if !v.Guest {
 				<a href={ templ.SafeURL(v.GameNightsHref) } class="cb-more text-xs text-accent hover:underline">Open Game nights</a>
@@ -107,7 +107,7 @@ templ couldPlayLegend() {
 // couldPlayRowView is one day: its label, the bar, and the words under it.
 templ couldPlayRowView(r couldPlayRow) {
 	<div class="cb-line flex items-start gap-3 py-2 text-sm">
-		<span class="cb-line-name w-24 flex-none font-semibold text-fg">{ r.Label }</span>
+		<span class="cb-line-name w-24 flex-none break-words font-semibold text-fg">{ r.Label }</span>
 		<span class="min-w-0 flex-1">
 			<span class="relative block h-3 overflow-hidden rounded bg-surface-alt" aria-hidden="true">
 				if r.Shade != "" {
@@ -120,7 +120,7 @@ templ couldPlayRowView(r couldPlayRow) {
 			for _, n := range r.Nights {
 				<span class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
 					if n.Title != "" {
-						<span class="font-medium text-fg">{ n.Title }</span>
+						<span class="min-w-0 break-words font-medium text-fg">{ n.Title }</span>
 					} else if n.Clock == "" {
 						<span class="font-medium text-fg">Game night</span>
 					}
@@ -135,7 +135,7 @@ templ couldPlayRowView(r couldPlayRow) {
 				</span>
 			}
 			if r.Phrase != "" {
-				<span class="mt-1 block text-xs text-fg-muted">{ r.Phrase }</span>
+				<span class="mt-1 block break-words text-xs text-fg-muted">{ r.Phrase }</span>
 			}
 		</span>
 	</div>

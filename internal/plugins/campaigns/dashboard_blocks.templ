@@ -88,27 +88,27 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			// Members see their own answers and the table's usual free times;
 			// a guest sees set nights as a date and a time, only where the
 			// owner placed the block on the Guests home.
-			@dashFragment("when-we-could-play", fmt.Sprintf("/campaigns/%s/when-we-could-play", cc.Campaign.ID), "h-24")
+			@PageBlockFragment(BlockWhenWeCouldPlay, cc.Campaign.ID, "")
 		case "next_game":
 			// Members see the countdown and their own answer; a guest sees a
 			// date and a time, only where the owner placed the block on the
 			// Guests home.
-			@dashFragment("next-game", fmt.Sprintf("/campaigns/%s/next-game", cc.Campaign.ID), "h-24")
+			@PageBlockFragment(BlockNextGame, cc.Campaign.ID, "")
 		case "today_in_world":
 			// The calendar decides what a visitor may see of the world's day.
-			@dashFragment("today-in-world", fmt.Sprintf("/campaigns/%s/today-in-world", cc.Campaign.ID), "h-24")
+			@PageBlockFragment(BlockTodayInWorld, cc.Campaign.ID, "")
 		case "open_quests":
 			// Quest visibility is decided by the quests service per viewer.
-			@dashFragment("open-quests", fmt.Sprintf("/campaigns/%s/open-quests", cc.Campaign.ID), "h-24")
+			@PageBlockFragment(BlockOpenQuests, cc.Campaign.ID, "")
 		case "world_clocks":
 			// Only trackers shown to everyone, on pages the viewer may open.
-			@dashFragment("world-clocks", fmt.Sprintf("/campaigns/%s/world-clocks", cc.Campaign.ID), "h-20")
+			@PageBlockFragment(BlockWorldClocks, cc.Campaign.ID, "")
 		case "since_last_here":
 			// What changed since this member last looked is the member's own;
 			// a visitor has no marker, so none is shown a card that can only
 			// be empty.
 			if cc.IsMember {
-				@dashFragment("since-last-here", fmt.Sprintf("/campaigns/%s/since-last-here", cc.Campaign.ID), "h-24")
+				@PageBlockFragment(BlockSinceLastHere, cc.Campaign.ID, "")
 			}
 		case "where_we_play":
 			@dashWhereWePlay(cc, block.Config)
@@ -905,6 +905,19 @@ templ dashFragment(slug, href, skeleton string) {
 		<span class="inline-block w-24 h-4 mb-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 		<span class={ "block rounded-xl bg-fg-secondary/10 animate-pulse", skeleton } aria-hidden="true"></span>
 	</div>
+}
+
+// PageBlockFragment is the placeholder for a placeable block (see
+// PlaceableBlockTypes) drawn on an ordinary page or a category home. It loads
+// the same fragment the campaign home does; a page passes its own id so the
+// fragment can check the block really is placed there. Unknown types draw
+// nothing.
+templ PageBlockFragment(blockType, campaignID, onEntityID string) {
+	if b, ok := placeableBlock(blockType); ok {
+		if href, ok := BlockFragmentURL(campaignID, blockType, onEntityID); ok {
+			@dashFragment(b.Path, href, b.Skeleton)
+		}
+	}
 }
 
 // dashWhereWePlay is the "Where we play" block: the Foundry address and the

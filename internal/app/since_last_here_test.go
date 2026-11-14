@@ -478,3 +478,49 @@ func TestSinceNightsOn(t *testing.T) {
 		t.Error("an unhealthy plugin must not read nights")
 	}
 }
+
+// Since you were last here is a member's own, wherever the owner placed it: a
+// guest gets an empty body even where the Guests home or a page names the
+// block, and a member still gets it when it sits on a page.
+func TestSinceHandler_GuestEmptyWhereverPlaced(t *testing.T) {
+	guestHome := &campaigns.Campaign{ID: "c1", IsPublic: true}
+	layout := &campaigns.DashboardLayout{Rows: []campaigns.DashboardRow{{ID: "r", Columns: []campaigns.DashboardColumn{{
+		Blocks: []campaigns.DashboardBlock{{ID: "b", Type: campaigns.BlockSinceLastHere}}}}}}}
+	full, err := guestHome.SetRoleDashboardJSON(campaigns.HomeGuest, layout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guestHome.DashboardLayout = full
+	pub := &campaigns.Campaign{ID: "c1", IsPublic: true}
+	tests := []struct {
+		name   string
+		cc     *campaigns.CampaignContext
+		path   string
+		userID string
+		want   bool
+	}{
+		{"guest, placed on the Guests home", &campaigns.CampaignContext{Campaign: guestHome}, "/campaigns/c1/since-last-here", "", false},
+		{"guest, on a page", &campaigns.CampaignContext{Campaign: pub}, "/campaigns/c1/since-last-here?on=page-ok", "", false},
+		{"signed-in non-member, on a page", &campaigns.CampaignContext{Campaign: pub}, "/campaigns/c1/since-last-here?on=page-ok", "stranger", false},
+		{"member, on a page", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, IsMember: true, MemberRole: campaigns.RolePlayer}, "/campaigns/c1/since-last-here?on=page-ok", "u1", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nights := &fakeSinceNights{}
+			h := newSinceHandler(&fakeMarkers{member: true}, sinceSources{Pages: &fakeSincePages{}, Nights: nights, NightsOn: nightsOn})
+			c, rec := sinceCtx(t, http.MethodGet, tt.path, tt.cc, tt.userID)
+			if err := h.Show(c); err != nil {
+				t.Fatal(err)
+			}
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d", rec.Code)
+			}
+			if got := rec.Body.Len() > 0; got != tt.want {
+				t.Errorf("body present = %v, want %v:\n%s", got, tt.want, rec.Body.String())
+			}
+			if !tt.want && nights.read {
+				t.Error("a source was read for a guest")
+			}
+		})
+	}
+}

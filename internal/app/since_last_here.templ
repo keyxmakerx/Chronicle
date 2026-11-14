@@ -7,7 +7,7 @@ package app
 // is plain HTMX attributes, so it works the same when the block is swapped in.
 templ sinceLastHereBlock(v sinceView) {
 	<section class="cb-info cb-since" data-block="since-last-here" aria-labelledby="since-last-here-h">
-		<div class="cb-info-top flex items-baseline justify-between mb-3">
+		<div class="cb-info-top flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-3">
 			<h2 id="since-last-here-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">Since you were last here</h2>
 			if len(v.Rows) > 0 {
 				<button
@@ -31,9 +31,9 @@ templ sinceLastHereBlock(v sinceView) {
 							<span class="mt-1.5 inline-block h-2 w-2 flex-none rounded-full bg-accent" aria-hidden="true"></span>
 							<span class="min-w-0">
 								if r.Href != "" {
-									<a href={ templ.SafeURL(r.Href) } class="cb-line-name block font-semibold text-fg hover:underline">{ r.Bold }</a>
+									<a href={ templ.SafeURL(r.Href) } class="cb-line-name block break-words font-semibold text-fg hover:underline">{ r.Bold }</a>
 								} else {
-									<span class="cb-line-name block font-semibold text-fg">{ r.Bold }</span>
+									<span class="cb-line-name block break-words font-semibold text-fg">{ r.Bold }</span>
 								}
 								if r.Sub != "" {
 									<span class="cb-line-sub block truncate text-xs text-fg-muted">{ r.Sub }</span>

@@ -53,6 +53,14 @@ type Handler struct {
 	mentions sanitize.MentionHider
 	// heroes tells the Getting started block whether a member plays a hero.
 	heroes HeroChecker
+	// placement tells the home blocks whether the owner placed them on a page
+	// a guest may open. Nil means only the Guests home counts.
+	placement campaigns.BlockPlacementChecker
+}
+
+// SetPlacementChecker wires the check a guest-facing block asks for a page placement.
+func (h *Handler) SetPlacementChecker(p campaigns.BlockPlacementChecker) {
+	h.placement = p
 }
 
 // SetRecipientFilter wires people's notification choices into the emails.

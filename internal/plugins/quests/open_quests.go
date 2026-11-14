@@ -105,7 +105,7 @@ func (h *Handler) OpenQuestsBlock(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if !cc.IsMember && !campaigns.GuestHomeHasBlock(cc.Campaign, campaigns.BlockOpenQuests) {
+	if !campaigns.BlockVisibleTo(c.Request().Context(), cc, h.placement, campaigns.BlockOpenQuests, c.QueryParam("on"), v.UserID) {
 		return c.HTML(http.StatusOK, "")
 	}
 	if campaigns.ViewingAsPlayer(c, cc) {

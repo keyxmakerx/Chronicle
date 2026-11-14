@@ -97,7 +97,7 @@ func (h *Handler) WorldClocksBlock(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if !cc.IsMember && !campaigns.GuestHomeHasBlock(cc.Campaign, campaigns.BlockWorldClocks) {
+	if !campaigns.BlockVisibleTo(c.Request().Context(), cc, h.placement, campaigns.BlockWorldClocks, c.QueryParam("on"), v.UserID) {
 		return c.HTML(http.StatusOK, "")
 	}
 	list, err := h.svc.Shared(c.Request().Context(), campaignID, v)

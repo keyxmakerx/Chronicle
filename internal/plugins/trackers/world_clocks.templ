@@ -13,7 +13,7 @@ func ringStyle(pct int) string {
 // worldClocksBlock replaces the placeholder (hx-swap outerHTML).
 templ worldClocksBlock(v worldClocksView) {
 	<section class="cb-info cb-world-clocks" data-block="world-clocks" aria-labelledby="world-clocks-h">
-		<div class="cb-info-top flex items-baseline justify-between mb-3">
+		<div class="cb-info-top flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-3">
 			<h2 id="world-clocks-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">The world's clocks</h2>
 		</div>
 		if v.Hint != "" {
@@ -33,9 +33,9 @@ templ worldClocksBlock(v worldClocksView) {
 								</span>
 							}
 							<span class="min-w-0">
-								<a href={ templ.SafeURL(r.Href) } class="block font-semibold text-fg hover:underline">{ r.Name }</a>
+								<a href={ templ.SafeURL(r.Href) } class="block break-words font-semibold text-fg hover:underline">{ r.Name }</a>
 								if r.Sub != "" {
-									<span class="block text-xs text-fg-muted">{ r.Sub }</span>
+									<span class="block break-words text-xs text-fg-muted">{ r.Sub }</span>
 								}
 								if r.Bounded {
 									<span class="sr-only">{ r.Label }</span>
