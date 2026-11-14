@@ -6402,6 +6402,32 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("quests plugin degraded — routes not registered")
 	}
 
+	// The home's "Since you were last here", wired here because its news comes
+	// from the entities, quests and sessions plugins. Quests are left out while
+	// that plugin is degraded; game nights need both addons and both plugins.
+	sinceSrc := sinceSources{
+		Pages:  entities.NewPagesSinceReader(a.DB),
+		Nights: sessions.NewSinceReader(a.DB),
+		NightsOn: sinceNightsOn(addonService, func(slug string) bool {
+			return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug)
+		}),
+	}
+	if aiQuests != nil {
+		sinceSrc.Quests = aiQuests
+	}
+	registerSinceRoutes(e, &sinceHandler{
+		src:     sinceSrc,
+		markers: campaigns.NewHomeSeenStore(a.DB),
+		now:     time.Now,
+		zone: func(ctx context.Context, userID string) *time.Location {
+			u, err := authService.GetUser(ctx, userID)
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		},
+	}, campaignService, authService)
+
 	// Read-aloud, Table and Steps block content.
 	a.registerPlugin(PluginRegistration{
 		Slug:     pageblocks.PluginSlug,

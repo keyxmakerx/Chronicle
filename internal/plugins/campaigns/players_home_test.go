@@ -185,3 +185,17 @@ func TestShowPage_EyeShowsPlayersHome(t *testing.T) {
 		t.Errorf("only the owner is offered the Customizer")
 	}
 }
+
+// "Since you were last here" is a member's own: the home draws its
+// placeholder for members and nothing for a visitor, who has no marker.
+func TestSinceLastHereBlockIsMembersOnly(t *testing.T) {
+	member := &CampaignContext{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RolePlayer, IsMember: true}
+	guest := &CampaignContext{Campaign: &Campaign{ID: "camp-1", IsPublic: true}}
+	block := DashboardBlock{ID: "b", Type: BlockSinceLastHere}
+	if html := renderBlock(t, context.Background(), member, block); !strings.Contains(html, "/campaigns/camp-1/since-last-here") {
+		t.Errorf("a member should load the fragment:\n%s", html)
+	}
+	if html := renderBlock(t, context.Background(), guest, block); strings.Contains(html, "since-last-here") {
+		t.Errorf("a visitor must get no placeholder:\n%s", html)
+	}
+}

@@ -103,6 +103,13 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 		case "world_clocks":
 			// Only trackers shown to everyone, on pages the viewer may open.
 			@dashFragment("world-clocks", fmt.Sprintf("/campaigns/%s/world-clocks", cc.Campaign.ID), "h-20")
+		case "since_last_here":
+			// What changed since this member last looked is the member's own;
+			// a visitor has no marker, so none is shown a card that can only
+			// be empty.
+			if cc.IsMember {
+				@dashFragment("since-last-here", fmt.Sprintf("/campaigns/%s/since-last-here", cc.Campaign.ID), "h-24")
+			}
 		case "where_we_play":
 			@dashWhereWePlay(cc, block.Config)
 		case "house_rules":

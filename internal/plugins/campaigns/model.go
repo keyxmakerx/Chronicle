@@ -903,6 +903,7 @@ const (
 	BlockTodayInWorld    = "today_in_world"   // The in-world date, weather, moons and next event (calendar plugin).
 	BlockOpenQuests      = "open_quests"      // The open quests that most need attention (quests plugin).
 	BlockWorldClocks     = "world_clocks"     // Trackers shown to everyone, drawn small (trackers plugin).
+	BlockSinceLastHere   = "since_last_here"  // What changed since the member last pressed "Mark as seen" (assembled in internal/app).
 	BlockWhereWePlay     = "where_we_play"    // The owner's Foundry address and voice channel, typed in the block's config.
 	BlockHouseRules      = "house_rules"      // The rulebook's house chapters (systems).
 	BlockLastTime        = "last_time"        // The latest session's recap, as its viewer may read it (sessions plugin).
@@ -945,6 +946,7 @@ var ValidBlockTypes = map[string]bool{
 	BlockTodayInWorld:    true,
 	BlockOpenQuests:      true,
 	BlockWorldClocks:     true,
+	BlockSinceLastHere:   true,
 	BlockWhereWePlay:     true,
 	BlockHouseRules:      true,
 	BlockLastTime:        true,

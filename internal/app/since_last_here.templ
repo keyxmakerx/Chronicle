@@ -1,0 +1,49 @@
+// since_last_here.templ draws the campaign home's "Since you were last here"
+// block from an already-worded view, so only what the reads let through can
+// print. The home's placeholder (campaigns.dashFragment) loads it.
+package app
+
+// sinceLastHereBlock replaces the placeholder (hx-swap outerHTML). The button
+// is plain HTMX attributes, so it works the same when the block is swapped in.
+templ sinceLastHereBlock(v sinceView) {
+	<section class="cb-info cb-since" data-block="since-last-here" aria-labelledby="since-last-here-h">
+		<div class="cb-info-top flex items-baseline justify-between mb-3">
+			<h2 id="since-last-here-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">Since you were last here</h2>
+			if len(v.Rows) > 0 {
+				<button
+					type="button"
+					class="cb-more text-xs text-accent hover:underline"
+					hx-post={ v.SeenHref }
+					hx-vals={ v.SeenVals }
+					hx-target="closest section"
+					hx-swap="outerHTML"
+					hx-disabled-elt="this"
+				>Mark as seen</button>
+			}
+		</div>
+		if len(v.Rows) == 0 {
+			<p class="text-sm text-fg-muted">{ v.CaughtUp }</p>
+		} else {
+			<div class="cb-info-rows card cb-card px-4 py-2">
+				for _, r := range v.Rows {
+					<div class="cb-line flex items-start justify-between gap-3 py-2 text-sm">
+						<span class="flex min-w-0 items-start gap-2">
+							<span class="mt-1.5 inline-block h-2 w-2 flex-none rounded-full bg-accent" aria-hidden="true"></span>
+							<span class="min-w-0">
+								if r.Href != "" {
+									<a href={ templ.SafeURL(r.Href) } class="cb-line-name block font-semibold text-fg hover:underline">{ r.Bold }</a>
+								} else {
+									<span class="cb-line-name block font-semibold text-fg">{ r.Bold }</span>
+								}
+								if r.Sub != "" {
+									<span class="cb-line-sub block truncate text-xs text-fg-muted">{ r.Sub }</span>
+								}
+							</span>
+						</span>
+						<span class="cb-line-end whitespace-nowrap text-xs text-fg-muted">{ r.Day }</span>
+					</div>
+				}
+			</div>
+		}
+	</section>
+}

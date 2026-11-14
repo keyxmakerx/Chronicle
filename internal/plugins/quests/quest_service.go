@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -23,6 +24,9 @@ type QuestService interface {
 	// Digest reads the viewer's quests for the campaign home: every saved
 	// sheet whose page v may open, as v sees it (see QuestDigest).
 	Digest(ctx context.Context, campaignID string, v Viewer) (*QuestDigest, error)
+	// ChangesSince reads the sheets saved after since that v may see, as the
+	// digest does, and sorts them into new quests and finished ones.
+	ChangesSince(ctx context.Context, campaignID string, v Viewer, since time.Time) (*QuestChanges, error)
 	// SyncDueEvent re-derives the visibility of the page's due-date calendar
 	// event after the page's own visibility changed. It touches nothing when
 	// the page has no sheet or no due date.
@@ -382,6 +386,70 @@ func (s *questService) Digest(ctx context.Context, campaignID string, v Viewer) 
 		}
 		return a.EntityID < b.EntityID
 	})
+	return out, nil
+}
+
+// ChangesSince returns the quests v may see that changed after since. The
+// time bound is in the read, then the same page gate as Digest decides what
+// the viewer may see, and below the DM team a notice the DM hid is skipped, so
+// a hidden quest adds to no list. A quest is new when its sheet is still at
+// its first version (it has not been saved since it was made); it is finished
+// when it was last saved as done or failed. The sheet records no moment of
+// finishing, so a finished quest edited again after the finish shows again.
+func (s *questService) ChangesSince(ctx context.Context, campaignID string, v Viewer, since time.Time) (*QuestChanges, error) {
+	sheets, err := s.repo.ListStampedSince(ctx, campaignID, since)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	out := &QuestChanges{}
+	if len(sheets) == 0 {
+		return out, nil
+	}
+	ids := make([]string, 0, len(sheets))
+	for id := range sheets {
+		ids = append(ids, id)
+	}
+	infos, ok, err := s.viewable(ctx, campaignID, v, ids)
+	if err != nil {
+		return nil, err
+	}
+	slugs := map[string]int{}
+	for id, sheet := range sheets {
+		if !ok[id] {
+			continue
+		}
+		q := defaultQuest(infos[id].Name)
+		if err := json.Unmarshal(sheet.Data, &q); err != nil {
+			continue
+		}
+		fillDefaults(&q, infos[id].Name)
+		if q.Layout.Notice.Hidden && !v.IsDM {
+			continue
+		}
+		if infos[id].TypeSlug != "" {
+			slugs[infos[id].TypeSlug]++
+		}
+		c := QuestChange{EntityID: id, Title: q.Notice.Title, Saved: sheet.UpdatedAt}
+		switch {
+		case q.Status == StatusDone || q.Status == StatusFailed:
+			out.Finished = append(out.Finished, c)
+		case sheet.Version <= 1:
+			out.New = append(out.New, c)
+		}
+	}
+	for slug, n := range slugs {
+		if n > slugs[out.TypeSlug] || n == slugs[out.TypeSlug] && (out.TypeSlug == "" || slug < out.TypeSlug) {
+			out.TypeSlug = slug
+		}
+	}
+	for _, list := range [][]QuestChange{out.New, out.Finished} {
+		sort.Slice(list, func(i, j int) bool {
+			if !list[i].Saved.Equal(list[j].Saved) {
+				return list[i].Saved.After(list[j].Saved)
+			}
+			return list[i].EntityID < list[j].EntityID
+		})
+	}
 	return out, nil
 }
 

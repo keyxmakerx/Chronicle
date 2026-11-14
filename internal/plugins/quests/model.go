@@ -200,6 +200,23 @@ type QuestDigest struct {
 	TypeSlug string
 }
 
+// QuestChange is one quest the viewer may see that was saved after a time.
+type QuestChange struct {
+	EntityID string
+	Title    string
+	Saved    time.Time
+}
+
+// QuestChanges is what the campaign home's "Since you were last here" reads:
+// the quests the viewer may see that were made, or last saved as finished,
+// after a time. TypeSlug is the category most visible quests are pages of, for
+// a link to the board; empty when none.
+type QuestChanges struct {
+	New      []QuestChange
+	Finished []QuestChange
+	TypeSlug string
+}
+
 // RewardView is a Reward with the linked page's name resolved.
 type RewardView struct {
 	Reward

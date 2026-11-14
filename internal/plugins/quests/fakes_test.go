@@ -152,7 +152,18 @@ func (f *fakeQuestRepo) ListAllStamped(_ context.Context, campaignID string) (ma
 	out := map[string]StampedSheet{}
 	for id, d := range f.docs {
 		if f.camp[id] == campaignID {
-			out[id] = StampedSheet{Data: d, UpdatedAt: f.saved[id]}
+			out[id] = StampedSheet{Data: d, UpdatedAt: f.saved[id], Version: f.versions[id]}
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeQuestRepo) ListStampedSince(ctx context.Context, campaignID string, since time.Time) (map[string]StampedSheet, error) {
+	all, _ := f.ListAllStamped(ctx, campaignID)
+	out := map[string]StampedSheet{}
+	for id, sh := range all {
+		if sh.UpdatedAt.After(since) {
+			out[id] = sh
 		}
 	}
 	return out, nil

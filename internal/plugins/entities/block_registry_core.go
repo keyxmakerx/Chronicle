@@ -468,7 +468,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	r.Register(BlockMeta{
 		Type: "today_in_world", Label: "Today in the world", Icon: "fa-sun",
 		Description: "The date in your world, today's weather and moons, and the next event on the calendar",
-		Addon: "calendar", Contexts: []string{"dashboard"},
+		Addon: addonCalendar, Contexts: []string{"dashboard"},
 	}, nil)
 
 	r.Register(BlockMeta{
@@ -480,6 +480,12 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	r.Register(BlockMeta{
 		Type: "world_clocks", Label: "The world's clocks", Icon: "fa-stopwatch",
 		Description: "Trackers you show to everyone, drawn small as rings",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "since_last_here", Label: "Since you were last here", Icon: "fa-envelope-open-text",
+		Description: "What is new for each member since they last pressed Mark as seen: recaps, pages, quests and game nights they may open",
 		Contexts: []string{"dashboard"},
 	}, nil)
 
