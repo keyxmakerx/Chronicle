@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -110,6 +111,7 @@ func (f fakeNames) DisplayNames(context.Context, string, []string) (map[string]s
 }
 
 type fakeQuestRepo struct {
+	saved    map[string]time.Time // last-saved time by id; zero when unset
 	docs     map[string][]byte
 	versions map[string]int
 	camp     map[string]string
@@ -141,6 +143,27 @@ func (f *fakeQuestRepo) ListAll(_ context.Context, campaignID string) (map[strin
 	for id, d := range f.docs {
 		if f.camp[id] == campaignID {
 			out[id] = d
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeQuestRepo) ListAllStamped(_ context.Context, campaignID string) (map[string]StampedSheet, error) {
+	out := map[string]StampedSheet{}
+	for id, d := range f.docs {
+		if f.camp[id] == campaignID {
+			out[id] = StampedSheet{Data: d, UpdatedAt: f.saved[id], Version: f.versions[id]}
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeQuestRepo) ListStampedSince(ctx context.Context, campaignID string, since time.Time) (map[string]StampedSheet, error) {
+	all, _ := f.ListAllStamped(ctx, campaignID)
+	out := map[string]StampedSheet{}
+	for id, sh := range all {
+		if sh.UpdatedAt.After(since) {
+			out[id] = sh
 		}
 	}
 	return out, nil

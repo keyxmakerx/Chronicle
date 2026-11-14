@@ -1,0 +1,27 @@
+// open_quests.templ draws the campaign home's "Open quests" block from an
+// already-worded view, so only what the service let through can print.
+package quests
+
+// openQuestsBlock replaces the placeholder (hx-swap outerHTML).
+templ openQuestsBlock(v openQuestsView) {
+	<section class="cb-info cb-open-quests" data-block="open-quests" aria-labelledby="open-quests-h">
+		<div class="cb-info-top flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-3">
+			<h2 id="open-quests-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">Open quests</h2>
+			if v.AllWord != "" {
+				<a href={ templ.SafeURL(v.AllHref) } class="cb-more text-xs text-accent hover:underline">{ v.AllWord }</a>
+			}
+		</div>
+		if len(v.Rows) == 0 {
+			<p class="text-sm text-fg-muted">No open quests</p>
+		} else {
+			<div class="cb-info-rows card cb-card px-4 py-2">
+				for _, r := range v.Rows {
+					<div class="cb-line flex items-baseline justify-between gap-3 py-2 text-sm">
+						<a href={ templ.SafeURL(r.Href) } class="cb-line-name min-w-0 break-words font-semibold text-fg hover:underline">{ r.Title }</a>
+						<span class={ "cb-line-end whitespace-nowrap text-xs", templ.KV("text-bad", r.Late), templ.KV("text-fg-muted", !r.Late) }>{ r.Word }</span>
+					</div>
+				}
+			</div>
+		}
+	</section>
+}

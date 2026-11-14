@@ -1,0 +1,53 @@
+// world_clocks.templ draws the campaign home's "The world's clocks" block
+// from an already-worded view. A ring's fill is an integer percent built
+// Go-side, so the one inline style carries no text from a tracker.
+package trackers
+
+import "fmt"
+
+// ringStyle fills the ring in the accent up to pct percent.
+func ringStyle(pct int) string {
+	return fmt.Sprintf("background:conic-gradient(var(--color-accent) 0 %d%%, var(--color-bg-tertiary) 0)", pct)
+}
+
+// worldClocksBlock replaces the placeholder (hx-swap outerHTML).
+templ worldClocksBlock(v worldClocksView) {
+	<section class="cb-info cb-world-clocks" data-block="world-clocks" aria-labelledby="world-clocks-h">
+		<div class="cb-info-top flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-3">
+			<h2 id="world-clocks-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">The world's clocks</h2>
+		</div>
+		if v.Hint != "" {
+			<p class="text-sm text-fg-muted">{ v.Hint }</p>
+		} else {
+			<div class="cb-info-rows card cb-card px-4 py-3">
+				<div class="flex flex-wrap gap-x-5 gap-y-4">
+					for _, r := range v.Rings {
+						<div class="flex min-w-[8rem] flex-1 items-center gap-3">
+							if r.Bounded {
+								<span class="flex h-10 w-10 flex-none items-center justify-center rounded-full" style={ templ.SafeCSS(ringStyle(r.Pct)) } aria-hidden="true">
+									<b class="flex h-7 w-7 items-center justify-center rounded-full bg-surface text-xs font-medium tabular-nums text-fg">{ r.Label }</b>
+								</span>
+							} else {
+								<span class="flex h-10 w-10 flex-none items-center justify-center rounded-full border-2 border-edge" aria-hidden="true">
+									<b class="text-xs font-medium tabular-nums text-fg">{ r.Label }</b>
+								</span>
+							}
+							<span class="min-w-0">
+								<a href={ templ.SafeURL(r.Href) } class="block break-words font-semibold text-fg hover:underline">{ r.Name }</a>
+								if r.Sub != "" {
+									<span class="block break-words text-xs text-fg-muted">{ r.Sub }</span>
+								}
+								if r.Bounded {
+									<span class="sr-only">{ r.Label }</span>
+								}
+							</span>
+						</div>
+					}
+				</div>
+			</div>
+			if v.More != "" {
+				<p class="mt-2 text-xs text-fg-muted">{ v.More }</p>
+			}
+		}
+	</section>
+}

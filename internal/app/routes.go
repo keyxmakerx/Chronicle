@@ -4924,6 +4924,12 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("page layout tables degraded — each category has only its main layout")
 	}
 
+	// Home blocks that can sit on a page ask this before answering a guest,
+	// so a block shows only where the owner placed it and the guest may open.
+	blockPlacement := entities.NewBlockPlacementChecker(entityService, pageLayoutService)
+	sessionsHandler.SetPlacementChecker(blockPlacement)
+	calendarHandler.SetPlacementChecker(blockPlacement)
+
 	// The home's Pinned Pages widget: each member's starred pages always, and
 	// the Director's pins for everyone while their table migrated.
 	pinsHealthy := a.PluginHealth.IsHealthy(pinschema.PluginSlug)
@@ -4939,6 +4945,8 @@ func (a *App) RegisterRoutes() {
 	// This drives validation, rendering, and the template editor palette.
 	blockRegistry := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blockRegistry)
+	// Recent Pages on an ordinary page reads its pages as the home does.
+	blockRegistry.SetRecentPagesLister(&recentEntityListerAdapter{svc: entityService})
 	// The Standing block and its routes exist only while its tables migrated
 	// (its script loads on sight from the entities plugin's assets).
 	if a.PluginHealth.IsHealthy(entities.StandingPluginSlug) {
@@ -6397,10 +6405,38 @@ func (a *App) RegisterRoutes() {
 			names: &questMemberNamesAdapter{svc: campaignService},
 		})
 		questAPI.attach(questSvc, boardSvc, questPicker)
-		quests.RegisterRoutes(e, quests.NewHandler(questSvc, boardSvc, questPicker), campaignService, authService)
+		questsHandler := quests.NewHandler(questSvc, boardSvc, questPicker)
+		questsHandler.SetPlacementChecker(blockPlacement)
+		quests.RegisterRoutes(e, questsHandler, campaignService, authService)
 	} else {
 		slog.Warn("quests plugin degraded — routes not registered")
 	}
+
+	// The home's "Since you were last here", wired here because its news comes
+	// from the entities, quests and sessions plugins. Quests are left out while
+	// that plugin is degraded; game nights need both addons and both plugins.
+	sinceSrc := sinceSources{
+		Pages:  entities.NewPagesSinceReader(a.DB),
+		Nights: sessions.NewSinceReader(a.DB),
+		NightsOn: sinceNightsOn(addonService, func(slug string) bool {
+			return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug)
+		}),
+	}
+	if aiQuests != nil {
+		sinceSrc.Quests = aiQuests
+	}
+	registerSinceRoutes(e, &sinceHandler{
+		src:     sinceSrc,
+		markers: campaigns.NewHomeSeenStore(a.DB),
+		now:     time.Now,
+		zone: func(ctx context.Context, userID string) *time.Location {
+			u, err := authService.GetUser(ctx, userID)
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		},
+	}, campaignService, authService)
 
 	// Read-aloud, Table and Steps block content.
 	a.registerPlugin(PluginRegistration{
@@ -6472,7 +6508,9 @@ func (a *App) RegisterRoutes() {
 		trackersSvc = trackers.NewService(trackers.NewRepository(a.DB),
 			&trackersEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)},
 			&trackersClockAdapter{svc: calendarService})
-		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
+		trackersHandler := trackers.NewHandler(trackersSvc)
+		trackersHandler.SetPlacementChecker(blockPlacement)
+		trackers.RegisterRoutes(e, trackersHandler, campaignService, authService)
 		registerTrackersBlock(blockRegistry)
 		registerRecipeBlock(blockRegistry)
 	} else {

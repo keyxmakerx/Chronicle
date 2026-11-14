@@ -21,6 +21,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Static "picker" wins over the :eid route; its handler wants a member.
 	pub.GET("/quests/picker", h.Picker, campaigns.RequireViewAccess())
 	pub.GET("/quests/:eid", h.GetQuest, campaigns.RequireViewAccess())
+	// The home's "Open quests": the handler gates a guest on placement and the
+	// service filters per viewer.
+	pub.GET("/open-quests", h.OpenQuestsBlock, campaigns.RequireViewAccess())
 	pub.GET("/notice-boards/:eid", h.GetBoards, campaigns.RequireViewAccess())
 	pub.GET("/category-boards/:tid", h.GetBoards, campaigns.RequireViewAccess())
 

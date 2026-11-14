@@ -21,7 +21,7 @@ templ whenWePlayBlock(campaignID string, times []playTime, zone string) {
 				<div class="cb-line flex items-center gap-3 py-2 text-sm">
 					<span class="cb-line-name font-semibold text-fg">{ t.Day() }</span>
 					<span class="cb-line-sub min-w-0 flex-1 text-fg-secondary">{ t.Span() }</span>
-					<span class="cb-line-end whitespace-nowrap text-xs tabular-nums text-fg-muted">{ fmt.Sprintf("%d of %d free", t.Free, t.Total) }</span>
+					<span class="cb-line-end whitespace-nowrap text-xs tabular-nums text-fg-muted">{ t.Words() }</span>
 					<span class="cb-bar h-1.5 w-16 flex-none overflow-hidden rounded-full bg-surface-alt" aria-hidden="true">
 						<i class="block h-full rounded-full bg-accent" style={ fmt.Sprintf("width:%d%%", t.Percent()) }></i>
 					</span>

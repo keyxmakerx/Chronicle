@@ -19,6 +19,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 	)
 	pub.GET("/trackers/page/:eid", h.Page, campaigns.RequireViewAccess())
+	// The home's "The world's clocks": a guest gets it only where the owner
+	// placed it on the Guests home, and the service reads as a plain player.
+	pub.GET("/world-clocks", h.WorldClocksBlock, campaigns.RequireViewAccess())
 
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),

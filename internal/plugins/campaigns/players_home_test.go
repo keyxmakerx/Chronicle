@@ -100,6 +100,32 @@ func TestDashFragmentBlocks_MembersOnly(t *testing.T) {
 			t.Errorf("%s should load its fragment for a member:\n%s", typ, html)
 		}
 	}
+	// When we could play is public-capable too: the fragment shows a guest
+	// set nights as a date and time, and a member the full block.
+	for _, cc := range []*CampaignContext{
+		{Campaign: &Campaign{ID: "camp-1", IsPublic: true}},
+		{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RolePlayer, IsMember: true},
+	} {
+		if html := renderBlock(t, context.Background(), cc, DashboardBlock{ID: "b", Type: BlockWhenWeCouldPlay}); !strings.Contains(html, "/campaigns/camp-1/when-we-could-play") {
+			t.Errorf("when we could play should load its fragment (member=%v):\n%s", cc.IsMember, html)
+		}
+	}
+	// The small home blocks are public-capable too: each fragment's handler
+	// decides what a visitor may see (and answers a visitor empty unless the
+	// owner placed the block on the Guests home).
+	for _, b := range []struct{ typ, route string }{
+		{BlockNextGame, "next-game"}, {BlockTodayInWorld, "today-in-world"},
+		{BlockOpenQuests, "open-quests"}, {BlockWorldClocks, "world-clocks"},
+	} {
+		for _, cc := range []*CampaignContext{
+			{Campaign: &Campaign{ID: "camp-1", IsPublic: true}},
+			{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RolePlayer, IsMember: true},
+		} {
+			if html := renderBlock(t, context.Background(), cc, DashboardBlock{ID: "b", Type: b.typ}); !strings.Contains(html, "/campaigns/camp-1/"+b.route) {
+				t.Errorf("%s should load its fragment (member=%v):\n%s", b.typ, cc.IsMember, html)
+			}
+		}
+	}
 	// The party is public-capable: what a visitor may see is decided by the
 	// fragment, as Start here is.
 	visitor := &CampaignContext{Campaign: &Campaign{ID: "camp-1", IsPublic: true}}
@@ -157,5 +183,19 @@ func TestShowPage_EyeShowsPlayersHome(t *testing.T) {
 	coDM := &CampaignContext{Campaign: campaign, MemberRole: RoleScribe, IsMember: true, IsDmGranted: true}
 	if got = render(coDM, preview); strings.Contains(got, "customize/home/player") {
 		t.Errorf("only the owner is offered the Customizer")
+	}
+}
+
+// "Since you were last here" is a member's own: the home draws its
+// placeholder for members and nothing for a visitor, who has no marker.
+func TestSinceLastHereBlockIsMembersOnly(t *testing.T) {
+	member := &CampaignContext{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RolePlayer, IsMember: true}
+	guest := &CampaignContext{Campaign: &Campaign{ID: "camp-1", IsPublic: true}}
+	block := DashboardBlock{ID: "b", Type: BlockSinceLastHere}
+	if html := renderBlock(t, context.Background(), member, block); !strings.Contains(html, "/campaigns/camp-1/since-last-here") {
+		t.Errorf("a member should load the fragment:\n%s", html)
+	}
+	if html := renderBlock(t, context.Background(), guest, block); strings.Contains(html, "since-last-here") {
+		t.Errorf("a visitor must get no placeholder:\n%s", html)
 	}
 }

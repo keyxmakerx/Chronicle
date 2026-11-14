@@ -4,5 +4,6 @@ package entities
 // owning plugins, so the slugs are declared here once, in a file the
 // plugin-isolation guard reads as a const registry.
 const (
-	addonArmory = "armory"
+	addonArmory   = "armory"
+	addonCalendar = "calendar"
 )

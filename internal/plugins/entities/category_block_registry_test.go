@@ -43,7 +43,7 @@ func TestExtraCategoryBlocks(t *testing.T) {
 	if IsExtraCategoryBlock("zz_test_block") {
 		t.Fatal("unregistered block reported as registered")
 	}
-	if renderExtraCategoryBlock(nil, nil, "zz_test_block") == nil {
+	if renderExtraCategoryBlock(nil, nil, "zz_test_block", nil) == nil {
 		t.Fatal("unknown block must render nothing, not nil")
 	}
 	RegisterCategoryBlock("zz_test_block", func(*campaigns.CampaignContext, *EntityType) templ.Component { return templ.NopComponent })

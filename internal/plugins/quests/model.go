@@ -1,6 +1,8 @@
 package quests
 
 import (
+	"time"
+
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
@@ -172,6 +174,47 @@ type QuestEntry struct {
 	Notice   Notice
 	Status   string
 	Steps    []Step
+}
+
+// DigestQuest is one open quest in the campaign home's digest. Title is the
+// notice's own title, which is what a player is shown of the quest.
+type DigestQuest struct {
+	EntityID string
+	Title    string
+	Status   string
+	// DaysLeft is nil without a due date or a calendar to count on; negative
+	// when late.
+	DaysLeft *int
+	// Saved is when the sheet was last saved; it stands in for "newest".
+	Saved time.Time
+}
+
+// QuestDigest is what the campaign home reads: the open quests the viewer may
+// see, most pressing first (due soonest, then most recently saved), and how
+// many quests of any status the viewer may see.
+type QuestDigest struct {
+	Open  []DigestQuest
+	Total int
+	// TypeSlug is the category most of the visible quests are pages of, so a
+	// link to the quest board needs no id.
+	TypeSlug string
+}
+
+// QuestChange is one quest the viewer may see that was saved after a time.
+type QuestChange struct {
+	EntityID string
+	Title    string
+	Saved    time.Time
+}
+
+// QuestChanges is what the campaign home's "Since you were last here" reads:
+// the quests the viewer may see that were made, or last saved as finished,
+// after a time. TypeSlug is the category most visible quests are pages of, for
+// a link to the board; empty when none.
+type QuestChanges struct {
+	New      []QuestChange
+	Finished []QuestChange
+	TypeSlug string
 }
 
 // RewardView is a Reward with the linked page's name resolved.

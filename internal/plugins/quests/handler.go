@@ -21,6 +21,14 @@ type Handler struct {
 	quests QuestService
 	boards BoardService
 	picker PickerService
+	// placement tells Open quests whether the owner placed it on a page a guest
+	// may open. Nil means only the Guests home counts.
+	placement campaigns.BlockPlacementChecker
+}
+
+// SetPlacementChecker wires the check a guest-facing block asks for a page placement.
+func (h *Handler) SetPlacementChecker(p campaigns.BlockPlacementChecker) {
+	h.placement = p
 }
 
 // NewHandler builds the handler.

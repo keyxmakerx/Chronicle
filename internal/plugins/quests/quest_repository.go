@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 )
@@ -23,9 +24,24 @@ type QuestRepository interface {
 	GetMany(ctx context.Context, campaignID string, entityIDs []string) (map[string][]byte, error)
 	// ListAll returns every stored sheet in the campaign, keyed by page id.
 	ListAll(ctx context.Context, campaignID string) (map[string][]byte, error)
+	// ListAllStamped is ListAll with each sheet's last-saved time, so a
+	// caller can say which quest is newest.
+	ListAllStamped(ctx context.Context, campaignID string) (map[string]StampedSheet, error)
+	// ListStampedSince is ListAllStamped limited to the sheets saved after
+	// since, so a caller asking what changed reads only those.
+	ListStampedSince(ctx context.Context, campaignID string, since time.Time) (map[string]StampedSheet, error)
 	// Save writes the document if the stored version is still expectedVersion
 	// (0 means "no row yet") and bumps it. ok is false on a lost race.
 	Save(ctx context.Context, campaignID, entityID string, data []byte, expectedVersion int, userID string) (ok bool, err error)
+}
+
+// StampedSheet is a stored sheet and when it was last saved. Version is 1
+// until the sheet's second save, so a sheet still at 1 was saved only when it
+// was made.
+type StampedSheet struct {
+	Data      []byte
+	UpdatedAt time.Time
+	Version   int
 }
 
 type sqlQuestRepository struct{ db *sql.DB }
@@ -87,6 +103,36 @@ func (r *sqlQuestRepository) ListAll(ctx context.Context, campaignID string) (ma
 			return nil, fmt.Errorf("scan quest: %w", err)
 		}
 		out[id] = []byte(data)
+	}
+	return out, rows.Err()
+}
+
+func (r *sqlQuestRepository) ListAllStamped(ctx context.Context, campaignID string) (map[string]StampedSheet, error) {
+	return r.listStamped(ctx, `SELECT entity_id, data, updated_at, version FROM quests WHERE campaign_id = ?`, campaignID)
+}
+
+// ListStampedSince filters on the campaign and the save time together. The
+// campaign's foreign-key index finds its few sheets; no index on updated_at
+// is needed for a table this small per campaign.
+func (r *sqlQuestRepository) ListStampedSince(ctx context.Context, campaignID string, since time.Time) (map[string]StampedSheet, error) {
+	return r.listStamped(ctx, `SELECT entity_id, data, updated_at, version FROM quests WHERE campaign_id = ? AND updated_at > ?`, campaignID, since)
+}
+
+func (r *sqlQuestRepository) listStamped(ctx context.Context, query string, args ...any) (map[string]StampedSheet, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list quests: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]StampedSheet{}
+	for rows.Next() {
+		var id, data string
+		var at time.Time
+		var version int
+		if err := rows.Scan(&id, &data, &at, &version); err != nil {
+			return nil, fmt.Errorf("scan quest: %w", err)
+		}
+		out[id] = StampedSheet{Data: []byte(data), UpdatedAt: at, Version: version}
 	}
 	return out, rows.Err()
 }
