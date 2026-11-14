@@ -376,18 +376,21 @@ func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, qu
 func (r *sessionRepository) Update(ctx context.Context, s *Session) error {
 	query := `UPDATE sessions SET
 		name = ?, summary = ?, notes = ?, notes_html = ?,
+		`+recapPostedSet+`
 		recap = ?, recap_html = ?,
 		scheduled_date = ?, scheduled_time = ?, scheduled_tz = ?, calendar_id = ?, calendar_year = ?, calendar_month = ?, calendar_day = ?,
 		status = ?, is_recurring = ?, recurrence_type = ?, recurrence_interval = ?,
 		recurrence_day_of_week = ?, recurrence_end_date = ?, updated_at = ?
 		WHERE id = ? AND deleted_at IS NULL`
 
+	now := time.Now().UTC()
 	result, err := r.db.ExecContext(ctx, query,
 		s.Name, s.Summary, s.Notes, s.NotesHTML,
+		s.RecapHTML, now,
 		s.Recap, s.RecapHTML,
 		s.ScheduledDate, s.ScheduledTime, s.ScheduledTZ, s.CalendarID, s.CalendarYear, s.CalendarMonth, s.CalendarDay,
 		s.Status, s.IsRecurring, s.RecurrenceType, s.RecurrenceInterval,
-		s.RecurrenceDayOfWeek, s.RecurrenceEndDate, time.Now().UTC(), s.ID,
+		s.RecurrenceDayOfWeek, s.RecurrenceEndDate, now, s.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating session: %w", err)
@@ -399,11 +402,20 @@ func (r *sessionRepository) Update(ctx context.Context, s *Session) error {
 	return nil
 }
 
+// recapPostedSet stamps recap_posted_at when a write turns an empty recap into
+// a written one, and keeps it on every other write. It must come before the
+// `recap_html = ?` assignment in the same UPDATE: MariaDB assigns left to
+// right, so after that assignment recap_html already holds the new value and
+// the "was empty" test could never be true. Its two arguments are the new
+// recap HTML and the time.
+const recapPostedSet = `recap_posted_at = IF(TRIM(COALESCE(recap_html, '')) = '' AND TRIM(COALESCE(?, '')) <> '', ?, recap_posted_at),`
+
 // UpdateRecap saves the post-session recap content.
 func (r *sessionRepository) UpdateRecap(ctx context.Context, id string, recap, recapHTML *string) error {
+	now := time.Now().UTC()
 	result, err := r.db.ExecContext(ctx,
-		`UPDATE sessions SET recap = ?, recap_html = ?, updated_at = ? WHERE id = ?`,
-		recap, recapHTML, time.Now().UTC(), id,
+		`UPDATE sessions SET `+recapPostedSet+` recap = ?, recap_html = ?, updated_at = ? WHERE id = ?`,
+		recapHTML, now, recap, recapHTML, now, id,
 	)
 	if err != nil {
 		return fmt.Errorf("updating session recap: %w", err)

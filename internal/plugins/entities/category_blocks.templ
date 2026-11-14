@@ -40,7 +40,7 @@ templ CategoryBlockSwitch(cc *campaigns.CampaignContext, et *EntityType, block c
 		case "timeline_preview":
 			@catTimelinePreview(cc, block.Config)
 		default:
-			@renderExtraCategoryBlock(cc, et, block.Type)
+			@renderExtraCategoryBlock(cc, et, block.Type, block.Config)
 		// map_preview is not a block type: layouts still holding it keep the
 		// JSON entry but render nothing. The per-entity map_editor block
 		// replaces it.

@@ -73,9 +73,11 @@ func TestPlayTimesFrom(t *testing.T) {
 			t.Errorf("got %+v, want 3 of 5", got)
 		}
 	})
-	t.Run("a table of one has no times to show", func(t *testing.T) {
-		if got := playTimesFrom([]WeekOverlay{week(1, thu)}, "2026-11-09"); len(got) != 0 {
-			t.Errorf("got %+v", got)
+	t.Run("a table of three or fewer has no times to show", func(t *testing.T) {
+		for _, n := range []int{1, 2, 3} {
+			if got := playTimesFrom([]WeekOverlay{week(n, thu)}, "2026-11-09"); len(got) != 0 {
+				t.Errorf("table of %d: got %+v", n, got)
+			}
 		}
 	})
 	t.Run("at most three", func(t *testing.T) {

@@ -144,6 +144,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	pub.GET("/sessions/:sid", h.ShowSession, campaigns.RequireViewAccess())
 	pub.GET("/sessions/embed", h.EmbedSessions, campaigns.RequireViewAccess())
 	pub.GET("/game-nights", h.GameNightsLink, campaigns.RequireViewAccess())
+	// The home's "When we could play": the handler itself decides what a
+	// guest may see (set nights as date and time only).
+	pub.GET("/when-we-could-play", h.WhenWeCouldPlayBlock, campaigns.RequireViewAccess())
+	// The home's "Next game", gated the same way.
+	pub.GET("/next-game", h.NextGameBlock, campaigns.RequireViewAccess())
 
 	// RSVP token redemption — public endpoint, no auth required (token is the
 	// credential, emailed to the user). GET renders a confirm interstitial; POST

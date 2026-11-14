@@ -46,6 +46,11 @@ type Service interface {
 	// the kind owned as owner: on entityID's page, creating its row if
 	// needed, or with entityID "" on every page that already has one.
 	LogOwned(ctx context.Context, campaignID, entityID, owner string, v Viewer, op string, amount int, note string) ([]TrackerView, error)
+	// Shared lists the placed trackers shown to everyone, on pages a plain
+	// player may open, for the campaign home's clocks block. It reads as a
+	// player whoever v is: a Director's hidden trackers and hidden pages
+	// never appear, so the owner sees what the table sees.
+	Shared(ctx context.Context, campaignID string, v Viewer) ([]SharedTracker, error)
 	// Pages lists the pages that have trackers, by name, for the DM
 	// Screen's Homebrew drawer.
 	Pages(ctx context.Context, campaignID string, v Viewer) ([]PageRef, error)

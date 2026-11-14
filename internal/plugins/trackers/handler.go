@@ -17,7 +17,17 @@ import (
 )
 
 // Handler serves the tracker routes.
-type Handler struct{ svc Service }
+type Handler struct {
+	svc Service
+	// placement tells the clocks block whether the owner placed it on a page a
+	// guest may open. Nil means only the Guests home counts.
+	placement campaigns.BlockPlacementChecker
+}
+
+// SetPlacementChecker wires the check a guest-facing block asks for a page placement.
+func (h *Handler) SetPlacementChecker(p campaigns.BlockPlacementChecker) {
+	h.placement = p
+}
 
 // NewHandler builds the handler.
 func NewHandler(svc Service) *Handler { return &Handler{svc: svc} }

@@ -84,6 +84,32 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			if cc.IsMember {
 				@dashFragment("when-we-play", fmt.Sprintf("/campaigns/%s/when-we-play", cc.Campaign.ID), "h-24")
 			}
+		case "when_we_could_play":
+			// Members see their own answers and the table's usual free times;
+			// a guest sees set nights as a date and a time, only where the
+			// owner placed the block on the Guests home.
+			@PageBlockFragment(BlockWhenWeCouldPlay, cc.Campaign.ID, "")
+		case "next_game":
+			// Members see the countdown and their own answer; a guest sees a
+			// date and a time, only where the owner placed the block on the
+			// Guests home.
+			@PageBlockFragment(BlockNextGame, cc.Campaign.ID, "")
+		case "today_in_world":
+			// The calendar decides what a visitor may see of the world's day.
+			@PageBlockFragment(BlockTodayInWorld, cc.Campaign.ID, "")
+		case "open_quests":
+			// Quest visibility is decided by the quests service per viewer.
+			@PageBlockFragment(BlockOpenQuests, cc.Campaign.ID, "")
+		case "world_clocks":
+			// Only trackers shown to everyone, on pages the viewer may open.
+			@PageBlockFragment(BlockWorldClocks, cc.Campaign.ID, "")
+		case "since_last_here":
+			// What changed since this member last looked is the member's own;
+			// a visitor has no marker, so none is shown a card that can only
+			// be empty.
+			if cc.IsMember {
+				@PageBlockFragment(BlockSinceLastHere, cc.Campaign.ID, "")
+			}
 		case "where_we_play":
 			@dashWhereWePlay(cc, block.Config)
 		case "house_rules":
@@ -98,15 +124,17 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			}
 		case "activity_feed":
 			// The activity embed is the owner's (audit routes), so nobody
-			// else is shown a card that can only fail to load.
-			if cc.MemberRole >= RoleOwner {
+			// else is shown a card that can only fail to load, wherever the
+			// block sits.
+			if OwnerCardVisible(ctx, cc) {
 				@dashActivityFeed(cc, block.Config)
 			}
 		case "sync_status":
 			// Lazy-loaded from foundry_vtt (DashboardSyncBlock) to keep
 			// this plugin VTT-agnostic; shows a loading skeleton until
 			// the fragment swaps in. Its status read is owner-only.
-			if cc.MemberRole >= RoleOwner {
+			if OwnerCardVisible(ctx, cc) {
+			<div data-dm-only>
 			<div
 				hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/dashboard-sync-block", cc.Campaign.ID) }
 				hx-trigger="load"
@@ -121,6 +149,7 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 						<span class="inline-block w-48 h-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 					</div>
 				</div>
+			</div>
 			</div>
 			}
 	}
@@ -881,6 +910,19 @@ templ dashFragment(slug, href, skeleton string) {
 	</div>
 }
 
+// PageBlockFragment is the placeholder for a placeable block (see
+// PlaceableBlockTypes) drawn on an ordinary page or a category home. It loads
+// the same fragment the campaign home does; a page passes its own id so the
+// fragment can check the block really is placed there. Unknown types draw
+// nothing.
+templ PageBlockFragment(blockType, campaignID, onEntityID string) {
+	if b, ok := placeableBlock(blockType); ok {
+		if href, ok := BlockFragmentURL(campaignID, blockType, onEntityID); ok {
+			@dashFragment(b.Path, href, b.Skeleton)
+		}
+	}
+}
+
 // dashWhereWePlay is the "Where we play" block: the Foundry address and the
 // voice channel the owner types into the block's settings. Nothing is looked
 // up, so it needs no fragment. The address becomes a link only when it is an
@@ -940,7 +982,7 @@ func dashConfigString(config map[string]any, key string) string {
 // Lazy-loads via HTMX from the audit plugin embed endpoint.
 // Config: limit (int, default 10).
 templ dashActivityFeed(cc *CampaignContext, config map[string]any) {
-	<div>
+	<div data-dm-only>
 		<div class="flex items-center justify-between mb-3">
 			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-clock-rotate-left mr-1.5"></i>Recent Activity

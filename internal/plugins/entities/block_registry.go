@@ -113,6 +113,10 @@ type BlockRegistry struct {
 	// tile sizes of an ext_widget block (declared per widget, not per block
 	// type) can be looked up. Nil in tests that don't wire one.
 	widgetLister WidgetBlockLister
+	// recentLister reads the Recent Pages block's pages for a viewer when the
+	// block sits on an ordinary page; the campaign home preloads them itself.
+	// Nil draws the block empty.
+	recentLister campaigns.RecentEntityLister
 }
 
 // NewBlockRegistry creates an empty registry.
@@ -134,6 +138,13 @@ func (r *BlockRegistry) SetWidgetLister(wl WidgetBlockLister) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.widgetLister = wl
+}
+
+// SetRecentPagesLister sets the source of the Recent Pages block's pages.
+func (r *BlockRegistry) SetRecentPagesLister(l campaigns.RecentEntityLister) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.recentLister = l
 }
 
 // TileSizesFor returns the tile sizes a block of blockType can take in the

@@ -3,18 +3,16 @@
 // plugin stays VTT-agnostic (T-B2).
 //
 // URL: GET /campaigns/:id/foundry-vtt/dashboard-sync-block
-// Auth: campaign-member. The outer chrome + "Manage keys" link render
-// for any campaign member; the inner /sync-status hx-get is
-// owner-gated and 403s for non-owners, leaving just the chrome.
+// Auth: owner only, as is the inner /sync-status hx-get, so the block
+// shows nobody else anything wherever it is placed.
 
 package foundry_vtt
 
 import "fmt"
 
 // DashboardSyncBlock renders chrome (header + Manage keys link) plus
-// a lazy-load slot for the inner sync-status content. The inner slot
-// (/campaigns/:id/sync-status) is owner-gated by syncapi; for
-// non-owners it 403s but the outer chrome still renders.
+// a lazy-load slot for the inner sync-status content. Both routes answer
+// the owner only.
 templ DashboardSyncBlock(campaignID string) {
 	<div>
 		<div class="flex items-center justify-between mb-3">

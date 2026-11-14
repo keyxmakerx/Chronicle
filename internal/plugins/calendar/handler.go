@@ -31,6 +31,14 @@ type Handler struct {
 	// calendar wizard step, never load-bearing, so NewHandler's existing
 	// signature and every caller of it stay unchanged.
 	userZones timezoneLookup
+	// placement tells Today in the world whether the owner placed it on a page
+	// a guest may open. Nil means only the Guests home counts.
+	placement campaigns.BlockPlacementChecker
+}
+
+// SetPlacementChecker wires the check a guest-facing block asks for a page placement.
+func (h *Handler) SetPlacementChecker(p campaigns.BlockPlacementChecker) {
+	h.placement = p
 }
 
 // NewHandler creates a new calendar Handler.

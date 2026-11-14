@@ -19,10 +19,10 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.GET("/foundry-vtt/install-url", h.InstallURLAPI, requireOwner)
 	cg.GET("/foundry-vtt/settings-tab", h.OwnerTabFragmentHandler, requireOwner)
 
-	// Dashboard sync block, lazy-loaded when the dashboard layout
-	// includes a sync_status block. Campaign-member access: the inner
-	// /sync-status fetch is owner-gated by syncapi.
-	cg.GET("/foundry-vtt/dashboard-sync-block", h.DashboardSyncBlockHandler)
+	// Dashboard sync block, lazy-loaded wherever a sync_status block sits (a
+	// home or a page). The block is the owner's, so its chrome is too: it
+	// answers no one else, whichever page it was placed on.
+	cg.GET("/foundry-vtt/dashboard-sync-block", h.DashboardSyncBlockHandler, requireOwner)
 
 	// "New module version is ready" line for the campaign home page and the
 	// Module version card of the Foundry page, with the owner's answers to

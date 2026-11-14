@@ -14,17 +14,30 @@ import (
 // viewer may see itself.
 type CategoryBlockRenderer func(cc *campaigns.CampaignContext, et *EntityType) templ.Component
 
+// ConfiguredCategoryBlockRenderer is a CategoryBlockRenderer for a block with
+// settings. config is what the owner saved on this block in the category's
+// layout, read server-side; it is never taken from the request.
+type ConfiguredCategoryBlockRenderer func(cc *campaigns.CampaignContext, et *EntityType, config map[string]any) templ.Component
+
 // extraCategoryBlocks holds category dashboard blocks that other plugins own.
 // The built-in blocks stay in CategoryBlockSwitch; a plugin cannot be imported
 // from here (plugin isolation), so it registers its block at startup instead.
 var extraCategoryBlocks = struct {
 	sync.RWMutex
-	byType map[string]CategoryBlockRenderer
-}{byType: map[string]CategoryBlockRenderer{}}
+	byType map[string]ConfiguredCategoryBlockRenderer
+}{byType: map[string]ConfiguredCategoryBlockRenderer{}}
 
 // RegisterCategoryBlock adds a category dashboard block owned by another
 // plugin. Registering the same type again replaces it.
 func RegisterCategoryBlock(blockType string, r CategoryBlockRenderer) {
+	RegisterCategoryBlockWithConfig(blockType, func(cc *campaigns.CampaignContext, et *EntityType, _ map[string]any) templ.Component {
+		return r(cc, et)
+	})
+}
+
+// RegisterCategoryBlockWithConfig adds a category dashboard block that reads
+// its settings from the layout it sits in.
+func RegisterCategoryBlockWithConfig(blockType string, r ConfiguredCategoryBlockRenderer) {
 	extraCategoryBlocks.Lock()
 	defer extraCategoryBlocks.Unlock()
 	extraCategoryBlocks.byType[blockType] = r
@@ -42,14 +55,14 @@ func IsExtraCategoryBlock(blockType string) bool {
 
 // renderExtraCategoryBlock draws a registered block, or nothing for an
 // unknown type (an old layout naming a block that no longer exists).
-func renderExtraCategoryBlock(cc *campaigns.CampaignContext, et *EntityType, blockType string) templ.Component {
+func renderExtraCategoryBlock(cc *campaigns.CampaignContext, et *EntityType, blockType string, config map[string]any) templ.Component {
 	extraCategoryBlocks.RLock()
 	r := extraCategoryBlocks.byType[blockType]
 	extraCategoryBlocks.RUnlock()
 	if r == nil {
 		return templ.NopComponent
 	}
-	return r(cc, et)
+	return r(cc, et, config)
 }
 
 // extraCategoryBlockTypes lists the types registered through
@@ -90,5 +103,5 @@ func renderCategoryLead(cc *campaigns.CampaignContext, et *EntityType) templ.Com
 	if bt == "" {
 		return templ.NopComponent
 	}
-	return renderExtraCategoryBlock(cc, et, bt)
+	return renderExtraCategoryBlock(cc, et, bt, nil)
 }
