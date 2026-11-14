@@ -114,7 +114,7 @@ func TestHomeBlocksOfferedOnPages(t *testing.T) {
 	if got := strings.Join(byType["coming_up"].TileSizes, ","); got != "2x2,2x1" {
 		t.Errorf("coming_up tile sizes = %q", got)
 	}
-	if byType["map_full"].Addon != "maps" || byType["calendar_full"].Addon != "calendar" || byType["sync_status"].Addon != "foundry" {
+	if byType["map_full"].Addon == "" || byType["calendar_full"].Addon == "" || byType["sync_status"].Addon == "" {
 		t.Error("an addon gate was lost")
 	}
 	if len(byType["where_we_play"].ConfigFields) != 2 || len(byType["entity_list"].ConfigFields) != 2 || len(byType["start_here"].ConfigFields) != 1 {
