@@ -460,6 +460,30 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
+		Type: "next_game", Label: "Next game", Icon: "fa-hourglass-half",
+		Description: "How many days until the next set game night, and your own answer",
+		Addon: "sessions", Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "today_in_world", Label: "Today in the world", Icon: "fa-sun",
+		Description: "The date in your world, today's weather and moons, and the next event on the calendar",
+		Addon: "calendar", Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "open_quests", Label: "Open quests", Icon: "fa-scroll",
+		Description: "The three open quests that most need attention: due soonest, then newest",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "world_clocks", Label: "The world's clocks", Icon: "fa-stopwatch",
+		Description: "Trackers you show to everyone, drawn small as rings",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
 		Type: "where_we_play", Label: "Where we play", Icon: "fa-location-dot",
 		Description: "The Foundry address and voice channel you type in",
 		Contexts: []string{"dashboard"},

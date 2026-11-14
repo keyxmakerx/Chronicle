@@ -89,6 +89,20 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			// a guest sees set nights as a date and a time, only where the
 			// owner placed the block on the Guests home.
 			@dashFragment("when-we-could-play", fmt.Sprintf("/campaigns/%s/when-we-could-play", cc.Campaign.ID), "h-24")
+		case "next_game":
+			// Members see the countdown and their own answer; a guest sees a
+			// date and a time, only where the owner placed the block on the
+			// Guests home.
+			@dashFragment("next-game", fmt.Sprintf("/campaigns/%s/next-game", cc.Campaign.ID), "h-24")
+		case "today_in_world":
+			// The calendar decides what a visitor may see of the world's day.
+			@dashFragment("today-in-world", fmt.Sprintf("/campaigns/%s/today-in-world", cc.Campaign.ID), "h-24")
+		case "open_quests":
+			// Quest visibility is decided by the quests service per viewer.
+			@dashFragment("open-quests", fmt.Sprintf("/campaigns/%s/open-quests", cc.Campaign.ID), "h-24")
+		case "world_clocks":
+			// Only trackers shown to everyone, on pages the viewer may open.
+			@dashFragment("world-clocks", fmt.Sprintf("/campaigns/%s/world-clocks", cc.Campaign.ID), "h-20")
 		case "where_we_play":
 			@dashWhereWePlay(cc, block.Config)
 		case "house_rules":

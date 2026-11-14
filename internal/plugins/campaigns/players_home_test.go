@@ -110,6 +110,22 @@ func TestDashFragmentBlocks_MembersOnly(t *testing.T) {
 			t.Errorf("when we could play should load its fragment (member=%v):\n%s", cc.IsMember, html)
 		}
 	}
+	// The small home blocks are public-capable too: each fragment's handler
+	// decides what a visitor may see (and answers a visitor empty unless the
+	// owner placed the block on the Guests home).
+	for _, b := range []struct{ typ, route string }{
+		{BlockNextGame, "next-game"}, {BlockTodayInWorld, "today-in-world"},
+		{BlockOpenQuests, "open-quests"}, {BlockWorldClocks, "world-clocks"},
+	} {
+		for _, cc := range []*CampaignContext{
+			{Campaign: &Campaign{ID: "camp-1", IsPublic: true}},
+			{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RolePlayer, IsMember: true},
+		} {
+			if html := renderBlock(t, context.Background(), cc, DashboardBlock{ID: "b", Type: b.typ}); !strings.Contains(html, "/campaigns/camp-1/"+b.route) {
+				t.Errorf("%s should load its fragment (member=%v):\n%s", b.typ, cc.IsMember, html)
+			}
+		}
+	}
 	// The party is public-capable: what a visitor may see is decided by the
 	// fragment, as Start here is.
 	visitor := &CampaignContext{Campaign: &Campaign{ID: "camp-1", IsPublic: true}}

@@ -1,0 +1,45 @@
+// next_game.templ draws the campaign home's "Next game" block. It takes only
+// the already-worded view, so a guest's copy has no title or answer to print.
+package sessions
+
+// nextGameBlock replaces the placeholder (hx-swap outerHTML).
+templ nextGameBlock(v nextGameView) {
+	<section class="cb-info cb-next-game" data-block="next-game" aria-labelledby="next-game-h">
+		<div class="cb-info-top flex items-baseline justify-between mb-3">
+			<h2 id="next-game-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">Next game</h2>
+			if !v.Guest {
+				<a href={ templ.SafeURL(v.GameNightsHref) } class="cb-more text-xs text-accent hover:underline">Open Game nights</a>
+			}
+		</div>
+		<div class="cb-info-rows card cb-card px-4 py-3">
+			if !v.Set {
+				<p class="text-sm text-fg-muted">No game night set yet</p>
+			} else {
+				<div class="flex items-center gap-4">
+					if v.Count != "" {
+						<span class="flex-none text-center">
+							<span class="block text-4xl font-bold leading-none tabular-nums text-accent">{ v.Count }</span>
+							<span class="mt-1 block text-xs font-semibold uppercase tracking-wider text-fg-muted">{ v.Unit }</span>
+						</span>
+					}
+					<span class="min-w-0 flex-1">
+						if v.Today != "" {
+							<span class="block text-lg font-semibold text-fg">{ v.Today }</span>
+						}
+						if v.Title != "" {
+							<span class="block truncate font-semibold text-fg">{ v.Title }</span>
+							<span class="block text-xs text-fg-muted">{ v.When }</span>
+						} else if v.Today == "" {
+							<span class="block font-semibold text-fg">{ v.When }</span>
+						}
+						if v.Owes {
+							<a href={ templ.SafeURL(v.Href) } class="mt-1 inline-block text-xs text-accent hover:underline">Answer</a>
+						} else if v.Answer != "" {
+							<span class={ "mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium", couldPlayPill(v.Tone) }>{ v.Answer }</span>
+						}
+					</span>
+				</div>
+			}
+		</div>
+	</section>
+}

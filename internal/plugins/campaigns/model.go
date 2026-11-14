@@ -899,6 +899,10 @@ const (
 	BlockParty           = "party"            // The claimed heroes: name, ancestry, class, level, player (entities plugin).
 	BlockWhenWePlay      = "when_we_play"     // The times most of the table is free (sessions plugin).
 	BlockWhenWeCouldPlay = "when_we_could_play" // Upcoming days: set nights and where the table tends to be free (sessions plugin).
+	BlockNextGame        = "next_game"        // Days until the next set game night (sessions plugin).
+	BlockTodayInWorld    = "today_in_world"   // The in-world date, weather, moons and next event (calendar plugin).
+	BlockOpenQuests      = "open_quests"      // The open quests that most need attention (quests plugin).
+	BlockWorldClocks     = "world_clocks"     // Trackers shown to everyone, drawn small (trackers plugin).
 	BlockWhereWePlay     = "where_we_play"    // The owner's Foundry address and voice channel, typed in the block's config.
 	BlockHouseRules      = "house_rules"      // The rulebook's house chapters (systems).
 	BlockLastTime        = "last_time"        // The latest session's recap, as its viewer may read it (sessions plugin).
@@ -937,6 +941,10 @@ var ValidBlockTypes = map[string]bool{
 	BlockParty:           true,
 	BlockWhenWePlay:      true,
 	BlockWhenWeCouldPlay: true,
+	BlockNextGame:        true,
+	BlockTodayInWorld:    true,
+	BlockOpenQuests:      true,
+	BlockWorldClocks:     true,
 	BlockWhereWePlay:     true,
 	BlockHouseRules:      true,
 	BlockLastTime:        true,

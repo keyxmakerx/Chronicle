@@ -1074,6 +1074,7 @@ PUT	/campaigns/:id/members/:uid/role	session	plugins/campaigns.(*Handler).Update
 GET	/campaigns/:id/my-look	session	plugins/campaigns.(*Handler).YourLook	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/my-look/:part	session	plugins/campaigns.(*Handler).PutLookPick	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/nav-pins	session	plugins/campaigns.(*Handler).UpdateNavPins	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/next-game	public-capable	plugins/sessions.(*Handler).NextGameBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/notes	session	widgets/notes.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/notes	session	widgets/notes.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/notes/:nid/attachments	session	widgets/notes.(*Handler).ListAttachments	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1119,6 +1120,7 @@ GET	/campaigns/:id/npcs	public-capable	plugins/npcs.(*Handler).Index	plugins/aut
 POST	/campaigns/:id/npcs/:eid/reveal	session	plugins/npcs.(*Handler).ToggleReveal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/npcs/count	public-capable	plugins/npcs.(*Handler).CountAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/npcs/section	public-capable	plugins/npcs.(*Handler).SectionFragment	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/open-quests	public-capable	plugins/quests.(*Handler).OpenQuestsBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 DELETE	/campaigns/:id/owner-dashboard-layout	session	plugins/campaigns.(*Handler).ResetOwnerDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/owner-dashboard-layout	session	plugins/campaigns.(*Handler).GetOwnerDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/owner-dashboard-layout	session	plugins/campaigns.(*Handler).UpdateOwnerDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1280,6 +1282,7 @@ GET	/campaigns/:id/timelines/calendars	session	plugins/timeline.(*Handler).ListC
 GET	/campaigns/:id/timelines/embed	public-capable	plugins/timeline.(*Handler).EmbedTimeline	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/timelines/members	session	plugins/timeline.(*Handler).ListCampaignMembersAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/timelines/preview	public-capable	plugins/timeline.(*Handler).PreviewAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/today-in-world	public-capable	plugins/calendar.(*Handler).TodayInWorldBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/toggle-view-mode	session	plugins/campaigns.(*Handler).ToggleViewAsPlayer	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccessEvenIfArchived > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/tracker-kinds	session	plugins/trackers.(*Handler).ListKinds	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/tracker-kinds	session	plugins/trackers.(*Handler).CreateKind	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1301,6 +1304,7 @@ POST	/campaigns/:id/unarchive	session	plugins/campaigns.(*Handler).UnarchiveCamp
 PUT	/campaigns/:id/welcome-message	session	plugins/campaigns.(*Handler).UpdateWelcomeMessageAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/when-we-could-play	public-capable	plugins/sessions.(*Handler).WhenWeCouldPlayBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/when-we-play	session	plugins/sessions.(*Handler).WhenWePlayBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/world-clocks	public-capable	plugins/trackers.(*Handler).WorldClocksBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/worldbuilding-prompts	session	plugins/entities.(*WorldbuildingPromptHandler).ListAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/worldbuilding-prompts	session	plugins/entities.(*WorldbuildingPromptHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/worldbuilding-prompts/:pid	session	plugins/entities.(*WorldbuildingPromptHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

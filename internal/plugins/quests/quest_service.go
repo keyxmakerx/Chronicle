@@ -20,6 +20,9 @@ type QuestService interface {
 	// List returns every saved sheet in the campaign whose page v may open,
 	// by page name. DM team only: it is how the AI tool reads the quests.
 	List(ctx context.Context, campaignID string, v Viewer) ([]QuestEntry, error)
+	// Digest reads the viewer's quests for the campaign home: every saved
+	// sheet whose page v may open, as v sees it (see QuestDigest).
+	Digest(ctx context.Context, campaignID string, v Viewer) (*QuestDigest, error)
 	// SyncDueEvent re-derives the visibility of the page's due-date calendar
 	// event after the page's own visibility changed. It touches nothing when
 	// the page has no sheet or no due date.
@@ -301,6 +304,83 @@ func (s *questService) List(ctx context.Context, campaignID string, v Viewer) ([
 			return a < b
 		}
 		return out[i].EntityID < out[j].EntityID
+	})
+	return out, nil
+}
+
+// Digest returns the open quests v may see, most pressing first, and how many
+// quests v may see in all. The page gate decides first, as for the sheet
+// itself, so a private page, a DM-only category's page or a trashed one is
+// never counted; below the DM team a quest whose notice the DM hid is
+// skipped too, since the notice is all a player is shown of it.
+func (s *questService) Digest(ctx context.Context, campaignID string, v Viewer) (*QuestDigest, error) {
+	sheets, err := s.repo.ListAllStamped(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	out := &QuestDigest{Open: []DigestQuest{}}
+	if len(sheets) == 0 {
+		return out, nil
+	}
+	ids := make([]string, 0, len(sheets))
+	for id := range sheets {
+		ids = append(ids, id)
+	}
+	infos, ok, err := s.viewable(ctx, campaignID, v, ids)
+	if err != nil {
+		return nil, err
+	}
+	var cal QuestCalendar
+	calRead := false
+	slugs := map[string]int{}
+	for id, sheet := range sheets {
+		if !ok[id] {
+			continue
+		}
+		q := defaultQuest(infos[id].Name)
+		if err := json.Unmarshal(sheet.Data, &q); err != nil {
+			continue // a damaged sheet is left for its own page to report
+		}
+		fillDefaults(&q, infos[id].Name)
+		if q.Layout.Notice.Hidden && !v.IsDM {
+			continue
+		}
+		out.Total++
+		if infos[id].TypeSlug != "" {
+			slugs[infos[id].TypeSlug]++
+		}
+		if q.Status != StatusNotStarted && q.Status != StatusActive {
+			continue
+		}
+		dq := DigestQuest{EntityID: id, Title: q.Notice.Title, Status: q.Status, Saved: sheet.UpdatedAt}
+		if q.DueDate != nil {
+			if !calRead {
+				calRead, cal = true, s.viewCalendar(ctx, campaignID)
+			}
+			if cal != nil {
+				n := cal.DaysFromToday(*q.DueDate)
+				dq.DaysLeft = &n
+			}
+		}
+		out.Open = append(out.Open, dq)
+	}
+	// The category link is the one most of the visible quests live in.
+	for slug, n := range slugs {
+		if n > slugs[out.TypeSlug] || n == slugs[out.TypeSlug] && (out.TypeSlug == "" || slug < out.TypeSlug) {
+			out.TypeSlug = slug
+		}
+	}
+	sort.Slice(out.Open, func(i, j int) bool {
+		a, b := out.Open[i], out.Open[j]
+		switch {
+		case a.DaysLeft != nil && b.DaysLeft != nil && *a.DaysLeft != *b.DaysLeft:
+			return *a.DaysLeft < *b.DaysLeft
+		case (a.DaysLeft != nil) != (b.DaysLeft != nil):
+			return a.DaysLeft != nil
+		case !a.Saved.Equal(b.Saved):
+			return a.Saved.After(b.Saved)
+		}
+		return a.EntityID < b.EntityID
 	})
 	return out, nil
 }

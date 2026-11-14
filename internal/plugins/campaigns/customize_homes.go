@@ -121,7 +121,7 @@ var homeBlockTypes = []string{
 	"pinned_pages", "calendar_preview", "timeline_preview", "relations_graph", "calendar_full",
 	"timeline_full", "relations_graph_full", "map_full", "session_tracker", "coming_up",
 	"activity_feed", "sync_status", "start_here", "at_a_glance",
-	"party", "when_we_play", "when_we_could_play", "where_we_play", "house_rules", "last_time", "your_hero", "getting_started",
+	"party", "when_we_play", "when_we_could_play", "next_game", "today_in_world", "open_quests", "world_clocks", "where_we_play", "house_rules", "last_time", "your_hero", "getting_started",
 }
 
 // homeTab is one home the Customizer's Home pages area offers. Label and

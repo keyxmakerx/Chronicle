@@ -121,6 +121,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// "/calendars/:calid" param route below it (same reasoning as
 	// "/calendars/list" above).
 	pub.GET("/calendars/upcoming", h.PreviewUpcomingEvents, campaigns.RequireViewAccess())
+	// The home's "Today in the world" block: read through the viewer's own
+	// filter, so a guest gets only what the public may see of the calendar.
+	pub.GET("/today-in-world", h.TodayInWorldBlock, campaigns.RequireViewAccess())
 	pub.GET("/calendars/list", h.ListCalendarsAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid", h.GetCalendarAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireViewAccess())

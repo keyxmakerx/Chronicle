@@ -574,22 +574,5 @@ func (h *Handler) WhenWeCouldPlayBlock(c *echo.Context) error {
 // homeHasBlock reports whether a home layout places blockType in a column or
 // a tile section.
 func homeHasBlock(l *campaigns.DashboardLayout, blockType string) bool {
-	if l == nil {
-		return false
-	}
-	for _, r := range l.Rows {
-		for _, col := range r.Columns {
-			for _, b := range col.Blocks {
-				if b.Type == blockType {
-					return true
-				}
-			}
-		}
-		for _, t := range r.Tiles {
-			if t.Type == blockType {
-				return true
-			}
-		}
-	}
-	return false
+	return campaigns.HomeHasBlock(l, blockType)
 }
