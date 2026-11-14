@@ -76,19 +76,28 @@ func (p playTime) Span() string {
 	return start + " to " + end
 }
 
-// Percent is the share of the table free, for the bar.
-func (p playTime) Percent() int {
-	if p.Total == 0 {
-		return 0
+// Words is how much of the table is free, in words. A count would let a
+// reader work out who is missing from a small table.
+func (p playTime) Words() string {
+	if availabilityStep(p.Free, p.Total) == stepMost {
+		return "Most of the table"
 	}
-	return p.Free * 100 / p.Total
+	return "About half the table"
+}
+
+// Percent is the bar's fill: two steps, matching Words, never an exact share.
+func (p playTime) Percent() int {
+	if availabilityStep(p.Free, p.Total) == stepMost {
+		return 100
+	}
+	return 50
 }
 
 // playTimesFrom finds the windows most of the table is free from anonymous
 // per-hour counts. Only days from today on count; a weekday that appears in
 // two weeks keeps its first appearance. A window is a run of hours in which
 // more than half the table is free; its Free is the fewest free in any hour of
-// it, so "4 of 5 free" is true for the whole window. The best windows (most
+// it, so its words hold for the whole window. The best windows (most
 // free, then longest) come first, at most playTimesShown of them. Nothing but
 // counts is read, so nobody's own answers can show.
 func playTimesFrom(weeks []WeekOverlay, today string) []playTime {
