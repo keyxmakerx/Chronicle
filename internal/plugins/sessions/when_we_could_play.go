@@ -43,7 +43,7 @@ const (
 	couldPlayAxisHours = 12
 	// couldPlayMinRun is the shortest stretch worth shading, as for When we play.
 	couldPlayMinRun = 2
-	// couldPlayMaxAlpha is the accent's strength, in percent, at the darkest.
+	// couldPlayMaxAlpha is the shade's strength, in percent, at the darkest.
 	couldPlayMaxAlpha = 60
 )
 
@@ -248,7 +248,8 @@ func daySteps(d OverlayDay, total int) [couldPlayAxisHours]int {
 	return steps
 }
 
-// shadeGradient draws the steps as a left-to-right gradient of the accent.
+// shadeGradient draws the steps as a left-to-right grey gradient; the accent
+// is kept for set nights, so a likely evening never reads as a booked one.
 // Each hour's strength is blended with its neighbours' so the bands melt into
 // one another instead of ending at a hard edge; the stops sit at hour centres
 // so the transition is spread across the hours either side of a change.
@@ -268,7 +269,7 @@ func shadeGradient(steps [couldPlayAxisHours]int) string {
 		v := 0.25*at(i-1) + 0.5*at(i) + 0.25*at(i+1)
 		alpha := int(v*couldPlayMaxAlpha + 0.5)
 		pos := float64(2*i+1) * 100 / float64(2*n)
-		parts = append(parts, fmt.Sprintf("color-mix(in srgb, var(--color-accent) %d%%, transparent) %.1f%%", alpha, pos))
+		parts = append(parts, fmt.Sprintf("color-mix(in srgb, var(--color-text-muted) %d%%, transparent) %.1f%%", alpha, pos))
 	}
 	return "linear-gradient(to right, " + strings.Join(parts, ", ") + ")"
 }
@@ -501,6 +502,14 @@ func (h *Handler) WhenWeCouldPlayBlock(c *echo.Context) error {
 	}
 	ctx := c.Request().Context()
 	guest := !cc.IsMember
+	// A visitor sees game nights only where the owner chose to show them: the
+	// route is reachable on any public campaign, so placement is the consent.
+	if guest {
+		home, _ := cc.Campaign.HomeLayout(campaigns.HomeGuest)
+		if !homeHasBlock(home, campaigns.BlockWhenWeCouldPlay) {
+			return c.HTML(http.StatusOK, "")
+		}
+	}
 	userID := auth.GetUserID(c)
 	tz := "UTC"
 	if !guest {
@@ -560,4 +569,27 @@ func (h *Handler) WhenWeCouldPlayBlock(c *echo.Context) error {
 		}
 	}
 	return middleware.Render(c, http.StatusOK, whenWeCouldPlayBlock(buildCouldPlay(in)))
+}
+
+// homeHasBlock reports whether a home layout places blockType in a column or
+// a tile section.
+func homeHasBlock(l *campaigns.DashboardLayout, blockType string) bool {
+	if l == nil {
+		return false
+	}
+	for _, r := range l.Rows {
+		for _, col := range r.Columns {
+			for _, b := range col.Blocks {
+				if b.Type == blockType {
+					return true
+				}
+			}
+		}
+		for _, t := range r.Tiles {
+			if t.Type == blockType {
+				return true
+			}
+		}
+	}
+	return false
 }

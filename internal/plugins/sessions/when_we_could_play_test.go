@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
 
 // couldPlayHTML renders the block as a reader would receive it.
@@ -87,7 +90,7 @@ func TestShadeGradientBlends(t *testing.T) {
 		steps[h] = stepMost
 	}
 	g := shadeGradient(steps)
-	alpha := regexp.MustCompile(`var\(--color-accent\) (\d+)%`)
+	alpha := regexp.MustCompile(`var\(--color-text-muted\) (\d+)%`)
 	var as []int
 	for _, m := range alpha.FindAllStringSubmatch(g, -1) {
 		var a int
@@ -361,5 +364,27 @@ func TestWhenWePlayWords(t *testing.T) {
 	}
 	if times[0].Percent() != 100 || times[1].Percent() != 50 {
 		t.Errorf("bar should be two steps, got %d and %d", times[0].Percent(), times[1].Percent())
+	}
+}
+
+func TestHomeHasBlock(t *testing.T) {
+	col := &campaigns.DashboardLayout{Rows: []campaigns.DashboardRow{{Columns: []campaigns.DashboardColumn{{Blocks: []campaigns.DashboardBlock{{Type: "party"}, {Type: campaigns.BlockWhenWeCouldPlay}}}}}}}
+	tile := &campaigns.DashboardLayout{Rows: []campaigns.DashboardRow{{Kind: "tiles", Tiles: []tilegrid.Tile{{Type: campaigns.BlockWhenWeCouldPlay}}}}}
+	none := &campaigns.DashboardLayout{Rows: []campaigns.DashboardRow{{Columns: []campaigns.DashboardColumn{{Blocks: []campaigns.DashboardBlock{{Type: "party"}}}}}}}
+	tests := []struct {
+		name string
+		l    *campaigns.DashboardLayout
+		want bool
+	}{
+		{"in a column", col, true},
+		{"as a tile", tile, true},
+		{"not placed", none, false},
+		{"nil layout", nil, false},
+		{"built-in guest home", campaigns.DefaultGuestDashboardLayout(), false},
+	}
+	for _, tt := range tests {
+		if got := homeHasBlock(tt.l, campaigns.BlockWhenWeCouldPlay); got != tt.want {
+			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+		}
 	}
 }
