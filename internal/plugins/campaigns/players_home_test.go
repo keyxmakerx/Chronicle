@@ -100,6 +100,16 @@ func TestDashFragmentBlocks_MembersOnly(t *testing.T) {
 			t.Errorf("%s should load its fragment for a member:\n%s", typ, html)
 		}
 	}
+	// When we could play is public-capable too: the fragment shows a guest
+	// set nights as a date and time, and a member the full block.
+	for _, cc := range []*CampaignContext{
+		{Campaign: &Campaign{ID: "camp-1", IsPublic: true}},
+		{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RolePlayer, IsMember: true},
+	} {
+		if html := renderBlock(t, context.Background(), cc, DashboardBlock{ID: "b", Type: BlockWhenWeCouldPlay}); !strings.Contains(html, "/campaigns/camp-1/when-we-could-play") {
+			t.Errorf("when we could play should load its fragment (member=%v):\n%s", cc.IsMember, html)
+		}
+	}
 	// The party is public-capable: what a visitor may see is decided by the
 	// fragment, as Start here is.
 	visitor := &CampaignContext{Campaign: &Campaign{ID: "camp-1", IsPublic: true}}

@@ -454,6 +454,12 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
+		Type: "when_we_could_play", Label: "When we could play", Icon: "fa-calendar-week",
+		Description: "The next weeks: set game nights and roughly when the table tends to be free",
+		Addon: "sessions", Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
 		Type: "where_we_play", Label: "Where we play", Icon: "fa-location-dot",
 		Description: "The Foundry address and voice channel you type in",
 		Contexts: []string{"dashboard"},

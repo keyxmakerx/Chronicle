@@ -84,6 +84,11 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			if cc.IsMember {
 				@dashFragment("when-we-play", fmt.Sprintf("/campaigns/%s/when-we-play", cc.Campaign.ID), "h-24")
 			}
+		case "when_we_could_play":
+			// Members see their own answers and the table's usual free times;
+			// a guest sees set nights as a date and a time, only where the
+			// owner placed the block on the Guests home.
+			@dashFragment("when-we-could-play", fmt.Sprintf("/campaigns/%s/when-we-could-play", cc.Campaign.ID), "h-24")
 		case "where_we_play":
 			@dashWhereWePlay(cc, block.Config)
 		case "house_rules":
