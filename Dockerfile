@@ -12,7 +12,7 @@
 # build time and never kept in git. tools/fetch_cutout.py pins and checks every
 # file, and the int8 model it makes must match its pinned checksum, which
 # depends on these package versions (keep them in step with REQUIREMENTS there).
-FROM python:3.13-slim AS cutout
+FROM python:3.15-slim AS cutout
 RUN pip install --no-cache-dir onnxruntime==1.31.1 onnx==1.23.2
 COPY tools/fetch_cutout.py /fetch_cutout.py
 RUN python3 /fetch_cutout.py /cutout
