@@ -25,7 +25,7 @@ No `data-widget`; it self-initialises as an IIFE and exposes no API.
 
 | Shown | Bound in |
 |---|---|
-| Mod+K | `search_modal.js` |
+| Mod+K | `search_modal.js` (the key), which toggles `Chronicle.toggleSearch`: the top bar's search from `topbar_search.js` in a campaign, the modal elsewhere |
 | Mod+Shift+P | `command_palette.js` |
 | Mod+N, Mod+E, Mod+S | `keyboard_shortcuts.js` |
 | Mod+Shift+N | `quick_capture.js` (also offered by the palette) |
