@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 // build-signin-scenes.mjs bakes the sign-in scenes' drawn layers
 // (tools/signin-scenes/*.svg) into the blurred WebP layers the page serves
-// (static/img/signin/). The scenes stay readable: only the back layer gets a
-// light blur, for depth, baked in so the animated layers need no filter at
-// run time.
+// (static/img/signin/). Each layer gets a light blur, more the farther back,
+// baked in so the animated layers need no filter at run time.
 //
 // Usage: NODE_PATH="$(npm root -g)" node tools/build-signin-scenes.mjs
 // Needs global playwright + chromium and python3 with Pillow (WebP encode).
@@ -22,10 +21,13 @@ mkdirSync(out, { recursive: true });
 
 // 1920x1080 keeps the drawing crisp on a large screen, where the layer is
 // shown wider than the viewport. The drawing is laid 140px past each edge so
-// the back layer's blur never fades to transparent at the rim.
+// the blur never fades to transparent at the rim.
 const W = 1920, H = 1080, PAD = 140;
 const TONE = 'brightness(1.08) saturate(1.1)';
-const filterFor = (f) => (f.includes('-1-back') ? `blur(3px) ${TONE}` : TONE);
+// Softer the farther back, so the scene reads as a dream but each thing in it
+// can still be told apart.
+const BLUR = { back: 12, mid: 6, front: 3, action: 1.5 };
+const filterFor = (f) => `blur(${BLUR[f.replace(/^.*-\d-(\w+)\.svg$/, '$1')] ?? 0}px) ${TONE}`;
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: W, height: H } });

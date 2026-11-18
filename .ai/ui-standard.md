@@ -537,8 +537,8 @@ second; the dice settle in under 480ms.
   *I have a code* are tabs (`/login`, `/register`, `/join` each open their
   own) on one floating panel with no box around the form. Nothing hangs from
   these tabs, so the open one is underlined in the accent with no side line.
-  A painted scene, sharp enough to tell what it is (only its back layer is
-  softened), sits behind it and follows the tab (castle, dragon, tavern); its
+  A painted scene, softly blurred (more the farther back) but clear enough to
+  tell what it is, sits behind it and follows the tab (castle, dragon, tavern); its
   four layers drift on `--dur-ambient` and hold still under Calm
   and Off. A site admin's picture or colours replace the scenes, and a saved
   plain look shows the panel on the page colour

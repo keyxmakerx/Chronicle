@@ -42,6 +42,12 @@ func sanitizeRedirect(raw string) string {
 	if err != nil || u.Scheme != "" || u.Host != "" {
 		return ""
 	}
+	// The join page with no code in hand is not somewhere to come back to:
+	// someone who signs in from the code tab means to sign in, and landing
+	// on "Join a campaign" afterwards reads as a code being demanded.
+	if u.Path == joinHref && u.Query().Get("code") == "" {
+		return ""
+	}
 	return raw
 }
 

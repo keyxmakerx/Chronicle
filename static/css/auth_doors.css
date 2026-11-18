@@ -3,10 +3,10 @@
  * (internal/templates/layouts/site_doors.templ, internal/plugins/auth).
  *
  * One floating surface panel sits over a scene that follows the open tab:
- * castle, dragon, tavern. Each scene is four drawn layers, kept sharp enough
- * to read (only the back one carries a light baked-in blur, for depth), that
- * drift sideways at different speeds; only transform and opacity ever animate. Durations come
- * from the motion tokens in input.css. Calm and Off stop every drift (the
+ * castle, dragon, tavern. Each scene is four drawn layers with a light blur
+ * baked in, more the farther back, so it reads as a dream yet stays clear
+ * enough to tell what it is. The layers drift sideways at different speeds;
+ * only transform and opacity ever animate. Durations come from the motion tokens in input.css. Calm and Off stop every drift (the
  * global rules end a keyframe animation at once and, with no fill, it falls
  * back to the resting position below); a still page or hidden tab pauses it.
  */
