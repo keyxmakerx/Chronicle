@@ -1,0 +1,62 @@
+// manage_frame.templ is the one frame every owner Manage page sits in. It
+// lives here, not in the campaigns plugin, because pages owned by other
+// plugins (Media, Trash, Sync history, Your AI) use it too. The sidebar is
+// the only Manage menu, so the frame carries no links of its own beyond the
+// quiet way back to the desk.
+
+package layouts
+
+// ManageFrameData is what a Manage page tells its frame.
+type ManageFrameData struct {
+	// Title is the page's name, drawn as its one h1.
+	Title string
+	// Home marks the desk itself, which has no "Manage" word above it since
+	// it is the place that word leads to.
+	Home bool
+	// Intro is one plain sentence under the title; empty draws nothing. Pages
+	// that already carry their own introduction inside leave it empty.
+	Intro string
+	// Actions is the page's own actions, drawn beside the title; nil draws
+	// nothing.
+	Actions templ.Component
+	// Line names the desk line this page belongs to ("people", "trash"). The
+	// frame draws that line's sentence under the title, the same words the
+	// desk shows, so going from the desk to the page carries it. Empty draws
+	// none: pages with no line of their own, and anyone who is not the owner.
+	Line string
+}
+
+// ManageFrame gives every Manage page the same left edge and the same content
+// width, a quiet "Manage" above the title that leads back to the desk, the
+// title, a slot for the page's own actions, then the page body. One
+// component, so the edge cannot drift page by page again. The Customizer is a
+// full-screen workshop and never sits in it.
+templ ManageFrame(d ManageFrameData) {
+	{{ sentence := manageSentenceFor(ctx, d.Line) }}
+	<div class="manage-frame" data-manage-frame>
+		<header class={ "manage-head cb-head", templ.KV("has-sentence", sentence != nil) }>
+			if !d.Home {
+				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow" data-manage-back onclick={ manageBackCall() }>Manage</a>
+			}
+			<h1 class="manage-title cb-title">{ d.Title }</h1>
+			{{ pinKey, pinName := ManageToolOfLine(d.Line) }}
+			@ManagePin(pinKey, pinName)
+			if d.Actions != nil || ManageFindShown(ctx) {
+				<div class="manage-actions">
+					if d.Actions != nil {
+						@d.Actions
+					}
+					@ManageFind()
+				</div>
+			}
+			if d.Intro != "" {
+				<p class="manage-intro">{ d.Intro }</p>
+			}
+		</header>
+		if sentence != nil {
+			<link rel="stylesheet" href={ AssetURL("/static/css/manage_desk.css") }/>
+			@sentence
+		}
+		{ children... }
+	</div>
+}

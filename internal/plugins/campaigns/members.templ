@@ -14,10 +14,9 @@ import (
 // manages members, invites and ownership.
 templ CampaignMembersPage(cc *CampaignContext, v MemberListView, transfer *OwnershipTransfer, smtpConfigured bool) {
 	@layouts.App(cc.Campaign.Name + " - People") {
-		<div class="max-w-4xl min-[1600px]:max-w-screen-2xl mx-auto">
-			@layouts.ManageHeader("People")
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "People", Line: "people"}) {
 			@peopleSections(cc, v, transfer, smtpConfigured)
-		</div>
+		}
 	}
 }
 

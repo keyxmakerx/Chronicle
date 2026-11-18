@@ -221,6 +221,16 @@ func categoryPart(base string, c CustomizeCategory, current, kind bool) Customiz
 // customizeFind lists what the Find palette can open: every area, every
 // Look section and every category.
 func (h *Handler) customizeFind(cc *CampaignContext, areas []CustomizeArea, cats []CustomizeCategory) string {
+	b, err := json.Marshal(h.customizeFindEntries(cc, areas, cats))
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+// customizeFindEntries is the Customizer's Find list as data, so the Manage
+// desk's Find can offer the same settings from the same source.
+func (h *Handler) customizeFindEntries(cc *CampaignContext, areas []CustomizeArea, cats []CustomizeCategory) []customizeFindEntry {
 	base := h.customizeBase(cc)
 	out := make([]customizeFindEntry, 0, len(areas)+len(lookSections)+len(cats)*2+1)
 	for _, a := range areas {
@@ -237,11 +247,7 @@ func (h *Handler) customizeFind(cc *CampaignContext, areas []CustomizeArea, cats
 			customizeFindEntry{Label: c.NamePlural + " settings", Path: "Categories › " + c.NamePlural, Href: href + "/settings", Icon: "fa-sliders", Words: "name icon colour color claim menu kinds delete rename"},
 		)
 	}
-	b, err := json.Marshal(out)
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
+	return out
 }
 
 // renderCustomize draws an area inside the frame.
@@ -302,8 +308,9 @@ func (h *Handler) CustomizeLook(c *echo.Context) error {
 		lookTab(cc, middleware.GetCSRFToken(c), string(stateJSON)))
 }
 
-// CustomizeHome arranges one home, the campaign home for an audience or the
-// DM dashboard: GET /campaigns/:id/customize/home[/:who].
+// CustomizeHome arranges one audience's campaign home: GET
+// /campaigns/:id/customize/home[/:who]. The retired Overview tab's address
+// goes to the Home pages area instead of a dead end.
 func (h *Handler) CustomizeHome(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
@@ -312,6 +319,9 @@ func (h *Handler) CustomizeHome(c *echo.Context) error {
 	key := c.Param("who")
 	if key == "" {
 		key = HomeDefault
+	}
+	if key == legacyHomeDM {
+		return c.Redirect(http.StatusSeeOther, h.customizeBase(cc)+"/home")
 	}
 	if !validHomeKey(key) {
 		return apperror.NewNotFound("that home doesn't exist")

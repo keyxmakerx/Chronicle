@@ -140,6 +140,9 @@ func (m *mockCampaignRepoForInvites) ListPublic(context.Context, int) ([]Campaig
 	return nil, nil
 }
 func (m *mockCampaignRepoForInvites) Update(context.Context, *Campaign) error { return nil }
+func (m *mockCampaignRepoForInvites) UpdateDetails(context.Context, string, *string, *string, *bool) error {
+	return nil
+}
 func (m *mockCampaignRepoForInvites) MoveToTrash(context.Context, string, string, string, time.Time) error {
 	return nil
 }

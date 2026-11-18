@@ -27,6 +27,10 @@ type CampaignRepository interface {
 	CountBySystem(ctx context.Context, query string) ([]SystemCount, error)
 	ListPublic(ctx context.Context, limit int) ([]Campaign, error)
 	Update(ctx context.Context, campaign *Campaign) error
+	// UpdateDetails writes only the columns it is given (nil leaves a column
+	// alone), so a rename or a public/private flip cannot overwrite a
+	// description saved a moment earlier somewhere else.
+	UpdateDetails(ctx context.Context, id string, name, slug *string, isPublic *bool) error
 	// MoveToTrash marks a campaign deleted without removing anything; Undo is
 	// RestoreFromTrash. See trash_repository.go.
 	MoveToTrash(ctx context.Context, id, byUserID, byName string, at time.Time) error
@@ -315,6 +319,33 @@ func (r *campaignRepository) Update(ctx context.Context, campaign *Campaign) err
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
+		return apperror.NewNotFound("campaign not found")
+	}
+	return nil
+}
+
+// UpdateDetails sets just the named columns of one campaign.
+func (r *campaignRepository) UpdateDetails(ctx context.Context, id string, name, slug *string, isPublic *bool) error {
+	sets := []string{"updated_at = NOW()"}
+	var args []any
+	if name != nil {
+		sets = append(sets, "name = ?")
+		args = append(args, *name)
+	}
+	if slug != nil {
+		sets = append(sets, "slug = ?")
+		args = append(args, *slug)
+	}
+	if isPublic != nil {
+		sets = append(sets, "is_public = ?")
+		args = append(args, *isPublic)
+	}
+	args = append(args, id)
+	result, err := r.db.ExecContext(ctx, `UPDATE campaigns SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)
+	if err != nil {
+		return fmt.Errorf("updating campaign details: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
 		return apperror.NewNotFound("campaign not found")
 	}
 	return nil

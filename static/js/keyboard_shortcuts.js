@@ -5,6 +5,7 @@
  *   - Ctrl+N / Cmd+N: New entity (within current campaign)
  *   - Ctrl+E / Cmd+E: Edit current entity (on entity show pages)
  *   - Ctrl+S / Cmd+S: Save (triggers visible save button or fires chronicle:save)
+ *   - "/": Find, on a Manage page that has the Find button (see below)
  *
  * Shortcuts are suppressed when the user is typing in an input, textarea,
  * or contenteditable element (except Ctrl+S which always works).
@@ -90,6 +91,18 @@
 
   document.addEventListener('keydown', function (e) {
     var mod = e.ctrlKey || e.metaKey;
+    // "/" is Find, but only where a page offers the Find button (the owner's
+    // Manage pages) and never while a letter is being typed: it does nothing
+    // and leaves the key alone in a field, so the slash is typed. It presses
+    // the button, so the shortcut and the button share one handler. This
+    // listener lives on the document for good, so it survives boosted swaps.
+    if (!mod && !e.altKey && e.key === '/' && !e.defaultPrevented) {
+      var find = document.querySelector('[data-manage-find]');
+      if (!find || isTyping()) return;
+      e.preventDefault();
+      find.click();
+      return;
+    }
     if (!mod) return;
 
     switch (e.key) {

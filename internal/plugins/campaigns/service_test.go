@@ -26,6 +26,7 @@ type mockCampaignRepo struct {
 	listAllFn               func(ctx context.Context, opts ListOptions) ([]Campaign, int, error)
 	listPublicFn            func(ctx context.Context, limit int) ([]Campaign, error)
 	updateFn                func(ctx context.Context, campaign *Campaign) error
+	updateDetailsFn         func(ctx context.Context, id string, name, slug *string, isPublic *bool) error
 	moveToTrashFn           func(ctx context.Context, id, byUserID, byName string, at time.Time) error
 	restoreFn               func(ctx context.Context, id string) error
 	listTrashedFn           func(ctx context.Context) ([]TrashedCampaign, error)
@@ -113,6 +114,13 @@ func (m *mockCampaignRepo) ListPublic(ctx context.Context, limit int) ([]Campaig
 func (m *mockCampaignRepo) Update(ctx context.Context, campaign *Campaign) error {
 	if m.updateFn != nil {
 		return m.updateFn(ctx, campaign)
+	}
+	return nil
+}
+
+func (m *mockCampaignRepo) UpdateDetails(ctx context.Context, id string, name, slug *string, isPublic *bool) error {
+	if m.updateDetailsFn != nil {
+		return m.updateDetailsFn(ctx, id, name, slug, isPublic)
 	}
 	return nil
 }

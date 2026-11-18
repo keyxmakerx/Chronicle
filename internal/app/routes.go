@@ -3047,6 +3047,11 @@ func (a *App) RegisterRoutes() {
 	inviteHandler := campaigns.NewInviteHandler(inviteService, campaignService, a.Config.BaseURL)
 	campaignHandler.SetInviteService(inviteService)
 	campaigns.RegisterInviteRoutes(e, inviteHandler, campaignService, authService)
+	// The desk's People line counts the invitations still waiting.
+	campaignHandler.SetInviteLister(inviteService)
+	// Every Manage page opens with its own desk sentence, worded by the same
+	// service the desk uses.
+	layouts.SetManageSentence(campaignHandler.ManageSentence)
 
 	// Guest codes: the owner's card, and auth's join page redeeming them.
 	// A guest exists only for their campaign, so removing them from it or
@@ -3153,6 +3158,7 @@ func (a *App) RegisterRoutes() {
 	// but don't crash -- the rest of the app keeps running.
 	mediaRepo := media.NewMediaRepository(a.DB)
 	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
+	campaignHandler.RegisterDeskProvider(media.NewDeskProvider(mediaService))
 	if err := mediaService.ValidateMediaPath(); err != nil {
 		slog.Warn("media storage validation failed; uploads may not work",
 			slog.Any("error", err),
@@ -4878,6 +4884,7 @@ func (a *App) RegisterRoutes() {
 	pageSafetyService.AddTrashKind(gameNightTrash{svc: sessionsService, backOn: sessionsHandler.EmailBackOn})
 	pageSafetyService.AddTrashKind(pictureTrash{svc: mediaService})
 	pageSafetyService.AddTrashKind(mapTrash{svc: mapsService})
+	campaignHandler.RegisterDeskProvider(entities.NewDeskProvider(pageSafetyService))
 	pageSafetyHandler := entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService)
 	pageSafetyHandler.SetAuditService(auditService)
 	entities.RegisterPageSafetyRoutes(e, pageSafetyHandler, campaignService, authService)
@@ -4914,6 +4921,7 @@ func (a *App) RegisterRoutes() {
 		pageSafetyService.SetLongTermTrash(playerChangesSvc)
 		adminHandler.SetLongTermTrashSizer(playerChangesSvc)
 		go playerChangesSvc.StartPacker(a.ShutdownCtx)
+		campaignHandler.RegisterDeskProvider(playerchanges.NewDeskProvider(playerChangesSvc))
 	} else {
 		slog.Warn("player changes plugin degraded — What players changed is not available")
 	}
@@ -5435,6 +5443,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
+		campaignHandler.RegisterDeskProvider(ai_workspace.NewDeskProvider(aiConnectorSvc))
 		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheckDid)
 		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)
@@ -6109,16 +6118,26 @@ func (a *App) RegisterRoutes() {
 				}
 				// A member who is not the owner has pins of their own; they
 				// are read for this user only.
+				// The owner's are only Manage tools, which sit outside the
+				// layout, so they go to Pinned after ViewNav, not through it.
 				var pins []string
-				if cc.IsMember && cc.MemberRole < campaigns.RoleOwner && layoutUserID != "" {
+				if cc.IsMember && layoutUserID != "" {
 					if p, err := campaignService.NavPins(reqCtx, cc.Campaign.ID, layoutUserID); err == nil {
 						pins = p
 					} else {
 						slog.Warn("reading member nav pins", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 					}
 				}
-				viewer := campaigns.NavViewer{Owner: navOwner, Access: navAccessFor(cc), Pins: pins}
+				viewerPins := pins
+				if cc.MemberRole >= campaigns.RoleOwner {
+					viewerPins = nil
+				}
+				viewer := campaigns.NavViewer{Owner: navOwner, Access: navAccessFor(cc), Pins: viewerPins}
 				secs := campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)
+				if navOwner {
+					secs = campaigns.AppendManagePins(secs, pins, "/campaigns/"+cc.Campaign.ID,
+						enabledSlugs["media-gallery"], enabledSlugs["sync-api"])
+				}
 				ctx = layouts.SetNavSections(ctx, navSectionViews(secs))
 				ctx = layouts.SetNavDrawer(ctx, buildNavDrawer(in, secs,
 					campaigns.NavDrawerRows(in.layout, in.apps, viewer), navOwner, addonIDs))
@@ -6964,7 +6983,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
 	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},
 	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
-	{Name: "customize-shell", Scripts: []string{"/static/js/widgets/customize_shell.js"}},
+	{Name: "customize-shell", Scripts: []string{"/static/js/find_palette.js", "/static/js/widgets/customize_shell.js"}},
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
 	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/customize_page_editor.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},

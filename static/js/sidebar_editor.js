@@ -1171,7 +1171,7 @@
    * sidebar, or unpins it. Resolves true once the sidebar shows it, false
    * when nothing was saved.
    */
-  function setPersonalPin(key, on, name) {
+  function setPersonalPin(key, on, name, opts) {
     if (pinning || S) return Promise.resolve(false);
     var pins = ownPins().filter(function (k) { return k !== key; });
     if (on) pins.push(key);
@@ -1196,7 +1196,9 @@
           if (top) top.hidden = false;
           playFlip(sidebarEl(), prev, { lift: 'n:' + key });
           var again = sidebarEl().querySelector('[data-nav-pin="' + key.replace(/["\\]/g, '\\$&') + '"]');
-          if (again && !inDrawer()) again.focus({ preventScroll: true });
+          syncManagePins();
+          // A pin pressed on a Manage page keeps focus where it was pressed.
+          if (again && !inDrawer() && !(opts && opts.keepFocus)) again.focus({ preventScroll: true });
           announce(on ? name + ' is pinned to the top of your sidebar.' : name + ' is unpinned.');
           return true;
         }, function () {
@@ -1206,6 +1208,22 @@
       })
       .catch(function (err) { notify(err.message, 'error'); return false; })
       .then(function (ok) { pinning = false; return ok; });
+  }
+
+  /**
+   * Keeps the pin buttons on a Manage page (the desk's lines, a frame's title)
+   * in step with the sidebar, which holds the truth: a pin or unpin made in
+   * the sidebar reads the same on the page without a reload.
+   */
+  function syncManagePins() {
+    var side = sidebarEl();
+    $$('[data-manage-pin]').forEach(function (b) {
+      var key = b.getAttribute('data-manage-pin'), name = b.getAttribute('data-pin-name') || '';
+      var on = !!(side && side.querySelector('[data-nav-pin="' + key.replace(/["\\]/g, '\\$&') + '"][aria-pressed="true"]'));
+      b.setAttribute('aria-pressed', String(on));
+      b.setAttribute('aria-label', on ? 'Unpin ' + name + ' from your sidebar' : 'Pin ' + name + ' to your sidebar');
+      b.setAttribute('title', on ? 'Unpin' : 'Pin to your sidebar');
+    });
   }
 
   /** Whether focus is in the open app drawer, which keeps it there. */
@@ -1334,6 +1352,7 @@
     quickChange: quickChange,
     togglePersonalPin: togglePersonalPin,
     setPersonalPin: setPersonalPin,
+    syncManagePins: syncManagePins,
     refresh: refresh,
     keepInDrawer: keepInDrawer,
     placeBefore: placeBefore,

@@ -815,7 +815,7 @@
       var h = '<div class="cpe-pagehead">' + ic('fa-file-lines') + '<span>';
       if (PV.failed) h += 'The page couldn’t be drawn here, so widgets show their names.';
       else if (!PV.loaded) h += 'Loading a page to show the layout with…';
-      else if (HOME) h += 'Your ' + (KEY === 'dm' ? gmTerm() + ' dashboard' : 'campaign home') + ' as it is drawn, with your own pages';
+      else if (HOME) h += 'Your campaign home as it is drawn, with your own pages';
       else if (CATHOME) h += 'The ' + esc(S.plural || 'category') + ' home as it is drawn, with your own pages';
       else if (!PV.entityId) h += 'No ' + esc((S.plural || 'pages').toLowerCase()) + ' yet, so widgets show example content. Your pages will fill them with their own.';
       else h += 'Shown with ' + esc(pageName()) + ', one of your ' + esc((S.plural || 'pages').toLowerCase());

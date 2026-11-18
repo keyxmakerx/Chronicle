@@ -1,16 +1,14 @@
 package campaigns
 
-import "context"
-
-// needsYou gathers what is waiting on the owner for the Overview card. It may
-// only use data campaigns already reaches through its own service and
-// interfaces, never another plugin's repository. Today none of the candidates
-// (join requests, a game system update awaiting approval, Foundry not seen
-// for a week, storage near its limit) has such a source: campaigns has no
-// join-request concept, and the Foundry and media plugins expose no interface
-// to it. Each lands here when its source exists.
-//
-// TODO(#851): add entries as their data becomes reachable through an interface.
-func (h *Handler) needsYou(_ context.Context, _ *CampaignContext) []NeedsYouItem {
-	return nil
+// NeedsYouItem is one thing waiting on the owner, drawn as a row of the
+// desk's "Needs you" sheet: a bold lead, the rest of the sentence, and the
+// quiet word that goes to it.
+type NeedsYouItem struct {
+	Lead   string // the words that say what, in bold
+	Rest   string // the rest of the sentence
+	Action string // the quiet word's text
+	URL    string // where it goes
+	// State is the dot before the row: "warn" or "" for a plain dot. Amber
+	// here means state only; the Director's amber edge is never used.
+	State string
 }

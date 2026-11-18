@@ -40,6 +40,9 @@ type CampaignService interface {
 	CountBySystem(ctx context.Context, query string) ([]SystemCount, error)
 	ListPublic(ctx context.Context, limit int) ([]Campaign, error)
 	Update(ctx context.Context, campaignID string, input UpdateCampaignInput) (*Campaign, error)
+	// UpdateDetails is the partial save behind the desk's name and public
+	// blanks: absent keys keep what is stored, including the description.
+	UpdateDetails(ctx context.Context, campaignID string, input UpdateCampaignDetailsInput) (*Campaign, error)
 	// MoveToTrash is what "delete campaign" means: the campaign disappears for
 	// everyone and waits in the site Trash (trash_repository.go). PurgeTrashed
 	// is the only real delete.
@@ -519,7 +522,22 @@ func (s *campaignService) UpdateNavPins(ctx context.Context, cc *CampaignContext
 		return nil, apperror.NewForbidden("only members of this campaign can pin rows")
 	}
 	if cc.MemberRole >= RoleOwner {
-		return nil, apperror.NewForbidden("the owner pins rows for everyone in the sidebar editor")
+		// The owner pins rows for everyone in the sidebar editor; for
+		// themselves they may pin only Manage tools, which the editor's
+		// layout does not hold. Anything else is still refused.
+		for _, key := range pins {
+			if !strings.HasPrefix(key, navManagePrefix) {
+				return nil, apperror.NewForbidden("the owner pins rows for everyone in the sidebar editor; only Manage tools can be pinned for yourself")
+			}
+		}
+		clean, err := CleanOwnerNavPins(pins)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.repo.SetMemberNavPins(ctx, cc.Campaign.ID, userID, clean); err != nil {
+			return nil, apperror.NewInternal(err)
+		}
+		return clean, nil
 	}
 	if s.navSections == nil {
 		return nil, apperror.NewInternal(fmt.Errorf("nav sections source is not wired"))
@@ -798,6 +816,49 @@ func (s *campaignService) Update(ctx context.Context, campaignID string, input U
 		return nil, apperror.NewInternal(fmt.Errorf("updating campaign: %w", err))
 	}
 
+	return campaign, nil
+}
+
+// UpdateDetails merges the name and public flag the caller named over the
+// stored campaign and writes only those. A read of the stored campaign
+// settles the slug and whether the name really changed; the description and
+// every column the caller did not name are never written.
+func (s *campaignService) UpdateDetails(ctx context.Context, campaignID string, input UpdateCampaignDetailsInput) (*Campaign, error) {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate the merged name, not the raw input: an absent name is not an
+	// empty one.
+	name := strings.TrimSpace(input.Name.Val(campaign.Name))
+	if name == "" {
+		return nil, apperror.NewBadRequest("campaign name is required")
+	}
+	if len(name) > 200 {
+		return nil, apperror.NewBadRequest("campaign name must be at most 200 characters")
+	}
+
+	var namePtr, slugPtr *string
+	if name != campaign.Name {
+		slug, err := s.generateSlug(ctx, name)
+		if err != nil {
+			return nil, apperror.NewInternal(fmt.Errorf("generating slug: %w", err))
+		}
+		namePtr, slugPtr = &name, &slug
+		campaign.Name, campaign.Slug = name, slug
+	}
+	var publicPtr *bool
+	if want, ok := input.IsPublic.Get(); ok && want != campaign.IsPublic {
+		publicPtr = &want
+		campaign.IsPublic = want
+	}
+	if namePtr == nil && publicPtr == nil {
+		return campaign, nil
+	}
+	if err := s.repo.UpdateDetails(ctx, campaignID, namePtr, slugPtr, publicPtr); err != nil {
+		return nil, err
+	}
 	return campaign, nil
 }
 

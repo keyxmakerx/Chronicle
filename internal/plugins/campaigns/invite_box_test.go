@@ -46,4 +46,3 @@ func TestInviteBoxListsEverythingWaiting(t *testing.T) {
 	}
 }
 
-func strPtr(s string) *string { return &s }

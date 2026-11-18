@@ -143,11 +143,16 @@ type Handler struct {
 	systemAddonEnabler SystemAddonEnabler
 	mediaUploader      MediaUploader
 	smtpChecker        SMTPChecker
-	// invites turns "add a member" into an invitation the person accepts.
+	// invites turns "add a member" into an invitation the person accepts, and
+	// counts the ones still waiting for the desk's People line (nil leaves the
+	// count out).
 	invites InviteService
 	// box is the People page's Invite someone box (SetInviteBox).
 	box          inviteBoxDeps
 	systemLister SystemLister
+	// desk draws the owner's home page and holds the providers other plugins
+	// register for their lines (RegisterDeskProvider).
+	desk DeskService
 	// extraSettingsTabs holds factory functions other plugins
 	// contribute via RegisterSettingsTab (see settings_tabs.go).
 	// Each factory is invoked per-request with the live
@@ -174,7 +179,7 @@ type Handler struct {
 
 // NewHandler creates a new campaign handler.
 func NewHandler(service CampaignService) *Handler {
-	h := &Handler{service: service}
+	h := &Handler{service: service, desk: NewDeskService()}
 	// The look is the campaign's own data, so it registers here and always
 	// applies first; other plugins register their sections after it.
 	h.RegisterCustomizeSection(CustomizeSection{Key: customizeSectionLook, Apply: h.applyLookSection})
@@ -220,7 +225,15 @@ func (h *Handler) SetAddonLister(lister AddonLister) {
 // it reads is built after the campaign handler.
 func (h *Handler) SetFoundryConnector(c FoundryConnector) {
 	h.foundryConnector = c
+	if c != nil {
+		// The desk's Foundry line reads the same connector as the Foundry page.
+		h.desk.Register(foundryDeskProvider{c: c})
+	}
 }
+
+// SetInviteLister lets the desk say how many invitations still wait. The same
+// service the invite routes use.
+func (h *Handler) SetInviteLister(svc InviteService) { h.invites = svc }
 
 // SetSystemAddonEnabler sets the addon enabler for auto-enabling game system
 // addons when the user changes the Game System dropdown.
@@ -951,24 +964,54 @@ func (h *Handler) ResetDashboardLayout(c *echo.Context) error {
 
 // --- Owner Dashboard ---
 
-// OwnerDashboard renders the owner-only management dashboard (GET /campaigns/:id/dashboard).
+// OwnerDashboard renders the owner's desk (GET /campaigns/:id/dashboard):
+// plain sentences in groups, with live numbers. The route is owner-only; the
+// check here is the same belt and braces the other owner pages carry, since
+// every number on the desk is the owner's alone.
 func (h *Handler) OwnerDashboard(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-
-	// ADR-057 slice 2 (P1FIX): see Show's identical comment above — the owner
-	// dashboard's recent-entities list must use the same promoted role.
-	var recentEntities []RecentEntity
-	if h.recentLister != nil {
-		recentEntities, _ = h.recentLister.ListRecentForDashboard(
-			c.Request().Context(), cc.Campaign.ID, int(cc.VisibilityRole()), auth.GetUserID(c), 8,
-		)
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only the campaign owner can open the desk")
 	}
+	ctx := c.Request().Context()
+	in := h.deskInputs(c, cc)
+	desk := h.desk.Build(ctx, DeskRequest{CampaignID: cc.Campaign.ID, OwnerID: auth.GetUserID(c), Now: time.Now()}, in)
+	return middleware.Render(c, http.StatusOK, DeskPage(cc, desk))
+}
 
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, OwnerDashboardPage(cc, recentEntities, h.needsYou(c.Request().Context(), cc), csrfToken))
+// RegisterDeskProvider lets another plugin fill one line of the desk with its
+// own numbers, the way RegisterSettingsTab lets it add a settings tab.
+func (h *Handler) RegisterDeskProvider(p DeskProvider) { h.desk.Register(p) }
+
+// UpdateDetailsAPI saves the desk's name and public blanks (PUT
+// /campaigns/:id/details). It is a partial update: a key the body does not
+// carry keeps what is stored. Owner only, like every other campaign setting.
+func (h *Handler) UpdateDetailsAPI(c *echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change these details")
+	}
+	var in UpdateCampaignDetailsInput
+	if err := c.Bind(&in); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if !in.Name.Present() && !in.IsPublic.Present() {
+		return apperror.NewBadRequest("nothing to change")
+	}
+	camp, err := h.service.UpdateDetails(c.Request().Context(), cc.Campaign.ID, in)
+	if err != nil {
+		return err
+	}
+	h.logAudit(c, cc.Campaign.ID, "campaign.details.updated", map[string]any{
+		"name_sent": in.Name.Present(), "is_public_sent": in.IsPublic.Present(), "is_public": camp.IsPublic,
+	})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "name": camp.Name, "isPublic": camp.IsPublic})
 }
 
 // GetOwnerDashboardLayout returns the owner dashboard layout JSON (GET /campaigns/:id/owner-dashboard-layout).

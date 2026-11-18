@@ -384,73 +384,17 @@
     }
 
     /* ---------- Find a setting ---------- */
+    // The field itself is shared with the Manage desk (find_palette.js); this
+    // frame only says what it may find and when "/" is its own.
     var palette = null;
-    function words(s) { return String(s || '').toLowerCase(); }
     function openFind() {
-      if (palette) return;
-      var opener = document.activeElement;
-      palette = document.createElement('div');
-      palette.className = 'czs-scrim';
-      palette.innerHTML = '<div class="czs-palette" role="dialog" aria-modal="true" aria-label="Find a setting">' +
-        '<div class="czs-q"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>' +
-        '<input type="text" placeholder="Find a setting, like “font” or “Places”" aria-label="Find a setting" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="czs-find-res"><kbd>Esc</kbd></div>' +
-        '<div class="czs-res" id="czs-find-res" role="listbox"></div></div>';
-      document.body.appendChild(palette);
-      var input = palette.querySelector('input'), res = palette.querySelector('.czs-res'), sel = 0, shown = [];
-      function draw() {
-        var q = words(input.value).trim().split(/\s+/).filter(Boolean);
-        // A hit in the label ranks above one only in the path or the
-        // section's other words, so "colour" puts Colours first.
-        shown = finds.map(function (f, i) {
-          var hay = words(f.label + ' ' + f.path + ' ' + (f.words || ''));
-          if (!q.every(function (w) { return hay.indexOf(w) >= 0; })) return null;
-          var lab = words(f.label), rank = 2;
-          if (q.length && q.every(function (w) { return lab.indexOf(w) >= 0; })) rank = lab.indexOf(q[0]) === 0 ? 0 : 1;
-          return { f: f, rank: rank, i: i };
-        }).filter(Boolean).sort(function (a, b) {
-          return a.rank - b.rank || a.i - b.i;
-        }).slice(0, 40).map(function (r) { return r.f; });
-        sel = Math.min(sel, Math.max(0, shown.length - 1));
-        res.innerHTML = shown.length ? shown.map(function (f, i) {
-          var icon = String(f.icon || 'fa-sliders').replace(/^fa-solid\s+/, '');
-          return '<a href="' + esc(f.href) + '" role="option" id="czs-f-' + i + '" aria-selected="' + (i === sel) + '">' +
-            '<span class="czs-ic"><i class="fa-solid ' + esc(icon) + '" aria-hidden="true"></i></span>' +
-            '<span><span class="czs-t">' + esc(f.label) + '</span><span class="czs-p">' + esc(f.path) + '</span></span></a>';
-        }).join('') : '<p class="czs-none">Nothing matches. Try another word.</p>';
-        input.setAttribute('aria-activedescendant', shown.length ? 'czs-f-' + sel : '');
-      }
-      function close() {
-        if (!palette) return;
-        palette.remove(); palette = null;
-        if (opener && opener.focus) opener.focus();
-      }
-      function go(f) {
-        close();
-        var here = location.pathname, to = f.href.split('#');
-        if (to[0] === here && to[1]) { location.hash = to[1]; return; }
-        location.href = f.href;
-      }
-      input.addEventListener('input', function () { sel = 0; draw(); });
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(sel + 1, shown.length - 1); draw(); scrollSel(); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(sel - 1, 0); draw(); scrollSel(); }
-        else if (e.key === 'Enter') { e.preventDefault(); if (shown[sel]) go(shown[sel]); }
+      if (palette || !Chronicle.findPalette) return;
+      palette = Chronicle.findPalette.open({
+        finds: finds,
+        label: 'Find a setting',
+        placeholder: 'Find a setting, like \u201cfont\u201d or \u201cPlaces\u201d',
+        onClose: function () { palette = null; }
       });
-      function scrollSel() { var a = res.querySelector('[aria-selected="true"]'); if (a) a.scrollIntoView({ block: 'nearest' }); }
-      res.addEventListener('click', function (e) {
-        var a = e.target.closest('a');
-        if (!a) return;
-        e.preventDefault();
-        var i = Number(a.id.replace('czs-f-', ''));
-        if (shown[i]) go(shown[i]);
-      });
-      palette.addEventListener('pointerdown', function (e) { if (e.target === palette) close(); });
-      palette.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
-        if (e.key === 'Tab') { e.preventDefault(); input.focus(); }
-      });
-      draw();
-      input.focus();
     }
 
     /* ---------- Wiring ---------- */

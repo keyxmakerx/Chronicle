@@ -93,8 +93,8 @@ func settingsTabIDsJSON(tabs []SettingsTab) string {
 // inside each tab's own Content closure.
 templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken, errMsg, activeTab string, tabs []SettingsTab) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Settings", Line: "settings"}) {
 		<div
-			class="max-w-4xl mx-auto"
 			x-data={ fmt.Sprintf(`{
 				tab: '%s',
 				ids: %s,
@@ -110,7 +110,6 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 				}
 			}`, jsEsc(activeTab), settingsTabIDsJSON(tabs)) }
 		>
-			@layouts.ManageHeader("Settings")
 			if errMsg != "" {
 				<div class="alert-error mb-4" role="alert">{ errMsg }</div>
 			}
@@ -147,6 +146,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 				</div>
 			}
 		</div>
+		}
 	}
 }
 

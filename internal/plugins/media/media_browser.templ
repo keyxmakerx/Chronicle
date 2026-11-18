@@ -57,8 +57,7 @@ func mediaUsageLabel(t string) string {
 
 // campaignMediaContent renders the media browser body.
 templ campaignMediaContent(cc *campaigns.CampaignContext, data CampaignMediaPageData) {
-	<div class="max-w-screen-2xl mx-auto py-6 px-4">
-		@layouts.ManageHeader("Media")
+	@layouts.ManageFrame(layouts.ManageFrameData{Title: "Media", Line: "media"}) {
 		<!-- Header + upload zone -->
 		<div
 			x-data={ fmt.Sprintf("mediaUploader('%s', '%s')", cc.Campaign.ID, data.CSRFToken) }
@@ -188,7 +187,7 @@ templ campaignMediaContent(cc *campaigns.CampaignContext, data CampaignMediaPage
 				</div>
 			}
 		}
-	</div>
+	}
 }
 
 // mediaCard renders a single media file in the grid view.
