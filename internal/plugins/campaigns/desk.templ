@@ -2,8 +2,8 @@
 // sentences in groups. Every control inside it carries its own inline handler
 // (deskBlankCall), built Go-side, because the page arrives by a boosted swap
 // where a script tag or a delegated listener may never run. The behaviour
-// itself is static/js/desk_blank.js, loaded by the layout outside the swapped
-// region.
+// itself is static/js/desk_blank.js, which the handler loads on first use so
+// the page stays inside the layout's script budget.
 
 package campaigns
 
