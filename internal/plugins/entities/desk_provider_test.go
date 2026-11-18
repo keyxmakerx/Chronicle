@@ -18,7 +18,7 @@ type deskTrashStub struct {
 
 func (s deskTrashStub) ListTrash(context.Context, string) ([]TrashItem, error) { return s.pages, nil }
 func (s deskTrashStub) ListOtherTrash(context.Context, string) []TrashedThing  { return s.others }
-func (s deskTrashStub) RetentionDays(context.Context) int                       { return s.days }
+func (s deskTrashStub) RetentionDays(context.Context) int                      { return s.days }
 
 func TestDeskProvider_Fold(t *testing.T) {
 	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
