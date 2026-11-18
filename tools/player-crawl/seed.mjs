@@ -93,6 +93,12 @@ export async function seed(base, log = console.log) {
   for (const [em, role] of [[playerEmail, 'player'], [player2Email, 'player'], [scribeEmail, 'scribe']]) {
     r = await owner.post(`${C}/members`, { body: { email: em, role, csrf_token: owner.csrf() } });
     if (r.status >= 400) throw new Error(`add ${role}: ${r.status}`);
+    // Nobody joins without accepting, so each one opens their invite link.
+    const link = (r.text.match(/\/invites\/accept\?token=[A-Za-z0-9_-]+/) || [])[0];
+    if (!link) throw new Error(`add ${role}: no invite link came back`);
+    const who = { [playerEmail]: player, [player2Email]: player2, [scribeEmail]: scribe }[em];
+    const a = await who.get(link);
+    if (a.status >= 400 || !a.text.includes('Welcome!')) throw new Error(`accept ${role}: ${a.status}`);
   }
 
   const ids = { cid, C };

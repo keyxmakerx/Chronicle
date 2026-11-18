@@ -366,7 +366,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 // invitations) take the wide column and the ways in and out of the
 // campaign (guest codes, invite link, transfer) sit beside them, so the two
 // columns carry similar weight.
-templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
+templ peopleSections(cc *CampaignContext, v MemberListView, transfer *OwnershipTransfer, smtpConfigured bool) {
 	if !smtpConfigured {
 		<div class="alert-warning mb-6">
 			<i class="fa-solid fa-triangle-exclamation mr-2"></i>
@@ -375,7 +375,7 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 	}
 	<div class="manage-split">
 		<div class="manage-split-main space-y-6">
-			@MemberListComponent(cc, members, csrfToken, errMsg)
+			@MemberListComponent(cc, v)
 
 			// Invitations (HTMX lazy load).
 			<div class="card p-6">
@@ -383,7 +383,7 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 					<i class="fa-solid fa-envelope mr-2 text-accent"></i> Invitations
 				</h2>
 				<p class="text-sm text-fg-secondary mb-4">Invite players and scribes by email. Invitations expire after 7 days.</p>
-				<div hx-get={ fmt.Sprintf("/campaigns/%s/invites/page", cc.Campaign.ID) } hx-trigger="load" hx-swap="innerHTML">
+				<div hx-get={ fmt.Sprintf("/campaigns/%s/invites/page", cc.Campaign.ID) } hx-trigger="load, invites-changed from:body" hx-swap="innerHTML">
 					<div class="text-center py-4 text-fg-muted text-sm">Loading invitations...</div>
 				</div>
 			</div>
@@ -418,7 +418,7 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 				navigator.clipboard.writeText(this.url);
 				Chronicle.notify('Link copied!', 'success');
 			}
-		}`, func() string { if cc.Campaign.JoinCode != nil { return *cc.Campaign.JoinCode } else { return "" } }(), func() string { if cc.Campaign.JoinCode != nil { return fmt.Sprintf("%s/join/%s", "", *cc.Campaign.JoinCode) } else { return "" } }(), cc.Campaign.ID, cc.Campaign.ID) }>
+		}`, func() string { if cc.Campaign.JoinCode != nil { return *cc.Campaign.JoinCode } else { return "" } }(), func() string { if cc.Campaign.JoinCode != nil { return fmt.Sprintf("%s/join/%s", "", *cc.Campaign.JoinCode) } else { return "" } }(), cc.Campaign.ID, cc.Campaign.ID) } @join-link-replaced.window="code = $event.detail.code; url = $event.detail.url">
 			<h2 class="text-lg font-semibold text-fg mb-2">Invite Link</h2>
 			<p class="text-sm text-fg-secondary mb-3">Generate a shareable link anyone can use to join your campaign.</p>
 			<div x-show="code" class="flex items-center gap-2">
@@ -442,13 +442,13 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 					<strong>Transfer pending.</strong> Waiting for the new owner to accept. Expires { transfer.ExpiresAt.Format("Jan 2, 2006 3:04 PM") }.
 				</div>
 				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID)) } hx-post={ fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID) }>
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
 					<button type="submit" class="btn-secondary text-sm">Cancel Transfer</button>
 				</form>
 			} else {
 				<p class="text-sm text-fg-secondary mb-4">Transfer ownership to another user. They will receive a confirmation email (if SMTP is configured).</p>
 				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/transfer", cc.Campaign.ID)) } hx-post={ fmt.Sprintf("/campaigns/%s/transfer", cc.Campaign.ID) } class="flex items-end space-x-4">
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
 					<div class="flex-1">
 						<label for="transfer-email" class="block text-sm font-medium text-fg-body mb-1">New owner's email</label>
 						<input type="email" id="transfer-email" name="email" required class="input w-full" placeholder="user@example.com"/>

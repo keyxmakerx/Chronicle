@@ -14,6 +14,7 @@ import (
 // --- Mock Repository ---
 
 type mockCampaignRepo struct {
+	setJoinCodeFn func(ctx context.Context, campaignID, code string) error
 	ownerPresence           map[string]OwnerPresence
 	ownedByUser             []OwnedCampaign
 	memberCampaignIDs       []string
@@ -361,7 +362,12 @@ func (m *mockCampaignRepo) ForceTransferOwnership(ctx context.Context, campaignI
 
 func (m *mockCampaignRepo) ArchiveCampaign(context.Context, string) error   { return nil }
 func (m *mockCampaignRepo) UnarchiveCampaign(context.Context, string) error { return nil }
-func (m *mockCampaignRepo) SetJoinCode(context.Context, string, string) error { return nil }
+func (m *mockCampaignRepo) SetJoinCode(ctx context.Context, campaignID, code string) error {
+	if m.setJoinCodeFn != nil {
+		return m.setJoinCodeFn(ctx, campaignID, code)
+	}
+	return nil
+}
 func (m *mockCampaignRepo) ClearJoinCode(context.Context, string) error       { return nil }
 func (m *mockCampaignRepo) FindByJoinCode(ctx context.Context, code string) (*Campaign, error) {
 	if m.findByJoinCodeFn != nil {
@@ -843,84 +849,6 @@ func TestListPublic_DefaultsZero(t *testing.T) {
 // Membership Tests
 // ============================================================
 
-func TestAddMember_Success(t *testing.T) {
-	var capturedMember *CampaignMember
-	repo := &mockCampaignRepo{
-		addMemberFn: func(_ context.Context, m *CampaignMember) error {
-			capturedMember = m
-			return nil
-		},
-	}
-	users := &mockUserFinder{
-		findByEmailFn: func(_ context.Context, email string) (*MemberUser, error) {
-			return &MemberUser{ID: "user-2", Email: email}, nil
-		},
-	}
-	svc := newTestCampaignService(repo, users)
-	err := svc.AddMember(context.Background(), "camp-1", "player@example.com", RolePlayer)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if capturedMember == nil {
-		t.Fatal("AddMember was not called")
-	}
-	if capturedMember.Role != RolePlayer {
-		t.Errorf("expected Player role, got %v", capturedMember.Role)
-	}
-	if capturedMember.UserID != "user-2" {
-		t.Errorf("expected user-2, got %q", capturedMember.UserID)
-	}
-}
-
-func TestAddMember_InvalidRole(t *testing.T) {
-	svc := newTestCampaignService(&mockCampaignRepo{}, &mockUserFinder{})
-	err := svc.AddMember(context.Background(), "camp-1", "test@example.com", RoleNone)
-	assertAppError(t, err, 400)
-}
-
-func TestAddMember_OwnerRoleForbidden(t *testing.T) {
-	svc := newTestCampaignService(&mockCampaignRepo{}, &mockUserFinder{})
-	err := svc.AddMember(context.Background(), "camp-1", "test@example.com", RoleOwner)
-	assertAppError(t, err, 400)
-}
-
-func TestAddMember_UserNotFound(t *testing.T) {
-	svc := newTestCampaignService(&mockCampaignRepo{}, &mockUserFinder{})
-	err := svc.AddMember(context.Background(), "camp-1", "nobody@example.com", RolePlayer)
-	assertAppError(t, err, 400)
-}
-
-func TestAddMember_AlreadyMember(t *testing.T) {
-	repo := &mockCampaignRepo{
-		findMemberFn: func(_ context.Context, _, _ string) (*CampaignMember, error) {
-			return &CampaignMember{Role: RolePlayer}, nil
-		},
-	}
-	users := &mockUserFinder{
-		findByEmailFn: func(_ context.Context, _ string) (*MemberUser, error) {
-			return &MemberUser{ID: "user-2"}, nil
-		},
-	}
-	svc := newTestCampaignService(repo, users)
-	err := svc.AddMember(context.Background(), "camp-1", "existing@example.com", RolePlayer)
-	assertAppError(t, err, 409)
-}
-
-func TestAddMember_NormalizesEmail(t *testing.T) {
-	var capturedEmail string
-	users := &mockUserFinder{
-		findByEmailFn: func(_ context.Context, email string) (*MemberUser, error) {
-			capturedEmail = email
-			return &MemberUser{ID: "user-2", Email: email}, nil
-		},
-	}
-	svc := newTestCampaignService(&mockCampaignRepo{}, users)
-	_ = svc.AddMember(context.Background(), "camp-1", "  TEST@Example.COM  ", RoleScribe)
-	if capturedEmail != "test@example.com" {
-		t.Errorf("expected normalized email 'test@example.com', got %q", capturedEmail)
-	}
-}
-
 func TestRemoveMember_Success(t *testing.T) {
 	removeCalled := false
 	repo := &mockCampaignRepo{
@@ -1007,9 +935,16 @@ func TestUpdateMemberRole_CannotChangeOwnerRole(t *testing.T) {
 // Ownership Transfer Tests
 // ============================================================
 
+// targetIsMember answers every membership lookup with a player, for the
+// handover tests whose target has to be in the campaign already.
+func targetIsMember(_ context.Context, _, userID string) (*CampaignMember, error) {
+	return &CampaignMember{UserID: userID, Role: RolePlayer}, nil
+}
+
 func TestInitiateTransfer_Success(t *testing.T) {
 	var capturedTransfer *OwnershipTransfer
 	repo := &mockCampaignRepo{
+		findMemberFn: targetIsMember,
 		createTransferFn: func(_ context.Context, tr *OwnershipTransfer) error {
 			capturedTransfer = tr
 			return nil
@@ -1061,6 +996,7 @@ func TestInitiateTransfer_TargetNotFound(t *testing.T) {
 
 func TestInitiateTransfer_AlreadyPending(t *testing.T) {
 	repo := &mockCampaignRepo{
+		findMemberFn: targetIsMember,
 		findTransferByCampaignFn: func(_ context.Context, _ string) (*OwnershipTransfer, error) {
 			return &OwnershipTransfer{ID: "existing"}, nil
 		},
@@ -1078,6 +1014,7 @@ func TestInitiateTransfer_AlreadyPending(t *testing.T) {
 func TestInitiateTransfer_SendsEmailWhenConfigured(t *testing.T) {
 	emailSent := false
 	repo := &mockCampaignRepo{
+		findMemberFn: targetIsMember,
 		findByIDFn: func(_ context.Context, _ string) (*Campaign, error) {
 			return &Campaign{ID: "camp-1", Name: "Test Campaign", Settings: "{}", SidebarConfig: "{}"}, nil
 		},
@@ -1106,6 +1043,7 @@ func TestInitiateTransfer_SendsEmailWhenConfigured(t *testing.T) {
 
 func TestInitiateTransfer_EmailFailureNonFatal(t *testing.T) {
 	repo := &mockCampaignRepo{
+		findMemberFn: targetIsMember,
 		findByIDFn: func(_ context.Context, _ string) (*Campaign, error) {
 			return &Campaign{ID: "camp-1", Name: "Test", Settings: "{}", SidebarConfig: "{}"}, nil
 		},

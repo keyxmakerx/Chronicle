@@ -150,6 +150,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// Member management (Owner only).
 	cg.POST("/members", h.AddMember, RequireRole(RoleOwner))
 	cg.DELETE("/members/:uid", h.RemoveMember, RequireRole(RoleOwner))
+	cg.POST("/members/removed/:uid/allow", h.AllowMemberBack, RequireRole(RoleOwner))
 	cg.PUT("/members/:uid/role", h.UpdateRole, RequireRole(RoleOwner))
 	cg.PUT("/members/:uid/character", h.UpdateMemberCharacterAPI, RequireRole(RoleOwner))
 

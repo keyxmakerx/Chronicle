@@ -3045,6 +3045,7 @@ func (a *App) RegisterRoutes() {
 	inviteRepo := campaigns.NewInviteRepository(a.DB)
 	inviteService := campaigns.NewInviteService(inviteRepo, campaignRepo, smtpService, a.Config.BaseURL)
 	inviteHandler := campaigns.NewInviteHandler(inviteService, campaignService, a.Config.BaseURL)
+	campaignHandler.SetInviteService(inviteService)
 	campaigns.RegisterInviteRoutes(e, inviteHandler, campaignService, authService)
 
 	// Guest codes: the owner's card, and auth's join page redeeming them.

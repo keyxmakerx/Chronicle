@@ -708,6 +708,7 @@ type CampaignSettings struct {
 	AccentAction      string       `json:"accent_action,omitempty"`       // "Action highlight" slot: primary buttons, hover/press states, FABs. Empty = inherit AccentColor.
 	AccentApp         string       `json:"accent_app,omitempty"`          // "App accent" slot: per-app identity — character pages, calendar app, other apps. Empty = inherit AccentSurface1, then AccentColor.
 	DmGrantIDs        []string     `json:"dm_grant_ids,omitempty"`        // User IDs granted dm_only visibility.
+	RemovedMemberIDs  []string     `json:"removed_member_ids,omitempty"`  // People the owner removed; the join link turns them away.
 	BrandName         string       `json:"brand_name,omitempty"`          // Custom sidebar brand name (replaces campaign name).
 	BrandLogo         string       `json:"brand_logo,omitempty"`          // Media path for brand logo image.
 	TopbarStyle       *TopbarStyle   `json:"topbar_style,omitempty"`        // Topbar visual customization.

@@ -10,27 +10,36 @@ import (
 
 // CampaignMembersPage renders the People page: the one place the owner
 // manages members, invites and ownership.
-templ CampaignMembersPage(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
+templ CampaignMembersPage(cc *CampaignContext, v MemberListView, transfer *OwnershipTransfer, smtpConfigured bool) {
 	@layouts.App(cc.Campaign.Name + " - People") {
 		<div class="max-w-4xl min-[1600px]:max-w-screen-2xl mx-auto">
 			@layouts.ManageHeader("People")
-			@peopleSections(cc, members, transfer, csrfToken, errMsg, smtpConfigured)
+			@peopleSections(cc, v, transfer, smtpConfigured)
 		</div>
 	}
 }
 
 // MemberListComponent renders the member list and add form (HTMX partial swap target).
-templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfToken, errMsg string) {
+templ MemberListComponent(cc *CampaignContext, v MemberListView) {
 	<div id="member-list" class="space-y-6">
-		if errMsg != "" {
+		if v.ErrMsg != "" {
 			<div class="alert-error" role="alert">
-				{ errMsg }
+				{ v.ErrMsg }
+			</div>
+		}
+		if v.Notice != "" {
+			<div class="alert-success" role="status">
+				{ v.Notice }
+				if v.NoticeLink != "" {
+					<input type="text" readonly value={ v.NoticeLink } aria-label="Invite link" class="input w-full font-mono text-sm mt-2" onclick="this.select()"/>
+				}
 			</div>
 		}
 		// Add member form (owner only).
 		if cc.MemberRole >= RoleOwner {
 			<div class="card p-6">
-				<h2 class="text-sm font-semibold text-fg mb-3">Add Member</h2>
+				<h2 class="text-sm font-semibold text-fg mb-1">Add a member</h2>
+				<p class="text-xs text-fg-secondary mb-3">They get an invite and join when they accept it.</p>
 				<form
 					method="POST"
 					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) }
@@ -39,7 +48,7 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 					hx-swap="outerHTML"
 					class="flex items-end space-x-4"
 				>
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
 					<div class="flex-1">
 						<label for="member-email" class="block text-xs font-medium text-fg-body mb-1">Email</label>
 						<input type="email" id="member-email" name="email" required class="input w-full" placeholder="player@example.com"/>
@@ -73,9 +82,9 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-edge">
-						if len(members) > 0 {
-							for _, member := range members {
-								@MemberRow(cc, &member, csrfToken)
+						if len(v.Members) > 0 {
+							for _, member := range v.Members {
+								@MemberRow(cc, &member, v.CSRFToken)
 							}
 						} else {
 							<tr>
@@ -98,9 +107,35 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 				</p>
 			}
 		</div>
+		if cc.MemberRole >= RoleOwner && len(v.Removed) > 0 {
+			@removedMembers(cc, v)
+		}
 		if cc.MemberRole >= RoleOwner {
 			@roleGuide()
 		}
+	</div>
+}
+
+// removedMembers lists the people the owner removed. The join link turns
+// each one away until the owner allows them back.
+templ removedMembers(cc *CampaignContext, v MemberListView) {
+	<div class="card p-6">
+		<h2 class="text-sm font-semibold text-fg mb-1">Removed</h2>
+		<p class="text-xs text-fg-secondary mb-3">The join link turns these people away. Allow someone back and the link works for them again.</p>
+		<ul class="divide-y divide-edge">
+			for _, u := range v.Removed {
+				<li class="flex items-center justify-between gap-3 py-2">
+					<span class="text-sm font-medium text-fg min-w-0 truncate">{ u.DisplayName }</span>
+					<button
+						type="button"
+						class="btn-secondary text-xs shrink-0"
+						hx-post={ fmt.Sprintf("/campaigns/%s/members/removed/%s/allow", cc.Campaign.ID, u.ID) }
+						hx-target="#member-list"
+						hx-swap="outerHTML"
+					>Allow back</button>
+				</li>
+			}
+		</ul>
 	</div>
 }
 

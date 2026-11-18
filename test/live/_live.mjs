@@ -168,14 +168,22 @@ export async function newCampaign(who, name) {
   return id;
 }
 
-/** Add `member` to the campaign with a role: player, scribe or owner. */
+/**
+ * Add `member` to the campaign as a player or scribe. Nobody joins without
+ * accepting, so the owner makes the invite and the member opens its link.
+ */
 export async function addMember(owner, campaignId, member, role = 'player') {
   const res = await api(owner.page, `/campaigns/${campaignId}/members`, {
     method: 'POST', form: { email: member.email, role },
     headers: { 'HX-Request': 'true' },
   });
-  assert.ok(res.ok, `adding ${member.email} answered ${res.status}`);
-  assert.ok(typeof res.body === 'string' && res.body.includes(member.name), `${member.name} is not in the member list after adding`);
+  assert.ok(res.ok, `inviting ${member.email} answered ${res.status}`);
+  const link = typeof res.body === 'string' && (res.body.match(/\/invites\/accept\?token=[A-Za-z0-9_-]+/) || [])[0];
+  assert.ok(link, `no invite link came back for ${member.email}`);
+  const back = member.page.url();
+  await member.page.goto(BASE + link);
+  assert.ok(await member.page.getByText('Welcome!').count(), `${member.name} could not accept the invite`);
+  if (back.startsWith(BASE)) await member.page.goto(back);
 }
 
 /** Switch on campaign add-ons by slug ('*' for every non-system add-on). */

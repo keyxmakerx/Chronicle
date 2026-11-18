@@ -143,7 +143,9 @@ type Handler struct {
 	systemAddonEnabler SystemAddonEnabler
 	mediaUploader      MediaUploader
 	smtpChecker        SMTPChecker
-	systemLister       SystemLister
+	// invites turns "add a member" into an invitation the person accepts.
+	invites      InviteService
+	systemLister SystemLister
 	// extraSettingsTabs holds factory functions other plugins
 	// contribute via RegisterSettingsTab (see settings_tabs.go).
 	// Each factory is invoked per-request with the live
@@ -176,6 +178,11 @@ func NewHandler(service CampaignService) *Handler {
 	h.RegisterCustomizeSection(CustomizeSection{Key: customizeSectionLook, Apply: h.applyLookSection})
 	h.RegisterCustomizeSection(CustomizeSection{Key: customizeSectionHomes, Apply: h.applyHomesSection})
 	return h
+}
+
+// SetInviteService wires the invitations the People page's add form sends.
+func (h *Handler) SetInviteService(svc InviteService) {
+	h.invites = svc
 }
 
 // SetGroupService sets the group service for campaign group management.
@@ -1118,11 +1125,7 @@ func (h *Handler) Members(c *echo.Context) error {
 	if cc.MemberRole < RoleOwner {
 		return apperror.NewForbidden("insufficient permissions")
 	}
-	members, err := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
-	if err != nil {
-		return err
-	}
-	return h.renderPeoplePage(c, cc, members, "")
+	return h.renderPeoplePage(c, cc, h.memberListView(c, cc, ""))
 }
 
 // redactMemberEmails blanks email addresses for viewers below Owner, except
@@ -1140,20 +1143,58 @@ func redactMemberEmails(members []CampaignMember, viewer Role, viewerID string) 
 	}
 }
 
+// MemberListView is what the member list draws: the members, the people
+// the owner removed, and one message from the action just taken.
+type MemberListView struct {
+	Members   []CampaignMember
+	Removed   []MemberUser
+	CSRFToken string
+	ErrMsg    string
+	Notice    string
+	// NoticeLink is a link the owner passes on by hand, shown under Notice.
+	NoticeLink string
+}
+
+// memberListView loads the list for the People page. Removed people are the
+// owner's to see.
+func (h *Handler) memberListView(c *echo.Context, cc *CampaignContext, errMsg string) MemberListView {
+	ctx := c.Request().Context()
+	v := MemberListView{CSRFToken: middleware.GetCSRFToken(c), ErrMsg: errMsg}
+	v.Members, _ = h.service.ListMembers(ctx, cc.Campaign.ID)
+	if cc.MemberRole >= RoleOwner {
+		v.Removed, _ = h.service.ListRemovedMembers(ctx, cc.Campaign.ID)
+	}
+	return v
+}
+
 // renderPeoplePage renders the People page. The add-member error path shares
 // it so a failed add redraws the whole page, not a bare list.
-func (h *Handler) renderPeoplePage(c *echo.Context, cc *CampaignContext, members []CampaignMember, errMsg string) error {
+func (h *Handler) renderPeoplePage(c *echo.Context, cc *CampaignContext, v MemberListView) error {
 	ctx := c.Request().Context()
 	transfer, _ := h.service.GetPendingTransfer(ctx, cc.Campaign.ID)
 	smtpConfigured := h.smtpChecker != nil && h.smtpChecker.IsConfigured(ctx)
-	return middleware.Render(c, http.StatusOK, CampaignMembersPage(cc, members, transfer, middleware.GetCSRFToken(c), errMsg, smtpConfigured))
+	return middleware.Render(c, http.StatusOK, CampaignMembersPage(cc, v, transfer, smtpConfigured))
 }
 
-// AddMember adds a user to the campaign (POST /campaigns/:id/members).
+// renderMemberList answers a member action: the list alone for HTMX, the
+// whole page otherwise.
+func (h *Handler) renderMemberList(c *echo.Context, cc *CampaignContext, v MemberListView) error {
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, v))
+	}
+	return h.renderPeoplePage(c, cc, v)
+}
+
+// AddMember invites someone to the campaign by email
+// (POST /campaigns/:id/members). They join when they accept, and the answer
+// is the same whether or not the email has an account.
 func (h *Handler) AddMember(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
+	}
+	if h.invites == nil {
+		return apperror.NewInternal(fmt.Errorf("invite service not wired"))
 	}
 
 	var req AddMemberRequest
@@ -1161,30 +1202,30 @@ func (h *Handler) AddMember(c *echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	role := RoleFromString(req.Role)
-	if err := h.service.AddMember(c.Request().Context(), cc.Campaign.ID, req.Email, role); err != nil {
-		// Re-render with error message.
-		members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
-		errMsg := apperror.UserMessage(err, "failed to add member")
-		if middleware.IsHTMX(c) {
-			return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, middleware.GetCSRFToken(c), errMsg))
-		}
-		return h.renderPeoplePage(c, cc, members, errMsg)
+	ctx := c.Request().Context()
+	invite, err := h.invites.CreateInvite(ctx, cc.Campaign.ID, auth.GetUserID(c), CreateInviteInput{Email: req.Email, Role: req.Role})
+	if err != nil {
+		return h.renderMemberList(c, cc, h.memberListView(c, cc, apperror.UserMessage(err, "failed to send the invite")))
 	}
 
-	h.logAudit(c, cc.Campaign.ID, "member.joined", map[string]any{
+	h.logAudit(c, cc.Campaign.ID, "member.invited", map[string]any{
 		"email": req.Email,
 		"role":  req.Role,
 	})
 
-	// Refresh the member list.
-	members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
-	csrfToken := middleware.GetCSRFToken(c)
-
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, ""))
+	v := h.memberListView(c, cc, "")
+	if h.smtpChecker != nil && h.smtpChecker.IsConfigured(ctx) {
+		v.Notice = "Invite sent. They join when they accept."
+	} else {
+		v.Notice = "Invite made. Email isn't set up here, so send them this link yourself. They join when they accept."
+		v.NoticeLink = fmt.Sprintf("%s/invites/accept?token=%s", h.baseURL, invite.Token)
 	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/members")
+	// The invitations list below the members redraws itself on this.
+	c.Response().Header().Set("HX-Trigger", "invites-changed")
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, v))
+	}
+	return h.renderPeoplePage(c, cc, v)
 }
 
 // RemoveMember removes a user from the campaign (DELETE /campaigns/:id/members/:uid).
@@ -1194,23 +1235,50 @@ func (h *Handler) RemoveMember(c *echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
+	ctx := c.Request().Context()
 	targetUserID := c.Param("uid")
-	if err := h.service.RemoveMember(c.Request().Context(), cc.Campaign.ID, targetUserID); err != nil {
-		members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
-		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := apperror.UserMessage(err, "failed to remove member")
-		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, errMsg))
+	if err := h.service.RemoveMember(ctx, cc.Campaign.ID, targetUserID); err != nil {
+		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, h.memberListView(c, cc, apperror.UserMessage(err, "failed to remove member"))))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "member.left", map[string]any{
 		"target_user_id": targetUserID,
 	})
 
-	members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
-	csrfToken := middleware.GetCSRFToken(c)
-
+	v := h.memberListView(c, cc, "")
+	// Removing someone replaces a live join link; the link card on the page
+	// takes the new one from this event.
+	if fresh, err := h.service.GetByID(ctx, cc.Campaign.ID); err == nil && fresh != nil && fresh.JoinCode != nil && *fresh.JoinCode != "" {
+		v.Notice = "The join link was replaced, so the old one no longer works. Share the new one with anyone still to join."
+		if payload, err := json.Marshal(map[string]any{"join-link-replaced": map[string]string{
+			"code": *fresh.JoinCode,
+			"url":  fmt.Sprintf("%s/join/%s", h.baseURL, *fresh.JoinCode),
+		}}); err == nil {
+			c.Response().Header().Set("HX-Trigger", string(payload))
+		}
+	}
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, ""))
+		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, v))
+	}
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/members")
+}
+
+// AllowMemberBack lets a removed person use the join link again
+// (POST /campaigns/:id/members/removed/:uid/allow).
+func (h *Handler) AllowMemberBack(c *echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	targetUserID := c.Param("uid")
+	if err := h.service.AllowRemovedMemberBack(c.Request().Context(), cc.Campaign.ID, targetUserID); err != nil {
+		return h.renderMemberList(c, cc, h.memberListView(c, cc, apperror.UserMessage(err, "failed to allow them back")))
+	}
+	h.logAudit(c, cc.Campaign.ID, "member.allowed_back", map[string]any{
+		"target_user_id": targetUserID,
+	})
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, h.memberListView(c, cc, "")))
 	}
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/members")
 }
@@ -1230,10 +1298,8 @@ func (h *Handler) UpdateRole(c *echo.Context) error {
 
 	ctx := c.Request().Context()
 	if err := h.service.SetMemberAccess(ctx, cc.Campaign.ID, targetUserID, req.Role); err != nil {
-		members, _ := h.service.ListMembers(ctx, cc.Campaign.ID)
-		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := apperror.UserMessage(err, "failed to update role")
-		return middleware.Render(c, http.StatusOK, MemberListComponent(h.freshContext(ctx, cc), members, csrfToken, errMsg))
+		cc = h.freshContext(ctx, cc)
+		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, h.memberListView(c, cc, apperror.UserMessage(err, "failed to update role"))))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "member.role_changed", map[string]any{
@@ -1241,14 +1307,12 @@ func (h *Handler) UpdateRole(c *echo.Context) error {
 		"new_role":       req.Role,
 	})
 
-	members, _ := h.service.ListMembers(ctx, cc.Campaign.ID)
-	csrfToken := middleware.GetCSRFToken(c)
 	// The grant lives in the campaign's settings, which the request's context
 	// read before the change; the menu must show the new Co-DM state.
 	cc = h.freshContext(ctx, cc)
 
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, ""))
+		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, h.memberListView(c, cc, "")))
 	}
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/members")
 }

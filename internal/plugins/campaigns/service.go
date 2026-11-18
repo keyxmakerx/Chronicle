@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -55,8 +56,11 @@ type CampaignService interface {
 
 	// Membership
 	GetMember(ctx context.Context, campaignID, userID string) (*CampaignMember, error)
-	AddMember(ctx context.Context, campaignID, email string, role Role) error
 	RemoveMember(ctx context.Context, campaignID, userID string) error
+	// ListRemovedMembers returns the people the owner removed who have not
+	// come back; AllowRemovedMemberBack lets one use the join link again.
+	ListRemovedMembers(ctx context.Context, campaignID string) ([]MemberUser, error)
+	AllowRemovedMemberBack(ctx context.Context, campaignID, userID string) error
 	UpdateMemberRole(ctx context.Context, campaignID, userID string, role Role) error
 	// SetMemberAccess applies a People role-menu choice: player, scribe or
 	// codm (a Scribe with the DM-only grant).
@@ -262,20 +266,20 @@ type CampaignHookDispatcher interface {
 
 // campaignService implements CampaignService.
 type campaignService struct {
-	repo           CampaignRepository
-	users          UserFinder
-	mail           MailService            // May be nil if SMTP is not configured.
-	seeder           EntityTypeSeeder       // Seeds default entity types on campaign creation. May be nil.
-	templateSeeder   ContentTemplateSeeder  // Seeds default content templates on campaign creation. May be nil.
-	promptSeeder     WorldbuildingPromptSeeder // Seeds default worldbuilding prompts on campaign creation. May be nil.
-	layoutSeeder     LayoutPresetSeeder     // Seeds default layout presets on campaign creation. May be nil.
-	characterSeeder  CharacterListSeeder    // Records the character/NPC page types on campaign creation. May be nil.
-	mediaCleaner     MediaCleaner           // Cleans up media files on campaign delete. May be nil.
-	hookDispatcher   CampaignHookDispatcher // Dispatches WASM lifecycle events. May be nil.
-	connRevoker      ConnectionRevoker      // Drops live sockets when access is lowered. May be nil until wiring reaches it.
-	navSections      NavSectionsSource      // Draws a member's sidebar for pin checks. Pins are refused while nil.
-	siteLook         SiteLookSource         // Site-wide look new campaigns start with. May be nil.
-	baseURL          string
+	repo            CampaignRepository
+	users           UserFinder
+	mail            MailService               // May be nil if SMTP is not configured.
+	seeder          EntityTypeSeeder          // Seeds default entity types on campaign creation. May be nil.
+	templateSeeder  ContentTemplateSeeder     // Seeds default content templates on campaign creation. May be nil.
+	promptSeeder    WorldbuildingPromptSeeder // Seeds default worldbuilding prompts on campaign creation. May be nil.
+	layoutSeeder    LayoutPresetSeeder        // Seeds default layout presets on campaign creation. May be nil.
+	characterSeeder CharacterListSeeder       // Records the character/NPC page types on campaign creation. May be nil.
+	mediaCleaner    MediaCleaner              // Cleans up media files on campaign delete. May be nil.
+	hookDispatcher  CampaignHookDispatcher    // Dispatches WASM lifecycle events. May be nil.
+	connRevoker     ConnectionRevoker         // Drops live sockets when access is lowered. May be nil until wiring reaches it.
+	navSections     NavSectionsSource         // Draws a member's sidebar for pin checks. Pins are refused while nil.
+	siteLook        SiteLookSource            // Site-wide look new campaigns start with. May be nil.
+	baseURL         string
 	// memberRemoved runs after a member is removed, so other plugins can end
 	// credentials they issued for that campaign without campaigns importing them.
 	memberRemoved []func(ctx context.Context, campaignID, userID string)
@@ -920,53 +924,29 @@ func (s *campaignService) GetMember(ctx context.Context, campaignID, userID stri
 	return s.repo.FindMember(ctx, campaignID, userID)
 }
 
-// AddMember adds a user to a campaign by their email address.
-func (s *campaignService) AddMember(ctx context.Context, campaignID, email string, role Role) error {
-	if !isValidEmail(email) {
-		return apperror.NewBadRequest("invalid email address")
+// RemoveMember removes a user from a campaign at the owner's or an admin's
+// word. The owner cannot be removed. The person is remembered as removed and
+// the shared join link is replaced, so the old link cannot bring them back.
+func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID string) error {
+	if err := s.removeMember(ctx, campaignID, userID, true); err != nil {
+		return err
 	}
-	if !role.IsValid() {
-		return apperror.NewBadRequest("invalid role")
-	}
-	// Only Owner and admin can add members, but Owner role can't be assigned
-	// through regular member addition -- only through ownership transfer.
-	if role == RoleOwner {
-		return apperror.NewBadRequest("cannot add a member as owner; use ownership transfer instead")
-	}
-
-	// Look up the user by email.
-	user, err := s.users.FindUserByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+	campaign, err := s.repo.FindByID(ctx, campaignID)
 	if err != nil {
-		return apperror.NewBadRequest("no user found with that email")
+		return err
 	}
-
-	// Check if already a member.
-	_, err = s.repo.FindMember(ctx, campaignID, user.ID)
-	if err == nil {
-		return apperror.NewConflict("user is already a member of this campaign")
+	if campaign != nil && campaign.JoinCode != nil && *campaign.JoinCode != "" {
+		if _, err := s.GenerateJoinCode(ctx, campaignID); err != nil {
+			return err
+		}
 	}
-
-	member := &CampaignMember{
-		CampaignID: campaignID,
-		UserID:     user.ID,
-		Role:       role,
-		JoinedAt:   time.Now().UTC(),
-	}
-
-	if err := s.repo.AddMember(ctx, member); err != nil {
-		return apperror.NewInternal(fmt.Errorf("adding member: %w", err))
-	}
-
-	slog.Info("member added to campaign",
-		slog.String("campaign_id", campaignID),
-		slog.String("user_id", user.ID),
-		slog.String("role", role.String()),
-	)
 	return nil
 }
 
-// RemoveMember removes a user from a campaign. The owner cannot be removed.
-func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID string) error {
+// removeMember ends a membership and everything that hangs off it. removed
+// is false for someone leaving by their own choice (deleting the account),
+// who is not remembered as removed.
+func (s *campaignService) removeMember(ctx context.Context, campaignID, userID string, removed bool) error {
 	member, err := s.repo.FindMember(ctx, campaignID, userID)
 	if err != nil {
 		return err
@@ -986,7 +966,7 @@ func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID s
 	// that is a live leak: AllowPublicCampaignAccess admits an authenticated
 	// non-member as RoleNone, the grant still resolves, and VisibilityRole()
 	// hands them RoleOwner over every dm_only object.
-	if err := s.revokeDmGrant(ctx, campaignID, userID); err != nil {
+	if err := s.revokeDmGrant(ctx, campaignID, userID, removed); err != nil {
 		return err
 	}
 
@@ -1027,7 +1007,7 @@ func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID s
 // needed. This alone leaves campaigns whose data is already corrupt exposed
 // until someone happens to re-save them; the middleware gate alone leaves wrong
 // data behind for the next code path that reads the list directly.
-func (s *campaignService) revokeDmGrant(ctx context.Context, campaignID, userID string) error {
+func (s *campaignService) revokeDmGrant(ctx context.Context, campaignID, userID string, markRemoved bool) error {
 	campaign, err := s.repo.FindByID(ctx, campaignID)
 	if err != nil {
 		return err
@@ -1043,10 +1023,17 @@ func (s *campaignService) revokeDmGrant(ctx context.Context, campaignID, userID 
 			kept = append(kept, id)
 		}
 	}
-	if len(kept) == len(settings.DmGrantIDs) {
-		return nil // held no grant; nothing to write
+	hadGrant := len(kept) != len(settings.DmGrantIDs)
+	// The removed mark rides the same write as the grant, so neither can
+	// land without the other.
+	mark := markRemoved && !slices.Contains(settings.RemovedMemberIDs, userID)
+	if !hadGrant && !mark {
+		return nil // nothing to write
 	}
 	settings.DmGrantIDs = kept
+	if mark {
+		settings.RemovedMemberIDs = append(settings.RemovedMemberIDs, userID)
+	}
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
@@ -1056,10 +1043,12 @@ func (s *campaignService) revokeDmGrant(ctx context.Context, campaignID, userID 
 		return apperror.NewInternal(fmt.Errorf("revoking dm grant: %w", err))
 	}
 
-	slog.Info("dm grant revoked with membership",
-		slog.String("campaign_id", campaignID),
-		slog.String("user_id", userID),
-	)
+	if hadGrant {
+		slog.Info("dm grant revoked with membership",
+			slog.String("campaign_id", campaignID),
+			slog.String("user_id", userID),
+		)
+	}
 	return nil
 }
 
@@ -1121,10 +1110,17 @@ func (s *campaignService) InitiateTransfer(ctx context.Context, campaignID, owne
 		return nil, apperror.NewBadRequest("invalid email address")
 	}
 
-	// Verify the target user exists.
+	// The campaign goes only to someone already in it, and an email that
+	// has no account gets the same answer as one outside the campaign.
+	notMember := apperror.NewBadRequest("hand the campaign to someone who is already a member of it")
 	targetUser, err := s.users.FindUserByEmail(ctx, email)
 	if err != nil {
-		return nil, apperror.NewBadRequest("no user found with that email")
+		return nil, notMember
+	}
+	if targetUser.ID != ownerID {
+		if _, err := s.repo.FindMember(ctx, campaignID, targetUser.ID); err != nil {
+			return nil, notMember
+		}
 	}
 
 	// Can't transfer to yourself.
@@ -2156,6 +2152,10 @@ func (s *campaignService) JoinByCode(ctx context.Context, code, userID string) (
 
 	if campaign.IsArchived() {
 		return nil, false, apperror.NewBadRequest("campaign is archived and not accepting new members")
+	}
+
+	if slices.Contains(campaign.ParseSettings().RemovedMemberIDs, userID) {
+		return nil, false, apperror.NewForbidden("You were removed from this campaign. Ask the owner to add you back.")
 	}
 
 	member := &CampaignMember{

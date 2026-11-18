@@ -113,7 +113,7 @@ func (s *campaignService) SetMemberAccess(ctx context.Context, campaignID, userI
 	// grants, so an id left behind by a deleted account can't stop
 	// it.
 	if !grant && has {
-		if err := s.revokeDmGrant(ctx, campaignID, userID); err != nil {
+		if err := s.revokeDmGrant(ctx, campaignID, userID, false); err != nil {
 			return err
 		}
 		if s.connRevoker != nil {

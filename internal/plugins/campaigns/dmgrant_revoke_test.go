@@ -93,8 +93,8 @@ func TestRemoveMember_WithoutGrant_DoesNotRewriteSettings(t *testing.T) {
 	}
 	svc := &campaignService{repo: repo}
 
-	if err := svc.RemoveMember(context.Background(), "camp-1", "u-plain"); err != nil {
-		t.Fatalf("RemoveMember: %v", err)
+	if err := svc.removeMember(context.Background(), "camp-1", "u-plain", false); err != nil {
+		t.Fatalf("removeMember: %v", err)
 	}
 	if rewritten {
 		t.Error("settings rewritten for a member who held no grant — unnecessary write")
