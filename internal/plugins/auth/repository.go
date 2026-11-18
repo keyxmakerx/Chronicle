@@ -26,7 +26,7 @@ type UserRepository interface {
 	UpdatePassword(ctx context.Context, userID, passwordHash string) error
 	CreateResetToken(ctx context.Context, userID, email, tokenHash string, expiresAt time.Time) error
 	FindResetToken(ctx context.Context, tokenHash string) (userID, email string, expiresAt time.Time, usedAt *time.Time, err error)
-	MarkResetTokenUsed(ctx context.Context, tokenHash string) error
+	MarkResetTokenUsed(ctx context.Context, tokenHash string) (bool, error)
 
 	// User profile.
 	UpdateTimezone(ctx context.Context, userID, timezone string) error
@@ -697,14 +697,19 @@ func (r *userRepository) FindResetToken(ctx context.Context, tokenHash string) (
 	return userID, email, expiresAt, usedAt, nil
 }
 
-// MarkResetTokenUsed stamps the used_at column so the token can't be reused.
-func (r *userRepository) MarkResetTokenUsed(ctx context.Context, tokenHash string) error {
-	query := `UPDATE password_reset_tokens SET used_at = NOW() WHERE token_hash = ?`
-	_, err := r.db.ExecContext(ctx, query, tokenHash)
+// MarkResetTokenUsed stamps used_at on an unused token and reports whether
+// this call was the one that claimed it.
+func (r *userRepository) MarkResetTokenUsed(ctx context.Context, tokenHash string) (bool, error) {
+	query := `UPDATE password_reset_tokens SET used_at = NOW() WHERE token_hash = ? AND used_at IS NULL`
+	res, err := r.db.ExecContext(ctx, query, tokenHash)
 	if err != nil {
-		return fmt.Errorf("marking reset token used: %w", err)
+		return false, fmt.Errorf("marking reset token used: %w", err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("marking reset token used: %w", err)
+	}
+	return n == 1, nil
 }
 
 // --- Email Change Verification ---

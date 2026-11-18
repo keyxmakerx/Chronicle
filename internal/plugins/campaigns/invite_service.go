@@ -195,8 +195,18 @@ func (s *inviteService) AcceptInvite(ctx context.Context, token string, userID s
 	_, err = s.campaigns.FindMember(ctx, invite.CampaignID, userID)
 	if err == nil {
 		// Already a member — mark invite accepted and return.
-		_ = s.repo.MarkAccepted(ctx, invite.ID)
+		_, _ = s.repo.MarkAccepted(ctx, invite.ID)
 		return invite, apperror.NewValidation("you are already a member of this campaign")
+	}
+
+	// Claim the invite before adding anyone, so one link opened by two
+	// people at the same moment adds only the first.
+	claimed, err := s.repo.MarkAccepted(ctx, invite.ID)
+	if err != nil {
+		return nil, fmt.Errorf("marking invite accepted: %w", err)
+	}
+	if !claimed {
+		return nil, apperror.NewValidation("this invitation has already been accepted")
 	}
 
 	// Add user to campaign with the invited role.
@@ -211,10 +221,6 @@ func (s *inviteService) AcceptInvite(ctx context.Context, token string, userID s
 		return nil, fmt.Errorf("adding member: %w", err)
 	}
 
-	// Mark invite as accepted.
-	if err := s.repo.MarkAccepted(ctx, invite.ID); err != nil {
-		return nil, fmt.Errorf("marking invite accepted: %w", err)
-	}
 
 	slog.Info("campaign invite accepted",
 		slog.String("campaign_id", invite.CampaignID),

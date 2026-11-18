@@ -5,7 +5,7 @@ DELETE	/account/avatar	session	plugins/auth.(*Handler).ClearAvatarAPI	plugins/au
 POST	/account/avatar	session	plugins/auth.(*Handler).UploadAvatarAPI	plugins/auth.RequireAuth > middleware.RateLimit
 POST	/account/delete	session	plugins/auth.(*Handler).DeleteAccountAPI	plugins/auth.RequireAuth > middleware.RateLimit
 PUT	/account/display-name	session	plugins/auth.(*Handler).UpdateDisplayNameAPI	plugins/auth.RequireAuth
-PUT	/account/email	session	plugins/auth.(*Handler).RequestEmailChangeAPI	plugins/auth.RequireAuth
+PUT	/account/email	session	plugins/auth.(*Handler).RequestEmailChangeAPI	plugins/auth.RequireAuth > middleware.RateLimit
 GET	/account/email/verify	none	plugins/auth.(*Handler).ConfirmEmailChange	-
 GET	/account/guest	session	plugins/auth.(*Handler).GuestPanelFragment	plugins/auth.RequireAuth
 POST	/account/guest/keep	session	plugins/auth.(*Handler).KeepGuestAccount	plugins/auth.RequireAuth > middleware.RateLimit
@@ -1329,7 +1329,7 @@ GET	/healthz	none	app.(*App).RegisterRoutes	-
 GET	/invites/accept	optional-session	plugins/campaigns.(*InviteHandler).AcceptInvitePage	plugins/auth.OptionalAuth
 GET	/join	optional-session	plugins/auth.(*Handler).JoinPage	plugins/auth.OptionalAuth
 POST	/join	optional-session	plugins/auth.(*Handler).Join	plugins/auth.OptionalAuth > middleware.RateLimit
-GET	/join/:code	session	plugins/campaigns.(*Handler).JoinByCode	plugins/auth.RequireAuth
+GET	/join/:code	session	plugins/campaigns.(*Handler).JoinByCode	plugins/auth.RequireAuth > middleware.RateLimit
 GET	/login	none	plugins/auth.(*Handler).LoginForm	-
 POST	/login	none	plugins/auth.(*Handler).Login	middleware.RateLimit
 GET	/login/oidc	none	plugins/auth.(*Handler).LoginOIDC	middleware.RateLimit

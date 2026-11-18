@@ -24,7 +24,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	authed.GET("/campaigns/:id/accept-transfer", h.AcceptTransfer)
 
 	// Join via shareable invite code (auth required, no campaign membership needed).
-	authed.GET("/join/:code", h.JoinByCode)
+	authed.GET("/join/:code", h.JoinByCode, middleware.RateLimit(10, time.Minute))
 
 	// Public-capable view routes: logged-in users see full UI, guests see
 	// read-only content for public campaigns.

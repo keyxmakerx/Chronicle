@@ -11,7 +11,7 @@ type InviteRepository interface {
 	Create(ctx context.Context, invite *Invite) error
 	GetByToken(ctx context.Context, token string) (*Invite, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]Invite, error)
-	MarkAccepted(ctx context.Context, id string) error
+	MarkAccepted(ctx context.Context, id string) (bool, error)
 	// Delete removes an invite of the given campaign and reports whether a row
 	// was deleted, so a foreign or unknown ID is distinguishable from success.
 	Delete(ctx context.Context, campaignID, id string) (bool, error)
@@ -89,14 +89,19 @@ func (r *inviteRepository) ListByCampaign(ctx context.Context, campaignID string
 	return invites, rows.Err()
 }
 
-// MarkAccepted sets the accepted_at timestamp on an invite.
-func (r *inviteRepository) MarkAccepted(ctx context.Context, id string) error {
-	query := `UPDATE campaign_invites SET accepted_at = NOW() WHERE id = ?`
-	_, err := r.db.ExecContext(ctx, query, id)
+// MarkAccepted stamps accepted_at on an invite nobody has accepted yet and
+// reports whether this call was the one that claimed it.
+func (r *inviteRepository) MarkAccepted(ctx context.Context, id string) (bool, error) {
+	query := `UPDATE campaign_invites SET accepted_at = NOW() WHERE id = ? AND accepted_at IS NULL`
+	res, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("marking invite accepted: %w", err)
+		return false, fmt.Errorf("marking invite accepted: %w", err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("marking invite accepted: %w", err)
+	}
+	return n == 1, nil
 }
 
 // Delete removes an invite by ID within a campaign; the campaign condition

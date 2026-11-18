@@ -47,12 +47,14 @@ func (m *mockInviteRepo) ListByCampaign(_ context.Context, campaignID string) ([
 	return result, nil
 }
 
-func (m *mockInviteRepo) MarkAccepted(_ context.Context, id string) error {
-	if inv, ok := m.invites[id]; ok {
-		now := time.Now().UTC()
-		inv.AcceptedAt = &now
+func (m *mockInviteRepo) MarkAccepted(_ context.Context, id string) (bool, error) {
+	inv, ok := m.invites[id]
+	if !ok || inv.AcceptedAt != nil {
+		return false, nil
 	}
-	return nil
+	now := time.Now().UTC()
+	inv.AcceptedAt = &now
+	return true, nil
 }
 
 func (m *mockInviteRepo) Delete(_ context.Context, campaignID, id string) (bool, error) {
@@ -357,6 +359,27 @@ func TestAcceptInvite_Success(t *testing.T) {
 	}
 	if member.Role != RoleScribe {
 		t.Errorf("expected role scribe, got %s", member.Role.String())
+	}
+}
+
+// One link adds one person: a second person opening the same link is told
+// it has been used, and is not added.
+func TestAcceptInvite_SecondPersonIsRefused(t *testing.T) {
+	inviteRepo := newMockInviteRepo()
+	campaignRepo := newMockCampaignRepoForInvites()
+	svc := NewInviteService(inviteRepo, campaignRepo, nil, "http://localhost:3000")
+	invite, _ := svc.CreateInvite(context.Background(), "camp-1", "user-1", CreateInviteInput{
+		Email: "player@example.com",
+		Role:  "player",
+	})
+	if _, err := svc.AcceptInvite(context.Background(), invite.Token, "user-2"); err != nil {
+		t.Fatalf("first accept: %v", err)
+	}
+	if _, err := svc.AcceptInvite(context.Background(), invite.Token, "user-3"); err == nil {
+		t.Fatal("a second person accepted the same link")
+	}
+	if _, err := campaignRepo.FindMember(context.Background(), "camp-1", "user-3"); err == nil {
+		t.Fatal("the second person was added")
 	}
 }
 

@@ -44,6 +44,9 @@ type pickerData struct {
 	CurrentID    string // the resolved instance (highlight)
 	Source       string // own | entity_type | default | none
 	CSRFToken    string
+	// CanCreate shows the create-new form: making a new instance is the DM
+	// team's.
+	CanCreate bool
 }
 
 // hostFrom builds a campaign-scoped HostRef from the route context + the given
@@ -92,6 +95,7 @@ func (h *Handler) PickerAPI(c *echo.Context) error {
 		CurrentID:    res.InstanceID,
 		Source:       res.Source,
 		CSRFToken:    middleware.GetCSRFToken(c),
+		CanCreate:    cc.CanAuthorDmOnly(),
 	}))
 }
 
@@ -109,6 +113,9 @@ func (h *Handler) BindAPI(c *echo.Context) error {
 	wt, ok := h.validate(hostType, hostID, widgetType)
 	if !ok {
 		return apperror.NewBadRequest("unknown host or widget type")
+	}
+	if err := requireHostAccess(cc, hostType); err != nil {
+		return err
 	}
 	host := hostFrom(cc, hostType, hostID, c.FormValue("entity_type_id"))
 	if err := h.svc.Bind(c.Request().Context(), host, widgetType, instanceID); err != nil {
@@ -130,6 +137,11 @@ func (h *Handler) CreateBindAPI(c *echo.Context) error {
 	wt, ok := h.validate(hostType, hostID, widgetType)
 	if !ok {
 		return apperror.NewBadRequest("unknown host or widget type")
+	}
+	// Making a new map or timeline is the DM team's, as on those apps' own
+	// pages; a Scribe picks from what exists.
+	if !cc.CanAuthorDmOnly() {
+		return apperror.NewForbidden("only the owner or a Co-DM can create one here")
 	}
 	ctx := c.Request().Context()
 	instanceID, err := wt.CreateInstance(ctx, cc.Campaign.ID, CreateInput{Name: c.FormValue("name")})
@@ -160,11 +172,24 @@ func (h *Handler) UnbindAPI(c *echo.Context) error {
 	}
 	// Keep entity_type_id so the post-unbind re-Resolve can still surface an
 	// inherited entity-type template binding (the precedence rung below "own").
+	if err := requireHostAccess(cc, hostType); err != nil {
+		return err
+	}
 	host := hostFrom(cc, hostType, hostID, entityTypeID)
 	if err := h.svc.Unbind(c.Request().Context(), host, widgetType); err != nil {
 		return err
 	}
 	return h.swapHostBlock(c, cc, wt, host, widgetType)
+}
+
+// requireHostAccess refuses a Scribe changing what the campaign home or a
+// whole category shows; those belong to the DM team. A single page stays
+// open to Scribes.
+func requireHostAccess(cc *campaigns.CampaignContext, hostType string) error {
+	if hostType != HostTypeEntity && !cc.CanAuthorDmOnly() {
+		return apperror.NewForbidden("only the owner or a Co-DM can change this")
+	}
+	return nil
 }
 
 // validate checks the host_type + widget_type against the app-code namespaces

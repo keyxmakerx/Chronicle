@@ -3707,6 +3707,11 @@ func (a *App) RegisterRoutes() {
 	// socket that authenticated before the disable can't keep receiving.
 	// See wsRevokerHolder — wsHub itself is constructed further down.
 	securityService.SetConnectionRevoker(wsRevoker)
+	// A live socket was opened by a session, so it closes when the person's
+	// sessions all end (sign out everywhere, password reset or change).
+	auth.OnSessionsRevoked(authService, func(_ context.Context, userID string) {
+		wsRevoker.RevokeUserEverywhere(userID)
+	})
 
 	// Data hygiene scanner: orphan detection and cleanup for media, API keys, stale files.
 	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)

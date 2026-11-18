@@ -518,7 +518,8 @@ func (s *authService) isTrustedDevice(ctx context.Context, userID, token string)
 }
 
 // forgetTrustedDevices makes every device ask for a code again. It runs
-// whenever all sessions end (password change or reset, admin sign-out) and
+// whenever all sessions end (password change or reset, sign out everywhere,
+// admin sign-out) and
 // when two-factor is turned off.
 func (s *authService) forgetTrustedDevices(ctx context.Context, userID string) {
 	if s.redis == nil {

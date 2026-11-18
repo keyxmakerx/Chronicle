@@ -388,3 +388,19 @@ func TestChangePasswordKeepsCallerSignedIn(t *testing.T) {
 		t.Fatalf("fresh session = %+v, %v", sess, err)
 	}
 }
+
+func TestSignOutEverywhereForgetsRememberedDevices(t *testing.T) {
+	r := newTwoFactorRig(t)
+	ctx := context.Background()
+	secret, _ := r.turnOn(t, "mara")
+	ch := r.passwordStep(t, "mara", "")
+	res, err := r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: ch, Code: unusedCode(secret), Remember: true})
+	if err != nil || res.TrustedDevice == "" {
+		t.Fatalf("CompleteTwoFactorLogin: %+v, %v", res, err)
+	}
+	if _, err := r.svc.DestroyAllUserSessions(ctx, "mara"); err != nil {
+		t.Fatal(err)
+	}
+	// The device that was remembered is asked for a code again.
+	r.passwordStep(t, "mara", res.TrustedDevice)
+}
