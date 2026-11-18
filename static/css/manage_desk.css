@@ -269,7 +269,7 @@ html[data-motion="off"] .desk-menu > button { transition: none; }
 .desk-fold[hidden] { display: none; }
 .desk-fold-in {
   margin: 0.125rem 0 0.5rem 0.125rem;
-  padding: 0.125rem 0 0.375rem 0.875rem;
+  padding: 0.125rem 0.25rem 0.375rem 0.875rem; /* room on the right so a focus ring is not clipped by the fold */
   border-left: var(--shape-rule) solid var(--color-border);
 }
 .desk-note { margin: 0.25rem 0 0.5rem; color: var(--color-text-secondary); }
