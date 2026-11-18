@@ -59,7 +59,7 @@
       })
       .finally(function () {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Save Changes';
+        btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Save changes';
       });
   }
 

@@ -968,7 +968,7 @@
           var m = W[k], once = m.singleton && hasType(m.type);
           return '<div class="cpe-gwrap"><button type="button" class="cpe-gw" data-gw="' + esc(k) + '" title="' + esc(m.desc) + '"' + (once ? ' disabled' : '') + '>' +
             '<span class="cpe-gw-ic">' + ic(m.icon) + '</span><span class="cpe-gw-nm">' + esc(m.name) + '</span>' +
-            '<span class="cpe-gw-sz">' + (once ? 'Already on the page' : m.sizes.length ? esc(m.sizes.map(function (s) { return s.replace('x', '×'); }).join(' · ')) : 'Columns only') + '</span></button>' +
+            '<span class="cpe-gw-sz">' + (once ? 'Already on the page' : m.sizes.length ? esc(m.sizes.map(function (s) { return s.replace('x', '×'); }).join(' · ')) : 'Fills the column') + '</span></button>' +
             '<button type="button" class="cpe-eye" data-act="peek" data-k="' + esc(k) + '" aria-label="Preview ' + esc(m.name) + '" title="Preview">' + ic('fa-eye') + '</button></div>';
         }).join('') + '</div></div>';
       });

@@ -102,7 +102,7 @@ func BuildCallout(unread []Notification, zoneSet bool, now time.Time) Callout {
 			// timezone" is a task; "times are not in yours" is the reason
 			// anyone would do it. It does not say UTC: game nights show in
 			// the organizer's zone, so that claim would be false there.
-			Message: "Chronicle does not know your timezone, so times are not shown in your local time",
+			Message: "Times aren't in your time zone yet",
 		}
 	}
 

@@ -107,7 +107,7 @@ func NavCommandsJSON(ctx context.Context) string {
 			}
 		}
 	}
-	add("All Pages", base+"/entities", "fa-layer-group")
+	add("All pages", base+"/entities", "fa-layer-group")
 	for _, row := range NavManageRows(ctx) {
 		add(row.Label, row.URL, row.Icon)
 	}

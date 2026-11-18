@@ -42,8 +42,8 @@ func TestDashQuickActions_NoComingSoonTile(t *testing.T) {
 		if strings.Contains(out, "Coming soon") {
 			t.Errorf("role %d: the stale Maps tile is back: %s", role, out)
 		}
-		if !strings.Contains(out, "All Pages") {
-			t.Errorf("role %d: All Pages is missing: %s", role, out)
+		if !strings.Contains(out, "All pages") {
+			t.Errorf("role %d: All pages is missing: %s", role, out)
 		}
 	}
 }

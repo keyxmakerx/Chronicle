@@ -123,7 +123,7 @@ func TestCallout_AsksForTheZoneWhenItIsUnsetAndNothingIsPending(t *testing.T) {
 	// The sentence must state the CONSEQUENCE. "Set your timezone" is a chore;
 	// "times are not in yours" is the reason anyone would act. It must not
 	// claim UTC: game nights show in the organizer's zone.
-	if !strings.Contains(got.Message, "not shown in your local time") || strings.Contains(got.Message, "UTC") {
+	if !strings.Contains(got.Message, "aren't in your time zone") || strings.Contains(got.Message, "UTC") {
 		t.Errorf("Message = %q — it must say what is happening now, not just ask for a setting", got.Message)
 	}
 }

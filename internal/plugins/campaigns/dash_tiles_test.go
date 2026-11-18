@@ -52,7 +52,7 @@ func TestCustomDashboard_TileSection(t *testing.T) {
 			role:    RolePlayer,
 			tiles:   []tilegrid.Tile{{ID: "a", Type: "quick_actions", Size: "1x1"}, {ID: "b", Type: "text_block", Size: "1x1", Config: text}},
 			want:    []string{"Block not available here", "hello tile"},
-			notWant: []string{"All Pages"},
+			notWant: []string{"All pages"},
 		},
 		{
 			name:    "a DM-only tile is left out for a player",

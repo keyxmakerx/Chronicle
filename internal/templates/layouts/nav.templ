@@ -178,7 +178,7 @@ templ navSection(sec NavSectionView) {
 			}
 			<div class="nav-gb" id={ "nav-b-" + sec.ID } hidden?={ !NavFoldOpen(ctx, sec.ID) }>
 				if sec.Kind == "categories" {
-					@navFixedRow("all", "All Pages", "fa-layer-group", fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)), navAllPagesCount(ctx, sec.Rows))
+					@navFixedRow("all", "All pages", "fa-layer-group", fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)), navAllPagesCount(ctx, sec.Rows))
 				}
 				for _, row := range sec.Rows {
 					@navItem(row, navPinnable(ctx, sec, row))

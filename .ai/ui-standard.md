@@ -610,6 +610,9 @@ second; the dice settle in under 480ms.
   strings that aren't real. A button says what happens ("Publish") and its
   message confirms it ("Published"); an error says what went wrong and how to
   fix it, without apologising.
+  Headings, buttons, labels and menu rows are in sentence case ("Add a map",
+  "New page"); only names keep their capitals (Chronicle, Foundry, an app's
+  own name, a campaign's category names).
 
 ## Customize goes further
 

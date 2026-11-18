@@ -10,7 +10,7 @@ import (
 
 // CampaignIndexPage renders the full campaign list page.
 templ CampaignIndexPage(campaigns []Campaign, total int, opts ListOptions, csrfToken string) {
-	@layouts.App("My Campaigns") {
+	@layouts.App("My campaigns") {
 		@CampaignListContent(campaigns, total, opts, csrfToken)
 	}
 }
@@ -19,8 +19,8 @@ templ CampaignIndexPage(campaigns []Campaign, total int, opts ListOptions, csrfT
 templ CampaignListContent(campaigns []Campaign, total int, opts ListOptions, csrfToken string) {
 	<div id="campaign-list">
 		<div class="flex items-center justify-between mb-6">
-			<h1 class="text-2xl font-bold text-fg">My Campaigns</h1>
-			<a href="/campaigns/new" class="btn-primary">New Campaign</a>
+			<h1 class="text-2xl font-bold text-fg">My campaigns</h1>
+			<a href="/campaigns/new" class="btn-primary">New campaign</a>
 		</div>
 
 		if len(campaigns) == 0 {

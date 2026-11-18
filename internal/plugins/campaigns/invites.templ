@@ -39,7 +39,7 @@ templ InviteAcceptPage(invite *Invite, campaignName, token string, accepted bool
 						</a>
 					} else {
 						<a href="/campaigns" class="btn-primary inline-block">
-							My Campaigns
+							My campaigns
 						</a>
 					}
 				} else if invite.IsExpired() {
@@ -52,7 +52,7 @@ templ InviteAcceptPage(invite *Invite, campaignName, token string, accepted bool
 						Please ask the campaign owner to send a new one.
 					</p>
 					<a href="/campaigns" class="btn-secondary inline-block">
-						My Campaigns
+						My campaigns
 					</a>
 				} else {
 					<div class="mb-4">

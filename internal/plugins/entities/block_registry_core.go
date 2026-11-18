@@ -183,7 +183,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	})
 
 	r.Register(BlockMeta{
-		Type: BlockWritingPrompts, Label: "Writing Prompts", Icon: "fa-lightbulb",
+		Type: BlockWritingPrompts, Label: "Writing prompts", Icon: "fa-lightbulb",
 		Description: "Prompts to help write this page (shown to scribes and the owner)",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -303,7 +303,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	// customization editor edit the same structure the live page renders.
 	r.Register(BlockMeta{
 		Type: "quick_actions", Label: "Quick Actions", Icon: "fa-bolt",
-		Description: "All Pages / Members / Categories shortcut cards",
+		Description: "All pages / Members / Categories shortcut cards",
 		Contexts:    []string{"dashboard"},
 	}, nil)
 

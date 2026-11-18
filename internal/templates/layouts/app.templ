@@ -428,7 +428,7 @@ templ defaultSidebarLinks() {
 		<svg class="w-4 h-4 mr-3 shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
 		</svg>
-		My Campaigns
+		My campaigns
 	</a>
 
 	<a
@@ -450,7 +450,7 @@ templ defaultSidebarLinks() {
 		<svg class="w-4 h-4 mr-3 shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
 		</svg>
-		New Campaign
+		New campaign
 	</a>
 }
 
@@ -796,7 +796,7 @@ templ Topbar() {
 							@click.outside="open = false"
 							class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
 						>
-							<span class="text-fg-secondary">My Campaigns</span>
+							<span class="text-fg-secondary">My campaigns</span>
 							<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
 							</svg>
@@ -1090,7 +1090,7 @@ templ Topbar() {
 						if !IsGuest(ctx) {
 							@UserPictureBox()
 							<a href="/account" class="dropdown-item" @click="open = false">
-								<i class="fa-solid fa-gear text-xs w-4"></i> Account Settings
+								<i class="fa-solid fa-gear text-xs w-4"></i> Account settings
 							</a>
 						}
 						if !InSiteAdmin(ctx) {

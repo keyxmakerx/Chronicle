@@ -103,7 +103,7 @@ const PLAYER_ROWS = [
   { label: 'Journal', href: '/campaigns/camp-1/journal', icon: 'fa-book-open' },
   { label: 'Characters', href: '/campaigns/camp-1/characters', icon: 'fa-masks-theater' },
   { label: 'Locations', href: '/campaigns/camp-1/locations', icon: 'fa-map-pin' },
-  { label: 'All Pages', href: '/campaigns/camp-1/entities', icon: 'fa-layer-group' },
+  { label: 'All pages', href: '/campaigns/camp-1/entities', icon: 'fa-layer-group' },
 ];
 
 test('each row of the viewer\'s sidebar becomes a "Go to" command', () => {

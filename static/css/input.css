@@ -4236,12 +4236,14 @@
   }
   .jnl :where(.jnl-list) button { border: 0; background: none; padding: 0; margin: 0; cursor: pointer; text-align: left; -webkit-appearance: none; appearance: none; }
 
-  .nl-bar { flex-shrink: 0; padding: 10px 10px 8px; display: flex; align-items: center; gap: 5px; }
+  /* The tools group wraps under the title as one row when the column is too narrow for both; the search keeps room to type. */
+  .nl-bar { flex-shrink: 0; padding: 10px 10px 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 5px; }
+  .nl-tools { flex: 1 1 350px; min-width: 0; display: flex; align-items: center; gap: 5px; }
   /* The Journal's name, in the page heading face, as the first thing in the list bar; the narrow list keeps its room for search. */
   .nl-name { flex-shrink: 0; margin: 0 6px 0 2px; font-family: var(--font-heading, var(--serif)); font-size: 1.05rem; font-weight: 700; line-height: 1; color: var(--ink); }
   .jnl-list[data-size="compact"] .nl-name { display: none; }
   .nl-search {
-    flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
+    flex: 1; min-width: 215px; display: flex; align-items: center; gap: 5px;
     height: 34px; padding: 0 8px; border-radius: var(--jnl-r-ctl); border: 1px solid var(--color-input-border); background: var(--color-input-bg);
   }
   .nl-search:focus-within { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); }
@@ -4461,6 +4463,7 @@
     .jnl-list[data-size="compact"] .nl-hint, .jnl-list[data-size="compact"] .nl-date { display: none; }
     .jnl-list[data-size="compact"] .nl-title { max-width: none; flex: 1 1 auto; }
     .jnl-list[data-size="compact"] .nl-bar { flex-wrap: nowrap; }
+    .jnl-list[data-size="compact"] .nl-search { min-width: 0; }
     .jnl-list[data-size="compact"] .nl-tbtn span, .jnl-list[data-size="compact"] .nl-newbody span { display: none; }
     .jnl-list[data-size="compact"] .nl-tbtn { padding: 0 8px; }
     .jnl-list[data-size="compact"] .nl-newbody { padding: 0 10px; }
@@ -4705,7 +4708,6 @@
     .jnl.pane-note .jnl-editor { display: flex; width: 100%; flex: 1; }
     .jnl.pane-links .jnl-drawer { display: block; width: 100%; flex: 1; border-left: 0; }
     .jnl .ed-ibtn[data-act="drawer"], .jnl .dr-head .ed-ibtn { display: none; }
-    .jnl .nl-bar { flex-wrap: nowrap; }
     .jnl .nl-tbtn span, .jnl .nl-newbody span { display: none; }
     .jnl .nl-tbtn { padding: 0 8px; }
     .jnl .nl-newbody { padding: 0 10px; }
