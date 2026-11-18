@@ -2,8 +2,11 @@ package layouts
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/a-h/templ"
 )
 
 // Only the owner manages a campaign: a Scribe, a Player, an owner viewing as
@@ -75,6 +78,53 @@ func TestManageFrame_TitleAndWayBack(t *testing.T) {
 			}
 			if strings.Contains(out, "<nav") || strings.Count(out, "href=") > 1 {
 				t.Errorf("frame repeats the Manage links: %s", out)
+			}
+		})
+	}
+}
+
+// A page that names its desk line draws that line's sentence under the title,
+// from whatever the app registered; a page with no line, or a resolver that
+// has nothing true to say, draws none, and the frame never fails for it.
+func TestManageFrame_Sentence(t *testing.T) {
+	t.Cleanup(func() { SetManageSentence(nil) })
+	say := func(words string) ManageSentenceFunc {
+		return func(_ context.Context, line string) templ.Component {
+			if words == "" {
+				return nil
+			}
+			return templ.Raw(`<div class="manage-sentence" data-line="` + line + `">` + words + `</div>`)
+		}
+	}
+	tests := []struct {
+		name string
+		fn   ManageSentenceFunc
+		line string
+		want string
+	}{
+		{"line and resolver", say("4 people."), "people", "4 people."},
+		{"no line", say("4 people."), "", ""},
+		{"nothing to say", say(""), "people", ""},
+		{"no resolver", nil, "people", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			SetManageSentence(tt.fn)
+			var buf bytes.Buffer
+			ctx := navStateCase{role: 3, path: "/campaigns/c1/members"}.ctx()
+			if err := ManageFrame(ManageFrameData{Title: "People", Line: tt.line}).Render(ctx, &buf); err != nil {
+				t.Fatal(err)
+			}
+			out := buf.String()
+			if got := strings.Contains(out, tt.want); tt.want != "" && !got {
+				t.Errorf("missing %q: %s", tt.want, out)
+			}
+			if tt.want == "" && strings.Contains(out, "manage-sentence") {
+				t.Errorf("no sentence expected: %s", out)
+			}
+			// The sentence sits after the title, outside the heading band.
+			if tt.want != "" && strings.Index(out, tt.want) < strings.Index(out, "</header>") {
+				t.Errorf("sentence must come after the header: %s", out)
 			}
 		})
 	}

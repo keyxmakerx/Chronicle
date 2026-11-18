@@ -4983,6 +4983,10 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
 .manage-eyebrow:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: var(--shape-r-tag); }
 .manage-title { margin: 0; font-size: 1.5rem; line-height: 1.2; font-weight: 700; color: var(--color-text-primary); }
 .manage-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+/* The page's own desk sentence, first line under the title. Same type as on
+   the desk, so the move from the desk lands exactly on it. */
+.manage-head.has-sentence { margin-bottom: 0.25rem; }
+.manage-sentence { margin: 0 0 1.5rem; max-width: 46rem; font-size: 0.9375rem; line-height: 1.6; }
 .manage-intro { flex: 0 0 100%; margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--color-text-secondary); max-width: 65ch; }
 
 /* Shared block parts. Blocks mark their heading (cb-head), count (cb-count),

@@ -19,6 +19,11 @@ type ManageFrameData struct {
 	// Actions is the page's own actions, drawn beside the title; nil draws
 	// nothing.
 	Actions templ.Component
+	// Line names the desk line this page belongs to ("people", "trash"). The
+	// frame draws that line's sentence under the title, the same words the
+	// desk shows, so going from the desk to the page carries it. Empty draws
+	// none: pages with no line of their own, and anyone who is not the owner.
+	Line string
 }
 
 // ManageFrame gives every Manage page the same left edge and the same content
@@ -27,10 +32,11 @@ type ManageFrameData struct {
 // component, so the edge cannot drift page by page again. The Customizer is a
 // full-screen workshop and never sits in it.
 templ ManageFrame(d ManageFrameData) {
+	{{ sentence := manageSentenceFor(ctx, d.Line) }}
 	<div class="manage-frame" data-manage-frame>
-		<header class="manage-head cb-head">
+		<header class={ "manage-head cb-head", templ.KV("has-sentence", sentence != nil) }>
 			if !d.Home {
-				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow" data-manage-back>Manage</a>
+				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow" data-manage-back onclick={ manageBackCall() }>Manage</a>
 			}
 			<h1 class="manage-title cb-title">{ d.Title }</h1>
 			if d.Actions != nil {
@@ -42,6 +48,10 @@ templ ManageFrame(d ManageFrameData) {
 				<p class="manage-intro">{ d.Intro }</p>
 			}
 		</header>
+		if sentence != nil {
+			<link rel="stylesheet" href={ AssetURL("/static/css/manage_desk.css") }/>
+			@sentence
+		}
 		{ children... }
 	</div>
 }

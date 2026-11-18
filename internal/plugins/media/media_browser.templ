@@ -55,7 +55,7 @@ func mediaUsageLabel(t string) string {
 
 // campaignMediaContent renders the media browser body.
 templ campaignMediaContent(cc *campaigns.CampaignContext, data CampaignMediaPageData) {
-	@layouts.ManageFrame(layouts.ManageFrameData{Title: "Media"}) {
+	@layouts.ManageFrame(layouts.ManageFrameData{Title: "Media", Line: "media"}) {
 		<!-- Header + upload zone -->
 		<div
 			x-data={ fmt.Sprintf("mediaUploader('%s', '%s')", cc.Campaign.ID, data.CSRFToken) }

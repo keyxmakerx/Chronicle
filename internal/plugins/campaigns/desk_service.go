@@ -167,7 +167,7 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 	return d
 }
 
-// line words one provider-backed or people line. Foundry and Media exist only
+// line words one line by its id. Foundry and Media exist only
 // while their add-on is on, the same rule Build applies.
 func (s *deskService) line(id string, c *Campaign, in DeskInputs, f DeskFacts, now time.Time) (DeskLine, bool) {
 	var l DeskLine
@@ -186,6 +186,10 @@ func (s *deskService) line(id string, c *Campaign, in DeskInputs, f DeskFacts, n
 			return DeskLine{}, false
 		}
 		l = foundryLine(c, f.Foundry, now)
+	case "game":
+		l = gameLine(c, in)
+	case "settings":
+		l = settingsLine(c)
 	case "ai":
 		l = aiLine(c, f.AI)
 	case "trash":

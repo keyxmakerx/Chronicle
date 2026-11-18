@@ -177,6 +177,9 @@ type DeskAct struct {
 	Href  string
 	// Danger draws the word in the state red: only Delete.
 	Danger bool
+	// Carry says the page this leads to opens with this line's own sentence,
+	// so the press lifts the sentence and carries it there.
+	Carry bool
 }
 
 // DeskBlankKind is how a blank is changed.

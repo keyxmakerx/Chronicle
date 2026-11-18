@@ -49,7 +49,7 @@ func deskHref(campaignID, path string) string { return "/campaigns/" + campaignI
 // co-DM and 2 players." members is nil when they could not be read, which
 // leaves the plain link sentence.
 func peopleLine(c *Campaign, members []CampaignMember, invited int) DeskLine {
-	l := DeskLine{ID: "people", Acts: []DeskAct{{Label: "Open People", Href: deskHref(c.ID, "/members")}}}
+	l := DeskLine{ID: "people", Acts: []DeskAct{{Label: "Open People", Href: deskHref(c.ID, "/members"), Carry: true}}}
 	if len(members) == 0 {
 		l.Parts = []DeskPart{txt("Everyone in the campaign, and what each may do, is on the People page.")}
 		return l
@@ -110,7 +110,7 @@ func peopleLine(c *Campaign, members []CampaignMember, invited int) DeskLine {
 
 // changesLine says how much players changed this week.
 func changesLine(c *Campaign, f *DeskChangesFacts) DeskLine {
-	l := DeskLine{ID: "changes", Acts: []DeskAct{{Label: "Look", Href: deskHref(c.ID, "/players/changes")}}}
+	l := DeskLine{ID: "changes", Acts: []DeskAct{{Label: "Look", Href: deskHref(c.ID, "/players/changes"), Carry: true}}}
 	switch {
 	case f == nil:
 		l.Parts = []DeskPart{txt("What players changed on your pages can be looked at, and undone, on its own page.")}
@@ -139,7 +139,7 @@ func nameLine(c *Campaign) DeskLine {
 // gameLine says which game the campaign plays and how many features are on.
 // It names nothing it was not told: with neither number it is a plain link.
 func gameLine(c *Campaign, in DeskInputs) DeskLine {
-	l := DeskLine{ID: "game", Acts: []DeskAct{{Label: "Game & features", Href: deskHref(c.ID, "/extensions")}}}
+	l := DeskLine{ID: "game", Acts: []DeskAct{{Label: "Game & features", Href: deskHref(c.ID, "/extensions"), Carry: true}}}
 	feats := ""
 	if in.FeaturesTotal > 0 {
 		feats = fmt.Sprintf("%d of %d features", in.FeaturesOn, in.FeaturesTotal)
@@ -227,7 +227,7 @@ func lookLine(c *Campaign) DeskLine {
 
 // mediaLine says what the picture store holds.
 func mediaLine(c *Campaign, f *DeskMediaFacts) DeskLine {
-	l := DeskLine{ID: "media", Acts: []DeskAct{{Label: "Open Media", Href: deskHref(c.ID, "/media")}}}
+	l := DeskLine{ID: "media", Acts: []DeskAct{{Label: "Open Media", Href: deskHref(c.ID, "/media"), Carry: true}}}
 	if f == nil {
 		l.Parts = []DeskPart{txt("Its pictures and files are kept in Media.")}
 		return l
@@ -243,7 +243,7 @@ func mediaLine(c *Campaign, f *DeskMediaFacts) DeskLine {
 // settingsLine points at everything the desk does not draw.
 func settingsLine(c *Campaign) DeskLine {
 	return DeskLine{ID: "settings", Parts: []DeskPart{txt("Export, import, the activity log and the rest are in Settings.")},
-		Acts: []DeskAct{{Label: "Open Settings", Href: deskHref(c.ID, "/settings")}}}
+		Acts: []DeskAct{{Label: "Open Settings", Href: deskHref(c.ID, "/settings"), Carry: true}}}
 }
 
 // foundrySeen is when Foundry last answered, from the socket or the keys.
@@ -253,7 +253,7 @@ func foundrySeen(conn FoundryConnection) *time.Time {
 
 // foundryLine says whether Foundry is answering, and which module it runs.
 func foundryLine(c *Campaign, f *DeskFoundryFacts, now time.Time) DeskLine {
-	l := DeskLine{ID: "foundry", Acts: []DeskAct{{Label: "Open Foundry", Href: deskHref(c.ID, "/foundry")}}}
+	l := DeskLine{ID: "foundry", Acts: []DeskAct{{Label: "Open Foundry", Href: deskHref(c.ID, "/foundry"), Carry: true}}}
 	if f == nil {
 		l.Parts = []DeskPart{txt("Foundry's link to this campaign, its module and its players are on the Foundry page.")}
 		return l
@@ -288,7 +288,7 @@ func foundryLine(c *Campaign, f *DeskFoundryFacts, now time.Time) DeskLine {
 
 // aiLine says whether the owner's AI is connected and what it may do.
 func aiLine(c *Campaign, f *DeskAIFacts) DeskLine {
-	l := DeskLine{ID: "ai", Acts: []DeskAct{{Label: "Open Your AI", Href: deskHref(c.ID, "/ai")}}}
+	l := DeskLine{ID: "ai", Acts: []DeskAct{{Label: "Open Your AI", Href: deskHref(c.ID, "/ai"), Carry: true}}}
 	if f == nil {
 		l.Parts = []DeskPart{txt("Connecting an AI app, and what it did, are on the Your AI page.")}
 		return l
@@ -324,7 +324,7 @@ func keysLine(c *Campaign) DeskLine {
 
 // trashLine says what waits in the campaign Trash.
 func trashLine(c *Campaign, f *DeskTrashFacts) DeskLine {
-	l := DeskLine{ID: "trash", Acts: []DeskAct{{Label: "Trash", Href: deskHref(c.ID, "/trash")}}}
+	l := DeskLine{ID: "trash", Acts: []DeskAct{{Label: "Trash", Href: deskHref(c.ID, "/trash"), Carry: true}}}
 	switch {
 	case f == nil:
 		l.Parts = []DeskPart{txt("Deleted pages wait in the Trash, where you can bring them back.")}

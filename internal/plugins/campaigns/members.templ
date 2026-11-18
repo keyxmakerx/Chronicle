@@ -12,7 +12,7 @@ import (
 // manages members, invites and ownership.
 templ CampaignMembersPage(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
 	@layouts.App(cc.Campaign.Name + " - People") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "People"}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "People", Line: "people"}) {
 			@peopleSections(cc, members, transfer, csrfToken, errMsg, smtpConfigured)
 		}
 	}

@@ -31,7 +31,7 @@ import (
 // degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
 templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, contentPacksCard templ.Component) {
 	@layouts.App(cc.Campaign.Name + " - Game & features") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Game & features"}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Game & features", Line: "game"}) {
 		<div data-extensions-hub>
 			<div class="manage-split">
 				<div class="mb-6">

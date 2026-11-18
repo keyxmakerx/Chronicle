@@ -3048,6 +3048,9 @@ func (a *App) RegisterRoutes() {
 	campaigns.RegisterInviteRoutes(e, inviteHandler, campaignService, authService)
 	// The desk's People line counts the invitations still waiting.
 	campaignHandler.SetInviteLister(inviteService)
+	// Every Manage page opens with its own desk sentence, worded by the same
+	// service the desk uses.
+	layouts.SetManageSentence(campaignHandler.ManageSentence)
 
 	// Guest codes: the owner's card, and auth's join page redeeming them.
 	// A guest exists only for their campaign, so removing them from it or

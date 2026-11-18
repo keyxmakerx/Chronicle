@@ -7,10 +7,12 @@
 package campaigns
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -19,20 +21,38 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// deskInputs gathers what campaigns itself knows that the desk draws. A part
+// deskParts says which of campaigns' own facts a caller needs, so a page that
+// draws one line does not read what only another line uses.
+type deskParts uint8
+
+const (
+	deskMembers deskParts = 1 << iota
+	deskInvites
+	deskAddons
+	deskSystem
+	deskAll = deskMembers | deskInvites | deskAddons | deskSystem
+)
+
+// deskInputs gathers everything the whole desk draws.
+func (h *Handler) deskInputs(c *echo.Context, cc *CampaignContext) DeskInputs {
+	return h.deskInputsFor(c.Request().Context(), cc.Campaign, deskAll)
+}
+
+// deskInputsFor gathers the asked-for facts that campaigns itself knows. A part
 // that cannot be read is left out and logged; it never stops the desk or a
 // fragment from opening.
-func (h *Handler) deskInputs(c *echo.Context, cc *CampaignContext) DeskInputs {
-	ctx := c.Request().Context()
-	in := DeskInputs{Campaign: cc.Campaign, Addons: map[string]bool{}, GMTerm: layouts.GMTerm(ctx)}
-	if members, err := h.service.ListMembers(ctx, cc.Campaign.ID); err != nil {
-		slog.Warn("desk: members not read", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
-	} else {
-		in.Members = members
+func (h *Handler) deskInputsFor(ctx context.Context, campaign *Campaign, parts deskParts) DeskInputs {
+	in := DeskInputs{Campaign: campaign, Addons: map[string]bool{}, GMTerm: layouts.GMTerm(ctx)}
+	if parts&deskMembers != 0 {
+		if members, err := h.service.ListMembers(ctx, campaign.ID); err != nil {
+			slog.Warn("desk: members not read", slog.String("campaign_id", campaign.ID), slog.Any("error", err))
+		} else {
+			in.Members = members
+		}
 	}
-	if h.invites != nil {
-		if inv, err := h.invites.ListInvites(ctx, cc.Campaign.ID); err != nil {
-			slog.Warn("desk: invitations not read", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+	if parts&deskInvites != 0 && h.invites != nil {
+		if inv, err := h.invites.ListInvites(ctx, campaign.ID); err != nil {
+			slog.Warn("desk: invitations not read", slog.String("campaign_id", campaign.ID), slog.Any("error", err))
 		} else {
 			for i := range inv {
 				if inv[i].IsPending() {
@@ -42,10 +62,10 @@ func (h *Handler) deskInputs(c *echo.Context, cc *CampaignContext) DeskInputs {
 		}
 	}
 	var addons []PluginHubAddon
-	if h.addonLister != nil {
+	if parts&(deskAddons|deskSystem) != 0 && h.addonLister != nil {
 		var err error
-		if addons, err = h.addonLister.ListForPluginHub(ctx, cc.Campaign.ID); err != nil {
-			slog.Warn("desk: add-ons not read", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		if addons, err = h.addonLister.ListForPluginHub(ctx, campaign.ID); err != nil {
+			slog.Warn("desk: add-ons not read", slog.String("campaign_id", campaign.ID), slog.Any("error", err))
 			addons = nil
 		}
 	}
@@ -61,8 +81,8 @@ func (h *Handler) deskInputs(c *echo.Context, cc *CampaignContext) DeskInputs {
 			in.FeaturesOn++
 		}
 	}
-	if h.systemLister != nil {
-		id := currentSystemID(cc.Campaign.ParseSettings().SystemID, addons)
+	if parts&deskSystem != 0 && h.systemLister != nil {
+		id := currentSystemID(campaign.ParseSettings().SystemID, addons)
 		for _, o := range h.systemLister.ListSystems() {
 			if id != "" && o.ID == id {
 				in.SystemName = o.Name
@@ -70,6 +90,32 @@ func (h *Handler) deskInputs(c *echo.Context, cc *CampaignContext) DeskInputs {
 		}
 	}
 	return in
+}
+
+// ManageSentence is a Manage page's own desk sentence, for the frame to draw
+// under the title (layouts.SetManageSentence). It words the line from the
+// same service and providers the desk uses, so the page opened by address and
+// the page reached from the desk start with the same words. It returns nil for
+// anyone who is not the campaign's owner and when the line cannot be worded;
+// the frame then draws nothing.
+func (h *Handler) ManageSentence(ctx context.Context, lineID string) templ.Component {
+	if !layouts.InCampaign(ctx) || layouts.GetCampaignRole(ctx) < int(RoleOwner) {
+		return nil
+	}
+	campaign, err := h.service.GetByID(ctx, layouts.GetCampaignID(ctx))
+	if err != nil || campaign == nil {
+		return nil
+	}
+	parts := deskAddons | deskSystem
+	if lineID == "people" {
+		parts = deskMembers | deskInvites
+	}
+	in := h.deskInputsFor(ctx, campaign, parts)
+	line, ok := h.desk.Line(ctx, DeskRequest{CampaignID: campaign.ID, OwnerID: layouts.GetUserID(ctx), Now: time.Now()}, in, lineID)
+	if !ok {
+		return nil
+	}
+	return manageSentence(lineID, line)
 }
 
 // deskOwner returns the campaign context of an owner-only desk request.

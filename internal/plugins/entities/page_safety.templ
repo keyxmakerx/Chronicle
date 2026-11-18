@@ -242,7 +242,7 @@ templ historyDiff(d HistoryPanelData) {
 // TrashPage is the campaign Trash under Manage.
 templ TrashPage(cc *campaigns.CampaignContext, d TrashPageData) {
 	@layouts.App(cc.Campaign.Name + " - Trash") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Trash"}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Trash", Line: "trash"}) {
 			<p class="text-sm text-fg-secondary mb-4">
 				Deleted pages, pictures, game nights and maps wait here for { fmt.Sprint(d.Retention) } days, then are gone for good.
 				Restoring a page brings back its sub-pages, links and pictures with it. Players never see the Trash.

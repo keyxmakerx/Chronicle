@@ -15,7 +15,7 @@ import (
 templ PlayerChangesPage(v View) {
 	@layouts.App("What players changed") {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/player_changes.css") }/>
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "What players changed"}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "What players changed", Line: "changes"}) {
 		<div
 			data-widget="player-changes"
 			data-results-url={ fmt.Sprintf("/campaigns/%s/players/changes/results", v.CampaignID) }

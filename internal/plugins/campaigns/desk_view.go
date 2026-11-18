@@ -154,6 +154,27 @@ func deskFoldInviteKey() templ.ComponentScript {
 	return deskFoldCall("deskFoldInviteKey", "inviteKey", `if(e.key!=='Enter')return;e.preventDefault();`)
 }
 
+// deskCarryCall is the click handler of a line's "open the page" word. It
+// hands the press to static/js/desk_carry.js, which lifts the line's sentence
+// and carries it to the page it opens. A plain click would navigate before
+// the script has loaded, so the first press is held and handed over with
+// "late" set: the script then plays the move, or goes to the link itself when
+// it cannot.
+func deskCarryCall() templ.ComponentScript {
+	src := layouts.AssetURL("/static/js/desk_carry.js")
+	return templ.ComponentScript{
+		Name:     "deskCarry",
+		Function: "",
+		Call: `(function(a,e){var C=window.Chronicle=window.Chronicle||{};var late=0;` +
+			`if(!C.deskCarry&&e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey&&!a.target){e.preventDefault();late=1;}` +
+			`function go(){if(C.deskCarry)C.deskCarry.go(a,e,late);}` +
+			`if(C.deskCarry){go();return;}` +
+			`var s=document.querySelector('script[data-desk-carry-js]');` +
+			`if(!s){s=document.createElement('script');s.src=` + jsString(src) + `;s.setAttribute('data-desk-carry-js','');document.head.appendChild(s);}` +
+			`s.addEventListener('load',go);})(this,event)`,
+	}
+}
+
 // deskFoldTitle is the tool a fold belongs to, for its screen-reader name and
 // the chevron's label.
 func deskFoldTitle(id string) string {

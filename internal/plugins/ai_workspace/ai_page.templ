@@ -19,7 +19,7 @@ import (
 templ AIPageView(cc *campaigns.CampaignContext, v ConnectView) {
 	@layouts.App(cc.Campaign.Name + " - Your AI") {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Your AI"}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Your AI", Line: "ai"}) {
 			<div data-ai-page x-data={ pageTabState(v) }>
 				@aiConnectSection(v)
 			</div>

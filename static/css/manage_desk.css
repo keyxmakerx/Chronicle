@@ -326,6 +326,22 @@ html[data-motion="off"] .desk-ln[data-fold] > .desk-row,
 html[data-motion="off"] .desk-send { transition: none; }
 html[data-motion="calm"] .desk-send { transition: background-color var(--dur-micro) var(--ease-out); }
 
+/* The line carries you (static/js/desk_carry.js) -------------------------------
+   The travelling copy of a sentence, and the flag that keeps the page hidden
+   while it arrives. Only transform and opacity animate. The script removes the
+   flag and the copy at every end, so a failed or interrupted move can never
+   leave the page hidden. */
+.desk-fly {
+  position: fixed;
+  z-index: 70;
+  margin: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+html[data-desk-trip] #main-content > :not(link, script, style) { opacity: 0; }
+
 /* Phone: one column, quiet words under their sentence, sticky group names --- */
 @media (max-width: 640px) {
   .desk { gap: 1.25rem; }

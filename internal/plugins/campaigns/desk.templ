@@ -82,7 +82,11 @@ templ deskRowBody(l DeskLine) {
 	@deskSentence(l)
 	<span class="desk-acts">
 		for _, a := range l.Acts {
-			<a class={ "desk-q", templ.KV("bad", a.Danger) } href={ templ.SafeURL(a.Href) }>{ a.Label }</a>
+			if a.Carry {
+				<a class="desk-q" href={ templ.SafeURL(a.Href) } data-carry onclick={ deskCarryCall() }>{ a.Label }</a>
+			} else {
+				<a class={ "desk-q", templ.KV("bad", a.Danger) } href={ templ.SafeURL(a.Href) }>{ a.Label }</a>
+			}
 		}
 	</span>
 	if l.Fold {
@@ -115,6 +119,16 @@ templ deskSentence(l DeskLine) {
 			@deskNode(n)
 		}
 	</p>
+}
+
+// manageSentence is a desk line's sentence as the first line of the Manage page
+// it opens, under the title. The desk's own sentence and this one are the same
+// words from the same service; the move from the desk carries one onto the
+// other, and the page opened by address starts the same way.
+templ manageSentence(id string, l DeskLine) {
+	<div class="manage-sentence" data-manage-sentence data-line={ id }>
+		@deskSentence(l)
+	</div>
 }
 
 // DeskFoldBody is what a line unfolds into, served as a fragment when the line

@@ -91,7 +91,7 @@ func settingsTabIDsJSON(tabs []SettingsTab) string {
 // inside each tab's own Content closure.
 templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken, errMsg, activeTab string, tabs []SettingsTab) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Settings"}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Settings", Line: "settings"}) {
 		<div
 			x-data={ fmt.Sprintf(`{
 				tab: '%s',

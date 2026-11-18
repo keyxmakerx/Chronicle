@@ -18,6 +18,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 func members(n int, role Role) []CampaignMember {
@@ -347,3 +348,88 @@ func TestDeskFragments_UnknownLineIsNotFound(t *testing.T) {
 }
 
 func ptrTime(t time.Time) *time.Time { return &t }
+
+// deskSentenceService answers what ManageSentence reads.
+type deskSentenceService struct{ CampaignService }
+
+func (deskSentenceService) GetByID(_ context.Context, id string) (*Campaign, error) {
+	return &Campaign{ID: id, Name: "Therin", Settings: "{}"}, nil
+}
+func (deskSentenceService) ListMembers(context.Context, string) ([]CampaignMember, error) {
+	return members(3, RolePlayer), nil
+}
+
+func sentenceCtx(role int, in bool) context.Context {
+	ctx := layouts.SetUserID(context.Background(), "owner")
+	if in {
+		ctx = layouts.SetCampaignID(ctx, "c1")
+		ctx = layouts.SetCampaignRole(ctx, role)
+	}
+	return ctx
+}
+
+// A Manage page's own sentence is the owner's alone and is the same words the
+// desk shows, from the same provider.
+func TestManageSentence(t *testing.T) {
+	h := NewHandler(deskSentenceService{})
+	h.RegisterDeskProvider(stubProvider{DeskTrash, func(context.Context) (DeskFacts, error) {
+		return DeskFacts{Trash: &DeskTrashFacts{Items: 2, Days: 30}}, nil
+	}})
+	tests := []struct {
+		name string
+		ctx  context.Context
+		line string
+		want string // "" means no sentence at all
+	}{
+		{"owner, people", sentenceCtx(int(RoleOwner), true), "people", "4 people: you and 3 players."},
+		{"owner, trash", sentenceCtx(int(RoleOwner), true), "trash", "Trash holds 2 items for 30 days."},
+		{"owner, a line with no page", sentenceCtx(int(RoleOwner), true), "keys", ""},
+		{"scribe", sentenceCtx(int(RoleScribe), true), "people", ""},
+		{"player", sentenceCtx(int(RolePlayer), true), "people", ""},
+		{"owner viewing as a player reads as player", sentenceCtx(int(RolePlayer), true), "trash", ""},
+		{"outside a campaign", sentenceCtx(0, false), "people", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comp := h.ManageSentence(tt.ctx, tt.line)
+			if tt.want == "" {
+				if comp != nil {
+					t.Fatal("this viewer or line must get no sentence")
+				}
+				return
+			}
+			if comp == nil {
+				t.Fatal("want a sentence")
+			}
+			var sb strings.Builder
+			if err := comp.Render(tt.ctx, &sb); err != nil {
+				t.Fatal(err)
+			}
+			out := sb.String()
+			if !strings.Contains(out, tt.want) || !strings.Contains(out, `data-manage-sentence`) || !strings.Contains(out, `data-line="`+tt.line+`"`) {
+				t.Errorf("sentence = %s, want it to say %q", out, tt.want)
+			}
+		})
+	}
+}
+
+// Only the lines whose page opens with their own sentence carry it; the rest
+// are plain links.
+func TestDeskLine_CarriesOnlyWhereThePageOpensWithTheSentence(t *testing.T) {
+	c := &Campaign{ID: "c1", Settings: "{}"}
+	carries := map[string]bool{"people": true, "changes": true, "game": true, "media": true, "foundry": true, "ai": true, "trash": true, "settings": true}
+	in := DeskInputs{Campaign: c, Members: members(1, RolePlayer), Addons: map[string]bool{"media-gallery": true, "sync-api": true}}
+	d := NewDeskService().Build(context.Background(), DeskRequest{Now: time.Now()}, in)
+	for _, g := range d.Groups {
+		for _, l := range g.Lines {
+			want := carries[l.ID]
+			got := false
+			for _, a := range l.Acts {
+				got = got || a.Carry
+			}
+			if got != want {
+				t.Errorf("line %s carries = %v, want %v", l.ID, got, want)
+			}
+		}
+	}
+}
