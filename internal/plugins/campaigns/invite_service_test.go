@@ -532,3 +532,17 @@ func (m *mockCampaignRepoForInvites) ListOwnedByUser(context.Context, string) ([
 func (m *mockCampaignRepoForInvites) ListMemberCampaignIDs(context.Context, string) ([]string, error) {
 	return nil, nil
 }
+
+func TestCreateInvite_RejectsUnsafeAddresses(t *testing.T) {
+	for _, email := range []string{
+		"a@b.com\r\nBcc: x@y.com",
+		"Name <a@b.com>",
+		"a@b.com, c@d.com",
+		"not an address",
+	} {
+		svc := &inviteService{}
+		if _, err := svc.CreateInvite(context.Background(), "camp-1", "u1", CreateInviteInput{Email: email, Role: "player"}); err == nil {
+			t.Errorf("%q was accepted", email)
+		}
+	}
+}

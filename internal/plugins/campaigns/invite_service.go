@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -55,6 +56,11 @@ func (s *inviteService) CreateInvite(ctx context.Context, campaignID, createdBy 
 	email := strings.TrimSpace(strings.ToLower(input.Email))
 	if email == "" {
 		return nil, apperror.NewValidation("email is required")
+	}
+	// The address goes into a mail header, so it must be one plain address:
+	// no names, comments, spaces or line breaks.
+	if addr, err := mail.ParseAddress(email); err != nil || addr.Address != email || strings.ContainsAny(email, " \t\r\n<>,;\"") {
+		return nil, apperror.NewValidation("that doesn't look like an email address")
 	}
 
 	// Validate role.
