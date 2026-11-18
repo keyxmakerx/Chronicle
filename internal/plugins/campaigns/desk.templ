@@ -1,0 +1,128 @@
+// desk.templ draws the owner's desk: Manage's home page, one page of plain
+// sentences in groups. Every control inside it carries its own inline handler
+// (deskBlankCall), built Go-side, because the page arrives by a boosted swap
+// where a script tag or a delegated listener may never run. The behaviour
+// itself is static/js/desk_blank.js, loaded by the layout outside the swapped
+// region.
+
+package campaigns
+
+import "fmt"
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// DeskPage renders the desk inside the shared Manage frame.
+templ DeskPage(cc *CampaignContext, d *Desk) {
+	@layouts.App(d.CampaignName + " — Manage") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/manage_desk.css") }/>
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Manage", Home: true, Intro: "How this campaign is set up, in one place."}) {
+			<div class="desk" data-desk data-campaign={ cc.Campaign.ID }>
+				if len(d.Needs) > 0 {
+					<section class="desk-need" aria-labelledby="desk-g-needs" data-desk-needs>
+						<h2 class="desk-lab" id="desk-g-needs">Needs you</h2>
+						<ul class="desk-lines">
+							for _, n := range d.Needs {
+								<li class="desk-ln">
+									<div class="desk-row">
+										<p class="desk-s">
+											<i class={ "desk-dot", templ.KV("warn", n.State == "warn") } aria-hidden="true"></i>
+											if n.State == "warn" {
+												<span class="sr-only">Warning: </span>
+											}
+											<b>{ n.Lead }</b>{ n.Rest }
+										</p>
+										<span class="desk-acts">
+											<a class="desk-q" href={ templ.SafeURL(n.URL) }>{ n.Action }</a>
+										</span>
+									</div>
+								</li>
+							}
+						</ul>
+					</section>
+				}
+				for i, g := range d.Groups {
+					<section class="desk-grp" aria-labelledby={ fmt.Sprintf("desk-g-%d", i) }>
+						<h2 class="desk-lab" id={ fmt.Sprintf("desk-g-%d", i) }>{ g.Name }</h2>
+						<div class="desk-lines">
+							for _, l := range g.Lines {
+								@deskLine(l)
+							}
+						</div>
+					</section>
+				}
+			</div>
+		}
+	}
+}
+
+// deskLine is one sentence and the quiet words that open its tool. The acts
+// span is always drawn, even empty, because it is where a blank's "Saved"
+// tick appears.
+templ deskLine(l DeskLine) {
+	<div class="desk-ln" data-line={ l.ID }>
+		<div class="desk-row">
+			<p class="desk-s">
+				if l.State != "" {
+					<i class={ "desk-dot", templ.KV("ok", l.State == "ok"), templ.KV("warn", l.State == "warn") } aria-hidden="true"></i>
+					if l.State == "warn" {
+						<span class="sr-only">Warning: </span>
+					}
+				}
+				for _, n := range deskNodes(l.Parts) {
+					@deskNode(n)
+				}
+			</p>
+			<span class="desk-acts">
+				for _, a := range l.Acts {
+					<a class={ "desk-q", templ.KV("bad", a.Danger) } href={ templ.SafeURL(a.Href) }>{ a.Label }</a>
+				}
+			</span>
+		</div>
+	</div>
+}
+
+// deskNode draws one piece of a sentence. A blank and the punctuation that
+// follows it sit in one no-wrap span so a full stop is never left alone at
+// the start of a line.
+templ deskNode(n deskNodeView) {
+	switch n.Kind {
+		case deskNodeBold:
+			<b>{ n.Text }</b>
+		case deskNodeGM:
+			{ layouts.GMTerm(ctx) }
+		case deskNodeSwatch:
+			<i class="desk-sw" aria-hidden="true"></i>
+		case deskNodeAfter:
+			<span data-desk-after>{ n.Text }</span>
+		case deskNodeBlank:
+			@deskBlank(n.Blank, n.Glue)
+		default:
+			{ n.Text }
+	}
+}
+
+// deskBlank is the dashed word. A choice opens a small menu and saves at
+// once; the name turns into a field where it stands. Off while the campaign
+// is archived, with the reason on hover.
+templ deskBlank(b *DeskBlank, glue string) {
+	<span
+		role="button"
+		tabindex={ deskTabindex(b) }
+		class="desk-b"
+		data-desk-blank={ string(b.Kind) }
+		data-id={ b.ID }
+		data-label={ b.Label }
+		data-url={ b.URL }
+		data-method={ b.Method }
+		data-field={ b.Field }
+		data-bool?={ b.Bool }
+		data-value={ b.Value }
+		data-options={ deskOptionsJSON(b.Options) }
+		aria-haspopup={ deskHasPopup(b) }
+		aria-expanded="false"
+		aria-disabled={ deskDisabled(b) }
+		aria-label={ b.Label + ": " + b.Shown }
+		title={ b.Off }
+		onclick={ deskBlankCall() }
+		onkeydown={ deskBlankKey() }
+	>{ b.Shown }</span>{ deskJoin(glue) }
+}

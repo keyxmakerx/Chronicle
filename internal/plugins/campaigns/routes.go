@@ -131,6 +131,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// held-down button from flooding their inbox or the mail server.
 	cg.POST("/appearance/email-test", h.SendTestEmailAPI, RequireRole(RoleOwner), middleware.RateLimit(5, time.Minute))
 	cg.PUT("/default-visibility", h.UpdateDefaultVisibilityAPI, RequireRole(RoleOwner))
+	// The desk's name and public/private blanks: a partial save, so naming
+	// one never rewrites the description.
+	cg.PUT("/details", h.UpdateDetailsAPI, RequireRole(RoleOwner))
 	// Event tier definitions per campaign: owner-only campaign-config
 	// surface, not exposed via syncapi.
 	cg.GET("/event-tier-definitions", h.GetEventTierDefinitionsAPI, RequireRole(RoleOwner))

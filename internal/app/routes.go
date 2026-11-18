@@ -3152,6 +3152,7 @@ func (a *App) RegisterRoutes() {
 	// but don't crash -- the rest of the app keeps running.
 	mediaRepo := media.NewMediaRepository(a.DB)
 	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
+	campaignHandler.RegisterDeskProvider(media.NewDeskProvider(mediaService))
 	if err := mediaService.ValidateMediaPath(); err != nil {
 		slog.Warn("media storage validation failed; uploads may not work",
 			slog.Any("error", err),
@@ -4860,6 +4861,7 @@ func (a *App) RegisterRoutes() {
 	pageSafetyService.AddTrashKind(gameNightTrash{svc: sessionsService, backOn: sessionsHandler.EmailBackOn})
 	pageSafetyService.AddTrashKind(pictureTrash{svc: mediaService})
 	pageSafetyService.AddTrashKind(mapTrash{svc: mapsService})
+	campaignHandler.RegisterDeskProvider(entities.NewDeskProvider(pageSafetyService))
 	pageSafetyHandler := entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService)
 	pageSafetyHandler.SetAuditService(auditService)
 	entities.RegisterPageSafetyRoutes(e, pageSafetyHandler, campaignService, authService)
@@ -4896,6 +4898,7 @@ func (a *App) RegisterRoutes() {
 		pageSafetyService.SetLongTermTrash(playerChangesSvc)
 		adminHandler.SetLongTermTrashSizer(playerChangesSvc)
 		go playerChangesSvc.StartPacker(a.ShutdownCtx)
+		campaignHandler.RegisterDeskProvider(playerchanges.NewDeskProvider(playerChangesSvc))
 	} else {
 		slog.Warn("player changes plugin degraded — What players changed is not available")
 	}
@@ -5417,6 +5420,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
+		campaignHandler.RegisterDeskProvider(ai_workspace.NewDeskProvider(aiConnectorSvc))
 		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheckDid)
 		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)
