@@ -82,10 +82,12 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 
 			<!-- Footer meta -->
 			<div class="flex items-center gap-3 text-xs text-fg-muted mt-8">
-				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
-					<i class="fa-solid fa-user-shield text-[10px]"></i>
-					{ ViewerAccessLabel(cc) }
-				</span>
+				if label := ViewerAccessLabel(cc); label != "" {
+					<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
+						<i class="fa-solid fa-user-shield text-[10px]"></i>
+						{ label }
+					</span>
+				}
 				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
 			</div>
 		</div>
@@ -207,10 +209,12 @@ templ OwnerDashboardPage(cc *CampaignContext, recentEntities []RecentEntity, nee
 			}
 
 			<div class="flex items-center gap-3 text-xs text-fg-muted mt-8">
-				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
-					<i class="fa-solid fa-user-shield text-[10px]"></i>
-					{ ViewerAccessLabel(cc) }
-				</span>
+				if label := ViewerAccessLabel(cc); label != "" {
+					<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
+						<i class="fa-solid fa-user-shield text-[10px]"></i>
+						{ label }
+					</span>
+				}
 				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
 			</div>
 		</div>

@@ -43,7 +43,7 @@ function rsvpBar({ count = 1, link = '/campaigns/c1/proposals/p1' } = {}) {
 function timezoneBar({ guest = false } = {}) {
   const kids = [
     el('i', { class: 'fa-solid fa-clock cta-ico' }),
-    el('span', { class: 'cta-msg' }, [], 'Times aren\'t in your time zone yet'),
+    el('span', { class: 'cta-msg' }, [], 'Times aren\'t in your zone yet'),
     el('button', { type: 'button', class: 'cta-go', 'data-cta-tz-accept': '', hidden: true }, [
       el('span', { 'data-cta-zone': '' }, [], 'my timezone'),
     ]),

@@ -88,8 +88,8 @@ function header(name) {
 const tzBanner = (withAccept) => `
   <div class="cta-host"><div class="cta-bar" data-cta="timezone" role="status">
     <i class="cta-ico">c</i>
-    <span class="cta-msg"><span class="cta-long">Times aren't in your time zone yet</span><span class="cta-short">Times aren't in your time zone yet</span></span>
-    <button type="button" class="cta-go" data-cta-tz-accept ${withAccept ? '' : 'hidden'}>Use <span data-cta-zone>London time</span></button><a class="cta-alt" href="/account">Choose</a>
+    <span class="cta-msg"><span class="cta-long">Times aren't in your zone yet</span><span class="cta-short">Times aren't in your zone yet</span></span>
+    <button type="button" class="cta-go" data-cta-tz-accept ${withAccept ? '' : 'hidden'}>Use <span data-cta-zone>Buenos Aires time</span></button><a class="cta-alt" href="/account">Choose</a>
     <button type="button" class="cta-x" data-cta-dismiss aria-label="Dismiss"><i>x</i></button>
   </div></div>`;
 

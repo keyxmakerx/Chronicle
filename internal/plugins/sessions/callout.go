@@ -102,7 +102,7 @@ func BuildCallout(unread []Notification, zoneSet bool, now time.Time) Callout {
 			// timezone" is a task; "times are not in yours" is the reason
 			// anyone would do it. It does not say UTC: game nights show in
 			// the organizer's zone, so that claim would be false there.
-			Message: "Times aren't in your time zone yet",
+			Message: "Times aren't in your zone yet",
 		}
 	}
 
