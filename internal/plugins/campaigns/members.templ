@@ -4,6 +4,8 @@
 package campaigns
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -216,7 +218,7 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 			}
 		</td>
 		<td class="px-6 py-4 text-sm text-fg-secondary">
-			{ member.JoinedAt.Format("Jan 2, 2006") }
+			@components.Date(member.JoinedAt, timeutil.DateShort)
 		</td>
 		if showFoundryColumn(ctx, cc) {
 			<td class="px-6 py-4 text-sm">

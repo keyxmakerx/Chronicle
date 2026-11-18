@@ -135,7 +135,7 @@ templ discoverCampaignCard(campaign *campaigns.Campaign) {
 			</div>
 		</div>
 		<div class="mt-3 text-xs text-fg-secondary">
-			<time datetime={ campaign.UpdatedAt.UTC().Format(time.RFC3339) } title={ campaign.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>{ timeutil.EditedAgo(campaign.UpdatedAt, time.Now()) }</time>
+			<time datetime={ campaign.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(campaign.UpdatedAt, timeutil.DateWithTime) } data-date-title>{ timeutil.EditedAgo(campaign.UpdatedAt, time.Now()) }</time>
 		</div>
 	</a>
 }

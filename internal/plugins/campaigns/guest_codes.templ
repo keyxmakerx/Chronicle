@@ -3,6 +3,8 @@
 package campaigns
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"math"
 	"net/url"
@@ -111,7 +113,9 @@ templ guestCodeRow(campaignID string, gc GuestCode, now time.Time, csrfToken str
 				if gc.IsVisit() {
 					Look around, { visitDaysLabel(gc.VisitDays) } ·
 				}
-				Made { gc.CreatedAt.Format("Jan 2") }
+				Made
+				{ " " }
+				@components.Date(gc.CreatedAt, timeutil.DateDay)
 			</div>
 		</div>
 		<div class="flex flex-wrap items-center gap-3 shrink-0">
@@ -121,7 +125,10 @@ templ guestCodeRow(campaignID string, gc GuestCode, now time.Time, csrfToken str
 					@guestCodeAction(campaignID, gc.ID, "player", "Make player", csrfToken)
 					@guestCodeAction(campaignID, gc.ID, "end", "End now", csrfToken)
 				case "visit_ended":
-					<span class="gc-pill">Looked around until { gc.VisitUntil.Format("Jan 2") }</span>
+					<span class="gc-pill">Looked around until
+					{ " " }
+					@components.Date(*gc.VisitUntil, timeutil.DateDay)
+					</span>
 					@guestCodeAction(campaignID, gc.ID, "player", "Make player", csrfToken)
 				case "used":
 					<span class="gc-pill gc-pill-ok">
@@ -134,7 +141,10 @@ templ guestCodeRow(campaignID string, gc GuestCode, now time.Time, csrfToken str
 				case "expired":
 					<span class="gc-pill">Expired</span>
 				default:
-					<span class="gc-pill gc-pill-live">Open until { gc.ExpiresAt.Format("Jan 2") }</span>
+					<span class="gc-pill gc-pill-live">Open until
+					{ " " }
+					@components.Date(gc.ExpiresAt, timeutil.DateDay)
+					</span>
 					<form
 						hx-delete={ fmt.Sprintf("/campaigns/%s/guest-codes/%s", campaignID, gc.ID) }
 						hx-target="#guest-codes"

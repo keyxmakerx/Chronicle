@@ -5,6 +5,8 @@
 package entities
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -485,8 +487,14 @@ templ blockDetails(cc *campaigns.CampaignContext, entity *Entity) {
 		</div>
 		<!-- Metadata -->
 		<div class="pt-2 border-t border-edge-light text-xs text-fg-muted space-y-1">
-			<div>Created { entity.CreatedAt.Format("Jan 2, 2006") }</div>
-			<div>Updated { entity.UpdatedAt.Format("Jan 2, 2006") }</div>
+			<div>Created
+			{ " " }
+			@components.Date(entity.CreatedAt, timeutil.DateShort)
+			</div>
+			<div>Updated
+			{ " " }
+			@components.Date(entity.UpdatedAt, timeutil.DateShort)
+			</div>
 		</div>
 	</div>
 }

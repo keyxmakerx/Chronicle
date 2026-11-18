@@ -5,6 +5,7 @@
 package campaigns
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -86,7 +87,10 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 					<i class="fa-solid fa-user-shield text-[10px]"></i>
 					{ ViewerAccessLabel(cc) }
 				</span>
-				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
+				<span>Created
+				{ " " }
+				@components.Date(cc.Campaign.CreatedAt, timeutil.DateShort)
+				</span>
 			</div>
 		</div>
 	}
@@ -211,7 +215,10 @@ templ OwnerDashboardPage(cc *CampaignContext, recentEntities []RecentEntity, nee
 					<i class="fa-solid fa-user-shield text-[10px]"></i>
 					{ ViewerAccessLabel(cc) }
 				</span>
-				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
+				<span>Created
+				{ " " }
+				@components.Date(cc.Campaign.CreatedAt, timeutil.DateShort)
+				</span>
 			</div>
 		</div>
 	}
@@ -366,7 +373,7 @@ templ RecentEntityCard(cc *CampaignContext, re *RecentEntity) {
 					}
 					{ re.TypeName }
 				</span>
-				<time class="text-[10px] text-fg-secondary" datetime={ re.UpdatedAt.UTC().Format(time.RFC3339) } title={ re.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+				<time class="text-[10px] text-fg-secondary" datetime={ re.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(re.UpdatedAt, timeutil.DateWithTime) } data-date-title>
 					{ timeutil.EditedAgo(re.UpdatedAt, time.Now()) }
 				</time>
 			</div>

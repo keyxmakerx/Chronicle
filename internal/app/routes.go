@@ -5860,7 +5860,13 @@ func (a *App) RegisterRoutes() {
 			// rather than failing the page.
 			if !middleware.IsHTMX(c) {
 				if vp, err := authService.GetViewPrefs(ctx, session.UserID); err == nil {
-					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast})
+					// The saved time zone, so dates read in it (static/js/dates.js).
+					// A failed read leaves the device's zone.
+					var tz string
+					if zones, zerr := authService.GetTimezonesByIDs(ctx, []string{session.UserID}); zerr == nil {
+						tz = zones[session.UserID]
+					}
+					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz})
 				} else {
 					slog.Warn("reading view prefs", slog.String("user_id", session.UserID), slog.Any("error", err))
 				}

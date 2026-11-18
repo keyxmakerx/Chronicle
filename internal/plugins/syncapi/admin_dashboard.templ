@@ -5,6 +5,7 @@
 package syncapi
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -162,7 +163,9 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 											@securityEventBadge(e.EventType)
 										</td>
 										<td class="py-2 pr-4 font-mono text-xs">{ e.IPAddress }</td>
-										<td class="py-2 pr-4 text-xs text-fg-muted">{ e.CreatedAt.Format("Jan 2, 15:04:05") }</td>
+										<td class="py-2 pr-4 text-xs text-fg-muted">
+										@components.Date(e.CreatedAt, timeutil.DateWithTime)
+										</td>
 										<td class="py-2 pr-4">
 											if e.Resolved {
 												<span class="badge-green text-xs">Resolved</span>

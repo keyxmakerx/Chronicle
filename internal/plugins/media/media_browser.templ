@@ -6,6 +6,8 @@
 package media
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -251,7 +253,9 @@ templ mediaCard(cc *campaigns.CampaignContext, f MediaFile, csrfToken string) {
 		>
 			<p class="text-xs font-medium text-fg-body truncate mb-1" title={ f.OriginalName }>{ f.OriginalName }</p>
 			<p class="text-[10px] text-fg-muted mb-1.5">
-				{ formatFileSize(f.FileSize) } &middot; { f.MimeType } &middot; { f.CreatedAt.Format("Jan 2, 2006") }
+				{ formatFileSize(f.FileSize) } &middot; { f.MimeType } &middot;
+				{ " " }
+				@components.Date(f.CreatedAt, timeutil.DateShort)
 			</p>
 			<!-- Lazy-load references -->
 			<div

@@ -1,6 +1,8 @@
 package admin
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -29,7 +31,9 @@ templ AdminHandoverPage(d HandoverPageData) {
 			<div class="card p-6 space-y-3">
 				<p class="text-sm text-fg-body">
 					<strong>{ d.Status.OwnerName }</strong> owns this campaign and was last { lastSeenText(d.Status.LastSeen, d.Now) }
-					({ d.Status.LastSeen.Format("January 2, 2006") }).
+					(
+					@components.Date(d.Status.LastSeen, timeutil.DateLong)
+					).
 				</p>
 				<p class="text-sm text-fg-secondary">
 					They allowed a hand-over after { handoverMonthsText(d.Status.AfterMonths) } away, so you can now choose a new owner.

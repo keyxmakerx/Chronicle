@@ -4,6 +4,7 @@
 package backup
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"net/url"
 	"time"
@@ -39,7 +40,11 @@ templ BackupPage(d BackupPageData) {
 				<div class="card p-4 border-l-4 border-red-500" role="alert">
 					<p class="text-sm text-red-700 dark:text-red-300">
 						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-						The daily backup on { d.LastScheduled.At.Format("2 Jan at 15:04") } failed: { d.LastScheduled.Detail }. Run one now to check, and see the server log for details.
+						The daily backup on
+						{ " " }
+						@components.Date(d.LastScheduled.At, timeutil.DateWithTime)
+						{ " " }
+						failed: { d.LastScheduled.Detail }. Run one now to check, and see the server log for details.
 					</p>
 				</div>
 			}
@@ -258,12 +263,16 @@ templ scheduleCard(d BackupPageData) {
 				if d.LastScheduled.OK {
 					<div class="text-green-700 dark:text-green-300">
 						<i class="fa-solid fa-circle-check mr-1"></i>
-						Last daily backup finished { d.LastScheduled.At.Format("2 Jan at 15:04") }
+						Last daily backup finished
+						{ " " }
+						@components.Date(d.LastScheduled.At, timeutil.DateWithTime)
 					</div>
 				} else {
 					<div class="text-red-700 dark:text-red-300">
 						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-						Last daily backup failed { d.LastScheduled.At.Format("2 Jan at 15:04") }
+						Last daily backup failed
+						{ " " }
+						@components.Date(d.LastScheduled.At, timeutil.DateWithTime)
 					</div>
 				}
 			</div>

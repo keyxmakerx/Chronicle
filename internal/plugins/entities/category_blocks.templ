@@ -187,7 +187,7 @@ templ catRecentPages(cc *campaigns.CampaignContext, entities []Entity, config ma
 							<span class="text-sm font-medium text-fg truncate block group-hover:text-accent transition-colors">
 								{ entity.Name }
 							</span>
-							<time class="text-[10px] text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ entity.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+							<time class="text-[10px] text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(entity.UpdatedAt, timeutil.DateWithTime) } data-date-title>
 								{ timeutil.EditedAgo(entity.UpdatedAt, time.Now()) }
 							</time>
 						</div>
