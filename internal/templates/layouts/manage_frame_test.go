@@ -26,11 +26,19 @@ func TestNavManageRows_OwnerOnly(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var got []string
-			for _, r := range NavManageRows(tt.c.ctx()) {
+			for _, r := range NavManagePages(tt.c.ctx()) {
 				got = append(got, r.Label)
 			}
 			if strings.Join(got, ",") != strings.Join(tt.want, ",") {
-				t.Fatalf("rows = %v, want %v", got, tt.want)
+				t.Fatalf("pages = %v, want %v", got, tt.want)
+			}
+			// The sidebar shows one row for all of them, or none.
+			rows := NavManageRows(tt.c.ctx())
+			if (len(tt.want) == 0) != (len(rows) == 0) || len(rows) > 1 {
+				t.Fatalf("sidebar rows = %d for %d pages", len(rows), len(tt.want))
+			}
+			if len(rows) == 1 && (rows[0].Key != NavManageKey || rows[0].URL != "/campaigns/c1/dashboard") {
+				t.Fatalf("the one row = %+v", rows[0])
 			}
 		})
 	}
@@ -40,7 +48,7 @@ func TestNavManageRows_OwnerOnly(t *testing.T) {
 func TestNavManageRows_FoundryNeedsSyncAPI(t *testing.T) {
 	ctx := SetEnabledAddons(navStateCase{role: 3, path: "/campaigns/c1"}.ctx(), map[string]bool{"sync-api": true})
 	var got []string
-	for _, r := range NavManageRows(ctx) {
+	for _, r := range NavManagePages(ctx) {
 		got = append(got, r.Label)
 	}
 	want := "Overview,People,What players changed,Customize,Game & features,Foundry,Your AI,Trash,Settings"

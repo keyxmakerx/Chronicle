@@ -108,7 +108,9 @@ func NavCommandsJSON(ctx context.Context) string {
 		}
 	}
 	add("All Pages", base+"/entities", "fa-layer-group")
-	for _, row := range NavManageRows(ctx) {
+	// The sidebar has one Manage row, but the palette still reaches each tool
+	// by name, so it lists the pages and not that row.
+	for _, row := range NavManagePages(ctx) {
 		add(row.Label, row.URL, row.Icon)
 	}
 	b, err := json.Marshal(out)
@@ -118,11 +120,29 @@ func NavCommandsJSON(ctx context.Context) string {
 	return string(b)
 }
 
-// NavManageRows are the campaign-management pages, in the order the sidebar
-// lists them. Only the owner manages a campaign, so anyone else (a Scribe, a
-// player, an owner viewing as a player whose role reads Player, a visitor)
-// gets none.
+// NavManageKey is the one sidebar row that leads to the desk. A tool's own
+// key ("manage:trash") is what a pin and the palette use; this row stands for
+// all of them, so it is current on every Manage page.
+const NavManageKey = "manage"
+
+// NavManageRows is the sidebar's Manage entry: one row to the desk, for the
+// owner only. Anyone else (a Scribe, a player, an owner viewing as a player
+// whose role reads Player, a visitor) gets none.
 func NavManageRows(ctx context.Context) []NavRowView {
+	if len(NavManagePages(ctx)) == 0 {
+		return nil
+	}
+	return []NavRowView{{
+		Key: NavManageKey, Kind: "app", Label: "Manage", Icon: "fa-sliders",
+		URL: "/campaigns/" + GetCampaignID(ctx) + "/dashboard",
+	}}
+}
+
+// NavManagePages are the campaign-management tools, in the order the desk
+// lists them. They no longer get a sidebar row each; they feed the command
+// palette, the active-row match and the owner's pins. Same owner-only rule as
+// NavManageRows.
+func NavManagePages(ctx context.Context) []NavRowView {
 	if !InCampaign(ctx) || !IsAuthenticated(ctx) || GetCampaignRole(ctx) < 3 {
 		return nil
 	}

@@ -445,16 +445,14 @@ templ navRing() {
 	</span>
 }
 
-// navManage is the Manage section, folded until opened: Members for every
-// member, and the owner's own pages for the owner.
+// navManage is the one Manage row, leading to the desk. Its trailing text is
+// the count of what needs the owner, filled in by sidebar_nav.js so a page
+// load never waits on it.
 templ navManage() {
 	<div class="nav-sec" data-nav-section="manage">
-		@navFoldHead("manage", "Manage", len(NavManageRows(ctx)), NavSectionCurrent(ctx, NavManageRows(ctx)))
-		<div class="nav-gb" id="nav-b-manage" hidden?={ !NavFoldOpen(ctx, "manage") }>
-			for _, row := range NavManageRows(ctx) {
-				@navRow(row)
-			}
-		</div>
+		for _, row := range NavManageRows(ctx) {
+			@navRow(row)
+		}
 	</div>
 }
 
