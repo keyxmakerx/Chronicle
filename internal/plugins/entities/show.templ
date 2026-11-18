@@ -36,7 +36,8 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 	{{ editor := pageEditorOn(ctx, cc, entity, entityType) }}
 	@withPageEditor(editor) {
 		<div
-			class="max-w-7xl mx-auto"
+			class={ layouts.AppFrameClass }
+			data-app-frame
 			data-page-frame
 			data-entity-type-slug={ entityType.Slug }
 			if editor {

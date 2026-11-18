@@ -991,6 +991,9 @@
      column's width back. The margin box spans the editor's height, so the
      list sticks only while the text is in view. */
   [data-page-frame] { position: relative; }
+  /* A page's words stop at a readable measure; tables and the space beside
+     the text keep the frame's width. */
+  [data-page-frame] .chronicle-editor__content .tiptap > :is(p, h1, h2, h3, h4, ul, ol, blockquote) { max-width: 68ch; }
   .chronicle-outline-margin { position: absolute; left: calc(100% + 1.5rem); width: 12rem; }
   .chronicle-editor--outlined.chronicle-editor--outline-out .chronicle-editor__content {
     grid-template-columns: minmax(0, 1fr);
