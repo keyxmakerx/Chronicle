@@ -4078,7 +4078,6 @@ func (a *App) RegisterRoutes() {
 	// rulebook_editor.js mount on their data-widget pages. Every script
 	// no-ops when its mount is absent.
 	pluginBodyScripts := []string{
-		"/static/js/invitation_time.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/own_entries.js",
@@ -6929,6 +6928,7 @@ func (a *App) RegisterRoutes() {
 // /static/js/widgets/ rather than in a plugin: each loads on the first page
 // that mounts it (ADR-063). Helpers come first, the registering script last.
 var coreWidgets = []PluginWidget{
+	{Name: "invitation-time", Scripts: []string{"/static/js/widgets/invitation_time.js"}},
 	{Name: "calendar_event_roll", Scripts: []string{"/static/js/widgets/calendar_event_roll.js"}},
 	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},
 	{Name: "permissions", Scripts: []string{"/static/js/widgets/permissions.js"}},

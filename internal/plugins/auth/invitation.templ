@@ -46,7 +46,7 @@ templ InvitationCard(inv *Invitation) {
 			<p class="inv-next">
 				<span class="inv-label">Next game night</span>
 				if inv.NextNight.Time != "" {
-					<time datetime={ inv.NextNight.At.UTC().Format(time.RFC3339) } data-local-night>{ invitationNightText(inv.NextNight) }</time>
+					<time datetime={ inv.NextNight.At.UTC().Format(time.RFC3339) } data-widget="invitation-time">{ invitationNightText(inv.NextNight) }</time>
 				} else {
 					<time datetime={ inv.NextNight.Date }>{ invitationNightText(inv.NextNight) }</time>
 				}
