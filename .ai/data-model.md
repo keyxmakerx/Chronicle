@@ -76,6 +76,7 @@ tracked in `golang-migrate`'s `schema_migrations` table.
 | `site_settings` | Global key/value settings | `setting_key` PK |
 | `smtp_settings` | Outbound email config (singleton) | `id` CHECK = 1; `password_encrypted` AES-256-GCM |
 | `user_storage_limits` | Per-user upload/storage overrides | PK `user_id`; `bypass_*` columns for temporary admin-granted bypass |
+| `update_health` | Per feature the running release changed (`internal/updatehealth`), how often it has been used and failed since this server first ran with it; feeds Site admin Home's Needs you | PK `feature_id` (an entry of `updatehealth.Changed`; rows for removed entries are ignored); `first_seen_at`; `uses`, `errors` (added to, so several servers share it); `last_error_at`, `last_error` (method, route template and message, no request data) |
 | `admin_activity` | Site-wide log of changes made from the admin area, shown on the admin Home page | `actor_user_id` deliberately not a FK, so rows outlive the account; `action`, `target_type`/`target_id`/`target_label`; `detail` JSON |
 
 ### Campaigns & membership
