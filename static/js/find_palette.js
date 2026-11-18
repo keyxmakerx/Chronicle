@@ -19,11 +19,8 @@
 
   var C = (window.Chronicle = window.Chronicle || {});
 
-  function esc(s) {
-    return C.escapeHtml ? C.escapeHtml(s) : String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
-    });
-  }
+  // Chronicle.escapeHtml is the one escape every script shares (boot.js).
+  function esc(s) { return C.escapeHtml(s); }
 
   function words(s) { return String(s || '').toLowerCase(); }
 

@@ -58,7 +58,7 @@ async function open({ find = true, findStatus = 200, count = 0, countStatus = 20
     return route.fulfill({ contentType: 'text/html', body: PAGE.replace(find ? '' : /<button[\s\S]*?<\/button>/, '').replace(sidebar ? '' : /<aside[\s\S]*<\/aside>/, '') });
   });
   await page.goto('http://t.test/');
-  await page.evaluate(() => { window.Chronicle = window.Chronicle || {}; window.Chronicle.notify = (m) => { window.notified = m; }; });
+  await page.evaluate(() => { window.Chronicle = window.Chronicle || {}; window.Chronicle.notify = (m) => { window.notified = m; }; window.Chronicle.escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); });
   return { ctx, page, seen };
 }
 
