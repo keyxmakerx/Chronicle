@@ -4966,6 +4966,25 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
 /* The tall header. Unlayered, so it outranks the h-14 utility on the bar. */
 [data-cz-hdr="tall"] #app-topbar { height: 6rem; }
 
+/* The Manage frame (layouts.ManageFrame): one left edge and one content width
+   for every owner Manage page, a quiet way back to the desk above the title,
+   and a slot for the page's own actions. Plain tokens, no motion. */
+.manage-frame { box-sizing: border-box; width: 100%; max-width: 64rem; margin-inline: auto; padding: 1.5rem 1rem; }
+.manage-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 1rem; margin-bottom: 1.5rem; }
+.manage-eyebrow {
+  flex: 0 0 100%; align-self: flex-start; width: max-content;
+  /* A 32px hit area around a 12px word, without growing the header. */
+  padding-block: 8px; margin-block: -8px 0;
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--color-accent); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-micro) var(--ease-standard);
+}
+.manage-eyebrow:hover, .manage-eyebrow:focus-visible { text-decoration-color: currentColor; }
+.manage-eyebrow:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: var(--shape-r-tag); }
+.manage-title { margin: 0; font-size: 1.5rem; line-height: 1.2; font-weight: 700; color: var(--color-text-primary); }
+.manage-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+.manage-intro { flex: 0 0 100%; margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--color-text-secondary); max-width: 65ch; }
+
 /* Shared block parts. Blocks mark their heading (cb-head), count (cb-count),
    fact section and row (cb-section, cb-fact), linked-page row (cb-link),
    surface (cb-card) and Director-only marks (cb-dm, data-dm-only), so a page

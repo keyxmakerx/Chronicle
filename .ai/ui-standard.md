@@ -93,7 +93,9 @@ it and the main action at its end. There is no box and no placeholder icon in
 the empty size; the sentence is the empty state. Each app writes three
 sentences (player, co-DM, owner) that say what will show there and who adds
 it, never offer an action the reader can't take, and name the game master
-with `GMTerm`. Manage pages keep `ManageHeader`.
+with `GMTerm`. Manage pages sit in `layouts.ManageFrame`: one left edge and width, a quiet
+"Manage" above the title leading back to the desk, and a slot for the page's
+actions.
 
 ## The material rules
 

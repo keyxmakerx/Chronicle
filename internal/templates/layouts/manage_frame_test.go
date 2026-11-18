@@ -46,21 +46,36 @@ func TestNavManageRows_FoundryNeedsSyncAPI(t *testing.T) {
 	}
 }
 
-// The sidebar is the only Manage menu: the header is a title, never a
-// second row of the same links.
-func TestManageHeader_TitleOnly(t *testing.T) {
-	var buf bytes.Buffer
-	ctx := navStateCase{role: 3, path: "/campaigns/c1/members"}.ctx()
-	if err := ManageHeader("People").Render(ctx, &buf); err != nil {
-		t.Fatal(err)
+// The sidebar is the only Manage menu: the frame is a title and one quiet way
+// back to the desk, never a second row of the same links.
+func TestManageFrame_TitleAndWayBack(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     ManageFrameData
+		wantBack bool
+	}{
+		{"a page leads back to the desk", ManageFrameData{Title: "People"}, true},
+		{"the desk has no word leading to itself", ManageFrameData{Title: "Manage", Home: true}, false},
 	}
-	out := buf.String()
-	for _, want := range []string{"Manage", "Saltmarsh", "<h1", "People"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("header is missing %q: %s", want, out)
-		}
-	}
-	if strings.Contains(out, "<nav") || strings.Contains(out, "href=") {
-		t.Errorf("header repeats the Manage links: %s", out)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			ctx := navStateCase{role: 3, path: "/campaigns/c1/members"}.ctx()
+			if err := ManageFrame(tt.data).Render(ctx, &buf); err != nil {
+				t.Fatal(err)
+			}
+			out := buf.String()
+			for _, want := range []string{"<h1", tt.data.Title, "data-manage-frame"} {
+				if !strings.Contains(out, want) {
+					t.Errorf("frame is missing %q: %s", want, out)
+				}
+			}
+			if got := strings.Contains(out, `href="/campaigns/c1/dashboard"`); got != tt.wantBack {
+				t.Errorf("way back to the desk = %v, want %v: %s", got, tt.wantBack, out)
+			}
+			if strings.Contains(out, "<nav") || strings.Count(out, "href=") > 1 {
+				t.Errorf("frame repeats the Manage links: %s", out)
+			}
+		})
 	}
 }

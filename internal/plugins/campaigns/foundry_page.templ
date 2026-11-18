@@ -13,8 +13,8 @@ import (
 // hx-get into placeholders that say what is loading.
 templ FoundryPageView(cc *CampaignContext, row FoundryRowData, checks []FoundryCheck, csrfToken string) {
 	@layouts.App(cc.Campaign.Name + " - Foundry") {
-		<div class="max-w-5xl mx-auto px-4 py-6" data-foundry-page>
-			@layouts.ManageHeader("Foundry")
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Foundry"}) {
+		<div data-foundry-page>
 			<p class="-mt-4 mb-4 text-sm text-fg-secondary max-w-prose">
 				Your Foundry world's link to this campaign: whether it is working, which module version it runs, and how to install it.
 			</p>
@@ -78,6 +78,7 @@ templ FoundryPageView(cc *CampaignContext, row FoundryRowData, checks []FoundryC
 				</div>
 			}
 		</div>
+		}
 	}
 }
 

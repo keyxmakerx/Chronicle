@@ -31,8 +31,8 @@ import (
 // degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
 templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, contentPacksCard templ.Component) {
 	@layouts.App(cc.Campaign.Name + " - Game & features") {
-		<div class="max-w-5xl min-[1600px]:max-w-screen-2xl mx-auto px-4 py-6" data-extensions-hub>
-			@layouts.ManageHeader("Game & features")
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Game & features"}) {
+		<div data-extensions-hub>
 			<div class="manage-split">
 				<div class="mb-6">
 					@gameSystemCard(cc, systemOptionsJSON, currentSystemID(cc.Campaign.ParseSettings().SystemID, addons))
@@ -93,6 +93,7 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 				}
 			</div>
 		</div>
+		}
 	}
 }
 
