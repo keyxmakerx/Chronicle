@@ -27,10 +27,10 @@ func TestDoorsOpenTheirOwnTab(t *testing.T) {
 		page templ.Component
 		door string
 	}{
-		{"login", LoginPage("tok", "", "", "", "", LoginOptions{}), "signin"},
-		{"register", RegisterPage("tok", nil, "", "", false, "open"), "new"},
-		{"register gated", RegisterPage("tok", nil, "", "", true, "invite"), "new"},
-		{"join", JoinPage("tok", "", "", "", ""), "code"},
+		{"login", LoginPage("tok", "", "", "", "", LoginOptions{}, nil), "signin"},
+		{"register", RegisterPage("tok", nil, "", "", false, "open", nil), "new"},
+		{"register gated", RegisterPage("tok", nil, "", "", true, "invite", nil), "new"},
+		{"join", JoinPage("tok", "", "", "", "", nil), "code"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -57,7 +57,7 @@ func TestDoorsOpenTheirOwnTab(t *testing.T) {
 }
 
 func TestDoorTabsKeepTheRedirect(t *testing.T) {
-	html := renderDoor(t, LoginPage("tok", "", "", "", "/join/abc123", LoginOptions{}))
+	html := renderDoor(t, LoginPage("tok", "", "", "", "/join/abc123", LoginOptions{}, nil))
 	for _, want := range []string{
 		`href="/login?redirect=%2Fjoin%2Fabc123"`,
 		`href="/register?redirect=%2Fjoin%2Fabc123"`,
@@ -71,7 +71,7 @@ func TestDoorTabsKeepTheRedirect(t *testing.T) {
 }
 
 func TestJoinDoorCarriesTheJoinRedirect(t *testing.T) {
-	html := renderDoor(t, JoinPage("tok", "", "", "", ""))
+	html := renderDoor(t, JoinPage("tok", "", "", "", "", nil))
 	if !strings.Contains(html, `href="/login?redirect=%2Fjoin"`) || !strings.Contains(html, `href="/register?redirect=%2Fjoin"`) {
 		t.Errorf("signing in from the code tab should come back to /join: %s", html)
 	}

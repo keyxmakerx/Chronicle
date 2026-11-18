@@ -143,6 +143,8 @@ type Handler struct {
 	systemAddonEnabler SystemAddonEnabler
 	mediaUploader      MediaUploader
 	smtpChecker        SMTPChecker
+	// box is the People page's Invite someone box (SetInviteBox).
+	box inviteBoxDeps
 	systemLister       SystemLister
 	// extraSettingsTabs holds factory functions other plugins
 	// contribute via RegisterSettingsTab (see settings_tabs.go).

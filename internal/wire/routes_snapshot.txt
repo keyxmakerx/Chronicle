@@ -967,11 +967,6 @@ PUT	/campaigns/:id/groups/:gid	session	plugins/campaigns.(*Handler).UpdateGroupA
 POST	/campaigns/:id/groups/:gid/members	session	plugins/campaigns.(*Handler).AddGroupMemberAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/groups/:gid/members/:uid	session	plugins/campaigns.(*Handler).RemoveGroupMemberAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/groups/manage	session	plugins/campaigns.(*Handler).GroupsPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Card	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-POST	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
-DELETE	/campaigns/:id/guest-codes/:gcid	session	plugins/campaigns.(*GuestCodeHandler).Remove	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-POST	/campaigns/:id/guest-codes/:gcid/end	session	plugins/campaigns.(*GuestCodeHandler).EndVisit	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-POST	/campaigns/:id/guest-codes/:gcid/player	session	plugins/campaigns.(*GuestCodeHandler).MakePlayer	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/handover-setting	session	plugins/campaigns.(*Handler).UpdateHandoverSettingAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew	session	plugins/homebrew.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/catalog	session	plugins/homebrew.(*Handler).Catalog	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1000,10 +995,18 @@ GET	/campaigns/:id/import/markdown/jobs/:job	session	plugins/vault_import.(*Hand
 POST	/campaigns/:id/import/markdown/preview	session	plugins/vault_import.(*Handler).Preview	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
 POST	/campaigns/:id/import/markdown/start	session	plugins/vault_import.(*Handler).Start	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
 GET	/campaigns/:id/integrations/keys	session	plugins/syncapi.(*Handler).IntegrationsKeysFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/invite-box	session	plugins/campaigns.(*Handler).InviteBox	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/invite-box/code	session	plugins/campaigns.(*Handler).InviteBoxMakeCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
+DELETE	/campaigns/:id/invite-box/codes/:gcid	session	plugins/campaigns.(*Handler).InviteBoxRemoveCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/invite-box/codes/:gcid/end	session	plugins/campaigns.(*Handler).InviteBoxEndVisit	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/invite-box/codes/:gcid/player	session	plugins/campaigns.(*Handler).InviteBoxMakePlayer	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/invite-box/email	session	plugins/campaigns.(*Handler).InviteBoxEmail	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
+DELETE	/campaigns/:id/invite-box/invites/:iid	session	plugins/campaigns.(*Handler).InviteBoxRevokeInvite	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/invite-box/link	session	plugins/campaigns.(*Handler).InviteBoxRevokeLink	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/invite-box/link	session	plugins/campaigns.(*Handler).InviteBoxMakeLink	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
 GET	/campaigns/:id/invites	session	plugins/campaigns.(*InviteHandler).ListInvitesAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/invites	session	plugins/campaigns.(*InviteHandler).CreateInviteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/invites/:inviteId	session	plugins/campaigns.(*InviteHandler).RevokeInviteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/invites/page	session	plugins/campaigns.(*InviteHandler).InvitesPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/join-code	session	plugins/campaigns.(*Handler).RevokeJoinCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/join-code	session	plugins/campaigns.(*Handler).GenerateJoinCode	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/journal	session	widgets/notes.(*Handler).ShowJournal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

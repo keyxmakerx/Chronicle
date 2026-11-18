@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v5"
 
@@ -20,8 +21,19 @@ func (h *Handler) JoinPage(c *echo.Context) error {
 	if sess != nil {
 		signedInAs = sess.Name
 	}
-	return middleware.Render(c, http.StatusOK, JoinPage(middleware.GetCSRFToken(c), c.QueryParam("code"), "", "", signedInAs))
+	// A code in the link opens the invitation straight away; a typed one does
+	// after it is entered (Join).
+	code := c.QueryParam("code")
+	var inv *Invitation
+	if code != "" {
+		inv = h.invitationForCode(c, code)
+	}
+	return middleware.Render(c, http.StatusOK, JoinPage(middleware.GetCSRFToken(c), code, "", "", signedInAs, inv))
 }
+
+// codeRefused is what a code that opens nothing says. A wrong, used,
+// expired or throttled code all get it, so the page never confirms a code.
+const codeRefused = "that code isn't right, or it was already used or has expired"
 
 // Join takes a guest code (POST /join): a new guest is made and signed in,
 // or someone already signed in is added to the campaign.
@@ -34,14 +46,32 @@ func (h *Handler) Join(c *echo.Context) error {
 	if sess != nil {
 		in.SessionUserID, signedInAs = sess.UserID, sess.Name
 	}
+	csrf := middleware.GetCSRFToken(c)
+	show := func(inv *Invitation, msg string) error {
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, JoinForm_(csrf, in.Code, in.Name, msg, signedInAs, inv))
+		}
+		return middleware.Render(c, http.StatusOK, JoinPage(csrf, in.Code, in.Name, msg, signedInAs, inv))
+	}
+	// A code typed by hand with no name yet is the first step: check it and
+	// show the invitation before asking who is joining. Nothing is claimed.
+	if sess == nil && strings.TrimSpace(in.Name) == "" {
+		inv := h.invitationForCode(c, in.Code)
+		if inv == nil {
+			return show(nil, codeRefused)
+		}
+		return show(inv, "")
+	}
 	res, err := h.service.JoinWithGuestCode(ctx, in)
 	if err != nil {
 		msg := apperror.UserMessage(err, "that code didn't work")
-		csrf := middleware.GetCSRFToken(c)
-		if middleware.IsHTMX(c) {
-			return middleware.Render(c, http.StatusOK, JoinForm_(csrf, in.Code, in.Name, msg, signedInAs))
+		// The name step is only reached with a live code, so a refusal here
+		// (a name too short, the code used meanwhile) keeps the invitation.
+		var inv *Invitation
+		if msg != codeRefused {
+			inv = h.invitationForCode(c, in.Code)
 		}
-		return middleware.Render(c, http.StatusOK, JoinPage(csrf, in.Code, in.Name, msg, signedInAs))
+		return show(inv, msg)
 	}
 	if res.SessionToken != "" {
 		setSessionCookie(c, res.SessionToken, h.sessionTTL)

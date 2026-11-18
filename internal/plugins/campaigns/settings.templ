@@ -358,8 +358,8 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 }
 
 // peopleSections renders everything the owner manages about members: the
-// member list (add, role change including Co-DM, remove), the invite link,
-// email invitations and ownership transfer. The People page is its
+// member list (add, role change including Co-DM, remove), the Invite someone box
+// (email, link and code) and ownership transfer. The People page is its
 // only home; Settings links to it instead of repeating it.
 //
 // On a big monitor the people themselves (members, roles, pending
@@ -376,63 +376,11 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 	<div class="manage-split">
 		<div class="manage-split-main space-y-6">
 			@MemberListComponent(cc, members, csrfToken, errMsg)
-
-			// Invitations (HTMX lazy load).
-			<div class="card p-6">
-				<h2 class="text-lg font-semibold text-fg mb-4">
-					<i class="fa-solid fa-envelope mr-2 text-accent"></i> Invitations
-				</h2>
-				<p class="text-sm text-fg-secondary mb-4">Invite players and scribes by email. Invitations expire after 7 days.</p>
-				<div hx-get={ fmt.Sprintf("/campaigns/%s/invites/page", cc.Campaign.ID) } hx-trigger="load" hx-swap="innerHTML">
-					<div class="text-center py-4 text-fg-muted text-sm">Loading invitations...</div>
-				</div>
-			</div>
 		</div>
 
 		if cc.MemberRole >= RoleOwner {
-			<div id="guest-codes" hx-get={ fmt.Sprintf("/campaigns/%s/guest-codes", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML"></div>
+			<div id="invite-box" hx-get={ fmt.Sprintf("/campaigns/%s/invite-box", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML"></div>
 		}
-
-		// Shareable invite link.
-		<div class="card p-6" x-data={ fmt.Sprintf(`{
-			code: '%s',
-			url: '%s',
-			generating: false,
-			async generate() {
-				this.generating = true;
-				const res = await Chronicle.apiFetch('/campaigns/%s/join-code', { method: 'POST' });
-				if (res.ok) {
-					const data = await res.json();
-					this.code = data.code;
-					this.url = data.url;
-				}
-				this.generating = false;
-			},
-			async revoke() {
-				if (!confirm('Revoke invite link? Existing links will stop working.')) return;
-				await Chronicle.apiFetch('/campaigns/%s/join-code', { method: 'DELETE' });
-				this.code = '';
-				this.url = '';
-			},
-			copy() {
-				navigator.clipboard.writeText(this.url);
-				Chronicle.notify('Link copied!', 'success');
-			}
-		}`, func() string { if cc.Campaign.JoinCode != nil { return *cc.Campaign.JoinCode } else { return "" } }(), func() string { if cc.Campaign.JoinCode != nil { return fmt.Sprintf("%s/join/%s", "", *cc.Campaign.JoinCode) } else { return "" } }(), cc.Campaign.ID, cc.Campaign.ID) }>
-			<h2 class="text-lg font-semibold text-fg mb-2">Invite Link</h2>
-			<p class="text-sm text-fg-secondary mb-3">Generate a shareable link anyone can use to join your campaign.</p>
-			<div x-show="code" class="flex items-center gap-2">
-				<input type="text" readonly :value="url" class="input flex-1 font-mono text-sm bg-surface-alt"/>
-				<button type="button" @click="copy()" class="btn-secondary text-sm px-3 py-2 shrink-0" title="Copy"><i class="fa-solid fa-copy"></i></button>
-				<button type="button" @click="revoke()" class="btn-secondary text-sm px-3 py-2 shrink-0 text-red-400 hover:text-red-500" title="Revoke"><i class="fa-solid fa-trash"></i></button>
-			</div>
-			<div x-show="!code">
-				<button type="button" @click="generate()" :disabled="generating" class="btn-primary text-sm">
-					<span x-show="!generating"><i class="fa-solid fa-link mr-1.5"></i> Generate Invite Link</span>
-					<span x-show="generating"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Generating...</span>
-				</button>
-			</div>
-		</div>
 
 		// Transfer ownership.
 		<div class="card p-6">

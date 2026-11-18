@@ -3051,7 +3051,7 @@ func (a *App) RegisterRoutes() {
 	// A guest exists only for their campaign, so removing them from it or
 	// deleting it ends their account.
 	guestCodeService := campaigns.NewGuestCodeService(campaigns.NewGuestCodeRepository(a.DB), campaignRepo)
-	campaigns.RegisterGuestCodeRoutes(e, campaigns.NewGuestCodeHandler(guestCodeService, a.Config.BaseURL), campaignService, authService)
+	campaignHandler.SetInviteBox(inviteService, guestCodeService, a.Config.BaseURL)
 	auth.ConfigureGuests(authService, guestCodeService)
 	campaigns.ConfigureVisitPasses(campaignService, guestCodeService)
 	auth.OnGuestMerged(authService, guestCodeService.MoveGuestMembership)
@@ -4078,6 +4078,7 @@ func (a *App) RegisterRoutes() {
 	// rulebook_editor.js mount on their data-widget pages. Every script
 	// no-ops when its mount is absent.
 	pluginBodyScripts := []string{
+		"/static/js/invitation_time.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/own_entries.js",
@@ -4212,6 +4213,18 @@ func (a *App) RegisterRoutes() {
 	// Entity campaign checker prevents cross-campaign entity linking (IDOR).
 	sessionsRepo := sessions.NewSessionRepository(a.DB)
 	sessionsService := sessions.NewSessionService(sessionsRepo, &entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	// The door a newcomer meets before joining: the campaign's picture,
+	// its table and its next game night, for a link, emailed invite or code.
+	invitationSource := campaigns.NewInvitationSource(campaignRepo, inviteRepo, guestCodeService,
+		func(ctx context.Context, campaignID string, now time.Time) *auth.InvitationNight {
+			n, err := sessionsService.NextGameNight(ctx, campaignID, now)
+			if err != nil || n == nil {
+				return nil
+			}
+			return &auth.InvitationNight{Date: n.Date, Time: n.Time, TZ: n.TZ, At: n.At}
+		})
+	auth.ConfigureInvitations(authService, invitationSource)
+	inviteHandler.SetInvitations(invitationSource)
 	// The calendar's anchor-move preview names the sessions it would re-date
 	// through this lookup; without it the owner's warning would always read
 	// "no sessions affected".

@@ -227,6 +227,8 @@ type authService struct {
 	// Guest codes (ConfigureGuests, OnGuestMerged); nil codes means guests
 	// can't join.
 	guestCodes    GuestCodes
+	// invitations is the door's campaign lookup (ConfigureInvitations).
+	invitations   InvitationSource
 	onGuestMerged []func(ctx context.Context, campaignID, guestID, targetID string) error
 }
 

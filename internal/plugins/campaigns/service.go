@@ -920,6 +920,11 @@ func (s *campaignService) GetMember(ctx context.Context, campaignID, userID stri
 	return s.repo.FindMember(ctx, campaignID, userID)
 }
 
+// errNoAccountForEmail is AddMember's answer for an address with no account
+// here, so the Invite box can tell it from other refusals and send an
+// emailed invite instead.
+var errNoAccountForEmail = apperror.NewBadRequest("no user found with that email")
+
 // AddMember adds a user to a campaign by their email address.
 func (s *campaignService) AddMember(ctx context.Context, campaignID, email string, role Role) error {
 	if !isValidEmail(email) {
@@ -937,7 +942,7 @@ func (s *campaignService) AddMember(ctx context.Context, campaignID, email strin
 	// Look up the user by email.
 	user, err := s.users.FindUserByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
 	if err != nil {
-		return apperror.NewBadRequest("no user found with that email")
+		return errNoAccountForEmail
 	}
 
 	// Check if already a member.
