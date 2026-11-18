@@ -6,6 +6,9 @@ package campaigns
 import (
 	"fmt"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // InviteBox is the box. It is its own swap target: every action in it
@@ -213,7 +216,9 @@ templ inviteCodeRow(d InviteBoxData, gc GuestCode) {
 					case "visiting":
 						looking around, { visitRemaining(*gc.VisitUntil, d.Now) }
 					case "visit_ended":
-						looked around until { gc.VisitUntil.Format("Jan 2") }
+						looked around until
+						{ " " }
+						@components.Date(*gc.VisitUntil, timeutil.DateDay)
 					default:
 						{ inviteEnds(gc.ExpiresAt, d.Now) }
 				}

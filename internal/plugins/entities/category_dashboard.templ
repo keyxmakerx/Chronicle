@@ -320,7 +320,7 @@ templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
 			}
 		</td>
 		<td class="px-4 py-2.5 hidden lg:table-cell">
-			<time class="text-xs text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ entity.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+			<time class="text-xs text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(entity.UpdatedAt, timeutil.DateWithTime) } data-date-title>
 				{ timeutil.Ago(entity.UpdatedAt, time.Now()) }
 			</time>
 		</td>

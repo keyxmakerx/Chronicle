@@ -152,6 +152,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/recent_entities.js") } defer></script>
 		<!-- Entity favorites (localStorage-backed sidebar list + star toggle) -->
 		<script src={ AssetURL("/static/js/favorites.js") } defer></script>
+		<!-- Real-world dates in the reader's own format; re-run after every swap -->
+		<script src={ AssetURL("/static/js/dates.js") } defer></script>
 		<!-- Undo for world pages: local times in History, Undo after a delete -->
 		<script src={ AssetURL("/static/js/page_safety.js") } defer></script>
 		<!-- Sync history page: local times, day headings, live rows -->

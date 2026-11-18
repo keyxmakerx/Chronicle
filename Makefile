@@ -176,6 +176,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: escape-helpers";         ./tools/check-escape-helpers.sh
 	@echo "==> guard: customize-discipline";   ./tools/check-customize-discipline.sh
 	@echo "==> guard: templ-packages";         ./tools/check-templ-packages.sh
+	@echo "==> guard: date-format";            ./tools/check-date-format.sh
 	@echo "==> guard: css-emissions (self-test)"; ./tools/test-css-emissions.sh
 	@echo "==> guard: css-emissions";          ./tools/check-css-emissions.sh
 	@echo "==> go test ./... -short";          go test ./... -short

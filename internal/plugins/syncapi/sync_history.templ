@@ -4,6 +4,7 @@
 package syncapi
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -87,7 +88,7 @@ func historyLastSeen(d SyncHistoryPageData) string {
 	case ago < 48*time.Hour:
 		return fmt.Sprintf("Foundry last seen %d h ago", int(ago.Hours()))
 	}
-	return "Foundry last seen " + d.LastSeen.UTC().Format("2 Jan")
+	return "Foundry last seen " + timeutil.FixedDate(d.LastSeen.UTC(), timeutil.DateDay)
 }
 
 // historyQuery keeps the filters on the rows requests.

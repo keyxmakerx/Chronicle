@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -70,7 +71,9 @@ templ AdminCampaignsList(data CampaignListData) {
 										<div class={ "text-xs", templ.KV("text-orange-600 dark:text-orange-400", st.Open), templ.KV("text-fg-muted", !st.Open) }>
 											{ handoverSettingText(st.AfterMonths) }
 											if st.AfterMonths > 0 && !st.Open {
-												· possible from { st.OpensAt.Format("Jan 2, 2006") }
+												· possible from
+												{ " " }
+												@components.Date(st.OpensAt, timeutil.DateShort)
 											}
 										</div>
 									} else {
@@ -78,7 +81,7 @@ templ AdminCampaignsList(data CampaignListData) {
 									}
 								</td>
 								<td class="px-4 py-3 text-sm text-fg-muted">
-									{ c.CreatedAt.Format("Jan 2, 2006") }
+									@components.Date(c.CreatedAt, timeutil.DateShort)
 								</td>
 								<td class="px-4 py-3 text-right">
 									<div class="flex items-center justify-end gap-3">
@@ -102,7 +105,7 @@ templ AdminCampaignsList(data CampaignListData) {
 		<div class="card p-0 divide-y divide-edge md:hidden" data-testid="campaigns-cards">
 			if len(allCampaigns) > 0 {
 				for _, c := range allCampaigns {
-					@adminCardRow(avatarInitial(c.Name), c.Name, fmt.Sprintf("/campaigns/%s", c.ID), campaignVisibilityLabel(c), "bg-surface-alt text-fg-secondary", c.Slug+" · created "+c.CreatedAt.Format("Jan 2, 2006"), csrfToken, campaignCardActions(c, data.Handover[c.ID], data.CanLeave[c.ID], csrfToken))
+					@adminCardRow(avatarInitial(c.Name), c.Name, fmt.Sprintf("/campaigns/%s", c.ID), campaignVisibilityLabel(c), "bg-surface-alt text-fg-secondary", c.Slug+" · created "+timeutil.FixedDate(c.CreatedAt, timeutil.DateShort), csrfToken, campaignCardActions(c, data.Handover[c.ID], data.CanLeave[c.ID], csrfToken))
 				}
 			} else {
 				@adminListEmptyCard(data.View)

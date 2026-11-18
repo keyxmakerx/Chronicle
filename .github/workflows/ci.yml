@@ -172,6 +172,12 @@ jobs:
         # such package carries a hand-written doc.go. Self-tests on every run.
         run: ./tools/check-templ-packages.sh
 
+      - name: Date format guard
+        # A real-world date is written the way the reader's device writes it
+        # (static/js/dates.js); no template spells a month-first or day-first
+        # layout. Use components.Date. Self-tests on every run.
+        run: ./tools/check-date-format.sh
+
       - name: CSS emissions guard
         # Builds the minified stylesheet with the pinned Tailwind binary
         # (tools/tailwind.sh) and fails if a selector in

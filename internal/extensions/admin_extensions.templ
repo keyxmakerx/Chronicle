@@ -1,6 +1,8 @@
 package extensions
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"encoding/json"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -160,7 +162,7 @@ templ adminExtensionCard(ext Extension) {
 				</span>
 				<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-surface-alt text-fg-secondary">
 					<i class="fa-solid fa-calendar text-[10px]"></i>
-					{ ext.CreatedAt.Format("Jan 2, 2006") }
+					@components.Date(ext.CreatedAt, timeutil.DateShort)
 				</span>
 			</div>
 			<div class="flex items-center gap-1">
@@ -333,11 +335,15 @@ templ adminExtensionDetailFragment(ext *Extension, manifest *ExtensionManifest) 
 					}
 					<div class="flex justify-between">
 						<dt class="text-fg-secondary">Installed</dt>
-						<dd class="text-fg font-medium">{ ext.CreatedAt.Format("Jan 2, 2006 15:04") }</dd>
+						<dd class="text-fg font-medium">
+						@components.Date(ext.CreatedAt, timeutil.DateWithTime)
+						</dd>
 					</div>
 					<div class="flex justify-between">
 						<dt class="text-fg-secondary">Updated</dt>
-						<dd class="text-fg font-medium">{ ext.UpdatedAt.Format("Jan 2, 2006 15:04") }</dd>
+						<dd class="text-fg font-medium">
+						@components.Date(ext.UpdatedAt, timeutil.DateWithTime)
+						</dd>
 					</div>
 				</dl>
 			</div>

@@ -32,7 +32,7 @@ templ CampaignCard(campaign *Campaign) {
 			</div>
 
 			<div class="mt-4 flex items-center text-xs text-fg-secondary">
-				<time datetime={ campaign.UpdatedAt.UTC().Format(time.RFC3339) } title={ campaign.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>{ timeutil.EditedAgo(campaign.UpdatedAt, time.Now()) }</time>
+				<time datetime={ campaign.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(campaign.UpdatedAt, timeutil.DateWithTime) } data-date-title>{ timeutil.EditedAgo(campaign.UpdatedAt, time.Now()) }</time>
 				if campaign.IsPublic {
 					<span class="ml-auto inline-flex items-center gap-1 text-green-600 dark:text-green-400">
 						<i class="fa-solid fa-globe text-[10px]"></i>

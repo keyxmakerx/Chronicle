@@ -4,6 +4,8 @@
 package campaigns
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -387,7 +389,10 @@ templ peopleSections(cc *CampaignContext, v MemberListView, transfer *OwnershipT
 			<h2 class="text-lg font-semibold text-fg mb-4">Transfer Ownership</h2>
 			if transfer != nil {
 				<div class="alert-warning mb-4">
-					<strong>Transfer pending.</strong> Waiting for the new owner to accept. Expires { transfer.ExpiresAt.Format("Jan 2, 2006 3:04 PM") }.
+					<strong>Transfer pending.</strong> Waiting for the new owner to accept. Expires
+					{ " " }
+					@components.Date(transfer.ExpiresAt, timeutil.DateWithTime)
+					.
 				</div>
 				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID)) } hx-post={ fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID) }>
 					<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
