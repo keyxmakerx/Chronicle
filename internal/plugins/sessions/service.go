@@ -260,6 +260,9 @@ type SessionService interface {
 	// slot was picked, linking to the new session.
 	NotifyProposalConfirmed(ctx context.Context, campaignID, proposalID, sessionID string) error
 	ListMyNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
+	// OpenAsks drops the scheduled-night asks whose night is over (played,
+	// completed, cancelled or removed), for the call-to-action banner.
+	OpenAsks(ctx context.Context, notes []Notification) []Notification
 	CountMyUnreadNotifications(ctx context.Context, userID string) (int, error)
 	MarkNotificationRead(ctx context.Context, userID, notificationID string) error
 	MarkAllNotificationsRead(ctx context.Context, userID string) error

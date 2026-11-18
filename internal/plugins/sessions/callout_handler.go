@@ -40,6 +40,8 @@ func (h *Handler) CalloutAPI(c *echo.Context) error {
 	if err != nil {
 		return c.HTML(http.StatusOK, "")
 	}
+	// Only asks that can still be answered raise the banner.
+	notes = h.svc.OpenAsks(ctx, notes)
 
 	// storedTZ is the account-level zone. The availability zone is
 	// campaign-scoped and this banner is not, so a player who only set that
