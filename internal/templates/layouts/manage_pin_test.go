@@ -137,3 +137,46 @@ func TestNavHasRing_PinnedToolTakesTheRing(t *testing.T) {
 		t.Errorf("both rows read as current")
 	}
 }
+
+// Find is the owner's: nobody else is offered the button, and the frame
+// carries it only when it is offered.
+func TestManageFind_OnlyTheOwnerGetsOne(t *testing.T) {
+	tests := []struct {
+		name string
+		c    navStateCase
+		want bool
+	}{
+		{"owner", navStateCase{role: 3, path: "/campaigns/c1/trash"}, true},
+		{"scribe", navStateCase{role: 2, path: "/campaigns/c1/trash"}, false},
+		{"player", navStateCase{role: 1, path: "/campaigns/c1/trash"}, false},
+		{"visitor", navStateCase{role: 0, path: "/campaigns/c1/trash"}, false},
+		{"owner previewing as a player", navStateCase{role: 3, player: true, path: "/campaigns/c1/trash"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := ManageFind().Render(tt.c.ctx(), &buf); err != nil {
+				t.Fatal(err)
+			}
+			out := buf.String()
+			if !tt.want {
+				if out != "" {
+					t.Fatalf("Find was drawn: %s", out)
+				}
+				return
+			}
+			for _, w := range []string{`data-manage-find`, `data-find-url="/campaigns/c1/dashboard/find"`, `aria-keyshortcuts="/"`, `onclick=`, `<button`, `find_palette.js`} {
+				if !strings.Contains(out, w) {
+					t.Errorf("missing %q in %s", w, out)
+				}
+			}
+			var frame bytes.Buffer
+			if err := ManageFrame(ManageFrameData{Title: "Trash"}).Render(tt.c.ctx(), &frame); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(frame.String(), "data-manage-find") {
+				t.Errorf("the frame lacks Find for the owner")
+			}
+		})
+	}
+}

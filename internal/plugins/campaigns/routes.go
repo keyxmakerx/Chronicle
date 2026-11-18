@@ -122,6 +122,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/dashboard/lines/:line/fold", h.DeskLineFold, RequireRole(RoleOwner))
 	cg.GET("/dashboard/lines/:line/sentence", h.DeskLineSentence, RequireRole(RoleOwner))
 	cg.GET("/dashboard/needs", h.DeskNeedsCount, RequireRole(RoleOwner))
+	cg.GET("/dashboard/find", h.DeskFind, RequireRole(RoleOwner))
 	cg.GET("/owner-dashboard-layout", h.GetOwnerDashboardLayout, RequireRole(RoleOwner))
 	cg.PUT("/owner-dashboard-layout", h.UpdateOwnerDashboardLayout, RequireRole(RoleOwner))
 	cg.DELETE("/owner-dashboard-layout", h.ResetOwnerDashboardLayout, RequireRole(RoleOwner))

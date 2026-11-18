@@ -58,3 +58,28 @@ func managePinCall() templ.ComponentScript {
 			`s.addEventListener('load',go);})(this,event)`,
 	}
 }
+
+// manageFindCall is the Find button's click handler. It hands the press to
+// static/js/manage_find.js, loading it on first use for the same reason the pin
+// does: the frame arrives by boosted swaps, where a script tag may never run.
+func manageFindCall() templ.ComponentScript {
+	src := AssetURL("/static/js/manage_find.js")
+	q := strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\n", ``, "\r", ``, `<`, `\x3c`).Replace(src)
+	return templ.ComponentScript{
+		Name:     "manageFind",
+		Function: "",
+		Call: `(function(b,e){var C=window.Chronicle=window.Chronicle||{};` +
+			`function go(){if(C.manageFind)C.manageFind.open(b,e);}` +
+			`if(C.manageFind){go();return;}` +
+			`var s=document.querySelector('script[data-manage-find-js]');` +
+			`if(!s){s=document.createElement('script');s.src='` + q + `';s.setAttribute('data-manage-find-js','');document.head.appendChild(s);}` +
+			`s.addEventListener('load',go);})(this,event)`,
+	}
+}
+
+// ManageFindShown reports whether the viewer gets Find: the signed-in owner
+// who is not previewing the campaign as a player. The list behind it is
+// owner-only on the server too; this only avoids offering a refused button.
+func ManageFindShown(ctx context.Context) bool {
+	return IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 3 && !IsViewingAsPlayer(ctx)
+}

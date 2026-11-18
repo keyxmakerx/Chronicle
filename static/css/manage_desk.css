@@ -223,7 +223,8 @@
   opacity: 0;
   pointer-events: none;
 }
-.desk-ln.is-glow::after { animation: desk-glow 1.2s var(--ease-out); }
+/* A line Find just took you to glows the same way. */
+.desk-ln.is-glow::after, .desk-ln:target::after { animation: desk-glow 1.2s var(--ease-out); }
 @keyframes desk-glow {
   0% { opacity: 0; }
   20% { opacity: 1; }
@@ -232,9 +233,9 @@
 
 html[data-motion="calm"] .desk-saved { animation-name: desk-fade; }
 @keyframes desk-fade { from { opacity: 0; } to { opacity: 1; } }
-html[data-motion="off"] .desk-saved,
-html[data-motion="off"] .desk-ln.is-glow::after { animation: none; }
-html[data-motion="off"] .desk-ln.is-glow::after { opacity: 1; }
+html[data-motion="off"] .desk-saved { animation: none; }
+html[data-motion="off"] .desk-ln.is-glow::after,
+html[data-motion="off"] .desk-ln:target::after { animation: none; opacity: 1; }
 html[data-motion="off"] .desk-q,
 html[data-motion="off"] .desk-b,
 html[data-motion="off"] .desk-menu > button { transition: none; }

@@ -60,7 +60,7 @@ templ DeskPage(cc *CampaignContext, d *Desk) {
 // control that toggles it from the keyboard; pressing the row itself does the
 // same for a pointer.
 templ deskLine(l DeskLine) {
-	<div class="desk-ln" data-line={ l.ID } data-fold?={ l.Fold }>
+	<div class="desk-ln" id={ "line-" + l.ID } data-line={ l.ID } data-fold?={ l.Fold }>
 		if l.Fold {
 			<div class="desk-row" onclick={ deskFoldRowCall() }>
 				@deskRowBody(l)

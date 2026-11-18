@@ -278,6 +278,7 @@ func TestDeskFragments_OnlyTheOwner(t *testing.T) {
 		{"fold", (*Handler).DeskLineFold, "/campaigns/camp-1/dashboard/lines/trash/fold"},
 		{"sentence", (*Handler).DeskLineSentence, "/campaigns/camp-1/dashboard/lines/trash/sentence"},
 		{"needs count", (*Handler).DeskNeedsCount, "/campaigns/camp-1/dashboard/needs"},
+		{"find", (*Handler).DeskFind, "/campaigns/camp-1/dashboard/find"},
 	}
 	roles := []struct {
 		name      string

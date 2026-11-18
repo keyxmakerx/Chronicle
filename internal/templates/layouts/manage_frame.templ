@@ -41,9 +41,12 @@ templ ManageFrame(d ManageFrameData) {
 			<h1 class="manage-title cb-title">{ d.Title }</h1>
 			{{ pinKey, pinName := ManageToolOfLine(d.Line) }}
 			@ManagePin(pinKey, pinName)
-			if d.Actions != nil {
+			if d.Actions != nil || ManageFindShown(ctx) {
 				<div class="manage-actions">
-					@d.Actions
+					if d.Actions != nil {
+						@d.Actions
+					}
+					@ManageFind()
 				</div>
 			}
 			if d.Intro != "" {
