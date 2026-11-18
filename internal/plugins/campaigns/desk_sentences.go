@@ -48,7 +48,7 @@ func deskHref(campaignID, path string) string { return "/campaigns/" + campaignI
 // peopleLine counts who is in the campaign by role: "4 people: you, a
 // co-DM and 2 players." members is nil when they could not be read, which
 // leaves the plain link sentence.
-func peopleLine(c *Campaign, members []CampaignMember) DeskLine {
+func peopleLine(c *Campaign, members []CampaignMember, invited int) DeskLine {
 	l := DeskLine{ID: "people", Acts: []DeskAct{{Label: "Open People", Href: deskHref(c.ID, "/members")}}}
 	if len(members) == 0 {
 		l.Parts = []DeskPart{txt("Everyone in the campaign, and what each may do, is on the People page.")}
@@ -67,8 +67,14 @@ func peopleLine(c *Campaign, members []CampaignMember) DeskLine {
 		}
 	}
 	total := coDM + scribes + players + 1
+	// Waiting invitations are said apart from the count: nobody invited is a
+	// person yet.
+	with := ""
+	if invited > 0 {
+		with = fmt.Sprintf(", with %d invited", invited)
+	}
 	if total == 1 {
-		l.Parts = []DeskPart{txt("Just you, so far.")}
+		l.Parts = []DeskPart{txt("Just you, so far" + with + ".")}
 		return l
 	}
 	l.Parts = []DeskPart{txt(fmt.Sprintf("%d people: you", total))}
@@ -98,7 +104,7 @@ func peopleLine(c *Campaign, members []CampaignMember) DeskLine {
 		l.Parts = append(l.Parts, txt(sep))
 		l.Parts = append(l.Parts, t...)
 	}
-	l.Parts = append(l.Parts, txt("."))
+	l.Parts = append(l.Parts, txt(with+"."))
 	return l
 }
 

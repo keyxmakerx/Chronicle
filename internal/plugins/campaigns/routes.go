@@ -117,6 +117,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 
 	// Owner dashboard (Owner + Co-DM).
 	cg.GET("/dashboard", h.OwnerDashboard, RequireRole(RoleOwner))
+	// What a desk line unfolds into, and its sentence again after a change
+	// made inside it. Fragments, owner only.
+	cg.GET("/dashboard/lines/:line/fold", h.DeskLineFold, RequireRole(RoleOwner))
+	cg.GET("/dashboard/lines/:line/sentence", h.DeskLineSentence, RequireRole(RoleOwner))
 	cg.GET("/owner-dashboard-layout", h.GetOwnerDashboardLayout, RequireRole(RoleOwner))
 	cg.PUT("/owner-dashboard-layout", h.UpdateOwnerDashboardLayout, RequireRole(RoleOwner))
 	cg.DELETE("/owner-dashboard-layout", h.ResetOwnerDashboardLayout, RequireRole(RoleOwner))

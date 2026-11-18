@@ -3046,6 +3046,8 @@ func (a *App) RegisterRoutes() {
 	inviteService := campaigns.NewInviteService(inviteRepo, campaignRepo, smtpService, a.Config.BaseURL)
 	inviteHandler := campaigns.NewInviteHandler(inviteService, campaignService, a.Config.BaseURL)
 	campaigns.RegisterInviteRoutes(e, inviteHandler, campaignService, authService)
+	// The desk's People line counts the invitations still waiting.
+	campaignHandler.SetInviteLister(inviteService)
 
 	// Guest codes: the owner's card, and auth's join page redeeming them.
 	// A guest exists only for their campaign, so removing them from it or

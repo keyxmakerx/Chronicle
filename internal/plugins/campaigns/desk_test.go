@@ -45,10 +45,10 @@ func TestDeskSentences(t *testing.T) {
 		want  string
 		state string
 	}{
-		{"people unread", peopleLine(c, nil), "Everyone in the campaign, and what each may do, is on the People page.", ""},
-		{"people alone", peopleLine(c, []CampaignMember{{Role: RoleOwner}}), "Just you, so far.", ""},
-		{"people players", peopleLine(c, []CampaignMember{{Role: RoleOwner}, {Role: RolePlayer}, {Role: RolePlayer}}), "3 people: you and 2 players.", ""},
-		{"people one player one scribe", peopleLine(c, []CampaignMember{{Role: RoleOwner}, {Role: RolePlayer}, {Role: RoleScribe}}), "3 people: you, 1 scribe and a player.", ""},
+		{"people unread", peopleLine(c, nil, 0), "Everyone in the campaign, and what each may do, is on the People page.", ""},
+		{"people alone", peopleLine(c, []CampaignMember{{Role: RoleOwner}}, 0), "Just you, so far.", ""},
+		{"people players", peopleLine(c, []CampaignMember{{Role: RoleOwner}, {Role: RolePlayer}, {Role: RolePlayer}}, 0), "3 people: you and 2 players.", ""},
+		{"people one player one scribe", peopleLine(c, []CampaignMember{{Role: RoleOwner}, {Role: RolePlayer}, {Role: RoleScribe}}, 0), "3 people: you, 1 scribe and a player.", ""},
 		{"changes no provider", changesLine(c, nil), "What players changed on your pages can be looked at, and undone, on its own page.", ""},
 		{"changes none", changesLine(c, &DeskChangesFacts{}), "No player has changed anything this week.", ""},
 		{"changes one", changesLine(c, &DeskChangesFacts{Changes: 1, Players: 1}), "A player changed 1 thing this week.", ""},

@@ -169,6 +169,9 @@ type Handler struct {
 	sheetChecker           SheetChecker
 	// testMailer sends Customize's "Send me a test" email; nil refuses it.
 	testMailer TestMailer
+	// invites counts the invitations still waiting, for the desk's People
+	// line; nil leaves the count out.
+	invites InviteService
 }
 
 // NewHandler creates a new campaign handler.
@@ -219,6 +222,10 @@ func (h *Handler) SetFoundryConnector(c FoundryConnector) {
 		h.desk.Register(foundryDeskProvider{c: c})
 	}
 }
+
+// SetInviteLister lets the desk say how many invitations still wait. The same
+// service the invite routes use.
+func (h *Handler) SetInviteLister(svc InviteService) { h.invites = svc }
 
 // SetSystemAddonEnabler sets the addon enabler for auto-enabling game system
 // addons when the user changes the Game System dropdown.
@@ -962,44 +969,7 @@ func (h *Handler) OwnerDashboard(c *echo.Context) error {
 		return apperror.NewForbidden("only the campaign owner can open the desk")
 	}
 	ctx := c.Request().Context()
-
-	in := DeskInputs{Campaign: cc.Campaign, Addons: map[string]bool{}}
-	// A members list that cannot be read leaves the people line plain; it
-	// never stops the desk opening.
-	if members, err := h.service.ListMembers(ctx, cc.Campaign.ID); err != nil {
-		slog.Warn("desk: members not read", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
-	} else {
-		in.Members = members
-	}
-	var addons []PluginHubAddon
-	if h.addonLister != nil {
-		var err error
-		if addons, err = h.addonLister.ListForPluginHub(ctx, cc.Campaign.ID); err != nil {
-			slog.Warn("desk: add-ons not read", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
-			addons = nil
-		}
-	}
-	for _, a := range addons {
-		in.Addons[a.Slug] = a.Enabled
-	}
-	for _, a := range featureAddons(addons) {
-		if !a.Installed {
-			continue
-		}
-		in.FeaturesTotal++
-		if a.Enabled {
-			in.FeaturesOn++
-		}
-	}
-	if h.systemLister != nil {
-		id := currentSystemID(cc.Campaign.ParseSettings().SystemID, addons)
-		for _, o := range h.systemLister.ListSystems() {
-			if id != "" && o.ID == id {
-				in.SystemName = o.Name
-			}
-		}
-	}
-
+	in := h.deskInputs(c, cc)
 	desk := h.desk.Build(ctx, DeskRequest{CampaignID: cc.Campaign.ID, OwnerID: auth.GetUserID(c), Now: time.Now()}, in)
 	return middleware.Render(c, http.StatusOK, DeskPage(cc, desk))
 }

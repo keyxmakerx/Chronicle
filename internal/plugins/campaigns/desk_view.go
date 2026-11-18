@@ -1,6 +1,7 @@
 package campaigns
 
 import (
+	"context"
 	"encoding/json"
 	"strconv"
 	"strings"
@@ -109,16 +110,78 @@ func deskBlankKey() templ.ComponentScript {
 }
 
 func deskBlankScript(name, guard string) templ.ComponentScript {
-	src := layouts.AssetURL("/static/js/desk_blank.js")
+	return deskScript(name, "desk_blank.js", "data-desk-blank-js", "deskBlank", "activate", guard, "b,e", "this,event")
+}
+
+// deskScript builds an inline handler that loads one of the desk's scripts on
+// first use and then calls Chronicle.<global>.<method>(args). The desk and its
+// fragments arrive by boosted swaps and innerHTML, where a script tag may
+// never run, so the handler brings its own script. Loading it from the handler
+// keeps every other page free of a script only the desk needs.
+func deskScript(name, file, attr, global, method, guard, params, args string) templ.ComponentScript {
+	src := layouts.AssetURL("/static/js/" + file)
 	return templ.ComponentScript{
 		Name:     name,
 		Function: "",
-		Call: `(function(b,e){` + guard + `var C=window.Chronicle=window.Chronicle||{};` +
-			`function go(){if(C.deskBlank)C.deskBlank.activate(b,e);}` +
-			`if(C.deskBlank){go();return;}` +
-			`var s=document.querySelector('script[data-desk-blank-js]');` +
-			`if(!s){s=document.createElement('script');s.src=` + jsString(src) + `;s.setAttribute('data-desk-blank-js','');document.head.appendChild(s);}` +
-			`s.addEventListener('load',go);})(this,event)`,
+		Call: `(function(` + params + `){` + guard + `var C=window.Chronicle=window.Chronicle||{};` +
+			`function go(){if(C.` + global + `)C.` + global + `.` + method + `(` + params + `);}` +
+			`if(C.` + global + `){go();return;}` +
+			`var s=document.querySelector('script[` + attr + `]');` +
+			`if(!s){s=document.createElement('script');s.src=` + jsString(src) + `;s.setAttribute('` + attr + `','');document.head.appendChild(s);}` +
+			`s.addEventListener('load',go);})(` + args + `)`,
+	}
+}
+
+func deskFoldCall(name, method, guard string) templ.ComponentScript {
+	return deskScript(name, "desk_fold.js", "data-desk-fold-js", "deskFold", method, guard, "b,e", "this,event")
+}
+
+// The fold's handlers. Each is a plain inline attribute, so they work in a
+// fragment swapped in by innerHTML.
+func deskFoldToggleCall() templ.ComponentScript { return deskFoldCall("deskFoldToggle", "toggle", "") }
+func deskFoldRowCall() templ.ComponentScript    { return deskFoldCall("deskFoldRow", "row", "") }
+func deskFoldActCall() templ.ComponentScript    { return deskFoldCall("deskFoldAct", "act", "") }
+func deskFoldInviteCall() templ.ComponentScript { return deskFoldCall("deskFoldInvite", "invite", "") }
+
+// deskFoldKey answers Escape, which closes the fold from its chevron or from
+// anywhere inside it.
+func deskFoldKey() templ.ComponentScript {
+	return deskFoldCall("deskFoldKey", "key", `if(e.key!=='Escape')return;`)
+}
+
+// deskFoldInviteKey sends the invite on Enter, like pressing its button.
+func deskFoldInviteKey() templ.ComponentScript {
+	return deskFoldCall("deskFoldInviteKey", "inviteKey", `if(e.key!=='Enter')return;e.preventDefault();`)
+}
+
+// deskFoldTitle is the tool a fold belongs to, for its screen-reader name and
+// the chevron's label.
+func deskFoldTitle(id string) string {
+	switch id {
+	case "people":
+		return "People"
+	case "trash":
+		return "Trash"
+	case "foundry":
+		return "Foundry"
+	}
+	return id
+}
+
+// deskFoldURL is where a line's fold is fetched from.
+func deskFoldURL(ctx context.Context, id string) string {
+	return "/campaigns/" + layouts.GetCampaignID(ctx) + "/dashboard/lines/" + id + "/fold"
+}
+
+// deskMore words the rows a fold leaves out.
+func deskMore(n int) string { return "and " + strconv.Itoa(n) + " more" }
+
+// deskInviteRole is the invite's role, a dashed word that sends nothing by
+// itself: the Send button reads its value.
+func deskInviteRole(i *DeskInvite) *DeskBlank {
+	return &DeskBlank{
+		Kind: DeskBlankChoice, ID: "invite-role", Label: "Role for the invite",
+		Value: "player", Shown: "player", Options: i.Roles, Local: true,
 	}
 }
 

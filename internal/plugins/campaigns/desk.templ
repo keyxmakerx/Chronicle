@@ -56,27 +56,139 @@ templ DeskPage(cc *CampaignContext, d *Desk) {
 
 // deskLine is one sentence and the quiet words that open its tool. The acts
 // span is always drawn, even empty, because it is where a blank's "Saved"
-// tick appears.
+// tick appears. A line that unfolds carries one chevron button, the only
+// control that toggles it from the keyboard; pressing the row itself does the
+// same for a pointer.
 templ deskLine(l DeskLine) {
-	<div class="desk-ln" data-line={ l.ID }>
-		<div class="desk-row">
-			<p class="desk-s">
-				if l.State != "" {
-					<i class={ "desk-dot", templ.KV("ok", l.State == "ok"), templ.KV("warn", l.State == "warn") } aria-hidden="true"></i>
-					if l.State == "warn" {
-						<span class="sr-only">Warning: </span>
+	<div class="desk-ln" data-line={ l.ID } data-fold?={ l.Fold }>
+		if l.Fold {
+			<div class="desk-row" onclick={ deskFoldRowCall() }>
+				@deskRowBody(l)
+			</div>
+		} else {
+			<div class="desk-row">
+				@deskRowBody(l)
+			</div>
+		}
+		if l.Fold {
+			<div class="desk-fold" id={ "desk-fold-" + l.ID } role="region" aria-label={ deskFoldTitle(l.ID) } hidden data-url={ deskFoldURL(ctx, l.ID) } onkeydown={ deskFoldKey() }></div>
+		}
+	</div>
+}
+
+// deskRowBody is what sits in a line's row: the sentence, the quiet words and,
+// on a line that unfolds, its chevron.
+templ deskRowBody(l DeskLine) {
+	@deskSentence(l)
+	<span class="desk-acts">
+		for _, a := range l.Acts {
+			<a class={ "desk-q", templ.KV("bad", a.Danger) } href={ templ.SafeURL(a.Href) }>{ a.Label }</a>
+		}
+	</span>
+	if l.Fold {
+		<button
+			type="button"
+			class="desk-chev"
+			aria-expanded="false"
+			aria-controls={ "desk-fold-" + l.ID }
+			aria-label={ "Unfold " + deskFoldTitle(l.ID) }
+			data-title={ deskFoldTitle(l.ID) }
+			onclick={ deskFoldToggleCall() }
+			onkeydown={ deskFoldKey() }
+		>
+			<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+		</button>
+	}
+}
+
+// deskSentence is a line's sentence alone, also served by itself so a change
+// made inside the line's fold can word it again where it stands.
+templ deskSentence(l DeskLine) {
+	<p class="desk-s">
+		if l.State != "" {
+			<i class={ "desk-dot", templ.KV("ok", l.State == "ok"), templ.KV("warn", l.State == "warn") } aria-hidden="true"></i>
+			if l.State == "warn" {
+				<span class="sr-only">Warning: </span>
+			}
+		}
+		for _, n := range deskNodes(l.Parts) {
+			@deskNode(n)
+		}
+	</p>
+}
+
+// DeskFoldBody is what a line unfolds into, served as a fragment when the line
+// is first opened. Every control has its own inline handler, built Go-side,
+// because the fragment arrives by innerHTML, where a script tag never runs.
+templ DeskFoldBody(cc *CampaignContext, id string, f *DeskFold) {
+	<div class="desk-fold-in" data-fold-line={ id } data-campaign={ cc.Campaign.ID }>
+		if f.Note != "" {
+			<p class="desk-note">{ f.Note }</p>
+		}
+		if f.Fallback {
+			if f.FullHref != "" {
+				<a class="desk-q" href={ templ.SafeURL(f.FullHref) }>{ f.FullLabel }</a>
+			}
+		} else {
+			for _, r := range f.Rows {
+				<div class="desk-fr">
+					if r.Initial != "" {
+						<span class="desk-av" aria-hidden="true">{ r.Initial }</span>
 					}
-				}
-				for _, n := range deskNodes(l.Parts) {
-					@deskNode(n)
-				}
-			</p>
-			<span class="desk-acts">
-				for _, a := range l.Acts {
-					<a class={ "desk-q", templ.KV("bad", a.Danger) } href={ templ.SafeURL(a.Href) }>{ a.Label }</a>
-				}
-			</span>
-		</div>
+					<span class="desk-ft">
+						if r.Lead != "" {
+							<b>{ r.Lead }</b>
+						}
+						if r.Text != "" {
+							{ r.Text }
+						}
+					</span>
+					if r.Meta != "" {
+						<span class="desk-m">{ r.Meta }</span>
+					}
+					<span class="desk-fill"></span>
+					if r.Blank != nil {
+						@deskBlank(r.Blank, "")
+					}
+					if r.Act != nil {
+						<button
+							type="button"
+							class="desk-q desk-act"
+							data-url={ r.Act.URL }
+							data-method={ r.Act.Method }
+							data-busy={ r.Act.Busy }
+							onclick={ deskFoldActCall() }
+						>{ r.Act.Label }</button>
+					}
+				</div>
+			}
+			if f.More > 0 {
+				<a class="desk-q desk-more" href={ templ.SafeURL(f.MoreHref) }>{ deskMore(f.More) }</a>
+			}
+			if f.Invite != nil {
+				<div class="desk-fr desk-inv">
+					<input
+						type="email"
+						class="desk-in"
+						data-desk-invite-email
+						placeholder="Email to invite"
+						aria-label="Email to invite"
+						autocomplete="off"
+						onkeydown={ deskFoldInviteKey() }
+					/>
+					<span>as a</span>
+					@deskBlank(deskInviteRole(f.Invite), "")
+					<button
+						type="button"
+						class="btn btn-primary desk-send"
+						data-url={ f.Invite.URL }
+						data-busy="Sending"
+						onclick={ deskFoldInviteCall() }
+					>Send invite</button>
+				</div>
+			}
+		}
+		<p class="desk-st" role="status" aria-live="polite" data-desk-status></p>
 	</div>
 }
 

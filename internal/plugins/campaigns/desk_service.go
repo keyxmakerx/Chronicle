@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 )
@@ -27,6 +28,14 @@ type DeskService interface {
 	// Build reads every provider and words every line. It never fails: a
 	// line whose numbers are missing is a plain sentence.
 	Build(ctx context.Context, req DeskRequest, in DeskInputs) *Desk
+	// Line words one line again, from fresh numbers, so a change made inside
+	// its fold can update its sentence without redrawing the desk. False when
+	// the line does not exist for this campaign.
+	Line(ctx context.Context, req DeskRequest, in DeskInputs, id string) (DeskLine, bool)
+	// Fold reads what a line shows when it unfolds. It never fails: a fold
+	// that cannot be read is a plain sentence and a link. False when the
+	// line does not exist or does not unfold.
+	Fold(ctx context.Context, req DeskRequest, in DeskInputs, id string) (*DeskFold, bool)
 }
 
 type deskService struct {
@@ -51,10 +60,13 @@ func (s *deskService) Register(p DeskProvider) {
 // gather runs every provider at once and merges what they return. Each result
 // is merged under its own slot only, so a provider that fills a pointer that
 // is not its own cannot change another line.
-func (s *deskService) gather(ctx context.Context, req DeskRequest) DeskFacts {
+func (s *deskService) gather(ctx context.Context, req DeskRequest, only ...DeskSlot) DeskFacts {
 	s.mu.RLock()
 	ps := make([]DeskProvider, 0, len(s.providers))
-	for _, p := range s.providers {
+	for slot, p := range s.providers {
+		if len(only) > 0 && !slices.Contains(only, slot) {
+			continue
+		}
 		ps = append(ps, p)
 	}
 	s.mu.RUnlock()
@@ -127,19 +139,20 @@ func callProvider(ctx context.Context, p DeskProvider, req DeskRequest) (DeskFac
 func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs) *Desk {
 	c := in.Campaign
 	facts := s.gather(ctx, req)
+	line := func(id string) DeskLine { l, _ := s.line(id, c, in, facts, req.Now); return l }
 
-	table := []DeskLine{peopleLine(c, in.Members), changesLine(c, facts.Changes)}
+	table := []DeskLine{line("people"), line("changes")}
 	campaign := []DeskLine{nameLine(c), gameLine(c, in), pagesLine(c), lookLine(c)}
 	if in.Addons["media-gallery"] {
-		campaign = append(campaign, mediaLine(c, facts.Media))
+		campaign = append(campaign, line("media"))
 	}
 	campaign = append(campaign, settingsLine(c))
 
 	var conns []DeskLine
 	if in.Addons["sync-api"] {
-		conns = append(conns, foundryLine(c, facts.Foundry, req.Now))
+		conns = append(conns, line("foundry"))
 	}
-	conns = append(conns, aiLine(c, facts.AI), keysLine(c))
+	conns = append(conns, line("ai"), keysLine(c))
 
 	d := &Desk{
 		CampaignName: c.Name,
@@ -148,10 +161,109 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 			{Name: "The table", Lines: table},
 			{Name: "The campaign", Lines: campaign},
 			{Name: "Connections", Lines: conns},
-			{Name: "Safety net", Lines: []DeskLine{trashLine(c, facts.Trash), endLine(c)}},
+			{Name: "Safety net", Lines: []DeskLine{line("trash"), endLine(c)}},
 		},
 	}
 	return d
+}
+
+// line words one provider-backed or people line. Foundry and Media exist only
+// while their add-on is on, the same rule Build applies.
+func (s *deskService) line(id string, c *Campaign, in DeskInputs, f DeskFacts, now time.Time) (DeskLine, bool) {
+	var l DeskLine
+	switch id {
+	case "people":
+		l = peopleLine(c, in.Members, in.Invited)
+	case "changes":
+		l = changesLine(c, f.Changes)
+	case "media":
+		if !in.Addons["media-gallery"] {
+			return DeskLine{}, false
+		}
+		l = mediaLine(c, f.Media)
+	case "foundry":
+		if !in.Addons["sync-api"] {
+			return DeskLine{}, false
+		}
+		l = foundryLine(c, f.Foundry, now)
+	case "ai":
+		l = aiLine(c, f.AI)
+	case "trash":
+		l = trashLine(c, f.Trash)
+	default:
+		return DeskLine{}, false
+	}
+	l.Fold = s.foldable(id)
+	return l, true
+}
+
+func (s *deskService) Line(ctx context.Context, req DeskRequest, in DeskInputs, id string) (DeskLine, bool) {
+	var facts DeskFacts
+	if slot, ok := deskSlotOf[id]; ok {
+		facts = s.gather(ctx, req, slot)
+	}
+	return s.line(id, in.Campaign, in, facts, req.Now)
+}
+
+// deskSlotOf is the provider slot whose numbers each line draws on; People
+// has none.
+var deskSlotOf = map[string]DeskSlot{
+	"changes": DeskChanges, "media": DeskMedia, "foundry": DeskFoundry, "ai": DeskAI, "trash": DeskTrash,
+}
+
+func (s *deskService) Fold(ctx context.Context, req DeskRequest, in DeskInputs, id string) (*DeskFold, bool) {
+	c := in.Campaign
+	plain, ok := s.line(id, c, in, DeskFacts{}, req.Now)
+	if !ok || !s.foldable(id) {
+		return nil, false
+	}
+	if id == "people" {
+		return peopleFold(c, in), true
+	}
+	s.mu.RLock()
+	p, _ := s.providers[deskFoldSlots[id]].(DeskFolder)
+	s.mu.RUnlock()
+	f, err := callFold(ctx, p, req)
+	if err != nil || f == nil {
+		slog.Warn("desk: fold not read, showing a plain sentence",
+			slog.String("line", id), slog.String("campaign_id", req.CampaignID), slog.Any("error", err))
+		return fallbackFold(plain), true
+	}
+	if len(f.Rows) > deskFoldRows {
+		f.More += len(f.Rows) - deskFoldRows
+		f.Rows = f.Rows[:deskFoldRows]
+	}
+	if f.MoreHref == "" && len(plain.Acts) > 0 {
+		f.MoreHref = plain.Acts[0].Href
+	}
+	return f, true
+}
+
+// callFold is callProvider for a fold: under the same deadline, with a panic
+// turned into an error.
+func callFold(ctx context.Context, p DeskFolder, req DeskRequest) (*DeskFold, error) {
+	ctx, cancel := context.WithTimeout(ctx, deskProviderTimeout)
+	defer cancel()
+	type result struct {
+		f   *DeskFold
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				done <- result{err: fmt.Errorf("provider panicked: %v", r)}
+			}
+		}()
+		f, err := p.Fold(ctx, req)
+		done <- result{f, err}
+	}()
+	select {
+	case r := <-done:
+		return r.f, r.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // withoutDisabled drops the facts of a feature that is off, so the desk never
