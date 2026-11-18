@@ -49,7 +49,8 @@ func TestGuestCodesCard_Visits(t *testing.T) {
 		`hx-post="/campaigns/camp-1/guest-codes/gc-1/player"`,
 		`hx-post="/campaigns/camp-1/guest-codes/gc-1/end"`,
 		`hx-post="/campaigns/camp-1/guest-codes/gc-2/player"`,
-		"Looked around until Nov 11",
+		"Looked around until",
+		`data-date="day"`, `>11 Nov</time>`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %q", want)
