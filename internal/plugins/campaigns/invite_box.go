@@ -139,8 +139,12 @@ func (h *Handler) InviteBoxEmail(c *echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 	ctx := c.Request().Context()
-	email := strings.TrimSpace(c.FormValue("email"))
-	role := strings.ToLower(strings.TrimSpace(c.FormValue("role")))
+	var req AddMemberRequest
+	if err := c.Bind(&req); err != nil {
+		return h.boxResponse(c, boxError("email", apperror.NewBadRequest("invalid request"), ""))
+	}
+	email := strings.TrimSpace(req.Email)
+	role := strings.ToLower(strings.TrimSpace(req.Role))
 	if role == "" {
 		role = "player"
 	}
