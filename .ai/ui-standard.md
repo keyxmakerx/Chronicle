@@ -95,6 +95,15 @@ sentences (player, co-DM, owner) that say what will show there and who adds
 it, never offer an action the reader can't take, and name the game master
 with `GMTerm`. Manage pages keep `ManageHeader`.
 
+### Where a reading page starts
+
+Every title and first line on a reading page starts on the same left edge as
+the app pages, like the text edge of a book. Reading text stops at its line
+length (under **Look**); lists and tables may run to the frame's width; the
+space to the right holds facts, pictures and the contents rail. Home, a page,
+the lists, Search and Create page still start at different edges:
+TODO(#2253).
+
 ## The material rules
 
 How the physical idea turns into pixels. Each rule names what a real sheet
@@ -613,6 +622,11 @@ second; the dice settle in under 480ms.
   Headings, buttons, labels and menu rows are in sentence case ("Add a map",
   "New page"); only names keep their capitals (Chronicle, Foundry, an app's
   own name, a campaign's category names).
+- **Real-world dates follow the reader.** A real date (a game night, created,
+  joined) is written the way the reader's device writes dates, as times
+  follow their time zone, with the month always a word. A recent change says
+  "Edited 2 days ago". In-world dates are the calendar's own. Screens still
+  format dates on the server in two orders: TODO(#2254).
 
 ## Customize goes further
 
