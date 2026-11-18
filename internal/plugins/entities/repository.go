@@ -1782,6 +1782,38 @@ func (r *entityRepository) UpdateMapID(ctx context.Context, entityID string, map
 	return nil
 }
 
+// searchRank is the leading ORDER BY term of Search, with its arguments. It
+// puts the page a searcher most likely means first: the page named exactly
+// that, then names starting with the query, names with a word starting with
+// it, any other name match, an alias match, and last the pages that only
+// mention it in their text or label. Sorting by name alone put a page that
+// mentions "Thorne" in passing above the page called Thorne, and the first
+// row is the one Enter opens and the one a mention picks.
+//
+// fulltext says the name was matched with MATCH (queries of four or more
+// characters): a several-word query matches a name word by word there, which
+// no LIKE below catches, so that match gets a rank of its own.
+func searchRank(query string, fulltext bool) (string, []any) {
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	expr := `CASE
+	            WHEN e.name = ? THEN 0
+	            WHEN e.name LIKE ? THEN 1
+	            WHEN e.name LIKE ? THEN 2
+	            WHEN e.name LIKE ? THEN 3`
+	args := []any{query, escaped + "%", "% " + escaped + "%", "%" + escaped + "%"}
+	if fulltext {
+		expr += `
+	            WHEN MATCH(e.name) AGAINST(? IN BOOLEAN MODE) THEN 4`
+		args = append(args, stripFTOperators(query)+"*")
+	}
+	expr += `
+	            WHEN EXISTS (SELECT 1 FROM entity_aliases ra WHERE ra.entity_id = e.id AND ra.alias LIKE ?) THEN 5
+	            ELSE 6
+	          END ASC`
+	args = append(args, "%"+escaped+"%")
+	return expr, args
+}
+
 // Search performs a text search on entities with visibility filtering.
 // Matches against name (FULLTEXT), aliases (LIKE), entry/field content
 // (FULLTEXT on search_text), and type label (LIKE).
@@ -1793,7 +1825,8 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	// FULLTEXT for longer queries, LIKE for short ones.
 	var nameCondition, contentCondition string
 	var nameArg, contentArg string
-	if len(query) >= 4 {
+	fulltext := len(query) >= 4
+	if fulltext {
 		cleaned := stripFTOperators(query)
 		nameCondition = "MATCH(e.name) AGAINST(? IN BOOLEAN MODE)"
 		nameArg = cleaned + "*"
@@ -1838,17 +1871,19 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 		return nil, 0, fmt.Errorf("counting search results: %w", err)
 	}
 
-	// Fetch page. `e.id` breaks name ties so the sort is a total order —
-	// entity names are not unique, and OFFSET paging over a partial order
-	// silently duplicates and skips rows (see ListOptions.OrderByClause).
+	// Fetch page, best match first. `e.id` breaks ties so the sort is a
+	// total order — entity names are not unique, and OFFSET paging over a
+	// partial order silently duplicates and skips rows (see
+	// ListOptions.OrderByClause).
+	rank, rankArgs := searchRank(query, fulltext)
 	selectQuery := fmt.Sprintf(`SELECT `+entitySelectColumns+`
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          %s
-	          ORDER BY e.name ASC, e.id ASC
-	          LIMIT ? OFFSET ?`, where)
+	          ORDER BY %s, e.name ASC, e.id ASC
+	          LIMIT ? OFFSET ?`, where, rank)
 
-	pageArgs := append(args, opts.PerPage, opts.Offset())
+	pageArgs := append(append(append([]any{}, args...), rankArgs...), opts.PerPage, opts.Offset())
 	rows, err := r.db.QueryContext(ctx, selectQuery, pageArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("searching entities: %w", err)
