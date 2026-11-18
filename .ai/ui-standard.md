@@ -270,7 +270,10 @@ leaving the list for another page.
   it is made and confirms in place.
 - **Find with "/".** A workshop with many settings has Find: "/" outside a
   text field, or the Find button, opens it, and it jumps to the setting by
-  name.
+  name. One field serves them all (`static/js/find_palette.js`, styled by
+  `find_palette.css`); the Customizer and the owner's Manage pages each hand it
+  their own list, and a Manage list is built on the server for the owner and
+  leaves out any tool the campaign switched off.
 - **Single-key shortcuts never take a typed letter.** A shortcut with no
   Ctrl, Cmd or Alt (E, "/", ?) does nothing while focus is in a text field,
   a text area, a select or anything editable (`isContentEditable`), and
@@ -423,6 +426,26 @@ place, and Off shows the end state.
   motion, unsaved changes, a modified click and a browser without view
   transitions keep the ordinary page load. The browser's Back button is the
   ordinary history restore and plays nothing.
+- **The Manage desk: the line carries you.** Pressing the quiet word on a desk
+  line that opens a page (People, Game & features, Media, Settings, Foundry,
+  Your AI, Trash, What players changed) lifts that line's sentence off the
+  desk and carries it to the first line of the page it opens, under the title;
+  the other lines fall away. The "Manage" word above that page's title brings
+  the sentence home, and the desk returns to its place and the line glows.
+  It is a signed move, about a third of a second each way: `--dur-slide` out
+  and `--dur-large` back, with `--ease-slide`. Only transform and opacity
+  animate (a copy of the sentence travels in a fixed layer; the real one
+  appears where it lands), so it is not a view transition, whose group
+  animates width and height. Calm is a plain fade (`--dur-page`) with no
+  travelling copy; Off and a device asking for reduced motion leave the link an
+  ordinary page load, as do a modified click and a page without htmx. A browser
+  without the Web Animations API gets the same swap with no motion. It never traps: a second press while moving is ignored,
+  the browser's Back stops it, a failed request or six seconds with no answer
+  ends it with a normal page load, and every end leaves no inline transform,
+  opacity or `view-transition-name` behind
+  (`static/js/desk_carry.js`, pinned by `test/js/desk_carry_browser.test.mjs`).
+  The same sentence is drawn by the server when the page is opened by address
+  (`ManageFrame`'s `Line`), so both ways in start alike.
 - **The title's rule draws on arrival.** Under Annals the accent rule under
   a page title draws from the left over `--dur-large`, after 120ms, under
   full motion only.
