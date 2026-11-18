@@ -17,7 +17,7 @@ import (
 // the hardcoded default dashboard.
 templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string) {
 	@layouts.App(cc.Campaign.Name) {
-		<div class="max-w-5xl mx-auto">
+		@layouts.AppFrame() {
 			// VTT update-available banner is owner-only markup: its endpoint
 			// sits behind RequireAuth+requireOwner, so emitting it to a
 			// viewer who can't pass that gate 401s/403s the on-load hx-get
@@ -90,7 +90,7 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 				}
 				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
 			</div>
-		</div>
+		}
 	}
 }
 
