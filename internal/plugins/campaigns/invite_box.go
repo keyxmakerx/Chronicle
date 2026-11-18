@@ -35,6 +35,9 @@ type InviteBoxData struct {
 	Mode string
 	// Done is a plain confirmation; Err a refusal.
 	Done, Err string
+	// DoneLink is an invite's accept link, shown once when the site can't
+	// email it, so the owner can send it themselves.
+	DoneLink string
 	// EmailReady is false when the site can't send email.
 	EmailReady bool
 }
@@ -157,7 +160,8 @@ func (h *Handler) InviteBoxEmail(c *echo.Context) error {
 		if d.EmailReady {
 			d.Done = "Invite sent to " + email + "."
 		} else {
-			d.Done = "Invite made for " + email + ", but this site can't send email. It is listed below."
+			d.Done = "Invite made for " + email + ", but this site can't send email. Send them this link yourself; they join when they accept."
+			d.DoneLink = h.box.baseURL + "/invites/accept?token=" + inv.Token
 		}
 	})
 }

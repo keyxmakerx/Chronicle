@@ -24,6 +24,10 @@ type ManageFrameData struct {
 	// desk shows, so going from the desk to the page carries it. Empty draws
 	// none: pages with no line of their own, and anyone who is not the owner.
 	Line string
+	// NoSentence keeps the line's pin but draws no sentence: for a page that
+	// states the same thing itself and changes it in place, where the frame's
+	// copy would go stale.
+	NoSentence bool
 }
 
 // ManageFrame gives every Manage page the same left edge and the same content
@@ -33,6 +37,9 @@ type ManageFrameData struct {
 // full-screen workshop and never sits in it.
 templ ManageFrame(d ManageFrameData) {
 	{{ sentence := manageSentenceFor(ctx, d.Line) }}
+	if d.NoSentence {
+		{{ sentence = nil }}
+	}
 	<div class="manage-frame" data-manage-frame>
 		<header class={ "manage-head cb-head", templ.KV("has-sentence", sentence != nil) }>
 			if !d.Home {

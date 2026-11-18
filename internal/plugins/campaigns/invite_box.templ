@@ -20,7 +20,12 @@ templ InviteBox(d InviteBoxData) {
 			<div class="alert-error mb-4" role="alert">{ d.Err }</div>
 		}
 		if d.Done != "" {
-			<div class="alert-success mb-4" role="status">{ d.Done }</div>
+			<div class="alert-success mb-4" role="status">
+				{ d.Done }
+				if d.DoneLink != "" {
+					<input type="text" readonly value={ d.DoneLink } aria-label="Invite to send" class="input w-full font-mono text-sm mt-2" onclick="this.select()"/>
+				}
+			</div>
 		}
 		<div class="ib-choices" role="tablist" aria-label="How to invite">
 			@inviteChoice("email", "By email", "They get a message with a button.")
@@ -49,9 +54,9 @@ templ InviteBox(d InviteBoxData) {
 				<button type="submit" class="btn-primary text-sm">Send invite</button>
 			</form>
 			<p class="text-xs text-fg-muted mt-2">
-				If they already have an account here they are added straight away.
+				They join when they accept, whether or not they have an account yet.
 				if !d.EmailReady {
-					This site can't send email yet, so a new person's invite waits in the list below.
+					This site can't send email yet, so you'll get a link to send them yourself.
 				}
 			</p>
 		</div>
