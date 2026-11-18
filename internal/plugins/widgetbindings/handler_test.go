@@ -413,13 +413,13 @@ func TestMutations_ScribeLimits(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &stubSvc{resolution: Resolution{InstanceID: "cal-A", Source: SourceOwn}}
-			wt := &fakeWT{slug: "calendar", newID: "cal-new"}
+			svc := &stubSvc{resolution: Resolution{InstanceID: "inst-A", Source: SourceOwn}}
+			wt := &fakeWT{slug: "fake", newID: "new-1"}
 			h := testHandler(svc, wt)
 			e := echo.New()
 			form := url.Values{
-				"host_type": {tc.hostType}, "host_id": {"host-1"}, "widget_type": {"calendar"},
-				"instance_id": {"cal-A"}, "name": {"New"},
+				"host_type": {tc.hostType}, "host_id": {"host-1"}, "widget_type": {"fake"},
+				"instance_id": {"inst-A"}, "name": {"New"},
 			}
 			var c *echo.Context
 			var err error
