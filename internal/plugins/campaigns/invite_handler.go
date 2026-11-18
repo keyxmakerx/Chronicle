@@ -14,7 +14,13 @@ type InviteHandler struct {
 	service   InviteService
 	campaigns CampaignService
 	baseURL   string
+	// invitations draws the campaign's picture, table and next night for a
+	// signed-out person; nil leaves the page as it was.
+	invitations *InvitationSource
 }
+
+// SetInvitations wires the invitation card on the accept page.
+func (h *InviteHandler) SetInvitations(src *InvitationSource) { h.invitations = src }
 
 // NewInviteHandler creates a new invite handler.
 func NewInviteHandler(service InviteService, campaigns CampaignService, baseURL string) *InviteHandler {
@@ -110,7 +116,11 @@ func (h *InviteHandler) AcceptInvitePage(c *echo.Context) error {
 		if campaign != nil {
 			campaignName = campaign.Name
 		}
-		return middleware.Render(c, http.StatusOK, InviteAcceptPage(invite, campaignName, token, false, ""))
+		var card *auth.Invitation
+		if h.invitations != nil && auth.AllowInvitationLookup(c) {
+			card = h.invitations.ByToken(c.Request().Context(), token)
+		}
+		return middleware.Render(c, http.StatusOK, InviteAcceptPage(invite, campaignName, token, false, "", card))
 	}
 
 	// User is logged in — accept the invite.
@@ -121,7 +131,7 @@ func (h *InviteHandler) AcceptInvitePage(c *echo.Context) error {
 		if campaign != nil {
 			campaignName = campaign.Name
 		}
-		return middleware.Render(c, http.StatusOK, InviteAcceptPage(invite, campaignName, token, false, err.Error()))
+		return middleware.Render(c, http.StatusOK, InviteAcceptPage(invite, campaignName, token, false, err.Error(), nil))
 	}
 
 	// Success — redirect to the campaign.
@@ -130,24 +140,5 @@ func (h *InviteHandler) AcceptInvitePage(c *echo.Context) error {
 		campaignName = campaign.Name
 	}
 	_ = accepted
-	return middleware.Render(c, http.StatusOK, InviteAcceptPage(invite, campaignName, token, true, ""))
-}
-
-// InvitesPage renders the invite management tab in campaign settings.
-// GET /campaigns/:id/invites/page
-func (h *InviteHandler) InvitesPage(c *echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	invites, err := h.service.ListInvites(c.Request().Context(), cc.Campaign.ID)
-	if err != nil {
-		return apperror.NewInternal(err)
-	}
-
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, InviteListFragment(cc, invites))
-	}
-	return middleware.Render(c, http.StatusOK, InviteListFragment(cc, invites))
+	return middleware.Render(c, http.StatusOK, InviteAcceptPage(invite, campaignName, token, true, "", nil))
 }

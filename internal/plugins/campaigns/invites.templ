@@ -1,11 +1,13 @@
 package campaigns
 
 import "fmt"
+import "github.com/keyxmakerx/chronicle/internal/plugins/auth"
 import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
 // InviteAcceptPage renders the invite acceptance page for unauthenticated
 // or authenticated users.
-templ InviteAcceptPage(invite *Invite, campaignName, token string, accepted bool, errMsg string) {
+// A signed-out person with a live invite also sees the invitation card.
+templ InviteAcceptPage(invite *Invite, campaignName, token string, accepted bool, errMsg string, inv *auth.Invitation) {
 	@layouts.Base("Campaign Invitation") {
 		<div class="min-h-screen bg-page flex items-center justify-center px-4">
 			<div class="card max-w-md w-full p-8 text-center">
@@ -55,9 +57,15 @@ templ InviteAcceptPage(invite *Invite, campaignName, token string, accepted bool
 						My Campaigns
 					</a>
 				} else {
-					<div class="mb-4">
-						<i class="fa-solid fa-envelope-open text-4xl text-accent"></i>
-					</div>
+					if inv != nil {
+						<div class="text-left mb-5">
+							@auth.InvitationCard(inv)
+						</div>
+					} else {
+						<div class="mb-4">
+							<i class="fa-solid fa-envelope-open text-4xl text-accent"></i>
+						</div>
+					}
 					<h2 class="text-xl font-bold text-fg mb-2">You're Invited!</h2>
 					<p class="text-fg-secondary mb-6">
 						You've been invited to join
@@ -82,114 +90,4 @@ templ InviteAcceptPage(invite *Invite, campaignName, token string, accepted bool
 			</div>
 		</div>
 	}
-}
-
-// InviteListFragment renders the invite list for the campaign settings page.
-// Shown as an HTMX fragment within the Members & Invites tab.
-templ InviteListFragment(cc *CampaignContext, invites []Invite) {
-	<div id="invite-list" class="space-y-4">
-		<!-- Send invite form -->
-		if cc.MemberRole >= RoleOwner {
-			<div class="card p-4">
-				<h3 class="text-sm font-semibold text-fg mb-3">Send Invitation</h3>
-				<form
-					id="invite-form"
-					class="flex flex-wrap items-end gap-3"
-					hx-post={ fmt.Sprintf("/campaigns/%s/invites", cc.Campaign.ID) }
-					hx-target="#invite-list"
-					hx-swap="outerHTML"
-					hx-headers='{"Content-Type": "application/json"}'
-					hx-ext="json-enc"
-				>
-					<div class="flex-1 min-w-[200px]">
-						<label class="block text-xs text-fg-secondary mb-1" for="invite-email">Email</label>
-						<input
-							type="email"
-							id="invite-email"
-							name="email"
-							placeholder="player@example.com"
-							required
-							class="input w-full"
-						/>
-					</div>
-					<div class="w-32">
-						<label class="block text-xs text-fg-secondary mb-1" for="invite-role">Role</label>
-						<select id="invite-role" name="role" class="input w-full">
-							<option value="player">Player</option>
-							<option value="scribe">Scribe</option>
-						</select>
-					</div>
-					<button type="submit" class="btn-primary">
-						<i class="fa-solid fa-paper-plane"></i>
-						Send
-					</button>
-				</form>
-			</div>
-		}
-
-		<!-- Invite list -->
-		if len(invites) > 0 {
-			<div class="card overflow-hidden">
-				<table class="w-full text-sm">
-					<thead>
-						<tr class="border-b border-edge text-left">
-							<th class="px-4 py-2 text-fg-secondary font-medium">Email</th>
-							<th class="px-4 py-2 text-fg-secondary font-medium">Role</th>
-							<th class="px-4 py-2 text-fg-secondary font-medium">Status</th>
-							<th class="px-4 py-2 text-fg-secondary font-medium">Sent by</th>
-							<th class="px-4 py-2"></th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, inv := range invites {
-							<tr class="border-b border-edge-light last:border-0">
-								<td class="px-4 py-3 text-fg">{ inv.Email }</td>
-								<td class="px-4 py-3">
-									<span class={ "text-xs font-medium px-2 py-0.5 rounded-full",
-										templ.KV("bg-accent/10 text-accent", inv.Role == "scribe"),
-										templ.KV("bg-green-500/10 text-green-500", inv.Role == "player") }>
-										{ inv.Role }
-									</span>
-								</td>
-								<td class="px-4 py-3">
-									if inv.AcceptedAt != nil {
-										<span class="text-xs text-green-500">
-											<i class="fa-solid fa-check mr-1"></i>Accepted
-										</span>
-									} else if inv.IsExpired() {
-										<span class="text-xs text-fg-muted">
-											<i class="fa-solid fa-clock mr-1"></i>Expired
-										</span>
-									} else {
-										<span class="text-xs text-amber-500">
-											<i class="fa-solid fa-hourglass-half mr-1"></i>Pending
-										</span>
-									}
-								</td>
-								<td class="px-4 py-3 text-fg-secondary text-xs">{ inv.CreatedByName }</td>
-								<td class="px-4 py-3 text-right">
-									if inv.IsPending() && cc.MemberRole >= RoleOwner {
-										<button
-											class="text-xs text-red-400 hover:text-red-300 transition-colors"
-											hx-delete={ fmt.Sprintf("/campaigns/%s/invites/%s", cc.Campaign.ID, inv.ID) }
-											hx-target="#invite-list"
-											hx-swap="outerHTML"
-											hx-confirm="Revoke this invitation?"
-										>
-											<i class="fa-solid fa-xmark mr-1"></i>Revoke
-										</button>
-									}
-								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
-		} else {
-			<div class="card p-8 text-center">
-				<i class="fa-solid fa-envelope text-2xl text-fg-muted mb-2"></i>
-				<p class="text-fg-muted text-sm">No invitations sent yet.</p>
-			</div>
-		}
-	</div>
 }

@@ -1,0 +1,94 @@
+// invitation.templ is the invitation shown above the sign-in, "I'm new" and
+// code forms when the link, emailed invite or code in hand is valid: the
+// campaign's picture and name, who is at the table, and the next game night.
+
+package auth
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// invitationSeen is how many names the line lists before "and N more".
+const invitationSeen = 6
+
+// InvitationCard is the invitation. It carries names and pictures only.
+templ InvitationCard(inv *Invitation) {
+	<section class="inv" aria-label={ "Invitation to " + inv.CampaignName } data-testid="invitation">
+		<div class="inv-banner">
+			if inv.BackdropPath != "" {
+				<img src={ layouts.MediaURL(ctx, inv.BackdropPath) } alt="" loading="eager"/>
+			}
+			<h2 class="inv-name">{ inv.CampaignName }</h2>
+		</div>
+		if len(inv.Members) > 0 {
+			<div class="inv-table">
+				<div class="inv-faces" aria-hidden="true">
+					for i, m := range inv.Members {
+						if i < invitationSeen {
+							<span class="inv-face">
+								if m.AvatarPath != "" {
+									<img src={ layouts.AvatarURL(ctx, m.AvatarPath) } alt="" loading="lazy"/>
+								} else {
+									{ layouts.Initials(m.Name) }
+								}
+							</span>
+						}
+					}
+				</div>
+				<p>{ invitationNames(inv.Members) }</p>
+			</div>
+		}
+		if inv.NextNight != nil {
+			<p class="inv-next">
+				<span class="inv-label">Next game night</span>
+				if inv.NextNight.Time != "" {
+					<time datetime={ inv.NextNight.At.UTC().Format(time.RFC3339) } data-widget="invitation-time">{ invitationNightText(inv.NextNight) }</time>
+				} else {
+					<time datetime={ inv.NextNight.Date }>{ invitationNightText(inv.NextNight) }</time>
+				}
+			</p>
+		}
+	</section>
+}
+
+// invitationNames words the table: "Olive, Pat and Quinn are at the table".
+// Past a handful it counts the rest rather than listing everyone.
+func invitationNames(members []InvitationMember) string {
+	names := make([]string, 0, len(members))
+	for _, m := range members {
+		names = append(names, m.Name)
+	}
+	if len(names) > invitationSeen {
+		rest := len(names) - invitationSeen
+		return fmt.Sprintf("%s and %d more are at the table", strings.Join(names[:invitationSeen], ", "), rest)
+	}
+	switch len(names) {
+	case 1:
+		return names[0] + " is at the table"
+	case 2:
+		return names[0] + " and " + names[1] + " are at the table"
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1] + " are at the table"
+}
+
+// invitationNightText is the server's wording of the night, in the table's
+// own zone. invitation_time.js replaces it with the reader's zone when the
+// night has a start time.
+func invitationNightText(n *InvitationNight) string {
+	at := n.At
+	if n.Time == "" {
+		if d, err := time.Parse("2006-01-02", n.Date); err == nil {
+			return d.Format("Monday, January 2")
+		}
+		return n.Date
+	}
+	label := "UTC"
+	if n.TZ != "" {
+		label = n.TZ
+	}
+	return at.Format("Monday, January 2, 3:04 pm") + " (" + label + ")"
+}

@@ -11,15 +11,22 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // friendly explanatory panel renders in place of the form (production-UI tenet —
 // never a bare 403). redirect is carried through the form so an invite-flow
 // registrant returns to the invite after their account is created.
-templ RegisterPage(csrfToken string, req *RegisterRequest, errMsg, redirect string, gated bool, mode string) {
+templ RegisterPage(csrfToken string, req *RegisterRequest, errMsg, redirect string, gated bool, mode string, inv *Invitation) {
 	@layouts.Base("Register") {
 		@AuthDoors(layouts.DoorNew, redirect) {
 			<div>
+				if inv != nil {
+					@InvitationCard(inv)
+				}
 				<div class="doors-head">
-					<h1>Get started</h1>
-					if joiningCampaign(redirect) {
+					if inv != nil {
+						<h1>Join { inv.CampaignName }</h1>
+						<p>Create your { layouts.SiteName(ctx) } account, then you&apos;ll be at the table.</p>
+					} else if joiningCampaign(redirect) {
+						<h1>Get started</h1>
 						<p>Create your { layouts.SiteName(ctx) } account, then you&apos;ll join the campaign you were invited to.</p>
 					} else {
+						<h1>Get started</h1>
 						<p>Create your { layouts.SiteName(ctx) } account</p>
 					}
 				</div>

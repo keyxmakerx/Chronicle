@@ -27,10 +27,10 @@ func TestDoorsOpenTheirOwnTab(t *testing.T) {
 		page templ.Component
 		door string
 	}{
-		{"login", LoginPage("tok", "", "", "", "", LoginOptions{}), "signin"},
-		{"register", RegisterPage("tok", nil, "", "", false, "open"), "new"},
-		{"register gated", RegisterPage("tok", nil, "", "", true, "invite"), "new"},
-		{"join", JoinPage("tok", "", "", "", ""), "code"},
+		{"login", LoginPage("tok", "", "", "", "", LoginOptions{}, nil), "signin"},
+		{"register", RegisterPage("tok", nil, "", "", false, "open", nil), "new"},
+		{"register gated", RegisterPage("tok", nil, "", "", true, "invite", nil), "new"},
+		{"join", JoinPage("tok", "", "", "", "", nil), "code"},
 		{"two-factor step", TwoFactorPage("tok", "ch", "", ""), "signin"},
 	}
 	for _, tt := range tests {
@@ -58,7 +58,7 @@ func TestDoorsOpenTheirOwnTab(t *testing.T) {
 }
 
 func TestDoorTabsKeepTheRedirect(t *testing.T) {
-	html := renderDoor(t, LoginPage("tok", "", "", "", "/join/abc123", LoginOptions{}))
+	html := renderDoor(t, LoginPage("tok", "", "", "", "/join/abc123", LoginOptions{}, nil))
 	for _, want := range []string{
 		`href="/login?redirect=%2Fjoin%2Fabc123"`,
 		`href="/register?redirect=%2Fjoin%2Fabc123"`,
@@ -74,12 +74,12 @@ func TestDoorTabsKeepTheRedirect(t *testing.T) {
 func TestJoinDoorCarriesTheJoinRedirect(t *testing.T) {
 	// With no code, signing in from the code tab is just signing in: the
 	// owner must not land back on "Join a campaign".
-	html := renderDoor(t, JoinPage("tok", "", "", "", ""))
+	html := renderDoor(t, JoinPage("tok", "", "", "", "", nil))
 	if strings.Contains(html, `redirect=%2Fjoin`) {
 		t.Errorf("a bare join page must not send sign-ins back to /join: %s", html)
 	}
 	// With a code in hand, an account holder comes back to use it.
-	html = renderDoor(t, JoinPage("tok", "ABCD-2345", "", "", ""))
+	html = renderDoor(t, JoinPage("tok", "ABCD-2345", "", "", "", nil))
 	if !strings.Contains(html, `href="/login?redirect=%2Fjoin%3Fcode%3DABCD-2345"`) || !strings.Contains(html, `href="/register?redirect=%2Fjoin%3Fcode%3DABCD-2345"`) {
 		t.Errorf("signing in with a code in hand should come back to it: %s", html)
 	}

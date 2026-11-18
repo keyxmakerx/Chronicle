@@ -47,8 +47,8 @@ func TestAuthPagesCarryTheSiteBrand(t *testing.T) {
 		// doors pages sit on the three-door stage, the others on the plain stage.
 		doors bool
 	}{
-		{"login", LoginPage("tok", "", "", "", "", LoginOptions{}), true},
-		{"register", RegisterPage("tok", &RegisterRequest{}, "", "", false, "open"), true},
+		{"login", LoginPage("tok", "", "", "", "", LoginOptions{}, nil), true},
+		{"register", RegisterPage("tok", &RegisterRequest{}, "", "", false, "open", nil), true},
 		{"forgot password", ForgotPasswordPage("tok", "", "", true), false},
 		{"reset password", ResetPasswordPage("tok", "t", "", ""), false},
 	}
@@ -106,7 +106,7 @@ func TestLoginPageSiteLook(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out := renderAuthPage(t, tc.look, LoginPage("tok", "", "", "", "", LoginOptions{}))
+			out := renderAuthPage(t, tc.look, LoginPage("tok", "", "", "", "", LoginOptions{}, nil))
 			for _, w := range tc.want {
 				if !strings.Contains(out, w) {
 					t.Errorf("missing %q", w)
@@ -124,7 +124,7 @@ func TestLoginPageSiteLook(t *testing.T) {
 // TestSiteLookAccentOnAuthPages checks the look's accent reaches the sign-in
 // pages (they are outside a campaign) through the layout's accent CSS.
 func TestSiteLookAccentOnAuthPages(t *testing.T) {
-	out := renderAuthPage(t, sitelook.Settings{Configured: true, Look: "forest"}, LoginPage("tok", "", "", "", "", LoginOptions{}))
+	out := renderAuthPage(t, sitelook.Settings{Configured: true, Look: "forest"}, LoginPage("tok", "", "", "", "", LoginOptions{}, nil))
 	if !strings.Contains(out, "--color-accent:#2f7d4f") {
 		t.Errorf("accent of the forest look missing from the page head")
 	}

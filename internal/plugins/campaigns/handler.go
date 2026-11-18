@@ -144,7 +144,9 @@ type Handler struct {
 	mediaUploader      MediaUploader
 	smtpChecker        SMTPChecker
 	// invites turns "add a member" into an invitation the person accepts.
-	invites      InviteService
+	invites InviteService
+	// box is the People page's Invite someone box (SetInviteBox).
+	box          inviteBoxDeps
 	systemLister SystemLister
 	// extraSettingsTabs holds factory functions other plugins
 	// contribute via RegisterSettingsTab (see settings_tabs.go).

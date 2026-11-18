@@ -3052,7 +3052,7 @@ func (a *App) RegisterRoutes() {
 	// A guest exists only for their campaign, so removing them from it or
 	// deleting it ends their account.
 	guestCodeService := campaigns.NewGuestCodeService(campaigns.NewGuestCodeRepository(a.DB), campaignRepo)
-	campaigns.RegisterGuestCodeRoutes(e, campaigns.NewGuestCodeHandler(guestCodeService, a.Config.BaseURL), campaignService, authService)
+	campaignHandler.SetInviteBox(inviteService, guestCodeService, a.Config.BaseURL)
 	auth.ConfigureGuests(authService, guestCodeService)
 	campaigns.ConfigureVisitPasses(campaignService, guestCodeService)
 	auth.OnGuestMerged(authService, guestCodeService.MoveGuestMembership)
@@ -4218,6 +4218,18 @@ func (a *App) RegisterRoutes() {
 	// Entity campaign checker prevents cross-campaign entity linking (IDOR).
 	sessionsRepo := sessions.NewSessionRepository(a.DB)
 	sessionsService := sessions.NewSessionService(sessionsRepo, &entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	// The door a newcomer meets before joining: the campaign's picture,
+	// its table and its next game night, for a link, emailed invite or code.
+	invitationSource := campaigns.NewInvitationSource(campaignRepo, inviteRepo, guestCodeService,
+		func(ctx context.Context, campaignID string, now time.Time) *auth.InvitationNight {
+			n, err := sessionsService.NextGameNight(ctx, campaignID, now)
+			if err != nil || n == nil {
+				return nil
+			}
+			return &auth.InvitationNight{Date: n.Date, Time: n.Time, TZ: n.TZ, At: n.At}
+		})
+	auth.ConfigureInvitations(authService, invitationSource)
+	inviteHandler.SetInvitations(invitationSource)
 	// The calendar's anchor-move preview names the sessions it would re-date
 	// through this lookup; without it the owner's warning would always read
 	// "no sessions affected".
@@ -6922,6 +6934,7 @@ func (a *App) RegisterRoutes() {
 // /static/js/widgets/ rather than in a plugin: each loads on the first page
 // that mounts it (ADR-063). Helpers come first, the registering script last.
 var coreWidgets = []PluginWidget{
+	{Name: "invitation-time", Scripts: []string{"/static/js/widgets/invitation_time.js"}},
 	{Name: "calendar_event_roll", Scripts: []string{"/static/js/widgets/calendar_event_roll.js"}},
 	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},
 	{Name: "permissions", Scripts: []string{"/static/js/widgets/permissions.js"}},

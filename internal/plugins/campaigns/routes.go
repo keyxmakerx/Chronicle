@@ -170,6 +170,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("/system", h.UpdateSystemID, RequireRole(RoleOwner))
 
 	// Shareable invite link (Owner only).
+	h.registerInviteBoxRoutes(cg)
 	cg.POST("/join-code", h.GenerateJoinCode, RequireRole(RoleOwner))
 	cg.DELETE("/join-code", h.RevokeJoinCode, RequireRole(RoleOwner))
 
@@ -198,7 +199,6 @@ func RegisterInviteRoutes(e *echo.Echo, ih *InviteHandler, svc CampaignService, 
 		RequireCampaignAccess(svc),
 	)
 	cg.GET("/invites", ih.ListInvitesAPI, RequireRole(RoleOwner))
-	cg.GET("/invites/page", ih.InvitesPage, RequireRole(RoleOwner))
 	cg.POST("/invites", ih.CreateInviteAPI, RequireRole(RoleOwner))
 	cg.DELETE("/invites/:inviteId", ih.RevokeInviteAPI, RequireRole(RoleOwner))
 }
