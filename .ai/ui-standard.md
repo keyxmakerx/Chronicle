@@ -535,9 +535,11 @@ second; the dice settle in under 480ms.
   as its own row under **Style kits** says.
 - **The sign-in page is three doors over a scene.** *Sign in*, *I'm new* and
   *I have a code* are tabs (`/login`, `/register`, `/join` each open their
-  own) on one floating panel with no box around the form. A painted,
-  pre-blurred scene sits behind it and follows the tab (castle, dragon,
-  tavern); its four layers drift on `--dur-ambient` and hold still under Calm
+  own) on one floating panel with no box around the form. Nothing hangs from
+  these tabs, so the open one is underlined in the accent with no side line.
+  A painted scene, softly blurred (more the farther back) but clear enough to
+  tell what it is, sits behind it and follows the tab (castle, dragon, tavern); its
+  four layers drift on `--dur-ambient` and hold still under Calm
   and Off. A site admin's picture or colours replace the scenes, and a saved
   plain look shows the panel on the page colour
   (`internal/templates/layouts/site_doors.templ`, `static/css/auth_doors.css`;

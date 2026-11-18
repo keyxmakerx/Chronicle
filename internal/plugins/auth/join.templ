@@ -3,13 +3,27 @@
 
 package auth
 
-import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+import (
+	"net/url"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// joinReturn is where the other doors send someone back to after signing in
+// from the code tab: the join page only while a code is being used, so an
+// account holder can join with it; otherwise nowhere special.
+func joinReturn(code string) string {
+	if code == "" {
+		return ""
+	}
+	return joinHref + "?code=" + url.QueryEscape(code)
+}
 
 // JoinPage is the full /join page. signedInAs is the name of someone
 // already signed in, who joins with their own account and needs no name.
 templ JoinPage(csrfToken, code, name, errMsg, signedInAs string) {
 	@layouts.Base("Join a campaign") {
-		@AuthDoors(layouts.DoorCode, "/join") {
+		@AuthDoors(layouts.DoorCode, joinReturn(code)) {
 			<div>
 				<div class="doors-head">
 					<h1>Join a campaign</h1>
