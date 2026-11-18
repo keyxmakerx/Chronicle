@@ -8,7 +8,7 @@
 # components.Date, or timeutil.FixedDate where a plain string is needed.
 #
 # Scans *.templ for a Format layout that starts with a month or weekday name
-# or with a day then a month name. Machine layouts (2006-01-02, RFC3339) are
+# or with a day then a month name. Numeric machine layouts and RFC3339 are
 # not dates a person reads and pass. The helper itself lives in
 # internal/timeutil/date.go, which is Go, so there is no exemption.
 #
