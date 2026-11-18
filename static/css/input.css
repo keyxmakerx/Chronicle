@@ -4984,7 +4984,7 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
 .manage-eyebrow:hover, .manage-eyebrow:focus-visible { text-decoration-color: currentColor; }
 .manage-eyebrow:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: var(--shape-r-tag); }
 .manage-title { margin: 0; font-size: 1.5rem; line-height: 1.2; font-weight: 700; color: var(--color-text-primary); }
-.manage-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+.manage-actions { order: 1; margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
 /* The page's own desk sentence, first line under the title. Same type as on
    the desk, so the move from the desk lands exactly on it. */
 .manage-head.has-sentence { margin-bottom: 0.25rem; }
