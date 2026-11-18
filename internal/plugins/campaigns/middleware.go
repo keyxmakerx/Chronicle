@@ -1,6 +1,7 @@
 package campaigns
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -249,7 +250,11 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 // knows about them; test doubles of CampaignService don't, and admit no one.
 // A failed read admits no one either, rather than failing the page.
 func visitPassOf(c *echo.Context, service CampaignService, campaignID, userID string) (until time.Time, live, found bool) {
-	v, ok := service.(VisitPasses)
+	// Only the read is asked for: the campaign service answers VisitPass but
+	// not the rest of VisitPasses, and asking for all of it admits no one.
+	v, ok := service.(interface {
+		VisitPass(ctx context.Context, campaignID, userID string) (time.Time, bool, bool, error)
+	})
 	if !ok {
 		return time.Time{}, false, false
 	}
