@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // invitationSeen is how many names the line lists before "and N more".
@@ -82,7 +83,7 @@ func invitationNightText(n *InvitationNight) string {
 	at := n.At
 	if n.Time == "" {
 		if d, err := time.Parse("2006-01-02", n.Date); err == nil {
-			return d.Format("Monday, January 2")
+			return timeutil.FixedDate(d, timeutil.DateWeekday)
 		}
 		return n.Date
 	}
@@ -90,5 +91,5 @@ func invitationNightText(n *InvitationNight) string {
 	if n.TZ != "" {
 		label = n.TZ
 	}
-	return at.Format("Monday, January 2, 3:04 pm") + " (" + label + ")"
+	return timeutil.FixedDate(at, timeutil.DateWeekday) + ", " + at.Format("3:04 pm") + " (" + label + ")"
 }

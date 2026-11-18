@@ -40,7 +40,7 @@ func TestInvitationCardShowsNamesOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := b.String()
-	for _, want := range []string{"The Ashen Reach", "Olive, Pat and Quinn are at the table", "Next game night", "Tuesday, December 1"} {
+	for _, want := range []string{"The Ashen Reach", "Olive, Pat and Quinn are at the table", "Next game night", "Tuesday 1 December"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("card lacks %q", want)
 		}

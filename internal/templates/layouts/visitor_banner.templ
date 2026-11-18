@@ -3,7 +3,11 @@
 
 package layouts
 
-import "time"
+import (
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
+)
 
 // VisitorBanner says the viewer is looking around on a pass, the day it ends,
 // what a pass cannot do, and how to stay. It takes the place of the guest
@@ -36,6 +40,6 @@ func visitEndDay(until, now time.Time) string {
 	case days < 7:
 		return until.Weekday().String()
 	default:
-		return until.Format("Jan 2")
+		return timeutil.FixedDate(until, timeutil.DateDay)
 	}
 }

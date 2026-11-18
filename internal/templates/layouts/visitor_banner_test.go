@@ -20,7 +20,7 @@ func TestVisitEndDay(t *testing.T) {
 		{"past midnight", now.Add(5 * time.Hour), "tomorrow"},
 		{"three days", now.Add(72 * time.Hour), "Sunday"},
 		{"six days", now.Add(6 * 24 * time.Hour), "Wednesday"},
-		{"a week out", now.Add(7 * 24 * time.Hour), "Nov 19"},
+		{"a week out", now.Add(7 * 24 * time.Hour), "19 Nov"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
