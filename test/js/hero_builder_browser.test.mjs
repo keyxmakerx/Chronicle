@@ -63,7 +63,7 @@ function staticFile(path) {
   return join(root, path);
 }
 
-async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROES, canCreate = false, failSave = false } = {}) {
+async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROES, canCreate = false, failSave = false, noSteps = false } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport });
@@ -74,7 +74,7 @@ async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROE
   await p.route('**/*', (route) => {
     const req = route.request(), u = new URL(req.url());
     if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: page(heroes, canCreate) });
-    if (u.pathname === '/campaigns/c1/characters/new/plan') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(PLAN) });
+    if (u.pathname === '/campaigns/c1/characters/new/plan') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(noSteps ? { ...PLAN, steps: [] } : PLAN) });
     if (u.pathname.startsWith('/campaigns/c1/')) {
       sent.push({ method: req.method(), path: u.pathname, csrf: req.headers()['x-csrf-token'], body: JSON.parse(req.postData() || 'null') });
       if (req.method() === 'POST') return route.fulfill({ status: 201, contentType: 'application/json', body: '{"id":"e9","url":"/campaigns/c1/entities/e9"}' });
@@ -168,6 +168,15 @@ test('a new hero is made from its own sentence', { skip }, async (t) => {
   await p.click('[data-make]');
   await nav;
   assert.deepEqual(sent, [{ method: 'POST', path: '/campaigns/c1/characters/new', csrf: 'tok', body: { name: 'Bram', picks: { ancestry: { name: 'Gull-kin' } } } }]);
+});
+
+test('with no steps the new hero is just a name field, and its hidden label keeps the apostrophe', { skip }, async (t) => {
+  const { p } = await open(t, { heroes: [], canCreate: true, noSteps: true });
+  await p.click('[data-create-hero]');
+  const sentenceBox = p.locator('[data-hero-card="new"] .hb-sentence');
+  assert.equal(await sentenceBox.innerText(), 'Your new hero’s name', 'only the hidden label text, no stray visible "’s"');
+  assert.equal(await sentenceBox.locator('.sr-only').innerText(), 'Your new hero’s name');
+  assert.equal(await sentenceBox.evaluate((el) => el.querySelector('label').nextSibling), null, 'nothing follows the name field');
 });
 
 test('the new-hero sentence stays folded until Create hero, and Not now folds it back', { skip }, async (t) => {

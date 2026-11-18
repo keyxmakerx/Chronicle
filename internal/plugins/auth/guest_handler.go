@@ -77,7 +77,10 @@ func (h *Handler) Join(c *echo.Context) error {
 		setSessionCookie(c, res.SessionToken, h.sessionTTL)
 		h.logSecurityEvent(ctx, "guest.joined", res.User.ID, "", ip, ua, map[string]any{"campaign_id": res.CampaignID})
 	}
-	return middleware.HTMXRedirect(c, "/campaigns/"+res.CampaignID)
+	// joined=1 asks the campaign home for its welcome. The home only says it
+	// to a member, so a look-around visitor (not a member) is never told they
+	// joined.
+	return middleware.HTMXRedirect(c, "/campaigns/"+res.CampaignID+"?joined=1")
 }
 
 // GuestPanelFragment loads the keep-your-account panel under a guest's

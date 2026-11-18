@@ -130,7 +130,7 @@ func TestShow_LayoutPageDrawsOnlyPlacedPieces(t *testing.T) {
 	if n := strings.Count(body, `data-widget="entity-posts"`); n != 1 {
 		t.Errorf("Posts drawn %d times, want once", n)
 	}
-	for _, absent := range []string{"The Hidden Vault", "/backlinks", "Writing Prompts"} {
+	for _, absent := range []string{"The Hidden Vault", "/backlinks", "Writing prompts"} {
 		if strings.Contains(body, absent) {
 			t.Errorf("page draws %q although its layout does not place it", absent)
 		}

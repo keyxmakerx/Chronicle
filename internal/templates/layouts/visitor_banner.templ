@@ -3,39 +3,39 @@
 
 package layouts
 
-import (
-	"fmt"
-	"math"
-	"time"
-)
+import "time"
 
-// VisitorBanner says the viewer is looking around on a pass, how long it has
-// left, and how to stay. It takes the place of the guest strip: there is no
-// account worth keeping until they are a player.
+// VisitorBanner says the viewer is looking around on a pass, the day it ends,
+// what a pass cannot do, and how to stay. It takes the place of the guest
+// strip, and carries no "Keep my account" button: a visitor has nothing worth
+// keeping until the GM makes them a player.
 templ VisitorBanner(until time.Time, now time.Time) {
 	<div class="cta-bar" data-cta="visitor" role="status">
 		<i class="fa-solid fa-binoculars cta-ico" aria-hidden="true"></i>
 		<span class="cta-msg">
-			You're looking around. { visitLeft(until, now) }.
+			You're looking around until { visitEndDay(until, now) }. You can read, but not write or roll.
 			<span class="text-fg-secondary">To play, ask your { GMTerm(ctx) } to make you a player.</span>
 		</span>
 	</div>
 }
 
-// visitLeft says how much of a pass remains in whole days, or hours on its
-// last day, rounded up so "1 day left" never means "ending now".
-func visitLeft(until, now time.Time) string {
-	left := until.Sub(now)
+// visitEndDay names the day a pass ends the way a person would say it. A pass
+// lasts at most a week, so a weekday is unambiguous except a week out, where
+// the date is clearer.
+func visitEndDay(until, now time.Time) string {
+	until = until.In(now.Location())
+	// Compare calendar dates, not durations, so 11pm tonight to 1am is "tomorrow".
+	y1, m1, d1 := now.Date()
+	y2, m2, d2 := until.Date()
+	days := int(time.Date(y2, m2, d2, 0, 0, 0, 0, time.UTC).Sub(time.Date(y1, m1, d1, 0, 0, 0, 0, time.UTC)).Hours() / 24)
 	switch {
-	case left <= time.Hour:
-		return "Less than an hour left"
-	case left < 24*time.Hour:
-		return fmt.Sprintf("%d hours left", int(math.Ceil(left.Hours())))
+	case days <= 0:
+		return "today"
+	case days == 1:
+		return "tomorrow"
+	case days < 7:
+		return until.Weekday().String()
 	default:
-		days := int(math.Ceil(left.Hours() / 24))
-		if days == 1 {
-			return "1 day left"
-		}
-		return fmt.Sprintf("%d days left", days)
+		return until.Format("Jan 2")
 	}
 }

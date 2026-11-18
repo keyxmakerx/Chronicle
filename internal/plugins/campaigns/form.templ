@@ -10,7 +10,7 @@ import (
 
 // CampaignNewPage renders the full campaign creation page.
 templ CampaignNewPage(csrfToken, name, errMsg string) {
-	@layouts.App("New Campaign") {
+	@layouts.App("New campaign") {
 		<div class="max-w-2xl mx-auto">
 			<h1 class="text-2xl font-bold text-fg mb-6">Create Campaign</h1>
 			@CampaignCreateForm(csrfToken, &CreateCampaignRequest{Name: name}, errMsg)
@@ -39,7 +39,7 @@ templ CampaignCreateForm(csrfToken string, req *CreateCampaignRequest, errMsg st
 			}
 
 			<div>
-				<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
+				<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign name</label>
 				<input
 					type="text"
 					id="name"
@@ -50,7 +50,7 @@ templ CampaignCreateForm(csrfToken string, req *CreateCampaignRequest, errMsg st
 					required
 					autofocus
 					class="input w-full"
-					placeholder="The Lost Mines of Phandelver"
+					placeholder="The Ashen Crown"
 					maxlength="200"
 				/>
 			</div>

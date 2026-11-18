@@ -963,7 +963,7 @@
         srow('journal', 'i-journal', 'Journal') + srow('calendar', 'i-cal', 'Calendar') + srow('sessions', 'i-d20', 'Sessions') + srow('maps', 'i-map', 'Maps') +
         '<div class="s-gh folded">Apps <span class="n">6</span>' + IC('i-chev', 'chev') + '</div>' +
         '<div class="s-gh">Categories <span class="n">8</span>' + IC('i-chev', 'chev') + '</div>' +
-        srow('all', 'i-layers', 'All Pages', 226) + srow('locations', 'i-mappin', 'Locations', 64, '#f87171') +
+        srow('all', 'i-layers', 'All pages', 226) + srow('locations', 'i-mappin', 'Locations', 64, '#f87171') +
         '<div class="s-subs">' + ssub('regions', 'Regions', 6) + ssub('cities', 'Cities', 14, true) + ssub('dungeons', 'Dungeons', 11) + '</div>' +
         srow('factions', 'i-banner', 'Factions', 18, '#fbbf24') + srow('items', 'i-gem', 'Items', 53, '#a78bfa') + srow('lore', 'i-scroll', 'Lore', 29, '#34d399') +
         '</div></div>';

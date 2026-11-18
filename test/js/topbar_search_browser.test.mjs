@@ -41,7 +41,7 @@ async function open(t, { canCreate = true, hits = [] } = {}) {
       apiFetch: () => Promise.resolve({ json: () => Promise.resolve({ results: hits }) }),
       paletteCommands: () => [
         { id: 'search', label: 'Search Pages', icon: 'fa-search' },
-        { id: 'new-page', label: 'New Page', icon: 'fa-plus', href: '/campaigns/c1/entities/new' },
+        { id: 'new-page', label: 'New page', icon: 'fa-plus', href: '/campaigns/c1/entities/new' },
         { label: 'Toggle Theme', icon: 'fa-circle-half-stroke', action: () => window.ran.push('theme') },
       ],
     };
@@ -71,11 +71,11 @@ test('no match offers to create the page, with its name filled in', { skip }, as
   assert.ok(r.some((x) => x.href === '/campaigns/c1/entities/new?name=Ferryman' && /Create a page named/.test(x.text)), JSON.stringify(r));
 });
 
-test('a viewer who may not create pages gets neither the create row nor New Page', { skip }, async (t) => {
+test('a viewer who may not create pages gets neither the create row nor New page', { skip }, async (t) => {
   const p = await open(t, { canCreate: false });
   await type(p, 'new');
   const r = await rows(p);
-  assert.ok(!r.some((x) => /Create a page named|New Page/.test(x.text)), JSON.stringify(r));
+  assert.ok(!r.some((x) => /Create a page named|New page/.test(x.text)), JSON.stringify(r));
 });
 
 test('matching commands follow the pages, and Enter runs one', { skip }, async (t) => {

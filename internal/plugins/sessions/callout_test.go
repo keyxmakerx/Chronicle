@@ -122,9 +122,13 @@ func TestCallout_AsksForTheZoneWhenItIsUnsetAndNothingIsPending(t *testing.T) {
 	}
 	// The sentence must state the CONSEQUENCE. "Set your timezone" is a chore;
 	// "times are not in yours" is the reason anyone would act. It must not
-	// claim UTC: game nights show in the organizer's zone.
-	if !strings.Contains(got.Message, "not shown in your local time") || strings.Contains(got.Message, "UTC") {
+	// claim UTC: game nights show in the organizer's zone. It is also the phone
+	// sentence, which has to fit one line at 390 wide, so the two never differ.
+	if !strings.Contains(got.Message, "aren't in your zone") || strings.Contains(got.Message, "UTC") {
 		t.Errorf("Message = %q — it must say what is happening now, not just ask for a setting", got.Message)
+	}
+	if got.Message != timezoneShortMessage {
+		t.Errorf("Message = %q, want the phone sentence %q", got.Message, timezoneShortMessage)
 	}
 }
 
@@ -222,7 +226,7 @@ func TestRenderCallout_BothKindsCanBeDismissed(t *testing.T) {
 // beside the full one; phone_shell.css shows whichever fits.
 func TestRenderCallout_TimezoneCarriesAShortSentence(t *testing.T) {
 	got := renderCallout(Callout{Kind: CalloutTimezone, Message: "the long message"})
-	for _, want := range []string{`class="cta-long">the long message<`, `class="cta-short">Times aren&#39;t in your time zone yet<`} {
+	for _, want := range []string{`class="cta-long">the long message<`, `class="cta-short">Times aren&#39;t in your zone yet<`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}

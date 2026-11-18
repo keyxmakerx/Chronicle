@@ -101,7 +101,7 @@
       cmds.push({ label: 'Go to Plugins', icon: 'fa-puzzle-piece', href: '/campaigns/' + cid + '/plugins', shortcut: '' });
 
       // Actions.
-      cmds.push({ id: 'new-page', label: 'New Page', icon: 'fa-plus', href: '/campaigns/' + cid + '/entities/new', shortcut: mod + '+N' });
+      cmds.push({ id: 'new-page', label: 'New page', icon: 'fa-plus', href: '/campaigns/' + cid + '/entities/new', shortcut: mod + '+N' });
       cmds.push({
         label: 'Quick Capture Note', icon: 'fa-bolt', shortcut: mod + '+Shift+N',
         action: function () { if (Chronicle.openQuickCapture) Chronicle.openQuickCapture(); }

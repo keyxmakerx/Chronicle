@@ -730,7 +730,7 @@
     var saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'chronicle-editor__btn chronicle-editor__btn--save';
-    saveBtn.innerHTML = '&#128190; Save';
+    saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk" style="font-size:11px" aria-hidden="true"></i> Save';
     saveBtn.title = 'Save (Ctrl+S)';
     saveBtn.setAttribute('data-cmd', 'save');
     toolbar.appendChild(saveBtn);

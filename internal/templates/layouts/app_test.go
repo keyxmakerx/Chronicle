@@ -331,16 +331,16 @@ func TestAllPagesRowIsCurrentOnEntitySubpath(t *testing.T) {
 		ctx = SetActivePath(ctx, activePath)
 		ctx = ResolveNavState(ctx)
 		var buf bytes.Buffer
-		if err := navFixedRow("all", "All Pages", "fa-layer-group", "/campaigns/camp1/entities", "").Render(ctx, &buf); err != nil {
-			t.Fatalf("render All Pages row: %v", err)
+		if err := navFixedRow("all", "All pages", "fa-layer-group", "/campaigns/camp1/entities", "").Render(ctx, &buf); err != nil {
+			t.Fatalf("render All pages row: %v", err)
 		}
 		return buf.String()
 	}
 	if got := render("/campaigns/camp1/entities/42"); !strings.Contains(got, `aria-current="page"`) {
-		t.Errorf("All Pages must be current on an entity detail sub-path; got %q", got)
+		t.Errorf("All pages must be current on an entity detail sub-path; got %q", got)
 	}
 	if got := render("/campaigns/camp1/members"); strings.Contains(got, `aria-current`) {
-		t.Errorf("All Pages must not be current off the entities tree; got %q", got)
+		t.Errorf("All pages must not be current off the entities tree; got %q", got)
 	}
 }
 

@@ -5085,7 +5085,7 @@ func (a *App) RegisterRoutes() {
 	// entity's linked events" engine. Distinct from calendar_preview
 	// (dashboard upcoming-events card) by design.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "entity_calendar", Label: "Calendar (this entity)", Icon: "fa-calendar-days",
+		Type: "entity_calendar", Label: "Calendar (this page)", Icon: "fa-calendar-days",
 		Description: "Upcoming events for a bound calendar",
 		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5098,7 +5098,7 @@ func (a *App) RegisterRoutes() {
 	// this renders sky only, not yet the hourglass shelf (real UI work of
 	// its own).
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "entity_worldstate", Label: "Worldstate timepiece", Icon: "fa-hourglass-half",
+		Type: "entity_worldstate", Label: "World sky", Icon: "fa-hourglass-half",
 		Description: "Ambient sky for the current world date",
 		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5255,8 +5255,8 @@ func (a *App) RegisterRoutes() {
 
 	// Entity manager block — sortable, filterable entity list with visibility controls.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "entity_manager", Label: "Entity Manager", Icon: "fa-list-check",
-		Description: "Sortable, filterable entity list with visibility controls",
+		Type: "entity_manager", Label: "Page manager", Icon: "fa-list-check",
+		Description: "Sortable, filterable page list with visibility controls",
 		Contexts:    []string{"template"},
 	}, func(bctx entities.BlockRenderContext) templ.Component {
 		typeID := entities.BlockConfigInt(bctx.Block.Config, "entity_type_id", 0)

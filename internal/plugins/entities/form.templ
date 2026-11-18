@@ -17,14 +17,14 @@ import (
 // sub-category children. When nil/empty the form falls back to a flat
 // category dropdown.
 templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string) {
-	@layouts.App("New Page - " + cc.Campaign.Name) {
+	@layouts.App("New page - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
 			<nav class="text-sm text-fg-secondary mb-4">
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
 				<span class="mx-1">/</span>
 				<span class="text-fg">New</span>
 			</nav>
-			<h1 class="text-2xl font-bold text-fg mb-6">Create Page</h1>
+			<h1 class="text-2xl font-bold text-fg mb-6">Create page</h1>
 			@EntityCreateFormComponent(cc, entityTypes, preselect, variants, parentEntity, name, csrfToken, errMsg)
 		</div>
 	}
@@ -148,7 +148,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 					required
 					autofocus
 					class="input w-full"
-					placeholder="e.g., Gandalf, Rivendell, The One Ring"
+					placeholder="e.g. Harrowmere, Captain Varn, a moonsteel dagger"
 					maxlength="200"
 				/>
 			</div>
@@ -184,7 +184,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			@parentSelector(cc.Campaign.ID, parentEntity)
 
 			<div class="flex items-center space-x-4">
-				<button type="submit" class="btn-primary">Create Page</button>
+				<button type="submit" class="btn-primary">Create page</button>
 				// Leaving isn't a command, so Cancel is a quiet word.
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="quiet-word">Cancel</a>
 			</div>
@@ -290,7 +290,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 			@popupConfigSection(cc, entity)
 
 			<div class="flex items-center space-x-4">
-				<button type="submit" class="btn-primary">Save Changes</button>
+				<button type="submit" class="btn-primary">Save changes</button>
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) } class="btn-secondary">Cancel</a>
 			</div>
 		</form>
@@ -400,7 +400,7 @@ templ parentSelector(campaignID string, parentEntity *Entity) {
 		}`, parentSelectorID(parentEntity), jsEsc(parentSelectorName(parentEntity)), campaignID) }
 		class="relative"
 	>
-		<label class="block text-sm font-medium text-fg-body mb-1">Parent Page (optional)</label>
+		<label class="block text-sm font-medium text-fg-body mb-1">Parent page (optional)</label>
 		<input type="hidden" name="parent_id" x-bind:value="selectedID"/>
 
 		<!-- Selected parent display -->

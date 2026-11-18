@@ -58,7 +58,7 @@ func (h *Handler) CalloutAPI(c *echo.Context) error {
 
 // timezoneShortMessage is the timezone sentence on a phone, where the banner
 // is one line (phone_shell.css shows it in place of the full message).
-const timezoneShortMessage = "Times aren't in your time zone yet"
+const timezoneShortMessage = "Times aren't in your zone yet"
 
 // renderCallout builds the banner fragment.
 //

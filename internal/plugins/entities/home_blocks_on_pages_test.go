@@ -200,7 +200,7 @@ func TestHomeBlocksOnAPageShowEachViewerOnlyTheirOwn(t *testing.T) {
 		allSee string
 	}{
 		{block: "welcome_banner", who: everyone, allSee: "Therin", ownerSees: "/settings"},
-		{block: "quick_actions", who: everyone, allSee: "All Pages", ownerSees: "/entity-types"},
+		{block: "quick_actions", who: everyone, allSee: "All pages", ownerSees: "/entity-types"},
 		{block: "category_grid", who: everyone, allSee: "Characters", ownerSees: "Secret Vaults"},
 		{block: "recent_pages", who: everyone, allSee: "Harbour Gate"},
 		{block: "entity_list", cfg: map[string]any{"entity_type_id": float64(7), "limit": float64(5)}, who: everyone, allSee: "/campaigns/camp-1/entity-list?type=7&amp;limit=5"},
