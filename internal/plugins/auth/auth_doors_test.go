@@ -31,6 +31,7 @@ func TestDoorsOpenTheirOwnTab(t *testing.T) {
 		{"register", RegisterPage("tok", nil, "", "", false, "open"), "new"},
 		{"register gated", RegisterPage("tok", nil, "", "", true, "invite"), "new"},
 		{"join", JoinPage("tok", "", "", "", ""), "code"},
+		{"two-factor step", TwoFactorPage("tok", "ch", "", ""), "signin"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -6,14 +6,14 @@ package auth
 import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
 // TwoFactorPage is the full-page code step, for a sign-in posted without HTMX.
+// It sits on the Sign in door, like the password step it follows.
 templ TwoFactorPage(csrfToken, challenge, redirect, errMsg string) {
 	@layouts.Base("Login") {
-		@layouts.SiteAuthStage("") {
-			<div class="w-full max-w-md">
-				<div class="text-center mb-8">
-					@layouts.SiteAuthMark()
-					<h1 class="text-3xl font-bold text-fg">Welcome back</h1>
-					<p class="text-fg-secondary mt-2">Sign in to your { layouts.SiteName(ctx) } account</p>
+		@AuthDoors(layouts.DoorSignIn, redirect) {
+			<div>
+				<div class="doors-head">
+					<h1>Welcome back</h1>
+					<p>Sign in to your { layouts.SiteName(ctx) } account</p>
 				</div>
 				@TwoFactorForm_(csrfToken, challenge, redirect, errMsg)
 			</div>
@@ -28,7 +28,7 @@ templ TwoFactorPage(csrfToken, challenge, redirect, errMsg string) {
 templ TwoFactorForm_(csrfToken, challenge, redirect, errMsg string) {
 	<div id="login-form" class="step-settle">
 		<form
-			class="card p-8 space-y-5"
+			class="space-y-5"
 			method="POST"
 			action="/login/two-factor"
 			hx-post="/login/two-factor"
