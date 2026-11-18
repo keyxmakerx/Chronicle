@@ -3356,6 +3356,8 @@
     color: var(--nav-text-3); font-variant-numeric: tabular-nums;
   }
   .nav-tr:empty { display: none; }
+  /* What needs the owner reads as a small count, stronger than a caption. */
+  .nav-row[data-needs] .nav-tr { color: var(--nav-strong); font-weight: 600; }
   /* A row with a caption keeps its whole label and lets the caption truncate. */
   .nav-lb-keep { flex: 1 0 auto; max-width: 100%; }
   .nav-lb-keep ~ .nav-tr { flex: 0 1 auto; min-width: 0; max-width: none; }
@@ -4986,6 +4988,25 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
 /* The page's own desk sentence, first line under the title. Same type as on
    the desk, so the move from the desk lands exactly on it. */
 .manage-head.has-sentence { margin-bottom: 0.25rem; }
+/* The owner's pin for a Manage tool, on a desk line and beside a title. Quiet
+   until it is on; a press sinks it and the sidebar's Pinned group shows the
+   result. */
+.manage-pin {
+  flex: 0 0 auto; align-self: center; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: var(--shape-r-small);
+  background: transparent; color: var(--color-text-muted); font-size: 0.8125rem; cursor: pointer;
+  transition: transform var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+.manage-pin:hover { color: var(--color-accent); }
+.manage-pin:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.manage-pin:active { transform: scale(0.88); }
+.manage-pin[aria-pressed="true"] { color: var(--color-accent); }
+.manage-pin .manage-pin-head { fill: transparent; transition: fill var(--dur-micro) var(--ease-out); }
+.manage-pin[aria-pressed="true"] .manage-pin-head { fill: currentColor; }
+.manage-pin[aria-busy="true"] { cursor: progress; opacity: 0.6; }
+html[data-motion="calm"] .manage-pin, html[data-motion="off"] .manage-pin { transition: color var(--dur-micro) var(--ease-out); }
+html[data-motion="calm"] .manage-pin:active, html[data-motion="off"] .manage-pin:active { transform: none; }
+@media (pointer: coarse), (max-width: 767px) { .manage-pin { width: 2.75rem; height: 2.75rem; } }
 .manage-sentence { margin: 0 0 1.5rem; max-width: 46rem; font-size: 0.9375rem; line-height: 1.6; }
 .manage-intro { flex: 0 0 100%; margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--color-text-secondary); max-width: 65ch; }
 

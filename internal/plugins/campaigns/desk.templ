@@ -76,8 +76,9 @@ templ deskLine(l DeskLine) {
 	</div>
 }
 
-// deskRowBody is what sits in a line's row: the sentence, the quiet words and,
-// on a line that unfolds, its chevron.
+// deskRowBody is what sits in a line's row: the sentence, the quiet words, on
+// a line that unfolds its chevron and, on a line that opens a tool, the pin
+// that puts that tool in the owner's sidebar.
 templ deskRowBody(l DeskLine) {
 	@deskSentence(l)
 	<span class="desk-acts">
@@ -103,6 +104,8 @@ templ deskRowBody(l DeskLine) {
 			<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
 		</button>
 	}
+	{{ pinKey, pinName := layouts.ManageToolOfLine(l.ID) }}
+	@layouts.ManagePin(pinKey, pinName)
 }
 
 // deskSentence is a line's sentence alone, also served by itself so a change

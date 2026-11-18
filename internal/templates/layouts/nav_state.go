@@ -258,7 +258,18 @@ func NavCanEdit(ctx context.Context) bool {
 // navPinnable reports whether a row gets the viewer's own pin: any row
 // outside Pinned, and in Pinned only the rows they pinned themselves.
 func navPinnable(ctx context.Context, sec NavSectionView, row NavRowView) bool {
+	if NavCanOwnPin(ctx) {
+		// The owner's own pins are Manage tools only; they unpin them here.
+		return sec.Kind == "pinned" && row.Personal && strings.HasPrefix(row.Key, NavManageKey+":")
+	}
 	return NavCanPin(ctx) && (sec.Kind != "pinned" || row.Personal)
+}
+
+// NavCanOwnPin reports whether the viewer is the owner pinning Manage tools
+// for themselves. The pin is personal storage, so it needs a signed-in owner
+// who is not previewing as a player, on a campaign that still takes writes.
+func NavCanOwnPin(ctx context.Context) bool {
+	return IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 3 && !IsViewingAsPlayer(ctx) && !IsCampaignArchived(ctx)
 }
 
 // NavToolsWordSection is the section whose heading carries the touch-screen

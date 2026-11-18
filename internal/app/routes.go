@@ -6094,16 +6094,26 @@ func (a *App) RegisterRoutes() {
 				}
 				// A member who is not the owner has pins of their own; they
 				// are read for this user only.
+				// The owner's are only Manage tools, which sit outside the
+				// layout, so they go to Pinned after ViewNav, not through it.
 				var pins []string
-				if cc.IsMember && cc.MemberRole < campaigns.RoleOwner && layoutUserID != "" {
+				if cc.IsMember && layoutUserID != "" {
 					if p, err := campaignService.NavPins(reqCtx, cc.Campaign.ID, layoutUserID); err == nil {
 						pins = p
 					} else {
 						slog.Warn("reading member nav pins", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 					}
 				}
-				viewer := campaigns.NavViewer{Owner: navOwner, Access: navAccessFor(cc), Pins: pins}
+				viewerPins := pins
+				if cc.MemberRole >= campaigns.RoleOwner {
+					viewerPins = nil
+				}
+				viewer := campaigns.NavViewer{Owner: navOwner, Access: navAccessFor(cc), Pins: viewerPins}
 				secs := campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)
+				if navOwner {
+					secs = campaigns.AppendManagePins(secs, pins, "/campaigns/"+cc.Campaign.ID,
+						enabledSlugs["media-gallery"], enabledSlugs["sync-api"])
+				}
 				ctx = layouts.SetNavSections(ctx, navSectionViews(secs))
 				ctx = layouts.SetNavDrawer(ctx, buildNavDrawer(in, secs,
 					campaigns.NavDrawerRows(in.layout, in.apps, viewer), navOwner, addonIDs))

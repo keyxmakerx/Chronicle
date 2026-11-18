@@ -32,6 +32,10 @@ type DeskService interface {
 	// its fold can update its sentence without redrawing the desk. False when
 	// the line does not exist for this campaign.
 	Line(ctx context.Context, req DeskRequest, in DeskInputs, id string) (DeskLine, bool)
+	// NeedsCount is how many things wait on the owner, for the sidebar's
+	// Manage row. It asks only the providers that feed Needs-you, so a count
+	// on every page does not cost the whole desk.
+	NeedsCount(ctx context.Context, req DeskRequest, in DeskInputs) int
 	// Fold reads what a line shows when it unfolds. It never fails: a fold
 	// that cannot be read is a plain sentence and a link. False when the
 	// line does not exist or does not unfold.
@@ -199,6 +203,11 @@ func (s *deskService) line(id string, c *Campaign, in DeskInputs, f DeskFacts, n
 	}
 	l.Fold = s.foldable(id)
 	return l, true
+}
+
+func (s *deskService) NeedsCount(ctx context.Context, req DeskRequest, in DeskInputs) int {
+	facts := s.gather(ctx, req, DeskFoundry, DeskAI)
+	return len(needsYou(in.Campaign, withoutDisabled(facts, in.Addons), req.Now))
 }
 
 func (s *deskService) Line(ctx context.Context, req DeskRequest, in DeskInputs, id string) (DeskLine, bool) {

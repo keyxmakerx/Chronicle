@@ -518,7 +518,22 @@ func (s *campaignService) UpdateNavPins(ctx context.Context, cc *CampaignContext
 		return nil, apperror.NewForbidden("only members of this campaign can pin rows")
 	}
 	if cc.MemberRole >= RoleOwner {
-		return nil, apperror.NewForbidden("the owner pins rows for everyone in the sidebar editor")
+		// The owner pins rows for everyone in the sidebar editor; for
+		// themselves they may pin only Manage tools, which the editor's
+		// layout does not hold. Anything else is still refused.
+		for _, key := range pins {
+			if !strings.HasPrefix(key, navManagePrefix) {
+				return nil, apperror.NewForbidden("the owner pins rows for everyone in the sidebar editor; only Manage tools can be pinned for yourself")
+			}
+		}
+		clean, err := CleanOwnerNavPins(pins)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.repo.SetMemberNavPins(ctx, cc.Campaign.ID, userID, clean); err != nil {
+			return nil, apperror.NewInternal(err)
+		}
+		return clean, nil
 	}
 	if s.navSections == nil {
 		return nil, apperror.NewInternal(fmt.Errorf("nav sections source is not wired"))

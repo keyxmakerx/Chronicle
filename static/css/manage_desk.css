@@ -263,6 +263,7 @@ html[data-motion="off"] .desk-menu > button { transition: none; }
 .desk-chev:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .desk-chev[aria-expanded="true"] { transform: rotate(90deg); color: var(--color-accent); }
 .desk-chev[aria-busy="true"] { cursor: progress; opacity: 0.6; }
+.desk-row > .manage-pin { margin: -0.25rem -0.25rem -0.25rem 0; }
 .desk-fold { overflow: hidden; }
 .desk-fold[hidden] { display: none; }
 .desk-fold-in {
@@ -364,7 +365,10 @@ html[data-desk-trip] #main-content > :not(link, script, style) { opacity: 0; }
   .desk-send { min-height: 2.75rem; }
   .desk-in { min-height: 2.75rem; flex-basis: 100%; }
   .desk-chev { width: 2.75rem; height: 2.75rem; margin: -0.5rem -0.5rem -0.5rem 0; }
-  .desk-ln[data-fold] > .desk-row { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
-  .desk-ln[data-fold] > .desk-row > .desk-s { flex-basis: calc(100% - 3rem); }
-  .desk-ln[data-fold] > .desk-row > .desk-acts { flex-basis: 100%; order: 3; }
+  /* A row with a chevron or a pin keeps them beside the sentence, in a column
+     of their own, and the quiet words drop under it. */
+  .desk-row:has(> .desk-chev, > .manage-pin) { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  .desk-row:has(> .desk-chev, > .manage-pin) > .desk-s { flex: 1 1 0; min-width: 0; }
+  .desk-row:has(> .desk-chev, > .manage-pin) > .desk-acts { flex-basis: 100%; order: 3; }
+  .desk-row > .manage-pin, .desk-row > .desk-chev { margin: -0.5rem -0.5rem -0.5rem 0; }
 }

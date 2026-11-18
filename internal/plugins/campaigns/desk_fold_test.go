@@ -277,6 +277,7 @@ func TestDeskFragments_OnlyTheOwner(t *testing.T) {
 	}{
 		{"fold", (*Handler).DeskLineFold, "/campaigns/camp-1/dashboard/lines/trash/fold"},
 		{"sentence", (*Handler).DeskLineSentence, "/campaigns/camp-1/dashboard/lines/trash/sentence"},
+		{"needs count", (*Handler).DeskNeedsCount, "/campaigns/camp-1/dashboard/needs"},
 	}
 	roles := []struct {
 		name      string
@@ -431,5 +432,35 @@ func TestDeskLine_CarriesOnlyWhereThePageOpensWithTheSentence(t *testing.T) {
 				t.Errorf("line %s carries = %v, want %v", l.ID, got, want)
 			}
 		}
+	}
+}
+
+func TestDeskService_NeedsCount(t *testing.T) {
+	tests := []struct {
+		name   string
+		addons map[string]bool
+		ai     int
+		want   int
+	}{
+		{"nothing waits", map[string]bool{}, 0, 0},
+		{"the AI has a request waiting", map[string]bool{}, 2, 1},
+		{"Foundry facts of a campaign without the add-on are not counted", map[string]bool{"sync-api": false}, 1, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewDeskService()
+			s.Register(stubProvider{DeskAI, func(context.Context) (DeskFacts, error) {
+				return DeskFacts{AI: &DeskAIFacts{Waiting: tt.ai}}, nil
+			}})
+			// A provider outside Needs-you must not be asked.
+			s.Register(stubProvider{DeskTrash, func(context.Context) (DeskFacts, error) {
+				t.Error("the trash provider was read for a count")
+				return DeskFacts{}, nil
+			}})
+			in := DeskInputs{Campaign: &Campaign{ID: "c1"}, Addons: tt.addons}
+			if got := s.NeedsCount(context.Background(), DeskRequest{Now: time.Now()}, in); got != tt.want {
+				t.Fatalf("count = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }

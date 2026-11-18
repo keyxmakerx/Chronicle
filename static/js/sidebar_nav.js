@@ -231,6 +231,86 @@
     Array.prototype.forEach.call(document.querySelectorAll('#sidebar [data-nav-tools-toggle]'), function (b) {
       b.setAttribute('aria-pressed', on);
     });
+    // A swapped-in sidebar arrives without its count; draw it again.
+    refreshCount(false);
+  }
+
+  // --- The Manage row's count ------------------------------------------------
+  // How many things wait on the owner is asked for after the page has drawn,
+  // so no page waits on the providers behind it. The answer is kept for a
+  // minute per campaign: a boosted page change redraws from the keep and a
+  // change made on the desk asks again at once.
+  var COUNT_KEEP_MS = 60000;
+  var counting = null;
+
+  function manageRow() {
+    return document.querySelector('#sidebar a.nav-row[data-nav-key="manage"]');
+  }
+
+  function countKey(row) { return 'chronicle_manage_count:' + row.getAttribute('href'); }
+
+  function keptCount(row) {
+    try {
+      var v = JSON.parse(sessionStorage.getItem(countKey(row)) || 'null');
+      if (v && typeof v.n === 'number' && Date.now() - v.at < COUNT_KEEP_MS) return v.n;
+    } catch (e) { /* storage may be blocked */ }
+    return null;
+  }
+
+  // paintCount writes n into the row: the trailing number, and the row's
+  // spoken name, since a bare digit says nothing to a screen reader.
+  function paintCount(n) {
+    var row = manageRow();
+    if (!row || typeof n !== 'number') return;
+    var tr = row.querySelector('.nav-tr');
+    if (!tr || tr.classList.contains('is-page')) return;
+    var had = row.hasAttribute('data-needs');
+    tr.textContent = n > 0 ? String(n) : '';
+    if (n > 0) {
+      row.setAttribute('data-needs', String(n));
+      row.setAttribute('aria-label', 'Manage, ' + n + (n === 1 ? ' thing needs you' : ' things need you'));
+    } else {
+      row.removeAttribute('data-needs');
+      row.removeAttribute('aria-label');
+    }
+    // A count that drops settles in place; the number only changes.
+    if (had && n > 0 && !reduced()) {
+      play(tr, [{ opacity: 0.4 }, { opacity: 1 }], { duration: 180, easing: EASE_OUT });
+    }
+  }
+
+  // refreshCount asks the server unless a fresh answer is kept. force skips
+  // the keep, for the moment something on the desk has just changed.
+  function refreshCount(force) {
+    var row = manageRow();
+    if (!row) return Promise.resolve(null);
+    if (!force) {
+      var kept = keptCount(row);
+      if (kept !== null) { paintCount(kept); return Promise.resolve(kept); }
+    }
+    var url = (row.getAttribute('href') || '').replace(/\/$/, '') + '/needs';
+    if (counting && counting.url === url) return counting.p;
+    var p = fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        if (!body || typeof body.count !== 'number') return null;
+        try { sessionStorage.setItem(countKey(row), JSON.stringify({ n: body.count, at: Date.now() })); } catch (e) { /* kept only when storage allows */ }
+        paintCount(body.count);
+        return body.count;
+      })
+      .catch(function () { return null; })
+      .then(function (n) { counting = null; return n; });
+    counting = { url: url, p: p };
+    return p;
+  }
+
+  // setCount is for a page that already knows the number (the desk draws its
+  // Needs-you lines), so the row follows without a request.
+  function setCount(n) {
+    var row = manageRow();
+    if (!row || typeof n !== 'number') return;
+    try { sessionStorage.setItem(countKey(row), JSON.stringify({ n: n, at: Date.now() })); } catch (e) { /* ignore */ }
+    paintCount(n);
   }
 
   function toggleTools() {
@@ -469,6 +549,7 @@
       observer = new MutationObserver(onSidebarClass);
       observer.observe(sb, { attributes: true, attributeFilter: ['class'] });
     }
+    refreshCount(false);
     wasOpen = drawerOpen();
     wasCollapsed = !!sb && sb.classList.contains('sidebar-collapsed');
     if (wasCollapsed && currentKey()) moveRing(ringTargetFor(currentKey()), false);
@@ -517,7 +598,13 @@
 
   document.addEventListener('htmx:afterSettle', function (e) {
     var target = e.detail && e.detail.target;
-    if (target && target.id === 'main-content') syncFromMarker(true);
+    if (target && target.id === 'main-content') {
+      syncFromMarker(true);
+      // On a Manage page what was fixed a moment ago may have changed the
+      // count, so ask again rather than trust the keep.
+      var cur = currentKey();
+      refreshCount(!!cur && cur.indexOf('manage') === 0);
+    }
   });
 
   // Back and Forward swap in a whole new body (htmx fetches the page, since
@@ -536,6 +623,8 @@
   window.Chronicle.nav = {
     setCurrent: setCurrent,
     syncTools: syncTools,
+    refreshCount: refreshCount,
+    setCount: setCount,
     parseFolds: parseFolds,
     serializeFolds: serializeFolds
   };

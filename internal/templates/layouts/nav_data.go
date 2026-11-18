@@ -146,14 +146,21 @@ func NavManagePages(ctx context.Context) []NavRowView {
 	if !InCampaign(ctx) || !IsAuthenticated(ctx) || GetCampaignRole(ctx) < 3 {
 		return nil
 	}
-	base := "/campaigns/" + GetCampaignID(ctx)
+	return ManageToolRows("/campaigns/"+GetCampaignID(ctx),
+		IsAddonEnabled(ctx, "media-gallery"), IsAddonEnabled(ctx, "sync-api"))
+}
+
+// ManageToolRows is the one list of Manage tools, for the desk's own pages
+// and for the campaigns plugin, which checks an owner's pins against it.
+// Media and Foundry exist only while their add-on is on.
+func ManageToolRows(base string, media, foundry bool) []NavRowView {
 	rows := []NavRowView{
 		{Key: "manage:dashboard", Label: "Overview", Icon: "fa-gauge", URL: base + "/dashboard"},
 		{Key: "manage:members", Label: "People", Icon: "fa-users", URL: base + "/members"},
 		// Every change a player made to a page, searchable and undoable.
 		{Key: "manage:player-changes", Label: "What players changed", Icon: "fa-clock-rotate-left", URL: base + "/players/changes"},
 	}
-	if IsAddonEnabled(ctx, "media-gallery") {
+	if media {
 		rows = append(rows, NavRowView{Key: "manage:media", Label: "Media", Icon: "fa-photo-film", URL: base + "/media"})
 	}
 	rows = append(rows,
@@ -163,7 +170,7 @@ func NavManagePages(ctx context.Context) []NavRowView {
 	// The Foundry page (connection, players, module version, install link,
 	// and from there the sync history) only means something once the
 	// campaign syncs with Foundry.
-	if IsAddonEnabled(ctx, "sync-api") {
+	if foundry {
 		rows = append(rows, NavRowView{Key: "manage:foundry", Label: "Foundry", Icon: "fa-dice-d20", URL: base + "/foundry"})
 	}
 	// Your AI: connecting an AI app, what it did, and copy and paste.

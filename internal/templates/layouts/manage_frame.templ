@@ -39,6 +39,8 @@ templ ManageFrame(d ManageFrameData) {
 				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow" data-manage-back onclick={ manageBackCall() }>Manage</a>
 			}
 			<h1 class="manage-title cb-title">{ d.Title }</h1>
+			{{ pinKey, pinName := ManageToolOfLine(d.Line) }}
+			@ManagePin(pinKey, pinName)
 			if d.Actions != nil {
 				<div class="manage-actions">
 					@d.Actions

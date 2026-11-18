@@ -161,3 +161,18 @@ func (h *Handler) DeskLineSentence(c *echo.Context) error {
 	}
 	return middleware.Render(c, http.StatusOK, deskSentence(line))
 }
+
+// DeskNeedsCount answers how many things wait on the owner (GET
+// /campaigns/:id/dashboard/needs), as {"count": N}. The sidebar's Manage row
+// asks it after the page has drawn, so no page waits on the providers behind
+// it. Only the add-on facts are read, since they alone decide Needs-you.
+func (h *Handler) DeskNeedsCount(c *echo.Context) error {
+	cc, err := deskOwner(c)
+	if err != nil {
+		return err
+	}
+	in := h.deskInputsFor(c.Request().Context(), cc.Campaign, deskAddons)
+	req := DeskRequest{CampaignID: cc.Campaign.ID, OwnerID: auth.GetUserID(c), Now: time.Now()}
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return c.JSON(http.StatusOK, map[string]int{"count": h.desk.NeedsCount(c.Request().Context(), req, in)})
+}
