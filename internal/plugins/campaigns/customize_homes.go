@@ -19,18 +19,20 @@ import (
 )
 
 // customizeSectionHomes is the draft key for the campaign's home pages: the
-// campaign home for each audience and the DM dashboard, arranged in the
-// Customizer's page editor and saved with the rest of the draft.
+// campaign home for each audience, arranged in the Customizer's page editor
+// and saved with the rest of the draft.
 const customizeSectionHomes = "homes"
 
-// HomeDM names the DM dashboard among the homes the Customizer arranges. It
-// is not a home audience (ValidHomeAudience): it has its own column and is
-// only ever seen by the DM team.
-const HomeDM = "dm"
+// legacyHomeDM was the key of the Overview tab, which arranged the owner's
+// dashboard before Manage's home became the desk. The tab is gone, but a draft
+// saved earlier may still carry it and a link may still name it; its stored
+// layout column is left as it is, and these are answered as retired rather
+// than refused.
+const legacyHomeDM = "dm"
 
 // validHomeKey reports whether key names a home the Customizer arranges.
 func validHomeKey(key string) bool {
-	return key == HomeDM || ValidHomeAudience(key)
+	return ValidHomeAudience(key)
 }
 
 // homeItem is one home's change in the draft. A nil Layout is no change, so
@@ -60,6 +62,11 @@ func (h *Handler) applyHomesSection(ctx context.Context, cc *CampaignContext, us
 
 	keys := make([]string, 0, len(sec.Items))
 	for k := range sec.Items {
+		if k == legacyHomeDM {
+			// Retired with the Overview tab: nothing arranges it any more, so
+			// a stale draft item neither saves nor blocks the others.
+			continue
+		}
 		if !validHomeKey(k) {
 			return nil, apperror.NewBadRequest("unknown home: " + k)
 		}
@@ -93,12 +100,9 @@ func (h *Handler) applyHomesSection(ctx context.Context, cc *CampaignContext, us
 	return out, firstErr
 }
 
-// saveHomeLayout stores one home's layout: the DM dashboard in its own
-// column, an audience's home merged into the role-keyed campaign home.
+// saveHomeLayout stores one audience's home, merged into the role-keyed
+// campaign home.
 func (h *Handler) saveHomeLayout(ctx context.Context, campaignID, key string, layout *DashboardLayout) error {
-	if key == HomeDM {
-		return h.service.UpdateOwnerDashboardLayout(ctx, campaignID, layout)
-	}
 	if err := validateDashboardLayout(ctx, campaignID, layout); err != nil {
 		return err
 	}
@@ -148,7 +152,6 @@ var homeTabs = []homeTab{
 	{HomeScribe, "Scribes", "fa-feather", "Scribes see this instead of the Everyone home."},
 	{HomeDirector, "{gm} team", "fa-crown", "You and your co-{gm}s land here. It is the Everyone home plus whatever you add here."},
 	{HomeGuest, "Guests", "fa-door-open", "Visitors who aren't members see this. It never falls back to a members' home."},
-	{HomeDM, "Overview", "fa-user-shield", "The Overview under Manage, seen only by you and your co-{gm}s."},
 }
 
 // homeTabFor returns the tab for key, or the Everyone tab.
@@ -166,10 +169,6 @@ func homeTabFor(key string) homeTab {
 func (h *Handler) homeHint(ctx context.Context, cc *CampaignContext, key string) string {
 	hint := homeTabFor(key).hint(ctx)
 	switch {
-	case key == HomeDM:
-		if cc.Campaign.ParseOwnerDashboardLayout() == nil {
-			hint += " Until you arrange it, the Overview shows its built-in links."
-		}
 	case key == HomeGuest:
 		if !cc.Campaign.HasSavedHome(key) {
 			hint += " Until you arrange it, they get a starter home: the about, the pages open to them and the latest of those."
@@ -182,40 +181,16 @@ func (h *Handler) homeHint(ctx context.Context, cc *CampaignContext, key string)
 	return hint
 }
 
-// defaultDMDashboardLayout is where the DM dashboard's editor starts while
-// nothing is saved: the categories and the latest pages, which the Overview's
-// built-in page also shows.
-func defaultDMDashboardLayout() *DashboardLayout {
-	full := DefaultDashboardLayout()
-	out := &DashboardLayout{}
-	for _, row := range full.Rows {
-		if row.ID == "row-categories" || row.ID == "row-recent" {
-			out.Rows = append(out.Rows, row)
-		}
-	}
-	return out
-}
-
 // homeEditorState is what the page editor draws a home from: the layout the
 // audience sees now and whether it is that home's own (unsaved means the
 // editor starts from what it borrows, and Save stores it as its own).
 func (h *Handler) homeEditorState(ctx context.Context, cc *CampaignContext, key string) string {
 	base := fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)
-	var layout *DashboardLayout
-	saved := false
-	if key == HomeDM {
-		layout = cc.Campaign.ParseOwnerDashboardLayout()
-		saved = layout != nil
-		if layout == nil {
-			layout = defaultDMDashboardLayout()
-		}
-	} else {
-		layout, saved = cc.Campaign.HomeLayout(key)
-		if key == HomeDirector {
-			// The editor starts from the home the DM team sees, so a widget
-			// added to Everyone shows here and is not saved away by accident.
-			layout = cc.Campaign.DirectorHome()
-		}
+	layout, saved := cc.Campaign.HomeLayout(key)
+	if key == HomeDirector {
+		// The editor starts from the home the DM team sees, so a widget
+		// added to Everyone shows here and is not saved away by accident.
+		layout = cc.Campaign.DirectorHome()
 	}
 	if layout == nil {
 		layout = DefaultDashboardLayout()

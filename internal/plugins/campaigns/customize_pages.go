@@ -302,8 +302,9 @@ func (h *Handler) CustomizeLook(c *echo.Context) error {
 		lookTab(cc, middleware.GetCSRFToken(c), string(stateJSON)))
 }
 
-// CustomizeHome arranges one home, the campaign home for an audience or the
-// DM dashboard: GET /campaigns/:id/customize/home[/:who].
+// CustomizeHome arranges one audience's campaign home: GET
+// /campaigns/:id/customize/home[/:who]. The retired Overview tab's address
+// goes to the Home pages area instead of a dead end.
 func (h *Handler) CustomizeHome(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
@@ -312,6 +313,9 @@ func (h *Handler) CustomizeHome(c *echo.Context) error {
 	key := c.Param("who")
 	if key == "" {
 		key = HomeDefault
+	}
+	if key == legacyHomeDM {
+		return c.Redirect(http.StatusSeeOther, h.customizeBase(cc)+"/home")
 	}
 	if !validHomeKey(key) {
 		return apperror.NewNotFound("that home doesn't exist")
