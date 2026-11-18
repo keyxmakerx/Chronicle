@@ -5,7 +5,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { person, newCampaign, done, BASE } from './_live.mjs';
+import { person, newCampaign, newPage, done } from './_live.mjs';
 
 after(done);
 
@@ -31,12 +31,9 @@ for (const width of [1440, 390]) {
     await owner.go(`/campaigns/${cid}/maps`);
     seen.app = await edge(page);
 
-    await owner.go(`/campaigns/${cid}/entities`);
-    const href = await page.locator(`main a[href*="/campaigns/${cid}/entities/"]`).first().getAttribute('href').catch(() => null);
-    if (href) {
-      await page.goto(`${BASE}${href}`, { waitUntil: 'networkidle' });
-      seen.page = await edge(page);
-    }
+    const eid = await newPage(owner, cid, 'Location', 'Saltreach');
+    await owner.go(`/campaigns/${cid}/entities/${eid}`);
+    seen.page = await edge(page);
 
     for (const [name, left] of Object.entries(seen)) {
       assert.equal(left, seen.app, `${name} starts at ${left}, the app page at ${seen.app}`);
