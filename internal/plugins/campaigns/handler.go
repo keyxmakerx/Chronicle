@@ -1203,7 +1203,7 @@ func (h *Handler) AddMember(c *echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	invite, err := h.invites.CreateInvite(ctx, cc.Campaign.ID, auth.GetUserID(c), CreateInviteInput{Email: req.Email, Role: req.Role})
+	invite, err := h.invites.CreateInvite(ctx, cc.Campaign.ID, auth.GetUserID(c), CreateInviteInput(req))
 	if err != nil {
 		return h.renderMemberList(c, cc, h.memberListView(c, cc, apperror.UserMessage(err, "failed to send the invite")))
 	}
