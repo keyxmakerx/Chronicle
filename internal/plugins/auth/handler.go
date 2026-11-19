@@ -28,10 +28,9 @@ import (
 // protocol-relative "//evil.example". Other plugins use it for the "return
 // here" fields of their own forms.
 func SameSitePath(raw string) string {
-	if raw == "" || !strings.HasPrefix(raw, "/") {
-		return ""
-	}
-	if strings.HasPrefix(raw, "//") {
+	// One leading "/", and never "/" or "\" after it: either makes the
+	// browser read what follows as another host.
+	if len(raw) == 0 || raw[0] != '/' || (len(raw) > 1 && (raw[1] == '/' || raw[1] == '\\')) {
 		return ""
 	}
 	for i := 0; i < len(raw); i++ {

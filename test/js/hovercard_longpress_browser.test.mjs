@@ -43,7 +43,10 @@ async function open() {
   opened.push(browser);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   const p = await ctx.newPage();
-  await p.setContent(page());
+  // Served from a web address, as in the app: Copy link resolves the link
+  // against the page's own address.
+  await p.route('http://t.test/**', (route) => route.fulfill({ contentType: 'text/html', body: page() }));
+  await p.goto('http://t.test/');
   return { p, browser };
 }
 
@@ -83,7 +86,7 @@ test('Read it below opens the page peek, Copy link says Link copied', { skip }, 
   await press(p, '#inner');
   await p.tap('[data-chc="copy"]');
   assert.deepEqual(await p.evaluate(() => window.__toasts), ['Link copied']);
-  assert.match((await p.evaluate(() => window.__copied))[0], /\/campaigns\/c1\/entities\/e1$/);
+  assert.deepEqual(await p.evaluate(() => window.__copied), ['http://t.test/campaigns/c1/entities/e1']);
   await press(p, '#inner');
   await p.tap('[data-chc="peek"]');
   assert.deepEqual(await p.evaluate(() => window.__peeked), ['/campaigns/c1/entities/e1/peek']);

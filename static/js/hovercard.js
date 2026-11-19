@@ -170,12 +170,16 @@
       if (C.peek && addr) C.peek.open(addr);
       close();
     } else if (job === 'copy') {
-      var a = document.createElement('a');
-      a.href = el.getAttribute('data-href');
-      var url = a.href;
+      // The full address, resolved against this page. Only a web address is
+      // copied, and the text never passes through an element.
+      var url = '';
+      try {
+        var u = new URL(el.getAttribute('data-href') || '', window.location.href);
+        if (u.protocol === 'http:' || u.protocol === 'https:') url = u.href;
+      } catch (err) { url = ''; }
       var ok = function () { if (C.notify) C.notify('Link copied', 'success'); };
       var bad = function () { if (C.notify) C.notify('The link could not be copied.', 'error'); };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, bad); else bad();
+      if (url && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, bad); else bad();
       close();
     } else {
       // Open in new tab: the link does its own opening.
