@@ -32,6 +32,12 @@ const longPage = (title) => ({
   blocks: [{ type: 'text', text: Array.from({ length: 40 }, (_, i) => `Paragraph ${i + 1} of ${title}.`).join('\n\n') }],
 });
 
+// A page whose links block turns to chapters several spreads away.
+const jumpPage = (title) => ({
+  title,
+  blocks: [{ type: 'text', text: 'Read on.' }, { type: 'links', items: [{ title: 'Running the game', chapter: 'running' }, { title: 'Combat', chapter: 'combat' }] }],
+});
+
 // A light paper with a crimson accent, the shape of a real bold book's theme.
 const BOLD_THEME = { paper: '#f1f2f4', 'paper-alt': '#ffffff', ink: '#15171d', 'ink-soft': '#4b5261', muted: '#6b7280', edge: '#cbd1da', accent: '#c22f39' };
 const COVER_URL = '/campaigns/camp-1/systems/demo/book/files/cover.svg';
@@ -56,7 +62,7 @@ function bookFixture(opts = {}) {
   }
   return {
     title: 'Handbook', systemName: 'Demo', turn: 'flip', look: opts.bold ? 'bold' : 'paper',
-    theme: opts.bold ? BOLD_THEME : {},
+    theme: opts.theme || (opts.bold ? BOLD_THEME : {}),
     cover: opts.cover ? COVER_URL : undefined,
     fonts: opts.cover ? [{ family: 'Big Shoulders Display', url: FONT_URL, weight: 900, style: 'normal' }] : undefined,
     tabs: opts.noTabs ? [] : ['basics', 'screen', 'combat'], isDirector: true, start: 'basics',
@@ -64,7 +70,7 @@ function bookFixture(opts = {}) {
     parts: [{
       title: "Player's book",
       chapters: [
-        { id: 'basics', title: 'Basics', pages: [longPage('Start here'), rollPage, longPage('Rolling')] },
+        { id: 'basics', title: 'Basics', pages: [opts.jumps ? jumpPage('Start here') : longPage('Start here'), rollPage, longPage('Rolling')] },
         { id: 'screen', title: 'Players Screen', pages: [{ title: 'At the table', wide: true, blocks: [{ type: 'text', text: 'Everything at once.' }] }] },
         { id: 'tests', title: 'Tests', pages: [longPage('Rolling a test'), longPage('Easy and hard')] },
         { id: 'combat', title: 'Combat', pages: [longPage('Turns'), longPage('Moving')] },
@@ -117,7 +123,7 @@ function houseFixture(opts = {}) {
   };
   return {
     title: 'Handbook', systemName: 'Demo', turn: 'flip', look: opts.bold ? 'bold' : 'paper',
-    theme: opts.bold ? BOLD_THEME : {},
+    theme: opts.theme || (opts.bold ? BOLD_THEME : {}),
     isDirector: !opts.player, start: 'basics', tabs: [],
     terms: { pledge: { name: 'Pledge', text: 'A promise sworn on a soul.' } },
     parts: [
@@ -194,6 +200,11 @@ ${opts.nested ? '<main id="main-content">' : ''}<main id="main-content"><div id=
       document.querySelectorAll('[data-widget="' + slug + '"]').forEach(function (el) { w.init(el, Object.assign({}, el.dataset)); });
     }
   };
+  ${opts.backCloses ? `window.__bc = []; window.__bcClose = {};
+  window.Chronicle.backCloses = function (name, close) {
+    window.__bc.push('hold ' + name); window.__bcClose[name] = close;
+    return function () { window.__bc.push('release ' + name); };
+  };` : ''}
 </script>
 <script src="/static/js/widgets/rulebook.js"></script>
 </body></html>`;
@@ -742,7 +753,7 @@ test('the Sections ribbon pulls down, lists chapters and pages, and rolls up bef
     assert.equal(st.expanded, 'true');
     assert.ok(await page.$(`#${st.controls}`));
     // Chapters by part, with a chapter's pages under it when it has several.
-    const list = await page.$$eval('.rb-bm-list > li', (lis) => lis.map((li) => li.classList.contains('rb-bm-part') ? `# ${li.textContent}` : li.querySelector(':scope > button span').textContent + (li.querySelector('.rb-bm-sub') ? ` [${[...li.querySelectorAll('.rb-bm-sub button span')].map((s) => s.textContent).join(', ')}]` : '')));
+    const list = await page.$$eval('.rb-bm-list > li:not(.rb-bm-all)', (lis) => lis.map((li) => li.classList.contains('rb-bm-part') ? `# ${li.textContent}` : li.querySelector(':scope > button span').textContent + (li.querySelector('.rb-bm-sub') ? ` [${[...li.querySelectorAll('.rb-bm-sub button span')].map((s) => s.textContent).join(', ')}]` : '')));
     assert.deepEqual(list, ["# Player's book", 'Basics [Start here, The power roll, Rolling]', 'Players Screen', 'Tests [Rolling a test, Easy and hard]', 'Combat [Turns, Moving]', "# Director's book", 'Running the game [Pacing, Rewards]']);
     assert.equal(await page.$eval('.rb-bm-list [aria-current="true"] span', (s) => s.textContent), 'Basics');
 
@@ -1065,4 +1076,148 @@ test('opening a rule grows its page in; reduced motion shows it at once', async 
     await openRule(page, 'd1');
     assert.equal(await page.$eval('#d1 .rb-tear', (e) => getComputedStyle(e).animationName), 'rb-grow-calm');
   }, { house: true });
+});
+
+// ---- the way back after a jump, and an address that follows the book ----
+
+const whereTitle = (page) => page.$eval('.rb-where b', (b) => b.textContent);
+const settle = (page) => page.waitForFunction(() => !document.querySelector('.rb-leaf'));
+const backWord = (page) => page.evaluate(() => { const b = document.querySelector('.rb-back'); return b ? b.textContent : null; });
+const firstFolio = (page) => page.$eval('.rb-page:not(.blank):not(.gone) .rb-folio', (f) => f.textContent);
+
+test('a jump through a links block offers "Back to p. N", and using it turns back to that page', async () => {
+  await withBook(async (page) => {
+    const left = await firstFolio(page);
+    assert.equal(await backWord(page), null);
+    await page.click('.rb-link[data-chapter="running"]');
+    await settle(page);
+    assert.equal(await whereTitle(page), 'Running the game');
+    assert.equal(await backWord(page), `Back to p. ${left}`);
+    assert.equal(await page.evaluate(() => window.location.hash), '#running');
+    await page.click('.rb-back');
+    await settle(page);
+    assert.equal(await whereTitle(page), 'Basics');
+    assert.equal(await backWord(page), null);
+    assert.equal(await page.evaluate(() => window.location.hash), '#basics');
+  }, { jumps: true });
+});
+
+test('the return word is quiet text, not a button', async () => {
+  await withBook(async (page) => {
+    await page.click('.rb-link[data-chapter="running"]');
+    await settle(page);
+    const st = await page.$eval('.rb-back', (b) => { const cs = getComputedStyle(b); return { bg: cs.backgroundColor, border: cs.borderTopWidth, deco: cs.textDecorationLine }; });
+    assert.deepEqual([st.bg, st.border, st.deco], ['rgba(0, 0, 0, 0)', '0px', 'none']);
+    await page.hover('.rb-back');
+    assert.equal(await page.$eval('.rb-back', (b) => getComputedStyle(b).textDecorationLine), 'underline');
+  }, { jumps: true });
+});
+
+test('turning a page by hand ends the offer to go back', async () => {
+  await withBook(async (page) => {
+    await page.click('.rb-link[data-chapter="running"]');
+    await settle(page);
+    assert.ok(await backWord(page));
+    await page.keyboard.press('ArrowLeft');
+    await settle(page);
+    assert.equal(await backWord(page), null);
+  }, { jumps: true });
+});
+
+test('a tab and a search result are jumps too', async () => {
+  await withBook(async (page) => {
+    await page.click('[data-tab="combat"]');
+    await settle(page);
+    assert.ok((await backWord(page)).startsWith('Back to p. '));
+    await page.click('.rb-back');
+    await settle(page);
+    await page.fill('[data-search]', 'Moving');
+    await page.click('.rb-results [data-hit]');
+    await settle(page);
+    assert.equal(await whereTitle(page), 'Combat');
+    assert.ok((await backWord(page)).startsWith('Back to p. '));
+  });
+});
+
+test('browser Back after a jump stays in the book and turns back; a reload keeps the page', async () => {
+  await withBook(async (page) => {
+    await page.evaluate(() => { window.__same = 1; });
+    await page.click('.rb-link[data-chapter="running"]');
+    await settle(page);
+    await page.goBack();
+    await settle(page);
+    assert.equal(await page.evaluate(() => window.__same), 1, 'the page was not reloaded');
+    assert.equal(await whereTitle(page), 'Basics');
+    assert.equal(await backWord(page), null);
+    await page.goForward();
+    await settle(page);
+    assert.equal(await whereTitle(page), 'Running the game');
+    await page.reload();
+    await page.waitForSelector('.rb-book');
+    assert.equal(await whereTitle(page), 'Running the game');
+  }, { jumps: true });
+});
+
+test('with reduced motion a jump still offers the way back and the address follows', async () => {
+  await withBook(async (page) => {
+    await page.click('.rb-link[data-chapter="combat"]');
+    assert.ok(await backWord(page));
+    assert.equal(await page.evaluate(() => window.location.hash), '#combat');
+    await page.click('.rb-back');
+    assert.equal(await whereTitle(page), 'Basics');
+  }, { jumps: true, reducedMotion: true });
+});
+
+test('a book nobody has turned leaves the address alone', async () => {
+  await withBook(async (page) => {
+    assert.equal(await page.evaluate(() => window.location.hash), '');
+  });
+});
+
+test('rulebook:goto from inside a page turns to that chapter as a jump', async () => {
+  await withBook(async (page) => {
+    const fire = (chapter) => page.evaluate((c) => document.querySelector('.rb-page .rb-scroll').dispatchEvent(new CustomEvent('rulebook:goto', { bubbles: true, detail: { chapter: c } })), chapter);
+    await fire('running');
+    await settle(page);
+    assert.equal(await whereTitle(page), 'Running the game');
+    assert.ok((await backWord(page)).startsWith('Back to p. '));
+    await fire('nope');
+    assert.equal(await whereTitle(page), 'Running the game');
+  }, { jumps: true });
+});
+
+test('the contents drawer holds the phone Back gesture and lets go when it closes itself', async () => {
+  await withBook(async (page) => {
+    await page.click('[data-act="toc"]');
+    assert.deepEqual(await page.evaluate(() => window.__bc), ['hold rb-contents']);
+    await page.keyboard.press('Escape');
+    assert.deepEqual(await page.evaluate(() => window.__bc), ['hold rb-contents', 'release rb-contents']);
+    await page.click('[data-act="toc"]');
+    await page.evaluate(() => window.__bcClose['rb-contents']());
+    assert.equal(await page.$eval('.rb-drawer', (d) => d.classList.contains('open')), false);
+    assert.equal((await page.evaluate(() => window.__bc)).filter((x) => x === 'release rb-contents').length, 2);
+  }, { backCloses: true });
+});
+
+test('the rules screen holds the Back gesture too', async () => {
+  await withBook(async (page) => {
+    await page.click('.rb-ribbon');
+    assert.ok((await page.evaluate(() => window.__bc)).includes('hold rb-screen'));
+    await page.evaluate(() => window.__bcClose['rb-screen']());
+    assert.equal(await page.$eval('.rb', (r) => r.classList.contains('rb-screen-open')), false);
+  }, { screen: true, backCloses: true });
+});
+
+test('the Sections ribbon links once to the reference lists', async () => {
+  await withBook(async (page) => {
+    await page.click('[data-act="bm"]');
+    const links = await page.$$eval('.rb-bm-all a', (as) => as.map((a) => [a.textContent, a.getAttribute('href')]));
+    assert.deepEqual(links, [['All reference lists', '/campaigns/camp-1/systems/demo/browse']]);
+  });
+});
+
+test('a light paper gets the deep gold and red for text; a dark paper keeps the bright ones', async () => {
+  const ink = (page) => page.$eval('.rb', (r) => { const cs = getComputedStyle(r); return [cs.getPropertyValue('--rb-gold-ink').trim(), cs.getPropertyValue('--rb-bad-ink').trim(), cs.getPropertyValue('--rb-gold').trim()]; });
+  await withBook(async (page) => { assert.deepEqual(await ink(page), ['#8a5a00', '#a3271b', '#fbbf24']); }, { bold: true });
+  await withBook(async (page) => { assert.deepEqual(await ink(page), ['#fbbf24', '#f87171', '#fbbf24']); }, { bold: true, theme: Object.assign({}, BOLD_THEME, { paper: '#141925', ink: '#f2f4fa' }) });
 });

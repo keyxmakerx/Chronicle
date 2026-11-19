@@ -27,6 +27,11 @@
   --rb-acc3: color-mix(in srgb, var(--rb-acc) 55%, #000);
   --rb-gold: #fbbf24;
   --rb-bad: #f87171;
+  /* The gold and red used as text or a thin line on the page. The reader sets
+     these from the book's paper, so a light paper gets the deeper shades even
+     in a look whose fills (tiers, cover hint) keep the bright ones. */
+  --rb-gold-ink: var(--rb-gold);
+  --rb-bad-ink: var(--rb-bad);
   --rb-ui: var(--book-ui-font, system-ui, "Segoe UI", Roboto, sans-serif);
   --rb-body: var(--book-body-font, "Spectral", Georgia, "Times New Roman", serif);
   --rb-head: var(--book-heading-font, "Spectral", Georgia, "Times New Roman", serif);
@@ -124,6 +129,12 @@
 .rb-page.l .rb-foot:where(:not(.rb-wslot *)) { justify-content: flex-start; }
 .rb-page.r .rb-foot:where(:not(.rb-wslot *)), .rb-page.wide .rb-foot:where(:not(.rb-wslot *)) { justify-content: flex-end; }
 .rb-fhd:where(:not(.rb-wslot *)) { display: none; }
+.rb-back:where(:not(.rb-wslot *)) { margin-inline-end: 18px; padding: 0; background: none; border: 0; font: 600 12px var(--rb-ui); color: var(--rb-acc); cursor: pointer; text-decoration: none; text-underline-offset: 3px; }
+.rb-back:hover:where(:not(.rb-wslot *)) { text-decoration: underline; }
+.rb-back:focus-visible:where(:not(.rb-wslot *)) { outline-offset: 2px; }
+@media (pointer: coarse) {
+  .rb-back:where(:not(.rb-wslot *)) { min-height: 44px; }
+}
 .rb-folio:where(:not(.rb-wslot *)) { font: 500 12px var(--rb-body); color: var(--rb-mut); font-variant-numeric: tabular-nums; }
 .rb-empty:where(:not(.rb-wslot *)) { color: var(--rb-mut); font: italic 500 16px var(--rb-body); }
 
@@ -148,7 +159,7 @@
 .rb-blocks:where(:not(.rb-wslot *)) { display: flex; flex-direction: column; gap: 18px; max-width: 720px; }
 .rb-page.wide .rb-blocks:where(:not(.rb-wslot *)) { max-width: 1040px; }
 .rb-term:where(:not(.rb-wslot *)) { color: var(--rb-ink); text-decoration: underline dotted color-mix(in srgb, var(--rb-acc) 70%, transparent); text-underline-offset: 3px; cursor: help; border-radius: 3px; }
-.rb-dir:where(:not(.rb-wslot *)), .rb-gmnote > .rb-dir:where(:not(.rb-wslot *)) { display: inline-block; font: 700 9.5px var(--rb-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--rb-gold); border: 1px solid color-mix(in srgb, var(--rb-gold) 45%, transparent); border-radius: 5px; padding: 1px 5px; vertical-align: middle; }
+.rb-dir:where(:not(.rb-wslot *)), .rb-gmnote > .rb-dir:where(:not(.rb-wslot *)) { display: inline-block; font: 700 9.5px var(--rb-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--rb-gold-ink); border: 1px solid color-mix(in srgb, var(--rb-gold) 45%, transparent); border-radius: 5px; padding: 1px 5px; vertical-align: middle; }
 .rb-dirwrap:where(:not(.rb-wslot *)) { border-left: 2px solid color-mix(in srgb, var(--rb-gold) 50%, transparent); padding-left: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .rb-dirwrap > :not(.rb-dir):where(:not(.rb-wslot *)) { align-self: stretch; }
 .rb-gmnote:where(:not(.rb-wslot *)) { border: 1px solid color-mix(in srgb, var(--rb-gold) 35%, var(--rb-edge)); background: color-mix(in srgb, var(--rb-gold) 6%, var(--rb-box)); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
@@ -156,7 +167,7 @@
 .rb-callout:where(:not(.rb-wslot *)) { border: 1px solid var(--rb-edge); border-left: 3px solid var(--rb-acc); border-radius: 12px; background: var(--rb-box); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
 .rb-ctitle:where(:not(.rb-wslot *)) { font: 700 16px var(--rb-head); color: var(--rb-ink); }
 .rb-problem:where(:not(.rb-wslot *)) { display: flex; gap: 10px; align-items: flex-start; border: 1px dashed var(--rb-edge); border-radius: 12px; background: color-mix(in srgb, var(--rb-bad) 5%, var(--rb-box)); padding: 12px 14px; color: var(--rb-ink2); font: 500 14px/1.55 var(--rb-ui); white-space: pre-line; overflow-wrap: anywhere; }
-.rb-problem-ic:where(:not(.rb-wslot *)) { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 800 12px var(--rb-ui); color: var(--rb-bad); border: 1.5px solid var(--rb-bad); }
+.rb-problem-ic:where(:not(.rb-wslot *)) { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 800 12px var(--rb-ui); color: var(--rb-bad-ink); border: 1.5px solid var(--rb-bad-ink); }
 
 /* contents list on a chapter opener */
 .rb-toc:where(:not(.rb-wslot *)) { list-style: none; padding: 0; margin-top: 22px; border-top: 1px solid var(--rb-edge2); }
@@ -519,6 +530,10 @@
 .rb-bm-list button[aria-current="true"]:where(:not(.rb-wslot *)) { background: rgba(0, 0, 0, 0.3); box-shadow: inset 4px 0 0 #fff; }
 .rb-bm-list button i:where(:not(.rb-wslot *)) { min-width: 20px; font: 800 15px/1 var(--rb-head); font-style: normal; opacity: 0.85; }
 .rb-bm-list button em:where(:not(.rb-wslot *)) { margin-left: auto; font: 700 9px/1 var(--rb-ui); font-style: normal; letter-spacing: 0.08em; padding: 2px 4px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 3px; }
+.rb-bm-all:where(:not(.rb-wslot *)) { padding: 10px 22px 2px; }
+.rb-bm-all a:where(:not(.rb-wslot *)) { font: 600 12.5px/1.3 var(--rb-ui); color: #fff; text-decoration: none; text-underline-offset: 3px; }
+.rb-bm-all a:hover:where(:not(.rb-wslot *)) { text-decoration: underline; }
+.rb-bm-all a:focus-visible:where(:not(.rb-wslot *)) { outline: 2px solid #fff; outline-offset: 3px; }
 .rb-bm-sub button:where(:not(.rb-wslot *)) { padding: 5px 22px 5px 52px; font: 600 12.5px/1.2 var(--rb-ui); letter-spacing: 0.06em; }
 .rb-bm-part:where(:not(.rb-wslot *)) { padding: 10px 22px 2px; font: 700 10px/1.2 var(--rb-ui); letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255, 255, 255, 0.72); }
 @media (max-width: 900px) {

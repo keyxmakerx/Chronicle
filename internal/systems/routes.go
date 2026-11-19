@@ -25,6 +25,9 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 
 	mg.GET("", h.Index)
 	mg.GET("/search", h.SearchAPI)
+	// The category browser at a stable address even when the system has a book
+	// (static segment, before /:cat).
+	mg.GET("/browse", h.Browse)
 	mg.GET("/widgets/:slug", h.WidgetScriptAPI)
 	// Raw glossary for client reference-renderers (must precede /:cat so it
 	// isn't shadowed by the category route).
