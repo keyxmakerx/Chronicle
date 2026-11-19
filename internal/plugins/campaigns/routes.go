@@ -160,6 +160,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 		return cc.CanAuthorDmOnly()
 	}, "only the campaign owner or a member with DM access may do this"))
 
+	// A member leaving by their own choice. Always the signed-in person; the
+	// service refuses the owner, who hands over first.
+	cg.POST("/leave", h.LeaveCampaign, RequireRole(RolePlayer))
+
 	// Member management (Owner only).
 	cg.POST("/members", h.AddMember, RequireRole(RoleOwner))
 	cg.DELETE("/members/:uid", h.RemoveMember, RequireRole(RoleOwner))

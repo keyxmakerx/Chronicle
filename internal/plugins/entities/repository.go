@@ -2761,3 +2761,81 @@ func (r *entityRepository) ClearOwnerForUser(ctx context.Context, userID string)
 	}
 	return res.RowsAffected()
 }
+
+// ReleaseOwned clears the user's claim on every page they hold in one
+// campaign and marks each playable, so it joins "Free to pick" for the owner
+// to hand on. It returns the names of the live ones; a trashed character is
+// released too, so restoring it later does not bring back a claim held by
+// someone who has gone. The pages are read and written in one transaction so
+// a claim made in between is not lost.
+func (r *entityRepository) ReleaseOwned(ctx context.Context, campaignID, userID string) ([]string, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("starting release: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT name, deleted_at IS NULL FROM entities
+		 WHERE campaign_id = ? AND owner_user_id = ? ORDER BY name FOR UPDATE`, campaignID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing claimed pages: %w", err)
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		var live bool
+		if err := rows.Scan(&name, &live); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scanning claimed page: %w", err)
+		}
+		if live {
+			names = append(names, name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE entities SET owner_user_id = NULL, playable = 1, updated_at = NOW()
+		 WHERE campaign_id = ? AND owner_user_id = ?`, campaignID, userID); err != nil {
+		return nil, fmt.Errorf("releasing claimed pages: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("committing release: %w", err)
+	}
+	return names, nil
+}
+
+// ClaimedNames names the live pages the user holds in each of the given
+// campaigns, in name order, for the Leave box's "who goes back to the table".
+func (r *entityRepository) ClaimedNames(ctx context.Context, userID string, campaignIDs []string) (map[string][]string, error) {
+	out := map[string][]string{}
+	if len(campaignIDs) == 0 {
+		return out, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(campaignIDs)), ",")
+	args := []any{userID}
+	for _, id := range campaignIDs {
+		args = append(args, id)
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT campaign_id, name FROM entities
+		 WHERE owner_user_id = ? AND deleted_at IS NULL AND campaign_id IN (`+marks+`)
+		 ORDER BY name`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing claimed names: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, name string
+		if err := rows.Scan(&cid, &name); err != nil {
+			return nil, fmt.Errorf("scanning claimed name: %w", err)
+		}
+		out[cid] = append(out[cid], name)
+	}
+	return out, rows.Err()
+}

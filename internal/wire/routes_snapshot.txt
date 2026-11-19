@@ -1023,6 +1023,7 @@ POST	/campaigns/:id/layout-presets	session	plugins/entities.(*LayoutPresetHandle
 DELETE	/campaigns/:id/layout-presets/:pid	session	plugins/entities.(*LayoutPresetHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/layout-presets/:pid	session	plugins/entities.(*LayoutPresetHandler).GetAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/layout-presets/:pid	session	plugins/entities.(*LayoutPresetHandler).UpdateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/leave	session	plugins/campaigns.(*Handler).LeaveCampaign	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/maps	public-capable	plugins/maps.(*Handler).Index	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/maps	session	plugins/maps.(*Handler).CreateMapAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/maps/:mid	session	plugins/maps.(*Handler).DeleteMapAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole

@@ -144,6 +144,14 @@
       // A detail line ("On Bren") goes before the time.
       when.textContent = n.detail ? n.detail + ' · ' + relTime(n.createdAt) : relTime(n.createdAt);
       body.appendChild(msg); body.appendChild(when);
+      // The link's own label, for a note whose point is where it leads.
+      if (n.action && n.link) {
+        var act = document.createElement('div');
+        act.className = 'text-xs font-medium mt-0.5';
+        act.style.color = 'var(--color-accent-link)';
+        act.textContent = n.action;
+        body.appendChild(act);
+      }
       item.appendChild(body);
       row.appendChild(item);
 

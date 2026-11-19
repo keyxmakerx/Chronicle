@@ -26,4 +26,10 @@ var Changed = []Feature{
 		Routes: []string{"/admin/diagnostics/workspace*"},
 		Try:    "/admin/diagnostics/workspace",
 	},
+	{
+		ID:     "leave-campaign-2026-11",
+		Name:   "Leaving a campaign",
+		Routes: []string{"POST /campaigns/:id/leave"},
+		Try:    "/campaigns",
+	},
 }

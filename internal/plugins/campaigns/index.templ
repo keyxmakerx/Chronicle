@@ -9,15 +9,15 @@ import (
 )
 
 // CampaignIndexPage renders the full campaign list page.
-templ CampaignIndexPage(campaigns []Campaign, total int, opts ListOptions, csrfToken string) {
+templ CampaignIndexPage(campaigns []Campaign, total int, opts ListOptions, csrfToken string, leave LeaveView) {
 	@layouts.App("My campaigns") {
-		@CampaignListContent(campaigns, total, opts, csrfToken)
+		@CampaignListContent(campaigns, total, opts, csrfToken, leave)
 	}
 }
 
 // CampaignListContent renders the campaign list content (for HTMX partial swap).
-templ CampaignListContent(campaigns []Campaign, total int, opts ListOptions, csrfToken string) {
-	<div id="campaign-list">
+templ CampaignListContent(campaigns []Campaign, total int, opts ListOptions, csrfToken string, leave LeaveView) {
+	<div id="campaign-list" data-widget="campaign-leave">
 		<div class="flex items-center justify-between mb-6">
 			<h1 class="text-2xl font-bold text-fg">My campaigns</h1>
 			<a href="/campaigns/new" class="btn-primary">New campaign</a>
@@ -31,9 +31,14 @@ templ CampaignListContent(campaigns []Campaign, total int, opts ListOptions, csr
 		} else {
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 				for _, campaign := range campaigns {
-					@CampaignCard(&campaign)
+					@CampaignCard(&campaign, leave.Owned[campaign.ID])
 				}
 			</div>
+			for _, campaign := range campaigns {
+				if !leave.Owned[campaign.ID] {
+					@leaveBox(&campaign, leave.Characters[campaign.ID])
+				}
+			}
 
 			@components.Pagination(components.PaginationData{
 				CurrentPage: opts.Page,
