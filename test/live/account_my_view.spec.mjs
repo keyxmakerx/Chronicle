@@ -57,12 +57,17 @@ test('My view saves per account and stays private to the viewer', async () => {
   const size = () => player.page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
   const before = await size();
   await card.getByRole('button', { name: 'Largest' }).click();
+  // The saved note from the Dark step may still be on screen, so wait for the size itself.
+  await player.page.waitForFunction((b) => parseFloat(getComputedStyle(document.documentElement).fontSize) > b * 1.2, before);
   await card.getByText('Saved to your account').waitFor();
   assert.ok(await size() > before * 1.2, 'text gets noticeably bigger');
   await player.go(`/campaigns/${cid}`);
   assert.ok(await size() > before * 1.2, 'and stays bigger on another page');
   await player.go('/account');
   await card.getByRole('button', { name: 'Standard' }).first().click();
+  // The note from the Largest step is gone after the page change, but the size
+  // is applied by the click, so wait for it rather than for the note.
+  await player.page.waitForFunction((b) => parseFloat(getComputedStyle(document.documentElement).fontSize) === b, before);
   await card.getByText('Saved to your account').waitFor();
   assert.equal(await size(), before, 'Standard puts it back');
 

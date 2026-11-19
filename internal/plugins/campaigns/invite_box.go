@@ -151,11 +151,7 @@ func (h *Handler) InviteBoxEmail(c *echo.Context) error {
 	if role == "" {
 		role = "player"
 	}
-	_ = ctx
-	_ = role
-	var inv *Invite
-	err := apperror.NewBadRequest("probe")
-	_ = email
+	inv, err := h.box.invites.CreateInvite(ctx, cc.Campaign.ID, auth.GetUserID(c), CreateInviteInput(req))
 	if err != nil {
 		return h.boxResponse(c, boxError("email", err, "the invite couldn't be sent"))
 	}
