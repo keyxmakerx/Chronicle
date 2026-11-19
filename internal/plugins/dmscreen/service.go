@@ -374,7 +374,7 @@ func (s *service) SaveNote(ctx context.Context, campaignID string, v Viewer, tex
 		return nil, apperror.NewNotFound("notes are not available")
 	}
 	if utf8.RuneCountInString(text) > maxNoteChars {
-		return nil, apperror.NewBadRequest("the note is too long for the DM Screen; open it in Notes")
+		return nil, apperror.NewBadRequest("the note is too long for the DM Screen; open it in the Journal")
 	}
 	night := s.nightForNote(ctx, campaignID, v)
 	cur, err := s.src.Notes.Find(ctx, campaignID, nightKey(night), v)
@@ -382,7 +382,7 @@ func (s *service) SaveNote(ctx context.Context, campaignID string, v Viewer, tex
 		return nil, err
 	}
 	if cur != nil && (cur.Legacy != "" || !isPlainProse(cur.Entry)) {
-		return nil, apperror.NewValidation("this note has formatting, so edit it in Notes")
+		return nil, apperror.NewValidation("this note has formatting, so edit it in the Journal")
 	}
 	label, title := noteNames(night)
 	entry, entryHTML := proseFromPlain(text)

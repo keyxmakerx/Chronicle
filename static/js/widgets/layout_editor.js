@@ -94,7 +94,7 @@
     var n = (row.tiles || []).length;
     var note = document.createElement('div');
     note.className = 'bg-surface border-2 border-dashed border-edge rounded-lg p-3 text-xs text-fg-muted';
-    note.textContent = 'Tile section with ' + n + (n === 1 ? ' tile' : ' tiles') + '. Tiles are arranged in the tile layout editor; this editor keeps them as they are.';
+    note.textContent = 'Tile section with ' + n + (n === 1 ? ' tile' : ' tiles') + '. Arrange these tiles in the Customizer. They stay as they are here.';
     return note;
   }
 
@@ -1826,7 +1826,7 @@
           var label = self.context === 'template' ? 'template' : 'dashboard layout';
           if (!res.ok) {
             // Surface the server's specific message — ValidateLayout
-            // returns operator-friendly text like "Only one Map Editor
+            // returns operator-friendly text like "Only one Map
             // block is allowed per layout." A generic "Failed to save"
             // hides that detail.
             return res.json().then(

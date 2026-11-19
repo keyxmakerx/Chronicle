@@ -126,10 +126,10 @@ func ValidateSection(rowNum int, hasColumns bool, tiles []Tile, seenIDs map[stri
 	}
 	for _, t := range tiles {
 		if strings.TrimSpace(t.ID) == "" {
-			return apperror.NewBadRequest("Internal: a tile is missing its ID. Refresh the page and try again.")
+			return apperror.NewBadRequest("A tile in this layout has lost its ID. Reload the page and try again.")
 		}
 		if seenIDs[t.ID] {
-			return apperror.NewBadRequest("This layout contains the same block twice. Refresh the page — the editor may have lost track of a drag.")
+			return apperror.NewBadRequest("The same block is in this layout twice. Reload the page and try the move again.")
 		}
 		seenIDs[t.ID] = true
 		if _, _, ok := ParseSize(t.Size); !ok {

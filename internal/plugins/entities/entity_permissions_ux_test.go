@@ -68,7 +68,7 @@ func TestEntityCard_VisibilityBadge_States(t *testing.T) {
 			entity:     &Entity{ID: "e2", Name: "Secret", Visibility: VisibilityDefault, IsPrivate: true},
 			wantBadge:  `data-visibility-badge="dm_only"`,
 			wantIcon:   "fa-lock",
-			wantTitleX: "DM-Only",
+			wantTitleX: "co-GMs can see this page",
 		},
 		{
 			name:       "custom",

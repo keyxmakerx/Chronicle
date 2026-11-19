@@ -418,7 +418,7 @@ Chronicle.register('template-editor', {
         const n = (row.tiles || []).length;
         const note = document.createElement('div');
         note.className = 'bg-surface border-2 border-dashed border-edge rounded-lg p-3 text-xs text-fg-muted';
-        note.textContent = `Tile section with ${n} ${n === 1 ? 'tile' : 'tiles'}. Tiles are arranged in the tile layout editor; this editor keeps them as they are.`;
+        note.textContent = `Tile section with ${n} ${n === 1 ? 'tile' : 'tiles'}. Arrange these tiles in the Customizer. They stay as they are here.`;
         rowEl.appendChild(note);
         return rowEl;
       }

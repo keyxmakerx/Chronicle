@@ -102,7 +102,7 @@ func TestPlayByCategory_SharedKeysAcrossSystems(t *testing.T) {
 	}{
 		{"one system", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner})}, "level", true, true},
 		{"one system clears", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level"})}, "level", true, false},
-		{"same block twice", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: owner})}, "level", true, true},
+		{"same block is in this layout twice", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: owner})}, "level", true, true},
 		{"block and none", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level"}), sys("b", systems.FieldDef{Key: "level", Play: owner})}, "level", false, false},
 		{"different blocks", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: gm})}, "level", false, false},
 		{"conflict stays out", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: gm}), sys("c", systems.FieldDef{Key: "level", Play: owner})}, "level", false, false},

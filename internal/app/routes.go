@@ -5225,7 +5225,7 @@ func (a *App) RegisterRoutes() {
 	// it); none + Scribe+ → create-or-pick prompt; none + Player → friendly
 	// empty state.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "map_editor", Label: "Map Editor", Icon: "fa-map-location-dot",
+		Type: "map_editor", Label: "Map", Icon: "fa-map-location-dot",
 		Description: "Framed map preview that opens the full map",
 		Addon:       "maps", Contexts: []string{"template"},
 		// No ConfigFields — the source of truth is entity.MapID. The

@@ -522,12 +522,12 @@ func (s *campaignService) UpdateNavPins(ctx context.Context, cc *CampaignContext
 		return nil, apperror.NewForbidden("only members of this campaign can pin rows")
 	}
 	if cc.MemberRole >= RoleOwner {
-		// The owner pins rows for everyone in the sidebar editor; for
+		// The owner pins rows for everyone with Edit the sidebar; for
 		// themselves they may pin only Manage tools, which the editor's
 		// layout does not hold. Anything else is still refused.
 		for _, key := range pins {
 			if !strings.HasPrefix(key, navManagePrefix) {
-				return nil, apperror.NewForbidden("the owner pins rows for everyone in the sidebar editor; only Manage tools can be pinned for yourself")
+				return nil, apperror.NewForbidden("the owner pins rows for everyone with Edit the sidebar; only Manage tools can be pinned for yourself")
 			}
 		}
 		clean, err := CleanOwnerNavPins(pins)
