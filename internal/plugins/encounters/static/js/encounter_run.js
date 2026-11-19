@@ -378,7 +378,7 @@
     if (S.report) box.appendChild(ended(S));
     box.appendChild(h('p', 'erun-lbl', 'Ready to run'));
     if (!S.ready.length) {
-      box.appendChild(h('p', 'erun-note', 'No encounter is marked Ready. Open an encounter on its page, turn on Ready, and it shows here.'));
+      box.appendChild(h('p', 'erun-note', 'No fight is marked Ready yet. Fights are planned on Adventure pages: open one, build the fight in its Encounters block and turn on Ready.'));
       return;
     }
     var ul = h('ul', 'erun-ready');

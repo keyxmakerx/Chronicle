@@ -41,7 +41,7 @@ templ visibilityGlance(cc *campaigns.CampaignContext, entity *Entity, ev *Effect
 		{{ widened := ev != nil && ev.WidenedByTags }}
 		<span
 			class="relative inline-flex items-center ml-1.5 shrink-0"
-			title={ visibilityGlanceTooltip(cc, entity, ev) }
+			title={ visibilityGlanceTooltip(ctx, cc, entity, ev) }
 			data-visibility-badge={ state }
 			if widened {
 				data-tag-widened="true"
@@ -145,7 +145,7 @@ templ effectiveVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity, ev
 				data-perm-corner-tip
 				class="pointer-events-none absolute right-0 top-full mt-1.5 z-40 w-max max-w-xs rounded-md bg-fg px-2 py-1 text-[11px] leading-snug text-surface opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
 			>
-				{ visibilityGlanceTooltip(cc, entity, ev) }
+				{ visibilityGlanceTooltip(ctx, cc, entity, ev) }
 				if canEdit {
 					{ " · Click to change." }
 				}

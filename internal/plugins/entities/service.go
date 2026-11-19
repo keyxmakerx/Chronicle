@@ -2881,10 +2881,10 @@ func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool, isS
 
 	seenBlockIDs := make(map[string]bool)
 	singletonCount := make(map[string]int) // type → count, for friendly multi-instance error
-	blockLabels := make(map[string]string) // type → "Map Editor" for the error message; populated lazily
+	blockLabels := make(map[string]string) // type → "Map" for the error message; populated lazily
 	for rowIdx, row := range layout.Rows {
 		if strings.TrimSpace(row.ID) == "" {
-			return apperror.NewBadRequest("Internal: a row is missing its ID. Refresh the page and try again.")
+			return apperror.NewBadRequest("A row in this layout has lost its ID. Reload the page and try again.")
 		}
 		if err := tilegrid.ValidateKind(rowIdx+1, row.Kind); err != nil {
 			return err
@@ -2916,7 +2916,7 @@ func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool, isS
 		totalWidth := 0
 		for _, col := range row.Columns {
 			if strings.TrimSpace(col.ID) == "" {
-				return apperror.NewBadRequest("Internal: a column is missing its ID. Refresh the page and try again.")
+				return apperror.NewBadRequest("A column in this layout has lost its ID. Reload the page and try again.")
 			}
 			if col.Width < 1 || col.Width > gridWidth {
 				return apperror.NewBadRequest(fmt.Sprintf("Row %d has a column with an invalid width — column widths must be between 1 and %d.", rowIdx+1, gridWidth))
@@ -2928,10 +2928,10 @@ func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool, isS
 			}
 			for _, blk := range col.Blocks {
 				if strings.TrimSpace(blk.ID) == "" {
-					return apperror.NewBadRequest("Internal: a block is missing its ID. Refresh the page and try again.")
+					return apperror.NewBadRequest("A block in this layout has lost its ID. Reload the page and try again.")
 				}
 				if seenBlockIDs[blk.ID] {
-					return apperror.NewBadRequest("This layout contains the same block twice. Refresh the page — the editor may have lost track of a drag.")
+					return apperror.NewBadRequest("The same block is in this layout twice. Reload the page and try the move again.")
 				}
 				seenBlockIDs[blk.ID] = true
 				if isValidBlock != nil && !isValidBlock(blk.Type) {
@@ -2959,13 +2959,16 @@ func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool, isS
 }
 
 // humanizeBlockType turns a block type slug into a human-friendly label
-// for error messages ("map_editor" → "Map Editor"). Strict slug→label
+// for error messages ("map_editor" → "Map"). Strict slug→label
 // transform — the registry has the real Label but exposing it from a
 // non-receiver helper would tangle the import graph more than this
 // warrants. Block-type slugs are stable so the heuristic is safe.
 func humanizeBlockType(t string) string {
 	if t == "" {
 		return "this"
+	}
+	if t == "map_editor" {
+		return "Map" // the block's on-screen name; the stored type keeps its old slug
 	}
 	parts := strings.Split(t, "_")
 	for i, p := range parts {
