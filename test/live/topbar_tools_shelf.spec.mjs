@@ -30,7 +30,13 @@ const shown = (page, sel) => page.locator(sel).evaluate((el) => {
 
 const shelfNames = (page) => page.locator('#tb-shelf .tb-tool:not([hidden]) .tb-tool-name').allTextContents();
 
+// The widget loads when the tab comes into sight, so after a page load the
+// tab is there a moment before it answers.
 async function openShelf(page) {
+  await page.waitForFunction(() => {
+    const host = document.querySelector('[data-widget="topbar-tools"]');
+    return !!host && !!host._tbDestroy;
+  });
   await page.locator('#tb-tools-tab').tap();
   await page.locator('#tb-shelf').waitFor({ state: 'visible' });
   await page.waitForFunction(() => document.getElementById('tb-shelf').classList.contains('is-open'));
