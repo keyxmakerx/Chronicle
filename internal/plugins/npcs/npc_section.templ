@@ -51,10 +51,11 @@ templ NPCSectionComponent(cc *campaigns.CampaignContext, featured []NPCCard, lis
 
 // npcControls is the search box and tag filter. They live outside #npc-results
 // so a swap never replaces the input being typed in; each includes the other by
-// id so the two filters combine.
+// id so the two filters combine. The tag filter is as wide as its words and
+// the search box gives way to it, so the two share a row down to a phone.
 templ npcControls(cc *campaigns.CampaignContext, list NPCListView) {
 	<div class="flex flex-wrap items-center gap-2 mb-4">
-		<div class="relative">
+		<div class="relative min-w-40 max-w-56 flex-1">
 			<input
 				id="npc-q"
 				type="search"
@@ -63,7 +64,7 @@ templ npcControls(cc *campaigns.CampaignContext, list NPCListView) {
 				placeholder="Search NPCs…"
 				aria-label="Search NPCs"
 				autocomplete="off"
-				class="input pl-9 pr-3 py-2 w-56"
+				class="input pl-9 pr-3 py-2"
 				hx-get={ fmt.Sprintf("/campaigns/%s/npcs/section", cc.Campaign.ID) }
 				hx-trigger="input changed delay:300ms, search"
 				hx-include="#npc-tag"
@@ -77,7 +78,7 @@ templ npcControls(cc *campaigns.CampaignContext, list NPCListView) {
 				id="npc-tag"
 				name="tag"
 				aria-label="Filter NPCs by tag"
-				class="input py-2 text-sm"
+				class="input py-2 text-sm w-auto max-w-full"
 				hx-get={ fmt.Sprintf("/campaigns/%s/npcs/section", cc.Campaign.ID) }
 				hx-include="#npc-q"
 				hx-target="#npc-results"
