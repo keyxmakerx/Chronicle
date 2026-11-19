@@ -1080,10 +1080,14 @@ type CreateCampaignRequest struct {
 }
 
 // UpdateCampaignRequest holds the data submitted by the campaign edit form.
+//
+// Every field is a pointer: the Details tab posts only the description, so an
+// absent name or is_public must keep what is stored rather than blank the name
+// or flip a public campaign private.
 type UpdateCampaignRequest struct {
-	Name        string `json:"name" form:"name"`
-	Description string `json:"description" form:"description"`
-	IsPublic    bool   `json:"is_public" form:"is_public"`
+	Name        *string `json:"name" form:"name"`
+	Description *string `json:"description" form:"description"`
+	IsPublic    *bool   `json:"is_public" form:"is_public"`
 }
 
 // UpdateCampaignDetailsInput is the owner's save of the two details the desk
@@ -1135,10 +1139,12 @@ type CreateCampaignInput struct {
 }
 
 // UpdateCampaignInput is the validated input for updating a campaign.
+// A nil field is absent and keeps the stored value; a pointer to the empty
+// string clears the description.
 type UpdateCampaignInput struct {
-	Name        string
-	Description string
-	IsPublic    bool
+	Name        *string
+	Description *string
+	IsPublic    *bool
 }
 
 // ListOptions holds pagination parameters for list queries.

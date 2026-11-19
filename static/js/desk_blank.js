@@ -1,7 +1,8 @@
 /**
- * desk_blank.js -- the dashed words on the owner's desk (Manage's home page).
+ * desk_blank.js -- the values the owner changes where they stand on Campaign
+ * settings (and in the People fold).
  *
- * A "blank" is a word in a sentence that the owner changes where it stands and
+ * A "blank" is a value on a row that the owner changes where it stands and
  * that saves the moment it is changed:
  *
  *   choice  opens a small menu that grows out of the word; a pick saves at once
@@ -9,7 +10,7 @@
  *
  * Each blank's button carries its own inline onclick (built in
  * campaigns/desk_view.go) that calls Chronicle.deskBlank.activate, because the
- * desk arrives by a boosted swap where a script tag or a delegated listener may
+ * page arrives by a boosted swap where a script tag or a delegated listener may
  * never run. Nothing here listens on document except while a menu is open, and
  * that one goes away when the menu does.
  *
@@ -211,7 +212,7 @@
     if (C.notify) C.notify((msg ? msg + ' ' : '') + 'Nothing changed.', 'error');
   }
 
-  // "Saved", in place, in the line's own acts: it settles in, then fades.
+  // "Saved", in place, beside the value: it settles in, then fades.
   function tick(line) {
     if (!line) return;
     var host = line.querySelector('.desk-acts') || line;
@@ -261,14 +262,9 @@
       return;
     }
     var was = { value: btn.getAttribute('data-value'), text: btn.textContent };
-    var after = btn.parentNode.nextElementSibling;
-    var para = btn.closest('p');
-    after = after && after.hasAttribute('data-desk-after') ? after : (para ? para.querySelector('[data-desk-after]') : null);
-    var wasAfter = after ? after.textContent : '';
     // Feedback first: the new word and a working state, inside a tenth of a
     // second, then the save settles it or puts the old word back.
     setShown(btn, opt.l);
-    if (after && opt.a) after.textContent = opt.a;
     btn.setAttribute('data-state', 'working');
     btn.setAttribute('aria-busy', 'true');
     btn.focus({ preventScroll: true });
@@ -276,7 +272,6 @@
       saved(btn, value);
     }, function (err) {
       setShown(btn, was.text);
-      if (after) after.textContent = wasAfter;
       btn.removeAttribute('data-state');
       btn.removeAttribute('aria-busy');
       fail(err);

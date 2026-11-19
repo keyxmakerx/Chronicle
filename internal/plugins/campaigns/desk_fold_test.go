@@ -224,21 +224,6 @@ func TestDeskService_Fold(t *testing.T) {
 	}
 }
 
-func TestDeskService_FoldFlagOnLines(t *testing.T) {
-	c := &Campaign{ID: "c1", Settings: "{}"}
-	in := DeskInputs{Campaign: c, Addons: map[string]bool{"sync-api": true}}
-	s := NewDeskService()
-	s.Register(foldStub{stubProvider{DeskTrash, func(context.Context) (DeskFacts, error) { return DeskFacts{}, nil }},
-		func() (*DeskFold, error) { return &DeskFold{}, nil }})
-	d := s.Build(context.Background(), DeskRequest{Now: time.Now()}, in)
-	for id, want := range map[string]bool{"people": true, "trash": true, "foundry": false, "ai": false, "changes": false} {
-		l := lineByID(d, id)
-		if l == nil || l.Fold != want {
-			t.Errorf("line %s unfolds = %v, want %v", id, l != nil && l.Fold, want)
-		}
-	}
-}
-
 func TestDeskService_Line(t *testing.T) {
 	c := &Campaign{ID: "c1", Settings: "{}"}
 	s := NewDeskService()
@@ -412,27 +397,6 @@ func TestManageSentence(t *testing.T) {
 				t.Errorf("sentence = %s, want it to say %q", out, tt.want)
 			}
 		})
-	}
-}
-
-// Only the lines whose page opens with their own sentence carry it; the rest
-// are plain links.
-func TestDeskLine_CarriesOnlyWhereThePageOpensWithTheSentence(t *testing.T) {
-	c := &Campaign{ID: "c1", Settings: "{}"}
-	carries := map[string]bool{"people": true, "changes": true, "game": true, "media": true, "foundry": true, "ai": true, "trash": true, "settings": true}
-	in := DeskInputs{Campaign: c, Members: members(1, RolePlayer), Addons: map[string]bool{"media-gallery": true, "sync-api": true}}
-	d := NewDeskService().Build(context.Background(), DeskRequest{Now: time.Now()}, in)
-	for _, g := range d.Groups {
-		for _, l := range g.Lines {
-			want := carries[l.ID]
-			got := false
-			for _, a := range l.Acts {
-				got = got || a.Carry
-			}
-			if got != want {
-				t.Errorf("line %s carries = %v, want %v", l.ID, got, want)
-			}
-		}
 	}
 }
 

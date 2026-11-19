@@ -163,8 +163,6 @@ func fallbackFold(l DeskLine) *DeskFold {
 		b.WriteString(p.Text)
 	}
 	f := &DeskFold{Fallback: true, Note: b.String()}
-	if len(l.Acts) > 0 {
-		f.FullHref, f.FullLabel = l.Acts[0].Href, l.Acts[0].Label
-	}
+	f.FullHref, f.FullLabel = l.Href, "Open "+l.Name
 	return f
 }

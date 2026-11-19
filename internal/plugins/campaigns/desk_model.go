@@ -1,8 +1,8 @@
-// desk_model.go holds the types of the owner's desk (Manage's home page): the
-// facts other plugins supply, the provider seam they register through, and
-// the page model the templates draw. Wording lives in desk_sentences.go and
-// the assembly in desk_service.go, so every sentence is table-testable
-// without a database, a socket or an Echo context.
+// desk_model.go holds the types of the owner's Campaign settings page (the
+// desk): the facts other plugins supply, the provider seam they register
+// through, and the page model the templates draw. Wording lives in
+// desk_sentences.go and the assembly in desk_service.go, so every row and
+// sentence is table-testable without a database, a socket or an Echo context.
 
 package campaigns
 
@@ -129,57 +129,69 @@ type DeskInputs struct {
 	GMTerm string
 }
 
-// Desk is the page: plain sentences in groups.
+// Desk is the page: named rows in groups.
 type Desk struct {
 	CampaignName string
 	Needs        []NeedsYouItem
 	Groups       []DeskGroup
 }
 
-// DeskGroup is a named run of lines, drawn under a quiet label.
+// DeskGroup is a named run of rows, drawn under a quiet label.
 type DeskGroup struct {
 	Name  string
 	Lines []DeskLine
 }
 
-// DeskLine is one sentence with the quiet words that open its tool.
+// DeskLine is one setting. The page draws it as a row (Name, then Short in
+// grey, then a chevron); a tool page draws the same line as the sentence
+// under its title (Parts), so both read from one service and cannot disagree.
 type DeskLine struct {
 	ID string
-	// Fold says the line unfolds into a sub menu; its content is fetched when
-	// the owner first opens it.
-	Fold bool
-	// State is the dot before the sentence: "", "ok" or "warn". State colours
-	// mean state only.
+	// Name is what the row is called. It is the first thing on the row.
+	Name string
+	// Short is what the setting is doing, in a few words. Empty draws the
+	// name alone (a count that could not be read, or a row that only leads
+	// somewhere).
+	Short string
+	// Href is where the whole row goes. Empty for a row that changes in
+	// place (Blank) or posts a form (View).
+	Href string
+	// Danger draws the name in the state red: only Delete.
+	Danger bool
+	// Swatch draws the campaign's colour as a small dot after Short.
+	Swatch bool
+	// State is the dot before the row: "", "ok" or "warn". State colours mean
+	// state only.
 	State string
+	// Parts is the sentence a tool page draws under its title; nil for a line
+	// that opens no tool.
 	Parts []DeskPart
-	Acts  []DeskAct
+	// Blank is set for a row whose value is changed where it stands.
+	Blank *DeskBlank
+	// View is set for a row that opens the campaign as another kind of
+	// viewer, by posting the view-as form.
+	View *DeskView
 }
 
-// DeskPart is a piece of a sentence: plain words, bold words, or a blank the
-// owner changes in place.
+// DeskView is the "See it" form of the two dashboard rows: it posts to the
+// view-as route with who to look as and where to land.
+type DeskView struct {
+	As   string // "player" or "guest"
+	Next string // "home"
+	// Off is why the row cannot be opened ("" when it can).
+	Off string
+}
+
+// DeskPart is a piece of a sentence: plain words, bold words, the game
+// master's term or the campaign's colour.
 type DeskPart struct {
 	Text string
 	Bold bool
 	// GM draws the campaign's own word for its game master (GMTerm), which
 	// only the template can read from its context.
 	GM bool
-	// After marks the words that follow a blank and change with its value;
-	// the page rewrites them in place when the blank is changed.
-	After bool
-	// Swatch draws the campaign's colour as a small dot (the Customize line).
+	// Swatch draws the campaign's colour as a small dot.
 	Swatch bool
-	Blank  *DeskBlank
-}
-
-// DeskAct is a quiet word that leads to a tool's own page.
-type DeskAct struct {
-	Label string
-	Href  string
-	// Danger draws the word in the state red: only Delete.
-	Danger bool
-	// Carry says the page this leads to opens with this line's own sentence,
-	// so the press lifts the sentence and carries it there.
-	Carry bool
 }
 
 // DeskBlankKind is how a blank is changed.
@@ -223,9 +235,6 @@ type DeskBlank struct {
 type DeskOption struct {
 	Value string `json:"v"`
 	Label string `json:"l"`
-	// After replaces the words that follow the blank once this is chosen, for
-	// a sentence whose ending depends on the value.
-	After string `json:"a,omitempty"`
 }
 
 // DeskFold is what a line shows when it unfolds: a few rows and the one

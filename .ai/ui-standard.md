@@ -439,26 +439,12 @@ place, and Off shows the end state.
   motion, unsaved changes, a modified click and a browser without view
   transitions keep the ordinary page load. The browser's Back button is the
   ordinary history restore and plays nothing.
-- **The Campaign settings desk: the line carries you.** Pressing the quiet word on a desk
-  line that opens a page (People, Game & features, Media, Settings, Foundry,
-  Your AI, Trash, What players changed) lifts that line's sentence off the
-  desk and carries it to the first line of the page it opens, under the title;
-  the other lines fall away. The "Campaign settings" word above that page's title brings
-  the sentence home, and the desk returns to its place and the line glows.
-  It is a signed move, about a third of a second each way: `--dur-slide` out
-  and `--dur-large` back, with `--ease-slide`. Only transform and opacity
-  animate (a copy of the sentence travels in a fixed layer; the real one
-  appears where it lands), so it is not a view transition, whose group
-  animates width and height. Calm is a plain fade (`--dur-page`) with no
-  travelling copy; Off and a device asking for reduced motion leave the link an
-  ordinary page load, as do a modified click and a page without htmx. A browser
-  without the Web Animations API gets the same swap with no motion. It never traps: a second press while moving is ignored,
-  the browser's Back stops it, a failed request or six seconds with no answer
-  ends it with a normal page load, and every end leaves no inline transform,
-  opacity or `view-transition-name` behind
-  (`static/js/desk_carry.js`, pinned by `test/js/desk_carry_browser.test.mjs`).
-  The same sentence is drawn by the server when the page is opened by address
-  (`ManageFrame`'s `Line`), so both ways in start alike.
+- **Campaign settings rows do not travel.** A row is one link, so pressing it
+  is an ordinary page load or boosted swap; no sentence lifts off the page.
+  A tool page's own sentence under its title is drawn by the server
+  (`ManageFrame`'s `Line`). The "Campaign settings" word above a tool's title still hands
+  its press to `static/js/desk_carry.js` (`back`), which has no sentence on
+  Campaign settings to land on and so only fades the old sentence out.
 - **The title's rule draws on arrival.** Under Annals the accent rule under
   a page title draws from the left over `--dur-large`, after 120ms, under
   full motion only.

@@ -27,8 +27,6 @@ func deskText(l DeskLine) string {
 		switch {
 		case p.GM:
 			sb.WriteString("DM")
-		case p.Blank != nil:
-			sb.WriteString("[" + p.Blank.Shown + "]")
 		default:
 			sb.WriteString(p.Text)
 		}
@@ -82,44 +80,185 @@ func TestDeskSentences(t *testing.T) {
 	}
 }
 
-func TestDeskPagesLine_Blanks(t *testing.T) {
+// The row words: every line's name and short state for each data state, so
+// the page never shows more than the facts it was given.
+func TestDeskRows_NameAndState(t *testing.T) {
+	c := &Campaign{ID: "c1", Name: "Therin", Settings: "{}"}
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	two := now.Add(-2 * time.Hour)
+	members := func(n int) []CampaignMember {
+		out := []CampaignMember{{Role: RoleOwner}}
+		for i := 1; i < n; i++ {
+			out = append(out, CampaignMember{Role: RolePlayer})
+		}
+		return out
+	}
+	tests := []struct {
+		name  string
+		line  DeskLine
+		row   string
+		short string
+		href  string
+		state string
+	}{
+		{"people unread", peopleLine(c, nil, 0), "People", "", "/campaigns/c1/members", ""},
+		{"people alone", peopleLine(c, members(1), 0), "People", "Just you", "/campaigns/c1/members", ""},
+		{"people five", peopleLine(c, members(5), 0), "People", "5 people", "/campaigns/c1/members", ""},
+		{"people with invites", peopleLine(c, members(5), 2), "People", "5 people, 2 invited", "/campaigns/c1/members", ""},
+		{"changes no provider", changesLine(c, nil), "What players changed", "", "/campaigns/c1/players/changes", ""},
+		{"changes none", changesLine(c, &DeskChangesFacts{}), "What players changed", "Nothing this week", "/campaigns/c1/players/changes", ""},
+		{"changes one", changesLine(c, &DeskChangesFacts{Changes: 1, Players: 1}), "What players changed", "1 change by 1 player this week", "/campaigns/c1/players/changes", ""},
+		{"changes many", changesLine(c, &DeskChangesFacts{Changes: 12, Players: 3}), "What players changed", "12 changes by 3 players this week", "/campaigns/c1/players/changes", ""},
+		{"game neither", gameLine(c, DeskInputs{}), "Game & features", "", "/campaigns/c1/extensions", ""},
+		{"game system only", gameLine(c, DeskInputs{SystemName: "Draw Steel"}), "Game & features", "Draw Steel", "/campaigns/c1/extensions", ""},
+		{"game features only", gameLine(c, DeskInputs{FeaturesOn: 1, FeaturesTotal: 4}), "Game & features", "No game system, 1 of 4 features on", "/campaigns/c1/extensions", ""},
+		{"game both", gameLine(c, DeskInputs{SystemName: "Draw Steel", FeaturesOn: 12, FeaturesTotal: 15}), "Game & features", "Draw Steel, 12 of 15 features on", "/campaigns/c1/extensions", ""},
+		{"media no provider", mediaLine(c, nil), "Media", "", "/campaigns/c1/media", ""},
+		{"media empty", mediaLine(c, &DeskMediaFacts{}), "Media", "No pictures or files yet", "/campaigns/c1/media", ""},
+		{"media some", mediaLine(c, &DeskMediaFacts{Files: 212, Bytes: 310 << 20}), "Media", "212 pictures and files, 310 MB", "/campaigns/c1/media", ""},
+		{"foundry no provider", foundryLine(c, nil, now), "Foundry", "", "/campaigns/c1/foundry", ""},
+		{"foundry never set up", foundryLine(c, &DeskFoundryFacts{}, now), "Foundry", "Not set up yet", "/campaigns/c1/foundry", ""},
+		{"foundry key, no answer", foundryLine(c, &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true}}, now), "Foundry", "Key made, no answer yet", "/campaigns/c1/foundry", ""},
+		{"foundry live", foundryLine(c, &DeskFoundryFacts{Connection: FoundryConnection{Connected: true, HasKey: true, HubLastSeen: &now}}, now), "Foundry", "Connected now", "/campaigns/c1/foundry", "ok"},
+		{"foundry live with module", foundryLine(c, &DeskFoundryFacts{Connection: FoundryConnection{Connected: true, HasKey: true, HubLastSeen: &now, ModuleVersion: "1.2.0"}}, now), "Foundry", "Connected now, module 1.2.0", "/campaigns/c1/foundry", "ok"},
+		{"foundry seen", foundryLine(c, &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: &two}}, now), "Foundry", "Last answered 2 hours ago", "/campaigns/c1/foundry", "ok"},
+		{"ai no provider", aiLine(c, nil), "Your AI", "", "/campaigns/c1/ai", ""},
+		{"ai none", aiLine(c, &DeskAIFacts{State: DeskAINone}), "Your AI", "Not connected yet", "/campaigns/c1/ai", ""},
+		{"ai connected", aiLine(c, &DeskAIFacts{State: DeskAIConnected, Client: "Claude", CanAsk: true}), "Your AI", "Claude, may ask for changes", "/campaigns/c1/ai", "ok"},
+		{"ai look only", aiLine(c, &DeskAIFacts{State: DeskAIConnected}), "Your AI", "Connected, may only look", "/campaigns/c1/ai", "ok"},
+		{"ai paused", aiLine(c, &DeskAIFacts{State: DeskAIPaused}), "Your AI", "Paused", "/campaigns/c1/ai", ""},
+		{"ai ended", aiLine(c, &DeskAIFacts{State: DeskAIEnded}), "Your AI", "Key ran out", "/campaigns/c1/ai", ""},
+		{"keys", keysLine(c), "Keys", "For other tools", "/campaigns/c1/settings?tab=api-keys", ""},
+		{"export", exportLine(c), "Export a copy", "", "/campaigns/c1/settings?tab=data", ""},
+		{"import", importLine(c), "Import", "", "/campaigns/c1/settings?tab=import", ""},
+		{"activity", activityLine(c), "Activity log", "", "/campaigns/c1/settings?tab=activity", ""},
+		{"trash no provider", trashLine(c, nil), "Trash", "", "/campaigns/c1/trash", ""},
+		{"trash empty", trashLine(c, &DeskTrashFacts{Days: 30}), "Trash", "Empty", "/campaigns/c1/trash", ""},
+		{"trash one", trashLine(c, &DeskTrashFacts{Items: 1, Days: 30}), "Trash", "1 thing, kept 30 days", "/campaigns/c1/trash", ""},
+		{"trash some", trashLine(c, &DeskTrashFacts{Items: 3, Days: 30}), "Trash", "3 things, kept 30 days", "/campaigns/c1/trash", ""},
+		{"archive", endLine(c), "Archive this campaign", "", "/campaigns/c1/settings#danger", ""},
+		{"delete", deleteLine(c), "Delete this campaign", "", "/campaigns/c1/settings#danger", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := tt.line
+			if l.Name != tt.row || l.Short != tt.short || l.Href != tt.href || l.State != tt.state {
+				t.Errorf("row = %q / %q / %q / %q, want %q / %q / %q / %q", l.Name, l.Short, l.Href, l.State, tt.row, tt.short, tt.href, tt.state)
+			}
+			for _, bad := range []string{"GM Only", "dm_only", "The table"} {
+				if strings.Contains(l.Name+l.Short, bad) {
+					t.Errorf("row says %q", bad)
+				}
+			}
+		})
+	}
+}
+
+func TestDeskRows_ArchivedAndLook(t *testing.T) {
+	now := time.Now()
+	archived := &Campaign{ID: "c1", Settings: "{}", ArchivedAt: &now}
+	if l := endLine(archived); l.Name != "Unarchive this campaign" || l.Href != "/campaigns/c1/settings#danger" {
+		t.Errorf("archived end row = %+v", l)
+	}
+	if l := deleteLine(archived); !l.Danger {
+		t.Error("the delete row must be in the danger tone")
+	}
+	tests := []struct {
+		name     string
+		settings string
+		want     string
+	}{
+		{"standard", `{}`, "Standard"},
+		{"material default kit", `{"appearance":{"page_look":"annals"}}`, "Material, Material kit"},
+		{"material named kit", `{"appearance":{"page_look":"annals","style_kit":"paper"}}`, "Material, Paper kit"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lookLine(&Campaign{ID: "c1", Settings: tt.settings})
+			if l.Name != "Customize" || l.Short != tt.want || !l.Swatch || l.Href != "/campaigns/c1/customize" {
+				t.Errorf("look row = %+v, want short %q", l, tt.want)
+			}
+		})
+	}
+}
+
+func TestDeskRows_DashboardsPostTheViewAsForm(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      DeskLine
+		wantAs    string
+		wantShort string
+		wantOff   bool
+	}{
+		{"players", playersHomeLine(), "player", "See it", false},
+		{"guests, public campaign", guestsHomeLine(&Campaign{ID: "c", IsPublic: true}), "guest", "See it", false},
+		{"guests, private campaign", guestsHomeLine(&Campaign{ID: "c"}), "guest", "Private campaign: guests can't open it", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := tt.line
+			if l.View == nil || l.View.As != tt.wantAs || l.View.Next != "home" || l.Short != tt.wantShort || (l.View.Off != "") != tt.wantOff {
+				t.Fatalf("line = %+v", l)
+			}
+			var sb strings.Builder
+			if err := deskRow(l).Render(context.Background(), &sb); err != nil {
+				t.Fatal(err)
+			}
+			html := sb.String()
+			if tt.wantOff {
+				if strings.Contains(html, "<form") || strings.Contains(html, "<button") {
+					t.Errorf("a row that cannot open must offer nothing to press: %s", html)
+				}
+				return
+			}
+			for _, want := range []string{`method="POST"`, `/view-as"`, `name="as" value="` + tt.wantAs + `"`, `name="next" value="home"`, `name="csrf_token"`, `type="submit" class="set-row"`, `id="line-` + l.ID + `"`} {
+				if !strings.Contains(html, want) {
+					t.Errorf("form is missing %q: %s", want, html)
+				}
+			}
+		})
+	}
+}
+
+func TestDeskRows_ChangeInPlace(t *testing.T) {
 	tests := []struct {
 		name      string
 		c         *Campaign
 		wantVis   string
 		wantPub   string
-		wantAfter string
+		wantShown string
 		off       bool
 	}{
-		{"open and private", &Campaign{ID: "c", Settings: "{}"}, "open to players", "private", deskPrivateAfter, false},
-		{"hidden and public", &Campaign{ID: "c", IsPublic: true, Settings: `{"default_visibility":"dm_only"}`}, "hidden from players", "public", deskPublicAfter, false},
+		{"shown and private", &Campaign{ID: "c", Name: "Therin", Settings: "{}"}, "Shown to players", "Private: members only", "Therin", false},
+		{"hidden and public", &Campaign{ID: "c", Name: "Therin", IsPublic: true, Settings: `{"default_visibility":"dm_only"}`}, "Hidden from players", "Public: anyone with the link", "Therin", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := pagesLine(tt.c)
-			var vis, pub *DeskBlank
-			var after string
-			for _, p := range l.Parts {
-				switch {
-				case p.Blank != nil && p.Blank.ID == "visibility":
-					vis = p.Blank
-				case p.Blank != nil && p.Blank.ID == "public":
-					pub = p.Blank
-				case p.After:
-					after = p.Text
+			vis, pub, name := pagesLine(tt.c), publicLine(tt.c), nameLine(tt.c)
+			if vis.Name != "New pages start" || pub.Name != "Who can read it" || name.Name != "Name" {
+				t.Errorf("names = %q / %q / %q", vis.Name, pub.Name, name.Name)
+			}
+			if vis.Blank == nil || pub.Blank == nil || name.Blank == nil {
+				t.Fatal("all three rows change in place")
+			}
+			if vis.Blank.Shown != tt.wantVis || pub.Blank.Shown != tt.wantPub || name.Blank.Shown != tt.wantShown {
+				t.Errorf("got %q / %q / %q", vis.Blank.Shown, pub.Blank.Shown, name.Blank.Shown)
+			}
+			if vis.Blank.URL != "/campaigns/c/default-visibility" || pub.Blank.URL != "/campaigns/c/details" || name.Blank.URL != "/campaigns/c/details" || !pub.Blank.Bool {
+				t.Errorf("blanks must save through their own routes, got %q, %q and %q", vis.Blank.URL, pub.Blank.URL, name.Blank.URL)
+			}
+			// A pick shows exactly the words the menu offered.
+			for _, b := range []*DeskBlank{vis.Blank, pub.Blank} {
+				found := false
+				for _, o := range b.Options {
+					found = found || o.Label == b.Shown
+				}
+				if !found {
+					t.Errorf("%q shows %q, which is not one of its options %+v", b.ID, b.Shown, b.Options)
 				}
 			}
-			if vis == nil || pub == nil {
-				t.Fatal("both blanks must be on the line")
-			}
-			if vis.Shown != tt.wantVis || pub.Shown != tt.wantPub || after != tt.wantAfter {
-				t.Errorf("got %q / %q / %q", vis.Shown, pub.Shown, after)
-			}
-			if vis.URL != "/campaigns/c/default-visibility" || pub.URL != "/campaigns/c/details" || !pub.Bool {
-				t.Errorf("blanks must save through their own routes, got %q and %q", vis.URL, pub.URL)
-			}
-			if (vis.Off != "") != tt.off {
-				t.Errorf("off = %q", vis.Off)
+			if (vis.Blank.Off != "") != tt.off {
+				t.Errorf("off = %q", vis.Blank.Off)
 			}
 		})
 	}
@@ -128,11 +267,9 @@ func TestDeskPagesLine_Blanks(t *testing.T) {
 func TestDeskBlanks_OffWhenArchived(t *testing.T) {
 	now := time.Now()
 	c := &Campaign{ID: "c", Settings: "{}", ArchivedAt: &now}
-	for _, l := range []DeskLine{nameLine(c), pagesLine(c)} {
-		for _, p := range l.Parts {
-			if p.Blank != nil && p.Blank.Off == "" {
-				t.Errorf("blank %q must be off on an archived campaign", p.Blank.ID)
-			}
+	for _, l := range []DeskLine{nameLine(c), pagesLine(c), publicLine(c)} {
+		if l.Blank == nil || l.Blank.Off == "" {
+			t.Errorf("row %q must be off on an archived campaign", l.ID)
 		}
 	}
 }
@@ -316,13 +453,20 @@ func TestOwnerDashboard_OnlyTheOwnerOpensTheDesk(t *testing.T) {
 					t.Fatalf("owner: err=%v code=%d", err, rec.Code)
 				}
 				body := rec.Body.String()
-				for _, want := range []string{"Needs you", "The table", "Trash holds 7 items", `href="/campaigns/camp-1/extensions"`} {
-					if want == "Needs you" {
-						continue // only when something needs the owner
-					}
+				// "Needs you" is drawn only when something needs the owner.
+				for _, want := range []string{
+					"Campaign settings", "People", "What players and guests see", "Look and game", "Connections", "Safety net", "Archive or delete",
+					"7 things, kept 30 days", `href="/campaigns/camp-1/extensions"`, `id="line-pages"`, `id="line-settings"`,
+				} {
 					if !strings.Contains(body, want) {
 						t.Errorf("desk is missing %q", want)
 					}
+				}
+				if strings.Contains(body, "The table") {
+					t.Error("no group may be called The table: that is the dice sheet's name")
+				}
+				if strings.Count(body, "data-manage-find") > 1 {
+					t.Errorf("the page draws at most one Find, got %d", strings.Count(body, "data-manage-find"))
 				}
 				if strings.Contains(body, "settings?tab=features") {
 					t.Error("desk must not link to the retired Features settings tab")
@@ -333,7 +477,7 @@ func TestOwnerDashboard_OnlyTheOwnerOpensTheDesk(t *testing.T) {
 			if !errors.As(err, &ae) || ae.Code != http.StatusForbidden {
 				t.Fatalf("want forbidden, got %v", err)
 			}
-			if called || strings.Contains(rec.Body.String(), "Trash holds") {
+			if called || strings.Contains(rec.Body.String(), "7 things") {
 				t.Error("a lower role reached the desk's numbers")
 			}
 		})
@@ -459,14 +603,17 @@ func TestUpdateDetailsAPI(t *testing.T) {
 	}
 }
 
-func TestDeskPage_RendersNeedsYouAndBlanks(t *testing.T) {
+func TestDeskPage_RendersRowsNeedsYouAndBlanks(t *testing.T) {
 	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Therin", Settings: "{}"}, MemberRole: RoleOwner}
 	d := &Desk{
 		CampaignName: "Therin",
 		Needs: []NeedsYouItem{
-			{Lead: "Foundry stopped answering", Rest: " 9 days ago.", Action: "See why", URL: "/campaigns/camp-1/foundry", State: "warn"},
+			{Lead: "Foundry", Rest: "Stopped answering 9 days ago", URL: "/campaigns/camp-1/foundry", State: "warn"},
 		},
-		Groups: []DeskGroup{{Name: "The campaign", Lines: []DeskLine{nameLine(cc.Campaign), pagesLine(cc.Campaign)}}},
+		Groups: []DeskGroup{
+			{Name: "People", Lines: []DeskLine{peopleLine(cc.Campaign, nil, 0)}},
+			{Name: "Look and game", Lines: []DeskLine{nameLine(cc.Campaign), pagesLine(cc.Campaign), lookLine(cc.Campaign), deleteLine(cc.Campaign)}},
+		},
 	}
 	var sb strings.Builder
 	if err := DeskPage(cc, d).Render(context.Background(), &sb); err != nil {
@@ -474,10 +621,14 @@ func TestDeskPage_RendersNeedsYouAndBlanks(t *testing.T) {
 	}
 	html := sb.String()
 	for _, want := range []string{
-		`data-desk-needs`, `Warning: `, `Foundry stopped answering`, `href="/campaigns/camp-1/foundry"`,
-		// A blank is a span with a button role so it wraps like text, and it
-		// answers both the pointer and the keyboard from its own attributes.
-		`role="button"`, `onclick=`, `onkeydown=`, `aria-haspopup="menu"`, `aria-expanded="false"`,
+		`data-desk-needs`, `Warning: `, `Foundry`, `Stopped answering 9 days ago`, `href="/campaigns/camp-1/foundry"`,
+		// A navigating row is one link over the whole row.
+		`<a class="set-row" href="/campaigns/camp-1/members">`, `class="set-name">People`,
+		`class="set-row set-danger"`,
+		// A row that changes in place has a blank that answers both the pointer
+		// and the keyboard from its own attributes, and the Saved tick's host.
+		`role="button"`, `onclick=`, `onkeydown=`, `aria-haspopup="menu"`, `aria-expanded="false"`, `class="desk-acts"`,
+		`id="line-pages"`, `id="line-name"`, `id="line-delete"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("desk is missing %q", want)
@@ -485,6 +636,11 @@ func TestDeskPage_RendersNeedsYouAndBlanks(t *testing.T) {
 	}
 	if regexp.MustCompile(`<button[^>]*desk-b`).MatchString(html) {
 		t.Error("a blank must not be a real button: buttons cannot wrap across lines")
+	}
+	for _, gone := range []string{"desk-chev", "data-fold", "data-carry", "Open People"} {
+		if strings.Contains(html, gone) {
+			t.Errorf("the rows no longer carry %q", gone)
+		}
 	}
 }
 
@@ -505,5 +661,129 @@ func TestManageSentenceSwapRedrawsInPlace(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "hx-swap-oob") || !strings.Contains(buf.String(), `id="manage-sentence"`) {
 		t.Errorf("the page's own sentence must carry the id and no swap: %s", buf.String())
+	}
+}
+
+// The page's groups and rows, in order, with the add-on rows present only while
+// their add-on is on. Line ids matter: links point at "#line-<id>".
+func TestDeskService_Build_GroupsAndRows(t *testing.T) {
+	c := &Campaign{ID: "c1", Name: "Therin", Settings: "{}"}
+	ids := func(d *Desk) map[string][]string {
+		out := map[string][]string{}
+		for _, g := range d.Groups {
+			for _, l := range g.Lines {
+				out[g.Name] = append(out[g.Name], l.ID)
+			}
+		}
+		return out
+	}
+	tests := []struct {
+		name   string
+		addons map[string]bool
+		want   map[string][]string
+	}{
+		{"add-ons off", map[string]bool{}, map[string][]string{
+			"People":                      {"people", "changes"},
+			"What players and guests see": {"players-home", "guests-home", "pages", "public"},
+			"Look and game":               {"name", "look", "game"},
+			"Connections":                 {"ai", "keys"},
+			"Safety net":                  {"export", "import", "activity", "trash"},
+			"Archive or delete":           {"end", "delete"},
+		}},
+		{"media and Foundry on", map[string]bool{"media-gallery": true, "sync-api": true}, map[string][]string{
+			"People":                      {"people", "changes"},
+			"What players and guests see": {"players-home", "guests-home", "pages", "public"},
+			"Look and game":               {"name", "look", "game", "media"},
+			"Connections":                 {"foundry", "ai", "keys"},
+			"Safety net":                  {"export", "import", "activity", "trash"},
+			"Archive or delete":           {"end", "delete"},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// No provider answers: every row still draws, with its name alone.
+			d := NewDeskService().Build(context.Background(), DeskRequest{Now: time.Now()}, DeskInputs{Campaign: c, Addons: tt.addons})
+			got := ids(d)
+			for group, want := range tt.want {
+				if strings.Join(got[group], ",") != strings.Join(want, ",") {
+					t.Errorf("%s = %v, want %v", group, got[group], want)
+				}
+			}
+			if len(got) != len(tt.want) {
+				t.Errorf("groups = %v", got)
+			}
+			if l := lineByID(d, "changes"); l == nil || l.Short != "" || l.Name != "What players changed" {
+				t.Errorf("a provider that did not answer leaves the row's name alone, got %+v", l)
+			}
+			for _, g := range d.Groups {
+				if g.Name == "The table" {
+					t.Error("a group is called The table, the dice sheet's name")
+				}
+			}
+		})
+	}
+}
+
+// The tool pages' sentence is still worded from the same lines: every line a
+// page opens with keeps its sentence.
+func TestDeskService_LineKeepsToolPageSentences(t *testing.T) {
+	c := &Campaign{ID: "c1", Name: "Therin", Settings: "{}"}
+	in := DeskInputs{Campaign: c, Members: members(2, RolePlayer), Addons: map[string]bool{"media-gallery": true, "sync-api": true}}
+	for _, id := range []string{"people", "changes", "game", "media", "foundry", "ai", "trash", "settings"} {
+		l, ok := NewDeskService().Line(context.Background(), DeskRequest{Now: time.Now()}, in, id)
+		if !ok || len(l.Parts) == 0 {
+			t.Errorf("line %s lost its sentence: ok=%v parts=%d", id, ok, len(l.Parts))
+		}
+	}
+	if l, _ := NewDeskService().Line(context.Background(), DeskRequest{}, in, "settings"); !strings.Contains(deskText(l), "on this page") {
+		t.Errorf("the Details and data sentence must say it is on this page: %q", deskText(l))
+	}
+}
+
+// updateService records what Update was asked.
+type updateService struct {
+	CampaignService
+	got *UpdateCampaignInput
+}
+
+func (s *updateService) Update(_ context.Context, _ string, in UpdateCampaignInput) (*Campaign, error) {
+	s.got = &in
+	return &Campaign{ID: "camp-1"}, nil
+}
+
+// The Details tab posts only the description. The handler must hand the service
+// a description and nothing else, so the name and the public flag stay as they
+// are; a body that names them still reaches the service.
+func TestUpdate_FormBodyKeepsAbsentKeysAbsent(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantName   bool
+		wantPublic bool
+	}{
+		{"description only", "description=New+words", false, false},
+		{"old full form", "name=Therin&description=x&is_public=true", true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &updateService{}
+			h := NewHandler(svc)
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPut, "/campaigns/camp-1", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.Set(contextKeyCampaign, &CampaignContext{Campaign: &Campaign{ID: "camp-1", Settings: "{}"}, MemberRole: RoleOwner, IsMember: true})
+			auth.SetSession(c, &auth.Session{UserID: "u1"})
+			if err := h.Update(c); err != nil {
+				t.Fatalf("update: %v", err)
+			}
+			if svc.got == nil || svc.got.Description == nil {
+				t.Fatalf("the description must reach the service: %+v", svc.got)
+			}
+			if (svc.got.Name != nil) != tt.wantName || (svc.got.IsPublic != nil) != tt.wantPublic {
+				t.Errorf("name present = %v, public present = %v", svc.got.Name != nil, svc.got.IsPublic != nil)
+			}
+		})
 	}
 }

@@ -145,12 +145,10 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 	facts := s.gather(ctx, req)
 	line := func(id string) DeskLine { l, _ := s.line(id, c, in, facts, req.Now); return l }
 
-	table := []DeskLine{line("people"), line("changes")}
-	campaign := []DeskLine{nameLine(c), gameLine(c, in), pagesLine(c), lookLine(c)}
+	look := []DeskLine{nameLine(c), lookLine(c), gameLine(c, in)}
 	if in.Addons["media-gallery"] {
-		campaign = append(campaign, line("media"))
+		look = append(look, line("media"))
 	}
-	campaign = append(campaign, settingsLine(c))
 
 	var conns []DeskLine
 	if in.Addons["sync-api"] {
@@ -158,51 +156,49 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 	}
 	conns = append(conns, line("ai"), keysLine(c))
 
-	d := &Desk{
+	return &Desk{
 		CampaignName: c.Name,
 		Needs:        needsYou(c, withoutDisabled(facts, in.Addons), req.Now),
 		Groups: []DeskGroup{
-			{Name: "The table", Lines: table},
-			{Name: "The campaign", Lines: campaign},
+			{Name: "People", Lines: []DeskLine{line("people"), line("changes")}},
+			{Name: "What players and guests see", Lines: []DeskLine{playersHomeLine(), guestsHomeLine(c), pagesLine(c), publicLine(c)}},
+			{Name: "Look and game", Lines: look},
 			{Name: "Connections", Lines: conns},
-			{Name: "Safety net", Lines: []DeskLine{line("trash"), endLine(c)}},
+			{Name: "Safety net", Lines: []DeskLine{exportLine(c), importLine(c), activityLine(c), line("trash")}},
+			{Name: "Archive or delete", Lines: []DeskLine{endLine(c), deleteLine(c)}},
 		},
 	}
-	return d
 }
 
 // line words one line by its id. Foundry and Media exist only
-// while their add-on is on, the same rule Build applies.
+// while their add-on is on, the same rule Build applies. Only the lines a
+// tool page opens with are worded here; the rest are built by Build alone.
 func (s *deskService) line(id string, c *Campaign, in DeskInputs, f DeskFacts, now time.Time) (DeskLine, bool) {
-	var l DeskLine
 	switch id {
 	case "people":
-		l = peopleLine(c, in.Members, in.Invited)
+		return peopleLine(c, in.Members, in.Invited), true
 	case "changes":
-		l = changesLine(c, f.Changes)
+		return changesLine(c, f.Changes), true
 	case "media":
 		if !in.Addons["media-gallery"] {
 			return DeskLine{}, false
 		}
-		l = mediaLine(c, f.Media)
+		return mediaLine(c, f.Media), true
 	case "foundry":
 		if !in.Addons["sync-api"] {
 			return DeskLine{}, false
 		}
-		l = foundryLine(c, f.Foundry, now)
+		return foundryLine(c, f.Foundry, now), true
 	case "game":
-		l = gameLine(c, in)
+		return gameLine(c, in), true
 	case "settings":
-		l = settingsLine(c)
+		return settingsLine(c), true
 	case "ai":
-		l = aiLine(c, f.AI)
+		return aiLine(c, f.AI), true
 	case "trash":
-		l = trashLine(c, f.Trash)
-	default:
-		return DeskLine{}, false
+		return trashLine(c, f.Trash), true
 	}
-	l.Fold = s.foldable(id)
-	return l, true
+	return DeskLine{}, false
 }
 
 func (s *deskService) NeedsCount(ctx context.Context, req DeskRequest, in DeskInputs) int {
@@ -246,8 +242,8 @@ func (s *deskService) Fold(ctx context.Context, req DeskRequest, in DeskInputs, 
 		f.More += len(f.Rows) - deskFoldRows
 		f.Rows = f.Rows[:deskFoldRows]
 	}
-	if f.MoreHref == "" && len(plain.Acts) > 0 {
-		f.MoreHref = plain.Acts[0].Href
+	if f.MoreHref == "" {
+		f.MoreHref = plain.Href
 	}
 	return f, true
 }
