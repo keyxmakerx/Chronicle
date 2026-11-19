@@ -654,9 +654,10 @@
   };
 
   Rulebook.prototype.goChapter = function (id) {
-    if (id && id === this.data.screen) { this.openScreen(); return; }
+    if (id && id === this.data.screen) { this.openScreen(); return true; }
     var n = this.firstItemOf(id);
     if (n >= 0) this.goItem(n);
+    return n >= 0;
   };
 
   // holdBack makes the phone's Back gesture close a drawer or screen instead of
@@ -772,11 +773,12 @@
   };
 
   // rulebook:goto is how something drawn inside a page asks the book to turn
-  // to a chapter, as a jump the reader can return from.
+  // to a chapter, as a jump the reader can return from. A turn the book makes
+  // cancels the event, so the asker can fall back to its own link otherwise.
   Rulebook.prototype.onGoto = function (e) {
     var d = e && e.detail, id = d && typeof d.chapter === 'string' ? d.chapter : '';
     if (!this.data || this.inline || !SLUG_RE.test(id) || !this.el.contains(e.target)) return;
-    this.goChapter(id);
+    if (this.goChapter(id) && e.preventDefault) e.preventDefault();
   };
 
   // "Back to p. N": the quiet word in the page foot after a jump.

@@ -228,6 +228,13 @@ highest total it covers:
 A creature's `stats` and `note` are Director-only: players see the creature's
 look and what they notice, and a `?` where the numbers would be.
 
+A widget block that wants the book to turn to a chapter dispatches a
+bubbling, cancelable `rulebook:goto` event from inside its page, with
+`detail: { chapter: '<chapter name>' }`. The turn is a jump, so the reader
+gets "Back to p. N". The book cancels the event when it turns; when it is
+not cancelled (an unknown chapter, or a Chronicle without the event), the
+widget should carry on with its own link.
+
 ## The Sections bookmark
 
 Every book has a **Sections** bookmark at the top of the right-hand page. It

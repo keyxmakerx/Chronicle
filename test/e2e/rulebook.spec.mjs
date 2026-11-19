@@ -1176,12 +1176,12 @@ test('a book nobody has turned leaves the address alone', async () => {
 
 test('rulebook:goto from inside a page turns to that chapter as a jump', async () => {
   await withBook(async (page) => {
-    const fire = (chapter) => page.evaluate((c) => document.querySelector('.rb-page .rb-scroll').dispatchEvent(new CustomEvent('rulebook:goto', { bubbles: true, detail: { chapter: c } })), chapter);
-    await fire('running');
+    const fire = (chapter) => page.evaluate((c) => document.querySelector('.rb-page .rb-scroll').dispatchEvent(new CustomEvent('rulebook:goto', { bubbles: true, cancelable: true, detail: { chapter: c } })), chapter);
+    assert.equal(await fire('running'), false, 'a turn the book makes cancels the ask');
     await settle(page);
     assert.equal(await whereTitle(page), 'Running the game');
     assert.ok((await backWord(page)).startsWith('Back to p. '));
-    await fire('nope');
+    assert.equal(await fire('nope'), true, 'an unknown chapter is left to the asker');
     assert.equal(await whereTitle(page), 'Running the game');
   }, { jumps: true });
 });
