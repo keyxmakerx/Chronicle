@@ -40,6 +40,7 @@ function cut(from, to) {
   assert.ok(b > a, `"${to.trim()}" no longer follows "${from.trim()}" in input.css`);
   return inputCSS.slice(a, b);
 }
+const layersCSS = cut(':root {\n  --z-raised:', '}\n') + '}\n';
 const sidebarCSS = cut('  .sidebar-mobile-open {', '  /* Hide text labels, section headers');
 const motionCSS = cut('html[data-cz-reduce] *:not(.czp *),', '\n\n/* ======');
 const comingUpCSS = cut('.cu-card { container:', '/* Header widgets below md:');
@@ -55,7 +56,7 @@ const UTILITIES = `
   .gap-2 { gap: .5rem; } .gap-3 { gap: .75rem; } .gap-4 { gap: 1rem; }
   .px-3 { padding-inline: .75rem; } .px-4 { padding-inline: 1rem; } .py-2 { padding-block: .5rem; } .py-1 { padding-block: .25rem; }
   .py-1\\.5 { padding-block: .375rem; }
-  .fixed { position: fixed; } .inset-y-0 { top: 0; bottom: 0; } .left-0 { left: 0; } .z-40 { z-index: 40; }
+  .fixed { position: fixed; } .inset-y-0 { top: 0; bottom: 0; } .left-0 { left: 0; } .z-\\[var\\(--z-drawer\\)\\] { z-index: var(--z-drawer); }
   .w-64 { width: 16rem; } .w-10 { width: 2.5rem; } .h-10 { height: 2.5rem; }
   .-translate-x-full { transform: translateX(-100%); }
   .grid { display: grid; } .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
@@ -83,7 +84,7 @@ const UTILITIES = `
 function shell(sidebarState = '') {
   return `
   <div class="flex h-screen overflow-hidden" data-nav-drawer-query="${DRAWER_QUERY}">
-    <aside id="sidebar" class="nav-sb fixed inset-y-0 left-0 z-40 w-64 flex flex-col -translate-x-full md:translate-x-0 md:static md:z-auto md:shrink-0 ${sidebarState}">
+    <aside id="sidebar" class="nav-sb fixed inset-y-0 left-0 z-[var(--z-drawer)] w-64 flex flex-col -translate-x-full md:translate-x-0 md:static md:z-auto md:shrink-0 ${sidebarState}">
       <div class="nav-brand">
         <a class="nav-brand-link" href="#home">The Sunken Crown</a>
         <button type="button" class="nav-ibtn nav-x-close" aria-label="Close navigation">x</button>
@@ -127,7 +128,7 @@ function comingUp(width, title) {
 function page(body, attrs = '') {
   return `<!doctype html><html ${attrs}><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>${UTILITIES}</style><style>${sidebarCSS}</style><style>${comingUpCSS}</style><style>${motionCSS}</style><style>${shellCSS}</style></head>
+<style>${layersCSS}</style><style>${UTILITIES}</style><style>${sidebarCSS}</style><style>${comingUpCSS}</style><style>${motionCSS}</style><style>${shellCSS}</style></head>
 <body>${body}</body></html>`;
 }
 
@@ -171,8 +172,8 @@ function shape(p) {
 }
 
 test('the harness classes are the ones the templates use', () => {
-  for (const c of ['data-nav-drawer-query={ navDrawerQuery }', 'id="sidebar"', 'fixed inset-y-0 left-0 z-40 w-64',
-    '-translate-x-full md:translate-x-0', 'md:static md:z-auto md:shrink-0', "'sidebar-mobile-open shadow-2xl'",
+  for (const c of ['data-nav-drawer-query={ navDrawerQuery }', 'id="sidebar"', 'fixed inset-y-0 left-0 z-[var(--z-drawer)] w-64',
+    '-translate-x-full md:translate-x-0', 'md:static md:z-auto md:shrink-0', "'sidebar-mobile-open shadow-elev-dragged'",
     "'sidebar-unpinned'", "'sidebar-collapsed'", "'sidebar-fully-hidden'", 'id="app-main"', 'id="nav-toggle"',
     'x-show="sidebarOpen && navDrawer"']) {
     assert.ok(appTempl.includes(c), `app.templ no longer has ${c}`);
