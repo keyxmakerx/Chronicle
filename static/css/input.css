@@ -582,6 +582,12 @@
   .dropdown-divider {
     @apply border-t border-edge my-1;
   }
+  /* The bar sits low so full-screen page overlays cover it, which also
+   * leaves it under a page's own raised toolbars. While one of its menus is
+   * open the bar lifts over the page, but never over the open phone sidebar. */
+  #app-topbar:has(.tb-pop:not([hidden], .hidden, [x-cloak], [style*="display: none"]), #ai-bubble:not([hidden])):not(:has(#nav-toggle[aria-expanded="true"])) {
+    z-index: 70;
+  }
   @keyframes dropdown-in {
     from { opacity: 0; transform: translateY(-4px) scale(0.98); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -5318,7 +5324,7 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
 .ai-chip[aria-expanded="true"] { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
 .ai-chip-n {
   position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
-  display: inline-grid; place-items: center; font-size: 0.65rem; font-weight: 700; line-height: 1;
+  display: inline-grid; place-items: center; font-size: 0.65rem; font-weight: 700; line-height: 16px;
   background: var(--color-accent); color: #fff;
 }
 .ai-chip-n[data-tone="bad"] { background: rgb(var(--color-bad-rgb)); }
@@ -7360,7 +7366,7 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
   position: absolute; top: -2px; right: -4px;
   min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
   background: var(--color-accent-fill, var(--color-accent)); color: var(--color-accent-on-fill, #fff);
-  font-size: 10.5px; letter-spacing: 0; display: inline-grid; place-items: center;
+  font-size: 10.5px; line-height: 16px; letter-spacing: 0; display: inline-grid; place-items: center;
 }
 .tt-n[hidden] { display: none; }
 .tt-n.tt-grow { animation: tt-grow var(--dur-large) var(--ease-out); }
