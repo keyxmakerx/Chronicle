@@ -128,7 +128,7 @@ func (h *Handler) boxResponse(c *echo.Context, fill func(*InviteBoxData)) error 
 		fill(&d)
 	}
 	if c.Request().Method != http.MethodGet {
-		d.Sentence = h.manageSentenceSwap(c.Request().Context(), "people")
+		d.Sentence = h.manageSentenceSwap("people")
 	}
 	return middleware.Render(c, http.StatusOK, InviteBox(d))
 }

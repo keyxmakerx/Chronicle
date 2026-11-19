@@ -1214,7 +1214,7 @@ func (h *Handler) memberListView(c *echo.Context, cc *CampaignContext, errMsg st
 		v.Removed, _ = h.service.ListRemovedMembers(ctx, cc.Campaign.ID)
 	}
 	if c.Request().Method != http.MethodGet && middleware.IsHTMX(c) {
-		v.Sentence = h.manageSentenceSwap(ctx, "people")
+		v.Sentence = h.manageSentenceSwap("people")
 	}
 	return v
 }

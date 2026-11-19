@@ -8,6 +8,7 @@ package campaigns
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -106,14 +107,18 @@ func (h *Handler) ManageSentence(ctx context.Context, lineID string) templ.Compo
 	return manageSentence(lineID, line)
 }
 
-// ManageSentenceSwap is the same sentence as an out-of-band swap, for a
-// response that changes what the sentence counts (a removal, an invite).
-func (h *Handler) manageSentenceSwap(ctx context.Context, lineID string) templ.Component {
-	line, ok := h.manageLine(ctx, lineID)
-	if !ok {
-		return nil
-	}
-	return manageSentenceSwap(lineID, line)
+// manageSentenceSwap is the same sentence as an out-of-band swap, for a
+// response that changes what the sentence counts (a removal, an invite). It is
+// worded when the response is drawn, because the campaign and the owner are
+// only in the render context, not the request's.
+func (h *Handler) manageSentenceSwap(lineID string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		line, ok := h.manageLine(ctx, lineID)
+		if !ok {
+			return nil
+		}
+		return manageSentenceSwap(lineID, line).Render(ctx, w)
+	})
 }
 
 func (h *Handler) manageLine(ctx context.Context, lineID string) (DeskLine, bool) {
