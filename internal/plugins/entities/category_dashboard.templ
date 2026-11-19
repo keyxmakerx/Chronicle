@@ -6,6 +6,7 @@
 package entities
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/colour"
 	"fmt"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -308,8 +309,8 @@ templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
 				<div class="flex flex-wrap gap-1">
 					for _, tag := range entity.Tags {
 						<span
-							class="inline-flex items-center px-1.5 py-px rounded-full text-[10px] font-medium"
-							style={ fmt.Sprintf("background-color: %s22; color: %s", tag.Color, tag.Color) }
+							class="chip-ink inline-flex items-center px-1.5 py-px rounded-full text-[10px] font-medium"
+							style={ colour.ChipStyle(tag.Color) }
 						>
 							{ tag.Name }
 						</span>

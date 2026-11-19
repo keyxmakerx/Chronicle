@@ -507,8 +507,8 @@
           entity.tags.forEach(function (tag) {
             var chip = document.createElement('span');
             chip.className = 'inline-block px-1 py-0 text-[9px] rounded';
-            chip.style.backgroundColor = tag.color + '22';
-            chip.style.color = tag.color;
+            if (window.ChronicleChip) window.ChronicleChip.paint(chip, tag.color);
+            else chip.style.color = tag.color;
             chip.textContent = tag.name;
             tagWrap.appendChild(chip);
           });
