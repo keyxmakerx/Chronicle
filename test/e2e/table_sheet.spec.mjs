@@ -140,6 +140,38 @@ test('lifted shows the dice and the roll field; full shows the log', async () =>
   assert.notEqual(fullLog, 'none');
 });
 
+test('lifted names Rolls, Tonight and My dice in the top row; a tap raises the sheet to full on that leaf', async () => {
+  const { p, close } = await phone();
+  await p.tap('[data-tt-grab]');
+  await settle(p);
+  const names = await p.$$eval('.tt-ptab', (els) => els.filter((e) => e.offsetParent !== null).map((e) => ({ t: e.textContent, h: Math.round(e.getBoundingClientRect().height) })));
+  const diceTop = await p.$eval('.tt-dbtn', (e) => Math.round(e.getBoundingClientRect().top));
+  // The names are laid over the empty row, so hiding them moves nothing.
+  const without = await p.evaluate(() => { const sw = document.querySelector('.tt-phone-sw'); sw.style.display = 'none'; const t = Math.round(document.querySelector('.tt-dbtn').getBoundingClientRect().top); sw.style.display = ''; return t; });
+  assert.equal(without, diceTop, 'the dice stay where they were');
+  const dheadH = await p.$eval('.tt-dhead', (e) => Math.round(e.getBoundingClientRect().height));
+  const swBottom = await p.$eval('.tt-phone-sw', (e) => Math.round(e.getBoundingClientRect().bottom - e.closest('#tt-sheetbody').getBoundingClientRect().top));
+  assert.ok(swBottom <= dheadH + 1, `names (${swBottom}) fit the empty row (${dheadH})`);
+  await p.tap('[data-tt-grab]');
+  await settle(p);
+  await p.tap('[data-tt-grab]');
+  await settle(p);
+  assert.deepEqual(names.map((n) => n.t), ['Rolls', 'Tonight', 'My dice']);
+  assert.ok(names.every((n) => n.h >= 44), 'each name is 44 tall');
+  await p.keyboard.press('Escape');
+  await settle(p);
+  await p.tap('[data-tt-grab]');
+  await settle(p);
+  const baseline = await p.$eval('.tt-dbtn', (e) => Math.round(e.getBoundingClientRect().top));
+  assert.equal(baseline, diceTop);
+  await p.tap('.tt-ptab >> text=My dice');
+  await settle(p);
+  const after = await p.evaluate(() => ({ h: document.getElementById('tt-drawer').dataset.h, leaf: document.querySelector('.tt-leaf.tt-on-phone').getAttribute('aria-label') }));
+  await close();
+  assert.equal(after.h, 'full');
+  assert.equal(after.leaf, 'My dice');
+});
+
 test('dragging follows the finger and lets go at the nearest height', async () => {
   const { p, close } = await phone();
   await settle(p);
