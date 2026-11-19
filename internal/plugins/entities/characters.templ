@@ -71,7 +71,7 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 					if view.ClaimTypeID != 0 {
 						@castEmptyLink("fa-users", "No player characters yet", "Claimed characters appear here.", "Find a character to claim →", fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, view.ClaimTypeID))
 					} else {
-						@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
+						@castEmpty("fa-users", "No player characters yet", castEmptyPartyHint(view, layouts.GMTerm(ctx)))
 					}
 				} else {
 					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-4">

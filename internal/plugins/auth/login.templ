@@ -49,12 +49,18 @@ func joiningCampaign(redirect string) bool {
 // redirect is the already-sanitized post-login destination (see
 // sanitizeRedirect in handler.go); "" means the dashboard. opts adds the
 // provider button, and folds the password form away when the admin hid it.
-templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string, opts LoginOptions) {
+templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string, opts LoginOptions, inv *Invitation) {
 	@layouts.Base("Login") {
 		@AuthDoors(layouts.DoorSignIn, redirect) {
 			<div>
+				if inv != nil {
+					@InvitationCard(inv)
+				}
 				<div class="doors-head">
-					if joiningCampaign(redirect) {
+					if inv != nil {
+						<h1>Join { inv.CampaignName }</h1>
+						<p>Sign in, or create an account if you&apos;re new to { layouts.SiteName(ctx) }.</p>
+					} else if joiningCampaign(redirect) {
 						<h1>You&apos;re invited</h1>
 						<p>Sign in to join the campaign, or create an account if you&apos;re new to { layouts.SiteName(ctx) }.</p>
 					} else {

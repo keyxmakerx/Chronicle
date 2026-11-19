@@ -28,7 +28,6 @@ type NavRowView struct {
 	Kind     string // "app", "category" or "link"
 	Label    string
 	Icon     string // a Font Awesome name, or "" for none
-	Color    string // a category's colour
 	URL      string // absolute path, or a link's target
 	Caption  string // a few muted words beside the label
 	External bool   // a link leaving Chronicle
@@ -44,7 +43,6 @@ type NavSubRowView struct {
 	Key    string
 	TypeID int
 	Label  string
-	Color  string
 	URL    string
 	Count  int
 }
@@ -107,8 +105,10 @@ func NavCommandsJSON(ctx context.Context) string {
 			}
 		}
 	}
-	add("All Pages", base+"/entities", "fa-layer-group")
-	for _, row := range NavManageRows(ctx) {
+	add("All pages", base+"/entities", "fa-layer-group")
+	// The sidebar has one Manage row, but the palette still reaches each tool
+	// by name, so it lists the pages and not that row.
+	for _, row := range NavManagePages(ctx) {
 		add(row.Label, row.URL, row.Icon)
 	}
 	b, err := json.Marshal(out)
@@ -118,22 +118,47 @@ func NavCommandsJSON(ctx context.Context) string {
 	return string(b)
 }
 
-// NavManageRows are the campaign-management pages, in the order the sidebar
-// lists them. Only the owner manages a campaign, so anyone else (a Scribe, a
-// player, an owner viewing as a player whose role reads Player, a visitor)
-// gets none.
+// NavManageKey is the one sidebar row that leads to the desk. A tool's own
+// key ("manage:trash") is what a pin and the palette use; this row stands for
+// all of them, so it is current on every Manage page.
+const NavManageKey = "manage"
+
+// NavManageRows is the sidebar's Manage entry: one row to the desk, for the
+// owner only. Anyone else (a Scribe, a player, an owner viewing as a player
+// whose role reads Player, a visitor) gets none.
 func NavManageRows(ctx context.Context) []NavRowView {
+	if len(NavManagePages(ctx)) == 0 {
+		return nil
+	}
+	return []NavRowView{{
+		Key: NavManageKey, Kind: "app", Label: "Manage", Icon: "fa-sliders",
+		URL: "/campaigns/" + GetCampaignID(ctx) + "/dashboard",
+	}}
+}
+
+// NavManagePages are the campaign-management tools, in the order the desk
+// lists them. They no longer get a sidebar row each; they feed the command
+// palette, the active-row match and the owner's pins. Same owner-only rule as
+// NavManageRows.
+func NavManagePages(ctx context.Context) []NavRowView {
 	if !InCampaign(ctx) || !IsAuthenticated(ctx) || GetCampaignRole(ctx) < 3 {
 		return nil
 	}
-	base := "/campaigns/" + GetCampaignID(ctx)
+	return ManageToolRows("/campaigns/"+GetCampaignID(ctx),
+		IsAddonEnabled(ctx, "media-gallery"), IsAddonEnabled(ctx, "sync-api"))
+}
+
+// ManageToolRows is the one list of Manage tools, for the desk's own pages
+// and for the campaigns plugin, which checks an owner's pins against it.
+// Media and Foundry exist only while their add-on is on.
+func ManageToolRows(base string, media, foundry bool) []NavRowView {
 	rows := []NavRowView{
 		{Key: "manage:dashboard", Label: "Overview", Icon: "fa-gauge", URL: base + "/dashboard"},
 		{Key: "manage:members", Label: "People", Icon: "fa-users", URL: base + "/members"},
 		// Every change a player made to a page, searchable and undoable.
 		{Key: "manage:player-changes", Label: "What players changed", Icon: "fa-clock-rotate-left", URL: base + "/players/changes"},
 	}
-	if IsAddonEnabled(ctx, "media-gallery") {
+	if media {
 		rows = append(rows, NavRowView{Key: "manage:media", Label: "Media", Icon: "fa-photo-film", URL: base + "/media"})
 	}
 	rows = append(rows,
@@ -143,7 +168,7 @@ func NavManageRows(ctx context.Context) []NavRowView {
 	// The Foundry page (connection, players, module version, install link,
 	// and from there the sync history) only means something once the
 	// campaign syncs with Foundry.
-	if IsAddonEnabled(ctx, "sync-api") {
+	if foundry {
 		rows = append(rows, NavRowView{Key: "manage:foundry", Label: "Foundry", Icon: "fa-dice-d20", URL: base + "/foundry"})
 	}
 	// Your AI: connecting an AI app, what it did, and copy and paste.

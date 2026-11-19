@@ -52,7 +52,7 @@ templ systemPageHeader(cc *campaigns.CampaignContext, entity *Entity, entityType
 					data-more
 					onclick={ headerCall("toggleMore") }
 				><i class="fa-solid fa-ellipsis"></i></button>
-				<div class="ph-more-menu" role="menu" data-more-menu hidden>
+				<div class="ph-more-menu" role="menu" data-more-menu data-kit-open hidden>
 					if canRename {
 						<button type="button" role="menuitem" class="ph-item ph-only-phone" data-edit-name onclick={ headerCall("nameFoldFromMenu") }>
 							<i class="fa-solid fa-pencil"></i> Edit name

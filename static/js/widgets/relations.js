@@ -129,7 +129,7 @@ Chronicle.register('relations', {
           var addBtn = document.createElement('button');
           addBtn.type = 'button';
           addBtn.className = 'rel-add-btn';
-          addBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size:10px"></i> Add Relation';
+          addBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size:10px"></i> Add relation';
           addBtn.addEventListener('click', function () {
             state.isAdding = true;
             state.selectedTarget = null;
@@ -392,7 +392,7 @@ Chronicle.register('relations', {
       var submitBtn = document.createElement('button');
       submitBtn.type = 'button';
       submitBtn.className = 'rel-submit';
-      submitBtn.textContent = 'Add Relation';
+      submitBtn.textContent = 'Add relation';
       submitBtn.disabled = !canSubmit();
       submitBtn.addEventListener('click', function () {
         createRelation();

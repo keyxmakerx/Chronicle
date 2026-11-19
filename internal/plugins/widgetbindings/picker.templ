@@ -44,32 +44,34 @@ templ bindingPicker(d pickerData) {
 				}
 			</div>
 		}
-		// Create-new inline form (name only — refine later in the editor).
-		// On success the handler returns the re-rendered widget block; HTMX swaps
-		// it into the BlockHost wrapper (outerHTML) so the block updates in place.
-		<form
-			class="flex items-center gap-2 mb-3"
-			hx-post={ fmt.Sprintf("/campaigns/%s/bindings/create", d.CampaignID) }
-			hx-target={ "#" + BlockHostID(d.WidgetType, d.HostID) }
-			hx-swap="outerHTML"
-		>
-			<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
-			<input type="hidden" name="host_type" value={ d.HostType }/>
-			<input type="hidden" name="host_id" value={ d.HostID }/>
-			<input type="hidden" name="entity_type_id" value={ d.EntityTypeID }/>
-			<input type="hidden" name="widget_type" value={ d.WidgetType }/>
-			<input
-				type="text"
-				name="name"
-				class="input text-sm flex-1"
-				placeholder={ fmt.Sprintf("New %s name", d.WidgetLabel) }
-				maxlength="200"
-				required
-			/>
-			<button type="submit" class="btn-primary text-xs whitespace-nowrap">
-				<i class="fa-solid fa-plus" aria-hidden="true"></i>Create &amp; use
-			</button>
-		</form>
+		if d.CanCreate {
+			// Create-new inline form (name only — refine later in the editor).
+			// On success the handler returns the re-rendered widget block; HTMX swaps
+			// it into the BlockHost wrapper (outerHTML) so the block updates in place.
+			<form
+				class="flex items-center gap-2 mb-3"
+				hx-post={ fmt.Sprintf("/campaigns/%s/bindings/create", d.CampaignID) }
+				hx-target={ "#" + BlockHostID(d.WidgetType, d.HostID) }
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
+				<input type="hidden" name="host_type" value={ d.HostType }/>
+				<input type="hidden" name="host_id" value={ d.HostID }/>
+				<input type="hidden" name="entity_type_id" value={ d.EntityTypeID }/>
+				<input type="hidden" name="widget_type" value={ d.WidgetType }/>
+				<input
+					type="text"
+					name="name"
+					class="input text-sm flex-1"
+					placeholder={ fmt.Sprintf("New %s name", d.WidgetLabel) }
+					maxlength="200"
+					required
+				/>
+				<button type="submit" class="btn-primary text-xs whitespace-nowrap">
+					<i class="fa-solid fa-plus" aria-hidden="true"></i>Create &amp; use
+				</button>
+			</form>
+		}
 		// Revert to default (only when an explicit binding exists).
 		if d.Source == "own" || d.Source == "entity_type" {
 			<button

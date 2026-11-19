@@ -20,7 +20,7 @@ func TestElvenPresetMoonsImportWithTheirReferenceDate(t *testing.T) {
 		wantOffset float64
 		newMoonDay int
 	}{
-		{"Sehanine", 54.2, 33.2, 21},
+		{"Nythara", 54.2, 33.2, 21},
 		{"Lira", 27.1, 21.1, 6},
 	}
 	for _, tt := range tests {

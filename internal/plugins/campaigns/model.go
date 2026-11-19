@@ -708,6 +708,7 @@ type CampaignSettings struct {
 	AccentAction      string       `json:"accent_action,omitempty"`       // "Action highlight" slot: primary buttons, hover/press states, FABs. Empty = inherit AccentColor.
 	AccentApp         string       `json:"accent_app,omitempty"`          // "App accent" slot: per-app identity — character pages, calendar app, other apps. Empty = inherit AccentSurface1, then AccentColor.
 	DmGrantIDs        []string     `json:"dm_grant_ids,omitempty"`        // User IDs granted dm_only visibility.
+	RemovedMemberIDs  []string     `json:"removed_member_ids,omitempty"`  // People the owner removed; the join link turns them away.
 	BrandName         string       `json:"brand_name,omitempty"`          // Custom sidebar brand name (replaces campaign name).
 	BrandLogo         string       `json:"brand_logo,omitempty"`          // Media path for brand logo image.
 	TopbarStyle       *TopbarStyle   `json:"topbar_style,omitempty"`        // Topbar visual customization.
@@ -909,6 +910,9 @@ const (
 	BlockLastTime        = "last_time"        // The latest session's recap, as its viewer may read it (sessions plugin).
 	BlockGettingStarted  = "getting_started"  // A new player's steps, ticked as they are done (sessions plugin).
 	BlockYourHero        = "your_hero"        // The viewer's own claimed hero, or a way to choose one (entities plugin).
+	BlockTableAgreement  = "table_agreement"  // The owner's table agreement, typed into the block's config.
+	BlockMakingAHero     = "making_a_hero"    // The owner's notes on making a hero, typed into the block's config.
+	BlockRunBy           = "run_by"           // The owner and co-Directors by name (campaigns).
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -951,6 +955,9 @@ var ValidBlockTypes = map[string]bool{
 	BlockHouseRules:      true,
 	BlockLastTime:        true,
 	BlockYourHero:        true,
+	BlockTableAgreement:  true,
+	BlockMakingAHero:     true,
+	BlockRunBy:           true,
 	BlockGettingStarted:  true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
@@ -1029,6 +1036,15 @@ type UpdateCampaignRequest struct {
 	Name        string `json:"name" form:"name"`
 	Description string `json:"description" form:"description"`
 	IsPublic    bool   `json:"is_public" form:"is_public"`
+}
+
+// UpdateCampaignDetailsInput is the owner's save of the two details the desk
+// changes where they stand: the name, and whether people outside the
+// campaign may read it. It is a partial update: a body naming one key leaves
+// the other, and the description it never mentions, exactly as stored.
+type UpdateCampaignDetailsInput struct {
+	Name     patch.Field[string] `json:"name"`
+	IsPublic patch.Field[bool]   `json:"isPublic"`
 }
 
 // AddMemberRequest holds the data for adding a member to a campaign.

@@ -5,6 +5,7 @@
 package campaigns
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -17,7 +18,7 @@ import (
 // the hardcoded default dashboard.
 templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string) {
 	@layouts.App(cc.Campaign.Name) {
-		<div class="max-w-5xl mx-auto">
+		@layouts.AppFrame() {
 			// VTT update-available banner is owner-only markup: its endpoint
 			// sits behind RequireAuth+requireOwner, so emitting it to a
 			// viewer who can't pass that gate 401s/403s the on-load hx-get
@@ -82,13 +83,18 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 
 			<!-- Footer meta -->
 			<div class="flex items-center gap-3 text-xs text-fg-muted mt-8">
-				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
-					<i class="fa-solid fa-user-shield text-[10px]"></i>
-					{ ViewerAccessLabel(cc) }
+				if label := ViewerAccessLabel(cc); label != "" {
+					<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
+						<i class="fa-solid fa-user-shield text-[10px]"></i>
+						{ label }
+					</span>
+				}
+				<span>Created
+				{ " " }
+				@components.Date(cc.Campaign.CreatedAt, timeutil.DateShort)
 				</span>
-				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
 			</div>
-		</div>
+		}
 	}
 }
 
@@ -175,7 +181,7 @@ templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntiti
 			if row.Kind == "tiles" {
 				@dashTileSection(cc, row, ri, repeats, recentEntities)
 			} else {
-				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+				<div class="block-row grid grid-cols-1 md:grid-cols-12 gap-4">
 					for ci, col := range row.Columns {
 						// Blocks stacked in one column keep the rows' own gap.
 						<div class={ dashColSpan(col.Width), "min-w-0 space-y-6" }>
@@ -190,135 +196,6 @@ templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntiti
 			}
 		}
 	</div>
-}
-
-// OwnerDashboardPage renders the owner-only management dashboard.
-// Separate from the campaign page (CampaignShowPage) which all members see.
-templ OwnerDashboardPage(cc *CampaignContext, recentEntities []RecentEntity, needsYou []NeedsYouItem, csrfToken string) {
-	@layouts.App(cc.Campaign.Name + " — Overview") {
-		<div class="max-w-5xl mx-auto">
-			@layouts.ManageHeader("Overview")
-			@NeedsYouCard(needsYou)
-
-			if layout := cc.Campaign.ParseOwnerDashboardLayout(); layout != nil {
-				@customDashboard(cc, layout, recentEntities)
-			} else {
-				@defaultOwnerDashboard(cc, recentEntities, csrfToken)
-			}
-
-			<div class="flex items-center gap-3 text-xs text-fg-muted mt-8">
-				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
-					<i class="fa-solid fa-user-shield text-[10px]"></i>
-					{ ViewerAccessLabel(cc) }
-				</span>
-				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
-			</div>
-		</div>
-	}
-}
-
-// defaultOwnerDashboard renders the default owner management dashboard.
-templ defaultOwnerDashboard(cc *CampaignContext, recentEntities []RecentEntity, csrfToken string) {
-	<!-- Quick management links -->
-	<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="card p-4 hover:shadow-md hover:-translate-y-0.5 block group">
-			<div class="flex items-center gap-3">
-				<div class="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-					<i class="fa-solid fa-gear text-gray-600 dark:text-gray-400 text-sm"></i>
-				</div>
-				<div>
-					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Settings</h3>
-					<p class="text-[11px] text-fg-muted">Campaign config</p>
-				</div>
-			</div>
-		</a>
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) } class="card p-4 hover:shadow-md hover:-translate-y-0.5 block group">
-			<div class="flex items-center gap-3">
-				<div class="w-9 h-9 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
-					<i class="fa-solid fa-palette text-purple-600 dark:text-purple-400 text-sm"></i>
-				</div>
-				<div>
-					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Customize</h3>
-					<p class="text-[11px] text-fg-muted">Layouts & themes</p>
-				</div>
-			</div>
-		</a>
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-4 hover:shadow-md hover:-translate-y-0.5 block group">
-			<div class="flex items-center gap-3">
-				<div class="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-					<i class="fa-solid fa-users text-blue-600 dark:text-blue-400 text-sm"></i>
-				</div>
-				<div>
-					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">People</h3>
-					<p class="text-[11px] text-fg-muted">Roles & access</p>
-				</div>
-			</div>
-		</a>
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)) } class="card p-4 hover:shadow-md hover:-translate-y-0.5 block group">
-			<div class="flex items-center gap-3">
-				<div class="w-9 h-9 rounded-lg bg-green-50 dark:bg-green-900/30 flex items-center justify-center shrink-0">
-					<i class="fa-solid fa-puzzle-piece text-green-600 dark:text-green-400 text-sm"></i>
-				</div>
-				<div>
-					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Game &amp; features</h3>
-					<p class="text-[11px] text-fg-muted">Game system and features</p>
-				</div>
-			</div>
-		</a>
-	</div>
-
-	<!-- Category quick-nav -->
-	if len(layouts.GetEntityTypes(ctx)) > 0 {
-		<div class="mb-8">
-			<div class="flex items-center justify-between mb-3">
-				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">Categories</h2>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="text-xs text-accent hover:underline">Manage</a>
-			</div>
-			<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-				for _, et := range layouts.GetEntityTypes(ctx) {
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
-						class="card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
-					>
-						<div class="flex items-center gap-2.5 mb-1">
-							<span
-								class="w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
-								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-							>
-								if et.Icon != "" {
-									<i class={ "fa-solid " + et.Icon }></i>
-								}
-							</span>
-							<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
-						</div>
-						<div class="pl-[2.375rem] text-xs text-fg-muted">
-							{ pageCountLabel(layouts.GetEntityCount(ctx, et.ID)) }
-						</div>
-					</a>
-				}
-			</div>
-		</div>
-	}
-
-	<!-- Recently updated pages -->
-	if len(recentEntities) > 0 {
-		<div class="mb-8">
-			<div class="flex items-center justify-between mb-3">
-				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">Recently Updated</h2>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
-					class="text-xs text-accent hover:underline"
-				>
-					View all
-				</a>
-			</div>
-			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-				for _, re := range recentEntities {
-					@RecentEntityCard(cc, &re)
-				}
-			</div>
-		</div>
-	}
 }
 
 // RecentEntityCard renders a compact card for a recently updated entity.
@@ -366,7 +243,7 @@ templ RecentEntityCard(cc *CampaignContext, re *RecentEntity) {
 					}
 					{ re.TypeName }
 				</span>
-				<time class="text-[10px] text-fg-secondary" datetime={ re.UpdatedAt.UTC().Format(time.RFC3339) } title={ re.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+				<time class="text-[10px] text-fg-secondary" datetime={ re.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(re.UpdatedAt, timeutil.DateWithTime) } data-date-title>
 					{ timeutil.EditedAgo(re.UpdatedAt, time.Now()) }
 				</time>
 			</div>

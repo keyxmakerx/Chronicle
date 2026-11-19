@@ -301,16 +301,6 @@
 .czs-icons button:hover { background: var(--color-bg-tertiary); }
 .czs-icons button[aria-pressed="true"] { background: var(--czs-accent-soft); color: var(--color-accent); border-color: var(--color-accent); }
 .czs-icons-empty { grid-column: 1 / -1; font-size: 12.5px; color: var(--color-text-secondary); padding: 8px 4px; }
-.czs-palette { width: min(600px, 100%); background: var(--color-bg-secondary); border-radius: 12px; box-shadow: var(--elev-dragged); overflow: hidden; align-self: start; margin-top: 10vh; animation: czs-dlg var(--dur-standard) var(--ease-out); }
-.czs-palette .czs-q { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary); }
-.czs-palette .czs-q input { border: 0; outline: none; background: none; flex: 1; font-size: 15px; min-width: 0; color: var(--color-text-primary); }
-.czs-palette .czs-res { max-height: 50vh; overflow-y: auto; padding: 6px; }
-.czs-palette .czs-res a { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 8px; color: inherit; text-decoration: none; }
-.czs-palette .czs-res a[aria-selected="true"], .czs-palette .czs-res a:hover { background: var(--czs-accent-soft); }
-.czs-palette .czs-res .czs-ic { width: 28px; height: 28px; border-radius: 8px; background: var(--color-bg-tertiary); display: grid; place-items: center; color: var(--color-text-secondary); flex: none; }
-.czs-palette .czs-res .czs-t { color: var(--color-text-primary); font-weight: 500; display: block; }
-.czs-palette .czs-res .czs-p { font-size: 12px; color: var(--color-text-secondary); display: block; }
-.czs-palette .czs-none { padding: 18px; color: var(--color-text-secondary); font-size: 13px; }
 @keyframes czs-fade { from { opacity: 0; } }
 @keyframes czs-dlg { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
 @keyframes czs-grow { from { opacity: 0; transform: scale(0.96); } }

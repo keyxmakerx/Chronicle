@@ -15,6 +15,7 @@ import (
 templ CustomizeShell(d customizeShellData, body templ.Component) {
 	@layouts.App(d.Title) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/customize_shell.css") }/>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/find_palette.css") }/>
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/customize_page_editor.css") }/>
 		<div
 			class="czs"

@@ -158,6 +158,12 @@ func (h *Handler) CampaignShowPresencePillHandler(c *echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 	view := h.resolvePresence(cc.Campaign.ID)
+	// Until a Foundry module has connected, the chip is a setup hint. It
+	// tells a player nothing, so only the DM team is shown it; the empty
+	// fragment removes the placeholder for everyone else.
+	if view.NeverSeen && (!cc.CanAuthorDmOnly() || campaigns.ViewingAsPlayer(c, cc)) {
+		return c.HTML(http.StatusOK, "")
+	}
 	return middleware.Render(c, http.StatusOK, CampaignShowPresencePill(view))
 }
 

@@ -3,6 +3,8 @@
 package packages
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"time"
 )
@@ -26,7 +28,9 @@ templ VersionList(pkg *Package, versions []PackageVersion, ruleText, csrfToken s
 					<div class={ "px-3 py-2.5 text-sm", templ.KV("bg-green-500/5", v.Version == pkg.InstalledVersion) }>
 						<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
 							<span class="font-mono font-bold text-fg">{ v.Version }</span>
-							<span class="text-xs text-fg-muted">{ v.PublishedAt.Format("2 Jan 2006") }</span>
+							<span class="text-xs text-fg-muted">
+							@components.Date(v.PublishedAt, timeutil.DateShort)
+							</span>
 							if v.Prerelease {
 								<span class="badge-primary">pre-release</span>
 							}

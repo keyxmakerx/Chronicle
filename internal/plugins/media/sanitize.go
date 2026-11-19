@@ -22,6 +22,35 @@ import (
 //
 // Returns the sanitized bytes and the effective MIME type (WebP is re-encoded
 // as JPEG since Go lacks a WebP encoder in the standard library).
+// maxImagePixels caps width times height. A decoded picture costs four bytes
+// a pixel however small its file is, so the two side limits alone would let
+// one upload ask for hundreds of megabytes.
+const maxImagePixels = 64_000_000
+
+// imageDecodeSlots bounds how many pictures are decoded at once across the
+// whole server, so many uploads at the same moment queue instead of adding
+// their memory together.
+var imageDecodeSlots = make(chan struct{}, 2)
+
+// acquireImageDecode waits for a decode slot and returns the func that
+// gives it back.
+func acquireImageDecode() func() {
+	imageDecodeSlots <- struct{}{}
+	return func() { <-imageDecodeSlots }
+}
+
+// checkImageSize refuses a picture whose header declares more pixels than
+// the server will decode.
+func checkImageSize(cfg image.Config) error {
+	if cfg.Width > maxImageDimension || cfg.Height > maxImageDimension {
+		return fmt.Errorf("image too large: %dx%d exceeds %d limit", cfg.Width, cfg.Height, maxImageDimension)
+	}
+	if cfg.Width*cfg.Height > maxImagePixels {
+		return fmt.Errorf("image too large: %dx%d is more than %d megapixels", cfg.Width, cfg.Height, maxImagePixels/1_000_000)
+	}
+	return nil
+}
+
 func sanitizeImage(data []byte, mimeType string) ([]byte, string, error) {
 	// Check dimensions BEFORE full decode to prevent decompression bombs.
 	// DecodeConfig reads only the image header, using minimal memory.
@@ -29,9 +58,11 @@ func sanitizeImage(data []byte, mimeType string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("invalid image: %w", err)
 	}
-	if cfg.Width > maxImageDimension || cfg.Height > maxImageDimension {
-		return nil, "", fmt.Errorf("image too large: %dx%d exceeds %d limit", cfg.Width, cfg.Height, maxImageDimension)
+	if err := checkImageSize(cfg); err != nil {
+		return nil, "", err
 	}
+	release := acquireImageDecode()
+	defer release()
 
 	// Full decode strips all metadata -- Go's image.Decode only extracts
 	// pixel data, silently discarding EXIF, IPTC, XMP, and other metadata.

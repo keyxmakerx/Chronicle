@@ -137,6 +137,9 @@ func (f *fakeRepo) KeptPages(context.Context, time.Time) ([]string, error) {
 }
 func (f *fakeRepo) MonthlyBytes(context.Context) (int64, bool, error) { return 0, false, nil }
 func (f *fakeRepo) ForgetPage(context.Context, string, string) error  { return nil }
+func (f *fakeRepo) CountSince(context.Context, string, time.Time) (int, int, error) {
+	return 0, 0, nil
+}
 
 // fakePages is one page with sheet fields, and a Trash.
 type fakePages struct {

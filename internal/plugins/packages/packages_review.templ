@@ -3,6 +3,8 @@
 package packages
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -34,7 +36,9 @@ templ reviewList(pkgs []Package, csrfToken string) {
 									@packageTypeBadge(pkg.Type)
 								</p>
 								<p class="mt-0.5 text-xs text-fg-secondary break-all">
-									{ pkg.RepoURL } · sent { pkg.CreatedAt.Format("2 Jan 2006 15:04") }
+									{ pkg.RepoURL } · sent
+									{ " " }
+									@components.Date(pkg.CreatedAt, timeutil.DateWithTime)
 								</p>
 								<form class="mt-3 flex flex-wrap items-end gap-2">
 									<div class="flex-1 min-w-48">

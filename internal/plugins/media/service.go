@@ -1036,9 +1036,11 @@ func (s *mediaService) generateThumbnail(data []byte, dir, id, ext string, maxDi
 	if err != nil {
 		return "", fmt.Errorf("reading image config: %w", err)
 	}
-	if cfg.Width > maxImageDimension || cfg.Height > maxImageDimension {
-		return "", fmt.Errorf("image too large: %dx%d exceeds %d limit", cfg.Width, cfg.Height, maxImageDimension)
+	if err := checkImageSize(cfg); err != nil {
+		return "", err
 	}
+	release := acquireImageDecode()
+	defer release()
 
 	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {

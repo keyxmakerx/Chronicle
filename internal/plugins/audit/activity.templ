@@ -4,6 +4,7 @@
 package audit
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -109,7 +110,7 @@ func relativeTime(t time.Time) string {
 		}
 		return fmt.Sprintf("%d weeks ago", weeks)
 	default:
-		return t.Format("Jan 2, 2006")
+		return timeutil.FixedDate(t, timeutil.DateShort)
 	}
 }
 

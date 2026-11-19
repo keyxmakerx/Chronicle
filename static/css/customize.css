@@ -196,6 +196,9 @@
   box-shadow:inset 0 0 0 1px var(--sw-ring); transition:transform var(--dur-micro) var(--ease);
 }
 .czp .sw > span .i{ width:13px; height:13px; stroke-width:2.2; }
+.czp .sw-adj{ display:inline-flex; align-items:center; gap:6px; margin-left:6px; font-size:11.5px; color:var(--muted); }
+.czp .sw-adj[hidden], .czp .sw-adj .chip[hidden]{ display:none; }
+.czp .sw-adj .chip{ width:16px; height:16px; border-radius:5px; background:var(--c); box-shadow:inset 0 0 0 1px var(--line); }
 .czp .sw:hover > span{ transform:scale(1.1); }
 .czp .sw:active > span{ transform:scale(.94); }
 .czp .sw > input:checked + span{ box-shadow:0 0 0 2px var(--surface), 0 0 0 4px var(--c); }

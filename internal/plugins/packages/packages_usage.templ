@@ -1,6 +1,11 @@
 // packages_usage.templ is the Campaigns tab and the GET /:id/usage fragment.
 package packages
 
+import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
+)
+
 // UsageTable is the body of GET /admin/packages/:id/usage.
 templ UsageTable(pkg *Package, usage []PackageUsage) {
 	@CampaignsPanel(pkg, usage, true)
@@ -20,7 +25,10 @@ templ CampaignsPanel(pkg *Package, usage []PackageUsage, known bool) {
 				for _, u := range usage {
 					<li class="flex flex-wrap items-center gap-x-3 px-3 py-2 text-sm">
 						<span class="flex-1 min-w-36 font-medium text-fg">{ u.CampaignName }</span>
-						<span class="text-xs text-fg-muted">since { u.EnabledAt.Format("2 Jan 2006") }</span>
+						<span class="text-xs text-fg-muted">since
+						{ " " }
+						@components.Date(u.EnabledAt, timeutil.DateShort)
+						</span>
 					</li>
 				}
 			</ul>

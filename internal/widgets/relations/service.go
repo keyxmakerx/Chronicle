@@ -365,7 +365,7 @@ func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID s
 
 	// Merge @mention edges if requested and provider is available.
 	if filter.IncludeMentions && s.mentionProvider != nil {
-		mentions, err := s.mentionProvider.GetMentionLinksForGraph(ctx, campaignID, includeDmOnly, userID)
+		mentions, mentionNodes, err := s.mentionProvider.GetMentionLinksForGraph(ctx, campaignID, includeDmOnly, userID)
 		if err != nil {
 			return nil, fmt.Errorf("getting mention links: %w", err)
 		}
@@ -396,7 +396,18 @@ func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID s
 			if edgeSet[key] {
 				continue
 			}
+
+			// A page no relation brought in is drawn from what the provider
+			// says of it. A link with an end it does not describe is left
+			// out: a node with no name is a page the viewer cannot open.
+			src, okSrc := mentionEnd(nodeMap, mentionNodes, m.SourceEntityID)
+			dst, okDst := mentionEnd(nodeMap, mentionNodes, m.TargetEntityID)
+			if !okSrc || !okDst {
+				continue
+			}
 			edgeSet[key] = true
+			nodeMap[src.ID] = src
+			nodeMap[dst.ID] = dst
 
 			data.Edges = append(data.Edges, GraphEdge{
 				Source: m.SourceEntityID,
@@ -404,18 +415,6 @@ func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID s
 				Type:   "mentioned in",
 				Kind:   "mention",
 			})
-
-			// Ensure both source and target appear as nodes.
-			// Note: mention targets that don't have full node data yet will be
-			// added by the frontend when it resolves the IDs. For now we track
-			// that they exist in the node map.
-			if _, ok := nodeMap[m.SourceEntityID]; !ok {
-				// Placeholder node — entity exists but wasn't in a relation.
-				nodeMap[m.SourceEntityID] = GraphNode{ID: m.SourceEntityID}
-			}
-			if _, ok := nodeMap[m.TargetEntityID]; !ok {
-				nodeMap[m.TargetEntityID] = GraphNode{ID: m.TargetEntityID}
-			}
 		}
 
 		// Rebuild nodes from map.
@@ -429,9 +428,8 @@ func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID s
 	// edge touching them — so private entities don't leak as named nodes to
 	// anonymous / non-privileged viewers. ListByCampaign applies no
 	// per-viewer filter, so this is the only gate on relation-derived nodes.
-	// (Mention-derived edges are already viewer-filtered on the source side
-	// by the mention provider; this additionally drops any private mention
-	// target that surfaced as an ID-only node.) Owner / site-admin /
+	// (Mention-derived edges are already viewer-filtered at both ends by the
+	// mention provider; this checks them a second time.) Owner / site-admin /
 	// DM-granted viewers (includeDmOnly) keep the full picture.
 	if !includeDmOnly {
 		// Fail closed: without the visibility filter a non-privileged viewer
@@ -512,6 +510,20 @@ func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID s
 	}
 
 	return data, nil
+}
+
+// mentionEnd returns the node for one end of a mention link: the one a
+// relation already brought in, or the provider's. A node needs its page's id
+// and name to count.
+func mentionEnd(have, described map[string]GraphNode, id string) (GraphNode, bool) {
+	if n, ok := have[id]; ok {
+		return n, true
+	}
+	n, ok := described[id]
+	if !ok || n.ID != id || n.Name == "" {
+		return GraphNode{}, false
+	}
+	return n, true
 }
 
 // filterGraphByVisibility mutates data in place, removing every node the viewer

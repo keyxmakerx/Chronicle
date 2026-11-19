@@ -946,3 +946,27 @@ type MentionLink struct {
 	SourceEntityID string `json:"sourceEntityId"`
 	TargetEntityID string `json:"targetEntityId"`
 }
+
+// MentionSource is a page whose text names other pages, with that text.
+type MentionSource struct {
+	ID        string
+	EntryHTML string
+}
+
+// MentionPage is what a graph draws for the page at either end of a mention
+// link: its name, its address and its category's name, icon and colour.
+type MentionPage struct {
+	ID        string
+	Name      string
+	Slug      string
+	TypeName  string
+	TypeIcon  string
+	TypeColor string
+}
+
+// MentionGraph is the @mention links of a campaign that one viewer may know
+// of, with the pages at their ends. Both ends of every link are in Pages.
+type MentionGraph struct {
+	Links []MentionLink
+	Pages map[string]MentionPage
+}

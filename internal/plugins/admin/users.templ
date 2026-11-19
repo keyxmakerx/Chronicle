@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -63,7 +64,7 @@ templ AdminUsersList(data UserListData) {
 									<span class={ "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium " + userRoleChipClass(user) }>{ userRoleLabel(user) }</span>
 								</td>
 								<td class="px-4 py-3 text-sm text-fg-muted">
-									{ user.CreatedAt.Format("Jan 2, 2006") }
+									@components.Date(user.CreatedAt, timeutil.DateShort)
 								</td>
 								<td class="px-4 py-3 text-right space-x-2">
 									for _, a := range userRowActions(user, data.SelfID) {
@@ -81,7 +82,7 @@ templ AdminUsersList(data UserListData) {
 		<div class="card p-0 divide-y divide-edge md:hidden" data-testid="users-cards">
 			if len(users) > 0 {
 				for _, user := range users {
-					@adminCardRow(avatarInitial(user.DisplayName), user.DisplayName, "", userRoleLabel(user), userRoleChipClass(user), user.Email+twoFactorNote(user)+" · joined "+user.CreatedAt.Format("Jan 2, 2006"), csrfToken, userCardActions(user, data.SelfID))
+					@adminCardRow(avatarInitial(user.DisplayName), user.DisplayName, "", userRoleLabel(user), userRoleChipClass(user), user.Email+twoFactorNote(user)+" · joined "+timeutil.FixedDate(user.CreatedAt, timeutil.DateShort), csrfToken, userCardActions(user, data.SelfID))
 				}
 			} else {
 				@adminListEmptyCard(data.View)

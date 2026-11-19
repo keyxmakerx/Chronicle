@@ -279,7 +279,7 @@ func (s *authService) AdminDisableTwoFactor(ctx context.Context, userID string) 
 	if s.mail != nil && s.mail.IsConfigured(ctx) {
 		body := "A site admin switched off two-factor sign-in for your Chronicle account, " +
 			"usually because you asked after losing your phone.\n\n" +
-			"You can sign in with your password alone until you turn it back on under Account Settings.\n\n" +
+			"You can sign in with your password alone until you turn it back on under Account settings.\n\n" +
 			"If you didn't ask for this, change your password and contact your site admin."
 		if err := s.mail.SendMail(ctx, []string{user.Email}, "Two-factor sign-in was switched off — Chronicle", body); err != nil {
 			slog.Warn("sending two-factor switch-off email", slog.String("user_id", userID), slog.Any("error", err))
@@ -518,7 +518,8 @@ func (s *authService) isTrustedDevice(ctx context.Context, userID, token string)
 }
 
 // forgetTrustedDevices makes every device ask for a code again. It runs
-// whenever all sessions end (password change or reset, admin sign-out) and
+// whenever all sessions end (password change or reset, sign out everywhere,
+// admin sign-out) and
 // when two-factor is turned off.
 func (s *authService) forgetTrustedDevices(ctx context.Context, userID string) {
 	if s.redis == nil {

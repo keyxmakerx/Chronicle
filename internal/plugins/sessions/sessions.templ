@@ -154,7 +154,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 						</div>
 					} else {
 						<h2 class="text-sm font-semibold text-fg mb-2">
-							<i class="fa-solid fa-scroll mr-1 text-accent"></i> Recap
+							<i class="fa-solid fa-scroll mr-1"></i> Recap
 						</h2>
 						if session.RecapHTML != nil && *session.RecapHTML != "" {
 							<div class="prose prose-sm text-fg-body">
@@ -170,16 +170,16 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 				<!-- Attendees / RSVP -->
 				<div class="card p-4">
 					<h2 class="text-sm font-semibold text-fg mb-3">
-						<i class="fa-solid fa-users mr-1 text-accent"></i> Attendees
+						<i class="fa-solid fa-users mr-1"></i> Attendees
 					</h2>
 					<div id="attendee-list">
-						@AttendeeList(cc, session.ID, session.Attendees, csrfToken, userID, session.AcceptsRSVP())
+						@AttendeeList(cc, session.ID, session.Attendees, csrfToken, userID, session.AcceptsRSVP() && !recap.Played)
 					</div>
 				</div>
 				<!-- Linked Entities -->
 				<div class="card p-4">
 					<h2 class="text-sm font-semibold text-fg mb-3">
-						<i class="fa-solid fa-link mr-1 text-accent"></i> Linked Pages
+						<i class="fa-solid fa-link mr-1"></i> Linked Pages
 					</h2>
 					if len(session.Entities) == 0 {
 						<p class="text-sm text-fg-muted">No pages linked to this session yet.</p>
@@ -282,7 +282,7 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 					Cancel
 				</button>
 				<button type="button" class="btn-primary text-sm" id="edit-session-save-btn">
-					<i class="fa-solid fa-check"></i> Save Changes
+					<i class="fa-solid fa-check"></i> Save changes
 				</button>
 			</div>
 		</div>
@@ -290,7 +290,8 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 }
 
 // AttendeeList renders the RSVP attendee list with action buttons. open is
-// Session.AcceptsRSVP: a night that is over lists who came and asks nothing.
+// false once the night is completed, cancelled or marked Played for this
+// viewer: a night that is over lists who came and asks nothing.
 templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []Attendee, csrfToken string, currentUserID string, open bool) {
 	if len(attendees) == 0 {
 		<p class="text-sm text-fg-muted">No attendees invited yet.</p>
@@ -342,9 +343,9 @@ templ rsvpControls(cc *campaigns.CampaignContext, sessionID, csrfToken, myStatus
 		<p class="text-sm font-semibold text-fg mb-2">
 			<i class="fa-solid fa-envelope-open-text mr-1 text-accent"></i> RSVP
 		</p>
-		<div class="flex gap-2">
+		<div class="flex flex-wrap gap-2">
 			<button
-				class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+				class={ "rsvp-answer text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
 					templ.KV("bg-ok/10 text-ok font-medium ring-1 ring-ok/40", myStatus == RSVPAccepted),
 					templ.KV("bg-surface-secondary text-fg-secondary hover:bg-ok/10", myStatus != RSVPAccepted) }
 				hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
@@ -356,7 +357,7 @@ templ rsvpControls(cc *campaigns.CampaignContext, sessionID, csrfToken, myStatus
 				<i class="fa-solid fa-check"></i> Going
 			</button>
 			<button
-				class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+				class={ "rsvp-answer text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
 					templ.KV("bg-warn/10 text-warn font-medium ring-1 ring-warn/40", myStatus == RSVPTentative),
 					templ.KV("bg-surface-secondary text-fg-secondary hover:bg-warn/10", myStatus != RSVPTentative) }
 				hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
@@ -368,7 +369,7 @@ templ rsvpControls(cc *campaigns.CampaignContext, sessionID, csrfToken, myStatus
 				<i class="fa-solid fa-question"></i> Maybe
 			</button>
 			<button
-				class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+				class={ "rsvp-answer text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
 					templ.KV("bg-bad/10 text-bad font-medium ring-1 ring-bad/40", myStatus == RSVPDeclined),
 					templ.KV("bg-surface-secondary text-fg-secondary hover:bg-bad/10", myStatus != RSVPDeclined) }
 				hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }

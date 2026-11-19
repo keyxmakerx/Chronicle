@@ -21,9 +21,9 @@ func navStateTestSections() []NavSectionView {
 			{Key: "app:maps", Kind: "app", Label: "Maps", Icon: "fa-map", URL: "/campaigns/c1/maps"},
 		}},
 		{ID: "categories", Kind: "categories", Label: "Categories", Rows: []NavRowView{
-			{Key: "cat:1", Kind: "category", Label: "Locations", Color: "#f87171", URL: "/campaigns/c1/locations", TypeID: 1, Count: 7,
-				Subs: []NavSubRowView{{Key: "cat:11", TypeID: 11, Label: "Cities", Color: "#f87171", URL: "/campaigns/c1/cities", Count: 3}}},
-			{Key: "cat:2", Kind: "category", Label: "Factions", Color: "#fbbf24", URL: "/campaigns/c1/factions", TypeID: 2},
+			{Key: "cat:1", Kind: "category", Label: "Locations", URL: "/campaigns/c1/locations", TypeID: 1, Count: 7,
+				Subs: []NavSubRowView{{Key: "cat:11", TypeID: 11, Label: "Cities", URL: "/campaigns/c1/cities", Count: 3}}},
+			{Key: "cat:2", Kind: "category", Label: "Factions", URL: "/campaigns/c1/factions", TypeID: 2},
 		}},
 		{ID: "sec_prep", Kind: "custom", Label: "Prep", Rows: []NavRowView{
 			{Key: "link:l1", Kind: "link", Label: "Tunnel map", URL: "/campaigns/c1/maps/tunnel"},
@@ -263,6 +263,19 @@ func TestCampaignNavList_FoldedSectionNamesTheCurrentPage(t *testing.T) {
 	}
 }
 
+// The Manage row is current on every Manage page, not only the desk.
+func TestNavIsCurrent_ManageRowCoversEveryTool(t *testing.T) {
+	for _, path := range []string{"/campaigns/c1/dashboard", "/campaigns/c1/members", "/campaigns/c1/settings/general", "/campaigns/c1/trash"} {
+		ctx := navStateCase{role: 3, path: path}.ctx()
+		if !NavIsCurrent(ctx, NavManageKey) {
+			t.Errorf("%s: the Manage row is not current", path)
+		}
+	}
+	if NavIsCurrent(navStateCase{role: 3, path: "/campaigns/c1"}.ctx(), NavManageKey) {
+		t.Errorf("the campaign's front page is not a Manage page")
+	}
+}
+
 func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
 	player := renderNavList(t, navStateCase{role: 1, path: "/campaigns/c1"}.ctx())
 	for _, owners := range []string{"/campaigns/c1/settings", "/campaigns/c1/customize", "/campaigns/c1/dashboard", "data-nav-edit", "Add category"} {
@@ -288,13 +301,19 @@ func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
 
 	ownerCtx := SetNavEdit(navStateCase{role: 3, path: "/campaigns/c1"}.ctx(), &NavEditView{})
 	owner := renderNavList(t, ownerCtx)
-	for _, want := range []string{`data-nav-section="manage"`, `id="nav-b-manage" hidden`, "/campaigns/c1/settings", "data-nav-edit"} {
+	for _, want := range []string{`data-nav-section="manage"`, `data-nav-key="manage"`, `href="/campaigns/c1/dashboard"`, "data-nav-edit"} {
 		if !strings.Contains(owner, want) {
 			t.Errorf("the owner's sidebar is missing %q", want)
 		}
 	}
 	if strings.Contains(owner, `data-nav-key="me"`) {
 		t.Errorf("the owner's sidebar must not have a My Characters row")
+	}
+	// The ten tool rows are gone: one Manage row stands for them.
+	for _, gone := range []string{`data-nav-key="manage:settings"`, `data-nav-key="manage:members"`, `nav-b-manage`} {
+		if strings.Contains(owner, gone) {
+			t.Errorf("the owner's sidebar still carries %q", gone)
+		}
 	}
 
 	var brand bytes.Buffer

@@ -41,7 +41,7 @@ templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, lay
 			if row.Kind == "tiles" {
 				@categoryTileSection(row, cc, et, entities, total)
 			} else {
-				<div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
+				<div class="block-row grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
 					for _, col := range row.Columns {
 						<div class={ catColSpan(col.Width) }>
 							for _, block := range col.Blocks {
@@ -320,7 +320,7 @@ templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
 			}
 		</td>
 		<td class="px-4 py-2.5 hidden lg:table-cell">
-			<time class="text-xs text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ entity.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+			<time class="text-xs text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(entity.UpdatedAt, timeutil.DateWithTime) } data-date-title>
 				{ timeutil.Ago(entity.UpdatedAt, time.Now()) }
 			</time>
 		</td>

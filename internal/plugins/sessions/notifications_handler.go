@@ -1,9 +1,11 @@
 package sessions
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -38,12 +40,14 @@ func (h *Handler) ListNotificationsAPI(c *echo.Context) error {
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
+	settled := h.settledAsks(c.Request().Context(), userID, ns)
 	out := make([]notifDTO, 0, len(ns))
 	for _, n := range ns {
 		d := notifDTO{
-			ID:        n.ID,
-			Type:      n.Type,
-			Read:      n.ReadAt != nil,
+			ID:   n.ID,
+			Type: n.Type,
+			// An ask whose night is over stays listed, drawn as read.
+			Read:      n.ReadAt != nil || settled[n.ID],
 			CreatedAt: n.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 			Message:   notificationMessage(n),
 			Detail:    notificationDetail(n),
@@ -61,8 +65,17 @@ func (h *Handler) ListNotificationsAPI(c *echo.Context) error {
 // GET /notifications/badge
 func (h *Handler) NotificationBadgeAPI(c *echo.Context) error {
 	userID := auth.GetUserID(c)
-	n, err := h.svc.CountMyUnreadNotifications(c.Request().Context(), userID)
+	ctx := c.Request().Context()
+	n, err := h.svc.CountMyUnreadNotifications(ctx, userID)
 	if err != nil || n <= 0 {
+		return c.HTML(http.StatusOK, "")
+	}
+	// An ask about a night that is over is no longer waiting on anyone, so
+	// it leaves the count; a failed read leaves the count as it was.
+	if asks, err := h.svc.ListMyUnreadAsks(ctx, userID); err == nil {
+		n -= len(h.settledAsks(ctx, userID, asks))
+	}
+	if n <= 0 {
 		return c.HTML(http.StatusOK, "")
 	}
 	label := fmt.Sprintf("%d", n)
@@ -72,6 +85,34 @@ func (h *Handler) NotificationBadgeAPI(c *echo.Context) error {
 	return c.HTML(http.StatusOK, fmt.Sprintf(
 		`<span class="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center" data-count="%d">%s</span>`,
 		n, label))
+}
+
+// settledAsks returns the ids, among notes, of the member's unread "are you
+// coming?" asks whose night no longer takes an answer on the member's own
+// day. The bell lists them as read and leaves them out of its count; the
+// rows themselves are not changed, so an ask comes back if its night is
+// moved to a later date.
+func (h *Handler) settledAsks(ctx context.Context, userID string, notes []Notification) map[string]bool {
+	settled := map[string]bool{}
+	var asks []Notification
+	for _, n := range notes {
+		if n.Type == NotifSessionScheduled && n.ReadAt == nil && sessionIDFromLink(n.Link) != "" {
+			asks = append(asks, n)
+		}
+	}
+	if len(asks) == 0 {
+		return settled
+	}
+	open := map[string]bool{}
+	for _, n := range h.svc.OpenAsks(ctx, asks, h.viewerDays(ctx, userID, time.Now())) {
+		open[n.ID] = true
+	}
+	for _, n := range asks {
+		if !open[n.ID] {
+			settled[n.ID] = true
+		}
+	}
+	return settled
 }
 
 // MarkNotificationReadAPI marks one of the current user's notifications read.

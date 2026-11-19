@@ -3,10 +3,10 @@
  * (internal/templates/layouts/site_doors.templ, internal/plugins/auth).
  *
  * One floating surface panel sits over a scene that follows the open tab:
- * castle, dragon, tavern. Each scene is four pre-blurred layers (the blur is
- * baked into the images, so it scales with the picture) that drift sideways at
- * different speeds; only transform and opacity ever animate. Durations come
- * from the motion tokens in input.css. Calm and Off stop every drift (the
+ * castle, dragon, tavern. Each scene is four drawn layers with a light blur
+ * baked in, more the farther back, so it reads as a dream yet stays clear
+ * enough to tell what it is. The layers drift sideways at different speeds;
+ * only transform and opacity ever animate. Durations come from the motion tokens in input.css. Calm and Off stop every drift (the
  * global rules end a keyframe animation at once and, with no fill, it falls
  * back to the resting position below); a still page or hidden tab pauses it.
  */
@@ -73,8 +73,8 @@
 .doors.is-still .doors-layer,
 .doors.is-still .doors-layer img { animation-play-state: paused; }
 
-/* The site admin's own picture: the same blur, scaled to the viewport, and
-   the same drift when the look's Move switch is on. */
+/* The site admin's own picture: softened only a little so it still reads,
+   with the same drift when the look's Move switch is on. */
 .doors-photo { position: absolute; top: 0; bottom: 0; left: -8%; width: 116%; will-change: transform; }
 .doors[data-move] .doors-photo { --drift: 3%; animation: doors-drift calc(var(--dur-ambient, 40s) * 0.75) ease-in-out infinite alternate; }
 .doors-photo img {
@@ -82,8 +82,8 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: blur(1.6vmax) brightness(1.08) saturate(1.1);
-  transform: scale(1.12);
+  filter: blur(3px) brightness(1.08) saturate(1.1);
+  transform: scale(1.04);
 }
 .doors.is-still .doors-photo { animation-play-state: paused; }
 
@@ -109,10 +109,11 @@
 .dark .doors-panel { background: var(--color-card-bg, #1f2937); }
 @media (max-width: 480px) { .doors-panel { padding: 22px 18px 20px; } }
 
-/* Tabs: small capitals, a hairline under, and up the left side of the open one. */
+/* Tabs: small capitals over a hairline, the open one underlined in the
+   accent. Nothing hangs from these tabs, so the open one has no side line. */
 .doors-tabs { display: flex; gap: 4px; margin: 0 0 20px; border-bottom: var(--shape-rule, 1px) solid var(--color-border-light, #e5e7eb); }
 .doors-tab {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
   padding: 8px 6px;
   text-align: center;
@@ -124,17 +125,32 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--color-text-secondary, #6b7280);
-  border-left: var(--shape-rule, 1px) solid transparent;
-  border-bottom: var(--shape-rule, 1px) solid transparent;
+  border-bottom: 2px solid transparent;
   margin-bottom: calc(var(--shape-rule, 1px) * -1);
   transition: color var(--dur-micro, 120ms) var(--ease-standard, ease), border-color var(--dur-micro, 120ms) var(--ease-standard, ease);
 }
 .doors-tab:hover { color: var(--color-text-primary, #111827); }
-.doors-tab[aria-selected="true"] { color: var(--color-accent, #6366f1); border-left-color: var(--color-accent, #6366f1); border-bottom-color: var(--color-accent, #6366f1); }
+.doors-tab[aria-selected="true"] { color: var(--color-accent, #6366f1); border-bottom-color: var(--color-accent, #6366f1); }
 .doors-tab:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; border-radius: var(--shape-r-tag, 4px); }
-@media (max-width: 380px) { .doors-tab { font-size: 11px; letter-spacing: .04em; } }
+@media (max-width: 430px) { .doors-tab { padding: 8px 4px; font-size: 11px; letter-spacing: .04em; } }
 
 /* The open door's heading, set into the panel. */
 .doors-head { text-align: center; margin-bottom: 20px; }
 .doors-head h1 { font-size: 1.5rem; font-weight: 700; color: var(--color-text-primary, #111827); }
 .doors-head p { margin-top: 6px; font-size: 14px; color: var(--color-text-secondary, #6b7280); }
+
+/* The invitation above the form: a banner, who is at the table, the next night. */
+.inv { margin: 0 0 20px; border: var(--shape-edge, 1px) solid var(--color-border-light, #e5e7eb); border-radius: var(--shape-r-card, 10px); overflow: hidden; background: var(--color-card-bg, #fff); }
+.dark .inv { background: var(--color-card-bg, #1f2937); }
+.inv-banner { position: relative; display: flex; align-items: flex-end; min-height: 96px; padding: 14px 16px; background: var(--color-accent, #6366f1); }
+.inv-banner img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.inv-banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgb(0 0 0 / .62), rgb(0 0 0 / .05)); }
+.inv-name { position: relative; z-index: 1; margin: 0; font-size: 1.25rem; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: .06em; text-shadow: 0 1px 2px rgb(0 0 0 / .4); }
+.inv-table { display: flex; align-items: center; gap: 12px; padding: 12px 16px 0; font-size: 14px; color: var(--color-text-secondary, #6b7280); }
+.inv-table p { margin: 0; text-align: left; }
+.inv-faces { display: flex; flex: none; }
+.inv-face { width: 28px; height: 28px; border-radius: 999px; margin-left: -8px; overflow: hidden; display: grid; place-items: center; font-size: 12px; font-weight: 600; background: var(--color-accent-light, #eef2ff); color: var(--color-accent, #6366f1); border: 2px solid var(--color-card-bg, #fff); }
+.inv-face:first-child { margin-left: 0; }
+.inv-face img { width: 100%; height: 100%; object-fit: cover; }
+.inv-next { margin: 0; padding: 10px 16px 14px; font-size: 14px; color: var(--color-text-primary, #111827); text-align: left; }
+.inv-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-secondary, #6b7280); }

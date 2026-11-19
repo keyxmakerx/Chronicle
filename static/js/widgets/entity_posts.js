@@ -148,7 +148,7 @@
         html += '</h3>';
         if (editable) {
           html += '<button class="btn-secondary text-xs" data-action="create-post">';
-          html += '<i class="fa-solid fa-plus"></i>Add Post';
+          html += '<i class="fa-solid fa-plus"></i>Add post';
           html += '</button>';
         }
         html += '</div>';
@@ -159,7 +159,7 @@
           html += '<i class="fa-solid fa-layer-group text-2xl text-fg-muted mb-2"></i>';
           html += '<p class="text-sm text-fg-muted">No posts yet.';
           if (editable) {
-            html += ' Add sub-notes to organize additional content for this page.';
+            html += ' Add a post for anything that needs its own section on this page.';
           }
           html += '</p></div>';
         } else {

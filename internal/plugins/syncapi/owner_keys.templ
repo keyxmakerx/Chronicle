@@ -4,6 +4,8 @@
 package syncapi
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"strconv"
 	"time"
@@ -207,7 +209,9 @@ templ ownerKeyRow(campaignID string, k APIKey, csrfToken string) {
 				</div>
 				if k.LastUsedAt != nil {
 					<div class="text-xs text-fg-muted">
-						Last used: { k.LastUsedAt.Format("Jan 2, 15:04") }
+						Last used:
+						{ " " }
+						@components.Date(*k.LastUsedAt, timeutil.DateWithTime)
 					</div>
 				} else {
 					<div class="text-xs text-fg-muted italic">Never used</div>
@@ -289,7 +293,9 @@ templ keyCreatedContent(campaignID string, result *CreateAPIKeyResult) {
 				<p><strong>Permissions:</strong> { formatPermissions(result.Key.Permissions) }</p>
 				<p><strong>Rate Limit:</strong> { fmt.Sprintf("%d", result.Key.RateLimit) } req/min</p>
 				if result.Key.ExpiresAt != nil {
-					<p><strong>Expires:</strong> { result.Key.ExpiresAt.Format("Jan 2, 2006") }</p>
+					<p><strong>Expires:</strong>
+					@components.Date(*result.Key.ExpiresAt, timeutil.DateShort)
+					</p>
 				}
 			</div>
 

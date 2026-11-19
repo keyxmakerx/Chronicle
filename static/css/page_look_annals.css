@@ -31,6 +31,11 @@
   font-weight: var(--annals-hw, var(--cz-hw, 600));
   letter-spacing: var(--annals-hls, var(--cz-hls, 0));
 }
+/* A button beside a heading keeps its own sentence case. A real button never
+   takes its parent's capitals, so a link drawn as one must not either. */
+[data-cz-page="annals"] :is(.cb-title, .cb-head, .cb-section-h) :is(.btn, .btn-primary, .btn-secondary, .btn-ghost, .btn-danger, .btn-warning, .btn-success) {
+  text-transform: none;
+}
 
 /* The page title, with the accent rule under it. */
 [data-cz-page="annals"] .cb-title {

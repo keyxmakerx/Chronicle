@@ -325,7 +325,7 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 						}).catch(e => { error = e.message; }).finally(() => { saving = false; })
 					`, cc.Campaign.ID, et.ID, claimableBody) }
 				>
-					<span x-show="!saving">Save Changes</span>
+					<span x-show="!saving">Save changes</span>
 					<span x-show="saving">Saving...</span>
 				</button>
 			</div>

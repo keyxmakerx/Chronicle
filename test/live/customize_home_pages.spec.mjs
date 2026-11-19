@@ -21,11 +21,11 @@ test('Home pages: tabs, the real home, and a Players change saved and seen', asy
   await addMember(owner, cid, player, 'player');
   const { page } = owner;
 
-  // 2. Six homes (listed in the Home pages drawer of the rail), with the real home drawn under them.
+  // 2. Five homes (listed in the Home pages drawer of the rail), with the real home drawn under them.
   await owner.go(`/campaigns/${cid}/customize/home`);
   await page.locator('.cpe-sec').first().waitFor();
   const tabs = (await page.locator('.czs-drawer a[href*="/customize/home/"]').allInnerTexts()).map((t) => t.trim());
-  assert.deepEqual(tabs, ['Everyone', 'Players', 'Scribes', 'GM team', 'Guests', 'Overview'], 'the home tabs are not the expected six');
+  assert.deepEqual(tabs, ['Everyone', 'Players', 'Scribes', 'GM team', 'Guests'], 'the home tabs are not the expected five');
   assert.match(await page.locator('.cpe-page').innerText(), /categories/i, 'the real home (its categories) is not drawn');
   assert.equal(await page.locator('.czs-legacy, button:has-text("Save Layout")').count(), 0, 'the old grid with its own Save Layout is back');
   await picture(page, 'customize-home-pages', { check: '#1545', about: 'Home pages, Everyone tab drawn as the real home', mask: ['.cpe-page'] });

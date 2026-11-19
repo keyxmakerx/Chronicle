@@ -64,6 +64,10 @@ type Repository interface {
 	MonthlyBytes(ctx context.Context) (bytes int64, known bool, err error)
 	// ForgetPage stops keeping a removed page (it was brought back).
 	ForgetPage(ctx context.Context, campaignID, entityID string) error
+	// CountSince counts the campaign's live changes made at or after since
+	// that were not undone, and how many different people made them. One
+	// aggregate query, so the owner's desk is not capped by liveScan.
+	CountSince(ctx context.Context, campaignID string, since time.Time) (changes, people int, err error)
 }
 
 // PackKey names one packed month.
@@ -437,6 +441,16 @@ func (r *repository) ForgetPage(ctx context.Context, campaignID, entityID string
 		return fmt.Errorf("forgetting a kept page: %w", err)
 	}
 	return nil
+}
+
+func (r *repository) CountSince(ctx context.Context, campaignID string, since time.Time) (int, int, error) {
+	var changes, people int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*), COUNT(DISTINCT user_id) FROM player_changes
+		WHERE campaign_id = ? AND created_at >= ? AND undone_at IS NULL`, campaignID, since.UTC()).Scan(&changes, &people)
+	if err != nil {
+		return 0, 0, fmt.Errorf("counting player changes: %w", err)
+	}
+	return changes, people, nil
 }
 
 // packRatio is roughly how much gzip shrinks a month of changes, used only

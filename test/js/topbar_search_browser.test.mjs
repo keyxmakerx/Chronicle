@@ -1,7 +1,9 @@
 // topbar_search_browser.test.mjs — quick search (Ctrl+K in a campaign) lists
-// recent pages before typing, offers to create a page when nothing matches
-// (only for those who may create pages), and lists matching palette commands
-// under the pages it finds.
+// recent pages before typing, offers to create a page when no page carries the
+// words in its name (only for those who may create pages), and lists the
+// viewer's matching notes and matching palette commands under the pages it
+// finds. Ctrl+K opens this search, the same one the header button opens.
+// Every row is a name and then its kind in words, with nothing drawn in front.
 //
 // Runs static/js/topbar_search.js in a real Chromium against a stubbed search
 // endpoint. Needs playwright-core and a Chromium (see _browser_env.mjs).
@@ -15,6 +17,7 @@ import { pw, chromePath, skip } from './_browser_env.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SEARCH_JS = readFileSync(join(root, 'static/js/topbar_search.js'), 'utf8');
+const MODAL_JS = readFileSync(join(root, 'static/js/search_modal.js'), 'utf8');
 
 function body(canCreate) {
   return '<div id="topbar-content">Top</div>' +
@@ -22,7 +25,7 @@ function body(canCreate) {
     '<input id="topbar-search-input"><div id="topbar-search-results" class="hidden"></div></div>';
 }
 
-async function open(t, { canCreate = true, hits = [] } = {}) {
+async function open(t, { canCreate = true, hits = [], notes = [], viaKey = false } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage();
@@ -31,24 +34,28 @@ async function open(t, { canCreate = true, hits = [] } = {}) {
   t.after(() => assert.deepEqual(errors, []));
   await p.route('**/*', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body>' + body(canCreate) + '</body></html>' }));
   await p.goto('http://chronicle.test/campaigns/c1/entities');
-  await p.evaluate((hits) => {
+  await p.evaluate(({ hits, notes }) => {
     localStorage.setItem('chronicle-recent-c1', JSON.stringify([
       { id: 'e2', name: 'Mira Vant', type: 'npc', ts: 2 }, { id: 'e1', name: 'Port Rell', type: 'place', ts: 1 }]));
     window.ran = [];
     window.Chronicle = {
       escapeHtml: (s) => String(s).replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';'),
       escapeAttr: (s) => String(s).replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';'),
-      apiFetch: () => Promise.resolve({ json: () => Promise.resolve({ results: hits }) }),
+      apiFetch: (url) => Promise.resolve({ json: () => Promise.resolve(/\/notes$/.test(url) ? notes : { results: hits }) }),
       paletteCommands: () => [
         { id: 'search', label: 'Search Pages', icon: 'fa-search' },
-        { id: 'new-page', label: 'New Page', icon: 'fa-plus', href: '/campaigns/c1/entities/new' },
+        { id: 'new-page', label: 'New page', icon: 'fa-plus', href: '/campaigns/c1/entities/new' },
         { label: 'Toggle Theme', icon: 'fa-circle-half-stroke', action: () => window.ran.push('theme') },
       ],
     };
-  }, hits);
+  }, { hits, notes });
+  // The page loads the modal first and the top bar's search after it, as
+  // base.templ does; the modal owns the Ctrl+K key.
+  await p.addScriptTag({ content: MODAL_JS });
   await p.addScriptTag({ content: SEARCH_JS });
   await p.evaluate(() => document.dispatchEvent(new Event('DOMContentLoaded')));
-  await p.evaluate(() => Chronicle.openSearch());
+  if (viaKey) await p.keyboard.press('Control+k');
+  else await p.evaluate(() => Chronicle.openSearch());
   return p;
 }
 const rows = (p) => p.$$eval('#topbar-search-results a', (as) => as.map((a) => ({ text: a.textContent.trim(), href: a.getAttribute('href') })));
@@ -71,11 +78,11 @@ test('no match offers to create the page, with its name filled in', { skip }, as
   assert.ok(r.some((x) => x.href === '/campaigns/c1/entities/new?name=Ferryman' && /Create a page named/.test(x.text)), JSON.stringify(r));
 });
 
-test('a viewer who may not create pages gets neither the create row nor New Page', { skip }, async (t) => {
+test('a viewer who may not create pages gets neither the create row nor New page', { skip }, async (t) => {
   const p = await open(t, { canCreate: false });
   await type(p, 'new');
   const r = await rows(p);
-  assert.ok(!r.some((x) => /Create a page named|New Page/.test(x.text)), JSON.stringify(r));
+  assert.ok(!r.some((x) => /Create a page named|New page/.test(x.text)), JSON.stringify(r));
 });
 
 test('matching commands follow the pages, and Enter runs one', { skip }, async (t) => {
@@ -88,4 +95,83 @@ test('matching commands follow the pages, and Enter runs one', { skip }, async (
   await p.keyboard.press('ArrowDown');
   await p.keyboard.press('Enter');
   assert.deepEqual(await p.evaluate(() => window.ran), ['theme']);
+});
+
+test('Ctrl+K opens the top bar search, not the old modal, and closes it again', { skip }, async (t) => {
+  const p = await open(t, { viaKey: true });
+  const state = () => p.evaluate(() => ({
+    bar: !document.getElementById('topbar-search').classList.contains('hidden'),
+    focused: document.activeElement && document.activeElement.id,
+    modal: !!document.querySelector('.fixed.inset-0'),
+  }));
+  await p.waitForFunction(() => document.activeElement && document.activeElement.id === 'topbar-search-input');
+  assert.deepEqual(await state(), { bar: true, focused: 'topbar-search-input', modal: false });
+  assert.match(await p.textContent('#topbar-search-results'), /^Recent/, 'the shortcut lands on the search with recent pages');
+  await p.keyboard.press('Control+k');
+  assert.equal((await state()).bar, false, 'the same key closes it');
+  assert.equal((await state()).modal, false);
+});
+
+test('a page that only mentions the words does not hide the offer to create one', { skip }, async (t) => {
+  const p = await open(t, { hits: [{ id: 'e3', name: 'Saltmere', type_name: 'Place', url: '/campaigns/c1/entities/e3' }] });
+  await type(p, 'ferryman');
+  const r = await rows(p);
+  assert.equal(r[0].text.startsWith('Saltmere'), true, 'the mention is still listed, and first');
+  assert.ok(r.some((x) => x.href === '/campaigns/c1/entities/new?name=ferryman'), JSON.stringify(r));
+});
+
+test('something that is not a page, named like the query, does not hide the offer either', { skip }, async (t) => {
+  const p = await open(t, { hits: [{ name: 'Ferryman Row', type_name: 'Map', url: '/campaigns/c1/maps/m1' }] });
+  await type(p, 'ferryman');
+  assert.ok((await rows(p)).some((x) => /Create a page named/.test(x.text)));
+});
+
+test('the viewer\'s notes with a matching title follow the pages and open in the Journal', { skip }, async (t) => {
+  const p = await open(t, {
+    hits: [{ id: 'e9', name: 'Tide tables', type_name: 'Item', url: '/campaigns/c1/entities/e9' }],
+    notes: [
+      { id: 'n1', title: 'Tide notes for session 3' },
+      { id: 'n2', title: 'Tide folder', isFolder: true },
+      { id: 'n3', title: 'Old tide plan', archived: true },
+      { id: 'n4', title: 'Shopping list' },
+      { id: 'n5', title: 'Tide jot', entityId: 'e9' },
+    ],
+  });
+  await type(p, 'tide');
+  const r = await rows(p);
+  assert.deepEqual(r.map((x) => x.text.replace(/\s+/g, ' ')), ['Tide tablesItem', 'Tide notes for session 3Note', 'Tide jotNote', 'View all results']);
+  assert.equal(r[1].href, '/campaigns/c1/journal/n1');
+  await p.evaluate(() => { window.opened = []; window.addEventListener('chronicle:open-note', (e) => window.opened.push(e.detail.noteId)); });
+  await p.click('#topbar-search-results a:nth-of-type(3)');
+  assert.deepEqual(await p.evaluate(() => window.opened), ['n5'], 'a jot opens on its page\'s notes panel');
+});
+
+test('every row is a name, then its kind in words, with nothing drawn in front', { skip }, async (t) => {
+  const p = await open(t, {
+    hits: [{ id: 'e9', name: 'Theme park', type_name: 'Place', type_icon: 'fa-map-pin', type_color: '#ef4444', url: '/campaigns/c1/entities/e9' }],
+    notes: [{ id: 'n1', title: 'Theme song' }],
+  });
+  const drawn = () => p.$$eval('#topbar-search-results a', (as) => as.map((a) => ({
+    parts: [...a.children].map((c) => c.textContent),
+    text: a.textContent.trim(),
+    marks: a.querySelectorAll('i, svg, img, [style]').length,
+  })));
+  const plain = async (label) => {
+    const html = await p.innerHTML('#topbar-search-results');
+    assert.ok(!/fa-|#ef4444|style=/.test(html), label + ': an icon or a colour is drawn: ' + html);
+  };
+
+  assert.deepEqual((await drawn()).map((x) => x.parts), [['Mira Vant', 'Recent'], ['Port Rell', 'Recent']]);
+  await plain('recent pages');
+
+  await type(p, 'theme');
+  assert.deepEqual((await drawn()).map((x) => x.parts.length ? x.parts : x.text), [
+    ['Theme park', 'Place'], ['Theme song', 'Note'], ['Toggle Theme', 'Command'], 'View all results']);
+  await plain('pages, notes and commands');
+
+  await type(p, 'ferryman');
+  assert.deepEqual((await drawn()).map((x) => x.parts.length ? x.parts : x.text), [
+    ['Theme park', 'Place'], ['Create a page named \u201cferryman\u201d', 'New page'], 'View all results']);
+  await plain('the offer to create a page');
+  for (const x of await drawn()) assert.equal(x.marks, 0);
 });

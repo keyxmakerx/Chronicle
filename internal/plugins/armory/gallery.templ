@@ -27,13 +27,15 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 					<span>{ *selected.Description }</span>
 				}
 			}
-		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-end gap-4 mb-6">
+		// Tools sit under the opening on the page's left edge. .input is
+		// full-width, so each control sets sm:w-auto to size to its content.
+		<div class="mb-6">
 			<div class="flex items-center gap-3 flex-wrap">
 				<!-- Instance selector -->
 				if len(instances) > 0 {
 					<select
 						name="instance"
-						class="input py-2 text-sm"
+						class="input py-2 text-sm sm:w-auto"
 						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
@@ -73,13 +75,13 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 				}
 
 				<!-- Search -->
-				<div class="relative">
+				<div class="relative w-full sm:w-auto">
 					<input
 						type="text"
 						name="q"
 						placeholder="Search items..."
 						value={ opts.Search }
-						class="input pl-9 pr-3 py-2 w-56"
+						class="input pl-9 pr-3 py-2 sm:w-56"
 						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
@@ -94,7 +96,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 					<select
 						name="tag"
 						aria-label="Filter by tag"
-						class="input py-2 text-sm"
+						class="input py-2 text-sm sm:w-auto"
 						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
@@ -111,7 +113,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 				if len(itemTypes) > 1 {
 					<select
 						name="type"
-						class="input py-2 text-sm"
+						class="input py-2 text-sm sm:w-auto"
 						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
@@ -130,7 +132,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 				<select
 					name="sort"
 					aria-label="Sort by"
-					class="input py-2 text-sm"
+					class="input py-2 text-sm sm:w-auto"
 					hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 					hx-target="#armory-gallery"
 					hx-swap="innerHTML"

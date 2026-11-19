@@ -4,6 +4,8 @@
 package campaigns
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -91,8 +93,8 @@ func settingsTabIDsJSON(tabs []SettingsTab) string {
 // inside each tab's own Content closure.
 templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken, errMsg, activeTab string, tabs []SettingsTab) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Settings", Line: "settings"}) {
 		<div
-			class="max-w-4xl mx-auto"
 			x-data={ fmt.Sprintf(`{
 				tab: '%s',
 				ids: %s,
@@ -108,7 +110,6 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 				}
 			}`, jsEsc(activeTab), settingsTabIDsJSON(tabs)) }
 		>
-			@layouts.ManageHeader("Settings")
 			if errMsg != "" {
 				<div class="alert-error mb-4" role="alert">{ errMsg }</div>
 			}
@@ -145,6 +146,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 				</div>
 			}
 		</div>
+		}
 	}
 }
 
@@ -190,7 +192,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 			// Campaign details.
 			<div class="card p-4">
-				<h2 class="text-sm font-semibold text-fg mb-3">Campaign Details</h2>
+				<h2 class="text-sm font-semibold text-fg mb-3">Campaign details</h2>
 				<form
 					method="POST"
 					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
@@ -203,7 +205,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 					<input type="hidden" name="_method" value="PUT"/>
 					<input type="hidden" name="csrf_token" value={ csrfToken }/>
 					<div>
-						<label for="name" class="block text-xs font-medium text-fg-body mb-1">Campaign Name</label>
+						<label for="name" class="block text-xs font-medium text-fg-body mb-1">Campaign name</label>
 						<input type="text" id="name" name="name" value={ cc.Campaign.Name } required class="input w-full text-sm" maxlength="200"/>
 					</div>
 					<div>
@@ -219,7 +221,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 						<label for="is_public" class="ml-2 block text-xs text-fg-body">Make this campaign public</label>
 					</div>
 					<div class="flex justify-end">
-						<button type="submit" class="btn-primary text-xs">Save Changes</button>
+						<button type="submit" class="btn-primary text-xs">Save changes</button>
 					</div>
 				</form>
 			</div>
@@ -227,7 +229,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 			// Welcome message: edited only in Customize → Brand, beside the backdrop
 			// it sits on, so Settings shows it and links there.
 			<div class="card p-4">
-				<h2 class="text-sm font-semibold text-fg mb-1">Welcome Message</h2>
+				<h2 class="text-sm font-semibold text-fg mb-1">Welcome message</h2>
 				<p class="text-xs text-fg-secondary mb-3">Banner shown on the campaign home, over your backdrop.</p>
 				if msg := cc.Campaign.ParseSettings().WelcomeMessage; msg != "" {
 					<p class="text-sm text-fg-body whitespace-pre-line mb-3 line-clamp-4">{ msg }</p>
@@ -242,8 +244,8 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 		// Default visibility.
 		<div class="card p-4">
-			<h2 class="text-sm font-semibold text-fg mb-2">Default Visibility</h2>
-			<p class="text-xs text-fg-secondary mb-2">Default visibility for new entities.</p>
+			<h2 class="text-sm font-semibold text-fg mb-2">Default visibility</h2>
+			<p class="text-xs text-fg-secondary mb-2">Default visibility for new pages.</p>
 			<div
 				x-data={ fmt.Sprintf(`{
 					visibility: '%s',
@@ -270,14 +272,14 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 					<input type="radio" name="default_vis" value="" :checked="visibility === ''" @change="save('')" class="accent-accent"/>
 					<div>
 						<span class="text-sm font-medium text-fg">Everyone</span>
-						<p class="text-xs text-fg-secondary">All campaign members can see new entities by default.</p>
+						<p class="text-xs text-fg-secondary">All campaign members can see new pages by default.</p>
 					</div>
 				</label>
 				<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
 					<input type="radio" name="default_vis" value="dm_only" :checked="visibility === 'dm_only' || visibility === 'private'" @change="save('dm_only')" class="accent-accent"/>
 					<div>
 						<span class="text-sm font-medium text-fg">{ layouts.GMTerm(ctx) } Only</span>
-						<p class="text-xs text-fg-secondary">New entities are hidden from players until explicitly revealed.</p>
+						<p class="text-xs text-fg-secondary">New pages are hidden from players until explicitly revealed.</p>
 					</div>
 				</label>
 				// "Private" (creator-only) is not offered as a choice here (ADR-056):
@@ -297,7 +299,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 		// The game system picker is on Game & features; this keeps the
 		// old spot from going silent for owners who look here first.
 		<div class="card p-4">
-			<h2 class="text-sm font-semibold text-fg mb-1">Game System</h2>
+			<h2 class="text-sm font-semibold text-fg mb-1">Game system</h2>
 			<p class="text-xs text-fg-secondary">
 				Choose it on
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">Game &amp; features</a>.
@@ -309,7 +311,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 		// Danger Zone.
 		<div class="card border-red-200 dark:border-red-800" x-data="{ open: false }">
 			<button @click="open = !open" class="w-full p-4 flex items-center justify-between text-left">
-				<h2 class="text-sm font-semibold text-red-600 dark:text-red-400">Danger Zone</h2>
+				<h2 class="text-sm font-semibold text-red-600 dark:text-red-400">Danger zone</h2>
 				<i class="fa-solid fa-chevron-down text-red-400 text-xs transition-transform" :class="open && 'rotate-180'"></i>
 			</button>
 			<div x-show="open" x-transition x-cloak class="px-6 pb-6 space-y-6">
@@ -358,15 +360,15 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 }
 
 // peopleSections renders everything the owner manages about members: the
-// member list (add, role change including Co-DM, remove), the invite link,
-// email invitations and ownership transfer. The People page is its
+// member list (add, role change including Co-DM, remove), the Invite someone box
+// (email, link and code) and ownership transfer. The People page is its
 // only home; Settings links to it instead of repeating it.
 //
 // On a big monitor the people themselves (members, roles, pending
 // invitations) take the wide column and the ways in and out of the
 // campaign (guest codes, invite link, transfer) sit beside them, so the two
 // columns carry similar weight.
-templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
+templ peopleSections(cc *CampaignContext, v MemberListView, transfer *OwnershipTransfer, smtpConfigured bool) {
 	if !smtpConfigured {
 		<div class="alert-warning mb-6">
 			<i class="fa-solid fa-triangle-exclamation mr-2"></i>
@@ -375,80 +377,31 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 	}
 	<div class="manage-split">
 		<div class="manage-split-main space-y-6">
-			@MemberListComponent(cc, members, csrfToken, errMsg)
-
-			// Invitations (HTMX lazy load).
-			<div class="card p-6">
-				<h2 class="text-lg font-semibold text-fg mb-4">
-					<i class="fa-solid fa-envelope mr-2 text-accent"></i> Invitations
-				</h2>
-				<p class="text-sm text-fg-secondary mb-4">Invite players and scribes by email. Invitations expire after 7 days.</p>
-				<div hx-get={ fmt.Sprintf("/campaigns/%s/invites/page", cc.Campaign.ID) } hx-trigger="load" hx-swap="innerHTML">
-					<div class="text-center py-4 text-fg-muted text-sm">Loading invitations...</div>
-				</div>
-			</div>
+			@MemberListComponent(cc, v)
 		</div>
 
 		if cc.MemberRole >= RoleOwner {
-			<div id="guest-codes" hx-get={ fmt.Sprintf("/campaigns/%s/guest-codes", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML"></div>
+			<div id="invite-box" hx-get={ fmt.Sprintf("/campaigns/%s/invite-box", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML"></div>
 		}
-
-		// Shareable invite link.
-		<div class="card p-6" x-data={ fmt.Sprintf(`{
-			code: '%s',
-			url: '%s',
-			generating: false,
-			async generate() {
-				this.generating = true;
-				const res = await Chronicle.apiFetch('/campaigns/%s/join-code', { method: 'POST' });
-				if (res.ok) {
-					const data = await res.json();
-					this.code = data.code;
-					this.url = data.url;
-				}
-				this.generating = false;
-			},
-			async revoke() {
-				if (!confirm('Revoke invite link? Existing links will stop working.')) return;
-				await Chronicle.apiFetch('/campaigns/%s/join-code', { method: 'DELETE' });
-				this.code = '';
-				this.url = '';
-			},
-			copy() {
-				navigator.clipboard.writeText(this.url);
-				Chronicle.notify('Link copied!', 'success');
-			}
-		}`, func() string { if cc.Campaign.JoinCode != nil { return *cc.Campaign.JoinCode } else { return "" } }(), func() string { if cc.Campaign.JoinCode != nil { return fmt.Sprintf("%s/join/%s", "", *cc.Campaign.JoinCode) } else { return "" } }(), cc.Campaign.ID, cc.Campaign.ID) }>
-			<h2 class="text-lg font-semibold text-fg mb-2">Invite Link</h2>
-			<p class="text-sm text-fg-secondary mb-3">Generate a shareable link anyone can use to join your campaign.</p>
-			<div x-show="code" class="flex items-center gap-2">
-				<input type="text" readonly :value="url" class="input flex-1 font-mono text-sm bg-surface-alt"/>
-				<button type="button" @click="copy()" class="btn-secondary text-sm px-3 py-2 shrink-0" title="Copy"><i class="fa-solid fa-copy"></i></button>
-				<button type="button" @click="revoke()" class="btn-secondary text-sm px-3 py-2 shrink-0 text-red-400 hover:text-red-500" title="Revoke"><i class="fa-solid fa-trash"></i></button>
-			</div>
-			<div x-show="!code">
-				<button type="button" @click="generate()" :disabled="generating" class="btn-primary text-sm">
-					<span x-show="!generating"><i class="fa-solid fa-link mr-1.5"></i> Generate Invite Link</span>
-					<span x-show="generating"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Generating...</span>
-				</button>
-			</div>
-		</div>
 
 		// Transfer ownership.
 		<div class="card p-6">
 			<h2 class="text-lg font-semibold text-fg mb-4">Transfer Ownership</h2>
 			if transfer != nil {
 				<div class="alert-warning mb-4">
-					<strong>Transfer pending.</strong> Waiting for the new owner to accept. Expires { transfer.ExpiresAt.Format("Jan 2, 2006 3:04 PM") }.
+					<strong>Transfer pending.</strong> Waiting for the new owner to accept. Expires
+					{ " " }
+					@components.Date(transfer.ExpiresAt, timeutil.DateWithTime)
+					.
 				</div>
 				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID)) } hx-post={ fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID) }>
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
 					<button type="submit" class="btn-secondary text-sm">Cancel Transfer</button>
 				</form>
 			} else {
 				<p class="text-sm text-fg-secondary mb-4">Transfer ownership to another user. They will receive a confirmation email (if SMTP is configured).</p>
 				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/transfer", cc.Campaign.ID)) } hx-post={ fmt.Sprintf("/campaigns/%s/transfer", cc.Campaign.ID) } class="flex items-end space-x-4">
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
 					<div class="flex-1">
 						<label for="transfer-email" class="block text-sm font-medium text-fg-body mb-1">New owner's email</label>
 						<input type="email" id="transfer-email" name="email" required class="input w-full" placeholder="user@example.com"/>

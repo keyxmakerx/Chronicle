@@ -46,7 +46,7 @@ func (s *campaignService) LeaveAllForDeletedAccount(ctx context.Context, userID 
 		return apperror.NewInternal(fmt.Errorf("listing memberships: %w", err))
 	}
 	for _, id := range ids {
-		if err := s.RemoveMember(ctx, id, userID); err != nil {
+		if err := s.removeMember(ctx, id, userID, false); err != nil {
 			return err
 		}
 	}

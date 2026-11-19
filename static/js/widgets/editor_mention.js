@@ -112,6 +112,13 @@
   // players read therefore takes a second pick, after a warning.
   var LINK_WARNING = 'Players read this text and will see this name. Choose it again to link.';
 
+  // The list's tallest and shortest heights, its gap from the cursor's line
+  // and the space it keeps from the window's edges.
+  var MAX_HEIGHT = 240;
+  var MIN_HEIGHT = 96;
+  var GAP = 4;
+  var EDGE = 8;
+
   function MentionPopup(options) {
     this.campaignId = options.campaignId;
     this.onSelect = options.onSelect;
@@ -142,16 +149,41 @@
     this.visible = true;
     this.selectedIndex = 0;
 
-    // Position the popup below the cursor.
-    this.el.style.left = coords.left + 'px';
-    this.el.style.top = coords.bottom + 4 + 'px';
     this.el.style.display = 'block';
+    this.place(coords);
 
     // Add click-outside listener.
     var self = this;
     setTimeout(function () {
       document.addEventListener('mousedown', self._onClickOutside);
     }, 0);
+  };
+
+  /**
+   * Put the list beside the cursor and inside the window: under the cursor
+   * when a full list fits there, above it when it does not, and clear of the
+   * window's sides. On a phone the window is what the keyboard leaves showing.
+   *
+   * @param {Object} [coords] - {left, top, bottom} of the cursor. Left out,
+   *   the list is placed again where it was, after its height changed.
+   */
+  MentionPopup.prototype.place = function (coords) {
+    if (coords) this._at = coords;
+    if (!this.el || !this._at) return;
+    var vv = window.visualViewport;
+    var winTop = vv ? vv.offsetTop : 0;
+    var winLeft = vv ? vv.offsetLeft : 0;
+    var winH = vv ? vv.height : window.innerHeight;
+    var winW = vv ? vv.width : window.innerWidth;
+    var roomBelow = winTop + winH - EDGE - (this._at.bottom + GAP);
+    var roomAbove = this._at.top - GAP - (winTop + EDGE);
+    // The side is chosen for a full list, so it does not change as results
+    // arrive and the list grows.
+    var below = roomBelow >= MAX_HEIGHT || roomBelow >= roomAbove;
+    this.el.style.maxHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, below ? roomBelow : roomAbove)) + 'px';
+    this.el.style.top = (below ? this._at.bottom + GAP : this._at.top - GAP - this.el.offsetHeight) + 'px';
+    var maxLeft = winLeft + winW - this.el.offsetWidth - EDGE;
+    this.el.style.left = Math.max(winLeft + EDGE, Math.min(this._at.left, maxLeft)) + 'px';
   };
 
   /**
@@ -262,8 +294,8 @@
     this.el = document.createElement('div');
     this.el.className = 'mention-popup';
     this.el.style.cssText =
-      'position:fixed;z-index:9999;display:none;min-width:220px;max-width:320px;' +
-      'max-height:240px;overflow-y:auto;border-radius:8px;' +
+      'position:fixed;z-index:9999;display:none;box-sizing:border-box;min-width:220px;max-width:320px;' +
+      'max-height:' + MAX_HEIGHT + 'px;overflow-y:auto;border-radius:8px;' +
       'box-shadow:0 4px 16px rgba(0,0,0,0.12);';
 
     // Apply theme-aware colors.
@@ -375,36 +407,21 @@
         html += this._sceneItemHTML(item, i, isDark);
         continue;
       }
+      // A page not everyone can read says so under its name, and so does the
+      // warning shown before such a page is linked.
       var note = Chronicle.linkRestrictionLabel(item);
-      var sub = Chronicle.escapeHtml(item.type_name || '');
+      var under = '';
       if (item._warned) {
-        sub = '<span style="color:#b45309;opacity:1">' + Chronicle.escapeHtml(LINK_WARNING) + '</span>';
+        under = '<div style="font-size:12px;white-space:normal;color:#b45309">' + Chronicle.escapeHtml(LINK_WARNING) + '</div>';
       } else if (note) {
-        sub += (sub ? ' · ' : '') + '<i class="fa-solid fa-lock" aria-hidden="true" style="font-size:10px"></i> ' + Chronicle.escapeHtml(note);
+        under = '<div style="font-size:12px;opacity:0.6"><i class="fa-solid fa-lock" aria-hidden="true" style="font-size:10px"></i> ' +
+          Chronicle.escapeHtml(note) + '</div>';
       }
-      var selectedClass = i === this.selectedIndex ? ' mention-popup__item--selected' : '';
-      var bgSelected = i === this.selectedIndex
-        ? (isDark ? 'background-color:#374151;' : 'background-color:#f3f4f6;')
-        : '';
-
-      html +=
-        '<div class="mention-popup__item' + selectedClass + '" ' +
-        'data-index="' + i + '" ' +
-        'style="display:flex;align-items:center;padding:8px 12px;cursor:pointer;' +
-        'transition:background-color 0.1s;' + bgSelected + '">' +
-        '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;' +
-        'margin-right:10px;flex-shrink:0;background-color:' +
-        Chronicle.escapeAttr(item.type_color || '#6b7280') + '"></span>' +
-        '<div style="min-width:0;flex:1">' +
-        '<div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
-        Chronicle.escapeHtml(item.name) + '</div>' +
-        '<div style="font-size:12px;' + (item._warned ? 'white-space:normal' : 'opacity:0.6') + '">' +
-        sub + '</div>' +
-        '</div>' +
-        '</div>';
+      html += this._rowHTML(i, isDark, Chronicle.escapeHtml(item.name), Chronicle.escapeHtml(item.type_name || ''), under);
     }
 
     this.el.innerHTML = html;
+    this.place();
 
     // Bind click events on items.
     var self = this;
@@ -426,24 +443,33 @@
   };
 
   /**
-   * One Foundry scene row: its name and folder, or, for a name typed before
-   * the scene exists, the offer to mark it as needed.
+   * One row of the list: the name, then a quiet word at the end saying what
+   * it is, and under them an optional line. Nothing is drawn in front, so
+   * every name starts at the same edge and a long one keeps the most room.
+   */
+  MentionPopup.prototype._rowHTML = function (i, isDark, nameHTML, endHTML, underHTML) {
+    var selected = i === this.selectedIndex;
+    var bgSelected = selected ? (isDark ? 'background-color:#374151;' : 'background-color:#f3f4f6;') : '';
+    return '<div class="mention-popup__item' + (selected ? ' mention-popup__item--selected' : '') + '" ' +
+      'data-index="' + i + '" style="padding:8px 12px;cursor:pointer;transition:background-color 0.1s;' + bgSelected + '">' +
+      '<div style="display:flex;align-items:baseline;gap:12px">' +
+      '<span class="mention-popup__name" style="min-width:0;flex:1;font-weight:500;font-size:14px;' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + nameHTML + '</span>' +
+      (endHTML ? '<span class="mention-popup__kind" style="flex-shrink:0;max-width:45%;font-size:12px;opacity:0.6;' +
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + endHTML + '</span>' : '') +
+      '</div>' + (underHTML || '') + '</div>';
+  };
+
+  /**
+   * One Foundry scene row: its name with its folder at the end, or, for a
+   * name typed before the scene exists, the offer to mark it as needed.
    */
   MentionPopup.prototype._sceneItemHTML = function (item, i, isDark) {
-    var bgSelected = i === this.selectedIndex
-      ? (isDark ? 'background-color:#374151;' : 'background-color:#f3f4f6;')
-      : '';
-    var sub = item.needed ? 'Not in Foundry yet: mark the map as needed' : (item.folder || 'Top level');
-    return '<div class="mention-popup__item' + (i === this.selectedIndex ? ' mention-popup__item--selected' : '') + '" ' +
-      'data-index="' + i + '" style="display:flex;align-items:center;padding:8px 12px;cursor:pointer;' +
-      'transition:background-color 0.1s;' + bgSelected + '">' +
-      '<i class="fa-' + (item.needed ? 'regular' : 'solid') + ' fa-map" aria-hidden="true" ' +
-      'style="width:14px;margin-right:8px;font-size:12px;opacity:.75;flex-shrink:0"></i>' +
-      '<div style="min-width:0;flex:1">' +
-      '<div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
-      (item.needed ? '“' + Chronicle.escapeHtml(item.name) + '”' : Chronicle.escapeHtml(item.name)) + '</div>' +
-      '<div style="font-size:12px;opacity:0.6">' + Chronicle.escapeHtml(sub) + '</div>' +
-      '</div></div>';
+    if (item.needed) {
+      return this._rowHTML(i, isDark, '\u201c' + Chronicle.escapeHtml(item.name) + '\u201d', '',
+        '<div style="font-size:12px;opacity:0.6">Not in Foundry yet: mark the map as needed</div>');
+    }
+    return this._rowHTML(i, isDark, Chronicle.escapeHtml(item.name), Chronicle.escapeHtml(item.folder || 'Top level'), '');
   };
 
   /**
@@ -458,6 +484,7 @@
       '<div style="padding:10px 14px;font-size:13px;opacity:0.5">' +
       Chronicle.escapeHtml(message) +
       '</div>';
+    this.place();
   };
 
   /**
@@ -499,6 +526,32 @@
     var mentionActive = false;
     var mentionStartPos = null;
     var editorInstance = null;
+    // Where the caret sat after the space a pick leaves behind the name,
+    // kept until the next edit.
+    var spaceAfterPick = null;
+
+    // What a sentence never puts a space in front of.
+    var CLOSING_MARKS = ',.;:!?)';
+
+    /**
+     * Takes back the space a pick left after the name when the very next
+     * thing typed there is a closing mark, so "@Name ," reads "@Name,". It
+     * reads what the edit left in the text, never the key, so a phone's
+     * keyboard is served the same. True when it changed the text.
+     *
+     * @param {Object} editor - The TipTap editor instance.
+     * @param {number} at - The caret position just after that space.
+     */
+    function closeUpAfterPick(editor, at) {
+      var state = editor.state;
+      if (editor.view.composing || !state.selection.empty || state.selection.from !== at + 1) return false;
+      if (at < 1 || at + 1 > state.doc.content.size) return false;
+      var typed = state.doc.textBetween(at - 1, at + 1, '\0', '\0');
+      var space = typed.charAt(0);
+      if (typed.length !== 2 || (space !== '\u00a0' && space !== ' ') || CLOSING_MARKS.indexOf(typed.charAt(1)) === -1) return false;
+      editor.chain().deleteRange({ from: at - 1, to: at }).run();
+      return true;
+    }
 
     /**
      * Insert a mention node at the current @ trigger position.
@@ -538,6 +591,7 @@
         .insertContent(mentionHTML + '&nbsp;')
         .run();
 
+      spaceAfterPick = editor.state.selection.from;
       closeMention();
     }
 
@@ -552,6 +606,7 @@
         ? [{ type: 'foundryScene', attrs: { sceneId: item.sceneId || null, name: item.name } }, { type: 'text', text: ' ' }]
         : item.name + ' ';
       editor.chain().focus().deleteRange(range).insertContent(content).run();
+      spaceAfterPick = editor.state.selection.from;
       closeMention();
     }
 
@@ -614,6 +669,13 @@
         if (!editor.isEditable) return;
         editorInstance = editor;
 
+        if (spaceAfterPick !== null) {
+          var afterSpace = spaceAfterPick;
+          spaceAfterPick = null;
+          // Its own edit comes back through here and does the rest.
+          if (closeUpAfterPick(editor, afterSpace)) return;
+        }
+
         var state = editor.state;
         var from = state.selection.from;
 
@@ -663,12 +725,8 @@
             popup.show(coords);
           }
 
-          // Update popup position on each keystroke in case of line wrapping.
-          var updatedCoords = getCursorCoords(editor.view, from);
-          if (popup.el) {
-            popup.el.style.left = updatedCoords.left + 'px';
-            popup.el.style.top = updatedCoords.bottom + 4 + 'px';
-          }
+          // Follow the cursor on each keystroke, in case the line wrapped.
+          popup.place(getCursorCoords(editor.view, from));
 
           popup.updateQuery(query);
         } else if (mentionActive) {
@@ -699,12 +757,35 @@
         }
         mentionActive = false;
         mentionStartPos = null;
+        spaceAfterPick = null;
         editorInstance = null;
       },
     };
   }
 
   // --- Extended Link Mark for Entity Mentions ---
+
+  // The kinds of address a link may carry.
+  var LINK_PROTOCOLS = ['http:', 'https:', 'mailto:', 'tel:', 'sms:', 'ftp:', 'ftps:', 'callto:', 'cid:', 'xmpp:'];
+
+  // What a link's address is to this site: 'inside' for a page of this site,
+  // 'outside' for anywhere else a link may go, 'refused' for an address that
+  // is not a link (one that runs code, or cannot be read). The browser's own
+  // address parser decides, so "//other.example" or a tab tucked into a path
+  // cannot pass for a page of this site.
+  function linkKind(href, base) {
+    if (typeof href !== 'string' || href === '') return 'outside';
+    var url, here;
+    try {
+      url = new URL(href, base);
+      here = new URL(base);
+    } catch (e) {
+      return 'refused';
+    }
+    if (LINK_PROTOCOLS.indexOf(url.protocol) === -1) return 'refused';
+    var web = url.protocol === 'http:' || url.protocol === 'https:';
+    return web && url.origin === here.origin ? 'inside' : 'outside';
+  }
 
   /**
    * Chronicle.MentionLink - Extended TipTap Link mark that preserves
@@ -772,6 +853,21 @@
       }
       for (key in attrs) {
         if (attrs.hasOwnProperty(key)) merged[key] = attrs[key];
+      }
+      var kind = linkKind(merged.href, window.location.href);
+      // Saved text is loaded as JSON, which skips the check made when a link
+      // is typed or pasted, so the drawing repeats it: a refused address is
+      // drawn as a link to nowhere.
+      if (kind === 'refused') merged.href = '';
+      // Inside the site a link opens in place, like every other link in the
+      // app; only another website gets the new tab. The address alone
+      // decides, whatever the saved link says about itself.
+      if (kind === 'inside') {
+        delete merged.target;
+        delete merged.rel;
+      } else {
+        merged.target = '_blank';
+        merged.rel = 'noopener noreferrer nofollow';
       }
       // Entity mention links get distinctive styling + non-editable behavior.
       if (merged['data-mention-id']) {

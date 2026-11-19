@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -1018,10 +1019,16 @@ func (s *packageService) RunAutoUpdates(ctx context.Context) error {
 			slog.Warn("auto-update check failed",
 				slog.String("package", pkg.Slug),
 				slog.Any("error", err),
+				slog.Any("cause", errors.Unwrap(err)),
 			)
-			// Persist so a rate-limited / renamed / private repo shows up
-			// on /admin/packages instead of only in the logs.
-			_ = s.repo.SetLastError(ctx, pkg.ID, fmt.Sprintf("update check failed: %v", err))
+			// GitHub being down is not the package's problem: keep the last
+			// good result and try again next hour (last_checked_at is only
+			// moved on success). Anything else is persisted so a
+			// rate-limited / renamed / private repo shows up on
+			// /admin/packages instead of only in the logs.
+			if !isTemporaryGitHubError(err) {
+				_ = s.repo.SetLastError(ctx, pkg.ID, updateCheckErrPrefix+err.Error())
+			}
 			continue
 		}
 
@@ -1446,12 +1453,22 @@ func (s *packageService) fetchAndInstallLatest(ctx context.Context, pkg *Package
 	}
 }
 
+// updateCheckErrPrefix starts every persisted update-check failure, so a
+// later working check knows which banner is its own to clear.
+const updateCheckErrPrefix = "update check failed: "
+
 // fetchAndImportVersions fetches releases from GitHub and upserts them into
 // the database. Returns all versions sorted by published_at descending.
 func (s *packageService) fetchAndImportVersions(ctx context.Context, pkg *Package) ([]PackageVersion, error) {
 	releases, err := s.github.ListReleases(ctx, pkg.RepoURL)
 	if err != nil {
-		return nil, fmt.Errorf("fetching releases from GitHub: %w", err)
+		return nil, err
+	}
+	// A check that works clears a failed check's banner. Install and
+	// serving failures are left for a working install to clear.
+	if strings.HasPrefix(pkg.LastError, updateCheckErrPrefix) {
+		_ = s.repo.SetLastError(ctx, pkg.ID, "")
+		pkg.LastError = ""
 	}
 
 	var versions []PackageVersion

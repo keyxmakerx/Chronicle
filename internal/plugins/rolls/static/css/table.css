@@ -169,8 +169,10 @@
    header. It is always as tall as the full height and moves by transform
    only: Resting shows the grab line, Lifted about 60% of the screen, Full
    everything under the header. html[data-tt-sheet] is set by table.js from
-   the same query it uses to build the sheet, so the two never disagree. */
-html[data-tt-sheet] { --tt-rest: calc(38px + env(safe-area-inset-bottom, 0px)); }
+   the same query it uses to build the sheet, so the two never disagree.
+   --bottom-bar tells anything else that reaches the bottom edge (the notes
+   sheet) how much of it the resting line takes. */
+html[data-tt-sheet] { --tt-rest: calc(38px + env(safe-area-inset-bottom, 0px)); --bottom-bar: var(--tt-rest); }
 html[data-tt-sheet] .tt-tab { display: none; }
 html[data-tt-sheet] #main-content { padding-bottom: var(--tt-rest); }
 html[data-tt-sheet] .jot-tab { bottom: calc(1.5rem + var(--tt-rest)); }

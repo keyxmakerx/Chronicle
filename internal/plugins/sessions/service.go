@@ -260,6 +260,13 @@ type SessionService interface {
 	// slot was picked, linking to the new session.
 	NotifyProposalConfirmed(ctx context.Context, campaignID, proposalID, sessionID string) error
 	ListMyNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
+	// OpenAsks drops the scheduled-night asks whose night is over (played,
+	// completed, cancelled or removed), for the call-to-action banner and
+	// the bell. today is the reader's own date for a campaign's nights; nil
+	// means the day where the date ends last, so no night is closed early.
+	OpenAsks(ctx context.Context, notes []Notification, today func(campaignID string) string) []Notification
+	// ListMyUnreadAsks returns the member's unread "are you coming?" asks.
+	ListMyUnreadAsks(ctx context.Context, userID string) ([]Notification, error)
 	CountMyUnreadNotifications(ctx context.Context, userID string) (int, error)
 	MarkNotificationRead(ctx context.Context, userID, notificationID string) error
 	MarkAllNotificationsRead(ctx context.Context, userID string) error
@@ -654,6 +661,11 @@ func (s *sessionService) RespondRSVP(ctx context.Context, session *Session, user
 	if !session.AcceptsRSVP() {
 		return apperror.NewConflict("this game night is over, so it no longer takes answers")
 	}
+	// The day is judged where it ends last, so nobody is refused while the
+	// night's own date is still under way for them.
+	if isPlayed(*session, s.today()) {
+		return apperror.NewConflict("this game night has been played, so it no longer takes answers")
+	}
 	var err error
 	if note.Present() || occurrenceDate != nil {
 		err = s.UpdateRSVPDetailed(ctx, session.ID, userID, status, occurrenceDate, note)
@@ -850,7 +862,7 @@ func (s *sessionService) ValidateRSVPToken(ctx context.Context, tokenStr string)
 		return nil, apperror.NewBadRequest("this RSVP link has expired")
 	}
 	// A link mailed before the night finished must not count anyone at it.
-	if sess, err := s.repo.FindByID(ctx, token.SessionID); err == nil && sess != nil && !sess.AcceptsRSVP() {
+	if sess, err := s.repo.FindByID(ctx, token.SessionID); err == nil && sess != nil && !takesAnswers(sess, s.today()) {
 		return nil, apperror.NewBadRequest("this game night is over, so this RSVP link no longer works")
 	}
 	return token, nil

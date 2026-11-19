@@ -5,6 +5,7 @@
 package armory
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -141,7 +142,7 @@ templ requestsPanel(v *StashesPageView, csrfToken string) {
 							</p>
 							<p class="text-xs text-fg-muted">
 								from { l.FromName } &middot;
-								<time datetime={ l.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ l.CreatedAt.Format("2 Jan 2006 15:04") }>{ moveAgo(l.CreatedAt) }</time>
+								<time datetime={ l.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ timeutil.FixedDate(l.CreatedAt, timeutil.DateWithTime) } data-date-title>{ moveAgo(l.CreatedAt) }</time>
 							</p>
 						</div>
 						<div class="flex items-center gap-2 shrink-0">

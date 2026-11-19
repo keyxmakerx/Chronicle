@@ -125,6 +125,13 @@ func hctx(e *echo.Echo, method, target, body string) (*echo.Context, *httptest.R
 	return c, rec
 }
 
+// asOwner swaps the context's Scribe for the campaign owner.
+func asOwner(c *echo.Context) {
+	c.Set("campaign_context", &campaigns.CampaignContext{
+		Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner,
+	})
+}
+
 // --- tests ---
 
 // PickerAPI renders the generic picker with the resolved source, the instance
@@ -265,6 +272,7 @@ func TestCreateBindAPI_CreatesThenBinds(t *testing.T) {
 		"name":        {"Harptos"},
 	}
 	c, rec := hctx(e, http.MethodPost, "/campaigns/camp-1/bindings/create", form.Encode())
+	asOwner(c)
 
 	if err := h.CreateBindAPI(c); err != nil {
 		t.Fatalf("CreateBindAPI: %v", err)
@@ -381,4 +389,73 @@ func isBadRequest(err error) bool {
 		return ae.Code == http.StatusBadRequest
 	}
 	return false
+}
+
+// A Scribe picks an existing instance for a single page. Making a new one,
+// or changing what the campaign home or a whole category shows, is the DM
+// team's.
+func TestMutations_ScribeLimits(t *testing.T) {
+	cases := []struct {
+		name     string
+		do       string
+		hostType string
+		owner    bool
+		want     int
+	}{
+		{"scribe binds on a page", "bind", HostTypeEntity, false, http.StatusOK},
+		{"scribe unbinds on a page", "unbind", HostTypeEntity, false, http.StatusOK},
+		{"scribe creates on a page", "create", HostTypeEntity, false, http.StatusForbidden},
+		{"scribe binds on the campaign home", "bind", HostTypeDashboard, false, http.StatusForbidden},
+		{"scribe unbinds on the campaign home", "unbind", HostTypeDashboard, false, http.StatusForbidden},
+		{"scribe binds on a category", "bind", HostTypeEntityType, false, http.StatusForbidden},
+		{"owner creates on the campaign home", "create", HostTypeDashboard, true, http.StatusOK},
+		{"owner unbinds on a category", "unbind", HostTypeEntityType, true, http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &stubSvc{resolution: Resolution{InstanceID: "inst-A", Source: SourceOwn}}
+			wt := &fakeWT{slug: "fake", newID: "new-1"}
+			h := testHandler(svc, wt)
+			e := echo.New()
+			form := url.Values{
+				"host_type": {tc.hostType}, "host_id": {"host-1"}, "widget_type": {"fake"},
+				"instance_id": {"inst-A"}, "name": {"New"},
+			}
+			var c *echo.Context
+			var err error
+			switch tc.do {
+			case "bind":
+				c, _ = hctx(e, http.MethodPost, "/campaigns/camp-1/bindings", form.Encode())
+			case "create":
+				c, _ = hctx(e, http.MethodPost, "/campaigns/camp-1/bindings/create", form.Encode())
+			default:
+				c, _ = hctx(e, http.MethodDelete, "/campaigns/camp-1/bindings?"+form.Encode(), "")
+			}
+			if tc.owner {
+				asOwner(c)
+			}
+			switch tc.do {
+			case "bind":
+				err = h.BindAPI(c)
+			case "create":
+				err = h.CreateBindAPI(c)
+			default:
+				err = h.UnbindAPI(c)
+			}
+			got := http.StatusOK
+			if err != nil {
+				ae, ok := err.(*apperror.AppError)
+				if !ok {
+					t.Fatalf("unexpected error %v", err)
+				}
+				got = ae.Code
+			}
+			if got != tc.want {
+				t.Fatalf("status = %d (err %v), want %d", got, err, tc.want)
+			}
+			if tc.want != http.StatusOK && len(svc.bound)+len(svc.unbound)+len(wt.created) > 0 {
+				t.Fatalf("refused request still changed things: bound=%v unbound=%v created=%v", svc.bound, svc.unbound, wt.created)
+			}
+		})
+	}
 }

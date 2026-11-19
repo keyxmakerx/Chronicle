@@ -15,13 +15,12 @@ import (
 templ PlayerChangesPage(v View) {
 	@layouts.App("What players changed") {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/player_changes.css") }/>
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "What players changed", Line: "changes"}) {
 		<div
-			class="max-w-6xl mx-auto px-4 py-6"
 			data-widget="player-changes"
 			data-results-url={ fmt.Sprintf("/campaigns/%s/players/changes/results", v.CampaignID) }
 			data-suggestions={ suggestionsJSON(v.Suggestions) }
 		>
-			@layouts.ManageHeader("What players changed")
 			<p class="-mt-4 mb-5 text-sm text-fg-secondary max-w-prose">
 				Every change a player made to a page, by hand or through their AI. Type a name, a field or a kind of change and it becomes a tag.
 			</p>
@@ -48,6 +47,7 @@ templ PlayerChangesPage(v View) {
 				@resultsSkeleton()
 			</div>
 		</div>
+		}
 	}
 }
 

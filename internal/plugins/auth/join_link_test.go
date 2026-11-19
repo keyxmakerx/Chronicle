@@ -41,7 +41,7 @@ func TestAuthLinksCarryRedirect(t *testing.T) {
 func TestLoginPage_FromJoinLink(t *testing.T) {
 	render := func(redirect string) string {
 		var buf bytes.Buffer
-		if err := LoginPage("csrf", "", "", "", redirect, LoginOptions{}).Render(context.Background(), &buf); err != nil {
+		if err := LoginPage("csrf", "", "", "", redirect, LoginOptions{}, nil).Render(context.Background(), &buf); err != nil {
 			t.Fatalf("render: %v", err)
 		}
 		return buf.String()
@@ -63,7 +63,7 @@ func TestLoginPage_FromJoinLink(t *testing.T) {
 
 func TestRegisterPage_FromJoinLink(t *testing.T) {
 	var buf bytes.Buffer
-	if err := RegisterPage("csrf", nil, "", "/join/abc123", false, "").Render(context.Background(), &buf); err != nil {
+	if err := RegisterPage("csrf", nil, "", "/join/abc123", false, "", nil).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()

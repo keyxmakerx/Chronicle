@@ -93,7 +93,18 @@ it and the main action at its end. There is no box and no placeholder icon in
 the empty size; the sentence is the empty state. Each app writes three
 sentences (player, co-DM, owner) that say what will show there and who adds
 it, never offer an action the reader can't take, and name the game master
-with `GMTerm`. Manage pages keep `ManageHeader`.
+with `GMTerm`. Manage pages sit in `layouts.ManageFrame`: one left edge and width, a quiet
+"Manage" above the title leading back to the desk, and a slot for the page's
+actions.
+
+### Where a reading page starts
+
+Every title and first line on a reading page starts on the same left edge as
+the app pages, like the text edge of a book. Reading text stops at its line
+length (under **Look**); lists and tables may run to the frame's width; the
+space to the right holds facts, pictures and the contents rail. Home, a page,
+the lists, Search and Create page still start at different edges:
+TODO(#2253).
 
 ## The material rules
 
@@ -268,7 +279,10 @@ leaving the list for another page.
   it is made and confirms in place.
 - **Find with "/".** A workshop with many settings has Find: "/" outside a
   text field, or the Find button, opens it, and it jumps to the setting by
-  name.
+  name. One field serves them all (`static/js/find_palette.js`, styled by
+  `find_palette.css`); the Customizer and the owner's Manage pages each hand it
+  their own list, and a Manage list is built on the server for the owner and
+  leaves out any tool the campaign switched off.
 - **Single-key shortcuts never take a typed letter.** A shortcut with no
   Ctrl, Cmd or Alt (E, "/", ?) does nothing while focus is in a text field,
   a text area, a select or anything editable (`isContentEditable`), and
@@ -421,6 +435,26 @@ place, and Off shows the end state.
   motion, unsaved changes, a modified click and a browser without view
   transitions keep the ordinary page load. The browser's Back button is the
   ordinary history restore and plays nothing.
+- **The Manage desk: the line carries you.** Pressing the quiet word on a desk
+  line that opens a page (People, Game & features, Media, Settings, Foundry,
+  Your AI, Trash, What players changed) lifts that line's sentence off the
+  desk and carries it to the first line of the page it opens, under the title;
+  the other lines fall away. The "Manage" word above that page's title brings
+  the sentence home, and the desk returns to its place and the line glows.
+  It is a signed move, about a third of a second each way: `--dur-slide` out
+  and `--dur-large` back, with `--ease-slide`. Only transform and opacity
+  animate (a copy of the sentence travels in a fixed layer; the real one
+  appears where it lands), so it is not a view transition, whose group
+  animates width and height. Calm is a plain fade (`--dur-page`) with no
+  travelling copy; Off and a device asking for reduced motion leave the link an
+  ordinary page load, as do a modified click and a page without htmx. A browser
+  without the Web Animations API gets the same swap with no motion. It never traps: a second press while moving is ignored,
+  the browser's Back stops it, a failed request or six seconds with no answer
+  ends it with a normal page load, and every end leaves no inline transform,
+  opacity or `view-transition-name` behind
+  (`static/js/desk_carry.js`, pinned by `test/js/desk_carry_browser.test.mjs`).
+  The same sentence is drawn by the server when the page is opened by address
+  (`ManageFrame`'s `Line`), so both ways in start alike.
 - **The title's rule draws on arrival.** Under Annals the accent rule under
   a page title draws from the left over `--dur-large`, after 120ms, under
   full motion only.
@@ -461,6 +495,14 @@ place, and Off shows the end state.
 - **A move is captured before anything changes.** A view transition takes
   its picture of the old state before the page scrolls, swaps or reflows, so
   nothing jumps somewhere else first.
+- **Nothing flickers on the way.** A press never blanks, flashes or redraws
+  a part before its move starts; what stays on screen stays drawn.
+- **Things that move together move as one.** Several parts moving on one
+  screen share a direction and a timing and read as a single move. A
+  sequence runs one way (the door opens, the lights come on, the shop
+  shows) and never goes back and forth.
+- **A control points the way its move goes.** The calendar's month strip
+  rolls up and down, so its arrows point up and down.
 - **Looping animations rest when the person steps away.** Every loop takes
   its clock from `window.MotionRest` (`static/js/motion_rest.js`) and stops
   requesting frames once `still()`. One-shot transitions don't need it.
@@ -535,9 +577,11 @@ second; the dice settle in under 480ms.
   as its own row under **Style kits** says.
 - **The sign-in page is three doors over a scene.** *Sign in*, *I'm new* and
   *I have a code* are tabs (`/login`, `/register`, `/join` each open their
-  own) on one floating panel with no box around the form. A painted,
-  pre-blurred scene sits behind it and follows the tab (castle, dragon,
-  tavern); its four layers drift on `--dur-ambient` and hold still under Calm
+  own) on one floating panel with no box around the form. Nothing hangs from
+  these tabs, so the open one is underlined in the accent with no side line.
+  A painted scene, softly blurred (more the farther back) but clear enough to
+  tell what it is, sits behind it and follows the tab (castle, dragon, tavern); its
+  four layers drift on `--dur-ambient` and hold still under Calm
   and Off. A site admin's picture or colours replace the scenes, and a saved
   plain look shows the panel on the page colour
   (`internal/templates/layouts/site_doors.templ`, `static/css/auth_doors.css`;
@@ -601,15 +645,70 @@ second; the dice settle in under 480ms.
   page.
 - **The header is slim**: 48px under the quiet look unless the owner picked
   the tall one; every header function stays.
-- Icons are monochrome Font Awesome in the text colour, or the accent beside
-  a heading or in a tool's selected state; colour is never decoration, and
-  an emoji is never an icon.
+- **Icons are few, one colour and unboxed.** Monochrome Font Awesome in the
+  text colour, or the accent in a tool's selected state.
+  Nothing sits behind an icon at rest (no tinted square, circle or border);
+  a frame shows only on hover, as the Icon weight under **The material
+  rules** says. Colour is never decoration, a category's colour never tints
+  its icon, an emoji is never an icon, and an empty page has no placeholder
+  icon.
+- **An icon stays only where it is the control, or a landmark**: where a
+  word won't fit, or where people find a thing by its place. That is the
+  header's tools, the three dots that open a menu, pens and close marks, and
+  the sidebar, which folds down to icons. A button or a menu row that has a
+  word has no icon. A heading is the exception: it may carry an icon in
+  front of its words, because it helps people find the block, in the
+  heading's own colour and never the accent. Marks that carry meaning stay:
+  the Director's amber mark, warnings, the Table's die, the pen beside a
+  part you can edit.
+- **A row that names a page starts with the name.** In search, a picker or a
+  list, nothing sits in front of the name: no category icon, square or dot.
+  The kind follows as a quiet word at the row's end, and a page that has a
+  picture shows a small one there, its own and never a stand-in; a page with
+  none shows none. An owner still picks each category's icon in the
+  Customizer, and it shows in the sidebar.
+- Screens not yet brought to these three icon rules: TODO(#2276).
 - Buttons and pills size to their content; nothing stretches full width after
   a state change.
 - Words on screen are plain and short. No developer terms, IDs, or version
   strings that aren't real. A button says what happens ("Publish") and its
   message confirms it ("Published"); an error says what went wrong and how to
   fix it, without apologising.
+  Headings, buttons, labels and menu rows are in sentence case ("Add a map",
+  "New page"); only names keep their capitals (Chronicle, Foundry, an app's
+  own name, a campaign's category names).
+- **Real-world dates follow the reader.** A real date (a game night, created,
+  joined) is written the way the reader's device writes dates, as times
+  follow their time zone, with the month always a word. A recent change says
+  "Edited 2 days ago". In-world dates are the calendar's own. Screens still
+  format dates on the server in two orders: TODO(#2254).
+
+## Phones and tablets
+
+The same screens, folded to the width; never a second design.
+
+- **Nothing is squeezed.** Where the page area is too narrow for its
+  columns, the blocks fold into one column instead of crushing. Words are
+  never cut off, covered by a control or broken to a word a line to make
+  room, and nothing scrolls sideways down to 320 wide.
+- **Touch gets 44.** On a touch screen the controls people answer with are
+  at least 44 tall (Going, Maybe and Can't included); with a mouse they keep
+  their size.
+- **A touch screen narrower than a tablet on its side starts with the
+  sidebar closed.** The menu button slides it over the page, and it closes
+  again when a row is picked, as on a phone. A computer window of the same
+  width keeps its docked sidebar.
+- **A banner takes one row on a phone**: its sentence wraps beside its
+  button.
+- **A name in a page's written text opens in the same tab**, on every
+  screen, and Back returns. Ctrl-click, a middle click or a long press still
+  open a new tab; links to other websites open in a new one.
+- **A game night's long name wraps** onto a second line in Home's Coming
+  up; it is never cut short.
+- **Side panels become bottom sheets on a phone**: the page peek and the
+  Table (under **What is on a page** and **Opening and closing**).
+- **A workshop previews all three**: Phone, Tablet and Computer (under
+  **Editing**).
 
 ## Customize goes further
 
@@ -643,6 +742,26 @@ their tokens.
   under a faint light from the page's top corner.
 - **Motion speed** retimes the duration tokens; **menu highlight** and
   **hover card** looks are their own choices.
+- **Entrances** (Customize › Look › Pages › How cards open). Material is the
+  one kit where the owner picks how a card opens: Grow, the base (200 ms,
+  each component's own), or Bloom (260 ms, into focus from a 6px blur),
+  Unfold (260 ms, revealed downward from its top edge, contents fading in
+  after 60%) or Drop (set down 22px with weight, 480 ms). The setting shows
+  only while the kit is Material; every other kit keeps its own opening and
+  the Customizer says so in its place, and the pick is kept. They run on the
+  same helper as the kit openings (`static/js/kit_open.js`), on cards and
+  panels marked `data-kit-open="card"` (the place line's picker and the page
+  files' removal ask so far); a menu or picker carries the bare attribute and
+  keeps its quick move. Each closes the same way back, quicker. Calm makes
+  it a short fade and Off shows the card at once.
+- **Moments** are three switches, each off until the owner turns it on
+  (Customize › Look › Motion): Page sheen (an accent sweep across the page
+  header over 900 ms), List cascade (the cards of a list marked
+  `data-cascade` stagger in 60 ms apart with a fade and an 8px rise, the
+  eighth on arriving together) and Save spark (seven accent dots radiate
+  from what was pressed over 700 ms when a request that is not a read
+  succeeds). They reach the page as `data-cz-moments`; Calm and Off turn each
+  one off. Only the entities list is marked `data-cascade` so far.
 - **View as player** (the owner's eye button in the header) hides everything
   marked `data-dm-only`, and inline secrets (`data-secret`), while it is on
   (`html[data-view-as-player]`), in any look, and shows what is marked
@@ -672,7 +791,10 @@ character: https://claude.ai/artifact/YMuDg5AgHP7V6L6G5rSDnc. A screen may
 vary the details as long as it keeps that character. The owner picks the
 kit in Customize › Look › Pages; it puts `data-cz-kit` on the page
 (`static/css/style_kits.css`), and only pages in the Material page look wear
-it. Each kit's opening is still to be built (#1548).
+it. A card takes its kit's opening by carrying `data-kit-open` and showing
+itself with the `hidden` attribute; `static/js/kit_open.js` does the rest. It
+is on the place line's picker, the page header's more menu and the armory's
+item menu; the page layout menu is still on Drape (TODO(#1548)).
 
 | Kit | Top bar | Dividers and rows | Boxes | Pointer | A card opens | Faces |
 |---|---|---|---|---|---|---|
@@ -690,7 +812,8 @@ it. Each kit's opening is still to be built (#1548).
   what you can act on stay the same in every kit.
 - **A kit's opening replaces Grow and Drape** for cards and panels that come
   out of something clicked on a page. The other moves under **Motion** keep
-  their timing in every kit.
+  their timing in every kit. Under Material the owner may pick that opening
+  (Entrances, under **Customize goes further**).
 - **Calm and Off still win.** Under Calm or the device's reduced-motion
   setting, every kit's opening is a short fade in place, and every ambient or
   pointer movement stops at rest: Lumen's sheen, glint and breathing hold
@@ -718,14 +841,16 @@ it. Each kit's opening is still to be built (#1548).
   picked one, and everything the kit derives from its accent follows it:
   Lumen's glow and line, Flowing's wash, Sketchbook's highlighter and tape.
   With no colour picked, each kit keeps the colour it was designed with. The
-  contrast step below is built; the picker's refusals and swatch are
-  TODO(#1549).
+  picker's own swatches leave out amber, orange and rose, and a colour
+  already stored in the amber range keeps working until the owner picks
+  another.
 - **Lifted for dark mode.** The light-mode accent is the colour darkened
   slightly (mixed 88% with black). The dark-mode accent is the colour mixed
   55% with white, so one choice reads on both.
 - **Colours near the Director's amber are refused** (hue 22 to 58 degrees,
   saturation above 45%, lightness above 30%). The colour picker says why in
-  words and keeps the previous colour.
+  words and keeps the previous colour, and the save refuses the same range
+  (`colour.NearAmber`, mirrored in `customize_look.js`).
 
 ### Exceptions
 
@@ -743,8 +868,9 @@ in a template.
   the picked one when this happens.
 - **A colour that would read as a state colour is moved off it.** Beside
   the green, amber and red of state, a picked colour within 12 degrees of
-  red or green has its saturation lowered until the two are told apart.
-  Amber is refused outright, as above.
+  red or green has its colour drained until the two are told apart in both
+  themes (`colour.OffState`; the picker says so when it does). Amber is
+  refused outright, as above.
 - **Expensive effects step down when they cost too much.** Sketchbook's
   hand-drawn edge (the outline drawn twice, a little apart) and Lumen's
   breathing glow are only on boxes, which a page has few of. Rows in every
@@ -828,5 +954,11 @@ look in the same piece of work, or files the issue to do it.
 - A visible change gets a mockup first, on the real page as it is on `main`,
   at shipped quality: never placeholders or a lean out-of-context fragment.
 - Motion decisions are shown as playable clips, never stills.
-- A signed mockup is the contract until a new one is signed. Small
-  differences found while building go back as a "small differences" card.
+- **A mockup is held to the same bar as a screen.** Every option on a card
+  has its own mockup. Its words can be read at the size it is shown; nothing
+  in it is squeezed, cut off or dark on dark; and it holds in light and
+  dark.
+- A signed mockup is the contract until a new one is signed. A change to a
+  look, or to what a feature does, is a new card before it is built. Small
+  differences found while building go ahead, and are listed for the operator
+  once a week, each with a way to reverse it.

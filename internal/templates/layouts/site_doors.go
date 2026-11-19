@@ -26,7 +26,7 @@ var doorLayers = []struct{ N, Name string }{
 	{"1", "back"}, {"2", "mid"}, {"3", "front"}, {"4", "action"},
 }
 
-// doorLayerURL is the static path of one pre-blurred scene layer.
+// doorLayerURL is the static path of one drawn scene layer.
 func doorLayerURL(scene, n, name string) string {
 	return AssetURL(fmt.Sprintf("/static/img/signin/%s-%s-%s.webp", scene, n, name))
 }

@@ -8,6 +8,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -213,5 +214,58 @@ func TestSectionFragment_Access(t *testing.T) {
 				t.Errorf("Location = %q, want %q", loc, tt.wantLoc)
 			}
 		})
+	}
+}
+
+// The tag filter is as wide as its words: the shared input class alone is
+// full width, which put the filter on a line of its own under the search box.
+// The search box gives way instead of holding a fixed width, so the two share
+// a row down to a phone.
+func TestNPCControls_TagFilterSitsBesideTheSearchBox(t *testing.T) {
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}}
+	list := NPCListView{Tags: []NPCTagInfo{{Slug: "villain", Name: "Villain"}}}
+	var b strings.Builder
+	if err := npcControls(cc, list).Render(context.Background(), &b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := b.String()
+	classOf := func(pattern string) []string {
+		t.Helper()
+		m := regexp.MustCompile(pattern).FindStringSubmatch(out)
+		if m == nil {
+			t.Fatalf("no match for %s in %s", pattern, out)
+		}
+		return strings.Fields(m[1])
+	}
+	has := func(classes []string, want string) bool {
+		for _, c := range classes {
+			if c == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	picker := classOf(`<select[^>]*id="npc-tag"[^>]*class="([^"]*)"`)
+	for _, want := range []string{"input", "w-auto", "max-w-full"} {
+		if !has(picker, want) {
+			t.Errorf("the tag filter's classes %v lack %s", picker, want)
+		}
+	}
+	row := classOf(`^<div class="([^"]*)">`)
+	if !has(row, "flex") || !has(row, "flex-wrap") {
+		t.Errorf("the controls are not one wrapping row: %v", row)
+	}
+	box := classOf(`<div class="([^"]*)">\s*<input[^>]*id="npc-q"`)
+	for _, want := range []string{"flex-1", "min-w-40", "max-w-56"} {
+		if !has(box, want) {
+			t.Errorf("the search box's holder %v lacks %s", box, want)
+		}
+	}
+	search := classOf(`<input[^>]*id="npc-q"[^>]*class="([^"]*)"`)
+	for _, c := range search {
+		if strings.HasPrefix(c, "w-") && c != "w-full" {
+			t.Errorf("the search box holds a fixed width (%s), so it cannot give way", c)
+		}
 	}
 }

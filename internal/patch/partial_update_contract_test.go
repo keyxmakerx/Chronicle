@@ -28,10 +28,11 @@ import (
 
 // contractGoverned lists update inputs that must be presence-aware.
 var contractGoverned = map[string]string{
-	"sessions.UpdateSessionInput":       "PUT /campaigns/:id/sessions/:sid — Mark Complete wiped the schedule, summary, in-world date and recurrence",
-	"entities.UpdateEntityInput":        "PUT /entities/:eid and the syncapi twin — every sync push un-parented the entity; {name} alone un-privated it",
-	"timeline.UpdateTimelineEventInput": "PUT .../standalone-events/:eid — a rename cleared eight fields, including per-player visibility rules",
-	"maps.UpdateMarkerInput":            "PUT .../markers/:mkid — an edit or a drag cleared pin_category, visibility_rules and the Foundry pairing key",
+	"sessions.UpdateSessionInput":          "PUT /campaigns/:id/sessions/:sid — Mark Complete wiped the schedule, summary, in-world date and recurrence",
+	"campaigns.UpdateCampaignDetailsInput": "PUT /campaigns/:id/details — the desk's name and public blanks each send one key; a rename must not flip a public campaign private, and a public toggle must not rename or rewrite the description",
+	"entities.UpdateEntityInput":           "PUT /entities/:eid and the syncapi twin — every sync push un-parented the entity; {name} alone un-privated it",
+	"timeline.UpdateTimelineEventInput":    "PUT .../standalone-events/:eid — a rename cleared eight fields, including per-player visibility rules",
+	"maps.UpdateMarkerInput":               "PUT .../markers/:mkid — an edit or a drag cleared pin_category, visibility_rules and the Foundry pairing key",
 	// CALV5 SALVAGE: restored with the domain layer, already presence-aware,
 	// so it stays on the governed list rather than the allowlist.
 	"calendar.UpdateEventInput": "PUT .../calendar/events/:eid — Foundry's five-key push turned off recurrence, all-day and the entity link",

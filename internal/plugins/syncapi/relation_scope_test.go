@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
 
@@ -91,6 +92,7 @@ func newRelationScopeContext(method, campaignID, relationID string, body []byte)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPathValues(echo.PathValues{{Name: "id", Value: campaignID}, {Name: "relationId", Value: relationID}})
+	c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: campaignID, UserID: "u-1"})
 	return c, rec
 }
 
@@ -98,7 +100,7 @@ func newRelationScopeContext(method, campaignID, relationID string, body []byte)
 // caller must not be able to delete campaign-B's relation by guessing its ID.
 func TestDeleteRelation_RejectsForeignCampaign(t *testing.T) {
 	svc := newRelationScopeSvc()
-	h := NewAPIHandler(nil, nil, nil, svc)
+	h := NewAPIHandler(nil, nil, gateCampaignSvc{role: campaigns.RoleOwner}, svc)
 
 	c, _ := newRelationScopeContext(http.MethodDelete, "campaign-A", "12345", nil)
 
@@ -122,7 +124,7 @@ func TestDeleteRelation_RejectsForeignCampaign(t *testing.T) {
 // a campaign-A caller must not overwrite campaign-B relation metadata.
 func TestUpdateRelation_RejectsForeignCampaign(t *testing.T) {
 	svc := newRelationScopeSvc()
-	h := NewAPIHandler(nil, nil, nil, svc)
+	h := NewAPIHandler(nil, nil, gateCampaignSvc{role: campaigns.RoleOwner}, svc)
 
 	c, _ := newRelationScopeContext(http.MethodPut, "campaign-A", "12345", []byte(`{"metadata":{"price":1}}`))
 
@@ -147,7 +149,7 @@ func TestUpdateRelation_RejectsForeignCampaign(t *testing.T) {
 func TestRelationScope_SameCampaignStillWorks(t *testing.T) {
 	t.Run("update", func(t *testing.T) {
 		svc := newRelationScopeSvc()
-		h := NewAPIHandler(nil, nil, nil, svc)
+		h := NewAPIHandler(nil, nil, gateCampaignSvc{role: campaigns.RoleOwner}, svc)
 
 		c, rec := newRelationScopeContext(http.MethodPut, "campaign-A", "777", []byte(`{"metadata":{"price":9}}`))
 		if err := h.UpdateRelation(c); err != nil {
@@ -163,7 +165,7 @@ func TestRelationScope_SameCampaignStillWorks(t *testing.T) {
 
 	t.Run("delete", func(t *testing.T) {
 		svc := newRelationScopeSvc()
-		h := NewAPIHandler(nil, nil, nil, svc)
+		h := NewAPIHandler(nil, nil, gateCampaignSvc{role: campaigns.RoleOwner}, svc)
 
 		c, rec := newRelationScopeContext(http.MethodDelete, "campaign-A", "777", nil)
 		if err := h.DeleteRelation(c); err != nil {
@@ -182,7 +184,7 @@ func TestRelationScope_SameCampaignStillWorks(t *testing.T) {
 // exist at all still 404s rather than surfacing a raw lookup error.
 func TestRelationScope_UnknownRelationIs404(t *testing.T) {
 	svc := newRelationScopeSvc()
-	h := NewAPIHandler(nil, nil, nil, svc)
+	h := NewAPIHandler(nil, nil, gateCampaignSvc{role: campaigns.RoleOwner}, svc)
 
 	c, _ := newRelationScopeContext(http.MethodDelete, "campaign-A", "99999", nil)
 	err := h.DeleteRelation(c)
@@ -210,7 +212,7 @@ func TestUpdateRelation_MissingMetadataKeyKeepsBlob(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := newRelationScopeSvc()
-			h := NewAPIHandler(nil, nil, nil, svc)
+			h := NewAPIHandler(nil, nil, gateCampaignSvc{role: campaigns.RoleOwner}, svc)
 			c, _ := newRelationScopeContext(http.MethodPut, "campaign-A", "777", []byte(tt.body))
 			err := h.UpdateRelation(c)
 			if tt.wantErr {

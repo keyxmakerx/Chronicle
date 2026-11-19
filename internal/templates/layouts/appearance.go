@@ -68,6 +68,12 @@ type AppearanceData struct {
 	// no attribute, and the others set data-cz-kit for style_kits.css.
 	StyleKit string
 
+	// Entrance is how a card opens under the Material kit ("bloom", "unfold"
+	// or "drop"); "" is Grow. It is kept while another kit is on.
+	Entrance string
+	// The Moments, each off until the owner turns it on.
+	MomentSheen, MomentCascade, MomentSpark bool
+
 	// DmScreenKit is the style kit this viewer's DM Screen wears when they
 	// picked their own; "" leaves the screen with the page. It is separate
 	// from StyleKit so one person's pick never restyles the page.
@@ -136,6 +142,21 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 		if _, ok := czKits[a.StyleKit]; ok {
 			attrs["data-cz-kit"] = a.StyleKit
 		}
+	}
+	if _, kit := attrs["data-cz-kit"]; !kit && a.PageLook == "annals" && a.Entrance != "" {
+		attrs["data-cz-entrance"] = a.Entrance
+	}
+	var moments []string
+	for _, m := range []struct {
+		on   bool
+		name string
+	}{{a.MomentSheen, "sheen"}, {a.MomentCascade, "cascade"}, {a.MomentSpark, "spark"}} {
+		if m.on {
+			moments = append(moments, m.name)
+		}
+	}
+	if len(moments) > 0 {
+		attrs["data-cz-moments"] = strings.Join(moments, " ")
 	}
 	if _, ok := czKits[a.DmScreenKit]; ok || a.DmScreenKit == "material" {
 		attrs["data-dms-kit"] = a.DmScreenKit

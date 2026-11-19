@@ -42,9 +42,9 @@
       "startingWeekday": null,
       "ordinal": 4
     },
-    "ithil00000000000": {
-      "name": "Ithil",
-      "abbreviation": "Ith",
+    "ostrel0000000000": {
+      "name": "Ostrel",
+      "abbreviation": "Ost",
       "days": 45,
       "leapDays": null,
       "startingWeekday": null,
@@ -89,10 +89,10 @@
         "abbreviation": "Vae",
         "isRestDay": false
       },
-      "ith2000000000000": {
-        "name": "Ith",
+      "ost2000000000000": {
+        "name": "Ost",
         "ordinal": 3,
-        "abbreviation": "Ith",
+        "abbreviation": "Ost",
         "isRestDay": false
       },
       "rel3000000000000": {
@@ -178,8 +178,8 @@
     }
   },
   "moons": {
-    "sehanine00000000": {
-      "name": "Sehanine",
+    "nythara000000000": {
+      "name": "Nythara",
       "cycleLength": 54.2,
       "referenceDate": { "year": 0, "month": 1, "day": 21 },
       "color": "#d5d0e8"

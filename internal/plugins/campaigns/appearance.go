@@ -45,6 +45,10 @@ type Appearance struct {
 	PageLook        string `json:"page_look,omitempty"`        // How pages draw their blocks (AppearancePageLooks); "standard" is the default.
 	TimelinePopup   string `json:"timeline_popup,omitempty"`   // What opens on a time line's event: "classic" (default) or "corner".
 	StyleKit        string `json:"style_kit,omitempty"`        // The pages' character under the Material page look (AppearanceStyleKits); "material" is the default.
+	Entrance        string `json:"entrance,omitempty"`         // How a card opens under the Material kit (AppearanceEntrances); empty is Grow.
+	MomentSheen     bool   `json:"moment_sheen,omitempty"`     // Moments: an accent sweep across a page's header.
+	MomentCascade   bool   `json:"moment_cascade,omitempty"`   // Moments: cards of a list stagger in.
+	MomentSpark     bool   `json:"moment_spark,omitempty"`     // Moments: dots radiate from a save.
 	DmScreenKit     string `json:"dmscreen_kit,omitempty"`     // The DM Screen's own style kit (AppearanceStyleKits); empty wears the pages' kit.
 	EmailLayout     string `json:"email_layout,omitempty"`     // The campaign's emails (AppearanceEmailLayouts); empty is Note.
 
@@ -76,8 +80,11 @@ var (
 	AppearanceSidebars     = []string{"charcoal", "ink", "tinted", "own"}
 	AppearanceCorners      = []string{"plain", "subtitle", "banner"}
 	AppearanceGlows        = []string{"accent", "own"}
-	AppearanceHeights      = []string{"slim", "tall"}
-	AppearanceHoverCards   = []string{"paper", "plain", "night", "compact"}
+	// AppearanceEntrances are how a card opens under the Material kit; Grow
+	// is the base and is stored as unset.
+	AppearanceEntrances  = []string{"grow", "bloom", "unfold", "drop"}
+	AppearanceHeights    = []string{"slim", "tall"}
+	AppearanceHoverCards = []string{"paper", "plain", "night", "compact"}
 	// AppearanceSheetStyles are the character sheet styles sheet_styles.css
 	// knows, keyed by the data-cz-sheet value; "modern" is the unstyled default.
 	AppearanceSheetStyles = []string{"modern", "parchment", "ledger", "journal", "vellum", "night", "deck", "pencil", "starship", "neon", "runes", "brass"}
@@ -144,6 +151,10 @@ type AppearanceInput struct {
 		Elevation string `json:"elevation"`
 		Speed     string `json:"speed"`
 		ReduceAll bool   `json:"reduceAll"`
+		Entrance  string `json:"entrance"` // One of AppearanceEntrances; empty keeps the stored one.
+		Sheen     bool   `json:"sheen"`
+		Cascade   bool   `json:"cascade"`
+		Spark     bool   `json:"spark"`
 	} `json:"motion"`
 	Sidebar AppearanceSidebarInput `json:"sidebar"`
 	Hover   struct {
@@ -318,6 +329,22 @@ func styleKitChoice(v string, prev *Appearance) (string, error) {
 	return oneOf("style kit", v, AppearanceStyleKits)
 }
 
+// entranceChoice is the card entrance a save stores: Grow as unset, and a
+// save that sends none keeps the stored one, as styleKitChoice does. The pick
+// is kept while another kit is on and applies only under Material.
+func entranceChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.Entrance, nil
+		}
+		return "", nil
+	}
+	if v == "grow" {
+		return "", nil
+	}
+	return oneOf("card entrance", v, AppearanceEntrances)
+}
+
 // dmScreenKitChoice is the DM Screen kit a save stores: "same" clears it so
 // the screen follows the pages' kit, and a save that sends nothing keeps the
 // stored choice, as styleKitChoice does.
@@ -349,6 +376,26 @@ func calmColour(name, v string, deep bool) (string, error) {
 		return "", apperror.NewBadRequest(fmt.Sprintf("invalid %s, expected #RRGGBB", name))
 	}
 	out, _ := colour.Tame(strings.ToLower(v), deep)
+	return out, nil
+}
+
+// accentColour validates the campaign's colour. A new pick in the Director's
+// amber is refused, so a hand-sent save can't store what the picker won't
+// offer; the colour already stored is let through so a campaign that picked
+// amber before the rule can still save its other choices. Anything else is
+// toned like any colour and moved off the state red and green.
+func accentColour(v, stored string) (string, error) {
+	if v == "" {
+		return "", nil
+	}
+	if !isValidHexColor(v) {
+		return "", apperror.NewBadRequest("invalid chrome accent, expected #RRGGBB")
+	}
+	v = strings.ToLower(v)
+	if colour.NearAmber(v) && v != strings.ToLower(stored) {
+		return "", apperror.NewBadRequest("that colour is too close to amber, which marks what only the Director sees; pick another")
+	}
+	out, _ := colour.AccentTame(v)
 	return out, nil
 }
 
@@ -500,7 +547,7 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 	// Colours. Buttons follow the chrome accent and apps follow Surface A,
 	// so the older Action and App slots are cleared.
 	var accent, s1, s2 string
-	if accent, err = calmColour("chrome accent", in.Colours.Accent, false); err != nil {
+	if accent, err = accentColour(in.Colours.Accent, s.AccentColor); err != nil {
 		return fail(err)
 	}
 	if s1, err = calmColour("surface A", in.Colours.S1, false); err != nil {
@@ -564,6 +611,10 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		return fail(err)
 	}
 	a.ReduceMotion = in.Motion.ReduceAll
+	if a.Entrance, err = entranceChoice(in.Motion.Entrance, s.Appearance); err != nil {
+		return fail(err)
+	}
+	a.MomentSheen, a.MomentCascade, a.MomentSpark = in.Motion.Sheen, in.Motion.Cascade, in.Motion.Spark
 	if err := applyLookAccess(&a, in.Access, s.Appearance); err != nil {
 		return fail(err)
 	}

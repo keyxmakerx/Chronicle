@@ -1,58 +1,39 @@
 // members.templ renders the People page and the member list it is built
-// around: add member form, role change and remove controls.
+// around: role change and remove controls.
 
 package campaigns
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // CampaignMembersPage renders the People page: the one place the owner
 // manages members, invites and ownership.
-templ CampaignMembersPage(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
+templ CampaignMembersPage(cc *CampaignContext, v MemberListView, transfer *OwnershipTransfer, smtpConfigured bool) {
 	@layouts.App(cc.Campaign.Name + " - People") {
-		<div class="max-w-4xl min-[1600px]:max-w-screen-2xl mx-auto">
-			@layouts.ManageHeader("People")
-			@peopleSections(cc, members, transfer, csrfToken, errMsg, smtpConfigured)
-		</div>
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "People", Line: "people"}) {
+			@peopleSections(cc, v, transfer, smtpConfigured)
+		}
 	}
 }
 
 // MemberListComponent renders the member list and add form (HTMX partial swap target).
-templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfToken, errMsg string) {
+templ MemberListComponent(cc *CampaignContext, v MemberListView) {
 	<div id="member-list" class="space-y-6">
-		if errMsg != "" {
+		if v.ErrMsg != "" {
 			<div class="alert-error" role="alert">
-				{ errMsg }
+				{ v.ErrMsg }
 			</div>
 		}
-		// Add member form (owner only).
-		if cc.MemberRole >= RoleOwner {
-			<div class="card p-6">
-				<h2 class="text-sm font-semibold text-fg mb-3">Add Member</h2>
-				<form
-					method="POST"
-					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) }
-					hx-post={ fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID) }
-					hx-target="#member-list"
-					hx-swap="outerHTML"
-					class="flex items-end space-x-4"
-				>
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
-					<div class="flex-1">
-						<label for="member-email" class="block text-xs font-medium text-fg-body mb-1">Email</label>
-						<input type="email" id="member-email" name="email" required class="input w-full" placeholder="player@example.com"/>
-					</div>
-					<div>
-						<label for="member-role" class="block text-xs font-medium text-fg-body mb-1">Role</label>
-						<select id="member-role" name="role" class="input">
-							<option value="player">Player</option>
-							<option value="scribe">Scribe</option>
-						</select>
-					</div>
-					<button type="submit" class="btn-primary text-sm">Add</button>
-				</form>
+		if v.Notice != "" {
+			<div class="alert-success" role="status">
+				{ v.Notice }
+				if v.NoticeLink != "" {
+					<input type="text" readonly value={ v.NoticeLink } aria-label="Invite link" class="input w-full font-mono text-sm mt-2" onclick="this.select()"/>
+				}
 			</div>
 		}
 		<div>
@@ -60,22 +41,22 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 				<table class="w-full">
 					<thead>
 						<tr class="bg-surface-alt border-b border-edge">
-							<th class="px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Name</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Character</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Role</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Joined</th>
+							<th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Name</th>
+							<th class="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Character</th>
+							<th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Role</th>
+							<th class="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Joined</th>
 							if showFoundryColumn(ctx, cc) {
-								<th class="px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">In Foundry</th>
+								<th class="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">In Foundry</th>
 							}
 							if cc.MemberRole >= RoleOwner {
-								<th class="px-6 py-3 text-right text-xs font-medium text-fg-secondary uppercase">Actions</th>
+								<th class="px-3 sm:px-6 py-3 text-right text-xs font-medium text-fg-secondary uppercase">Actions</th>
 							}
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-edge">
-						if len(members) > 0 {
-							for _, member := range members {
-								@MemberRow(cc, &member, csrfToken)
+						if len(v.Members) > 0 {
+							for _, member := range v.Members {
+								@MemberRow(cc, &member, v.CSRFToken)
 							}
 						} else {
 							<tr>
@@ -98,9 +79,38 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 				</p>
 			}
 		</div>
+		if cc.MemberRole >= RoleOwner && len(v.Removed) > 0 {
+			@removedMembers(cc, v)
+		}
 		if cc.MemberRole >= RoleOwner {
 			@roleGuide()
 		}
+		if v.Sentence != nil {
+			@v.Sentence
+		}
+	</div>
+}
+
+// removedMembers lists the people the owner removed. The join link turns
+// each one away until the owner allows them back.
+templ removedMembers(cc *CampaignContext, v MemberListView) {
+	<div class="card p-6">
+		<h2 class="text-sm font-semibold text-fg mb-1">Removed</h2>
+		<p class="text-xs text-fg-secondary mb-3">The join link turns these people away. Allow someone back and the link works for them again.</p>
+		<ul class="divide-y divide-edge">
+			for _, u := range v.Removed {
+				<li class="flex items-center justify-between gap-3 py-2">
+					<span class="text-sm font-medium text-fg min-w-0 truncate">{ u.DisplayName }</span>
+					<button
+						type="button"
+						class="btn-secondary text-xs shrink-0"
+						hx-post={ fmt.Sprintf("/campaigns/%s/members/removed/%s/allow", cc.Campaign.ID, u.ID) }
+						hx-target="#member-list"
+						hx-swap="outerHTML"
+					>Allow back</button>
+				</li>
+			}
+		</ul>
 	</div>
 }
 
@@ -156,7 +166,7 @@ func removeMemberConfirm(member *CampaignMember) string {
 // MemberRow renders a single member row in the table.
 templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 	<tr>
-		<td class="px-6 py-4">
+		<td class="px-3 sm:px-6 py-4">
 			<div class="flex items-center gap-3">
 				@memberAvatar(member)
 				<div class="min-w-0">
@@ -173,7 +183,7 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 							<div class="text-xs text-fg-muted">Joined with a guest code, no email yet</div>
 						}
 					} else if cc.MemberRole >= RoleOwner || layouts.GetUserID(ctx) == member.UserID {
-						<div class="text-xs text-fg-secondary">{ member.Email }</div>
+						<div class="text-xs text-fg-secondary break-all sm:break-normal">{ member.Email }</div>
 					}
 					if layouts.GetUserID(ctx) == member.UserID && !member.IsGuest {
 						// A signed-in person finds the picture control on their own row.
@@ -186,7 +196,7 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 				</div>
 			</div>
 		</td>
-		<td class="px-6 py-4 text-sm text-fg-body">
+		<td class="hidden sm:table-cell px-6 py-4 text-sm text-fg-body">
 			if member.CharacterName != nil && *member.CharacterName != "" {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, *member.CharacterEntityID)) }
@@ -198,7 +208,7 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 				<span class="text-fg-muted text-xs italic">None</span>
 			}
 		</td>
-		<td class="px-6 py-4">
+		<td class="px-3 sm:px-6 py-4">
 			<span
 				class={
 					"inline-block px-2 py-1 text-xs font-medium rounded-full",
@@ -215,18 +225,18 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 				}
 			}
 		</td>
-		<td class="px-6 py-4 text-sm text-fg-secondary">
-			{ member.JoinedAt.Format("Jan 2, 2006") }
+		<td class="hidden sm:table-cell px-6 py-4 text-sm text-fg-secondary">
+			@components.Date(member.JoinedAt, timeutil.DateShort)
 		</td>
 		if showFoundryColumn(ctx, cc) {
-			<td class="px-6 py-4 text-sm">
+			<td class="hidden sm:table-cell px-6 py-4 text-sm">
 				<span id={ "foundry-status-" + member.UserID } class="text-xs text-fg-muted">&hellip;</span>
 			</td>
 		}
 		if cc.MemberRole >= RoleOwner {
-			<td class="px-6 py-4 text-right">
+			<td class="px-3 sm:px-6 py-4 text-right">
 				if member.Role != RoleOwner {
-					<div class="flex items-center justify-end space-x-2">
+					<div class="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:justify-end sm:gap-2">
 						// Role change dropdown.
 						<form
 							method="POST"
@@ -234,11 +244,11 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 							hx-put={ fmt.Sprintf("/campaigns/%s/members/%s/role", cc.Campaign.ID, member.UserID) }
 							hx-target="#member-list"
 							hx-swap="outerHTML"
-							class="inline-flex items-center space-x-1"
+							class="inline-flex items-center gap-1"
 						>
 							<input type="hidden" name="_method" value="PUT"/>
 							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-							<select name="role" class="input text-xs py-1" aria-label={ "Role for " + member.DisplayName }>
+							<select name="role" class="input text-xs py-1 w-auto" aria-label={ "Role for " + member.DisplayName }>
 								<option value={ AccessPlayer } selected?={ MemberAccess(cc.Campaign, *member) == AccessPlayer }>Player</option>
 								<option value={ AccessScribe } selected?={ MemberAccess(cc.Campaign, *member) == AccessScribe }>Scribe</option>
 								<option value={ AccessCoDM } selected?={ MemberAccess(cc.Campaign, *member) == AccessCoDM }>Co-{ layouts.GMTerm(ctx) }</option>

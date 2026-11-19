@@ -385,7 +385,7 @@
       var saveBtn = document.createElement('button');
       saveBtn.type = 'button';
       saveBtn.className = 'btn-primary text-sm';
-      saveBtn.textContent = 'Save Changes';
+      saveBtn.textContent = 'Save changes';
 
       var statusSpan = document.createElement('span');
       statusSpan.className = 'text-xs text-gray-500 dark:text-gray-400';

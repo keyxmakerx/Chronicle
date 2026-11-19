@@ -140,3 +140,49 @@ func TestClaimTypeID_SkipsEmptyTypes(t *testing.T) {
 		})
 	}
 }
+
+// The empty Party box offers the claim link only when a claimable type has
+// pages to claim; unknown counts keep it.
+func TestClaimLinkTypeID(t *testing.T) {
+	yes := true
+	types := []EntityType{{ID: 6, Slug: "player-character", Claimable: &yes}}
+	tests := []struct {
+		name   string
+		counts map[int]int
+		want   int
+	}{
+		{"pages to claim", map[int]int{6: 2}, 6},
+		{"nothing to claim", map[int]int{6: 0}, 0},
+		{"no counts at all", map[int]int{}, 0},
+		{"counts unknown", nil, 6},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := claimLinkTypeID(types, tt.counts); got != tt.want {
+				t.Errorf("claimLinkTypeID = %d, want %d", got, tt.want)
+			}
+		})
+	}
+	if got := claimLinkTypeID(nil, map[int]int{}); got != 0 {
+		t.Errorf("no claimable type: got %d, want 0", got)
+	}
+}
+
+func TestCastEmptyPartyHint(t *testing.T) {
+	tests := []struct {
+		name string
+		view CastView
+		want string
+	}{
+		{"can make a hero", CastView{IsMember: true, CanCreateHero: true}, "Claimed characters appear here. Make one with Create hero, or ask your GM for one."},
+		{"cannot make a hero", CastView{IsMember: true}, "Claimed characters appear here. Ask your GM for one."},
+		{"not a member", CastView{}, "Claimed characters appear here. Players can claim a character from its page."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := castEmptyPartyHint(tt.view, "GM"); got != tt.want {
+				t.Errorf("hint = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

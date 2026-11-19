@@ -59,6 +59,9 @@ type Service interface {
 	// MonthlyBytes estimates one packed month's size, for the Site admin
 	// setting.
 	MonthlyBytes(ctx context.Context) (int64, bool, error)
+	// CountSince counts the campaign's live changes since a time and how many
+	// different people made them, for the owner's desk.
+	CountSince(ctx context.Context, campaignID string, since time.Time) (changes, people int, err error)
 }
 
 type service struct {
@@ -328,6 +331,10 @@ func (s *service) PageRestored(ctx context.Context, campaignID, entityID string)
 
 func (s *service) KeptPages(ctx context.Context) ([]string, error) {
 	return s.repo.KeptPages(ctx, s.now())
+}
+
+func (s *service) CountSince(ctx context.Context, campaignID string, since time.Time) (int, int, error) {
+	return s.repo.CountSince(ctx, campaignID, since)
 }
 
 func (s *service) MonthlyBytes(ctx context.Context) (int64, bool, error) {

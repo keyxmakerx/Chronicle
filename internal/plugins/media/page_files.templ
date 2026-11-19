@@ -156,7 +156,7 @@ templ pageFileRow(campaignID, entityID string, f PageFile, listing *PageFileList
 			}
 		</div>
 		if listing.CanAttach {
-			<div class="pf-ask ml-auto flex flex-wrap items-center gap-2" data-pf-ask hidden role="group" aria-label="Confirm removal">
+			<div class="pf-ask ml-auto flex flex-wrap items-center gap-2" data-pf-ask data-kit-open="card" hidden role="group" aria-label="Confirm removal">
 				<span class="text-sm text-fg-secondary">Remove this file? It can't be brought back.</span>
 				<button type="button" class="btn-danger btn-sm" onclick={ pfRemoveCall }>Remove</button>
 				<button type="button" class="btn-secondary btn-sm" data-pf-keep onclick={ pfKeepCall }>Keep</button>

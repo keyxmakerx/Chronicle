@@ -351,3 +351,24 @@ func TestRequireAuthFencesGuests(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeGuestKeepsPasswordSignInHidden(t *testing.T) {
+	r := newGuestRig(t)
+	ctx := context.Background()
+	store := &memOIDCStore{}
+	ConfigureOIDC(r.svc, store, "test-site-secret-of-at-least-thirty-two", "https://chronicle.example.com")
+	store.row.Enabled, store.row.ButtonName, store.row.HidePassword = true, "Authentik", true
+	if !r.svc.LoginOptions(ctx).HidePassword {
+		t.Fatal("password sign-in is not hidden in this rig")
+	}
+	res := r.join(t, "ABCD2345", "Rook")
+
+	_, _, err := r.svc.MergeGuest(ctx, res.User.ID, MergeGuestInput{Email: "mara@example.com", Password: "correct horse"}, "", "")
+	assertAppError(t, err, http.StatusForbidden)
+	if len(r.moved) != 0 {
+		t.Fatal("a refused merge moved things")
+	}
+	if _, err := r.svc.ValidateSession(ctx, res.SessionToken); err != nil {
+		t.Fatalf("a refused merge ended the guest: %v", err)
+	}
+}

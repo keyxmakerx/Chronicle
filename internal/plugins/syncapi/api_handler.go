@@ -56,6 +56,7 @@ type APIHandler struct {
 	shopRoomAddon        string
 	shopBuyer            ShopBuyAPIService
 	dmScreen             DMScreenProvider
+	layers               LayersReader
 	rolls                RollsProvider
 	rollPlayers          FoundryPlayerRepository
 	folders              FolderLister
@@ -1185,6 +1186,26 @@ func (h *APIHandler) ListEntityRelations(c *echo.Context) error {
 	return c.JSON(http.StatusOK, rels)
 }
 
+// requireRelationAccess answers 404 unless the caller may see the relation,
+// as the web relation routes do: both ends viewable, and a DM-only relation
+// only for the DM team. The relation must already be known to be in the
+// key's campaign.
+func (h *APIHandler) requireRelationAccess(c *echo.Context, rel *relations.Relation) error {
+	role := h.visibilityRoleFor(c.Request().Context(), rel.CampaignID, h.resolveUserID(c), h.resolveRole(c))
+	if role >= int(campaigns.RoleOwner) {
+		return nil
+	}
+	if rel.DmOnly {
+		return apperror.NewNotFound("relation not found")
+	}
+	for _, id := range []string{rel.SourceEntityID, rel.TargetEntityID} {
+		if _, _, err := h.requireViewableEntity(c, id); err != nil {
+			return apperror.NewNotFound("relation not found")
+		}
+	}
+	return nil
+}
+
 // pageGate is the page-write check shared with the tag handlers.
 func (h *APIHandler) pageGate() pageWriteGate {
 	return pageWriteGate{entitySvc: h.entitySvc, campaignSvc: h.campaignSvc}
@@ -1639,9 +1660,12 @@ func (h *APIHandler) CreateRelation(c *echo.Context) error {
 		return apperror.NewBadRequest("relation_type is required")
 	}
 
+	// Only the DM team may mark a relation DM-only; anyone else would lose
+	// sight of what they just made.
 	userID := h.resolveUserID(c)
+	dmOnly := req.DmOnly && h.pageGate().visibilityRole(ctx, campaignID, userID, h.resolveRole(c)) >= int(campaigns.RoleOwner)
 	rel, err := h.relationSvc.Create(ctx, campaignID, entityID, req.TargetEntityID,
-		req.RelationType, req.ReverseRelationType, userID, req.Metadata, req.DmOnly)
+		req.RelationType, req.ReverseRelationType, userID, req.Metadata, dmOnly)
 	if err != nil {
 		return err
 	}
@@ -1674,6 +1698,9 @@ func (h *APIHandler) UpdateRelation(c *echo.Context) error {
 	}
 	if existing.CampaignID != campaignID {
 		return apperror.NewNotFound("relation not found")
+	}
+	if err := h.requireRelationAccess(c, existing); err != nil {
+		return err
 	}
 
 	var req apiUpdateRelationRequest
@@ -1709,6 +1736,9 @@ func (h *APIHandler) DeleteRelation(c *echo.Context) error {
 	}
 	if existing.CampaignID != campaignID {
 		return apperror.NewNotFound("relation not found")
+	}
+	if err := h.requireRelationAccess(c, existing); err != nil {
+		return err
 	}
 
 	if err := h.relationSvc.Delete(c.Request().Context(), relationID); err != nil {
@@ -1837,7 +1867,26 @@ func (h *APIHandler) BulkUpdateEntityType(c *echo.Context) error {
 		return apperror.NewBadRequest("entity_type_id is required")
 	}
 
-	updated, err := h.entitySvc.BulkUpdateType(c.Request().Context(), campaignID, req.EntityIDs, req.EntityTypeID)
+	// A caller below DM level changes only pages they can edit, and cannot
+	// move pages into a DM-only category, as on the web.
+	ctx := c.Request().Context()
+	gate, role, userID := h.pageGate(), h.resolveRole(c), h.resolveUserID(c)
+	if gate.visibilityRole(ctx, campaignID, userID, role) < int(campaigns.RoleOwner) {
+		if et, err := h.entitySvc.GetEntityTypeByID(ctx, req.EntityTypeID); err == nil && et.DMOnly() {
+			return apperror.NewForbidden("only the owner or a Co-DM can move pages into this category")
+		}
+		for _, id := range req.EntityIDs {
+			entity, err := h.entitySvc.GetByID(ctx, id)
+			if err != nil || entity.CampaignID != campaignID {
+				return apperror.NewNotFound("entity not found")
+			}
+			if err := gate.check(ctx, campaignID, id, userID, role); err != nil {
+				return err
+			}
+		}
+	}
+
+	updated, err := h.entitySvc.BulkUpdateType(ctx, campaignID, req.EntityIDs, req.EntityTypeID)
 	if err != nil {
 		return err
 	}

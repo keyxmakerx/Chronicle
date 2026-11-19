@@ -4,9 +4,14 @@
 
 package layouts
 
-// AppFrame is the one width and left edge every app page sits in.
+// AppFrameClass is the frame's classes, for a page that must put its own
+// data attributes on the frame element instead of nesting one.
+const AppFrameClass = "max-w-screen-2xl mx-auto px-4 py-6"
+
+// AppFrame is the one width and left edge every app page and reading page
+// sits in.
 templ AppFrame() {
-	<div class="max-w-screen-2xl mx-auto px-4 py-6" data-app-frame>
+	<div class={ AppFrameClass } data-app-frame>
 		{ children... }
 	</div>
 }

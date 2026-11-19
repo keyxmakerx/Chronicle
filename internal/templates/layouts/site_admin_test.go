@@ -61,7 +61,7 @@ func TestSidebar_SiteAdminPlace(t *testing.T) {
 			if got := strings.Contains(out, "nav-admin-mode"); got != tc.menu {
 				t.Errorf("admin shade = %v, want %v", got, tc.menu)
 			}
-			if got := strings.Contains(out, "My Campaigns"); got == tc.menu {
+			if got := strings.Contains(out, "My campaigns"); got == tc.menu {
 				t.Errorf("everyday menu drawn = %v, want %v", got, !tc.menu)
 			}
 			if got := strings.Contains(out, "data-site-admin-entry"); got != tc.entry {

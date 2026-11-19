@@ -21,7 +21,9 @@ the two seem to differ, the standard wins and this file is wrong.
    work, or file the issue (**Older looks**).
 4. A visible change needs a mockup the operator signs first, on Sign-offs,
    one mockup per option, with at least one genuinely new option, researched
-   beyond TTRPG tools. Motion choices are shown as playable clips.
+   beyond TTRPG tools. Motion choices are shown as playable clips. A mockup
+   is held to the same bar as a screen: readable at the size it is shown,
+   nothing squeezed, cut off or dark on dark.
 
 ## Quick rules (the ones most often broken)
 
@@ -33,6 +35,16 @@ the two seem to differ, the standard wins and this file is wrong.
 - Controls come in four weights and the lightest that fits wins: a quiet
   word, a tab, an icon, a button. A button is never the default way to
   reveal more; no bordered "Show all ▾" buttons.
+- Icons are few, one colour and unboxed: no category colour on an icon, no
+  tinted square behind it, no emoji, no placeholder icon in an empty state.
+  An icon stays only where it is the control or a landmark (the header's
+  tools, the three dots, pens and close marks, the sidebar); a button or a
+  menu row that has a word has none. A heading may carry one, in the
+  heading's own colour. A row that names a page starts with the name, with
+  its kind in words and the page's own picture at the row's end (**Look**).
+- Nothing is squeezed: on a narrow screen blocks fold into one column, and
+  words are never cut off or broken to a word a line. Touch controls are 44
+  tall (**Phones and tablets**).
 - Single-key shortcuts never fire while focus is in an input, textarea or
   editable element.
 - Say "page editor" for writing a page's words and "the Customizer" for
@@ -62,6 +74,8 @@ new kind of move needs a signed mockup. Then:
   `window.MotionRest`.
 - **Feedback within 100 ms** of every click or key, even when the move is
   longer.
+- **Nothing jumps or flickers first**, parts that move together read as one
+  move in one direction, and a control points the way its move goes.
 
 ## Emil Kowalski's skills
 
