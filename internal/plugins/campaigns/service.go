@@ -782,7 +782,12 @@ func (s *campaignService) Update(ctx context.Context, campaignID string, input U
 		return nil, err
 	}
 
-	name := strings.TrimSpace(input.Name)
+	// Validate the merged name, not the raw input: an absent name is not an
+	// empty one.
+	name := campaign.Name
+	if input.Name != nil {
+		name = strings.TrimSpace(*input.Name)
+	}
 	if name == "" {
 		return nil, apperror.NewBadRequest("campaign name is required")
 	}
@@ -790,9 +795,17 @@ func (s *campaignService) Update(ctx context.Context, campaignID string, input U
 		return nil, apperror.NewBadRequest("campaign name must be at most 200 characters")
 	}
 
-	desc := strings.TrimSpace(input.Description)
-	if len(desc) > 5000 {
-		return nil, apperror.NewBadRequest("description must be at most 5000 characters")
+	var desc *string
+	if input.Description != nil {
+		d := strings.TrimSpace(*input.Description)
+		if len(d) > 5000 {
+			return nil, apperror.NewBadRequest("description must be at most 5000 characters")
+		}
+		if d != "" {
+			desc = &d
+		}
+	} else {
+		desc = campaign.Description
 	}
 
 	// Regenerate slug if name changed.
@@ -805,12 +818,10 @@ func (s *campaignService) Update(ctx context.Context, campaignID string, input U
 	}
 
 	campaign.Name = name
-	if desc != "" {
-		campaign.Description = &desc
-	} else {
-		campaign.Description = nil
+	campaign.Description = desc
+	if input.IsPublic != nil {
+		campaign.IsPublic = *input.IsPublic
 	}
-	campaign.IsPublic = input.IsPublic
 
 	if err := s.repo.Update(ctx, campaign); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("updating campaign: %w", err))

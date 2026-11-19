@@ -1,0 +1,25 @@
+package campaigns
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// GuestPreviewRefusalPage is what the DM team gets when, previewing as a
+// guest, they open a page a visitor could not: it says so and offers the way
+// back. A visitor would get a plain refusal; the way back is the one addition.
+templ GuestPreviewRefusalPage(campaignID, csrfToken string) {
+	@layouts.App("Guests can't open this page") {
+		@layouts.AppFrame() {
+			<div class="max-w-xl py-8" role="status">
+				<h1 class="text-xl font-semibold text-fg">A guest can't open this page.</h1>
+				<p class="mt-2 text-fg-secondary">You are viewing this campaign as a guest.</p>
+				<form method="POST" action={ templ.SafeURL("/campaigns/" + campaignID + "/view-as") } class="mt-4">
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<input type="hidden" name="as" value="self"/>
+					<input type="hidden" name="next" value="home"/>
+					<button type="submit" class="btn-secondary text-sm">Back to your own view</button>
+				</form>
+			</div>
+		}
+	}
+}

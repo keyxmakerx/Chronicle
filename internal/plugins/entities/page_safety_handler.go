@@ -182,7 +182,7 @@ func (h *PageSafetyHandler) RestoreVersion(c *echo.Context) error {
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entity.ID)
 }
 
-// Trash renders the campaign's Trash under Manage (GET /campaigns/:id/trash).
+// Trash renders the campaign's Trash under Campaign settings (GET /campaigns/:id/trash).
 func (h *PageSafetyHandler) Trash(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {

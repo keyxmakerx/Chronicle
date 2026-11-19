@@ -77,9 +77,25 @@ func manageFindCall() templ.ComponentScript {
 	}
 }
 
-// ManageFindShown reports whether the viewer gets Find: the signed-in owner
-// who is not previewing the campaign as a player. The list behind it is
-// owner-only on the server too; this only avoids offering a refused button.
-func ManageFindShown(ctx context.Context) bool {
+type manageFindFieldKey struct{}
+
+// WithManageFindField marks a render as one whose page draws its own Find
+// field (ManageFindField), so the frame leaves its header button out.
+func WithManageFindField(ctx context.Context) context.Context {
+	return context.WithValue(ctx, manageFindFieldKey{}, true)
+}
+
+// ManageFindEligible reports whether the viewer gets Find at all: the
+// signed-in owner who is not previewing the campaign as a player. The list
+// behind it is owner-only on the server too; this only avoids offering a
+// refused button.
+func ManageFindEligible(ctx context.Context) bool {
 	return IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 3 && !IsViewingAsPlayer(ctx)
+}
+
+// ManageFindShown reports whether the frame's header draws the Find button:
+// the viewer gets Find, and the page has not drawn a field of its own.
+func ManageFindShown(ctx context.Context) bool {
+	own, _ := ctx.Value(manageFindFieldKey{}).(bool)
+	return !own && ManageFindEligible(ctx)
 }

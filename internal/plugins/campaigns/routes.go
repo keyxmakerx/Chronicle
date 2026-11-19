@@ -118,10 +118,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 
 	// Owner dashboard (Owner + Co-DM).
 	cg.GET("/dashboard", h.OwnerDashboard, RequireRole(RoleOwner))
-	// What a desk line unfolds into, and its sentence again after a change
-	// made inside it. Fragments, owner only.
-	cg.GET("/dashboard/lines/:line/fold", h.DeskLineFold, RequireRole(RoleOwner))
-	cg.GET("/dashboard/lines/:line/sentence", h.DeskLineSentence, RequireRole(RoleOwner))
 	cg.GET("/dashboard/needs", h.DeskNeedsCount, RequireRole(RoleOwner))
 	cg.GET("/dashboard/find", h.DeskFind, RequireRole(RoleOwner))
 	cg.GET("/owner-dashboard-layout", h.GetOwnerDashboardLayout, RequireRole(RoleOwner))
@@ -154,6 +150,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// co-DMs). It only flips a display cookie, so it stays usable on an
 	// archived campaign.
 	cgArchived.POST("/toggle-view-mode", h.ToggleViewAsPlayer, RequireCapability(func(cc *CampaignContext) bool {
+		return cc.CanAuthorDmOnly()
+	}, "only the campaign owner or a member with DM access may do this"))
+
+	// The one preview switch behind the "Dashboard for" line: self, player or
+	// guest. Same gate as the eye, and for the same reason it works on an
+	// archived campaign.
+	cgArchived.POST("/view-as", h.ViewAs, RequireCapability(func(cc *CampaignContext) bool {
 		return cc.CanAuthorDmOnly()
 	}, "only the campaign owner or a member with DM access may do this"))
 

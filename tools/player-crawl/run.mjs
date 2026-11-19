@@ -26,9 +26,20 @@ try {
   for (const [, v] of unreachable) console.log('  UNREACHABLE (no page shows it to the owner):', v);
 
   let leaks = 0;
-  const viewers = { player: s.player, 'other player': s.player2, scribe: s.scribe, signedout: s.guest };
+  // The owner previewing as a guest rides the owner's own session with the
+  // guest cookie on. The server lowers each read to a visitor's, so this walk
+  // must see what the signed-out stranger sees, under the same leak checks.
+  // The cookie is dropped straight after the walk so no later owner step runs
+  // with it (writes ignore it anyway).
+  const GUEST_COOKIE = 'chronicle_view_as_guest';
+  const viewers = { player: s.player, 'other player': s.player2, scribe: s.scribe, signedout: s.guest, 'owner previewing as a guest': s.owner };
+  const walks = {};
   for (const [who, client] of Object.entries(viewers)) {
+    const previewing = who === 'owner previewing as a guest';
+    if (previewing) client.jar.set(GUEST_COOKIE, '1');
     const r = await crawl(client, s.ids.cid, s.ids.all, { ...s.markers, ...s.playerOnly }, { term: 'ZQ' + RUN, controls: s.controls });
+    if (previewing) client.jar.delete(GUEST_COOKIE);
+    walks[who] = r;
     if (r.lostAt.length) console.log(`  (${who}'s session ended during the walk at: ${r.lostAt.join(', ')}; signed back in)`);
     const byMarker = new Map();
     for (const h of r.hits) {
@@ -46,6 +57,22 @@ try {
       for (const rt of [...routes].slice(0, 6)) console.log(`        ${rt}`);
       if (routes.size > 6) console.log(`        ... and ${routes.size - 6} more`);
     }
+  }
+  // The preview must not open anything the stranger cannot: any page that
+  // answers 2xx to the previewing owner and not to the stranger is a leak of
+  // the owner's real access. The other direction (a page the stranger gets and
+  // the preview refuses) is only noted.
+  {
+    const ok = (n) => n < 300;
+    const strangerWalk = walks.signedout, previewWalk = walks['owner previewing as a guest'];
+    let wider = 0, narrower = 0;
+    for (const [key, st] of previewWalk.statuses) {
+      const other = strangerWalk.statuses.get(key);
+      if (other === undefined) continue;
+      if (ok(st) && !ok(other)) { wider++; leaks++; console.log(`  PREVIEW OPENS WHAT A STRANGER CANNOT  ${idShape(key)}  preview ${st}, stranger ${other}`); }
+      else if (!ok(st) && ok(other)) narrower++;
+    }
+    console.log(`\nguest preview vs stranger: ${wider} page(s) wider, ${narrower} narrower (narrower is only noted)`);
   }
   // The live channel: viewers hold a socket while the owner edits hidden things.
   const socks = {

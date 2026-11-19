@@ -9,7 +9,7 @@ every change is in the audit log. It is optional and enabled per campaign.
 
 The campaign owner switches it on:
 
-1. Open the campaign, then **Game & features** (under Manage;
+1. Open the campaign, then **Game & features** (under Campaign settings;
    `/campaigns/<id>/extensions`).
 2. Under **Features**, find **Player Character Claiming** and click **Enable**
    (it shows **On** when active).

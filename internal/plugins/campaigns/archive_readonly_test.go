@@ -285,6 +285,7 @@ func TestArchivedExceptionList(t *testing.T) {
 		"DELETE ":                true,
 		"POST /unarchive":        true,
 		"POST /toggle-view-mode": true,
+		"POST /view-as":          true,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("routes writable on an archived campaign = %v, want %v", got, want)

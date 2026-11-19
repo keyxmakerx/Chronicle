@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,16 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
+
+// DeskPage renders the owner's Campaign settings page. The page draws its own
+// full-width Find field, so the frame is told not to draw the small one in its
+// header: two Finds would also give the "/" shortcut two buttons to press.
+func DeskPage(cc *CampaignContext, d *Desk) templ.Component {
+	page := deskPageBody(cc, d)
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		return page.Render(layouts.WithManageFindField(ctx), w)
+	})
+}
 
 // deskNodeKind is how the template draws one piece of a sentence.
 type deskNodeKind int
@@ -19,51 +30,23 @@ const (
 	deskNodeBold
 	deskNodeGM
 	deskNodeSwatch
-	deskNodeAfter
-	deskNodeBlank
 )
 
-// deskNodeView is a DeskPart ready to draw: a blank carries the punctuation
-// that follows it (Glue) so the two can be kept on one line.
+// deskNodeView is a DeskPart ready to draw.
 type deskNodeView struct {
-	Kind  deskNodeKind
-	Text  string
-	Blank *DeskBlank
-	Glue  string
+	Kind deskNodeKind
+	Text string
 }
 
-// deskPunct is what may not start a line after a blank.
-const deskPunct = ".,:;!?"
-
-// deskNodes turns a line's parts into what the template draws, moving the
-// punctuation that directly follows a blank into the blank's own no-wrap
-// span. A blank is plain inline text for wrapping, so without this a full
-// stop could be left alone at the start of the next line.
+// deskNodes turns a sentence's parts into what the template draws.
 func deskNodes(parts []DeskPart) []deskNodeView {
-	var out []deskNodeView
-	for i := 0; i < len(parts); i++ {
-		p := parts[i]
+	out := make([]deskNodeView, 0, len(parts))
+	for _, p := range parts {
 		switch {
-		case p.Blank != nil:
-			n := deskNodeView{Kind: deskNodeBlank, Blank: p.Blank}
-			if i+1 < len(parts) && parts[i+1].Blank == nil && !parts[i+1].Bold && !parts[i+1].GM {
-				next := parts[i+1].Text
-				rest := strings.TrimLeft(next, deskPunct)
-				n.Glue = next[:len(next)-len(rest)]
-				if rest == "" {
-					i++
-				} else if n.Glue != "" {
-					parts = append([]DeskPart(nil), parts...)
-					parts[i+1].Text = rest
-				}
-			}
-			out = append(out, n)
 		case p.GM:
 			out = append(out, deskNodeView{Kind: deskNodeGM})
 		case p.Swatch:
 			out = append(out, deskNodeView{Kind: deskNodeSwatch})
-		case p.After:
-			out = append(out, deskNodeView{Kind: deskNodeAfter, Text: p.Text})
 		case p.Bold:
 			out = append(out, deskNodeView{Kind: deskNodeBold, Text: p.Text})
 		default:
@@ -132,80 +115,6 @@ func deskScript(name, file, attr, global, method, guard, params, args string) te
 	}
 }
 
-func deskFoldCall(name, method, guard string) templ.ComponentScript {
-	return deskScript(name, "desk_fold.js", "data-desk-fold-js", "deskFold", method, guard, "b,e", "this,event")
-}
-
-// The fold's handlers. Each is a plain inline attribute, so they work in a
-// fragment swapped in by innerHTML.
-func deskFoldToggleCall() templ.ComponentScript { return deskFoldCall("deskFoldToggle", "toggle", "") }
-func deskFoldRowCall() templ.ComponentScript    { return deskFoldCall("deskFoldRow", "row", "") }
-func deskFoldActCall() templ.ComponentScript    { return deskFoldCall("deskFoldAct", "act", "") }
-func deskFoldInviteCall() templ.ComponentScript { return deskFoldCall("deskFoldInvite", "invite", "") }
-
-// deskFoldKey answers Escape, which closes the fold from its chevron or from
-// anywhere inside it.
-func deskFoldKey() templ.ComponentScript {
-	return deskFoldCall("deskFoldKey", "key", `if(e.key!=='Escape')return;`)
-}
-
-// deskFoldInviteKey sends the invite on Enter, like pressing its button.
-func deskFoldInviteKey() templ.ComponentScript {
-	return deskFoldCall("deskFoldInviteKey", "inviteKey", `if(e.key!=='Enter')return;e.preventDefault();`)
-}
-
-// deskCarryCall is the click handler of a line's "open the page" word. It
-// hands the press to static/js/desk_carry.js, which lifts the line's sentence
-// and carries it to the page it opens. A plain click would navigate before
-// the script has loaded, so the first press is held and handed over with
-// "late" set: the script then plays the move, or goes to the link itself when
-// it cannot.
-func deskCarryCall() templ.ComponentScript {
-	src := layouts.AssetURL("/static/js/desk_carry.js")
-	return templ.ComponentScript{
-		Name:     "deskCarry",
-		Function: "",
-		Call: `(function(a,e){var C=window.Chronicle=window.Chronicle||{};var late=0;` +
-			`if(!C.deskCarry&&e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey&&!a.target){e.preventDefault();late=1;}` +
-			`function go(){if(C.deskCarry)C.deskCarry.go(a,e,late);}` +
-			`if(C.deskCarry){go();return;}` +
-			`var s=document.querySelector('script[data-desk-carry-js]');` +
-			`if(!s){s=document.createElement('script');s.src=` + jsString(src) + `;s.setAttribute('data-desk-carry-js','');document.head.appendChild(s);}` +
-			`s.addEventListener('load',go);})(this,event)`,
-	}
-}
-
-// deskFoldTitle is the tool a fold belongs to, for its screen-reader name and
-// the chevron's label.
-func deskFoldTitle(id string) string {
-	switch id {
-	case "people":
-		return "People"
-	case "trash":
-		return "Trash"
-	case "foundry":
-		return "Foundry"
-	}
-	return id
-}
-
-// deskFoldURL is where a line's fold is fetched from.
-func deskFoldURL(ctx context.Context, id string) string {
-	return "/campaigns/" + layouts.GetCampaignID(ctx) + "/dashboard/lines/" + id + "/fold"
-}
-
-// deskMore words the rows a fold leaves out.
-func deskMore(n int) string { return "and " + strconv.Itoa(n) + " more" }
-
-// deskInviteRole is the invite's role, a dashed word that sends nothing by
-// itself: the Send button reads its value.
-func deskInviteRole(i *DeskInvite) *DeskBlank {
-	return &DeskBlank{
-		Kind: DeskBlankChoice, ID: "invite-role", Label: "Role for the invite",
-		Value: "player", Shown: "player", Options: i.Roles, Local: true,
-	}
-}
-
 // deskTabindex takes an off blank out of the tab order.
 func deskTabindex(b *DeskBlank) string {
 	if b.Off != "" {
@@ -224,13 +133,3 @@ func jsString(s string) string {
 
 // deskDisabled is the aria-disabled value for a blank.
 func deskDisabled(b *DeskBlank) string { return strconv.FormatBool(b.Off != "") }
-
-// deskJoin keeps the punctuation that follows a blank on the blank's line. A
-// word joiner forbids a break between the blank's last letter and the full
-// stop, while the blank itself still wraps like the words around it.
-func deskJoin(glue string) string {
-	if glue == "" {
-		return ""
-	}
-	return "\u2060" + glue
-}

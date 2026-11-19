@@ -10,7 +10,7 @@ package layouts
 type ManageFrameData struct {
 	// Title is the page's name, drawn as its one h1.
 	Title string
-	// Home marks the desk itself, which has no "Manage" word above it since
+	// Home marks the desk itself, which has no "Campaign settings" word above it since
 	// it is the place that word leads to.
 	Home bool
 	// Intro is one plain sentence under the title; empty draws nothing. Pages
@@ -31,7 +31,7 @@ type ManageFrameData struct {
 }
 
 // ManageFrame gives every Manage page the same left edge and the same content
-// width, a quiet "Manage" above the title that leads back to the desk, the
+// width, a quiet "Campaign settings" above the title that leads back to the desk, the
 // title, a slot for the page's own actions, then the page body. One
 // component, so the edge cannot drift page by page again. The Customizer is a
 // full-screen workshop and never sits in it.
@@ -43,7 +43,7 @@ templ ManageFrame(d ManageFrameData) {
 	<div class="manage-frame" data-manage-frame>
 		<header class={ "manage-head cb-head", templ.KV("has-sentence", sentence != nil) }>
 			if !d.Home {
-				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow" data-manage-back onclick={ manageBackCall() }>Manage</a>
+				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow">Campaign settings</a>
 			}
 			<h1 class="manage-title cb-title">{ d.Title }</h1>
 			{{ pinKey, pinName := ManageToolOfLine(d.Line) }}

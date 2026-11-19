@@ -41,8 +41,10 @@ func TestGameSystemCard_LegitSystemIDUnchanged(t *testing.T) {
 	}
 }
 
-// TestSettingsGeneralTab_NoLongerHoldsPicker pins that the picker lives in one
-// place: two live controls for one setting would drift.
+// TestSettingsGeneralTab_NoLongerHoldsPicker pins that each setting lives in
+// one place: two live controls for one setting would drift. The Details tab
+// keeps the description and the danger zone; the name, public flag and default
+// visibility are on Campaign settings, and the game system on Game & features.
 func TestSettingsGeneralTab_NoLongerHoldsPicker(t *testing.T) {
 	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Test"}}
 	var buf bytes.Buffer
@@ -51,10 +53,17 @@ func TestSettingsGeneralTab_NoLongerHoldsPicker(t *testing.T) {
 	}
 	html := buf.String()
 	if strings.Contains(html, "data-game-system-card") {
-		t.Error("General tab still renders the game system picker")
+		t.Error("Details tab still renders the game system picker")
 	}
-	if !strings.Contains(html, "/campaigns/camp-1/extensions") {
-		t.Error("General tab should link to the Game & features page")
+	for _, gone := range []string{`name="name"`, `name="is_public"`, "default_vis", "Welcome message", "Game system"} {
+		if strings.Contains(html, gone) {
+			t.Errorf("Details tab still holds %q, which Campaign settings owns", gone)
+		}
+	}
+	for _, want := range []string{`name="description"`, `id="danger"`, "/campaigns/camp-1/dashboard"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("Details tab is missing %q", want)
+		}
 	}
 }
 

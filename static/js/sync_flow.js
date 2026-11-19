@@ -1,7 +1,7 @@
 /**
  * sync_flow.js -- the call flow (sync_flow.templ).
  *
- * 1. Opens a flow: under a failed row of Manage › Sync history (the row is a
+ * 1. Opens a flow: under a failed row of Campaign settings › Sync history (the row is a
  *    <details>) and under a campaign row of Admin › API & access. The flow
  *    is fetched once, the first time it opens, and folds open.
  * 2. Clicking a step opens what happened under it and lights its chain:
@@ -179,7 +179,7 @@
       });
   }
 
-  // Manage › Sync history: a failed row is a <details>; toggle doesn't
+  // Campaign settings › Sync history: a failed row is a <details>; toggle doesn't
   // bubble, so listen in the capture phase.
   document.addEventListener('toggle', function (ev) {
     var row = ev.target;

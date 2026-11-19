@@ -112,6 +112,9 @@ func RequireCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 			if err != nil {
 				return err
 			}
+			if handled, err := refuseDuringGuestPreview(c, cc); handled {
+				return err
+			}
 
 			if isWriteMethod(c.Request().Method) && cc.Campaign.IsArchived() {
 				return apperror.NewForbidden("campaign is archived and read-only")
@@ -139,6 +142,9 @@ func RequireCampaignAccessEvenIfArchived(service CampaignService) echo.Middlewar
 		return func(c *echo.Context) error {
 			cc, err := resolveCampaignContext(c, service)
 			if err != nil {
+				return err
+			}
+			if handled, err := refuseDuringGuestPreview(c, cc); handled {
 				return err
 			}
 
@@ -225,6 +231,18 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 				// VisibilityRole(). Site admins are unaffected — they take the
 				// IsSiteAdmin branch above and never rely on a grant.
 				cc.IsDmGranted = cc.IsMember && hasDmGrant(campaign, session.UserID)
+				// The guest preview (ADR-074): the DM team's own read of a
+				// public campaign runs as a visitor, once, here, so every
+				// handler downstream takes exactly the path a visitor takes
+				// instead of each guessing at it. This can only lower
+				// privileges and only for a real owner/co-DM sending their own
+				// cookie; Preview and the Previewer fields it sets draw the
+				// preview's chrome and grant nothing. The user id stays on the
+				// session, so a grant made to the owner's own account on a
+				// page would still match where a signed-out visitor's would not.
+				if guestPreviewActive(c, cc) {
+					cc = cc.GuestPreviewContext()
+				}
 				c.Set(contextKeyCampaign, cc)
 				return next(c)
 			}

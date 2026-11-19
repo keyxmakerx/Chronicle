@@ -2,7 +2,6 @@ package layouts
 
 import (
 	"context"
-	"strings"
 	"sync/atomic"
 
 	"github.com/a-h/templ"
@@ -38,27 +37,4 @@ func manageSentenceFor(ctx context.Context, line string) templ.Component {
 		return nil
 	}
 	return (*f)(ctx, line)
-}
-
-// manageBackCall is the "Manage" word's click handler. It hands the click to
-// static/js/desk_carry.js, loading that file on first use: the frame arrives by
-// boosted swaps where a script tag may never run, and no other page needs the
-// script.
-func manageBackCall() templ.ComponentScript {
-	src := AssetURL("/static/js/desk_carry.js")
-	q := strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\n", ``, "\r", ``, `<`, `\x3c`).Replace(src)
-	return templ.ComponentScript{
-		Name:     "manageBack",
-		Function: "",
-		// A plain click would navigate before the script has loaded, so the
-		// first press is held and handed over with "late" set: the script then
-		// plays the move, or goes to the link itself when it cannot.
-		Call: `(function(a,e){var C=window.Chronicle=window.Chronicle||{};var late=0;` +
-			`if(!C.deskCarry&&e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey&&!a.target){e.preventDefault();late=1;}` +
-			`function go(){if(C.deskCarry)C.deskCarry.back(a,e,late);}` +
-			`if(C.deskCarry){go();return;}` +
-			`var s=document.querySelector('script[data-desk-carry-js]');` +
-			`if(!s){s=document.createElement('script');s.src='` + q + `';s.setAttribute('data-desk-carry-js','');document.head.appendChild(s);}` +
-			`s.addEventListener('load',go);})(this,event)`,
-	}
 }

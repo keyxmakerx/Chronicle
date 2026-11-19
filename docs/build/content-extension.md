@@ -108,7 +108,7 @@ named `ext_<id>_…` (hyphens in the id become underscores).
 2. Admin > Extensions (`/admin/extensions`) > upload the zip, confirm your
    password. Or, on a server you run, copy the folder into `EXTENSIONS_PATH`
    (default `./extensions`) and press Rescan. Rescan does not run migrations.
-3. In a campaign, as owner: Manage > Game & features
+3. In a campaign, as owner: Campaign settings > Game & features
    (`/campaigns/:id/extensions`) > Content Packs > turn it on.
 
 Working: the new entity types appear in the sidebar and the tags in the tag

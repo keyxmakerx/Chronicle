@@ -51,12 +51,14 @@ const VARIANTS = [
   { name: 'htmx', headers: { Accept: 'text/html', 'HX-Request': 'true' } },
 ];
 
-// Returns {hits: [{route, variant, marker, status}], seen:Set(markers), requests}
+// Returns {hits: [{route, variant, marker, status}], seen:Set(markers), requests,
+// statuses: Map('variant route' -> status)}
 export async function crawl(client, cid, ids, markers, { log = () => {}, term = 'ZQ', controls = [] } = {}) {
   const controlSeen = new Set();
   const pool = { ids: [...new Set(ids)], ints: ['1', '2', '3', '4', '5'] };
   const keys = Object.keys(markers);
   const hits = [];
+  const statuses = new Map();
   const seen = new Set();
   let requests = 0;
   let before0 = client.jar.size;
@@ -80,6 +82,7 @@ export async function crawl(client, cid, ids, markers, { log = () => {}, term = 
       let res;
       try { res = await client.get(u, { headers: v.headers, follow: false }); } catch { continue; }
       requests++;
+      statuses.set(`${v.name} ${u.replace(cid, ':id')}`, res.status);
       const before = client.jar.size;
       if (client.jar.size < before0) { log(`${client.label}: cookie dropped by GET ${u}`); before0 = client.jar.size; }
       if (res.status >= 300 && res.status < 400) continue;
@@ -94,5 +97,5 @@ export async function crawl(client, cid, ids, markers, { log = () => {}, term = 
   }
   if (client.creds && !(await client.signedIn())) { lostAt.push('(end of walk)'); await client.login(client.creds.email, client.creds.password); }
   log(`${client.label}: ${urls.size} urls x ${VARIANTS.length} = ${requests} requests`);
-  return { hits, seen, requests, lostAt, controlSeen };
+  return { hits, seen, requests, lostAt, controlSeen, statuses };
 }

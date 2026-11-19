@@ -12,8 +12,8 @@ import (
 	"github.com/a-h/templ"
 )
 
-// SettingsTab is the declarative description of one tab on the campaign
-// Settings page.
+// SettingsTab is the declarative description of one tab on the Details and
+// data page.
 //
 //   - ID: stable slug used in the URL (`?tab=<id>`) and the Alpine.js
 //     x-show predicate; must stay URL-safe and stable (operator bookmarks
@@ -72,7 +72,7 @@ func (h *Handler) builtInSettingsTabs(
 	return []SettingsTab{
 		{
 			ID:        "general",
-			Label:     "General",
+			Label:     "Details",
 			Icon:      "fa-solid fa-gear",
 			MinRole:   RolePlayer,
 			SortOrder: 10,
@@ -80,7 +80,7 @@ func (h *Handler) builtInSettingsTabs(
 		},
 		{
 			ID:        settingsTabAPIKeys,
-			Label:     "API keys",
+			Label:     "Keys",
 			Icon:      "fa-solid fa-key",
 			MinRole:   RolePlayer,
 			SortOrder: 40,
@@ -88,15 +88,15 @@ func (h *Handler) builtInSettingsTabs(
 		},
 		{
 			ID:        settingsTabData,
-			Label:     "Data",
+			Label:     "Export",
 			Icon:      "fa-solid fa-database",
 			MinRole:   RolePlayer,
 			SortOrder: 50,
 			Content:   SettingsDataSection(cc),
 		},
 		{
-			ID:        "activity",
-			Label:     "Activity",
+			ID:        settingsTabActivity,
+			Label:     "Activity log",
 			Icon:      "fa-solid fa-clock-rotate-left",
 			MinRole:   RolePlayer,
 			SortOrder: 60,
@@ -107,8 +107,12 @@ func (h *Handler) builtInSettingsTabs(
 
 // Settings tab IDs that other code points at.
 const (
-	settingsTabAPIKeys = "api-keys"
-	settingsTabData    = "data"
+	settingsTabAPIKeys  = "api-keys"
+	settingsTabData     = "data"
+	settingsTabActivity = "activity"
+	// settingsTabImport is the id the vault_import plugin registers its tab
+	// under; campaigns names it only to link there and cannot import the plugin.
+	settingsTabImport = "import"
 )
 
 // visibleSettingsTabs returns the merged + role-filtered + sorted tab
