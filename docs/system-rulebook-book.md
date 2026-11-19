@@ -83,10 +83,16 @@ parts:
   coloured result tiers, coloured from `theme` (`accent` colours banner edges
   and tiers). A book is `paper` or `bold`, not both. Navigation is the Sections
   ribbon and the bar under the book, so a bold book has no contents drawer or
-  tabs. Each chapter gets a colour from a fixed set, in book order, for its
+  tabs. A reader who followed a link from another Chronicle page to a chapter
+  (`…/systems/<id>#<chapter-id>`) also gets a link back to that page, in either
+  look. Each chapter gets a colour from a fixed set, in book order, for its
   banner edge, page numbers and the intro's first letter. A chapter that is a
   single `wide` contents page takes the left page, with the next chapter
   opening beside it.
+- The campaign home shows each house-rules chapter's pages in place: opening
+  a rule shows the chapter's page torn out of the book, in the book's own look,
+  with Previous and Next among the chapter's pages and a link that opens the
+  book at the chapter.
 - A book's `look`, colours and fonts belong to its system; the site's Customize
   settings never change them.
 - `cover` is a drawn cover. On first open in a visit the book shows closed; a

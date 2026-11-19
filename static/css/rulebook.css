@@ -94,6 +94,7 @@
 .rb-mark:where(:not(.rb-wslot *)) { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font: 700 12px var(--rb-head); color: #fff; background: linear-gradient(135deg, color-mix(in srgb, var(--rb-acc) 82%, #000), var(--rb-acc3)); }
 .rb-name small:where(:not(.rb-wslot *)) { display: block; font: 600 9px var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-mut); }
 .rb-btn:where(:not(.rb-wslot *)) { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--rb-edge); background: var(--rb-box); font-size: 12.5px; color: var(--rb-ink2); white-space: nowrap; }
+.rb a.rb-btn:where(:not(.rb-wslot *)) { text-decoration: none; }
 .rb-btn:hover:where(:not(.rb-wslot *)) { border-color: var(--rb-acc3); color: var(--rb-ink); }
 .rb-btn[aria-expanded="true"]:where(:not(.rb-wslot *)) { background: color-mix(in srgb, var(--rb-acc) 16%, var(--rb-box)); color: var(--rb-ink); border-color: var(--rb-acc3); }
 .rb-btn-primary:where(:not(.rb-wslot *)) { background: var(--rb-acc3); border-color: var(--rb-acc3); color: #fff; padding: 8px 16px; font-weight: 600; }
@@ -673,9 +674,18 @@
 .rb-turnbar:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 10px; width: min(100% - 28px, 1600px); min-width: min(100% - 28px, 720px); margin: 10px auto 14px; }
 .rb-turn-where:where(:not(.rb-wslot *)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font: 700 13px/1 var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-ink2); }
 .rb-turn-ctl:where(:not(.rb-wslot *)) { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.rb .rb-pill:where(:not(.rb-wslot *)) { padding: 9px 12px; border: 1.5px solid var(--rb-ink); border-radius: 3px; font: 600 13px/1 var(--rb-ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--rb-ink); white-space: nowrap; }
-.rb .rb-pill:hover:not(:disabled):where(:not(.rb-wslot *)) { background: var(--rb-ink); color: var(--rb-paper); }
-.rb .rb-pill:disabled:where(:not(.rb-wslot *)) { opacity: 0.4; }
+/* A pill is filled, so one that works never reads as switched off; the one
+   that is off keeps only its outline. Hover is for pointers alone: on a touch
+   screen it would stay on the last pill tapped. */
+.rb .rb-pill:where(:not(.rb-wslot *)) { display: inline-flex; align-items: center; padding: 9px 12px; border: 1.5px solid var(--rb-ink); border-radius: 3px; background: var(--rb-ink); font: 600 13px/1 var(--rb-ui); letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; color: var(--rb-paper); white-space: nowrap; }
+@media (hover: hover) {
+  .rb .rb-pill:hover:not(:disabled):where(:not(.rb-wslot *)) { background: color-mix(in srgb, var(--rb-ink) 82%, var(--rb-paper)); }
+}
+.rb .rb-pill:active:not(:disabled):where(:not(.rb-wslot *)) { background: color-mix(in srgb, var(--rb-ink) 70%, var(--rb-paper)); }
+.rb .rb-pill:disabled:where(:not(.rb-wslot *)) { background: transparent; color: var(--rb-ink); opacity: 0.45; }
+/* The way back to the page that sent the reader here has a row of its own. */
+.rb-turnbar:has(.rb-return):where(:not(.rb-wslot *)) { flex-wrap: wrap; }
+.rb .rb-turnbar .rb-return:where(:not(.rb-wslot *)) { flex: 1 0 100%; justify-content: center; white-space: normal; }
 .rb .rb-pill:focus-visible:where(:not(.rb-wslot *)) { outline: 2px solid var(--rb-hot); outline-offset: 2px; }
 /* Chronicle's Jot notes tab is fixed in the window's bottom-right corner;
    the bar ends above it so Next is never under it. */
@@ -688,6 +698,7 @@ body:has(.jot-tab) .rb-turnbar:where(:not(.rb-wslot *)) { margin-bottom: calc(1.
   .rb-turnbar:where(:not(.rb-wslot *)) { width: calc(100% - 12px); min-width: 0; margin: 8px auto 10px; }
   .rb[data-look="bold"] .rb-turnbar:where(:not(.rb-wslot *)) { margin-top: 20px; }
   .rb-turn-where:where(:not(.rb-wslot *)) { display: none; }
+  .rb .rb-pill:where(:not(.rb-wslot *)) { min-height: 44px; }
 }
 
 /* Shut, the book lies on the desk without the open spread's shadow. */
@@ -737,3 +748,82 @@ body:has(.jot-tab) .rb-turnbar:where(:not(.rb-wslot *)) { margin-bottom: calc(1.
 .rb .rb-flap p:where(:not(.rb-wslot *)) { margin: 0; font: 500 14.5px/1.65 var(--rb-body); color: inherit; }
 .rb .rb-flap p + p:where(:not(.rb-wslot *)) { margin-top: 8px; }
 .rb .rb-flap b:where(:not(.rb-wslot *)) { color: inherit; }
+
+/* ---- leaf: one chapter's page, torn out of the book ----
+   A leaf is the reader in a third form (data-leaf): one page of one chapter
+   set in another page, as if torn from the book and laid there. Only the leaf
+   gets the paper: the torn binding edge is a clip-path on the page, and since
+   a clipped element cannot carry its own shadow, the drop shadow is on the
+   wrapper around it. Every colour is the book's own, so the page keeps its
+   paper and ink in the app's light and dark alike. A filter makes its element
+   the containing block of fixed descendants, so a page holding a mounted
+   widget goes without the shadow rather than misplace the widget's sheets.
+   The tear below is the fixed fallback; the script draws one to the page's
+   height. */
+.rb.rb-torn:where(:not(.rb-wslot *)) {
+  --rb-pad: clamp(20px, 3.4vw, 34px);
+  --rb-shade: color-mix(in srgb, var(--rb-ink) 12%, #000);
+  display: block;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  background: none;
+  color: inherit;
+  margin: 4px -6px 12px;
+}
+.rb-torn .rb-tear:where(:not(.rb-wslot *)) {
+  filter: drop-shadow(0 0 0.5px color-mix(in srgb, var(--rb-edge) 90%, transparent)) drop-shadow(0 1px 1px color-mix(in srgb, var(--rb-shade) 40%, transparent)) drop-shadow(0 6px 10px color-mix(in srgb, var(--rb-shade) 28%, transparent));
+}
+.rb-torn .rb-tear:has(.rb-wslot):where(:not(.rb-wslot *)) { filter: none; }
+.rb-torn .rb-page:where(:not(.rb-wslot *)) {
+  flex: none;
+  height: auto;
+  min-width: 0;
+  background: var(--rb-paper);
+  color: var(--rb-ink);
+  clip-path: polygon(7px 0.0%, 3px 3.3%, 2px 6.7%, 0px 10.0%, 1px 13.3%, 1px 16.7%, 7px 20.0%, 0px 23.3%, 5px 26.7%, 0px 30.0%, 1px 33.3%, 2px 36.7%, 2px 40.0%, 1px 43.3%, 5px 46.7%, 1px 50.0%, 2px 53.3%, 0px 56.7%, 1px 60.0%, 5px 63.3%, 0px 66.7%, 2px 70.0%, 0px 73.3%, 5px 76.7%, 0px 80.0%, 3px 83.3%, 9px 86.7%, 2px 90.0%, 3px 93.3%, 1px 96.7%, 9px 100.0%, 100% 100%, 100% 0%);
+}
+.rb-torn .rb-scroll:where(:not(.rb-wslot *)) { flex: 0 0 auto; overflow: visible; padding: 10px var(--rb-pad) 4px; }
+.rb-torn .rb-fhd:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; justify-content: space-between; gap: 12px; padding: 14px var(--rb-pad) 0; font: 700 10px/1 var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-mut); white-space: nowrap; overflow: hidden; }
+.rb-torn .rb-fhd span:where(:not(.rb-wslot *)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rb-torn[data-look="bold"] .rb-fhd span:where(:not(.rb-wslot *)) { max-width: none; }
+/* On a phone the head keeps the book's name; the chapter is the kicker just below. */
+@media (max-width: 520px) {
+  .rb-torn .rb-fhd span:last-child:not(:first-child):where(:not(.rb-wslot *)) { display: none; }
+}
+.rb-torn .rb-page h2:where(:not(.rb-wslot *)) { font-size: clamp(20px, 5vw, 26px); margin: 6px 0 12px; }
+.rb-torn[data-look="bold"] .rb-page h2:where(:not(.rb-wslot *)) { font-size: clamp(28px, 6vw, 36px); }
+.rb-torn .rb-prose:where(:not(.rb-wslot *)) { font-size: 15px; line-height: 1.65; }
+.rb-torn .rb-blocks:where(:not(.rb-wslot *)) { max-width: none; gap: 14px; }
+.rb-torn > .rb-state:where(:not(.rb-wslot *)) { padding: 18px 12px; gap: 8px; color: inherit; }
+.rb-torn > .rb-state .rb-state-title:where(:not(.rb-wslot *)) { font: 700 15px var(--rb-ui); color: inherit; }
+
+/* The foot: the page's number, and quiet underlined words to turn it or open
+   the book there. */
+.rb-torn .rb-foot:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: block; padding: 6px var(--rb-pad) 12px; }
+.rb-tnav:where(:not(.rb-wslot *)) { display: flex; flex-direction: column; }
+.rb-trow:where(:not(.rb-wslot *)) { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rb-twords:where(:not(.rb-wslot *)) { display: flex; flex-wrap: wrap; column-gap: 18px; min-width: 0; }
+.rb-tw:where(:not(.rb-wslot *)) { display: inline-flex; align-items: center; min-height: 32px; min-width: 0; padding: 0; background: none; border: 0; text-align: left; font: 600 12.5px/1.3 var(--rb-ui); color: var(--rb-ink); text-decoration: underline; text-decoration-thickness: 1px; text-decoration-color: color-mix(in srgb, var(--rb-ink) 55%, transparent); text-underline-offset: 3px; cursor: pointer; }
+.rb-tw:hover:where(:not(.rb-wslot *)) { text-decoration-thickness: 2px; text-decoration-color: currentColor; }
+.rb-tw:focus-visible:where(:not(.rb-wslot *)) { outline-offset: 2px; }
+@media (pointer: coarse) {
+  .rb-tw:where(:not(.rb-wslot *)) { min-height: 44px; }
+}
+.rb-torn .rb-folio:where(:not(.rb-wslot *)) { flex: none; }
+.rb-tcount:where(:not(.rb-wslot *)) { flex: none; font: 600 11px var(--rb-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--rb-mut); font-variant-numeric: tabular-nums; }
+
+/* Opening a rule grows its page out of the row (the Settle move: opacity and
+   a short rise); turning to another page settles in the same way. Calm fades
+   only, and Off and a device asking for less motion show the page at once. */
+details[open] .rb-torn.rb-ready > .rb-tear:where(:not(.rb-wslot *)) { animation: rb-grow var(--dur-standard, 200ms) var(--ease-out, ease-out) both; }
+.rb-torn .rb-page.rb-in:where(:not(.rb-wslot *)) { animation: rb-grow var(--dur-micro, 120ms) var(--ease-out, ease-out) both; }
+@keyframes rb-grow { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes rb-grow-calm { from { opacity: 0; } to { opacity: 1; } }
+:is(html[data-motion], html[data-cz-reduce], html[data-view-motion="calm"]) details[open] .rb-torn.rb-ready > .rb-tear:where(:not(.rb-wslot *)),
+:is(html[data-motion], html[data-cz-reduce], html[data-view-motion="calm"]) .rb-torn .rb-page.rb-in:where(:not(.rb-wslot *)) { animation-name: rb-grow-calm; }
+html[data-motion="off"] details[open] .rb-torn.rb-ready > .rb-tear:where(:not(.rb-wslot *)),
+html[data-motion="off"] .rb-torn .rb-page.rb-in:where(:not(.rb-wslot *)) { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  details[open] .rb-torn.rb-ready > .rb-tear:where(:not(.rb-wslot *)), .rb-torn .rb-page.rb-in:where(:not(.rb-wslot *)) { animation: none; }
+}

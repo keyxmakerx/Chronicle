@@ -17,6 +17,14 @@
  * Mount: <div data-widget="rulebook" data-campaign-id data-book-url>, or
  * data-book-json for a book shown inside another page (a draft under review),
  * which keeps no place and only answers keys pressed inside it.
+ *
+ * A leaf is a third mode: data-leaf="<chapter id>" draws only that chapter's
+ * pages, one at a time, torn out of the book and set in another page (the
+ * campaign home's house rules). It has no bar, tabs, cover, search or saved
+ * place, listens to nothing outside itself, and waits for the fold-out it sits
+ * in to open before it asks for the book. data-open-href is the link that
+ * opens the full book at the chapter; data-leaf-preview adds a hover preview
+ * to the fold-out's row.
  */
 (function () {
   'use strict';
@@ -55,6 +63,11 @@
 
   var instances = new WeakMap();
   var uid = 0;
+  // Leaves on one page ask for the same book once. A failed request is not
+  // kept, so the next leaf to open tries again.
+  var bookRequests = {};
+  // A preview excerpt stays short enough to read at a glance.
+  var PREVIEW_CHARS = 220;
 
   // --- Small helpers ---------------------------------------------------------
 
@@ -63,6 +76,22 @@
   function arr(v) { return Array.isArray(v) ? v : []; }
   function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+
+  // getBook fetches and parses a book's JSON; the error carries the HTTP
+  // status or an unreadable flag for errorMessage.
+  function getBook(url) {
+    return Chronicle.apiFetch(url).then(function (res) {
+      if (!res.ok) { var err = new Error('http'); err.status = res.status; throw err; }
+      return res.json().catch(function () { var e = new Error('json'); e.unreadable = true; throw e; });
+    });
+  }
+
+  function sharedBook(url) {
+    if (!has(bookRequests, url)) {
+      bookRequests[url] = getBook(url).catch(function (err) { delete bookRequests[url]; throw err; });
+    }
+    return bookRequests[url];
+  }
 
   function roman(n) {
     var out = '', vals = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
@@ -270,6 +299,14 @@
     this.frontShut = false;
     this.frontTimer = 0;
     this.faces = [];
+    // Leaf mode: the one chapter drawn, where it opens the full book, and
+    // whether its fold-out row previews it on hover.
+    this.leafId = str(config.leaf);
+    this.openHref = str(config.openHref);
+    this.leafPreview = config.leafPreview === true || config.leafPreview === 'true';
+    this.leafItems = [];
+    this.leafAt = 0;
+    this.leafStarted = false;
     this.inst = ++uid;
   }
 
@@ -282,6 +319,7 @@
 
   Rulebook.prototype.start = function () {
     var self = this;
+    if (this.leafId) { this.startLeaf(); return; }
     this.el.classList.add('rb');
     if (this.inline) this.el.classList.add('rb-inline');
     this.on(document, 'click', function (e) { self.onClick(e); });
@@ -310,6 +348,8 @@
     });
     this.handlers = [];
     if (this.unbindCard) { this.unbindCard(); this.unbindCard = null; }
+    if (this.unbindPreview) { this.unbindPreview(); this.unbindPreview = null; }
+    if (this.ro) { this.ro.disconnect(); this.ro = null; }
     this.timers.forEach(function (t) { clearInterval(t); clearTimeout(t); });
     this.timers = [];
     clearTimeout(this.leafTimer);
@@ -319,7 +359,7 @@
     this.unloadFonts();
     this.destroyNested(this.el);
     this.el.innerHTML = '';
-    this.el.classList.remove('rb', 'rb-inline', 'rb-closed');
+    this.el.classList.remove('rb', 'rb-inline', 'rb-closed', 'rb-torn');
     this.el.removeAttribute('aria-busy');
   };
 
@@ -348,10 +388,7 @@
     }
     if (!this.url) { this.showState('error', 'This page has no book address.'); return; }
     this.showState('loading');
-    Chronicle.apiFetch(this.url).then(function (res) {
-      if (!res.ok) { var err = new Error('http'); err.status = res.status; throw err; }
-      return res.json().catch(function () { var e = new Error('json'); e.unreadable = true; throw e; });
-    }).then(function (json) {
+    (this.leafId ? sharedBook(this.url) : getBook(this.url)).then(function (json) {
       if (self.dead || seq !== self.loadSeq) return;
       var data = normalize(json);
       if (!data) { var e = new Error('shape'); e.unreadable = true; throw e; }
@@ -377,6 +414,7 @@
   };
 
   Rulebook.prototype.open = function (data) {
+    if (this.leafId) { this.openLeaf(data); return; }
     this.data = data;
     this.applyTheme(data.theme);
     this.view = data.isDirector ? 'director' : 'player';
@@ -415,6 +453,7 @@
     this.bmRoll = q('.rb-bm-roll');
     this.bmList = q('.rb-bm-list');
     var key = this.openingKey(place);
+    this.placeReturn();
     this.rebuild(key);
     // The book opens shut on its cover, as a book on the table does, but
     // never over a link that names a chapter: that reader asked for a page.
@@ -657,11 +696,40 @@
       '<div class="rb-sr" aria-live="polite"></div>';
   };
 
+  // returnLink is the way out for a reader a link elsewhere in Chronicle sent
+  // to a place in the book: the page they came from. The book's own page
+  // controls only turn pages, so without it the reader has no way back on the
+  // page. It is empty for a reader who opened the book themselves.
+  Rulebook.prototype.returnLink = function () {
+    if (this.inline || !this.deepLink) return null;
+    var ref;
+    try { ref = new URL(document.referrer); } catch (e) { return null; }
+    if (ref.origin !== window.location.origin || ref.pathname === window.location.pathname) return null;
+    return {
+      href: ref.pathname + ref.search + ref.hash,
+      label: /^\/campaigns\/[^/]+\/?$/.test(ref.pathname) ? 'Back to the campaign home' : 'Back to where you were'
+    };
+  };
+
+  // placeReturn adds the way back once the opening place is known: first in
+  // the turn bar of a bold book, else before Contents in the bar.
+  Rulebook.prototype.placeReturn = function () {
+    var r = this.returnLink(), before = this.turnEl ? this.turnEl.firstChild : this.tocBtn;
+    if (!r || !before) return;
+    var a = document.createElement('a');
+    a.className = (this.turnEl ? 'rb-pill' : 'rb-btn') + ' rb-return';
+    a.setAttribute('data-act', 'return');
+    a.href = r.href;
+    a.textContent = '\u21A9 ' + r.label;
+    before.parentNode.insertBefore(a, before);
+  };
+
   // The bold look turns its pages from a bar under the book, as a printed
-  // handbook's reader would expect: back, where the reader is, close the
+  // handbook's reader would expect: previous, where the reader is, close the
   // book, next. While the book is shut, Next opens it.
   Rulebook.prototype.turnbarHTML = function () {
-    return '<div class="rb-turnbar"><button type="button" class="rb-pill" data-act="prev">\u2039 Back</button>' +
+    return '<div class="rb-turnbar">' +
+      '<button type="button" class="rb-pill" data-act="prev">\u2039 Previous</button>' +
       '<span class="rb-turn-where" aria-hidden="true"></span><span class="rb-turn-ctl">' +
       (this.data.cover ? '<button type="button" class="rb-pill" data-act="shut">Close the book</button>' : '') +
       '<button type="button" class="rb-pill" data-act="next">Next \u203A</button></span></div>';
@@ -982,7 +1050,8 @@
 
   Rulebook.prototype.dirTag = function () { return '<span class="rb-dir">' + gmTerm() + '</span>'; };
 
-  Rulebook.prototype.pageHTML = function (item) {
+  // foot replaces the page's folio line; the leaf draws its own.
+  Rulebook.prototype.pageHTML = function (item, foot) {
     var h, label;
     if (item.kind === 'open') {
       var ch = item.ch;
@@ -1009,7 +1078,7 @@
       : '<span>' + esc(this.data.title) + '</span><span>' + esc(chapter) + '</span>';
     return '<div class="rb-fhd" aria-hidden="true">' + head + '</div>' +
       '<div class="rb-scroll" tabindex="0" role="region" aria-label="Page ' + (item.n + 1) + ': ' + esc(label) + '"' + hueStyle(item.hue) + '>' + h + '</div>' +
-      '<div class="rb-foot"><span class="rb-folio">' + (item.n + 1) + '</span></div>';
+      '<div class="rb-foot">' + (foot || '<span class="rb-folio">' + (item.n + 1) + '</span>') + '</div>';
   };
 
   // The kicker, title and blocks of one page, shared with the page editor's
@@ -1863,6 +1932,8 @@
         case 'bm': this.bmSet(!this.bmOpen(), false); break;
         case 'front': this.openFront(); break;
         case 'shut': this.shutFront(); break;
+        // Going back in history returns the reader to their place on that page.
+        case 'return': if (window.history.length > 1) { e.preventDefault(); window.history.back(); } break;
         case 'more': this.setMore(x.getAttribute('aria-expanded') !== 'true'); break;
         case 'view': this.setView(x.getAttribute('data-view')); break;
         case 'roll': this.doRoll(x.closest('[data-roll]')); break;
@@ -1919,6 +1990,229 @@
     if (!s || this.drawerOpen()) return;
     var dx = p.clientX - s.x, dy = p.clientY - s.y;
     if (Math.abs(dx) >= SWIPE_PX && Math.abs(dy) < Math.abs(dx) * 0.6) this.turnTo(this.at + (dx < 0 ? 1 : -1));
+  };
+
+  // --- Leaf mode -------------------------------------------------------------
+  // One chapter's pages, one at a time, drawn by the book's own page renderer
+  // and set in another page. Nothing here reads or writes the reader's saved
+  // place, and nothing listens outside the leaf, so any number can share a page
+  // with the app's own shortcuts.
+
+  Rulebook.prototype.startLeaf = function () {
+    var self = this, det = this.el.closest('details');
+    this.el.classList.add('rb', 'rb-torn');
+    this.on(this.el, 'click', function (e) { self.onLeafClick(e); });
+    this.on(this.el, 'input', function (e) { self.onInput(e); });
+    if (window.Chronicle && Chronicle.hovercard) {
+      this.unbindCard = Chronicle.hovercard.bind(this.el, '.rb-term', function (t) { return self.termCard(t); }, { pinOnClick: true });
+    }
+    // Closed, the leaf costs nothing: the book is asked for when the fold-out
+    // it sits in first opens.
+    if (!det || det.open) { this.leafStarted = true; this.load(); }
+    else {
+      this.on(det, 'toggle', function () {
+        if (det.open && !self.leafStarted) { self.leafStarted = true; self.load(); }
+      });
+    }
+    if (det && this.leafPreview) this.bindPreview(det);
+  };
+
+  // The row's hover preview is the shared hover card; it describes the
+  // chapter's first page in plain text and never draws a popup of its own.
+  Rulebook.prototype.bindPreview = function (det) {
+    var self = this, sum = det.querySelector(':scope > summary');
+    if (!sum || !window.Chronicle || !Chronicle.hovercard) return;
+    this.unbindPreview = Chronicle.hovercard.bind(sum, 'summary', function (t) { return self.previewCard(det, t); });
+    this.on(det, 'toggle', function () {
+      var hc = Chronicle.hovercard;
+      if (det.open && hc.current() === sum) hc.close();
+    });
+  };
+
+  function keyboardFocus(el) {
+    try { return el.matches(':focus-visible'); } catch (e) { return true; }
+  }
+
+  Rulebook.prototype.previewCard = function (det, row) {
+    // An open rule already shows the page; a touch screen has no resting
+    // pointer, and a row focused by a press is about to open.
+    if (det.open || !media('(hover: hover)')) return null;
+    if (row === document.activeElement && !keyboardFocus(row)) return null;
+    var id = this.leafId;
+    return sharedBook(this.url).then(function (json) {
+      var data = normalize(json);
+      return data ? previewOf(data, id) : null;
+    }).catch(function () { return null; });
+  };
+
+  // previewOf is the hover card's content for a chapter: its title, the start
+  // of its first page in plain words, and how long it is. Director-only pages
+  // and blocks are left out, whoever asks, so a preview never carries them
+  // onto a shared screen.
+  function previewOf(data, id) {
+    var dir = data.isDirector, found = null;
+    data.parts.forEach(function (part) {
+      if (part.director && !dir) return;
+      part.chapters.forEach(function (ch) { if (ch.id === id && !(ch.director && !dir)) found = ch; });
+    });
+    if (!found) return null;
+    var pages = found.pages.filter(function (p) { return !p.director && p.blocks.some(function (b) { return !b.director && str(b.type) !== 'note'; }); });
+    var first = pages[0], text = '';
+    if (first) {
+      first.blocks.some(function (b) {
+        var type = str(b.type);
+        if (b.director === true || (type !== 'text' && type !== 'callout')) return false;
+        text = plain(str(b.text)).replace(/\s+/g, ' ').trim();
+        return !!text;
+      });
+    }
+    if (!text) text = found.intro;
+    if (text.length > PREVIEW_CHARS) text = text.slice(0, PREVIEW_CHARS).replace(/\s+\S*$/, '') + '…';
+    return {
+      kind: 'Rulebook', title: found.title, text: text,
+      foot: pages.length ? pages.length + (pages.length === 1 ? ' page' : ' pages') + (first.title ? ' · ' + first.title : '') : ''
+    };
+  }
+
+  Rulebook.prototype.openLeaf = function (data) {
+    this.data = data;
+    this.applyTheme(data.theme);
+    this.view = data.isDirector ? 'director' : 'player';
+    this.unloadFonts();
+    this.loadFonts();
+    this.buildItems();
+    var id = this.leafId;
+    // The chapter's own pages, without its opener: the row above the leaf
+    // already shows the introduction.
+    this.leafItems = this.items.filter(function (it) { return it.kind === 'page' && it.ch.id === id; });
+    this.leafItems.forEach(function (it) { it.wide = false; });
+    this.leafAt = 0;
+    this.el.innerHTML = '<div class="rb-tear"></div><div class="rb-sr" aria-live="polite"></div>';
+    this.el.setAttribute('aria-busy', 'false');
+    this.tearEl = this.el.querySelector('.rb-tear');
+    this.srEl = this.el.querySelector('.rb-sr');
+    this.paintLeaf(false, '');
+  };
+
+  // Where "Open the book at this page" goes: the full book, at this chapter.
+  Rulebook.prototype.leafHref = function () {
+    if (/^\/(?!\/)[^\s"'<>\\]*$/.test(this.openHref)) return this.openHref;
+    return this.url.replace(/[?#].*$/, '').replace(/\/book\/?$/, '') + '#' + encodeURIComponent(this.leafId);
+  };
+
+  Rulebook.prototype.leafFootHTML = function (it, prev, next) {
+    var n = this.leafItems.length, words = '';
+    if (prev) words += '<button type="button" class="rb-tw" data-act="leaf-prev">Previous</button>';
+    if (next) words += '<button type="button" class="rb-tw" data-act="leaf-next">Next' + (next.p.title ? ': ' + esc(next.p.title) : '') + '</button>';
+    return '<nav class="rb-tnav" aria-label="Pages of ' + esc(it.ch.title) + '">' +
+      '<div class="rb-trow">' + (words ? '<span class="rb-twords">' + words + '</span>' : '<span></span>') +
+      '<span class="rb-folio">' + (it.n + 1) + '</span></div>' +
+      '<div class="rb-trow"><a class="rb-tw" href="' + esc(this.leafHref()) + '">Open the book at this page</a>' +
+      (n > 1 ? '<span class="rb-tcount">' + (this.leafAt + 1) + ' of ' + n + '</span>' : '') + '</div></nav>';
+  };
+
+  Rulebook.prototype.paintLeaf = function (turned, focusAct) {
+    var items = this.leafItems, it = items[this.leafAt];
+    this.hideCard();
+    this.destroyNested(this.tearEl);
+    if (this.ro) { this.ro.disconnect(); this.ro = null; }
+    this.tearH = 0;
+    if (!it) {
+      this.tearEl.innerHTML = '<p class="rb-empty">This page is not in the book you can read.</p>';
+      return;
+    }
+    this.tearEl.innerHTML = '<article class="rb-page' + (turned ? ' rb-in' : '') + '">' +
+      this.pageHTML(it, this.leafFootHTML(it, items[this.leafAt - 1], items[this.leafAt + 1])) + '</article>';
+    // The page grows with its words and never scrolls inside the leaf, so it
+    // is not a tab stop.
+    var sc = this.tearEl.querySelector('.rb-scroll');
+    if (sc) sc.removeAttribute('tabindex');
+    this.mountNested(this.tearEl);
+    this.el.classList.add('rb-ready');
+    this.shapeEdge();
+    if (turned) {
+      this.srEl.textContent = 'Page ' + (it.n + 1) + ' of ' + this.items.length + ': ' + it.ch.title + (it.p.title ? ', ' + it.p.title : '');
+    }
+    if (focusAct) {
+      // The control just used may be gone (the last page has no Next).
+      var other = focusAct === 'leaf-next' ? 'leaf-prev' : 'leaf-next';
+      var f = this.tearEl.querySelector('[data-act="' + focusAct + '"]') || this.tearEl.querySelector('[data-act="' + other + '"]') ||
+        this.tearEl.querySelector('.rb-tnav a');
+      if (f) f.focus({ preventScroll: true });
+    }
+  };
+
+  // A tear drawn to the page's own height: points every few pixels down the
+  // binding edge, jittered from the chapter and page so the same page always
+  // tears the same way. The stylesheet carries a fixed tear for when
+  // ResizeObserver is missing.
+  function tornEdge(seed, h) {
+    var x = 0, i;
+    for (i = 0; i < seed.length; i++) x = (x * 31 + seed.charCodeAt(i)) >>> 0;
+    function rand() { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }
+    var n = Math.max(6, Math.round(h / 12)), pts = [];
+    for (i = 0; i <= n; i++) {
+      var r = rand(), dx = r > 0.82 ? 5 + Math.round(rand() * 4) : Math.round(r * 3);
+      pts.push(dx + 'px ' + Math.round(i * h / n) + 'px');
+    }
+    return 'polygon(' + pts.join(', ') + ', 100% ' + h + 'px, 100% 0)';
+  }
+
+  Rulebook.prototype.shapeEdge = function () {
+    var self = this, page = this.tearEl.querySelector('.rb-page');
+    if (!page || !window.ResizeObserver) return;
+    var seed = this.leafId + ':' + this.leafAt;
+    var apply = function () {
+      var h = page.offsetHeight;
+      // Hidden in a closed fold-out the page has no height yet.
+      if (h <= 0 || h === self.tearH) return;
+      self.tearH = h;
+      page.style.clipPath = tornEdge(seed, h);
+    };
+    apply();
+    this.ro = new ResizeObserver(apply);
+    this.ro.observe(page);
+  };
+
+  Rulebook.prototype.turnLeaf = function (d) {
+    var at = clamp(this.leafAt + d, 0, this.leafItems.length - 1);
+    if (at === this.leafAt) return;
+    this.leafAt = at;
+    this.paintLeaf(true, d > 0 ? 'leaf-next' : 'leaf-prev');
+  };
+
+  // A link inside a page to another chapter opens the full book there: the
+  // leaf shows one chapter only.
+  Rulebook.prototype.leaveFor = function (id) {
+    if (!SLUG_RE.test(id || '')) return;
+    window.location.assign(this.leafHref().replace(/#.*$/, '') + '#' + encodeURIComponent(id));
+  };
+
+  Rulebook.prototype.onLeafClick = function (e) {
+    var t = e.target, x;
+    if (!t || !t.closest) return;
+    if (!this.data) {
+      if (t.closest('[data-act="retry"]')) this.load();
+      return;
+    }
+    if ((x = t.closest('[data-chapter]'))) { this.leaveFor(x.getAttribute('data-chapter')); return; }
+    if ((x = t.closest('[data-go]'))) {
+      var item = this.items[+x.getAttribute('data-go')];
+      if (item) this.leaveFor(item.ch.id);
+      return;
+    }
+    if ((x = t.closest('[data-act]'))) {
+      switch (x.getAttribute('data-act')) {
+        case 'leaf-prev': this.turnLeaf(-1); break;
+        case 'leaf-next': this.turnLeaf(1); break;
+        case 'roll': this.doRoll(x.closest('[data-roll]')); break;
+        case 'prev-step': this.stepExample(x, -1); break;
+        case 'next-step': this.stepExample(x, 1); break;
+      }
+      return;
+    }
+    if ((x = t.closest('.rb-fc'))) { this.foldCard(x); return; }
+    if ((x = t.closest('.rb-flap > button'))) { this.toggleFlap(x); }
   };
 
   // Reuse by the page editor: draws one wire-format page (the same shape the

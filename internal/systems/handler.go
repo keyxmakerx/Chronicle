@@ -531,8 +531,9 @@ func (h *SystemHandler) systemDir(c *echo.Context, mod System) string {
 
 // BookAPI serves the system's Rulebook book, checked and filtered for the
 // viewer: Directors (the owner, or a member with Director visibility) get
-// everything, players only the player view (FilterBook). Never cached
-// shared, since the body depends on who asks.
+// everything, players only the player view (FilterBook), and a Director who
+// passes ?view=player gets what a player gets. Never cached shared, since the
+// body depends on who asks.
 //
 // GET /campaigns/:id/systems/:mod/book
 func (h *SystemHandler) BookAPI(c *echo.Context) error {
@@ -569,7 +570,9 @@ func (h *SystemHandler) BookAPI(c *echo.Context) error {
 		}
 	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
-	out := FilterBook(book, bookViewerIsDirector(cc)).
+	// ?view=player asks a Director for the player's book (the campaign home's
+	// leaves when the Director is viewing as a player); it can only narrow.
+	out := FilterBook(book, bookViewerIsDirector(cc) && c.QueryParam("view") != "player").
 		WithAssetBase("/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/book/files")
 	out.CanEdit = h.bookEdits != nil && bookEditorAllowed(cc)
 	return c.JSON(http.StatusOK, out)
