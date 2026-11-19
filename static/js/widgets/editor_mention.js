@@ -795,14 +795,21 @@
       for (key in attrs) {
         if (attrs.hasOwnProperty(key)) merged[key] = attrs[key];
       }
+      var kind = linkKind(merged.href, window.location.href);
       // Saved text is loaded as JSON, which skips the check made when a link
       // is typed or pasted, so the drawing repeats it: a refused address is
       // drawn as a link to nowhere.
-      if (linkKind(merged.href, window.location.href) === 'refused') merged.href = '';
-      // A link opens a new tab cut off from this one, whatever the saved
-      // link says about itself.
-      merged.target = '_blank';
-      merged.rel = 'noopener noreferrer nofollow';
+      if (kind === 'refused') merged.href = '';
+      // Inside the site a link opens in place, like every other link in the
+      // app; only another website gets the new tab. The address alone
+      // decides, whatever the saved link says about itself.
+      if (kind === 'inside') {
+        delete merged.target;
+        delete merged.rel;
+      } else {
+        merged.target = '_blank';
+        merged.rel = 'noopener noreferrer nofollow';
+      }
       // Entity mention links get distinctive styling + non-editable behavior.
       if (merged['data-mention-id']) {
         merged['class'] = 'entity-link';

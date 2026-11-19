@@ -1,7 +1,8 @@
-// editor_link_target.test.mjs — pins what a link in written text is drawn
-// with: an address that is not a link (one that runs code) is drawn as a link
-// to nowhere, and every link opens a new tab cut off from this one. The
-// address alone decides, whatever the saved text says about the link.
+// editor_link_target.test.mjs — pins what a link in written text does when it
+// is drawn: a link inside this site opens in place, a link to another website
+// opens a new tab cut off from this one, and an address that is not a link is
+// drawn as a link to nowhere. The address alone decides, whatever the saved
+// text says about the link.
 //
 // The first half runs the rule on its own; the second draws saved text through
 // the real editor in Chromium (needs playwright-core, see _browser_env.mjs).
@@ -95,16 +96,43 @@ const drawn = (p) => p.$$eval('#ed a', (as) => as.map((a) => ({
 
 const BLANK = { target: '_blank', rel: 'noopener noreferrer nofollow', class: null };
 
-test('drawn text: a link opens a new tab cut off from this one, whatever it says', { skip }, async (t) => {
+test('drawn text: a name opens in place, another website in a new tab', { skip }, async (t) => {
   const { p } = await draw(t, [
+    { text: 'Tidewatch Keep', attrs: { href: '/campaigns/c1/entities/e2', 'data-mention-id': 'e2', 'data-entity-preview': '/campaigns/c1/entities/e2/preview', ...BLANK } },
+    { text: 'the map', attrs: { href: 'https://chronicle.test/campaigns/c1/maps/m1', ...BLANK } },
     { text: 'a rules site', attrs: { href: 'https://example.com/rules', ...BLANK } },
     { text: 'a bare outside link', attrs: { href: 'https://example.com/bare', target: null, rel: null, class: null } },
     { text: 'a named window', attrs: { href: '//example.com/opener', target: 'chronicle', rel: 'opener', class: null } },
   ]);
-  for (const out of await drawn(p)) {
+  const a = await drawn(p);
+  assert.deepEqual(a[0], { text: 'Tidewatch Keep', href: '/campaigns/c1/entities/e2', target: null, rel: null });
+  assert.deepEqual(a[1], { text: 'the map', href: 'https://chronicle.test/campaigns/c1/maps/m1', target: null, rel: null });
+  for (const out of a.slice(2)) {
     assert.equal(out.target, '_blank', out.text);
     assert.equal(out.rel, 'noopener noreferrer nofollow', out.text);
   }
+  // The name keeps what its hover card and its look hang on.
+  assert.equal(await p.getAttribute('#ed a >> nth=0', 'data-entity-preview'), '/campaigns/c1/entities/e2/preview');
+  assert.equal(await p.getAttribute('#ed a >> nth=0', 'class'), 'entity-link');
+});
+
+test('drawn text: clicking a name changes this tab and opens no other', { skip }, async (t) => {
+  const { p, ctx } = await draw(t, [
+    { text: 'Tidewatch Keep', attrs: { href: '/campaigns/c1/entities/e2', 'data-mention-id': 'e2', ...BLANK } }]);
+  const opened = [];
+  ctx.on('page', (np) => opened.push(np));
+  await Promise.all([p.waitForURL('**/entities/e2'), p.click('#ed a')]);
+  assert.equal(new URL(p.url()).pathname, '/campaigns/c1/entities/e2');
+  assert.equal(opened.length, 0);
+});
+
+test('drawn text: while the text is being edited a name opens beside it', { skip }, async (t) => {
+  const { p, ctx } = await draw(t, [
+    { text: 'Tidewatch Keep', attrs: { href: '/campaigns/c1/entities/e2', ...BLANK } }], { editable: true });
+  const [np] = await Promise.all([ctx.waitForEvent('page'), p.click('#ed a')]);
+  await np.waitForLoadState();
+  assert.equal(new URL(np.url()).pathname, '/campaigns/c1/entities/e2');
+  assert.equal(new URL(p.url()).pathname, '/campaigns/c1/entities/e1', 'the page being written stays open');
 });
 
 test('drawn text: an address that runs code is drawn as a link to nowhere', { skip }, async (t) => {
