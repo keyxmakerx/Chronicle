@@ -495,6 +495,14 @@ place, and Off shows the end state.
 - **A move is captured before anything changes.** A view transition takes
   its picture of the old state before the page scrolls, swaps or reflows, so
   nothing jumps somewhere else first.
+- **Nothing flickers on the way.** A press never blanks, flashes or redraws
+  a part before its move starts; what stays on screen stays drawn.
+- **Things that move together move as one.** Several parts moving on one
+  screen share a direction and a timing and read as a single move. A
+  sequence runs one way (the door opens, the lights come on, the shop
+  shows) and never goes back and forth.
+- **A control points the way its move goes.** The calendar's month strip
+  rolls up and down, so its arrows point up and down.
 - **Looping animations rest when the person steps away.** Every loop takes
   its clock from `window.MotionRest` (`static/js/motion_rest.js`) and stops
   requesting frames once `still()`. One-shot transitions don't need it.
@@ -637,9 +645,29 @@ second; the dice settle in under 480ms.
   page.
 - **The header is slim**: 48px under the quiet look unless the owner picked
   the tall one; every header function stays.
-- Icons are monochrome Font Awesome in the text colour, or the accent beside
-  a heading or in a tool's selected state; colour is never decoration, and
-  an emoji is never an icon.
+- **Icons are few, one colour and unboxed.** Monochrome Font Awesome in the
+  text colour, or the accent in a tool's selected state.
+  Nothing sits behind an icon at rest (no tinted square, circle or border);
+  a frame shows only on hover, as the Icon weight under **The material
+  rules** says. Colour is never decoration, a category's colour never tints
+  its icon, an emoji is never an icon, and an empty page has no placeholder
+  icon.
+- **An icon stays only where it is the control, or a landmark**: where a
+  word won't fit, or where people find a thing by its place. That is the
+  header's tools, the three dots that open a menu, pens and close marks, and
+  the sidebar, which folds down to icons. A button or a menu row that has a
+  word has no icon. A heading is the exception: it may carry an icon in
+  front of its words, because it helps people find the block, in the
+  heading's own colour and never the accent. Marks that carry meaning stay:
+  the Director's amber mark, warnings, the Table's die, the pen beside a
+  part you can edit.
+- **A row that names a page starts with the name.** In search, a picker or a
+  list, nothing sits in front of the name: no category icon, square or dot.
+  The kind follows as a quiet word at the row's end, and a page that has a
+  picture shows a small one there, its own and never a stand-in; a page with
+  none shows none. An owner still picks each category's icon in the
+  Customizer, and it shows in the sidebar.
+- Screens not yet brought to these three icon rules: TODO(#2276).
 - Buttons and pills size to their content; nothing stretches full width after
   a state change.
 - Words on screen are plain and short. No developer terms, IDs, or version
@@ -654,6 +682,34 @@ second; the dice settle in under 480ms.
   follow their time zone, with the month always a word. A recent change says
   "Edited 2 days ago". In-world dates are the calendar's own. Screens still
   format dates on the server in two orders: TODO(#2254).
+
+## Phones and tablets
+
+The same screens, folded to the width; never a second design. The first
+six rules are signed and being built: TODO(#2277).
+
+- **Nothing is squeezed.** Where the page area is too narrow for its
+  columns, the blocks fold into one column instead of crushing. Words are
+  never cut off, covered by a control or broken to a word a line to make
+  room, and nothing scrolls sideways down to 320 wide.
+- **Touch gets 44.** On a touch screen the controls people answer with are
+  at least 44 tall (Going, Maybe and Can't included); with a mouse they keep
+  their size.
+- **A touch screen narrower than a tablet on its side starts with the
+  sidebar closed.** The menu button slides it over the page, and it closes
+  again when a row is picked, as on a phone. A computer window of the same
+  width keeps its docked sidebar.
+- **A banner takes one row on a phone**: its sentence wraps beside its
+  button.
+- **A name in a page's written text opens in the same tab**, on every
+  screen, and Back returns. Ctrl-click, a middle click or a long press still
+  open a new tab; links to other websites open in a new one.
+- **A game night's long name wraps** onto a second line in Home's Coming
+  up; it is never cut short.
+- **Side panels become bottom sheets on a phone**: the page peek and the
+  Table (under **What is on a page** and **Opening and closing**).
+- **A workshop previews all three**: Phone, Tablet and Computer (under
+  **Editing**).
 
 ## Customize goes further
 
@@ -687,6 +743,18 @@ their tokens.
   under a faint light from the page's top corner.
 - **Motion speed** retimes the duration tokens; **menu highlight** and
   **hover card** looks are their own choices.
+- **Entrances** (signed, not built: TODO(#1216)). Material is the one kit
+  where the owner picks how a card opens: Grow, the base, or Bloom (into
+  focus from a soft blur), Unfold (revealed downward from its top edge) or
+  Drop (set down with weight, 480 ms). The setting shows only while the kit
+  is Material; every other kit keeps its own opening, and the Customizer
+  says so in its place. An entrance plays where a kit's opening would, on
+  cards and panels that come out of something clicked on a page; menus,
+  pickers and dialogs keep their own moves. Calm makes it a short fade and
+  Off shows the card at once.
+- **Moments** (signed, not built: TODO(#1216)) are three switches, each off
+  until the owner turns it on: Page sheen, List cascade and Save spark.
+  Calm and Off turn each one off.
 - **View as player** (the owner's eye button in the header) hides everything
   marked `data-dm-only`, and inline secrets (`data-secret`), while it is on
   (`html[data-view-as-player]`), in any look, and shows what is marked
@@ -737,7 +805,8 @@ item menu; the page layout menu is still on Drape (TODO(#1548)).
   what you can act on stay the same in every kit.
 - **A kit's opening replaces Grow and Drape** for cards and panels that come
   out of something clicked on a page. The other moves under **Motion** keep
-  their timing in every kit.
+  their timing in every kit. Under Material the owner may pick that opening
+  (Entrances, under **Customize goes further**).
 - **Calm and Off still win.** Under Calm or the device's reduced-motion
   setting, every kit's opening is a short fade in place, and every ambient or
   pointer movement stops at rest: Lumen's sheen, glint and breathing hold
@@ -878,5 +947,11 @@ look in the same piece of work, or files the issue to do it.
 - A visible change gets a mockup first, on the real page as it is on `main`,
   at shipped quality: never placeholders or a lean out-of-context fragment.
 - Motion decisions are shown as playable clips, never stills.
-- A signed mockup is the contract until a new one is signed. Small
-  differences found while building go back as a "small differences" card.
+- **A mockup is held to the same bar as a screen.** Every option on a card
+  has its own mockup. Its words can be read at the size it is shown; nothing
+  in it is squeezed, cut off or dark on dark; and it holds in light and
+  dark.
+- A signed mockup is the contract until a new one is signed. A change to a
+  look, or to what a feature does, is a new card before it is built. Small
+  differences found while building go ahead, and are listed for the operator
+  once a week, each with a way to reverse it.
