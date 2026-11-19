@@ -206,7 +206,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 				} else {
 					<!-- Grid view -->
 					<div x-show="view === 'grid'" x-cloak>
-						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3" data-cascade>
 							for _, entity := range entities {
 								@EntityCard(&entity, cc)
 							}

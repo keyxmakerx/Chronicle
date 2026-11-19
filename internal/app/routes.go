@@ -5978,6 +5978,8 @@ func (a *App) RegisterRoutes() {
 					CraftArt:      ap.CraftArt,
 					PageLook:      ap.PageLook,
 					StyleKit:      ap.StyleKit,
+					Entrance:      ap.Entrance,
+					MomentSheen:   ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
 					DmScreenKit:   ap.DmScreenKit,
 					TimelinePopup: ap.TimelinePopup,
 				}

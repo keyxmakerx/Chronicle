@@ -468,6 +468,7 @@
     // the Material page look in the UI standard, so the owner sees that name.
     var PAGE_LOOKS = [['standard', 'Standard'], ['annals', 'Material']];
     // Same ids as the server's AppearanceStyleKits, in that order.
+    var ENTRANCES = [['grow', 'Grow'], ['bloom', 'Bloom'], ['unfold', 'Unfold'], ['drop', 'Drop']];
     var STYLE_KITS = [['material', 'Material'], ['sharp', 'Sharp'], ['ornate', 'Ornate'], ['flowing', 'Flowing'], ['lumen', 'Lumen'], ['sketchbook', 'Sketchbook']];
     var SEC_KEYS = {
       brand:['brand.name', 'brand.logo', 'brand.welcome', 'brand.backdrop'],
@@ -477,7 +478,7 @@
       colours:['colours.accent', 'colours.s1', 'colours.s2', 'colours.page', 'colours.contrast'],
       type:['type.body', 'type.heading', 'type.scale'],
       buttons:['buttons.style'],
-      motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
+      motion:['motion.elevation', 'motion.speed', 'motion.reduceAll', 'motion.entrance', 'motion.sheen', 'motion.cascade', 'motion.spark'],
       page:['page.look', 'page.kit', 'page.dmKit', 'access.page', 'access.dmscreen'],
       hover:['hover.look', 'hover.timelinePopup', 'access.hover'],
       sheet:['sheet.style', 'sheet.craftArt', 'access.sheet'],
@@ -546,6 +547,7 @@
       if (!d.page) d.page = { look:'', kit:'material' };
       if (!d.page.kit) d.page.kit = 'material';
       if (!d.page.dmKit) d.page.dmKit = 'same';
+      if (!d.motion.entrance) d.motion.entrance = 'grow';
       if (!d.hover.timelinePopup) d.hover.timelinePopup = 'classic';
       if (!d.email || !d.email.layout) d.email = { layout:'note' };
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
@@ -917,6 +919,10 @@
         fld('m-elev', 'Elevation', 'How far cards lift', '<div class="tiles rows" role="radiogroup" aria-labelledby="m-elev-l">' + tilesElev() + '</div>') +
         fld('m-speed', 'Motion', 'How quickly things move', opts('m-speed', 'motion.speed', 'm-speed-l', Object.keys(SPEEDS).map(function(k){ return [k, SPEEDS[k].name]; })) +
           '<p class="hint">Point at the cards and buttons in the preview to feel it.</p>') +
+        fld('m-mom', 'Moments', 'Small flourishes, each off until you turn it on',
+          [['sheen', 'Page sheen', 'An accent sweep crosses a page’s header as it opens.'], ['cascade', 'List cascade', 'The cards in a list come in one after another.'], ['spark', 'Save spark', 'A few dots in the accent fly out when something saves.']].map(function(m){
+            return '<label class="switch"><input type="checkbox" id="m-' + m[0] + '" data-k="motion.' + m[0] + '"><span class="trk"><span class="knob"></span></span><span class="sw-t"><b>' + m[1] + '</b>' + m[2] + '</span></label>';
+          }).join('') + '<p class="hint">Calm and Off turn all three off.</p>') +
         fld('m-red', 'For everyone', null, '<label class="switch"><input type="checkbox" id="m-reduce" data-k="motion.reduceAll"><span class="trk"><span class="knob"></span></span>' +
           '<span class="sw-t"><b>Reduce motion for everyone in this campaign</b>Things fade instead of moving, the header holds still and the menu highlight stays still.</span></label>'));
       if (id === 'page') return (
@@ -924,6 +930,9 @@
           '<p class="hint">Material draws sections without boxes or borders: headings over a rule, rows on hairlines, and an edge only on fact panels and tools. Standard puts a bordered card around each section. Nothing moves on the page either way.</p>') +
         fld('pg-kit', 'Style kit', 'The character of pages drawn in Material', opts('pg-kit', 'page.kit', 'pg-kit-l', STYLE_KITS) +
           '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look; save and open any page to see yours.</p>') +
+        fld('pg-open', 'How cards open', 'Cards and panels that come out of something you click', '<div id="pg-open-pick">' + opts('pg-open', 'motion.entrance', 'pg-open-l', ENTRANCES) +
+          '<p class="hint">Grow is the base. Bloom comes into focus from a soft blur, Unfold is revealed downward from its top edge and Drop is set down with weight. Menus, pickers and dialogs keep their quick moves, and Calm turns each into a short fade.</p></div>' +
+          '<p class="hint" id="pg-open-kit" hidden></p>') +
         fld('pg-dmkit', 'DM Screen look', 'What the DM Screen wears for you and your co-DMs', opts('pg-dmkit', 'page.dmKit', 'pg-dmkit-l', [['same', 'Same as pages']].concat(STYLE_KITS)) +
           '<p class="hint">Give the DM Screen its own kit so it stands apart from the pages at the table. Players never see the DM Screen.</p>'));
       if (id === 'hover') return (
@@ -1198,6 +1207,12 @@
         if (inp.checked !== on) inp.checked = on;
       });
       $('#m-reduce').checked = !!d.motion.reduceAll;
+      ['sheen', 'cascade', 'spark'].forEach(function(m){ var c = $('#m-' + m); if (c) c.checked = !!d.motion[m]; });
+      var kitName = (STYLE_KITS.filter(function(k){ return k[0] === d.page.kit; })[0] || [])[1], underMaterial = d.page.kit === 'material';
+      $('#pg-open-pick').hidden = !underMaterial;
+      var openNote = $('#pg-open-kit');
+      openNote.hidden = underMaterial;
+      setText(openNote, kitName ? kitName + ' opens cards its own way, so the choice here is kept and applies if you go back to Material.' : '');
       $$('.tlp-classic .chc, .e-hc .chc').forEach(function(c){ if (c.dataset.look !== d.hover.look) c.dataset.look = d.hover.look; });
       $$('.em-sample').forEach(function(e){ e.style.setProperty('--em-ac', emailAccent(d.colours.accent)); });
       syncText('#b-name', d.brand.name); syncText('#b-welcome', d.brand.welcome);

@@ -723,3 +723,76 @@
   60% { opacity: 1; transform: translateY(2px) rotate(1.4deg); }
   100% { opacity: 1; transform: rotate(var(--ko-tilt, .6deg)); }
 }
+
+/* ---------- Entrances ----------
+   Under the Material kit the owner picks how a card or panel opens
+   (Customize › Look; layouts.AppearanceAttrs writes data-cz-entrance only
+   when no other kit is on). Grow is the base and each component's own move.
+   They share kit_open.js and its data-ko marks with the kit openings above,
+   and play only on data-kit-open="card": menus, pickers and dialogs keep
+   their quick moves. Going out plays the move backwards, quicker. Calm is a
+   short fade; Off sets no move. */
+[data-cz-entrance] [data-kit-open="card"][data-ko] {
+  animation-duration: var(--dur-large);
+  animation-timing-function: var(--ease-out);
+  animation-fill-mode: both;
+  transform-origin: var(--ko-x, 50%) var(--ko-ey, 0%);
+}
+[data-cz-entrance] [data-kit-open="card"][data-ko="out"] {
+  animation-direction: reverse;
+  animation-duration: var(--dur-everyday-out, 80ms);
+  animation-timing-function: var(--ease-in);
+}
+[data-cz-entrance="bloom"] [data-kit-open="card"][data-ko] { animation-name: ko-bloom; }
+[data-cz-entrance="unfold"] [data-kit-open="card"][data-ko] { animation-name: ko-unfold; }
+[data-cz-entrance="unfold"] [data-kit-open="card"][data-ko="in"] > * { animation: ko-unfold-kids var(--dur-large) var(--ease-out) both; }
+[data-cz-entrance="drop"] [data-kit-open="card"][data-ko] { animation-name: ko-drop; animation-duration: calc(var(--dur-slide) * 4 / 3); }
+[data-cz-entrance="drop"] [data-kit-open="card"][data-ko="out"] { animation-duration: var(--dur-everyday-out, 80ms); }
+[data-cz-entrance][data-motion="calm"] [data-kit-open="card"][data-ko] { animation-name: ko-fade; animation-duration: var(--dur-micro); }
+[data-cz-entrance][data-motion="calm"] [data-kit-open="card"][data-ko] > * { animation: none; }
+[data-cz-entrance][data-motion="off"] [data-kit-open="card"] { animation: none; }
+[data-cz-entrance][data-motion="off"] [data-kit-open="card"] > * { animation: none; }
+
+/* Bloom: into focus from a soft blur. */
+@keyframes ko-bloom { from { opacity: 0; transform: scale(.92); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
+/* Unfold: revealed downward from the top edge; its contents arrive after 60%. */
+@keyframes ko-unfold { from { clip-path: inset(0 -40px 100% -40px); } to { clip-path: inset(0 -40px -40px -40px); } }
+@keyframes ko-unfold-kids { 0%, 60% { opacity: 0; } 100% { opacity: 1; } }
+/* Drop: set down from 22px above, with weight. */
+@keyframes ko-drop { from { opacity: 0; transform: translateY(-22px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Moments ----------
+   Three switches the owner can turn on (Customize › Look › Motion), each off
+   by default; layouts.AppearanceAttrs writes the ones that are on as
+   data-cz-moments. Calm and Off carry data-motion, so none of them runs
+   there. Page sheen sweeps the accent across a page's header over 900 ms,
+   List cascade staggers the cards of a marked list (data-cascade) 60 ms
+   apart, Save spark is kit_open.js. */
+html[data-cz-moments~="sheen"]:not([data-motion]) .ph-title { position: relative; }
+html[data-cz-moments~="sheen"]:not([data-motion]) .ph-title::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 8px;
+  background: linear-gradient(100deg, transparent 35%, color-mix(in srgb, var(--color-accent, #6366f1) 22%, transparent) 50%, transparent 65%) 0 0 / 300% 100% no-repeat;
+  animation: mo-sheen 900ms var(--ease-out) both;
+}
+@keyframes mo-sheen { from { background-position: 100% 0; opacity: 1; } to { background-position: 0 0; opacity: 0; } }
+
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > * { animation: mo-rise var(--dur-large) var(--ease-out) both; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(2) { animation-delay: 60ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(3) { animation-delay: 120ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(4) { animation-delay: 180ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(5) { animation-delay: 240ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(6) { animation-delay: 300ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(7) { animation-delay: 360ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(8) { animation-delay: 420ms; }
+/* Past the eighth card the rest arrive together so a long list never waits. */
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(n + 9) { animation-delay: 480ms; }
+@keyframes mo-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.mo-spark { position: fixed; z-index: 90; width: 0; height: 0; pointer-events: none; }
+.mo-spark i {
+  position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--color-accent, #6366f1);
+  animation: mo-spark 700ms var(--ease-out) both;
+}
+@keyframes mo-spark { from { opacity: 1; transform: none; } to { opacity: 0; transform: translate(var(--mx), var(--my)) scale(.4); } }
+@media (prefers-reduced-motion: reduce) { .mo-spark { display: none; } }

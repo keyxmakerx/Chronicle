@@ -9,8 +9,11 @@
  * (--ko-x, --ko-y, --ko-s, --ko-ey and data-ko-edge) and marks the move
  * (data-ko="in" or "out"); the moves themselves are in style_kits.css. On
  * the way out the card stays shown while the move plays backwards, then goes
- * hidden. Without a kit (data-cz-kit on <html>) or with motion Off, nothing
- * here runs and the component keeps its own move.
+ * hidden. The same file runs the Save spark Moment. Without a kit (data-cz-kit on <html>) or an owner's entrance
+ * (data-cz-entrance, Material only) or with motion Off, nothing here runs and
+ * the component keeps its own move. data-kit-open="card" marks a card or
+ * panel, which also takes the owner's entrance; a menu or picker carries the
+ * bare attribute and keeps its quick move.
  */
 (function () {
   'use strict';
@@ -79,7 +82,7 @@
   }
 
   function watch(records) {
-    if (!root.hasAttribute('data-cz-kit')) return;
+    if (!root.hasAttribute('data-cz-kit') && !root.hasAttribute('data-cz-entrance')) return;
     for (var i = 0; i < records.length; i++) {
       var card = records[i].target;
       if (!card.hasAttribute || !card.hasAttribute('data-kit-open')) continue;
@@ -88,6 +91,31 @@
       if (card.hidden) closed(card); else opened(card);
     }
   }
+
+  // Save spark (a Moment, off until the owner turns it on): seven dots in the
+  // accent radiate from whatever was pressed when a save lands. A save is a
+  // successful htmx request that is not a read. Calm and Off never get it.
+  function spark(e) {
+    var moments = root.getAttribute('data-cz-moments') || '';
+    if (moments.split(' ').indexOf('spark') < 0 || root.hasAttribute('data-motion')) return;
+    var d = e.detail || {}, cfg = d.requestConfig || {};
+    if (!d.successful || !cfg.verb || cfg.verb === 'get') return;
+    var el = last && last.isConnected && Date.now() - lastAt < 3000 ? last : null;
+    if (!el || !el.getBoundingClientRect) return;
+    var r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    var host = document.createElement('div');
+    host.className = 'mo-spark'; host.setAttribute('aria-hidden', 'true');
+    host.style.left = x + 'px'; host.style.top = y + 'px';
+    for (var i = 0; i < 7; i++) {
+      var dot = document.createElement('i'), a = (i / 7) * 2 * Math.PI;
+      dot.style.setProperty('--mx', Math.round(Math.cos(a) * 26) + 'px');
+      dot.style.setProperty('--my', Math.round(Math.sin(a) * 26) + 'px');
+      host.appendChild(dot);
+    }
+    document.body.appendChild(host);
+    setTimeout(function () { if (host.parentNode) host.parentNode.removeChild(host); }, 800);
+  }
+  document.addEventListener('htmx:afterRequest', spark);
 
   function start() {
     new MutationObserver(watch).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden'] });

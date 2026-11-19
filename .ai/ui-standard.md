@@ -742,18 +742,26 @@ their tokens.
   under a faint light from the page's top corner.
 - **Motion speed** retimes the duration tokens; **menu highlight** and
   **hover card** looks are their own choices.
-- **Entrances** (signed, not built: TODO(#1216)). Material is the one kit
-  where the owner picks how a card opens: Grow, the base, or Bloom (into
-  focus from a soft blur), Unfold (revealed downward from its top edge) or
-  Drop (set down with weight, 480 ms). The setting shows only while the kit
-  is Material; every other kit keeps its own opening, and the Customizer
-  says so in its place. An entrance plays where a kit's opening would, on
-  cards and panels that come out of something clicked on a page; menus,
-  pickers and dialogs keep their own moves. Calm makes it a short fade and
-  Off shows the card at once.
-- **Moments** (signed, not built: TODO(#1216)) are three switches, each off
-  until the owner turns it on: Page sheen, List cascade and Save spark.
-  Calm and Off turn each one off.
+- **Entrances** (Customize › Look › Pages › How cards open). Material is the
+  one kit where the owner picks how a card opens: Grow, the base (200 ms,
+  each component's own), or Bloom (260 ms, into focus from a 6px blur),
+  Unfold (260 ms, revealed downward from its top edge, contents fading in
+  after 60%) or Drop (set down 22px with weight, 480 ms). The setting shows
+  only while the kit is Material; every other kit keeps its own opening and
+  the Customizer says so in its place, and the pick is kept. They run on the
+  same helper as the kit openings (`static/js/kit_open.js`), on cards and
+  panels marked `data-kit-open="card"` (the place line's picker and the page
+  files' removal ask so far); a menu or picker carries the bare attribute and
+  keeps its quick move. Each closes the same way back, quicker. Calm makes
+  it a short fade and Off shows the card at once.
+- **Moments** are three switches, each off until the owner turns it on
+  (Customize › Look › Motion): Page sheen (an accent sweep across the page
+  header over 900 ms), List cascade (the cards of a list marked
+  `data-cascade` stagger in 60 ms apart with a fade and an 8px rise, the
+  eighth on arriving together) and Save spark (seven accent dots radiate
+  from what was pressed over 700 ms when a request that is not a read
+  succeeds). They reach the page as `data-cz-moments`; Calm and Off turn each
+  one off. Only the entities list is marked `data-cascade` so far.
 - **View as player** (the owner's eye button in the header) hides everything
   marked `data-dm-only`, and inline secrets (`data-secret`), while it is on
   (`html[data-view-as-player]`), in any look, and shows what is marked
