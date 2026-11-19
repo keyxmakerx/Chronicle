@@ -499,6 +499,32 @@
     var mentionActive = false;
     var mentionStartPos = null;
     var editorInstance = null;
+    // Where the caret sat after the space a pick leaves behind the name,
+    // kept until the next edit.
+    var spaceAfterPick = null;
+
+    // What a sentence never puts a space in front of.
+    var CLOSING_MARKS = ',.;:!?)';
+
+    /**
+     * Takes back the space a pick left after the name when the very next
+     * thing typed there is a closing mark, so "@Name ," reads "@Name,". It
+     * reads what the edit left in the text, never the key, so a phone's
+     * keyboard is served the same. True when it changed the text.
+     *
+     * @param {Object} editor - The TipTap editor instance.
+     * @param {number} at - The caret position just after that space.
+     */
+    function closeUpAfterPick(editor, at) {
+      var state = editor.state;
+      if (editor.view.composing || !state.selection.empty || state.selection.from !== at + 1) return false;
+      if (at < 1 || at + 1 > state.doc.content.size) return false;
+      var typed = state.doc.textBetween(at - 1, at + 1, '\0', '\0');
+      var space = typed.charAt(0);
+      if (typed.length !== 2 || (space !== '\u00a0' && space !== ' ') || CLOSING_MARKS.indexOf(typed.charAt(1)) === -1) return false;
+      editor.chain().deleteRange({ from: at - 1, to: at }).run();
+      return true;
+    }
 
     /**
      * Insert a mention node at the current @ trigger position.
@@ -538,6 +564,7 @@
         .insertContent(mentionHTML + '&nbsp;')
         .run();
 
+      spaceAfterPick = editor.state.selection.from;
       closeMention();
     }
 
@@ -552,6 +579,7 @@
         ? [{ type: 'foundryScene', attrs: { sceneId: item.sceneId || null, name: item.name } }, { type: 'text', text: ' ' }]
         : item.name + ' ';
       editor.chain().focus().deleteRange(range).insertContent(content).run();
+      spaceAfterPick = editor.state.selection.from;
       closeMention();
     }
 
@@ -613,6 +641,13 @@
       onUpdate: function (editor) {
         if (!editor.isEditable) return;
         editorInstance = editor;
+
+        if (spaceAfterPick !== null) {
+          var afterSpace = spaceAfterPick;
+          spaceAfterPick = null;
+          // Its own edit comes back through here and does the rest.
+          if (closeUpAfterPick(editor, afterSpace)) return;
+        }
 
         var state = editor.state;
         var from = state.selection.from;
@@ -699,6 +734,7 @@
         }
         mentionActive = false;
         mentionStartPos = null;
+        spaceAfterPick = null;
         editorInstance = null;
       },
     };
