@@ -44,6 +44,12 @@ templ Panel(v *View, csrf string) {
 			}
 		</nav>
 		<div class="dms-col" data-dms-col>
+			<div class="dms-phonehead">
+				<span class="dms-phonehead-t" aria-hidden="true">{ layouts.GMTerm(ctx) } Screen</span>
+				<button type="button" class="dms-ic dms-phonehead-x" data-dms-tuck aria-label={ "Put the " + layouts.GMTerm(ctx) + " Screen away" }>
+					<span aria-hidden="true">×</span>
+				</button>
+			</div>
 			<div class="dms-colhead">
 				<span class="dms-count" data-dms-count></span>
 				<button type="button" class="dms-quiet" data-dms-closeall>Close all</button>
@@ -85,6 +91,9 @@ templ section(sec SectionView) {
 				<i class={ "fa-solid fa-" + sec.Icon } aria-hidden="true"></i>
 				<span id={ "dms-h-" + sec.ID }>{ sec.Title }</span>
 				<span class="dms-sec-sum">{ sec.Summary }</span>
+				if sec.Badge > 0 {
+					<span class="dms-sec-badge" aria-hidden="true">{ fmt.Sprint(sec.Badge) }</span>
+				}
 			</button>
 			<button type="button" class="dms-ic dms-sec-x" data-dms-shut aria-label={ "Close " + sec.Title } title="Close">
 				<i class="fa-solid fa-xmark" aria-hidden="true"></i>

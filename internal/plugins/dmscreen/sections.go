@@ -1,5 +1,10 @@
 package dmscreen
 
+import (
+	"fmt"
+	"strings"
+)
+
 // SectionView is one section of the docked screen: an icon on the rail and a
 // card in the column. Summary is the one line a folded card and the icon's
 // peek show; Badge is a count drawn on the icon (zero draws none).
@@ -38,17 +43,27 @@ func (v *View) Sections() []SectionView {
 	}
 	out := []SectionView{world}
 	if v.Fight != nil {
-		out = append(out, SectionView{ID: "fight", Title: "Fight", Icon: "khanda", Summary: "Run a prepared encounter"})
+		fight := SectionView{ID: "fight", Title: "Fight", Icon: "khanda", Summary: "Run a prepared encounter"}
+		if v.FightCounted {
+			fight.Summary = "Nothing ready to run"
+			if v.FightReady > 0 {
+				fight.Summary = fmt.Sprintf("%d ready to run", v.FightReady)
+			}
+		}
+		out = append(out, fight)
 	}
 	party := SectionView{ID: "party", Title: "The party", Icon: "users", Summary: "No player characters yet"}
 	if n := len(v.Party); n > 0 {
 		party.Summary = plural(n, "hero", "heroes")
+		if v.Presence != nil {
+			party.Summary += fmt.Sprintf(", %d here now", v.Presence.Here)
+		}
 	}
 	out = append(out, party)
 	if n := len(v.Conditions); n > 0 {
 		out = append(out, SectionView{ID: "rules", Title: "Rules", Icon: "book", Summary: plural(n, "condition", "conditions")})
 	}
-	reveal := SectionView{ID: "reveal", Title: "Reveal", Icon: "eye", Summary: "Nothing hidden right now"}
+	reveal := SectionView{ID: "reveal", Title: "Reveal", Icon: "eye", Summary: "Nothing hidden"}
 	if n := len(v.Hidden); n > 0 {
 		reveal.Summary = plural(n, "character", "characters") + " hidden"
 		if v.HiddenMore {
@@ -61,13 +76,28 @@ func (v *View) Sections() []SectionView {
 	}
 	if v.Adventures != nil {
 		adv := SectionView{ID: "adventures", Title: "Adventures", Icon: "map", Summary: "Nothing pinned yet"}
-		if n := len(v.Adventures.Items); n > 0 {
-			adv.Summary = plural(n, "card", "cards")
+		var pages, notes int
+		for _, it := range v.Adventures.Items {
+			if it.Kind == BoardKindNote {
+				notes++
+			} else {
+				pages++
+			}
+		}
+		var bits []string
+		if pages > 0 {
+			bits = append(bits, fmt.Sprintf("%d pinned", pages))
+		}
+		if notes > 0 {
+			bits = append(bits, plural(notes, "note", "notes"))
+		}
+		if len(bits) > 0 {
+			adv.Summary = strings.Join(bits, ", ")
 		}
 		out = append(out, adv)
 	}
 	if v.Homebrew != nil {
-		out = append(out, SectionView{ID: "homebrew", Title: "Homebrew", Icon: "beer-mug-empty", Summary: "Your table's own rules and items"})
+		out = append(out, SectionView{ID: "homebrew", Title: "Homebrew", Icon: "beer-mug-empty", Summary: "House rules"})
 	}
 	return out
 }

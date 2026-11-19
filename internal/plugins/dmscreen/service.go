@@ -255,6 +255,11 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 			names = append(names, c.Name)
 		}
 		view.Fight = s.src.Fight.FightMount(campaignID, names)
+		if n, err := s.src.Fight.ReadyCount(ctx, campaignID, v); err != nil {
+			warn("fight", err)
+		} else {
+			view.FightReady, view.FightCounted = n, true
+		}
 	}
 	return view, nil
 }

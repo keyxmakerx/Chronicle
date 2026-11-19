@@ -151,6 +151,8 @@ type HomebrewSource interface {
 // marks a creature.
 type FightSource interface {
 	FightMount(campaignID string, conditions []string) templ.Component
+	// ReadyCount is how many fights the viewer could start now.
+	ReadyCount(ctx context.Context, campaignID string, v Viewer) (int, error)
 }
 
 // Sources groups the screen's inputs. Any of them may be nil, which leaves
