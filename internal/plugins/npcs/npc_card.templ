@@ -3,6 +3,7 @@
 package npcs
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/colour"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -60,8 +61,8 @@ templ NPCCardComponent(cc *campaigns.CampaignContext, card *NPCCard, csrfToken s
 					<div class="flex flex-wrap gap-0.5 mt-1.5">
 						for _, tag := range card.Tags {
 							<span
-								class="inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
-								style={ fmt.Sprintf("background-color: %s22; color: %s", tag.Color, tag.Color) }
+								class="chip-ink inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
+								style={ colour.ChipStyle(tag.Color) }
 							>
 								{ tag.Name }
 							</span>

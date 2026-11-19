@@ -224,3 +224,53 @@ func TestBlockDetails_LabelAlwaysDrawn(t *testing.T) {
 		})
 	}
 }
+
+// The three dots beside Edit page hold the page's own actions by name, and
+// each person gets only the rows their role may use: a Scribe copies, reads
+// the history and moves; the owner also deletes; a player gets no dots.
+func TestPageEditorBar_MoreMenuByRole(t *testing.T) {
+	ent := &Entity{ID: "e1", CampaignID: "c1", Name: "Mara Vell"}
+	cases := []struct {
+		name string
+		role campaigns.Role
+		want []string
+		none []string
+	}{
+		{"owner gets all four", campaigns.RoleOwner,
+			[]string{"data-pe-dots", "Make a copy", "Page history", "Earlier versions", "Move under another page", "Delete page", "Goes to Trash",
+				"/campaigns/c1/entities/e1/clone", "/campaigns/c1/entities/e1/history", `hx-delete="/campaigns/c1/entities/e1"`},
+			nil},
+		{"scribe gets no Delete page", campaigns.RoleScribe,
+			[]string{"data-pe-dots", "Make a copy", "Page history", "Move under another page"},
+			[]string{"Delete page", "Goes to Trash", "hx-delete"}},
+		{"player gets no dots", campaigns.RolePlayer,
+			nil,
+			[]string{"data-pe-dots", "Make a copy", "Page history", "Move under another page", "Delete page", "pe-menu"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := pageEditorBar(foldTestCC(tc.role), ent, "tok").Render(annalsCtx("u-1"), &buf); err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			html := buf.String()
+			if !strings.Contains(html, ">Edit page<") {
+				t.Error("Edit page is gone")
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(html, w) {
+					t.Errorf("missing %q", w)
+				}
+			}
+			for _, n := range tc.none {
+				if strings.Contains(html, n) {
+					t.Errorf("must not draw %q", n)
+				}
+			}
+			// The menu starts shut.
+			if tc.want != nil && !strings.Contains(html, "data-kit-open hidden") {
+				t.Error("menu must start hidden")
+			}
+		})
+	}
+}

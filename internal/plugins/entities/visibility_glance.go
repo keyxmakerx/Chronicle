@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // EntityTagGrantInfo is one tag-derived visibility grant on an entity, resolved
@@ -96,7 +97,7 @@ func GetEffectiveVisibility(ctx context.Context) *EffectiveVisibility {
 // effectiveVisibilityTooltip builds the glance badge's tooltip: the base-state
 // sentence plus, when tags widen the entity, an explicit "Also visible to
 // <subject> via ‹tag›" list so the exposure is never silent.
-func effectiveVisibilityTooltip(ev *EffectiveVisibility, campaignIsPublic bool) string {
+func effectiveVisibilityTooltip(ev *EffectiveVisibility, campaignIsPublic bool, gmTerm string) string {
 	if ev == nil {
 		return ""
 	}
@@ -105,7 +106,9 @@ func effectiveVisibilityTooltip(ev *EffectiveVisibility, campaignIsPublic bool) 
 	case VisStateCustom:
 		base = "Custom permissions — specific people"
 	case VisStateDMOnly:
-		base = "DM-Only — visible to GMs (Scribe + Owner)"
+		// Scribes see what players see, so only the owner and promoted co-GMs
+		// can open a hidden page.
+		base = "Only you and your co-" + gmTerm + "s can see this page."
 	default:
 		// An "everyone" entity reaches every campaign MEMBER. Whether it also
 		// reaches a logged-out stranger is a property of the CAMPAIGN, not the
@@ -134,14 +137,14 @@ func effectiveVisibilityTooltip(ev *EffectiveVisibility, campaignIsPublic bool) 
 // (cards, category-dashboard rows/tree, child-entity lists), it still names
 // the entity's *configured* state with the same wording, just without a tag
 // widening it was never given.
-func visibilityGlanceTooltip(cc *campaigns.CampaignContext, entity *Entity, ev *EffectiveVisibility) string {
+func visibilityGlanceTooltip(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity, ev *EffectiveVisibility) string {
 	// A nil campaign context cannot happen behind visibilityGlanceVisible, which
 	// already rejects nil — but the tooltip must not be the thing that panics if
 	// a future call site forgets the gate, and "not public" is the safe answer:
 	// it claims LESS reach, never more.
 	isPublic := cc != nil && cc.Campaign != nil && cc.Campaign.IsPublic
 	if ev != nil {
-		return effectiveVisibilityTooltip(ev, isPublic)
+		return effectiveVisibilityTooltip(ev, isPublic, layouts.GMTerm(ctx))
 	}
-	return effectiveVisibilityTooltip(&EffectiveVisibility{BaseState: baseVisibilityState(entity)}, isPublic)
+	return effectiveVisibilityTooltip(&EffectiveVisibility{BaseState: baseVisibilityState(entity)}, isPublic, layouts.GMTerm(ctx))
 }

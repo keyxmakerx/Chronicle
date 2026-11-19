@@ -20,7 +20,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { person as signedIn, newCampaign, newPage, done, picture, BASE } from './_live.mjs';
+import { person as signedIn, newCampaign, newPage, done, picture, saved, BASE } from './_live.mjs';
 
 after(done);
 
@@ -136,12 +136,12 @@ test('widening what the AI sees asks first; narrowing does not', async () => {
   assert.match(await ask.innerText(), /sees your .*-only pages and secrets/);
   assert.equal(await sees(), false, 'widening took effect before the owner confirmed');
   await picture(page, 'ai-your-ai-widen-ask', { check: '#1776', about: 'The "Let it see what you see" question before widening', mask: ['.aic-head .aic-hint', '.aic-row-k .aic-hint', '.aic-sit-when'], locator: page.locator('.aic-levels') });
-  await ask.getByRole('button', { name: 'Let it see what you see' }).click();
+  await saved(page, '/ai/connection/access', () => ask.getByRole('button', { name: 'Let it see what you see' }).click());
   await page.getByText(/Saved\. Works from its next call/).waitFor();
   assert.equal(await sees(), true, 'the AI did not get the wider access after Save');
 
   await page.getByRole('tab', { name: 'Settings' }).click();
-  await page.getByRole('radio', { name: LEVEL.players }).click();
+  await saved(page, '/ai/connection/access', () => page.getByRole('radio', { name: LEVEL.players }).click());
   await page.getByText(/Saved\. Works from its next call/).waitFor();
   assert.equal(await page.locator('.aic-ask[role=alert]').isVisible(), false, 'narrowing asked for a confirmation');
   assert.equal(await sees(), false, 'the AI kept the old access after narrowing');

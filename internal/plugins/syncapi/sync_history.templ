@@ -4,6 +4,7 @@
 package syncapi
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -87,7 +88,7 @@ func historyLastSeen(d SyncHistoryPageData) string {
 	case ago < 48*time.Hour:
 		return fmt.Sprintf("Foundry last seen %d h ago", int(ago.Hours()))
 	}
-	return "Foundry last seen " + d.LastSeen.UTC().Format("2 Jan")
+	return "Foundry last seen " + timeutil.FixedDate(d.LastSeen.UTC(), timeutil.DateDay)
 }
 
 // historyQuery keeps the filters on the rows requests.
@@ -108,8 +109,8 @@ func historyQuery(f SyncHistoryFilter, extra string) string {
 
 templ SyncHistoryPage(cc *campaigns.CampaignContext, d SyncHistoryPageData) {
 	@layouts.App(cc.Campaign.Name + " - Sync history") {
-		<div class="max-w-5xl mx-auto" id="sync-history" data-campaign={ d.CampaignID }>
-			@layouts.ManageHeader("Sync history")
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Sync history"}) {
+		<div id="sync-history" data-campaign={ d.CampaignID }>
 			<form
 				class="flex flex-wrap items-center gap-2 mb-4"
 				hx-get={ fmt.Sprintf("/campaigns/%s/sync-history", d.CampaignID) }
@@ -141,6 +142,7 @@ templ SyncHistoryPage(cc *campaigns.CampaignContext, d SyncHistoryPageData) {
 				@SyncHistoryRows(d)
 			</div>
 		</div>
+		}
 	}
 }
 

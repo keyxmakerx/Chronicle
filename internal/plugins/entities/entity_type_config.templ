@@ -97,7 +97,7 @@ templ EntityTypeConfigPage(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 				<!-- Attributes tab: field definitions editor -->
 				<div x-show="tab === 'attributes'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-6">
-						@attributesTab(cc, et, csrfToken)
+						@attributesTab(cc, et, csrfToken, false)
 					</div>
 				</div>
 
@@ -344,7 +344,10 @@ templ EntityTypeAttributesFragmentTmpl(cc *campaigns.CampaignContext, et *Entity
 }
 
 // attributesTab renders the field definitions editor for this entity type.
-templ attributesTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
+// With inDraft the edits go into the
+// Customizer's draft and save with everything else; without it the editor
+// keeps its own Save button.
+templ attributesTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string, inDraft bool) {
 	<div class="space-y-6">
 		<div>
 			<h2 class="text-lg font-semibold text-fg mb-1">Attributes</h2>
@@ -365,6 +368,9 @@ templ attributesTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken str
 			data-fields={ entityTypeFieldsJSON(et.Fields) }
 			data-csrf-token={ csrfToken }
 			data-fields-only="true"
+			if inDraft {
+				data-draft="true"
+			}
 		>
 			<div class="text-sm text-fg-secondary">Loading field editor...</div>
 		</div>
@@ -446,7 +452,7 @@ templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken strin
 						}).then(r => { if (!r.ok) throw new Error(); saved = true; }).catch(() => Chronicle.notify('Could not save. Nothing changed.', 'error')).finally(() => { saving = false; })
 					`, cc.Campaign.ID, et.ID) }
 				>
-					<span x-show="!saving">Save Changes</span>
+					<span x-show="!saving">Save changes</span>
 					<span x-show="saving">Saving...</span>
 				</button>
 			</div>

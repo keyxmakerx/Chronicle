@@ -10,9 +10,9 @@
 // account is the site admin, made by _setup.mjs before any check runs,
 // because only the first account on a fresh instance becomes a site admin.
 //
-// Pictures: `picture()` saves a screenshot and compares it with the one the
-// last run on main saved (LIVE_BASELINE). A difference never fails the check
-// itself; tools/live-pictures.mjs collects them into a report for approval.
+// Pictures: `picture()` saves a screenshot and, when LIVE_BASELINE
+// holds an older one, notes whether it changed. A difference never fails a
+// check, and CI sets no baseline.
 
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
@@ -156,6 +156,21 @@ export async function api(page, url, opts = {}) {
   }, { url, opts });
 }
 
+/**
+ * Do `act` and wait until the server has answered the save it sends (a POST
+ * whose path holds `path`). A switch or a "Saved" line can already read as
+ * done on the page while the save is still on its way, so a check that goes
+ * on to ask the server from elsewhere waits here first.
+ */
+export async function saved(page, path, act) {
+  const [res] = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname.includes(path)),
+    act(),
+  ]);
+  assert.ok(res.ok(), `the save to ${path} answered ${res.status()}`);
+  await res.finished();
+}
+
 /** Make a campaign as `who` and return its id. */
 export async function newCampaign(who, name) {
   const { page } = who;
@@ -168,14 +183,22 @@ export async function newCampaign(who, name) {
   return id;
 }
 
-/** Add `member` to the campaign with a role: player, scribe or owner. */
+/**
+ * Add `member` to the campaign as a player or scribe. Nobody joins without
+ * accepting, so the owner makes the invite and the member opens its link.
+ */
 export async function addMember(owner, campaignId, member, role = 'player') {
   const res = await api(owner.page, `/campaigns/${campaignId}/members`, {
     method: 'POST', form: { email: member.email, role },
     headers: { 'HX-Request': 'true' },
   });
-  assert.ok(res.ok, `adding ${member.email} answered ${res.status}`);
-  assert.ok(typeof res.body === 'string' && res.body.includes(member.name), `${member.name} is not in the member list after adding`);
+  assert.ok(res.ok, `inviting ${member.email} answered ${res.status}`);
+  const link = typeof res.body === 'string' && (res.body.match(/\/invites\/accept\?token=[A-Za-z0-9_-]+/) || [])[0];
+  assert.ok(link, `no invite link came back for ${member.email}`);
+  const back = member.page.url();
+  await member.page.goto(BASE + link);
+  assert.ok(await member.page.getByText('Welcome!').count(), `${member.name} could not accept the invite`);
+  if (back.startsWith(BASE)) await member.page.goto(back);
 }
 
 /** Switch on campaign add-ons by slug ('*' for every non-system add-on). */

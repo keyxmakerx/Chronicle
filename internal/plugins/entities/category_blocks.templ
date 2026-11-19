@@ -78,7 +78,7 @@ templ catHeader(cc *campaigns.CampaignContext, et *EntityType, total int) {
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
 						class="btn-primary text-sm"
 					>
-						<i class="fa-solid fa-plus text-xs"></i> New Page
+						<i class="fa-solid fa-plus text-xs"></i> New page
 					</a>
 				}
 			</div>
@@ -187,7 +187,7 @@ templ catRecentPages(cc *campaigns.CampaignContext, entities []Entity, config ma
 							<span class="text-sm font-medium text-fg truncate block group-hover:text-accent transition-colors">
 								{ entity.Name }
 							</span>
-							<time class="text-[10px] text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ entity.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+							<time class="text-[10px] text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(entity.UpdatedAt, timeutil.DateWithTime) } data-date-title>
 								{ timeutil.EditedAgo(entity.UpdatedAt, time.Now()) }
 							</time>
 						</div>

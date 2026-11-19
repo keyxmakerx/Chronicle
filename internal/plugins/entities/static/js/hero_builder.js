@@ -218,7 +218,9 @@
 
   Builder.prototype.freshHtml = function () {
     var h = this.fresh, left = this.left(h).length;
-    var who = '<label class="hb-name"><span class="sr-only">Your new hero’s name</span><input type="text" maxlength="200" autocomplete="off" data-hb-name placeholder="Their name" value="' + esc(h.name) + '"></label>’s';
+    var field = '<label class="hb-name"><span class="sr-only">Your new hero’s name</span><input type="text" maxlength="200" autocomplete="off" data-hb-name placeholder="Their name" value="' + esc(h.name) + '"></label>';
+    // The visible "’s" belongs to the sentence; with no steps the name stands alone.
+    var who = field + '’s';
     var whose = this.forSelf ? 'The hero will be yours, on a new ' + esc(this.typeName) + ' page.'
       : 'The hero goes on a new ' + esc(this.typeName) + ' page, not yet claimed by a player.';
     var none = this.plan.steps.length ? '' : '<p class="hb-note">' + (this.plan.systemName ? esc(this.plan.systemName) + ' doesn’t list' : 'This campaign’s game system doesn’t list') +
@@ -227,7 +229,7 @@
       '<header class="hb-head"><div class="hb-names"><span class="hb-kicker">' + (this.heroes.length ? 'Another hero' : 'A new hero') + '</span></div>' +
       '<div class="hb-tools">' + (left ? '<button type="button" class="hb-btn" data-rollall="new">Roll everything left</button>' : '') +
       '<button type="button" class="hb-link" data-act="fold">Not now</button></div>' +
-      '</header>' + none + (this.plan.steps.length ? this.sentenceHtml(h, who) : '<p class="hb-sentence">' + who.replace('’s', '') + '</p>') +
+      '</header>' + none + (this.plan.steps.length ? this.sentenceHtml(h, who) : '<p class="hb-sentence">' + field + '</p>') +
       this.progressHtml(h) +
       '<div class="hb-make"><button type="button" class="hb-btn hb-go" data-make>Make this hero</button><span class="hb-note">' + whose + ' Anything left blank can be chosen later.</span></div>' +
       '<p class="hb-error" role="alert" data-hb-error hidden></p></article>';

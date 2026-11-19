@@ -3,7 +3,10 @@
 // two read as one list.
 package armory
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
+)
 
 templ purchaseRequestRow(campaignID string, p PurchaseRequestLine, csrfToken string) {
 	<li class="py-2 flex flex-wrap items-center justify-between gap-2">
@@ -14,7 +17,7 @@ templ purchaseRequestRow(campaignID string, p PurchaseRequestLine, csrfToken str
 			</p>
 			<p class="text-xs text-fg-muted">
 				Buying for { p.BuyerName } &middot;
-				<time datetime={ p.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ p.CreatedAt.Format("2 Jan 2006 15:04") }>{ moveAgo(p.CreatedAt) }</time>
+				<time datetime={ p.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ timeutil.FixedDate(p.CreatedAt, timeutil.DateWithTime) } data-date-title>{ moveAgo(p.CreatedAt) }</time>
 			</p>
 		</div>
 		<div class="flex items-center gap-2 shrink-0">

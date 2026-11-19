@@ -5,10 +5,12 @@
  * 1. The #topbar-content area slides up/fades out
  * 2. The #topbar-search area appears with an input field
  * 3. Before typing, it lists the pages this browser opened last
- * 4. Typing performs live search; matching commands from the command palette
- *    follow the pages, and a search with no page match offers to create one
- *    (for those who may create pages)
- * 5. Escape or clicking outside closes search and restores content
+ * 4. Typing performs live search; the viewer's notes with a matching title
+ *    and matching commands from the command palette follow the pages, and a
+ *    search that finds no page with the words in its name offers to create
+ *    one (for those who may create pages)
+ * 5. Escape, Ctrl+K again or clicking outside closes search and restores
+ *    content
  *
  * Falls back to the existing search modal (search_modal.js) when the
  * topbar elements aren't present (e.g., non-campaign pages).
@@ -26,6 +28,7 @@
   var abortController = null;
   var results = [];
   var activeIndex = -1;
+  var notesLoad = null; // the viewer's notes, fetched once per opening
 
   function init() {
     content = document.getElementById('topbar-content');
@@ -63,6 +66,7 @@
     input.value = '';
     results = [];
     activeIndex = -1;
+    notesLoad = null;
     showRecent();
     // Small delay so the transition feels smooth.
     requestAnimationFrame(function () { input.focus(); });
@@ -145,20 +149,21 @@
               '/entities/search?q=' + encodeURIComponent(query);
     var signal = abortController.signal;
 
-    Chronicle.apiFetch(url, { signal: signal })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
+    Promise.all([
+      Chronicle.apiFetch(url, { signal: signal }).then(function (r) { return r.json(); }),
+      loadNotes(campaignId),
+    ])
+      .then(function (loaded) {
+        var data = loaded[0] || {};
         var pages = (data.results || []).map(function (e) {
           return {
             name: e.name,
             type: e.type_name || '',
-            icon: e.type_icon || 'fa-file',
-            color: e.type_color || '#6b7280',
             url: resultUrl(e, campaignId),
           };
         });
-        results = pages.concat(matchingCommands(query));
-        if (!pages.length && canCreate()) results.push(createRow(query, campaignId));
+        results = pages.concat(matchingNotes(loaded[1], query, campaignId), matchingCommands(query));
+        if (canCreate() && !pageNamed(pages, query)) results.push(createRow(query, campaignId));
         activeIndex = results.length > 0 ? 0 : -1;
         renderResults();
       })
@@ -180,7 +185,6 @@
 
   // --- Rows that are not pages ---
 
-  var ICON_RE = /^fa-[a-z0-9-]{1,40}$/;
   var MAX_RECENT = 5;
   var MAX_COMMANDS = 4;
 
@@ -194,8 +198,6 @@
       return {
         name: String(item.name),
         type: 'Recent',
-        icon: 'fa-clock-rotate-left',
-        color: '#6b7280',
         url: '/campaigns/' + encodeURIComponent(campaignId) + '/entities/' + encodeURIComponent(item.id),
       };
     });
@@ -209,6 +211,73 @@
     renderResults('Recent');
   }
 
+  var MAX_NOTES = 5;
+  var PAGE_URL_RE = /\/entities\/[^/?#]+$/;
+
+  // The viewer's own notes, asked for once per opening and reused for each
+  // keystroke. A campaign without notes, or a viewer who may not read them,
+  // simply has none to list.
+  function loadNotes(campaignId) {
+    if (!notesLoad) {
+      notesLoad = Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignId) + '/notes')
+        .then(function (r) { return r.json(); })
+        .then(function (list) { return Array.isArray(list) ? list : []; })
+        .catch(function () { return []; });
+    }
+    return notesLoad;
+  }
+
+  // Notes match on their title. Folders and archived notes stay out, as they
+  // do everywhere a note is picked by name.
+  function matchingNotes(notes, query, campaignId) {
+    var q = query.toLowerCase();
+    var out = [];
+    (notes || []).forEach(function (n) {
+      if (out.length >= MAX_NOTES || !n || n.isFolder || n.archived || !n.title) return;
+      if (String(n.title).toLowerCase().indexOf(q) === -1) return;
+      var journalUrl = '/campaigns/' + encodeURIComponent(campaignId) + '/journal/' + encodeURIComponent(n.id);
+      out.push({
+        name: String(n.title),
+        type: 'Note',
+        // A jot belongs to a page and opens in that page's notes panel, so
+        // it has no address of its own.
+        url: n.entityId ? '' : journalUrl,
+        action: function () { openNote(n, journalUrl); },
+      });
+    });
+    return out;
+  }
+
+  function openNote(n, journalUrl) {
+    if (n.entityId) {
+      window.dispatchEvent(new CustomEvent('chronicle:open-note', { detail: { noteId: n.id } }));
+      return;
+    }
+    // Already in the Journal: open the note in place instead of reloading.
+    if (Chronicle.openJournalNote && Chronicle.openJournalNote(n.id)) return;
+    window.location.href = journalUrl;
+  }
+
+  // pageNamed says whether a page among the results carries the query in its
+  // name. Search also matches what a page says, so a page that only mentions
+  // the words is not the page the searcher was looking for, and must not hide
+  // the offer to create it.
+  function pageNamed(pages, query) {
+    var q = query.toLowerCase();
+    return pages.some(function (p) {
+      return PAGE_URL_RE.test(p.url || '') && String(p.name || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  // A command's other names (its words) find it as well as its label.
+  function wordsFind(words, q) {
+    var ws = String(words || '').toLowerCase().split(/\s+/);
+    for (var i = 0; i < ws.length; i++) {
+      if (ws[i] && ws[i].indexOf(q) === 0) return true;
+    }
+    return false;
+  }
+
   // Commands come from the command palette (command_palette.js), so search
   // offers exactly what the palette does, for this viewer and this page.
   function matchingCommands(query) {
@@ -219,12 +288,10 @@
       if (out.length >= MAX_COMMANDS || !c || !c.label) return;
       // Search is already open, and a new page needs the create right.
       if (c.id === 'search' || (c.id === 'new-page' && !canCreate())) return;
-      if (c.label.toLowerCase().indexOf(q) === -1) return;
+      if (c.label.toLowerCase().indexOf(q) === -1 && !wordsFind(c.words, q)) return;
       out.push({
         name: c.label,
         type: 'Command',
-        icon: ICON_RE.test(c.icon || '') ? c.icon : 'fa-terminal',
-        color: '#6b7280',
         url: c.href || '',
         action: c.action || null,
       });
@@ -241,8 +308,6 @@
     return {
       name: 'Create a page named \u201c' + query + '\u201d',
       type: 'New page',
-      icon: 'fa-plus',
-      color: '#6b7280',
       url: '/campaigns/' + encodeURIComponent(campaignId) + '/entities/new?name=' + encodeURIComponent(query),
     };
   }
@@ -267,14 +332,14 @@
     }
 
     var html = heading ? '<div class="px-4 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted">' + Chronicle.escapeHtml(heading) + '</div>' : '';
+    // A row is its name, then what kind of thing it is as a quiet word at the
+    // end. Nothing is drawn in front: the name is what tells two rows apart.
     for (var i = 0; i < results.length; i++) {
       var r = results[i];
       var active = i === activeIndex ? ' bg-surface-alt' : '';
-      html += '<a href="' + Chronicle.escapeAttr(r.url || '#') + '" data-index="' + i + '" class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-surface-alt transition-colors' + active + '">' +
-        '<span class="w-5 h-5 rounded flex items-center justify-center text-[10px] shrink-0" style="background-color:' + Chronicle.escapeAttr(r.color) + '20;color:' + Chronicle.escapeAttr(r.color) + '">' +
-          '<i class="fa-solid ' + Chronicle.escapeAttr(r.icon) + '"></i></span>' +
+      html += '<a href="' + Chronicle.escapeAttr(r.url || '#') + '" data-index="' + i + '" class="flex items-baseline gap-3 px-4 py-2.5 text-sm hover:bg-surface-alt transition-colors' + active + '">' +
         '<span class="flex-1 truncate text-fg">' + Chronicle.escapeHtml(r.name) + '</span>' +
-        '<span class="text-xs text-fg-muted shrink-0">' + Chronicle.escapeHtml(r.type) + '</span>' +
+        '<span class="text-xs text-fg-muted shrink-0 max-w-[45%] truncate">' + Chronicle.escapeHtml(r.type) + '</span>' +
       '</a>';
     }
 
@@ -283,8 +348,8 @@
     var q = input ? input.value.trim() : '';
     if (campaignId && q.length >= 2) {
       html += '<a href="/campaigns/' + Chronicle.escapeAttr(campaignId) + '/search?q=' + encodeURIComponent(q) + '" ' +
-        'class="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-accent hover:bg-accent/10 border-t border-edge transition-colors">' +
-        '<i class="fa-solid fa-arrow-right text-[10px]"></i> View all results</a>';
+        'class="flex items-center justify-center px-4 py-2 text-xs font-medium text-accent hover:bg-accent/10 border-t border-edge transition-colors">' +
+        'View all results</a>';
     }
 
     resultsCt.innerHTML = html;
@@ -328,6 +393,9 @@
       window.Chronicle = window.Chronicle || {};
       Chronicle.openSearch = openSearch;
       Chronicle.closeSearch = closeSearch;
+      // Ctrl+K (search_modal.js owns the key) opens and closes this search
+      // too, so the shortcut and the header button are one search.
+      Chronicle.toggleSearch = function () { if (isActive) closeSearch(); else openSearch(); };
     }
     // If topbar elements don't exist, search_modal.js keeps its own
     // Chronicle.openSearch — the modal works as before.

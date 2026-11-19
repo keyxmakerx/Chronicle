@@ -220,7 +220,7 @@ This checks:
    ```
 
 2. Upload to a Chronicle instance:
-   - Go to **Manage > Game & features** (`/campaigns/<id>/extensions`), custom game system upload
+   - Go to **Campaign settings > Game & features** (`/campaigns/<id>/extensions`), custom game system upload
    - Upload the ZIP
    - Check the validation report
 

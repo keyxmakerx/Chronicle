@@ -161,10 +161,26 @@ Chronicle.register('notes', {
     var collapseBtn = panel.querySelector('.notes-collapse-btn');
     var gesture = null; // { kind: 'move' | 'size', ... } while a pointer drags
 
+    // A bar resting on the window's bottom edge says how tall it is in
+    // --bottom-bar (the Table's line on a touch screen), and the sheet keeps
+    // above it. The height is read as the sheet is drawn, but not while it
+    // is dragged: the window does not change under a drag.
+    var barH = 0;
+    function readBar() {
+      var probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:var(--bottom-bar,0px);visibility:hidden;pointer-events:none';
+      document.body.appendChild(probe);
+      barH = probe.offsetHeight;
+      document.body.removeChild(probe);
+    }
+    /** The lowest the sheet may reach: the window's bottom, or the bar's top. */
+    function floorY() { return window.innerHeight - barH; }
+
     /** Draws the sheet at its place (or where it has stepped aside to). */
     function applyPlace() {
       var root = document.documentElement;
       var desk = isDesk();
+      if (desk && !gesture) readBar();
       var docked = desk && state.open && !!place.dock;
       var shown = aside && aside.place ? aside.place : place;
       root.classList.toggle('jot-dock-l', docked && place.dock === 'l');
@@ -192,10 +208,10 @@ Chronicle.register('notes', {
         st.left = (place.dock === 'l' ? col.left : col.right - w) + 'px';
         st.top = top + 'px';
         st.width = w + 'px';
-        st.height = (window.innerHeight - top) + 'px';
+        st.height = (floorY() - top) + 'px';
         return;
       }
-      var q = JP.clamp(shown, window.innerWidth, window.innerHeight);
+      var q = JP.clamp(shown, window.innerWidth, floorY());
       st.left = q.x + 'px';
       st.top = q.y + 'px';
       st.width = q.w + 'px';
@@ -204,7 +220,7 @@ Chronicle.register('notes', {
 
     /** The sheet's place as drawn, for a gesture that starts from it. */
     function drawnPlace() {
-      return JP.clamp(place, window.innerWidth, window.innerHeight);
+      return JP.clamp(place, window.innerWidth, floorY());
     }
 
     // Any hand on the sheet takes it back from wherever it stepped aside to.
@@ -236,6 +252,27 @@ Chronicle.register('notes', {
       panel.classList.add('notes-panel-moving');
       document.body.style.userSelect = 'none';
     }
+
+    // On a phone the sheet's title bar takes a swipe: down folds it to the
+    // bar, up opens it again. A tap still reaches the buttons.
+    header.addEventListener('pointerdown', function (e) {
+      if (embedded || isDesk() || e.pointerType === 'mouse' || e.target.closest('button, input, .notes-settings-popover')) return;
+      var y0 = e.clientY;
+      function end(ev) {
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        var dy = ev.clientY - y0;
+        if (ev.type !== 'pointerup' || Math.abs(dy) < 24) return;
+        var fold = dy > 0;
+        if (!!place.folded === fold) return;
+        place.folded = fold;
+        place.dock = null;
+        applyPlace();
+        savePlace();
+      }
+      document.addEventListener('pointerup', end);
+      document.addEventListener('pointercancel', end);
+    });
 
     resizeHandle.addEventListener('pointerdown', function (e) {
       if (!isDesk() || e.button !== 0) return;
@@ -347,7 +384,7 @@ Chronicle.register('notes', {
         var r = sheetRect();
         aside = { kind: kind, off: (r.left + r.right) / 2 > window.innerWidth / 2 ? 'r' : 'l' };
       } else {
-        aside = { kind: kind, place: JP.asideFor(place, tr, window.innerWidth, window.innerHeight) };
+        aside = { kind: kind, place: JP.asideFor(place, tr, window.innerWidth, floorY()) };
         panel.classList.add('notes-panel-gliding');
       }
       applyPlace();
@@ -575,11 +612,14 @@ Chronicle.register('notes', {
     });
 
     // On mobile, dodge the virtual keyboard by adjusting panel bottom offset
-    // when the visual viewport shrinks (keyboard opening).
+    // when the visual viewport shrinks (keyboard opening). The keyboard also
+    // covers a bar resting on the bottom edge, so the room the sheet keeps
+    // for that bar is given back while the keyboard is up.
     function onViewport() {
       if (!state.open) return;
       var kbHeight = window.innerHeight - window.visualViewport.height;
       panel.style.bottom = (kbHeight > 0 ? kbHeight : 0) + 'px';
+      panel.classList.toggle('notes-panel-kb', kbHeight > 0);
     }
     if (window.visualViewport && window.innerWidth < 640) {
       window.visualViewport.addEventListener('resize', onViewport);

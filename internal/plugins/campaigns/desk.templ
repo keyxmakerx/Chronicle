@@ -1,0 +1,198 @@
+// desk.templ draws the owner's Campaign settings page (the desk) and the
+// sentence a tool page opens with. The page's controls are in deskPageBody;
+// the sentence is worded from the same lines.
+
+package campaigns
+
+import "fmt"
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// deskPageBody draws the page inside the shared Manage frame: the title, a
+// full-width Find, then the settings as named rows in groups. A row that opens
+// a tool or a page is one link over the whole row; a row that changes in place
+// carries its own inline handler (deskBlankCall), built Go-side, because the
+// page arrives by a boosted swap where a script tag or a delegated listener
+// may never run. The behaviour itself is static/js/desk_blank.js, which the
+// handler loads on first use so the page stays inside the layout's script
+// budget.
+templ deskPageBody(cc *CampaignContext, d *Desk) {
+	@layouts.App(d.CampaignName + " — Campaign settings") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/manage_desk.css") }/>
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Campaign settings", Home: true}) {
+			<div class="desk set" data-desk data-campaign={ cc.Campaign.ID }>
+				@layouts.ManageFindField()
+				if len(d.Needs) > 0 {
+					<section class="set-grp" aria-labelledby="desk-g-needs" data-desk-needs>
+						<h2 class="set-lab" id="desk-g-needs">Needs you</h2>
+						<ul class="set-list">
+							for _, n := range d.Needs {
+								<li class="set-ln">
+									<a class="set-row" href={ templ.SafeURL(n.URL) }>
+										@deskRowFace(DeskLine{Name: n.Lead, Short: n.Rest, State: n.State})
+									</a>
+								</li>
+							}
+						</ul>
+					</section>
+				}
+				for i, g := range d.Groups {
+					<section class="set-grp" aria-labelledby={ fmt.Sprintf("desk-g-%d", i) }>
+						<h2 class="set-lab" id={ fmt.Sprintf("desk-g-%d", i) }>{ g.Name }</h2>
+						<ul class="set-list">
+							for _, l := range g.Lines {
+								@deskRow(l)
+							}
+						</ul>
+					</section>
+				}
+			</div>
+		}
+	}
+}
+
+// deskRow is one setting. Its id keeps links to "#line-<id>" landing on it.
+templ deskRow(l DeskLine) {
+	switch {
+		case l.Blank != nil:
+			<li class="set-ln set-edit" id={ "line-" + l.ID } data-line={ l.ID }>
+				<div class="set-row">
+					<span class="set-name">{ l.Name }</span>
+					<span class="set-state">
+						// The Saved tick lands here (desk_blank.js).
+						<span class="desk-acts"></span>
+						@deskBlank(l.Blank, "set-val")
+					</span>
+					if l.Blank.Kind == DeskBlankName {
+						// A name turns into a field, not a menu, so it gets a pencil.
+						<svg class="set-chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M10.5 3l2.5 2.5L6 12.5l-3 .5.5-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+					} else {
+						<svg class="set-chev set-chev-down" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+					}
+				</div>
+				if l.Blank.Off != "" {
+					<p class="set-why">{ l.Blank.Off }</p>
+				}
+			</li>
+		case l.View != nil:
+			<li class="set-ln" id={ "line-" + l.ID } data-line={ l.ID }>
+				// A form, not a link: opening the view changes what the session sees.
+				<form method="POST" action={ templ.SafeURL("/campaigns/" + layouts.GetCampaignID(ctx) + "/view-as") }>
+					<input type="hidden" name="csrf_token" value={ layouts.GetCSRFToken(ctx) }/>
+					<input type="hidden" name="as" value={ l.View.As }/>
+					<input type="hidden" name="next" value={ l.View.Next }/>
+					<button type="submit" class="set-row">
+						@deskRowFace(l)
+					</button>
+				</form>
+			</li>
+		default:
+			<li class="set-ln" id={ "line-" + l.ID } data-line={ l.ID }>
+				<a class={ "set-row", templ.KV("set-danger", l.Danger) } href={ templ.SafeURL(l.Href) }>
+					@deskRowFace(l)
+				</a>
+				// The pin sits at icon weight before the chevron, on a wide screen
+				// only; on a phone it stays on the tool page's own title.
+				{{ pinKey, pinName := layouts.ManageToolOfLine(l.ID) }}
+				@layouts.ManagePin(pinKey, pinName)
+			</li>
+	}
+	if l.ID == "export" {
+		// The old Settings row's id, so a link to #line-settings still lands here.
+		<span id="line-settings" class="set-anchor"></span>
+	}
+}
+
+// deskRowFace is what sits in a row: the state dot, the name, what it is doing
+// in grey and, when the row leads somewhere, the chevron.
+templ deskRowFace(l DeskLine) {
+	if l.State != "" {
+		<i class={ "desk-dot", templ.KV("ok", l.State == "ok"), templ.KV("warn", l.State == "warn") } aria-hidden="true"></i>
+		if l.State == "warn" {
+			<span class="sr-only">Warning: </span>
+		}
+	}
+	<span class="set-name">{ l.Name }</span>
+	if l.Short != "" || l.Swatch {
+		<span class="set-state">
+			{ l.Short }
+			if l.Swatch {
+				<i class="desk-sw" aria-hidden="true"></i>
+			}
+		</span>
+	}
+	<svg class="set-chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+}
+
+// deskSentence is a line's sentence alone, also served by itself so a change
+// made inside the line's fold can word it again where it stands.
+templ deskSentence(l DeskLine) {
+	<p class="desk-s">
+		if l.State != "" {
+			<i class={ "desk-dot", templ.KV("ok", l.State == "ok"), templ.KV("warn", l.State == "warn") } aria-hidden="true"></i>
+			if l.State == "warn" {
+				<span class="sr-only">Warning: </span>
+			}
+		}
+		for _, n := range deskNodes(l.Parts) {
+			@deskNode(n)
+		}
+	</p>
+}
+
+// manageSentence is a desk line's sentence as the first line of the Manage page
+// it opens, under the title, worded from the same service the desk's rows use.
+templ manageSentence(id string, l DeskLine) {
+	<div id="manage-sentence" class="manage-sentence" data-manage-sentence data-line={ id }>
+		@deskSentence(l)
+	</div>
+}
+
+// manageSentenceSwap redraws the sentence in place from another response, so
+// it never lags behind a change made on the page.
+templ manageSentenceSwap(id string, l DeskLine) {
+	<div id="manage-sentence" class="manage-sentence" data-manage-sentence data-line={ id } hx-swap-oob="true">
+		@deskSentence(l)
+	</div>
+}
+
+// deskNode draws one piece of a sentence.
+templ deskNode(n deskNodeView) {
+	switch n.Kind {
+		case deskNodeBold:
+			<b>{ n.Text }</b>
+		case deskNodeGM:
+			{ layouts.GMTerm(ctx) }
+		case deskNodeSwatch:
+			<i class="desk-sw" aria-hidden="true"></i>
+		default:
+			{ n.Text }
+	}
+}
+
+// deskBlank is a value changed where it stands. A choice opens a small menu and
+// saves at once; the name turns into a field where it stands. Off while the
+// campaign is archived, with the reason on hover. cls adds the page's own
+// class: a row's value, or none for the dashed word of a fold.
+templ deskBlank(b *DeskBlank, cls string) {
+	<span
+		role="button"
+		tabindex={ deskTabindex(b) }
+		class={ "desk-b", cls }
+		data-desk-blank={ string(b.Kind) }
+		data-id={ b.ID }
+		data-label={ b.Label }
+		data-url={ b.URL }
+		data-method={ b.Method }
+		data-field={ b.Field }
+		data-bool?={ b.Bool }
+		data-value={ b.Value }
+		data-options={ deskOptionsJSON(b.Options) }
+		aria-haspopup={ deskHasPopup(b) }
+		aria-expanded="false"
+		aria-disabled={ deskDisabled(b) }
+		aria-label={ b.Label + ": " + b.Shown }
+		title={ b.Off }
+		onclick={ deskBlankCall() }
+		onkeydown={ deskBlankKey() }
+	>{ b.Shown }</span>
+}

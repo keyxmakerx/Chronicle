@@ -29,7 +29,10 @@ async function openCard(who) {
   return card;
 }
 
-const cardLook = (page) => page.locator('#chc').evaluate((c) => {
+const cardLook = async (page) => {
+  // The kind line is drawn after the title, so wait for it before reading styles.
+  await page.locator('#chc .chc__kind').waitFor();
+  return page.locator('#chc').evaluate((c) => {
   const inner = c.querySelector('.chc__in');
   const title = c.querySelector('.chc__kind');
   return {
@@ -40,7 +43,8 @@ const cardLook = (page) => page.locator('#chc').evaluate((c) => {
     sheet: getComputedStyle(c, '::before').content,
     text: c.innerText,
   };
-});
+  });
+};
 const rgb = (s) => (s.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
 
 test('a linked page opens a paper card with a second sheet behind it', async () => {

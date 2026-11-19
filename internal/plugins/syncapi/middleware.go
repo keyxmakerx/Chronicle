@@ -101,7 +101,8 @@ func RequireAuthOrAPIKey(authSvc auth.AuthService, campaignSvc campaigns.Campaig
 // the URL allows, where `key` is a synthetic APIKey with permissions
 // derived from the membership role. Returns (nil, false) on any negative
 // outcome — "no cookie", "invalid cookie", "not a member" — so the caller
-// can cleanly fall through to the Bearer path. A user who is signed in but
+// can cleanly fall through to the Bearer path. The DM team's read during a
+// guest preview is a negative outcome too. A user who is signed in but
 // isn't a member of the campaign in the URL must return false here rather
 // than 403, otherwise a real API key for the same campaign would be
 // blocked by the session-membership failure.
@@ -138,6 +139,16 @@ func tryAuthFromSession(c *echo.Context, authSvc auth.AuthService, campaignSvc c
 		// 403 when the Bearer path also fails, which is the correct
 		// outcome.
 		return nil, false
+	}
+
+	// The guest preview (ADR-074) lowers the DM team's own reads to a
+	// visitor's, and a visitor has no session door: the request falls through
+	// to the Bearer path, as a stranger's does. A campaign that cannot be read
+	// here is left alone; the preview only ever lowers the owner's own view.
+	if campaigns.GuestPreviewAsked(c) {
+		if campaign, err := campaignSvc.GetByID(c.Request().Context(), campaignID); err == nil && campaigns.GuestPreviewLowers(c, campaign, member) {
+			return nil, false
+		}
 	}
 
 	auth.SetSession(c, session)

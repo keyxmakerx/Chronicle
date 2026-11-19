@@ -79,3 +79,65 @@ func TestValidateRSVPToken_FinishedNight(t *testing.T) {
 		}
 	}
 }
+
+// A planned night whose date has passed has been played, though nothing ever
+// marked it complete: it takes no answer from the page's endpoint or from a
+// mailed link. The date is judged where the day ends last, so nobody is
+// refused while the night's own date is still under way for them.
+func TestPlayedNight_TakesNoAnswer(t *testing.T) {
+	day := func(d string) *string { return &d }
+	evening := time.Date(2026, 11, 18, 18, 0, 0, 0, time.UTC)
+	// 05:00 UTC on the 18th is still the 17th in the last zone on Earth.
+	earlyMorning := time.Date(2026, 11, 18, 5, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name  string
+		now   time.Time
+		night Session
+		open  bool
+	}{
+		{"last night's game", evening, Session{Status: StatusPlanned, ScheduledDate: day("2026-11-17")}, false},
+		{"a game a week ago", evening, Session{Status: StatusPlanned, ScheduledDate: day("2026-11-11")}, false},
+		{"tonight's game", evening, Session{Status: StatusPlanned, ScheduledDate: day("2026-11-18")}, true},
+		{"last night's game while its date lasts somewhere", earlyMorning, Session{Status: StatusPlanned, ScheduledDate: day("2026-11-17")}, true},
+		{"a game still ahead", evening, Session{Status: StatusPlanned, ScheduledDate: day("2026-11-20")}, true},
+		{"a game with no date", evening, Session{Status: StatusPlanned}, true},
+		{"a repeating game that began long ago", evening, Session{Status: StatusPlanned, IsRecurring: true, ScheduledDate: day("2026-10-02")}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			night := tt.night
+			night.ID = "s1"
+			wrote := false
+			future := tt.now.Add(time.Hour)
+			if real := time.Now().UTC().Add(time.Hour); real.After(future) {
+				future = real
+			}
+			repo := &mockSessionRepo{
+				updateAttendeeStatusFn: func(context.Context, string, string, string) error { wrote = true; return nil },
+				findRSVPTokenFn: func(context.Context, string) (*RSVPToken, error) {
+					return &RSVPToken{Token: "rt", SessionID: "s1", UserID: "u1", Action: RSVPAccepted, ExpiresAt: future}, nil
+				},
+				findByIDFn: func(context.Context, string) (*Session, error) { return &night, nil },
+			}
+			svc := &sessionService{repo: repo, clock: func() time.Time { return tt.now }}
+
+			err := svc.RespondRSVP(context.Background(), &night, "u1", RSVPAccepted, nil, patch.Field[string]{})
+			if tt.open {
+				if err != nil || !wrote {
+					t.Errorf("an open night must record the answer: err=%v wrote=%v", err, wrote)
+				}
+			} else {
+				if apperror.SafeCode(err) != http.StatusConflict {
+					t.Errorf("code = %d (%v), want %d", apperror.SafeCode(err), err, http.StatusConflict)
+				}
+				if wrote {
+					t.Error("a played night recorded an answer")
+				}
+			}
+
+			if _, err := svc.ValidateRSVPToken(context.Background(), "rt"); (err == nil) != tt.open {
+				t.Errorf("mailed link: err = %v, want it to work = %v", err, tt.open)
+			}
+		})
+	}
+}

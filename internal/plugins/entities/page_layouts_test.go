@@ -354,7 +354,7 @@ func TestSetPageLayoutAPI(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPut, "/campaigns/camp-1/entities/p1/layout", strings.NewReader(tt.body))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			if tt.asPlayer {
-				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "camp-1"})
 			}
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(req, rec)

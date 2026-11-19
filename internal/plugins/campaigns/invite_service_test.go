@@ -47,12 +47,14 @@ func (m *mockInviteRepo) ListByCampaign(_ context.Context, campaignID string) ([
 	return result, nil
 }
 
-func (m *mockInviteRepo) MarkAccepted(_ context.Context, id string) error {
-	if inv, ok := m.invites[id]; ok {
-		now := time.Now().UTC()
-		inv.AcceptedAt = &now
+func (m *mockInviteRepo) MarkAccepted(_ context.Context, id string) (bool, error) {
+	inv, ok := m.invites[id]
+	if !ok || inv.AcceptedAt != nil {
+		return false, nil
 	}
-	return nil
+	now := time.Now().UTC()
+	inv.AcceptedAt = &now
+	return true, nil
 }
 
 func (m *mockInviteRepo) Delete(_ context.Context, campaignID, id string) (bool, error) {
@@ -138,6 +140,9 @@ func (m *mockCampaignRepoForInvites) ListPublic(context.Context, int) ([]Campaig
 	return nil, nil
 }
 func (m *mockCampaignRepoForInvites) Update(context.Context, *Campaign) error { return nil }
+func (m *mockCampaignRepoForInvites) UpdateDetails(context.Context, string, *string, *string, *bool) error {
+	return nil
+}
 func (m *mockCampaignRepoForInvites) MoveToTrash(context.Context, string, string, string, time.Time) error {
 	return nil
 }
@@ -360,6 +365,27 @@ func TestAcceptInvite_Success(t *testing.T) {
 	}
 }
 
+// One link adds one person: a second person opening the same link is told
+// it has been used, and is not added.
+func TestAcceptInvite_SecondPersonIsRefused(t *testing.T) {
+	inviteRepo := newMockInviteRepo()
+	campaignRepo := newMockCampaignRepoForInvites()
+	svc := NewInviteService(inviteRepo, campaignRepo, nil, "http://localhost:3000")
+	invite, _ := svc.CreateInvite(context.Background(), "camp-1", "user-1", CreateInviteInput{
+		Email: "player@example.com",
+		Role:  "player",
+	})
+	if _, err := svc.AcceptInvite(context.Background(), invite.Token, "user-2"); err != nil {
+		t.Fatalf("first accept: %v", err)
+	}
+	if _, err := svc.AcceptInvite(context.Background(), invite.Token, "user-3"); err == nil {
+		t.Fatal("a second person accepted the same link")
+	}
+	if _, err := campaignRepo.FindMember(context.Background(), "camp-1", "user-3"); err == nil {
+		t.Fatal("the second person was added")
+	}
+}
+
 func TestAcceptInvite_Expired(t *testing.T) {
 	inviteRepo := newMockInviteRepo()
 	campaignRepo := newMockCampaignRepoForInvites()
@@ -504,5 +530,23 @@ func (m *mockCampaignRepoForInvites) ListOwnedByUser(context.Context, string) ([
 }
 
 func (m *mockCampaignRepoForInvites) ListMemberCampaignIDs(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+func TestCreateInvite_RejectsUnsafeAddresses(t *testing.T) {
+	for _, email := range []string{
+		"a@b.com\r\nBcc: x@y.com",
+		"Name <a@b.com>",
+		"a@b.com, c@d.com",
+		"not an address",
+	} {
+		svc := &inviteService{}
+		if _, err := svc.CreateInvite(context.Background(), "camp-1", "u1", CreateInviteInput{Email: email, Role: "player"}); err == nil {
+			t.Errorf("%q was accepted", email)
+		}
+	}
+}
+
+func (m *mockCampaignRepoForInvites) ListOwnedMembershipIDs(context.Context, string) ([]string, error) {
 	return nil, nil
 }

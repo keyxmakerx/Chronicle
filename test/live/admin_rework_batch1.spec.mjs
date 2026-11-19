@@ -33,7 +33,7 @@ async function makeAdmin(admin, key, { sawBox } = {}) {
   page.once('dialog', (d) => d.accept());
   await row.getByRole('button', { name: 'Make Admin' }).click();
   const box = page.locator('#reauth-modal');
-  const shown = await box.getByText('Confirm Your Identity').waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false);
+  const shown = await box.getByText("Confirm it's you").waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false);
   if (sawBox) sawBox.shown = shown;
   if (shown) {
     await box.locator('input[name=password]').fill(ADMIN.password);
@@ -88,7 +88,7 @@ test('menu, pins, home, password box, tabs and people list', async () => {
     const recent = theo.page.locator('.card', { has: theo.page.getByRole('heading', { name: 'Recent admin changes' }) });
     await picture(theo.page, 'admin-home', {
       check: '#878', about: 'Admin Home: Needs you card, tiles, Recent admin changes',
-      mask: ['main .card ul', 'main p.font-mono', 'main .card p.text-sm'],
+      mask: ['main .card ul', 'main p.font-mono', 'main .card p.text-sm', '[data-update-health]'],
     });
     await recent.getByText(new RegExp(`Site Admin made ${NAME} an admin`)).first().waitFor();
 
@@ -124,7 +124,7 @@ test('menu, pins, home, password box, tabs and people list', async () => {
     admin.page.once('dialog', (d) => d.accept());
     await row.getByRole('button', { name: 'Remove Admin' }).click();
     const box = admin.page.locator('#reauth-modal');
-    if (await box.getByText('Confirm Your Identity').isVisible().catch(() => false)) {
+    if (await box.getByText("Confirm it's you").isVisible().catch(() => false)) {
       await box.locator('input[name=password]').fill(ADMIN.password);
       await box.getByRole('button', { name: 'Confirm' }).click();
     }

@@ -2,6 +2,7 @@ package layouts
 
 import (
 	"context"
+	"time"
 
 	"github.com/a-h/templ"
 )
@@ -15,6 +16,7 @@ type ViewPrefsData struct {
 	Motion   string // owner | calm | off
 	TextSize string // standard | larger | largest
 	Contrast string // standard | high
+	Timezone string // IANA zone; empty means use the device's
 }
 
 const keyViewPrefs ctxKey = "layout_view_prefs"
@@ -56,6 +58,13 @@ func ViewPrefAttrs(ctx context.Context) templ.Attributes {
 	}
 	if oneOf(p.Contrast, "standard", "high") == "high" {
 		attrs["data-view-contrast"] = "high"
+	}
+	// Dates are rewritten in this zone by static/js/dates.js. Re-checked here
+	// so a bad stored value never becomes an attribute.
+	if p.Timezone != "" {
+		if _, err := time.LoadLocation(p.Timezone); err == nil {
+			attrs["data-view-tz"] = p.Timezone
+		}
 	}
 	return attrs
 }

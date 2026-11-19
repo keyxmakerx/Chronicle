@@ -36,7 +36,7 @@ A package's licence is whatever its own repository says. Content reproduced from
 ### Manual Upload
 
 1. Download a system ZIP from [Releases](../../releases)
-2. In Chronicle: **Manage > Game & features** (`/campaigns/<id>/extensions`), custom game system upload
+2. In Chronicle: **Campaign settings > Game & features** (`/campaigns/<id>/extensions`), custom game system upload
 3. Upload the ZIP file
 
 ### ZIP Format

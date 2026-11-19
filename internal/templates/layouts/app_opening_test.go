@@ -71,10 +71,13 @@ func TestAppOpening_FullIsOneLine(t *testing.T) {
 		Action: &AppAction{Label: "Add an item", Href: "/x/new"},
 	}
 	out := renderOpening(t, SetIsOwner(context.Background(), true), d)
-	for _, w := range []string{`data-app-opening="full"`, "Armory", "<span>3 maps</span>", `href="/x/new"`, "Add an item", "cb-title", "cb-head"} {
+	for _, w := range []string{`data-app-opening="full"`, "Armory", "<span>3 maps</span>", `href="/x/new"`, "Add an item", "cb-title"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("missing %q in:\n%s", w, out)
 		}
+	}
+	if strings.Contains(out, "cb-head") {
+		t.Errorf("only the title is a heading, never the whole header:\n%s", out)
 	}
 	if strings.Contains(out, "must not show") || strings.Contains(out, "Nothing to do yet") {
 		t.Errorf("a page with content still shows the empty sentence:\n%s", out)

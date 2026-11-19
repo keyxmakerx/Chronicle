@@ -5,6 +5,7 @@
 package syncapi
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -162,7 +163,9 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 											@securityEventBadge(e.EventType)
 										</td>
 										<td class="py-2 pr-4 font-mono text-xs">{ e.IPAddress }</td>
-										<td class="py-2 pr-4 text-xs text-fg-muted">{ e.CreatedAt.Format("Jan 2, 15:04:05") }</td>
+										<td class="py-2 pr-4 text-xs text-fg-muted">
+										@components.Date(e.CreatedAt, timeutil.DateWithTime)
+										</td>
 										<td class="py-2 pr-4">
 											if e.Resolved {
 												<span class="badge-green text-xs">Resolved</span>
@@ -208,7 +211,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 									</div>
 									<form method="POST" hx-delete={ fmt.Sprintf("/admin/api/ip-blocks/%d", b.ID) } hx-confirm={ "Unblock " + b.IPAddress + "? It will be able to use the API again." } class="inline">
 										<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-										<button type="submit" class="text-xs text-red-500 hover:text-red-600" title="Unblock">
+										<button type="submit" class="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300" title="Unblock">
 											<i class="fa-solid fa-unlock"></i> Unblock
 										</button>
 									</form>
@@ -238,7 +241,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 				// API Keys overview.
 				<div class="card p-6">
 					<h2 class="text-lg font-semibold text-fg mb-4">
-						<i class="fa-solid fa-key text-accent mr-2"></i>
+						<i class="fa-solid fa-key mr-2"></i>
 						API Keys ({ fmt.Sprintf("%d", data.TotalKeys) })
 					</h2>
 					if len(data.APIKeys) > 0 {
@@ -270,7 +273,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 										</form>
 										<form method="POST" hx-delete={ fmt.Sprintf("/admin/api/keys/%d", k.ID) } hx-confirm="Revoke this API key?" class="inline">
 											<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-											<button type="submit" class="text-xs text-red-500 hover:text-red-600 px-1" title="Revoke" aria-label={ "Revoke key " + k.Name }>
+											<button type="submit" class="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 px-1" title="Revoke" aria-label={ "Revoke key " + k.Name }>
 												<i class="fa-solid fa-trash"></i>
 											</button>
 										</form>

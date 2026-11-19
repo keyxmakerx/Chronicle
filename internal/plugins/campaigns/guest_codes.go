@@ -200,6 +200,19 @@ func (s *GuestCodeService) ClaimGuestCode(ctx context.Context, code string) (str
 	return id, campaignID, nil
 }
 
+// Peek reports the campaign a live code opens, or false for a wrong, used,
+// expired or archived-campaign code. Nothing is claimed.
+func (s *GuestCodeService) Peek(ctx context.Context, code string) (campaignID string, ok bool) {
+	if len(normalizeGuestCode(code)) != guestCodeLen {
+		return "", false
+	}
+	id, err := s.repo.Peek(ctx, hashGuestCode(code), s.now())
+	if err != nil {
+		return "", false
+	}
+	return id, true
+}
+
 // ReleaseGuestCode puts a claimed code back.
 func (s *GuestCodeService) ReleaseGuestCode(ctx context.Context, codeID string) {
 	if err := s.repo.Release(ctx, codeID); err != nil {

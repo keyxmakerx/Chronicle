@@ -14,6 +14,7 @@ import (
 // --- Mock Repository ---
 
 type mockCampaignRepo struct {
+	setJoinCodeFn func(ctx context.Context, campaignID, code string) error
 	ownerPresence           map[string]OwnerPresence
 	ownedByUser             []OwnedCampaign
 	memberCampaignIDs       []string
@@ -25,6 +26,7 @@ type mockCampaignRepo struct {
 	listAllFn               func(ctx context.Context, opts ListOptions) ([]Campaign, int, error)
 	listPublicFn            func(ctx context.Context, limit int) ([]Campaign, error)
 	updateFn                func(ctx context.Context, campaign *Campaign) error
+	updateDetailsFn         func(ctx context.Context, id string, name, slug *string, isPublic *bool) error
 	moveToTrashFn           func(ctx context.Context, id, byUserID, byName string, at time.Time) error
 	restoreFn               func(ctx context.Context, id string) error
 	listTrashedFn           func(ctx context.Context) ([]TrashedCampaign, error)
@@ -112,6 +114,13 @@ func (m *mockCampaignRepo) ListPublic(ctx context.Context, limit int) ([]Campaig
 func (m *mockCampaignRepo) Update(ctx context.Context, campaign *Campaign) error {
 	if m.updateFn != nil {
 		return m.updateFn(ctx, campaign)
+	}
+	return nil
+}
+
+func (m *mockCampaignRepo) UpdateDetails(ctx context.Context, id string, name, slug *string, isPublic *bool) error {
+	if m.updateDetailsFn != nil {
+		return m.updateDetailsFn(ctx, id, name, slug, isPublic)
 	}
 	return nil
 }
@@ -361,7 +370,12 @@ func (m *mockCampaignRepo) ForceTransferOwnership(ctx context.Context, campaignI
 
 func (m *mockCampaignRepo) ArchiveCampaign(context.Context, string) error   { return nil }
 func (m *mockCampaignRepo) UnarchiveCampaign(context.Context, string) error { return nil }
-func (m *mockCampaignRepo) SetJoinCode(context.Context, string, string) error { return nil }
+func (m *mockCampaignRepo) SetJoinCode(ctx context.Context, campaignID, code string) error {
+	if m.setJoinCodeFn != nil {
+		return m.setJoinCodeFn(ctx, campaignID, code)
+	}
+	return nil
+}
 func (m *mockCampaignRepo) ClearJoinCode(context.Context, string) error       { return nil }
 func (m *mockCampaignRepo) FindByJoinCode(ctx context.Context, code string) (*Campaign, error) {
 	if m.findByJoinCodeFn != nil {
@@ -681,9 +695,9 @@ func TestUpdate_Success(t *testing.T) {
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
 	campaign, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{
-		Name:        "New Name",
-		Description: "New description",
-		IsPublic:    true,
+		Name:        strPtr("New Name"),
+		Description: strPtr("New description"),
+		IsPublic:    boolPtr(true),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -707,8 +721,8 @@ func TestUpdate_KeepsSlugWhenNameUnchanged(t *testing.T) {
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
 	campaign, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{
-		Name:        "Same Name",
-		Description: "Updated desc",
+		Name:        strPtr("Same Name"),
+		Description: strPtr("Updated desc"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -725,7 +739,7 @@ func TestUpdate_EmptyName(t *testing.T) {
 		},
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
-	_, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{Name: ""})
+	_, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{Name: strPtr("")})
 	assertAppError(t, err, 400)
 }
 
@@ -736,7 +750,7 @@ func TestUpdate_NotFound(t *testing.T) {
 		},
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
-	_, err := svc.Update(context.Background(), "nonexistent", UpdateCampaignInput{Name: "Test"})
+	_, err := svc.Update(context.Background(), "nonexistent", UpdateCampaignInput{Name: strPtr("Test")})
 	assertAppError(t, err, 404)
 }
 
@@ -749,14 +763,62 @@ func TestUpdate_ClearsDescription(t *testing.T) {
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
 	campaign, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{
-		Name:        "Test",
-		Description: "",
+		Name:        strPtr("Test"),
+		Description: strPtr(""),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if campaign.Description != nil {
 		t.Error("expected nil description when empty string provided")
+	}
+}
+
+// A save that names only the description (the Details tab) leaves the name,
+// slug and public flag exactly as stored: an absent key is not a blank one.
+func TestUpdate_DescriptionOnlyPreservesTheRest(t *testing.T) {
+	old := "old"
+	var saved *Campaign
+	repo := &mockCampaignRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Campaign, error) {
+			return &Campaign{ID: "camp-1", Name: "Therin", Slug: "therin", IsPublic: true, Description: &old, Settings: "{}", SidebarConfig: "{}"}, nil
+		},
+		updateFn: func(_ context.Context, c *Campaign) error { saved = c; return nil },
+	}
+	svc := newTestCampaignService(repo, &mockUserFinder{})
+	if _, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{Description: strPtr("new words")}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if saved == nil || saved.Name != "Therin" || saved.Slug != "therin" || !saved.IsPublic {
+		t.Errorf("name, slug and public flag must survive, got %+v", saved)
+	}
+	if saved.Description == nil || *saved.Description != "new words" {
+		t.Errorf("description = %v", saved.Description)
+	}
+}
+
+// An empty body changes nothing, and a name-only save keeps the description.
+func TestUpdate_AbsentKeysPreserve(t *testing.T) {
+	old := "keep me"
+	var saved *Campaign
+	repo := &mockCampaignRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Campaign, error) {
+			return &Campaign{ID: "camp-1", Name: "Therin", Slug: "therin", IsPublic: true, Description: &old, Settings: "{}", SidebarConfig: "{}"}, nil
+		},
+		updateFn: func(_ context.Context, c *Campaign) error { saved = c; return nil },
+	}
+	svc := newTestCampaignService(repo, &mockUserFinder{})
+	if _, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if saved.Name != "Therin" || !saved.IsPublic || saved.Description == nil || *saved.Description != "keep me" {
+		t.Errorf("an empty save changed the campaign: %+v", saved)
+	}
+	if _, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{Name: strPtr("Therin the Grey")}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if saved.Description == nil || *saved.Description != "keep me" || !saved.IsPublic {
+		t.Errorf("a rename changed the description or public flag: %+v", saved)
 	}
 }
 
@@ -842,84 +904,6 @@ func TestListPublic_DefaultsZero(t *testing.T) {
 // ============================================================
 // Membership Tests
 // ============================================================
-
-func TestAddMember_Success(t *testing.T) {
-	var capturedMember *CampaignMember
-	repo := &mockCampaignRepo{
-		addMemberFn: func(_ context.Context, m *CampaignMember) error {
-			capturedMember = m
-			return nil
-		},
-	}
-	users := &mockUserFinder{
-		findByEmailFn: func(_ context.Context, email string) (*MemberUser, error) {
-			return &MemberUser{ID: "user-2", Email: email}, nil
-		},
-	}
-	svc := newTestCampaignService(repo, users)
-	err := svc.AddMember(context.Background(), "camp-1", "player@example.com", RolePlayer)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if capturedMember == nil {
-		t.Fatal("AddMember was not called")
-	}
-	if capturedMember.Role != RolePlayer {
-		t.Errorf("expected Player role, got %v", capturedMember.Role)
-	}
-	if capturedMember.UserID != "user-2" {
-		t.Errorf("expected user-2, got %q", capturedMember.UserID)
-	}
-}
-
-func TestAddMember_InvalidRole(t *testing.T) {
-	svc := newTestCampaignService(&mockCampaignRepo{}, &mockUserFinder{})
-	err := svc.AddMember(context.Background(), "camp-1", "test@example.com", RoleNone)
-	assertAppError(t, err, 400)
-}
-
-func TestAddMember_OwnerRoleForbidden(t *testing.T) {
-	svc := newTestCampaignService(&mockCampaignRepo{}, &mockUserFinder{})
-	err := svc.AddMember(context.Background(), "camp-1", "test@example.com", RoleOwner)
-	assertAppError(t, err, 400)
-}
-
-func TestAddMember_UserNotFound(t *testing.T) {
-	svc := newTestCampaignService(&mockCampaignRepo{}, &mockUserFinder{})
-	err := svc.AddMember(context.Background(), "camp-1", "nobody@example.com", RolePlayer)
-	assertAppError(t, err, 400)
-}
-
-func TestAddMember_AlreadyMember(t *testing.T) {
-	repo := &mockCampaignRepo{
-		findMemberFn: func(_ context.Context, _, _ string) (*CampaignMember, error) {
-			return &CampaignMember{Role: RolePlayer}, nil
-		},
-	}
-	users := &mockUserFinder{
-		findByEmailFn: func(_ context.Context, _ string) (*MemberUser, error) {
-			return &MemberUser{ID: "user-2"}, nil
-		},
-	}
-	svc := newTestCampaignService(repo, users)
-	err := svc.AddMember(context.Background(), "camp-1", "existing@example.com", RolePlayer)
-	assertAppError(t, err, 409)
-}
-
-func TestAddMember_NormalizesEmail(t *testing.T) {
-	var capturedEmail string
-	users := &mockUserFinder{
-		findByEmailFn: func(_ context.Context, email string) (*MemberUser, error) {
-			capturedEmail = email
-			return &MemberUser{ID: "user-2", Email: email}, nil
-		},
-	}
-	svc := newTestCampaignService(&mockCampaignRepo{}, users)
-	_ = svc.AddMember(context.Background(), "camp-1", "  TEST@Example.COM  ", RoleScribe)
-	if capturedEmail != "test@example.com" {
-		t.Errorf("expected normalized email 'test@example.com', got %q", capturedEmail)
-	}
-}
 
 func TestRemoveMember_Success(t *testing.T) {
 	removeCalled := false
@@ -1007,9 +991,16 @@ func TestUpdateMemberRole_CannotChangeOwnerRole(t *testing.T) {
 // Ownership Transfer Tests
 // ============================================================
 
+// targetIsMember answers every membership lookup with a player, for the
+// handover tests whose target has to be in the campaign already.
+func targetIsMember(_ context.Context, _, userID string) (*CampaignMember, error) {
+	return &CampaignMember{UserID: userID, Role: RolePlayer}, nil
+}
+
 func TestInitiateTransfer_Success(t *testing.T) {
 	var capturedTransfer *OwnershipTransfer
 	repo := &mockCampaignRepo{
+		findMemberFn: targetIsMember,
 		createTransferFn: func(_ context.Context, tr *OwnershipTransfer) error {
 			capturedTransfer = tr
 			return nil
@@ -1061,6 +1052,7 @@ func TestInitiateTransfer_TargetNotFound(t *testing.T) {
 
 func TestInitiateTransfer_AlreadyPending(t *testing.T) {
 	repo := &mockCampaignRepo{
+		findMemberFn: targetIsMember,
 		findTransferByCampaignFn: func(_ context.Context, _ string) (*OwnershipTransfer, error) {
 			return &OwnershipTransfer{ID: "existing"}, nil
 		},
@@ -1078,6 +1070,7 @@ func TestInitiateTransfer_AlreadyPending(t *testing.T) {
 func TestInitiateTransfer_SendsEmailWhenConfigured(t *testing.T) {
 	emailSent := false
 	repo := &mockCampaignRepo{
+		findMemberFn: targetIsMember,
 		findByIDFn: func(_ context.Context, _ string) (*Campaign, error) {
 			return &Campaign{ID: "camp-1", Name: "Test Campaign", Settings: "{}", SidebarConfig: "{}"}, nil
 		},
@@ -1106,6 +1099,7 @@ func TestInitiateTransfer_SendsEmailWhenConfigured(t *testing.T) {
 
 func TestInitiateTransfer_EmailFailureNonFatal(t *testing.T) {
 	repo := &mockCampaignRepo{
+		findMemberFn: targetIsMember,
 		findByIDFn: func(_ context.Context, _ string) (*Campaign, error) {
 			return &Campaign{ID: "camp-1", Name: "Test", Settings: "{}", SidebarConfig: "{}"}, nil
 		},
@@ -1804,4 +1798,8 @@ func (m *mockCampaignRepo) ListOwnedByUser(context.Context, string) ([]OwnedCamp
 
 func (m *mockCampaignRepo) ListMemberCampaignIDs(context.Context, string) ([]string, error) {
 	return m.memberCampaignIDs, nil
+}
+
+func (m *mockCampaignRepo) ListOwnedMembershipIDs(context.Context, string) ([]string, error) {
+	return nil, nil
 }

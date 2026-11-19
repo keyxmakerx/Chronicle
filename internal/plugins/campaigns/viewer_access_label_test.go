@@ -1,8 +1,12 @@
 package campaigns
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestViewerAccessLabel(t *testing.T) {
+	until := time.Now().Add(time.Hour)
 	tests := []struct {
 		name string
 		cc   CampaignContext
@@ -13,6 +17,9 @@ func TestViewerAccessLabel(t *testing.T) {
 		{"scribe", CampaignContext{MemberRole: RoleScribe}, "Scribe"},
 		{"player with DM access", CampaignContext{MemberRole: RolePlayer, IsDmGranted: true}, "Player with DM access"},
 		{"player", CampaignContext{MemberRole: RolePlayer}, "Player"},
+		{"look-around visitor", CampaignContext{MemberRole: RoleNone, VisitUntil: &until}, "Visitor"},
+		{"public visitor has no chip", CampaignContext{MemberRole: RoleNone}, ""},
+		{"admin without a role has no chip", CampaignContext{MemberRole: RoleNone, IsSiteAdmin: true}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

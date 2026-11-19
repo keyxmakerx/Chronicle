@@ -255,6 +255,41 @@ func TestApplyAppearance_Colours(t *testing.T) {
 			}
 		}
 	})
+	t.Run("amber accent refused, previous kept", func(t *testing.T) {
+		for _, amber := range []string{"#f59e0b", "#F97316", "#a16207"} {
+			s := CampaignSettings{AccentColor: "#6366f1"}
+			var in AppearanceInput
+			in.Colours.Accent = amber
+			if _, err := applyAppearance(&s, in); err == nil {
+				t.Errorf("accent %s was accepted", amber)
+			}
+			if s.AccentColor != "#6366f1" {
+				t.Errorf("accent %s changed the stored colour to %q", amber, s.AccentColor)
+			}
+		}
+	})
+	t.Run("amber already stored may be saved again", func(t *testing.T) {
+		stored, _ := colour.Tame("#f59e0b", false)
+		s := CampaignSettings{AccentColor: stored}
+		var in AppearanceInput
+		in.Colours.Accent = stored
+		if _, err := applyAppearance(&s, in); err != nil {
+			t.Fatalf("re-saving the stored colour failed: %v", err)
+		}
+	})
+	t.Run("red and green accents move off the state colours", func(t *testing.T) {
+		for _, c := range []string{"#dc2626", "#16a34a"} {
+			var s CampaignSettings
+			var in AppearanceInput
+			in.Colours.Accent = c
+			if _, err := applyAppearance(&s, in); err != nil {
+				t.Fatal(err)
+			}
+			if s.AccentColor == c {
+				t.Errorf("accent %s was stored unchanged", c)
+			}
+		}
+	})
 	t.Run("header colour uses deep range", func(t *testing.T) {
 		var in AppearanceInput
 		in.Header.Bg, in.Header.Color = "solid", neon
@@ -951,5 +986,34 @@ func TestTimelinePopupChoice(t *testing.T) {
 				t.Errorf("timelinePopupChoice(%q) = %q, %v; want %q", tt.v, got, err, tt.want)
 			}
 		})
+	}
+}
+
+func TestApplyAppearance_EntranceAndMoments(t *testing.T) {
+	run := func(prev *Appearance, in AppearanceInput) (*Appearance, error) {
+		s := CampaignSettings{Appearance: prev}
+		_, err := applyAppearance(&s, in)
+		return s.Appearance, err
+	}
+	var in AppearanceInput
+	in.Motion.Entrance, in.Motion.Sheen, in.Motion.Spark = "bloom", true, true
+	a, err := run(nil, in)
+	if err != nil || a == nil || a.Entrance != "bloom" || !a.MomentSheen || a.MomentCascade || !a.MomentSpark {
+		t.Fatalf("stored %+v, %v", a, err)
+	}
+	// Grow is the base and stored as unset; a save that sends none keeps the pick.
+	in.Motion.Entrance = "grow"
+	if a, _ = run(a, in); a.Entrance != "" {
+		t.Errorf("grow stored as %q", a.Entrance)
+	}
+	in.Motion.Entrance = "unfold"
+	a, _ = run(nil, in)
+	in.Motion.Entrance = ""
+	if a, _ = run(a, in); a.Entrance != "unfold" {
+		t.Errorf("a save that sends no entrance changed it to %q", a.Entrance)
+	}
+	in.Motion.Entrance = "wobble"
+	if _, err := run(nil, in); err == nil {
+		t.Error("an unknown entrance was accepted")
 	}
 }

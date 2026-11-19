@@ -49,7 +49,7 @@ func TestValidateDashboardLayout_TileSections(t *testing.T) {
 		{"repeated tile id across rows", []DashboardRow{
 			{ID: "r1", Kind: "tiles", Tiles: []tilegrid.Tile{tile("a", "text_block", "1x1")}},
 			{ID: "r2", Kind: "tiles", Tiles: []tilegrid.Tile{tile("a", "text_block", "1x1")}},
-		}, "same block twice"},
+		}, "same block is in this layout twice"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

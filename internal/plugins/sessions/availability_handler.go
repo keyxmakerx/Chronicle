@@ -442,19 +442,44 @@ func (h *Handler) resolveViewerTZ(c *echo.Context, userID string) string {
 	if tz := c.QueryParam("tz"); timeutil.IsValidLocation(tz) {
 		return tz
 	}
-	// The zone the viewer set for THEMSELVES on this campaign's availability
-	// page comes first: for most players it is the only zone they ever set.
-	if cc := campaigns.GetCampaignContext(c); cc != nil && cc.Campaign != nil && userID != "" {
-		if zones, err := h.svc.CampaignMemberZones(c.Request().Context(), cc.Campaign.ID); err == nil {
+	campaignID := ""
+	if cc := campaigns.GetCampaignContext(c); cc != nil && cc.Campaign != nil {
+		campaignID = cc.Campaign.ID
+	}
+	return h.memberTZ(c.Request().Context(), campaignID, userID)
+}
+
+// memberTZ is the zone a member's dates are told in for one campaign. The
+// zone they set for THEMSELVES on that campaign's availability page comes
+// first: for most players it is the only zone they ever set. Then their
+// account's, then UTC.
+func (h *Handler) memberTZ(ctx context.Context, campaignID, userID string) string {
+	if campaignID != "" && userID != "" {
+		if zones, err := h.svc.CampaignMemberZones(ctx, campaignID); err == nil {
 			if tz := zones[userID]; tz != "" {
 				return tz
 			}
 		}
 	}
-	if tz := h.storedTZ(c.Request().Context(), userID); tz != "" {
+	if tz := h.storedTZ(ctx, userID); tz != "" {
 		return tz
 	}
 	return "UTC"
+}
+
+// viewerDays gives today's date where a member is, campaign by campaign, as
+// a night's own page resolves it (memberTZ). Each campaign is read once, so
+// it can be handed to a loop over the member's notifications.
+func (h *Handler) viewerDays(ctx context.Context, userID string, now time.Time) func(campaignID string) string {
+	days := map[string]string{}
+	return func(campaignID string) string {
+		if d, ok := days[campaignID]; ok {
+			return d
+		}
+		d := now.In(timeutil.LoadLocation(h.memberTZ(ctx, campaignID, userID))).Format("2006-01-02")
+		days[campaignID] = d
+		return d
+	}
 }
 
 // storedTZ returns a member's stored IANA zone, or "" when they have not set a

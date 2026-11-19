@@ -290,14 +290,12 @@
       if (e.target.closest && e.target.closest('[data-act="fmt"]')) e.preventDefault();
     });
     this.on(this.el, 'keydown', function (e) { self.onKey(e); });
-    this.on(window, 'beforeunload', function (e) {
-      if (self.unsaved()) { e.preventDefault(); e.returnValue = ''; }
-    });
     this.load();
   };
 
   Editor.prototype.stop = function () {
     this.dead = true;
+    this.syncDirty();
     this.handlers.forEach(function (h) { h[0].removeEventListener(h[1], h[2], h[3]); });
     this.handlers = [];
     var self = this;
@@ -458,7 +456,16 @@
     return u || this.ops > 0;
   };
 
+  // The shared leave guard (boot.js) asks for a boosted link and for the
+  // browser's own prompt alike, so the editor only reports its state.
+  Editor.prototype.syncDirty = function () {
+    var C = window.Chronicle;
+    if (!C || !C.markDirty) return;
+    if (this.unsaved() && !this.dead) C.markDirty('rulebook-editor'); else C.markClean('rulebook-editor');
+  };
+
   Editor.prototype.syncSaved = function () {
+    this.syncDirty();
     if (!this.savedEl) return;
     var busy = this.ops > 0, error = this.opError;
     this.each(function (o) {

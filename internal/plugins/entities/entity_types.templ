@@ -222,7 +222,7 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 				if entityCount == 0 {
 					<button
 						@click="deleting = true"
-						class="btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+						class="btn-ghost btn-ghost-danger btn-sm"
 						title="Delete category"
 					>
 						<i class="fa-solid fa-trash"></i> Delete
@@ -325,7 +325,7 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 						}).catch(e => { error = e.message; }).finally(() => { saving = false; })
 					`, cc.Campaign.ID, et.ID, claimableBody) }
 				>
-					<span x-show="!saving">Save Changes</span>
+					<span x-show="!saving">Save changes</span>
 					<span x-show="saving">Saving...</span>
 				</button>
 			</div>

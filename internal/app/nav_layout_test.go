@@ -280,12 +280,12 @@ func TestNavCommandsJSON_OffersOnlyTheViewersRows(t *testing.T) {
 			t.Errorf("a player's palette offers %q, which is hidden from players", hidden)
 		}
 	}
-	for _, want := range []string{"Home", "Journal", "Locations", "Cities", "All Pages"} {
+	for _, want := range []string{"Home", "Journal", "Locations", "Cities", "All pages"} {
 		if _, ok := playerCmds[want]; !ok {
 			t.Errorf("a player's palette is missing %q: %v", want, playerCmds)
 		}
 	}
-	for _, manage := range []string{"Customize", "Game & features", "Settings", "Overview", "People"} {
+	for _, manage := range []string{"Customize", "Game & features", "Settings", "Overview", "People", "Campaign settings", "Details and data", "Export a copy", "Guests' dashboard", "Archive or delete this campaign", "Invite someone"} {
 		if _, ok := playerCmds[manage]; ok {
 			t.Errorf("a player's palette offers the owner's %q", manage)
 		}
@@ -294,7 +294,7 @@ func TestNavCommandsJSON_OffersOnlyTheViewersRows(t *testing.T) {
 	owner := navTestContext(hiddenTestItems(), campaigns.RoleOwner, true, false)
 	ownerCmds := decode(layouts.NavCommandsJSON(navTestLayoutCtx(
 		buildNavSections(owner, true, nil, navTestTypes(), nil, navTestEnabled(), navTestSystem), int(campaigns.RoleOwner))))
-	for _, want := range []string{"Maps", "Factions", "Secret Tunnel", "People", "Settings", "Customize", "Overview"} {
+	for _, want := range []string{"Maps", "Factions", "Secret Tunnel", "People", "Campaign settings", "Customize", "Export a copy", "Guests' dashboard", "Archive or delete this campaign"} {
 		if _, ok := ownerCmds[want]; !ok {
 			t.Errorf("the owner's palette is missing %q", want)
 		}
@@ -351,8 +351,8 @@ func TestBuildNavEdit_KeepsTheWholeArrangementForTheOwner(t *testing.T) {
 	if r := rows["app:maps"]; !r.Off || !r.Hidden || r.Label != "Maps" {
 		t.Errorf("a turned-off, hidden app must keep its place, marked: %+v", r)
 	}
-	if r := rows["cat:2"]; !r.Hidden || r.Icon != "" || r.Color != "#fbbf24" {
-		t.Errorf("a hidden category keeps its colour and loses a poisoned icon: %+v", r)
+	if r := rows["cat:2"]; !r.Hidden || r.Icon != "" || r.Label != "Factions" {
+		t.Errorf("a hidden category keeps its place and loses a poisoned icon: %+v", r)
 	}
 	if r := rows["link:lnk_1"]; !r.Hidden || r.URL != "/campaigns/camp-1/tunnel" || r.Kind != "link" {
 		t.Errorf("a hidden link keeps its target: %+v", r)

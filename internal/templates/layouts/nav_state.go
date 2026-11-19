@@ -112,7 +112,9 @@ func ResolveNavState(ctx context.Context) context.Context {
 		}
 	}
 	cands = append(cands, navCandidate{key: "all", url: base + "/entities"})
-	for _, row := range NavManageRows(ctx) {
+	// Every tool page leads to the one Campaign settings row; a pinned tool keeps its own
+	// key so its Pinned row, not only that row, shows where the owner is.
+	for _, row := range NavManagePages(ctx) {
 		cands = append(cands, navCandidate{key: row.Key, url: row.URL})
 	}
 
@@ -154,7 +156,7 @@ func navStateOf(ctx context.Context) navState {
 }
 
 // navFoldOpen reports whether a fold is open: the viewer's remembered choice,
-// else the default. Manage starts folded; a category's sub-categories start
+// else the default. a category's sub-categories start
 // folded unless the open page is that category or one of them; every other
 // section starts open.
 func navFoldOpen(st navState, id string) bool {
@@ -183,12 +185,37 @@ func NavCurrent(ctx context.Context) (key, page string) {
 
 // NavIsCurrent reports whether key is the row for the open page.
 func NavIsCurrent(ctx context.Context, key string) bool {
-	return key != "" && navStateOf(ctx).current == key
+	cur := navStateOf(ctx).current
+	if key == NavManageKey {
+		return cur == NavManageKey || strings.HasPrefix(cur, NavManageKey+":")
+	}
+	return key != "" && cur == key
 }
 
 // NavHasRing reports whether the living ring sits on this row.
 func NavHasRing(ctx context.Context, key string) bool {
-	return key != "" && navStateOf(ctx).ring == key
+	ring := navStateOf(ctx).ring
+	if key == NavManageKey {
+		// The ring is one element: when the tool is also pinned, its Pinned
+		// row holds it and the Campaign settings row only reads as current.
+		return (ring == NavManageKey || strings.HasPrefix(ring, NavManageKey+":")) && !navPinnedHere(ctx, ring)
+	}
+	return key != "" && ring == key
+}
+
+// navPinnedHere reports whether the Pinned section already has a row for key.
+func navPinnedHere(ctx context.Context, key string) bool {
+	for _, sec := range GetNavSections(ctx) {
+		if sec.Kind != "pinned" {
+			continue
+		}
+		for _, r := range sec.Rows {
+			if r.Key == key {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // NavSectionCurrent names the current row when it sits inside the given rows
@@ -231,7 +258,18 @@ func NavCanEdit(ctx context.Context) bool {
 // navPinnable reports whether a row gets the viewer's own pin: any row
 // outside Pinned, and in Pinned only the rows they pinned themselves.
 func navPinnable(ctx context.Context, sec NavSectionView, row NavRowView) bool {
+	if NavCanOwnPin(ctx) {
+		// The owner's own pins are owner tools only; they unpin them here.
+		return sec.Kind == "pinned" && row.Personal && strings.HasPrefix(row.Key, NavManageKey+":")
+	}
 	return NavCanPin(ctx) && (sec.Kind != "pinned" || row.Personal)
+}
+
+// NavCanOwnPin reports whether the viewer is the owner pinning owner tools
+// for themselves. The pin is personal storage, so it needs a signed-in owner
+// who is not previewing as a player, on a campaign that still takes writes.
+func NavCanOwnPin(ctx context.Context) bool {
+	return IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 3 && !IsViewingAsPlayer(ctx) && !IsCampaignArchived(ctx)
 }
 
 // NavToolsWordSection is the section whose heading carries the touch-screen

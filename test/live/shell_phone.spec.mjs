@@ -43,6 +43,17 @@ test('phone: the sidebar is out of the way and the menu button opens and closes 
   assert.ok(open.right <= 390 + 1, 'the open sidebar is wider than the screen');
   await picture(page, 'shell-phone-open', { check: '#737', about: 'The sidebar open at phone width', mask: ['main'] });
 
+  // The Table bar steps down while the menu is open, so the menu's bottom
+  // row is the thing under a finger, not the bar.
+  const footHit = await page.evaluate(() => {
+    const links = [...document.querySelectorAll('#sidebar a')].filter((a) => a.getClientRects().length);
+    const last = links.reduce((m, a) => (a.getBoundingClientRect().bottom > m.getBoundingClientRect().bottom ? a : m));
+    const r = last.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { text: last.textContent.trim(), covered: !last.contains(hit), hit: hit && (hit.className || hit.tagName) };
+  });
+  assert.ok(!footHit.covered, `the menu's bottom row "${footHit.text}" is covered by ${footHit.hit}`);
+
   // Esc closes it and hands focus back to the button.
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.getElementById('nav-toggle').getAttribute('aria-expanded') === 'false');
@@ -91,5 +102,19 @@ test('phone: a long page scrolls in one place', async () => {
   const after = await bar.boundingBox();
   assert.equal(Math.round(after.y), Math.round(before.y), 'the top bar scrolled away');
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the page scrolls sideways');
+  owner.assertClean();
+});
+
+test('phone: All pages fits at 360 wide without sliding sideways', async () => {
+  const owner = await person({ tag: 'pw', name: 'Mara Vell', context: { viewport: { width: 360, height: 780 }, isMobile: true, hasTouch: true } });
+  const cid = await newCampaign(owner, 'Phone Lists');
+  const { page } = owner;
+  await owner.go(`/campaigns/${cid}/entities`);
+  await page.locator('#main-content').waitFor();
+  // The shell check above reads only the document; the list scrolls inside
+  // #main-content, so a toolbar wider than the screen shows up here.
+  assert.ok(await page.evaluate(() => { const m = document.getElementById('main-content'); return m.scrollWidth <= m.clientWidth; }), '#main-content slides sideways on All pages');
+  const bounds = await page.locator('a[aria-label="New page"]').evaluate((e) => e.getBoundingClientRect().right);
+  assert.ok(bounds <= 360, `New page ends at ${bounds}, past the screen`);
   owner.assertClean();
 });

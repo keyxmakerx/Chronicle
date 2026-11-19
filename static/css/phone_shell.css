@@ -1,4 +1,4 @@
-/* phone_shell.css: the app shell and its lists on a phone.
+/* phone_shell.css: the app shell and its lists on a phone or a tablet.
  *
  * Plain CSS, linked after app.css and unlayered so it outranks the Tailwind
  * component rules it adjusts. Each block is gated by a width or a coarse
@@ -78,6 +78,81 @@
   .cta-bar[data-cta="timezone"] .cta-x { margin-block: -10px; inline-size: 44px; block-size: 44px; }
 }
 
+/* The game night banner is one row under 640 wide: its sentence wraps beside
+   the count and the button instead of taking a line of its own. The button
+   keeps its drawn size; the area that answers a tap grows to 44 tall. */
+@media (max-width: 640px) {
+  .cta-bar[data-cta="rsvp"] { flex-wrap: nowrap; }
+  .cta-bar[data-cta="rsvp"] .cta-msg { flex: 1 1 auto; }
+  .cta-bar[data-cta="rsvp"] .cta-go { position: relative; white-space: nowrap; }
+  .cta-bar[data-cta="rsvp"] .cta-go::after { content: ""; position: absolute; inset: -8px 0; }
+}
+
+/* Going, Maybe and Can't are 44 tall on a touch screen. With a mouse they
+   keep their smaller size. */
+@media (pointer: coarse) {
+  .rsvp-answer {
+    min-block-size: 44px;
+    padding-inline: 18px;
+    font-size: 15px;
+  }
+}
+
+/* A touch screen narrower than a tablet on its side keeps the phone's drawer:
+   the sidebar waits off the page until the menu button brings it over, and
+   leaves again when something is picked. A mouse-driven window of the same
+   width keeps its docked sidebar. The layout (navDrawerQuery in app.templ)
+   says when this applies; the two have to agree.
+   The id outranks the sidebar's md: utilities, and nothing here is
+   !important but the width, so Calm, Off and the device's reduce setting
+   still switch the slide off, the open state (.sidebar-mobile-open) still
+   wins, and the fade that replaces the slide can hold the drawer in place. */
+@media (min-width: 768px) and (max-width: 1023.98px) and (pointer: coarse) {
+  #sidebar {
+    position: fixed;
+    z-index: var(--z-drawer);
+    visibility: visible;
+    transform: translateX(-100%);
+    transition: transform var(--dur-large, 280ms) ease-out;
+    /* A drawer is never folded to icons or hidden; those states set their
+       widths with !important, so this has to as well. */
+    inline-size: 16rem !important;
+    min-inline-size: 16rem !important;
+  }
+  #sidebar.sidebar-fully-hidden > * { transform: none; }
+  .nav-x-close { display: grid; }
+  .nav-sb .sidebar-pin-btn { display: none; }
+}
+
+/* The drawer's close control keeps its drawn size; an unseen margin around
+   it brings what answers a tap to 44, stopping short of the button beside it. */
+@media (pointer: coarse) {
+  .nav-x-close::after { content: ""; position: absolute; inset: -6px -8px -6px -4px; }
+}
+
+/* Where the sidebar is docked the menu button has nothing to open. The header
+   rule above shows every header control on touch, this one included. */
+@media (min-width: 1024px) {
+  #app-topbar #nav-toggle { display: none; }
+}
+
+/* Blocks fold into one column instead of squeezing. A row of blocks is laid
+   out in twelfths from 768 wide, which leaves a third-width block 240 wide
+   or less on an upright tablet or beside a docked sidebar. The rows stay one
+   column until the page area is about 880 wide: under 880 always, and under
+   1136 while the sidebar is docked open (256 wide). A sidebar folded to
+   icons, unpinned, hidden, or waiting as a drawer takes no such room. */
+@media (min-width: 768px) and (max-width: 879.98px) {
+  .block-row { grid-template-columns: minmax(0, 1fr); }
+  .block-row > * { grid-column: auto; }
+}
+@media (min-width: 880px) and (max-width: 1135.98px) and (pointer: fine),
+       (min-width: 880px) and (max-width: 1135.98px) and (pointer: none),
+       (min-width: 1024px) and (max-width: 1135.98px) {
+  body:has(#sidebar:not(.sidebar-unpinned):not(.sidebar-collapsed):not(.sidebar-fully-hidden)) .block-row { grid-template-columns: minmax(0, 1fr); }
+  body:has(#sidebar:not(.sidebar-unpinned):not(.sidebar-collapsed):not(.sidebar-fully-hidden)) .block-row > * { grid-column: auto; }
+}
+
 /* Page lists draw as rows under 640 wide: name, kind in muted words and the
    Director's lock at the end, 44 tall, on hairlines with no band and no card.
    The grid, table and tree switch is unchanged on wider screens. */
@@ -113,3 +188,198 @@
   }
   #entity-list .ec-pill > i { display: none; }
 }
+
+/* The Tools tab and its shelf (layouts/topbar_tools.templ,
+   widgets/topbar_tools.js). Under 768 wide, where the menu button shows, the
+   bar's tool buttons step off it and one Tools tab takes their place; tapping
+   it hangs a shelf from the bar with every tool and its name. The tools'
+   hosts stay in the bar's flow of the page (their bubbles, panels and sheets
+   hang inside them), taken out of the row but never display:none; only the
+   button is hidden, and the shelf presses it. A tool kept on the bar (.tb-kept)
+   gets its real button back. Above 768 none of this applies. */
+.tb-tools { display: none; }
+@media (max-width: 767.98px) {
+  .tb-tools { display: flex; align-self: stretch; }
+
+  #app-topbar[data-tb-tools] { padding-inline: 8px; }
+  #app-topbar[data-tb-tools] .tb-left { gap: 0; }
+  #app-topbar[data-tb-tools] .tb-left button:has([data-topbar-name]) { padding-inline: 6px; gap: 4px; }
+
+  /* A tool not kept leaves the row: its host is pulled out of the flow, so
+     the bar's gap closes up, and its button is hidden. visibility keeps the
+     button pressable by the shelf and out of the tab order. */
+  #app-topbar[data-tb-tools] [data-tb-tool]:not(.tb-kept, button) {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: 4rem;
+    inline-size: 0;
+    block-size: 100%;
+    min-inline-size: 0;
+  }
+  #app-topbar[data-tb-tools] [data-tb-tool]:not(.tb-kept) :is([data-ai-chip], [data-tt-tab], [data-notif-toggle], [data-dms-toggle]),
+  #app-topbar[data-tb-tools] button[data-tb-tool]:not(.tb-kept) {
+    visibility: hidden;
+    position: absolute;
+  }
+  /* The Table's own rule hides its tab on a phone and the bell's under 480;
+     kept, they come back like the rest. */
+  #app-topbar[data-tb-tools] .tb-kept .tt-tab,
+  #app-topbar[data-tb-tools] .tb-kept .tb-bell { display: inline-flex; }
+  /* The shelf names Notifications, so the account menu's copy of the row goes. */
+  #app-topbar[data-tb-tools] .tb-menu-notif { display: none; }
+}
+
+.tb-tab {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 5px;
+  min-inline-size: 44px;
+  padding: 0 8px;
+  background: none;
+  border: 0;
+  border-inline-start: 1px solid var(--color-border);
+  border-block-end: 1px solid var(--color-text-primary);
+  border-radius: 0;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  line-height: 1;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+.tb-tab:hover { color: var(--color-accent-link, var(--color-accent)); border-block-end-color: var(--color-accent); }
+.tb-tab:active { opacity: 0.7; }
+.tb-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.tb-tab[aria-expanded="true"] { color: var(--color-accent-link, var(--color-accent)); border-block-end-color: var(--color-accent); }
+
+.tb-count {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 16px;
+  block-size: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-accent-fill, var(--color-accent));
+  color: var(--color-accent-on-fill, #fff);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 16px;
+}
+.tb-count[data-tone="bad"] { background: rgb(var(--color-bad-rgb)); }
+.tb-count[hidden] { display: none; }
+
+/* The shelf hangs from the bar's bottom edge across its full width, over the
+   page with its shadow; nothing below moves. A custom header with light words
+   sets light ink inside it, so the shelf takes the page's own ink back, as the
+   header tray does. It drapes down on transform and opacity: 200ms in, 120ms
+   out; Calm fades only, Off and a device asking for less just show. */
+.cz-hdr-light .tb-shelf {
+  --color-text-primary: var(--cz-page-ink-1);
+  --color-text-body: var(--cz-page-ink-2);
+  --color-text-secondary: var(--cz-page-ink-3);
+  --color-text-muted: var(--cz-page-ink-4);
+  --color-bg-tertiary: var(--cz-page-fill);
+  --color-border: var(--cz-page-line);
+}
+.tb-shelf {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 100%;
+  z-index: 50;
+  padding: 8px 8px 0;
+  background: var(--color-bg-secondary);
+  border-block-end: 1px solid var(--color-border);
+  box-shadow: var(--elev-dragged);
+  color: var(--color-text-primary);
+  text-shadow: none;
+  transform: translateY(-10px);
+  opacity: 0;
+  transition: transform var(--dur-micro) var(--ease-in), opacity var(--dur-micro) var(--ease-in);
+}
+.tb-shelf[hidden] { display: none; }
+.tb-shelf.is-open {
+  transform: none;
+  opacity: 1;
+  transition: transform var(--dur-standard) var(--ease-out), opacity var(--dur-standard) var(--ease-out);
+}
+html[data-motion="calm"] .tb-shelf, html.nav-rm .tb-shelf { transform: none; }
+html[data-motion="off"] .tb-shelf { transition: none; transform: none; }
+@media (prefers-reduced-motion: reduce) { .tb-shelf { transition: none; transform: none; } }
+
+.tb-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+
+.tb-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-block-size: 56px;
+  padding: 6px 2px;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+.tb-tool[hidden] { display: none; }
+.tb-tool:hover { background: var(--color-bg-tertiary); }
+.tb-tool:active { background: var(--color-bg-tertiary); transform: translateY(1px); }
+.tb-tool:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.tb-tool-ic { position: relative; display: grid; place-items: center; inline-size: 36px; block-size: 28px; }
+.tb-ico { font-size: 14px; }
+svg.tb-ico { inline-size: 18px; block-size: 18px; }
+.tb-tool-ic .tb-count { position: absolute; inset-block-start: -2px; inset-inline-end: -2px; }
+.tb-tool-name { font-size: 12.5px; font-weight: 600; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
+.tb-tool-state { font-size: 11px; line-height: 1.2; color: var(--color-accent-link, var(--color-accent)); }
+.tb-tool-state[hidden] { display: none; }
+.tb-tool.is-kept { color: var(--color-accent-link, var(--color-accent)); }
+.tb-tool[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+[data-cz-kit="sharp"] .tb-tool { border-radius: 0; }
+
+.tb-hint { margin: 4px 8px 0; font-size: 12px; text-align: center; color: var(--color-text-muted); }
+.tb-hint[hidden] { display: none; }
+.tb-quiet {
+  display: block;
+  inline-size: 100%;
+  min-block-size: 44px;
+  margin-block-start: 4px;
+  background: none;
+  border: 0;
+  border-block-start: 1px solid var(--color-border);
+  border-radius: 0;
+  color: var(--color-accent-link, var(--color-accent));
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+}
+.tb-quiet:hover { text-decoration: underline; text-underline-offset: 3px; }
+.tb-quiet:active { opacity: 0.7; }
+.tb-quiet:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+/* The "Viewing as player" banner's way back, in words, as a quiet word. */
+.pv-back {
+  position: relative;
+  flex: none;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pv-back::after { content: ""; position: absolute; inset: -14px -8px; }
+.pv-back:hover { text-decoration-thickness: 2px; }
+.pv-back:active { opacity: 0.7; }
+.pv-back:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 2px; }

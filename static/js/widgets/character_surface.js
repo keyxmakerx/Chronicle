@@ -105,7 +105,7 @@
       '.cs-ch__portrait--add{flex-direction:column;gap:4px;font-size:20px;border:1px dashed var(--surface-border,#d1d5db);' +
         'transition:border-color var(--dur-micro,120ms),color var(--dur-micro,120ms);}',
       '.cs-ch__portrait--add span{font-size:11px;font-weight:600;}',
-      '.cs-ch__portrait--add:hover{border-color:var(--color-accent,#6366f1);color:var(--color-accent,#6366f1);}',
+      '.cs-ch__portrait--add:hover{border-color:var(--color-accent,#6366f1);color:var(--color-accent-link, var(--color-accent,#6366f1));}',
       '.cs-ch__name{font-size:20px;font-weight:700;color:var(--surface-text,#111827);line-height:1.2;}',
       '.cs-ch__sub{margin-top:3px;font-size:13px;color:var(--surface-text-muted,#6b7280);}',
       '.cs-ch__sec{margin:10px 0 6px;font-size:11px;font-weight:600;text-transform:uppercase;' +

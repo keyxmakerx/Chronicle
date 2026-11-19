@@ -165,6 +165,9 @@ type SessionRepository interface {
 	// notification of ntype to anyone; the zero time when never.
 	LatestCampaignNotificationAt(ctx context.Context, campaignID, ntype string) (time.Time, error)
 	ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
+	// ListUnreadNotificationsOfType returns the user's unread notifications
+	// of one type, newest first, capped at limit.
+	ListUnreadNotificationsOfType(ctx context.Context, userID, ntype string, limit int) ([]Notification, error)
 
 	// ListCampaignIDsUsingGameNights is every campaign that has planned a
 	// session, painted hours or opened a proposal.

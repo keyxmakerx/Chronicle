@@ -12,7 +12,7 @@
  * — so this only has to handle opening, switching straight from one
  * category to another, and closing. Closing (or never opening) puts the
  * panel out of the tab order and hidden from assistive tech via `inert`,
- * the same way the phone drawer already does.
+ * the same way the drawer already does.
  */
 (function () {
   'use strict';

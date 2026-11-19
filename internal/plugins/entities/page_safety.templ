@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"sort"
 	"time"
@@ -65,9 +66,9 @@ func whenLabel(t, now time.Time) string {
 	case t.AddDate(0, 0, 1).Format("2006-01-02") == now.Format("2006-01-02"):
 		return "Yesterday " + t.Format("15:04")
 	case y1 == y2:
-		return t.Format("2 Jan")
+		return timeutil.FixedDate(t, timeutil.DateDay)
 	}
-	return t.Format("2 Jan 2006")
+	return timeutil.FixedDate(t, timeutil.DateShort)
 }
 
 // versionAuthor is "You", "Sam (scribe)", or a stand-in when the author is
@@ -162,8 +163,8 @@ func trashNotesLine(t TrashItem, retention int) string {
 		return ""
 	}
 	when := t.DeletedAt.UTC().Add(time.Duration(retention) * 24 * time.Hour)
-	return fmt.Sprintf("Removed for good on %d %s, with the %d %s people wrote on it",
-		when.Day(), when.Format("Jan"), t.NoteCount, plural(t.NoteCount, "note", "notes"))
+	return fmt.Sprintf("Removed for good on %s, with the %d %s people wrote on it",
+		timeutil.FixedDate(when, timeutil.DateDay), t.NoteCount, plural(t.NoteCount, "note", "notes"))
 }
 
 // HistoryPanel is the History box opened from a page's History button. It
@@ -239,11 +240,10 @@ templ historyDiff(d HistoryPanelData) {
 	</div>
 }
 
-// TrashPage is the campaign Trash under Manage.
+// TrashPage is the campaign Trash under Campaign settings.
 templ TrashPage(cc *campaigns.CampaignContext, d TrashPageData) {
 	@layouts.App(cc.Campaign.Name + " - Trash") {
-		<div class="max-w-4xl mx-auto">
-			@layouts.ManageHeader("Trash")
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Trash", Line: "trash"}) {
 			<p class="text-sm text-fg-secondary mb-4">
 				Deleted pages, pictures, game nights and maps wait here for { fmt.Sprint(d.Retention) } days, then are gone for good.
 				Restoring a page brings back its sub-pages, links and pictures with it. Players never see the Trash.
@@ -266,7 +266,7 @@ templ TrashPage(cc *campaigns.CampaignContext, d TrashPageData) {
 					}
 				</ul>
 			}
-		</div>
+		}
 	}
 }
 

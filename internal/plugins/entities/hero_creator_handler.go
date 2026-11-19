@@ -70,21 +70,50 @@ func (h *Handler) heroPlan(c *echo.Context, cc *campaigns.CampaignContext) (*Her
 }
 
 // mayReadHeroPlan reports whether a viewer below Director may read the
-// creator plan: they may make a hero, or they own a page of one of the
-// campaign's character types.
+// creator plan: they may make a hero, they own a page of one of the
+// campaign's character types, or a Director let them write an entry of
+// their own for one of its lists.
 func (h *Handler) mayReadHeroPlan(c *echo.Context, cc *campaigns.CampaignContext) (bool, error) {
 	_, access, err := h.heroTarget(c, cc)
 	if err != nil || access.Allowed {
 		return access.Allowed, err
 	}
-	if h.charLists == nil || cc.MemberRole < campaigns.RolePlayer {
+	if cc.MemberRole < campaigns.RolePlayer {
 		return false, nil
 	}
-	ids, err := h.charLists.CharacterTypeIDs(c.Request().Context(), cc.Campaign.ID)
-	if err != nil {
+	if h.charLists != nil {
+		ids, err := h.charLists.CharacterTypeIDs(c.Request().Context(), cc.Campaign.ID)
+		if err != nil {
+			return false, err
+		}
+		owns, err := h.ownsCharacter(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), ids)
+		if err != nil || owns {
+			return owns, err
+		}
+	}
+	return h.writesOwnEntry(c, cc)
+}
+
+// writesOwnEntry reports whether the viewer's own plan offers "make your
+// own" for a list, or already holds an entry they wrote. A Director's
+// permission must open the page it is used on even for a player who has no
+// hero yet and may not make one.
+func (h *Handler) writesOwnEntry(c *echo.Context, cc *campaigns.CampaignContext) (bool, error) {
+	plan, err := h.heroPlan(c, cc)
+	if err != nil || plan == nil {
 		return false, err
 	}
-	return h.ownsCharacter(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), ids)
+	for _, st := range plan.Steps {
+		if st.CanMake {
+			return true, nil
+		}
+		for _, ch := range st.Choices {
+			if ch.Mine {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // NewHero renders the hero creator (GET /campaigns/:id/characters/new).

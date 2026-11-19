@@ -122,14 +122,44 @@ func (h *SystemHandler) resolveSystem(c *echo.Context) System {
 // Index lists all categories for a system.
 // GET /campaigns/:id/systems/:mod
 func (h *SystemHandler) Index(c *echo.Context) error {
+	cc, mod, cats, err := h.indexData(c)
+	if err != nil {
+		return err
+	}
+	hasBook := HasBook(h.systemDir(c, mod))
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, SystemIndexContent(cc, mod.Info(), cats, hasBook))
+	}
+	return middleware.Render(c, http.StatusOK, SystemIndexPage(cc, mod.Info(), cats, hasBook))
+}
+
+// Browse is the category browser at an address of its own. Index shows the
+// book instead of the browser when a system has one, so without this the
+// categories could not be reached from a reference page's breadcrumb.
+// GET /campaigns/:id/systems/:mod/browse
+func (h *SystemHandler) Browse(c *echo.Context) error {
+	cc, mod, cats, err := h.indexData(c)
+	if err != nil {
+		return err
+	}
+	hasBook := HasBook(h.systemDir(c, mod))
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, SystemBrowseContent(cc, mod.Info(), cats, hasBook))
+	}
+	return middleware.Render(c, http.StatusOK, SystemBrowsePage(cc, mod.Info(), cats, hasBook))
+}
+
+// indexData resolves the system and the categories this viewer may see, with
+// their counts. Index and Browse share it so they apply the same hiding rules.
+func (h *SystemHandler) indexData(c *echo.Context) (*campaigns.CampaignContext, System, []categoryInfo, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewMissingContext()
+		return nil, nil, nil, apperror.NewMissingContext()
 	}
 
 	mod := h.resolveSystem(c)
 	if mod == nil {
-		return apperror.NewNotFound("system not found")
+		return nil, nil, nil, apperror.NewNotFound("system not found")
 	}
 
 	manifest := mod.Info()
@@ -154,12 +184,7 @@ func (h *SystemHandler) Index(c *echo.Context) error {
 			Count: count,
 		})
 	}
-
-	hasBook := HasBook(h.systemDir(c, mod))
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, SystemIndexContent(cc, manifest, cats, hasBook))
-	}
-	return middleware.Render(c, http.StatusOK, SystemIndexPage(cc, manifest, cats, hasBook))
+	return cc, mod, cats, nil
 }
 
 // CategoryList lists items in a system category.
@@ -203,9 +228,9 @@ func (h *SystemHandler) CategoryList(c *echo.Context) error {
 	}
 
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, CategoryListContent(cc, manifest, catDef, items))
+		return middleware.Render(c, http.StatusOK, CategoryListContent(cc, manifest, catDef, items, HasBook(h.systemDir(c, mod))))
 	}
-	return middleware.Render(c, http.StatusOK, CategoryListPage(cc, manifest, catDef, items))
+	return middleware.Render(c, http.StatusOK, CategoryListPage(cc, manifest, catDef, items, HasBook(h.systemDir(c, mod))))
 }
 
 // ItemDetail shows a single reference item.
@@ -250,9 +275,9 @@ func (h *SystemHandler) ItemDetail(c *echo.Context) error {
 	}
 
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, ItemDetailContent(cc, manifest, catDef, item))
+		return middleware.Render(c, http.StatusOK, ItemDetailContent(cc, manifest, catDef, item, HasBook(h.systemDir(c, mod))))
 	}
-	return middleware.Render(c, http.StatusOK, ItemDetailPage(cc, manifest, catDef, item))
+	return middleware.Render(c, http.StatusOK, ItemDetailPage(cc, manifest, catDef, item, HasBook(h.systemDir(c, mod))))
 }
 
 // SearchAPI returns JSON search results across all system categories.
@@ -531,8 +556,9 @@ func (h *SystemHandler) systemDir(c *echo.Context, mod System) string {
 
 // BookAPI serves the system's Rulebook book, checked and filtered for the
 // viewer: Directors (the owner, or a member with Director visibility) get
-// everything, players only the player view (FilterBook). Never cached
-// shared, since the body depends on who asks.
+// everything, players only the player view (FilterBook), and a Director who
+// passes ?view=player gets what a player gets. Never cached shared, since the
+// body depends on who asks.
 //
 // GET /campaigns/:id/systems/:mod/book
 func (h *SystemHandler) BookAPI(c *echo.Context) error {
@@ -569,7 +595,9 @@ func (h *SystemHandler) BookAPI(c *echo.Context) error {
 		}
 	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
-	out := FilterBook(book, bookViewerIsDirector(cc)).
+	// ?view=player asks a Director for the player's book (the campaign home's
+	// leaves when the Director is viewing as a player); it can only narrow.
+	out := FilterBook(book, bookViewerIsDirector(cc) && c.QueryParam("view") != "player").
 		WithAssetBase("/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/book/files")
 	out.CanEdit = h.bookEdits != nil && bookEditorAllowed(cc)
 	return c.JSON(http.StatusOK, out)

@@ -28,11 +28,13 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/maintenance"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/observability"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	"github.com/keyxmakerx/chronicle/internal/updatehealth"
 )
 
 // App holds all shared dependencies and the Echo HTTP server instance.
@@ -184,6 +186,11 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 // setupMiddleware registers global middleware on the Echo instance.
 // Order matters: outermost (recovery) runs first, innermost (CSRF) runs last.
 func (a *App) setupMiddleware() {
+	// Update health counts finished requests against the changed features.
+	// It sits outside panic recovery so a recovered panic, which leaves only
+	// a written 500 behind, is still counted as a failure.
+	a.Echo.Use(updateHealthCounter())
+
 	// Panic recovery -- must be outermost to catch panics from all other middleware.
 	a.Echo.Use(middleware.Recovery())
 
@@ -401,6 +408,11 @@ func (a *App) errorHandler(c *echo.Context, err error) {
 	// after the status is known and before anything is written, so it
 	// observes exactly the code and error the client is about to receive.
 	_ = observability.RecordHTTPError(code, c.Request().Method, c.Path(), c.Request().URL.Path, kind, err)
+	// Update health stores only the status, never the error text, which can
+	// carry values from the request or the database.
+	if code >= http.StatusInternalServerError {
+		updatehealth.Fail(c.Request().Method, c.Path(), fmt.Sprintf("%d %s", code, http.StatusText(code)))
+	}
 
 	// API requests always get JSON. `error` carries the MACHINE-READABLE
 	// condition (e.g. `sync_api_disabled`, `calendar_rebuilding`), `message`
@@ -457,6 +469,10 @@ func (a *App) errorHandler(c *echo.Context, err error) {
 		return
 	}
 
+	if id, name, ok := campaigns.MemberHome(c); ok {
+		_ = middleware.Render(c, code, pages.ErrorPageIn(code, message, id, name))
+		return
+	}
 	_ = middleware.Render(c, code, pages.ErrorPage(code, message))
 }
 

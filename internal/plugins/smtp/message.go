@@ -20,9 +20,16 @@ func buildMessage(from mail.Address, to []string, subject, plainBody, htmlBody s
 	// Strip newlines from the subject to prevent header injection.
 	safeSubject := strings.NewReplacer("\r", "", "\n", "").Replace(subject)
 
+	// Recipients are written into a header, so line breaks never pass.
+	lineSafe := strings.NewReplacer("\r", "", "\n", "")
+	safeTo := make([]string, len(to))
+	for i, r := range to {
+		safeTo[i] = lineSafe.Replace(r)
+	}
+
 	var msg strings.Builder
 	fmt.Fprintf(&msg, "From: %s\r\n", from.String())
-	fmt.Fprintf(&msg, "To: %s\r\n", strings.Join(to, ", "))
+	fmt.Fprintf(&msg, "To: %s\r\n", strings.Join(safeTo, ", "))
 	fmt.Fprintf(&msg, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", safeSubject))
 	fmt.Fprintf(&msg, "Date: %s\r\n", now.UTC().Format(time.RFC1123Z))
 	fmt.Fprintf(&msg, "Message-ID: %s\r\n", messageID(from.Address))

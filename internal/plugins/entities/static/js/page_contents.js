@@ -31,6 +31,12 @@
 (function () {
   'use strict';
 
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
+
   var MIN_HEADINGS = 4;       // a shorter page gets no Contents
   var RAIL_W = 32;            // the strip and the icon
   var RAIL_PAD = 8;           // space between the page area's edge and the rail
@@ -570,7 +576,7 @@
     }
     if (level() === 'full') {
       [].forEach.call(st.pl.querySelectorAll('.ct-row'), function (a, i) {
-        if (a.animate && i < 16) a.animate([{ opacity: 0, transform: 'translateX(-8px)' }, { opacity: 1, transform: 'none' }], { duration: 240, delay: 90 + i * 22, easing: EASE, fill: 'backwards' });
+        if (a.animate && i < 16) a.animate([{ opacity: 0, transform: 'translateX(-8px)' }, { opacity: 1, transform: 'none' }], { duration: tokMs('--dur-standard', 200), delay: 90 + i * 22, easing: EASE, fill: 'backwards' });
       });
     }
     st.onKey = function (e) {

@@ -3,7 +3,7 @@
  * tokens, never paper; sheets have a hairline edge and a resting shadow. */
 
 .aic-panel { background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--elev-resting); padding: 16px 20px; }
-.aic-label { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
+.aic-label { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent-link, var(--color-accent)); }
 .aic-h { font-size: 1rem; font-weight: 600; color: var(--color-text-primary); }
 .aic-hint { font-size: 0.8125rem; color: var(--color-text-secondary); }
 
@@ -24,7 +24,7 @@
 .aic-tabs { display: flex; flex-wrap: wrap; gap: 0 18px; border-bottom: 1px solid var(--color-border-light); }
 .aic-tab { font: inherit; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); background: none; border: 0; border-left: 1px solid var(--color-border-light); padding: 10px 0 8px 8px; margin-bottom: -1px; border-bottom: 1px solid transparent; cursor: pointer; min-height: 32px; }
 .aic-tab:hover { color: var(--color-text-primary); }
-.aic-tab[aria-selected="true"] { color: var(--color-accent); border-bottom-color: var(--color-accent); border-left-color: var(--color-accent); }
+.aic-tab[aria-selected="true"] { color: var(--color-accent-link, var(--color-accent)); border-bottom-color: var(--color-accent); border-left-color: var(--color-accent); }
 .aic-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .aic-drawer { border-left: 1px solid var(--color-border-light); padding: 12px 0 4px 14px; }
 .aic-drawer ol { list-style: decimal; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 8px; font-size: 0.875rem; color: var(--color-text-body); }
@@ -74,7 +74,7 @@
 .aic-waitline > i { color: var(--color-text-muted); }
 .aic-waitline > span { flex: 1 1 260px; min-width: 0; }
 .aic-waitline[data-waiting] { border-color: transparent; background: rgb(var(--color-accent-rgb) / 0.10); color: var(--color-text-primary); }
-.aic-waitline[data-waiting] > i { color: var(--color-accent); }
+.aic-waitline[data-waiting] > i { color: var(--color-accent-link, var(--color-accent)); }
 .aic-waitline b { font-weight: 600; color: var(--color-text-primary); }
 
 /* The page's two tabs: bigger than the drawer tabs, a 2px accent rule
@@ -85,7 +85,7 @@
 
 /* A small rounded tag: something waits (accent) or wasn't answered (red). */
 .aic-pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
-.aic-pill[data-tone="wait"] { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); }
+.aic-pill[data-tone="wait"] { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent-link, var(--color-accent)); }
 .aic-pill[data-tone="bad"] { background: rgb(var(--color-bad-rgb) / 0.10); color: rgb(var(--color-bad-rgb)); }
 
 /* What it did: filter chips, a search box and Fold all over the sittings. */
@@ -94,7 +94,7 @@
 .aic-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); font: inherit; font-size: 0.8125rem; color: var(--color-text-body); cursor: pointer; box-shadow: var(--elev-resting); transition: box-shadow var(--dur-micro, 120ms) var(--ease-standard, ease); }
 .aic-chip:hover { box-shadow: var(--elev-hover); }
 .aic-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.aic-chip[aria-pressed="true"] { border-color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.10); color: var(--color-accent); font-weight: 600; box-shadow: none; }
+.aic-chip[aria-pressed="true"] { border-color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.10); color: var(--color-accent-link, var(--color-accent)); font-weight: 600; box-shadow: none; }
 .aic-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .aic-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent); }
 .aic-chip-dot[data-tone="fail"] { background: rgb(var(--color-bad-rgb)); }
@@ -134,7 +134,7 @@
 .aic-call-i { color: var(--color-text-muted); font-size: 0.8125rem; text-align: center; }
 .aic-call-w { color: var(--color-text-primary); overflow-wrap: anywhere; min-width: 0; }
 .aic-call[data-kind="look"]:not([data-fail]) .aic-call-w { color: var(--color-text-body); }
-.aic-call[data-kind="ask"] .aic-call-i { color: var(--color-accent); }
+.aic-call[data-kind="ask"] .aic-call-i { color: var(--color-accent-link, var(--color-accent)); }
 .aic-call[data-fail] .aic-call-i { color: rgb(var(--color-bad-rgb)); }
 .aic-why { display: block; margin-top: 2px; font-size: 0.8125rem; color: var(--color-text-secondary); }
 .aic-call-r { font-size: 0.8125rem; color: var(--color-text-secondary); text-align: right; white-space: nowrap; }
@@ -162,7 +162,7 @@
 .aic-lv-pick:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .aic-lv-pick b { font-weight: 600; color: var(--color-text-primary); }
 .aic-lv-tag { position: absolute; top: 14px; right: 12px; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
-.aic-lv-more { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 32px; margin: 0 0 6px; padding: 0 14px; border: 0; background: none; font: inherit; font-size: 0.8125rem; font-weight: 500; color: var(--color-accent); cursor: pointer; }
+.aic-lv-more { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 32px; margin: 0 0 6px; padding: 0 14px; border: 0; background: none; font: inherit; font-size: 0.8125rem; font-weight: 500; color: var(--color-accent-link, var(--color-accent)); cursor: pointer; }
 .aic-lv-more:hover span { text-decoration: underline; text-underline-offset: 3px; }
 .aic-lv-more:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; border-radius: 6px; }
 .aic-lv-more i { font-size: 0.6875rem; transition: transform 200ms var(--ease-standard, ease); }
@@ -173,7 +173,7 @@
 .aic-lv-drawer h4 { margin: 8px 0 2px; font-size: 0.875rem; font-weight: 600; color: var(--color-text-primary); }
 .aic-cov { display: grid; grid-template-columns: 20px 15rem minmax(0, 1fr); gap: 4px 10px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--aic-hair, var(--color-border-light)); font-size: 0.875rem; }
 .aic-lv-drawer h4 + .aic-cov { border-top: 0; }
-.aic-cov > i { color: var(--color-accent); font-size: 0.8125rem; text-align: center; }
+.aic-cov > i { color: var(--color-accent-link, var(--color-accent)); font-size: 0.8125rem; text-align: center; }
 .aic-cov-k { font-weight: 500; color: var(--color-text-primary); }
 .aic-cov-v { color: var(--color-text-body); }
 .aic-cov[data-never] > i, .aic-cov[data-never] .aic-cov-k { color: rgb(var(--color-bad-rgb)); }
@@ -191,7 +191,7 @@
 .aic-copies { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .aic-steps { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: aic-step; }
 .aic-steps > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; align-items: start; counter-increment: aic-step; font-size: 0.875rem; }
-.aic-steps > li::before { content: counter(aic-step); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.12); }
+.aic-steps > li::before { content: counter(aic-step); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; color: var(--color-accent-link, var(--color-accent)); background: rgb(var(--color-accent-rgb) / 0.12); }
 .aic-steps b { display: block; font-weight: 600; color: var(--color-text-primary); }
 .aic-note { padding: 8px 12px; border-radius: 8px; background: var(--color-bg-tertiary); font-size: 0.8125rem; color: var(--color-text-body); }
 .aic-drawer p { font-size: 0.875rem; color: var(--color-text-body); }
@@ -288,7 +288,7 @@ label.aic-row { cursor: pointer; }
 .aic-done { border: 1px solid rgb(var(--color-ok-rgb)); background: rgb(var(--color-ok-rgb) / 0.08); border-radius: 12px; padding: 12px 18px; animation: aic-row-in 240ms ease-out both; }
 .aic-done-line { color: var(--color-text-primary); font-size: 0.9rem; }
 .aic-done-line i { color: rgb(var(--color-ok-rgb)); }
-.aic-done-more > summary { cursor: pointer; font-size: 0.8125rem; color: var(--color-accent); padding-top: 4px; }
+.aic-done-more > summary { cursor: pointer; font-size: 0.8125rem; color: var(--color-accent-link, var(--color-accent)); padding-top: 4px; }
 .aic-done-more .card { box-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -389,7 +389,7 @@ label.aic-row { cursor: pointer; }
 .aib-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
 .aib-seg button { font: inherit; font-size: 0.75rem; padding: 4px 8px; min-height: 32px; border: 0; border-left: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-body); cursor: pointer; }
 .aib-seg button:first-child { border-left: 0; }
-.aib-seg button[aria-checked="true"] { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); font-weight: 600; }
+.aib-seg button[aria-checked="true"] { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent-link, var(--color-accent)); font-weight: 600; }
 .aib-warn { margin: 0 14px 12px; padding: 10px 12px; border-radius: 8px; border-left: 3px solid rgb(var(--color-warn-rgb)); background: rgb(var(--color-warn-rgb) / 0.12); font-size: 0.8125rem; color: var(--color-text-primary); display: flex; flex-direction: column; gap: 8px; }
 .aib-warn p { margin: 0; }
 .aib-warn-row { display: flex; align-items: center; gap: 12px; }

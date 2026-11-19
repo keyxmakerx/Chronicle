@@ -711,3 +711,101 @@ func TestGetFilteredGraphData_PrivilegedViewerKeepsFullPicture(t *testing.T) {
 		t.Error("privileged viewer must still see the private node priv-b (over-filtering)")
 	}
 }
+
+// --- Mention links in the graph ---
+
+// stubMentions answers the graph's request for @mention links and the pages
+// at their ends.
+type stubMentions struct {
+	links []MentionLinkData
+	nodes map[string]GraphNode
+}
+
+func (s stubMentions) GetMentionLinksForGraph(context.Context, string, bool, string) ([]MentionLinkData, map[string]GraphNode, error) {
+	return s.links, s.nodes, nil
+}
+
+func nodesByID(d *GraphData) map[string]GraphNode {
+	m := make(map[string]GraphNode, len(d.Nodes))
+	for _, n := range d.Nodes {
+		m[n.ID] = n
+	}
+	return m
+}
+
+func TestGetFilteredGraphData_NamesPagesReachedOnlyByAMention(t *testing.T) {
+	// Public A and Public C are joined by a relation. The Ledger and the Keep
+	// are in the graph only because a page's text names them.
+	repo := &mockRelationRepo{listByCampaignFn: func(string) ([]GraphRelation, error) {
+		return []GraphRelation{{SourceEntityID: "pub-a", SourceEntityName: "Public A", TargetEntityID: "pub-c", TargetEntityName: "Public C", RelationType: "allied with"}}, nil
+	}}
+	ledger := GraphNode{ID: "ledger", Name: "Smuggler's Ledger", Icon: "fa-box", Color: "#445566", Slug: "ledger", Type: "Item"}
+	keep := GraphNode{ID: "keep", Name: "Tidewatch Keep", Icon: "fa-map", Color: "#778899", Slug: "keep", Type: "Location"}
+	mentions := stubMentions{
+		links: []MentionLinkData{
+			{SourceEntityID: "pub-a", TargetEntityID: "ledger"},
+			{SourceEntityID: "keep", TargetEntityID: "ledger"},
+			// A relation already joins these two: no second edge.
+			{SourceEntityID: "pub-c", TargetEntityID: "pub-a"},
+			// Ends the provider does not describe, or describes without a name.
+			{SourceEntityID: "pub-a", TargetEntityID: "nobody"},
+			{SourceEntityID: "nameless", TargetEntityID: "keep"},
+		},
+		nodes: map[string]GraphNode{"ledger": ledger, "keep": keep, "nameless": {ID: "nameless"}},
+	}
+
+	for _, privileged := range []bool{true, false} {
+		svc := NewRelationService(repo)
+		svc.SetMentionLinkProvider(mentions)
+		svc.SetEntityViewFilter(stubViewFilter{viewable: map[string]bool{"pub-a": true, "pub-c": true, "ledger": true, "keep": true, "nobody": true, "nameless": true}})
+
+		data, err := svc.GetFilteredGraphData(context.Background(), "camp-1", GraphFilter{IncludeMentions: true}, privileged, 1, "u1")
+		if err != nil {
+			t.Fatalf("privileged=%v: unexpected error: %v", privileged, err)
+		}
+		nodes := nodesByID(data)
+		if nodes["ledger"] != ledger || nodes["keep"] != keep {
+			t.Errorf("privileged=%v: mention-only pages are drawn as %+v and %+v", privileged, nodes["ledger"], nodes["keep"])
+		}
+		if len(nodes) != 4 {
+			t.Errorf("privileged=%v: got %d nodes, want pub-a, pub-c, ledger and keep: %+v", privileged, len(nodes), data.Nodes)
+		}
+		for _, n := range data.Nodes {
+			if n.Name == "" {
+				t.Errorf("privileged=%v: node %q has no name", privileged, n.ID)
+			}
+		}
+		mentionEdges := 0
+		for _, e := range data.Edges {
+			if _, ok := nodes[e.Source]; !ok {
+				t.Errorf("privileged=%v: edge from a node that is not drawn: %+v", privileged, e)
+			}
+			if _, ok := nodes[e.Target]; !ok {
+				t.Errorf("privileged=%v: edge to a node that is not drawn: %+v", privileged, e)
+			}
+			if e.Kind == "mention" {
+				mentionEdges++
+			}
+		}
+		if mentionEdges != 2 || len(data.Edges) != 3 {
+			t.Errorf("privileged=%v: got %d mention edges of %d edges, want 2 of 3: %+v", privileged, mentionEdges, len(data.Edges), data.Edges)
+		}
+	}
+}
+
+func TestGetFilteredGraphData_MentionsCanBeLeftOut(t *testing.T) {
+	repo := &mockRelationRepo{listByCampaignFn: func(string) ([]GraphRelation, error) { return graphFixture(), nil }}
+	svc := NewRelationService(repo)
+	svc.SetMentionLinkProvider(stubMentions{
+		links: []MentionLinkData{{SourceEntityID: "pub-a", TargetEntityID: "ledger"}},
+		nodes: map[string]GraphNode{"ledger": {ID: "ledger", Name: "Smuggler's Ledger"}},
+	})
+
+	data, err := svc.GetFilteredGraphData(context.Background(), "camp-1", GraphFilter{IncludeMentions: false}, true, 3, "dm-user")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := nodesByID(data)["ledger"]; ok {
+		t.Error("a mention-only page is drawn although mentions were switched off")
+	}
+}

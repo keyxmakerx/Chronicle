@@ -97,7 +97,7 @@ func TestValidateLayout_TileSections(t *testing.T) {
 		{"tile id repeats a block id", EntityTypeLayout{Rows: []TemplateRow{
 			{ID: "r1", Columns: []TemplateColumn{{ID: "c1", Width: 12, Blocks: []TemplateBlock{{ID: "x", Type: "probe"}}}}},
 			{ID: "r2", Kind: "tiles", Tiles: []tilegrid.Tile{{ID: "x", Type: "probe", Size: "1x1"}}},
-		}}, "same block twice"},
+		}}, "same block is in this layout twice"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

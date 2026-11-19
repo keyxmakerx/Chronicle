@@ -474,7 +474,7 @@ func (h *Handler) NewForm(c *echo.Context) error {
 	}
 
 	// ?name= comes from quick search's "Create a page named …" row.
-	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, ""))
+	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, "", NewPageDraft{Return: openedFrom(c)}))
 }
 
 // prefillName is a name to start the create form with, trimmed and cut to the
@@ -576,7 +576,16 @@ func (h *Handler) Create(c *echo.Context) error {
 		// Preserve the same variant-aware picker across error re-render so a
 		// failed submission doesn't drop the user back to the flat dropdown.
 		variants := collectVariants(entityTypes, req.EntityTypeID)
-		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, nil, prefillName(req.Name), csrfToken, errMsg))
+		// Nothing the person chose is forgotten: the parent they were
+		// adding under, and the descriptor, template and visibility.
+		var parentEntity *Entity
+		if req.ParentID != "" {
+			if parent, perr := h.service.GetByID(c.Request().Context(), req.ParentID); perr == nil && parent.CampaignID == cc.Campaign.ID {
+				parentEntity = parent
+			}
+		}
+		draft := NewPageDraft{TypeLabel: req.TypeLabel, TemplateID: req.TemplateID, IsPrivate: req.IsPrivate, Return: openedFrom(c)}
+		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, parentEntity, prefillName(req.Name), csrfToken, errMsg, draft))
 	}
 
 	// Apply content template if one was selected.
@@ -601,7 +610,7 @@ func (h *Handler) Create(c *echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, entity.ID, entity.Name)
 
-	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entity.ID)
+	return middleware.HTMXRedirect(c, newPageURL(cc.Campaign.ID, entity.ID))
 }
 
 // showPage is everything the entity page and the DM Screen's sheet draw from,
@@ -631,6 +640,10 @@ func (h *Handler) Show(c *echo.Context) error {
 	// above on the real role.
 	if campaigns.ViewingAsPlayer(c, p.cc) {
 		p.cc = p.cc.PlayerPreview()
+	}
+	// Create lands here with ?write=1 and the text opens ready to type.
+	if c.QueryParam(startWritingParam) == "1" {
+		c.SetRequest(c.Request().WithContext(withStartWriting(c.Request().Context())))
 	}
 	return middleware.Render(c, http.StatusOK, EntityShowPage(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
 }
@@ -3540,6 +3553,59 @@ func (h *Handler) UpdateEntityTypeLayout(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// BlockPlacementAPI lists the categories a block can be put on.
+// GET /campaigns/:id/entity-types/placement?block=trackers
+func (h *Handler) BlockPlacementAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	opts, err := h.service.BlockPlacementOptions(c.Request().Context(), cc.Campaign.ID, c.QueryParam("block"))
+	if err != nil {
+		return err
+	}
+	if opts == nil {
+		opts = []PlacementOption{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"categories": opts})
+}
+
+// AppendLayoutBlock puts one block at the end of a category's page layout.
+// POST /campaigns/:id/entity-types/:etid/layout/blocks {"type": "..."}
+// It answers {"status": "added"|"already_there", "category": name}. The
+// block's own rules (one per page, its context) are the service's.
+func (h *Handler) AppendLayoutBlock(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+	var body struct {
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil || body.Type == "" {
+		return apperror.NewBadRequest("say which block to put on the page")
+	}
+	ctx := c.Request().Context()
+	// IDOR protection: the service rejects a category of another campaign.
+	added, err := h.service.AppendBlockToCategoryLayout(ctx, cc.Campaign.ID, etID, body.Type)
+	if err != nil {
+		return err
+	}
+	et, err := h.service.GetEntityTypeByID(ctx, etID)
+	if err != nil {
+		return err
+	}
+	status := "already_there"
+	if added {
+		status = "added"
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": status, "category": et.NamePlural})
+}
+
 // UpdateEntityTypeColor saves the entity type's display color.
 // PUT /campaigns/:id/entity-types/:etid/color
 func (h *Handler) UpdateEntityTypeColor(c *echo.Context) error {
@@ -4013,6 +4079,11 @@ func (h *Handler) Characters(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// A link that names the Players box (a leaver's note) opens it. Only
+	// staff have a roster, so anyone else's link just shows the page.
+	if c.QueryParam("open") == "players" && view.Roster != nil {
+		view.Open = "players"
+	}
 	return h.renderCast(c, cc, view)
 }
 
@@ -4075,8 +4146,11 @@ func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) 
 		// Only a member with no party yet needs a pointer to where claiming happens.
 		if view.IsMember && len(view.Party) == 0 {
 			if types, err := h.service.GetEntityTypes(ctx, campaignID); err == nil {
-				counts, _ := h.service.CountByType(ctx, campaignID, int(cc.VisibilityRole()), userID)
-				view.ClaimTypeID = claimTypeID(types, counts)
+				counts, err := h.service.CountByType(ctx, campaignID, int(cc.VisibilityRole()), userID)
+				if err != nil {
+					counts = nil
+				}
+				view.ClaimTypeID = claimLinkTypeID(types, counts)
 			}
 		}
 	}
@@ -4515,6 +4589,33 @@ func claimTypeID(types []EntityType, counts map[int]int) int {
 		}
 	}
 	return pick(false)
+}
+
+// claimLinkTypeID is claimTypeID, except that it gives no link when the
+// per-type counts show the chosen type holds no page the viewer can see: the
+// party is empty here, so any visible page of a claimable type is one nobody
+// has claimed, and a link into an empty list would only mislead. Unknown
+// counts (nil) keep the link, since an absent answer is not an empty one.
+func claimLinkTypeID(types []EntityType, counts map[int]int) int {
+	id := claimTypeID(types, counts)
+	if id != 0 && counts != nil && counts[id] == 0 {
+		return 0
+	}
+	return id
+}
+
+// castEmptyPartyHint is the second line of the empty Party box when there is
+// no claim link to offer. Only a viewer who may make a hero is pointed at
+// Create hero; the rest are sent to the game master.
+func castEmptyPartyHint(view CastView, gm string) string {
+	switch {
+	case !view.IsMember:
+		return "Claimed characters appear here. Players can claim a character from its page."
+	case view.CanCreateHero:
+		return "Claimed characters appear here. Make one with Create hero, or ask your " + gm + " for one."
+	default:
+		return "Claimed characters appear here. Ask your " + gm + " for one."
+	}
 }
 
 // assembleCastParty is the pure assembly step (no IO), split out so the

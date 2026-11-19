@@ -407,7 +407,7 @@ window.CraftStage = window.CraftStage || (function () {
     '.cpaint-levels{display:flex;flex-wrap:wrap;gap:2px 14px;border-bottom:1px solid var(--color-border)}',
     '.cpaint-levels button{padding:6px 0;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;background:none;color:var(--color-text-secondary);font:inherit;font-size:.75rem;font-variant:all-small-caps;letter-spacing:.04em;cursor:pointer}',
     '.cpaint-levels button[aria-pressed="true"]{color:var(--color-text-primary);border-bottom-color:var(--color-accent)}',
-    '.cpaint-slow{align-self:flex-start;padding:0;border:0;background:none;color:var(--color-accent);font:inherit;cursor:pointer}',
+    '.cpaint-slow{align-self:flex-start;padding:0;border:0;background:none;color:var(--color-accent-link, var(--color-accent));font:inherit;cursor:pointer}',
     '.cpaint-slow[aria-pressed="true"]{text-decoration:underline}',
     '.cpaint-read{margin:0;font-variant-numeric:tabular-nums}',
     '.cpaint-log{margin:0;padding-left:18px;font-size:.75rem}',

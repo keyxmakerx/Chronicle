@@ -411,6 +411,7 @@
 .cal-v5 .crease .x{margin-left:auto}
 .cal-v5 .x{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);flex:none}
 .cal-v5 .x:hover{background:var(--hair);color:var(--ink)}
+/* A phone sheet has no swipe to close, so it draws no grab line. */
 .cal-v5 .grab{display:none}
 .cal-v5 .wb{padding:14px 16px 16px}
 /* The crease between the two leaves runs through the gap under the head. */
@@ -860,7 +861,6 @@
 .cal-v5 .evp{max-height:86vh!important}
 .cal-v5 .evp::before{box-shadow:inset 0 1px 0 var(--edge)}
 .cal-v5 .evp .crease{border-radius:18px 18px 0 0}
-.cal-v5 .grab{display:block;width:36px;height:4px;border-radius:99px;background:var(--edge);margin:8px auto 0}
 .cal-v5 .dock{overflow:visible}
 .cal-v5 .dscrim{display:none}
 .cal-v5 .drawer{position:fixed;top:auto;left:0;right:0;bottom:-28px;width:auto;max-height:calc(86vh + 28px);padding:0 0 28px;border:0;border-top:1px solid var(--edge);border-radius:18px 18px 0 0;transform:translate3d(0,105%,0)}

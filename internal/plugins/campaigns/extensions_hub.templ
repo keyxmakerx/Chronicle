@@ -2,7 +2,8 @@
 //
 // Served at /campaigns/:id/extensions (the URL predates the rename and
 // stays so bookmarks and the redirects that point here keep working). It
-// holds the game system picker, the feature toggles and content packs;
+// holds the game system picker, the feature toggles, the "For your pages"
+// rows and content packs;
 // everything about Foundry is on the Foundry page (foundry_page.templ).
 //
 // Catalog source: PluginHubAddon list from the addons store. Each
@@ -31,8 +32,8 @@ import (
 // degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
 templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, contentPacksCard templ.Component) {
 	@layouts.App(cc.Campaign.Name + " - Game & features") {
-		<div class="max-w-5xl min-[1600px]:max-w-screen-2xl mx-auto px-4 py-6" data-extensions-hub>
-			@layouts.ManageHeader("Game & features")
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Game & features", Line: "game"}) {
+		<div data-extensions-hub>
 			<div class="manage-split">
 				<div class="mb-6">
 					@gameSystemCard(cc, systemOptionsJSON, currentSystemID(cc.Campaign.ParseSettings().SystemID, addons))
@@ -56,6 +57,7 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 					>
 						@ExtensionsHubFragment(cc, addons, csrfToken)
 					</div>
+					@hubPagePieces(cc)
 				</div>
 				// Extension settings overlay target. An "Open setup" button on a
 				// card hx-gets the extension's settings page here; the GET returns a
@@ -93,6 +95,7 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 				}
 			</div>
 		</div>
+		}
 	}
 }
 
@@ -339,4 +342,59 @@ func addonEnabled(addons []PluginHubAddon, slug string) bool {
 		}
 	}
 	return false
+}
+
+// hubPiece is one row of "For your pages": a finished piece the owner puts on
+// a category's pages. Block is the page-layout block type the chooser places;
+// ID is the anchor the command palette links to.
+type hubPiece struct {
+	ID    string
+	Name  string
+	Line  string
+	Block string
+}
+
+// hubPieces are the page pieces that have no switch of their own. None of them
+// belongs to an add-on, so each row is always on offer; the block types are
+// the ones registered in internal/app/routes.go.
+var hubPieces = []hubPiece{
+	{ID: "quest-board", Name: "Quest board", Line: "A quest’s page as a cork board: the notice, a map scrap, the reward.", Block: "quest_board"},
+	{ID: "notice-boards", Name: "Notice boards", Line: "Boards in a town or tavern that players flip through.", Block: "notice_boards"},
+	{ID: "trackers", Name: "Trackers", Line: "Numbers, steps and clocks you tick during play.", Block: "trackers"},
+	{ID: "tests", Name: "Tests", Line: "Montages and chases, scored as you go.", Block: "page_tests"},
+}
+
+// hubPagePieces is the "For your pages" section of Game & features. Each
+// button opens the shared "Put on a page" chooser (put_on_page.js).
+templ hubPagePieces(cc *CampaignContext) {
+	<section
+		class="mt-8"
+		aria-labelledby="for-your-pages"
+		data-hub-page-pieces
+		data-widget="put-on-page"
+		data-campaign-id={ cc.Campaign.ID }
+	>
+		<div class="mb-3">
+			<h2 id="for-your-pages" class="text-base font-semibold text-fg">For your pages</h2>
+			<p class="text-sm text-fg-muted">Finished pieces you put on the pages of a category. They have no switch to turn on.</p>
+		</div>
+		<ul class="card divide-y divide-edge-light">
+			for _, p := range hubPieces {
+				<li id={ p.ID } class="p-4 flex flex-wrap items-center gap-x-4 gap-y-3" data-page-piece={ p.Block }>
+					<div class="flex-1 min-w-[14rem]">
+						<p class="text-sm font-semibold text-fg">{ p.Name }</p>
+						<p class="text-sm text-fg-muted mt-0.5">{ p.Line }</p>
+					</div>
+					<button
+						type="button"
+						class="btn-secondary btn-sm shrink-0"
+						data-put-block={ p.Block }
+						aria-haspopup="dialog"
+						aria-expanded="false"
+						aria-label={ "Put on a page: " + p.Name }
+					>Put on a page</button>
+				</li>
+			}
+		</ul>
+	</section>
 }

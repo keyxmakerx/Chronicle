@@ -217,7 +217,7 @@
 .mp-pick-empty b { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
 .mp-pick-empty p { max-width: 30ch; margin: 0 0 6px; font-size: 12.5px; line-height: 1.45; color: var(--color-text-secondary); }
 
-.mp-pick-link { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none; font-size: 12px; color: var(--color-accent); cursor: pointer; }
+.mp-pick-link { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none; font-size: 12px; color: var(--color-accent-link, var(--color-accent)); cursor: pointer; }
 .mp-pick-link:hover { text-decoration: underline; }
 .mp-pick-link[hidden], .mp-pick-btn[hidden] { display: none; }
 .mp-pick-btn:not(.mp-pick-primary) { background: var(--color-card-bg); color: var(--color-text-primary); }

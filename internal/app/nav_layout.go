@@ -75,7 +75,7 @@ func navCategoriesFor(campaignID string, types []layouts.SidebarEntityType, coun
 		}
 		cat := campaigns.NavCategory{
 			TypeID: t.ID, Label: t.NamePlural, Icon: layouts.SafeNavIcon(t.Icon, ""),
-			Color: t.Color, URL: base + t.Slug, Count: counts[t.ID],
+			URL: base + t.Slug, Count: counts[t.ID],
 		}
 		if cat.Label == "" {
 			cat.Label = t.Name
@@ -93,7 +93,7 @@ func navCategoriesFor(campaignID string, types []layouts.SidebarEntityType, coun
 				label = c.Name
 			}
 			cat.Subs = append(cat.Subs, campaigns.NavSubcategory{
-				TypeID: c.ID, Label: label, Color: c.Color, URL: base + c.Slug, Count: counts[c.ID],
+				TypeID: c.ID, Label: label, URL: base + c.Slug, Count: counts[c.ID],
 			})
 		}
 		out = append(out, cat)
@@ -133,7 +133,7 @@ func navSectionViews(secs []campaigns.NavSection) []layouts.NavSectionView {
 		v := layouts.NavSectionView{ID: s.ID, Kind: s.Kind, Label: s.Label}
 		for _, r := range s.Rows {
 			row := layouts.NavRowView{
-				Key: r.Key, Kind: r.Kind, Label: r.Label, Icon: r.Icon, Color: r.Color,
+				Key: r.Key, Kind: r.Kind, Label: r.Label, Icon: r.Icon,
 				URL: r.URL, Caption: r.Caption, External: r.External, Count: r.Count,
 				Hidden: r.Hidden, Personal: r.Personal,
 			}
@@ -143,7 +143,7 @@ func navSectionViews(secs []campaigns.NavSection) []layouts.NavSectionView {
 			for _, sub := range r.Subs {
 				row.Subs = append(row.Subs, layouts.NavSubRowView{
 					Key: campaigns.NavCategoryKey(sub.TypeID), TypeID: sub.TypeID,
-					Label: sub.Label, Color: sub.Color, URL: sub.URL, Count: sub.Count,
+					Label: sub.Label, URL: sub.URL, Count: sub.Count,
 				})
 			}
 			v.Rows = append(v.Rows, row)
@@ -256,7 +256,7 @@ func buildNavEdit(in navInputs) *layouts.NavEditView {
 				if !found {
 					continue
 				}
-				row.Label, row.Icon, row.Color = c.Label, c.Icon, c.Color
+				row.Label, row.Icon = c.Label, c.Icon
 			case campaigns.NavRowLink:
 				row.Label, row.Icon, row.URL = it.Label, it.Icon, it.URL
 			}

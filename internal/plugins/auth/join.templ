@@ -3,27 +3,49 @@
 
 package auth
 
-import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+import (
+	"net/url"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// joinReturn is where the other doors send someone back to after signing in
+// from the code tab: the join page only while a code is being used, so an
+// account holder can join with it; otherwise nowhere special.
+func joinReturn(code string) string {
+	if code == "" {
+		return ""
+	}
+	return joinHref + "?code=" + url.QueryEscape(code)
+}
 
 // JoinPage is the full /join page. signedInAs is the name of someone
 // already signed in, who joins with their own account and needs no name.
-templ JoinPage(csrfToken, code, name, errMsg, signedInAs string) {
+templ JoinPage(csrfToken, code, name, errMsg, signedInAs string, inv *Invitation) {
 	@layouts.Base("Join a campaign") {
-		@AuthDoors(layouts.DoorCode, "/join") {
-			<div>
-				<div class="doors-head">
-					<h1>Join a campaign</h1>
-					<p>Type the code your game master gave you</p>
-				</div>
-				@JoinForm_(csrfToken, code, name, errMsg, signedInAs)
-			</div>
+		@AuthDoors(layouts.DoorCode, joinReturn(code)) {
+			@JoinForm_(csrfToken, code, name, errMsg, signedInAs, inv)
 		}
 	}
 }
 
-// JoinForm_ is the join form, swapped in place when the code is refused.
-templ JoinForm_(csrfToken, code, name, errMsg, signedInAs string) {
+// JoinForm_ is the join step, swapped in place when the code is refused or
+// checked. A code is asked for first; once it opens a live campaign the
+// invitation shows and only then is a name asked for.
+templ JoinForm_(csrfToken, code, name, errMsg, signedInAs string, inv *Invitation) {
 	<div id="join-form" class="step-settle">
+		if inv != nil {
+			@InvitationCard(inv)
+		}
+		<div class="doors-head">
+			if inv != nil {
+				<h1>Join { inv.CampaignName }</h1>
+				<p>Add your name and you&apos;re in</p>
+			} else {
+				<h1>Join a campaign</h1>
+				<p>Type the code your game master gave you</p>
+			}
+		</div>
 		<form
 			class="space-y-4"
 			method="POST"
@@ -53,7 +75,7 @@ templ JoinForm_(csrfToken, code, name, errMsg, signedInAs string) {
 					maxlength="20"
 				/>
 			</div>
-			if signedInAs == "" {
+			if signedInAs == "" && inv != nil {
 				<div>
 					<label for="join-name" class="block text-sm font-medium text-fg-body mb-1.5">Your name</label>
 					<input
@@ -62,7 +84,7 @@ templ JoinForm_(csrfToken, code, name, errMsg, signedInAs string) {
 						name="name"
 						value={ name }
 						required
-						autofocus?={ code != "" }
+						autofocus?={ inv != nil }
 						minlength="2"
 						maxlength="100"
 						class="input w-full"
@@ -71,13 +93,17 @@ templ JoinForm_(csrfToken, code, name, errMsg, signedInAs string) {
 					/>
 					<p class="text-xs text-fg-muted mt-1.5">No email or password needed. You can keep your account later.</p>
 				</div>
-			} else {
+			} else if signedInAs != "" {
 				<p class="text-sm text-fg-secondary">
 					You're signed in as <strong class="text-fg">{ signedInAs }</strong>, so you'll join with your own account.
 				</p>
 			}
 			<button type="submit" class="btn-primary w-full py-2.5">
-				Join
+				if signedInAs == "" && inv == nil {
+					Continue
+				} else {
+					Join
+				}
 			</button>
 		</form>
 	</div>

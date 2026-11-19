@@ -65,6 +65,10 @@ type customizeDraft struct {
 		Elevation string `json:"elevation"`
 		Speed     string `json:"speed"`
 		ReduceAll bool   `json:"reduceAll"`
+		Entrance  string `json:"entrance"`
+		Sheen     bool   `json:"sheen"`
+		Cascade   bool   `json:"cascade"`
+		Spark     bool   `json:"spark"`
 	} `json:"motion"`
 	Hover struct {
 		Look          string `json:"look"`
@@ -240,6 +244,8 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	d.Motion.Elevation = orDefault(a.Elevation, AppearanceElevations)
 	d.Motion.Speed = orDefault(a.MotionSpeed, AppearanceSpeeds)
 	d.Motion.ReduceAll = a.ReduceMotion
+	d.Motion.Entrance = orDefault(a.Entrance, AppearanceEntrances)
+	d.Motion.Sheen, d.Motion.Cascade, d.Motion.Spark = a.MomentSheen, a.MomentCascade, a.MomentSpark
 	d.Hover.Look = orDefault(a.HoverCard, AppearanceHoverCards)
 	d.Sheet.Style = orDefault(a.SheetStyle, AppearanceSheetStyles)
 	d.Sheet.CraftArt = orDefault(a.CraftArt, AppearanceCraftArts)

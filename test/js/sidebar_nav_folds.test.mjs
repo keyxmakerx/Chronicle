@@ -23,6 +23,7 @@ function load() {
     body: { classList: { contains: () => false } },
     documentElement: { classList: { contains: () => false } },
     getElementById: () => null,
+    querySelector: () => null,
     addEventListener: noop,
   };
   const window = {
@@ -65,4 +66,12 @@ test('serializeFolds writes a stable form that parses back', () => {
 test('serializeFolds never writes an id the server would refuse', () => {
   const nav = load();
   assert.equal(nav.serializeFolds({ 'bad id': true, 'x;y': false, apps: true }), 'apps:1');
+});
+
+test('needsWords says it in words, singular, plural and nothing for zero', () => {
+  const nav = load();
+  assert.equal(nav.needsWords(1), '1 needs you');
+  assert.equal(nav.needsWords(3), '3 need you');
+  assert.equal(nav.needsWords(12), '12 need you');
+  for (const none of [0, -1, NaN, undefined]) assert.equal(nav.needsWords(none), '');
 });

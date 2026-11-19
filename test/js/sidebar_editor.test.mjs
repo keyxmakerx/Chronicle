@@ -48,7 +48,7 @@ function model() {
         { key: 'link:lnk_1', kind: 'link', label: ' Wiki ', url: ' https://example.com ', icon: 'fa-globe' },
       ] },
       { id: 'categories', kind: 'categories', label: 'Categories', items: [
-        { key: 'cat:1', kind: 'category', label: 'Locations', color: '#f87171' },
+        { key: 'cat:1', kind: 'category', label: 'Locations' },
         { key: 'cat:2', kind: 'category', label: 'Factions' },
       ] },
       { id: 'sec_prep', kind: 'custom', label: 'Prep', items: [
@@ -240,4 +240,9 @@ test('findRow finds a drawer app, so hiding it from players works the same', () 
   const ed = load();
   const loc = ed.findRow(drawerDraft(), 'app:crafting');
   assert.equal(loc.sec.id, 'drawer');
+});
+
+test('a row\'s mark takes no colour from its category, in the editor or the players\' card', () => {
+  assert.doesNotMatch(src, /\.color\b/, 'the editor draws every mark in the sidebar\'s one icon colour');
+  assert.doesNotMatch(src, /style\.(backgroundColor|color)\s*=/);
 });

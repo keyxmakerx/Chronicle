@@ -46,7 +46,7 @@ func TestAdventuresPane_Render(t *testing.T) {
 	for _, want := range []string{
 		`data-dms-open="adventures"`,
 		`data-dms-sec="adventures"`,
-		"2 cards",
+		"1 pinned, 1 note",
 		`data-sheet-url="/campaigns/c1/entities/e1/sheet"`,
 		`data-url="/campaigns/c1/dm-screen/adventures/items/i1"`,
 		"Lastwell",

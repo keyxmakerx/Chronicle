@@ -18,6 +18,9 @@ type Viewer struct {
 	UserID string
 	// Role is the campaign visibility role (3 owner or co-DM, 2 scribe).
 	Role int
+	// Layouts is true for the campaign's owner, who alone may change a
+	// category's page layout; a co-DM sees the owner's view but not that.
+	Layouts bool
 }
 
 // IsOwner reports whether the viewer is the owner or a Co-DM, who alone may
@@ -81,6 +84,12 @@ type View struct {
 	// co-DMs get it, since the encounters behind it are theirs. Not on the
 	// wire, for the same reason as Adventures.
 	Fight templ.Component `json:"-"`
+
+	// FightReady is how many fights are marked Ready; FightCounted is false
+	// when that could not be read, so the summary stays a plain line rather
+	// than a made-up count. Neither is on the wire.
+	FightReady   int  `json:"-"`
+	FightCounted bool `json:"-"`
 }
 
 // DowntimeView is the downtime switch's state plus requests waiting on the GM.

@@ -158,6 +158,12 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.POST("/dm-screen/reveal/:entityID", api.RevealDMScreenCharacter, RequirePermission(PermWrite))
 	cg.POST("/dm-screen/downtime", api.SetDMScreenDowntime, RequirePermission(PermWrite))
 
+	// Transformation layers on a page, for the module's one Active Effect
+	// per layer. The reader checks the page; while the add-on is off the
+	// gate answers 403 addon_disabled, which the module reads as "no layers".
+	layersGroup := addonRoutes{cg, RequireAddonAPI(addonChecker, "transformations")}
+	layersGroup.GET("/entities/:entityID/layers", api.GetEntityLayers, RequirePermission(PermRead))
+
 	// Shared rolls: a roll made in Foundry joins the roll log; see
 	// rolls_api.go. Session callers are refused there.
 	cg.POST("/rolls", api.ReportRoll, RequirePermission(PermWrite))

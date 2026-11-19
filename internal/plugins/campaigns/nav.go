@@ -9,6 +9,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // nav.go turns the owner's stored sidebar (SidebarConfig.Items) into the
@@ -87,7 +88,6 @@ type NavCategory struct {
 	TypeID int
 	Label  string
 	Icon   string
-	Color  string
 	URL    string
 	Count  int
 	Subs   []NavSubcategory
@@ -97,7 +97,6 @@ type NavCategory struct {
 type NavSubcategory struct {
 	TypeID int
 	Label  string
-	Color  string
 	URL    string
 	Count  int
 }
@@ -157,7 +156,6 @@ type NavRow struct {
 	Kind     string
 	Label    string
 	Icon     string
-	Color    string
 	URL      string
 	Caption  string
 	External bool // a link leaving Chronicle; opens in a new tab
@@ -666,7 +664,7 @@ func navRowFor(it NavLayoutItem, apps map[string]NavApp, cats map[int]NavCategor
 		}
 		return NavRow{
 			Key: it.Key, Kind: NavRowCategory, Label: c.Label, Icon: c.Icon,
-			Color: c.Color, URL: c.URL, Count: c.Count, Subs: c.Subs,
+			URL: c.URL, Count: c.Count, Subs: c.Subs,
 		}, true
 	case NavRowLink:
 		target, safe := sanitize.SafeLinkURL(it.URL)
@@ -717,4 +715,42 @@ func applyNavPins(sections []NavSection, pins []string) []NavSection {
 		}
 	}
 	return sections
+}
+
+// navManagePrefix marks a Manage tool's key in a member's pins ("manage:trash").
+const navManagePrefix = "manage:"
+
+// CleanOwnerNavPins checks the owner's own pins. The owner arranges the
+// sidebar for everyone in the editor, so what they may pin for themselves is
+// only the Manage tools, which no campaign layout holds. A key outside that
+// set is refused, as CleanNavPins does for a member.
+func CleanOwnerNavPins(pins []string) ([]string, error) {
+	pinnable := make(map[string]bool)
+	for _, r := range layouts.ManageToolRows("", true, true) {
+		pinnable[r.Key] = true
+	}
+	return CleanNavPins(pins, pinnable)
+}
+
+// AppendManagePins adds the owner's pinned Manage tools to the end of Pinned,
+// marked personal. A tool whose add-on is off, or a key no tool has any more,
+// is skipped rather than shown: a pin never outlives what it points at.
+func AppendManagePins(secs []NavSection, pins []string, base string, media, foundry bool) []NavSection {
+	if len(pins) == 0 || len(secs) == 0 || secs[0].ID != NavSectionPinned {
+		return secs
+	}
+	tools := make(map[string]layouts.NavRowView)
+	for _, r := range layouts.ManageToolRows(base, media, foundry) {
+		tools[r.Key] = r
+	}
+	for _, key := range pins {
+		t, ok := tools[key]
+		if !ok || !strings.HasPrefix(key, navManagePrefix) {
+			continue
+		}
+		secs[0].Rows = append(secs[0].Rows, NavRow{
+			Key: t.Key, Kind: NavRowApp, Label: t.Label, Icon: t.Icon, URL: t.URL, Personal: true,
+		})
+	}
+	return secs
 }

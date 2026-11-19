@@ -5,6 +5,7 @@
 package entities
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/colour"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -14,7 +15,7 @@ import (
 templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-		class="ec-card card p-0 overflow-hidden hover:shadow-md transition-shadow block group"
+		class="ec-card card p-0 overflow-hidden hover:shadow-elev-hover transition-shadow block group"
 		data-entity-preview={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, entity.ID) }
 	>
 		<!-- Image or placeholder header -->
@@ -44,7 +45,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 			<div class="ec-kind flex items-center gap-1.5">
 				<span
 					class="ec-pill inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[11px] font-medium"
-					style={ fmt.Sprintf("background-color: %s; color: %s", entity.TypeColor, contrastTextColor(entity.TypeColor)) }
+					style={ typeBadgeStyle(entity.TypeColor) }
 				>
 					if entity.TypeIcon != "" {
 						<i class={ "fa-solid " + entity.TypeIcon, "text-[9px]" }></i>
@@ -61,8 +62,8 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 				<div class="ec-tags flex flex-wrap gap-0.5 mt-1.5">
 					for _, tag := range entity.Tags {
 						<span
-							class="inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
-							style={ fmt.Sprintf("background-color: %s22; color: %s", tag.Color, tag.Color) }
+							class="chip-ink inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
+							style={ colour.ChipStyle(tag.Color) }
 						>
 							{ tag.Name }
 						</span>

@@ -50,8 +50,8 @@ const PIECES = {
   items: `(function () { var m = document.querySelector('[data-pt-pane="items"] [hx-trigger="load"]'); m.dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true })); m.outerHTML = '<section id="armory-panel-e1"><button data-open-give>Give an item</button><ul data-items><li data-item-id="1">Rope</li><li data-item-id="2">Torch</li></ul></section>'; })()`,
   itemsNone: `(function () { var m = document.querySelector('[data-pt-pane="items"] [hx-trigger="load"]'); m.dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true })); m.outerHTML = ''; })()`,
   files204: `document.querySelector('[data-pt-pane="files"] [hx-trigger="load"]').dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true }))`,
-  posts: `document.querySelector('[data-widget="entity-posts"]').innerHTML = '<div class="flex"><h3>Posts</h3><button data-action="create-post">Add Post</button></div><div class="card" data-post-id="p1">Backstory</div>'`,
-  links: `document.querySelector('[data-widget="relations"]').innerHTML = '<div class="rel-item">Ally: Bren</div><button class="rel-add-btn">Add Relation</button>'; document.querySelector('[data-pt-pane="links"] [hx-trigger="load"]').dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true }))`,
+  posts: `document.querySelector('[data-widget="entity-posts"]').innerHTML = '<div class="flex"><h3>Posts</h3><button data-action="create-post">Add post</button></div><div class="card" data-post-id="p1">Backstory</div>'`,
+  links: `document.querySelector('[data-widget="relations"]').innerHTML = '<div class="rel-item">Ally: Bren</div><button class="rel-add-btn">Add relation</button>'; document.querySelector('[data-pt-pane="links"] [hx-trigger="load"]').dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true }))`,
 };
 
 async function page(t) {
@@ -106,7 +106,7 @@ test('the action button presses the piece\'s own button and wears its label', { 
   assert.equal(await p.getAttribute('[data-en-act="new"]', 'data-pressed'), '1');
   await p.click('#pt-tab-links');
   await load(p, 'links');
-  assert.equal((await state(p)).press, 'Add Relation');
+  assert.equal((await state(p)).press, 'Add relation');
 });
 
 test('an armory with no panel hides Items; files with none say so', { skip }, async (t) => {

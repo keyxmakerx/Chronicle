@@ -71,7 +71,7 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 					if view.ClaimTypeID != 0 {
 						@castEmptyLink("fa-users", "No player characters yet", "Claimed characters appear here.", "Find a character to claim →", fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, view.ClaimTypeID))
 					} else {
-						@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
+						@castEmpty("fa-users", "No player characters yet", castEmptyPartyHint(view, layouts.GMTerm(ctx)))
 					}
 				} else {
 					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-4">
@@ -270,7 +270,7 @@ templ castListBoxes(campaignID, csrf string, ed *CastBandEditor) {
 // "You" ribbon and an accent ring.
 templ castCard(campaignID string, m CastMember) {
 	<div
-		class={ "group relative rounded-lg bg-surface overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5",
+		class={ "group relative rounded-lg bg-surface overflow-hidden transition-all hover:shadow-elev-hover",
 			templ.KV("border border-accent ring-1 ring-accent/40", m.IsViewer),
 			templ.KV("border border-edge hover:border-accent", !m.IsViewer) }
 		data-cast-card="true"

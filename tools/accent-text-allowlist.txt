@@ -1,0 +1,3 @@
+# tools/accent-text-allowlist.txt - exceptions to tools/check-accent-text.sh.
+# One per line: path|exact declaration|reason. Keep it short.
+static/js/notifications.js|color: var(--color-accent-hover, #4f46e5)',|words on the badge's own pale accent-light pill, not on the page

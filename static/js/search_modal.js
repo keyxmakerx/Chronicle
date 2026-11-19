@@ -1,11 +1,14 @@
 /**
  * search_modal.js -- Quick Search Modal (Ctrl+K / Cmd+K)
  *
- * Opens a centered search modal for finding entities within the current
- * campaign. Uses the existing /campaigns/:id/entities/search JSON endpoint.
+ * Opens a centered search modal for finding pages within the current
+ * campaign, on the screens whose top bar has no search of its own
+ * (topbar_search.js takes over where it does). Uses the existing
+ * /campaigns/:id/entities/search JSON endpoint.
  *
  * Features:
- *   - Ctrl+K / Cmd+K keyboard shortcut (global)
+ *   - Ctrl+K / Cmd+K keyboard shortcut (global), which toggles whichever
+ *     search the page has
  *   - Click the topbar search trigger to open
  *   - Debounced search (200ms)
  *   - Keyboard navigation: Arrow keys, Enter to open, Escape to close
@@ -58,7 +61,7 @@
 
     // Modal container.
     var modal = document.createElement('div');
-    modal.className = 'w-full max-w-lg bg-surface border border-edge rounded-lg shadow-2xl overflow-hidden';
+    modal.className = 'w-full max-w-lg bg-surface border border-edge rounded-lg shadow-elev-dragged overflow-hidden';
     modal.addEventListener('click', function (e) {
       e.stopPropagation();
     });
@@ -72,7 +75,7 @@
 
     input = document.createElement('input');
     input.type = 'text';
-    input.placeholder = 'Search entities...';
+    input.placeholder = 'Search pages...';
     input.className = 'flex-1 py-3.5 bg-transparent text-fg text-sm outline-none placeholder:text-fg-muted';
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('spellcheck', 'false');
@@ -240,7 +243,7 @@
     resultsList.innerHTML =
       '<div class="px-4 py-8 text-center text-sm text-fg-muted">' +
         '<i class="fa-solid fa-magnifying-glass text-2xl mb-2 block opacity-30"></i>' +
-        'Search for entities by name' +
+        'Search for pages by name' +
       '</div>';
   }
 
@@ -254,7 +257,7 @@
       resultsList.innerHTML =
         '<div class="px-4 py-6 text-center text-sm text-fg-muted">' +
           '<i class="fa-solid fa-circle-xmark text-lg mb-1 block opacity-30"></i>' +
-          'No entities found' +
+          'No pages found' +
         '</div>';
       return;
     }
@@ -392,16 +395,14 @@
 
   // --- Global Keyboard Shortcut ---
 
+  // Ctrl+K or Cmd+K opens and closes whichever search the page has. Where the
+  // top bar carries its own search, topbar_search.js replaces
+  // Chronicle.toggleSearch, so the shortcut opens the same search as the
+  // header button; everywhere else it is this modal.
   document.addEventListener('keydown', function (e) {
-    // Ctrl+K or Cmd+K opens the search modal.
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
-      if (isOpen) {
-        close();
-      } else {
-        open();
-      }
-      return;
+      Chronicle.toggleSearch();
     }
   });
 
@@ -414,4 +415,5 @@
   window.Chronicle = window.Chronicle || {};
   Chronicle.openSearch = open;
   Chronicle.closeSearch = close;
+  Chronicle.toggleSearch = function () { if (isOpen) close(); else open(); };
 })();

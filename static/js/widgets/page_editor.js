@@ -18,6 +18,13 @@
  * metadata endpoint is a partial update: null clears), and the bar says
  * Saving… then Saved. A value the server would refuse waits rather than
  * failing as it is typed; closing its part puts it back and says why.
+ *
+ * The three dots beside Edit page (Scribes and up) open a menu of the page's
+ * own actions, there without editing: Make a copy, Page history, Move under
+ * another page and, for the owner, Delete page. Copy, History and Delete are
+ * plain forms and a fetch on the sheet's own routes; Move starts editing and
+ * puts focus in the sheet's Parent page field. Esc closes the menu and focus
+ * goes back to the dots.
  */
 (function () {
   'use strict';
@@ -621,6 +628,84 @@
     }
   }
 
+  // ---- the three dots ----
+
+  function menuItems(S) {
+    return Array.prototype.slice.call(S.more.menu.querySelectorAll('[role="menuitem"]'));
+  }
+
+  function menuOpen(S) { return !!S.more && !S.more.menu.hidden; }
+
+  function openMenu(S) {
+    if (menuOpen(S)) return;
+    S.more.menu.hidden = false;
+    S.more.btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('keydown', S.on.menuKey, true);
+    document.addEventListener('pointerdown', S.on.menuOut, true);
+    var first = menuItems(S)[0];
+    if (first) first.focus({ preventScroll: true });
+  }
+
+  function closeMenu(S, refocus) {
+    if (!menuOpen(S)) return;
+    S.more.menu.hidden = true;
+    S.more.btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('keydown', S.on.menuKey, true);
+    document.removeEventListener('pointerdown', S.on.menuOut, true);
+    if (refocus) S.more.btn.focus({ preventScroll: true });
+  }
+
+  function onMenuKey(S, e) {
+    var list = menuItems(S), at = list.indexOf(document.activeElement);
+    if (e.key === 'Escape') {
+      // Only the menu's: the editor's own Escape must not also step back.
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu(S, true);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      list[(at + 1) % list.length].focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      list[(at <= 0 ? list.length : at) - 1].focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      list[0].focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      list[list.length - 1].focus();
+    } else if (e.key === 'Tab') {
+      closeMenu(S, false);
+    }
+  }
+
+  // Move under another page is the sheet's Parent page field: editing starts,
+  // the header's sheet opens and the field takes focus.
+  function moveUnder(S) {
+    var head = S.page.querySelector('[data-pe-part="header"]');
+    if (!head || !S.header || !S.header.parent) return;
+    if (!S.editing) setEditing(S, true);
+    openPart(S, head);
+    var field = S.header.parent;
+    // The sheet shows itself a moment after it opens, and a field that is
+    // not shown yet cannot take focus, so it is asked again once.
+    function take() { field.focus({ preventScroll: false }); return document.activeElement === field; }
+    requestAnimationFrame(function () { if (!take()) setTimeout(take, 160); });
+  }
+
+  function onMoreClick(S, e) {
+    var t = e.target;
+    if (!t.closest) return;
+    if (S.more.btn.contains(t)) {
+      if (menuOpen(S)) closeMenu(S, true); else openMenu(S);
+      return;
+    }
+    var item = t.closest('[role="menuitem"]');
+    if (!item || !S.more.menu.contains(item)) return;
+    closeMenu(S, false);
+    if (item.hasAttribute('data-pe-move')) moveUnder(S);
+  }
+
   // ---- mount ----
 
   var live = new WeakMap();
@@ -637,8 +722,10 @@
         edit: bar.querySelector('[data-pe-edit]'),
         mark: bar.querySelector('[data-pe-mark]'),
         saved: bar.querySelector('[data-pe-saved]'),
-        didSave: false, noteTimer: 0
+        didSave: false, noteTimer: 0, more: null
       };
+      var dots = bar.querySelector('[data-pe-dots]'), menu = bar.querySelector('[data-pe-menu]');
+      if (dots && menu) S.more = { btn: dots, menu: menu };
       var head = page.querySelector('[data-pe-part="header"]');
       if (head) {
         setupHeader(S, head);
@@ -652,6 +739,9 @@
         focusin: function (e) { onFocusIn(S, e); },
         focusout: function (e) { onFocusOut(S, e); },
         doc: function (e) { onKey(S, e); },
+        moreClick: function (e) { onMoreClick(S, e); },
+        menuKey: function (e) { onMenuKey(S, e); },
+        menuOut: function (e) { if (!S.more.btn.parentNode.contains(e.target)) closeMenu(S, false); },
         // The list keeps focus in the field while an option is clicked.
         down: function (e) { if (e.target.closest && e.target.closest('.pe-list')) e.preventDefault(); }
       };
@@ -663,6 +753,7 @@
       page.addEventListener('focusout', S.on.focusout);
       page.addEventListener('mousedown', S.on.down);
       document.addEventListener('keydown', S.on.doc);
+      if (S.more) bar.addEventListener('click', S.on.moreClick);
       live.set(bar, S);
     },
     // Leaving the page sends whatever is still waiting to be saved.
@@ -684,6 +775,10 @@
       S.page.removeEventListener('focusout', S.on.focusout);
       S.page.removeEventListener('mousedown', S.on.down);
       document.removeEventListener('keydown', S.on.doc);
+      if (S.more) {
+        closeMenu(S, false);
+        bar.removeEventListener('click', S.on.moreClick);
+      }
       if (C.markClean) C.markClean(DIRTY_ID);
     }
   });

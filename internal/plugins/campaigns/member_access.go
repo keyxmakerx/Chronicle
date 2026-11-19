@@ -48,9 +48,15 @@ func MemberAccessLabel(c *Campaign, m CampaignMember) string {
 }
 
 // ViewerAccessLabel is the viewer's own role in the People page's words, so
-// a Co-DM reads "Co-DM" on the campaign home, not "Scribe".
+// a Co-DM reads "Co-DM" on the campaign home, not "Scribe". It is empty for
+// a viewer with no role (a public or admin visit), so the home leaves the chip
+// out rather than printing "None".
 func ViewerAccessLabel(cc *CampaignContext) string {
 	switch {
+	case cc.MemberRole == RoleNone && cc.VisitUntil != nil:
+		return "Visitor"
+	case cc.MemberRole == RoleNone:
+		return ""
 	case cc.MemberRole >= RoleOwner:
 		return "Owner"
 	case cc.MemberRole == RoleScribe && cc.IsDmGranted:
@@ -113,7 +119,7 @@ func (s *campaignService) SetMemberAccess(ctx context.Context, campaignID, userI
 	// grants, so an id left behind by a deleted account can't stop
 	// it.
 	if !grant && has {
-		if err := s.revokeDmGrant(ctx, campaignID, userID); err != nil {
+		if err := s.revokeDmGrant(ctx, campaignID, userID, false); err != nil {
 			return err
 		}
 		if s.connRevoker != nil {

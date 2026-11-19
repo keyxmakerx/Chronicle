@@ -183,7 +183,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	})
 
 	r.Register(BlockMeta{
-		Type: BlockWritingPrompts, Label: "Writing Prompts", Icon: "fa-lightbulb",
+		Type: BlockWritingPrompts, Label: "Writing prompts", Icon: "fa-lightbulb",
 		Description: "Prompts to help write this page (shown to scribes and the owner)",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -303,7 +303,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	// customization editor edit the same structure the live page renders.
 	r.Register(BlockMeta{
 		Type: "quick_actions", Label: "Quick Actions", Icon: "fa-bolt",
-		Description: "All Pages / Members / Categories shortcut cards",
+		Description: "All pages / Members / Categories shortcut cards",
 		Contexts:    []string{"dashboard"},
 	}, nil)
 
@@ -514,6 +514,30 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		Type: "last_time", Label: "Last time", Icon: "fa-clock-rotate-left",
 		Description: "The latest session's recap, as players can read it",
 		Addon: "sessions", Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "table_agreement", Label: "Table agreement", Icon: "fa-handshake",
+		Description: "What the table agrees on: safety, pacing, absences",
+		Contexts: []string{"dashboard"},
+		ConfigFields: []ConfigFieldMeta{
+			{Key: "content", Label: "Text", Type: "textarea", Hint: "Players read this as you type it. Starter headings: Safety and lines, Pacing, Missing a night, Table talk."},
+		},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "making_a_hero", Label: "Making a hero", Icon: "fa-hammer",
+		Description: "What a new player needs to know before building a hero",
+		Contexts: []string{"dashboard"},
+		ConfigFields: []ConfigFieldMeta{
+			{Key: "content", Label: "Text", Type: "textarea", Hint: "Starter headings: What is allowed, Starting level, Where to build it, Ask me first."},
+		},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "run_by", Label: "Run by", Icon: "fa-crown",
+		Description: "Who runs the table: the owner and the people who help run it, by name",
+		Contexts: []string{"dashboard"},
 	}, nil)
 
 	r.Register(BlockMeta{

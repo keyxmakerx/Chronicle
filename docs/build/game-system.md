@@ -48,7 +48,7 @@ symlinks are rejected at install.
 - `"director": true` on a category keeps it to the campaign's Directors: its
   pages, search hits, tooltips and raw `data/<slug>.json`. Use it for content
   your book keeps in a Director-only chapter, so players can't read it there.
-- Caps: 20 categories, 100 fields each, 10 entity presets, 20 relation
+- Caps: 40 categories, 100 fields each, 10 entity presets, 20 relation
   presets, 10 widgets.
 
 Validation lives in `internal/systems/manifest.go` (`ValidateManifest`).
@@ -197,7 +197,7 @@ to be credited.
 2. Admin > Game systems & modules (`/admin/packages`) > Add package, paste
    `https://github.com/you/my-game`, confirm your password. The latest
    non-prerelease installs.
-3. In a campaign, as owner: Manage > Game & features
+3. In a campaign, as owner: Campaign settings > Game & features
    (`/campaigns/:id/extensions`) > Game system > pick My Game.
 4. Check it: `/campaigns/:id/systems/mygame` lists your categories, and
    `/campaigns/:id/systems/status` shows item counts and validation warnings.

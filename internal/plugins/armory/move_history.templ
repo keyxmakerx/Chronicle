@@ -2,7 +2,10 @@
 // and the full-history fragments.
 package armory
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
+)
 
 // MoveHistoryList renders every given line, newest first.
 templ MoveHistoryList(lines []MoveLine) {
@@ -22,7 +25,7 @@ templ moveHistoryLine(l MoveLine) {
 	<li class="text-xs text-fg-secondary flex flex-wrap items-baseline gap-x-2">
 		<span class={ moveStatusClass(l.Status) }>{ moveStatusLabel(l.Status) }</span>
 		<span class="text-fg-body">{ MoveSummary(l) }</span>
-		<time class="text-fg-muted" datetime={ l.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ l.CreatedAt.Format("2 Jan 2006 15:04") }>{ moveAgo(l.CreatedAt) }</time>
+		<time class="text-fg-muted" datetime={ l.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ timeutil.FixedDate(l.CreatedAt, timeutil.DateWithTime) } data-date-title>{ moveAgo(l.CreatedAt) }</time>
 		if l.Purchase && l.CanWithdraw {
 			@withdrawControl(l)
 		}

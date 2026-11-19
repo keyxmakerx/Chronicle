@@ -21,6 +21,10 @@ func TestSanitizeRedirect(t *testing.T) {
 		{"del byte", "/a\x7fb", ""},
 		{"backslash later", "/a\\b", ""},
 		{"unparseable", "/%zz", ""},
+		{"bare join page", "/join", ""},
+		{"join page with empty code", "/join?code=", ""},
+		{"join page with a code", "/join?code=ABCD-2345", "/join?code=ABCD-2345"},
+		{"campaign share link", "/join/abc123", "/join/abc123"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

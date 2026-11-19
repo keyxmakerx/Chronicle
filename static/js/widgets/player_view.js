@@ -5,6 +5,9 @@
  * data-pv-toggle>, drawn for campaign owners only, so only they load this
  * (ADR-063).
  *
+ * The banner's "Back to your view" button carries the same data-pv-toggle
+ * and does what the eye does.
+ *
  * The header's eye button (owners only) flips a cookie and the page reloads,
  * so the frame (menu, header, banner) is what the server renders for a
  * player. While it is on, <html data-view-as-player> hides every element

@@ -300,7 +300,7 @@ func TestSinceHandler_HiddenContentLeavesNoTrace(t *testing.T) {
 		"player": run(member(campaigns.RolePlayer, false)),
 		"scribe": run(member(campaigns.RoleScribe, false)),
 		// The owner "viewing as a player" is read as a player.
-		"owner as player": run(member(campaigns.RoleOwner, false), &http.Cookie{Name: "chronicle_view_as_player", Value: "1"}),
+		"owner as player": run(member(campaigns.RoleOwner, false), &http.Cookie{Name: "chronicle_view_as_player", Value: "c1"}),
 	} {
 		if strings.Contains(body, "Cult Vault") || strings.Contains(body, "2 new pages") || !strings.Contains(body, "1 new page") {
 			t.Errorf("%s leaks or miscounts:\n%s", name, body)
@@ -322,7 +322,7 @@ func TestSinceHandler_ViewerPassedToSources(t *testing.T) {
 		h := newSinceHandler(&fakeMarkers{member: true}, sinceSources{Pages: pages, Nights: nights, Quests: qs, NightsOn: nightsOn})
 		var cookies []*http.Cookie
 		if asPlayer {
-			cookies = append(cookies, &http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+			cookies = append(cookies, &http.Cookie{Name: "chronicle_view_as_player", Value: "c1"})
 		}
 		c, _ := sinceCtx(t, http.MethodGet, "/campaigns/c1/since-last-here", owner, "me", cookies...)
 		if err := h.Show(c); err != nil {

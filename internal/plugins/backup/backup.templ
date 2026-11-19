@@ -4,6 +4,7 @@
 package backup
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"net/url"
 	"time"
@@ -39,7 +40,11 @@ templ BackupPage(d BackupPageData) {
 				<div class="card p-4 border-l-4 border-red-500" role="alert">
 					<p class="text-sm text-red-700 dark:text-red-300">
 						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-						The daily backup on { d.LastScheduled.At.Format("2 Jan at 15:04") } failed: { d.LastScheduled.Detail }. Run one now to check, and see the server log for details.
+						The daily backup on
+						{ " " }
+						@components.Date(d.LastScheduled.At, timeutil.DateWithTime)
+						{ " " }
+						failed: { d.LastScheduled.Detail }. Run one now to check, and see the server log for details.
 					</p>
 				</div>
 			}
@@ -193,15 +198,15 @@ templ artifactList(d BackupPageData) {
 // gaps (e.g. a backup run that produced a manifest but no media tarball).
 templ kindBadge(kind string) {
 	if kind == "db" {
-		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-600">Database</span>
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400">Database</span>
 	} else if kind == "media" {
-		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-500/10 text-purple-600">Uploaded files</span>
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400">Uploaded files</span>
 	} else if kind == "redis" {
 		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-500/10 text-orange-600">Sessions</span>
 	} else if kind == "manifest" {
 		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-600">Summary</span>
 	} else if kind == "pre-migrate" {
-		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/10 text-yellow-700">Before an update</span>
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/10 text-yellow-700 dark:text-yellow-400">Before an update</span>
 	} else {
 		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-500/10 text-gray-600">Other</span>
 	}
@@ -258,12 +263,16 @@ templ scheduleCard(d BackupPageData) {
 				if d.LastScheduled.OK {
 					<div class="text-green-700 dark:text-green-300">
 						<i class="fa-solid fa-circle-check mr-1"></i>
-						Last daily backup finished { d.LastScheduled.At.Format("2 Jan at 15:04") }
+						Last daily backup finished
+						{ " " }
+						@components.Date(d.LastScheduled.At, timeutil.DateWithTime)
 					</div>
 				} else {
 					<div class="text-red-700 dark:text-red-300">
 						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-						Last daily backup failed { d.LastScheduled.At.Format("2 Jan at 15:04") }
+						Last daily backup failed
+						{ " " }
+						@components.Date(d.LastScheduled.At, timeutil.DateWithTime)
 					</div>
 				}
 			</div>
