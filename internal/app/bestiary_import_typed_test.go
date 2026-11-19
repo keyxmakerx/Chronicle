@@ -99,3 +99,65 @@ func TestCreatureFields(t *testing.T) {
 		t.Errorf("unreadable statblock gave %v, want only statblock_json", got)
 	}
 }
+
+// TestCreatureFields_TypesAndWholeCopy pins that a plain value only lands in a
+// field of a matching type, and that a statblock carrying its own
+// statblock_json key cannot replace the whole-statblock copy.
+func TestCreatureFields_TypesAndWholeCopy(t *testing.T) {
+	defs := []entities.FieldDefinition{
+		{Key: "level", Type: "number"}, {Key: "solo", Type: "checkbox"},
+		{Key: "role", Type: "text"}, {Key: "size", Type: "text"},
+	}
+	sb := json.RawMessage(`{"level":"three","solo":"yes","role":"Harrier","size":2,"statblock_json":"evil"}`)
+	got := creatureFields(defs, sb)
+	want := map[string]any{
+		"statblock_json": string(sb),
+		"role":           "Harrier",
+		"size":           "2",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("fields =\n %v\nwant\n %v", got, want)
+	}
+	good := creatureFields(defs, json.RawMessage(`{"level":3,"solo":true}`))
+	if good["level"] != float64(3) || good["solo"] != true {
+		t.Errorf("matching types dropped: %v", good)
+	}
+}
+
+// stubExistsEntitySvc answers GetByID for the EntityExists check.
+type stubExistsEntitySvc struct {
+	entities.EntityService
+	ent *entities.Entity
+	err error
+}
+
+func (s *stubExistsEntitySvc) GetByID(context.Context, string) (*entities.Entity, error) {
+	return s.ent, s.err
+}
+
+// TestBestiaryEntityExists pins that only a page that is still in the campaign
+// counts, that a missing one is "gone" rather than an error, and that other
+// failures are surfaced.
+func TestBestiaryEntityExists(t *testing.T) {
+	boom := errors.New("db down")
+	tests := []struct {
+		name    string
+		svc     *stubExistsEntitySvc
+		want    bool
+		wantErr bool
+	}{
+		{"still there", &stubExistsEntitySvc{ent: &entities.Entity{ID: "e", CampaignID: "camp-1"}}, true, false},
+		{"deleted", &stubExistsEntitySvc{err: apperror.NewNotFound("gone")}, false, false},
+		{"moved to another campaign", &stubExistsEntitySvc{ent: &entities.Entity{ID: "e", CampaignID: "camp-2"}}, false, false},
+		{"lookup failure", &stubExistsEntitySvc{err: boom}, false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &bestiaryEntityCreatorAdapter{svc: tt.svc}
+			got, err := a.EntityExists(context.Background(), "camp-1", "e")
+			if (err != nil) != tt.wantErr || got != tt.want {
+				t.Errorf("EntityExists = %v, %v; want %v, err %v", got, err, tt.want, tt.wantErr)
+			}
+		})
+	}
+}
