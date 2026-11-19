@@ -90,7 +90,7 @@ test('an editor moves a page into a folder from the menu', { skip }, async () =>
   const { browser, pg } = await open(EDITOR);
   try {
     await pg.click(row('data-entity-id="e1"'), { button: 'right' });
-    assert.deepEqual(await menuLabels(pg), ['Open', 'Open in new tab', 'Copy link', 'New page inside', 'New folder here', 'Rename', 'Move to folder…']);
+    assert.deepEqual(await menuLabels(pg), ['Open', 'Open in new tab', 'Copy link', 'New page inside', 'New folder here', 'Rename', 'Move to folder…', 'Page history']);
     await pick(pg, 'Move to folder');
     // The page is at the top level already, so that choice is off.
     assert.deepEqual(await menuLabels(pg), ['Back', '(off) Top level', 'Lore', 'Gods']);
