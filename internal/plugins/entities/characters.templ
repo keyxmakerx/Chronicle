@@ -270,7 +270,7 @@ templ castListBoxes(campaignID, csrf string, ed *CastBandEditor) {
 // "You" ribbon and an accent ring.
 templ castCard(campaignID string, m CastMember) {
 	<div
-		class={ "group relative rounded-lg bg-surface overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5",
+		class={ "group relative rounded-lg bg-surface overflow-hidden transition-all hover:shadow-elev-hover",
 			templ.KV("border border-accent ring-1 ring-accent/40", m.IsViewer),
 			templ.KV("border border-edge hover:border-accent", !m.IsViewer) }
 		data-cast-card="true"

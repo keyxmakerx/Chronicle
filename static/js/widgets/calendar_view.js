@@ -653,12 +653,7 @@
   // A menu's open and close times come from the --dur-everyday tokens, read
   // when the move starts so the owner's Motion speed applies.
   function tokenMs(name, fallback) {
-    try {
-      var v = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-      var m = /^([\d.]+)(ms|s)$/.exec(v);
-      if (m) return parseFloat(m[1]) * (m[2] === 's' ? 1000 : 1);
-    } catch (e) { /* the fallback stands */ }
-    return fallback;
+    return window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs(name, fallback) : fallback;
   }
   function menuOpenMs() { return tokenMs('--dur-everyday', 120); }
   function menuCloseMs() { return tokenMs('--dur-everyday-out', menuOpenMs() * 2 / 3); }

@@ -115,8 +115,11 @@
         host.hidden = !!counts.off;
         if (counts.off) { closeBubble(); if (state.open) close(); return; }
         var n = (counts.waiting || 0) + (counts.warnings || 0);
+        var text = n > 9 ? '9+' : String(n);
+        var changed = n > 0 && badge.textContent !== text;
         badge.hidden = n === 0;
-        badge.textContent = n > 9 ? '9+' : String(n);
+        badge.textContent = text;
+        if (changed) { badge.classList.remove('hdr-n-grow'); void badge.offsetWidth; badge.classList.add('hdr-n-grow'); }
         if (counts.warnings || counts.stopped) badge.setAttribute('data-tone', 'bad'); else badge.removeAttribute('data-tone');
         var words = 'Your AI';
         if (counts.waiting) words += ', ' + counts.waiting + (counts.waiting === 1 ? ' request waits' : ' requests wait');

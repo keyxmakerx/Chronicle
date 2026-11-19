@@ -143,6 +143,25 @@
   };
 
   /**
+   * A duration token as a number of milliseconds, for scripted animations:
+   * motionMs('--dur-everyday', 120). Reads the custom property from <html>
+   * (or el) at the moment of the move so the owner's Motion speed applies,
+   * accepts "120ms" and "0.12s", and returns fallback when the token is
+   * missing or not a duration.
+   */
+  window.Chronicle.motionMs = function (name, fallback, el) {
+    try {
+      var v = window.getComputedStyle(el || document.documentElement).getPropertyValue(name).trim();
+      var m = /^(-?[\d.]+)(ms|s)$/.exec(v);
+      if (m) {
+        var n = parseFloat(m[1]) * (m[2] === 's' ? 1000 : 1);
+        if (isFinite(n)) return n;
+      }
+    } catch (e) { /* the fallback stands */ }
+    return fallback;
+  };
+
+  /**
    * True when moves should not travel: the device asks for reduced motion,
    * or the page is Calm or Off (html[data-motion], or the older nav-rm and
    * data-view-motion flags the first-paint script and syncMotion also set).

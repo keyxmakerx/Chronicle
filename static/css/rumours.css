@@ -245,9 +245,9 @@
 .rm-menu {
   position: absolute; z-index: 9; min-width: 120px; padding: 4px; background: var(--rm-panel); border: var(--shape-edge, 1px) solid transparent; border-radius: var(--rm-r-ctl);
   box-shadow: var(--elev-hover, 0 8px 20px rgb(0 0 0 / .15)); opacity: 0; transform: scale(.9); transform-origin: var(--ox, 100%) 0;
-  transition: opacity 120ms var(--ease-in, ease-in), transform 120ms var(--ease-in, ease-in);
+  transition: opacity var(--dur-everyday-out, 80ms) var(--ease-in, ease-in), transform var(--dur-everyday-out, 80ms) var(--ease-in, ease-in);
 }
-.rm-menu.rm-open { opacity: 1; transform: none; transition: opacity var(--dur-standard, 200ms) var(--rm-ease), transform var(--dur-standard, 200ms) var(--rm-ease); }
+.rm-menu.rm-open { opacity: 1; transform: none; transition: opacity var(--dur-everyday, 120ms) var(--ease-out, ease-out), transform var(--dur-everyday, 120ms) var(--ease-out, ease-out); }
 .rm-menu button {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; min-height: var(--rm-hit); padding: 0 10px; border: 0; border-radius: var(--rm-r-tag);
   background: none; font-size: 13px; font-weight: 500; color: var(--rm-ink); text-align: left; cursor: pointer;

@@ -42,6 +42,12 @@
 (function () {
   'use strict';
 
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
+
   var DUR = 300;
   var EASE = 'cubic-bezier(.2,.8,.2,1)';
   var REST_MS = 250;
@@ -702,7 +708,7 @@
         lkBase.style.transition = 'none'; lkBase.style.opacity = '0'; lkLit.style.display = 'none';
         linkTimer = setTimeout(function () { lkBase.style.transition = ''; lkBase.style.opacity = '1'; lkLit.style.display = ''; lightUp(); }, 420);
       } else { lkBase.style.opacity = '1'; lkLit.style.display = ''; lightUp(); }
-      if (opts.fade && level() === 'calm' && tv.animate) tv.animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 220 });
+      if (opts.fade && level() === 'calm' && tv.animate) tv.animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200) });
       shownEl.textContent = Object.keys(L.dots).length + ' shown of ' + (reachable(M, dm(), PAGE) + 1);
       if (E.pick) placePick();
     }
@@ -770,7 +776,7 @@
           dkAnim = morphAnim(dock, [dkc], from, to, false, dkStop);
         } else if (was && S.open && level() === 'calm') {
           body.classList.add('fm-dk-keep'); body.classList.remove('fm-docked');
-          var a = dock.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140 }); dkAnim = [a]; a.onfinish = dkStop;
+          var a = dock.animate([{ opacity: 1 }, { opacity: 0 }], { duration: tokMs('--dur-micro', 120) }); dkAnim = [a]; a.onfinish = dkStop;
         } else body.classList.remove('fm-docked');
         return;
       }
@@ -815,7 +821,7 @@
           dkc.style.width = dock.clientWidth + 'px'; dkc.style.height = dock.clientHeight + 'px';
           dkAnim = morphAnim(dock, [dkc], from2, to2, true, dkStop);
         } else if (level() === 'calm') {
-          var a3 = dock.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180 }); dkAnim = [a3]; a3.onfinish = dkStop;
+          var a3 = dock.animate([{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200) }); dkAnim = [a3]; a3.onfinish = dkStop;
         }
       }
     }

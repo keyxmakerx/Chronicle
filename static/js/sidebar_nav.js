@@ -24,6 +24,12 @@
 (function () {
   'use strict';
 
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
+
   var FOLD_MS = 280;
   // A closing section's rows fade out this fast, so none are left showing
   // below a follower shorter than the section.
@@ -135,7 +141,7 @@
   function unfold(body) {
     body.hidden = false;
     if (reduced()) {
-      play(body, [{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'linear' });
+      play(body, [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'linear' });
       return;
     }
     var h = body.offsetHeight;
@@ -163,7 +169,7 @@
 
   function fold(body, onDone) {
     if (reduced()) {
-      var fade = play(body, [{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: 'linear', fill: 'forwards' });
+      var fade = play(body, [{ opacity: 1 }, { opacity: 0 }], { duration: tokMs('--dur-micro', 120), easing: 'linear', fill: 'forwards' });
       whenDone(fade, function () { body.hidden = true; if (fade) fade.cancel(); if (onDone) onDone(); });
       return;
     }
@@ -286,7 +292,7 @@
     }
     // A count that drops settles in place; the number only changes.
     if (had && n > 0 && !reduced()) {
-      play(tr, [{ opacity: 0.4 }, { opacity: 1 }], { duration: 180, easing: EASE_OUT });
+      play(tr, [{ opacity: 0.4 }, { opacity: 1 }], { duration: tokMs('--dur-large', 280), easing: EASE_OUT });
     }
   }
 
@@ -402,7 +408,7 @@
     if (ring.parentElement === target) return;
     target.appendChild(ring);
     keepPhase(ring);
-    if (animate) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
+    if (animate) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'ease-out' });
   }
 
   function restoreTrail(row) {

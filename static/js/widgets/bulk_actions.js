@@ -221,7 +221,7 @@
 
         if (!actionBar) {
           actionBar = document.createElement('div');
-          actionBar.className = 'bulk-action-bar fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-surface border border-edge rounded-xl shadow-xl px-4 py-2 w-max flex flex-wrap items-center gap-4 text-sm max-w-[calc(100vw-2rem)]';
+          actionBar.className = 'bulk-action-bar fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-surface border border-edge rounded-xl shadow-elev-hover px-4 py-2 w-max flex flex-wrap items-center gap-4 text-sm max-w-[calc(100vw-2rem)]';
           actionBar.setAttribute('role', 'toolbar');
           actionBar.setAttribute('aria-label', 'Change the selected pages');
           document.body.appendChild(actionBar);
@@ -321,7 +321,7 @@
       function openPicker(anchor, optionsFn, onPick, findLabel, canMake, onQuery) {
         closePicker();
         var box = document.createElement('div');
-        box.className = 'bulk-picker fixed z-50 bg-surface border border-edge rounded-lg shadow-xl p-1 w-64 max-h-72 flex flex-col';
+        box.className = 'bulk-picker fixed z-50 bg-surface border border-edge rounded-lg shadow-elev-hover p-1 w-64 max-h-72 flex flex-col';
         var list = document.createElement('div');
         list.className = 'overflow-y-auto';
         list.setAttribute('role', 'listbox');
