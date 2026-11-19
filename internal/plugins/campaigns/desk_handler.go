@@ -17,7 +17,6 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
-	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -147,38 +146,6 @@ func deskOwner(c *echo.Context) (*CampaignContext, error) {
 		return nil, apperror.NewForbidden("only the campaign owner can open the desk")
 	}
 	return cc, nil
-}
-
-// DeskLineFold renders what a line unfolds into
-// (GET /campaigns/:id/dashboard/lines/:line/fold).
-func (h *Handler) DeskLineFold(c *echo.Context) error {
-	cc, err := deskOwner(c)
-	if err != nil {
-		return err
-	}
-	in := h.deskInputs(c, cc)
-	req := DeskRequest{CampaignID: cc.Campaign.ID, OwnerID: auth.GetUserID(c), Now: time.Now()}
-	fold, ok := h.desk.Fold(c.Request().Context(), req, in, c.Param("line"))
-	if !ok {
-		return apperror.NewNotFound("that line does not unfold")
-	}
-	return middleware.Render(c, http.StatusOK, DeskFoldBody(cc, c.Param("line"), fold))
-}
-
-// DeskLineSentence renders one line's sentence, worded again from fresh
-// numbers (GET /campaigns/:id/dashboard/lines/:line/sentence).
-func (h *Handler) DeskLineSentence(c *echo.Context) error {
-	cc, err := deskOwner(c)
-	if err != nil {
-		return err
-	}
-	in := h.deskInputs(c, cc)
-	req := DeskRequest{CampaignID: cc.Campaign.ID, OwnerID: auth.GetUserID(c), Now: time.Now()}
-	line, ok := h.desk.Line(c.Request().Context(), req, in, c.Param("line"))
-	if !ok {
-		return apperror.NewNotFound("no such line")
-	}
-	return middleware.Render(c, http.StatusOK, deskSentence(line))
 }
 
 // DeskNeedsCount answers how many things wait on the owner (GET

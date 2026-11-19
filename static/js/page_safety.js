@@ -77,7 +77,7 @@
         })
         .catch(function () {
           btn.disabled = false;
-          Chronicle.notify('Could not put it back. It is still in Manage > Trash.', 'error');
+          Chronicle.notify('Could not put it back. It is still in Campaign settings > Trash.', 'error');
         });
     } } });
   }

@@ -15,8 +15,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCRIPT = readFileSync(join(root, 'static/js/desk_blank.js'), 'utf8');
 
 const OPTIONS = JSON.stringify([
-  { v: 'false', l: 'private', a: ' only members.' },
-  { v: 'true', l: 'public', a: ' anyone.' },
+  { v: 'false', l: 'private' },
+  { v: 'true', l: 'public' },
 ]).replace(/"/g, '&quot;');
 
 const PAGE = `<!doctype html><html><body>
@@ -25,7 +25,7 @@ const PAGE = `<!doctype html><html><body>
     <span role="button" tabindex="0" id="b" data-desk-blank="choice" data-label="The campaign is" data-url="/save"
       data-method="PUT" data-field="isPublic" data-bool data-value="false" data-options="${OPTIONS}"
       aria-haspopup="menu" aria-expanded="false" aria-disabled="false" aria-label="The campaign is: private"
-      onclick="(function(b,e){var C=window.Chronicle=window.Chronicle||{};function go(){if(C.deskBlank)C.deskBlank.activate(b,e);}if(C.deskBlank){go();return;}var s=document.querySelector('script[data-desk-blank-js]');if(!s){s=document.createElement('script');s.src='/static/js/desk_blank.js?v=t';s.setAttribute('data-desk-blank-js','');document.head.appendChild(s);}s.addEventListener('load',go);})(this,event)" onkeydown="(function(b,e){if(e.key!=='Enter'&&e.key!==' ')return;e.preventDefault();var C=window.Chronicle=window.Chronicle||{};function go(){if(C.deskBlank)C.deskBlank.activate(b,e);}if(C.deskBlank){go();return;}var s=document.querySelector('script[data-desk-blank-js]');if(!s){s=document.createElement('script');s.src='/static/js/desk_blank.js?v=t';s.setAttribute('data-desk-blank-js','');document.head.appendChild(s);}s.addEventListener('load',go);})(this,event)">private</span><span data-desk-after> only members.</span></p>
+      onclick="(function(b,e){var C=window.Chronicle=window.Chronicle||{};function go(){if(C.deskBlank)C.deskBlank.activate(b,e);}if(C.deskBlank){go();return;}var s=document.querySelector('script[data-desk-blank-js]');if(!s){s=document.createElement('script');s.src='/static/js/desk_blank.js?v=t';s.setAttribute('data-desk-blank-js','');document.head.appendChild(s);}s.addEventListener('load',go);})(this,event)" onkeydown="(function(b,e){if(e.key!=='Enter'&&e.key!==' ')return;e.preventDefault();var C=window.Chronicle=window.Chronicle||{};function go(){if(C.deskBlank)C.deskBlank.activate(b,e);}if(C.deskBlank){go();return;}var s=document.querySelector('script[data-desk-blank-js]');if(!s){s=document.createElement('script');s.src='/static/js/desk_blank.js?v=t';s.setAttribute('data-desk-blank-js','');document.head.appendChild(s);}s.addEventListener('load',go);})(this,event)">private</span></p>
     <span class="desk-acts"></span></div>
 </div>
 <button id="next">next</button>
@@ -87,7 +87,6 @@ test('arrows move, Enter picks and saves once with the right body', { skip }, as
     const saves = await page.evaluate(() => window.saves);
     assert.deepEqual(saves, [{ url: '/save', method: 'PUT', body: { isPublic: true } }]);
     assert.equal((await page.textContent('#b')).trim(), 'public');
-    assert.match(await page.textContent('[data-desk-after]'), /anyone/);
     assert.equal(await page.getAttribute('#b', 'aria-expanded'), 'false');
     await page.waitForSelector('.desk-saved');
   } finally { await browser.close(); }
@@ -119,7 +118,7 @@ test('Tab closes the menu and carries on from the word', { skip }, async () => {
   } finally { await browser.close(); }
 });
 
-test('a failed save puts the old word and its ending back', { skip }, async () => {
+test('a failed save puts the old word back', { skip }, async () => {
   const { browser, page } = await open({ failSave: true });
   try {
     await page.focus('#b');
@@ -129,7 +128,6 @@ test('a failed save puts the old word and its ending back', { skip }, async () =
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => window.saves.length === 1);
     await page.waitForFunction(() => document.getElementById('b').textContent.trim() === 'private');
-    assert.match(await page.textContent('[data-desk-after]'), /only members/);
     assert.equal(await page.locator('.desk-saved').count(), 0);
   } finally { await browser.close(); }
 });

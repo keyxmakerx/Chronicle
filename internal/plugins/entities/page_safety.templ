@@ -240,7 +240,7 @@ templ historyDiff(d HistoryPanelData) {
 	</div>
 }
 
-// TrashPage is the campaign Trash under Manage.
+// TrashPage is the campaign Trash under Campaign settings.
 templ TrashPage(cc *campaigns.CampaignContext, d TrashPageData) {
 	@layouts.App(cc.Campaign.Name + " - Trash") {
 		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Trash", Line: "trash"}) {

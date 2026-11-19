@@ -21,9 +21,9 @@ func topbarHasMemberAI(ctx context.Context) bool {
 func topbarHasFind(ctx context.Context) bool { return InCampaign(ctx) }
 
 // topbarHasViewAs reports whether the eye (view as player) is on the bar. It
-// stays while an owner views as a player, to take them back.
+// stays while an owner views as a player or as a guest, to take them back.
 func topbarHasViewAs(ctx context.Context) bool {
-	return InCampaign(ctx) && (IsOwner(ctx) || IsDmGranted(ctx) || IsViewingAsPlayer(ctx))
+	return InCampaign(ctx) && (IsOwner(ctx) || IsDmGranted(ctx) || IsViewingAsPlayer(ctx) || PreviewAs(ctx) == "guest")
 }
 
 // topbarHasTable reports whether the Table tab is on the bar.
@@ -63,7 +63,7 @@ func topbarShowsToolsShelf(ctx context.Context) bool {
 
 // topbarViewAsLabel is the shelf's name for the eye.
 func topbarViewAsLabel(ctx context.Context) string {
-	if IsViewingAsPlayer(ctx) {
+	if IsViewingAsPlayer(ctx) || PreviewAs(ctx) == "guest" {
 		return "Back to your view"
 	}
 	return "View as player"

@@ -751,8 +751,6 @@ DELETE	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).Rese
 GET	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).GetDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).UpdateDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dashboard/find	session	plugins/campaigns.(*Handler).DeskFind	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/dashboard/lines/:line/fold	session	plugins/campaigns.(*Handler).DeskLineFold	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/dashboard/lines/:line/sentence	session	plugins/campaigns.(*Handler).DeskLineSentence	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dashboard/needs	session	plugins/campaigns.(*Handler).DeskNeedsCount	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/default-visibility	session	plugins/campaigns.(*Handler).UpdateDefaultVisibilityAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs	session	plugins/designs.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1314,6 +1312,7 @@ GET	/campaigns/:id/trash	session	plugins/entities.(*PageSafetyHandler).Trash	plu
 POST	/campaigns/:id/trash/:eid/restore	session	plugins/entities.(*PageSafetyHandler).RestoreFromTrash	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/trash/:kind/:tid/restore	session	plugins/entities.(*PageSafetyHandler).RestoreOtherFromTrash	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/unarchive	session	plugins/campaigns.(*Handler).UnarchiveCampaign	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccessEvenIfArchived > plugins/campaigns.RequireRole
+POST	/campaigns/:id/view-as	session	plugins/campaigns.(*Handler).ViewAs	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccessEvenIfArchived > plugins/campaigns.RequireCapability
 PUT	/campaigns/:id/welcome-message	session	plugins/campaigns.(*Handler).UpdateWelcomeMessageAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/when-we-could-play	public-capable	plugins/sessions.(*Handler).WhenWeCouldPlayBlock	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/when-we-play	session	plugins/sessions.(*Handler).WhenWePlayBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole

@@ -269,6 +269,15 @@
     });
   }
 
+  // A command's other names (its words) find it as well as its label.
+  function wordsFind(words, q) {
+    var ws = String(words || '').toLowerCase().split(/\s+/);
+    for (var i = 0; i < ws.length; i++) {
+      if (ws[i] && ws[i].indexOf(q) === 0) return true;
+    }
+    return false;
+  }
+
   // Commands come from the command palette (command_palette.js), so search
   // offers exactly what the palette does, for this viewer and this page.
   function matchingCommands(query) {
@@ -279,7 +288,7 @@
       if (out.length >= MAX_COMMANDS || !c || !c.label) return;
       // Search is already open, and a new page needs the create right.
       if (c.id === 'search' || (c.id === 'new-page' && !canCreate())) return;
-      if (c.label.toLowerCase().indexOf(q) === -1) return;
+      if (c.label.toLowerCase().indexOf(q) === -1 && !wordsFind(c.words, q)) return;
       out.push({
         name: c.label,
         type: 'Command',

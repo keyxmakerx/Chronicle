@@ -29,6 +29,8 @@ import (
 // contractGoverned lists update inputs that must be presence-aware.
 var contractGoverned = map[string]string{
 	"sessions.UpdateSessionInput":          "PUT /campaigns/:id/sessions/:sid — Mark Complete wiped the schedule, summary, in-world date and recurrence",
+	"campaigns.UpdateCampaignRequest":      "PUT /campaigns/:id is the Details tab's hx-put form, which posts only the description; the name and the public flag live on Campaign settings, so a save must not blank the name or flip a public campaign private. Every field is a pointer, nil means absent",
+	"campaigns.UpdateCampaignInput":        "the service-side twin of campaigns.UpdateCampaignRequest; same incident, same fix",
 	"campaigns.UpdateCampaignDetailsInput": "PUT /campaigns/:id/details — the desk's name and public blanks each send one key; a rename must not flip a public campaign private, and a public toggle must not rename or rewrite the description",
 	"entities.UpdateEntityInput":           "PUT /entities/:eid and the syncapi twin — every sync push un-parented the entity; {name} alone un-privated it",
 	"timeline.UpdateTimelineEventInput":    "PUT .../standalone-events/:eid — a rename cleared eight fields, including per-player visibility rules",
@@ -125,8 +127,6 @@ var governedFieldExceptions = map[string]string{
 var fullReplaceByDesign = map[string]string{
 	"relations.UpdateRelationMetadataRequest": "PUT .../relations/:rid/metadata — the endpoint exists to replace the relation's one opaque metadata blob, and its callers (the inventory widget, the Foundry item sync) send the complete object; the blob is replaced wholesale by design, not merged key by key; a body with no metadata key is refused (400) so it cannot clear the blob",
 	"smtp.UpdateSMTPRequest":                  "PUT /admin/smtp is the admin settings page's hx-put form, which posts every field on each save (the unticked Enable checkbox is absent by HTML's design, so it cannot be presence-aware on a form bind; an empty password already keeps the stored secret). Nothing else calls it",
-	"campaigns.UpdateCampaignRequest":         "PUT /campaigns/:id is the settings page's hx-put form, which posts name, description and the is_public checkbox together; a checkbox is absent when unticked by HTML's own design, so is_public cannot be presence-aware on a form bind. No script or API client calls it",
-	"campaigns.UpdateCampaignInput":           "the service-side twin of campaigns.UpdateCampaignRequest: Update requires a name and states the whole record, and its only caller is the settings form handler",
 	"campaigns.UpdateRoleRequest":             "PUT /campaigns/:id/members/:uid/role — a one-field body: the role select is the whole request",
 	"entities.UpdateEntityRequest":            "PUT /campaigns/:id/entities/:eid is the edit page's hx-put form, which posts name, descriptor, parent and entry on every save and is bound as a form (patch.Field has no form binding); no script or API client calls it. The JSON and sync routes use entities.UpdateEntityInput, which is governed",
 	"addons.UpdateAddonInput":                 "addonService.Update has no caller outside tests (the admin UI only flips status through UpdateStatus), and it requires a name and a valid status, so it is a whole-record edit by construction. A route that reaches it with a subset must make the fields presence-aware first",

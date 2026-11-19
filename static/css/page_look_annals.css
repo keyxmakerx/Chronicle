@@ -228,8 +228,64 @@
 [data-cz-page="annals"] .cb-shortcut:hover h3 { text-decoration: underline; text-underline-offset: 3px; }
 [data-cz-page="annals"] .cb-shortcut .cb-sub { display: none; }
 
-/* Categories and recent pages: one row each, lifting on hover. */
-[data-cz-page="annals"] :is(.cb-contents, .cb-recent) .cb-rows {
+/* Categories: one running line of words, name then count, like a book's
+   index. Every category stays one tap away and the block stays a few lines
+   tall however many there are. */
+[data-cz-page="annals"] .cb-contents .cb-line {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: 0 18px;
+  padding-top: 4px;
+}
+[data-cz-page="annals"] #main-content .cb-word {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  min-height: 32px;
+  padding: 6px 0;
+  border: 0; background: none; box-shadow: none;
+  transform: none;
+  overflow: visible;
+  max-width: 100%;
+}
+/* A name longer than the line wraps inside it; it is never cut short. */
+[data-cz-page="annals"] .cb-word .cb-word-name { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+[data-cz-page="annals"] .cb-word .cb-swatch,
+[data-cz-page="annals"] .cb-word .cb-word-unit { display: none; }
+[data-cz-page="annals"] .cb-word .cb-word-main { min-width: 0; margin: 0; }
+[data-cz-page="annals"] .cb-word .cb-word-name { font-weight: 600; font-size: 0.9rem; }
+[data-cz-page="annals"] .cb-word .cb-word-meta {
+  padding-left: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+[data-cz-page="annals"] .cb-word:hover .cb-word-name {
+  color: var(--annals-link);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+[data-cz-page="annals"] .cb-word:active { opacity: 0.7; }
+/* A category with nothing in it yet steps back. */
+[data-cz-page="annals"] .cb-word[data-empty] .cb-word-name { font-weight: 500; color: var(--color-text-muted); }
+/* A finger needs a taller line than a pointer. */
+@media (pointer: coarse) {
+  [data-cz-page="annals"] #main-content .cb-word { min-height: 44px; padding: 0; align-items: center; }
+}
+/* Past the line's limit the rest wait behind a quiet word. */
+.cb-line-more > summary { list-style: none; cursor: pointer; }
+.cb-line-more > summary::-webkit-details-marker { display: none; }
+.cb-line-more:not([open]) .cb-when-open, .cb-line-more[open] .cb-when-closed { display: none; }
+/* Open, the word moves to the end of what it revealed. */
+.cb-line-more[open] { display: flex; flex-direction: column-reverse; align-items: flex-start; }
+[data-cz-page="annals"] .cb-line-more > summary {
+  display: inline-flex; align-items: center;
+  min-height: 32px;
+  color: var(--annals-link);
+  font-size: 0.9rem; font-weight: 500;
+}
+[data-cz-page="annals"] .cb-line-more > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+@media (pointer: coarse) {
+  [data-cz-page="annals"] .cb-line-more > summary { min-height: 44px; }
+}
+
+/* Recent pages: one row each, lifting on hover. */
+[data-cz-page="annals"] .cb-recent .cb-rows {
   display: flex; flex-direction: column; gap: 0;
 }
 [data-cz-page="annals"] #main-content :is(.cb-contents, .cb-recent) .cb-row {

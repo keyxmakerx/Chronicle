@@ -94,6 +94,9 @@ func newMultiAuthFixture(t *testing.T, authSvc auth.AuthService, campaignSvc cam
 	cg := e.Group("/api/v1/campaigns/:id",
 		RequireAuthOrAPIKey(authSvc, campaignSvc, syncSvc),
 	)
+	cg.GET("/entities", func(c *echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]any{"is_synthetic": GetAPIKey(c) != nil && GetAPIKey(c).ID == synthKeySessionID})
+	})
 	cg.POST("/entities", func(c *echo.Context) error {
 		key := GetAPIKey(c)
 		if key == nil {
@@ -267,6 +270,66 @@ func TestRequireAuthOrAPIKey_SessionPrecedence(t *testing.T) {
 	}
 	if !containsIgnoreCase(rec.Body.String(), "session-user") {
 		t.Errorf("precedence POST: response did not identify session user; body = %s", rec.Body.String())
+	}
+}
+
+// The guest preview reaches the session door: the DM team's own read of a
+// public campaign with the guest cookie is a visitor's, and a visitor has no
+// session door, so it ends at the Bearer path's 401. Nothing else is lowered:
+// a write, a private campaign, a plain player sending the cookie, or a
+// campaign that could not be read.
+func TestRequireAuthOrAPIKey_GuestPreview(t *testing.T) {
+	repo := &mockSyncAPIRepo{
+		isIPBlockedFn: func(_ context.Context, _ string) (bool, error) { return false, nil },
+	}
+	syncSvc := NewSyncAPIService(repo)
+	authSvc := &fakeAuthService{
+		validateSessionFn: func(_ context.Context, _ string) (*auth.Session, error) {
+			return &auth.Session{UserID: "user-abc"}, nil
+		},
+	}
+	grant := `{"dm_grant_ids":["user-abc"]}`
+	tests := []struct {
+		name     string
+		method   string
+		role     campaigns.Role
+		campaign *campaigns.Campaign
+		cookie   bool
+		want     int
+	}{
+		{"owner, public, GET, cookie: a visitor's 401", http.MethodGet, campaigns.RoleOwner, &campaigns.Campaign{ID: "camp-1", IsPublic: true}, true, http.StatusUnauthorized},
+		{"co-DM, public, GET, cookie: a visitor's 401", http.MethodGet, campaigns.RolePlayer, &campaigns.Campaign{ID: "camp-1", IsPublic: true, Settings: grant}, true, http.StatusUnauthorized},
+		{"owner, public, GET, no cookie", http.MethodGet, campaigns.RoleOwner, &campaigns.Campaign{ID: "camp-1", IsPublic: true}, false, http.StatusOK},
+		{"owner, public, POST, cookie: writes are never lowered", http.MethodPost, campaigns.RoleOwner, &campaigns.Campaign{ID: "camp-1", IsPublic: true}, true, http.StatusOK},
+		{"owner, private, GET, cookie: nothing to preview", http.MethodGet, campaigns.RoleOwner, &campaigns.Campaign{ID: "camp-1"}, true, http.StatusOK},
+		{"player, public, GET, cookie: not theirs to use", http.MethodGet, campaigns.RolePlayer, &campaigns.Campaign{ID: "camp-1", IsPublic: true}, true, http.StatusOK},
+		{"owner, campaign unreadable: left alone", http.MethodGet, campaigns.RoleOwner, nil, true, http.StatusOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			campSvc := &fakeCampaignService{
+				getMemberFn: func(_ context.Context, campaignID, userID string) (*campaigns.CampaignMember, error) {
+					return &campaigns.CampaignMember{CampaignID: campaignID, UserID: userID, Role: tt.role}, nil
+				},
+				getByIDFn: func(_ context.Context, _ string) (*campaigns.Campaign, error) {
+					if tt.campaign == nil {
+						return nil, stderrors.New("no campaign")
+					}
+					return tt.campaign, nil
+				},
+			}
+			e := newMultiAuthFixture(t, authSvc, campSvc, syncSvc)
+			req := httptest.NewRequest(tt.method, "/api/v1/campaigns/camp-1/entities", nil)
+			req.AddCookie(&http.Cookie{Name: "chronicle_session", Value: "any-valid-token"})
+			if tt.cookie {
+				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_guest", Value: "1"})
+			}
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status = %d, want %d; body = %s", rec.Code, tt.want, rec.Body.String())
+			}
+		})
 	}
 }
 
