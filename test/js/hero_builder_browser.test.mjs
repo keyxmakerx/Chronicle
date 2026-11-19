@@ -63,7 +63,7 @@ function staticFile(path) {
   return join(root, path);
 }
 
-async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROES, canCreate = false, failSave = false, noSteps = false } = {}) {
+async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROES, canCreate = false, failSave = false, noSteps = false, plan = PLAN } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport });
@@ -74,7 +74,7 @@ async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROE
   await p.route('**/*', (route) => {
     const req = route.request(), u = new URL(req.url());
     if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: page(heroes, canCreate) });
-    if (u.pathname === '/campaigns/c1/characters/new/plan') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(noSteps ? { ...PLAN, steps: [] } : PLAN) });
+    if (u.pathname === '/campaigns/c1/characters/new/plan') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(noSteps ? { ...plan, steps: [] } : plan) });
     if (u.pathname.startsWith('/campaigns/c1/')) {
       sent.push({ method: req.method(), path: u.pathname, csrf: req.headers()['x-csrf-token'], body: JSON.parse(req.postData() || 'null') });
       if (req.method() === 'POST') return route.fulfill({ status: 201, contentType: 'application/json', body: '{"id":"e9","url":"/campaigns/c1/entities/e9"}' });
@@ -164,10 +164,60 @@ test('a new hero is made from its own sentence', { skip }, async (t) => {
   assert.match(await p.locator('.hb-detail').innerHTML(), /<b>coast<\/b>/);
   await p.click('.hb-panel [data-choose]');
   assert.equal(sent.length, 0, 'a new hero saves nothing until it is made');
-  const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/');
+  // Once made, the new hero's own page opens.
+  const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/campaigns/c1/entities/e9');
   await p.click('[data-make]');
   await nav;
-  assert.deepEqual(sent, [{ method: 'POST', path: '/campaigns/c1/characters/new', csrf: 'tok', body: { name: 'Bram', picks: { ancestry: { name: 'Gull-kin' } } } }]);
+  assert.deepEqual(sent[0], { method: 'POST', path: '/campaigns/c1/characters/new', csrf: 'tok', body: { name: 'Bram', picks: { ancestry: { name: 'Gull-kin' } } } });
+});
+
+const DEVIL = { slug: 'devil', name: 'Devil', summary: 'Silver-tongued.', source: 'Draw Steel', properties: {
+  ancestry_points: 3,
+  purchased_traits: [{ name: 'Wings', cost: 2 }, { name: 'Silver Tongue', cost: 1 }, { name: 'Hellfire', cost: 2 }],
+  signature_traits: [{ name: 'Impressive Horns' }],
+} };
+const BUY_PLAN = { systemName: 'Draw Steel', steps: [
+  { fieldKey: 'ancestry', label: 'Ancestry', choices: [DEVIL, PLAN.steps[0].choices[1]] },
+  { fieldKey: 'culture', label: 'Culture', choices: [{ slug: 'wode', name: 'Wode', summary: 'Forest folk.', source: 'Draw Steel', properties: { languages: 'One language', skills: 'One skill' } }] },
+] };
+
+test('an ancestry with points keeps the panel on it to buy traits, within its points', { skip }, async (t) => {
+  const { p, sent } = await open(t, { heroes: [], canCreate: true, plan: BUY_PLAN });
+  await p.click('[data-create-hero]');
+  await p.fill('[data-hb-name]', 'Vex');
+  await p.click('[data-hero-card="new"] [data-blank="ancestry"]');
+  await p.click('.hb-panel [data-choose]');
+  assert.equal(await p.locator('.hb-pt').innerText(), 'Choose Vex’s ancestry', 'the panel stays on the ancestry');
+  assert.match(await p.locator('[data-hb-buy] legend').innerText(), /Spend Devil’s 3 points/);
+  await p.check('[data-buy="Wings"]');
+  assert.match(await p.locator('.hb-buy-left').innerText(), /1 of 3 left/);
+  assert.equal(await p.locator('[data-buy="Hellfire"]').isDisabled(), true, 'a trait that would overspend is off');
+  await p.check('[data-buy="Silver Tongue"]');
+  // The culture's grants are chosen on the sheet, which the panel says.
+  await p.click('.hb-panel [data-go="culture"]');
+  assert.match(await p.locator('.hb-detail').innerText(), /You choose the languages, skills this gives on your hero’s sheet once they’re made/);
+  const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/campaigns/c1/entities/e9');
+  await p.click('[data-make]');
+  await nav;
+  assert.deepEqual(sent[0].body, { name: 'Vex', picks: { ancestry: { name: 'Devil', options: ['Wings', 'Silver Tongue'] } } });
+});
+
+test('on a saved hero, bought traits save as one list, and a new ancestry drops them', { skip }, async (t) => {
+  const heroes = [{ id: 'e1', name: 'Tess', values: { ancestry: 'Devil', ancestry_choices_json: '["Wings"]' }, hidden: [] }];
+  const { p, sent } = await open(t, { heroes, plan: BUY_PLAN });
+  await p.click('[data-blank="ancestry"]');
+  assert.equal(await p.locator('[data-buy="Wings"]').isChecked(), true);
+  await p.check('[data-buy="Silver Tongue"]');
+  await p.waitForFunction(() => document.querySelector('.hb-buy-left') && /0 of 3/.test(document.querySelector('.hb-buy-left').textContent));
+  assert.deepEqual(sent[0].body, { fields_patch: { ancestry_choices_json: '["Wings","Silver Tongue"]' } });
+  await p.click('.hb-opt:has-text("Dwarf")');
+  await p.click('.hb-panel [data-choose]');
+  await p.waitForFunction(() => document.querySelectorAll('.hb-tick').length > 0);
+  assert.deepEqual(sent[1].body, { fields_patch: { ancestry: 'Dwarf' } }, 'the server clears what Devil bought');
+  await p.click('[data-blank="ancestry"]');
+  await p.click('.hb-opt:has-text("Devil")');
+  await p.click('.hb-panel [data-choose]');
+  assert.equal(await p.locator('[data-buy="Wings"]').isChecked(), false, 'traits from before are not brought back');
 });
 
 test('with no steps the new hero is just a name field, and its hidden label keeps the apostrophe', { skip }, async (t) => {

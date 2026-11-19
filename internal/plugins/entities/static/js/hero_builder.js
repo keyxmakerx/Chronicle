@@ -36,6 +36,37 @@
   function isScalar(v) { return typeof v === 'number' || (typeof v === 'string' && v.length > 0 && v.length <= 40); }
   function possessive(name) { return name + '’s'; }
 
+  // What an entry lets a hero buy, read the way the server's heroBuyList does:
+  // the points are the first positive "<x>_points" property, the list the
+  // first property (in key order) whose items all have a name and a cost.
+  var OPTS = '_choices_json';
+  function buyListOf(c) {
+    var props = (c && c.properties) || {}, keys = Object.keys(props).sort(), budget = 0, i;
+    for (i = 0; i < keys.length; i++) {
+      if (typeof props[keys[i]] === 'number' && props[keys[i]] > 0 && /_points$/.test(keys[i])) { budget = props[keys[i]]; break; }
+    }
+    if (!budget) return null;
+    for (i = 0; i < keys.length; i++) {
+      var list = props[keys[i]];
+      if (!Array.isArray(list) || !list.length) continue;
+      var ok = list.every(function (it) { return it && typeof it.name === 'string' && it.name.trim() && typeof it.cost === 'number' && it.cost >= 0; });
+      if (ok) return { budget: budget, items: list };
+    }
+    return null;
+  }
+  function boughtOf(h, key) {
+    try {
+      var v = JSON.parse(h.values[key + OPTS] || '[]');
+      return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : [];
+    } catch (e) { return []; }
+  }
+  // Grants a culture or career lists (skills, languages, perks) are chosen on
+  // the sheet, which keeps those lists; the builder only says so.
+  function grantsOf(c) {
+    var props = (c && c.properties) || {};
+    return Object.keys(props).filter(function (k) { return !/_display$/.test(k) && /skill|language|perk/i.test(k); });
+  }
+
   // Roll ranges: a list of up to ten is read off one d10, a longer one off
   // percentile dice, each entry owning an even share of the faces.
   function sidesFor(n) { return n <= 10 ? 10 : 100; }
@@ -127,6 +158,9 @@
         // Keep only picks the lists still offer, in case the system changed.
         var st = self.stepByKey(k), c = st && self.choiceByName(st, d.values[k]);
         if (c) self.fresh.values[k] = c.name;
+      });
+      Object.keys(d.values || {}).forEach(function (k) {
+        if (k.slice(-OPTS.length) === OPTS && self.fresh.values[k.slice(0, -OPTS.length)]) self.fresh.values[k] = d.values[k];
       });
       this.freshOpen = d.open !== false && !!(this.fresh.name.trim() || Object.keys(this.fresh.values).length);
     } catch (e) { /* no storage: start fresh */ }
@@ -254,7 +288,7 @@
         (c.source === 'campaign' ? ' <span class="hb-tag">this campaign</span>' : '') + '</b>' +
         (cur && lower(cur) === lower(c.name) ? '<span class="hb-cur">chosen</span>' : '<span></span>') + '</button>';
     }).join('') + '<p class="hb-none" data-hb-none hidden>Nothing on this list matches.</p></div>';
-    html += '<div class="hb-detail" data-hb-detail>' + this.detailHtml(st, fo) + '</div>';
+    html += '<div class="hb-detail" data-hb-detail>' + this.detailHtml(st, fo, h) + '</div>';
     var chosen = cur && lower(cur) === lower(fo.name);
     html += '<div class="hb-pf"><button type="button" class="hb-btn hb-go" data-choose' + (chosen ? ' aria-pressed="true"' : '') + '>' +
       (chosen ? 'Keep ' : 'Choose ') + esc(fo.name) + '</button>' +
@@ -266,8 +300,9 @@
     return html;
   };
 
-  Builder.prototype.detailHtml = function (st, c) {
+  Builder.prototype.detailHtml = function (st, c, h) {
     var props = c.properties || {};
+    var chosen = h && h.values[st.fieldKey] && lower(h.values[st.fieldKey]) === lower(c.name);
     var facts = Object.keys(props).filter(function (k) { return !/_display$/.test(k) && isScalar(props[k]); }).slice(0, 6);
     var body = '';
     if (c.description) {
@@ -277,7 +312,57 @@
     return '<h4 class="hb-dn">' + esc(c.name) + '</h4>' + (c.summary ? '<p class="hb-lede">' + esc(c.summary) + '</p>' : '') +
       (facts.length ? '<dl class="hb-facts">' + facts.map(function (k) {
         return '<div class="hb-f"><dt>' + esc(words(k)) + '</dt><dd>' + esc(props[k]) + '</dd></div>';
-      }).join('') + '</dl>' : '') + body;
+      }).join('') + '</dl>' : '') + (chosen ? this.buyHtml(st, c, h) : '') + this.grantsNote(c, h) + body;
+  };
+
+  // The points an entry gives and what they buy, once it is this hero's pick.
+  // A box that would overspend is off until something else is let go.
+  Builder.prototype.buyHtml = function (st, c, h) {
+    var buy = buyListOf(c);
+    if (!buy) return '';
+    var have = boughtOf(h, st.fieldKey).map(lower), spent = 0;
+    buy.items.forEach(function (it) { if (have.indexOf(lower(it.name)) >= 0) spent += it.cost; });
+    var left = buy.budget - spent;
+    return '<fieldset class="hb-buy" data-hb-buy><legend>Spend ' + esc(possessive(c.name)) + ' ' + buy.budget + ' points</legend>' +
+      '<p class="hb-buy-left" aria-live="polite">' + left + ' of ' + buy.budget + ' left</p>' +
+      buy.items.map(function (it) {
+        var on = have.indexOf(lower(it.name)) >= 0, off = !on && it.cost > left;
+        return '<label class="hb-trait' + (off ? ' is-off' : '') + '"><input type="checkbox" data-buy="' + esc(it.name) + '"' +
+          (on ? ' checked' : '') + (off ? ' disabled' : '') + '><span class="hb-trait-n">' + esc(it.name) + '</span>' +
+          '<span class="hb-trait-c">' + it.cost + (it.cost === 1 ? ' point' : ' points') + '</span></label>';
+      }).join('') + '</fieldset>';
+  };
+
+  Builder.prototype.grantsNote = function (c, h) {
+    var g = grantsOf(c);
+    if (!g.length) return '';
+    var what = g.map(function (k) { return lower(words(k)); }).join(', ');
+    return '<p class="hb-note">You choose the ' + esc(what) + ' this gives on ' + (h && !h.isNew ? esc(possessive(h.name)) : 'your hero’s') + ' sheet' + (h && h.isNew ? ' once they’re made' : '') + '.</p>';
+  };
+
+  // Ticks or unticks a bought trait on the current pick and saves the list.
+  Builder.prototype.buy = function (box) {
+    var p = this.panel, h = p && this.heroById(p.hero), st = p && this.stepByKey(p.key);
+    if (!h || !st) return;
+    var c = this.choiceByName(st, h.values[st.fieldKey] || ''), buy = buyListOf(c);
+    if (!buy) return;
+    var names = [];
+    this.el.querySelectorAll('[data-hb-buy] [data-buy]').forEach(function (b) { if (b.checked) names.push(b.getAttribute('data-buy')); });
+    var v = {}, self = this;
+    v[st.fieldKey + OPTS] = names.length ? JSON.stringify(names) : null;
+    this.apply(h, v).then(function () {
+      var d = self.el.querySelector('[data-hb-detail]'), top = d ? d.scrollTop : 0;
+      self.redrawDetail(h, st, c);
+      d = self.el.querySelector('[data-hb-detail]');
+      if (d) d.scrollTop = top;
+      var again = self.el.querySelector('[data-hb-buy] [data-buy="' + box.getAttribute('data-buy').replace(/"/g, '\\"') + '"]');
+      if (again) again.focus({ preventScroll: true });
+    }, function () { self.redrawDetail(h, st, c); });
+  };
+
+  Builder.prototype.redrawDetail = function (h, st, c) {
+    var d = this.el.querySelector('[data-hb-detail]');
+    if (d) d.innerHTML = this.detailHtml(st, c, h);
   };
 
   // Beside the sentences on a wide screen; on a narrow one, right under the
@@ -345,7 +430,7 @@
     var h = this.heroById(this.panel.hero), cur = h.values[st.fieldKey], chosen = cur && lower(cur) === lower(c.name);
     aside.querySelectorAll('.hb-opt').forEach(function (o) { o.setAttribute('aria-selected', String(+o.getAttribute('data-focus') === i)); });
     var d = aside.querySelector('[data-hb-detail]');
-    d.innerHTML = this.detailHtml(st, c);
+    d.innerHTML = this.detailHtml(st, c, h);
     d.scrollTop = 0;
     var btn = aside.querySelector('[data-choose]');
     btn.textContent = (chosen ? 'Keep ' : 'Choose ') + c.name;
@@ -387,6 +472,9 @@
     var self = this, before = {};
     Object.keys(values).forEach(function (k) {
       before[k] = h.values[k] || null;
+      // What was bought belongs to the old pick; the server clears it on a
+      // saved hero, and it goes here too.
+      if (self.stepByKey(k) && lower(h.values[k]) !== lower(values[k])) delete h.values[k + OPTS];
       if (values[k] == null) delete h.values[k]; else h.values[k] = values[k];
     });
     if (h.isNew) { this.saveDraft(); return Promise.resolve(before); }
@@ -431,6 +519,19 @@
     var rest = this.left(h).filter(function (s) { return s.fieldKey !== key; });
     var steps = this.stepsFor(h), at = steps.indexOf(this.stepByKey(key));
     var next = rest.filter(function (s) { return steps.indexOf(s) > at; })[0] || rest[0];
+    // A pick with points to spend keeps the panel on it, so its traits are
+    // bought now rather than forgotten.
+    var buy = buyListOf(this.choiceByName(this.stepByKey(key), name));
+    if (buy && !note) {
+      this.panel = { hero: h.id, key: key, focus: null };
+      var keeping = this.apply(h, v);
+      this.redrawHero(h);
+      keeping.then(function () { self.tick(h, key); }, function () {});
+      this.toast(name + ' chosen. Spend its ' + buy.budget + ' points below, then move on.');
+      var first = this.el.querySelector('[data-hb-buy] [data-buy]:not([disabled])');
+      if (first) first.focus({ preventScroll: false });
+      return keeping;
+    }
     this.panel = next ? { hero: h.id, key: next.fieldKey, focus: null } : null;
     var saving = this.apply(h, v);
     this.redrawHero(h);
@@ -501,7 +602,12 @@
     btn.disabled = true;
     err.hidden = true;
     var picks = {};
-    Object.keys(h.values).forEach(function (k) { picks[k] = { name: h.values[k] }; });
+    Object.keys(h.values).forEach(function (k) {
+      if (k.slice(-OPTS.length) === OPTS) return;
+      picks[k] = { name: h.values[k] };
+      var opts = boughtOf(h, k);
+      if (opts.length) picks[k].options = opts;
+    });
     var body = { name: name, picks: picks };
     var send = (window.Chronicle && Chronicle.apiFetch)
       ? Chronicle.apiFetch(this.createUrl, { method: 'POST', body: body, csrfToken: this.csrf })
@@ -512,9 +618,8 @@
       self.busy = false;
       if (!res.ok || !res.body.url) { fail(res.body.message || res.body.error || 'The hero could not be made. Try again.'); return; }
       self.clearDraft();
-      // Reload this page so the new hero joins the builder and the cast.
-      var here = window.location.pathname + window.location.search;
-      if (window.Chronicle && Chronicle.go) Chronicle.go(here); else window.location.reload();
+      // The new hero's sheet opens, where the rest of them is filled in.
+      if (window.Chronicle && Chronicle.go) Chronicle.go(res.body.url); else window.location.assign(res.body.url);
     }).catch(function () { self.busy = false; fail('The hero could not be made. Check your connection and try again.'); });
   };
   // --- Wiring ---
@@ -585,6 +690,10 @@
     this.onResize = function () { self.placePanel(); };
     el.addEventListener('click', this.onClick);
     el.addEventListener('input', this.onInput);
+    this.onChange = function (e) {
+      if (e.target.hasAttribute && e.target.hasAttribute('data-buy')) self.buy(e.target);
+    };
+    el.addEventListener('change', this.onChange);
     el.addEventListener('keydown', this.onKey);
     document.addEventListener('click', this.onCreate, true);
     window.addEventListener('resize', this.onResize);
@@ -617,6 +726,7 @@
   Builder.prototype.unwire = function () {
     this.el.removeEventListener('click', this.onClick);
     this.el.removeEventListener('input', this.onInput);
+    this.el.removeEventListener('change', this.onChange);
     this.el.removeEventListener('keydown', this.onKey);
     document.removeEventListener('click', this.onCreate, true);
     window.removeEventListener('resize', this.onResize);
