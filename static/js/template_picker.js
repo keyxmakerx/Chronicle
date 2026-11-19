@@ -68,6 +68,12 @@
           pickerEl.classList.add('hidden');
         }
         selectEl.innerHTML = html;
+        // A refused save comes back with the template that was chosen.
+        var want = pickerEl.getAttribute('data-selected-template');
+        if (want) {
+          selectEl.value = want;
+          pickerEl.removeAttribute('data-selected-template');
+        }
       })
       .catch(function () {
         // Silently fail — template picker is optional.

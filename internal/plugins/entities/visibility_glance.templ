@@ -7,6 +7,7 @@ import (
 	"context"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"fmt"
+	"strconv"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -199,16 +200,23 @@ templ visibilityChip(state string, canEdit, widened bool, describedBy string) {
 // page's own chip, unfolding the same editor, in draft mode. With no page to
 // save to yet, the widget writes the choice into the hidden is_private input
 // the Create handler reads; Custom waits until the page exists.
-templ draftVisibilityControl() {
-	<input type="hidden" name="is_private" value="false" id="is_private_draft"/>
+templ draftVisibilityControl(isPrivate bool) {
+	<input type="hidden" name="is_private" value={ strconv.FormatBool(isPrivate) } id="is_private_draft"/>
 	<div
 		class="relative shrink-0"
 		data-widget="permissions"
 		data-layout="corner"
 		data-mode="draft"
 		data-draft-target="#is_private_draft"
+		if isPrivate {
+			data-draft-private="true"
+		}
 		data-editable="true"
 	>
-		@visibilityChip(VisStateEveryone, true, false, "")
+		if isPrivate {
+			@visibilityChip(VisStateDMOnly, true, false, "")
+		} else {
+			@visibilityChip(VisStateEveryone, true, false, "")
+		}
 	</div>
 }

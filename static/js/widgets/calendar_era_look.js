@@ -65,7 +65,7 @@
     destroy: function () {
       if (this.painter) this.painter.destroy();
       if (this._ro) this._ro.disconnect();
-      if (this._beforeUnload) window.removeEventListener('beforeunload', this._beforeUnload);
+      if (window.Chronicle && Chronicle.markClean) Chronicle.markClean('era-look');
     },
 
     _build: function () {
@@ -198,9 +198,6 @@
         self.el.querySelector('[data-pairs]').value = String(self.pair);
         self._paint();
       }, true);
-      // Leaving with unsaved changes asks first.
-      this._beforeUnload = function (e) { if (snapshotOf(self.state) !== snapshotOf(self.saved)) { e.preventDefault(); e.returnValue = ''; } };
-      window.addEventListener('beforeunload', this._beforeUnload);
     },
 
     // _sync pushes the state into every control and the preview; it runs
@@ -237,6 +234,9 @@
       if (this.pair >= pairs.length) this.pair = 0;
       sel.value = String(this.pair);
       var dirty = snapshotOf(st) !== snapshotOf(this.saved);
+      // The shared leave guard (boot.js) asks for a boosted link and for the
+      // browser's own prompt alike.
+      if (window.Chronicle && Chronicle.markDirty) { if (dirty) Chronicle.markDirty('era-look'); else Chronicle.markClean('era-look'); }
       el.querySelector('[data-dirty]').textContent = this._status || (dirty ? 'Unsaved changes' : '');
       this._status = '';
       el.querySelector('[data-save]').disabled = !dirty || this._saving;
