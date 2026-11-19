@@ -716,7 +716,10 @@ character: https://claude.ai/artifact/YMuDg5AgHP7V6L6G5rSDnc. A screen may
 vary the details as long as it keeps that character. The owner picks the
 kit in Customize › Look › Pages; it puts `data-cz-kit` on the page
 (`static/css/style_kits.css`), and only pages in the Material page look wear
-it. Each kit's opening is still to be built (#1548).
+it. A card takes its kit's opening by carrying `data-kit-open` and showing
+itself with the `hidden` attribute; `static/js/kit_open.js` does the rest. It
+is on the place line's picker, the page header's more menu and the armory's
+item menu; the page layout menu is still on Drape (TODO(#1548)).
 
 | Kit | Top bar | Dividers and rows | Boxes | Pointer | A card opens | Faces |
 |---|---|---|---|---|---|---|

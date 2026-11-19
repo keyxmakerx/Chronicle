@@ -62,7 +62,7 @@ templ entityPlaces(cc *campaigns.CampaignContext, entity *Entity, p pagePlaces) 
 						aria-haspopup="dialog"
 						onclick={ placesCall("toggle") }
 					><i class="fa-solid fa-plus" aria-hidden="true"></i> Add a place</button>
-					<div class="pl-pop" data-pop role="dialog" aria-label="List this page under another page" hidden>
+					<div class="pl-pop" data-pop data-kit-open role="dialog" aria-label="List this page under another page" hidden>
 						<div class="ag-search">
 							<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
 							<input type="search" class="input w-full text-sm" placeholder="Search pages" aria-label="Search pages" autocomplete="off" data-q oninput={ placesCall("search") }/>

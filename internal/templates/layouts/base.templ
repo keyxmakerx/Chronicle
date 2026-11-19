@@ -300,6 +300,9 @@ templ Base(title string) {
 		     together when they come back. Loaded before anything that loops. -->
 		<script src={ AssetURL("/static/js/motion_rest.js") } defer></script>
 
+		<!-- A style kit's opening for cards that come out of something clicked (kit_open.js). Does nothing without a kit. -->
+		<script src={ AssetURL("/static/js/kit_open.js") } defer></script>
+
 		<!-- The character sheet's motion engine (sheet_motion.js): styles a [data-sheet] root and moves its panels, folds and changed values. Does nothing on a page without one. -->
 		<script src={ AssetURL("/static/js/sheet_motion.js") } defer></script>
 
