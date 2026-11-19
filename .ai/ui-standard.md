@@ -342,6 +342,13 @@ leaving the list for another page.
   them. The book editor's own panels always use the standard dark colours, so
   they stay readable whatever the book's theme; only its live page takes the
   book's.
+- **A widget that points at the rulebook shows the page where the reader
+  is**, torn out of the book along its binding edge and wearing the book's
+  look (signed on Sign-offs, "Reading a rule without going into the book",
+  option A). Home's House rules block is the first: a rule opens to its
+  chapter's page, the chapter's other pages turn inside it, and one quiet
+  link opens the whole book there. On a computer, resting on the rule first
+  shows a preview in the hover card. Only the torn page is paper.
 - **Side panels stay beside the page.** The page peek
   (`static/js/peek_panel.js`) opens a linked page read-only in one side panel
   (a bottom sheet on a phone) on Shift-click, Shift+Enter or the peek icon
