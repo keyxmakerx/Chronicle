@@ -33,9 +33,24 @@ func tagsJSONForBulk(cc *campaigns.CampaignContext) string {
 	return "[]"
 }
 
-// EntityIndexPage renders the full entity list page.
+// listHeading names the list: the category the address asks for when the
+// viewer can see it, and All pages otherwise. An address that names no such
+// category is All pages too, so one that is hidden reads like one never made.
+func listHeading(entityTypes []EntityType, activeTypeSlug string) string {
+	if activeTypeSlug != "" {
+		for _, et := range entityTypes {
+			if et.Slug == activeTypeSlug {
+				return et.NamePlural
+			}
+		}
+	}
+	return "All pages"
+}
+
+// EntityIndexPage renders the list as a full page, its tab named as the
+// heading is.
 templ EntityIndexPage(cc *campaigns.CampaignContext, entities []Entity, entityTypes []EntityType, counts map[int]int, total int, opts ListOptions, activeTypeID int, activeTypeSlug string, csrfToken string) {
-	@layouts.App(cc.Campaign.Name + " - Entities") {
+	@layouts.App(listHeading(entityTypes, activeTypeSlug) + " - " + cc.Campaign.Name) {
 		@EntityListContent(cc, entities, entityTypes, counts, total, opts, activeTypeID, activeTypeSlug, csrfToken)
 	}
 }
@@ -61,17 +76,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 			<!-- Page header with title, search, and create button -->
 			<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
 				<div>
-					<h1 class="text-2xl font-bold text-fg">
-						if activeTypeSlug != "" {
-							for _, et := range entityTypes {
-								if et.Slug == activeTypeSlug {
-									{ et.NamePlural }
-								}
-							}
-						} else {
-							All pages
-						}
-					</h1>
+					<h1 class="text-2xl font-bold text-fg">{ listHeading(entityTypes, activeTypeSlug) }</h1>
 					<p class="text-sm text-fg-secondary mt-0.5">
 						if opts.Query != "" {
 							{ searchMatchSummary(total, opts.Query) }

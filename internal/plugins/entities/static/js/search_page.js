@@ -104,6 +104,11 @@
         grid.innerHTML = html;
       },
 
+      // The count line: one result is "1 result", never "1 results".
+      resultsLabel: function () {
+        return this.total === 1 ? '1 result' : this.total + ' results';
+      },
+
       nextPage: function () { this.page++; this.search(); },
       prevPage: function () { if (this.page > 1) { this.page--; this.search(); } }
     };

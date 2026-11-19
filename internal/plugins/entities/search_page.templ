@@ -67,9 +67,7 @@ templ SearchPage(cc *campaigns.CampaignContext, entityTypes []EntityType) {
 				</div>
 				<!-- Results count -->
 				<div class="flex items-center justify-between mb-4">
-					<span class="text-sm text-fg-secondary" x-show="!loading">
-						<span x-text="total"></span> results
-					</span>
+					<span class="text-sm text-fg-secondary" x-show="!loading" x-text="resultsLabel()"></span>
 					<span class="text-sm text-fg-muted" x-show="loading">
 						<i class="fa-solid fa-spinner fa-spin mr-1"></i> Searching...
 					</span>
