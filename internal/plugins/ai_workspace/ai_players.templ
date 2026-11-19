@@ -50,17 +50,19 @@ templ aiPlayersPanel(p PlayersView) {
 }
 
 // playerCanDo is what a player's AI may do: the same list on the owner's
-// Settings and, said to the player (own), in their side sheet.
+// Settings and, said to the player (own), in their side sheet. The last line
+// is a limit, so it says so in words: its icon alone would read as a third
+// ability with icons off or to a screen reader.
 templ playerCanDo(own bool) {
 	<ul class="aic-cando">
 		if own {
 			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Read what you can read in this campaign, and nothing more</span></li>
 			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Ask to change your own character's sheet and hero builder choices</span></li>
-			<li data-never><i class="fa-solid fa-xmark" aria-hidden="true"></i><span>Change anything without your yes, or touch anyone else's things</span></li>
+			<li data-never><i class="fa-solid fa-xmark" aria-hidden="true"></i><span><b>Never:</b> change anything without your yes, or touch anyone else's things</span></li>
 		} else {
 			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Read what the player can read in this campaign, and nothing more</span></li>
 			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Ask to change their own character's sheet and hero builder choices</span></li>
-			<li data-never><i class="fa-solid fa-xmark" aria-hidden="true"></i><span>Change anything without the player's yes, or touch anyone else's things</span></li>
+			<li data-never><i class="fa-solid fa-xmark" aria-hidden="true"></i><span><b>Never:</b> change anything without the player's yes, or touch anyone else's things</span></li>
 		}
 	</ul>
 }
