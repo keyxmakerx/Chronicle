@@ -52,6 +52,8 @@ module.exports = {
           // words when it is too light for white (set by Customize).
           fill: 'var(--color-accent-fill, rgb(var(--color-accent-rgb, 99 102 241)))',
           'fill-hover': 'var(--color-accent-fill-hover, rgb(var(--color-accent-hover-rgb, 79 70 229)))',
+          // The accent shaded to read as text on the page in each theme.
+          link: 'var(--color-accent-link, rgb(var(--color-accent-rgb, 99 102 241)))',
         },
         // Words on an accent fill: white, or dark ink on a light accent.
         'on-accent': 'var(--color-accent-on-fill, #fff)',

@@ -48,7 +48,7 @@ templ visibilityGlance(cc *campaigns.CampaignContext, entity *Entity, ev *Effect
 			}
 		>
 			if state == VisStateCustom {
-				<i class="fa-solid fa-shield-halved text-[11px]" style="color: var(--color-accent);"></i>
+				<i class="fa-solid fa-shield-halved text-[11px]" style="color: var(--color-accent-link, var(--color-accent));"></i>
 			} else if state == VisStateDMOnly {
 				<i class="fa-solid fa-lock text-[11px]" style="color: var(--color-text-muted);"></i>
 			} else {
@@ -179,7 +179,7 @@ templ visibilityChip(state string, canEdit, widened bool, describedBy string) {
 		<i
 			class={ "fa-solid", visibilityCornerIcon(state), "text-[11px]" }
 			if state == VisStateCustom {
-				style="color: var(--color-accent);"
+				style="color: var(--color-accent-link, var(--color-accent));"
 			} else {
 				style="color: var(--color-text-muted);"
 			}

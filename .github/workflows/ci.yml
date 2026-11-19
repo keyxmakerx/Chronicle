@@ -178,6 +178,11 @@ jobs:
         # layout. Use components.Date. Self-tests on every run.
         run: ./tools/check-date-format.sh
 
+      - name: Accent text guard
+        # Words never read the raw accent; they use --color-accent-link, the
+        # shade checked for contrast in each theme. Self-tests on every run.
+        run: ./tools/check-accent-text.sh
+
       - name: CSS emissions guard
         # Builds the minified stylesheet with the pinned Tailwind binary
         # (tools/tailwind.sh) and fails if a selector in

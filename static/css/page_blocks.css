@@ -22,7 +22,7 @@
 .pb-btn:hover:not(:disabled) { background: var(--color-bg-tertiary, #f3f4f6); }
 .pb-btn:active:not(:disabled) { transform: scale(.96); }
 .pb-btn:disabled { opacity: .5; cursor: not-allowed; }
-.pb-btn.pb-primary { background: var(--color-accent, #6366f1); border-color: var(--color-accent, #6366f1); color: var(--color-accent-on-fill, #fff); }
+.pb-btn.pb-primary { background: var(--color-accent-fill, var(--color-accent, #6366f1)); border-color: var(--color-accent-fill, var(--color-accent, #6366f1)); color: var(--color-accent-on-fill, #fff); }
 .pb-btn.pb-primary:hover:not(:disabled) { background: var(--color-accent-fill-hover, var(--color-accent-hover, #4f46e5)); }
 .pb-btn:focus-visible, .pb-icon:focus-visible, .pb-num:focus-visible, .pb-input:focus-visible {
   outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px;
@@ -66,7 +66,7 @@
 .pb-table tbody tr:hover td { background: var(--color-bg-tertiary, #f3f4f6); }
 .pb-dm {
   margin-left: 8px; padding: 1px 6px; border-radius: var(--shape-r-tag, 4px); font-size: 11px; font-weight: 600; letter-spacing: .04em;
-  background: rgb(var(--color-accent-rgb, 99 102 241) / .12); color: var(--color-accent, #6366f1);
+  background: rgb(var(--color-accent-rgb, 99 102 241) / .12); color: var(--color-accent-link, var(--color-accent, #6366f1));
 }
 
 /* Steps */

@@ -198,7 +198,7 @@ templ siteLookLookPanel(d SiteLookPageData) {
 		<fieldset class="space-y-1.5">
 			<legend class="sr-only">Look</legend>
 			<label class="flex items-center gap-3 rounded-lg border border-edge px-3 py-2 text-sm text-fg-body cursor-pointer">
-				<input type="radio" name="look" value="" checked?={ d.Draft.Look == "" } data-accent="#6366f1"/>
+				<input type="radio" name="look" value="" checked?={ d.Draft.Look == "" } data-accent="#6366f1" data-fill={ siteLookFill("#6366f1").Fill } data-on={ siteLookFill("#6366f1").On }/>
 				<span>
 					Leave pages as they are
 					<span class="block text-xs text-fg-muted">The shipped look, as before</span>
@@ -206,7 +206,7 @@ templ siteLookLookPanel(d SiteLookPageData) {
 			</label>
 			for _, l := range sitelook.Looks {
 				<label class="flex items-center gap-3 rounded-lg border border-edge px-3 py-2 text-sm text-fg-body cursor-pointer">
-					<input type="radio" name="look" value={ l.ID } checked?={ d.Draft.Look == l.ID } data-accent={ l.Accent } data-from={ l.HeaderFrom } data-to={ l.HeaderTo } data-font={ layouts.HeadingFontStack(l.HeadingFont) }/>
+					<input type="radio" name="look" value={ l.ID } checked?={ d.Draft.Look == l.ID } data-accent={ l.Accent } data-fill={ siteLookFill(l.Accent).Fill } data-on={ siteLookFill(l.Accent).On } data-from={ l.HeaderFrom } data-to={ l.HeaderTo } data-font={ layouts.HeadingFontStack(l.HeadingFont) }/>
 					<span class="w-5 h-5 rounded shrink-0" style={ "background:linear-gradient(135deg," + l.Accent + "," + l.HeaderTo + ")" } aria-hidden="true"></span>
 					<span>{ l.Name }</span>
 				</label>

@@ -165,10 +165,10 @@ html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [d
 /* Plain: the site's own surfaces and fonts, light and dark */
 .chc[data-look="plain"] .chc__in { background: var(--color-card-bg); color: var(--color-text-body); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: 0 10px 28px -6px rgb(0 0 0 / 0.18); font-family: inherit; }
 .dark .chc[data-look="plain"] .chc__in { box-shadow: 0 10px 28px -6px rgb(0 0 0 / 0.55); }
-.chc[data-look="plain"] .chc__kind { color: var(--color-accent); font-weight: 600; }
+.chc[data-look="plain"] .chc__kind { color: var(--color-accent-link, var(--color-accent)); font-weight: 600; }
 .chc[data-look="plain"] .chc__title { font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
 .chc[data-look="plain"] .chc__foot { border-top: 1px solid var(--color-border); color: var(--color-text-secondary); }
-.chc[data-look="plain"] .chc__link { color: var(--color-accent); }
+.chc[data-look="plain"] .chc__link { color: var(--color-accent-link, var(--color-accent)); }
 
 /* Night: the Rules book's dark page, with gold */
 .chc[data-look="night"] .chc__in { background: #131722; color: #c9d0e0; border: 1px solid #2d3448; border-radius: 10px; box-shadow: 0 18px 40px rgb(0 0 0 / 0.5); font-family: var(--paper-font); }
@@ -266,7 +266,7 @@ html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [d
 .chc[data-look="corner"] .chc__stem { display: block; position: absolute; left: 0; bottom: -7px; width: var(--kit-tl-pop-sw, 1.5px); height: 7px; background: var(--chc-edge); }
 .chc--cr[data-look="corner"] .chc__stem { left: auto; right: 0; }
 .chc--cd[data-look="corner"] .chc__stem { bottom: auto; top: -7px; }
-.chc[data-look="corner"] .chc__kind { font-size: 10px; font-weight: 600; color: var(--color-accent); }
+.chc[data-look="corner"] .chc__kind { font-size: 10px; font-weight: 600; color: var(--color-accent-link, var(--color-accent)); }
 .chc[data-look="corner"] .chc__title { font-size: 13.5px; font-weight: 600; color: var(--color-text-primary); }
 .chc--cr[data-look="corner"] .chc__title { justify-content: flex-end; }
 .chc[data-look="corner"] .chc__facts { font-size: 12px; gap: 0 10px; text-align: left; }

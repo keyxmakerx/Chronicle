@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -244,11 +245,11 @@ func TestTopbarScrimStyle(t *testing.T) {
 		style *TopbarStyleData
 		want  string
 	}{
-		{"nil is medium", nil, "rgba(0,0,0,0.55), rgba(0,0,0,0.25)"},
-		{"medium", &TopbarStyleData{Mode: "image"}, "rgba(0,0,0,0.55), rgba(0,0,0,0.25)"},
-		{"light", &TopbarStyleData{Mode: "image", Scrim: "light"}, "rgba(0,0,0,0.38), rgba(0,0,0,0.15)"},
-		{"strong", &TopbarStyleData{Mode: "image", Scrim: "strong"}, "rgba(0,0,0,0.72), rgba(0,0,0,0.45)"},
-		{"unknown is medium", &TopbarStyleData{Mode: "image", Scrim: "bogus"}, "rgba(0,0,0,0.55), rgba(0,0,0,0.25)"},
+		{"nil is medium", nil, "rgba(0,0,0,0.70), rgba(0,0,0,0.66) 35%, rgba(0,0,0,0.66) 75%, rgba(0,0,0,0.45)"},
+		{"medium", &TopbarStyleData{Mode: "image"}, "rgba(0,0,0,0.70), rgba(0,0,0,0.66) 35%, rgba(0,0,0,0.66) 75%, rgba(0,0,0,0.45)"},
+		{"light", &TopbarStyleData{Mode: "image", Scrim: "light"}, "rgba(0,0,0,0.60), rgba(0,0,0,0.56) 35%, rgba(0,0,0,0.56) 75%, rgba(0,0,0,0.35)"},
+		{"strong", &TopbarStyleData{Mode: "image", Scrim: "strong"}, "rgba(0,0,0,0.82), rgba(0,0,0,0.78) 35%, rgba(0,0,0,0.78) 75%, rgba(0,0,0,0.58)"},
+		{"unknown is medium", &TopbarStyleData{Mode: "image", Scrim: "bogus"}, "rgba(0,0,0,0.70), rgba(0,0,0,0.66) 35%, rgba(0,0,0,0.66) 75%, rgba(0,0,0,0.45)"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -891,5 +892,27 @@ func TestToneVarsHintsReadable(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// White words over a pure white picture are the worst case. Behind the words
+// every shade must still give 4.5:1, and the three must stay in order.
+func TestTopbarScrimHoldsContrastOverWhite(t *testing.T) {
+	re := regexp.MustCompile(`rgba\(0,0,0,([0-9.]+)\) 35%`)
+	band := map[string]float64{}
+	for _, scrim := range []string{"light", "", "strong"} {
+		got := topbarScrimStyle(ctxWithTopbarStyle(&TopbarStyleData{Mode: "image", Scrim: scrim}))
+		m := re.FindStringSubmatch(got)
+		if m == nil {
+			t.Fatalf("scrim %q: no band stop in %q", scrim, got)
+		}
+		a, _ := strconv.ParseFloat(m[1], 64)
+		band[scrim] = a
+		if c := colour.Contrast("#ffffff", colour.Over("#000000", "#ffffff", a)); c < 4.5 {
+			t.Errorf("scrim %q: white words over white picture are %.2f:1, want >= 4.5", scrim, c)
+		}
+	}
+	if !(band["light"] < band[""] && band[""] < band["strong"]) {
+		t.Errorf("shades out of order: %v", band)
 	}
 }
