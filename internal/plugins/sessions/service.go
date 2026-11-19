@@ -256,6 +256,8 @@ type SessionService interface {
 	// NotifyUsersWithDetail is NotifyUsers with a short second line the bell
 	// shows under the message, before the time ("On Bren").
 	NotifyUsersWithDetail(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, link string) error
+	// NotifyUsersWithAction adds a label for the link, shown under the detail.
+	NotifyUsersWithAction(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, action, link string) error
 	// NotifyProposalConfirmed tells everyone who responded that the winning
 	// slot was picked, linking to the new session.
 	NotifyProposalConfirmed(ctx context.Context, campaignID, proposalID, sessionID string) error

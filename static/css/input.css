@@ -7628,3 +7628,15 @@ html[data-motion] .dw-sheet { animation: none; }
 @media (prefers-reduced-motion: reduce) { .dw-sheet { animation: none; } }
 .dw-sheet > #dw-review > .card { padding-right: 48px; }
 .dw > .dw-drape:not(.is-open) { margin-top: 0; }
+
+/* My campaigns: the three dots on a card and its menu rows. The dots are 32
+   square, 44 on touch; the menu reuses the page header's more-menu look. */
+.cl-dots { width: 2rem; height: 2rem; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 9999px; }
+.cl-menu a.ph-item { text-decoration: none; }
+@media (pointer: coarse) {
+  .cl-dots { width: 2.75rem; height: 2.75rem; }
+  .cl-menu .ph-item { min-height: 2.75rem; }
+}
+@media (max-width: 480px) {
+  .cl-menu { width: min(250px, calc(100vw - 3rem)); }
+}

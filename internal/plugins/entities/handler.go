@@ -4026,6 +4026,11 @@ func (h *Handler) Characters(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// A link that names the Players box (a leaver's note) opens it. Only
+	// staff have a roster, so anyone else's link just shows the page.
+	if c.QueryParam("open") == "players" && view.Roster != nil {
+		view.Open = "players"
+	}
 	return h.renderCast(c, cc, view)
 }
 

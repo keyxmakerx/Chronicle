@@ -4799,6 +4799,11 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// Leaving a campaign: the leaver's characters go back to "Free to pick" and
+	// the owner gets one bell note.
+	campaigns.ConfigureLeaving(campaignService,
+		&leaveCharacterAdapter{store: entityRepo.(leaveCharacterStore)},
+		&leaveNotifierAdapter{svc: sessionsService})
 	// The campaign's Sync API switch governs outside apps, the notebook too.
 	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
@@ -6993,6 +6998,7 @@ func (a *App) RegisterRoutes() {
 // /static/js/widgets/ rather than in a plugin: each loads on the first page
 // that mounts it (ADR-063). Helpers come first, the registering script last.
 var coreWidgets = []PluginWidget{
+	{Name: "campaign-leave", Scripts: []string{"/static/js/widgets/campaign_leave.js"}},
 	{Name: "invitation-time", Scripts: []string{"/static/js/widgets/invitation_time.js"}},
 	{Name: "calendar_event_roll", Scripts: []string{"/static/js/widgets/calendar_event_roll.js"}},
 	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},

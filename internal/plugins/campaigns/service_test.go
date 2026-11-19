@@ -1799,3 +1799,7 @@ func (m *mockCampaignRepo) ListOwnedByUser(context.Context, string) ([]OwnedCamp
 func (m *mockCampaignRepo) ListMemberCampaignIDs(context.Context, string) ([]string, error) {
 	return m.memberCampaignIDs, nil
 }
+
+func (m *mockCampaignRepo) ListOwnedMembershipIDs(context.Context, string) ([]string, error) {
+	return nil, nil
+}

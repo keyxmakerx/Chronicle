@@ -20,6 +20,9 @@ type notificationPayload struct {
 	Kind    string `json:"kind"`
 	// Detail is an optional second line, shown under the message.
 	Detail string `json:"detail,omitempty"`
+	// Action is an optional label for the row's link, shown under the detail
+	// ("Give Brannoc to someone").
+	Action string `json:"action,omitempty"`
 }
 
 // marshalPayload builds the JSON payload string for a notification.
@@ -29,7 +32,12 @@ func marshalPayload(message, kind string) *string {
 
 // marshalPayloadDetail is marshalPayload with the optional second line.
 func marshalPayloadDetail(message, kind, detail string) *string {
-	b, err := json.Marshal(notificationPayload{Message: message, Kind: kind, Detail: detail})
+	return marshalPayloadAction(message, kind, detail, "")
+}
+
+// marshalPayloadAction is marshalPayloadDetail with a label for the link.
+func marshalPayloadAction(message, kind, detail, action string) *string {
+	b, err := json.Marshal(notificationPayload{Message: message, Kind: kind, Detail: detail, Action: action})
 	if err != nil {
 		return nil
 	}
@@ -57,10 +65,16 @@ func (s *sessionService) NotifyUsers(ctx context.Context, userIDs []string, camp
 
 // NotifyUsersWithDetail is NotifyUsers with a second line under the message.
 func (s *sessionService) NotifyUsersWithDetail(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, link string) error {
+	return s.NotifyUsersWithAction(ctx, userIDs, campaignID, ntype, message, detail, "", link)
+}
+
+// NotifyUsersWithAction is NotifyUsersWithDetail with a label for the link,
+// for a note whose point is the place it leads to.
+func (s *sessionService) NotifyUsersWithAction(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, action, link string) error {
 	if ntype == "" {
 		return apperror.NewValidation("notification type is required")
 	}
-	payload := marshalPayloadDetail(message, ntype, detail)
+	payload := marshalPayloadAction(message, ntype, detail, action)
 	now := time.Now().UTC()
 	cid := campaignID
 	for _, uid := range s.bellRecipients(ctx, userIDs, ntype) {

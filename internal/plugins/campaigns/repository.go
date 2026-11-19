@@ -81,6 +81,10 @@ type CampaignRepository interface {
 	// ListMemberCampaignIDs lists every campaign the user is a member of,
 	// archived ones included.
 	ListMemberCampaignIDs(ctx context.Context, userID string) ([]string, error)
+	// ListOwnedMembershipIDs lists the campaigns where the user holds the
+	// owner role now. Unlike ListOwnedByUser it ignores who created the
+	// campaign, so someone who handed one over is not still its owner.
+	ListOwnedMembershipIDs(ctx context.Context, userID string) ([]string, error)
 
 	// UpdateBackdropPath updates only the backdrop_path column.
 	UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error
@@ -1326,6 +1330,25 @@ func (r *campaignRepository) OwnerPresence(ctx context.Context, campaignIDs []st
 			return nil, fmt.Errorf("scanning campaign owner: %w", err)
 		}
 		out[id] = p
+	}
+	return out, rows.Err()
+}
+
+// ListOwnedMembershipIDs lists the campaigns where the user is the owner now.
+func (r *campaignRepository) ListOwnedMembershipIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT campaign_id FROM campaign_members WHERE user_id = ? AND role = 'owner'`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing owned memberships: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning owned membership: %w", err)
+		}
+		out = append(out, id)
 	}
 	return out, rows.Err()
 }
