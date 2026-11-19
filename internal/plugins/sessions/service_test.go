@@ -74,6 +74,7 @@ type mockSessionRepo struct {
 	createNotificationFn             func(ctx context.Context, n *Notification) error
 	listNotificationsFn              func(ctx context.Context, userID string, limit int) ([]Notification, error)
 	countUnreadNotificationsFn       func(ctx context.Context, userID string) (int, error)
+	listUnreadOfTypeFn               func(ctx context.Context, userID, ntype string, limit int) ([]Notification, error)
 	markNotificationReadFn           func(ctx context.Context, userID, notificationID string) error
 	markAllNotificationsReadFn       func(ctx context.Context, userID string) error
 	// Game-night RSVP.
@@ -599,6 +600,13 @@ func (m *mockSessionRepo) TouchAvailabilityAnswered(ctx context.Context, campaig
 func (m *mockSessionRepo) ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error) {
 	if m.listNotificationsFn != nil {
 		return m.listNotificationsFn(ctx, userID, limit)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) ListUnreadNotificationsOfType(ctx context.Context, userID, ntype string, limit int) ([]Notification, error) {
+	if m.listUnreadOfTypeFn != nil {
+		return m.listUnreadOfTypeFn(ctx, userID, ntype, limit)
 	}
 	return nil, nil
 }

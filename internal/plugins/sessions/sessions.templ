@@ -173,7 +173,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 						<i class="fa-solid fa-users mr-1 text-accent"></i> Attendees
 					</h2>
 					<div id="attendee-list">
-						@AttendeeList(cc, session.ID, session.Attendees, csrfToken, userID, session.AcceptsRSVP())
+						@AttendeeList(cc, session.ID, session.Attendees, csrfToken, userID, session.AcceptsRSVP() && !recap.Played)
 					</div>
 				</div>
 				<!-- Linked Entities -->
@@ -290,7 +290,8 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 }
 
 // AttendeeList renders the RSVP attendee list with action buttons. open is
-// Session.AcceptsRSVP: a night that is over lists who came and asks nothing.
+// false once the night is completed, cancelled or marked Played for this
+// viewer: a night that is over lists who came and asks nothing.
 templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []Attendee, csrfToken string, currentUserID string, open bool) {
 	if len(attendees) == 0 {
 		<p class="text-sm text-fg-muted">No attendees invited yet.</p>

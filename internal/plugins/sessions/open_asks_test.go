@@ -57,7 +57,7 @@ func TestOpenAsks_KeepsOnlyNightsThatStillTakeAnAnswer(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := svc.OpenAsks(context.Background(), []Notification{tc.in})
+			got := svc.OpenAsks(context.Background(), []Notification{tc.in}, nil)
 			if (len(got) == 1) != tc.kept {
 				t.Errorf("kept = %v, want %v", len(got) == 1, tc.kept)
 			}
@@ -67,7 +67,7 @@ func TestOpenAsks_KeepsOnlyNightsThatStillTakeAnAnswer(t *testing.T) {
 	t.Run("order is kept and a night is read once however many rows point at it", func(t *testing.T) {
 		lookups = 0
 		in := []Notification{ask("played"), ask("ahead"), note(NotifProposalCreated, false, "/campaigns/c1/proposals/p1"), ask("ahead"), ask("played")}
-		got := svc.OpenAsks(context.Background(), in)
+		got := svc.OpenAsks(context.Background(), in, nil)
 		if len(got) != 3 || sessionIDFromLink(got[0].Link) != "ahead" || got[1].Type != NotifProposalCreated || sessionIDFromLink(got[2].Link) != "ahead" {
 			t.Errorf("got %d rows in the wrong shape: %+v", len(got), got)
 		}
@@ -80,16 +80,83 @@ func TestOpenAsks_KeepsOnlyNightsThatStillTakeAnAnswer(t *testing.T) {
 	// nights unanswered it says nothing about them, and with one still ahead
 	// it counts and links that one alone.
 	t.Run("the banner follows", func(t *testing.T) {
-		over := svc.OpenAsks(context.Background(), []Notification{ask("played"), ask("completed")})
+		over := svc.OpenAsks(context.Background(), []Notification{ask("played"), ask("completed")}, nil)
 		if out := BuildCallout(over, true, now); out.Kind != CalloutNone {
 			t.Errorf("finished nights raised a banner: %+v", out)
 		}
-		mixed := svc.OpenAsks(context.Background(), []Notification{ask("played"), ask("ahead"), ask("cancelled")})
+		mixed := svc.OpenAsks(context.Background(), []Notification{ask("played"), ask("ahead"), ask("cancelled")}, nil)
 		out := BuildCallout(mixed, true, now)
 		if out.Kind != CalloutRSVP || out.Count != 1 || out.Link != sessionLink("c1", "ahead") {
 			t.Errorf("banner = %+v, want one ask linking to the night ahead", out)
 		}
 	})
+}
+
+// The reader's own day decides, campaign by campaign: it is the day the
+// night's page marks it Played by, so the banner and the bell never send
+// anyone to a page that will not take their answer. The campaign asked about
+// is the night's own, never the one a notification claims.
+func TestOpenAsks_JudgesANightOnTheReadersOwnDay(t *testing.T) {
+	day := func(d string) *string { return &d }
+	nights := map[string]*Session{
+		"last-night": {ID: "last-night", CampaignID: "east", Status: StatusPlanned, ScheduledDate: day("2026-11-17")},
+		"same-date":  {ID: "same-date", CampaignID: "west", Status: StatusPlanned, ScheduledDate: day("2026-11-17")},
+	}
+	repo := &mockSessionRepo{findByIDFn: func(_ context.Context, id string) (*Session, error) { return nights[id], nil }}
+	// 10:00 UTC on the 18th: the 17th has not ended in every zone yet, so the
+	// service's own day still calls both nights open.
+	svc := &sessionService{repo: repo, clock: func() time.Time { return time.Date(2026, 11, 18, 10, 0, 0, 0, time.UTC) }}
+	asks := []Notification{
+		note(NotifSessionScheduled, false, sessionLink("somewhere-else", "last-night")),
+		note(NotifSessionScheduled, false, sessionLink("somewhere-else", "same-date")),
+	}
+
+	if got := svc.OpenAsks(context.Background(), asks, nil); len(got) != 2 {
+		t.Fatalf("with no reader's day, %d asks are open, want both", len(got))
+	}
+
+	var asked []string
+	readersDay := func(campaignID string) string {
+		asked = append(asked, campaignID)
+		// The reader set an eastern zone in one campaign, where it is already
+		// the 18th, and a western one in the other, where it is still the 17th.
+		if campaignID == "east" {
+			return "2026-11-18"
+		}
+		return "2026-11-17"
+	}
+	got := svc.OpenAsks(context.Background(), asks, readersDay)
+	if len(got) != 1 || sessionIDFromLink(got[0].Link) != "same-date" {
+		t.Errorf("open asks = %+v, want only the night whose date is still today for the reader", got)
+	}
+	if len(asked) != 2 || asked[0] != "east" || asked[1] != "west" {
+		t.Errorf("asked for the day in %v, want the nights' own campaigns east and west", asked)
+	}
+}
+
+func TestTakesAnswers(t *testing.T) {
+	day := func(d string) *string { return &d }
+	tests := []struct {
+		name  string
+		night *Session
+		want  bool
+	}{
+		{"a night still ahead", &Session{Status: StatusPlanned, ScheduledDate: day("2026-11-20")}, true},
+		{"tonight's game", &Session{Status: StatusPlanned, ScheduledDate: day("2026-11-18")}, true},
+		{"a night with no date", &Session{Status: StatusPlanned}, true},
+		{"a repeating night that began long ago", &Session{Status: StatusPlanned, IsRecurring: true, ScheduledDate: day("2026-10-02")}, true},
+		{"a night whose date is behind today", &Session{Status: StatusPlanned, ScheduledDate: day("2026-11-17")}, false},
+		{"a completed night", &Session{Status: StatusCompleted, ScheduledDate: day("2026-11-20")}, false},
+		{"a cancelled night", &Session{Status: StatusCancelled, ScheduledDate: day("2026-11-20")}, false},
+		{"no night at all", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := takesAnswers(tt.night, "2026-11-18"); got != tt.want {
+				t.Errorf("takesAnswers = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestSessionIDFromLink(t *testing.T) {

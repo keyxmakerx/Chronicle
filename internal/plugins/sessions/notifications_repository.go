@@ -70,6 +70,29 @@ func (r *sessionRepository) ListNotifications(ctx context.Context, userID string
 		return nil, fmt.Errorf("listing notifications: %w", err)
 	}
 	defer rows.Close()
+	return scanNotifications(rows)
+}
+
+// ListUnreadNotificationsOfType returns a user's unread notifications of one
+// type, newest first, capped at limit.
+func (r *sessionRepository) ListUnreadNotificationsOfType(ctx context.Context, userID, ntype string, limit int) ([]Notification, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, user_id, campaign_id, type, payload, link, read_at, created_at
+		 FROM notifications WHERE user_id = ? AND type = ? AND read_at IS NULL
+		 ORDER BY created_at DESC LIMIT ?`, userID, ntype, limit)
+	if err != nil {
+		return nil, fmt.Errorf("listing unread notifications of a type: %w", err)
+	}
+	defer rows.Close()
+	return scanNotifications(rows)
+}
+
+// scanNotifications reads notification rows selected in the column order the
+// two lists above share.
+func scanNotifications(rows *sql.Rows) ([]Notification, error) {
 	var out []Notification
 	for rows.Next() {
 		var n Notification
