@@ -1890,6 +1890,10 @@
      need no rule: they are above the tab. */
   body:has(.cal-v5 :is(.wing, .flap, .evp).live, .cal-v5 .drawer.open, .cra-drawer.is-open, .calv5-overlay) .jot-tab { opacity: 0; visibility: hidden; pointer-events: none; }
   .jot-tab[hidden] { display: none; }
+  /* The page scrolls inside #main-content, so the tab floats over its last
+     rows: end the content a tab-height clear of the bottom edge, so whatever
+     sits at the foot (a panel's corner, a button) can scroll above the tab. */
+  body:has(.jot-tab:not([hidden])) #main-content { padding-bottom: 5rem; scroll-padding-bottom: 5rem; }
   /* On a phone the tab is just its icon (and count), and the page gets room
      at the bottom so the tab never covers the end of the last rows. */
   @media (max-width: 639px) {
