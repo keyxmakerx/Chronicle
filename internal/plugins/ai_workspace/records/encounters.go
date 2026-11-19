@@ -262,6 +262,9 @@ func (k EncounterKind) byNameWarning(ctx context.Context, campaignID string, a A
 	if m := rep.Find(name); m != nil {
 		return base + ", and Foundry has it (" + m.Where() + ")"
 	}
+	if rep.Truncated {
+		return base + ", but Foundry sent only part of its monster list, so Chronicle couldn't check whether Foundry has it"
+	}
 	return base + ", but Foundry did not report a monster by that name, so it can't place it until you add one"
 }
 

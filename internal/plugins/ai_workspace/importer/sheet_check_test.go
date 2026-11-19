@@ -3,6 +3,7 @@ package importer
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -62,21 +63,27 @@ func TestClassify_SheetCheck(t *testing.T) {
 // The review screen's formula numbers replace only what the AI wrote.
 func TestUseSheetFormula(t *testing.T) {
 	tests := []struct {
-		name   string
-		fields map[string]any
-		raw    string
-		want   map[string]any
+		name    string
+		fields  map[string]any
+		raw     string
+		want    map[string]any
+		wantErr bool
 	}{
-		{"replaces under the AI's spelling", map[string]any{"Stamina": 20, "ev": 6}, `{"stamina": 30}`, map[string]any{"Stamina": 30.0, "ev": 6}},
-		{"never adds a field", map[string]any{"stamina": 20}, `{"stamina": 30, "winded": 15}`, map[string]any{"stamina": 30.0}},
-		{"nothing pressed", map[string]any{"stamina": 20}, "", map[string]any{"stamina": 20}},
-		{"unreadable", map[string]any{"stamina": 20}, `{"stamina":`, map[string]any{"stamina": 20}},
-		{"not an object", map[string]any{"stamina": 20}, `[30]`, map[string]any{"stamina": 20}},
-		{"no fields", nil, `{"stamina": 30}`, nil},
+		{"replaces under the AI's spelling", map[string]any{"Stamina": 20, "ev": 6}, `{"stamina": 30}`, map[string]any{"Stamina": 30.0, "ev": 6}, false},
+		{"never adds a field", map[string]any{"stamina": 20}, `{"stamina": 30, "winded": 15}`, map[string]any{"stamina": 30.0}, false},
+		{"nothing pressed", map[string]any{"stamina": 20}, "", map[string]any{"stamina": 20}, false},
+		{"unreadable is reported", map[string]any{"stamina": 20}, `{"stamina":`, map[string]any{"stamina": 20}, true},
+		{"not an object is reported", map[string]any{"stamina": 20}, `[30]`, map[string]any{"stamina": 20}, true},
+		{"over 64 KB is reported", map[string]any{"stamina": 20}, `{"stamina": "` + strings.Repeat("9", maxSheetFormula) + `"}`, map[string]any{"stamina": 20}, true},
+		{"no fields", nil, `{"stamina": 30}`, nil, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := UseSheetFormula(tt.fields, tt.raw); !reflect.DeepEqual(got, tt.want) {
+			got, err := UseSheetFormula(tt.fields, tt.raw)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("err = %v, want error %v", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %#v, want %#v", got, tt.want)
 			}
 		})

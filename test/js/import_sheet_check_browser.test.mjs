@@ -109,11 +109,35 @@ test('marks what differs, and the director takes the formula for all, or for one
   assert.equal(s.input, '', 'keeping the AI’s numbers sends none');
 });
 
-test('stays empty when the game system has no check, or its check fails', { skip }, async (t) => {
-  for (const setup of ['', 'Chronicle.sheetChecks = { creature: { check: function () { throw new Error("no refs"); } } };',
-    'Chronicle.sheetChecks = { creature: { check: function () { return Promise.resolve({ items: [] }); } } };']) {
+test('says so when the game system has no check or its check fails, and stays empty when it has nothing to compare', { skip }, async (t) => {
+  const cases = [
+    ['', /no check for these numbers/],
+    ['Chronicle.sheetChecks = { creature: { check: function () { throw new Error("no refs"); } } };', /could not run/],
+    ['Chronicle.sheetChecks = { creature: { check: function () { return Promise.resolve({ items: [] }); } } };', null],
+  ];
+  for (const [setup, line] of cases) {
     const p = await page(t, setup);
     const s = await state(p);
     assert.deepEqual([s.tiles.length, s.all, s.input], [0, '', '']);
+    const text = await p.evaluate(() => document.querySelector('.air-sheet').textContent);
+    if (line) assert.match(text, line); else assert.equal(text, '');
   }
+});
+
+test('shows every number up to the cap and says how many it did not check', { skip }, async (t) => {
+  const many = (n) => 'Chronicle.sheetChecks = { creature: { check: function () { var items = []; for (var i = 0; i < ' + n +
+    '; i++) items.push({ id: "n" + i, label: "Number " + i, ai: "1", formula: "2", matches: false });' +
+    ' return Promise.resolve({ items: items, patch: function (ids) { return { count: ids.length }; } }); } } };';
+  let p = await page(t, many(60));
+  let s = await state(p);
+  assert.equal(s.tiles.length, 60);
+  assert.equal(s.all, 'Use the formula for all 60');
+  assert.equal(await p.evaluate(() => document.querySelectorAll('.air-bad').length), 0);
+
+  p = await page(t, many(230));
+  s = await state(p);
+  assert.equal(s.tiles.length, 200);
+  assert.equal(s.all, 'Use the formula for all 200');
+  const note = await p.evaluate(() => document.querySelector('.air-bad').textContent);
+  assert.match(note, /first 200 numbers\. 30 more were not checked/);
 });

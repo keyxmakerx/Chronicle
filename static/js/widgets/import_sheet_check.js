@@ -7,7 +7,8 @@
  * (data-fields), the keys the AI wrote (data-written) and the name of the
  * row's hidden formula input (data-input). The campaign's game system adds
  * Chronicle.sheetChecks[kind] (docs/system-package-rendering.md); with none,
- * or with nothing to say, the mount stays empty and the row is unchanged.
+ * or with a check that fails, the row says so in one line rather than staying
+ * silent; a check with nothing to compare leaves the mount empty.
  *
  * Each number gets a tile: "Matches the formula", or "Formula gives N" with a
  * press that takes the formula's number. The hidden input holds the check's
@@ -17,7 +18,7 @@
 (function () {
   'use strict';
 
-  var MAX_ITEMS = 24;
+  var MAX_ITEMS = 200;
   var INPUT_NAME = /^page_\d+_sheet_formula$/;
 
   function parse(s, fallback) {
@@ -34,16 +35,19 @@
   }
 
   // items keeps the check's well-formed entries: an id and a label, and for a
-  // number that differs, the formula's figure to offer.
+  // number that differs, the formula's figure to offer. Entries past the cap
+  // are counted in out.dropped so the row can say they were not shown.
   function items(res) {
     var list = res && Array.isArray(res.items) ? res.items : [];
     var out = [], seen = {};
-    for (var i = 0; i < list.length && out.length < MAX_ITEMS; i++) {
+    out.dropped = 0;
+    for (var i = 0; i < list.length; i++) {
       var it = list[i];
       if (!it || typeof it !== 'object') continue;
       var id = str(it.id);
       if (!id || seen[id] || !str(it.label)) continue;
       if (!it.matches && !str(it.formula)) continue;
+      if (out.length >= MAX_ITEMS) { out.dropped++; continue; }
       seen[id] = true;
       out.push({ id: id, label: str(it.label), ai: str(it.ai), formula: str(it.formula), matches: !!it.matches });
     }
@@ -66,6 +70,10 @@
 
     el.innerHTML = '';
     if (str(res.note)) el.appendChild(node('span', 'air-line', str(res.note)));
+    if (list.dropped) {
+      el.appendChild(node('span', 'air-line air-bad', 'Showing the first ' + list.length + ' numbers. ' +
+        list.dropped + ' more were not checked, so they are saved as the AI wrote them.'));
+    }
     var grid = node('div', 'air-stats');
     grid.setAttribute('role', 'group');
     grid.setAttribute('aria-label', 'Numbers the AI wrote, beside the published formulas');
@@ -137,11 +145,20 @@
     update();
   }
 
+  // say puts one plain line in the mount when the check cannot run.
+  function say(el, text) {
+    el.innerHTML = '';
+    el.appendChild(node('span', 'air-line', text));
+  }
+
   Chronicle.register('import-sheet-check', {
     init: function (el) {
       var checks = Chronicle.sheetChecks || {};
       var check = checks[el.getAttribute('data-sheet-kind') || ''];
-      if (!check || typeof check.check !== 'function') return;
+      if (!check || typeof check.check !== 'function') {
+        say(el, 'This game system has no check for these numbers, so they are saved as the AI wrote them.');
+        return;
+      }
       var name = el.getAttribute('data-input') || '';
       var form = el.closest('form') || document;
       var input = INPUT_NAME.test(name) ? form.querySelector('input[name="' + name + '"]') : null;
@@ -154,6 +171,7 @@
         .then(function () { return check.check(fields, env); })
         .then(function (res) { if (el.isConnected) draw(el, input, res); }, function (err) {
           console.warn('[import-sheet-check] The game system\'s check failed; the row is shown without it:', err);
+          if (el.isConnected) say(el, 'The game system\'s check could not run, so these numbers are saved as the AI wrote them.');
         });
     },
     destroy: function (el) {

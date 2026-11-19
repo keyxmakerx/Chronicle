@@ -118,3 +118,37 @@ func TestAIFieldNotes_MarksOtherSystemsFields(t *testing.T) {
 		t.Errorf("location notes = %v", notes)
 	}
 }
+
+// A creature's live Stamina and conditions are what Foundry sends back, so
+// the AI is told to leave them out; a bounded number says its bounds.
+func TestAIFieldNotes_CreatureFoundryPullAndBounds(t *testing.T) {
+	one, twenty := 1.0, 20.0
+	m := &systems.SystemManifest{ID: "drawsteel", EntityPresets: []systems.EntityPresetDef{
+		{Slug: "creature", Category: "creature", FoundryPullFields: []string{"stamina_current", "conditions_json"}, Fields: []systems.FieldDef{
+			{Key: "level", Label: "Level", Type: "number", Min: &one, Max: &twenty},
+			{Key: "stamina", Label: "Stamina", Type: "number", Min: &one},
+			{Key: "stamina_current", Label: "Current Stamina", Type: "number", Min: &one},
+			{Key: "conditions_json", Label: "Conditions", Type: "string", Format: "a JSON list"},
+			{Key: "name_note", Label: "Note", Type: "string"},
+		}},
+	}}
+	creature := entities.EntityType{ID: 2, Slug: "creature", Enabled: true}
+	n := aiFieldNotes{
+		manifest: func(context.Context, string) *systems.SystemManifest { return m },
+		lists:    fakePCLists{},
+		types:    &fakeSheetTypes{types: map[string][]entities.EntityType{"c1": {creature}}},
+	}
+	notes := n.FieldNotes(context.Background(), "c1", creature)
+	tests := []struct{ key, want string }{
+		{"stamina_current", "Foundry keeps this one: leave it out"},
+		{"conditions_json", "a JSON list. Foundry keeps this one: leave it out"},
+		{"level", "A number from 1 to 20"},
+		{"stamina", "A number of at least 1"},
+		{"name_note", ""},
+	}
+	for _, tc := range tests {
+		if notes[tc.key] != tc.want {
+			t.Errorf("%s note = %q, want %q", tc.key, notes[tc.key], tc.want)
+		}
+	}
+}

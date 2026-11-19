@@ -3073,6 +3073,7 @@ func (a *App) RegisterRoutes() {
 		// Same for play blocks, so an installed system's play declarations
 		// reach types created before it declared them.
 		reconcileFieldPlay(ctx, entityService)
+		reconcileFieldChecks(ctx, entityService)
 	}()
 
 	// Campaigns plugin: CRUD, membership, ownership transfer.
@@ -3610,6 +3611,7 @@ func (a *App) RegisterRoutes() {
 		reconcileFieldGMFlags(context.Background(), entityService)
 		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
 		reconcileFieldPlay(context.Background(), entityService)
+		reconcileFieldChecks(context.Background(), entityService)
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
