@@ -94,7 +94,6 @@ templ Base(title string) {
 
 		<!-- Theme toggle (before other scripts so icons update early) -->
 		<script src={ AssetURL("/static/js/theme.js") } defer></script>
-		<script src={ AssetURL("/static/js/chip_ink.js") } defer></script>
 
 		<!-- Vendored libraries -->
 		<script src={ AssetURL("/static/vendor/htmx.min.js") } defer></script>
@@ -228,9 +227,6 @@ templ Base(title string) {
 
 		<!-- Entity type config widget (unified sidebar + layout + color) -->
 		<script src={ AssetURL("/static/js/widgets/entity_type_config.js") } defer></script>
-
-		<!-- Tag picker widget (entity tag management) -->
-		<script src={ AssetURL("/static/js/widgets/tag_picker.js") } defer></script>
 
 		<!-- The one hover card, then the linked-page previews that use it -->
 		<script src={ AssetURL("/static/js/peek_address.js") } defer></script>
