@@ -156,6 +156,21 @@ export async function api(page, url, opts = {}) {
   }, { url, opts });
 }
 
+/**
+ * Do `act` and wait until the server has answered the save it sends (a POST
+ * whose path holds `path`). A switch or a "Saved" line can already read as
+ * done on the page while the save is still on its way, so a check that goes
+ * on to ask the server from elsewhere waits here first.
+ */
+export async function saved(page, path, act) {
+  const [res] = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname.includes(path)),
+    act(),
+  ]);
+  assert.ok(res.ok(), `the save to ${path} answered ${res.status()}`);
+  await res.finished();
+}
+
 /** Make a campaign as `who` and return its id. */
 export async function newCampaign(who, name) {
   const { page } = who;
