@@ -1007,8 +1007,15 @@
         var keep = self.keepForm();
         self.drawer().innerHTML = self.drawerHTML();
         self.restoreForm(keep);
+        // The names also stand in the lifted sheet's top row: a tap on one
+        // raises the sheet to full height on that leaf.
+        if (self.sheet && self.h === 'lift') self.setHeight('full');
         self.scrollLog();
         self.seen();
+        if (!ev.detail) {
+          var again = document.querySelector('[data-tt-phone="' + d.ttPhone + '"]');
+          if (again) again.focus({ preventScroll: true });
+        }
         return;
       }
       if (b.hasAttribute('data-tt-older')) { self.older(); return; }

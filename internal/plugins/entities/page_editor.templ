@@ -14,7 +14,7 @@ import (
 // pageEditorBar is Edit page, which becomes Done in the same spot, with the
 // Saving/Saved note beside it and, while editing, the keys that work. Its
 // children (the page's visibility badge) stand next to Edit page.
-templ pageEditorBar(cc *campaigns.CampaignContext, entity *Entity) {
+templ pageEditorBar(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	<div
 		class="pe-bar"
 		data-widget="page-editor"
@@ -37,6 +37,67 @@ templ pageEditorBar(cc *campaigns.CampaignContext, entity *Entity) {
 		<span class="pe-saved" data-pe-saved role="status" aria-live="polite"></span>
 		{ children... }
 		<button type="button" class="btn-secondary btn-sm pe-edit" data-pe-edit aria-pressed="false">Edit page</button>
+		if cc.MemberRole >= campaigns.RoleScribe {
+			@pageMoreMenu(cc, entity, csrfToken)
+		}
+	</div>
+}
+
+// pageMoreMenu is the three dots beside Edit page: the four things the header's
+// sheet also holds, by name, without opening the editor. Scribes and up only,
+// the same people the sheet is drawn for; Delete page is the owner's, as on the
+// sheet. Copy and Delete post to the sheet's own routes, History loads into the
+// same slot, and Move under another page opens the sheet on its Parent page
+// field (page_editor.js).
+templ pageMoreMenu(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	<div class="pe-more" data-pe-more>
+		<button
+			type="button"
+			class="pe-dots"
+			aria-haspopup="menu"
+			aria-expanded="false"
+			aria-label="More about this page"
+			title="More about this page"
+			data-pe-dots
+		>
+			<svg class="pe-i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"></circle><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"></circle></svg>
+		</button>
+		<div class="pe-menu" role="menu" aria-label="This page" data-pe-menu data-kit-open hidden>
+			<form
+				method="POST"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
+				hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<button type="submit" role="menuitem" class="pe-mi" tabindex="-1"><span>Make a copy</span></button>
+			</form>
+			<button
+				type="button"
+				role="menuitem"
+				class="pe-mi"
+				tabindex="-1"
+				hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/history", cc.Campaign.ID, entity.ID) }
+				hx-target="#page-history-slot"
+			>
+				<span>Page history</span>
+				<small>Earlier versions</small>
+			</button>
+			<button type="button" role="menuitem" class="pe-mi" tabindex="-1" data-pe-move><span>Move under another page</span></button>
+			if cc.MemberRole >= campaigns.RoleOwner {
+				<form
+					method="POST"
+					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+					hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
+				>
+					<input type="hidden" name="_method" value="DELETE"/>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<button type="submit" role="menuitem" class="pe-mi is-bad" tabindex="-1">
+						<span>Delete page</span>
+						<small>Goes to Trash</small>
+					</button>
+				</form>
+			}
+		</div>
 	</div>
 }
 

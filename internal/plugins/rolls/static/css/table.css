@@ -207,8 +207,13 @@ html[data-tt-sheet]:has(#nav-toggle[aria-expanded="true"]) .tt-sheet { transform
 .tt-sheet .tt-ptab[aria-pressed="true"] { color: var(--color-accent-link, var(--color-accent)); border-bottom-color: var(--color-accent); }
 .tt-sheet .tt-ltabs { display: none; }
 /* Lifted: the dice and the roll field only; the leaves and the log wait for Full. */
-.tt-sheet[data-h="lift"] :is(.tt-log, .tt-phone-sw) { display: none; }
+.tt-sheet[data-h="lift"] .tt-log { display: none; }
 .tt-sheet[data-h="lift"] .tt-dhead h2 { visibility: hidden; }
+/* Lifted, the three names fill the otherwise empty top row beside the close
+   mark, laid over it so the dice and the roll field stay where they are. */
+.tt-sheetbody { position: relative; }
+.tt-sheet[data-h="lift"] .tt-phone-sw { position: absolute; top: 0; left: 6px; right: 64px; padding: 4px 0 0; align-items: center; z-index: 1; }
+.tt-sheet[data-h="lift"] .tt-ptab[aria-pressed="true"] { color: var(--color-text-secondary); border-bottom-color: var(--color-border); }
 
 /* ---------- Motion: Calm fades in place, Off shows the end state ---------- */
 html[data-motion="calm"] .tt-drawer.tt-opening, html[data-motion="calm"] .tt-isl-detail.tt-opening { animation: tt-fade var(--dur-standard) linear; }

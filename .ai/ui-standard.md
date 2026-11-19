@@ -318,8 +318,11 @@ leaving the list for another page.
   so no feature draws its own tooltip. It opens after the pointer rests
   250 ms and stays while the pointer is on it; keyboard focus opens it and
   Escape closes it, returning focus; one card at a time, kept inside the
-  window. A click on a link still follows it (a long press pins it on
-  touch); a click on a rule word pins the card with a close button.
+  window. A click on a link still follows it; on touch, a long press on a
+  link to a page in a page's text opens the card pinned, and the phone's own
+  link menu stays shut on that link. The card offers Open page, Read it below
+  (the page peek), Open in new tab and Copy link. A click on a rule word pins
+  the card with a close button.
 - **The hover card's look is the owner's choice** (Customize › Hover cards:
   Paper, Plain, Night, Compact; Paper by default). Paper stays paper in dark
   mode, and its tokens and classes (`static/css/paper.css`) are the shared
@@ -696,8 +699,9 @@ The same screens, folded to the width; never a second design.
 - **A banner takes one row on a phone**: its sentence wraps beside its
   button.
 - **A name in a page's written text opens in the same tab**, on every
-  screen, and Back returns. Ctrl-click, a middle click or a long press still
-  open a new tab; links to other websites open in a new one.
+  screen, and Back returns. Ctrl-click and a middle click open a new tab; a
+  long press opens the page's card, which offers a new tab; links to other
+  websites open in a new one and keep the phone's own long-press menu.
 - **A game night's long name wraps** onto a second line in Home's Coming
   up; it is never cut short.
 - **The top bar folds its tools into one Tools tab below 768 wide.** The bar
