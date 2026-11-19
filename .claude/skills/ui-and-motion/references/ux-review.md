@@ -15,8 +15,12 @@ failing line is fixed, or the PR says why it is a signed exception.
       amber mark.
 - [ ] The lightest control weight that fits; nothing opens from a bordered
       "Show all ▾" button.
-- [ ] Icons are one colour with nothing behind them at rest; none was added
-      to a row, a heading or a button that has a word.
+- [ ] Icons are one colour with nothing behind them at rest, and each one
+      is a control or a landmark; a button, a menu row or a heading that has
+      a word has none.
+- [ ] A row that names a page starts with the name: no category icon,
+      square or dot in front, the kind in words and the page's own picture
+      at the row's end.
 - [ ] It matches the signed mockup. A changed look or behaviour went back
       as a new card; small differences are on the weekly list with a way to
       reverse each.

@@ -37,8 +37,11 @@ the two seem to differ, the standard wins and this file is wrong.
   reveal more; no bordered "Show all ▾" buttons.
 - Icons are few, one colour and unboxed: no category colour on an icon, no
   tinted square behind it, no emoji, no placeholder icon in an empty state.
-  Add no icon to a row, a heading or a button that has a word while the
-  icons sign-off is open (**Look**).
+  An icon stays only where it is the control or a landmark (the header's
+  tools, the three dots, pens and close marks, the sidebar); a button, a
+  menu row or a heading that has a word has none. A row that names a page
+  starts with the name, with its kind in words and the page's own picture
+  at the row's end (**Look**).
 - Nothing is squeezed: on a narrow screen blocks fold into one column, and
   words are never cut off or broken to a word a line. Touch controls are 44
   tall (**Phones and tablets**).

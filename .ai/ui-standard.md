@@ -649,13 +649,23 @@ second; the dice settle in under 480ms.
   text colour, or the accent beside a heading or in a tool's selected state.
   Nothing sits behind an icon at rest (no tinted square, circle or border);
   a frame shows only on hover, as the Icon weight under **The material
-  rules** says. Colour is never decoration, an emoji is never an icon, and an
-  empty page has no placeholder icon. No decision removes icons altogether.
-  Where they stay beyond this (list and search rows, buttons that have a
-  word, headings, the sidebar) waits on a sign-off, and so do the screens
-  that still colour an icon by its category or set it on a tinted square:
-  TODO(#2276). Until it is answered, new work adds no icon to a row, a
-  heading or a button that has a word.
+  rules** says. Colour is never decoration, a category's colour never tints
+  its icon, an emoji is never an icon, and an empty page has no placeholder
+  icon.
+- **An icon stays only where it is the control, or a landmark**: where a
+  word won't fit, or where people find a thing by its place. That is the
+  header's tools, the three dots that open a menu, pens and close marks, and
+  the sidebar, which folds down to icons. A button or a menu row that has a
+  word has no icon, and a heading has none in front of its words. Marks
+  that carry meaning stay: the Director's amber mark, warnings, the Table's
+  die, the pen beside a part you can edit.
+- **A row that names a page starts with the name.** In search, a picker or a
+  list, nothing sits in front of the name: no category icon, square or dot.
+  The kind follows as a quiet word at the row's end, and a page that has a
+  picture shows a small one there, its own and never a stand-in; a page with
+  none shows none. An owner still picks each category's icon in the
+  Customizer, and it shows in the sidebar.
+- Screens not yet brought to these three icon rules: TODO(#2276).
 - Buttons and pills size to their content; nothing stretches full width after
   a state change.
 - Words on screen are plain and short. No developer terms, IDs, or version
@@ -674,7 +684,7 @@ second; the dice settle in under 480ms.
 ## Phones and tablets
 
 The same screens, folded to the width; never a second design. The first
-five rules are signed and being built: TODO(#2277).
+six rules are signed and being built: TODO(#2277).
 
 - **Nothing is squeezed.** Where the page area is too narrow for its
   columns, the blocks fold into one column instead of crushing. Words are
@@ -692,6 +702,8 @@ five rules are signed and being built: TODO(#2277).
 - **A name in a page's written text opens in the same tab**, on every
   screen, and Back returns. Ctrl-click, a middle click or a long press still
   open a new tab; links to other websites open in a new one.
+- **A game night's long name wraps** onto a second line in Home's Coming
+  up; it is never cut short.
 - **Side panels become bottom sheets on a phone**: the page peek and the
   Table (under **What is on a page** and **Opening and closing**).
 - **A workshop previews all three**: Phone, Tablet and Computer (under
@@ -729,6 +741,11 @@ their tokens.
   under a faint light from the page's top corner.
 - **Motion speed** retimes the duration tokens; **menu highlight** and
   **hover card** looks are their own choices.
+- **Entrances and moments** are signed and not built. An owner may pick how
+  panels open (Bloom, Unfold or Drop in place of Grow) and turn on three
+  moments that are off until then (Page sheen, List cascade, Save spark);
+  Calm and Off turn each one off. How an owner's entrance sits beside a
+  kit's own opening goes to Sign-offs before it is built: TODO(#1216).
 - **View as player** (the owner's eye button in the header) hides everything
   marked `data-dm-only`, and inline secrets (`data-secret`), while it is on
   (`html[data-view-as-player]`), in any look, and shows what is marked
