@@ -846,7 +846,9 @@ var ValidFieldTypes = map[string]bool{
 
 // Manifest content limits to prevent resource exhaustion.
 const (
-	maxCategories        = 20
+	// maxCategories leaves room for a rulebook's full set of reference lists;
+	// a three-book game system needs more than twenty.
+	maxCategories        = 40
 	maxFieldsPerCategory = 100
 	// maxFieldsPerPreset bounds the field count of a single entity preset.
 	// It matches maxFieldsPerCategory (100): both are abuse/resource-exhaustion
