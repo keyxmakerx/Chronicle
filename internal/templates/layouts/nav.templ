@@ -2,9 +2,10 @@
 // campaignNavTop is fixed: Dashboard, Pinned, Apps, never covered and never
 // scrolled away by the categories area below it. campaignNavCategories is
 // its own scroller: the Categories heading, All Pages, the category rows,
-// the owner's own sections and, for members, Manage — with the drill panel
-// (nav-drill) laid over it, so drilling into a category never touches the
-// fixed part above. Every folding section but Pinned folds under its
+// the owner's own sections — with the drill panel (nav-drill) laid over it,
+// so drilling into a category never touches the fixed part above.
+// campaignNavManage is the owner's Campaign settings row, fixed at the foot
+// above Site admin. Every folding section but Pinned folds under its
 // heading. Rows arrive already cut down for the viewer (GetNavSections);
 // where the viewer is comes from nav_state.go. sidebar_nav.js runs the
 // folds, the living ring and the drawer; sidebar_drill.js runs the
@@ -108,9 +109,6 @@ templ campaignNavCategories() {
 					if sec.Kind == "categories" || sec.Kind == "custom" {
 						@navSection(sec)
 					}
-				}
-				if len(NavManageRows(ctx)) > 0 {
-					@navManage()
 				}
 			</div>
 		</nav>
@@ -299,7 +297,7 @@ templ navSubsFold(row NavRowView) {
 	</div>
 }
 
-// navRow is one app, category, link or Manage row. A row hidden from players
+// navRow is one app, category, link or Campaign settings row. A row hidden from players
 // is only ever given to the owner, who sees it dimmed and marked. A category
 // never navigates on its own click — it slides the drill panel over the
 // categories area instead (sidebar_drill.js); the category's own page stays
@@ -446,15 +444,27 @@ templ navRing() {
 	</span>
 }
 
-// navManage is the one Manage row, leading to the desk. Its trailing text is
-// the count of what needs the owner, filled in by sidebar_nav.js so a page
-// load never waits on it.
-templ navManage() {
-	<div class="nav-sec" data-nav-section="manage">
-		for _, row := range NavManageRows(ctx) {
-			@navRow(row)
-		}
-	</div>
+// campaignNavManage is the owner's Campaign settings row, fixed at the foot
+// of the sidebar above Site admin and outside every scroller so it never
+// scrolls away. It leads to the desk; its trailing words ("1 needs you") are
+// filled in by sidebar_nav.js so a page load never waits on them. It carries
+// its own boost, since it sits outside the categories nav that boosts the
+// other rows.
+templ campaignNavManage() {
+	if len(NavManageRows(ctx)) > 0 {
+		<div
+			class="nav-manage"
+			data-nav-section="manage"
+			hx-boost="true"
+			hx-target="#main-content"
+			hx-select="#main-content > *"
+			hx-swap="innerHTML show:window:top"
+		>
+			for _, row := range NavManageRows(ctx) {
+				@navRow(row)
+			}
+		</div>
+	}
 }
 
 // campaignNavFooter keeps the ways out of the campaign (every campaign, and

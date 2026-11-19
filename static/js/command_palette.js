@@ -76,6 +76,7 @@
         label: 'Go to ' + c.label,
         icon: ICON_RE.test(c.icon || '') ? c.icon : 'fa-chevron-right',
         href: c.href,
+        words: typeof c.words === 'string' ? c.words : '',
         shortcut: ''
       });
     });
@@ -95,7 +96,7 @@
       // Campaign navigation: one "Go to" per row of the viewer's own sidebar.
       // The server renders that list per viewer, so the palette can never
       // offer what the sidebar withholds (a row hidden from players, an app
-      // the viewer cannot open, the owner's Manage pages).
+      // the viewer cannot open, the owner's campaign settings pages).
       navCommands().forEach(function (c) { cmds.push(c); });
       cmds.push({ label: 'Go to Relations Graph', icon: 'fa-diagram-project', href: '/campaigns/' + cid + '/relations-graph/page', shortcut: '' });
       cmds.push({ label: 'Go to Plugins', icon: 'fa-puzzle-piece', href: '/campaigns/' + cid + '/plugins', shortcut: '' });
@@ -138,6 +139,17 @@
 
   // --- Fuzzy Filter ---
 
+  // wordsMatch tells whether q starts any of a command's other names, so
+  // "guest" finds a place called Guests' dashboard and "delete" finds the one
+  // labelled Archive or delete.
+  function wordsMatch(cmd, q) {
+    var ws = String(cmd.words || '').toLowerCase().split(/\s+/);
+    for (var i = 0; i < ws.length; i++) {
+      if (ws[i] && ws[i].indexOf(q) === 0) return true;
+    }
+    return false;
+  }
+
   function filterCommands(query) {
     if (!query) return commands.slice();
     var q = query.toLowerCase();
@@ -147,6 +159,10 @@
       var idx = label.indexOf(q);
       if (idx >= 0) {
         scored.push({ cmd: commands[i], score: idx });
+      } else if (wordsMatch(commands[i], q)) {
+        // The other names for a place rank after every label match, so a
+        // word that is also in a label still lists the label first.
+        scored.push({ cmd: commands[i], score: 1000 });
       }
     }
     scored.sort(function (a, b) { return a.score - b.score; });

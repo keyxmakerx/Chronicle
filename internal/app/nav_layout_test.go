@@ -285,7 +285,7 @@ func TestNavCommandsJSON_OffersOnlyTheViewersRows(t *testing.T) {
 			t.Errorf("a player's palette is missing %q: %v", want, playerCmds)
 		}
 	}
-	for _, manage := range []string{"Customize", "Game & features", "Settings", "Overview", "People"} {
+	for _, manage := range []string{"Customize", "Game & features", "Settings", "Overview", "People", "Campaign settings", "Details and data", "Export a copy", "Guests' dashboard", "Archive or delete this campaign", "Invite someone"} {
 		if _, ok := playerCmds[manage]; ok {
 			t.Errorf("a player's palette offers the owner's %q", manage)
 		}
@@ -294,7 +294,7 @@ func TestNavCommandsJSON_OffersOnlyTheViewersRows(t *testing.T) {
 	owner := navTestContext(hiddenTestItems(), campaigns.RoleOwner, true, false)
 	ownerCmds := decode(layouts.NavCommandsJSON(navTestLayoutCtx(
 		buildNavSections(owner, true, nil, navTestTypes(), nil, navTestEnabled(), navTestSystem), int(campaigns.RoleOwner))))
-	for _, want := range []string{"Maps", "Factions", "Secret Tunnel", "People", "Settings", "Customize", "Overview"} {
+	for _, want := range []string{"Maps", "Factions", "Secret Tunnel", "People", "Campaign settings", "Customize", "Export a copy", "Guests' dashboard", "Archive or delete this campaign"} {
 		if _, ok := ownerCmds[want]; !ok {
 			t.Errorf("the owner's palette is missing %q", want)
 		}

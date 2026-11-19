@@ -225,13 +225,13 @@ const rowState = (page) => page.$eval('[data-nav-key="manage"]', (r) => ({
   text: r.querySelector('.nav-tr').textContent, needs: r.getAttribute('data-needs'), label: r.getAttribute('aria-label'),
 }));
 
-test('the Manage row shows what needs the owner, keeps it a minute, and drops it as things are fixed', { skip }, async () => {
+test('the Campaign settings row says in words what needs the owner, keeps it a minute, and drops it as things are fixed', { skip }, async () => {
   let n = 2;
   const { ctx, page, seen } = await open({ count: () => n });
   try {
     await load(page, 'sidebar_nav.js');
     await page.waitForFunction(() => document.querySelector('[data-nav-key="manage"] .nav-tr').textContent !== '');
-    assert.deepEqual(await rowState(page), { text: '2', needs: '2', label: 'Manage, 2 things need you' });
+    assert.deepEqual(await rowState(page), { text: '2 need you', needs: '2', label: 'Campaign settings, 2 things need you' });
     assert.equal(seen.count, 1);
     // Kept: a second ask is answered from the keep.
     await page.evaluate(() => window.Chronicle.nav.refreshCount(false));
@@ -239,14 +239,14 @@ test('the Manage row shows what needs the owner, keeps it a minute, and drops it
     // Something was fixed: asking with force reads the server and the count drops.
     n = 1;
     await page.evaluate(() => window.Chronicle.nav.refreshCount(true));
-    assert.deepEqual(await rowState(page), { text: '1', needs: '1', label: 'Manage, 1 thing needs you' });
+    assert.deepEqual(await rowState(page), { text: '1 needs you', needs: '1', label: 'Campaign settings, 1 thing needs you' });
     n = 0;
     await page.evaluate(() => window.Chronicle.nav.refreshCount(true));
     assert.deepEqual(await rowState(page), { text: '', needs: null, label: null }, 'nothing waiting draws nothing');
     // A page that knows the number sets it without a request.
     const before = seen.count;
     await page.evaluate(() => window.Chronicle.nav.setCount(3));
-    assert.equal((await rowState(page)).text, '3');
+    assert.equal((await rowState(page)).text, '3 need you');
     assert.equal(seen.count, before);
   } finally { await ctx.close(); }
 });

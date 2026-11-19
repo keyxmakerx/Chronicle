@@ -95,7 +95,15 @@ function boot(pathname, navData) {
   const overlay = bodyEl.children[bodyEl.children.length - 1];
   const modal = overlay.children[overlay.children.length - 1];
   const resultsList = modal.children[modal.children.length - 1];
-  return { resultsList };
+  const inputWrap = modal.children[0];
+  const input = inputWrap.children[1];
+  /** Types into the palette's field and returns the list's markup. */
+  const type = (text) => {
+    input.value = text;
+    (input._listeners.input || []).forEach((fn) => fn.call(input, {}));
+    return resultsList.innerHTML;
+  };
+  return { resultsList, type };
 }
 
 const PLAYER_ROWS = [
@@ -140,4 +148,43 @@ test('missing or malformed data yields no campaign rows, and no error', () => {
     assert.ok(!resultsList.innerHTML.includes('Go to Journal'));
     assert.ok(resultsList.innerHTML.includes('Go to Campaigns'), 'global commands still render');
   }
+});
+
+const OWNER_ROWS = [
+  { label: 'Campaign settings', href: '/campaigns/camp-1/dashboard', icon: 'fa-sliders', words: 'settings manage owner options' },
+  { label: "Guests' dashboard", href: '/campaigns/camp-1/dashboard#line-guests-home', icon: 'fa-eye', words: 'guest visitor public dashboard home view as preview' },
+  { label: 'Export a copy', href: '/campaigns/camp-1/settings?tab=data', icon: 'fa-file-export', words: 'export backup download copy' },
+  { label: 'Archive or delete this campaign', href: '/campaigns/camp-1/settings#danger', icon: 'fa-triangle-exclamation', words: 'delete archive remove end' },
+  { label: 'Invite someone', href: '/campaigns/camp-1/members', icon: 'fa-user-plus', words: 'invite add player join' },
+];
+
+test('a command is found by its words as well as its label', () => {
+  const cases = [
+    ['visitor', 'Go to Guests'],
+    ['backup', 'Go to Export a copy'],
+    ['remove', 'Go to Archive or delete'],
+    ['join', 'Go to Invite someone'],
+    ['manage', 'Go to Campaign settings'],
+  ];
+  for (const [typed, expect] of cases) {
+    const { type } = boot('/campaigns/camp-1/dashboard', OWNER_ROWS);
+    assert.ok(type(typed).includes(expect), typed + ' should find ' + expect);
+  }
+});
+
+test('a label match ranks before a words match', () => {
+  // "dashboard" is in the guests' label and, as a word, in nothing else here;
+  // "settings" is a label of one row and a word of another.
+  const rows = [
+    { label: 'Export a copy', href: '/a', words: 'settings backup' },
+    { label: 'Campaign settings', href: '/b', words: 'manage' },
+  ];
+  const { type } = boot('/campaigns/camp-1/dashboard', rows);
+  const html = type('settings');
+  assert.ok(html.indexOf('Go to Campaign settings') < html.indexOf('Go to Export a copy'));
+});
+
+test('words that match nothing never list a command', () => {
+  const { type } = boot('/campaigns/camp-1/dashboard', OWNER_ROWS);
+  assert.ok(!type('zzzz').includes('Go to Export'));
 });

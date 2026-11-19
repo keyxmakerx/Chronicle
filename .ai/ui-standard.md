@@ -93,8 +93,8 @@ it and the main action at its end. There is no box and no placeholder icon in
 the empty size; the sentence is the empty state. Each app writes three
 sentences (player, co-DM, owner) that say what will show there and who adds
 it, never offer an action the reader can't take, and name the game master
-with `GMTerm`. Manage pages sit in `layouts.ManageFrame`: one left edge and width, a quiet
-"Manage" above the title leading back to the desk, and a slot for the page's
+with `GMTerm`. Owner tool pages sit in `layouts.ManageFrame`: one left edge and width, a quiet
+"Campaign settings" above the title leading back to the desk, and a slot for the page's
 actions.
 
 ### Where a reading page starts
@@ -191,7 +191,11 @@ would do.
   descriptions say what the owner gets, never a library or a protocol.
 - **Two sidebars exist**: inside a campaign (`campaignNavTop`,
   `campaignNavCategories` in `internal/templates/layouts/nav.templ`) and
-  outside one (`app.templ`). A navigation fix covers both.
+  outside one (`app.templ`). A navigation fix covers both. The owner's way
+  into campaign management is a plain "Campaign settings" row of its own
+  (`campaignNavManage`) fixed at the foot, above Site admin and outside every
+  scroller, under a hairline; "1 needs you" sits at its right in the accent
+  colour, and folded to icons it is its icon with a dot.
 - **Site admin is its own place, the control room.** On an admin page a site
   admin's sidebar is the admin menu (`AdminSidebarNav`), under a "Site admin"
   band, with "Back to Chronicle" returning to the page they came from and
@@ -280,8 +284,8 @@ leaving the list for another page.
 - **Find with "/".** A workshop with many settings has Find: "/" outside a
   text field, or the Find button, opens it, and it jumps to the setting by
   name. One field serves them all (`static/js/find_palette.js`, styled by
-  `find_palette.css`); the Customizer and the owner's Manage pages each hand it
-  their own list, and a Manage list is built on the server for the owner and
+  `find_palette.css`); the Customizer and the owner's Campaign settings pages each hand it
+  their own list, and that list is built on the server for the owner and
   leaves out any tool the campaign switched off.
 - **Single-key shortcuts never take a typed letter.** A shortcut with no
   Ctrl, Cmd or Alt (E, "/", ?) does nothing while focus is in a text field,
@@ -435,11 +439,11 @@ place, and Off shows the end state.
   motion, unsaved changes, a modified click and a browser without view
   transitions keep the ordinary page load. The browser's Back button is the
   ordinary history restore and plays nothing.
-- **The Manage desk: the line carries you.** Pressing the quiet word on a desk
+- **The Campaign settings desk: the line carries you.** Pressing the quiet word on a desk
   line that opens a page (People, Game & features, Media, Settings, Foundry,
   Your AI, Trash, What players changed) lifts that line's sentence off the
   desk and carries it to the first line of the page it opens, under the title;
-  the other lines fall away. The "Manage" word above that page's title brings
+  the other lines fall away. The "Campaign settings" word above that page's title brings
   the sentence home, and the desk returns to its place and the line glows.
   It is a signed move, about a third of a second each way: `--dur-slide` out
   and `--dur-large` back, with `--ease-slide`. Only transform and opacity

@@ -40,7 +40,7 @@ func manageSentenceFor(ctx context.Context, line string) templ.Component {
 	return (*f)(ctx, line)
 }
 
-// manageBackCall is the "Manage" word's click handler. It hands the click to
+// manageBackCall is the "Campaign settings" word's click handler. It hands the click to
 // static/js/desk_carry.js, loading that file on first use: the frame arrives by
 // boosted swaps where a script tag may never run, and no other page needs the
 // script.

@@ -77,23 +77,23 @@ type navCommand struct {
 	Label string `json:"label"`
 	Href  string `json:"href"`
 	Icon  string `json:"icon,omitempty"`
+	// Words are other names a person might type for the place; the palette
+	// and quick search match them as well as the label. Omitted when empty.
+	Words string `json:"words,omitempty"`
 }
 
 // NavCommandsJSON lists the viewer's sidebar destinations for the command
-// palette, as JSON [{label, href, icon}]. It is built from the same rows the
+// palette, as JSON [{label, href, icon, words}]. It is built from the same rows the
 // sidebar draws, so the palette can never offer what the sidebar withholds:
 // a row hidden from players, an app the viewer cannot open, or the owner's
-// Manage pages for anyone else.
+// campaign settings pages for anyone else.
 func NavCommandsJSON(ctx context.Context) string {
 	if !InCampaign(ctx) {
 		return "[]"
 	}
 	var out []navCommand
 	add := func(label, href, icon string) {
-		if label == "" || href == "" {
-			return
-		}
-		out = append(out, navCommand{Label: label, Href: href, Icon: SafeNavIcon(icon, "")})
+		addWords(&out, label, href, icon, "")
 	}
 	base := "/campaigns/" + GetCampaignID(ctx)
 	add("Home", base, "fa-house")
@@ -106,10 +106,19 @@ func NavCommandsJSON(ctx context.Context) string {
 		}
 	}
 	add("All pages", base+"/entities", "fa-layer-group")
-	// The sidebar has one Manage row, but the palette still reaches each tool
-	// by name, so it lists the pages and not that row.
+	// The sidebar has one Campaign settings row, but the palette still reaches
+	// each tool by name. The desk and the settings page are covered by the
+	// owner's phrases below, so their plain rows are not listed twice.
 	for _, row := range NavManagePages(ctx) {
+		if row.Key == "manage:dashboard" || row.Key == "manage:settings" {
+			continue
+		}
 		add(row.Label, row.URL, row.Icon)
+	}
+	if len(NavManagePages(ctx)) > 0 {
+		for _, c := range ownerCommands(base) {
+			addWords(&out, c.Label, c.Href, c.Icon, c.Words)
+		}
 	}
 	b, err := json.Marshal(out)
 	if err != nil || out == nil {
@@ -118,12 +127,42 @@ func NavCommandsJSON(ctx context.Context) string {
 	return string(b)
 }
 
-// NavManageKey is the one sidebar row that leads to the desk. A tool's own
-// key ("manage:trash") is what a pin and the palette use; this row stands for
-// all of them, so it is current on every Manage page.
+// addWords appends one palette command, dropping an entry with no label or
+// target and any icon that is not a Font Awesome name.
+func addWords(out *[]navCommand, label, href, icon, words string) {
+	if label == "" || href == "" {
+		return
+	}
+	*out = append(*out, navCommand{Label: label, Href: href, Icon: SafeNavIcon(icon, ""), Words: words})
+}
+
+// ownerCommands are the owner's own phrases: what people type when they want
+// a campaign setting ("export", "delete", "guest"), each with the words that
+// also find it. base is "/campaigns/<id>". The tab ids and the #danger,
+// #line-players-home and #line-guests-home anchors are the ones the settings
+// and desk pages answer to.
+func ownerCommands(base string) []navCommand {
+	return []navCommand{
+		{Label: "Campaign settings", Href: base + "/dashboard", Icon: "fa-sliders", Words: "settings manage owner options"},
+		{Label: "Players' dashboard", Href: base + "/dashboard#line-players-home", Icon: "fa-users", Words: "player dashboard home view as see preview"},
+		{Label: "Guests' dashboard", Href: base + "/dashboard#line-guests-home", Icon: "fa-eye", Words: "guest visitor public dashboard home view as preview"},
+		{Label: "Export a copy", Href: base + "/settings?tab=data", Icon: "fa-file-export", Words: "export backup download copy"},
+		{Label: "Import", Href: base + "/settings?tab=import", Icon: "fa-file-import", Words: "import upload restore"},
+		{Label: "Activity log", Href: base + "/settings?tab=activity", Icon: "fa-clock-rotate-left", Words: "activity log history audit"},
+		{Label: "Keys", Href: base + "/settings?tab=api-keys", Icon: "fa-key", Words: "api keys tokens tools"},
+		{Label: "Invite someone", Href: base + "/members", Icon: "fa-user-plus", Words: "invite add player join"},
+		{Label: "Archive or delete this campaign", Href: base + "/settings#danger", Icon: "fa-triangle-exclamation", Words: "delete archive remove end"},
+	}
+}
+
+// NavManageKey is the one sidebar row that leads to the desk (Campaign
+// settings). A tool's own key ("manage:trash") is what a pin and the palette
+// use; this row stands for all of them, so it is current on every owner tool
+// page. The key stays "manage" so pins, old links and the current-row match
+// keep working under the new name.
 const NavManageKey = "manage"
 
-// NavManageRows is the sidebar's Manage entry: one row to the desk, for the
+// NavManageRows is the sidebar's Campaign settings entry: one row to the desk, for the
 // owner only. Anyone else (a Scribe, a player, an owner viewing as a player
 // whose role reads Player, a visitor) gets none.
 func NavManageRows(ctx context.Context) []NavRowView {
@@ -131,7 +170,7 @@ func NavManageRows(ctx context.Context) []NavRowView {
 		return nil
 	}
 	return []NavRowView{{
-		Key: NavManageKey, Kind: "app", Label: "Manage", Icon: "fa-sliders",
+		Key: NavManageKey, Kind: "app", Label: "Campaign settings", Icon: "fa-sliders",
 		URL: "/campaigns/" + GetCampaignID(ctx) + "/dashboard",
 	}}
 }
@@ -148,12 +187,12 @@ func NavManagePages(ctx context.Context) []NavRowView {
 		IsAddonEnabled(ctx, "media-gallery"), IsAddonEnabled(ctx, "sync-api"))
 }
 
-// ManageToolRows is the one list of Manage tools, for the desk's own pages
+// ManageToolRows is the one list of owner tools (the Campaign settings pages), for the desk's own pages
 // and for the campaigns plugin, which checks an owner's pins against it.
 // Media and Foundry exist only while their add-on is on.
 func ManageToolRows(base string, media, foundry bool) []NavRowView {
 	rows := []NavRowView{
-		{Key: "manage:dashboard", Label: "Overview", Icon: "fa-gauge", URL: base + "/dashboard"},
+		{Key: "manage:dashboard", Label: "Campaign settings", Icon: "fa-gauge", URL: base + "/dashboard"},
 		{Key: "manage:members", Label: "People", Icon: "fa-users", URL: base + "/members"},
 		// Every change a player made to a page, searchable and undoable.
 		{Key: "manage:player-changes", Label: "What players changed", Icon: "fa-clock-rotate-left", URL: base + "/players/changes"},
@@ -175,6 +214,6 @@ func ManageToolRows(base string, media, foundry bool) []NavRowView {
 	return append(rows,
 		NavRowView{Key: "manage:ai", Label: "Your AI", Icon: "fa-wand-magic-sparkles", URL: base + "/ai"},
 		NavRowView{Key: "manage:trash", Label: "Trash", Icon: "fa-trash-can", URL: base + "/trash"},
-		NavRowView{Key: "manage:settings", Label: "Settings", Icon: "fa-gear", URL: base + "/settings"},
+		NavRowView{Key: "manage:settings", Label: "Details and data", Icon: "fa-gear", URL: base + "/settings"},
 	)
 }
