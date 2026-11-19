@@ -36,10 +36,6 @@ type DeskService interface {
 	// Manage row. It asks only the providers that feed Needs-you, so a count
 	// on every page does not cost the whole desk.
 	NeedsCount(ctx context.Context, req DeskRequest, in DeskInputs) int
-	// Fold reads what a line shows when it unfolds. It never fails: a fold
-	// that cannot be read is a plain sentence and a link. False when the
-	// line does not exist or does not unfold.
-	Fold(ctx context.Context, req DeskRequest, in DeskInputs, id string) (*DeskFold, bool)
 }
 
 type deskService struct {
@@ -145,12 +141,10 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 	facts := s.gather(ctx, req)
 	line := func(id string) DeskLine { l, _ := s.line(id, c, in, facts, req.Now); return l }
 
-	table := []DeskLine{line("people"), line("changes")}
-	campaign := []DeskLine{nameLine(c), gameLine(c, in), pagesLine(c), lookLine(c)}
+	look := []DeskLine{nameLine(c), descriptionLine(c), lookLine(c), gameLine(c, in)}
 	if in.Addons["media-gallery"] {
-		campaign = append(campaign, line("media"))
+		look = append(look, line("media"))
 	}
-	campaign = append(campaign, settingsLine(c))
 
 	var conns []DeskLine
 	if in.Addons["sync-api"] {
@@ -158,51 +152,49 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 	}
 	conns = append(conns, line("ai"), keysLine(c))
 
-	d := &Desk{
+	return &Desk{
 		CampaignName: c.Name,
 		Needs:        needsYou(c, withoutDisabled(facts, in.Addons), req.Now),
 		Groups: []DeskGroup{
-			{Name: "The table", Lines: table},
-			{Name: "The campaign", Lines: campaign},
+			{Name: "People", Lines: []DeskLine{line("people"), line("changes")}},
+			{Name: "What players and guests see", Lines: []DeskLine{playersHomeLine(), guestsHomeLine(c), pagesLine(c), publicLine(c)}},
+			{Name: "Look and game", Lines: look},
 			{Name: "Connections", Lines: conns},
-			{Name: "Safety net", Lines: []DeskLine{line("trash"), endLine(c)}},
+			{Name: "Safety net", Lines: []DeskLine{exportLine(c), importLine(c), activityLine(c), line("trash")}},
+			{Name: "Archive or delete", Lines: []DeskLine{endLine(c), deleteLine(c)}},
 		},
 	}
-	return d
 }
 
 // line words one line by its id. Foundry and Media exist only
-// while their add-on is on, the same rule Build applies.
+// while their add-on is on, the same rule Build applies. Only the lines a
+// tool page opens with are worded here; the rest are built by Build alone.
 func (s *deskService) line(id string, c *Campaign, in DeskInputs, f DeskFacts, now time.Time) (DeskLine, bool) {
-	var l DeskLine
 	switch id {
 	case "people":
-		l = peopleLine(c, in.Members, in.Invited)
+		return peopleLine(c, in.Members, in.Invited), true
 	case "changes":
-		l = changesLine(c, f.Changes)
+		return changesLine(c, f.Changes), true
 	case "media":
 		if !in.Addons["media-gallery"] {
 			return DeskLine{}, false
 		}
-		l = mediaLine(c, f.Media)
+		return mediaLine(c, f.Media), true
 	case "foundry":
 		if !in.Addons["sync-api"] {
 			return DeskLine{}, false
 		}
-		l = foundryLine(c, f.Foundry, now)
+		return foundryLine(c, f.Foundry, now), true
 	case "game":
-		l = gameLine(c, in)
+		return gameLine(c, in), true
 	case "settings":
-		l = settingsLine(c)
+		return settingsLine(c), true
 	case "ai":
-		l = aiLine(c, f.AI)
+		return aiLine(c, f.AI), true
 	case "trash":
-		l = trashLine(c, f.Trash)
-	default:
-		return DeskLine{}, false
+		return trashLine(c, f.Trash), true
 	}
-	l.Fold = s.foldable(id)
-	return l, true
+	return DeskLine{}, false
 }
 
 func (s *deskService) NeedsCount(ctx context.Context, req DeskRequest, in DeskInputs) int {
@@ -222,61 +214,6 @@ func (s *deskService) Line(ctx context.Context, req DeskRequest, in DeskInputs, 
 // has none.
 var deskSlotOf = map[string]DeskSlot{
 	"changes": DeskChanges, "media": DeskMedia, "foundry": DeskFoundry, "ai": DeskAI, "trash": DeskTrash,
-}
-
-func (s *deskService) Fold(ctx context.Context, req DeskRequest, in DeskInputs, id string) (*DeskFold, bool) {
-	c := in.Campaign
-	plain, ok := s.line(id, c, in, DeskFacts{}, req.Now)
-	if !ok || !s.foldable(id) {
-		return nil, false
-	}
-	if id == "people" {
-		return peopleFold(c, in), true
-	}
-	s.mu.RLock()
-	p, _ := s.providers[deskFoldSlots[id]].(DeskFolder)
-	s.mu.RUnlock()
-	f, err := callFold(ctx, p, req)
-	if err != nil || f == nil {
-		slog.Warn("desk: fold not read, showing a plain sentence",
-			slog.String("line", id), slog.String("campaign_id", req.CampaignID), slog.Any("error", err))
-		return fallbackFold(plain), true
-	}
-	if len(f.Rows) > deskFoldRows {
-		f.More += len(f.Rows) - deskFoldRows
-		f.Rows = f.Rows[:deskFoldRows]
-	}
-	if f.MoreHref == "" && len(plain.Acts) > 0 {
-		f.MoreHref = plain.Acts[0].Href
-	}
-	return f, true
-}
-
-// callFold is callProvider for a fold: under the same deadline, with a panic
-// turned into an error.
-func callFold(ctx context.Context, p DeskFolder, req DeskRequest) (*DeskFold, error) {
-	ctx, cancel := context.WithTimeout(ctx, deskProviderTimeout)
-	defer cancel()
-	type result struct {
-		f   *DeskFold
-		err error
-	}
-	done := make(chan result, 1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				done <- result{err: fmt.Errorf("provider panicked: %v", r)}
-			}
-		}()
-		f, err := p.Fold(ctx, req)
-		done <- result{f, err}
-	}()
-	select {
-	case r := <-done:
-		return r.f, r.err
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
 }
 
 // withoutDisabled drops the facts of a feature that is off, so the desk never

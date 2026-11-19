@@ -112,8 +112,8 @@ func ResolveNavState(ctx context.Context) context.Context {
 		}
 	}
 	cands = append(cands, navCandidate{key: "all", url: base + "/entities"})
-	// Every tool page leads to the one Manage row; a pinned tool keeps its own
-	// key so its Pinned row, not only Manage, shows where the owner is.
+	// Every tool page leads to the one Campaign settings row; a pinned tool keeps its own
+	// key so its Pinned row, not only that row, shows where the owner is.
 	for _, row := range NavManagePages(ctx) {
 		cands = append(cands, navCandidate{key: row.Key, url: row.URL})
 	}
@@ -156,7 +156,7 @@ func navStateOf(ctx context.Context) navState {
 }
 
 // navFoldOpen reports whether a fold is open: the viewer's remembered choice,
-// else the default. Manage starts folded; a category's sub-categories start
+// else the default. a category's sub-categories start
 // folded unless the open page is that category or one of them; every other
 // section starts open.
 func navFoldOpen(st navState, id string) bool {
@@ -197,7 +197,7 @@ func NavHasRing(ctx context.Context, key string) bool {
 	ring := navStateOf(ctx).ring
 	if key == NavManageKey {
 		// The ring is one element: when the tool is also pinned, its Pinned
-		// row holds it and the Manage row only reads as current.
+		// row holds it and the Campaign settings row only reads as current.
 		return (ring == NavManageKey || strings.HasPrefix(ring, NavManageKey+":")) && !navPinnedHere(ctx, ring)
 	}
 	return key != "" && ring == key
@@ -259,13 +259,13 @@ func NavCanEdit(ctx context.Context) bool {
 // outside Pinned, and in Pinned only the rows they pinned themselves.
 func navPinnable(ctx context.Context, sec NavSectionView, row NavRowView) bool {
 	if NavCanOwnPin(ctx) {
-		// The owner's own pins are Manage tools only; they unpin them here.
+		// The owner's own pins are owner tools only; they unpin them here.
 		return sec.Kind == "pinned" && row.Personal && strings.HasPrefix(row.Key, NavManageKey+":")
 	}
 	return NavCanPin(ctx) && (sec.Kind != "pinned" || row.Personal)
 }
 
-// NavCanOwnPin reports whether the viewer is the owner pinning Manage tools
+// NavCanOwnPin reports whether the viewer is the owner pinning owner tools
 // for themselves. The pin is personal storage, so it needs a signed-in owner
 // who is not previewing as a player, on a campaign that still takes writes.
 func NavCanOwnPin(ctx context.Context) bool {

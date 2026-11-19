@@ -154,7 +154,7 @@ func TestShowPage_EyeShowsPlayersHome(t *testing.T) {
 
 	render := func(cc *CampaignContext, ctx context.Context) string {
 		var sb strings.Builder
-		if err := CampaignShowPage(cc, nil, nil, "tok").Render(ctx, &sb); err != nil {
+		if err := CampaignShowPage(cc, nil, nil, "tok", false).Render(ctx, &sb); err != nil {
 			t.Fatalf("render: %v", err)
 		}
 		return sb.String()
@@ -167,21 +167,21 @@ func TestShowPage_EyeShowsPlayersHome(t *testing.T) {
 	if !strings.Contains(got, "PLAYERS-HOME-MARKER") || strings.Contains(got, "DIRECTOR-HOME-MARKER") {
 		t.Errorf("the eye should show the players' home, not the director's:\n%s", got)
 	}
-	for _, want := range []string{"You are seeing the players&#39; home", "/campaigns/camp-1/customize/home/player", "Back to your own home", "toggle-view-mode"} {
+	for _, want := range []string{"You are seeing the players&#39; dashboard", `value="arrange"`, `value="player"`, "Arrange this page", "/campaigns/camp-1/view-as", "Dashboard for"} {
 		if !strings.Contains(got, want) && !strings.Contains(got, strings.ReplaceAll(want, "&#39;", "'")) {
 			t.Errorf("strip missing %q", want)
 		}
 	}
 
-	if got = render(owner, context.Background()); !strings.Contains(got, "DIRECTOR-HOME-MARKER") || strings.Contains(got, "players' home, as a player") {
+	if got = render(owner, context.Background()); !strings.Contains(got, "DIRECTOR-HOME-MARKER") || strings.Contains(got, "players' dashboard, as a player") || !strings.Contains(got, "Dashboard for") {
 		t.Errorf("without the eye the owner keeps their own home and no strip")
 	}
-	if got = render(player, context.Background()); !strings.Contains(got, "PLAYERS-HOME-MARKER") || strings.Contains(got, "Back to your own home") {
+	if got = render(player, context.Background()); !strings.Contains(got, "PLAYERS-HOME-MARKER") || strings.Contains(got, "Dashboard for") {
 		t.Errorf("a player sees the players' home with no strip")
 	}
 	// A co-DM previewing is not the owner: the strip has no Customizer link.
 	coDM := &CampaignContext{Campaign: campaign, MemberRole: RoleScribe, IsMember: true, IsDmGranted: true}
-	if got = render(coDM, preview); strings.Contains(got, "customize/home/player") {
+	if got = render(coDM, preview); strings.Contains(got, "Arrange this page") {
 		t.Errorf("only the owner is offered the Customizer")
 	}
 }

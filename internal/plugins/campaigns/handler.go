@@ -383,16 +383,29 @@ func (h *Handler) Show(c *echo.Context) error {
 	// Check for pending transfer to show banner.
 	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 
+	// A guest preview reaches here already downgraded to a visitor's context
+	// (AllowPublicCampaignAccess), so nothing below needs to know about it.
+	// A player preview is only a display cookie, so the list is cut for the
+	// player the owner is looking as; the page draws the same copy.
+	// A private campaign has no guests' dashboard to show: guests cannot open
+	// it, so when asked for one the page says so and the owner's own context
+	// stays.
+	viewer := cc
+	if ViewingAsPlayer(c, cc) {
+		viewer = cc.PlayerPreview()
+	}
+	guestPrivate := GuestsNoteAsked(c, cc)
+
 	// Fetch recently updated pages for the dashboard.
-	// Use cc.VisibilityRole(), not the raw cc.MemberRole (ADR-057): this
+	// Use VisibilityRole(), not the raw MemberRole (ADR-057): this
 	// list threads straight through to the entities repository's
 	// visibility filter (the same rule CheckEntityAccess and
 	// GetChildren use), and a Co-DM already sees dm_only entities in the
 	// entities plugin's own list/category views, so the dashboard must agree.
 	var recentEntities []RecentEntity
-	if h.recentLister != nil {
+	if h.recentLister != nil && !guestPrivate {
 		recentEntities, _ = h.recentLister.ListRecentForDashboard(
-			c.Request().Context(), cc.Campaign.ID, int(cc.VisibilityRole()), auth.GetUserID(c), 8,
+			c.Request().Context(), cc.Campaign.ID, int(viewer.VisibilityRole()), auth.GetUserID(c), 8,
 		)
 	}
 
@@ -409,7 +422,7 @@ func (h *Handler) Show(c *echo.Context) error {
 	// enforces owner-only via requireOwner middleware and fetches its
 	// own banner state via fvttService.
 
-	return middleware.Render(c, http.StatusOK, CampaignShowPage(cc, transfer, recentEntities, csrfToken))
+	return middleware.Render(c, http.StatusOK, CampaignShowPage(cc, transfer, recentEntities, csrfToken, guestPrivate))
 }
 
 // EditForm redirects to the unified settings page (GET /campaigns/:id/edit).
@@ -1063,82 +1076,6 @@ func (h *Handler) ResetOwnerDashboardLayout(c *echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, "owner_dashboard_layout_reset", nil)
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// --- View As Player Toggle ---
-
-// viewAsPlayerCookie is the cookie name for the "view as player" display toggle.
-const viewAsPlayerCookie = "chronicle_view_as_player"
-
-// ViewingAsPlayer reports whether the owner or a co-DM has "view as player"
-// on. Handlers read it themselves because the layout context that also
-// carries it is only filled in when a page renders. Display only: never use
-// it to grant.
-func ViewingAsPlayer(c *echo.Context, cc *CampaignContext) bool {
-	if cc == nil || !cc.CanAuthorDmOnly() {
-		return false
-	}
-	cookie, err := c.Cookie(viewAsPlayerCookie)
-	return err == nil && cookie.Value == "1"
-}
-
-// ToggleViewAsPlayer toggles the "view as player" cookie for the owner and
-// co-DMs (POST /campaigns/:id/toggle-view-mode). When active, templates
-// render as if they had the Player role, hiding DM-only UI and private
-// entities. Display only: access control still uses their real role.
-func (h *Handler) ToggleViewAsPlayer(c *echo.Context) error {
-	// Read current cookie state and toggle.
-	viewing := false
-	if cookie, err := c.Cookie(viewAsPlayerCookie); err == nil && cookie.Value == "1" {
-		viewing = true
-	}
-
-	req := c.Request()
-	secure := req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https"
-
-	if viewing {
-		// Clear the cookie.
-		c.SetCookie(&http.Cookie{
-			Name:     viewAsPlayerCookie,
-			Value:    "",
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   secure,
-			SameSite: http.SameSiteLaxMode, // mirror the set-branch below
-			MaxAge:   -1,
-		})
-	} else {
-		// Set the cookie.
-		c.SetCookie(&http.Cookie{
-			Name:     viewAsPlayerCookie,
-			Value:    "1",
-			Path:     "/",
-			HttpOnly: false, // JS reads this for toggle state indicator.
-			Secure:   secure,
-			SameSite: http.SameSiteLaxMode,
-			// A session cookie: closing the browser ends the preview, so an
-			// owner never comes back days later to a campaign that looks
-			// like it lost its edit buttons.
-		})
-	}
-
-	// HTMX: tell the client to do a full page refresh to re-render everything.
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Refresh", "true")
-		return c.NoContent(http.StatusNoContent)
-	}
-
-	// Regular request: redirect back to the current page.
-	referer := req.Header.Get("Referer")
-	if referer == "" {
-		cc := GetCampaignContext(c)
-		if cc != nil {
-			referer = "/campaigns/" + cc.Campaign.ID
-		} else {
-			referer = "/campaigns"
-		}
-	}
-	return c.Redirect(http.StatusSeeOther, referer)
 }
 
 // --- Members ---

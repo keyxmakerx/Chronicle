@@ -28,7 +28,8 @@ func TestBuildDeskFind(t *testing.T) {
 		{Label: "Overview", Path: "Customize", Href: "/campaigns/c1/customize", Icon: "fa-compass"},
 	}
 	tabs := []SettingsTab{
-		{ID: "general", Label: "General", Icon: "fa-solid fa-gear", MinRole: RolePlayer},
+		{ID: "general", Label: "Details", Icon: "fa-solid fa-gear", MinRole: RolePlayer},
+		{ID: "data", Label: "Export", Icon: "fa-solid fa-database", MinRole: RolePlayer},
 		{ID: "secret", Label: "Hidden from the owner's own page", MinRole: RoleOwner + 1},
 		{ID: "blank"},
 	}
@@ -39,8 +40,10 @@ func TestBuildDeskFind(t *testing.T) {
 		wantNot        []string
 	}{
 		{"nothing switched on", false, false,
-			[]string{"People", "Trash", "Settings", "Customize", "Game & features", "Your AI", "What players changed", "Campaign name", "Colours", "General"},
-			[]string{"Media", "Foundry", "Overview", "Hidden from the owner's own page"}},
+			[]string{"People", "Trash", "Customize", "Game & features", "Your AI", "What players changed", "Name", "Colours", "Details",
+				"Players' dashboard", "Guests' dashboard", "New pages start", "Who can read it", "Keys", "Export a copy", "Import", "Activity log",
+				"Archive this campaign", "Delete this campaign"},
+			[]string{"Media", "Foundry", "Overview", "Hidden from the owner's own page", "Export"}},
 		{"media on", true, false, []string{"Media"}, []string{"Foundry"}},
 		{"foundry on", false, true, []string{"Foundry"}, []string{"Media"}},
 	}
@@ -98,6 +101,108 @@ func TestBuildDeskFind_CustomizeEntriesKeepTheirPlace(t *testing.T) {
 			if e.Path != "Customize" {
 				t.Errorf("Home pages path = %q", e.Path)
 			}
+		}
+	}
+}
+
+// The words people type find the rows they mean, and a result's path names the
+// page and the group.
+func TestBuildDeskFind_WordsFindTheirRows(t *testing.T) {
+	got := buildDeskFind(deskFindInput{Base: "/campaigns/c1", Media: true, Foundry: true})
+	find := func(word string) []string {
+		var labels []string
+		for _, e := range got {
+			hay := strings.ToLower(e.Label + " " + e.Path + " " + e.Words)
+			if strings.Contains(hay, word) {
+				labels = append(labels, e.Label)
+			}
+		}
+		return labels
+	}
+	tests := []struct {
+		word string
+		want []string
+	}{
+		{"guest", []string{"Guests' dashboard"}},
+		{"dashboard", []string{"Players' dashboard", "Guests' dashboard"}},
+		{"export", []string{"Export a copy"}},
+		{"delete", []string{"Delete this campaign"}},
+		{"archive", []string{"Archive this campaign"}},
+		{"invite", []string{"People"}},
+		{"rename", []string{"Name"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.word, func(t *testing.T) {
+			labels := find(tt.word)
+			for _, want := range tt.want {
+				ok := false
+				for _, l := range labels {
+					ok = ok || l == want
+				}
+				if !ok {
+					t.Errorf("%q does not find %q, only %v", tt.word, want, labels)
+				}
+			}
+		})
+	}
+	// "settings" is in every path, so it lists the page's rows rather than nothing.
+	if n := len(find("settings")); n < 15 {
+		t.Errorf("settings finds only %d rows", n)
+	}
+	for _, e := range got {
+		if strings.HasPrefix(e.Path, "Manage") {
+			t.Errorf("%q still lives under Manage: %q", e.Label, e.Path)
+		}
+	}
+}
+
+func TestBuildDeskFind_RowPathsNameTheGroup(t *testing.T) {
+	got := buildDeskFind(deskFindInput{Base: "/campaigns/c1", Archived: true})
+	want := map[string]string{
+		"People":                  "Campaign settings › People",
+		"Guests' dashboard":       "Campaign settings › What players and guests see",
+		"Export a copy":           "Campaign settings › Safety net",
+		"Unarchive this campaign": "Campaign settings › Archive or delete",
+		"Delete this campaign":    "Campaign settings › Archive or delete",
+		"Your AI":                 "Campaign settings › Connections",
+	}
+	for _, e := range got {
+		if p, ok := want[e.Label]; ok {
+			if e.Path != p {
+				t.Errorf("%q path = %q, want %q", e.Label, e.Path, p)
+			}
+			delete(want, e.Label)
+		}
+	}
+	for l := range want {
+		t.Errorf("%q is not offered", l)
+	}
+}
+
+// Typing "settings" finds this place first, ahead of the Customizer's category
+// entries, which sort after the page's own.
+func TestBuildDeskFind_SettingsLeadsWithThisPlace(t *testing.T) {
+	got := buildDeskFind(deskFindInput{Base: "/campaigns/c1", Customize: []customizeFindEntry{
+		{Label: "Characters settings", Path: "Categories › Characters", Href: "/campaigns/c1/customize/categories/1/settings"},
+	}})
+	if len(got) < 2 || got[0].Label != "Campaign settings" || got[0].Href != "/campaigns/c1/dashboard" || got[1].Label != "Details and data" {
+		t.Fatalf("first entries = %v", findLabels(got))
+	}
+	for _, w := range []string{"settings", "details", "description", "keys", "export", "import", "activity"} {
+		if !strings.Contains(" "+got[1].Words+" ", " "+w+" ") {
+			t.Errorf("Details and data lacks the word %q", w)
+		}
+	}
+	if !strings.Contains(got[0].Words, "settings") {
+		t.Error("Campaign settings must list the word settings")
+	}
+	for _, w := range []string{"description", "about", "summary", "blurb"} {
+		found := false
+		for _, e := range got {
+			found = found || (e.Label == "Description" && strings.Contains(e.Words, w))
+		}
+		if !found {
+			t.Errorf("Description is not found by %q", w)
 		}
 	}
 }

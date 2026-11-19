@@ -1,5 +1,5 @@
 /**
- * sync_history.js -- the Sync history page (Manage › Sync history).
+ * sync_history.js -- the Sync history page (Campaign settings › Sync history).
  *
  * 1. Times arrive in UTC; this rewrites them in the reader's own time zone
  *    and puts a day heading ("Today", "Yesterday", "Thu 1 Oct") above each

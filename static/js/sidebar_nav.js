@@ -26,7 +26,7 @@
 
   var FOLD_MS = 280;
   // A closing section's rows fade out this fast, so none are left showing
-  // below a follower shorter than the section (Manage above a folded Admin).
+  // below a follower shorter than the section.
   var FADE_OUT_MS = 120;
   var EASE = 'cubic-bezier(.2,.8,.2,1)';
   var EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
@@ -239,7 +239,7 @@
     refreshCount(false);
   }
 
-  // --- The Manage row's count ------------------------------------------------
+  // --- The Campaign settings row's needs-you words ---------------------------
   // How many things wait on the owner is asked for after the page has drawn,
   // so no page waits on the providers behind it. The answer is kept for a
   // minute per campaign: a boosted page change redraws from the keep and a
@@ -261,18 +261,25 @@
     return null;
   }
 
-  // paintCount writes n into the row: the trailing number, and the row's
-  // spoken name, since a bare digit says nothing to a screen reader.
+  // needsWords is what the row says at its right: words, so the number cannot
+  // pass for a page count. Nothing when nothing waits.
+  function needsWords(n) {
+    if (!(n > 0)) return '';
+    return n + (n === 1 ? ' needs you' : ' need you');
+  }
+
+  // paintCount writes n into the row: the trailing words, and the row's
+  // spoken name, since a bare phrase there is not a label.
   function paintCount(n) {
     var row = manageRow();
     if (!row || typeof n !== 'number') return;
     var tr = row.querySelector('.nav-tr');
     if (!tr || tr.classList.contains('is-page')) return;
     var had = row.hasAttribute('data-needs');
-    tr.textContent = n > 0 ? String(n) : '';
+    tr.textContent = needsWords(n);
     if (n > 0) {
       row.setAttribute('data-needs', String(n));
-      row.setAttribute('aria-label', 'Manage, ' + n + (n === 1 ? ' thing needs you' : ' things need you'));
+      row.setAttribute('aria-label', 'Campaign settings, ' + n + (n === 1 ? ' thing needs you' : ' things need you'));
     } else {
       row.removeAttribute('data-needs');
       row.removeAttribute('aria-label');
@@ -401,7 +408,9 @@
   function restoreTrail(row) {
     var tr = row.querySelector('.nav-tr');
     if (!tr) return;
-    tr.textContent = row.getAttribute('data-nav-tr') || '';
+    // A row that is waiting on the owner gets its words back, not a blank.
+    var needs = parseInt(row.getAttribute('data-needs') || '', 10);
+    tr.textContent = row.getAttribute('data-nav-tr') || needsWords(needs);
     tr.classList.remove('is-page');
   }
 
@@ -426,7 +435,8 @@
   function setCurrent(key, page, animate) {
     var root = list();
     if (!root) return;
-    var old = root.querySelectorAll('.nav-row[aria-current="page"]');
+    // The Campaign settings row sits outside the list, so clear the whole sidebar.
+    var old = (sidebar() || root).querySelectorAll('.nav-row[aria-current="page"]');
     for (var i = 0; i < old.length; i++) {
       old[i].removeAttribute('aria-current');
       restoreTrail(old[i]);
@@ -570,8 +580,8 @@
       toggleTools();
       return;
     }
-    // Apps' own fold heading lives in campaignNavTop, Manage's and a
-    // category's twisty in the categories area — both under #sidebar.
+    // Apps' own fold heading lives in campaignNavTop, a category's twisty
+    // in the categories area — both under #sidebar.
     var fold = t.closest('#sidebar [data-nav-fold]');
     if (fold) {
       e.preventDefault();
@@ -604,7 +614,7 @@
     var target = e.detail && e.detail.target;
     if (target && target.id === 'main-content') {
       syncFromMarker(true);
-      // On a Manage page what was fixed a moment ago may have changed the
+      // On an owner tool page what was fixed a moment ago may have changed the
       // count, so ask again rather than trust the keep.
       var cur = currentKey();
       refreshCount(!!cur && cur.indexOf('manage') === 0);
@@ -629,6 +639,7 @@
     syncTools: syncTools,
     refreshCount: refreshCount,
     setCount: setCount,
+    needsWords: needsWords,
     parseFolds: parseFolds,
     serializeFolds: serializeFolds
   };

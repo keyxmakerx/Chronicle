@@ -265,6 +265,35 @@ type CampaignContext struct {
 	// look-around pass: when the pass ends. They see what a public visitor
 	// sees (RoleNone), and write routes refuse them like any non-member.
 	VisitUntil *time.Time
+
+	// Preview, PreviewerRole and PreviewerCanDM exist ONLY to draw the
+	// preview's own chrome: the "Dashboard for" line, the strip, the eye and
+	// the way back. They record that the DM team is looking as someone else
+	// and who they really are. Nothing may ever grant access, widen
+	// visibility or pick a role from them; every access decision reads
+	// MemberRole, IsMember and IsDmGranted, which a preview has already
+	// lowered.
+	Preview        string // "", PreviewPlayer or PreviewGuest
+	PreviewerRole  Role   // The viewer's real role while Preview is set.
+	PreviewerCanDM bool   // Whether the viewer is really on the DM team.
+}
+
+// The two ways the DM team can look at the campaign as someone else.
+const (
+	PreviewPlayer = "player"
+	PreviewGuest  = "guest"
+)
+
+// DMTeamChrome reports whether the viewer is really on the DM team, even
+// while a preview has lowered their role. Chrome only (see Preview).
+func (cc *CampaignContext) DMTeamChrome() bool {
+	return cc.CanAuthorDmOnly() || cc.PreviewerCanDM
+}
+
+// OwnerChrome reports whether the viewer is really the owner, even while a
+// preview has lowered their role. Chrome only (see Preview).
+func (cc *CampaignContext) OwnerChrome() bool {
+	return cc.MemberRole >= RoleOwner || cc.PreviewerRole >= RoleOwner
 }
 
 // PlayerPreview is a copy of cc that draws a page as a player sees it, for an
@@ -273,10 +302,29 @@ type CampaignContext struct {
 // an access check.
 func (cc *CampaignContext) PlayerPreview() *CampaignContext {
 	out := *cc
+	out.Preview = PreviewPlayer
+	out.PreviewerRole = cc.MemberRole
+	out.PreviewerCanDM = cc.CanAuthorDmOnly()
 	out.MemberRole = RolePlayer
 	out.IsDmGranted = false
 	out.IsSiteAdmin = false
 	return &out
+}
+
+// GuestPreviewContext is the context a signed-in visitor who is not a member
+// gets, with the real viewer recorded for the preview's chrome. It is built
+// from nothing but the campaign, never copied from cc, so a field added to
+// CampaignContext later defaults to no access in a guest preview. It can only
+// lower privileges. Call it on the REAL context of a request from the DM
+// team; ADR-074.
+func (cc *CampaignContext) GuestPreviewContext() *CampaignContext {
+	return &CampaignContext{
+		Campaign:       cc.Campaign,
+		MemberRole:     RoleNone,
+		Preview:        PreviewGuest,
+		PreviewerRole:  cc.MemberRole,
+		PreviewerCanDM: cc.CanAuthorDmOnly(),
+	}
 }
 
 // EffectiveRole returns the permission level to use for route-level authorization.
@@ -1032,10 +1080,14 @@ type CreateCampaignRequest struct {
 }
 
 // UpdateCampaignRequest holds the data submitted by the campaign edit form.
+//
+// Every field is a pointer: the Details tab posts only the description, so an
+// absent name or is_public must keep what is stored rather than blank the name
+// or flip a public campaign private.
 type UpdateCampaignRequest struct {
-	Name        string `json:"name" form:"name"`
-	Description string `json:"description" form:"description"`
-	IsPublic    bool   `json:"is_public" form:"is_public"`
+	Name        *string `json:"name" form:"name"`
+	Description *string `json:"description" form:"description"`
+	IsPublic    *bool   `json:"is_public" form:"is_public"`
 }
 
 // UpdateCampaignDetailsInput is the owner's save of the two details the desk
@@ -1087,10 +1139,12 @@ type CreateCampaignInput struct {
 }
 
 // UpdateCampaignInput is the validated input for updating a campaign.
+// A nil field is absent and keeps the stored value; a pointer to the empty
+// string clears the description.
 type UpdateCampaignInput struct {
-	Name        string
-	Description string
-	IsPublic    bool
+	Name        *string
+	Description *string
+	IsPublic    *bool
 }
 
 // ListOptions holds pagination parameters for list queries.
@@ -1187,4 +1241,19 @@ func WhereWePlayLink(raw string) WhereWeLink {
 		return WhereWeLink{Text: text}
 	}
 	return WhereWeLink{Text: text, Href: u.String()}
+}
+
+// firstTitle finds the first title block (row, column, block index), the place
+// the home's preview line sits under. Tile rows hold no title.
+func (l *DashboardLayout) firstTitle() ([3]int, bool) {
+	for ri, row := range l.Rows {
+		for ci, col := range row.Columns {
+			for bi, b := range col.Blocks {
+				if b.Type == "welcome_banner" {
+					return [3]int{ri, ci, bi}, true
+				}
+			}
+		}
+	}
+	return [3]int{}, false
 }
