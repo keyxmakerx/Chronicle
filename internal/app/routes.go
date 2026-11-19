@@ -3140,6 +3140,7 @@ func (a *App) RegisterRoutes() {
 	entities.RegisterContentTemplateRoutes(e, contentTemplateHandler, campaignService, authService)
 	campaignService.SetContentTemplateSeeder(contentTemplateService)
 	entityHandler.SetContentTemplateService(contentTemplateService)
+	campaignHandler.RegisterCustomizeSection(newTemplatesSection(contentTemplateService))
 
 	// Worldbuilding prompt routes (guided writing prompts for content creators).
 	wbPromptRepo := entities.NewWorldbuildingPromptRepository(a.DB)
@@ -7007,6 +7008,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
 	{Name: "customize-shell", Scripts: []string{"/static/js/find_palette.js", "/static/js/widgets/customize_shell.js"}},
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
+	{Name: "customize-templates", Scripts: []string{"/static/js/widgets/customize_templates.js"}},
 	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/customize_page_editor.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "checkup", Scripts: []string{"/static/js/widgets/checkup.js"}},

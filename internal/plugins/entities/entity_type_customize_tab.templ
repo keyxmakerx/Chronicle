@@ -5,9 +5,9 @@ import (
 )
 
 // EntityTypeCustomizeTabTmpl is one tab of a category's Customize workspace.
-// The page layout and the category home are the Customizer's page editor,
-// which saves with the rest of the draft; the fields still use today's
-// editor, saving with its own button.
+// The page layout and the category home are the Customizer's page editor;
+// the fields are the field editor in draft mode. All of them save with the
+// rest of the draft.
 templ EntityTypeCustomizeTabTmpl(cc *campaigns.CampaignContext, et *EntityType, tab, csrfToken string) {
 	switch tab {
 		case "layout":
@@ -22,7 +22,7 @@ templ EntityTypeCustomizeTabTmpl(cc *campaigns.CampaignContext, et *EntityType, 
 			></div>
 		case "fields":
 			<div class="max-w-3xl">
-				@attributesTab(cc, et, csrfToken)
+				@attributesTab(cc, et, csrfToken, true)
 			</div>
 	}
 }
