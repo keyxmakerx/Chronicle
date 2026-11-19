@@ -110,16 +110,16 @@ templ fullApp(title string) {
 
 				<!-- "View as player" banner -->
 				if PreviewAs(ctx) == "guest" {
-					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-300" role="status">
+					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-800 dark:text-amber-300" role="status">
 						<i class="fa-solid fa-eye-slash mr-1"></i>
 						Viewing as a guest
-						<span class="text-amber-400/70 ml-1">— you see what a visitor sees</span>
+						<span class="text-amber-700 dark:text-amber-400/70 ml-1">— you see what a visitor sees</span>
 					</div>
 				} else if IsViewingAsPlayer(ctx) {
-					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-300" data-pv-banner>
+					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-800 dark:text-amber-300" data-pv-banner>
 						<i class="fa-solid fa-eye-slash mr-1"></i>
 						Viewing as player
-						<span class="text-amber-400/70 ml-1">— { GMTerm(ctx) }-only content is hidden</span>
+						<span class="text-amber-700 dark:text-amber-400/70 ml-1">— { GMTerm(ctx) }-only content is hidden</span>
 					</div>
 				}
 
