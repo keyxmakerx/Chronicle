@@ -255,6 +255,41 @@ func TestApplyAppearance_Colours(t *testing.T) {
 			}
 		}
 	})
+	t.Run("amber accent refused, previous kept", func(t *testing.T) {
+		for _, amber := range []string{"#f59e0b", "#F97316", "#a16207"} {
+			s := CampaignSettings{AccentColor: "#6366f1"}
+			var in AppearanceInput
+			in.Colours.Accent = amber
+			if _, err := applyAppearance(&s, in); err == nil {
+				t.Errorf("accent %s was accepted", amber)
+			}
+			if s.AccentColor != "#6366f1" {
+				t.Errorf("accent %s changed the stored colour to %q", amber, s.AccentColor)
+			}
+		}
+	})
+	t.Run("amber already stored may be saved again", func(t *testing.T) {
+		stored, _ := colour.Tame("#f59e0b", false)
+		s := CampaignSettings{AccentColor: stored}
+		var in AppearanceInput
+		in.Colours.Accent = stored
+		if _, err := applyAppearance(&s, in); err != nil {
+			t.Fatalf("re-saving the stored colour failed: %v", err)
+		}
+	})
+	t.Run("red and green accents move off the state colours", func(t *testing.T) {
+		for _, c := range []string{"#dc2626", "#16a34a"} {
+			var s CampaignSettings
+			var in AppearanceInput
+			in.Colours.Accent = c
+			if _, err := applyAppearance(&s, in); err != nil {
+				t.Fatal(err)
+			}
+			if s.AccentColor == c {
+				t.Errorf("accent %s was stored unchanged", c)
+			}
+		}
+	})
 	t.Run("header colour uses deep range", func(t *testing.T) {
 		var in AppearanceInput
 		in.Header.Bg, in.Header.Color = "solid", neon

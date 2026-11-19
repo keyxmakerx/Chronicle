@@ -716,7 +716,10 @@ character: https://claude.ai/artifact/YMuDg5AgHP7V6L6G5rSDnc. A screen may
 vary the details as long as it keeps that character. The owner picks the
 kit in Customize › Look › Pages; it puts `data-cz-kit` on the page
 (`static/css/style_kits.css`), and only pages in the Material page look wear
-it. Each kit's opening is still to be built (#1548).
+it. A card takes its kit's opening by carrying `data-kit-open` and showing
+itself with the `hidden` attribute; `static/js/kit_open.js` does the rest. It
+is on the place line's picker, the page header's more menu and the armory's
+item menu; the page layout menu is still on Drape (TODO(#1548)).
 
 | Kit | Top bar | Dividers and rows | Boxes | Pointer | A card opens | Faces |
 |---|---|---|---|---|---|---|
@@ -762,14 +765,16 @@ it. Each kit's opening is still to be built (#1548).
   picked one, and everything the kit derives from its accent follows it:
   Lumen's glow and line, Flowing's wash, Sketchbook's highlighter and tape.
   With no colour picked, each kit keeps the colour it was designed with. The
-  contrast step below is built; the picker's refusals and swatch are
-  TODO(#1549).
+  picker's own swatches leave out amber, orange and rose, and a colour
+  already stored in the amber range keeps working until the owner picks
+  another.
 - **Lifted for dark mode.** The light-mode accent is the colour darkened
   slightly (mixed 88% with black). The dark-mode accent is the colour mixed
   55% with white, so one choice reads on both.
 - **Colours near the Director's amber are refused** (hue 22 to 58 degrees,
   saturation above 45%, lightness above 30%). The colour picker says why in
-  words and keeps the previous colour.
+  words and keeps the previous colour, and the save refuses the same range
+  (`colour.NearAmber`, mirrored in `customize_look.js`).
 
 ### Exceptions
 
@@ -787,8 +792,9 @@ in a template.
   the picked one when this happens.
 - **A colour that would read as a state colour is moved off it.** Beside
   the green, amber and red of state, a picked colour within 12 degrees of
-  red or green has its saturation lowered until the two are told apart.
-  Amber is refused outright, as above.
+  red or green has its colour drained until the two are told apart in both
+  themes (`colour.OffState`; the picker says so when it does). Amber is
+  refused outright, as above.
 - **Expensive effects step down when they cost too much.** Sketchbook's
   hand-drawn edge (the outline drawn twice, a little apart) and Lumen's
   breathing glow are only on boxes, which a page has few of. Rows in every

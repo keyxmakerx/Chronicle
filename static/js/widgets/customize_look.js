@@ -168,6 +168,58 @@
       var out = (L === c[0] && C === c[1]) ? hex.toLowerCase() : lchHex(L, C, c[2]);
       return { hex:out, toned:deltaE(hex, out) > 0.02 };
     }
+    // Mirrors colour.NearAmber, colour.OffState and colour.AccentTame.
+    function hslOf(hex){
+      var c = hexToRgb(hex), mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]), l = (mx + mn) / 2, d = mx - mn, h = 0, s = 0;
+      if (d){
+        s = d / (1 - Math.abs(2 * l - 1));
+        h = mx === c[0] ? ((c[1] - c[2]) / d + 6) % 6 : mx === c[1] ? (c[2] - c[0]) / d + 2 : (c[0] - c[1]) / d + 4;
+      }
+      return { h:h * 60, s:s, l:l };
+    }
+    function nearAmber(hex){ var c = hslOf(hex); return c.h >= 22 && c.h <= 58 && c.s > 0.45 && c.l > 0.30; }
+    function hueGap(a, b){ var d = Math.abs(a - b); return Math.min(d, 360 - d); }
+    function offState(hex){
+      var h = hslOf(hex).h, near;
+      if (hueGap(h, 0) <= 12) near = ['#dc2626', '#f87171'];
+      else if (hueGap(h, 142) <= 12) near = ['#16a34a', '#4ade80'];
+      else return { hex:hex.toLowerCase(), moved:false };
+      function apart(c){ return deltaE(c, near[0]) >= 0.10 && deltaE(c, near[1]) >= 0.10; }
+      var out = hex.toLowerCase();
+      if (apart(out)) return { hex:out, moved:false };
+      var c = oklch(out);
+      for (var f = 0.9; f >= 0; f -= 0.1){
+        var cand = lchHex(c[0], c[1] * f, c[2]);
+        if (apart(cand)) return { hex:cand, moved:cand !== out };
+      }
+      return { hex:lchHex(c[0], 0, c[2]), moved:true };
+    }
+    function accentTame(hex){
+      var t = tame(hex, false), o = offState(t.hex);
+      return { hex:o.hex, toned:t.toned || o.moved, moved:o.moved };
+    }
+    // The pages and paper each style kit is drawn on (mirrors czKits in
+    // style_kits.go); Material reads against the chosen page tone.
+    var KIT_PAGES = {
+      sharp:{ page:['#fbfaf7', '#0e0e0e'], paper:['#fbfaf7', '#0e0e0e'] },
+      ornate:{ page:['#f6efe2', '#1b1510'], paper:['#fbf5e8', '#241c15'] },
+      flowing:{ page:['#f1f6f4', '#101918'], paper:['#fbfdfc', '#162221'] },
+      lumen:{ page:['#f4f4fa', '#0c0e1c'], paper:['#ffffff', '#141830'] },
+      sketchbook:{ page:['#f7f4ec', '#1d2220'], paper:['#fffdf6', '#252b28'] }
+    };
+    // What the pages will actually use for the campaign colour as words and
+    // edges, in light and dark, when the kit's contrast check moves it.
+    function kitAccent(d){
+      var acc = d.colours.accent, kit = d.page && d.page.kit, K = KIT_PAGES[kit], out = { light:null, dark:null };
+      if (!acc) return out;
+      var lp = K ? [K.page[0], K.paper[0]] : [tones(d, 'light').bg, tones(d, 'light').card];
+      var dp = K ? [K.page[1], K.paper[1]] : [tones(d, 'dark').bg, tones(d, 'dark').card];
+      var l0 = mix(acc, '#000000', 0.12), n0 = mix(acc, '#ffffff', 0.45);
+      var l1 = readable(l0, lp, 4.5, 'darker'), n1 = readable(n0, dp, 4.5, 'lighter');
+      if (l1.de > 0.03) out.light = l1.hex;
+      if (n1.de > 0.03) out.dark = n1.hex;
+      return out;
+    }
     function toneSpan(deep){ return 0.80 - (deep ? 0.16 : 0.36); }
     function fromPicker(h, t, deep){ var L = 0.80 - t / 100 * toneSpan(deep); return lchHex(L, Math.min(deep ? 0.14 : 0.19, chromaCap(L)), h); }
     function toPicker(hex, deep){ var c = oklch(hex); return { h:Math.round(c[2]) % 360, t:Math.round(clamp((0.80 - c[0]) / toneSpan(deep) * 100, 0, 100)) }; }
@@ -184,11 +236,14 @@
 
     /* ---------- Data ---------- */
     var PRESETS = [['Indigo', '#6366f1'], ['Blue', '#3b82f6'], ['Cyan', '#06b6d4'], ['Emerald', '#10b981'], ['Amber', '#f59e0b'], ['Rose', '#f43f5e'], ['Purple', '#a855f7'], ['Orange', '#f97316']];
+    // The campaign colour never sits in the Director's amber or beside the
+    // state red and green, so its swatches leave those ranges out.
+    var ACCENT_PRESETS = [['Indigo', '#6366f1'], ['Blue', '#3b82f6'], ['Sky', '#0ea5e9'], ['Cyan', '#06b6d4'], ['Teal', '#0d9488'], ['Emerald', '#10b981'], ['Purple', '#a855f7'], ['Pink', '#ec4899']];
     var HDR_COLOURS = [['Night', '#0f172a'], ['Deep blue', '#1e2a5a'], ['Slate', '#1f2937'], ['Umber', '#3b2a1c'], ['Pine', '#14352a'], ['Moss', '#2f4a2c'], ['Oxblood', '#4a1512'], ['Plum', '#3b1d5e']];
     var LOOK_COLOUR_NAMES = { '#9a4a26':'Sienna', '#8f2d2d':'Wax red', '#8a6a1f':'Ochre', '#5b6be0':'Moonlit blue', '#2563eb':'Blue', '#64748b':'Slate', '#2f7d4f':'Moss green', '#a16207':'Lantern', '#4d7c0f':'Fern', '#c2410c':'Ember', '#b91c1c':'Garnet', '#b45309':'Brass', '#0e7490':'Glacier', '#7c3aed':'Violet', '#a21caf':'Orchid', '#94651b':'Candle gold', '#0f766e':'Console teal', '#0369a1':'Signal blue' };
     function colourName(hex){
       if (!hex) return '';
-      var h = hex.toLowerCase(), p = PRESETS.concat(HDR_COLOURS).filter(function(x){ return x[1] === h; })[0];
+      var h = hex.toLowerCase(), p = PRESETS.concat(ACCENT_PRESETS, HDR_COLOURS).filter(function(x){ return x[1] === h; })[0];
       return p ? p[0] : (LOOK_COLOUR_NAMES[h] || 'Your colour');
     }
 
@@ -644,7 +699,7 @@
     /* ---------- Building the controls ---------- */
     // Swatch groups: which setting each writes, its list, and its extra option.
     var GROUPS = {
-      accent:{ k:'colours.accent', list:PRESETS, label:'Chrome accent' },
+      accent:{ k:'colours.accent', list:ACCENT_PRESETS, label:'Chrome accent' },
       s1:    { k:'colours.s1', list:PRESETS, follow:true, label:'Surface A' },
       s2:    { k:'colours.s2', list:PRESETS, follow:true, label:'Surface B' },
       hsolid:{ k:'header.solid', list:HDR_COLOURS, page:true, label:'Header colour', deep:true },
@@ -672,7 +727,9 @@
       });
       h += '<label class="sw sw-cus" data-hc="sw:' + g + ':custom" hidden><input type="radio" name="' + name + '" value="__custom" data-k="' + G.k + '" data-g="' + g + '" aria-label="Your own colour"><span></span></label>';
       h += '<button type="button" class="sw-add" data-pick="' + g + '" aria-haspopup="dialog" aria-expanded="false" aria-label="Choose your own colour for ' + esc(G.label) + '">' + IC('i-plus') + '</button>';
-      h += '<span class="sw-name" id="' + g + '-name"></span></div>';
+      h += '<span class="sw-name" id="' + g + '-name"></span>';
+      if (g === 'accent') h += '<span class="sw-adj" id="accent-adj" hidden><span class="sw-adj-l">Pages use</span><i class="chip" id="accent-adj-l"></i><i class="chip" id="accent-adj-d"></i></span>';
+      h += '</div>';
       if (g === 'accent' || g === 's1' || g === 's2') h += '<p class="note" id="' + g + '-note" hidden><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span></span></p>';
       return h;
     }
@@ -1154,6 +1211,11 @@
         if (G.page){ var pg = $('.sw-page', wrap); pg.style.setProperty('--c', T.card); pg.style.setProperty('--c2', T.line2); }
         setText($('#' + g + '-name'), v == null ? 'Same as the chrome accent' : v === 'page' ? 'Matches the page' : colourName(v) + (inList(g, v) ? '' : ' · ' + v.toUpperCase()));
       });
+      var adj = kitAccent(d), adjEl = $('#accent-adj');
+      adjEl.hidden = !(adj.light || adj.dark);
+      $('#accent-adj-l').hidden = !adj.light; $('#accent-adj-d').hidden = !adj.dark;
+      if (adj.light){ $('#accent-adj-l').style.setProperty('--c', adj.light); $('#accent-adj-l').title = 'On light pages'; }
+      if (adj.dark){ $('#accent-adj-d').style.setProperty('--c', adj.dark); $('#accent-adj-d').title = 'On dark pages'; }
       ['accent', 's1', 's2'].forEach(function(g){ var n = guardNote(g, d), el = $('#' + g + '-note'); el.hidden = !n; setText($('span', el), n); });
       var bg = d.header.bg;
       $('#h-solid').hidden = bg !== 'solid';
@@ -1517,7 +1579,15 @@
     }
     function applyPick(hex, typed){
       if (!pick) return;
-      var G = GROUPS[pick.g], t = tame(hex, G.deep);
+      var G = GROUPS[pick.g];
+      if (pick.g === 'accent' && nearAmber(hex)){
+        var keep = getP(draft, G.k), amberNote = $('#pop-note');
+        if (typed && keep){ $('#pop-hex').value = keep.toUpperCase(); }
+        amberNote.hidden = false;
+        setText($('span', amberNote), 'That colour is too close to amber, which marks what only the Director sees. Your previous colour is kept; pick another.');
+        return;
+      }
+      var t = pick.g === 'accent' ? accentTame(hex) : tame(hex, G.deep);
       memo[pick.g] = t.hex; setP(draft, G.k, t.hex);
       update();
       if (typed){ var pp = toPicker(t.hex, G.deep); $('#pop-hue').value = pp.h; $('#pop-tone').value = pp.t; }
@@ -1525,7 +1595,7 @@
       if (document.activeElement !== $('#pop-hex') || typed) $('#pop-hex').value = t.hex.toUpperCase();
       var note = $('#pop-note');
       note.hidden = !(typed && t.toned);
-      if (typed && t.toned) setText($('span', note), 'Toned down from ' + typed.toUpperCase() + ' so it won’t glare. This is the closest calm colour.');
+      if (typed && t.toned) setText($('span', note), t.moved ? 'Moved off the red and green Chronicle uses for warnings and success, so they stay easy to tell apart. This is the closest colour.' : 'Toned down from ' + typed.toUpperCase() + ' so it won’t glare. This is the closest calm colour.');
     }
     function useHex(){
       var v = $('#pop-hex').value.trim(); if (v.charAt(0) !== '#') v = '#' + v;

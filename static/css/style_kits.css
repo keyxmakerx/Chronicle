@@ -660,3 +660,66 @@
   [data-cz-kit] #main-content .cb-card:is(.cb-facts, .en-block) { box-shadow: none !important; outline: 0 !important; }
   [data-cz-kit] #main-content .cb-card::after { content: none !important; }
 }
+
+/* ---------- Openings ----------
+   What a card does when it comes out of something clicked on a page, in each
+   kit (ui-standard.md, "Style kits"). Components opt in with data-kit-open
+   and kit_open.js marks the move: data-ko="in" or "out", where it opened from
+   (--ko-x, --ko-y, --ko-ey, --ko-s) and the nearest edge (data-ko-edge).
+   Going out plays the same move backwards, quicker. Every card that opts in is a menu or picker, so the move takes the everyday 120 ms. Material keeps each
+   component's own Grow. Calm is a short fade in place; Off sets no move. */
+[data-cz-kit] [data-kit-open][data-ko] {
+  animation-duration: var(--dur-everyday, 120ms);
+  animation-timing-function: var(--ease-out);
+  animation-fill-mode: both;
+  transform-origin: var(--ko-x, 50%) var(--ko-ey, 0%);
+}
+[data-cz-kit] [data-kit-open][data-ko="out"] {
+  animation-direction: reverse;
+  animation-duration: var(--dur-everyday-out, 80ms);
+  animation-timing-function: var(--ease-in);
+}
+[data-cz-kit="sharp"] [data-kit-open][data-ko]:not([data-ko="out"]) { animation-timing-function: var(--ease-standard); }
+[data-cz-kit="sharp"] [data-kit-open][data-ko][data-ko-edge="top"] { animation-name: ko-sharp-top; }
+[data-cz-kit="sharp"] [data-kit-open][data-ko][data-ko-edge="bottom"] { animation-name: ko-sharp-bottom; }
+[data-cz-kit="ornate"] [data-kit-open][data-ko] { animation-name: ko-ornate; }
+[data-cz-kit="flowing"] [data-kit-open][data-ko] { animation-name: ko-flowing; }
+[data-cz-kit="lumen"] [data-kit-open][data-ko] { animation-name: ko-lumen; }
+[data-cz-kit="sketchbook"] [data-kit-open][data-ko] { animation-name: ko-sketch; transform-origin: top left; }
+/* The taped note stays a little askew once it has landed, in every motion level. */
+[data-cz-kit="sketchbook"] [data-kit-open]:not([hidden]) { transform: rotate(var(--ko-tilt, .6deg)); }
+
+[data-cz-kit][data-motion="calm"] [data-kit-open][data-ko] { animation-name: ko-fade; }
+[data-cz-kit][data-motion="calm"] [data-kit-open][data-ko][data-ko-edge] { animation-name: ko-fade; }
+[data-cz-kit][data-motion="off"] [data-kit-open] { animation: none; }
+
+@keyframes ko-fade { from { opacity: 0; } to { opacity: 1; } }
+/* Sharp: unrolls straight down from the edge clicked, no fade. The box
+   shadow stays outside the clip so the sheet keeps its edge while it moves. */
+@keyframes ko-sharp-top { from { clip-path: inset(0 -40px 100% -40px); } to { clip-path: inset(0 -40px -40px -40px); } }
+@keyframes ko-sharp-bottom { from { clip-path: inset(100% -40px 0 -40px); } to { clip-path: inset(-40px -40px 0 -40px); } }
+/* Ornate: swings down on a hinge along the edge clicked, and settles. */
+@keyframes ko-ornate {
+  0% { opacity: 0; transform: perspective(700px) rotateX(calc(-72deg * var(--ko-s, 1))); }
+  45% { opacity: 1; }
+  78% { transform: perspective(700px) rotateX(calc(5deg * var(--ko-s, 1))); }
+  100% { opacity: 1; transform: perspective(700px) rotateX(0deg); }
+}
+/* Flowing: spreads out from the click like ink in water, then settles. */
+@keyframes ko-flowing {
+  0% { opacity: 0; transform: scale(.97); clip-path: circle(0% at var(--ko-x, 50%) var(--ko-y, 0%)); }
+  40% { opacity: 1; }
+  100% { opacity: 1; transform: none; clip-path: circle(150% at var(--ko-x, 50%) var(--ko-y, 0%)); }
+}
+/* Lumen: a ring of light spreads and the card blooms out of it. */
+@keyframes ko-lumen {
+  0% { opacity: 0; transform: scale(.94); box-shadow: 0 0 0 0 color-mix(in srgb, var(--kit-acc, #6366f1) 55%, transparent); }
+  60% { opacity: 1; box-shadow: 0 0 0 16px color-mix(in srgb, var(--kit-acc, #6366f1) 12%, transparent); }
+  100% { opacity: 1; transform: none; }
+}
+/* Sketchbook: a taped note drops from the click and lands slightly askew. */
+@keyframes ko-sketch {
+  0% { opacity: 0; transform: translateY(-18px) rotate(-4deg); }
+  60% { opacity: 1; transform: translateY(2px) rotate(1.4deg); }
+  100% { opacity: 1; transform: rotate(var(--ko-tilt, .6deg)); }
+}
