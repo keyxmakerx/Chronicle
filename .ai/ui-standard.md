@@ -685,8 +685,7 @@ second; the dice settle in under 480ms.
 
 ## Phones and tablets
 
-The same screens, folded to the width; never a second design. The first
-six rules are signed and being built: TODO(#2277).
+The same screens, folded to the width; never a second design.
 
 - **Nothing is squeezed.** Where the page area is too narrow for its
   columns, the blocks fold into one column instead of crushing. Words are
