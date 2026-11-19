@@ -78,6 +78,11 @@ type HeroRequest struct {
 type heroAccess struct {
 	Allowed bool
 	ForSelf bool
+	// HasHero marks a refusal whose one reason is that the player already
+	// owns a hero, so the page can say so instead of "not allowed".
+	HasHero bool
+	// OwnHero is that hero, set by the handler for the link.
+	OwnHero *Entity
 }
 
 func heroAccessFor(role campaigns.Role, claimingOn bool, target *EntityType, ownsCharacter bool) heroAccess {
@@ -87,11 +92,24 @@ func heroAccessFor(role campaigns.Role, claimingOn bool, target *EntityType, own
 	if role >= campaigns.RoleScribe {
 		return heroAccess{Allowed: true}
 	}
-	if role >= campaigns.RolePlayer && claimingOn && isClaimableType(target) && !ownsCharacter {
+	if role >= campaigns.RolePlayer && claimingOn && isClaimableType(target) {
+		if ownsCharacter {
+			return heroAccess{HasHero: true}
+		}
 		return heroAccess{Allowed: true, ForSelf: true}
 	}
 	return heroAccess{}
 }
+
+// refusalMessage is why the creator is closed to this viewer: one hero at a
+// time when that is the reason, otherwise the campaign does not offer it.
+func (a heroAccess) refusalMessage() string {
+	if a.HasHero {
+		return "you already have a hero in this campaign; players have one hero at a time"
+	}
+	return "you can't create a hero in this campaign"
+}
+
 
 // pickHeroType chooses the page type a new hero becomes, from the types the
 // owner listed as characters (charTypeIDs, already resolved). It prefers the

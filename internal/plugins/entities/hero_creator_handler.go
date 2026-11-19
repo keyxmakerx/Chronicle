@@ -38,28 +38,38 @@ func (h *Handler) heroTarget(c *echo.Context, cc *campaigns.CampaignContext) (*E
 	staff := cc.MemberRole >= campaigns.RoleScribe
 	target := pickHeroType(types, ids, !staff)
 	claimingOn := h.isAddonEnabled(ctx, campaignID, AddonPlayerCharacterClaiming)
-	owns := false
+	var own *Entity
 	if !staff && claimingOn && target != nil {
-		if owns, err = h.ownsCharacter(ctx, campaignID, auth.GetUserID(c), ids); err != nil {
+		if own, err = h.ownedCharacter(ctx, campaignID, auth.GetUserID(c), ids); err != nil {
 			return nil, heroAccess{}, err
 		}
 	}
-	return target, heroAccessFor(cc.MemberRole, claimingOn, target, owns), nil
+	access := heroAccessFor(cc.MemberRole, claimingOn, target, own != nil)
+	if access.HasHero {
+		access.OwnHero = own
+	}
+	return target, access, nil
 }
 
-// ownsCharacter reports whether the user already owns a page of one of the
-// campaign's character types.
-func (h *Handler) ownsCharacter(ctx context.Context, campaignID, userID string, charTypeIDs []int) (bool, error) {
+// ownedCharacter returns the user's page of one of the campaign's character
+// types, or nil when they have none.
+func (h *Handler) ownedCharacter(ctx context.Context, campaignID, userID string, charTypeIDs []int) (*Entity, error) {
 	owned, err := h.service.ListByOwner(ctx, campaignID, userID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	for _, e := range owned {
-		if slices.Contains(charTypeIDs, e.EntityTypeID) {
-			return true, nil
+	for i := range owned {
+		if slices.Contains(charTypeIDs, owned[i].EntityTypeID) {
+			return &owned[i], nil
 		}
 	}
-	return false, nil
+	return nil, nil
+}
+
+// ownsCharacter reports whether the user already owns such a page.
+func (h *Handler) ownsCharacter(ctx context.Context, campaignID, userID string, charTypeIDs []int) (bool, error) {
+	e, err := h.ownedCharacter(ctx, campaignID, userID, charTypeIDs)
+	return e != nil, err
 }
 
 func (h *Handler) heroPlan(c *echo.Context, cc *campaigns.CampaignContext) (*HeroPlan, error) {
@@ -127,7 +137,10 @@ func (h *Handler) NewHero(c *echo.Context) error {
 		return err
 	}
 	if !access.Allowed {
-		return apperror.NewForbidden("you can't create a hero in this campaign")
+		if access.OwnHero != nil {
+			return middleware.Render(c, http.StatusForbidden, HeroAlreadyPage(cc, access.OwnHero))
+		}
+		return apperror.NewForbidden(access.refusalMessage())
 	}
 	return middleware.Render(c, http.StatusOK, HeroCreatorPage(cc, HeroCreatorView{
 		TypeName:  target.Name,
@@ -184,7 +197,7 @@ func (h *Handler) CreateHero(c *echo.Context) error {
 		return err
 	}
 	if !access.Allowed {
-		return apperror.NewForbidden("you can't create a hero in this campaign")
+		return apperror.NewForbidden(access.refusalMessage())
 	}
 	plan, err := h.heroPlan(c, cc)
 	if err != nil {

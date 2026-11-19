@@ -53,3 +53,16 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 		</div>
 	}
 }
+
+// HeroAlreadyPage is what a player who already has a hero sees at the
+// creator's address: players have one hero at a time, so it points them at
+// theirs instead of calling the creator unavailable.
+templ HeroAlreadyPage(cc *campaigns.CampaignContext, hero *Entity) {
+	@layouts.App("You already have a hero - " + cc.Campaign.Name) {
+		<div class="max-w-2xl mx-auto px-4 py-10">
+			<h1 class="text-xl font-semibold text-fg mb-2">You already have a hero</h1>
+			<p class="text-fg-muted mb-4">Players have one hero at a time in this campaign, so there is nothing new to create. Open { hero.Name } to keep building it.</p>
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, hero.ID)) } class="btn-primary">Go to { hero.Name }</a>
+		</div>
+	}
+}
