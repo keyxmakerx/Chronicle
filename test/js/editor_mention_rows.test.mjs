@@ -18,6 +18,8 @@ import { pw, chromePath, skip } from './_browser_env.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MENTION_JS = readFileSync(join(root, 'static/js/widgets/editor_mention.js'), 'utf8');
+// The list is placed by Chronicle.placeAtCaret, which lives in theme.js.
+const THEME_JS = readFileSync(join(root, 'static/js/theme.js'), 'utf8');
 const TIPTAP_JS = readFileSync(join(root, 'static/vendor/tiptap-bundle.min.js'), 'utf8');
 
 const page = (id, name, kind, more = {}) => ({ id, name, url: '/campaigns/c1/entities/' + id, type_name: kind, type_icon: 'fa-user', type_color: '#336699', ...more });
@@ -44,6 +46,7 @@ async function open(t, { results = [], scenes = [], hostOpen = false, viewport =
       FoundryScenes: { want: () => {}, pickerItems: () => scenes },
     };
   }, scenes);
+  await p.addScriptTag({ content: THEME_JS });
   await p.addScriptTag({ content: MENTION_JS });
   await p.evaluate((hostOpen) => {
     const ext = window.Chronicle.MentionExtension({ campaignId: 'c1', hostOpen });
