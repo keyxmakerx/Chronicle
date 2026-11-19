@@ -452,6 +452,40 @@
   };
   C.working = working;
 
+  /**
+   * Put a fixed menu beside the caret and inside the window: under the caret
+   * when a full-height menu fits there, above it when it does not, and 8px
+   * clear of the window's sides. On a phone the window is what the keyboard
+   * leaves showing (visualViewport).
+   *
+   * The side is chosen for the menu's full height (its CSS max-height, read
+   * once), so it doesn't jump as a filter shortens the list.
+   *
+   * @param {HTMLElement} menuEl - the menu; position:fixed.
+   * @param {Object} caretRect - {left, top, bottom} of the caret, in viewport px.
+   */
+  C.placeAtCaret = function (menuEl, caretRect) {
+    if (!menuEl || !caretRect) return;
+    var GAP = 4, EDGE = 8, MIN = 96;
+    if (menuEl._placeCap == null) {
+      var cs = window.getComputedStyle ? window.getComputedStyle(menuEl) : null;
+      menuEl._placeCap = (cs && parseFloat(cs.maxHeight)) || 300;
+    }
+    var cap = menuEl._placeCap;
+    var vv = window.visualViewport;
+    var winTop = vv ? vv.offsetTop : 0;
+    var winLeft = vv ? vv.offsetLeft : 0;
+    var winH = vv ? vv.height : window.innerHeight;
+    var winW = vv ? vv.width : window.innerWidth;
+    var roomBelow = winTop + winH - EDGE - (caretRect.bottom + GAP);
+    var roomAbove = caretRect.top - GAP - (winTop + EDGE);
+    var below = roomBelow >= cap || roomBelow >= roomAbove;
+    menuEl.style.maxHeight = Math.max(MIN, Math.min(cap, below ? roomBelow : roomAbove)) + 'px';
+    menuEl.style.top = (below ? caretRect.bottom + GAP : caretRect.top - GAP - menuEl.offsetHeight) + 'px';
+    var maxLeft = winLeft + winW - menuEl.offsetWidth - EDGE;
+    menuEl.style.left = Math.max(winLeft + EDGE, Math.min(caretRect.left, maxLeft)) + 'px';
+  };
+
   function requestButton(e) {
     var d = e.detail || {}, el = d.elt;
     if (!el || !el.matches) return null;

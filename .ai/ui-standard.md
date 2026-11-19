@@ -702,8 +702,42 @@ The same screens, folded to the width; never a second design.
   up; it is never cut short.
 - **Side panels become bottom sheets on a phone**: the page peek and the
   Table (under **What is on a page** and **Opening and closing**).
+- **A sheet that scrolls keeps the pull to itself**: a fixed sheet's scroll
+  area sets `overscroll-behavior: contain`, so pulling down at its top never
+  reloads the page. A grab line is drawn only where a swipe on it answers.
 - **A workshop previews all three**: Phone, Tablet and Computer (under
   **Editing**).
+
+## Layers
+
+Every surface that stacks over the page takes its z-index from one scale,
+the `--z-*` tokens at the top of `static/css/input.css`. A surface picks the
+band for its kind and never a number of its own. Lowest to highest:
+
+| Token | Value | What sits in it |
+|---|---|---|
+| `--z-raised` | 10 | in-page lift: sticky heads, a block's own overlays |
+| `--z-chrome` | 20 | the top bar at rest |
+| `--z-scrim` | 30 | the dim behind the phone sidebar |
+| `--z-drawer` | 40 | the phone sidebar drawer |
+| `--z-tab` | 49 | the jot tab |
+| `--z-popup` | 50 | hand-built pop-ups and the jot panel |
+| `--z-sheet` | 60 | docked sheets, such as the Table bar |
+| `--z-menu-lift` | 70 | the top bar while one of its menus is open, the peek and AI panels |
+| `--z-modal` | 9999 | hand-built modals that cover everything but toasts |
+| `--z-toast` | 10000 | toasts |
+
+- A native `<dialog>` opened with `showModal` is in the top layer and sits
+  above every band, so a dialog never needs a number.
+- The top bar sits low so full-screen page overlays cover it and a page's own
+  bars stay above it. It lifts to `--z-menu-lift` only while one of its menus
+  is open, and never over the open phone sidebar.
+- The jot tab sits under every pop-up with a backdrop, so a pop-up covers it.
+  A sheet that sits lower than the tab hides it while it is open.
+- A page bar stays below the top bar's lift, so a menu opened from the top
+  bar is never hidden behind it.
+- Layers move onto the tokens as each screen is brought to the Material look;
+  `tools/check-z-index.sh` stops the count of raw values above 10 from growing.
 
 ## Customize goes further
 

@@ -43,6 +43,17 @@ test('phone: the sidebar is out of the way and the menu button opens and closes 
   assert.ok(open.right <= 390 + 1, 'the open sidebar is wider than the screen');
   await picture(page, 'shell-phone-open', { check: '#737', about: 'The sidebar open at phone width', mask: ['main'] });
 
+  // The Table bar steps down while the menu is open, so the menu's bottom
+  // row is the thing under a finger, not the bar.
+  const footHit = await page.evaluate(() => {
+    const links = [...document.querySelectorAll('#sidebar a')].filter((a) => a.getClientRects().length);
+    const last = links.reduce((m, a) => (a.getBoundingClientRect().bottom > m.getBoundingClientRect().bottom ? a : m));
+    const r = last.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { text: last.textContent.trim(), covered: !last.contains(hit), hit: hit && (hit.className || hit.tagName) };
+  });
+  assert.ok(!footHit.covered, `the menu's bottom row "${footHit.text}" is covered by ${footHit.hit}`);
+
   // Esc closes it and hands focus back to the button.
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.getElementById('nav-toggle').getAttribute('aria-expanded') === 'false');

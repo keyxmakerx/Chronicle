@@ -116,7 +116,6 @@
 .ss-card:focus { outline: none; }
 @media (max-width: 560px) {
   .ss-card { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 85vh; transform: translateY(32px); border-radius: 16px; }
-  .ss-card::before { content: ""; display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--color-border, #d1d5db); margin: 0 auto 2px; flex: none; }
 }
 .ss-card header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .ss-card h3 { margin: 0; font-size: 1rem; font-weight: 700; color: var(--color-text-primary, #111827); }

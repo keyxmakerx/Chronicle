@@ -152,6 +152,12 @@ jobs:
         # may only shrink. Needs no git history; self-tests on every run.
         run: ./tools/check-widget-mounts.sh
 
+      - name: Layer scale ratchet
+        # Stacking order comes from the --z-* tokens in static/css/input.css.
+        # Counts raw z-index values above 10 and fails only if the count grows
+        # past tools/z-index-ceiling.txt, which may only shrink.
+        run: ./tools/check-z-index.sh
+
       - name: Escape helpers guard
         # Scripts escape HTML through Chronicle.escapeHtml, not their own copies.
         run: ./tools/check-escape-helpers.sh

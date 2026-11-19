@@ -176,7 +176,7 @@ html[data-tt-sheet] { --tt-rest: calc(38px + env(safe-area-inset-bottom, 0px)); 
 html[data-tt-sheet] .tt-tab { display: none; }
 html[data-tt-sheet] #main-content { padding-bottom: var(--tt-rest); }
 html[data-tt-sheet] .jot-tab { bottom: calc(1.5rem + var(--tt-rest)); }
-.tt-drawer.tt-sheet { position: fixed; top: auto; bottom: 0; left: 0; right: 0; max-width: none; margin: 0; height: calc(100dvh - 56px); max-height: none; z-index: 60;
+.tt-drawer.tt-sheet { position: fixed; top: auto; bottom: 0; left: 0; right: 0; max-width: none; margin: 0; height: calc(100dvh - 56px); max-height: none; z-index: var(--z-sheet);
   border: 1px solid var(--color-border); border-bottom: 0; border-radius: 16px 16px 0 0; clip-path: none; box-shadow: var(--elev-dragged);
   transform: translateY(calc(100% - var(--tt-rest))); transition: transform var(--dur-slide) var(--ease-slide); will-change: transform; animation: none; }
 .tt-sheet[data-h="lift"] { transform: translateY(calc(100% - 60dvh)); }
@@ -184,6 +184,9 @@ html[data-tt-sheet] .jot-tab { bottom: calc(1.5rem + var(--tt-rest)); }
 .tt-sheet.tt-drag { transition: none; }
 .tt-sheet, .tt-sheet .tt-lbody, .tt-sheet .tt-log { overscroll-behavior: contain; }
 .tt-sheet.tt-away { transform: translateY(100%); }
+/* The open phone menu reaches the bottom edge, so the bar steps down the same
+   way until the menu closes. */
+html[data-tt-sheet]:has(#nav-toggle[aria-expanded="true"]) .tt-sheet { transform: translateY(100%); }
 [data-cz-kit="sharp"] .tt-sheet { border-radius: 0; border-color: var(--color-text-primary); }
 .tt-grab { position: relative; flex-shrink: 0; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 0 16px; border: 0; background: none; color: var(--color-text-body);
   font: inherit; font-size: 13px; text-align: left; cursor: grab; touch-action: none; user-select: none; }
