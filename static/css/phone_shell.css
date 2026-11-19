@@ -1,4 +1,4 @@
-/* phone_shell.css: the app shell and its lists on a phone.
+/* phone_shell.css: the app shell and its lists on a phone or a tablet.
  *
  * Plain CSS, linked after app.css and unlayered so it outranks the Tailwind
  * component rules it adjusts. Each block is gated by a width or a coarse
@@ -96,6 +96,61 @@
     padding-inline: 18px;
     font-size: 15px;
   }
+}
+
+/* A touch screen narrower than a tablet on its side keeps the phone's drawer:
+   the sidebar waits off the page until the menu button brings it over, and
+   leaves again when something is picked. A mouse-driven window of the same
+   width keeps its docked sidebar. The layout (navDrawerQuery in app.templ)
+   says when this applies; the two have to agree.
+   The id outranks the sidebar's md: utilities, and nothing here is
+   !important but the width, so Calm, Off and the device's reduce setting
+   still switch the slide off, the open state (.sidebar-mobile-open) still
+   wins, and the fade that replaces the slide can hold the drawer in place. */
+@media (min-width: 768px) and (max-width: 1023.98px) and (pointer: coarse) {
+  #sidebar {
+    position: fixed;
+    z-index: 40;
+    visibility: visible;
+    transform: translateX(-100%);
+    transition: transform var(--dur-large, 280ms) ease-out;
+    /* A drawer is never folded to icons or hidden; those states set their
+       widths with !important, so this has to as well. */
+    inline-size: 16rem !important;
+    min-inline-size: 16rem !important;
+  }
+  #sidebar.sidebar-fully-hidden > * { transform: none; }
+  .nav-x-close { display: grid; }
+  .nav-sb .sidebar-pin-btn { display: none; }
+}
+
+/* The drawer's close control keeps its drawn size; an unseen margin around
+   it brings what answers a tap to 44, stopping short of the button beside it. */
+@media (pointer: coarse) {
+  .nav-x-close::after { content: ""; position: absolute; inset: -6px -8px -6px -4px; }
+}
+
+/* Where the sidebar is docked the menu button has nothing to open. The header
+   rule above shows every header control on touch, this one included. */
+@media (min-width: 1024px) {
+  #app-topbar #nav-toggle { display: none; }
+}
+
+/* Blocks fold into one column instead of squeezing. A row of blocks is laid
+   out in twelfths from 768 wide, which leaves a third-width block 240 wide
+   or less on an upright tablet or beside a docked sidebar. The rows stay one
+   column until the page area is about 880 wide: under 880 always, and under
+   1136 while the sidebar is docked open (256 wide). A sidebar folded to
+   icons, unpinned, hidden, or waiting as a drawer takes no such room. */
+@media (min-width: 768px) and (max-width: 879.98px) {
+  .block-row { grid-template-columns: minmax(0, 1fr); }
+  .block-row > * { grid-column: auto; }
+}
+@media (min-width: 880px) and (max-width: 1135.98px) and (pointer: fine),
+       (min-width: 880px) and (max-width: 1135.98px) and (pointer: none),
+       (min-width: 1024px) and (max-width: 1135.98px) {
+  body:has(#sidebar:not(.sidebar-unpinned):not(.sidebar-collapsed):not(.sidebar-fully-hidden)) .block-row { grid-template-columns: minmax(0, 1fr); }
+  body:has(#sidebar:not(.sidebar-unpinned):not(.sidebar-collapsed):not(.sidebar-fully-hidden)) .block-row > * { grid-column: auto; }
 }
 
 /* Page lists draw as rows under 640 wide: name, kind in muted words and the

@@ -130,7 +130,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 						if row.Kind == "tiles" {
 							@entityTileSection(row, cc, entity, entityType, showAttributes, csrfToken)
 						} else {
-							<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6" data-page-row>
+							<div class="block-row grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6" data-page-row>
 								for _, col := range row.Columns {
 									<div class={ entityColSpan(col.Width) } data-page-col>
 										for _, block := range col.Blocks {
@@ -143,7 +143,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					}
 				} else {
 					<!-- Fallback: default two-column layout if no layout defined -->
-					<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6" data-page-row>
+					<div class="block-row grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6" data-page-row>
 						<div class="col-span-1 md:col-span-8 space-y-4" data-page-col>
 							@blockTitle(cc, entity, csrfToken)
 							@blockTags(cc, entity, csrfToken)

@@ -3294,7 +3294,7 @@
   .nav-sb :focus-visible { outline: 2px solid var(--nav-focus); outline-offset: -2px; }
 
   /* Brand row: the campaign's logo and name, the owner's pencil and, on a
-     phone, close. 56px, the topbar's height, so their bottom edges line up. */
+     drawer, close. 56px, the topbar's height, so their bottom edges line up. */
   .nav-brand {
     height: 56px; flex: none; display: flex; align-items: center; gap: 4px;
     padding: 0 8px 0 14px; border-bottom: 1px solid var(--nav-line);
@@ -5097,6 +5097,16 @@ html[data-motion="off"] .manage-find { transition: none; }
   --cz-page-ink-4: var(--color-text-muted);
   --cz-page-fill: var(--color-bg-tertiary);
   --cz-page-line: var(--color-border);
+}
+/* Coming up (coming_up.templ): the button or answer sits beside the words
+   only where that leaves the words about 200 wide. In a narrower card, a
+   phone's included, it drops under the words, in line with them, so the
+   words keep the row's width. */
+.cu-card { container: cucard / inline-size; }
+@container cucard (max-width: 23rem) {
+  .cu-row { flex-wrap: wrap; row-gap: 6px; }
+  .cu-words { flex-basis: calc(100% - 3.25rem); }
+  .cu-end { margin-inline-start: 3.25rem; }
 }
 /* Header widgets below md: when the bar can't fit even the first widget,
    it joins the rest in the tray and the button counts it (app.templ,

@@ -7,7 +7,7 @@
 // fixed part above. Every folding section but Pinned folds under its
 // heading. Rows arrive already cut down for the viewer (GetNavSections);
 // where the viewer is comes from nav_state.go. sidebar_nav.js runs the
-// folds, the living ring and the phone drawer; sidebar_drill.js runs the
+// folds, the living ring and the drawer; sidebar_drill.js runs the
 // panel.
 package layouts
 
@@ -15,8 +15,9 @@ import "fmt"
 import "strconv"
 
 // campaignNavBrand is the sidebar's top row: the campaign's logo and name,
-// and, on a phone, close. Editing the sidebar lives in the footer instead,
-// so this row stays the owner's to customise (logo, name) without it.
+// and, while the sidebar is a drawer, close. Editing the sidebar lives in the
+// footer instead, so this row stays the owner's to customise (logo, name)
+// without it.
 // Beyond the plain logo and name the owner may add a subtitle line or a
 // banner picture behind the name; the picture sits in its own wrapper,
 // always rendered, so a Customize save can swap it without a reload. A

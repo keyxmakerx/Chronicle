@@ -23,6 +23,7 @@ function load() {
     body: { classList: { contains: () => false } },
     documentElement: { classList: { contains: () => false } },
     getElementById: () => null,
+    querySelector: () => null,
     addEventListener: noop,
   };
   const window = {

@@ -86,8 +86,8 @@ templ Base(title string) {
 		     The sidebar's folded or hidden state is Alpine's, which arrives later, so
 		     it is put on here first, without its slide, and handed back as Alpine
 		     starts, in the same task, so the sidebar neither shows open nor slides
-		     shut on arrival. -->
-		<script>(function(){try{var s=document.getElementById('sidebar');var c=localStorage.getItem('chronicle-sidebar-hidden')==='true'?'sidebar-fully-hidden':(localStorage.getItem('chronicle-sidebar-pinned')==='false'?'sidebar-collapsed':'');if(s&&c){var k=[s].concat([].slice.call(s.children));k.forEach(function(e){e.style.transition='none'});s.classList.add(c);void s.offsetWidth;k.forEach(function(e){e.style.transition=''});document.addEventListener('alpine:init',function(){s.classList.remove(c)},{once:true})}}catch(e){}document.body.style.opacity='1'})()</script>
+		     shut on arrival. A drawer has neither state, so it is left alone. -->
+		<script>(function(){try{var s=document.getElementById('sidebar');var c=localStorage.getItem('chronicle-sidebar-hidden')==='true'?'sidebar-fully-hidden':(localStorage.getItem('chronicle-sidebar-pinned')==='false'?'sidebar-collapsed':'');var d=document.querySelector('[data-nav-drawer-query]');if(d&&window.matchMedia(d.getAttribute('data-nav-drawer-query')).matches)c='';if(s&&c){var k=[s].concat([].slice.call(s.children));k.forEach(function(e){e.style.transition='none'});s.classList.add(c);void s.offsetWidth;k.forEach(function(e){e.style.transition=''});document.addEventListener('alpine:init',function(){s.classList.remove(c)},{once:true})}}catch(e){}document.body.style.opacity='1'})()</script>
 
 		<!-- Re-authentication modal for sensitive admin operations -->
 		@ReauthModal()
@@ -137,7 +137,7 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/vendor/alpine-collapse.min.js") } defer></script>
 		<script src={ AssetURL("/static/vendor/alpine.min.js") } defer></script>
 
-		<!-- Campaign sidebar: folds, the living ring, the phone drawer -->
+		<!-- Campaign sidebar: folds, the living ring, the drawer -->
 		<script src={ AssetURL("/static/js/sidebar_nav.js") } defer></script>
 		<!-- Unified sidebar edit mode: pencil-triggered inline editing -->
 		<script src={ AssetURL("/static/js/sidebar_editor.js") } defer></script>

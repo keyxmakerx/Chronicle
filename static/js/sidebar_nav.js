@@ -8,8 +8,9 @@
  *   boosted navigation, which swaps only #main-content: the layout renders a
  *   [data-nav-current] marker there, and this reads it. While a category's
  *   panel (sidebar_drill.js) is open, the ring marks the panel's header.
- * - The phone drawer: out of the tab order while shut, focus kept inside
- *   while open. (Escape and the menu button live in app.templ's Alpine.)
+ * - The drawer (a phone, or a touch screen narrower than a tablet on its
+ *   side): out of the tab order while shut, focus kept inside while open.
+ *   (Escape and the menu button live in app.templ's Alpine.)
  * - The touch-screen Edit word (navToolsWord): it shows a member's pins and
  *   row menus on every row until Done. The state is #sidebar's
  *   data-nav-tools, which CSS reads; this keeps aria-pressed in step.
@@ -33,7 +34,10 @@
   var FOLD_ID = /^[A-Za-z0-9_-]{1,48}$/;
 
   var rmQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-  var phoneQuery = window.matchMedia ? window.matchMedia('(max-width: 767px)') : null;
+  // When the sidebar is a drawer: the layout says, so the two cannot disagree.
+  var drawerHost = document.querySelector('[data-nav-drawer-query]');
+  var drawerQuery = window.matchMedia
+    ? window.matchMedia((drawerHost && drawerHost.getAttribute('data-nav-drawer-query')) || '(max-width: 767px)') : null;
 
   function reduced() {
     return !!(rmQuery && rmQuery.matches) || document.documentElement.classList.contains('nav-rm');
@@ -447,7 +451,7 @@
     if (m) setCurrent(m.getAttribute('data-nav-current') || '', m.getAttribute('data-nav-page') || '', animate);
   }
 
-  // --- The phone drawer ----------------------------------------------------
+  // --- The drawer -----------------------------------------------------------
 
   function sidebar() { return document.getElementById('sidebar'); }
 
@@ -457,16 +461,16 @@
   }
 
   // Shut, the drawer is out of the tab order and hidden from assistive tech;
-  // open on a phone, it is a modal dialog.
+  // open, it is a modal dialog.
   function syncDrawer() {
     var sb = sidebar();
     if (!sb || !list()) return;
-    var phone = !!(phoneQuery && phoneQuery.matches);
-    if (phone && !drawerOpen()) {
+    var asDrawer = !!(drawerQuery && drawerQuery.matches);
+    if (asDrawer && !drawerOpen()) {
       sb.setAttribute('inert', '');
       sb.removeAttribute('role');
       sb.removeAttribute('aria-modal');
-    } else if (phone) {
+    } else if (asDrawer) {
       sb.removeAttribute('inert');
       sb.setAttribute('role', 'dialog');
       sb.setAttribute('aria-label', 'Navigation');
@@ -501,7 +505,7 @@
     wasOpen = open;
     syncDrawer();
     var sb = sidebar();
-    if (!(phoneQuery && phoneQuery.matches)) return;
+    if (!(drawerQuery && drawerQuery.matches)) return;
     if (reduced()) {
       // The slide is off under reduced motion; fade instead. A transform:none
       // keyframe holds the drawer in place while it fades out.
@@ -556,7 +560,7 @@
     syncDrawer();
   }
 
-  if (phoneQuery && phoneQuery.addEventListener) phoneQuery.addEventListener('change', syncDrawer);
+  if (drawerQuery && drawerQuery.addEventListener) drawerQuery.addEventListener('change', syncDrawer);
 
   document.addEventListener('click', function (e) {
     var t = e.target;
@@ -593,7 +597,7 @@
   });
 
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Tab' && drawerOpen() && phoneQuery && phoneQuery.matches) trapTab(e);
+    if (e.key === 'Tab' && drawerOpen() && drawerQuery && drawerQuery.matches) trapTab(e);
   });
 
   document.addEventListener('htmx:afterSettle', function (e) {
