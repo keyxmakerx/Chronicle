@@ -48,7 +48,7 @@ symlinks are rejected at install.
 - `"director": true` on a category keeps it to the campaign's Directors: its
   pages, search hits, tooltips and raw `data/<slug>.json`. Use it for content
   your book keeps in a Director-only chapter, so players can't read it there.
-- Caps: 20 categories, 100 fields each, 10 entity presets, 20 relation
+- Caps: 40 categories, 100 fields each, 10 entity presets, 20 relation
   presets, 10 widgets.
 
 Validation lives in `internal/systems/manifest.go` (`ValidateManifest`).
