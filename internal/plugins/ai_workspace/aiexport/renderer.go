@@ -439,6 +439,9 @@ func sheetLine(e *entities.Entity, defs []entities.FieldDefinition, opts Options
 	if len(parts) == 0 {
 		return ""
 	}
+	if opts.SheetReadOnly {
+		return "**Sheet fields** (to read; how_to_write_changes says which of them you may change): " + strings.Join(parts, " · ")
+	}
 	return "**Sheet fields** (change them with `fields:`): " + strings.Join(parts, " · ")
 }
 

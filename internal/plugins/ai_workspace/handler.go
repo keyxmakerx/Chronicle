@@ -1119,7 +1119,7 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Con
 				return "", err
 			}
 		}
-		return playerInstructions(campaignName, sheets), nil
+		return playerInstructions(campaignName, h.playerGMTerm(ctx, conn.CampaignID), sheets), nil
 	}
 	if h.promptBuilder == nil {
 		return "", errors.New("ai-workspace: prompt builder not configured")

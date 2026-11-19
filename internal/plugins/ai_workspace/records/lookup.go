@@ -866,6 +866,7 @@ func (run *lookupRun) pageOf(e *entities.Entity) (LookupAnswer, error) {
 	} else {
 		opts.VisiblePages = run.visibleIDs()
 	}
+	opts.SheetReadOnly = run.a.ReadsOwnNotes
 	opts.ParentNames = run.parentNames()
 	var pageTagMap map[string][]tags.Tag
 	if run.l.Tags != nil {

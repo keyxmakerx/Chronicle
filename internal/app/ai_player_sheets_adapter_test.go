@@ -155,3 +155,39 @@ func TestAIPlayerSheets_Sheets(t *testing.T) {
 		t.Error("a GM-only field is offered to the player's AI")
 	}
 }
+
+// The brief offers only fields the character has, each once by the rule the
+// door applies, and shows the rest of what the player sees to recommend from.
+func TestPlayerSheetOf(t *testing.T) {
+	own := "p1"
+	e := &entities.Entity{ID: "e1", Name: "Korr", OwnerUserID: &own, FieldsData: map[string]any{
+		"ancestry": "Devil", "might": float64(2), "gm_notes": "secret", "backstory": "Forge-born.",
+	}}
+	fields := []entities.FieldDefinition{{Key: "ancestry"}, {Key: "class"}, {Key: "might"}, {Key: "backstory"},
+		{Key: "skills_json"}, {Key: "gm_notes", GMOnly: true}}
+	plan := &entities.HeroPlan{Steps: []entities.HeroStep{
+		{FieldKey: "ancestry", Choices: []entities.HeroChoice{{Name: "Devil", Properties: map[string]any{
+			"ancestry_points": float64(3), "traits": []any{map[string]any{"name": "Wings", "cost": float64(2)}}}}}},
+		{FieldKey: "class", Choices: []entities.HeroChoice{{Name: "Shadow"}}},
+		{FieldKey: "career", Choices: []entities.HeroChoice{{Name: "Sage"}}},
+	}}
+	s := playerSheetOf(e, "Character", fields, plan)
+	if len(s.Free) != 0 || len(s.Picks) != 2 || !s.Own["ancestry"] || s.Own["class"] {
+		t.Fatalf("free %v picks %v own %v: want ancestry and class as choices only, ancestry also free", s.Free, s.Picks, s.Own)
+	}
+	if _, ok := s.Picks["career"]; ok {
+		t.Error("a step the character has no field for is offered")
+	}
+	if len(s.Story) != 1 || len(s.Lists) != 1 {
+		t.Errorf("story %v lists %v", s.Story, s.Lists)
+	}
+	if b := s.Buys["ancestry_choices_json"]; b.Entry != "Devil" || b.Budget != 3 || len(b.Names) != 1 {
+		t.Errorf("buys = %+v", s.Buys)
+	}
+	if s.Shown["might"] != "2" {
+		t.Errorf("shown = %v, want might to read from", s.Shown)
+	}
+	if _, ok := s.Shown["gm_notes"]; ok {
+		t.Error("a GM-only field reached the player's AI")
+	}
+}

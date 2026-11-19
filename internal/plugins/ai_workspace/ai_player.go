@@ -241,7 +241,7 @@ func (h *Handler) PlayerCopy(c *echo.Context) error {
 		}
 	}
 	c.Response().Header().Set("Cache-Control", "no-store")
-	return c.String(http.StatusOK, playerInstructions(cc.Campaign.Name, sheets))
+	return c.String(http.StatusOK, playerInstructions(cc.Campaign.Name, h.playerGMTerm(ctx, cc.Campaign.ID), sheets))
 }
 
 // PlayerPaste reviews an answer the player pasted.

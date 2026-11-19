@@ -437,3 +437,86 @@ func entryHasDirectorParts(entryJSON, entryHTML string) bool {
 	}
 	return sanitize.StripSecretsJSON(entryJSON) != string(plain)
 }
+
+// OwnerFieldKind is how a claimed owner may write a field of their hero, as
+// the door judges it, for briefs and editors that offer only what it takes.
+type OwnerFieldKind string
+
+// The kinds a claimed owner's field can be.
+const (
+	OwnerFieldText   OwnerFieldKind = "text"   // short free text
+	OwnerFieldChoice OwnerFieldKind = "choice" // a name from a builder step's list
+	OwnerFieldStory  OwnerFieldKind = "story"  // the player's long text
+	OwnerFieldList   OwnerFieldKind = "list"   // a JSON list of short names
+)
+
+// OwnerFieldKindOf says how a claimed owner may write key, or "" when they
+// may not. typeFields are the hero's category's fields with any the page
+// added; a GM-only field or one the category lacks is never theirs. A step
+// whose key is also an identity key takes its list's names or the player's
+// own (ownChoice).
+func OwnerFieldKindOf(key string, typeFields []FieldDefinition, plan *HeroPlan) (kind OwnerFieldKind, ownChoice bool) {
+	on := false
+	for i := range typeFields {
+		if typeFields[i].Key == key {
+			if typeFields[i].GMOnly {
+				return "", false
+			}
+			on = true
+		}
+	}
+	if !on {
+		return "", false
+	}
+	if plan != nil {
+		for _, st := range plan.Steps {
+			if st.FieldKey == key && len(st.Choices) > 0 {
+				return OwnerFieldChoice, ownerIdentityFieldKeys[key]
+			}
+		}
+	}
+	switch {
+	case ownerIdentityFieldKeys[key]:
+		return OwnerFieldText, false
+	case ownerStoryFieldKeys[key]:
+		return OwnerFieldStory, false
+	case ownerListFieldKeys[key]:
+		return OwnerFieldList, false
+	}
+	return "", false
+}
+
+// HeroBuyList is what an entry lets a hero buy: the names on its list (in
+// their own spelling), each one's cost and the points to spend. ok is false
+// when the entry has nothing to buy.
+func HeroBuyList(c HeroChoice) (names []string, costs map[string]float64, budget float64, ok bool) {
+	lower, budget, ok := heroBuyList(c.Properties)
+	if !ok {
+		return nil, nil, 0, false
+	}
+	costs = map[string]float64{}
+	for _, k := range sortedKeys(c.Properties) {
+		items, isList := c.Properties[k].([]any)
+		if !isList {
+			continue
+		}
+		for _, it := range items {
+			m, _ := it.(map[string]any)
+			name, _ := m["name"].(string)
+			if cost, on := lower[strings.ToLower(strings.TrimSpace(name))]; on && name != "" {
+				if _, dup := costs[name]; !dup {
+					names = append(names, strings.TrimSpace(name))
+					costs[strings.TrimSpace(name)] = cost
+				}
+			}
+		}
+		if len(names) > 0 {
+			break
+		}
+	}
+	return names, costs, budget, true
+}
+
+// HeroOptionsKey is the field that keeps what a hero bought from a step's
+// entry ("ancestry" → "ancestry_choices_json").
+func HeroOptionsKey(step string) string { return step + heroOptionsSuffix }

@@ -5841,7 +5841,13 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.
-	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc}})
+	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc},
+		gmTerm: func(ctx context.Context, campaignID string) string {
+			if m := manifestFor(ctx, campaignID); m != nil {
+				return m.GMTerm()
+			}
+			return ""
+		}})
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the
 	// version + files each system loader is ACTUALLY serving, to catch the

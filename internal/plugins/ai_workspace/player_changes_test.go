@@ -2,6 +2,7 @@ package ai_workspace
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -47,6 +48,28 @@ func (f *fakeSheets) PatchSheet(_ context.Context, _, userID, id string, patch m
 	return apperror.NewNotFound("no such character")
 }
 
+func (f *fakeSheets) HeldFields(_ context.Context, _, userID, id string, patch map[string]any) (map[string]string, error) {
+	for _, s := range f.sheets {
+		if s.ID != id || userID != "player-1" {
+			continue
+		}
+		held := map[string]string{}
+		for k := range patch {
+			free := false
+			for _, x := range s.Free {
+				free = free || x == k
+			}
+			if _, pick := s.Picks[k]; !free && !pick {
+				held[k] = fmt.Sprintf("you can only change your character's identity fields, and %q isn't one", k)
+			}
+		}
+		return held, nil
+	}
+	return nil, apperror.NewNotFound("no such character")
+}
+
+func (f *fakeSheets) GMTerm(context.Context, string) string { return "Director" }
+
 func tyneSheets() *fakeSheets {
 	return &fakeSheets{sheets: []PlayerSheet{{
 		ID: "e-tyne", Name: "Tyne", Type: "Character",
@@ -85,16 +108,27 @@ func TestPlanPlayerChanges(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(plan) != 1 {
-				t.Fatalf("got %d blocks", len(plan))
-			}
-			c := plan[0]
 			if tt.held == "" {
-				if c.Held != "" || c.SheetID != "e-tyne" || c.Page != "Tyne" {
+				if len(plan) != 1 {
+					t.Fatalf("got %d entries", len(plan))
+				}
+				if c := plan[0]; c.Held != "" || c.SheetID != "e-tyne" || c.Page != "Tyne" {
 					t.Fatalf("held: %+v", c)
 				}
-			} else if !strings.Contains(c.Held, tt.held) || c.SheetID != "" || c.Fields != nil {
-				t.Fatalf("held = %q, want it to say %q and keep nothing", c.Held, tt.held)
+			} else {
+				found := false
+				for _, c := range plan {
+					if c.Held == "" {
+						continue
+					}
+					if c.SheetID != "" || c.Fields != nil {
+						t.Fatalf("a held entry keeps something: %+v", c)
+					}
+					found = found || strings.Contains(c.Held, tt.held)
+				}
+				if !found {
+					t.Fatalf("plan = %+v, want an entry saying %q", plan, tt.held)
+				}
 			}
 			if sheets.applied != nil {
 				t.Fatal("planning wrote to a sheet")
@@ -147,13 +181,48 @@ func TestPlanPlayerChanges_OnlyWhatDiffers(t *testing.T) {
 // A player's AI is told only about their own characters and the names each
 // builder step offers.
 func TestPlayerInstructions(t *testing.T) {
-	got := playerInstructions("Ashfall", tyneSheets().sheets)
-	for _, want := range []string{"### Tyne (Character)", "pronouns: now she/her", "class: (empty). Choose from: Fury, Tactician", "action: update"} {
+	got := playerInstructions("Ashfall", "Director", tyneSheets().sheets)
+	for _, want := range []string{"### Tyne (Character)", "pronouns: now she/her", "class: (empty). Choose from: Fury, Tactician", "action: update", "the numbers the Director keeps"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("instructions miss %q:\n%s", want, got)
 		}
 	}
-	if empty := playerInstructions("Ashfall", nil); !strings.Contains(empty, "hasn't claimed a character") {
+	if dm := playerInstructions("Ashfall", "DM", tyneSheets().sheets); !strings.Contains(dm, "the numbers the DM keeps") || strings.Contains(dm, "Director") {
+		t.Errorf("a DM campaign's brief says Director:\n%s", dm)
+	}
+	if empty := playerInstructions("Ashfall", "", nil); !strings.Contains(empty, "hasn't claimed a character") {
 		t.Errorf("no characters: %s", empty)
+	}
+}
+
+// One field the AI may not change, or page text, is left out on its own with
+// its reason; the fields it may change are still offered.
+func TestPlanPlayerChanges_KeepsWhatItMay(t *testing.T) {
+	block := "---\naction: update\nname: Tyne\nfields:\n  class: Fury\n  might: \"2\"\n  stamina: \"40\"\n---\nRaised in a forge.\n"
+	plan, err := planPlayerChanges(context.Background(), tyneSheets(), "camp-1", "player-1", block)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan) != 4 {
+		t.Fatalf("plan = %+v, want the class change and three left out", plan)
+	}
+	if c := plan[0]; c.Held != "" || len(c.Fields) != 1 || c.Fields["class"] != "Fury" {
+		t.Fatalf("kept = %+v, want class alone", c)
+	}
+	var reasons []string
+	for _, c := range plan[1:] {
+		if c.Block != 1 || c.Page != "Tyne" || c.Held == "" {
+			t.Fatalf("left out = %+v", c)
+		}
+		reasons = append(reasons, c.Held)
+	}
+	all := strings.Join(reasons, " | ")
+	for _, want := range []string{`"might"`, `"stamina"`, "page's text"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("left out %q, want it to name %s", all, want)
+		}
+	}
+	if playerCounts(plan) != "1 to change, 3 held back" {
+		t.Errorf("counts = %q", playerCounts(plan))
 	}
 }
