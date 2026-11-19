@@ -19,7 +19,7 @@ templ SystemPreviewPage(preview *PreviewResult, campaignID string, csrfToken str
 					if preview.Manifest != nil {
 						<h2 class="text-xl font-bold text-fg flex items-center gap-2">
 							if preview.Manifest.Icon != "" {
-								<i class={ "fas " + preview.Manifest.Icon + " text-accent" }></i>
+								<i class={ "fas " + preview.Manifest.Icon }></i>
 							}
 							{ preview.Manifest.Name }
 						</h2>

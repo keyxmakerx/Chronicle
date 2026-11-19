@@ -988,3 +988,32 @@ func TestTimelinePopupChoice(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyAppearance_EntranceAndMoments(t *testing.T) {
+	run := func(prev *Appearance, in AppearanceInput) (*Appearance, error) {
+		s := CampaignSettings{Appearance: prev}
+		_, err := applyAppearance(&s, in)
+		return s.Appearance, err
+	}
+	var in AppearanceInput
+	in.Motion.Entrance, in.Motion.Sheen, in.Motion.Spark = "bloom", true, true
+	a, err := run(nil, in)
+	if err != nil || a == nil || a.Entrance != "bloom" || !a.MomentSheen || a.MomentCascade || !a.MomentSpark {
+		t.Fatalf("stored %+v, %v", a, err)
+	}
+	// Grow is the base and stored as unset; a save that sends none keeps the pick.
+	in.Motion.Entrance = "grow"
+	if a, _ = run(a, in); a.Entrance != "" {
+		t.Errorf("grow stored as %q", a.Entrance)
+	}
+	in.Motion.Entrance = "unfold"
+	a, _ = run(nil, in)
+	in.Motion.Entrance = ""
+	if a, _ = run(a, in); a.Entrance != "unfold" {
+		t.Errorf("a save that sends no entrance changed it to %q", a.Entrance)
+	}
+	in.Motion.Entrance = "wobble"
+	if _, err := run(nil, in); err == nil {
+		t.Error("an unknown entrance was accepted")
+	}
+}
