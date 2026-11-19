@@ -300,7 +300,9 @@
     var on = [
       ['pointerover', onOver], ['pointerout', onOut], ['focusin', onFocusIn], ['focusout', onFocusOut],
       ['click', onClick, true], ['keydown', onKey], ['touchstart', onTouchStart, { passive: true }],
-      ['touchend', cancelPress], ['touchmove', cancelPress, { passive: true }]
+      ['touchend', cancelPress], ['touchcancel', cancelPress], ['touchmove', cancelPress, { passive: true }],
+      // The phone's own link menu taking the press ends it for the card too.
+      ['contextmenu', cancelPress]
     ];
     on.forEach(function (h) { root.addEventListener(h[0], h[1], h[2]); });
     return function unbind() {
