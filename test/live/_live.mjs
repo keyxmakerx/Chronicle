@@ -10,9 +10,9 @@
 // account is the site admin, made by _setup.mjs before any check runs,
 // because only the first account on a fresh instance becomes a site admin.
 //
-// Pictures: `picture()` saves a screenshot and compares it with the one the
-// last run on main saved (LIVE_BASELINE). A difference never fails the check
-// itself; tools/live-pictures.mjs collects them into a report for approval.
+// Pictures: `picture()` saves a screenshot and, when LIVE_BASELINE
+// holds an older one, notes whether it changed. A difference never fails a
+// check, and CI sets no baseline.
 
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
