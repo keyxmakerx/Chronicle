@@ -355,8 +355,14 @@
       self.redrawDetail(h, st, c);
       d = self.el.querySelector('[data-hb-detail]');
       if (d) d.scrollTop = top;
-      var again = self.el.querySelector('[data-hb-buy] [data-buy="' + box.getAttribute('data-buy').replace(/"/g, '\\"') + '"]');
-      if (again) again.focus({ preventScroll: true });
+      // Found by comparing names, not a built selector, so no trait name
+      // can break or bend the query.
+      var name = box.getAttribute('data-buy');
+      Array.prototype.some.call(self.el.querySelectorAll('[data-hb-buy] [data-buy]'), function (b) {
+        if (b.getAttribute('data-buy') !== name) return false;
+        b.focus({ preventScroll: true });
+        return true;
+      });
     }, function () { self.redrawDetail(h, st, c); });
   };
 
