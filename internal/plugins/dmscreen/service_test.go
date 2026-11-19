@@ -148,6 +148,12 @@ func TestBuild_HomebrewOwnerOnly(t *testing.T) {
 type fightMount struct {
 	asked      string
 	conditions []string
+	ready      int
+	readyErr   error
+}
+
+func (f *fightMount) ReadyCount(context.Context, string, Viewer) (int, error) {
+	return f.ready, f.readyErr
 }
 
 func (f *fightMount) FightMount(campaignID string, conditions []string) templ.Component {
@@ -171,6 +177,19 @@ func TestBuild_FightWithConditionNames(t *testing.T) {
 	}
 	if none, _ := NewService(Sources{}).Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3}); none.Fight != nil {
 		t.Error("no source should mean no Fight tab")
+	}
+}
+
+func TestBuild_FightReadyCountFeedsItsLine(t *testing.T) {
+	ctx := context.Background()
+	v, err := NewService(Sources{Fight: &fightMount{ready: 3}}).Build(ctx, "c1", Viewer{UserID: "u", Role: 3})
+	if err != nil || !v.FightCounted || v.FightReady != 3 {
+		t.Fatalf("view = %+v, err %v", v, err)
+	}
+	// A count that cannot be read leaves the line plain, never a guess.
+	v, err = NewService(Sources{Fight: &fightMount{readyErr: errors.New("db down")}}).Build(ctx, "c1", Viewer{UserID: "u", Role: 3})
+	if err != nil || v.FightCounted || v.Fight == nil {
+		t.Fatalf("a failed count must not drop the tab: %+v, err %v", v, err)
 	}
 }
 

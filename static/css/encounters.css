@@ -343,3 +343,23 @@ a.erun-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .erun-show { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--erun-edge); }
 .erun-show:first-child { border-top: 0; }
 .erun-shown .erun-pick-txt b { font-weight: 600; color: var(--erun-muted); }
+
+/* The Fight tab's list of every fight: a row opens the fight on its page,
+   the rest fold behind "Show all", and "Plan a fight" asks which adventure. */
+.erun-open {
+  font: inherit; text-align: left; background: transparent; color: var(--erun-ink); border: 0; cursor: pointer;
+  min-height: 44px; padding: 4px 6px; margin: 0 -6px; border-radius: 8px; display: block; width: calc(100% + 12px);
+}
+.erun-open:hover { background: color-mix(in srgb, var(--erun-ink) 6%, transparent); }
+a.erun-open { text-decoration: none; display: flex; align-items: center; }
+.erun-pick .erun-open { width: auto; flex: 1 1 auto; margin: 0; }
+.erun-quiet {
+  font: inherit; font-size: 12.5px; align-self: flex-start; min-height: 32px; padding: 4px 0; background: transparent; border: 0; cursor: pointer;
+  color: var(--color-accent-link, var(--erun-acc));
+}
+.erun-quiet:hover { text-decoration: underline; text-underline-offset: 2px; }
+.erun-plan { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.erun-choose { align-self: stretch; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--erun-edge); padding-top: 8px; }
+.erun-choice { font-weight: 600; }
+a.erun-choice { color: var(--color-accent-link, var(--erun-acc)); }
+@media (pointer: coarse) { .erun-quiet { min-height: 44px; } }

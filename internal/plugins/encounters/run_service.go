@@ -86,7 +86,7 @@ func (s *runService) Current(ctx context.Context, campaignID string, v Viewer) (
 	if err := requireDM(v); err != nil {
 		return nil, err
 	}
-	out := &RunView{Ready: []Summary{}, StatBlocks: []StatBlock{}}
+	out := &RunView{Ready: []Summary{}, Planned: []Summary{}, StatBlocks: []StatBlock{}}
 	row, found, err := s.repo.GetRun(ctx, campaignID)
 	if err != nil {
 		return nil, apperrorInternal(err)
@@ -107,17 +107,19 @@ func (s *runService) Current(ctx context.Context, campaignID string, v Viewer) (
 			}
 		}
 	} else {
-		list, _, err := s.enc.Search(ctx, campaignID, "", MaxSearchLimit, v)
+		list, total, err := s.enc.Search(ctx, campaignID, "", MaxSearchLimit, v)
 		if err != nil {
 			return nil, err
 		}
-		// Search lists ready encounters first.
+		// Search lists ready encounters first, then the rest by latest change.
 		for _, e := range list {
-			if !e.Ready {
-				break
+			if e.Ready {
+				out.Ready = append(out.Ready, e)
+			} else {
+				out.Planned = append(out.Planned, e)
 			}
-			out.Ready = append(out.Ready, e)
 		}
+		out.PlannedTotal = total - len(out.Ready)
 	}
 	// Best effort, as in the builder: without them a name folds out the
 	// page's fields instead of the system's stat block.

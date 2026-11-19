@@ -6349,8 +6349,9 @@ func (a *App) RegisterRoutes() {
 		dmSources.Homebrew = &dmHomebrewAdapter{trackers: a.PluginHealth.IsHealthy(trackers.PluginSlug)}
 	}
 	// The Fight tab runs encounters, so it needs their tables.
+	dmFight := &dmFightAdapter{}
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
-		dmSources.Fight = dmFightAdapter{}
+		dmSources.Fight = dmFight
 	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
@@ -6788,6 +6789,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
 		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB), encounterPages, encounterResults)
 		encounterAPI.attach(encounterSvc)
+		dmFight.svc = encounterSvc
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 		runSvc := encounters.NewRunService(encounters.NewRunRepository(a.DB), encounterSvc, encounterPages)
 		// Scenes show things to players: pages they may open, NPCs the

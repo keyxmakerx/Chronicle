@@ -41,4 +41,10 @@ var Changed = []Feature{
 		},
 		Try: "/campaigns",
 	},
+	{
+		ID:     "dm-screen-fights-phone-2026-11",
+		Name:   "The DM Screen's Fight card and phone lines",
+		Routes: []string{"GET /campaigns/:id/dm-screen", "GET /campaigns/:id/encounter-run", "GET /campaigns/:id/dm-screen/adventures/pages"},
+		Try:    "/campaigns",
+	},
 }

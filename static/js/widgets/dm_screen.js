@@ -9,6 +9,10 @@
  * one line. The rail's top icon tucks the dock away to a small edge tab that
  * carries the waiting count.
  *
+ * On a phone or touch screen there is no rail: all sections are always on
+ * screen as one named line each (icon, name, what it holds), and a tap
+ * unfolds or folds that line in place.
+ *
  * Whether the dock is out, and which sections are open in which order, is
  * remembered per browser and per campaign. The dock lives on <body>, so a
  * boosted navigation (which swaps only #main-content) leaves it standing.
@@ -52,6 +56,15 @@
   // On a narrow window the dock lies over the page instead of narrowing it.
   function narrow() { return window.matchMedia('(max-width: 700px)').matches; }
 
+  // Phones and touch screens show named lines instead of the icon bar; the
+  // same query drives the CSS.
+  function phone() {
+    return window.matchMedia('(max-width: 700px), (hover: none) and (pointer: coarse)').matches;
+  }
+
+  // The lines a phone starts with unfolded.
+  var DEFAULT_LINES = ['world'];
+
   function readJSON(key, fallback) {
     try {
       var v = JSON.parse(localStorage.getItem(key) || 'null');
@@ -76,9 +89,14 @@
       var cid = (url.match(/\/campaigns\/([^/]+)\//) || [])[1] || '';
       var OUT_KEY = 'chronicle.dms.out.' + cid;
       var OPEN_KEY = 'chronicle.dms.open.' + cid;
+      // A phone keeps its own unfolded lines, so the computer's order of
+      // open cards is never disturbed.
+      var LINES_KEY = 'chronicle.dms.lines.' + cid;
 
       var savedOpen = readJSON(OPEN_KEY, DEFAULT_OPEN);
+      var savedLines = readJSON(LINES_KEY, DEFAULT_LINES);
       var st = {
+        lines: Array.isArray(savedLines) ? savedLines.filter(function (x) { return typeof x === 'string'; }) : DEFAULT_LINES.slice(),
         out: readJSON(OUT_KEY, false) === true,
         open: Array.isArray(savedOpen) ? savedOpen.filter(function (s) { return typeof s === 'string'; }) : DEFAULT_OPEN.slice(),
         dock: null, tab: null, loading: null, loaded: false, brewPv: false
@@ -131,6 +149,11 @@
         document.addEventListener('keydown', onKey);
         document.addEventListener('click', onOutside);
         window.addEventListener('resize', place);
+        // Crossing between phone lines and the icon bar redraws the cards.
+        try {
+          st.mq = window.matchMedia('(max-width: 700px), (hover: none) and (pointer: coarse)');
+          st.mq.addEventListener('change', function () { applyOpen(); });
+        } catch (e) { /* older browsers redraw on the next open */ }
         place();
       }
 
@@ -140,7 +163,11 @@
         var rail = t.closest('[data-dms-open]');
         if (rail) { railPick(rail.getAttribute('data-dms-open')); return; }
         var fold = t.closest('[data-dms-fold]');
-        if (fold) { headerPick(fold.closest('[data-dms-sec]').getAttribute('data-dms-sec')); return; }
+        if (fold) {
+          var fid = fold.closest('[data-dms-sec]').getAttribute('data-dms-sec');
+          if (phone()) lineToggle(fid); else headerPick(fid);
+          return;
+        }
         var shut = t.closest('[data-dms-shut]');
         if (shut) { closeSection(shut.closest('[data-dms-sec]').getAttribute('data-dms-sec')); return; }
         if (t.closest('[data-dms-closeall]')) { st.open = []; saveOpen(); applyOpen(); return; }
@@ -192,10 +219,85 @@
         if (ic) ic.focus({ preventScroll: true });
       }
 
+      // ---- Phone lines -------------------------------------------------
+
+      function saveLines() { writeJSON(LINES_KEY, st.lines); }
+
+      function sectionEl(id) {
+        var r = root();
+        return r && r.querySelector('[data-dms-sec="' + id + '"]');
+      }
+
+      // Draws st.lines onto the markup at once: every section on screen in
+      // its fixed order, the unfolded ones whole and the rest one line.
+      function applyLines() {
+        var r = root(); if (!r) return;
+        var have = {};
+        r.querySelectorAll('[data-dms-sec]').forEach(function (s) { have[s.getAttribute('data-dms-sec')] = true; });
+        st.lines = st.lines.filter(function (id, i, a) { return have[id] && a.indexOf(id) === i; });
+        r.querySelectorAll('[data-dms-sec]').forEach(function (s) {
+          var open = st.lines.indexOf(s.getAttribute('data-dms-sec')) >= 0;
+          s.hidden = false;
+          s.style.order = '';
+          setLine(s, open);
+          if (open && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(s);
+        });
+        refreshParty();
+      }
+
+      function setLine(s, open) {
+        s.classList.toggle('dms-folded', !open);
+        var fold = s.querySelector('[data-dms-fold]');
+        if (fold) fold.setAttribute('aria-expanded', open ? 'true' : 'false');
+        var body = s.querySelector('.dms-sec-b');
+        if (body) body.hidden = !open;
+      }
+
+      // A tap on a line unfolds it where it sits, or folds it again. The
+      // body unrolls downward from its heading and rolls back up; with
+      // reduced motion (Calm or Off) it simply swaps.
+      function lineToggle(id) {
+        var s = sectionEl(id);
+        if (!s) return;
+        var i = st.lines.indexOf(id), opening = i < 0;
+        if (opening) st.lines.push(id); else st.lines.splice(i, 1);
+        saveLines();
+        var body = s.querySelector('.dms-sec-b');
+        if (body && body._dmsAnim) { body._dmsAnim.cancel(); body._dmsAnim = null; }
+        if (reduce() || !body || !body.animate) { setLine(s, opening); if (opening) mountLine(s); refreshParty(); return; }
+        if (opening) {
+          setLine(s, true);
+          mountLine(s);
+          var cs = getComputedStyle(body), h = body.scrollHeight;
+          body._dmsAnim = body.animate([
+            { height: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0 },
+            { height: h + 'px', paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, opacity: 1 }
+          ], { duration: standardMs(), easing: 'cubic-bezier(.2,.8,.2,1)' });
+          body._dmsAnim.onfinish = function () { body._dmsAnim = null; refreshParty(); };
+        } else {
+          var from = body.offsetHeight, cs2 = getComputedStyle(body);
+          s.classList.add('dms-folded');
+          var fold = s.querySelector('[data-dms-fold]');
+          if (fold) fold.setAttribute('aria-expanded', 'false');
+          var a = body._dmsAnim = body.animate([
+            { height: from + 'px', paddingTop: cs2.paddingTop, paddingBottom: cs2.paddingBottom, opacity: 1 },
+            { height: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0 }
+          ], { duration: standardMs(), easing: 'cubic-bezier(.4,0,1,1)' });
+          a.onfinish = function () { body._dmsAnim = null; body.hidden = true; };
+        }
+      }
+
+      // A line's widgets (Fight's tracker, the Homebrew lists) mount when it
+      // is first unfolded.
+      function mountLine(s) {
+        if (window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(s);
+      }
+
       // Draws st.open onto the markup: open cards shown, the newest whole and
       // first in the column, the rest folded to their one-line summary.
       function applyOpen(focusId) {
         var r = root(); if (!r) return;
+        if (phone()) { applyLines(); return; }
         var have = {};
         r.querySelectorAll('[data-dms-sec]').forEach(function (s) { have[s.getAttribute('data-dms-sec')] = true; });
         // A section can leave the screen (no fight source any more); forget it.
@@ -266,7 +368,10 @@
         }
         ensure(true).then(function () {
           if (!focus) return;
-          var t = root() && root().querySelector('[data-dms-tuck]');
+          // The rail's tuck mark is hidden on a phone, whose close mark is the
+          // one in the heading.
+          var ts = root() ? Array.prototype.slice.call(root().querySelectorAll('[data-dms-tuck]')) : [];
+          var t = ts.filter(function (b) { return b.offsetParent !== null; })[0];
           if (t) t.focus({ preventScroll: true });
         });
       }

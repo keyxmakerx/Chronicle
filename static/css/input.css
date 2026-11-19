@@ -5712,6 +5712,30 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     .dms-col { flex: 1; width: auto; }
   }
 
+  /* Phones and touch screens: no icon bar. Every section is one named line
+     (icon, name, what it holds) that unfolds in place. The bar, its pop-out
+     and the hover names stay on a mouse. */
+  .dms-phonehead { display: none; }
+  .dms-sec-badge { display: none; }
+  @media (max-width: 700px), (hover: none) and (pointer: coarse) {
+    .dms-rail, .dms-colhead, .dms-empty, .dms-sec-x { display: none; }
+    .dms-phonehead {
+      display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: 4px 4px 4px 14px;
+      border-bottom: 1px solid var(--surface-border);
+    }
+    .dms-phonehead-t { font-size: .95rem; font-weight: 700; color: var(--dms-ink); }
+    .dms-phonehead-x { width: 44px; height: 44px; font-size: 1.6rem; line-height: 1; }
+    .dms-sec-t { min-height: 44px; padding: 6px 8px; }
+    .dms-sec-t > span:not(.dms-sec-sum):not(.dms-sec-badge) { font-size: .78rem; }
+    .dms-sec-badge {
+      display: block; flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; margin-left: auto;
+      background: var(--dms-warn); color: #fff; font-size: 11px; font-weight: 700; line-height: 20px; text-align: center;
+      text-transform: none; letter-spacing: 0;
+    }
+    .dms-folded .dms-sec-sum { flex: 1 1 auto; }
+    .dms-sec-b { overflow: hidden; }
+  }
+
   /* What fills the cards. */
   .dms-brew { display: grid; gap: .5rem; }
   .dms-tool {
