@@ -213,6 +213,7 @@ func TestViewAs(t *testing.T) {
 	coDM := &CampaignContext{Campaign: camp, MemberRole: RolePlayer, IsMember: true, IsDmGranted: true}
 	player := &CampaignContext{Campaign: camp, MemberRole: RolePlayer, IsMember: true}
 	visitor := &CampaignContext{Campaign: camp}
+	privOwner := &CampaignContext{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RoleOwner, IsMember: true}
 	pCookie := &http.Cookie{Name: viewAsPlayerCookie, Value: "1"}
 	gCookie := &http.Cookie{Name: viewAsGuestCookie, Value: "1"}
 
@@ -233,6 +234,8 @@ func TestViewAs(t *testing.T) {
 		{"guest clears the player preview", owner, url.Values{"as": {"guest"}, "next": {"home"}}, []*http.Cookie{pCookie}, 303, "/campaigns/camp-1", "off", "on"},
 		{"arrange the players' dashboard", owner, url.Values{"as": {"self"}, "next": {"arrange"}, "home": {"player"}}, []*http.Cookie{pCookie}, 303, "/campaigns/camp-1/customize/home/player", "off", ""},
 		{"arrange the guests' dashboard", owner, url.Values{"as": {"self"}, "next": {"arrange"}, "home": {"guest"}}, []*http.Cookie{gCookie}, 303, "/campaigns/camp-1/customize/home/guest", "", "off"},
+		{"guest on a private campaign: Home's note, and no cookie left behind", privOwner, url.Values{"as": {"guest"}, "next": {"home"}}, []*http.Cookie{pCookie}, 303, "/campaigns/camp-1?dashboard=guests", "off", ""},
+		{"guest on a private campaign clears a stale guest cookie", privOwner, url.Values{"as": {"guest"}}, []*http.Cookie{gCookie}, 303, "/campaigns/camp-1?dashboard=guests", "", "off"},
 		{"co-DM may preview", coDM, url.Values{"as": {"guest"}, "next": {"home"}}, nil, 303, "/campaigns/camp-1", "", "on"},
 		{"co-DM may not arrange", coDM, url.Values{"as": {"self"}, "next": {"arrange"}, "home": {"player"}}, nil, 403, "", "", ""},
 		{"a player is refused", player, url.Values{"as": {"guest"}}, nil, 403, "", "", ""},
@@ -411,9 +414,47 @@ func TestShowPage_DashboardForLine(t *testing.T) {
 	}
 	priv := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Test"}, MemberRole: RoleOwner, IsMember: true}
 	out = render(priv, context.Background(), true)
-	for _, want := range []string{"so guests can&#39;t open it", "Who can read it", "/campaigns/camp-1/dashboard#line-pages", "Arrange this page"} {
+	for _, want := range []string{"so guests can&#39;t open it", "Who can read it", "/campaigns/camp-1/dashboard#line-public", "Arrange this page"} {
 		if !strings.Contains(out, want) && !strings.Contains(out, strings.ReplaceAll(want, "&#39;", "'")) {
 			t.Errorf("private guest note missing %q", want)
 		}
+	}
+}
+
+// Only the DM team's own request for a private campaign's guests' dashboard
+// gets the note, and a player preview in force wins over it.
+func TestGuestsNoteAsked(t *testing.T) {
+	pub := &Campaign{ID: "camp-1", IsPublic: true}
+	priv := &Campaign{ID: "camp-1"}
+	owner := func(c *Campaign) *CampaignContext {
+		return &CampaignContext{Campaign: c, MemberRole: RoleOwner, IsMember: true}
+	}
+	tests := []struct {
+		name   string
+		cc     *CampaignContext
+		query  string
+		player bool
+		want   bool
+	}{
+		{"owner, private, asked", owner(priv), "?dashboard=guests", false, true},
+		{"owner, private, not asked", owner(priv), "", false, false},
+		{"owner, private, another value", owner(priv), "?dashboard=players", false, false},
+		{"owner, public: the real preview is the cookie's job", owner(pub), "?dashboard=guests", false, false},
+		{"owner, private, player preview on", owner(priv), "?dashboard=guests", true, false},
+		{"co-DM, private, asked", &CampaignContext{Campaign: priv, MemberRole: RolePlayer, IsMember: true, IsDmGranted: true}, "?dashboard=guests", false, true},
+		{"player, private, asked", &CampaignContext{Campaign: priv, MemberRole: RolePlayer, IsMember: true}, "?dashboard=guests", false, false},
+		{"no context", nil, "?dashboard=guests", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1"+tt.query, nil)
+			if tt.player {
+				req.AddCookie(&http.Cookie{Name: viewAsPlayerCookie, Value: "1"})
+			}
+			c := echo.New().NewContext(req, httptest.NewRecorder())
+			if got := GuestsNoteAsked(c, tt.cc); got != tt.want {
+				t.Errorf("GuestsNoteAsked = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

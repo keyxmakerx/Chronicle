@@ -387,13 +387,14 @@ func (h *Handler) Show(c *echo.Context) error {
 	// (AllowPublicCampaignAccess), so nothing below needs to know about it.
 	// A player preview is only a display cookie, so the list is cut for the
 	// player the owner is looking as; the page draws the same copy.
-	// On a private campaign the guest preview has no dashboard to show: guests
-	// cannot open it, so the page says so and the owner's own context stays.
+	// A private campaign has no guests' dashboard to show: guests cannot open
+	// it, so when asked for one the page says so and the owner's own context
+	// stays.
 	viewer := cc
 	if ViewingAsPlayer(c, cc) {
 		viewer = cc.PlayerPreview()
 	}
-	guestPrivate := !cc.Campaign.IsPublic && ViewingAsGuest(c, cc)
+	guestPrivate := GuestsNoteAsked(c, cc)
 
 	// Fetch recently updated pages for the dashboard.
 	// Use VisibilityRole(), not the raw MemberRole (ADR-057): this

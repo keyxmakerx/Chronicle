@@ -9,7 +9,7 @@
  * and a typed word that is exactly one of `words` counts like a hit inside the
  * label, so an entry listing "settings" is not buried under longer names.
  *
- * The Customizer and the Manage desk both use it, so Find reads and keys the
+ * The Customizer and the Campaign settings page both use it, so Find reads and keys the
  * same in both places: arrows move, Enter goes, Escape closes and puts focus
  * back where it was. It never listens for the "/" key itself; each workshop
  * decides when "/" is its own (never while someone is typing) and calls open.

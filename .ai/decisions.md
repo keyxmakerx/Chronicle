@@ -1212,10 +1212,11 @@ Also under this ADR: the partial-update contract test only recognised structs na
 
 **Decision:**
 1. `AllowPublicCampaignAccess` builds the visitor's `CampaignContext` once (`GuestPreviewContext`) for a real owner or co-Director on a GET or HEAD of a public campaign with the guest cookie. Every handler downstream runs the code path a visitor runs. The context is built from nothing but the campaign, so a field added later defaults to no access.
-2. The downgrade only lowers privileges, is honoured only for the DM team's own requests (a player or non-member sending the cookie gets nothing), and never touches a write, so leaving the preview and anything the owner does always works. A private campaign is never downgraded: guests cannot open it, so Home says so.
+2. The downgrade only lowers privileges, is honoured only for the DM team's own requests (a player or non-member sending the cookie gets nothing), and never touches a write, so leaving the preview and anything the owner does always works. A private campaign is never downgraded: guests cannot open it, so asking for its guests' dashboard sets no cookie and lands on Home with a note saying so (`?dashboard=guests`, display only).
 3. `Preview`, `PreviewerRole` and `PreviewerCanDM` exist only to draw the preview's chrome (the "Dashboard for" line, the strip, the eye, the way back). Nothing may grant access from them.
 4. `RequireCampaignAccess` refuses a GET or HEAD of a members-only route during the preview as it would a non-member: a page gets a small page with a way back, a fragment gets the 403.
 5. The layout injector builds the shell from the downgraded context and clears the site-admin flag, so the sidebar, top bar and blocks are the visitor's.
+6. The REST API's session door (`syncapi.RequireAuthOrAPIKey`) resolves the member itself, so it asks the same rule (`campaigns.GuestPreviewLowers`): a lowered read gets no session identity and ends where a visitor's does, at the Bearer path's 401. A real API key is untouched.
 
 **Consequences:**
 - The signed-in session stays, so a per-user grant made to the owner's own account on a page still matches where a signed-out visitor's would not.

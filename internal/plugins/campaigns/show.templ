@@ -18,8 +18,8 @@ import (
 // the hardcoded default dashboard.
 //
 // cc is the request's context: the real one, or a visitor's during a guest
-// preview. guestPrivate is the DM team's guest preview on a private campaign,
-// where there is no visitor's dashboard to draw.
+// preview. guestPrivate is the DM team asking for the guests' dashboard of a
+// private campaign, where there is no visitor's dashboard to draw.
 templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string, guestPrivate bool) {
 	// shown is the context the page is drawn from: the players' view of an
 	// owner previewing as a player, so every owner-only control reads as it
@@ -152,14 +152,15 @@ templ homePreviewChrome(cc *CampaignContext, state string, guestPrivate bool, cs
 			@homePreviewChoice(cc, "guest", "Guests", state == PreviewGuest, csrfToken)
 		</div>
 		if guestPrivate {
-			<p class="mt-3 text-sm text-fg-secondary" role="status">
+			// A div, not a paragraph: the arrange form inside would end a paragraph.
+			<div class="mt-3 text-sm text-fg-secondary" role="status">
 				This campaign is private, so guests can't open it.
-				<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/dashboard#line-pages") } class="text-accent hover:underline">Who can read it</a>
+				<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/dashboard#line-public") } class="text-accent hover:underline">Who can read it</a>
 				if cc.OwnerChrome() {
 					<span aria-hidden="true">·</span>
 					@homeArrangeLink(cc, PreviewGuest, csrfToken)
 				}
-			</p>
+			</div>
 		} else if state != "" {
 			<div class="cb-pv-strip mt-3 rounded-lg border-l-[3px] border-amber-500 bg-amber-500/10 px-4 py-2 text-sm text-fg" role="status">
 				if state == PreviewGuest {

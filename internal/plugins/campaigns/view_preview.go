@@ -40,13 +40,32 @@ func ViewingAsPlayer(c *echo.Context, cc *CampaignContext) bool {
 	return err == nil && cookie.Value == "1"
 }
 
-// ViewingAsGuest reports whether the REAL owner or co-DM has asked to look as
-// a guest. It is the request, not the effect: on a private campaign guests
-// cannot get in, so no downgrade happens and the page says so. A downgraded
-// guest-preview context is not the DM team any more, so it answers false;
-// read cc.Preview for that. Display only: never use it to grant.
+// ViewingAsGuest reports whether the REAL owner or co-DM has the guest cookie
+// on. It is the request, not the effect: on a private campaign guests cannot
+// get in, so no downgrade happens there. A downgraded guest-preview context
+// is not the DM team any more, so it answers false; read cc.Preview for that.
+// Display only: never use it to grant.
 func ViewingAsGuest(c *echo.Context, cc *CampaignContext) bool {
 	return cc != nil && cc.CanAuthorDmOnly() && guestCookieOn(c)
+}
+
+// homeGuestsNoteParam and homeGuestsNoteValue are the query that asks a
+// private campaign's Home for its "guests can't open it" note. A private
+// campaign has no guest view to switch on, so asking for one leaves no cookie
+// behind: one could only take effect later and unasked, on another campaign
+// or once this one is made public.
+const (
+	homeGuestsNoteParam = "dashboard"
+	homeGuestsNoteValue = "guests"
+)
+
+// GuestsNoteAsked reports whether this Home request is the DM team asking for
+// the guests' dashboard of a private campaign. A player preview started from
+// that address wins, so the page never claims two views at once. Display only.
+func GuestsNoteAsked(c *echo.Context, cc *CampaignContext) bool {
+	return cc != nil && cc.CanAuthorDmOnly() && !cc.Campaign.IsPublic &&
+		c.QueryParam(homeGuestsNoteParam) == homeGuestsNoteValue &&
+		!ViewingAsPlayer(c, cc)
 }
 
 func guestCookieOn(c *echo.Context) bool {
@@ -70,6 +89,30 @@ func guestPreviewActive(c *echo.Context, real *CampaignContext) bool {
 		isReadMethod(c.Request().Method) &&
 		real.Campaign.IsPublic &&
 		guestCookieOn(c)
+}
+
+// GuestPreviewAsked is the cheap first test for a door that does not run
+// AllowPublicCampaignAccess: a read carrying the guest cookie. Whether it has
+// any effect is GuestPreviewLowers' answer.
+func GuestPreviewAsked(c *echo.Context) bool {
+	return isReadMethod(c.Request().Method) && guestCookieOn(c)
+}
+
+// GuestPreviewLowers reports whether the guest preview lowers this member's
+// request to a visitor's, by the same rule as the web middleware. It is for
+// the REST API's session door, which resolves the member itself: the preview
+// must show a visitor's view on every door a browser session opens, and a
+// visitor has no session door at all.
+func GuestPreviewLowers(c *echo.Context, campaign *Campaign, member *CampaignMember) bool {
+	if campaign == nil || member == nil {
+		return false
+	}
+	return guestPreviewActive(c, &CampaignContext{
+		Campaign:    campaign,
+		MemberRole:  member.Role,
+		IsMember:    true,
+		IsDmGranted: hasDmGrant(campaign, member.UserID),
+	})
 }
 
 // refuseDuringGuestPreview stops a read of a members-only route while the
@@ -133,8 +176,8 @@ func setPreview(c *echo.Context, as string) {
 
 // anyPreviewOn reports whether the eye would show as on for this DM-team
 // request: the player preview, or the guest preview where it has an effect.
-// On a private campaign the guest cookie changes nothing but the Home line,
-// so it does not count; the eye starts the player preview there.
+// On a private campaign a guest cookie left by another campaign changes
+// nothing, so it does not count; the eye starts the player preview there.
 func anyPreviewOn(c *echo.Context, cc *CampaignContext) bool {
 	return ViewingAsPlayer(c, cc) || (cc.Campaign.IsPublic && ViewingAsGuest(c, cc))
 }
@@ -208,9 +251,14 @@ func (h *Handler) ViewAs(c *echo.Context) error {
 		return apperror.NewBadRequest("next must be home or arrange")
 	}
 
-	if req.As == "self" {
+	switch {
+	case req.As == "self":
 		setPreview(c, "")
-	} else {
+	case req.As == PreviewGuest && !cc.Campaign.IsPublic:
+		// Nothing to switch on: Home says why, once, and no cookie is left.
+		setPreview(c, "")
+		return middleware.HTMXRedirect(c, base+"?"+homeGuestsNoteParam+"="+homeGuestsNoteValue)
+	default:
 		setPreview(c, req.As)
 	}
 	if to != "" {
