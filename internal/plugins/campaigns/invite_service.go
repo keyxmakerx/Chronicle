@@ -116,6 +116,13 @@ func (s *inviteService) CreateInvite(ctx context.Context, campaignID, createdBy 
 		return nil, err
 	}
 
+	// The mail goes to the address as stored, read back by the token only
+	// this call knows, so what is sent is exactly what the invite records.
+	stored, err := s.repo.GetByToken(ctx, token)
+	if err != nil {
+		return nil, fmt.Errorf("reading back the invite: %w", err)
+	}
+
 	// Send invite email if SMTP is configured.
 	if s.mailer != nil && s.mailer.IsConfigured(ctx) {
 		acceptURL := fmt.Sprintf("%s/invites/accept?token=%s", s.baseURL, token)
@@ -140,7 +147,7 @@ func (s *inviteService) CreateInvite(ctx context.Context, campaignID, createdBy 
 		})
 		if err != nil {
 			slog.Warn("failed to build invite email", slog.String("campaign", campaignID), slog.String("error", err.Error()))
-		} else if err := s.mailer.SendHTMLMail(ctx, []string{email}, subject, plainBody, htmlBody); err != nil {
+		} else if err := s.mailer.SendHTMLMail(ctx, []string{stored.Email}, subject, plainBody, htmlBody); err != nil {
 			slog.Warn("failed to send invite email",
 				slog.String("email", email),
 				slog.String("campaign", campaignID),
