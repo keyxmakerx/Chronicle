@@ -390,11 +390,9 @@
         el.textContent = '';
         el.appendChild(h('p', 'hbw-err', e.message || 'The workshop could not open.'));
       });
-      S.leave = function (ev) { if (S.dirty) { ev.preventDefault(); ev.returnValue = ''; } };
-      window.addEventListener('beforeunload', S.leave);
     },
     destroy: function (el) {
-      if (el._hbw) window.removeEventListener('beforeunload', el._hbw.leave);
+      if (window.Chronicle && Chronicle.markClean) Chronicle.markClean('homebrew-workshop');
       el._hbw = null;
     }
   });
@@ -408,8 +406,16 @@
     S.statusEl.classList.toggle('err', !!isErr);
   }
 
+  // The shared leave guard (boot.js) asks for a boosted link and for the
+  // browser's own prompt alike.
+  function reportDirty(S) {
+    var C = window.Chronicle;
+    if (C && C.markDirty) { if (S.dirty) C.markDirty('homebrew-workshop'); else C.markClean('homebrew-workshop'); }
+  }
+
   function touch(S) {
     S.dirty = true;
+    reportDirty(S);
     S.saveBtn.disabled = false;
     setStatus(S, 'Not saved yet');
   }
@@ -529,6 +535,7 @@
     simSync(S.cur.doc, S.catalog, S.sim);
     S.titleEl.textContent = S.cur.name || 'Untitled recipe';
     S.saveBtn.disabled = !S.dirty;
+    reportDirty(S);
     drawLibrary(S);
     drawCanvas(S);
     drawInspector(S);

@@ -63,7 +63,7 @@ templ fullApp(title string) {
 		<div
 			class="flex h-screen overflow-hidden"
 			data-nav-drawer-query={ navDrawerQuery }
-			x-data="{ sidebarOpen: false, sidebarHidden: localStorage.getItem('chronicle-sidebar-hidden') === 'true', navDrawer: false, init() { const q = window.matchMedia(this.$el.dataset.navDrawerQuery); this.navDrawer = q.matches; q.addEventListener('change', (e) => { this.navDrawer = e.matches; if (!e.matches) this.sidebarOpen = false }) } }"
+			x-data="{ sidebarOpen: false, sidebarHidden: localStorage.getItem('chronicle-sidebar-hidden') === 'true', navDrawer: false, giveBack: null, init() { const q = window.matchMedia(this.$el.dataset.navDrawerQuery); this.navDrawer = q.matches; q.addEventListener('change', (e) => { this.navDrawer = e.matches; if (!e.matches) this.sidebarOpen = false }); this.$watch('sidebarOpen', (open) => { if (open && this.navDrawer && window.Chronicle && Chronicle.backCloses) { this.giveBack = Chronicle.backCloses('nav-drawer', () => { this.sidebarOpen = false }) } else if (this.giveBack) { const give = this.giveBack; this.giveBack = null; give() } }) } }"
 			@chronicle:navigated.window="sidebarOpen = false"
 			@chronicle:sidebar-show.window="sidebarHidden = false; localStorage.setItem('chronicle-sidebar-hidden', 'false')"
 			@keydown.escape.window="if (sidebarOpen && !$event.defaultPrevented) { sidebarOpen = false; $nextTick(() => { const t = document.getElementById('nav-toggle'); if (t) t.focus() }) }"
