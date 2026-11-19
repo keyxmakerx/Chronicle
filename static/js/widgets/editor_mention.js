@@ -112,6 +112,13 @@
   // players read therefore takes a second pick, after a warning.
   var LINK_WARNING = 'Players read this text and will see this name. Choose it again to link.';
 
+  // The list's tallest and shortest heights, its gap from the cursor's line
+  // and the space it keeps from the window's edges.
+  var MAX_HEIGHT = 240;
+  var MIN_HEIGHT = 96;
+  var GAP = 4;
+  var EDGE = 8;
+
   function MentionPopup(options) {
     this.campaignId = options.campaignId;
     this.onSelect = options.onSelect;
@@ -142,16 +149,41 @@
     this.visible = true;
     this.selectedIndex = 0;
 
-    // Position the popup below the cursor.
-    this.el.style.left = coords.left + 'px';
-    this.el.style.top = coords.bottom + 4 + 'px';
     this.el.style.display = 'block';
+    this.place(coords);
 
     // Add click-outside listener.
     var self = this;
     setTimeout(function () {
       document.addEventListener('mousedown', self._onClickOutside);
     }, 0);
+  };
+
+  /**
+   * Put the list beside the cursor and inside the window: under the cursor
+   * when a full list fits there, above it when it does not, and clear of the
+   * window's sides. On a phone the window is what the keyboard leaves showing.
+   *
+   * @param {Object} [coords] - {left, top, bottom} of the cursor. Left out,
+   *   the list is placed again where it was, after its height changed.
+   */
+  MentionPopup.prototype.place = function (coords) {
+    if (coords) this._at = coords;
+    if (!this.el || !this._at) return;
+    var vv = window.visualViewport;
+    var winTop = vv ? vv.offsetTop : 0;
+    var winLeft = vv ? vv.offsetLeft : 0;
+    var winH = vv ? vv.height : window.innerHeight;
+    var winW = vv ? vv.width : window.innerWidth;
+    var roomBelow = winTop + winH - EDGE - (this._at.bottom + GAP);
+    var roomAbove = this._at.top - GAP - (winTop + EDGE);
+    // The side is chosen for a full list, so it does not change as results
+    // arrive and the list grows.
+    var below = roomBelow >= MAX_HEIGHT || roomBelow >= roomAbove;
+    this.el.style.maxHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, below ? roomBelow : roomAbove)) + 'px';
+    this.el.style.top = (below ? this._at.bottom + GAP : this._at.top - GAP - this.el.offsetHeight) + 'px';
+    var maxLeft = winLeft + winW - this.el.offsetWidth - EDGE;
+    this.el.style.left = Math.max(winLeft + EDGE, Math.min(this._at.left, maxLeft)) + 'px';
   };
 
   /**
@@ -262,8 +294,8 @@
     this.el = document.createElement('div');
     this.el.className = 'mention-popup';
     this.el.style.cssText =
-      'position:fixed;z-index:9999;display:none;min-width:220px;max-width:320px;' +
-      'max-height:240px;overflow-y:auto;border-radius:8px;' +
+      'position:fixed;z-index:9999;display:none;box-sizing:border-box;min-width:220px;max-width:320px;' +
+      'max-height:' + MAX_HEIGHT + 'px;overflow-y:auto;border-radius:8px;' +
       'box-shadow:0 4px 16px rgba(0,0,0,0.12);';
 
     // Apply theme-aware colors.
@@ -389,6 +421,7 @@
     }
 
     this.el.innerHTML = html;
+    this.place();
 
     // Bind click events on items.
     var self = this;
@@ -451,6 +484,7 @@
       '<div style="padding:10px 14px;font-size:13px;opacity:0.5">' +
       Chronicle.escapeHtml(message) +
       '</div>';
+    this.place();
   };
 
   /**
@@ -691,12 +725,8 @@
             popup.show(coords);
           }
 
-          // Update popup position on each keystroke in case of line wrapping.
-          var updatedCoords = getCursorCoords(editor.view, from);
-          if (popup.el) {
-            popup.el.style.left = updatedCoords.left + 'px';
-            popup.el.style.top = updatedCoords.bottom + 4 + 'px';
-          }
+          // Follow the cursor on each keystroke, in case the line wrapped.
+          popup.place(getCursorCoords(editor.view, from));
 
           popup.updateQuery(query);
         } else if (mentionActive) {

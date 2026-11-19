@@ -2,7 +2,8 @@
 // page is linked with @ while writing. A row is the page's name, then its
 // kind as a quiet word at the end, with nothing drawn in front. A page not
 // everyone can read says so on a line under its name, and Foundry scenes line
-// up with the pages above them.
+// up with the pages above them. The list stays inside the window: it opens
+// above the cursor when there is no room under it, and clear of the sides.
 //
 // Runs the real editor and the real picker in Chromium against a stubbed
 // search (needs playwright-core, see _browser_env.mjs), wired the way
@@ -159,4 +160,48 @@ test('Foundry scenes line up with the pages above them', { skip }, async (t) => 
     assert.deepEqual(x.icons, [], x.html);
     assert.equal(x.inset, 12, 'every name starts at the same edge');
   }
+});
+
+// Where the open list sits against the cursor's line and the window.
+const placed = (p) => p.evaluate(() => {
+  const b = document.querySelector('.mention-popup').getBoundingClientRect();
+  const c = window.getSelection().getRangeAt(0).getBoundingClientRect();
+  return { top: Math.round(b.top), bottom: Math.round(b.bottom), left: Math.round(b.left), right: Math.round(b.right),
+    cursorTop: Math.round(c.top), cursorBottom: Math.round(c.bottom), cursorLeft: Math.round(c.left), vw: window.innerWidth, vh: window.innerHeight };
+});
+const MANY = Array.from({ length: 9 }, (_, i) => page('e' + (i + 2), 'Thorne ' + (i + 1), 'Character'));
+
+test('with room under the cursor the list opens there, starting at the cursor', { skip }, async (t) => {
+  const p = await open(t, { results: MANY, style: 'position:absolute;top:40px;left:60px;width:600px' });
+  const at = await placed(p);
+  assert.ok(at.top >= at.cursorBottom && at.top - at.cursorBottom <= 6, JSON.stringify(at));
+  assert.ok(Math.abs(at.left - at.cursorLeft) <= 1, JSON.stringify(at));
+  assert.ok(at.bottom <= at.vh, 'the whole list is inside the window');
+});
+
+test('with no room under the cursor the list opens above it, whole', { skip }, async (t) => {
+  const p = await open(t, { results: MANY, style: 'position:absolute;bottom:12px;left:60px;width:600px' });
+  const at = await placed(p);
+  assert.ok(at.bottom <= at.cursorTop && at.cursorTop - at.bottom <= 6, 'the list ends just above the cursor\'s line: ' + JSON.stringify(at));
+  assert.ok(at.top >= 0 && at.bottom <= at.vh, JSON.stringify(at));
+  assert.equal(at.bottom - at.top, 240, 'a full list keeps its full height');
+});
+
+test('a short list above the cursor still touches the cursor\'s line', { skip }, async (t) => {
+  const p = await open(t, { results: [page('e2', 'Thorne', 'Character')], style: 'position:absolute;bottom:12px;left:60px;width:600px' });
+  const at = await placed(p);
+  assert.ok(at.bottom <= at.cursorTop && at.cursorTop - at.bottom <= 6, JSON.stringify(at));
+});
+
+test('on a narrow window the list stays clear of the right edge', { skip }, async (t) => {
+  const p = await open(t, { results: MANY, viewport: { width: 390, height: 700 }, style: 'position:absolute;top:40px;left:250px;width:130px' });
+  const at = await placed(p);
+  assert.ok(at.right <= at.vw - 8 && at.left >= 8, 'inside the window with its margin: ' + JSON.stringify(at));
+});
+
+test('in a window too short for a full list either way, the list takes the larger side and scrolls', { skip }, async (t) => {
+  const p = await open(t, { results: MANY, viewport: { width: 800, height: 300 }, style: 'position:absolute;top:120px;left:60px;width:600px' });
+  const at = await placed(p);
+  assert.ok(at.top >= 0 && at.bottom <= at.vh, 'no part of the list is outside the window: ' + JSON.stringify(at));
+  assert.ok(at.bottom - at.top >= 96, 'and it keeps a usable height');
 });
