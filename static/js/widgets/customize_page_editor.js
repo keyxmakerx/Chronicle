@@ -1794,6 +1794,32 @@
         else if (UI.sel) select(null);
       }
     });
+    // On a phone the panel is a sheet: a swipe down on its handle strip folds
+    // it, a swipe up opens it, and a tap still goes through to the buttons.
+    on(el, 'pointerdown', function (e) {
+      var strip = e.target.closest && e.target.closest('.cpe-insp-tabs');
+      if (!strip || e.pointerType === 'mouse' || window.innerWidth > 1100) return;
+      var y0 = e.clientY, moved = false;
+      function end(ev) {
+        document.removeEventListener('pointermove', mv);
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        if (!moved) return;
+        var dy = ev.clientY - y0;
+        if (Math.abs(dy) < 24) return;
+        UI.sheet = dy < 0;
+        var ins = $('.cpe-insp');
+        if (ins) ins.classList.toggle('open', UI.sheet);
+        // The press that ended the swipe must not also click a tab.
+        var stop = function (c) { c.stopPropagation(); c.preventDefault(); };
+        document.addEventListener('click', stop, true);
+        setTimeout(function () { document.removeEventListener('click', stop, true); }, 0);
+      }
+      function mv(ev) { if (Math.abs(ev.clientY - y0) > 8) moved = true; }
+      document.addEventListener('pointermove', mv);
+      document.addEventListener('pointerup', end);
+      document.addEventListener('pointercancel', end);
+    });
     on(el, 'pointerdown', function (e) {
       if (UI.reading) return;
       if (e.target.closest('.cpe-tbar button, .cpe-addt')) return;
@@ -1860,8 +1886,10 @@
     render();
     showLook(UI.look);
     loadPalette();
+    document.documentElement.classList.add('cpe-open');
     return function destroy() {
       alive = false;
+      document.documentElement.classList.remove('cpe-open');
       clearTimeout(PV.timer);
       clearTimeout(pageTimer);
       closePop();
