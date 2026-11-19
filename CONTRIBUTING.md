@@ -54,9 +54,8 @@ again; CI runs the same command.
   binary on an emptied scratch database (`tools/live-checks.sh`; defaults suit
   `make test-db-up` and a local `redis-server`) and drives it in a browser, as
   the operator's click-path checks do. Each check names the issue it stands in
-  for. The CI "Live checks" job runs them on every pull request and compares
-  the pictures they take with main's; a changed picture needs the
-  `pictures-approved` label once someone has looked at the report.
+  for. The CI "Live checks" job runs them on every pull request; the pictures they
+  take are not compared.
 - A change to a feature people use adds an entry to `updatehealth.Changed`
   (`internal/updatehealth/changed.go`): a new ID, the name a site admin knows
   it by, the routes that serve it and a page to try it. After the update, the
