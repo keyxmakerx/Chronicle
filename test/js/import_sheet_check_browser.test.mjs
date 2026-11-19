@@ -45,14 +45,14 @@ Chronicle.sheetChecks = { creature: { check: function (fields, env) {
   });
 } } };`;
 
-async function page(t, setup) {
+async function page(t, setup, kind) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   t.after(() => assert.deepEqual(errors, []));
-  await p.setContent('<!doctype html><html><body>' + ROW + '</body></html>');
+  await p.setContent('<!doctype html><html><body>' + (kind ? ROW.replace('data-sheet-kind="creature"', 'data-sheet-kind="' + kind + '"') : ROW) + '</body></html>');
   await p.addScriptTag({ content: 'window.Chronicle = { register: function (n, impl) { window.impl = impl; } };' + (setup || '') });
   await p.addScriptTag({ content: WIDGET });
   await p.evaluate(() => window.impl.init(document.querySelector('[data-widget]')));
@@ -122,6 +122,9 @@ test('says so when the game system has no check or its check fails, and stays em
     const text = await p.evaluate(() => document.querySelector('.air-sheet').textContent);
     if (line) assert.match(text, line); else assert.equal(text, '');
   }
+  // A row that isn't a stat block has no figures to check, so it says nothing.
+  const item = await page(t, '', 'item');
+  assert.equal(await item.evaluate(() => document.querySelector('.air-sheet').textContent), '');
 });
 
 test('shows every number up to the cap and says how many it did not check', { skip }, async (t) => {

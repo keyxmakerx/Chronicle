@@ -145,6 +145,9 @@
     update();
   }
 
+  // STAT_KINDS are the page kinds whose sheets are stat blocks.
+  var STAT_KINDS = { creature: true, character: true };
+
   // say puts one plain line in the mount when the check cannot run.
   function say(el, text) {
     el.innerHTML = '';
@@ -154,9 +157,12 @@
   Chronicle.register('import-sheet-check', {
     init: function (el) {
       var checks = Chronicle.sheetChecks || {};
-      var check = checks[el.getAttribute('data-sheet-kind') || ''];
+      var kind = el.getAttribute('data-sheet-kind') || '';
+      var check = checks[kind];
       if (!check || typeof check.check !== 'function') {
-        say(el, 'This game system has no check for these numbers, so they are saved as the AI wrote them.');
+        // Only stat blocks carry figures a formula could check; on other rows
+        // the missing check is no news.
+        if (STAT_KINDS[kind]) say(el, 'This game system has no check for these numbers, so they are saved as the AI wrote them.');
         return;
       }
       var name = el.getAttribute('data-input') || '';
