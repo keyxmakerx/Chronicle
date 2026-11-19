@@ -92,8 +92,8 @@ func settingsTabIDsJSON(tabs []SettingsTab) string {
 // csrfToken are used by the pre-tab banners; per-tab data is captured
 // inside each tab's own Content closure.
 templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken, errMsg, activeTab string, tabs []SettingsTab) {
-	@layouts.App(cc.Campaign.Name + " - Settings") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Settings", Line: "settings"}) {
+	@layouts.App(cc.Campaign.Name + " - Details and data") {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Details and data", Line: "settings"}) {
 		<div
 			x-data={ fmt.Sprintf(`{
 				tab: '%s',
@@ -127,7 +127,9 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 			// unrelated buttons; roving tabindex (bound in
 			// settingsTabButton) makes only the active tab a Tab-key
 			// stop, matching the arrow-key pattern below.
-			<div class="flex gap-0 border-b border-edge mb-6 overflow-x-auto" role="tablist" aria-label="Campaign settings">
+			// The tabs wrap onto a second row on a narrow screen rather than
+			// scrolling out of sight, so no label is ever cut off.
+			<div class="flex flex-wrap gap-x-1 border-b border-edge mb-6" role="tablist" aria-label="Details and data">
 				for _, t := range tabs {
 					@settingsTabButton(t)
 				}
@@ -170,7 +172,7 @@ templ settingsTabButton(t SettingsTab) {
 		:aria-selected={ fmt.Sprintf("tab === '%s' ? 'true' : 'false'", t.ID) }
 		:tabindex={ fmt.Sprintf("tab === '%s' ? '0' : '-1'", t.ID) }
 		:class={ fmt.Sprintf("tab === '%s' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'", t.ID) }
-		class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"
+		class="px-3 sm:px-4 py-2.5 text-sm transition-colors whitespace-nowrap"
 	>
 		<i class={ t.Icon, "mr-1.5 text-xs" }></i>
 		{ " " + t.Label }
@@ -185,131 +187,52 @@ templ settingsActivityTab(cc *CampaignContext) {
 	</div>
 }
 
-// settingsGeneralTab renders the General tab: details, MOTD, visibility, system, danger zone.
+// settingsGeneralTab renders the Details tab: the description, then the danger
+// zone. The name, who can read the campaign and where new pages start are on
+// Campaign settings, each in one place only.
 templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 	<div class="space-y-4">
-		// Top row: Campaign Details + Welcome Message side-by-side.
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-			// Campaign details.
-			<div class="card p-4">
-				<h2 class="text-sm font-semibold text-fg mb-3">Campaign details</h2>
-				<form
-					method="POST"
-					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
-					hx-put={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
-					hx-target="#campaign-details-form"
-					hx-swap="outerHTML"
-					id="campaign-details-form"
-					class="space-y-3"
-				>
-					<input type="hidden" name="_method" value="PUT"/>
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
-					<div>
-						<label for="name" class="block text-xs font-medium text-fg-body mb-1">Campaign name</label>
-						<input type="text" id="name" name="name" value={ cc.Campaign.Name } required class="input w-full text-sm" maxlength="200"/>
-					</div>
-					<div>
-						<label for="description" class="block text-xs font-medium text-fg-body mb-1">Description</label>
-						<textarea id="description" name="description" class="input w-full h-20 text-sm" maxlength="5000">
-							if cc.Campaign.Description != nil {
-								{ *cc.Campaign.Description }
-							}
-						</textarea>
-					</div>
-					<div class="flex items-center">
-						<input type="checkbox" id="is_public" name="is_public" value="true" if cc.Campaign.IsPublic { checked } class="h-4 w-4 text-accent border-edge rounded focus:ring-accent"/>
-						<label for="is_public" class="ml-2 block text-xs text-fg-body">Make this campaign public</label>
-					</div>
-					<div class="flex justify-end">
-						<button type="submit" class="btn-primary text-xs">Save changes</button>
-					</div>
-				</form>
-			</div>
-
-			// Welcome message: edited only in Customize → Brand, beside the backdrop
-			// it sits on, so Settings shows it and links there.
-			<div class="card p-4">
-				<h2 class="text-sm font-semibold text-fg mb-1">Welcome message</h2>
-				<p class="text-xs text-fg-secondary mb-3">Banner shown on the campaign home, over your backdrop.</p>
-				if msg := cc.Campaign.ParseSettings().WelcomeMessage; msg != "" {
-					<p class="text-sm text-fg-body whitespace-pre-line mb-3 line-clamp-4">{ msg }</p>
-				} else {
-					<p class="text-sm text-fg-muted mb-3">No welcome message yet.</p>
-				}
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize/look", cc.Campaign.ID)) } class="btn-secondary text-sm">Edit in Customize → Brand</a>
-			</div>
-		</div>
-
-		// Second row: Visibility + Game System side-by-side.
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-		// Default visibility.
 		<div class="card p-4">
-			<h2 class="text-sm font-semibold text-fg mb-2">Default visibility</h2>
-			<p class="text-xs text-fg-secondary mb-2">Default visibility for new pages.</p>
-			<div
-				x-data={ fmt.Sprintf(`{
-					visibility: '%s',
-					saving: false,
-					saved: false,
-					async save(v) {
-						this.visibility = v;
-						this.saving = true;
-						this.saved = false;
-						const res = await Chronicle.apiFetch('/campaigns/%s/default-visibility', {
-							method: 'PUT',
-							body: { visibility: v }
-						});
-						this.saving = false;
-						if (res.ok) {
-							this.saved = true;
-							setTimeout(() => { this.saved = false; }, 3000);
-						}
-					}
-				}`, cc.Campaign.ParseSettings().DefaultVisibility, cc.Campaign.ID) }
-				class="space-y-2"
+			<h2 class="text-sm font-semibold text-fg mb-3">Description</h2>
+			<form
+				method="POST"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
+				hx-put={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
+				hx-target="#campaign-details-form"
+				hx-swap="outerHTML"
+				id="campaign-details-form"
+				class="space-y-3"
 			>
-				<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
-					<input type="radio" name="default_vis" value="" :checked="visibility === ''" @change="save('')" class="accent-accent"/>
-					<div>
-						<span class="text-sm font-medium text-fg">Everyone</span>
-						<p class="text-xs text-fg-secondary">All campaign members can see new pages by default.</p>
-					</div>
-				</label>
-				<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
-					<input type="radio" name="default_vis" value="dm_only" :checked="visibility === 'dm_only' || visibility === 'private'" @change="save('dm_only')" class="accent-accent"/>
-					<div>
-						<span class="text-sm font-medium text-fg">{ layouts.GMTerm(ctx) } Only</span>
-						<p class="text-xs text-fg-secondary">New pages are hidden from players until explicitly revealed.</p>
-					</div>
-				</label>
-				// "Private" (creator-only) is not offered as a choice here (ADR-056):
-				// storage has exactly one flag (entities.is_private), so it was DM
-				// Only under a second name promising behavior nothing implemented.
-				// A campaign already storing "private" still collapses to
-				// is_private=true (DefaultVisibilityPrivate in model.go). Real
-				// creator-only visibility exists per-entity via "custom" mode with
-				// a user-subject grant.
-				<div class="flex items-center gap-2 pt-1">
-					<span x-show="saving" class="text-xs text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Saving...</span>
-					<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+				<input type="hidden" name="_method" value="PUT"/>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<div>
+					<label for="description" class="block text-xs font-medium text-fg-body mb-1">What the campaign is about</label>
+					<textarea id="description" name="description" class="input w-full h-20 text-sm" maxlength="5000">
+						if cc.Campaign.Description != nil {
+							{ *cc.Campaign.Description }
+						}
+					</textarea>
 				</div>
-			</div>
-		</div>
-
-		// The game system picker is on Game & features; this keeps the
-		// old spot from going silent for owners who look here first.
-		<div class="card p-4">
-			<h2 class="text-sm font-semibold text-fg mb-1">Game system</h2>
-			<p class="text-xs text-fg-secondary">
-				Choose it on
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">Game &amp; features</a>.
+				<div class="flex justify-end">
+					<button type="submit" class="btn-primary text-xs">Save changes</button>
+				</div>
+			</form>
+			<p class="text-xs text-fg-secondary mt-3">
+				The name, who can read the campaign and where new pages start are on
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/dashboard", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">Campaign settings</a>.
 			</p>
 		</div>
-		</div>
-
 
 		// Danger Zone.
-		<div class="card border-red-200 dark:border-red-800" x-data="{ open: false }">
+		// Campaign settings links here as /settings#danger, so the card opens
+		// itself when that is the address.
+		<div
+			id="danger"
+			class="card border-red-200 dark:border-red-800 scroll-mt-4"
+			x-data="{ open: location.hash === '#danger' }"
+			@hashchange.window="if (location.hash === '#danger') open = true"
+			x-init="if (location.hash === '#danger') $nextTick(() => $el.scrollIntoView())"
+		>
 			<button @click="open = !open" class="w-full p-4 flex items-center justify-between text-left">
 				<h2 class="text-sm font-semibold text-red-600 dark:text-red-400">Danger zone</h2>
 				<i class="fa-solid fa-chevron-down text-red-400 text-xs transition-transform" :class="open && 'rotate-180'"></i>

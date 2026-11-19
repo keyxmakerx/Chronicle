@@ -603,6 +603,12 @@
   .dropdown-divider {
     @apply border-t border-edge my-1;
   }
+  /* The bar sits low so full-screen page overlays cover it, which also
+   * leaves it under a page's own raised toolbars. While one of its menus is
+   * open the bar lifts over the page, but never over the open phone sidebar. */
+  #app-topbar:has(.tb-pop:not([hidden], .hidden, [x-cloak], [style*="display: none"]), #ai-bubble:not([hidden])):not(:has(#nav-toggle[aria-expanded="true"])) {
+    z-index: 70;
+  }
   @keyframes dropdown-in {
     from { opacity: 0; transform: translateY(-4px) scale(0.98); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -3409,6 +3415,27 @@
   .nav-tr:empty { display: none; }
   /* What needs the owner reads as a small count, stronger than a caption. */
   .nav-row[data-needs] .nav-tr { color: var(--nav-strong); font-weight: 600; }
+  /* Campaign settings: a plain row at the foot of the sidebar, outside every
+     scroller, under a hairline. What needs the owner is said in words at the
+     right, small, in the accent colour; the words keep their room and the
+     label gives way first. Site admin's own row follows with its own plate,
+     so the two hairlines do not stack. */
+  .nav-manage { flex: none; padding: 4px 0; border-top: 1px solid var(--nav-line); }
+  .nav-manage + .site-admin-row { border-top: 0; padding-top: 0; }
+  .nav-manage .nav-row[data-needs] .nav-tr {
+    flex: none; max-width: none; color: var(--nav-accent-soft); font-weight: 500;
+  }
+  /* Folded to icons the words are gone, so the icon carries a small dot. */
+  .sidebar-collapsed .nav-manage .nav-row[data-needs] .nav-ic { position: relative; }
+  .sidebar-collapsed .nav-manage .nav-row[data-needs] .nav-ic::after {
+    content: ""; position: absolute; top: -2px; right: -3px; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--nav-accent-soft); box-shadow: 0 0 0 2px var(--nav-bg);
+  }
+  /* Home's "Dashboard for" words and its "Arrange this page" look like small
+     text but answer over 32 pixels (44 on touch). */
+  .cb-home-preview button { position: relative; }
+  .cb-home-preview button::before { content: ""; position: absolute; inset: -7px -6px; }
+  @media (pointer: coarse) { .cb-home-preview button::before { inset: -13px -6px; } }
   /* A row with a caption keeps its whole label and lets the caption truncate. */
   .nav-lb-keep { flex: 1 0 auto; max-width: 100%; }
   .nav-lb-keep ~ .nav-tr { flex: 0 1 auto; min-width: 0; max-width: none; }
@@ -5323,7 +5350,7 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
 .ai-chip[aria-expanded="true"] { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
 .ai-chip-n {
   position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
-  display: inline-grid; place-items: center; font-size: 0.65rem; font-weight: 700; line-height: 1;
+  display: inline-grid; place-items: center; font-size: 0.65rem; font-weight: 700; line-height: 16px;
   background: var(--color-accent); color: #fff;
 }
 .ai-chip-n[data-tone="bad"] { background: rgb(var(--color-bad-rgb)); }
@@ -7365,7 +7392,7 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
   position: absolute; top: -2px; right: -4px;
   min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
   background: var(--color-accent-fill, var(--color-accent)); color: var(--color-accent-on-fill, #fff);
-  font-size: 10.5px; letter-spacing: 0; display: inline-grid; place-items: center;
+  font-size: 10.5px; line-height: 16px; letter-spacing: 0; display: inline-grid; place-items: center;
 }
 .tt-n[hidden] { display: none; }
 .tt-n.tt-grow { animation: tt-grow var(--dur-large) var(--ease-out); }

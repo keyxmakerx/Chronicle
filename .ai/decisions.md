@@ -1203,3 +1203,22 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - Background schedulers are not paused (no shared mechanism exists); only HTTP traffic is gated.
 - The restore page needs no layout while closed, because the layout reads the database.
 - The change log row for `restore.started` lives in the replaced database; the server log keeps it.
+
+## ADR-074: The guest preview is a middleware downgrade, not per-handler display logic
+
+**Status:** Accepted. Extends the player preview (a display cookie) without changing it.
+
+**Context:** The owner could not find how to look at the dashboard a guest sees. Seeing the campaign as a guest must show exactly what a visitor who is not a member gets. The player preview does this with display logic: about 25 handlers each ask `ViewingAsPlayer` and cut their own output. Copying that for guests would put a second copy of the visitor rules in every handler, and each missed handler would show the owner something a guest never sees, a preview that lies.
+
+**Decision:**
+1. `AllowPublicCampaignAccess` builds the visitor's `CampaignContext` once (`GuestPreviewContext`) for a real owner or co-Director on a GET or HEAD of a public campaign with the guest cookie. Every handler downstream runs the code path a visitor runs. The context is built from nothing but the campaign, so a field added later defaults to no access.
+2. The downgrade only lowers privileges, is honoured only for the DM team's own requests (a player or non-member sending the cookie gets nothing), and never touches a write, so leaving the preview and anything the owner does always works. A private campaign is never downgraded: guests cannot open it, so asking for its guests' dashboard sets no cookie and lands on Home with a note saying so (`?dashboard=guests`, display only).
+3. `Preview`, `PreviewerRole` and `PreviewerCanDM` exist only to draw the preview's chrome (the "Dashboard for" line, the strip, the eye, the way back). Nothing may grant access from them.
+4. `RequireCampaignAccess` refuses a GET or HEAD of a members-only route during the preview as it would a non-member: a page gets a small page with a way back, a fragment gets the 403.
+5. The layout injector builds the shell from the downgraded context and clears the site-admin flag, so the sidebar, top bar and blocks are the visitor's.
+6. The REST API's session door (`syncapi.RequireAuthOrAPIKey`) resolves the member itself, so it asks the same rule (`campaigns.GuestPreviewLowers`): a lowered read gets no session identity and ends where a visitor's does, at the Bearer path's 401. A real API key is untouched.
+
+**Consequences:**
+- The signed-in session stays, so a per-user grant made to the owner's own account on a page still matches where a signed-out visitor's would not.
+- The player preview stays a display cookie; moving it to the same downgrade is a separate change.
+- `tools/player-crawl` walks "owner previewing as a guest" and must see no page a stranger cannot open.

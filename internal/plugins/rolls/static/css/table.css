@@ -182,6 +182,7 @@ html[data-tt-sheet] .jot-tab { bottom: calc(1.5rem + var(--tt-rest)); }
 .tt-sheet[data-h="lift"] { transform: translateY(calc(100% - 60dvh)); }
 .tt-sheet[data-h="full"] { transform: none; }
 .tt-sheet.tt-drag { transition: none; }
+.tt-sheet, .tt-sheet .tt-lbody, .tt-sheet .tt-log { overscroll-behavior: contain; }
 .tt-sheet.tt-away { transform: translateY(100%); }
 [data-cz-kit="sharp"] .tt-sheet { border-radius: 0; border-color: var(--color-text-primary); }
 .tt-grab { position: relative; flex-shrink: 0; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 0 16px; border: 0; background: none; color: var(--color-text-body);

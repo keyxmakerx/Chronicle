@@ -38,6 +38,7 @@ const (
 	keyEnabledSystem       ctxKey = "layout_enabled_system"
 	keyGMTerm              ctxKey = "layout_gm_term"
 	keyViewingAsPlayer     ctxKey = "layout_viewing_as_player"
+	keyPreviewAs           ctxKey = "layout_preview_as"
 	keyIsOwner             ctxKey = "layout_is_owner"
 	keyIsDmGranted         ctxKey = "layout_is_dm_granted"
 	keyHasYourLook         ctxKey = "layout_has_your_look"
@@ -418,6 +419,20 @@ func drillSearchURL(_ context.Context, campaignID string, typeID int) string {
 // SetViewingAsPlayer marks whether the owner is currently in "view as player" mode.
 func SetViewingAsPlayer(ctx context.Context, viewing bool) context.Context {
 	return context.WithValue(ctx, keyViewingAsPlayer, viewing)
+}
+
+// SetPreviewAs records which preview the DM team is in ("player", "guest" or
+// ""), for the preview's own chrome: the eye, the strip and the way back.
+// The role and owner values in this context are already the viewer's during a
+// preview; this never decides what is shown.
+func SetPreviewAs(ctx context.Context, preview string) context.Context {
+	return context.WithValue(ctx, keyPreviewAs, preview)
+}
+
+// PreviewAs returns "player", "guest" or "" (no preview).
+func PreviewAs(ctx context.Context) string {
+	p, _ := ctx.Value(keyPreviewAs).(string)
+	return p
 }
 
 // IsViewingAsPlayer returns true if the owner has toggled "view as player" mode.

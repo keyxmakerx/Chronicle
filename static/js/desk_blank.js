@@ -1,7 +1,8 @@
 /**
- * desk_blank.js -- the dashed words on the owner's desk (Manage's home page).
+ * desk_blank.js -- the values the owner changes where they stand on Campaign
+ * settings.
  *
- * A "blank" is a word in a sentence that the owner changes where it stands and
+ * A "blank" is a value on a row that the owner changes where it stands and
  * that saves the moment it is changed:
  *
  *   choice  opens a small menu that grows out of the word; a pick saves at once
@@ -9,7 +10,7 @@
  *
  * Each blank's button carries its own inline onclick (built in
  * campaigns/desk_view.go) that calls Chronicle.deskBlank.activate, because the
- * desk arrives by a boosted swap where a script tag or a delegated listener may
+ * page arrives by a boosted swap where a script tag or a delegated listener may
  * never run. Nothing here listens on document except while a menu is open, and
  * that one goes away when the menu does.
  *
@@ -171,30 +172,9 @@
     return b;
   }
 
-  // The People role route answers a redirect when it worked and a page that
-  // says why when it did not, always with a 200 for the latter. So the save
-  // is read from the redirect, and the reason is taken from that page.
-  function sendForRedirect(url, body, method) {
-    var h = { 'Content-Type': 'application/json', Accept: 'text/html' };
-    var csrf = C.getCsrf && C.getCsrf();
-    if (csrf) h['X-CSRF-Token'] = csrf;
-    return fetch(url, { method: method, headers: h, credentials: 'same-origin', redirect: 'manual', body: JSON.stringify(body) }).then(function (r) {
-      if (r.type === 'opaqueredirect') return {};
-      if (r.status === 200) {
-        return r.text().then(function (t) {
-          var why = '';
-          try { var a = new DOMParser().parseFromString(t, 'text/html').querySelector('[role=alert]'); why = a ? a.textContent.trim() : ''; } catch (e) { why = ''; }
-          throw new Error(why || 'The change was refused.');
-        });
-      }
-      throw new Error('request failed (' + r.status + ')');
-    });
-  }
-
   function send(btn, value) {
     var opts = { method: btn.getAttribute('data-method') || 'PUT', body: bodyFor(btn, value) };
     var url = btn.getAttribute('data-url');
-    if (btn.getAttribute('data-expect') === 'redirect') return sendForRedirect(url, opts.body, opts.method);
     if (C.apiAction) return C.apiAction(url, opts);
     return C.apiFetch(url, opts).then(function (r) {
       return r.text().then(function (t) {
@@ -211,7 +191,7 @@
     if (C.notify) C.notify((msg ? msg + ' ' : '') + 'Nothing changed.', 'error');
   }
 
-  // "Saved", in place, in the line's own acts: it settles in, then fades.
+  // "Saved", in place, beside the value: it settles in, then fades.
   function tick(line) {
     if (!line) return;
     var host = line.querySelector('.desk-acts') || line;
@@ -244,8 +224,6 @@
     btn.removeAttribute('aria-busy');
     tick(line);
     glow(line);
-    // A word inside a line's fold has changed what the line's sentence says.
-    if (C.deskFold && C.deskFold.changed) C.deskFold.changed(btn);
   }
 
   function choose(btn, value) {
@@ -253,22 +231,10 @@
     if (value === btn.getAttribute('data-value')) { btn.focus(); return; }
     var opt = options(btn).filter(function (o) { return o.v === value; })[0];
     if (!opt) { btn.focus(); return; }
-    // A local choice (the invite's role) is read by the button that sends it.
-    if (btn.hasAttribute('data-local')) {
-      setShown(btn, opt.l);
-      btn.setAttribute('data-value', value);
-      btn.focus({ preventScroll: true });
-      return;
-    }
     var was = { value: btn.getAttribute('data-value'), text: btn.textContent };
-    var after = btn.parentNode.nextElementSibling;
-    var para = btn.closest('p');
-    after = after && after.hasAttribute('data-desk-after') ? after : (para ? para.querySelector('[data-desk-after]') : null);
-    var wasAfter = after ? after.textContent : '';
     // Feedback first: the new word and a working state, inside a tenth of a
     // second, then the save settles it or puts the old word back.
     setShown(btn, opt.l);
-    if (after && opt.a) after.textContent = opt.a;
     btn.setAttribute('data-state', 'working');
     btn.setAttribute('aria-busy', 'true');
     btn.focus({ preventScroll: true });
@@ -276,7 +242,6 @@
       saved(btn, value);
     }, function (err) {
       setShown(btn, was.text);
-      if (after) after.textContent = wasAfter;
       btn.removeAttribute('data-state');
       btn.removeAttribute('aria-busy');
       fail(err);

@@ -1,14 +1,22 @@
 // house_rules_block.templ draws the campaign home's "House rules" block, which
 // the home's placeholder (campaigns.dashFragment) loads. Each chapter is a
 // native fold-out, so it opens with the keyboard and without script; the
-// Material page look sets the parts it marks (cb-info, cb-rule).
+// Material page look sets the parts it marks (cb-info, cb-rule). Opened, a
+// rule shows its introduction and then the chapter's own page, torn out of the
+// book by the rulebook widget in leaf mode. The widget's script is on every
+// page; the block brings its stylesheet.
 package systems
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // houseRulesBlock replaces the placeholder (hx-swap outerHTML).
 templ houseRulesBlock(v houseRulesView) {
 	<section class="cb-info cb-rules" data-block="house-rules" aria-labelledby="house-rules-h">
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/rulebook.css") }/>
 		<div class="cb-info-top flex items-baseline justify-between mb-3">
 			<h2 id="house-rules-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				House rules
@@ -33,7 +41,14 @@ templ houseRulesBlock(v houseRulesView) {
 						if r.Intro != "" {
 							<p class="max-w-prose">{ r.Intro }</p>
 						}
-						<a href={ templ.SafeURL(r.Href) } class="cb-more text-xs text-accent hover:underline">Read it in the rulebook</a>
+						<div
+							data-widget="rulebook"
+							data-campaign-id={ v.CampaignID }
+							data-book-url={ v.BookURL }
+							data-leaf={ r.ChapterID }
+							data-open-href={ r.Href }
+							data-leaf-preview="true"
+						></div>
 					</div>
 				</details>
 			}

@@ -109,11 +109,28 @@ templ fullApp(title string) {
 				@Topbar()
 
 				<!-- "View as player" banner -->
-				if IsViewingAsPlayer(ctx) {
-					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-300" data-pv-banner>
+				if PreviewAs(ctx) == "guest" {
+					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-800 dark:text-amber-300" role="status">
 						<i class="fa-solid fa-eye-slash mr-1"></i>
-						Viewing as player
-						<span class="text-amber-400/70 ml-1">— { GMTerm(ctx) }-only content is hidden</span>
+						Viewing as a guest
+						<span class="text-amber-700 dark:text-amber-400/70 ml-1">— you see what a visitor sees</span>
+					</div>
+				} else if IsViewingAsPlayer(ctx) {
+					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-sm text-amber-800 dark:text-amber-300" data-pv-banner>
+						<span class="min-w-0">
+							<i class="fa-solid fa-eye-slash mr-1"></i>
+							Viewing as player
+							<span class="text-amber-700 dark:text-amber-400/70 ml-1">— { GMTerm(ctx) }-only content is hidden</span>
+						</span>
+						<!-- The same switch as the eye, said in words, so the way out is
+						     in the banner on every screen. player_view.js folds it away. -->
+						<button
+							type="button"
+							class="pv-back"
+							hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/toggle-view-mode" }
+							hx-headers={ `{"X-CSRF-Token":"` + GetCSRFToken(ctx) + `"}` }
+							data-pv-toggle
+						>Back to your view</button>
 					</div>
 				}
 
@@ -231,6 +248,7 @@ templ Sidebar() {
 			@campaignNavBrand()
 			@campaignNavTop()
 			@campaignNavCategories()
+			@campaignNavManage()
 			if GetIsAdmin(ctx) {
 				@SiteAdminEntry()
 			}
@@ -683,12 +701,13 @@ func safeExternalURL(url string) templ.SafeURL {
 }
 
 // Topbar renders the top navigation bar with campaign selector, customizable
-// content area, search, notes, and user menu. It sits at z-20 so its menus
+// content area, search, notes, and user menu. It sits at z-20, and lifts over
+// the page while one of its menus (.tb-pop) is open (input.css), so its menus
 // paint over page content that makes its own stacking context (the
 // call-to-action strip keeps a transform), while staying under the mobile
 // sidebar (z-30/z-40).
 templ Topbar() {
-	<header id="app-topbar" class={ "h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate z-20", templ.KV("cz-hdr-light", topbarWantsLightWords(ctx)) }>
+	<header id="app-topbar" class={ "h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate z-20", templ.KV("cz-hdr-light", topbarWantsLightWords(ctx)) } data-tb-tools?={ topbarShowsToolsShelf(ctx) }>
 		// #topbar-bg is always rendered, even empty, so a save on the Customize
 		// page can swap in the new background without a reload: the header
 		// sits outside #main-content and boosted navigation never redraws it.
@@ -782,7 +801,7 @@ templ Topbar() {
 							x-transition:leave="mn-leave"
 							x-transition:leave-start="mn-to"
 							x-transition:leave-end="mn-from"
-							class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
+							class="tb-pop absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
 							hx-get="/campaigns/picker"
 							hx-trigger="intersect once"
 							hx-swap="innerHTML"
@@ -820,7 +839,7 @@ templ Topbar() {
 							x-transition:leave="mn-leave"
 							x-transition:leave-start="mn-to"
 							x-transition:leave-end="mn-from"
-							class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
+							class="tb-pop absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
 						>
 							for _, uc := range GetUserCampaigns(ctx) {
 								<a
@@ -860,7 +879,7 @@ templ Topbar() {
 							x-transition:leave="mn-leave"
 							x-transition:leave-start="mn-to"
 							x-transition:leave-end="mn-from"
-							class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
+							class="tb-pop absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
 							hx-get="/campaigns/picker"
 							hx-trigger="intersect once"
 							hx-swap="innerHTML"
@@ -900,7 +919,7 @@ templ Topbar() {
 					</kbd>
 				</div>
 				<!-- Search results dropdown (populated by JS) -->
-				<div id="topbar-search-results" class="absolute left-0 right-0 top-full mt-1 mx-auto max-w-lg bg-surface border border-edge rounded-lg shadow-xl z-50 hidden max-h-[60vh] overflow-y-auto"></div>
+				<div id="topbar-search-results" class="tb-pop absolute left-0 right-0 top-full mt-1 mx-auto max-w-lg bg-surface border border-edge rounded-lg shadow-xl z-50 hidden max-h-[60vh] overflow-y-auto"></div>
 			</div>
 		}
 
@@ -925,12 +944,12 @@ templ Topbar() {
 					hx-swap="innerHTML"
 				></div>
 			}
-			if InCampaign(ctx) && IsOwner(ctx) && !IsViewingAsPlayer(ctx) && !InSiteAdmin(ctx) {
+			if topbarHasOwnerAI(ctx) {
 				@aiChip("ai", false)
-			} else if InCampaign(ctx) && !IsOwner(ctx) && !IsGuest(ctx) && GetCampaignRole(ctx) >= 1 && !InSiteAdmin(ctx) {
+			} else if topbarHasMemberAI(ctx) {
 				@aiChip("ai/me", true)
 			}
-			if InCampaign(ctx) {
+			if topbarHasFind(ctx) {
 				<!-- Search trigger (magnifying glass) -->
 				<button
 					id="topbar-search-trigger"
@@ -964,28 +983,32 @@ templ Topbar() {
 
 			<!-- View as player toggle, for the owner and co-DMs. While it is on a
 			     co-DM reads as having no DM grant, hence IsViewingAsPlayer. -->
-			if InCampaign(ctx) && (IsOwner(ctx) || IsDmGranted(ctx) || IsViewingAsPlayer(ctx)) {
+			if topbarHasViewAs(ctx) {
 				<button
 					hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/toggle-view-mode" }
-					data-pv-toggle
-					data-widget="player-view"
+					data-tb-tool="pv"
+					if PreviewAs(ctx) != "guest" {
+						data-pv-toggle
+						data-widget="player-view"
+					}
 					hx-headers={ `{"X-CSRF-Token":"` + GetCSRFToken(ctx) + `"}` }
 					class={
 						"btn-ghost btn-icon",
-						templ.KV("!bg-amber-500/20 !text-amber-400 hover:!bg-amber-500/30", IsViewingAsPlayer(ctx)),
+						templ.KV("!bg-amber-500/20 !text-amber-400 hover:!bg-amber-500/30", IsViewingAsPlayer(ctx) || PreviewAs(ctx) == "guest"),
 					}
-					title={ func() string { if IsViewingAsPlayer(ctx) { return "Viewing as player — click to go back to your own view" }; return "View as player" }() }
+					title={ func() string { if PreviewAs(ctx) == "guest" { return "Viewing as a guest — click to go back to your own view" }; if IsViewingAsPlayer(ctx) { return "Viewing as player — click to go back to your own view" }; return "View as player" }() }
 				>
-					<i class={ "fa-solid text-xs", templ.KV("fa-eye-slash", IsViewingAsPlayer(ctx)), templ.KV("fa-eye", !IsViewingAsPlayer(ctx)) }></i>
+					<i class={ "fa-solid text-xs", templ.KV("fa-eye-slash", IsViewingAsPlayer(ctx) || PreviewAs(ctx) == "guest"), templ.KV("fa-eye", !IsViewingAsPlayer(ctx) && PreviewAs(ctx) != "guest") }></i>
 				</button>
 			}
 
-			if InCampaign(ctx) && IsAuthenticated(ctx) && !InSiteAdmin(ctx) && GetCampaignRole(ctx) >= 1 {
+			if topbarHasTable(ctx) {
 				<!-- The Table tab: the roll log, the dice and the roll notice.
 				     The table widget (rolls plugin) builds the drawer on first
 				     open and listens for rolls on the campaign's socket. -->
 				<div
 					class="tt-host"
+					data-tb-tool="table"
 					data-widget="table"
 					data-campaign-id={ GetCampaignID(ctx) }
 					data-user-id={ GetUserID(ctx) }
@@ -1004,11 +1027,11 @@ templ Topbar() {
 					</button>
 				</div>
 			}
-			if IsAuthenticated(ctx) {
+			if topbarHasBell(ctx) {
 				<!-- Notification bell. Server-rendered button + badge;
 				     the badge count refreshes via an HTMX poll, the dropdown is
 				     driven by the notification-bell widget. -->
-				<div class="relative" data-widget="notification-bell" data-csrf={ GetCSRFToken(ctx) }>
+				<div class="relative" data-tb-tool="bell" data-widget="notification-bell" data-csrf={ GetCSRFToken(ctx) }>
 					<button
 						type="button"
 						class="btn-ghost btn-icon relative tb-bell"
@@ -1026,7 +1049,7 @@ templ Topbar() {
 					<div
 						data-notif-panel
 						hidden
-						class="fixed left-3 right-3 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-80 mt-1 max-h-[70vh] overflow-y-auto bg-surface rounded-lg shadow-lg border border-edge z-50"
+						class="tb-pop fixed left-3 right-3 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-80 mt-1 max-h-[70vh] overflow-y-auto bg-surface rounded-lg shadow-lg border border-edge z-50"
 					>
 						<div class="flex items-center justify-between px-3 py-2 border-b border-edge">
 							<span class="text-sm font-semibold text-fg">Notifications</span>
@@ -1036,12 +1059,12 @@ templ Topbar() {
 					</div>
 				</div>
 			}
-			if InCampaign(ctx) && (GetCampaignRole(ctx) >= 3 || IsDmGranted(ctx)) {
+			if topbarHasDMScreen(ctx) {
 				<!-- DM Screen: the control panel for the owner and members
 				     with DM access (dmscreen.CanOpen). The dm-screen
 				     widget docks the panel at the right edge; hidden
 				     under "view as player" because the role reads 1. -->
-				<div data-widget="dm-screen" data-url={ fmt.Sprintf("/campaigns/%s/dm-screen", GetCampaignID(ctx)) }>
+				<div data-tb-tool="dms" data-widget="dm-screen" data-url={ fmt.Sprintf("/campaigns/%s/dm-screen", GetCampaignID(ctx)) }>
 					<button type="button" class="btn-ghost btn-icon" data-dms-toggle title={ GMTerm(ctx) + " Screen" } aria-label={ "Show or tuck the " + GMTerm(ctx) + " Screen" } aria-expanded="false">
 						<svg class="w-5 h-5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
 							<!-- A standing GM screen: upright side panels and a flat front, so it reads apart from the slanted Maps fold. -->
@@ -1051,6 +1074,10 @@ templ Topbar() {
 						</svg>
 					</button>
 				</div>
+			}
+			if topbarShowsToolsShelf(ctx) {
+				<!-- The Tools tab and shelf: a phone's one place for the tools above. -->
+				@topbarToolsTab()
 			}
 			if IsAuthenticated(ctx) {
 				<!-- User dropdown (picture + account/logout). The click-outside sits on the
@@ -1086,7 +1113,7 @@ templ Topbar() {
 						x-transition:leave="mn-leave"
 						x-transition:leave-start="mn-to"
 						x-transition:leave-end="mn-from"
-						class="absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-1rem)] bg-surface rounded-lg shadow-lg border border-edge z-50 py-1"
+						class="tb-pop absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-1rem)] bg-surface rounded-lg shadow-lg border border-edge z-50 py-1"
 					>
 						<!-- Under 480 wide the bell steps into this menu to leave the
 						     campaign name room (phone_shell.css). It opens the bell's own
@@ -1222,7 +1249,7 @@ templ topbarCenterContent(ctx context.Context) {
 					id="topbar-tray"
 					x-show="more"
 					x-cloak
-					class="md:hidden absolute left-2 right-2 top-full mt-1.5 z-50 flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-edge bg-surface text-fg shadow-xl"
+					class="tb-pop md:hidden absolute left-2 right-2 top-full mt-1.5 z-50 flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-edge bg-surface text-fg shadow-xl"
 				>
 					<div class="tb-first-copy">
 						@topbarWidget(ctx, tc, ws[0])

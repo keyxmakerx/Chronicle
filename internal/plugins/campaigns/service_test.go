@@ -695,9 +695,9 @@ func TestUpdate_Success(t *testing.T) {
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
 	campaign, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{
-		Name:        "New Name",
-		Description: "New description",
-		IsPublic:    true,
+		Name:        strPtr("New Name"),
+		Description: strPtr("New description"),
+		IsPublic:    boolPtr(true),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -721,8 +721,8 @@ func TestUpdate_KeepsSlugWhenNameUnchanged(t *testing.T) {
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
 	campaign, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{
-		Name:        "Same Name",
-		Description: "Updated desc",
+		Name:        strPtr("Same Name"),
+		Description: strPtr("Updated desc"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -739,7 +739,7 @@ func TestUpdate_EmptyName(t *testing.T) {
 		},
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
-	_, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{Name: ""})
+	_, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{Name: strPtr("")})
 	assertAppError(t, err, 400)
 }
 
@@ -750,7 +750,7 @@ func TestUpdate_NotFound(t *testing.T) {
 		},
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
-	_, err := svc.Update(context.Background(), "nonexistent", UpdateCampaignInput{Name: "Test"})
+	_, err := svc.Update(context.Background(), "nonexistent", UpdateCampaignInput{Name: strPtr("Test")})
 	assertAppError(t, err, 404)
 }
 
@@ -763,14 +763,62 @@ func TestUpdate_ClearsDescription(t *testing.T) {
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
 	campaign, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{
-		Name:        "Test",
-		Description: "",
+		Name:        strPtr("Test"),
+		Description: strPtr(""),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if campaign.Description != nil {
 		t.Error("expected nil description when empty string provided")
+	}
+}
+
+// A save that names only the description (the Details tab) leaves the name,
+// slug and public flag exactly as stored: an absent key is not a blank one.
+func TestUpdate_DescriptionOnlyPreservesTheRest(t *testing.T) {
+	old := "old"
+	var saved *Campaign
+	repo := &mockCampaignRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Campaign, error) {
+			return &Campaign{ID: "camp-1", Name: "Therin", Slug: "therin", IsPublic: true, Description: &old, Settings: "{}", SidebarConfig: "{}"}, nil
+		},
+		updateFn: func(_ context.Context, c *Campaign) error { saved = c; return nil },
+	}
+	svc := newTestCampaignService(repo, &mockUserFinder{})
+	if _, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{Description: strPtr("new words")}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if saved == nil || saved.Name != "Therin" || saved.Slug != "therin" || !saved.IsPublic {
+		t.Errorf("name, slug and public flag must survive, got %+v", saved)
+	}
+	if saved.Description == nil || *saved.Description != "new words" {
+		t.Errorf("description = %v", saved.Description)
+	}
+}
+
+// An empty body changes nothing, and a name-only save keeps the description.
+func TestUpdate_AbsentKeysPreserve(t *testing.T) {
+	old := "keep me"
+	var saved *Campaign
+	repo := &mockCampaignRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Campaign, error) {
+			return &Campaign{ID: "camp-1", Name: "Therin", Slug: "therin", IsPublic: true, Description: &old, Settings: "{}", SidebarConfig: "{}"}, nil
+		},
+		updateFn: func(_ context.Context, c *Campaign) error { saved = c; return nil },
+	}
+	svc := newTestCampaignService(repo, &mockUserFinder{})
+	if _, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if saved.Name != "Therin" || !saved.IsPublic || saved.Description == nil || *saved.Description != "keep me" {
+		t.Errorf("an empty save changed the campaign: %+v", saved)
+	}
+	if _, err := svc.Update(context.Background(), "camp-1", UpdateCampaignInput{Name: strPtr("Therin the Grey")}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if saved.Description == nil || *saved.Description != "keep me" || !saved.IsPublic {
+		t.Errorf("a rename changed the description or public flag: %+v", saved)
 	}
 }
 

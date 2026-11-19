@@ -3945,7 +3945,7 @@ func (a *App) RegisterRoutes() {
 	// decision and is left alone. Best-effort: logs and never blocks startup.
 	if n, err := syncapi.ReconcileAddonEnablement(context.Background(), syncService, addonService); err != nil {
 		slog.Error("sync-api addon enablement backfill failed; campaigns that already use the "+
-			"Sync API may be refused until an owner enables Sync API on the campaign's Game & features page (Manage → Game & features)",
+			"Sync API may be refused until an owner enables Sync API on the campaign's Game & features page (Campaign settings → Game & features)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("sync-api addon enablement backfill complete", slog.Int("campaigns", n))
@@ -4287,7 +4287,7 @@ func (a *App) RegisterRoutes() {
 	// owner choice is left alone. Best-effort: logs and never blocks startup.
 	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {
 		slog.Error("game nights addon enablement backfill failed; campaigns that already use game nights "+
-			"may not see them until an owner turns on Game nights (Manage → Game & features)",
+			"may not see them until an owner turns on Game nights (Campaign settings → Game & features)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("game nights addon enablement backfill complete", slog.Int("campaigns", n))
@@ -6062,6 +6062,17 @@ func (a *App) RegisterRoutes() {
 				effectiveRole = int(campaigns.RolePlayer)
 				ctx = layouts.SetViewingAsPlayer(ctx, true)
 			}
+			// A guest preview arrives already downgraded to a visitor's context
+			// (campaigns.AllowPublicCampaignAccess), so everything above and
+			// below is built from the visitor's values. The preview is noted
+			// only to draw its own chrome, and the site-admin flag, which the
+			// session carries, is blanked so the shell is a visitor's too.
+			if cc.Preview == campaigns.PreviewGuest {
+				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewGuest)
+				ctx = layouts.SetIsAdmin(ctx, false)
+			} else if viewingAsPlayer {
+				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewPlayer)
+			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
 			ctx = layouts.SetVisitUntil(ctx, cc.VisitUntil)
@@ -7013,6 +7024,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "checkup", Scripts: []string{"/static/js/widgets/checkup.js"}},
 	{Name: "player-view", Scripts: []string{"/static/js/widgets/player_view.js"}},
+	{Name: "topbar-tools", Scripts: []string{"/static/js/widgets/topbar_tools.js"}},
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},

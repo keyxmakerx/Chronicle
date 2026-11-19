@@ -119,7 +119,7 @@ notice. Neither breaks the page.
 
 ## Placing a packaged widget
 
-Owner: Manage > Customize (`/campaigns/:id/customize`) > Layouts > pick a
+Owner: Campaign settings > Customize (`/campaigns/:id/customize`) > Layouts > pick a
 page template > drag your widget from the **Extensions** section of the
 palette. The mount gets `data-campaign-id`, `data-entity-id`, and
 `data-editable="true"` for Scribes and up.

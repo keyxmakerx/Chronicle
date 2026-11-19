@@ -180,3 +180,39 @@ func TestManageFind_OnlyTheOwnerGetsOne(t *testing.T) {
 		})
 	}
 }
+
+// A page that draws its own full-width Find tells the frame, which then leaves
+// its header button out: one Find on the page, so "/" has one button to press.
+// The field itself is the owner's alone, like the button.
+func TestManageFindField_ReplacesTheFramesButton(t *testing.T) {
+	tests := []struct {
+		name string
+		c    navStateCase
+		want bool
+	}{
+		{"owner", navStateCase{role: 3, path: "/campaigns/c1/dashboard"}, true},
+		{"scribe", navStateCase{role: 2, path: "/campaigns/c1/dashboard"}, false},
+		{"owner previewing as a player", navStateCase{role: 3, player: true, path: "/campaigns/c1/dashboard"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := WithManageFindField(tt.c.ctx())
+			var field, frame bytes.Buffer
+			if err := ManageFindField().Render(ctx, &field); err != nil {
+				t.Fatal(err)
+			}
+			if err := ManageFrame(ManageFrameData{Title: "Campaign settings", Home: true}).Render(ctx, &frame); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(field.String(), "data-manage-find"); got != tt.want {
+				t.Errorf("field drawn = %v, want %v: %s", got, tt.want, field.String())
+			}
+			if tt.want && !strings.Contains(field.String(), "Find a setting") {
+				t.Errorf("the field says what it finds: %s", field.String())
+			}
+			if strings.Contains(frame.String(), "data-manage-find") {
+				t.Errorf("the frame still draws its own Find: %s", frame.String())
+			}
+		})
+	}
+}

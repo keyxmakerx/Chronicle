@@ -170,6 +170,9 @@ func renderNavList(t *testing.T, ctx context.Context) string {
 	if err := campaignNavCategories().Render(ctx, &buf); err != nil {
 		t.Fatalf("render campaignNavCategories: %v", err)
 	}
+	if err := campaignNavManage().Render(ctx, &buf); err != nil {
+		t.Fatalf("render campaignNavManage: %v", err)
+	}
 	return buf.String()
 }
 
@@ -184,7 +187,7 @@ func renderNavFooter(t *testing.T, ctx context.Context) string {
 
 // TestCampaignNav_TopAndCategoriesAreSeparate pins the two-part split itself:
 // Dashboard/Pinned/Apps are in the fixed top block and never in the
-// categories area, Categories/Manage are the other way around, and a
+// categories area, Categories are the other way around, and a
 // category row opens the drill panel instead of navigating away.
 func TestCampaignNav_TopAndCategoriesAreSeparate(t *testing.T) {
 	// Entity types resolve a category button's drill URL (navDrillURL); the
@@ -209,7 +212,10 @@ func TestCampaignNav_TopAndCategoriesAreSeparate(t *testing.T) {
 			t.Errorf("campaignNavCategories must not have %q — that belongs in the fixed top", want)
 		}
 	}
-	for _, want := range []string{`data-nav-section="categories"`, `data-nav-section="manage"`, `data-nav-key="cat:1"`} {
+	if strings.Contains(catHTML, `data-nav-section="manage"`) {
+		t.Errorf("Campaign settings is fixed at the foot, not inside the categories scroller")
+	}
+	for _, want := range []string{`data-nav-section="categories"`, `data-nav-key="cat:1"`} {
 		if !strings.Contains(catHTML, want) {
 			t.Errorf("campaignNavCategories is missing %q", want)
 		}

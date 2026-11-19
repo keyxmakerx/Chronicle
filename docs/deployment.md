@@ -264,7 +264,7 @@ Chronicle, the Foundry module and each system package ship separately. In this
 order:
 
 1. **Back up**, set `BACKUP_REQUIRED=1`, and set `BASE_URL` to the public
-   `https://` address. The Foundry connect line (Campaign > Manage > Foundry)
+   `https://` address. The Foundry connect line (Campaign > Campaign settings > Foundry)
    is built from `BASE_URL`; make a new line after fixing it. Older keys are not
    revoked.
 2. **Deploy Chronicle** (steps 1-5). New tables and columns are added at boot,
