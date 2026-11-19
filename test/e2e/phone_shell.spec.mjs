@@ -2,8 +2,9 @@
 //
 // A harness page, as in annals_phone_scroll.spec.mjs: the real phone_shell.css
 // and the real .cta-* rules from input.css, with the header, the time zone
-// banner and a page row transcribed from layouts/app.templ, the callout
-// handler and entities/entity_card.templ. The first test pins that
+// and game night banners, the answer buttons and a page row transcribed from
+// layouts/app.templ, the callout handler, sessions/sessions.templ and
+// entities/entity_card.templ. The first test pins that
 // transcription to the templates, so a renamed class fails here instead of
 // leaving the harness green over a page that changed.
 //
@@ -32,6 +33,7 @@ assert.ok(ctaStart > 0 && ctaEnd > ctaStart, 'the .cta-* block moved in input.cs
 const ctaCSS = inputCSS.slice(ctaStart, ctaEnd).replace(/\}\s*$/, '');
 
 const UTILITIES = `
+  *, ::before, ::after { box-sizing: border-box; }
   html { font-size: 16px; } html, body { margin: 0; font-family: sans-serif; line-height: 1.4; } body { font-size: 14px; }
   :root { --color-border-light: #f3f4f6; }
   .hidden { display: none; } .flex { display: flex; } .block { display: block; }
@@ -51,6 +53,9 @@ const UTILITIES = `
   .av { width: 28px; height: 28px; border-radius: 50%; background: #888; display: inline-block; }
   .ico { width: 16px; height: 16px; display: inline-block; background: currentColor; }
   h3 { margin: 0; font-size: .875rem; }
+  .flex-wrap { flex-wrap: wrap; } .inline-flex { display: inline-flex; } .text-sm { font-size: .875rem; line-height: 1.25rem; }
+  .rounded-md { border-radius: .375rem; }
+  button.rsvp-answer { border: 0; font-family: inherit; }
   @media (min-width: 768px) { .md\\:hidden { display: none; } }
 `;
 
@@ -91,6 +96,18 @@ const tzBanner = (withAccept) => `
     <span class="cta-msg"><span class="cta-long">Times aren't in your zone yet</span><span class="cta-short">Times aren't in your zone yet</span></span>
     <button type="button" class="cta-go" data-cta-tz-accept ${withAccept ? '' : 'hidden'}>Use <span data-cta-zone>Buenos Aires time</span></button><a class="cta-alt" href="/account">Choose</a>
     <button type="button" class="cta-x" data-cta-dismiss aria-label="Dismiss"><i>x</i></button>
+  </div></div>`;
+
+const nightBanner = (count) => `
+  <div class="cta-host"><div class="cta-bar" data-cta="rsvp" role="status">
+    <i class="cta-ico" style="display:inline-block;width:13px">h</i>
+    <span class="cta-msg">Your table is waiting on your answer${count > 1 ? 's' : ''}</span>${count > 1 ? `<span class="cta-count">${count}</span>` : ''}<a class="cta-go" href="#night">Answer now</a>
+    <button type="button" class="cta-x" data-cta-dismiss aria-label="Dismiss"><i>x</i></button>
+  </div></div>`;
+
+const answers = `
+  <div style="padding:16px"><div class="flex flex-wrap gap-2" id="answers">
+    ${['Going', 'Maybe', "Can't"].map((w) => `<button class="rsvp-answer text-sm px-3 py-1.5 rounded-md inline-flex items-center gap-1"><span class="ico" style="width:14px;height:14px"></span> ${w}</button>`).join('')}
   </div></div>`;
 
 const row = (name, kind) => `
@@ -141,6 +158,11 @@ test('the harness classes are the ones the templates use', () => {
   }
   const callout = read('internal/plugins/sessions/callout_handler.go');
   assert.ok(callout.includes('cta-long') && callout.includes('cta-short'));
+  for (const c of ['data-cta="rsvp"', 'cta-count', 'class="cta-go" href=', 'Answer now']) {
+    assert.ok(callout.includes(c), `callout_handler.go no longer has ${c}`);
+  }
+  const night = read('internal/plugins/sessions/sessions.templ');
+  assert.equal(night.split('"rsvp-answer ').length - 1, 3, 'sessions.templ should mark its three answer buttons rsvp-answer');
   assert.ok(read('internal/templates/layouts/base.templ').includes('/static/css/phone_shell.css'));
 });
 
@@ -228,6 +250,87 @@ test('the wide banner keeps both sentences\' long form and both buttons', async 
   assert.notEqual(m.long, 'none');
   assert.equal(m.short, 'none');
   assert.notEqual(m.choose, 'none');
+});
+
+// What the game night banner looks like: whether its button sits beside the
+// sentence, and how tall an area answers a tap on the button.
+function nightBannerShape(p) {
+  return p.evaluate(() => {
+    const bar = document.querySelector('.cta-bar');
+    const msg = bar.querySelector('.cta-msg').getBoundingClientRect();
+    const go = bar.querySelector('.cta-go');
+    const g = go.getBoundingClientRect();
+    // The tap area is the button plus the unseen strip above and below it.
+    const strip = getComputedStyle(go, '::after');
+    const hit = (y) => document.elementFromPoint(g.left + g.width / 2, y) === go;
+    return {
+      h: bar.getBoundingClientRect().height,
+      beside: g.left >= msg.right - 1 && g.top < msg.bottom && g.bottom > msg.top,
+      lines: Math.round(msg.height / parseFloat(getComputedStyle(bar).lineHeight)),
+      inkH: g.height, tapH: go.clientHeight - parseFloat(strip.top) - parseFloat(strip.bottom),
+      tapsAround: hit(g.top - 6) && hit(g.bottom + 6),
+      goOneLine: g.height < 40,
+      sideways: document.documentElement.scrollWidth - innerWidth,
+    };
+  });
+}
+
+test('the game night banner is one row on a phone, its sentence wrapping beside the button', async () => {
+  for (const [width, count] of [[390, 4], [390, 1], [360, 12], [320, 4]]) {
+    const { p, close } = await open(page(nightBanner(count)), { width });
+    const m = await nightBannerShape(p);
+    await close();
+    const at = `at ${width} wide with ${count}`;
+    assert.ok(m.beside, `the button is not beside the sentence ${at}`);
+    assert.ok(m.lines >= 1 && m.lines <= 3, `the sentence takes ${m.lines} lines ${at}`);
+    assert.ok(m.goOneLine, `the button's words wrapped ${at}`);
+    assert.equal(m.sideways, 0, `the banner scrolls sideways ${at}`);
+    assert.ok(m.inkH <= 30, `the button is drawn ${m.inkH} tall ${at}`);
+    assert.ok(m.tapH >= 44, `the button answers a tap over only ${m.tapH} ${at}`);
+    assert.ok(m.tapsAround, `a tap just above or below the button misses it ${at}`);
+  }
+});
+
+test('the game night banner is shorter in one row than with the button underneath', async () => {
+  const one = await open(page(nightBanner(4)));
+  const h = (await nightBannerShape(one.p)).h;
+  await one.close();
+  const wrapped = await open(page(nightBanner(4)).replace(shellCSS, ''));
+  const before = (await nightBannerShape(wrapped.p)).h;
+  await wrapped.close();
+  assert.ok(h < before - 20, `one row is ${h} tall, the wrapped banner ${before}`);
+});
+
+test('a wide screen keeps the game night banner on one line as before', async () => {
+  const { p, close } = await open(page(nightBanner(4)), { width: 900, touch: false });
+  const m = await nightBannerShape(p);
+  await close();
+  assert.equal(m.lines, 1);
+  assert.ok(m.beside);
+});
+
+test('Going, Maybe and Can\'t are 44 tall on touch and fit a small phone', async () => {
+  for (const width of [390, 360, 320]) {
+    const { p, close } = await open(page(answers), { width });
+    const m = await p.evaluate(() => ({
+      boxes: [...document.querySelectorAll('.rsvp-answer')].map((b) => b.getBoundingClientRect().toJSON()),
+      sideways: document.documentElement.scrollWidth - innerWidth,
+    }));
+    await close();
+    assert.equal(m.boxes.length, 3);
+    for (const b of m.boxes) {
+      assert.ok(b.height >= 44, `an answer button is ${b.height} tall at ${width}`);
+      assert.ok(b.right <= width, `an answer button runs off a ${width} wide screen`);
+    }
+    assert.equal(m.sideways, 0, `the answer buttons scroll sideways at ${width}`);
+  }
+});
+
+test('with a mouse the answer buttons keep their smaller size', async () => {
+  const { p, close } = await open(page(answers), { width: 1280, touch: false });
+  const hs = await p.$$eval('.rsvp-answer', (bs) => bs.map((b) => b.getBoundingClientRect().height));
+  await close();
+  for (const h of hs) assert.ok(h < 40, `a mouse answer button grew to ${h}`);
 });
 
 test('page lists draw as 44-tall rows under 640 and as cards above', async () => {

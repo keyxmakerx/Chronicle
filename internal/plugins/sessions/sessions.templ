@@ -342,9 +342,9 @@ templ rsvpControls(cc *campaigns.CampaignContext, sessionID, csrfToken, myStatus
 		<p class="text-sm font-semibold text-fg mb-2">
 			<i class="fa-solid fa-envelope-open-text mr-1 text-accent"></i> RSVP
 		</p>
-		<div class="flex gap-2">
+		<div class="flex flex-wrap gap-2">
 			<button
-				class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+				class={ "rsvp-answer text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
 					templ.KV("bg-ok/10 text-ok font-medium ring-1 ring-ok/40", myStatus == RSVPAccepted),
 					templ.KV("bg-surface-secondary text-fg-secondary hover:bg-ok/10", myStatus != RSVPAccepted) }
 				hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
@@ -356,7 +356,7 @@ templ rsvpControls(cc *campaigns.CampaignContext, sessionID, csrfToken, myStatus
 				<i class="fa-solid fa-check"></i> Going
 			</button>
 			<button
-				class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+				class={ "rsvp-answer text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
 					templ.KV("bg-warn/10 text-warn font-medium ring-1 ring-warn/40", myStatus == RSVPTentative),
 					templ.KV("bg-surface-secondary text-fg-secondary hover:bg-warn/10", myStatus != RSVPTentative) }
 				hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
@@ -368,7 +368,7 @@ templ rsvpControls(cc *campaigns.CampaignContext, sessionID, csrfToken, myStatus
 				<i class="fa-solid fa-question"></i> Maybe
 			</button>
 			<button
-				class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+				class={ "rsvp-answer text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
 					templ.KV("bg-bad/10 text-bad font-medium ring-1 ring-bad/40", myStatus == RSVPDeclined),
 					templ.KV("bg-surface-secondary text-fg-secondary hover:bg-bad/10", myStatus != RSVPDeclined) }
 				hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }

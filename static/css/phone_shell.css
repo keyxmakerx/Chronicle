@@ -78,6 +78,26 @@
   .cta-bar[data-cta="timezone"] .cta-x { margin-block: -10px; inline-size: 44px; block-size: 44px; }
 }
 
+/* The game night banner is one row under 640 wide: its sentence wraps beside
+   the count and the button instead of taking a line of its own. The button
+   keeps its drawn size; the area that answers a tap grows to 44 tall. */
+@media (max-width: 640px) {
+  .cta-bar[data-cta="rsvp"] { flex-wrap: nowrap; }
+  .cta-bar[data-cta="rsvp"] .cta-msg { flex: 1 1 auto; }
+  .cta-bar[data-cta="rsvp"] .cta-go { position: relative; white-space: nowrap; }
+  .cta-bar[data-cta="rsvp"] .cta-go::after { content: ""; position: absolute; inset: -8px 0; }
+}
+
+/* Going, Maybe and Can't are 44 tall on a touch screen. With a mouse they
+   keep their smaller size. */
+@media (pointer: coarse) {
+  .rsvp-answer {
+    min-block-size: 44px;
+    padding-inline: 18px;
+    font-size: 15px;
+  }
+}
+
 /* Page lists draw as rows under 640 wide: name, kind in muted words and the
    Director's lock at the end, 44 tall, on hairlines with no band and no card.
    The grid, table and tree switch is unchanged on wider screens. */
