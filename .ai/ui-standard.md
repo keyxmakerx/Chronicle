@@ -646,7 +646,7 @@ second; the dice settle in under 480ms.
 - **The header is slim**: 48px under the quiet look unless the owner picked
   the tall one; every header function stays.
 - **Icons are few, one colour and unboxed.** Monochrome Font Awesome in the
-  text colour, or the accent beside a heading or in a tool's selected state.
+  text colour, or the accent in a tool's selected state.
   Nothing sits behind an icon at rest (no tinted square, circle or border);
   a frame shows only on hover, as the Icon weight under **The material
   rules** says. Colour is never decoration, a category's colour never tints
@@ -656,9 +656,11 @@ second; the dice settle in under 480ms.
   word won't fit, or where people find a thing by its place. That is the
   header's tools, the three dots that open a menu, pens and close marks, and
   the sidebar, which folds down to icons. A button or a menu row that has a
-  word has no icon, and a heading has none in front of its words. Marks
-  that carry meaning stay: the Director's amber mark, warnings, the Table's
-  die, the pen beside a part you can edit.
+  word has no icon. A heading is the exception: it may carry an icon in
+  front of its words, because it helps people find the block, in the
+  heading's own colour and never the accent. Marks that carry meaning stay:
+  the Director's amber mark, warnings, the Table's die, the pen beside a
+  part you can edit.
 - **A row that names a page starts with the name.** In search, a picker or a
   list, nothing sits in front of the name: no category icon, square or dot.
   The kind follows as a quiet word at the row's end, and a page that has a
@@ -741,11 +743,18 @@ their tokens.
   under a faint light from the page's top corner.
 - **Motion speed** retimes the duration tokens; **menu highlight** and
   **hover card** looks are their own choices.
-- **Entrances and moments** are signed and not built. An owner may pick how
-  panels open (Bloom, Unfold or Drop in place of Grow) and turn on three
-  moments that are off until then (Page sheen, List cascade, Save spark);
-  Calm and Off turn each one off. How an owner's entrance sits beside a
-  kit's own opening goes to Sign-offs before it is built: TODO(#1216).
+- **Entrances** (signed, not built: TODO(#1216)). Material is the one kit
+  where the owner picks how a card opens: Grow, the base, or Bloom (into
+  focus from a soft blur), Unfold (revealed downward from its top edge) or
+  Drop (set down with weight, 480 ms). The setting shows only while the kit
+  is Material; every other kit keeps its own opening, and the Customizer
+  says so in its place. An entrance plays where a kit's opening would, on
+  cards and panels that come out of something clicked on a page; menus,
+  pickers and dialogs keep their own moves. Calm makes it a short fade and
+  Off shows the card at once.
+- **Moments** (signed, not built: TODO(#1216)) are three switches, each off
+  until the owner turns it on: Page sheen, List cascade and Save spark.
+  Calm and Off turn each one off.
 - **View as player** (the owner's eye button in the header) hides everything
   marked `data-dm-only`, and inline secrets (`data-secret`), while it is on
   (`html[data-view-as-player]`), in any look, and shows what is marked
@@ -793,7 +802,8 @@ it. Each kit's opening is still to be built (#1548).
   what you can act on stay the same in every kit.
 - **A kit's opening replaces Grow and Drape** for cards and panels that come
   out of something clicked on a page. The other moves under **Motion** keep
-  their timing in every kit.
+  their timing in every kit. Under Material the owner may pick that opening
+  (Entrances, under **Customize goes further**).
 - **Calm and Off still win.** Under Calm or the device's reduced-motion
   setting, every kit's opening is a short fade in place, and every ambient or
   pointer movement stops at rest: Lumen's sheen, glint and breathing hold

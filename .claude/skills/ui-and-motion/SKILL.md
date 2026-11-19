@@ -38,10 +38,10 @@ the two seem to differ, the standard wins and this file is wrong.
 - Icons are few, one colour and unboxed: no category colour on an icon, no
   tinted square behind it, no emoji, no placeholder icon in an empty state.
   An icon stays only where it is the control or a landmark (the header's
-  tools, the three dots, pens and close marks, the sidebar); a button, a
-  menu row or a heading that has a word has none. A row that names a page
-  starts with the name, with its kind in words and the page's own picture
-  at the row's end (**Look**).
+  tools, the three dots, pens and close marks, the sidebar); a button or a
+  menu row that has a word has none. A heading may carry one, in the
+  heading's own colour. A row that names a page starts with the name, with
+  its kind in words and the page's own picture at the row's end (**Look**).
 - Nothing is squeezed: on a narrow screen blocks fold into one column, and
   words are never cut off or broken to a word a line. Touch controls are 44
   tall (**Phones and tablets**).

@@ -16,8 +16,9 @@ failing line is fixed, or the PR says why it is a signed exception.
 - [ ] The lightest control weight that fits; nothing opens from a bordered
       "Show all ▾" button.
 - [ ] Icons are one colour with nothing behind them at rest, and each one
-      is a control or a landmark; a button, a menu row or a heading that has
-      a word has none.
+      is a control, a landmark or in front of a heading (in the heading's
+      colour, never the accent); a button or a menu row that has a word has
+      none.
 - [ ] A row that names a page starts with the name: no category icon,
       square or dot in front, the kind in words and the page's own picture
       at the row's end.
