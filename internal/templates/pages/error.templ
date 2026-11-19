@@ -13,6 +13,14 @@ import (
 // heading, one sentence on what happened and what to do, and the ways out as
 // quiet words. Signing in is the one real command, so it is the one button.
 templ ErrorPage(statusCode int, message string) {
+	@ErrorPageIn(statusCode, message, "", "")
+}
+
+// ErrorPageIn is ErrorPage for a failed address inside a campaign the viewer
+// belongs to: its first way out is that campaign's home. campaignID and
+// campaignName are empty everywhere else, so a hidden page's answer says
+// nothing about the campaign around it.
+templ ErrorPageIn(statusCode int, message, campaignID, campaignName string) {
 	@layouts.Base(fmt.Sprintf("Error %d", statusCode)) {
 		<main id="main-content" class="min-h-screen flex items-center justify-center bg-page px-4">
 			<div class="max-w-md w-full">
@@ -35,7 +43,10 @@ templ ErrorPage(statusCode int, message string) {
 						<a href="/login" class="btn-primary">Sign in</a>
 						<a href="/register" class="quiet-word">Create an account</a>
 					} else {
-						<a href="javascript:history.back()" class="quiet-word">Go back</a>
+						if campaignID != "" {
+							<a href={ templ.URL("/campaigns/" + campaignID) } class="quiet-word" data-campaign-home>{ "Back to " + campaignName + " home" }</a>
+						}
+						<a href="/campaigns" class="quiet-word hidden" data-go-back>Go back</a>
 						<a href="/campaigns" class="quiet-word">Your campaigns</a>
 					}
 				</div>

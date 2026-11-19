@@ -363,6 +363,19 @@ func RequireCapability(check func(*CampaignContext) bool, denyMsg string) echo.M
 	}
 }
 
+// MemberHome returns the id and name of the campaign a failed request was
+// inside, for an error page's way back to its home. It answers only when the
+// campaign middleware had already put a context on the request and the viewer
+// is a member of it, so a hidden page's 404 says nothing about the campaign
+// around it. ok is false everywhere else.
+func MemberHome(c *echo.Context) (id, name string, ok bool) {
+	cc := GetCampaignContext(c)
+	if cc == nil || cc.Campaign == nil || !cc.IsMember || cc.Campaign.ID == "" {
+		return "", "", false
+	}
+	return cc.Campaign.ID, cc.Campaign.Name, true
+}
+
 // GetCampaignContext retrieves the campaign context from the Echo context.
 // Returns nil if RequireCampaignAccess middleware was not applied.
 func GetCampaignContext(c *echo.Context) *CampaignContext {
