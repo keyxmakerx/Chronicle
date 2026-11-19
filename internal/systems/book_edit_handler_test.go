@@ -245,6 +245,46 @@ func TestBookAPI_MergesEditsAndReportsCanEdit(t *testing.T) {
 	}
 }
 
+// TestBookAPI_ViewPlayerNarrowsOnly: ?view=player gives a Director the
+// player's book (the home's leaves when the Director is viewing as a player),
+// and gives nobody more than their role allows.
+func TestBookAPI_ViewPlayerNarrowsOnly(t *testing.T) {
+	h := newBookEditHarness(t, nil)
+	h.repo.pages = []StoredBookPage{
+		{ID: 1, CampaignID: testCampaign, SystemID: "customds", ChapterID: "basics", SortOrder: 1, PageJSON: `{"title":"House page","blocks":[{"text":"table rule"}]}`},
+		{ID: 2, CampaignID: testCampaign, SystemID: "customds", ChapterID: "basics", SortOrder: 2, PageJSON: `{"title":"DIR-ONLY-OWN","director":true,"blocks":[{"text":"DIR-SECRET"}]}`},
+	}
+	tests := []struct {
+		name         string
+		role, path   string
+		wantDirector bool
+	}{
+		{"owner as oneself", "owner", "/book", true},
+		{"owner viewing as a player", "owner", "/book?view=player", false},
+		{"co-Director viewing as a player", "dmgrant", "/book?view=player", false},
+		{"player asking for the Director's view", "player", "/book?view=director", false},
+		{"player asking for the player's view", "player", "/book?view=player", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := h.do(tt.role, "GET", tt.path, "")
+			if rec.Code != 200 {
+				t.Fatalf("status %d: %s", rec.Code, rec.Body)
+			}
+			var got struct {
+				IsDirector bool `json:"isDirector"`
+			}
+			_ = json.Unmarshal(rec.Body.Bytes(), &got)
+			if got.IsDirector != tt.wantDirector {
+				t.Errorf("isDirector = %v, want %v", got.IsDirector, tt.wantDirector)
+			}
+			if leaks := strings.Contains(rec.Body.String(), "DIR-SECRET"); leaks == !tt.wantDirector {
+				t.Errorf("Director-only content present = %v, want %v", leaks, tt.wantDirector)
+			}
+		})
+	}
+}
+
 func TestBookEditorPage_RendersFullPage(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}}
 	var buf bytes.Buffer

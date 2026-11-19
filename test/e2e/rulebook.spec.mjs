@@ -46,6 +46,7 @@ const rollPage = {
 };
 
 function bookFixture(opts = {}) {
+  if (opts.house) return houseFixture(opts);
   if (opts.screen) return screenFixture(opts);
   if (opts.contents) {
     const book = bookFixture(Object.assign({}, opts, { contents: false }));
@@ -99,9 +100,77 @@ function screenFixture(opts = {}) {
   };
 }
 
+// A book with two house-rules chapters, for the leaves on the campaign home.
+// The first chapter's second page is Director-only; a player's book (the server
+// has already dropped it) still carries the flag in the fixture so the reader
+// is shown to hide it by itself.
+function houseFixture(opts = {}) {
+  const first = {
+    title: 'First rule',
+    blocks: [
+      { type: 'text', text: 'A soul lingers for **three days**. A [[pledge]] holds it longer.' },
+      { type: 'callout', title: 'Remember', text: 'Edges stack, and a very long unbroken word like Supercalifragilisticexpialidocious_Supercalifragilistic stays inside.' },
+      { type: 'cards', items: [1, 2, 3, 4].map((i) => ({ title: `Remnant ${i}`, summary: `About ${i} days.`, text: `What remnant ${i} does.` })) },
+      { type: 'roll', dice: { count: 2, sides: 10 }, label: 'Power roll', modifier: true, bands: [
+        { max: 11, label: 'Tier 1', text: 'A weak result.' }, { max: 16, label: 'Tier 2', text: 'A solid result.' }, { max: null, label: 'Tier 3', text: 'A strong result.' }] },
+    ],
+  };
+  return {
+    title: 'Handbook', systemName: 'Demo', turn: 'flip', look: opts.bold ? 'bold' : 'paper',
+    theme: opts.bold ? BOLD_THEME : {},
+    isDirector: !opts.player, start: 'basics', tabs: [],
+    terms: { pledge: { name: 'Pledge', text: 'A promise sworn on a soul.' } },
+    parts: [
+      { title: "Player's book", chapters: [{ id: 'basics', title: 'Basics', pages: [longPage('Start here')] }] },
+      { title: 'House rules', chapters: [
+        { id: 'house_one', title: 'Souls, Death and Remnants', intro: 'What becomes of a soul.', pages: [
+          first,
+          { title: 'Second page', blocks: [{ type: 'text', text: 'The second page.' }] },
+          { title: 'DIR ONLY page', director: true, blocks: [{ type: 'text', text: 'Never shown to a player.' }] },
+          { title: 'Third page', blocks: [{ type: 'text', text: 'The third page.' }] },
+        ] },
+        { id: 'house_two', title: 'Potions', intro: 'Drinking one is a maneuver.', pages: [{ title: 'Brewing', blocks: [{ type: 'text', text: 'Brew slowly.' }] }] },
+      ] },
+    ],
+  };
+}
+
+const HOUSE_HREF = '/campaigns/camp-1/systems/demo#house_one';
+
+// The campaign home's House rules block: each rule is a closed <details> with
+// the introduction and a leaf.
+function leafHarnessHTML() {
+  const leaf = (id) => `<div data-widget="rulebook" data-campaign-id="camp-1" data-book-url="${BOOK_URL}" data-leaf="${id}" data-open-href="/campaigns/camp-1/systems/demo#${id}" data-leaf-preview="true"></div>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; background: #fff; color: #222; font: 14px system-ui, sans-serif; }
+  main { padding: 16px; max-width: 760px; }
+  .rows { border: 1px solid #ddd; border-radius: 12px; padding: 0 16px; }
+  summary { min-height: 32px; cursor: pointer; font-weight: 600; display: flex; align-items: center; }
+</style>
+<link rel="stylesheet" href="/static/css/rulebook.css">
+</head><body><main><div class="rows">
+<details id="d1"><summary>Souls, Death and Remnants</summary><div class="cb-rule-body"><p>What becomes of a soul.</p>${leaf('house_one')}</div></details>
+<details id="d2"><summary>Potions</summary><div class="cb-rule-body"><p>Drinking one is a maneuver.</p>${leaf('house_two')}</div></details>
+</div><p id="after">After the block.</p></main>
+<script>
+  window.Chronicle = {
+    escapeHtml: function (s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); },
+    apiFetch: function (u) { return fetch(u); },
+    register: function (slug, w) {
+      document.querySelectorAll('[data-widget="' + slug + '"]').forEach(function (el) { w.init(el, Object.assign({}, el.dataset)); });
+    }
+  };
+</script>
+<script src="/static/js/hovercard.js"></script>
+<script src="/static/js/widgets/rulebook.js"></script>
+</body></html>`;
+}
+
 // The app layout around the Rules page, sized as base.templ and app.templ
 // size it: the header and a banner take part of the screen, <main> scrolls.
 function harnessHTML(opts = {}) {
+  if (opts.house) return leafHarnessHTML();
   return `<!doctype html><html><head><meta charset="utf-8">
 <style>
   html, body { margin: 0; height: 100%; }
@@ -133,9 +202,10 @@ ${opts.nested ? '<main id="main-content">' : ''}<main id="main-content"><div id=
 async function withBook(fn, opts = {}) {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: opts.viewport || { width: 1280, height: 720 }, reducedMotion: opts.reducedMotion ? 'reduce' : 'no-preference' });
+    const page = await browser.newPage(Object.assign({ viewport: opts.viewport || { width: 1280, height: 720 }, reducedMotion: opts.reducedMotion ? 'reduce' : 'no-preference' }, opts.touch ? { hasTouch: true, isMobile: true } : {}));
     const fontRequests = [];
     page.fontRequests = fontRequests;
+    page.bookRequests = 0;
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.addInitScript(() => {
@@ -148,6 +218,9 @@ async function withBook(fn, opts = {}) {
       if (p === '/rules') return route.fulfill({ status: 200, contentType: 'text/html', body: harnessHTML(opts) });
       if (p === '/static/css/rulebook.css') return route.fulfill({ status: 200, contentType: 'text/css', body: asset('static/css/rulebook.css') });
       if (p === '/static/js/widgets/rulebook.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: asset('static/js/widgets/rulebook.js') });
+      if (p === '/static/js/hovercard.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: asset('static/js/hovercard.js') });
+      if (p === BOOK_URL) page.bookRequests++;
+      if (p === BOOK_URL && opts.failFirst && page.bookRequests === 1) return route.fulfill({ status: 500, body: '' });
       if (p === BOOK_URL) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bookFixture(opts)) });
       if (p === COVER_URL) return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: COVER_SVG });
       if (p === FONT_URL) { fontRequests.push(p); return route.fulfill({ status: 200, contentType: 'font/woff2', body: 'wOF2' }); }
@@ -155,8 +228,8 @@ async function withBook(fn, opts = {}) {
     });
     // The attribute an older Customize setting wrote; the reader must ignore it.
     if (opts.standard) await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => document.documentElement.setAttribute('data-cz-book', 'standard')));
-    await page.goto('https://chronicle.test/rules' + (opts.hash || ''));
-    await page.waitForSelector('.rb-book');
+    await page.goto('https://chronicle.test/rules' + (opts.hash || ''), opts.referer ? { referer: opts.referer } : {});
+    if (!opts.house) await page.waitForSelector('.rb-book');
     await fn(page);
     assert.deepEqual(errors, []);
   } finally {
@@ -333,7 +406,7 @@ test('a book with a cover opens shut on it every visit, opens on Enter and shuts
     let st = await frontState(page);
     assert.deepEqual([st.closed, st.shown, st.open, st.pageVisible, st.focusOnFace], [true, true, false, 'hidden', false]);
     // The bold look turns pages from a bar under the book; shut, only Next works.
-    assert.deepEqual([st.turn, st.where], ['\u2039 Back:off|Close the book:off|Next \u203A', 'The cover']);
+    assert.deepEqual([st.turn, st.where], ['\u2039 Previous:off|Close the book:off|Next \u203A', 'The cover']);
     assert.equal(await page.evaluate(() => !!document.querySelector('.rb-bar [data-act="shut"]')), false);
     const face = await page.$eval('.rb-front-face', (b) => ({ label: b.getAttribute('aria-label'), alt: b.querySelector('img').alt, src: b.querySelector('img').getAttribute('src') }));
     assert.deepEqual(face, { label: 'Open the Handbook', alt: 'Handbook: the cover', src: '/campaigns/camp-1/systems/demo/book/files/cover.svg' });
@@ -357,7 +430,7 @@ test('a book with a cover opens shut on it every visit, opens on Enter and shuts
     await page.waitForFunction(() => document.querySelector('.rb-front').hidden);
     st = await frontState(page);
     assert.deepEqual([st.closed, st.shown, st.pageVisible], [false, false, 'visible']);
-    assert.equal(st.turn, '\u2039 Back:off|Close the book|Next \u203A');
+    assert.equal(st.turn, '\u2039 Previous:off|Close the book|Next \u203A');
     assert.equal(st.where, 'Basics \u00B7 Start here');
     assert.equal(await page.evaluate(() => document.activeElement.closest('.rb-scroll') !== null), true);
 
@@ -734,4 +807,262 @@ test('with reduced motion the Sections ribbon has no transition and turns at onc
     await page.click('.rb-bm-list > li >> text=Tests');
     await page.waitForFunction(() => document.querySelector('.rb-where').textContent === 'Tests', null, { timeout: 1000 });
   }, { reducedMotion: true });
+});
+
+// --- the way back -------------------------------------------------------------
+
+const returnState = (page) => page.evaluate(() => {
+  const a = document.querySelector('.rb-return');
+  if (!a) return null;
+  const next = document.querySelector('.rb-turnbar [data-act="next"]'), cs = getComputedStyle(next);
+  return { text: a.textContent, href: a.getAttribute('href'), ownRow: a.getBoundingClientRect().bottom <= next.getBoundingClientRect().top, filled: cs.backgroundColor !== 'rgba(0, 0, 0, 0)', height: next.getBoundingClientRect().height };
+});
+
+test('a reader a link sent into the book gets a way back to that page, and working pills are filled', async () => {
+  await withBook(async (page) => {
+    const st = await returnState(page);
+    assert.deepEqual([st.text, st.href, st.ownRow, st.filled], ['\u21A9 Back to the campaign home', '/campaigns/camp-1', true, true]);
+    assert.ok(st.height >= 44, String(st.height));
+    assert.equal(await page.$eval('.rb-turnbar [data-act="prev"]', (b) => b.textContent), '\u2039 Previous');
+  }, { bold: true, viewport: { width: 390, height: 844 }, hash: '#basics', referer: 'https://chronicle.test/campaigns/camp-1' });
+  await withBook(async (page) => {
+    assert.equal((await returnState(page)).text, '\u21A9 Back to where you were');
+  }, { bold: true, hash: '#basics', referer: 'https://chronicle.test/campaigns/camp-1/pages/a?x=1' });
+});
+
+test('no way back is offered to a reader who opened the book themselves or came from another site', async () => {
+  await withBook(async (page) => { assert.equal(await returnState(page), null); }, { bold: true, referer: 'https://chronicle.test/campaigns/camp-1' });
+  await withBook(async (page) => { assert.equal(await returnState(page), null); }, { bold: true, hash: '#basics', referer: 'https://elsewhere.test/campaigns/camp-1' });
+  await withBook(async (page) => { assert.equal(await returnState(page), null); }, { bold: true, hash: '#basics' });
+});
+
+// ---- leaves: a chapter's page torn out of the book, on the campaign home ----
+
+const openRule = async (page, id) => {
+  await page.click(`#${id} > summary`);
+  await page.waitForSelector(`#${id} .rb-torn .rb-page`);
+};
+const leafTitle = (page, id) => page.$eval(`#${id} .rb-torn .rb-page h2`, (h) => h.textContent);
+
+for (const bold of [false, true]) {
+  const look = bold ? 'bold' : 'plain';
+
+  test(`a ${look} leaf shows one page of its chapter, with none of the reader's chrome`, async () => {
+    await withBook(async (page) => {
+      await openRule(page, 'd1');
+      const st = await page.evaluate(() => {
+        const leaf = document.querySelector('#d1 .rb-torn');
+        const q = (s) => leaf.querySelectorAll(s).length;
+        const wrap = leaf.querySelector('.rb-tear');
+        return {
+          pages: q('.rb-page'), chrome: q('.rb-bar, .rb-tabs, .rb-front, .rb-search, .rb-turnbar, .rb-book, .rb-spine, .rb-curl, .rb-drawer, .rb-bm, .rb-ribbon, .rb-screen, .rb-toc'),
+          folio: leaf.querySelector('.rb-folio').textContent, head: !!leaf.querySelector('.rb-fhd'), kicker: leaf.querySelector('.rb-kicker').textContent,
+          look: leaf.getAttribute('data-look'), shadow: getComputedStyle(wrap).filter,
+          clip: leaf.querySelector('.rb-page').style.clipPath, tab: leaf.querySelector('.rb-scroll').hasAttribute('tabindex'),
+          bodyBg: getComputedStyle(document.querySelector('#d1 .cb-rule-body p')).backgroundColor,
+          sideBg: getComputedStyle(document.querySelector('#d2')).backgroundColor,
+        };
+      });
+      assert.equal(st.pages, 1);
+      assert.equal(st.chrome, 0);
+      // The chapter's opener is skipped; the folio is the page's number in the book.
+      assert.equal(await leafTitle(page, 'd1'), 'First rule');
+      assert.equal(st.folio, '4');
+      assert.ok(st.head);
+      assert.equal(st.kicker, 'Souls, Death and Remnants');
+      assert.equal(st.look, bold ? 'bold' : 'paper');
+      assert.match(st.shadow, /drop-shadow/);
+      assert.match(st.clip, /^polygon\(/);
+      assert.ok(st.clip.split(',').length > 8, st.clip);
+      assert.equal(st.tab, false);
+      // Nothing outside the leaf gains paper.
+      assert.equal(st.bodyBg, 'rgba(0, 0, 0, 0)');
+      assert.equal(st.sideBg, 'rgba(0, 0, 0, 0)');
+      // The page's own blocks work as in the book.
+      await page.click('#d1 .rb-fc');
+      assert.equal(await page.$eval('#d1 .rb-fold:not([hidden])', (e) => e.textContent), 'Remnant 1What remnant 1 does.');
+      await page.click('#d1 [data-act="roll"]');
+      await page.waitForFunction(() => document.querySelector('#d1 [data-total]').textContent.startsWith('='));
+    }, { house: true, bold });
+  });
+}
+
+test('a leaf keeps no place and answers no key outside itself', async () => {
+  await withBook(async (page) => {
+    await openRule(page, 'd1');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('/');
+    assert.equal(await leafTitle(page, 'd1'), 'First rule');
+    assert.equal(await page.evaluate(() => localStorage.getItem('chronicle.rulebook.place.camp-1')), null);
+    assert.equal(await page.evaluate(() => document.querySelectorAll('.rb-front, .rb-closed').length), 0);
+  }, { house: true });
+});
+
+test('Next and Previous turn among the chapter\'s pages and stop at its ends', async () => {
+  await withBook(async (page) => {
+    await openRule(page, 'd1');
+    const words = () => page.$$eval('#d1 .rb-tnav .rb-tw', (els) => els.map((e) => e.textContent));
+    // First page: no Previous. The Director-only page is not turned to by a player.
+    assert.deepEqual(await words(), ['Next: Second page', 'Open the book at this page']);
+    assert.equal(await page.$eval('#d1 .rb-tcount', (e) => e.textContent), '1 of 3');
+    await page.click('#d1 [data-act="leaf-next"]');
+    assert.equal(await leafTitle(page, 'd1'), 'Second page');
+    assert.deepEqual(await words(), ['Previous', 'Next: Third page', 'Open the book at this page']);
+    assert.equal(await page.$eval('#d1 .rb-sr', (e) => e.textContent), 'Page 5 of 8: Souls, Death and Remnants, Second page');
+    await page.click('#d1 [data-act="leaf-next"]');
+    assert.equal(await leafTitle(page, 'd1'), 'Third page');
+    // Last page: no Next, and focus lands on Previous rather than being lost.
+    assert.deepEqual(await words(), ['Previous', 'Open the book at this page']);
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-act')), 'leaf-prev');
+    await page.click('#d1 [data-act="leaf-prev"]');
+    await page.click('#d1 [data-act="leaf-prev"]');
+    assert.equal(await leafTitle(page, 'd1'), 'First rule');
+    assert.deepEqual(await words(), ['Next: Second page', 'Open the book at this page']);
+    // The other leaf is a one-page chapter: only the link to the book.
+    await openRule(page, 'd2');
+    assert.deepEqual(await page.$$eval('#d2 .rb-tnav .rb-tw', (els) => els.map((e) => e.textContent)), ['Open the book at this page']);
+  }, { house: true, player: true });
+});
+
+test('a Director-only page is absent from a player\'s leaf, and present for the Director', async () => {
+  await withBook(async (page) => {
+    await openRule(page, 'd1');
+    const seen = [await leafTitle(page, 'd1')];
+    while (await page.$('#d1 [data-act="leaf-next"]')) {
+      await page.click('#d1 [data-act="leaf-next"]');
+      seen.push(await leafTitle(page, 'd1'));
+    }
+    assert.deepEqual(seen, ['First rule', 'Second page', 'Third page']);
+    assert.ok(!(await page.content()).includes('Never shown to a player'));
+  }, { house: true, player: true });
+  await withBook(async (page) => {
+    await openRule(page, 'd1');
+    const seen = [await leafTitle(page, 'd1')];
+    while (await page.$('#d1 [data-act="leaf-next"]')) {
+      await page.click('#d1 [data-act="leaf-next"]');
+      seen.push(await leafTitle(page, 'd1'));
+    }
+    assert.deepEqual(seen, ['First rule', 'Second page', 'DIR ONLY page', 'Third page']);
+  }, { house: true });
+});
+
+test('a leaf asks for the book only when its rule first opens, and two leaves ask once', async () => {
+  await withBook(async (page) => {
+    await page.waitForTimeout(300);
+    assert.equal(page.bookRequests, 0);
+    assert.equal(await page.$('#d1 .rb-page'), null);
+    await openRule(page, 'd1');
+    assert.equal(page.bookRequests, 1);
+    await openRule(page, 'd2');
+    assert.equal(page.bookRequests, 1);
+    // Closing and opening again asks for nothing more.
+    await page.click('#d1 > summary');
+    await page.click('#d1 > summary');
+    await page.waitForTimeout(150);
+    assert.equal(page.bookRequests, 1);
+    assert.equal(await leafTitle(page, 'd1'), 'First rule');
+  }, { house: true });
+});
+
+test('a failed request shows the error with Retry, and Retry asks again', async () => {
+  await withBook(async (page) => {
+    await page.click('#d1 > summary');
+    await page.waitForSelector('#d1 .rb-state-error');
+    assert.match(await page.$eval('#d1 .rb-state-error', (e) => e.textContent), /could not be opened/);
+    await page.click('#d1 [data-act="retry"]');
+    await page.waitForSelector('#d1 .rb-torn .rb-page');
+    assert.equal(page.bookRequests, 2);
+  }, { house: true, failFirst: true });
+});
+
+test('"Open the book at this page" is a real link into the book at the chapter', async () => {
+  await withBook(async (page) => {
+    await openRule(page, 'd1');
+    const a = await page.$eval('#d1 .rb-tnav a', (e) => ({ href: e.getAttribute('href'), text: e.textContent }));
+    assert.deepEqual(a, { href: HOUSE_HREF, text: 'Open the book at this page' });
+  }, { house: true });
+});
+
+test('a leaf holds no sideways scroll at 320px, in either look', async () => {
+  for (const bold of [false, true]) {
+    await withBook(async (page) => {
+      await openRule(page, 'd1');
+      await openRule(page, 'd2');
+      await page.click('#d1 .rb-fc');
+      const st = await page.evaluate(() => {
+        const leaf = document.querySelector('#d1 .rb-torn'), r = leaf.getBoundingClientRect();
+        return { doc: document.documentElement.scrollWidth - document.documentElement.clientWidth, left: r.left, right: r.right, vw: window.innerWidth };
+      });
+      assert.ok(st.doc <= 0, `page scrolls sideways by ${st.doc}`);
+      assert.ok(st.left >= 0 && st.right <= st.vw, JSON.stringify(st));
+      // No text is cut off by the page's own edge.
+      const cut = await page.evaluate(() => {
+        const pg = document.querySelector('#d1 .rb-torn .rb-page').getBoundingClientRect();
+        return [...document.querySelectorAll('#d1 .rb-torn .rb-page *')].filter((e) => e.children.length === 0 && e.textContent.trim() && e.getBoundingClientRect().right > pg.right + 1).length;
+      });
+      assert.equal(cut, 0);
+    }, { house: true, bold, viewport: { width: 320, height: 700 } });
+  }
+});
+
+test('on a touch screen the leaf\'s quiet words are 44px tall', async () => {
+  await withBook(async (page) => {
+    await openRule(page, 'd1');
+    await page.click('#d1 [data-act="leaf-next"]');
+    const heights = await page.$$eval('#d1 .rb-tnav .rb-tw', (els) => els.map((e) => e.getBoundingClientRect().height));
+    assert.equal(heights.length, 3);
+    heights.forEach((h) => assert.ok(h >= 44, String(h)));
+  }, { house: true, touch: true, viewport: { width: 390, height: 844 } });
+});
+
+test('resting the pointer on a rule shows the shared hover card and only then asks for the book', async () => {
+  await withBook(async (page) => {
+    await page.waitForTimeout(200);
+    assert.equal(page.bookRequests, 0);
+    await page.hover('#d1 > summary');
+    await page.waitForFunction(() => { const c = document.getElementById('chc'); return c && !c.hidden && c.textContent.includes('A soul lingers'); });
+    assert.equal(page.bookRequests, 1);
+    const card = await page.$eval('#chc', (c) => c.textContent);
+    assert.match(card, /Rulebook/);
+    assert.match(card, /Souls, Death and Remnants/);
+    assert.match(card, /A soul lingers for three days\. A pledge holds it longer\./);
+    assert.match(card, /3 pages · First rule/);
+    // The Director-only page is not counted or shown on a preview.
+    assert.ok(!card.includes('DIR ONLY'));
+    // Opening the rule reuses the same fetch and takes the card away.
+    await page.click('#d1 > summary');
+    await page.waitForSelector('#d1 .rb-torn .rb-page');
+    assert.equal(page.bookRequests, 1);
+    await page.waitForFunction(() => document.getElementById('chc').hidden);
+  }, { house: true });
+});
+
+test('a keyboard focus on a rule shows the preview too, and a touch screen shows none', async () => {
+  await withBook(async (page) => {
+    await page.keyboard.press('Tab');
+    await page.waitForFunction(() => { const c = document.getElementById('chc'); return c && !c.hidden && c.textContent.includes('Rulebook'); });
+    assert.equal(page.bookRequests, 1);
+  }, { house: true });
+  await withBook(async (page) => {
+    await page.tap('#d1 > summary');
+    await page.waitForSelector('#d1 .rb-torn .rb-page');
+    await page.waitForTimeout(500);
+    assert.equal(await page.evaluate(() => { const c = document.getElementById('chc'); return !c || c.hidden; }), true);
+  }, { house: true, touch: true, viewport: { width: 390, height: 844 } });
+});
+
+test('opening a rule grows its page in; reduced motion shows it at once', async () => {
+  await withBook(async (page) => {
+    await openRule(page, 'd1');
+    assert.equal(await page.$eval('#d1 .rb-tear', (e) => getComputedStyle(e).animationName), 'rb-grow');
+  }, { house: true });
+  await withBook(async (page) => {
+    await openRule(page, 'd1');
+    assert.equal(await page.$eval('#d1 .rb-tear', (e) => getComputedStyle(e).animationName), 'none');
+  }, { house: true, reducedMotion: true });
+  await withBook(async (page) => {
+    await page.evaluate(() => document.documentElement.setAttribute('data-motion', 'calm'));
+    await openRule(page, 'd1');
+    assert.equal(await page.$eval('#d1 .rb-tear', (e) => getComputedStyle(e).animationName), 'rb-grow-calm');
+  }, { house: true });
 });
