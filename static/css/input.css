@@ -1835,6 +1835,8 @@
   @media (max-width: 639px) {
     .jot-tab { right: 1rem; bottom: 1rem; padding: 12px; }
     .jot-tab > .jot-tab-label { display: none; }
+    /* Drawn smaller than a fingertip, so its press area reaches past it. */
+    .jot-tab::after { content: ""; position: absolute; inset: -5px; border-radius: inherit; }
     body:has(.jnl) .jot-tab { bottom: calc(1rem + 2.25rem); }
     body:has(.jot-tab:not([hidden])) #main-content { padding-bottom: 4.5rem; }
     body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: 6rem; }
@@ -1865,6 +1867,13 @@
       max-height: calc(100vh - 6rem);
       border-radius: 14px;
     }
+  }
+  /* A bar resting on the window's bottom edge says how tall it is in
+     --bottom-bar (the Table's line on a touch screen). The phone sheet runs
+     to that edge, so it keeps the bar's height clear inside and its last row
+     stays in reach. With the keyboard up the bar is behind the keyboard. */
+  @media (max-width: 639px) {
+    .notes-panel:not(.notes-panel-embed):not(.notes-panel-kb) { padding-bottom: var(--bottom-bar, 0px); }
   }
   /* In an outside app's frame (the Foundry jot window) the frame is the
      panel: it fills the frame edge to edge and never hides. */
