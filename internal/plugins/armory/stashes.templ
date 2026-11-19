@@ -108,14 +108,14 @@ templ downtimeSwitch(v *StashesPageView, csrfToken string) {
 					name="open"
 					value="true"
 					aria-pressed={ fmt.Sprintf("%t", v.DowntimeOpen) }
-					class={ "px-3 py-1.5 text-sm", templ.KV("bg-accent text-white", v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", !v.DowntimeOpen) }
+					class={ "px-3 py-1.5 text-sm", templ.KV("bg-accent-fill text-on-accent", v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", !v.DowntimeOpen) }
 				>Open</button>
 				<button
 					type="submit"
 					name="open"
 					value="false"
 					aria-pressed={ fmt.Sprintf("%t", !v.DowntimeOpen) }
-					class={ "px-3 py-1.5 text-sm border-l border-border", templ.KV("bg-accent text-white", !v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", v.DowntimeOpen) }
+					class={ "px-3 py-1.5 text-sm border-l border-border", templ.KV("bg-accent-fill text-on-accent", !v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", v.DowntimeOpen) }
 				>Closed</button>
 			</div>
 		</div>

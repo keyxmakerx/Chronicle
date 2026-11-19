@@ -145,7 +145,7 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
 .desk-b.set-val:hover, .desk-b.set-val:active { background: transparent; color: var(--color-text-primary); text-decoration: none; }
 .desk-b.set-val:focus-visible { outline: none; }
 .desk-b.set-val:focus-visible::before { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.desk-b.set-val[aria-expanded="true"] { color: var(--color-accent); text-decoration: none; }
+.desk-b.set-val[aria-expanded="true"] { color: var(--color-accent-link, var(--color-accent)); text-decoration: none; }
 .desk-b.set-val[aria-disabled="true"] { text-decoration: none; }
 .desk-b.set-val[aria-disabled="true"]::before { cursor: not-allowed; }
 .set-edit:has(.desk-b.set-val[aria-disabled="true"]) > .set-row { cursor: not-allowed; }
@@ -199,13 +199,13 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
               background-color var(--dur-everyday) var(--ease-out);
 }
 .desk-b:hover {
-  color: var(--color-accent);
+  color: var(--color-accent-link, var(--color-accent));
   text-decoration-color: var(--color-accent);
   background: rgb(var(--color-accent-rgb, 99 102 241) / 0.08);
 }
 .desk-b:active { background: rgb(var(--color-accent-rgb, 99 102 241) / 0.16); }
 .desk-b[aria-expanded="true"] {
-  color: var(--color-accent);
+  color: var(--color-accent-link, var(--color-accent));
   text-decoration-style: solid;
   text-decoration-color: var(--color-accent);
 }
@@ -260,7 +260,7 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
   cursor: pointer;
   transition: background-color var(--dur-everyday) var(--ease-out);
 }
-.desk-menu > button svg { flex: 0 0 auto; opacity: 0; color: var(--color-accent); }
+.desk-menu > button svg { flex: 0 0 auto; opacity: 0; color: var(--color-accent-link, var(--color-accent)); }
 .desk-menu > button[aria-checked="true"] { color: var(--color-text-primary); font-weight: 600; }
 .desk-menu > button[aria-checked="true"] svg { opacity: 1; }
 .desk-menu > button:hover { background: var(--color-bg-tertiary); }

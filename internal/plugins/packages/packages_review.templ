@@ -67,7 +67,7 @@ templ reviewList(pkgs []Package, csrfToken string) {
 										hx-vals='{"action":"reject"}'
 										hx-headers={ csrfHeaders(csrfToken) }
 										hx-confirm={ fmt.Sprintf("Decline %s?", pkg.Name) }
-										class="btn-secondary btn-sm text-red-600"
+										class="btn-secondary btn-sm text-red-600 dark:text-red-400"
 									>Decline</button>
 								</form>
 							</div>

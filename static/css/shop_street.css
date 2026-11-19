@@ -28,7 +28,7 @@
   font: 600 .72rem/1 inherit; letter-spacing: .08em; text-transform: uppercase;
   color: var(--color-text-muted, #6b7280); border-bottom: 2px solid transparent;
 }
-.ss-towns button[aria-selected="true"] { color: var(--color-accent, #6366f1); border-bottom-color: var(--color-accent, #6366f1); }
+.ss-towns button[aria-selected="true"] { color: var(--color-accent-link, var(--color-accent, #6366f1)); border-bottom-color: var(--color-accent, #6366f1); }
 
 .ss-stage {
   position: relative; overflow: hidden; border-radius: 12px; border: 1px solid var(--ss-line);
@@ -133,7 +133,7 @@
   color: var(--color-text-secondary, #4b5563); font-size: .76rem; font-weight: 600; padding: 6px 8px; min-height: 32px; cursor: pointer;
 }
 .ss-seg button:last-child { border-right: 0; }
-.ss-seg button[aria-pressed="true"] { background: rgb(var(--color-accent-rgb, 99 102 241) / .12); color: var(--color-accent, #6366f1); }
+.ss-seg button[aria-pressed="true"] { background: rgb(var(--color-accent-rgb, 99 102 241) / .12); color: var(--color-accent-link, var(--color-accent, #6366f1)); }
 .ss-sw { display: flex; flex-wrap: wrap; gap: 6px; }
 .ss-sw button { appearance: none; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--color-bg-secondary, #fff); box-shadow: 0 0 0 1px var(--color-border, #d1d5db); cursor: pointer; }
 .ss-sw button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--color-accent, #6366f1); }

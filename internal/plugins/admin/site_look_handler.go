@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/colour"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/sitelook"
@@ -149,10 +150,21 @@ func siteLookBg(s sitelook.Settings) string {
 // fixed sitelook table, with Chronicle's shipped accent when none is chosen.
 func siteLookVars(s sitelook.Settings) string {
 	if l, ok := s.ActiveLook(); ok {
-		return "--sa:" + l.Accent + ";--hd1:" + l.HeaderFrom + ";--hd2:" + l.HeaderTo
+		return siteLookAccentVars(l.Accent) + ";--hd1:" + l.HeaderFrom + ";--hd2:" + l.HeaderTo
 	}
-	return "--sa:#6366f1"
+	return siteLookAccentVars("#6366f1")
 }
+
+// siteLookAccentVars is the accent plus a filled-button colour and its words,
+// shaded so the words reach 4.5:1 on the fill whatever accent a look has.
+func siteLookAccentVars(accent string) string {
+	f := colour.FillFor(accent)
+	return "--sa:" + accent + ";--sa-fill:" + f.Fill + ";--sa-on:" + f.On
+}
+
+// siteLookFill is the filled-button colour and words for an accent, for the
+// look swatches the preview reads when the choice changes.
+func siteLookFill(accent string) colour.Fill { return colour.FillFor(accent) }
 
 // siteLookOn is "on" or "off", the preview's state attributes.
 func siteLookOn(b bool) string {

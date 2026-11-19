@@ -742,6 +742,7 @@ templ Topbar() {
 					// A dark scrim over the photo keeps the nav text + icons legible
 					// regardless of which image the owner uploaded.
 					<div
+						data-topbar-scrim
 						style={ "position:absolute; inset:0; z-index:-1; pointer-events:none; " + topbarScrimStyle(ctx) }
 						aria-hidden="true"
 					></div>
@@ -1451,19 +1452,23 @@ func topbarWantsLightWords(ctx context.Context) bool {
 	return white >= ink
 }
 
-// topbarScrimStyle is the shade over an image header: the owner's choice
+// of strength, medium by default, with a flat band across the words.
 // of strength, medium by default, darker at the top where the words sit.
 func topbarScrimStyle(ctx context.Context) string {
-	top, bottom := 0.55, 0.25
+	// Darkest at the top edge, a flat plateau across the band the name and
+	// icons sit in, lighter at the bottom. The plateau alone decides legibility:
+	// white words over a pure white picture reach 4.5:1 only at about 0.54
+	// black, so every shade holds its plateau above that.
+	top, band, bottom := 0.70, 0.66, 0.45
 	if style := GetTopbarStyle(ctx); style != nil {
 		switch style.Scrim {
 		case "light":
-			top, bottom = 0.38, 0.15
+			top, band, bottom = 0.60, 0.56, 0.35
 		case "strong":
-			top, bottom = 0.72, 0.45
+			top, band, bottom = 0.82, 0.78, 0.58
 		}
 	}
-	return fmt.Sprintf("background:linear-gradient(to bottom, rgba(0,0,0,%.2f), rgba(0,0,0,%.2f));", top, bottom)
+	return fmt.Sprintf("background:linear-gradient(to bottom, rgba(0,0,0,%.2f), rgba(0,0,0,%.2f) 35%%, rgba(0,0,0,%.2f) 75%%, rgba(0,0,0,%.2f));", top, band, band, bottom)
 }
 
 // topbarGradientDir converts the stored shorthand gradient direction into a CSS

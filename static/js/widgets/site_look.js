@@ -151,12 +151,16 @@
       // Colours and heading font, straight from the chosen look's data attributes.
       if (look && look.value) {
         win.style.setProperty('--sa', look.getAttribute('data-accent'));
+        win.style.setProperty('--sa-fill', look.getAttribute('data-fill') || look.getAttribute('data-accent'));
+        win.style.setProperty('--sa-on', look.getAttribute('data-on') || '#fff');
         win.style.setProperty('--hd1', look.getAttribute('data-from'));
         win.style.setProperty('--hd2', look.getAttribute('data-to'));
         var font = look.getAttribute('data-font');
         win.style.setProperty('--hf', font || 'inherit');
       } else {
         win.style.setProperty('--sa', '#6366f1');
+        win.style.setProperty('--sa-fill', (look && look.getAttribute('data-fill')) || '#6366f1');
+        win.style.setProperty('--sa-on', (look && look.getAttribute('data-on')) || '#fff');
         win.style.removeProperty('--hd1');
         win.style.removeProperty('--hd2');
         win.style.setProperty('--hf', 'inherit');

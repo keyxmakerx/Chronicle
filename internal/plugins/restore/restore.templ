@@ -184,7 +184,7 @@ templ manifestRow(m ManifestSummary, runningNow bool, csrfToken string) {
 					}
 				</div>
 				if m.ParseError != "" {
-					<div class="text-xs text-red-600 mt-1">
+					<div class="text-xs text-red-600 dark:text-red-400 mt-1">
 						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
 						This backup's summary could not be read: { m.ParseError }
 					</div>
