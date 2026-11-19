@@ -700,6 +700,15 @@ The same screens, folded to the width; never a second design.
   open a new tab; links to other websites open in a new one.
 - **A game night's long name wraps** onto a second line in Home's Coming
   up; it is never cut short.
+- **The top bar folds its tools into one Tools tab below 768 wide.** The bar
+  keeps the menu, the campaign name, search, the tab and the picture; the tab
+  (small capitals, a hairline under it and up one side) carries the count of
+  what waits in the tools it hides, and drapes a shelf from the bar with every
+  tool the person has, icon over name, and Find. An entry does what the real
+  button does. "Choose what stays on the bar" keeps up to two tools on the bar,
+  remembered per browser; none by default. Someone with fewer than two tools
+  keeps the bar as it is. The "Viewing as player" banner carries a quiet
+  "Back to your view" on every width.
 - **Side panels become bottom sheets on a phone**: the page peek and the
   Table (under **What is on a page** and **Opening and closing**).
 - **A sheet that scrolls keeps the pull to itself**: a fixed sheet's scroll
