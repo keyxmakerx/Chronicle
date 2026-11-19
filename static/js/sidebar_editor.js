@@ -26,6 +26,12 @@
 (function () {
   'use strict';
 
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
+
   var FLIP_MS = 320;
   var BACK_MS = 220;
   var EASE = 'cubic-bezier(.2,.8,.2,1)';
@@ -333,16 +339,14 @@
 
   // --- Drawing the editor ----------------------------------------------------
 
+  // A row's mark is drawn as the sidebar draws it: in the one icon colour,
+  // with a dot standing in for a category that has no icon.
   function rowIcon(row) {
     var ic = el('span', 'nav-ic');
     if (row.kind === 'category' && !ICON_RE.test(row.icon || '')) {
-      var dot = el('span', 'nav-dot');
-      dot.style.backgroundColor = row.color || '';
-      ic.appendChild(dot);
+      ic.appendChild(el('span', 'nav-dot'));
     } else {
-      var i = faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle'));
-      if (row.color) i.style.color = row.color;
-      ic.appendChild(i);
+      ic.appendChild(faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle')));
     }
     return ic;
   }
@@ -573,9 +577,7 @@
       pv.appendChild(el('div', 'nav-pv-sec', null, sec.label || 'Untitled'));
       sec.rows.forEach(function (row) {
         var it = el('div', 'nav-pv-it');
-        var i = faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle'));
-        if (row.color) i.style.color = row.color;
-        it.appendChild(i);
+        it.appendChild(faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle')));
         it.appendChild(el('span', null, null, nameOf(row)));
         pv.appendChild(it);
       });
@@ -625,7 +627,7 @@
     o = o || {};
     if (!root) return;
     if (reduced()) {
-      play(root, [{ opacity: 0.35 }, { opacity: 1 }], { duration: 180, easing: 'linear' });
+      play(root, [{ opacity: 0.35 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'linear' });
       return;
     }
     $$(FLIP_SEL, root).forEach(function (node) {
@@ -723,17 +725,17 @@
     if (!reduced()) {
       $$('.nav-hd, .nav-eb', ed).forEach(function (b, i) {
         play(b, [{ opacity: 0, transform: 'translateX(-6px) scale(.9)' }, { opacity: 1, transform: 'none' }],
-          { duration: 240, delay: Math.min(i, 24) * 12, easing: EASE_OUT, fill: 'backwards' });
+          { duration: tokMs('--dur-standard', 200), delay: Math.min(i, 24) * 12, easing: EASE_OUT, fill: 'backwards' });
       });
       // The bar is centred with a transform everywhere but a phone.
       var phone = window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
       var x = phone ? '' : 'translateX(-50%) ';
       play(document.getElementById('nav-ebar'), [{ opacity: 0, transform: x + 'translateY(18px)' }, { opacity: 1, transform: x + 'translateY(0)' }],
-        { duration: 300, easing: EASE_OUT });
+        { duration: tokMs('--dur-large', 280), easing: EASE_OUT });
     } else {
-      play(document.getElementById('nav-ebar'), [{ opacity: 0 }, { opacity: 1 }], { duration: 180 });
+      play(document.getElementById('nav-ebar'), [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200) });
     }
-    play(document.getElementById('nav-pv'), [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 60, fill: 'backwards' });
+    play(document.getElementById('nav-pv'), [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), delay: 60, fill: 'backwards' });
     var wide = window.matchMedia && window.matchMedia('(min-width: 901px)').matches;
     announce('Editing navigation. Drag a handle, or focus it and use the arrow keys.' +
       (wide ? ' Watch the preview on the right.' : '') + ' Save when you are done.');
@@ -755,7 +757,7 @@
     playFlip(sidebarEl(), prev);
     // The ring comes back once the rows have landed.
     var ring = sidebarEl() && sidebarEl().querySelector('.nav-ring');
-    if (ring) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: reduced() ? 0 : 220, fill: 'backwards' });
+    if (ring) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), delay: reduced() ? 0 : 220, fill: 'backwards' });
     var pencil = document.querySelector('[data-sidebar-edit-toggle]');
     if (pencil) pencil.focus({ preventScroll: true });
   }
@@ -1052,7 +1054,7 @@
     var land = function () { row.classList.remove('nav-lifted', 'nav-dragged'); };
     if (reduced() || !from) {
       land();
-      play(row, [{ opacity: 0.35 }, { opacity: 1 }], { duration: 180, easing: 'linear' });
+      play(row, [{ opacity: 0.35 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'linear' });
       return;
     }
     whenDone(play(row, [{ transform: from }, { transform: 'none' }], { duration: BACK_MS, easing: EASE }), land);
@@ -1171,7 +1173,7 @@
    * sidebar, or unpins it. Resolves true once the sidebar shows it, false
    * when nothing was saved.
    */
-  function setPersonalPin(key, on, name) {
+  function setPersonalPin(key, on, name, opts) {
     if (pinning || S) return Promise.resolve(false);
     var pins = ownPins().filter(function (k) { return k !== key; });
     if (on) pins.push(key);
@@ -1196,7 +1198,9 @@
           if (top) top.hidden = false;
           playFlip(sidebarEl(), prev, { lift: 'n:' + key });
           var again = sidebarEl().querySelector('[data-nav-pin="' + key.replace(/["\\]/g, '\\$&') + '"]');
-          if (again && !inDrawer()) again.focus({ preventScroll: true });
+          syncManagePins();
+          // A pin pressed on a Manage page keeps focus where it was pressed.
+          if (again && !inDrawer() && !(opts && opts.keepFocus)) again.focus({ preventScroll: true });
           announce(on ? name + ' is pinned to the top of your sidebar.' : name + ' is unpinned.');
           return true;
         }, function () {
@@ -1206,6 +1210,22 @@
       })
       .catch(function (err) { notify(err.message, 'error'); return false; })
       .then(function (ok) { pinning = false; return ok; });
+  }
+
+  /**
+   * Keeps the pin buttons on a Manage page (the desk's lines, a frame's title)
+   * in step with the sidebar, which holds the truth: a pin or unpin made in
+   * the sidebar reads the same on the page without a reload.
+   */
+  function syncManagePins() {
+    var side = sidebarEl();
+    $$('[data-manage-pin]').forEach(function (b) {
+      var key = b.getAttribute('data-manage-pin'), name = b.getAttribute('data-pin-name') || '';
+      var on = !!(side && side.querySelector('[data-nav-pin="' + key.replace(/["\\]/g, '\\$&') + '"][aria-pressed="true"]'));
+      b.setAttribute('aria-pressed', String(on));
+      b.setAttribute('aria-label', on ? 'Unpin ' + name + ' from your sidebar' : 'Pin ' + name + ' to your sidebar');
+      b.setAttribute('title', on ? 'Unpin' : 'Pin to your sidebar');
+    });
   }
 
   /** Whether focus is in the open app drawer, which keeps it there. */
@@ -1334,6 +1354,7 @@
     quickChange: quickChange,
     togglePersonalPin: togglePersonalPin,
     setPersonalPin: setPersonalPin,
+    syncManagePins: syncManagePins,
     refresh: refresh,
     keepInDrawer: keepInDrawer,
     placeBefore: placeBefore,

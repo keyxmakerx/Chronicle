@@ -40,6 +40,9 @@ func (h *Handler) CalloutAPI(c *echo.Context) error {
 	if err != nil {
 		return c.HTML(http.StatusOK, "")
 	}
+	// Only asks that can still be answered raise the banner, judged on the
+	// reader's own day: the day the night's page marks it Played by.
+	notes = h.svc.OpenAsks(ctx, notes, h.viewerDays(ctx, userID, time.Now()))
 
 	// storedTZ is the account-level zone. The availability zone is
 	// campaign-scoped and this banner is not, so a player who only set that
@@ -58,7 +61,7 @@ func (h *Handler) CalloutAPI(c *echo.Context) error {
 
 // timezoneShortMessage is the timezone sentence on a phone, where the banner
 // is one line (phone_shell.css shows it in place of the full message).
-const timezoneShortMessage = "Times aren't in your time zone yet"
+const timezoneShortMessage = "Times aren't in your zone yet"
 
 // renderCallout builds the banner fragment.
 //

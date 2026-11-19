@@ -81,7 +81,7 @@ templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics
 			if len(diag.Categories) > 0 {
 				<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
 					<h3 class="text-sm font-semibold text-fg mb-3">
-						<i class="fa-solid fa-layer-group text-accent mr-1.5"></i>
+						<i class="fa-solid fa-layer-group mr-1.5"></i>
 						Reference Data Categories
 					</h3>
 					<div class="divide-y divide-edge">
@@ -106,7 +106,7 @@ templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics
 			if len(diag.Manifest.EntityPresets) > 0 {
 				<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
 					<h3 class="text-sm font-semibold text-fg mb-3">
-						<i class="fa-solid fa-shapes text-accent mr-1.5"></i>
+						<i class="fa-solid fa-shapes mr-1.5"></i>
 						Entity Presets
 					</h3>
 					<div class="divide-y divide-edge">
@@ -141,7 +141,7 @@ templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics
 			if len(diag.EntityTypes) > 0 {
 				<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
 					<h3 class="text-sm font-semibold text-fg mb-3">
-						<i class="fa-solid fa-cubes text-accent mr-1.5"></i>
+						<i class="fa-solid fa-cubes mr-1.5"></i>
 						Campaign Entity Types
 					</h3>
 					<div class="divide-y divide-edge">
@@ -168,7 +168,7 @@ templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics
 			if len(diag.Manifest.Widgets) > 0 {
 				<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
 					<h3 class="text-sm font-semibold text-fg mb-3">
-						<i class="fa-solid fa-puzzle-piece text-accent mr-1.5"></i>
+						<i class="fa-solid fa-puzzle-piece mr-1.5"></i>
 						Widgets ({ fmt.Sprintf("%d", len(diag.Manifest.Widgets)) })
 					</h3>
 					<div class="divide-y divide-edge">
@@ -193,7 +193,7 @@ templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics
 			// Foundry compatibility.
 			<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
 				<h3 class="text-sm font-semibold text-fg mb-3">
-					<i class="fa-solid fa-gamepad text-accent mr-1.5"></i>
+					<i class="fa-solid fa-gamepad mr-1.5"></i>
 					Foundry VTT Compatibility
 				</h3>
 				if diag.FoundrySystemID != "" {

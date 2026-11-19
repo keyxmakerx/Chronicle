@@ -524,7 +524,7 @@ func (s *authService) oidcAccount(ctx context.Context, row oidcSettingsRow, c oi
 		return nil, apperror.NewInternal(err)
 	}
 	if !c.EmailVerified || c.Email == "" {
-		return nil, apperror.NewForbidden("your provider didn't confirm your email, so Chronicle can't match you to an account. Sign in with your password and link it under Account Settings.")
+		return nil, apperror.NewForbidden("your provider didn't confirm your email, so Chronicle can't match you to an account. Sign in with your password and link it under Account settings.")
 	}
 	if user, err := s.repo.FindByEmail(ctx, c.Email); err == nil {
 		// With open sign-up anyone could have registered that email first,
@@ -534,7 +534,7 @@ func (s *authService) oidcAccount(ctx context.Context, row oidcSettingsRow, c oi
 			if row.HidePassword {
 				return nil, apperror.NewForbidden("a Chronicle account already uses this email, but it isn't linked to this sign-in yet. Ask your site admin to let you sign in with your password once to link it.")
 			}
-			return nil, apperror.NewForbidden("a Chronicle account already uses this email. Sign in with your password, then link your provider under Account Settings, Sign-in methods.")
+			return nil, apperror.NewForbidden("a Chronicle account already uses this email. Sign in with your password, then link your provider under Account settings, Sign-in methods.")
 		}
 		if err := s.oidc.store.LinkIdentity(ctx, user.ID, row.Issuer, c.Subject, c.Email); err != nil {
 			return nil, err

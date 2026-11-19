@@ -3,6 +3,7 @@
 package armory
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/colour"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -49,8 +50,8 @@ templ ItemCardComponent(cc *campaigns.CampaignContext, card *ItemCard) {
 				<!-- Type badge -->
 				<div class="flex items-center gap-1 mt-1">
 					<span
-						class="inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
-						style={ fmt.Sprintf("background-color: %s22; color: %s", card.TypeColor, card.TypeColor) }
+						class="chip-ink inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
+						style={ colour.ChipStyle(card.TypeColor) }
 					>
 						<i class={ "fa-solid " + card.TypeIcon + " mr-0.5 text-[8px]" }></i>
 						{ card.TypeName }
@@ -62,8 +63,8 @@ templ ItemCardComponent(cc *campaigns.CampaignContext, card *ItemCard) {
 					<div class="flex flex-wrap gap-0.5 mt-1.5">
 						for _, tag := range card.Tags {
 							<span
-								class="inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
-								style={ fmt.Sprintf("background-color: %s22; color: %s", tag.Color, tag.Color) }
+								class="chip-ink inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
+								style={ colour.ChipStyle(tag.Color) }
 							>
 								{ tag.Name }
 							</span>
@@ -104,6 +105,7 @@ templ ItemCardComponent(cc *campaigns.CampaignContext, card *ItemCard) {
 		<div
 			id={ "armory-coll-" + card.ID }
 			class="ag-pop"
+			data-kit-open
 			role="menu"
 			aria-label={ "Actions for " + card.Name }
 			tabindex="-1"

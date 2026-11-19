@@ -70,7 +70,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.DELETE("/account/avatar", h.ClearAvatarAPI, RequireAuth(h.service), middleware.RateLimit(30, time.Minute))
 
 	// Email change (requires auth for request, public for verification link).
-	e.PUT("/account/email", h.RequestEmailChangeAPI, RequireAuth(h.service))
+	e.PUT("/account/email", h.RequestEmailChangeAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
 	e.GET("/account/email/verify", h.ConfirmEmailChange)
 
 	// Re-authentication for sensitive operations (requires auth).

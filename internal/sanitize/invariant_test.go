@@ -39,6 +39,7 @@ const maxHelperDepth = 2
 // that function takes HTML input yet need not call sanitize.HTML itself.
 var unsanitizedAllowlist = map[string]string{
 	"internal/plugins/entities/service.go:buildSearchText": "reduces the HTML to plain text for the search_text column; the result is never rendered as markup",
+	"internal/plugins/entities/service.go:mentionTargets":  "reads page ids out of text that was sanitized when it was saved; it returns ids only and stores or renders no markup",
 }
 
 // funcInfo is what the analysis keeps per function declaration.

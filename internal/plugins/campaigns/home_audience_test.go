@@ -151,7 +151,7 @@ func TestCustomizeHomePages_BorrowedHints(t *testing.T) {
 		return buf.String()
 	}
 	fresh := render(nil, HomeDirector)
-	for _, want := range []string{"Overview", "co-GMs", "same as the Everyone home until you change it", `data-widget="customize-page-editor"`, `&#34;scope&#34;:&#34;home&#34;`} {
+	for _, want := range []string{"for guests", "co-GMs", "same as the Everyone home until you change it", `data-widget="customize-page-editor"`, `&#34;scope&#34;:&#34;home&#34;`} {
 		if !strings.Contains(fresh, want) {
 			t.Errorf("fresh campaign: missing %q", want)
 		}

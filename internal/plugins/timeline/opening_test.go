@@ -60,3 +60,22 @@ func TestTimelineListOpening_WithTimelines(t *testing.T) {
 		t.Errorf("unexpected opening:\n%s", out)
 	}
 }
+
+// templ refuses an on* attribute built from a plain string and prints a
+// comment in its place, which leaves the button dead. "Add a timeline" must
+// name its pop-up instead.
+func TestTimelineListOpening_ActionIsNotDead(t *testing.T) {
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}}
+	ctx := layouts.SetIsOwner(context.Background(), true)
+	var buf bytes.Buffer
+	if err := timelineListContent(cc, TimelineListData{CampaignID: "c1", IsOwner: true}).Render(ctx, &buf); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "failed sanitization") {
+		t.Errorf("a button carries an attribute templ refused to print:\n%s", out)
+	}
+	if !strings.Contains(out, `data-opens="create-timeline-modal"`) {
+		t.Errorf("Add a timeline does not name its pop-up:\n%s", out)
+	}
+}

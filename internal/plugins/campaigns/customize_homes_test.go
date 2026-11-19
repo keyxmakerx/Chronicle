@@ -27,6 +27,20 @@ func (s *stubHomesSvc) UpdateOwnerDashboardLayout(_ context.Context, _ string, l
 	return nil
 }
 
+// The retired Overview tab must never write the owner's dashboard column.
+func TestApplyHomesSection_RetiredDMNeverWritesTheOwnerColumn(t *testing.T) {
+	svc := &stubHomesSvc{campaign: &Campaign{ID: "c1"}}
+	h := &Handler{service: svc}
+	cc := &CampaignContext{Campaign: svc.campaign, MemberRole: RoleOwner, IsMember: true}
+	raw := `{"items":{"dm":{"layout":{"rows":[]}}}}`
+	if _, err := h.applyHomesSection(context.Background(), cc, "u1", json.RawMessage(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if svc.owner != nil {
+		t.Errorf("the owner dashboard column was written: %+v", svc.owner)
+	}
+}
+
 func TestApplyHomesSection(t *testing.T) {
 	good := `{"rows":[{"id":"r1","columns":[{"id":"c1","width":12,"blocks":[{"id":"b1","type":"welcome_banner"}]}]}]}`
 	bad := `{"rows":[{"id":"r1","columns":[{"id":"c1","width":12,"blocks":[{"id":"b1","type":"no_such_block"}]}]}]}`
@@ -37,10 +51,12 @@ func TestApplyHomesSection(t *testing.T) {
 		wantErr   bool
 		wantLeft  []string // homes still in the draft afterwards
 		wantSaved []string // audiences saved into the campaign home column
-		wantOwner bool
 	}{
 		{name: "one audience", raw: `{"items":{"player":{"layout":` + good + `}}}`, role: RoleOwner, wantSaved: []string{"player"}},
-		{name: "dm dashboard", raw: `{"items":{"dm":{"layout":` + good + `}}}`, role: RoleOwner, wantOwner: true},
+		// The retired Overview tab: a draft saved earlier is dropped quietly,
+		// saves nothing and does not hold back the homes beside it.
+		{name: "retired dm item saves nothing", raw: `{"items":{"dm":{"layout":` + good + `}}}`, role: RoleOwner},
+		{name: "retired dm item does not block another home", raw: `{"items":{"dm":{"layout":` + good + `},"player":{"layout":` + good + `}}}`, role: RoleOwner, wantSaved: []string{"player"}},
 		{name: "no layout is no change", raw: `{"items":{"guest":{}}}`, role: RoleOwner},
 		{name: "a bad home stays, the good one saves", raw: `{"items":{"guest":{"layout":` + bad + `},"default":{"layout":` + good + `}},"_changes":[{"label":"x"}]}`,
 			role: RoleOwner, wantErr: true, wantLeft: []string{"guest"}, wantSaved: []string{"default"}},
@@ -79,32 +95,27 @@ func TestApplyHomesSection(t *testing.T) {
 					t.Errorf("%s home was not saved", k)
 				}
 			}
-			if (svc.owner != nil) != tt.wantOwner {
-				t.Errorf("owner dashboard saved = %v, want %v", svc.owner != nil, tt.wantOwner)
-			}
 		})
 	}
 }
 
 func TestHomeEditorState(t *testing.T) {
 	h := &Handler{}
-	saved := `{"rows":[{"id":"own","columns":[]}]}`
+	savedColumn := `{"player":{"rows":[{"id":"own","columns":[]}]}}`
 	tests := []struct {
 		name        string
 		column      *string
-		owner       *string
 		key         string
 		wantUnsaved bool
 		wantRow     string
 	}{
 		{name: "fresh default starts from the built-in home", key: HomeDefault, wantUnsaved: true, wantRow: "row-welcome"},
 		{name: "fresh guest starts from the starter guest home", key: HomeGuest, wantUnsaved: true, wantRow: "row-categories"},
-		{name: "fresh dm dashboard", key: HomeDM, wantUnsaved: true, wantRow: "row-recent"},
-		{name: "saved dm dashboard", key: HomeDM, owner: &saved, wantRow: "own"},
+		{name: "a saved audience home is the editor's own", column: &savedColumn, key: HomePlayer, wantRow: "own"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cc := &CampaignContext{Campaign: &Campaign{ID: "c1", DashboardLayout: tt.column, OwnerDashboardLayout: tt.owner}}
+			cc := &CampaignContext{Campaign: &Campaign{ID: "c1", DashboardLayout: tt.column}}
 			var st struct {
 				Scope   string          `json:"scope"`
 				Unsaved bool            `json:"unsaved"`
@@ -218,7 +229,7 @@ func TestHomeSuggestions(t *testing.T) {
 	for _, c := range []struct {
 		key   string
 		saved bool
-	}{{HomePlayer, true}, {HomeDefault, false}, {HomeScribe, false}, {HomeDirector, false}, {HomeGuest, false}, {HomeDM, false}} {
+	}{{HomePlayer, true}, {HomeDefault, false}, {HomeScribe, false}, {HomeDirector, false}, {HomeGuest, false}, {legacyHomeDM, false}} {
 		if s := homeSuggestions(c.key, c.saved); s != nil {
 			t.Errorf("%s (saved %v) got suggestions %v", c.key, c.saved, s)
 		}

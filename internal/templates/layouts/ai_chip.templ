@@ -9,7 +9,7 @@ package layouts
 // anyone else in the campaign; a player's button starts hidden and shows
 // only once the plugin says players may use AI here.
 templ aiChip(base string, player bool) {
-	<div class="ai-chip-host" data-widget="ai-chip" data-campaign-id={ GetCampaignID(ctx) } data-ai-base={ base } hidden?={ player }>
+	<div class="ai-chip-host" data-tb-tool="ai" data-widget="ai-chip" data-campaign-id={ GetCampaignID(ctx) } data-ai-base={ base } hidden?={ player }>
 		<button
 			type="button"
 			class="btn-ghost btn-icon ai-chip"
@@ -21,7 +21,7 @@ templ aiChip(base string, player bool) {
 		>
 			<i class="fa-solid fa-wand-magic-sparkles text-xs" aria-hidden="true"></i>
 			<span class="sr-only" data-ai-chip-label>Your AI</span>
-			<span class="ai-chip-n" data-ai-chip-n hidden></span>
+			<span class="hdr-n" data-ai-chip-n hidden></span>
 		</button>
 		<div class="ai-chip-note" data-ai-note role="status" aria-live="polite" hidden></div>
 		<div id="ai-bubble" class="ai-bubble" role="dialog" aria-labelledby="ai-bubble-heading" tabindex="-1" data-ai-bubble hidden></div>

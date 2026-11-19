@@ -338,7 +338,7 @@ var _impl = {
           '<p style="font-weight: 600">No events to display</p>' +
           '<p class="text-xs mt-1" style="color: var(--color-text-muted)">Link calendar events to see them on the timeline.</p>' +
           '<button class="timeline-viz-btn mt-4" style="width:auto; padding:6px 16px; font-size:12px" ' +
-            'onclick="var m=document.getElementById(\'event-picker-modal\'); if(m) m.classList.remove(\'hidden\')">' +
+            'data-opens="event-picker-modal">' +
             '<i class="fa-solid fa-link" style="margin-right:6px"></i>Link Events' +
           '</button>' +
         '</div>';

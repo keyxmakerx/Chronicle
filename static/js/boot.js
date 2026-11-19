@@ -470,12 +470,75 @@
   // Back and Forward fetch the page and swap in a whole new body without a
   // beforeSwap or an afterSettle, so the widgets of the page that was left
   // are destroyed here and the restored page's are mounted.
-  document.addEventListener('htmx:historyRestore', function () {
+  document.addEventListener('htmx:historyRestore', function (event) {
     mountedEls.forEach(function (el) {
       if (!el.isConnected) destroyElement(el);
     });
     mountWidgets(document.body);
     scheduleUnmatchedWidgetScan(document.body);
+    // The form of the page that was left is gone with it, and so is what it
+    // had marked unsaved.
+    dirtySources = {};
+    restoreMainScroll(event.detail && event.detail.path);
+  });
+
+  // --- Where you were on the page ---
+  // The page scrolls inside #main-content, not the window. A boosted link
+  // would otherwise open the next page at the old offset (the swap's
+  // show:window:top scrolls the body, which never moves), and Back, which
+  // re-fetches (historyCacheSize is 0), would open at the top. So a new page
+  // starts at the top, and each page's offset is remembered by its address
+  // for Back. It is kept here rather than in history.state because htmx
+  // rewrites that state right after beforeHistorySave. Only numbers are
+  // stored, in this tab's sessionStorage.
+  var SCROLL_KEY = 'chronicle-main-scroll';
+  var SCROLL_MAX = 40;
+  var scrollMem = null;
+  function scrollStore() {
+    if (scrollMem) return scrollMem;
+    scrollMem = {};
+    try { scrollMem = JSON.parse(sessionStorage.getItem(SCROLL_KEY)) || {}; } catch (e) { scrollMem = {}; }
+    return scrollMem;
+  }
+  function rememberMainScroll(path) {
+    var main = document.getElementById('main-content');
+    if (!main || !path) return;
+    var m = scrollStore();
+    delete m[path];
+    m[path] = Math.round(main.scrollTop);
+    var keys = Object.keys(m);
+    while (keys.length > SCROLL_MAX) delete m[keys.shift()];
+    try { sessionStorage.setItem(SCROLL_KEY, JSON.stringify(m)); } catch (e) { /* the offset is only a convenience */ }
+  }
+  function restoreMainScroll(path) {
+    var want = path && scrollStore()[path];
+    if (!want) return;
+    var main = document.getElementById('main-content');
+    if (!main) return;
+    // Late widgets can grow the page after the first try; a second try
+    // follows them unless the person has already started scrolling.
+    var touched = false;
+    var stop = function () { touched = true; };
+    ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function (n) { main.addEventListener(n, stop, { once: true, passive: true }); });
+    requestAnimationFrame(function () {
+      if (!touched) main.scrollTop = want;
+      setTimeout(function () { if (!touched && main.isConnected) main.scrollTop = want; }, 400);
+    });
+  }
+  var here = function () { return location.pathname + location.search; };
+  document.addEventListener('htmx:beforeHistorySave', function (event) {
+    rememberMainScroll((event.detail && event.detail.path) || here());
+  });
+  // A page that opts out of history saving never fires the event above.
+  document.addEventListener('htmx:beforeRequest', function (event) {
+    var d = event.detail || {}, cfg = d.requestConfig || {};
+    if ((d.boosted || cfg.boosted) && (!cfg.verb || cfg.verb === 'get')) rememberMainScroll(here());
+  });
+  document.addEventListener('htmx:afterSwap', function (event) {
+    var d = event.detail || {}, cfg = d.requestConfig || {};
+    var main = document.getElementById('main-content');
+    if (!main || d.target !== main || !(d.boosted || cfg.boosted) || (cfg.verb && cfg.verb !== 'get')) return;
+    main.scrollTop = 0;
   });
 
   // After a deploy, an open tab still runs the scripts it first loaded,
@@ -636,6 +699,121 @@
     requestAnimationFrame(updateSidebarActiveLinks);
   });
 
+  // --- Back closes an open sheet or drawer ---
+  // Chronicle.backCloses(name, close) -> release()
+  // Call when a sheet or drawer opens. On a phone or touch tablet it pushes a
+  // history step (same address) so the Back gesture closes the sheet instead
+  // of leaving the page: close() is called once when that step is popped.
+  // Elsewhere it does nothing and returns a no-op. The opener calls release()
+  // when the sheet closes by its own control or Escape; that drops the extra
+  // step again if it is still the current one. Calling release() twice is
+  // harmless.
+  //
+  // A popstate that closes a sheet, or lands on a sheet step with no sheet
+  // behind it, is stopped here in the capture phase, before htmx's history
+  // restore and the other popstate listeners see it, so a sheet never
+  // triggers a page restore.
+  var SHEET_QUERY = '(max-width: 639.98px), (pointer: coarse) and (max-width: 899.98px)';
+  var sheetStack = [];
+  var sheetSkipNext = false;
+  var sheetAfterPop = null;
+  function noop() {}
+  Chronicle.backCloses = function (name, close) {
+    if (!window.matchMedia || !window.matchMedia(SHEET_QUERY).matches || !window.history || !history.pushState) return noop;
+    var entry = { name: name, close: close, released: false };
+    try {
+      history.pushState(Object.assign({}, history.state, { sheet: name }), '');
+    } catch (e) { return noop; }
+    sheetStack.push(entry);
+    return function release() {
+      if (entry.released) return;
+      entry.released = true;
+      var i = sheetStack.indexOf(entry);
+      if (i !== -1) sheetStack.splice(i, 1);
+      if (history.state && history.state.sheet === name && i === sheetStack.length) {
+        sheetSkipNext = true;
+        history.back();
+      }
+    };
+  };
+  window.addEventListener('popstate', function (e) {
+    if (sheetSkipNext) {
+      sheetSkipNext = false;
+      e.stopImmediatePropagation();
+      if (sheetAfterPop) { var then = sheetAfterPop; sheetAfterPop = null; then(); }
+      return;
+    }
+    var now = e.state && e.state.sheet;
+    var top = sheetStack[sheetStack.length - 1];
+    if (top && top.name !== now) {
+      sheetStack.pop();
+      top.released = true;
+      e.stopImmediatePropagation();
+      if (top.close) top.close();
+      return;
+    }
+    if (now && !sheetStack.some(function (x) { return x.name === now; })) {
+      // Forward onto a step whose sheet is gone: step back off it again.
+      e.stopImmediatePropagation();
+      sheetSkipNext = true;
+      history.back();
+    }
+  }, true);
+
+  // leaveSheets(then): a link followed from inside an open sheet first steps
+  // back off the sheet's history step, closing the sheet, and only then goes.
+  // Going straight on would stack the new page on top of that step, and htmx
+  // rewrites the step as a copy of the page underneath, so Back would need two
+  // presses to get past it. With no sheet step current, then() runs at once.
+  function leaveSheets(then) {
+    if (!sheetStack.length || !(history.state && history.state.sheet)) { then(); return; }
+    var open = sheetStack.splice(0);
+    open.forEach(function (x) { x.released = true; });
+    var done = false;
+    function go() {
+      if (done) return;
+      done = true;
+      for (var i = open.length - 1; i >= 0; i--) {
+        try { if (open[i].close) open[i].close(); } catch (err) { /* the page still goes */ }
+      }
+      then();
+    }
+    sheetAfterPop = go;
+    sheetSkipNext = true;
+    history.go(-open.length);
+    // A step back that never reports must not strand the link.
+    setTimeout(function () {
+      if (sheetAfterPop !== go) return;
+      sheetAfterPop = null;
+      sheetSkipNext = false;
+      go();
+    }, 1000);
+  }
+
+  // --- "Go back" on a page with nowhere else to go ---
+  // An error page's "Go back" is drawn hidden and a plain link, so with no
+  // history (a link pasted into a new tab) it never shows and never does
+  // nothing. It appears when there is a step back or the visitor came from
+  // this site, and then steps back instead of following the link.
+  function revealGoBack(root) {
+    var links = (root || document).querySelectorAll('[data-go-back]');
+    if (!links.length) return;
+    var fromHere = false;
+    try { fromHere = !!document.referrer && new URL(document.referrer).origin === location.origin; } catch (e) { fromHere = false; }
+    if (!(window.history && history.length > 1) && !fromHere) return;
+    for (var i = 0; i < links.length; i++) links[i].classList.remove('hidden');
+  }
+  document.addEventListener('DOMContentLoaded', function () { revealGoBack(document); });
+  document.addEventListener('htmx:afterSettle', function (event) {
+    if (event.detail && event.detail.target) revealGoBack(event.detail.target.isConnected === false ? document : event.detail.target);
+  });
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('[data-go-back]');
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    history.back();
+  });
+
   // --- Alpine inside on-sight widgets ---
   // A page whose Alpine components are defined by its widget's script, not by
   // a page <script> (htmx strips those from swapped content), renders the
@@ -707,6 +885,62 @@
     dirtySources = {};
   };
 
+  // A boosted link or GET form changes the page without unloading it, so
+  // beforeunload never runs for it. The request is held here when something
+  // is unsaved. The ask sits on the dirty form when it is on screen; with no
+  // such box, the link is followed as a full page load so the browser's own
+  // leave prompt (the beforeunload below) asks instead.
+  function visibleDirtyForm() {
+    var forms = document.querySelectorAll('form[data-track-changes]');
+    var h = window.innerHeight || document.documentElement.clientHeight;
+    for (var i = 0; i < forms.length; i++) {
+      var id = forms[i].getAttribute('data-track-changes');
+      if (!id || !dirtySources['form:' + id]) continue;
+      var r = forms[i].getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < h) return forms[i];
+    }
+    return null;
+  }
+  document.addEventListener('htmx:confirm', function (evt) {
+    var d = evt.detail || {}, elt = d.elt;
+    if (!elt || d.verb !== 'get' || !Chronicle.isDirty()) return;
+    var nav = (elt.tagName === 'A' || elt.tagName === 'FORM') && !elt.hasAttribute('hx-get');
+    if (!nav) return;
+    evt.preventDefault();
+    var box = visibleDirtyForm();
+    if (!box || !Chronicle.askSlip) {
+      var to = elt.href || d.path;
+      if (elt.tagName === 'FORM') {
+        var q = new URLSearchParams(new FormData(elt)).toString();
+        if (q) to += (to.indexOf('?') === -1 ? '?' : '&') + q;
+      }
+      window.location.assign(to);
+      return;
+    }
+    Chronicle.askSlip(box, {
+      ask: 'Leave without saving?',
+      detail: 'What you changed on this page hasn’t been saved.',
+      discard: 'Discard and leave',
+      onDiscard: function () {
+        dirtySources = {};
+        leaveSheets(function () { d.issueRequest(true); });
+      }
+    });
+  });
+
+  // A page link followed from inside an open sheet (the phone menu, a peek)
+  // leaves the sheet's history step first; see leaveSheets. Registered after
+  // the unsaved-changes guard so a link that guard is asking about waits.
+  document.addEventListener('htmx:confirm', function (evt) {
+    if (evt.defaultPrevented || !sheetStack.length) return;
+    var d = evt.detail || {}, elt = d.elt;
+    if (!elt || d.verb !== 'get') return;
+    if (!((elt.tagName === 'A' || elt.tagName === 'FORM') && !elt.hasAttribute('hx-get'))) return;
+    if (!(history.state && history.state.sheet)) return;
+    evt.preventDefault();
+    leaveSheets(function () { d.issueRequest(true); });
+  });
+
   // Warn user before leaving the page with unsaved changes.
   window.addEventListener('beforeunload', function (e) {
     if (Chronicle.isDirty()) {
@@ -747,9 +981,14 @@
     if (formId) Chronicle.markClean('form:' + formId);
   });
 
-  // Clear form dirty sources when HTMX swaps out tracked forms.
+  // Clear form dirty sources when HTMX swaps out tracked forms: a form's own
+  // request replacing itself. A boosted link is a navigation, which the
+  // guard below has already held and asked about, so it never marks the
+  // leaving form clean on the way out.
   document.addEventListener('htmx:beforeSwap', function (event) {
-    if (event.detail && event.detail.target) {
+    var d = event.detail || {}, cfg = d.requestConfig || {};
+    if ((d.boosted || cfg.boosted) && (!cfg.verb || cfg.verb === 'get')) return;
+    if (d.target) {
       var forms = event.detail.target.querySelectorAll('form[data-track-changes]');
       for (var i = 0; i < forms.length; i++) {
         var formId = forms[i].getAttribute('data-track-changes');

@@ -89,8 +89,9 @@ func (l planAccessLists) CharacterTypeIDs(_ context.Context, _ string) ([]int, e
 }
 
 // TestHeroPlanAPI_Access pins who below Director may read the plan: whoever
-// may make a hero, and a player who already has one, whose builder fills it
-// in from the same lists. Anyone else is refused.
+// may make a hero, a player who already has one, whose builder fills it in
+// from the same lists, and a player a Director let write their own entry.
+// Anyone else is refused.
 func TestHeroPlanAPI_Access(t *testing.T) {
 	yes, no := true, false
 	claimable := EntityType{ID: 1, Name: "Hero", Enabled: true, Claimable: &yes}
@@ -101,21 +102,25 @@ func TestHeroPlanAPI_Access(t *testing.T) {
 		role   campaigns.Role
 		types  []EntityType
 		owned  []Entity
+		plan   []HeroStep
 		status int
 	}{
-		{"player who may make a hero", campaigns.RolePlayer, []EntityType{claimable}, nil, http.StatusOK},
-		{"player who already has one", campaigns.RolePlayer, []EntityType{claimable}, []Entity{{ID: "e1", EntityTypeID: 1}}, http.StatusOK},
-		{"player with a hero players may no longer claim", campaigns.RolePlayer, []EntityType{closed}, []Entity{{ID: "e1", EntityTypeID: 1}}, http.StatusOK},
-		{"player with no hero and none to make", campaigns.RolePlayer, []EntityType{closed}, nil, http.StatusForbidden},
-		{"player who owns only a place", campaigns.RolePlayer, []EntityType{closed, place}, []Entity{{ID: "e2", EntityTypeID: 2}}, http.StatusForbidden},
-		{"not a member", campaigns.RoleNone, []EntityType{claimable}, []Entity{{ID: "e1", EntityTypeID: 1}}, http.StatusForbidden},
+		{"player who may make a hero", campaigns.RolePlayer, []EntityType{claimable}, nil, nil, http.StatusOK},
+		{"player who already has one", campaigns.RolePlayer, []EntityType{claimable}, []Entity{{ID: "e1", EntityTypeID: 1}}, nil, http.StatusOK},
+		{"player with a hero players may no longer claim", campaigns.RolePlayer, []EntityType{closed}, []Entity{{ID: "e1", EntityTypeID: 1}}, nil, http.StatusOK},
+		{"player with no hero and none to make", campaigns.RolePlayer, []EntityType{closed}, nil, nil, http.StatusForbidden},
+		{"player with no hero whom a Director let make an entry", campaigns.RolePlayer, []EntityType{closed}, nil, []HeroStep{{FieldKey: "ancestry", CanMake: true}}, http.StatusOK},
+		{"player with no hero who already wrote their entry", campaigns.RolePlayer, []EntityType{closed}, nil, []HeroStep{{FieldKey: "ancestry", Choices: []HeroChoice{{Name: "Mothfolk", Mine: true}}}}, http.StatusOK},
+		{"player with no hero offered only others' entries", campaigns.RolePlayer, []EntityType{closed}, nil, []HeroStep{{FieldKey: "ancestry", Choices: []HeroChoice{{Name: "Human"}}}}, http.StatusForbidden},
+		{"player who owns only a place", campaigns.RolePlayer, []EntityType{closed, place}, []Entity{{ID: "e2", EntityTypeID: 2}}, nil, http.StatusForbidden},
+		{"not a member", campaigns.RoleNone, []EntityType{claimable}, []Entity{{ID: "e1", EntityTypeID: 1}}, []HeroStep{{FieldKey: "ancestry", CanMake: true}}, http.StatusForbidden},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			h := &Handler{
 				service:     &planAccessSvc{types: tc.types, owned: tc.owned},
 				charLists:   planAccessLists{ids: []int{1}},
-				heroPlanner: &stubPlanner{plan: &HeroPlan{Steps: []HeroStep{}}},
+				heroPlanner: &stubPlanner{plan: &HeroPlan{Steps: append([]HeroStep{}, tc.plan...)}},
 			}
 			err := runIdentityCallOn(t, h, (*Handler).HeroPlanAPI, tc.role, "u1", "c1", "")
 			wantStatus(t, err, tc.status)

@@ -3,6 +3,8 @@
 package packages
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -66,7 +68,10 @@ templ systemCard(pkg Package) {
 				</span>
 			}
 			if pkg.LastCheckedAt != nil {
-				<span>Updated { pkg.LastCheckedAt.Format("Jan 2") }</span>
+				<span>Updated
+				{ " " }
+				@components.Date(*pkg.LastCheckedAt, timeutil.DateDay)
+				</span>
 			}
 		</div>
 	</div>
@@ -184,7 +189,9 @@ templ MySubmissionsPage(pkgs []Package) {
 									@packageTypeBadge(pkg.Type)
 									@statusBadge(pkg.Status)
 								</div>
-								<span class="text-xs text-fg-muted shrink-0">{ pkg.CreatedAt.Format("Jan 2, 2006") }</span>
+								<span class="text-xs text-fg-muted shrink-0">
+								@components.Date(pkg.CreatedAt, timeutil.DateShort)
+								</span>
 							</div>
 							<p class="text-xs text-fg-muted mt-1">{ pkg.RepoURL }</p>
 							if pkg.Status == StatusRejected && pkg.ReviewNote != "" {

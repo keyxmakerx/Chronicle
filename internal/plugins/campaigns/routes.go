@@ -24,7 +24,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	authed.GET("/campaigns/:id/accept-transfer", h.AcceptTransfer)
 
 	// Join via shareable invite code (auth required, no campaign membership needed).
-	authed.GET("/join/:code", h.JoinByCode)
+	authed.GET("/join/:code", h.JoinByCode, middleware.RateLimit(10, time.Minute))
 
 	// Public-capable view routes: logged-in users see full UI, guests see
 	// read-only content for public campaigns.
@@ -55,6 +55,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 
 	// All members.
 	cg.GET("/members", h.Members, RequireRole(RolePlayer))
+	cg.GET("/run-by", h.RunByBlock, RequireRole(RolePlayer))
 	cg.GET("/plugins", h.PluginHub, RequireRole(RolePlayer))
 	cg.GET("/plugins/fragment", h.PluginHubFragment, RequireRole(RolePlayer))
 	// /foundry-presence is registered by foundry_vtt.RegisterOwnerRoutes.
@@ -117,6 +118,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 
 	// Owner dashboard (Owner + Co-DM).
 	cg.GET("/dashboard", h.OwnerDashboard, RequireRole(RoleOwner))
+	cg.GET("/dashboard/needs", h.DeskNeedsCount, RequireRole(RoleOwner))
+	cg.GET("/dashboard/find", h.DeskFind, RequireRole(RoleOwner))
 	cg.GET("/owner-dashboard-layout", h.GetOwnerDashboardLayout, RequireRole(RoleOwner))
 	cg.PUT("/owner-dashboard-layout", h.UpdateOwnerDashboardLayout, RequireRole(RoleOwner))
 	cg.DELETE("/owner-dashboard-layout", h.ResetOwnerDashboardLayout, RequireRole(RoleOwner))
@@ -131,6 +134,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// held-down button from flooding their inbox or the mail server.
 	cg.POST("/appearance/email-test", h.SendTestEmailAPI, RequireRole(RoleOwner), middleware.RateLimit(5, time.Minute))
 	cg.PUT("/default-visibility", h.UpdateDefaultVisibilityAPI, RequireRole(RoleOwner))
+	// The desk's name and public/private blanks: a partial save, so naming
+	// one never rewrites the description.
+	cg.PUT("/details", h.UpdateDetailsAPI, RequireRole(RoleOwner))
 	// Event tier definitions per campaign: owner-only campaign-config
 	// surface, not exposed via syncapi.
 	cg.GET("/event-tier-definitions", h.GetEventTierDefinitionsAPI, RequireRole(RoleOwner))
@@ -147,9 +153,21 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 		return cc.CanAuthorDmOnly()
 	}, "only the campaign owner or a member with DM access may do this"))
 
+	// The one preview switch behind the "Dashboard for" line: self, player or
+	// guest. Same gate as the eye, and for the same reason it works on an
+	// archived campaign.
+	cgArchived.POST("/view-as", h.ViewAs, RequireCapability(func(cc *CampaignContext) bool {
+		return cc.CanAuthorDmOnly()
+	}, "only the campaign owner or a member with DM access may do this"))
+
+	// A member leaving by their own choice. Always the signed-in person; the
+	// service refuses the owner, who hands over first.
+	cg.POST("/leave", h.LeaveCampaign, RequireRole(RolePlayer))
+
 	// Member management (Owner only).
 	cg.POST("/members", h.AddMember, RequireRole(RoleOwner))
 	cg.DELETE("/members/:uid", h.RemoveMember, RequireRole(RoleOwner))
+	cg.POST("/members/removed/:uid/allow", h.AllowMemberBack, RequireRole(RoleOwner))
 	cg.PUT("/members/:uid/role", h.UpdateRole, RequireRole(RoleOwner))
 	cg.PUT("/members/:uid/character", h.UpdateMemberCharacterAPI, RequireRole(RoleOwner))
 
@@ -169,6 +187,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("/system", h.UpdateSystemID, RequireRole(RoleOwner))
 
 	// Shareable invite link (Owner only).
+	h.registerInviteBoxRoutes(cg)
 	cg.POST("/join-code", h.GenerateJoinCode, RequireRole(RoleOwner))
 	cg.DELETE("/join-code", h.RevokeJoinCode, RequireRole(RoleOwner))
 
@@ -197,7 +216,6 @@ func RegisterInviteRoutes(e *echo.Echo, ih *InviteHandler, svc CampaignService, 
 		RequireCampaignAccess(svc),
 	)
 	cg.GET("/invites", ih.ListInvitesAPI, RequireRole(RoleOwner))
-	cg.GET("/invites/page", ih.InvitesPage, RequireRole(RoleOwner))
 	cg.POST("/invites", ih.CreateInviteAPI, RequireRole(RoleOwner))
 	cg.DELETE("/invites/:inviteId", ih.RevokeInviteAPI, RequireRole(RoleOwner))
 }

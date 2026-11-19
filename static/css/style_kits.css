@@ -92,7 +92,7 @@
 }
 
 /* ---------- Every kit: the page takes the kit's palette and faces ---------- */
-[data-cz-page="annals"][data-cz-kit] #main-content:has(.cb-title) {
+[data-cz-page="annals"][data-cz-kit] #main-content:has(.cb-title):not(:has([data-workshop])) {
   --color-bg-primary: var(--k-page);
   --color-card-bg: var(--k-paper);
   --color-bg-secondary: var(--k-paper);
@@ -111,7 +111,7 @@
   color: var(--k-ink);
   font-family: var(--kit-bf, inherit);
 }
-[data-cz-page="annals"][data-cz-kit] :is(.cb-title, .cb-head, .cb-section-h) {
+[data-cz-page="annals"][data-cz-kit] :is(.cb-title:not(:where([data-workshop] .cb-title)), .cb-head, .cb-section-h) {
   font-family: var(--kit-hf, var(--annals-head));
   text-transform: none;
   letter-spacing: var(--cz-hls, 0);
@@ -155,9 +155,9 @@
   font-family: var(--kit-lf, var(--kit-hf, inherit));
   text-transform: uppercase; letter-spacing: 0.08em;
 }
-[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title { font-weight: 600; letter-spacing: -0.01em; }
+[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 600; letter-spacing: -0.01em; }
 /* The title's rule is doubled, thick over thin, in ink. */
-[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 5px; border-radius: 0; background: none;
   border-top: 2px solid var(--k-ink); border-bottom: 1px solid var(--k-ink);
 }
@@ -215,10 +215,10 @@
   background: var(--k-gilt); box-shadow: 0 0 0 4px var(--k-band);
 }
 [data-cz-page="annals"][data-cz-kit="ornate"] [data-topbar-name] { font-weight: 600; letter-spacing: 0.06em; font-size: 1.05rem; }
-[data-cz-page="annals"][data-cz-kit="ornate"] #main-content:has(.cb-title) { font-size: 1.04em; }
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content:has(.cb-title):not(:has([data-workshop])) { font-size: 1.04em; }
 /* A centred title over a gilt flourish. */
-[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title { text-align: center; font-weight: 600; padding-bottom: 16px; }
-[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title:not(:where([data-workshop] .cb-title)) { text-align: center; font-weight: 600; padding-bottom: 16px; }
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 14px; border-radius: 0;
   background: var(--k-gilt);
   -webkit-mask: var(--k-flourish) center / auto 14px no-repeat;
@@ -292,9 +292,9 @@
   mask: var(--k-wave) 0 0 / 100% 100% no-repeat;
 }
 [data-cz-page="annals"][data-cz-kit="flowing"] [data-topbar-name] { font-style: italic; font-weight: 600; }
-[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title { font-weight: 600; letter-spacing: -0.01em; padding-bottom: 12px; }
+[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 600; letter-spacing: -0.01em; padding-bottom: 12px; }
 /* The title's rule is a drawn wave. */
-[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 8px; border-radius: 0; background: var(--kit-acc); opacity: 0.7;
   -webkit-mask: var(--k-wave-line) 0 50% / 46px 8px repeat-x;
   mask: var(--k-wave-line) 0 50% / 46px 8px repeat-x;
@@ -350,9 +350,9 @@
   animation: kit-sheen 8s ease-in-out infinite;
 }
 @keyframes kit-sheen { 0%, 62% { background-position: 0% 0; } 88%, 100% { background-position: 100% 0; } }
-[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title { font-weight: 400; letter-spacing: 0.01em; }
+[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 400; letter-spacing: 0.01em; }
 /* The title's rule is a hairline of light, fading at both ends. */
-[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 1px; border-radius: 0;
   background: linear-gradient(90deg, var(--kit-acc), var(--k-shine) 35%, var(--kit-acc) 60%, transparent);
   box-shadow: 0 0 8px var(--k-glow);
@@ -406,9 +406,9 @@
   mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
 }
 [data-cz-page="annals"][data-cz-kit="sketchbook"] [data-topbar-name] { font-weight: 700; font-size: 1.05rem; }
-[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title { font-weight: 700; }
+[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 700; }
 /* The title's rule is a pen stroke in the accent. */
-[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 7px; border-radius: 0; background: var(--kit-acc);
   -webkit-mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
   mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
@@ -660,3 +660,139 @@
   [data-cz-kit] #main-content .cb-card:is(.cb-facts, .en-block) { box-shadow: none !important; outline: 0 !important; }
   [data-cz-kit] #main-content .cb-card::after { content: none !important; }
 }
+
+/* ---------- Openings ----------
+   What a card does when it comes out of something clicked on a page, in each
+   kit (ui-standard.md, "Style kits"). Components opt in with data-kit-open
+   and kit_open.js marks the move: data-ko="in" or "out", where it opened from
+   (--ko-x, --ko-y, --ko-ey, --ko-s) and the nearest edge (data-ko-edge).
+   Going out plays the same move backwards, quicker. Every card that opts in is a menu or picker, so the move takes the everyday 120 ms. Material keeps each
+   component's own Grow. Calm is a short fade in place; Off sets no move. */
+[data-cz-kit] [data-kit-open][data-ko] {
+  animation-duration: var(--dur-everyday, 120ms);
+  animation-timing-function: var(--ease-out);
+  animation-fill-mode: both;
+  transform-origin: var(--ko-x, 50%) var(--ko-ey, 0%);
+}
+[data-cz-kit] [data-kit-open][data-ko="out"] {
+  animation-direction: reverse;
+  animation-duration: var(--dur-everyday-out, 80ms);
+  animation-timing-function: var(--ease-in);
+}
+[data-cz-kit="sharp"] [data-kit-open][data-ko]:not([data-ko="out"]) { animation-timing-function: var(--ease-standard); }
+[data-cz-kit="sharp"] [data-kit-open][data-ko][data-ko-edge="top"] { animation-name: ko-sharp-top; }
+[data-cz-kit="sharp"] [data-kit-open][data-ko][data-ko-edge="bottom"] { animation-name: ko-sharp-bottom; }
+[data-cz-kit="ornate"] [data-kit-open][data-ko] { animation-name: ko-ornate; }
+[data-cz-kit="flowing"] [data-kit-open][data-ko] { animation-name: ko-flowing; }
+[data-cz-kit="lumen"] [data-kit-open][data-ko] { animation-name: ko-lumen; }
+[data-cz-kit="sketchbook"] [data-kit-open][data-ko] { animation-name: ko-sketch; transform-origin: top left; }
+/* The taped note stays a little askew once it has landed, in every motion level. */
+[data-cz-kit="sketchbook"] [data-kit-open]:not([hidden]) { transform: rotate(var(--ko-tilt, .6deg)); }
+
+[data-cz-kit][data-motion="calm"] [data-kit-open][data-ko] { animation-name: ko-fade; }
+[data-cz-kit][data-motion="calm"] [data-kit-open][data-ko][data-ko-edge] { animation-name: ko-fade; }
+[data-cz-kit][data-motion="off"] [data-kit-open] { animation: none; }
+
+@keyframes ko-fade { from { opacity: 0; } to { opacity: 1; } }
+/* Sharp: unrolls straight down from the edge clicked, no fade. The box
+   shadow stays outside the clip so the sheet keeps its edge while it moves. */
+@keyframes ko-sharp-top { from { clip-path: inset(0 -40px 100% -40px); } to { clip-path: inset(0 -40px -40px -40px); } }
+@keyframes ko-sharp-bottom { from { clip-path: inset(100% -40px 0 -40px); } to { clip-path: inset(-40px -40px 0 -40px); } }
+/* Ornate: swings down on a hinge along the edge clicked, and settles. */
+@keyframes ko-ornate {
+  0% { opacity: 0; transform: perspective(700px) rotateX(calc(-72deg * var(--ko-s, 1))); }
+  45% { opacity: 1; }
+  78% { transform: perspective(700px) rotateX(calc(5deg * var(--ko-s, 1))); }
+  100% { opacity: 1; transform: perspective(700px) rotateX(0deg); }
+}
+/* Flowing: spreads out from the click like ink in water, then settles. */
+@keyframes ko-flowing {
+  0% { opacity: 0; transform: scale(.97); clip-path: circle(0% at var(--ko-x, 50%) var(--ko-y, 0%)); }
+  40% { opacity: 1; }
+  100% { opacity: 1; transform: none; clip-path: circle(150% at var(--ko-x, 50%) var(--ko-y, 0%)); }
+}
+/* Lumen: a ring of light spreads and the card blooms out of it. */
+@keyframes ko-lumen {
+  0% { opacity: 0; transform: scale(.94); box-shadow: 0 0 0 0 color-mix(in srgb, var(--kit-acc, #6366f1) 55%, transparent); }
+  60% { opacity: 1; box-shadow: 0 0 0 16px color-mix(in srgb, var(--kit-acc, #6366f1) 12%, transparent); }
+  100% { opacity: 1; transform: none; }
+}
+/* Sketchbook: a taped note drops from the click and lands slightly askew. */
+@keyframes ko-sketch {
+  0% { opacity: 0; transform: translateY(-18px) rotate(-4deg); }
+  60% { opacity: 1; transform: translateY(2px) rotate(1.4deg); }
+  100% { opacity: 1; transform: rotate(var(--ko-tilt, .6deg)); }
+}
+
+/* ---------- Entrances ----------
+   Under the Material kit the owner picks how a card or panel opens
+   (Customize › Look; layouts.AppearanceAttrs writes data-cz-entrance only
+   when no other kit is on). Grow is the base and each component's own move.
+   They share kit_open.js and its data-ko marks with the kit openings above,
+   and play only on data-kit-open="card": menus, pickers and dialogs keep
+   their quick moves. Going out plays the move backwards, quicker. Calm is a
+   short fade; Off sets no move. */
+[data-cz-entrance] [data-kit-open="card"][data-ko] {
+  animation-duration: var(--dur-large);
+  animation-timing-function: var(--ease-out);
+  animation-fill-mode: both;
+  transform-origin: var(--ko-x, 50%) var(--ko-ey, 0%);
+}
+[data-cz-entrance] [data-kit-open="card"][data-ko="out"] {
+  animation-direction: reverse;
+  animation-duration: var(--dur-everyday-out, 80ms);
+  animation-timing-function: var(--ease-in);
+}
+[data-cz-entrance="bloom"] [data-kit-open="card"][data-ko] { animation-name: ko-bloom; }
+[data-cz-entrance="unfold"] [data-kit-open="card"][data-ko] { animation-name: ko-unfold; }
+[data-cz-entrance="unfold"] [data-kit-open="card"][data-ko="in"] > * { animation: ko-unfold-kids var(--dur-large) var(--ease-out) both; }
+[data-cz-entrance="drop"] [data-kit-open="card"][data-ko] { animation-name: ko-drop; animation-duration: calc(var(--dur-slide) * 4 / 3); }
+[data-cz-entrance="drop"] [data-kit-open="card"][data-ko="out"] { animation-duration: var(--dur-everyday-out, 80ms); }
+[data-cz-entrance][data-motion="calm"] [data-kit-open="card"][data-ko] { animation-name: ko-fade; animation-duration: var(--dur-micro); }
+[data-cz-entrance][data-motion="calm"] [data-kit-open="card"][data-ko] > * { animation: none; }
+[data-cz-entrance][data-motion="off"] [data-kit-open="card"] { animation: none; }
+[data-cz-entrance][data-motion="off"] [data-kit-open="card"] > * { animation: none; }
+
+/* Bloom: into focus from a soft blur. */
+@keyframes ko-bloom { from { opacity: 0; transform: scale(.92); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
+/* Unfold: revealed downward from the top edge; its contents arrive after 60%. */
+@keyframes ko-unfold { from { clip-path: inset(0 -40px 100% -40px); } to { clip-path: inset(0 -40px -40px -40px); } }
+@keyframes ko-unfold-kids { 0%, 60% { opacity: 0; } 100% { opacity: 1; } }
+/* Drop: set down from 22px above, with weight. */
+@keyframes ko-drop { from { opacity: 0; transform: translateY(-22px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Moments ----------
+   Three switches the owner can turn on (Customize › Look › Motion), each off
+   by default; layouts.AppearanceAttrs writes the ones that are on as
+   data-cz-moments. Calm and Off carry data-motion, so none of them runs
+   there. Page sheen sweeps the accent across a page's header over 900 ms,
+   List cascade staggers the cards of a marked list (data-cascade) 60 ms
+   apart, Save spark is kit_open.js. */
+html[data-cz-moments~="sheen"]:not([data-motion]) .ph-title { position: relative; }
+html[data-cz-moments~="sheen"]:not([data-motion]) .ph-title::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 8px;
+  background: linear-gradient(100deg, transparent 35%, color-mix(in srgb, var(--color-accent, #6366f1) 22%, transparent) 50%, transparent 65%) 0 0 / 300% 100% no-repeat;
+  animation: mo-sheen 900ms var(--ease-out) both;
+}
+@keyframes mo-sheen { from { background-position: 100% 0; opacity: 1; } to { background-position: 0 0; opacity: 0; } }
+
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > * { animation: mo-rise var(--dur-large) var(--ease-out) both; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(2) { animation-delay: 60ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(3) { animation-delay: 120ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(4) { animation-delay: 180ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(5) { animation-delay: 240ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(6) { animation-delay: 300ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(7) { animation-delay: 360ms; }
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(8) { animation-delay: 420ms; }
+/* Past the eighth card the rest arrive together so a long list never waits. */
+html[data-cz-moments~="cascade"]:not([data-motion]) [data-cascade] > :nth-child(n + 9) { animation-delay: 480ms; }
+@keyframes mo-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.mo-spark { position: fixed; z-index: 90; width: 0; height: 0; pointer-events: none; }
+.mo-spark i {
+  position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--color-accent, #6366f1);
+  animation: mo-spark 700ms var(--ease-out) both;
+}
+@keyframes mo-spark { from { opacity: 1; transform: none; } to { opacity: 0; transform: translate(var(--mx), var(--my)) scale(.4); } }
+@media (prefers-reduced-motion: reduce) { .mo-spark { display: none; } }

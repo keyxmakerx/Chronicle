@@ -19,7 +19,7 @@ templ comingUpFragment(campaignID string, v comingUpView) {
 				<a href={ templ.SafeURL(v.CalendarHref) } class="text-xs text-accent hover:underline">Open the calendar</a>
 			}
 		</div>
-		<div class="card divide-y divide-edge overflow-hidden">
+		<div class="cu-card card divide-y divide-edge overflow-hidden">
 			if v.Empty() {
 				<p class="px-4 py-5 text-sm text-fg-muted">Nothing is planned yet. Game nights and nearby events will show here.</p>
 			}
@@ -52,16 +52,18 @@ templ comingUpSection(label string, rows []comingUpRow, count bool) {
 // part of the link's text, so there is never a link inside a link.
 templ comingUpRowView(r comingUpRow) {
 	if r.Href != "" {
-		<a href={ templ.SafeURL(r.Href) } class="flex items-center gap-3 px-4 py-2 hover:bg-surface-alt/50 transition-colors group">
+		<a href={ templ.SafeURL(r.Href) } class="cu-row flex items-center gap-3 px-4 py-2 hover:bg-surface-alt/50 transition-colors group">
 			@comingUpRowBody(r)
 		</a>
 	} else {
-		<div class="flex items-center gap-3 px-4 py-2">
+		<div class="cu-row flex items-center gap-3 px-4 py-2">
 			@comingUpRowBody(r)
 		</div>
 	}
 }
 
+// A long name wraps; it is never cut short. In a narrow card the button or
+// answer at the end drops under the words (.cu-card in input.css).
 templ comingUpRowBody(r comingUpRow) {
 	<span
 		class={ "shrink-0 w-10 h-10 rounded-lg flex flex-col items-center justify-center leading-none", tileClass(r) }
@@ -74,16 +76,16 @@ templ comingUpRowBody(r comingUpRow) {
 			<span class="text-base font-semibold mt-0.5">{ r.TileBig }</span>
 		}
 	</span>
-	<span class="flex-1 min-w-0">
-		<span class="block text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ r.Title }</span>
+	<span class="cu-words flex-1 min-w-0">
+		<span class="block text-sm font-medium text-fg break-words group-hover:text-accent transition-colors">{ r.Title }</span>
 		<span class="block text-xs text-fg-muted">{ r.Sub }</span>
 	</span>
 	if r.Action != "" {
-		<span class={ "shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg", templ.KV("bg-accent text-white", r.Primary), templ.KV("border border-edge text-fg", !r.Primary) }>{ r.Action }</span>
+		<span class={ "cu-end shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg", templ.KV("bg-accent text-white", r.Primary), templ.KV("border border-edge text-fg", !r.Primary) }>{ r.Action }</span>
 	} else if r.Answer != "" {
-		<span class={ "shrink-0 text-xs font-medium px-2.5 py-0.5 rounded-full", answerPillClass(r.AnswerTone) }>{ r.Answer }</span>
+		<span class={ "cu-end shrink-0 text-xs font-medium px-2.5 py-0.5 rounded-full", answerPillClass(r.AnswerTone) }>{ r.Answer }</span>
 	} else if r.Chip != "" {
-		<span class="shrink-0 text-xs px-2.5 py-0.5 rounded-full bg-surface-alt text-fg-secondary">{ r.Chip }</span>
+		<span class="cu-end shrink-0 text-xs px-2.5 py-0.5 rounded-full bg-surface-alt text-fg-secondary">{ r.Chip }</span>
 	}
 }
 

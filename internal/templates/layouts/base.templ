@@ -86,8 +86,8 @@ templ Base(title string) {
 		     The sidebar's folded or hidden state is Alpine's, which arrives later, so
 		     it is put on here first, without its slide, and handed back as Alpine
 		     starts, in the same task, so the sidebar neither shows open nor slides
-		     shut on arrival. -->
-		<script>(function(){try{var s=document.getElementById('sidebar');var c=localStorage.getItem('chronicle-sidebar-hidden')==='true'?'sidebar-fully-hidden':(localStorage.getItem('chronicle-sidebar-pinned')==='false'?'sidebar-collapsed':'');if(s&&c){var k=[s].concat([].slice.call(s.children));k.forEach(function(e){e.style.transition='none'});s.classList.add(c);void s.offsetWidth;k.forEach(function(e){e.style.transition=''});document.addEventListener('alpine:init',function(){s.classList.remove(c)},{once:true})}}catch(e){}document.body.style.opacity='1'})()</script>
+		     shut on arrival. A drawer has neither state, so it is left alone. -->
+		<script>(function(){try{var s=document.getElementById('sidebar');var c=localStorage.getItem('chronicle-sidebar-hidden')==='true'?'sidebar-fully-hidden':(localStorage.getItem('chronicle-sidebar-pinned')==='false'?'sidebar-collapsed':'');var d=document.querySelector('[data-nav-drawer-query]');if(d&&window.matchMedia(d.getAttribute('data-nav-drawer-query')).matches)c='';if(s&&c){var k=[s].concat([].slice.call(s.children));k.forEach(function(e){e.style.transition='none'});s.classList.add(c);void s.offsetWidth;k.forEach(function(e){e.style.transition=''});document.addEventListener('alpine:init',function(){s.classList.remove(c)},{once:true})}}catch(e){}document.body.style.opacity='1'})()</script>
 
 		<!-- Re-authentication modal for sensitive admin operations -->
 		@ReauthModal()
@@ -137,7 +137,7 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/vendor/alpine-collapse.min.js") } defer></script>
 		<script src={ AssetURL("/static/vendor/alpine.min.js") } defer></script>
 
-		<!-- Campaign sidebar: folds, the living ring, the phone drawer -->
+		<!-- Campaign sidebar: folds, the living ring, the drawer -->
 		<script src={ AssetURL("/static/js/sidebar_nav.js") } defer></script>
 		<!-- Unified sidebar edit mode: pencil-triggered inline editing -->
 		<script src={ AssetURL("/static/js/sidebar_editor.js") } defer></script>
@@ -152,6 +152,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/recent_entities.js") } defer></script>
 		<!-- Entity favorites (localStorage-backed sidebar list + star toggle) -->
 		<script src={ AssetURL("/static/js/favorites.js") } defer></script>
+		<!-- Real-world dates in the reader's own format; re-run after every swap -->
+		<script src={ AssetURL("/static/js/dates.js") } defer></script>
 		<!-- Undo for world pages: local times in History, Undo after a delete -->
 		<script src={ AssetURL("/static/js/page_safety.js") } defer></script>
 		<!-- Sync history page: local times, day headings, live rows -->
@@ -226,9 +228,6 @@ templ Base(title string) {
 		<!-- Entity type config widget (unified sidebar + layout + color) -->
 		<script src={ AssetURL("/static/js/widgets/entity_type_config.js") } defer></script>
 
-		<!-- Tag picker widget (entity tag management) -->
-		<script src={ AssetURL("/static/js/widgets/tag_picker.js") } defer></script>
-
 		<!-- The one hover card, then the linked-page previews that use it -->
 		<script src={ AssetURL("/static/js/peek_address.js") } defer></script>
 		<script src={ AssetURL("/static/js/hovercard.js") } defer></script>
@@ -265,11 +264,6 @@ templ Base(title string) {
 		<!-- Header of a game-system-rendered page: more menu, Delete confirm, Claim. -->
 		<script src={ AssetURL("/static/js/widgets/page_header.js") } defer></script>
 
-		<!-- Transaction log widget (shop purchase/sale/gift/restock history).
-		     Mount is the `transaction_log` entity block; reads the armory
-		     plugin's /armory/shops/:eid/transactions endpoint. -->
-		<script src={ AssetURL("/static/js/widgets/transaction_log.js") } defer></script>
-
 		<!-- Entity aliases widget (alternative names; feeds auto-linking, search,
 		     @mentions). Mounts inside the `title` core block, i.e. effectively
 		     every entity page. -->
@@ -297,6 +291,9 @@ templ Base(title string) {
 		     all ease to a standstill when the viewer steps away and wake
 		     together when they come back. Loaded before anything that loops. -->
 		<script src={ AssetURL("/static/js/motion_rest.js") } defer></script>
+
+		<!-- A style kit's opening for cards that come out of something clicked (kit_open.js). Does nothing without a kit. -->
+		<script src={ AssetURL("/static/js/kit_open.js") } defer></script>
 
 		<!-- The character sheet's motion engine (sheet_motion.js): styles a [data-sheet] root and moves its panels, folds and changed values. Does nothing on a page without one. -->
 		<script src={ AssetURL("/static/js/sheet_motion.js") } defer></script>

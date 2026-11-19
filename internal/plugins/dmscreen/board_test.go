@@ -92,6 +92,8 @@ var (
 	playerViewer = Viewer{UserID: "pl", Role: 1}
 )
 
+func (f *fakeAdventures) CategoryID(context.Context, string) (int, error) { return 7, nil }
+
 func newBoardSvc(adv *fakeAdventures, b *memBoard) Service {
 	return NewService(Sources{Board: b, Adventures: adv})
 }
@@ -349,6 +351,9 @@ func TestPickPages(t *testing.T) {
 	if !res.HasCategory || len(res.Pages) != 1 || !res.Pages[0].Pinned {
 		t.Fatalf("result = %+v, want one pinned page", res)
 	}
+	if res.NewTypeID != 7 {
+		t.Errorf("new type = %d, want the Adventures category", res.NewTypeID)
+	}
 
 	adv.noCategory = true
 	res, err = svc.PickPages(context.Background(), "c1", dmViewer, "")
@@ -357,5 +362,8 @@ func TestPickPages(t *testing.T) {
 	}
 	if res.HasCategory || res.Pages == nil || len(res.Pages) != 0 {
 		t.Fatalf("no-category result = %+v, want has_category=false and an empty (non-nil) list", res)
+	}
+	if res.NewTypeID != 0 {
+		t.Errorf("a campaign with no Adventures category offers no place to make one: %+v", res)
 	}
 }

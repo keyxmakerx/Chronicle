@@ -68,6 +68,12 @@
           pickerEl.classList.add('hidden');
         }
         selectEl.innerHTML = html;
+        // A refused save comes back with the template that was chosen.
+        var want = pickerEl.getAttribute('data-selected-template');
+        if (want) {
+          selectEl.value = want;
+          pickerEl.removeAttribute('data-selected-template');
+        }
       })
       .catch(function () {
         // Silently fail — template picker is optional.
@@ -146,6 +152,8 @@
     var isDark = document.documentElement.classList.contains('dark');
     var menu = document.createElement('div');
     menu.id = 'template-insert-menu';
+    menu.setAttribute('role', 'listbox');
+    menu.setAttribute('aria-label', 'Content templates');
     menu.style.cssText =
       'position:fixed;z-index:9999;min-width:260px;max-width:340px;max-height:320px;' +
       'overflow-y:auto;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);' +
@@ -154,22 +162,56 @@
         ? 'background:#1f2937;border:1px solid #374151;color:#e5e7eb;'
         : 'background:#fff;border:1px solid #e5e7eb;color:#111827;');
 
-    // Position near cursor.
-    var coords = editor.view.coordsAtPos(editor.state.selection.from);
-    menu.style.left = coords.left + 'px';
-    menu.style.top = (coords.bottom + 4) + 'px';
-
     // Header.
     menu.innerHTML =
-      '<div style="padding:4px 12px 2px;font-size:11px;font-weight:600;opacity:0.5;' +
+      '<div aria-hidden="true" style="padding:4px 12px 2px;font-size:11px;font-weight:600;opacity:0.5;' +
       'text-transform:uppercase;letter-spacing:0.5px">Content Templates</div>';
+
+    var rows = [];
+    var current = -1;
+
+    function highlight(i) {
+      current = i;
+      rows.forEach(function (r, j) {
+        var on = j === i;
+        r.setAttribute('aria-selected', on ? 'true' : 'false');
+        r.style.backgroundColor = on ? (isDark ? '#374151' : '#f3f4f6') : '';
+      });
+      if (rows[i]) {
+        rows[i].focus({ preventScroll: true });
+        rows[i].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    // Closing hands the keyboard back to the editor, where the person was.
+    function close(refocus) {
+      menu.remove();
+      document.removeEventListener('mousedown', closeMenu);
+      if (refocus && editor.view && editor.view.focus) editor.view.focus();
+    }
+
+    function pick(tmpl) {
+      close(true);
+      insertTemplateContent(editor, tmpl);
+    }
+
+    menu.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); highlight(Math.min(rows.length - 1, current + 1)); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(Math.max(0, current - 1)); }
+      else if (e.key === 'Enter' && rows[current]) { e.preventDefault(); pick(templates[current]); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+      else if (e.key === 'Tab') { close(false); }
+    });
 
     for (var i = 0; i < templates.length; i++) {
       var t = templates[i];
       var item = document.createElement('div');
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', 'false');
+      item.tabIndex = -1;
       item.style.cssText =
         'display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;' +
-        'font-size:14px;transition:background 0.1s;';
+        'font-size:14px;transition:background 0.1s;outline:none;';
       item.innerHTML =
         '<i class="fa-solid ' + Chronicle.escapeHtml(t.icon || 'fa-file-lines') +
         '" style="width:20px;text-align:center;opacity:0.6"></i>' +
@@ -180,32 +222,31 @@
         '</div>';
 
       item.addEventListener('mouseenter', function () {
-        this.style.backgroundColor = isDark ? '#374151' : '#f3f4f6';
-      });
-      item.addEventListener('mouseleave', function () {
-        this.style.backgroundColor = '';
+        highlight(rows.indexOf(this));
       });
 
       (function (tmpl) {
         item.addEventListener('mousedown', function (e) {
           e.preventDefault();
           e.stopPropagation();
-          insertTemplateContent(editor, tmpl);
-          menu.remove();
+          pick(tmpl);
         });
       })(t);
+
+      rows.push(item);
 
       menu.appendChild(item);
     }
 
     document.body.appendChild(menu);
 
+    // Place it once it has a size, then hand it the keyboard.
+    Chronicle.placeAtCaret(menu, editor.view.coordsAtPos(editor.state.selection.from));
+    highlight(0);
+
     // Close on click outside.
     function closeMenu(e) {
-      if (!menu.contains(e.target)) {
-        menu.remove();
-        document.removeEventListener('mousedown', closeMenu);
-      }
+      if (!menu.contains(e.target)) close(false);
     }
     setTimeout(function () {
       document.addEventListener('mousedown', closeMenu);

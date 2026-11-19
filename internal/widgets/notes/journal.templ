@@ -45,20 +45,22 @@ templ journalContent(cc *campaigns.CampaignContext, view JournalView) {
 			<section class="jnl-list" id="jnl-list" aria-label="Notes">
 				<div class="nl-bar">
 					<h1 class="nl-name cb-title">Journal</h1>
-					<div class="nl-search">
-						<i class="fa-solid fa-magnifying-glass nl-ico" aria-hidden="true"></i>
-						<div class="nl-search-field" contenteditable="true" role="searchbox" aria-label="Search notes" data-placeholder="Search…" spellcheck="false"></div>
-						<button type="button" class="nl-scope" data-scope="title" title="Searching titles only — click to also search contents">Titles</button>
-					</div>
-					<button type="button" class="nl-tbtn nl-viewbtn" aria-haspopup="true" aria-expanded="false">
-						<i class="fa-solid fa-bars nl-ico" aria-hidden="true"></i><span>View</span><i class="fa-solid fa-chevron-right nl-ico chev" aria-hidden="true"></i>
-					</button>
-					<div class="nl-newsplit">
-						<button type="button" class="nl-newbody" data-new="note"><i class="fa-solid fa-plus nl-ico" aria-hidden="true"></i><span>New</span></button>
-						<button type="button" class="nl-newcaret" aria-haspopup="true" aria-expanded="false" title="New note or folder" aria-label="New note or folder"><i class="fa-solid fa-chevron-right nl-ico chev" aria-hidden="true"></i></button>
-						<div class="nl-newmenu" role="menu" aria-label="New">
-							<button type="button" role="menuitem" data-new="note"><i class="fa-solid fa-file-lines nl-ico" aria-hidden="true"></i>Note</button>
-							<button type="button" role="menuitem" data-new="folder"><i class="fa-solid fa-folder nl-ico" aria-hidden="true"></i>Folder</button>
+					<div class="nl-tools">
+						<div class="nl-search">
+							<i class="fa-solid fa-magnifying-glass nl-ico" aria-hidden="true"></i>
+							<div class="nl-search-field" contenteditable="true" role="searchbox" aria-label="Search notes" data-placeholder="Search…" spellcheck="false"></div>
+							<button type="button" class="nl-scope" data-scope="title" title="Searching titles only — click to also search contents">Titles</button>
+						</div>
+						<button type="button" class="nl-tbtn nl-viewbtn" aria-haspopup="true" aria-expanded="false">
+							<i class="fa-solid fa-bars nl-ico" aria-hidden="true"></i><span>View</span><i class="fa-solid fa-chevron-right nl-ico chev" aria-hidden="true"></i>
+						</button>
+						<div class="nl-newsplit">
+							<button type="button" class="nl-newbody" data-new="note"><i class="fa-solid fa-plus nl-ico" aria-hidden="true"></i><span>New</span></button>
+							<button type="button" class="nl-newcaret" aria-haspopup="true" aria-expanded="false" title="New note or folder" aria-label="New note or folder"><i class="fa-solid fa-chevron-right nl-ico chev" aria-hidden="true"></i></button>
+							<div class="nl-newmenu" role="menu" aria-label="New">
+								<button type="button" role="menuitem" data-new="note"><i class="fa-solid fa-file-lines nl-ico" aria-hidden="true"></i>Note</button>
+								<button type="button" role="menuitem" data-new="folder"><i class="fa-solid fa-folder nl-ico" aria-hidden="true"></i>Folder</button>
+							</div>
 						</div>
 					</div>
 				</div>

@@ -44,6 +44,12 @@ templ Panel(v *View, csrf string) {
 			}
 		</nav>
 		<div class="dms-col" data-dms-col>
+			<div class="dms-phonehead">
+				<span class="dms-phonehead-t" aria-hidden="true">{ layouts.GMTerm(ctx) } Screen</span>
+				<button type="button" class="dms-ic dms-phonehead-x" data-dms-tuck aria-label={ "Put the " + layouts.GMTerm(ctx) + " Screen away" }>
+					<span aria-hidden="true">×</span>
+				</button>
+			</div>
 			<div class="dms-colhead">
 				<span class="dms-count" data-dms-count></span>
 				<button type="button" class="dms-quiet" data-dms-closeall>Close all</button>
@@ -85,6 +91,9 @@ templ section(sec SectionView) {
 				<i class={ "fa-solid fa-" + sec.Icon } aria-hidden="true"></i>
 				<span id={ "dms-h-" + sec.ID }>{ sec.Title }</span>
 				<span class="dms-sec-sum">{ sec.Summary }</span>
+				if sec.Badge > 0 {
+					<span class="dms-sec-badge" aria-hidden="true">{ fmt.Sprint(sec.Badge) }</span>
+				}
 			</button>
 			<button type="button" class="dms-ic dms-sec-x" data-dms-shut aria-label={ "Close " + sec.Title } title="Close">
 				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
@@ -247,12 +256,12 @@ templ sectionBody(v *View, id string, csrf string) {
 			>{ v.Notes.Text }</textarea>
 			<span class="dms-small" role="status" aria-live="polite" data-dms-note-status>
 				if v.Notes.ReadOnly {
-					This note has formatting, so edit it in Notes
+					This note has formatting, so edit it in the Journal
 				} else {
 					Only you and co-{ layouts.GMTerm(ctx) }s can see this
 				}
 			</span>
-			<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Notes</a>
+			<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Journal</a>
 		case "adventures":
 			@adventuresPane(v.CampaignID, v.Adventures)
 		case "homebrew":
@@ -268,10 +277,10 @@ templ sectionBody(v *View, id string, csrf string) {
 templ brewBody(v *View) {
 	<div class="dms-brew" data-dms-brew-pane>
 		<div class="dms-brew-acts">
-			<a class="dms-ic" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/homebrew", v.CampaignID)) } data-dms-brew-workshop aria-label="Open the Homebrew workshop" title="Homebrew workshop"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i></a>
-			<button type="button" class="dms-ic" data-dms-brew-pv aria-pressed="false" aria-label="See it as a player" title="See it as a player"><i class="fa-solid fa-users" aria-hidden="true"></i></button>
+			<a class="dms-tool" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/homebrew", v.CampaignID)) } data-dms-brew-workshop title="Open the Homebrew Workshop"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i>Workshop</a>
+			<button type="button" class="dms-tool" data-dms-brew-pv aria-pressed="false" title="See it as a player sees it"><i class="fa-solid fa-users" aria-hidden="true"></i>Player view</button>
 		</div>
-		<p class="dms-brew-pvbar"><i class="fa-solid fa-users" aria-hidden="true"></i>Player view: only what players see. Press the people button again to go back.</p>
+		<p class="dms-brew-pvbar"><i class="fa-solid fa-users" aria-hidden="true"></i>Player view: only what players see. Press Player view again to go back.</p>
 		@v.Homebrew
 	</div>
 }

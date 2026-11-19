@@ -57,9 +57,9 @@
   position: absolute; right: 0; top: calc(100% + 4px); z-index: 7; min-width: 170px; max-height: 280px; overflow: auto; padding: 4px;
   background: var(--sg-panel); border: var(--shape-edge, 1px) solid var(--sg-line); border-radius: var(--shape-r-panel, 12px); box-shadow: var(--elev-hover, 0 8px 20px rgb(0 0 0 / .15));
   transform-origin: top right; visibility: hidden; opacity: 0; transform: scale(.94);
-  transition: opacity var(--dur-micro, 120ms) var(--ease-in, ease-in), transform var(--dur-micro, 120ms) var(--ease-in, ease-in), visibility 0s linear var(--dur-micro, 120ms);
+  transition: opacity var(--dur-everyday-out, 80ms) var(--ease-in, ease-in), transform var(--dur-everyday-out, 80ms) var(--ease-in, ease-in), visibility 0s linear var(--dur-everyday-out, 80ms);
 }
-.sg-menu.sg-on { visibility: visible; opacity: 1; transform: none; transition: opacity var(--dur-standard, 200ms), transform var(--dur-standard, 200ms) var(--sg-ease), visibility 0s; }
+.sg-menu.sg-on { visibility: visible; opacity: 1; transform: none; transition: opacity var(--dur-everyday, 120ms) var(--ease-out, ease-out), transform var(--dur-everyday, 120ms) var(--ease-out, ease-out), visibility 0s; }
 .sg-menu button {
   display: flex; width: 100%; min-height: var(--sg-hit); align-items: center; text-align: left; padding: 4px 10px; border: 0; border-radius: var(--shape-r-ctl, 8px);
   background: none; cursor: pointer; font-size: 13px; color: var(--sg-ink); overflow-wrap: anywhere;

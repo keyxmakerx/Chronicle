@@ -14,7 +14,7 @@
 .air-small { font-size: 0.82rem; color: var(--color-text-secondary); }
 
 /* A quiet word: accent text, no box, underline on hover. */
-.air-quiet { font: inherit; font-size: 0.86rem; background: none; border: 0; padding: 4px 2px; color: var(--color-accent); cursor: pointer; min-height: 32px; }
+.air-quiet { font: inherit; font-size: 0.86rem; background: none; border: 0; padding: 4px 2px; color: var(--color-accent-link, var(--color-accent)); cursor: pointer; min-height: 32px; }
 .air-quiet:hover { text-decoration: underline; }
 .air-quiet:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
 
@@ -37,7 +37,7 @@
 
 /* The tray under the paste box: parts of an answer waiting for the rest. */
 .air-tray { border: 1px dashed var(--color-border); border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
-.air-tray h4 { font-size: 0.76rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
+.air-tray h4 { font-size: 0.76rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent-link, var(--color-accent)); }
 .air-tray-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.88rem; color: var(--color-text-body); }
 .air-tray-row > i { color: var(--color-text-secondary); }
 .air-tray-what { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
@@ -48,7 +48,7 @@
 .air-defaults[open] > summary { margin-bottom: 8px; }
 
 .air-group { display: flex; align-items: baseline; gap: 10px; padding: 14px 10px 6px; border-bottom: 1px solid var(--color-border); }
-.air-group h4 { font-size: 0.76rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
+.air-group h4 { font-size: 0.76rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent-link, var(--color-accent)); }
 
 .air-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; padding: 12px 10px; border-top: 1px solid var(--color-border-light); border-radius: 8px; min-width: 0; }
 .air-group + .air-row { border-top: 0; }
@@ -86,7 +86,7 @@ button.air-stat:focus-visible { outline: 2px solid var(--color-accent); outline-
 
 .air-pill { display: inline-flex; align-items: center; font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); margin-top: 1px; }
 .air-pill.is-add { background: rgb(var(--color-ok-rgb) / 0.12); color: rgb(var(--color-ok-rgb)); }
-.air-pill.is-change { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); }
+.air-pill.is-change { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent-link, var(--color-accent)); }
 .air-pill.is-remove { background: rgb(var(--color-bad-rgb) / 0.10); color: rgb(var(--color-bad-rgb)); }
 
 /* Yes / No: a two-part segmented control built from the row's radios. */
@@ -98,7 +98,7 @@ button.air-stat:focus-visible { outline: 2px solid var(--color-accent); outline-
 .air-y:has(input:checked) { background: rgb(var(--color-ok-rgb) / 0.12); color: rgb(var(--color-ok-rgb)); }
 .air-n:has(input:checked) { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
 
-.air-more > summary { list-style: none; display: inline-block; font-size: 0.82rem; color: var(--color-accent); cursor: pointer; }
+.air-more > summary { list-style: none; display: inline-block; font-size: 0.82rem; color: var(--color-accent-link, var(--color-accent)); cursor: pointer; }
 .air-more > summary::-webkit-details-marker { display: none; }
 .air-more > summary:hover { text-decoration: underline; }
 /* A request's text, as written: plain, in a well, scrolled when long. */

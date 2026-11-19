@@ -45,12 +45,24 @@
     }
   }
 
+  // growOnChange plays the badge's count-change grow when the unread count
+  // differs from the last one seen; the first read only sets the baseline, so
+  // the 60s poll never replays it for an unchanged count.
+  function growOnChange(el) {
+    var badge = $('[data-count]', el);
+    var n = badge ? badge.getAttribute('data-count') : '';
+    var seen = el._notifCount;
+    el._notifCount = n;
+    if (!badge || seen === undefined || seen === n) return;
+    badge.classList.add('hdr-n-grow');
+  }
+
   function refreshBadge(el) {
     var badge = $('[data-notif-badge]', el);
     if (!badge) return;
     Chronicle.apiFetch('/notifications/badge')
       .then(function (r) { return r.ok ? r.text() : ''; })
-      .then(function (html) { badge.innerHTML = html || ''; syncMenuCount(el); })
+      .then(function (html) { badge.innerHTML = html || ''; syncMenuCount(el); growOnChange(el); })
       .catch(function () { /* non-fatal */ });
   }
 
@@ -132,6 +144,14 @@
       // A detail line ("On Bren") goes before the time.
       when.textContent = n.detail ? n.detail + ' · ' + relTime(n.createdAt) : relTime(n.createdAt);
       body.appendChild(msg); body.appendChild(when);
+      // The link's own label, for a note whose point is where it leads.
+      if (n.action && n.link) {
+        var act = document.createElement('div');
+        act.className = 'text-xs font-medium mt-0.5';
+        act.style.color = 'var(--color-accent-link)';
+        act.textContent = n.action;
+        body.appendChild(act);
+      }
       item.appendChild(body);
       row.appendChild(item);
 
@@ -189,11 +209,59 @@
       if (!toggle || !panel) return;
 
       // The badge is swapped in by the bell button's own HTMX poll.
-      toggle.addEventListener('htmx:afterSwap', function () { syncMenuCount(el); });
+      toggle.addEventListener('htmx:afterSwap', function () { syncMenuCount(el); growOnChange(el); });
       syncMenuCount(el);
+      growOnChange(el);
 
-      function open() { panel.hidden = false; loadList(el); }
-      function close() { panel.hidden = true; }
+      // The panel grows out of the bell with the menus' .mn-* classes. Under a
+      // style kit, kit_open.js plays the kit's opening off the hidden
+      // attribute instead, and with motion Off nothing plays. A keyboard
+      // open is instant through the :has(> :focus-visible) rule.
+      var root = document.documentElement;
+      var settle = null;
+      function plain() { return root.hasAttribute('data-cz-kit') || root.getAttribute('data-motion') === 'off'; }
+      function clearMotion() {
+        if (settle) { settle(); settle = null; }
+        panel.classList.remove('mn-enter', 'mn-leave', 'mn-from', 'mn-to');
+      }
+      // Runs done once the panel's transition ends, or after a fallback wait
+      // if no transition event arrives.
+      function afterMove(done) {
+        var fired = false;
+        function finish() {
+          if (fired) return;
+          fired = true;
+          panel.removeEventListener('transitionend', onEnd);
+          clearTimeout(timer);
+          settle = null;
+          done();
+        }
+        function onEnd(e) { if (e.target === panel) finish(); }
+        panel.addEventListener('transitionend', onEnd);
+        var timer = setTimeout(finish, Chronicle.motionMs ? Chronicle.motionMs('--dur-everyday', 120) + 80 : 200);
+        settle = finish;
+      }
+      function open() {
+        clearMotion();
+        if (plain()) { panel.hidden = false; loadList(el); return; }
+        panel.classList.add('mn-enter', 'mn-from');
+        panel.hidden = false;
+        void panel.offsetWidth;
+        panel.classList.remove('mn-from');
+        panel.classList.add('mn-to');
+        afterMove(function () { panel.classList.remove('mn-enter', 'mn-to'); });
+        loadList(el);
+      }
+      function close() {
+        clearMotion();
+        if (panel.hidden) return;
+        if (plain()) { panel.hidden = true; return; }
+        panel.classList.add('mn-leave', 'mn-to');
+        void panel.offsetWidth;
+        panel.classList.remove('mn-to');
+        panel.classList.add('mn-from');
+        afterMove(function () { panel.hidden = true; panel.classList.remove('mn-leave', 'mn-from'); });
+      }
 
       toggle.addEventListener('click', function (e) {
         e.stopPropagation();

@@ -16,7 +16,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { person as signedIn, newCampaign, newPage, addMember, enableAddons, done, picture, BASE } from './_live.mjs';
+import { person as signedIn, newCampaign, newPage, addMember, enableAddons, done, picture, saved, BASE } from './_live.mjs';
 
 after(done);
 
@@ -124,7 +124,7 @@ test('a player has no AI until the owner allows it; their key changes only their
   const sw = owner.page.getByRole('switch', { name: 'Players may use an AI here' });
   await sw.waitFor();
   await picture(owner.page, 'ai-players-switch', { check: '#1977', about: "The Players' AI row on Your AI > Settings, switch off", mask: ['.aic-head .aic-hint', '.aic-row-k .aic-hint'], locator: owner.page.locator('.aic-rows') });
-  await sw.check();
+  await saved(owner.page, '/ai/players', () => sw.check());
   await owner.page.locator('#ai-players .aic-switch:checked').waitFor();
   assert.equal(await hasButton(), true, 'the player has no AI button after the owner turned it on');
 
@@ -173,16 +173,16 @@ test('a player has no AI until the owner allows it; their key changes only their
   await owner.page.getByRole('tab', { name: 'Settings' }).click();
   const row = owner.page.locator('#ai-players .aic-subrow', { hasText: 'Player Pat' });
   await row.waitFor();
-  await row.getByRole('button', { name: 'Pause' }).click();
+  await saved(owner.page, '/ai/players/', () => row.getByRole('button', { name: 'Pause' }).click());
   await owner.page.locator('#ai-players').getByRole('button', { name: /Let it back/ }).waitFor();
   const paused = await theirAI.call('campaign_outline');
   assert.equal(paused.status, 403);
   assert.match(paused.text, /paused/i, 'the player\'s AI is not told the key is paused');
-  await owner.page.locator('#ai-players').getByRole('button', { name: /Let it back/ }).click();
+  await saved(owner.page, '/ai/players/', () => owner.page.locator('#ai-players').getByRole('button', { name: /Let it back/ }).click());
   await owner.page.locator('#ai-players').getByRole('button', { name: 'Pause' }).waitFor();
   assert.ok(!(await theirAI.call('campaign_outline')).isError, 'the player\'s AI is still refused after Let it back');
 
-  await owner.page.getByRole('switch', { name: 'Players may use an AI here' }).uncheck();
+  await saved(owner.page, '/ai/players', () => owner.page.getByRole('switch', { name: 'Players may use an AI here' }).uncheck());
   await owner.page.locator('#ai-players .aic-switch:not(:checked)').waitFor();
   const off = await theirAI.call('campaign_outline');
   assert.equal(off.status, 403);

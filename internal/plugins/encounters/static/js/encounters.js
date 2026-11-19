@@ -600,6 +600,10 @@
       };
       el.classList.add('enc');
       el._enc = S;
+      // The DM Screen's "Plan a fight" opens the page with the builder open
+      // on a new fight; the mark is used once.
+      S.planOnLoad = el.getAttribute('data-plan-fight') === '1';
+      el.removeAttribute('data-plan-fight');
       load(S);
     },
     destroy: function (el) {
@@ -622,6 +626,10 @@
       S.players = Array.isArray(v && v.players) ? v.players : [];
       S.loaded = true;
       drawBlock(S);
+      if (S.planOnLoad) {
+        S.planOnLoad = false;
+        if (S.canEdit && S.list.length < LIM.perPage) create(S);
+      }
     }).catch(function () {
       if (!S.loaded) S.el.textContent = '';
     });

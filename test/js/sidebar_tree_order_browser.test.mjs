@@ -132,7 +132,7 @@ test('the row menu moves a page and picks how a folder orders its pages', { skip
   try {
     await pg.click('.sidebar-tree-node[data-entity-id="e3"] > a', { button: 'right' });
     const labels = await menuLabels(pg);
-    assert.deepEqual(labels.slice(-2), ['Move up', 'Move down']);
+    assert.deepEqual(labels.slice(-3), ['Move up', 'Move down', 'Page history']);
     await pg.locator('.rowmenu .rowmenu-item', { hasText: 'Move down' }).click();
     assert.deepEqual(await topNames(pg), ['Lore', 'Bryn', 'Ash', 'Cass']);
 

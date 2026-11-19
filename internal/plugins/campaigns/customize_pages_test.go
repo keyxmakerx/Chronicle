@@ -157,8 +157,9 @@ func TestCustomizeTopBar(t *testing.T) {
 		{"a home open", h.CustomizeHome, "/campaigns/camp-1/customize/home/player", []string{"who", "player"},
 			[]string{`<span class="czs-part" data-czs-part>Players</span>`, `<span class="czs-pl">Players</span>`,
 				`href="/campaigns/camp-1/customize/home/player" class="czs-pt" aria-current="page"`,
-				`href="/campaigns/camp-1/customize/home/guest"`, `href="/campaigns/camp-1/customize/home/dm"`},
-			[]string{`aria-label="Which home"`}},
+				`href="/campaigns/camp-1/customize/home/guest"`},
+			// The Overview tab is retired along with the owner dashboard it arranged.
+			[]string{`aria-label="Which home"`, `customize/home/dm`}},
 		{"the overview", h.Customize, "/campaigns/camp-1/customize", nil,
 			[]string{`data-czs-area="overview" aria-current="page"`},
 			[]string{`data-czs-part`}},

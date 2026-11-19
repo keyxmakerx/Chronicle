@@ -142,7 +142,7 @@ func (s *campaignService) AdminHandOver(ctx context.Context, campaignID, toUserI
 		return nil, apperror.NewInternal(fmt.Errorf("handing over: %w", err))
 	}
 	// The new owner no longer needs a DM grant; the old one gets Co-DM.
-	if err := s.revokeDmGrant(ctx, campaignID, toUserID); err != nil {
+	if err := s.revokeDmGrant(ctx, campaignID, toUserID, false); err != nil {
 		slog.Warn("dropping new owner's DM grant", slog.String("campaign_id", campaignID), slog.Any("error", err))
 	}
 	if err := s.SetMemberAccess(ctx, campaignID, st.OwnerID, AccessCoDM); err != nil {

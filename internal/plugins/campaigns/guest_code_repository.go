@@ -20,6 +20,10 @@ type GuestCodeRepository interface {
 	// used or expired is NotFound.
 	Claim(ctx context.Context, codeHash string, now time.Time) (id, campaignID string, err error)
 	Release(ctx context.Context, id string) error
+	// Peek reads the campaign a live code opens without using it; a code
+	// that is unknown, used, expired or whose campaign is in the Trash is
+	// NotFound.
+	Peek(ctx context.Context, codeHash string, now time.Time) (campaignID string, err error)
 	SetUsedBy(ctx context.Context, id, userID string) error
 	// FindByID loads one of a campaign's codes; another campaign's is NotFound.
 	FindByID(ctx context.Context, campaignID, id string) (*GuestCode, error)
@@ -245,6 +249,22 @@ func (r *guestCodeRepository) Claim(ctx context.Context, codeHash string, now ti
 		return "", "", fmt.Errorf("reading claimed guest code: %w", err)
 	}
 	return id, campaignID, nil
+}
+
+// Peek is Claim's read-only twin, for the invitation shown before a name is asked.
+func (r *guestCodeRepository) Peek(ctx context.Context, codeHash string, now time.Time) (string, error) {
+	var campaignID string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT g.campaign_id FROM campaign_guest_codes g
+		  WHERE g.code_hash = ? AND g.used_at IS NULL AND g.expires_at > ?
+		    AND g.campaign_id IN (SELECT id FROM campaigns WHERE deleted_at IS NULL)`, codeHash, now).Scan(&campaignID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", apperror.NewNotFound("that code isn't right, or it was already used or has expired")
+	}
+	if err != nil {
+		return "", fmt.Errorf("peeking guest code: %w", err)
+	}
+	return campaignID, nil
 }
 
 // Release makes a claimed code usable again after the join failed.

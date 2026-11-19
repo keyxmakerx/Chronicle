@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -55,6 +56,11 @@ func (s *inviteService) CreateInvite(ctx context.Context, campaignID, createdBy 
 	email := strings.TrimSpace(strings.ToLower(input.Email))
 	if email == "" {
 		return nil, apperror.NewValidation("email is required")
+	}
+	// The address goes into a mail header, so it must be one plain address:
+	// no names, comments, spaces or line breaks.
+	if addr, err := mail.ParseAddress(email); err != nil || addr.Address != email || strings.ContainsAny(email, " \t\r\n<>,;\"") {
+		return nil, apperror.NewValidation("that doesn't look like an email address")
 	}
 
 	// Validate role.
@@ -110,6 +116,13 @@ func (s *inviteService) CreateInvite(ctx context.Context, campaignID, createdBy 
 		return nil, err
 	}
 
+	// The mail goes to the address as stored, read back by the token only
+	// this call knows, so what is sent is exactly what the invite records.
+	stored, err := s.repo.GetByToken(ctx, token)
+	if err != nil {
+		return nil, fmt.Errorf("reading back the invite: %w", err)
+	}
+
 	// Send invite email if SMTP is configured.
 	if s.mailer != nil && s.mailer.IsConfigured(ctx) {
 		acceptURL := fmt.Sprintf("%s/invites/accept?token=%s", s.baseURL, token)
@@ -134,7 +147,7 @@ func (s *inviteService) CreateInvite(ctx context.Context, campaignID, createdBy 
 		})
 		if err != nil {
 			slog.Warn("failed to build invite email", slog.String("campaign", campaignID), slog.String("error", err.Error()))
-		} else if err := s.mailer.SendHTMLMail(ctx, []string{email}, subject, plainBody, htmlBody); err != nil {
+		} else if err := s.mailer.SendHTMLMail(ctx, []string{stored.Email}, subject, plainBody, htmlBody); err != nil {
 			slog.Warn("failed to send invite email",
 				slog.String("email", email),
 				slog.String("campaign", campaignID),
@@ -195,8 +208,18 @@ func (s *inviteService) AcceptInvite(ctx context.Context, token string, userID s
 	_, err = s.campaigns.FindMember(ctx, invite.CampaignID, userID)
 	if err == nil {
 		// Already a member — mark invite accepted and return.
-		_ = s.repo.MarkAccepted(ctx, invite.ID)
+		_, _ = s.repo.MarkAccepted(ctx, invite.ID)
 		return invite, apperror.NewValidation("you are already a member of this campaign")
+	}
+
+	// Claim the invite before adding anyone, so one link opened by two
+	// people at the same moment adds only the first.
+	claimed, err := s.repo.MarkAccepted(ctx, invite.ID)
+	if err != nil {
+		return nil, fmt.Errorf("marking invite accepted: %w", err)
+	}
+	if !claimed {
+		return nil, apperror.NewValidation("this invitation has already been accepted")
 	}
 
 	// Add user to campaign with the invited role.
@@ -211,10 +234,6 @@ func (s *inviteService) AcceptInvite(ctx context.Context, token string, userID s
 		return nil, fmt.Errorf("adding member: %w", err)
 	}
 
-	// Mark invite as accepted.
-	if err := s.repo.MarkAccepted(ctx, invite.ID); err != nil {
-		return nil, fmt.Errorf("marking invite accepted: %w", err)
-	}
 
 	slog.Info("campaign invite accepted",
 		slog.String("campaign_id", invite.CampaignID),

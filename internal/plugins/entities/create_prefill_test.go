@@ -31,7 +31,7 @@ func TestCreateFormPrefillName(t *testing.T) {
 
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}}
 	var buf bytes.Buffer
-	err := EntityCreateFormComponent(cc, []EntityType{{ID: 1, Name: "Character", Enabled: true}}, 1, nil, nil, `The "Bell"<b>`, "csrf", "").Render(context.Background(), &buf)
+	err := EntityCreateFormComponent(cc, []EntityType{{ID: 1, Name: "Character", Enabled: true}}, 1, nil, nil, `The "Bell"<b>`, "csrf", "", NewPageDraft{}).Render(context.Background(), &buf)
 	if err != nil {
 		t.Fatal(err)
 	}

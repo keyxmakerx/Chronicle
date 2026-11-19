@@ -1,6 +1,7 @@
 package campaigns
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -111,6 +112,9 @@ func RequireCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 			if err != nil {
 				return err
 			}
+			if handled, err := refuseDuringGuestPreview(c, cc); handled {
+				return err
+			}
 
 			if isWriteMethod(c.Request().Method) && cc.Campaign.IsArchived() {
 				return apperror.NewForbidden("campaign is archived and read-only")
@@ -138,6 +142,9 @@ func RequireCampaignAccessEvenIfArchived(service CampaignService) echo.Middlewar
 		return func(c *echo.Context) error {
 			cc, err := resolveCampaignContext(c, service)
 			if err != nil {
+				return err
+			}
+			if handled, err := refuseDuringGuestPreview(c, cc); handled {
 				return err
 			}
 
@@ -224,6 +231,18 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 				// VisibilityRole(). Site admins are unaffected — they take the
 				// IsSiteAdmin branch above and never rely on a grant.
 				cc.IsDmGranted = cc.IsMember && hasDmGrant(campaign, session.UserID)
+				// The guest preview (ADR-074): the DM team's own read of a
+				// public campaign runs as a visitor, once, here, so every
+				// handler downstream takes exactly the path a visitor takes
+				// instead of each guessing at it. This can only lower
+				// privileges and only for a real owner/co-DM sending their own
+				// cookie; Preview and the Previewer fields it sets draw the
+				// preview's chrome and grant nothing. The user id stays on the
+				// session, so a grant made to the owner's own account on a
+				// page would still match where a signed-out visitor's would not.
+				if guestPreviewActive(c, cc) {
+					cc = cc.GuestPreviewContext()
+				}
 				c.Set(contextKeyCampaign, cc)
 				return next(c)
 			}
@@ -249,7 +268,11 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 // knows about them; test doubles of CampaignService don't, and admit no one.
 // A failed read admits no one either, rather than failing the page.
 func visitPassOf(c *echo.Context, service CampaignService, campaignID, userID string) (until time.Time, live, found bool) {
-	v, ok := service.(VisitPasses)
+	// Only the read is asked for: the campaign service answers VisitPass but
+	// not the rest of VisitPasses, and asking for all of it admits no one.
+	v, ok := service.(interface {
+		VisitPass(ctx context.Context, campaignID, userID string) (time.Time, bool, bool, error)
+	})
 	if !ok {
 		return time.Time{}, false, false
 	}
@@ -338,6 +361,19 @@ func RequireCapability(check func(*CampaignContext) bool, denyMsg string) echo.M
 			return next(c)
 		}
 	}
+}
+
+// MemberHome returns the id and name of the campaign a failed request was
+// inside, for an error page's way back to its home. It answers only when the
+// campaign middleware had already put a context on the request and the viewer
+// is a member of it, so a hidden page's 404 says nothing about the campaign
+// around it. ok is false everywhere else.
+func MemberHome(c *echo.Context) (id, name string, ok bool) {
+	cc := GetCampaignContext(c)
+	if cc == nil || cc.Campaign == nil || !cc.IsMember || cc.Campaign.ID == "" {
+		return "", "", false
+	}
+	return cc.Campaign.ID, cc.Campaign.Name, true
 }
 
 // GetCampaignContext retrieves the campaign context from the Echo context.

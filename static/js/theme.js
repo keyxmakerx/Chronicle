@@ -143,6 +143,25 @@
   };
 
   /**
+   * A duration token as a number of milliseconds, for scripted animations:
+   * motionMs('--dur-everyday', 120). Reads the custom property from <html>
+   * (or el) at the moment of the move so the owner's Motion speed applies,
+   * accepts "120ms" and "0.12s", and returns fallback when the token is
+   * missing or not a duration.
+   */
+  window.Chronicle.motionMs = function (name, fallback, el) {
+    try {
+      var v = window.getComputedStyle(el || document.documentElement).getPropertyValue(name).trim();
+      var m = /^(-?[\d.]+)(ms|s)$/.exec(v);
+      if (m) {
+        var n = parseFloat(m[1]) * (m[2] === 's' ? 1000 : 1);
+        if (isFinite(n)) return n;
+      }
+    } catch (e) { /* the fallback stands */ }
+    return fallback;
+  };
+
+  /**
    * True when moves should not travel: the device asks for reduced motion,
    * or the page is Calm or Off (html[data-motion], or the older nav-rm and
    * data-view-motion flags the first-paint script and syncMotion also set).
@@ -283,4 +302,222 @@
   ask.close = function (box) { hide(box, false); };
 
   C.askSlip = ask;
+
+  // --- Pop-up layers and the shared modal helper -------------------------
+  (function () {
+    /**
+     * layerHost: where a floating layer (toast, sheet, password check) must be
+     * mounted to be usable. Everything outside an open modal <dialog> is inert,
+     * so a layer raised while one is open goes inside the topmost.
+     */
+    C.layerHost = function () {
+      var open = document.querySelectorAll('dialog[open]');
+      for (var i = open.length - 1; i >= 0; i--) {
+        if (open[i].matches(':modal')) return open[i];
+      }
+      return document.body;
+    };
+
+    var FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
+    var MKEY = '_chronicleModal';
+    var stack = [];
+
+    function shown(el) {
+      if (!el.isConnected || el.hidden || el.classList.contains('hidden')) return false;
+      return el.getClientRects().length > 0;
+    }
+
+    function focusables(el) {
+      var out = [];
+      var all = el.querySelectorAll(FOCUSABLE);
+      for (var i = 0; i < all.length; i++) {
+        var n = all[i];
+        if (n.closest('[hidden],[inert]') || n.getClientRects().length === 0) continue;
+        if (getComputedStyle(n).visibility === 'hidden') continue;
+        out.push(n);
+      }
+      return out;
+    }
+
+    // Drops pop-ups that were removed or hidden by something that never told us.
+    function purge() {
+      while (stack.length && !shown(stack[stack.length - 1].el)) stack[stack.length - 1].release(false);
+    }
+
+    function onKey(e) {
+      purge();
+      var m = stack[stack.length - 1];
+      if (!m) return;
+      if (e.key === 'Escape') {
+        if (m.opts.escape === false || e.defaultPrevented) return;
+        e.preventDefault();
+        m.close();
+      } else if (e.key === 'Tab') {
+        var f = focusables(m.el);
+        if (!f.length) { e.preventDefault(); return; }
+        var a = document.activeElement;
+        if (!m.el.contains(a)) {
+          // A layer the pop-up opened, living elsewhere in the page, keeps its own Tab.
+          if (m.opts.allow && a && a.closest && a.closest(m.opts.allow)) return;
+          e.preventDefault(); f[e.shiftKey ? f.length - 1 : 0].focus();
+        }
+        else if (e.shiftKey && a === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && a === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+      }
+    }
+
+    /**
+     * Chronicle.modal(el, {opener, onClose, escape, focus}): treat a shown pop-up
+     * as a modal. Gives it role="dialog" and aria-modal when missing, moves focus
+     * in ([autofocus], else the first control), keeps Tab and Shift+Tab inside,
+     * closes on Escape (not when something already handled the key) and puts
+     * focus back on the opener when it closes, whoever closes it. onClose runs
+     * only when the helper closes it (Escape or close()); without one the helper
+     * hides the pop-up with the "hidden" class. escape:false leaves Escape to the
+     * pop-up's own guarded close; focus:false leaves the opening focus to it;
+     * opener:null skips returning focus; watch names an ancestor whose hiding
+     * also ends the modal; aria:false leaves the roles to markup that has them;
+     * allow is a selector for a layer opened from the pop-up that lives outside
+     * it and keeps its own Tab.
+     * Returns {close}. Calling it again on a managed pop-up returns the same one.
+     */
+    C.modal = function (el, opts) {
+      if (!el) return { close: function () {} };
+      purge();
+      if (el[MKEY]) return el[MKEY].handle;
+      opts = opts || {};
+      var opener = ('opener' in opts) ? opts.opener : document.activeElement;
+      if (opts.aria !== false) {
+        if (!el.hasAttribute('role')) el.setAttribute('role', 'dialog');
+        if (!el.hasAttribute('aria-modal')) el.setAttribute('aria-modal', 'true');
+      }
+      var obs = null;
+      var m = { el: el, opts: opts };
+      m.release = function (restore) {
+        var at = stack.indexOf(m);
+        if (at < 0) return;
+        stack.splice(at, 1);
+        if (!stack.length) document.removeEventListener('keydown', onKey);
+        if (obs) obs.disconnect();
+        delete el[MKEY];
+        if (restore !== false && opener && opener.isConnected && opener.focus) opener.focus();
+      };
+      m.close = function () {
+        if (stack.indexOf(m) < 0) return;
+        if (typeof opts.onClose === 'function') opts.onClose();
+        else el.classList.add('hidden');
+        m.release(true);
+      };
+      m.handle = { close: m.close };
+      el[MKEY] = m;
+      if (!stack.length) document.addEventListener('keydown', onKey);
+      stack.push(m);
+      // The owner hiding it (a Cancel button, a save) ends the modal too.
+      if (window.MutationObserver) {
+        obs = new MutationObserver(function () { if (!shown(el)) m.release(true); });
+        var seen = { attributes: true, attributeFilter: ['class', 'hidden', 'style'] };
+        obs.observe(el, seen);
+        // A pop-up shown by an ancestor (a reader around its sheet) names it.
+        if (opts.watch && opts.watch !== el) obs.observe(opts.watch, seen);
+      }
+      if (opts.focus !== false) {
+        var f = el.querySelector('[autofocus]') || focusables(el)[0];
+        if (f) f.focus();
+        else { if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1'); el.focus(); }
+      }
+      return m.handle;
+    };
+
+    // A button with data-opens="<id>" shows that pop-up and opens it as a modal.
+    // Inline on* handlers can't be written from Go (templ refuses them), so the
+    // app openings' create buttons name their pop-up here instead.
+    // data-opener-global="<name>" records the button on window for pop-ups
+    // that return focus themselves (the calendar wizard, loaded by htmx).
+    document.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest && e.target.closest('[data-opens],[data-opener-global]');
+      if (!b) return;
+      var g = b.getAttribute('data-opener-global');
+      if (g) window[g] = b;
+      var id = b.getAttribute('data-opens');
+      var target = id && document.getElementById(id);
+      if (!target) return;
+      target.classList.remove('hidden');
+      target.hidden = false;
+      C.modal(target, { opener: b });
+    });
+  })();
+
+  /**
+   * Working state for a button (ui-standard.md, "Waiting and feedback"): a
+   * spinner after 0.3 s, an optional "…ing" label from data-working-label,
+   * and no second press while it runs. An htmx request started by a button,
+   * or by the form it submits, sets and clears it on its own; other code
+   * calls Chronicle.working(button, true) and (button, false).
+   */
+  var working = function (btn, on) {
+    if (!btn || !btn.setAttribute) return;
+    if (on) {
+      if (btn.hasAttribute('data-working')) return;
+      btn.setAttribute('data-working', '');
+      btn.setAttribute('aria-busy', 'true');
+      var label = btn.getAttribute('data-working-label');
+      if (label) { btn._label = btn.textContent; btn.textContent = label; }
+    } else {
+      if (!btn.hasAttribute('data-working')) return;
+      btn.removeAttribute('data-working');
+      btn.removeAttribute('aria-busy');
+      if (btn._label != null) { btn.textContent = btn._label; btn._label = null; }
+    }
+  };
+  C.working = working;
+
+  /**
+   * Put a fixed menu beside the caret and inside the window: under the caret
+   * when a full-height menu fits there, above it when it does not, and 8px
+   * clear of the window's sides. On a phone the window is what the keyboard
+   * leaves showing (visualViewport).
+   *
+   * The side is chosen for the menu's full height (its CSS max-height, read
+   * once), so it doesn't jump as a filter shortens the list.
+   *
+   * @param {HTMLElement} menuEl - the menu; position:fixed.
+   * @param {Object} caretRect - {left, top, bottom} of the caret, in viewport px.
+   */
+  C.placeAtCaret = function (menuEl, caretRect) {
+    if (!menuEl || !caretRect) return;
+    var GAP = 4, EDGE = 8, MIN = 96;
+    if (menuEl._placeCap == null) {
+      var cs = window.getComputedStyle ? window.getComputedStyle(menuEl) : null;
+      menuEl._placeCap = (cs && parseFloat(cs.maxHeight)) || 300;
+    }
+    var cap = menuEl._placeCap;
+    var vv = window.visualViewport;
+    var winTop = vv ? vv.offsetTop : 0;
+    var winLeft = vv ? vv.offsetLeft : 0;
+    var winH = vv ? vv.height : window.innerHeight;
+    var winW = vv ? vv.width : window.innerWidth;
+    var roomBelow = winTop + winH - EDGE - (caretRect.bottom + GAP);
+    var roomAbove = caretRect.top - GAP - (winTop + EDGE);
+    var below = roomBelow >= cap || roomBelow >= roomAbove;
+    menuEl.style.maxHeight = Math.max(MIN, Math.min(cap, below ? roomBelow : roomAbove)) + 'px';
+    menuEl.style.top = (below ? caretRect.bottom + GAP : caretRect.top - GAP - menuEl.offsetHeight) + 'px';
+    var maxLeft = winLeft + winW - menuEl.offsetWidth - EDGE;
+    menuEl.style.left = Math.max(winLeft + EDGE, Math.min(caretRect.left, maxLeft)) + 'px';
+  };
+
+  function requestButton(e) {
+    var d = e.detail || {}, el = d.elt;
+    if (!el || !el.matches) return null;
+    if (el.matches('.btn')) return el;
+    var sub = d.requestConfig && d.requestConfig.triggeringEvent && d.requestConfig.triggeringEvent.submitter;
+    if (sub && sub.matches && sub.matches('.btn')) return sub;
+    return el.tagName === 'FORM' ? el.querySelector('[type="submit"].btn') : null;
+  }
+  document.addEventListener('htmx:beforeRequest', function (e) { working(requestButton(e), true); });
+  document.addEventListener('htmx:afterRequest', function (e) { working(requestButton(e), false); });
+  // A button that is working can't be pressed again, even by keyboard.
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('.btn[data-working]');
+    if (b) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
 })();

@@ -20,14 +20,40 @@ type Service interface {
 	Remove(ctx context.Context, campaignID, id string, v Viewer) error
 }
 
+// Notifier is told after a layer is put on or taken off a page, so the
+// Foundry module can redraw that hero's effects. It is told only after the
+// change is stored.
+type Notifier interface {
+	LayersChanged(campaignID, entityID string)
+}
+
+// Option configures the service.
+type Option func(*service)
+
+// WithNotifier sets who is told when a page's layers change.
+func WithNotifier(n Notifier) Option {
+	return func(s *service) { s.notify = n }
+}
+
 type service struct {
-	repo  Repository
-	pages PageDirectory
+	repo   Repository
+	pages  PageDirectory
+	notify Notifier
 }
 
 // NewService builds the service.
-func NewService(repo Repository, pages PageDirectory) Service {
-	return &service{repo: repo, pages: pages}
+func NewService(repo Repository, pages PageDirectory, opts ...Option) Service {
+	s := &service{repo: repo, pages: pages}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+func (s *service) changed(campaignID, entityID string) {
+	if s.notify != nil {
+		s.notify.LayersChanged(campaignID, entityID)
+	}
 }
 
 // access decides the page exists in the campaign and the viewer may see it.
@@ -114,6 +140,7 @@ func (s *service) Add(ctx context.Context, campaignID, entityID string, v Viewer
 	if !ok {
 		return nil, errInvalid("a hero can have at most 20 layers; take one off first")
 	}
+	s.changed(campaignID, entityID)
 	stored, found, err := s.repo.Get(ctx, campaignID, r.ID)
 	if err != nil || !found {
 		return nil, apperrorInternal(err)
@@ -149,5 +176,6 @@ func (s *service) Remove(ctx context.Context, campaignID, id string, v Viewer) e
 		return errNotFound("layer")
 	}
 	slog.Info("layer taken off", slog.String("campaign_id", campaignID), slog.String("entity_id", r.EntityID), slog.String("layer_id", id))
+	s.changed(campaignID, r.EntityID)
 	return nil
 }

@@ -21,16 +21,16 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
-// sanitizeRedirect returns raw only if it is a safe same-site path. Anything
+// SameSitePath returns raw only if it is a safe same-site path. Anything
 // else becomes "" so the caller falls back to a default. Control characters
 // and backslashes are rejected outright because browsers strip tabs and
 // newlines and treat "\" as "/", turning "/\t/evil.example" into the
-// protocol-relative "//evil.example".
-func sanitizeRedirect(raw string) string {
-	if raw == "" || !strings.HasPrefix(raw, "/") {
-		return ""
-	}
-	if strings.HasPrefix(raw, "//") {
+// protocol-relative "//evil.example". Other plugins use it for the "return
+// here" fields of their own forms.
+func SameSitePath(raw string) string {
+	// One leading "/", and never "/" or "\" after it: either makes the
+	// browser read what follows as another host.
+	if len(raw) == 0 || raw[0] != '/' || (len(raw) > 1 && (raw[1] == '/' || raw[1] == '\\')) {
 		return ""
 	}
 	for i := 0; i < len(raw); i++ {
@@ -40,6 +40,21 @@ func sanitizeRedirect(raw string) string {
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "" || u.Host != "" {
+		return ""
+	}
+	return raw
+}
+
+// sanitizeRedirect is SameSitePath for the login redirect, which also refuses
+// the join page with no code in hand: it is not somewhere to come back to,
+// since someone who signs in from the code tab means to sign in, and landing
+// on "Join a campaign" afterwards reads as a code being demanded.
+func sanitizeRedirect(raw string) string {
+	raw = SameSitePath(raw)
+	if raw == "" {
+		return ""
+	}
+	if u, err := url.Parse(raw); err == nil && u.Path == joinHref && u.Query().Get("code") == "" {
 		return ""
 	}
 	return raw
@@ -127,7 +142,7 @@ func (h *Handler) LoginForm(c *echo.Context) error {
 	// the query param does not survive the HTMX form POST.
 	redirect := sanitizeRedirect(c.QueryParam("redirect"))
 
-	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", errMsg, successMsg, redirect, h.service.LoginOptions(c.Request().Context())))
+	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", errMsg, successMsg, redirect, h.service.LoginOptions(c.Request().Context()), h.invitationForRedirect(c, redirect)))
 }
 
 // Login processes the login form submission (POST /login).
@@ -177,7 +192,7 @@ func (h *Handler) Login(c *echo.Context) error {
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, LoginForm_(csrfToken, req.Email, errMsg, redirect))
 		}
-		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, "", redirect, h.service.LoginOptions(c.Request().Context())))
+		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, "", redirect, h.service.LoginOptions(c.Request().Context()), nil))
 	}
 
 	// Log successful login as a security event.
@@ -279,7 +294,7 @@ func clearOIDCStateCookie(c *echo.Context) {
 // loginError shows the sign-in page with a message, for provider failures.
 func (h *Handler) loginError(c *echo.Context, msg string) error {
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", msg, "", "", h.service.LoginOptions(c.Request().Context())))
+	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", msg, "", "", h.service.LoginOptions(c.Request().Context()), nil))
 }
 
 // LoginOIDC sends the browser to the provider (GET /login/oidc).
@@ -402,7 +417,7 @@ func (h *Handler) RegisterForm(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, nil, "", redirect, !allowed, mode))
+	return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, nil, "", redirect, !allowed, mode, h.invitationForRedirect(c, redirect)))
 }
 
 // Register processes the registration form submission (POST /register).
@@ -423,7 +438,7 @@ func (h *Handler) Register(c *echo.Context) error {
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, RegisterFormComponent(csrfToken, &req, validationErr, redirect))
 		}
-		return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, validationErr, redirect, false, ""))
+		return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, validationErr, redirect, false, "", nil))
 	}
 
 	input := RegisterInput{
@@ -445,14 +460,14 @@ func (h *Handler) Register(c *echo.Context) error {
 			if middleware.IsHTMX(c) {
 				return middleware.Render(c, http.StatusOK, registrationGatedPanel(mode, redirect))
 			}
-			return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, "", redirect, true, mode))
+			return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, "", redirect, true, mode, nil))
 		}
 
 		errMsg := apperror.UserMessage(err, "registration failed")
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, RegisterFormComponent(csrfToken, &req, errMsg, redirect))
 		}
-		return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, errMsg, redirect, false, ""))
+		return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, errMsg, redirect, false, "", nil))
 	}
 
 	// Auto-login after successful registration.

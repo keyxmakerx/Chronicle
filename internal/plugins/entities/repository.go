@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -906,10 +905,14 @@ type EntityRepository interface {
 	// Deletes existing aliases and inserts new ones in a single transaction.
 	SetAliases(ctx context.Context, entityID string, aliases []string) error
 
-	// FindAllMentionLinks returns all @mention references across a campaign by
-	// scanning entry_html for data-mention-id attributes. Each result is a
-	// source→target pair. Used by the graph visualization to show mention edges.
-	FindAllMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error)
+	// FindMentionSources returns the pages of a campaign the viewer may see
+	// whose text carries an @mention, with that text.
+	FindMentionSources(ctx context.Context, campaignID string, role int, userID string) ([]MentionSource, error)
+
+	// FindMentionPages returns, of the given ids, the pages of this campaign
+	// the viewer may see, as a graph draws them. An id of another campaign, of
+	// a page in the trash or of a page hidden from the viewer is left out.
+	FindMentionPages(ctx context.Context, campaignID string, ids []string, role int, userID string) (map[string]MentionPage, error)
 
 	// UpdatePrivate sets an entity's is_private flag. Used by the NPC reveal toggle.
 	UpdatePrivate(ctx context.Context, entityID string, isPrivate bool) error
@@ -1782,6 +1785,38 @@ func (r *entityRepository) UpdateMapID(ctx context.Context, entityID string, map
 	return nil
 }
 
+// searchRank is the leading ORDER BY term of Search, with its arguments. It
+// puts the page a searcher most likely means first: the page named exactly
+// that, then names starting with the query, names with a word starting with
+// it, any other name match, an alias match, and last the pages that only
+// mention it in their text or label. Sorting by name alone put a page that
+// mentions "Thorne" in passing above the page called Thorne, and the first
+// row is the one Enter opens and the one a mention picks.
+//
+// fulltext says the name was matched with MATCH (queries of four or more
+// characters): a several-word query matches a name word by word there, which
+// no LIKE below catches, so that match gets a rank of its own.
+func searchRank(query string, fulltext bool) (string, []any) {
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	expr := `CASE
+	            WHEN e.name = ? THEN 0
+	            WHEN e.name LIKE ? THEN 1
+	            WHEN e.name LIKE ? THEN 2
+	            WHEN e.name LIKE ? THEN 3`
+	args := []any{query, escaped + "%", "% " + escaped + "%", "%" + escaped + "%"}
+	if fulltext {
+		expr += `
+	            WHEN MATCH(e.name) AGAINST(? IN BOOLEAN MODE) THEN 4`
+		args = append(args, stripFTOperators(query)+"*")
+	}
+	expr += `
+	            WHEN EXISTS (SELECT 1 FROM entity_aliases ra WHERE ra.entity_id = e.id AND ra.alias LIKE ?) THEN 5
+	            ELSE 6
+	          END ASC`
+	args = append(args, "%"+escaped+"%")
+	return expr, args
+}
+
 // Search performs a text search on entities with visibility filtering.
 // Matches against name (FULLTEXT), aliases (LIKE), entry/field content
 // (FULLTEXT on search_text), and type label (LIKE).
@@ -1793,7 +1828,8 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	// FULLTEXT for longer queries, LIKE for short ones.
 	var nameCondition, contentCondition string
 	var nameArg, contentArg string
-	if len(query) >= 4 {
+	fulltext := len(query) >= 4
+	if fulltext {
 		cleaned := stripFTOperators(query)
 		nameCondition = "MATCH(e.name) AGAINST(? IN BOOLEAN MODE)"
 		nameArg = cleaned + "*"
@@ -1838,17 +1874,19 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 		return nil, 0, fmt.Errorf("counting search results: %w", err)
 	}
 
-	// Fetch page. `e.id` breaks name ties so the sort is a total order —
-	// entity names are not unique, and OFFSET paging over a partial order
-	// silently duplicates and skips rows (see ListOptions.OrderByClause).
+	// Fetch page, best match first. `e.id` breaks ties so the sort is a
+	// total order — entity names are not unique, and OFFSET paging over a
+	// partial order silently duplicates and skips rows (see
+	// ListOptions.OrderByClause).
+	rank, rankArgs := searchRank(query, fulltext)
 	selectQuery := fmt.Sprintf(`SELECT `+entitySelectColumns+`
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          %s
-	          ORDER BY e.name ASC, e.id ASC
-	          LIMIT ? OFFSET ?`, where)
+	          ORDER BY %s, e.name ASC, e.id ASC
+	          LIMIT ? OFFSET ?`, where, rank)
 
-	pageArgs := append(args, opts.PerPage, opts.Offset())
+	pageArgs := append(append(append([]any{}, args...), rankArgs...), opts.PerPage, opts.Offset())
 	rows, err := r.db.QueryContext(ctx, selectQuery, pageArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("searching entities: %w", err)
@@ -2174,7 +2212,7 @@ func (r *entityRepository) UpdateEntityType(ctx context.Context, entityID string
 // a lookup for an entity id matches every campaign's entry_html, and an
 // Owner-role viewer (empty visibilityFilter fragment) would collect other
 // campaigns' private entities too. Same scoping FilterViewableEntityIDs /
-// FindAllMentionLinks apply.
+// FindMentionSources / FindMentionPages apply.
 func backlinksWhere(campaignID, entityID string, role int, userID string) (string, []any) {
 	where := `WHERE e.campaign_id = ? AND e.entry_html LIKE ? AND e.id != ?`
 	escaped := strings.NewReplacer("%", `\%`, "_", `\_`).Replace(entityID)
@@ -2612,13 +2650,10 @@ func (r *entityRepository) SetAliases(ctx context.Context, entityID string, alia
 	return tx.Commit()
 }
 
-// mentionIDPattern matches data-mention-id="<uuid>" attributes in entry_html.
-var mentionIDPattern = regexp.MustCompile(`data-mention-id="([a-f0-9-]+)"`)
-
-// FindAllMentionLinks scans all entities in a campaign for @mention references
-// in their entry_html and returns source→target pairs. Respects visibility
-// filtering so players only see links from/to entities they can access.
-func (r *entityRepository) FindAllMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error) {
+// FindMentionSources returns the pages of a campaign whose entry_html carries
+// an @mention, with that text. Respects visibility filtering, so a viewer only
+// gets pages they can open.
+func (r *entityRepository) FindMentionSources(ctx context.Context, campaignID string, role int, userID string) ([]MentionSource, error) {
 	where := `WHERE e.campaign_id = ? AND e.entry_html LIKE '%data-mention-id=%'`
 	args := []any{campaignID}
 
@@ -2630,38 +2665,79 @@ func (r *entityRepository) FindAllMentionLinks(ctx context.Context, campaignID s
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("finding mention links: %w", err)
+		return nil, fmt.Errorf("finding mention sources: %w", err)
 	}
 	defer rows.Close()
 
-	var links []MentionLink
+	var sources []MentionSource
 	for rows.Next() {
-		var sourceID string
+		var src MentionSource
 		var entryHTML *string
-		if err := rows.Scan(&sourceID, &entryHTML); err != nil {
-			return nil, fmt.Errorf("scanning mention row: %w", err)
+		if err := rows.Scan(&src.ID, &entryHTML); err != nil {
+			return nil, fmt.Errorf("scanning mention source: %w", err)
 		}
 		if entryHTML == nil {
 			continue
 		}
+		src.EntryHTML = *entryHTML
+		sources = append(sources, src)
+	}
+	return sources, rows.Err()
+}
 
-		// Extract all mention target IDs from the HTML.
-		matches := mentionIDPattern.FindAllStringSubmatch(*entryHTML, -1)
-		seen := make(map[string]bool)
-		for _, match := range matches {
-			targetID := match[1]
-			// Skip self-mentions and dedup within same entity.
-			if targetID == sourceID || seen[targetID] {
-				continue
-			}
-			seen[targetID] = true
-			links = append(links, MentionLink{
-				SourceEntityID: sourceID,
-				TargetEntityID: targetID,
-			})
+// mentionPagesChunk bounds one lookup's IN list, so a campaign with a great
+// many linked pages never builds a statement the server refuses.
+const mentionPagesChunk = 1000
+
+// FindMentionPages returns, of the given ids, the pages of this campaign the
+// viewer may see, with their category's name, icon and colour.
+//
+// SECURITY-SENSITIVE: a mention id is whatever a page's text carries, so it
+// can name a page of another campaign, a page in the trash or a page hidden
+// from the viewer. The campaign term and visibilityFilter are what keep such
+// a page's name from being returned.
+func (r *entityRepository) FindMentionPages(ctx context.Context, campaignID string, ids []string, role int, userID string) (map[string]MentionPage, error) {
+	pages := make(map[string]MentionPage, len(ids))
+	for start := 0; start < len(ids); start += mentionPagesChunk {
+		chunk := ids[start:min(start+mentionPagesChunk, len(ids))]
+
+		placeholders := make([]string, len(chunk))
+		args := []any{campaignID}
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+		query := `SELECT e.id, e.name, e.slug, COALESCE(et.name, ''), COALESCE(et.icon, 'fa-file'), COALESCE(et.color, '#6b7280')
+		          FROM entities e
+		          LEFT JOIN entity_types et ON et.id = e.entity_type_id
+		          WHERE e.campaign_id = ? AND e.id IN (` + strings.Join(placeholders, ", ") + `)`
+		visFilter, visArgs := visibilityFilter(role, userID)
+		query += visFilter
+		args = append(args, visArgs...)
+
+		if err := r.scanMentionPages(ctx, query, args, pages); err != nil {
+			return nil, err
 		}
 	}
-	return links, rows.Err()
+	return pages, nil
+}
+
+// scanMentionPages runs one FindMentionPages lookup and adds its rows to pages.
+func (r *entityRepository) scanMentionPages(ctx context.Context, query string, args []any, pages map[string]MentionPage) error {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("finding mention pages: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p MentionPage
+		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.TypeName, &p.TypeIcon, &p.TypeColor); err != nil {
+			return fmt.Errorf("scanning mention page: %w", err)
+		}
+		pages[p.ID] = p
+	}
+	return rows.Err()
 }
 
 // ReassignOwner moves a guest's characters in one campaign to the account
@@ -2684,4 +2760,82 @@ func (r *entityRepository) ClearOwnerForUser(ctx context.Context, userID string)
 		return 0, fmt.Errorf("clearing entity owners: %w", err)
 	}
 	return res.RowsAffected()
+}
+
+// ReleaseOwned clears the user's claim on every page they hold in one
+// campaign and marks each playable, so it joins "Free to pick" for the owner
+// to hand on. It returns the names of the live ones; a trashed character is
+// released too, so restoring it later does not bring back a claim held by
+// someone who has gone. The pages are read and written in one transaction so
+// a claim made in between is not lost.
+func (r *entityRepository) ReleaseOwned(ctx context.Context, campaignID, userID string) ([]string, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("starting release: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT name, deleted_at IS NULL FROM entities
+		 WHERE campaign_id = ? AND owner_user_id = ? ORDER BY name FOR UPDATE`, campaignID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing claimed pages: %w", err)
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		var live bool
+		if err := rows.Scan(&name, &live); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scanning claimed page: %w", err)
+		}
+		if live {
+			names = append(names, name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE entities SET owner_user_id = NULL, playable = 1, updated_at = NOW()
+		 WHERE campaign_id = ? AND owner_user_id = ?`, campaignID, userID); err != nil {
+		return nil, fmt.Errorf("releasing claimed pages: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("committing release: %w", err)
+	}
+	return names, nil
+}
+
+// ClaimedNames names the live pages the user holds in each of the given
+// campaigns, in name order, for the Leave box's "who goes back to the table".
+func (r *entityRepository) ClaimedNames(ctx context.Context, userID string, campaignIDs []string) (map[string][]string, error) {
+	out := map[string][]string{}
+	if len(campaignIDs) == 0 {
+		return out, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(campaignIDs)), ",")
+	args := []any{userID}
+	for _, id := range campaignIDs {
+		args = append(args, id)
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT campaign_id, name FROM entities
+		 WHERE owner_user_id = ? AND deleted_at IS NULL AND campaign_id IN (`+marks+`)
+		 ORDER BY name`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing claimed names: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, name string
+		if err := rows.Scan(&cid, &name); err != nil {
+			return nil, fmt.Errorf("scanning claimed name: %w", err)
+		}
+		out[cid] = append(out[cid], name)
+	}
+	return out, rows.Err()
 }

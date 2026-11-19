@@ -22,7 +22,7 @@ func TestBlockImage_ChangeChip(t *testing.T) {
 	}{
 		{"scribe with picture sees the chip", campaigns.RoleScribe, &path, true, false},
 		{"player with picture sees none", campaigns.RolePlayer, &path, false, false},
-		{"scribe without picture sees Add Image", campaigns.RoleScribe, nil, false, true},
+		{"scribe without picture sees Add image", campaigns.RoleScribe, nil, false, true},
 		{"player without picture sees none", campaigns.RolePlayer, nil, false, false},
 	}
 	for _, tt := range tests {
@@ -36,8 +36,8 @@ func TestBlockImage_ChangeChip(t *testing.T) {
 			if got := strings.Contains(out, "data-pick"); got != tt.wantChip {
 				t.Errorf("chip present = %v, want %v\n%s", got, tt.wantChip, out)
 			}
-			if got := strings.Contains(out, "Add Image"); got != tt.wantAdd {
-				t.Errorf("Add Image present = %v, want %v", got, tt.wantAdd)
+			if got := strings.Contains(out, "Add image"); got != tt.wantAdd {
+				t.Errorf("Add image present = %v, want %v", got, tt.wantAdd)
 			}
 			if strings.Contains(out, "group-hover") {
 				t.Error("the upload control must not be hover-only")

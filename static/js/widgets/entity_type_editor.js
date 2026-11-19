@@ -13,6 +13,8 @@
  *   data-icon            -- Current icon class
  *   data-color           -- Current color hex
  *   data-fields          -- JSON array of field definitions
+ *   data-draft           -- with data-fields-only: write the fields into the
+ *                           Customizer's draft (no Save button here)
  */
 (function () {
   'use strict';
@@ -152,7 +154,7 @@
       addFieldBtn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Add Field';
       addFieldBtn.addEventListener('click', function () {
         fields.push({ key: '', label: '', type: 'text', section: 'Basics', options: [] });
-        renderFields();
+        rerender();
       });
       fieldsHeader.appendChild(addFieldBtn);
       fieldsSection.appendChild(fieldsHeader);
@@ -161,6 +163,31 @@
       fieldsList.className = 'space-y-2';
       fieldsSection.appendChild(fieldsList);
       el.appendChild(fieldsSection);
+
+      // In draft mode (data-draft) the editor has no Save button: what is
+      // edited goes into the Customizer's draft and saves with the rest.
+      var inDraft = el.getAttribute('data-draft') === 'true' && fieldsOnly;
+      var typeId = el.getAttribute('data-entity-type-id') || '';
+      var savedKey = '';
+      function complete() { return fields.filter(function (f) { return f.key && f.label; }); }
+      // snapshot records the saved fields as the editor shows them (the
+      // render fills in empty countdown lists), then lays the draft's over.
+      function snapshot() {
+        if (!inDraft) return;
+        savedKey = JSON.stringify(complete());
+        var d = Chronicle.customizeDraft ? Chronicle.customizeDraft() : null;
+        var it = d && d.categories && d.categories.items && d.categories.items[typeId];
+        if (it && Array.isArray(it.fields)) {
+          fields = JSON.parse(JSON.stringify(it.fields));
+          renderFields();
+        }
+      }
+      function changed(step) {
+        if (!inDraft || !Chronicle.customizeCategoryWrite) return;
+        var now = complete();
+        Chronicle.customizeCategoryWrite(typeId, { fields: JSON.stringify(now) === savedKey ? undefined : now }, step ? { step: true } : undefined);
+      }
+      function rerender() { renderFields(); changed(true); }
 
       function renderFields() {
         fieldsList.innerHTML = '';
@@ -186,6 +213,7 @@
             fields[idx].label = this.value;
             // Auto-generate key from label.
             fields[idx].key = this.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+            changed();
           });
           row.appendChild(labelInput);
 
@@ -206,7 +234,7 @@
           typeSelect.addEventListener('change', function () {
             fields[idx].type = this.value;
             // A calendar date has settings of its own, shown under its row.
-            renderFields();
+            rerender();
           });
           row.appendChild(typeSelect);
 
@@ -218,6 +246,7 @@
           sectionInput.className = 'input text-xs py-1 w-20';
           sectionInput.addEventListener('input', function () {
             fields[idx].section = this.value;
+            changed();
           });
           row.appendChild(sectionInput);
 
@@ -232,7 +261,7 @@
               var temp = fields[idx];
               fields[idx] = fields[idx - 1];
               fields[idx - 1] = temp;
-              renderFields();
+              rerender();
             });
             row.appendChild(upBtn);
           }
@@ -248,7 +277,7 @@
               var temp = fields[idx];
               fields[idx] = fields[idx + 1];
               fields[idx + 1] = temp;
-              renderFields();
+              rerender();
             });
             row.appendChild(downBtn);
           }
@@ -261,7 +290,7 @@
           removeBtn.title = 'Remove field';
           removeBtn.addEventListener('click', function () {
             fields.splice(idx, 1);
-            renderFields();
+            rerender();
           });
           row.appendChild(removeBtn);
 
@@ -289,7 +318,7 @@
           var top = document.createElement('div');
           top.className = 'flex items-center gap-2';
           top.appendChild(text(cd.name, 'Countdown name, like Soul lingers', 'flex-1', function (v) { cd.name = v; }));
-          top.appendChild(iconBtn('fa-trash-can', 'Remove this countdown', function () { field.countdowns.splice(ci, 1); renderFields(); }));
+          top.appendChild(iconBtn('fa-trash-can', 'Remove this countdown', function () { field.countdowns.splice(ci, 1); rerender(); }));
           cdBox.appendChild(top);
           cd.lengths = cd.lengths && cd.lengths.length ? cd.lengths : [{ days: 3 }];
           cd.lengths.forEach(function (len, li) {
@@ -310,19 +339,19 @@
             days.value = len.days || '';
             days.className = 'input text-xs py-1 w-16';
             days.setAttribute('aria-label', 'Length in days');
-            days.addEventListener('input', function () { len.days = parseInt(this.value, 10) || 0; });
+            days.addEventListener('input', function () { len.days = parseInt(this.value, 10) || 0; changed(); });
             lr.appendChild(days);
             var dl = document.createElement('span');
             dl.textContent = 'days';
             lr.appendChild(dl);
-            if (li > 0) lr.appendChild(iconBtn('fa-xmark', 'Remove this length', function () { cd.lengths.splice(li, 1); renderFields(); }));
+            if (li > 0) lr.appendChild(iconBtn('fa-xmark', 'Remove this length', function () { cd.lengths.splice(li, 1); rerender(); }));
             cdBox.appendChild(lr);
           });
           var more = document.createElement('button');
           more.type = 'button';
           more.className = 'text-blue-600 dark:text-blue-400 hover:underline';
           more.textContent = 'Add another length';
-          more.addEventListener('click', function () { cd.lengths.push({ name: '', days: cd.lengths[0].days || 3 }); renderFields(); });
+          more.addEventListener('click', function () { cd.lengths.push({ name: '', days: cd.lengths[0].days || 3 }); rerender(); });
           cdBox.appendChild(more);
           cdBox.appendChild(check('Only the ' + Chronicle.gmTerm() + ' sees the countdown', !!cd.gm_only, function (v) { cd.gm_only = v; }));
           box.appendChild(cdBox);
@@ -331,7 +360,7 @@
         add.type = 'button';
         add.className = 'text-blue-600 dark:text-blue-400 hover:underline';
         add.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Add a countdown';
-        add.addEventListener('click', function () { field.countdowns.push({ name: '', lengths: [{ days: 3 }] }); renderFields(); });
+        add.addEventListener('click', function () { field.countdowns.push({ name: '', lengths: [{ days: 3 }] }); rerender(); });
         box.appendChild(add);
         var hint = document.createElement('p');
         hint.className = 'text-gray-500 dark:text-gray-400';
@@ -347,7 +376,7 @@
         c.type = 'checkbox';
         c.checked = on;
         c.className = 'h-4 w-4 rounded';
-        c.addEventListener('change', function () { set(this.checked); });
+        c.addEventListener('change', function () { set(this.checked); changed(true); });
         l.appendChild(c);
         l.appendChild(document.createTextNode(label));
         return l;
@@ -361,7 +390,7 @@
         i.maxLength = 60;
         i.className = 'input text-xs py-1 ' + cls;
         i.setAttribute('aria-label', placeholder);
-        i.addEventListener('input', function () { set(this.value); });
+        i.addEventListener('input', function () { set(this.value); changed(); });
         return i;
       }
 
@@ -377,6 +406,7 @@
       }
 
       renderFields();
+      snapshot();
 
       // Save button row.
       var saveRow = document.createElement('div');
@@ -385,7 +415,7 @@
       var saveBtn = document.createElement('button');
       saveBtn.type = 'button';
       saveBtn.className = 'btn-primary text-sm';
-      saveBtn.textContent = 'Save Changes';
+      saveBtn.textContent = 'Save changes';
 
       var statusSpan = document.createElement('span');
       statusSpan.className = 'text-xs text-gray-500 dark:text-gray-400';
@@ -459,7 +489,7 @@
 
       saveRow.appendChild(saveBtn);
       saveRow.appendChild(statusSpan);
-      el.appendChild(saveRow);
+      if (!inDraft) el.appendChild(saveRow);
 
       // --- Helpers ---
 

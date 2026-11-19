@@ -1,8 +1,9 @@
 package systems
 
 // The campaign home's "House rules" block: the titles of the rulebook's
-// house-rules chapters, each opening to the chapter's one-line introduction,
-// with a link into the rulebook. The home lives in the campaigns plugin, which
+// house-rules chapters, each opening to the chapter's one-line introduction
+// and then the chapter's own page, torn out of the book in place (the reader
+// widget's leaf mode). The home lives in the campaigns plugin, which
 // may not read the rulebook, so its placeholder loads this fragment. What it
 // lists is the rulebook as the viewer reads it: a chapter, page or block the
 // Director marked Director-only is gone before the list is made.
@@ -27,7 +28,10 @@ const houseRulesShown = 6
 type houseRule struct {
 	Title string
 	Intro string
-	Href  string
+	// Href opens the full rulebook at this chapter; ChapterID is the chapter
+	// the leaf draws.
+	Href      string
+	ChapterID string
 }
 
 // houseRulesView is what the block draws.
@@ -38,12 +42,22 @@ type houseRulesView struct {
 	Rules []houseRule
 	// BookHref opens the rulebook.
 	BookHref string
+	// BookURL is the book JSON every leaf reads, one fetch shared by all of
+	// them. A Director viewing as a player asks for the player's book, so the
+	// leaves show what a player is given.
+	BookURL string
+	// CampaignID is the campaign the leaves' widgets mount in.
+	CampaignID string
 }
 
 // houseRulesFrom lists the house chapters of a book already filtered for its
 // viewer. base is the rulebook's address; a chapter links to its id under it.
-func houseRulesFrom(b *Book, base string) houseRulesView {
-	view := houseRulesView{BookHref: base}
+// asPlayer asks the leaves for the player's book.
+func houseRulesFrom(b *Book, base, campaignID string, asPlayer bool) houseRulesView {
+	view := houseRulesView{BookHref: base, BookURL: base + "/book", CampaignID: campaignID}
+	if asPlayer {
+		view.BookURL += "?view=player"
+	}
 	if b == nil {
 		return view
 	}
@@ -57,9 +71,10 @@ func houseRulesFrom(b *Book, base string) houseRulesView {
 				continue
 			}
 			view.Rules = append(view.Rules, houseRule{
-				Title: strings.TrimSpace(ch.Title),
-				Intro: strings.TrimSpace(ch.Intro),
-				Href:  base + "#" + url.PathEscape(ch.ID),
+				Title:     strings.TrimSpace(ch.Title),
+				Intro:     strings.TrimSpace(ch.Intro),
+				Href:      base + "#" + url.PathEscape(ch.ID),
+				ChapterID: ch.ID,
 			})
 		}
 	}
@@ -91,9 +106,10 @@ func (h *SystemHandler) HouseRulesBlock(c *echo.Context) error {
 		return c.HTML(http.StatusOK, "")
 	}
 	// The Director previewing as a player reads what a player reads.
-	director := bookViewerIsDirector(cc) && !campaigns.ViewingAsPlayer(c, cc)
+	asPlayer := campaigns.ViewingAsPlayer(c, cc)
+	director := bookViewerIsDirector(cc) && !asPlayer
 	base := "/campaigns/" + cc.Campaign.ID + "/systems/" + url.PathEscape(sysID)
-	view := houseRulesFrom(FilterBook(book, director), base)
+	view := houseRulesFrom(FilterBook(book, director), base, cc.Campaign.ID, asPlayer)
 	if len(view.Rules) == 0 {
 		return c.HTML(http.StatusOK, "")
 	}

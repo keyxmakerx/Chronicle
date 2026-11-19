@@ -5,6 +5,7 @@
 package armory
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -107,14 +108,14 @@ templ downtimeSwitch(v *StashesPageView, csrfToken string) {
 					name="open"
 					value="true"
 					aria-pressed={ fmt.Sprintf("%t", v.DowntimeOpen) }
-					class={ "px-3 py-1.5 text-sm", templ.KV("bg-accent text-white", v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", !v.DowntimeOpen) }
+					class={ "px-3 py-1.5 text-sm", templ.KV("bg-accent-fill text-on-accent", v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", !v.DowntimeOpen) }
 				>Open</button>
 				<button
 					type="submit"
 					name="open"
 					value="false"
 					aria-pressed={ fmt.Sprintf("%t", !v.DowntimeOpen) }
-					class={ "px-3 py-1.5 text-sm border-l border-border", templ.KV("bg-accent text-white", !v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", v.DowntimeOpen) }
+					class={ "px-3 py-1.5 text-sm border-l border-border", templ.KV("bg-accent-fill text-on-accent", !v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", v.DowntimeOpen) }
 				>Closed</button>
 			</div>
 		</div>
@@ -141,7 +142,7 @@ templ requestsPanel(v *StashesPageView, csrfToken string) {
 							</p>
 							<p class="text-xs text-fg-muted">
 								from { l.FromName } &middot;
-								<time datetime={ l.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ l.CreatedAt.Format("2 Jan 2006 15:04") }>{ moveAgo(l.CreatedAt) }</time>
+								<time datetime={ l.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ timeutil.FixedDate(l.CreatedAt, timeutil.DateWithTime) } data-date-title>{ moveAgo(l.CreatedAt) }</time>
 							</p>
 						</div>
 						<div class="flex items-center gap-2 shrink-0">

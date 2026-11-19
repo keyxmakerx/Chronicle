@@ -227,6 +227,8 @@ type authService struct {
 	// Guest codes (ConfigureGuests, OnGuestMerged); nil codes means guests
 	// can't join.
 	guestCodes    GuestCodes
+	// invitations is the door's campaign lookup (ConfigureInvitations).
+	invitations   InvitationSource
 	onGuestMerged []func(ctx context.Context, campaignID, guestID, targetID string) error
 }
 
@@ -437,8 +439,10 @@ const loginThrottleWindow = 15 * time.Minute
 
 // loginThrottleMaxDelay caps the progressive delay applied after exceeding
 // loginThrottleMax failures. The delay doubles each attempt (2s, 4s, 8s, ...)
-// but never exceeds this ceiling.
-const loginThrottleMaxDelay = 5 * time.Minute
+// but never exceeds this ceiling. The wait is keyed on the email alone, so
+// it has to stay short enough that a stranger's wrong guesses cannot hold
+// the real owner's sign-in past a proxy's timeout.
+const loginThrottleMaxDelay = 20 * time.Second
 
 // loginFailureKeyPrefix is the Redis key prefix for per-email failure counters.
 // Uses SHA-256 of the email to avoid storing plaintext emails in Redis.
@@ -542,7 +546,7 @@ func loginFailureKey(email string) string {
 // loginThrottleDelay returns the progressive delay to apply before processing
 // a login attempt for the given email. Returns 0 if the failure count is below
 // the threshold. After loginThrottleMax failures, delay doubles each attempt:
-// 2s, 4s, 8s, 16s, ... capped at loginThrottleMaxDelay (5 min).
+// 2s, 4s, 8s, 16s, ... capped at loginThrottleMaxDelay.
 // Fails open on Redis errors (logs warning, returns 0).
 func (s *authService) loginThrottleDelay(ctx context.Context, email string) time.Duration {
 	if s.redis == nil {
@@ -851,6 +855,9 @@ func (s *authService) DestroyAllUserSessions(ctx context.Context, userID string)
 	if s.redis == nil {
 		return 0, nil
 	}
+	// A remembered device skips the two-factor code, so it ends with the
+	// sessions it was remembered for.
+	s.forgetTrustedDevices(ctx, userID)
 
 	userSetKey := userSessionsKeyPrefix + userID
 	tokens, err := s.redis.SMembers(ctx, userSetKey).Result()
@@ -987,14 +994,19 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 		return apperror.NewInternal(fmt.Errorf("hashing new password: %w", err))
 	}
 
+	// Claim the link before changing anything, so two submissions of the
+	// same link cannot both set a password.
+	claimed, err := s.repo.MarkResetTokenUsed(ctx, tokenHash)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("claiming reset token: %w", err))
+	}
+	if !claimed {
+		return apperror.NewBadRequest("this reset link has already been used")
+	}
+
 	// Update password in DB.
 	if err := s.repo.UpdatePassword(ctx, userID, hash); err != nil {
 		return apperror.NewInternal(fmt.Errorf("updating password: %w", err))
-	}
-
-	// Mark token as used so it can't be reused.
-	if err := s.repo.MarkResetTokenUsed(ctx, tokenHash); err != nil {
-		slog.Warn("failed to mark reset token as used", slog.Any("error", err))
 	}
 
 	// Invalidate all existing sessions for this user. If an attacker stole a

@@ -189,6 +189,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Entity type layout/color/dashboard API (Owner only).
 	cg.GET("/entity-types/:etid/layout", h.GetEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/layout", h.UpdateEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/entity-types/placement", h.BlockPlacementAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/entity-types/:etid/layout/blocks", h.AppendLayoutBlock, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/entity-types/:etid/layout-preview", h.LayoutPreview, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/entity-types/:etid/home-preview", h.CategoryHomePreview, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/color", h.UpdateEntityTypeColor, campaigns.RequireRole(campaigns.RoleOwner))

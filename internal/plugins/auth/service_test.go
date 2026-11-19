@@ -32,7 +32,7 @@ type mockUserRepo struct {
 	updatePasswordFn     func(ctx context.Context, userID, passwordHash string) error
 	createResetTokenFn   func(ctx context.Context, userID, email, tokenHash string, expiresAt time.Time) error
 	findResetTokenFn     func(ctx context.Context, tokenHash string) (string, string, time.Time, *time.Time, error)
-	markResetTokenUsedFn func(ctx context.Context, tokenHash string) error
+	markResetTokenUsedFn func(ctx context.Context, tokenHash string) (bool, error)
 	keepGuestFn          func(ctx context.Context, userID, email, passwordHash string) error
 	campaignGuests       map[string][]string
 	seen                 []string
@@ -100,11 +100,11 @@ func (m *mockUserRepo) FindResetToken(ctx context.Context, tokenHash string) (st
 	return "", "", time.Time{}, nil, apperror.NewNotFound("token not found")
 }
 
-func (m *mockUserRepo) MarkResetTokenUsed(ctx context.Context, tokenHash string) error {
+func (m *mockUserRepo) MarkResetTokenUsed(ctx context.Context, tokenHash string) (bool, error) {
 	if m.markResetTokenUsedFn != nil {
 		return m.markResetTokenUsedFn(ctx, tokenHash)
 	}
-	return nil
+	return true, nil
 }
 
 func (m *mockUserRepo) ListUsers(ctx context.Context, offset, limit int) ([]User, int, error) {
@@ -758,9 +758,9 @@ func TestResetPassword_Success(t *testing.T) {
 			updatedHash = passwordHash
 			return nil
 		},
-		markResetTokenUsedFn: func(ctx context.Context, tokenHash string) error {
+		markResetTokenUsedFn: func(ctx context.Context, tokenHash string) (bool, error) {
 			tokenMarkedUsed = true
-			return nil
+			return true, nil
 		},
 	}
 

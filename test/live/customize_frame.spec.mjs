@@ -97,7 +97,7 @@ test('Customize frame, drafts, save, discard, two tabs, find, old address', asyn
   const find = page.getByRole('combobox', { name: 'Find a setting' });
   await find.waitFor();
   await find.fill('colour');
-  const first = page.locator('#czs-find-res a').first();
+  const first = page.locator('#fnd-res a').first();
   await first.waitFor();
   assert.match(await first.innerText(), /Colours/, 'Colours is not the first result');
   await picture(page, 'customize-find', { check: '#1366', about: 'Find a setting, typed "colour"', mask: ['.sidebar', '[data-sidebar]'] });

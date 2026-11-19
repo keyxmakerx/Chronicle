@@ -148,7 +148,7 @@
         html += '</h3>';
         if (editable) {
           html += '<button class="btn-secondary text-xs" data-action="create-post">';
-          html += '<i class="fa-solid fa-plus"></i>Add Post';
+          html += '<i class="fa-solid fa-plus"></i>Add post';
           html += '</button>';
         }
         html += '</div>';
@@ -159,7 +159,7 @@
           html += '<i class="fa-solid fa-layer-group text-2xl text-fg-muted mb-2"></i>';
           html += '<p class="text-sm text-fg-muted">No posts yet.';
           if (editable) {
-            html += ' Add sub-notes to organize additional content for this page.';
+            html += ' Add a post for anything that needs its own section on this page.';
           }
           html += '</p></div>';
         } else {
@@ -211,7 +211,7 @@
         if (editable) {
           h += '<div class="relative" data-dropdown>';
           h += '<button class="text-fg-muted hover:text-fg text-xs p-1" data-action="post-menu" data-post-id="' + esc(post.id) + '" title="More actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>';
-          h += '<div class="hidden absolute right-0 top-full mt-1 bg-surface border border-edge rounded-lg shadow-lg py-1 z-20 min-w-[140px]" data-menu="' + esc(post.id) + '">';
+          h += '<div class="hidden absolute right-0 top-full mt-1 bg-surface border border-edge rounded-lg shadow-elev-hover py-1 z-20 min-w-[140px]" data-menu="' + esc(post.id) + '">';
           h += '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-action="rename-post" data-post-id="' + esc(post.id) + '"><i class="fa-solid fa-pen mr-2"></i>Rename</button>';
           if (canHide) {
             h += '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-action="toggle-private" data-post-id="' + esc(post.id) + '"><i class="fa-solid fa-' + (post.isPrivate ? 'unlock' : 'lock') + ' mr-2"></i>' + (post.isPrivate ? 'Make Public' : 'Make ' + Chronicle.gmTerm() + ' Only') + '</button>';

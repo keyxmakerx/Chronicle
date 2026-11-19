@@ -2,12 +2,13 @@
 // campaignNavTop is fixed: Dashboard, Pinned, Apps, never covered and never
 // scrolled away by the categories area below it. campaignNavCategories is
 // its own scroller: the Categories heading, All Pages, the category rows,
-// the owner's own sections and, for members, Manage — with the drill panel
-// (nav-drill) laid over it, so drilling into a category never touches the
-// fixed part above. Every folding section but Pinned folds under its
+// the owner's own sections — with the drill panel (nav-drill) laid over it,
+// so drilling into a category never touches the fixed part above.
+// campaignNavManage is the owner's Campaign settings row, fixed at the foot
+// above Site admin. Every folding section but Pinned folds under its
 // heading. Rows arrive already cut down for the viewer (GetNavSections);
 // where the viewer is comes from nav_state.go. sidebar_nav.js runs the
-// folds, the living ring and the phone drawer; sidebar_drill.js runs the
+// folds, the living ring and the drawer; sidebar_drill.js runs the
 // panel.
 package layouts
 
@@ -15,8 +16,9 @@ import "fmt"
 import "strconv"
 
 // campaignNavBrand is the sidebar's top row: the campaign's logo and name,
-// and, on a phone, close. Editing the sidebar lives in the footer instead,
-// so this row stays the owner's to customise (logo, name) without it.
+// and, while the sidebar is a drawer, close. Editing the sidebar lives in the
+// footer instead, so this row stays the owner's to customise (logo, name)
+// without it.
 // Beyond the plain logo and name the owner may add a subtitle line or a
 // banner picture behind the name; the picture sits in its own wrapper,
 // always rendered, so a Customize save can swap it without a reload. A
@@ -108,9 +110,6 @@ templ campaignNavCategories() {
 						@navSection(sec)
 					}
 				}
-				if len(NavManageRows(ctx)) > 0 {
-					@navManage()
-				}
 			</div>
 		</nav>
 		<div
@@ -178,7 +177,7 @@ templ navSection(sec NavSectionView) {
 			}
 			<div class="nav-gb" id={ "nav-b-" + sec.ID } hidden?={ !NavFoldOpen(ctx, sec.ID) }>
 				if sec.Kind == "categories" {
-					@navFixedRow("all", "All Pages", "fa-layer-group", fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)), navAllPagesCount(ctx, sec.Rows))
+					@navFixedRow("all", "All pages", "fa-layer-group", fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)), navAllPagesCount(ctx, sec.Rows))
 				}
 				for _, row := range sec.Rows {
 					@navItem(row, navPinnable(ctx, sec, row))
@@ -298,7 +297,7 @@ templ navSubsFold(row NavRowView) {
 	</div>
 }
 
-// navRow is one app, category, link or Manage row. A row hidden from players
+// navRow is one app, category, link or Campaign settings row. A row hidden from players
 // is only ever given to the owner, who sees it dimmed and marked. A category
 // never navigates on its own click — it slides the drill panel over the
 // categories area instead (sidebar_drill.js); the category's own page stays
@@ -352,13 +351,13 @@ templ navRow(row NavRowView) {
 // navRowInner is the inside of a row: icon, label, trailing text, marks and,
 // on the current row, the living ring.
 templ navRowInner(row NavRowView) {
+	// Every mark is the sidebar's one icon colour: a category's own colour
+	// tints neither its icon nor the dot that stands in for one.
 	<span class="nav-ic">
-		if row.Icon != "" && row.Color != "" {
-			<i class={ "fa-solid " + row.Icon } style={ fmt.Sprintf("color: %s", row.Color) } aria-hidden="true"></i>
-		} else if row.Icon != "" {
+		if row.Icon != "" {
 			<i class={ "fa-solid " + row.Icon } aria-hidden="true"></i>
 		} else if row.Kind == "category" {
-			<span class="nav-dot" style={ fmt.Sprintf("background-color: %s", row.Color) }></span>
+			<span class="nav-dot"></span>
 		} else {
 			<i class="fa-solid fa-link" aria-hidden="true"></i>
 		}
@@ -392,7 +391,7 @@ templ navSubRow(sub NavSubRowView, parentHidden bool) {
 			aria-current="page"
 		}
 	>
-		<span class="nav-ic"><span class="nav-dot" style={ fmt.Sprintf("background-color: %s", sub.Color) }></span></span>
+		<span class="nav-ic"><span class="nav-dot"></span></span>
 		<span class="nav-lb">{ sub.Label }</span>
 		@navTrail(sub.Key, navCount(sub.Count))
 		if NavHasRing(ctx, sub.Key) {
@@ -445,17 +444,27 @@ templ navRing() {
 	</span>
 }
 
-// navManage is the Manage section, folded until opened: Members for every
-// member, and the owner's own pages for the owner.
-templ navManage() {
-	<div class="nav-sec" data-nav-section="manage">
-		@navFoldHead("manage", "Manage", len(NavManageRows(ctx)), NavSectionCurrent(ctx, NavManageRows(ctx)))
-		<div class="nav-gb" id="nav-b-manage" hidden?={ !NavFoldOpen(ctx, "manage") }>
+// campaignNavManage is the owner's Campaign settings row, fixed at the foot
+// of the sidebar above Site admin and outside every scroller so it never
+// scrolls away. It leads to the desk; its trailing words ("1 needs you") are
+// filled in by sidebar_nav.js so a page load never waits on them. It carries
+// its own boost, since it sits outside the categories nav that boosts the
+// other rows.
+templ campaignNavManage() {
+	if len(NavManageRows(ctx)) > 0 {
+		<div
+			class="nav-manage"
+			data-nav-section="manage"
+			hx-boost="true"
+			hx-target="#main-content"
+			hx-select="#main-content > *"
+			hx-swap="innerHTML show:window:top"
+		>
 			for _, row := range NavManageRows(ctx) {
 				@navRow(row)
 			}
 		</div>
-	</div>
+	}
 }
 
 // campaignNavFooter keeps the ways out of the campaign (every campaign, and

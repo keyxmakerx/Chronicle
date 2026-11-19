@@ -156,10 +156,12 @@ type MentionLinkData struct {
 	TargetEntityID string
 }
 
-// MentionLinkProvider supplies @mention link data for the graph visualization.
-// Implemented by the entities service.
+// MentionLinkProvider supplies @mention links for the graph, with the pages
+// at their ends as nodes, keyed by page id. Implemented over the entities
+// service, which leaves out what the viewer may not know of. A link with an
+// end missing from the nodes is not drawn.
 type MentionLinkProvider interface {
-	GetMentionLinksForGraph(ctx context.Context, campaignID string, includeDmOnly bool, userID string) ([]MentionLinkData, error)
+	GetMentionLinksForGraph(ctx context.Context, campaignID string, includeDmOnly bool, userID string) ([]MentionLinkData, map[string]GraphNode, error)
 }
 
 // EntityTypeSummary holds minimal entity type info for the graph filter UI.

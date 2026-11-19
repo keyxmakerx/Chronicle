@@ -7,6 +7,7 @@ import (
 	"context"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"fmt"
+	"strconv"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -41,14 +42,14 @@ templ visibilityGlance(cc *campaigns.CampaignContext, entity *Entity, ev *Effect
 		{{ widened := ev != nil && ev.WidenedByTags }}
 		<span
 			class="relative inline-flex items-center ml-1.5 shrink-0"
-			title={ visibilityGlanceTooltip(cc, entity, ev) }
+			title={ visibilityGlanceTooltip(ctx, cc, entity, ev) }
 			data-visibility-badge={ state }
 			if widened {
 				data-tag-widened="true"
 			}
 		>
 			if state == VisStateCustom {
-				<i class="fa-solid fa-shield-halved text-[11px]" style="color: var(--color-accent);"></i>
+				<i class="fa-solid fa-shield-halved text-[11px]" style="color: var(--color-accent-link, var(--color-accent));"></i>
 			} else if state == VisStateDMOnly {
 				<i class="fa-solid fa-lock text-[11px]" style="color: var(--color-text-muted);"></i>
 			} else {
@@ -145,7 +146,7 @@ templ effectiveVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity, ev
 				data-perm-corner-tip
 				class="pointer-events-none absolute right-0 top-full mt-1.5 z-40 w-max max-w-xs rounded-md bg-fg px-2 py-1 text-[11px] leading-snug text-surface opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
 			>
-				{ visibilityGlanceTooltip(cc, entity, ev) }
+				{ visibilityGlanceTooltip(ctx, cc, entity, ev) }
 				if canEdit {
 					{ " · Click to change." }
 				}
@@ -179,7 +180,7 @@ templ visibilityChip(state string, canEdit, widened bool, describedBy string) {
 		<i
 			class={ "fa-solid", visibilityCornerIcon(state), "text-[11px]" }
 			if state == VisStateCustom {
-				style="color: var(--color-accent);"
+				style="color: var(--color-accent-link, var(--color-accent));"
 			} else {
 				style="color: var(--color-text-muted);"
 			}
@@ -199,16 +200,23 @@ templ visibilityChip(state string, canEdit, widened bool, describedBy string) {
 // page's own chip, unfolding the same editor, in draft mode. With no page to
 // save to yet, the widget writes the choice into the hidden is_private input
 // the Create handler reads; Custom waits until the page exists.
-templ draftVisibilityControl() {
-	<input type="hidden" name="is_private" value="false" id="is_private_draft"/>
+templ draftVisibilityControl(isPrivate bool) {
+	<input type="hidden" name="is_private" value={ strconv.FormatBool(isPrivate) } id="is_private_draft"/>
 	<div
 		class="relative shrink-0"
 		data-widget="permissions"
 		data-layout="corner"
 		data-mode="draft"
 		data-draft-target="#is_private_draft"
+		if isPrivate {
+			data-draft-private="true"
+		}
 		data-editable="true"
 	>
-		@visibilityChip(VisStateEveryone, true, false, "")
+		if isPrivate {
+			@visibilityChip(VisStateDMOnly, true, false, "")
+		} else {
+			@visibilityChip(VisStateEveryone, true, false, "")
+		}
 	</div>
 }

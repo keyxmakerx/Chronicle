@@ -99,3 +99,28 @@ func serveWriteGate(svc CampaignService, session *auth.Session, method string) i
 	e.ServeHTTP(rec, httptest.NewRequest(method, "/campaigns/camp-1", nil))
 	return rec.Code
 }
+
+// onePass answers for a single running look-around pass.
+type onePass struct{ until time.Time }
+
+func (p onePass) VisitPass(context.Context, string, string) (time.Time, bool, bool, error) {
+	return p.until, true, true, nil
+}
+
+func (onePass) EndVisits(context.Context, string, string) error { return nil }
+
+// The campaign service the app really builds must be read for passes: it
+// answers VisitPass and nothing else of VisitPasses, so a check that asks
+// for more than the read lets no visitor in.
+func TestVisitPassOfReadsTheRealService(t *testing.T) {
+	soon := time.Now().Add(48 * time.Hour)
+	svc := &campaignService{}
+	ConfigureVisitPasses(svc, onePass{until: soon})
+
+	e := echo.New()
+	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+	until, live, found := visitPassOf(c, svc, "camp-1", "mira")
+	if !live || !found || !until.Equal(soon) {
+		t.Fatalf("visitPassOf = %v %v %v, want the configured pass", until, live, found)
+	}
+}

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"math"
 	"time"
@@ -238,7 +239,9 @@ templ storageFilesTab(data StoragePageData) {
 								</td>
 								<td class="px-4 py-2.5 text-sm text-fg-secondary">{ formatBytes(f.FileSize) }</td>
 								<td class="px-4 py-2.5 text-sm text-fg-secondary hidden md:table-cell">{ f.UploaderName }</td>
-								<td class="px-4 py-2.5 text-sm text-fg-muted hidden md:table-cell">{ f.CreatedAt.Format("Jan 2") }</td>
+								<td class="px-4 py-2.5 text-sm text-fg-muted hidden md:table-cell">
+								@components.Date(f.CreatedAt, timeutil.DateDay)
+								</td>
 								<td class="px-4 py-2.5 text-right">
 									<div class="flex items-center justify-end gap-2">
 										if !f.IsBound() {

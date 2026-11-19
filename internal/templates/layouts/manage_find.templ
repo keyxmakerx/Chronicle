@@ -1,0 +1,52 @@
+// manage_find.templ is the Find word on the owner's Manage pages. "/" presses
+// it too (keyboard_shortcuts.js), so the shortcut is never the only way.
+
+package layouts
+
+// ManageFind draws the Find button, with the addresses its script needs. It
+// draws nothing for anyone but the owner.
+templ ManageFind() {
+	if ManageFindShown(ctx) {
+		<button
+			type="button"
+			class="manage-find"
+			data-manage-find
+			data-find-url={ "/campaigns/" + GetCampaignID(ctx) + "/dashboard/find" }
+			data-find-js={ AssetURL("/static/js/find_palette.js") }
+			data-find-css={ AssetURL("/static/css/find_palette.css") }
+			aria-haspopup="dialog"
+			aria-expanded="false"
+			aria-keyshortcuts="/"
+			onclick={ manageFindCall() }
+		>
+			<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+			<span>Find</span>
+			<kbd aria-hidden="true">/</kbd>
+		</button>
+	}
+}
+
+// ManageFindField is Find as a full-width field, for the page that is itself
+// the list of settings (Campaign settings). It opens the same list from the
+// same script as the header button and answers "/" the same way; a page draws
+// one or the other, never both.
+templ ManageFindField() {
+	if ManageFindEligible(ctx) {
+		<button
+			type="button"
+			class="manage-find manage-find-field"
+			data-manage-find
+			data-find-url={ "/campaigns/" + GetCampaignID(ctx) + "/dashboard/find" }
+			data-find-js={ AssetURL("/static/js/find_palette.js") }
+			data-find-css={ AssetURL("/static/css/find_palette.css") }
+			aria-haspopup="dialog"
+			aria-expanded="false"
+			aria-keyshortcuts="/"
+			onclick={ manageFindCall() }
+		>
+			<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+			<span>Find a setting</span>
+			<kbd aria-hidden="true">/</kbd>
+		</button>
+	}
+}

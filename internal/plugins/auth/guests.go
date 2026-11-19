@@ -253,6 +253,11 @@ func (s *authService) MergeGuest(ctx context.Context, guestID string, in MergeGu
 	if target.GuestCampaignID != nil || target.ID == guest.ID {
 		return "", nil, apperror.NewBadRequest("that's a guest account too; merge into a full account")
 	}
+	// Where password sign-in is hidden, a password opens only an admin's
+	// account, here as at sign-in.
+	if opts := s.LoginOptions(ctx); opts.HidePassword && !target.IsAdmin {
+		return "", nil, apperror.NewForbidden("sign in with the " + opts.ProviderName + " button first, then join with your account")
+	}
 	if err := s.verifySecondFactorIfOn(ctx, target, in.Code); err != nil {
 		return "", nil, err
 	}

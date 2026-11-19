@@ -76,6 +76,7 @@
         label: 'Go to ' + c.label,
         icon: ICON_RE.test(c.icon || '') ? c.icon : 'fa-chevron-right',
         href: c.href,
+        words: typeof c.words === 'string' ? c.words : '',
         shortcut: ''
       });
     });
@@ -95,13 +96,13 @@
       // Campaign navigation: one "Go to" per row of the viewer's own sidebar.
       // The server renders that list per viewer, so the palette can never
       // offer what the sidebar withholds (a row hidden from players, an app
-      // the viewer cannot open, the owner's Manage pages).
+      // the viewer cannot open, the owner's campaign settings pages).
       navCommands().forEach(function (c) { cmds.push(c); });
       cmds.push({ label: 'Go to Relations Graph', icon: 'fa-diagram-project', href: '/campaigns/' + cid + '/relations-graph/page', shortcut: '' });
       cmds.push({ label: 'Go to Plugins', icon: 'fa-puzzle-piece', href: '/campaigns/' + cid + '/plugins', shortcut: '' });
 
       // Actions.
-      cmds.push({ id: 'new-page', label: 'New Page', icon: 'fa-plus', href: '/campaigns/' + cid + '/entities/new', shortcut: mod + '+N' });
+      cmds.push({ id: 'new-page', label: 'New page', icon: 'fa-plus', href: '/campaigns/' + cid + '/entities/new', shortcut: mod + '+N' });
       cmds.push({
         label: 'Quick Capture Note', icon: 'fa-bolt', shortcut: mod + '+Shift+N',
         action: function () { if (Chronicle.openQuickCapture) Chronicle.openQuickCapture(); }
@@ -117,8 +118,32 @@
         }
       }
     });
+    // Account settings and the two top-bar tools are offered only when the
+    // page itself shows their control, so the palette never lists what the
+    // viewer cannot open. The tools open the way their buttons do.
+    if (document.querySelector('#user-menu-panel a[href="/account"]')) {
+      cmds.push({
+        label: 'Account settings', icon: 'fa-gear', href: '/account', shortcut: '',
+        words: 'password email two-factor 2fa time zone notifications account profile'
+      });
+    }
+    var tableBtn = document.querySelector('[data-tt-tab]');
+    if (tableBtn) {
+      cmds.push({
+        label: 'The table', icon: 'fa-dice-d20', shortcut: '', words: 'dice roll my dice',
+        action: function () { tableBtn.click(); }
+      });
+    }
+    var screenBtn = document.querySelector('[data-dms-toggle]');
+    if (screenBtn) {
+      cmds.push({
+        label: screenBtn.getAttribute('title') || 'GM Screen', icon: 'fa-shield-halved', shortcut: '',
+        words: 'screen dm gm director fight encounter homebrew',
+        action: function () { screenBtn.click(); }
+      });
+    }
     cmds.push({
-      label: 'Toggle Theme', icon: 'fa-circle-half-stroke', shortcut: '',
+      label: 'Toggle Theme', icon: 'fa-circle-half-stroke', shortcut: '', words: 'dark light theme mode',
       action: function () {
         // One implementation of the toggle (static/js/theme.js): it saves to the
         // account when signed in and to this browser otherwise.
@@ -138,6 +163,17 @@
 
   // --- Fuzzy Filter ---
 
+  // wordsMatch tells whether q starts any of a command's other names, so
+  // "guest" finds a place called Guests' dashboard and "delete" finds the one
+  // labelled Archive or delete.
+  function wordsMatch(cmd, q) {
+    var ws = String(cmd.words || '').toLowerCase().split(/\s+/);
+    for (var i = 0; i < ws.length; i++) {
+      if (ws[i] && ws[i].indexOf(q) === 0) return true;
+    }
+    return false;
+  }
+
   function filterCommands(query) {
     if (!query) return commands.slice();
     var q = query.toLowerCase();
@@ -147,6 +183,10 @@
       var idx = label.indexOf(q);
       if (idx >= 0) {
         scored.push({ cmd: commands[i], score: idx });
+      } else if (wordsMatch(commands[i], q)) {
+        // The other names for a place rank after every label match, so a
+        // word that is also in a label still lists the label first.
+        scored.push({ cmd: commands[i], score: 1000 });
       }
     }
     scored.sort(function (a, b) { return a.score - b.score; });
@@ -164,7 +204,7 @@
     });
 
     var modal = document.createElement('div');
-    modal.className = 'card w-full max-w-lg shadow-2xl overflow-hidden';
+    modal.className = 'card w-full max-w-lg shadow-elev-dragged overflow-hidden';
     modal.style.maxHeight = '60vh';
     modal.style.display = 'flex';
     modal.style.flexDirection = 'column';

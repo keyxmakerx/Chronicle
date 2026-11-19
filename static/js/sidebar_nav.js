@@ -8,8 +8,9 @@
  *   boosted navigation, which swaps only #main-content: the layout renders a
  *   [data-nav-current] marker there, and this reads it. While a category's
  *   panel (sidebar_drill.js) is open, the ring marks the panel's header.
- * - The phone drawer: out of the tab order while shut, focus kept inside
- *   while open. (Escape and the menu button live in app.templ's Alpine.)
+ * - The drawer (a phone, or a touch screen narrower than a tablet on its
+ *   side): out of the tab order while shut, focus kept inside while open.
+ *   (Escape and the menu button live in app.templ's Alpine.)
  * - The touch-screen Edit word (navToolsWord): it shows a member's pins and
  *   row menus on every row until Done. The state is #sidebar's
  *   data-nav-tools, which CSS reads; this keeps aria-pressed in step.
@@ -23,9 +24,15 @@
 (function () {
   'use strict';
 
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
+
   var FOLD_MS = 280;
   // A closing section's rows fade out this fast, so none are left showing
-  // below a follower shorter than the section (Manage above a folded Admin).
+  // below a follower shorter than the section.
   var FADE_OUT_MS = 120;
   var EASE = 'cubic-bezier(.2,.8,.2,1)';
   var EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
@@ -33,7 +40,10 @@
   var FOLD_ID = /^[A-Za-z0-9_-]{1,48}$/;
 
   var rmQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-  var phoneQuery = window.matchMedia ? window.matchMedia('(max-width: 767px)') : null;
+  // When the sidebar is a drawer: the layout says, so the two cannot disagree.
+  var drawerHost = document.querySelector('[data-nav-drawer-query]');
+  var drawerQuery = window.matchMedia
+    ? window.matchMedia((drawerHost && drawerHost.getAttribute('data-nav-drawer-query')) || '(max-width: 767px)') : null;
 
   function reduced() {
     return !!(rmQuery && rmQuery.matches) || document.documentElement.classList.contains('nav-rm');
@@ -131,7 +141,7 @@
   function unfold(body) {
     body.hidden = false;
     if (reduced()) {
-      play(body, [{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'linear' });
+      play(body, [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'linear' });
       return;
     }
     var h = body.offsetHeight;
@@ -159,7 +169,7 @@
 
   function fold(body, onDone) {
     if (reduced()) {
-      var fade = play(body, [{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: 'linear', fill: 'forwards' });
+      var fade = play(body, [{ opacity: 1 }, { opacity: 0 }], { duration: tokMs('--dur-micro', 120), easing: 'linear', fill: 'forwards' });
       whenDone(fade, function () { body.hidden = true; if (fade) fade.cancel(); if (onDone) onDone(); });
       return;
     }
@@ -231,6 +241,93 @@
     Array.prototype.forEach.call(document.querySelectorAll('#sidebar [data-nav-tools-toggle]'), function (b) {
       b.setAttribute('aria-pressed', on);
     });
+    // A swapped-in sidebar arrives without its count; draw it again.
+    refreshCount(false);
+  }
+
+  // --- The Campaign settings row's needs-you words ---------------------------
+  // How many things wait on the owner is asked for after the page has drawn,
+  // so no page waits on the providers behind it. The answer is kept for a
+  // minute per campaign: a boosted page change redraws from the keep and a
+  // change made on the desk asks again at once.
+  var COUNT_KEEP_MS = 60000;
+  var counting = null;
+
+  function manageRow() {
+    return document.querySelector('#sidebar a.nav-row[data-nav-key="manage"]');
+  }
+
+  function countKey(row) { return 'chronicle_manage_count:' + row.getAttribute('href'); }
+
+  function keptCount(row) {
+    try {
+      var v = JSON.parse(sessionStorage.getItem(countKey(row)) || 'null');
+      if (v && typeof v.n === 'number' && Date.now() - v.at < COUNT_KEEP_MS) return v.n;
+    } catch (e) { /* storage may be blocked */ }
+    return null;
+  }
+
+  // needsWords is what the row says at its right: words, so the number cannot
+  // pass for a page count. Nothing when nothing waits.
+  function needsWords(n) {
+    if (!(n > 0)) return '';
+    return n + (n === 1 ? ' needs you' : ' need you');
+  }
+
+  // paintCount writes n into the row: the trailing words, and the row's
+  // spoken name, since a bare phrase there is not a label.
+  function paintCount(n) {
+    var row = manageRow();
+    if (!row || typeof n !== 'number') return;
+    var tr = row.querySelector('.nav-tr');
+    if (!tr || tr.classList.contains('is-page')) return;
+    var had = row.hasAttribute('data-needs');
+    tr.textContent = needsWords(n);
+    if (n > 0) {
+      row.setAttribute('data-needs', String(n));
+      row.setAttribute('aria-label', 'Campaign settings, ' + n + (n === 1 ? ' thing needs you' : ' things need you'));
+    } else {
+      row.removeAttribute('data-needs');
+      row.removeAttribute('aria-label');
+    }
+    // A count that drops settles in place; the number only changes.
+    if (had && n > 0 && !reduced()) {
+      play(tr, [{ opacity: 0.4 }, { opacity: 1 }], { duration: tokMs('--dur-large', 280), easing: EASE_OUT });
+    }
+  }
+
+  // refreshCount asks the server unless a fresh answer is kept. force skips
+  // the keep, for the moment something on the desk has just changed.
+  function refreshCount(force) {
+    var row = manageRow();
+    if (!row) return Promise.resolve(null);
+    if (!force) {
+      var kept = keptCount(row);
+      if (kept !== null) { paintCount(kept); return Promise.resolve(kept); }
+    }
+    var url = (row.getAttribute('href') || '').replace(/\/$/, '') + '/needs';
+    if (counting && counting.url === url) return counting.p;
+    var p = fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        if (!body || typeof body.count !== 'number') return null;
+        try { sessionStorage.setItem(countKey(row), JSON.stringify({ n: body.count, at: Date.now() })); } catch (e) { /* kept only when storage allows */ }
+        paintCount(body.count);
+        return body.count;
+      })
+      .catch(function () { return null; })
+      .then(function (n) { counting = null; return n; });
+    counting = { url: url, p: p };
+    return p;
+  }
+
+  // setCount is for a page that already knows the number (the desk draws its
+  // Needs-you lines), so the row follows without a request.
+  function setCount(n) {
+    var row = manageRow();
+    if (!row || typeof n !== 'number') return;
+    try { sessionStorage.setItem(countKey(row), JSON.stringify({ n: n, at: Date.now() })); } catch (e) { /* ignore */ }
+    paintCount(n);
   }
 
   function toggleTools() {
@@ -311,13 +408,15 @@
     if (ring.parentElement === target) return;
     target.appendChild(ring);
     keepPhase(ring);
-    if (animate) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
+    if (animate) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'ease-out' });
   }
 
   function restoreTrail(row) {
     var tr = row.querySelector('.nav-tr');
     if (!tr) return;
-    tr.textContent = row.getAttribute('data-nav-tr') || '';
+    // A row that is waiting on the owner gets its words back, not a blank.
+    var needs = parseInt(row.getAttribute('data-needs') || '', 10);
+    tr.textContent = row.getAttribute('data-nav-tr') || needsWords(needs);
     tr.classList.remove('is-page');
   }
 
@@ -342,7 +441,8 @@
   function setCurrent(key, page, animate) {
     var root = list();
     if (!root) return;
-    var old = root.querySelectorAll('.nav-row[aria-current="page"]');
+    // The Campaign settings row sits outside the list, so clear the whole sidebar.
+    var old = (sidebar() || root).querySelectorAll('.nav-row[aria-current="page"]');
     for (var i = 0; i < old.length; i++) {
       old[i].removeAttribute('aria-current');
       restoreTrail(old[i]);
@@ -367,7 +467,7 @@
     if (m) setCurrent(m.getAttribute('data-nav-current') || '', m.getAttribute('data-nav-page') || '', animate);
   }
 
-  // --- The phone drawer ----------------------------------------------------
+  // --- The drawer -----------------------------------------------------------
 
   function sidebar() { return document.getElementById('sidebar'); }
 
@@ -377,16 +477,16 @@
   }
 
   // Shut, the drawer is out of the tab order and hidden from assistive tech;
-  // open on a phone, it is a modal dialog.
+  // open, it is a modal dialog.
   function syncDrawer() {
     var sb = sidebar();
     if (!sb || !list()) return;
-    var phone = !!(phoneQuery && phoneQuery.matches);
-    if (phone && !drawerOpen()) {
+    var asDrawer = !!(drawerQuery && drawerQuery.matches);
+    if (asDrawer && !drawerOpen()) {
       sb.setAttribute('inert', '');
       sb.removeAttribute('role');
       sb.removeAttribute('aria-modal');
-    } else if (phone) {
+    } else if (asDrawer) {
       sb.removeAttribute('inert');
       sb.setAttribute('role', 'dialog');
       sb.setAttribute('aria-label', 'Navigation');
@@ -421,7 +521,7 @@
     wasOpen = open;
     syncDrawer();
     var sb = sidebar();
-    if (!(phoneQuery && phoneQuery.matches)) return;
+    if (!(drawerQuery && drawerQuery.matches)) return;
     if (reduced()) {
       // The slide is off under reduced motion; fade instead. A transform:none
       // keyframe holds the drawer in place while it fades out.
@@ -469,13 +569,14 @@
       observer = new MutationObserver(onSidebarClass);
       observer.observe(sb, { attributes: true, attributeFilter: ['class'] });
     }
+    refreshCount(false);
     wasOpen = drawerOpen();
     wasCollapsed = !!sb && sb.classList.contains('sidebar-collapsed');
     if (wasCollapsed && currentKey()) moveRing(ringTargetFor(currentKey()), false);
     syncDrawer();
   }
 
-  if (phoneQuery && phoneQuery.addEventListener) phoneQuery.addEventListener('change', syncDrawer);
+  if (drawerQuery && drawerQuery.addEventListener) drawerQuery.addEventListener('change', syncDrawer);
 
   document.addEventListener('click', function (e) {
     var t = e.target;
@@ -485,8 +586,8 @@
       toggleTools();
       return;
     }
-    // Apps' own fold heading lives in campaignNavTop, Manage's and a
-    // category's twisty in the categories area — both under #sidebar.
+    // Apps' own fold heading lives in campaignNavTop, a category's twisty
+    // in the categories area — both under #sidebar.
     var fold = t.closest('#sidebar [data-nav-fold]');
     if (fold) {
       e.preventDefault();
@@ -512,12 +613,18 @@
   });
 
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Tab' && drawerOpen() && phoneQuery && phoneQuery.matches) trapTab(e);
+    if (e.key === 'Tab' && drawerOpen() && drawerQuery && drawerQuery.matches) trapTab(e);
   });
 
   document.addEventListener('htmx:afterSettle', function (e) {
     var target = e.detail && e.detail.target;
-    if (target && target.id === 'main-content') syncFromMarker(true);
+    if (target && target.id === 'main-content') {
+      syncFromMarker(true);
+      // On an owner tool page what was fixed a moment ago may have changed the
+      // count, so ask again rather than trust the keep.
+      var cur = currentKey();
+      refreshCount(!!cur && cur.indexOf('manage') === 0);
+    }
   });
 
   // Back and Forward swap in a whole new body (htmx fetches the page, since
@@ -536,6 +643,9 @@
   window.Chronicle.nav = {
     setCurrent: setCurrent,
     syncTools: syncTools,
+    refreshCount: refreshCount,
+    setCount: setCount,
+    needsWords: needsWords,
     parseFolds: parseFolds,
     serializeFolds: serializeFolds
   };

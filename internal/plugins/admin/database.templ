@@ -6,6 +6,7 @@
 package admin
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
 	"time"
 
@@ -312,7 +313,7 @@ templ migrationStatusCard(s PluginMigrationStatus) {
 			</div>
 		}
 		if s.Error != "" {
-			<p class="text-xs text-red-500 mt-2 truncate" title={ s.Error }>{ s.Error }</p>
+			<p class="text-xs text-red-500 dark:text-red-400 mt-2 truncate" title={ s.Error }>{ s.Error }</p>
 		}
 	</div>
 }
@@ -366,7 +367,7 @@ func dbTimeAgo(t time.Time) string {
 	d := time.Since(t)
 	switch {
 	case d < 0:
-		return t.Format("Jan 2")
+		return timeutil.FixedDate(t, timeutil.DateDay)
 	case d < time.Minute:
 		return "just now"
 	case d < time.Hour:
@@ -376,7 +377,7 @@ func dbTimeAgo(t time.Time) string {
 	case d < 30*24*time.Hour:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	default:
-		return t.Format("Jan 2, 2006")
+		return timeutil.FixedDate(t, timeutil.DateShort)
 	}
 }
 

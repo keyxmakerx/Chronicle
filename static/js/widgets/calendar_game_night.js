@@ -323,7 +323,7 @@
   };
 
   // Cancelling moves the night to the Trash, so it doesn't ask first: the
-  // message offers Undo, and Manage > Trash keeps it for the retention.
+  // message offers Undo, and Campaign settings > Trash keeps it for the retention.
   Drawer.prototype._delete = function () {
     var self = this, S = this.state, view = this.view;
     if (!S || !S.night || S.busy) return;
@@ -341,7 +341,7 @@
               view.say('Game night is back on. Anyone who had answered has been told.');
               return view.reloadNights();
             })
-            .catch(function () { view.say('It couldn’t be put back. It is still in Manage > Trash.'); });
+            .catch(function () { view.say('It couldn’t be put back. It is still in Campaign settings > Trash.'); });
         } });
         return view.reloadNights();
       })

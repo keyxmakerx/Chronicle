@@ -9,7 +9,7 @@
  *
  *   { items: { "<id>" | "new-<slug>": { new, name, name_plural, icon, color,
  *       claimable, parent, clear_parent, copy_from, menu, delete, layout,
- *       home, description } },
+ *       home, description, fields } },
  *     _changes: [{ label, href }] }
  *
  * An existing category's item holds only what differs from what is saved,
@@ -24,8 +24,8 @@
 
 
   var SECTION = 'categories';
-  // The item keys the Category home tab writes.
-  var HOME_KEYS = { home: true, description: true };
+  // The item keys the Category home and Fields tabs write.
+  var HOME_KEYS = { home: true, description: true, fields: true };
   var COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#64748b'];
   // Icons the picker offers, with the words a search matches beyond the name.
   var ICONS = [
@@ -113,7 +113,7 @@
           claimable: it.claimable !== undefined ? !!it.claimable : c.claimable,
           menu: it.menu !== undefined ? !!it.menu : inMenu[c.id] !== false,
           parent: parent, pages: c.pages, trashed: c.trashed, dmOnly: c.dmOnly,
-          deleted: !!it.delete, changed: settingsKeys(it).length > 0, layoutChanged: !!it.layout
+          deleted: !!it.delete, changed: settingsKeys(it).length > 0, layoutChanged: !!it.layout, fieldsChanged: !!it.fields
         };
       });
       Object.keys(its).forEach(function (k) {
@@ -137,7 +137,7 @@
       Object.keys(patch).forEach(function (k) { if (patch[k] === undefined) delete it[k]; else it[k] = patch[k]; });
       // A category being deleted keeps no layout or home change; Save would
       // refuse them.
-      if (it.delete) { delete it.layout; delete it.page_layouts; delete it.home; delete it.description; }
+      if (it.delete) { delete it.layout; delete it.page_layouts; delete it.home; delete it.description; delete it.fields; }
       var s = savedById(key);
       if (s) {
         if (it.name === s.name) delete it.name;
@@ -171,6 +171,7 @@
         else {
           if (it.layout || it.page_layouts) out.push({ label: nm + ' page layout', href: BASE + '/categories/' + k + '/layout' });
           if (it.home || it.description !== undefined) out.push({ label: nm + ' home', href: BASE + '/categories/' + k + '/home' });
+          if (it.fields) out.push({ label: nm + ' fields', href: BASE + '/categories/' + k + '/fields' });
           if (settingsKeys(it).length) out.push({ label: nm + ' settings', href: BASE + '/categories/' + k + '/settings' });
         }
       });
@@ -231,7 +232,7 @@
       tabs.innerHTML = TABS.map(function (t) {
         var lbl = '<i class="fa-solid ' + t[2] + '" aria-hidden="true"></i> ' + t[1];
         if (c.isNew && t[0] !== 'settings') return '<span title="Available once you save this category">' + lbl + '</span>';
-        var dot = (t[0] === 'settings' && c.changed) || (t[0] === 'layout' && c.layoutChanged) ? '<span class="czs-dot" title="Unsaved changes"></span>' : '';
+        var dot = (t[0] === 'settings' && c.changed) || (t[0] === 'layout' && c.layoutChanged) || (t[0] === 'fields' && c.fieldsChanged) ? '<span class="czs-dot" title="Unsaved changes"></span>' : '';
         return '<a role="tab" href="' + esc(BASE + '/categories/' + c.key + '/' + t[0]) + '"' + (t[0] === TAB ? ' aria-current="page" aria-selected="true"' : ' aria-selected="false"') + '>' + lbl + dot + '</a>';
       }).join('');
       if (body && TAB === 'settings') drawSettings(c, body);
@@ -364,6 +365,7 @@
         '<div class="czs-acts"><button type="button" class="btn-secondary" data-x>Keep it</button><button type="button" class="btn-danger" data-ok>Delete category</button></div></div>';
       document.body.appendChild(sc);
       var opener = document.activeElement;
+      if (window.Chronicle && Chronicle.modal) Chronicle.modal(sc, { opener: null, escape: false, focus: false, aria: false });
       function close() { sc.remove(); if (opener && opener.focus && document.body.contains(opener)) opener.focus(); }
       $('[data-x]', sc).addEventListener('click', close);
       $('[data-ok]', sc).addEventListener('click', function () { sc.remove(); ok(); });
@@ -454,6 +456,7 @@
       sc.addEventListener('pointerdown', function (e) { if (e.target === sc) close(); });
       sc.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !document.querySelector('.czs-pop')) close(); });
       document.body.appendChild(sc);
+      if (window.Chronicle && Chronicle.modal) Chronicle.modal(sc, { opener: null, escape: false, focus: false, aria: false, allow: '.czs-pop' });
       drawDlg();
       focus('#czc-nn');
     }

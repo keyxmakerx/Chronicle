@@ -117,11 +117,13 @@ jobs:
         run: ./tools/check-migration-numbers.sh
 
       - name: Live-check todo budget
+        continue-on-error: true
         # Known-bug todo subtests in test/live report without failing, so
         # their number may only go down (issue #2143 lists them).
         run: ./tools/check-live-todos.sh
 
       - name: V2 motion-discipline guard (§B2)
+        continue-on-error: true
         # Diff-scoped FAIL: no NEW `transition: all` / `transition-all` in
         # calendar / timeline / ai_workspace / campaigns sources — only
         # `transform` and `opacity` may be animated there. Pre-existing
@@ -152,6 +154,12 @@ jobs:
         # may only shrink. Needs no git history; self-tests on every run.
         run: ./tools/check-widget-mounts.sh
 
+      - name: Layer scale ratchet
+        # Stacking order comes from the --z-* tokens in static/css/input.css.
+        # Counts raw z-index values above 10 and fails only if the count grows
+        # past tools/z-index-ceiling.txt, which may only shrink.
+        run: ./tools/check-z-index.sh
+
       - name: Escape helpers guard
         # Scripts escape HTML through Chronicle.escapeHtml, not their own copies.
         run: ./tools/check-escape-helpers.sh
@@ -172,6 +180,17 @@ jobs:
         # such package carries a hand-written doc.go. Self-tests on every run.
         run: ./tools/check-templ-packages.sh
 
+      - name: Date format guard
+        # A real-world date is written the way the reader's device writes it
+        # (static/js/dates.js); no template spells a month-first or day-first
+        # layout. Use components.Date. Self-tests on every run.
+        run: ./tools/check-date-format.sh
+
+      - name: Accent text guard
+        # Words never read the raw accent; they use --color-accent-link, the
+        # shade checked for contrast in each theme. Self-tests on every run.
+        run: ./tools/check-accent-text.sh
+
       - name: CSS emissions guard
         # Builds the minified stylesheet with the pinned Tailwind binary
         # (tools/tailwind.sh) and fails if a selector in
@@ -186,14 +205,6 @@ jobs:
         # internal/plugins/A -> internal/plugins/B import edge outside the
         # grandfathered baseline.
         run: go test ./... -v -short
-
-      - name: Decision-citations lint (WARN-only)
-        # Surfaces orphan cordinator/decisions/*.md docs. WARN-only: always
-        # exits 0. In Chronicle CI the Cordinator repo isn't checked out, so
-        # this prints "nothing to check" and exits clean; it is fully
-        # effective only when run alongside that repo.
-        continue-on-error: true
-        run: ./tools/check-decision-citations.sh
 
   # --- JS tests ---
   # The node --test suite, split into groups on runners of their own

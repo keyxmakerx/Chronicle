@@ -91,8 +91,8 @@ func TestValidateSection(t *testing.T) {
 		{"size not in the type's list", false, []Tile{{ID: "a", Type: "steps", Size: "2x1"}}, sizes, "Allowed sizes: 1x1, 2x2"},
 		{"malformed size", false, []Tile{{ID: "a", Type: "steps", Size: "wide"}}, sizes, "invalid size"},
 		{"empty size", false, []Tile{{ID: "a", Type: "steps"}}, sizes, "invalid size"},
-		{"missing id", false, []Tile{{Type: "steps", Size: "1x1"}}, sizes, "missing its ID"},
-		{"duplicate id", false, []Tile{{ID: "a", Type: "steps", Size: "1x1"}, {ID: "a", Type: "steps", Size: "1x1"}}, sizes, "same block twice"},
+		{"missing id", false, []Tile{{Type: "steps", Size: "1x1"}}, sizes, "lost its ID"},
+		{"duplicate id", false, []Tile{{ID: "a", Type: "steps", Size: "1x1"}, {ID: "a", Type: "steps", Size: "1x1"}}, sizes, "same block is in this layout twice"},
 		{"no lookup skips type and size checks", false, []Tile{{ID: "a", Type: "anything", Size: "2x2"}}, nil, ""},
 		{"no lookup still checks the size shape", false, []Tile{{ID: "a", Type: "anything", Size: "9x9"}}, nil, "invalid size"},
 	}

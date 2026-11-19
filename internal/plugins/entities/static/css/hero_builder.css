@@ -47,7 +47,7 @@
   font: inherit; font-weight: 600; line-height: 1.2; cursor: pointer;
   transition: background-color var(--dur-micro) var(--ease-out);
 }
-.hb-blank.is-empty { border-bottom-style: dashed; color: var(--color-accent); font-weight: 500; }
+.hb-blank.is-empty { border-bottom-style: dashed; color: var(--color-accent-link, var(--color-accent)); font-weight: 500; }
 .hb-blank:hover, .hb-blank.is-cur { background: var(--hb-acc-soft); }
 .hb-blank:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 /* A campaign's own entry carries the Director's amber mark. */
@@ -75,7 +75,7 @@
   width: 9em; max-width: 100%; min-height: 32px; padding: 0 3px; border: 0; border-bottom: 2px dashed var(--color-accent);
   background: none; color: var(--color-text-primary); font: inherit; font-weight: 600;
 }
-.hb-name input::placeholder { color: var(--color-accent); font-weight: 500; opacity: 0.8; }
+.hb-name input::placeholder { color: var(--color-accent-link, var(--color-accent)); font-weight: 500; opacity: 0.8; }
 .hb-name input:focus { outline: none; border-bottom-style: solid; background: var(--hb-acc-soft); border-radius: var(--hb-r-small) var(--hb-r-small) 0 0; }
 .hb-make { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .hb-note { font-size: 12.5px; color: var(--color-text-secondary); }
@@ -97,7 +97,7 @@
 .hb-go[aria-pressed="true"] { background: var(--hb-acc-soft); color: var(--color-text-primary); border-color: var(--hb-acc-line); }
 .hb-link {
   display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 6px; border: 0; border-radius: var(--hb-r-small);
-  background: none; color: var(--color-accent); font-size: 13px; font-weight: 500; cursor: pointer;
+  background: none; color: var(--color-accent-link, var(--color-accent)); font-size: 13px; font-weight: 500; cursor: pointer;
 }
 .hb-link:hover { background: var(--hb-acc-soft); }
 

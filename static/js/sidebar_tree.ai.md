@@ -10,7 +10,10 @@ the core interactive component of the sidebar drill panel.
 campaign sidebar (`layouts/nav.templ`, `data-drill-open`) slides the drill
 panel open, and the panel's fragment carries the entity list this script
 turns into a tree. The row menu (`sidebar_row_menu.js`) acts on the rows
-through `Chronicle.sidebarTree`.
+through `Chronicle.sidebarTree`. A page's row menu also offers Page history
+(a Scribe or the owner; opens the page at `#history`, which `page_safety.js`
+loads into the History slot) and, for the owner, Delete page (the page's own
+delete route: the page and its sub-pages go to the Trash, with Undo).
 
 ## Architecture
 

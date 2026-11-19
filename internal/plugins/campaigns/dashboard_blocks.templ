@@ -117,6 +117,15 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			if cc.IsMember {
 				@dashFragment("house-rules", fmt.Sprintf("/campaigns/%s/house-rules", cc.Campaign.ID), "h-24")
 			}
+		case "table_agreement":
+			@dashWrittenBlock(cc, block.Config, "table-agreement", "Table agreement", "Safety and lines, Pacing, Missing a night, Table talk")
+		case "making_a_hero":
+			@dashWrittenBlock(cc, block.Config, "making-a-hero", "Making a hero", "What is allowed, Starting level, Where to build it, Ask me first")
+		case "run_by":
+			// Names of the people running the table are members' reading.
+			if cc.IsMember {
+				@dashFragment("run-by", fmt.Sprintf("/campaigns/%s/run-by", cc.Campaign.ID), "h-16")
+			}
 		case "last_time":
 			// Recaps are the table's own business, as game nights are.
 			if cc.IsMember {
@@ -174,7 +183,7 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 						<p class="text-white/80 mt-1 max-w-2xl text-sm drop-shadow">{ *cc.Campaign.Description }</p>
 					}
 				</div>
-				if cc.MemberRole >= RoleOwner {
+				if OwnerCardVisible(ctx, cc) {
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="cb-quiet inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm transition-colors">
 						<i class="fa-solid fa-gear text-xs"></i> Settings
 					</a>
@@ -189,7 +198,7 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 					<p class="cb-epi text-fg-secondary mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
 				}
 			</div>
-			if cc.MemberRole >= RoleOwner {
+			if OwnerCardVisible(ctx, cc) {
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="cb-quiet btn-secondary text-sm">
 					<i class="fa-solid fa-gear text-xs"></i> Settings
 				</a>
@@ -203,21 +212,21 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 // the owner's pages, so everyone else gets All Pages alone.
 templ dashQuickActions(cc *CampaignContext) {
 	<div class="cb-shortcuts grid grid-cols-1 md:grid-cols-3 gap-4">
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-elev-hover block group">
 			<div class="flex items-center gap-3">
 				<div class="cb-tile w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
 					<i class="fa-solid fa-scroll text-indigo-600 dark:text-indigo-400"></i>
 				</div>
 				<div>
-					<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">All Pages</h3>
+					<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">All pages</h3>
 					<p class="cb-sub text-xs text-fg-secondary">Browse all pages</p>
 				</div>
 			</div>
 		</a>
 
 		// The People page is the owner's; anyone else would get a 403.
-		if cc.MemberRole >= RoleOwner {
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+		if OwnerCardVisible(ctx, cc) {
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-elev-hover block group">
 				<div class="flex items-center gap-3">
 					<div class="cb-tile w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
 						<i class="fa-solid fa-users text-blue-600 dark:text-blue-400"></i>
@@ -230,8 +239,8 @@ templ dashQuickActions(cc *CampaignContext) {
 			</a>
 		}
 
-		if cc.MemberRole >= RoleOwner {
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+		if OwnerCardVisible(ctx, cc) {
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-elev-hover block group">
 				<div class="flex items-center gap-3">
 					<div class="cb-tile w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
 						<i class="fa-solid fa-layer-group text-purple-600 dark:text-purple-400"></i>
@@ -246,38 +255,87 @@ templ dashQuickActions(cc *CampaignContext) {
 	</div>
 }
 
-// dashCategoryGrid renders a quick-nav grid of entity types with counts.
+// dashCategoryGrid renders the campaign's categories with their page counts:
+// tiles in the Standard look, one running line of words under Annals, where a
+// long list would otherwise push the rest of the home below the screen.
 // Config: columns (int, default 4).
 templ dashCategoryGrid(cc *CampaignContext, config map[string]any) {
 	{{ types := dashVisibleCategories(ctx, cc) }}
 	if len(types) > 0 {
+		{{ shown, rest := splitCategoryLine(types) }}
 		<div class="cb-contents">
 			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">Categories</h2>
-			<div class={ "cb-rows", dashGridClass(config) }>
-				for _, et := range types {
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
-						class="cb-link cb-row card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
-					>
-						<div class="cb-row-main flex items-center gap-2.5 mb-1">
-							<span
-								class="cb-swatch w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
-								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-							>
-								if et.Icon != "" {
-									<i class={ "fa-solid " + et.Icon }></i>
-								}
-							</span>
-							<span class="cb-row-name text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
-						</div>
-						<div class="cb-row-meta pl-[2.375rem] text-xs text-fg-muted">
-							{ pageCountLabel(layouts.GetEntityCount(ctx, et.ID)) }
-						</div>
-					</a>
+			<div class={ "cb-rows cb-line", dashGridClass(config) }>
+				for _, et := range shown {
+					@dashCategoryWord(cc, et)
 				}
 			</div>
+			if len(rest) > 0 {
+				<details class="cb-line-more">
+					<summary class="cb-quiet-word mt-3 text-sm text-accent hover:underline">
+						<span class="cb-when-closed">and { strconv.Itoa(len(rest)) } more</span>
+						<span class="cb-when-open">Show fewer</span>
+					</summary>
+					<div class={ "cb-rows cb-line mt-3", dashGridClass(config) }>
+						for _, et := range rest {
+							@dashCategoryWord(cc, et)
+						}
+					</div>
+				</details>
+			}
 		</div>
 	}
+}
+
+// dashCategoryWord is one category in the Categories block: its name and how
+// many pages the viewer can open there. The link is named in full for screen
+// readers, since the Annals line shows the bare number.
+templ dashCategoryWord(cc *CampaignContext, et layouts.SidebarEntityType) {
+	{{ n := layouts.GetEntityCount(ctx, et.ID) }}
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
+		class="cb-word card px-4 py-3 hover:shadow-elev-hover block group"
+		aria-label={ et.NamePlural + ", " + pageCountLabel(n) }
+		data-empty?={ n == 0 }
+	>
+		<div class="cb-word-main flex items-center gap-2.5 mb-1">
+			<span
+				class="cb-swatch w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
+				style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+			>
+				if et.Icon != "" {
+					<i class={ "fa-solid " + et.Icon }></i>
+				}
+			</span>
+			<span class="cb-word-name text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
+		</div>
+		<div class="cb-word-meta pl-[2.375rem] text-xs text-fg-muted">
+			<span class="cb-word-n">{ strconv.Itoa(n) }</span><span class="cb-word-unit">{ pageCountUnit(n) }</span>
+		</div>
+	</a>
+}
+
+// categoryLineMax is how many categories the Categories block shows before
+// the rest wait behind "and N more", so a campaign with dozens stays short.
+const categoryLineMax = 30
+
+// splitCategoryLine divides the categories into the ones shown at once and
+// the ones behind "and N more". A single leftover is shown instead: a word
+// that hides one word saves nothing.
+func splitCategoryLine(types []layouts.SidebarEntityType) (shown, rest []layouts.SidebarEntityType) {
+	if len(types) <= categoryLineMax+1 {
+		return types, nil
+	}
+	return types[:categoryLineMax], types[categoryLineMax:]
+}
+
+// pageCountUnit is the word after a page count: " page" for one, " pages"
+// otherwise.
+func pageCountUnit(n int) string {
+	if n == 1 {
+		return " page"
+	}
+	return " pages"
 }
 
 // pageCountLabel is a category's page count in words: "1 page", "3 pages".
@@ -294,7 +352,7 @@ func pageCountLabel(n int) string {
 // counts by the viewer's role), so a zero means nothing here for them.
 func dashVisibleCategories(ctx context.Context, cc *CampaignContext) []layouts.SidebarEntityType {
 	all := layouts.GetEntityTypes(ctx)
-	if cc.MemberRole >= RoleOwner {
+	if OwnerCardVisible(ctx, cc) {
 		return all
 	}
 	var out []layouts.SidebarEntityType
@@ -335,7 +393,7 @@ templ dashRecentPages(cc *CampaignContext, config map[string]any, recentEntities
 // a widget that is not set up.
 // Config: entity_type_id (string or number), limit (int, default 8).
 templ dashEntityList(cc *CampaignContext, config map[string]any) {
-	if typeID := configInt(config, "entity_type_id", 0); typeID > 0 || cc.MemberRole >= RoleOwner {
+	if typeID := configInt(config, "entity_type_id", 0); typeID > 0 || OwnerCardVisible(ctx, cc) {
 		<div
 			hx-get={ fmt.Sprintf("/campaigns/%s/entity-list?type=%d&limit=%d", cc.Campaign.ID, typeID, configInt(config, "limit", 8)) }
 			hx-trigger="load"
@@ -375,7 +433,7 @@ templ dashTextBlock(cc *CampaignContext, config map[string]any) {
 		<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
 			@templ.Raw(sanitize.TextBlock(content))
 		</div>
-	} else if cc.MemberRole >= RoleOwner {
+	} else if OwnerCardVisible(ctx, cc) {
 		<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
 			<p class="text-fg-muted text-sm italic">Empty text block</p>
 		</div>
@@ -440,7 +498,7 @@ templ calendarCardUnavailableState(minHeightPx int) {
 // link into it, and a fragment with nothing for them drops the card.
 // Config: limit (int, default 5).
 templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
-	if !calendarCardUnavailable(ctx) || cc.MemberRole >= RoleOwner {
+	if !calendarCardUnavailable(ctx) || OwnerCardVisible(ctx, cc) {
 		<div data-block="upcoming">
 			<div class="flex items-center justify-between mb-3">
 				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
@@ -671,7 +729,7 @@ func dashGraphHeight(config map[string]any) int {
 // higher default limit and a taller card): real V5 data, not a placeholder.
 // Config: limit (int, default 10, max 20), height (int, default 400).
 templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
-	if !calendarCardUnavailable(ctx) || cc.MemberRole >= RoleOwner {
+	if !calendarCardUnavailable(ctx) || OwnerCardVisible(ctx, cc) {
 		<div data-block="upcoming">
 			<div class="flex items-center justify-between mb-3">
 				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
@@ -966,6 +1024,34 @@ templ dashWhereWePlay(cc *CampaignContext, config map[string]any) {
 				<p class="mt-1 text-xs text-fg-muted">
 					Only you see this until something is typed in.
 					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/customize/home") } class="text-accent hover:underline">Type it in the Customizer</a>
+				</p>
+			</div>
+		</section>
+	}
+}
+
+// dashWrittenBlock is a block of the owner's own words under a fixed heading
+// (Table agreement, Making a hero). The text goes through the same cleaning
+// as a Text Block. A block with nothing typed in is removed for players, and
+// the owner gets a dashed slot naming the starter headings.
+templ dashWrittenBlock(cc *CampaignContext, config map[string]any, slug, title, starters string) {
+	{{ body := sanitize.TextBlock(dashConfigString(config, "content")) }}
+	if body != "" {
+		<section class={ "cb-info", "cb-written" } data-block={ slug } aria-labelledby={ slug + "-h" }>
+			<div class="cb-info-top flex items-baseline justify-between mb-3">
+				<h2 id={ slug + "-h" } class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">{ title }</h2>
+			</div>
+			<div class="cb-written-body prose prose-sm dark:prose-invert max-w-none">
+				@templ.Raw(body)
+			</div>
+		</section>
+	} else if cc.CanAuthorDmOnly() && !layouts.IsViewingAsPlayer(ctx) {
+		<section class="cb-info cb-written" data-block={ slug } data-dm-only>
+			<div class="cb-start-slot border border-dashed border-edge rounded-lg px-4 py-3 text-sm text-fg-secondary">
+				<p>{ title }: write it in this block. Starter headings: { starters }.</p>
+				<p class="mt-1 text-xs text-fg-muted">
+					Only you see this until something is typed in.
+					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/customize/home") } class="text-accent hover:underline">Write it in the Customizer</a>
 				</p>
 			</div>
 		</section>

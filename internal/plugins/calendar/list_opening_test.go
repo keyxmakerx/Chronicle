@@ -28,3 +28,21 @@ func TestCalendarsList_Opening(t *testing.T) {
 		t.Errorf("player should see only the sharing sentence:\n%s", player)
 	}
 }
+
+// templ refuses an on* attribute built from a plain string and prints a
+// comment in its place. "New calendar" records its button for the wizard to
+// return focus to through a data attribute instead.
+func TestCalendarsList_ActionIsNotDead(t *testing.T) {
+	var buf bytes.Buffer
+	ctx := layouts.SetIsOwner(context.Background(), true)
+	if err := CalendarsListFragment(CalendarsListData{CampaignID: "c1", IsOwner: true}).Render(ctx, &buf); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "failed sanitization") {
+		t.Errorf("a button carries an attribute templ refused to print:\n%s", out)
+	}
+	if !strings.Contains(out, `data-opener-global="__calv5Opener"`) {
+		t.Errorf("New calendar does not record its opener:\n%s", out)
+	}
+}

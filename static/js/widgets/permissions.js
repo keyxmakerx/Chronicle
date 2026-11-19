@@ -596,6 +596,8 @@ Chronicle.register('permissions', {
         // No endpoint to load from in draft mode; widget operates on
         // local state seeded with defaults (Everyone / is_private=false).
         state.loading = false;
+        // A refused save comes back with the choice that was made.
+        if (String(config.draftPrivate) === 'true') setMode('dm_only');
         syncDraftTarget();
         renderTrigger();
         renderBody();
@@ -875,7 +877,7 @@ Chronicle.register('permissions', {
     header.className = 'perm-card-header';
     var titleEl = document.createElement('div');
     titleEl.className = 'perm-card-title';
-    titleEl.innerHTML = '<i class="fa-solid fa-shield-halved" style="color: var(--color-accent, #6366f1);"></i><span>Page Permissions</span>';
+    titleEl.innerHTML = '<i class="fa-solid fa-shield-halved" style="color: var(--color-accent-link, var(--color-accent, #6366f1));"></i><span>Page Permissions</span>';
     header.appendChild(titleEl);
     var closeBtn = document.createElement('button');
     closeBtn.type = 'button';

@@ -1,0 +1,18 @@
+package components
+
+import (
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
+)
+
+// Date renders a real-world date as a <time> element. The text inside is the
+// fixed day-first fallback; static/js/dates.js rewrites it in the reader's
+// own device format. Every template that shows a date a person reads goes
+// through this, or for an element that keeps its own text ("Edited 2 days ago"), gives it
+// title={ timeutil.FixedDate(t, timeutil.DateWithTime) } data-date-title so dates.js sets
+// the title in the reader's format (tools/check-date-format.sh), so the two orders cannot come
+// back. In-world calendar dates are not real-world dates and do not use it.
+templ Date(t time.Time, form timeutil.DateForm) {
+	<time datetime={ t.UTC().Format(time.RFC3339) } data-date={ string(form) }>{ timeutil.FixedDate(t, form) }</time>
+}

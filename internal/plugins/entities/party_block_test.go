@@ -120,7 +120,7 @@ func TestPartyBlockHandler(t *testing.T) {
 	// The owner previewing as a player is judged as a player.
 	rolesSeen = nil
 	c, _ = advCtx(campaigns.RoleOwner, false, http.MethodGet, "/campaigns/c1/party")
-	c.Request().AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+	c.Request().AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "c1"})
 	if err := build(true).PartyBlock(c); err != nil {
 		t.Fatal(err)
 	}

@@ -2,8 +2,8 @@
  * notifications.js -- Chronicle Toast Notification System
  *
  * Provides a global toast notification API for showing brief success, error,
- * info, and warning messages. Toasts appear in the top-right corner and
- * auto-dismiss after a configurable duration.
+ * info, and warning messages. Toasts appear at the bottom of the window and
+ * auto-dismiss after three seconds. An error stays until it is dismissed.
  *
  * Usage:
  *   Chronicle.notify('Entity saved successfully', 'success');
@@ -94,6 +94,9 @@
       style.textContent = [
         '.chronicle-toast-badge { transform: scale(1); transition: transform 0.15s ease; }',
         '.chronicle-toast-badge-bump { transform: scale(1.35); }',
+        // Calm fades in place and Off appears at once; nothing travels.
+        'html[data-motion] .chronicle-toast { transform: none !important; }',
+        'html[data-motion="off"] .chronicle-toast { transition: none !important; }',
       ].join(' ');
       document.head.appendChild(style);
     }
@@ -105,18 +108,28 @@
     container.setAttribute('aria-live', 'polite');
     container.style.cssText = [
       'position: fixed',
-      'top: 16px',
-      'right: 16px',
-      'z-index: 10000',
+      'bottom: 16px',
+      'left: 50%',
+      'transform: translateX(-50%)',
+      'align-items: center',
+      'z-index: var(--z-toast, 10000)',
       'display: flex',
       'flex-direction: column',
       'gap: 8px',
       'pointer-events: none',
-      'max-width: 380px',
-      'width: 100%',
+      'width: min(380px, calc(100vw - 32px))',
     ].join(';');
     document.body.appendChild(container);
   }
+
+  // A dialog that closes with the toasts inside it would hide them too, so
+  // they move back to the page, or to the next open dialog down, as it closes.
+  // The close event doesn't bubble, hence the capture listener.
+  document.addEventListener('close', function (e) {
+    if (!container || !e.target || container.parentNode !== e.target) return;
+    var host = Chronicle.layerHost ? Chronicle.layerHost() : document.body;
+    (host && host !== e.target ? host : document.body).appendChild(container);
+  }, true);
 
   /**
    * Show a toast notification.
@@ -124,16 +137,27 @@
    * @param {string} message - The notification message.
    * @param {string} [type='info'] - Type: 'success', 'error', 'info', 'warning'.
    * @param {Object} [opts] - Options.
-   * @param {number} [opts.duration=4000] - Auto-dismiss duration in ms. 0 = manual.
+   * @param {number} [opts.duration=3000] - Auto-dismiss duration in ms. 0 = manual.
+   *   An error defaults to manual, since it stays until dismissed.
+   * @param {function} [opts.undo] - Adds an Undo button that calls it and then
+   *   dismisses the toast; use it when the action can be undone.
    * @param {Object} [opts.action] - After the text: a button {label, onClick(button)}
    *   or a link {label, href}.
    */
   Chronicle.notify = function (message, type, opts) {
     type = type || 'info';
     opts = opts || {};
-    var duration = opts.duration !== undefined ? opts.duration : 4000;
+    var duration = opts.duration !== undefined ? opts.duration : (type === 'error' ? 0 : 3000);
+    if (typeof opts.undo === 'function' && !opts.action) {
+      var undo = opts.undo;
+      opts = Object.assign({}, opts, { action: { label: 'Undo', dismiss: true, onClick: function () { undo(); } } });
+    }
 
     ensureContainer();
+    // Inside an open modal dialog everything outside it is inert, so the
+    // container goes in the topmost one (or back in the body when none is).
+    var host = Chronicle.layerHost ? Chronicle.layerHost() : document.body;
+    if (container.parentNode !== host) host.appendChild(container);
 
     // A repeat of an on-screen toast (same message and type) reuses it --
     // a count badge and a restarted timer -- instead of stacking a copy
@@ -166,9 +190,9 @@
       'font-size: 13px',
       'line-height: 1.4',
       'color: var(--color-text-body, #374151)',
-      'transform: translateX(100%)',
+      'transform: translateY(6px)',
       'opacity: 0',
-      'transition: transform 0.3s ease, opacity 0.3s ease',
+      'transition: transform var(--dur-standard, 200ms) var(--ease-out, ease-out), opacity var(--dur-standard, 200ms) var(--ease-out, ease-out)',
     ].join(';');
 
     // Icon.
@@ -189,7 +213,10 @@
         act.href = opts.action.href;
       } else {
         act.type = 'button';
-        act.addEventListener('click', function () { opts.action.onClick(act); });
+        act.addEventListener('click', function () {
+          opts.action.onClick(act);
+          if (opts.action.dismiss) dismissToast(toast, id);
+        });
       }
       act.className = 'underline font-medium ml-1';
       act.style.color = 'inherit';
@@ -204,8 +231,13 @@
     // Close button.
     var close = document.createElement('button');
     close.type = 'button';
-    close.style.cssText = 'border:none;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;padding:0;font-size:14px;flex-shrink:0;line-height:1;';
+    close.style.cssText = 'border:none;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;padding:0;font-size:14px;flex-shrink:0;line-height:1;position:relative;';
     close.innerHTML = '&times;';
+    // A 44 by 44 hit area around the small glyph.
+    var hit = document.createElement('span');
+    hit.setAttribute('aria-hidden', 'true');
+    hit.style.cssText = 'position:absolute;top:50%;left:50%;width:44px;height:44px;transform:translate(-50%,-50%);';
+    close.appendChild(hit);
     close.setAttribute('aria-label', 'Dismiss');
     close.addEventListener('click', function () {
       if (record.timer) clearTimeout(record.timer);
@@ -218,7 +250,7 @@
 
     // Animate in.
     requestAnimationFrame(function () {
-      toast.style.transform = 'translateX(0)';
+      toast.style.transform = 'none';
       toast.style.opacity = '1';
     });
 
@@ -293,13 +325,13 @@
     if (!toast.parentNode || toast.dataset.dismissing) return;
     toast.dataset.dismissing = 'true';
 
-    toast.style.transform = 'translateX(100%)';
+    toast.style.transform = 'translateY(6px)';
     toast.style.opacity = '0';
 
     setTimeout(function () {
       if (toast.parentNode) toast.parentNode.removeChild(toast);
       toasts = toasts.filter(function (t) { return t.id !== id; });
-    }, 300);
+    }, 200);
   }
 
   // --- HTMX Integration ---

@@ -18,7 +18,8 @@
  *
  * - A page, for anyone: open it, open it in a new tab, copy its link.
  * - A page, for a scribe or the owner: a new page inside it, a new folder
- *   beside it, rename it, move it to a folder.
+ *   beside it, rename it, move it to a folder, and its history; the owner can
+ *   also delete it, which sends it and its sub-pages to the Trash with Undo.
  * - A folder, for a scribe or the owner: a new folder inside it, rename it,
  *   move it; the owner can also delete it, after a second step in the menu.
  *   Its pages go back to the top level, as the route says.
@@ -37,6 +38,12 @@
  */
 (function () {
   'use strict';
+
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
 
   var LONG_PRESS_MS = 550;
   var EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
@@ -164,9 +171,16 @@
       out.push({ id: 'step-down', label: 'Move down', icon: 'fa-arrow-down', disabled: !info.canDown });
     }
     if (info.hasChildren) out.push({ id: 'order', label: 'Order inside…', icon: 'fa-arrow-down-short-wide' });
-    if (info.kind === 'folder' && info.canDelete) {
+    if (info.kind === 'page') {
+      out.push({ id: 'history', label: 'Page history', icon: 'fa-clock-rotate-left' });
+    }
+    if (info.canDelete && (info.kind === 'folder' || info.kind === 'page')) {
       out.push({ sep: true });
-      out.push({ id: 'delete', label: 'Delete folder', icon: 'fa-trash-can', danger: true });
+      // A page goes to the Trash with Undo, so it is not asked twice; a
+      // folder's second step says where its pages go.
+      out.push(info.kind === 'folder'
+        ? { id: 'delete', label: 'Delete folder', icon: 'fa-trash-can', danger: true }
+        : { id: 'delete-page', label: 'Delete page', icon: 'fa-trash-can', danger: true });
     }
     return out;
   }
@@ -393,7 +407,7 @@
     menu.classList.add('is-open');
     if (!reduced() && menu.animate) {
       menu.animate([{ opacity: 0, transform: 'translateY(-4px) scale(.97)' }, { opacity: 1, transform: 'none' }],
-        { duration: 130, easing: EASE_OUT });
+        { duration: tokMs('--dur-everyday', 120), easing: EASE_OUT });
     }
     M = { el: menu, items: items, info: info, opener: opener || null, row: row, x: x, y: y };
     if (M.opener) M.opener.setAttribute('aria-expanded', 'true');
@@ -595,6 +609,24 @@
             if (again) again.focus({ preventScroll: true });
           });
         }
+        break;
+      case 'history':
+        // The page opens with its History panel; on the same page only the
+        // hash changes. page_safety.js opens the panel on either.
+        if (info.href) window.location.assign(info.href + '#history');
+        break;
+      case 'delete-page':
+        // The same route the page's own Delete page posts to. Asking as HTMX
+        // gets the Trash redirect back as a header rather than following it.
+        Chronicle.apiFetch(treeURL(info, '/entities/' + encodeURIComponent(info.entityId)), { method: 'DELETE', headers: { 'HX-Request': 'true' } })
+          .then(function (res) {
+            var to = res.headers.get('HX-Redirect');
+            if (!res.ok || !to) throw new Error(String(res.status));
+            window.location.assign(to);
+          }, function () { throw new Error('network'); })
+          .catch(function () {
+            if (Chronicle.notify) Chronicle.notify(nm + ' could not be deleted.', 'error');
+          });
         break;
       case 'delete-yes':
         treeSave(treeURL(info, '/sidebar-nodes/' + encodeURIComponent(info.nodeId)), 'DELETE', undefined, function () {

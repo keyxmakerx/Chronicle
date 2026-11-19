@@ -9,7 +9,7 @@ is the full-size example; its `API-CONTRACT.md` documents the endpoints it uses.
 
 As the campaign owner:
 
-1. Manage > Game & features (`/campaigns/:id/extensions`): make sure the
+1. Campaign settings > Game & features (`/campaigns/:id/extensions`): make sure the
    **Sync API** feature is on. With it off, every key is refused with
    `sync_api_disabled`.
 2. Settings > API keys (`/campaigns/:id/settings?tab=api-keys`) > create a key.

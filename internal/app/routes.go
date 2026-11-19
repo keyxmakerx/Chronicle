@@ -79,6 +79,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
+	"github.com/keyxmakerx/chronicle/internal/updatehealth"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -2146,8 +2147,9 @@ type mentionLinkAdapter struct {
 }
 
 // GetMentionLinksForGraph returns @mention references across a campaign for
-// the relations graph. Converts between entity and relations package types.
-func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campaignID string, includeDmOnly bool, userID string) ([]relations.MentionLinkData, error) {
+// the relations graph, with the pages at their ends. Converts between entity
+// and relations package types.
+func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campaignID string, includeDmOnly bool, userID string) ([]relations.MentionLinkData, map[string]relations.GraphNode, error) {
 	// Determine role for visibility filtering: DM sees everything, others
 	// see only entities they have access to.
 	role := permissions.RolePlayer
@@ -2155,18 +2157,26 @@ func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campai
 		role = permissions.RoleOwner
 	}
 
-	links, err := a.svc.GetMentionLinks(ctx, campaignID, role, userID)
+	// Whoever gets the graph's whole picture also gets the links that sit in
+	// DM-only text; nobody else does.
+	graph, err := a.svc.GetMentionGraph(ctx, campaignID, role, userID, includeDmOnly)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	result := make([]relations.MentionLinkData, len(links))
-	for i, l := range links {
-		result[i] = relations.MentionLinkData{
+	links := make([]relations.MentionLinkData, len(graph.Links))
+	for i, l := range graph.Links {
+		links[i] = relations.MentionLinkData{
 			SourceEntityID: l.SourceEntityID,
 			TargetEntityID: l.TargetEntityID,
 		}
 	}
-	return result, nil
+	nodes := make(map[string]relations.GraphNode, len(graph.Pages))
+	for id, p := range graph.Pages {
+		nodes[id] = relations.GraphNode{
+			ID: p.ID, Name: p.Name, Icon: p.TypeIcon, Color: p.TypeColor, Slug: p.Slug, Type: p.TypeName,
+		}
+	}
+	return links, nodes, nil
 }
 
 // registerPageTextBlocks registers Read-aloud, Table, Steps, Checklist and the Page map:
@@ -3045,13 +3055,19 @@ func (a *App) RegisterRoutes() {
 	inviteRepo := campaigns.NewInviteRepository(a.DB)
 	inviteService := campaigns.NewInviteService(inviteRepo, campaignRepo, smtpService, a.Config.BaseURL)
 	inviteHandler := campaigns.NewInviteHandler(inviteService, campaignService, a.Config.BaseURL)
+	campaignHandler.SetInviteService(inviteService)
 	campaigns.RegisterInviteRoutes(e, inviteHandler, campaignService, authService)
+	// The desk's People line counts the invitations still waiting.
+	campaignHandler.SetInviteLister(inviteService)
+	// Every Manage page opens with its own desk sentence, worded by the same
+	// service the desk uses.
+	layouts.SetManageSentence(campaignHandler.ManageSentence)
 
 	// Guest codes: the owner's card, and auth's join page redeeming them.
 	// A guest exists only for their campaign, so removing them from it or
 	// deleting it ends their account.
 	guestCodeService := campaigns.NewGuestCodeService(campaigns.NewGuestCodeRepository(a.DB), campaignRepo)
-	campaigns.RegisterGuestCodeRoutes(e, campaigns.NewGuestCodeHandler(guestCodeService, a.Config.BaseURL), campaignService, authService)
+	campaignHandler.SetInviteBox(inviteService, guestCodeService, a.Config.BaseURL)
 	auth.ConfigureGuests(authService, guestCodeService)
 	campaigns.ConfigureVisitPasses(campaignService, guestCodeService)
 	auth.OnGuestMerged(authService, guestCodeService.MoveGuestMembership)
@@ -3124,6 +3140,7 @@ func (a *App) RegisterRoutes() {
 	entities.RegisterContentTemplateRoutes(e, contentTemplateHandler, campaignService, authService)
 	campaignService.SetContentTemplateSeeder(contentTemplateService)
 	entityHandler.SetContentTemplateService(contentTemplateService)
+	campaignHandler.RegisterCustomizeSection(newTemplatesSection(contentTemplateService))
 
 	// Worldbuilding prompt routes (guided writing prompts for content creators).
 	wbPromptRepo := entities.NewWorldbuildingPromptRepository(a.DB)
@@ -3152,6 +3169,7 @@ func (a *App) RegisterRoutes() {
 	// but don't crash -- the rest of the app keeps running.
 	mediaRepo := media.NewMediaRepository(a.DB)
 	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
+	campaignHandler.RegisterDeskProvider(media.NewDeskProvider(mediaService))
 	if err := mediaService.ValidateMediaPath(); err != nil {
 		slog.Warn("media storage validation failed; uploads may not work",
 			slog.Any("error", err),
@@ -3707,6 +3725,11 @@ func (a *App) RegisterRoutes() {
 	// socket that authenticated before the disable can't keep receiving.
 	// See wsRevokerHolder — wsHub itself is constructed further down.
 	securityService.SetConnectionRevoker(wsRevoker)
+	// A live socket was opened by a session, so it closes when the person's
+	// sessions all end (sign out everywhere, password reset or change).
+	auth.OnSessionsRevoked(authService, func(_ context.Context, userID string) {
+		wsRevoker.RevokeUserEverywhere(userID)
+	})
 
 	// Data hygiene scanner: orphan detection and cleanup for media, API keys, stale files.
 	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)
@@ -3736,6 +3759,14 @@ func (a *App) RegisterRoutes() {
 	releaseNotice := admin.NewReleaseNoticeService(settingsRepo, newChronicleReleaseSource(), hostinfo.Version)
 	adminHandler.SetReleaseNoticeService(releaseNotice)
 	go releaseNotice.RunScheduler(a.ShutdownCtx)
+
+	// Update health: count uses and failures of the features this release
+	// changed, and show the ones that need a site admin in Needs you.
+	updateHealthRecorder := updatehealth.NewRecorder(updatehealth.Changed)
+	updatehealth.SetDefault(updateHealthRecorder)
+	updateHealth := updatehealth.NewService(updateHealthRecorder, updatehealth.NewRepository(a.DB))
+	adminHandler.SetUpdateHealth(updateHealth)
+	go updateHealth.Run(a.ShutdownCtx)
 
 	// The site check-up behind the admin top bar's shield: a weekly backup
 	// read-back, sign-up, password reset and updates. Admin reaches the
@@ -3914,7 +3945,7 @@ func (a *App) RegisterRoutes() {
 	// decision and is left alone. Best-effort: logs and never blocks startup.
 	if n, err := syncapi.ReconcileAddonEnablement(context.Background(), syncService, addonService); err != nil {
 		slog.Error("sync-api addon enablement backfill failed; campaigns that already use the "+
-			"Sync API may be refused until an owner enables Sync API on the campaign's Game & features page (Manage → Game & features)",
+			"Sync API may be refused until an owner enables Sync API on the campaign's Game & features page (Campaign settings → Game & features)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("sync-api addon enablement backfill complete", slog.Int("campaigns", n))
@@ -4212,6 +4243,18 @@ func (a *App) RegisterRoutes() {
 	// Entity campaign checker prevents cross-campaign entity linking (IDOR).
 	sessionsRepo := sessions.NewSessionRepository(a.DB)
 	sessionsService := sessions.NewSessionService(sessionsRepo, &entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	// The door a newcomer meets before joining: the campaign's picture,
+	// its table and its next game night, for a link, emailed invite or code.
+	invitationSource := campaigns.NewInvitationSource(campaignRepo, inviteRepo, guestCodeService,
+		func(ctx context.Context, campaignID string, now time.Time) *auth.InvitationNight {
+			n, err := sessionsService.NextGameNight(ctx, campaignID, now)
+			if err != nil || n == nil {
+				return nil
+			}
+			return &auth.InvitationNight{Date: n.Date, Time: n.Time, TZ: n.TZ, At: n.At}
+		})
+	auth.ConfigureInvitations(authService, invitationSource)
+	inviteHandler.SetInvitations(invitationSource)
 	// The calendar's anchor-move preview names the sessions it would re-date
 	// through this lookup; without it the owner's warning would always read
 	// "no sessions affected".
@@ -4244,7 +4287,7 @@ func (a *App) RegisterRoutes() {
 	// owner choice is left alone. Best-effort: logs and never blocks startup.
 	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {
 		slog.Error("game nights addon enablement backfill failed; campaigns that already use game nights "+
-			"may not see them until an owner turns on Game nights (Manage → Game & features)",
+			"may not see them until an owner turns on Game nights (Campaign settings → Game & features)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("game nights addon enablement backfill complete", slog.Int("campaigns", n))
@@ -4756,6 +4799,11 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// Leaving a campaign: the leaver's characters go back to "Free to pick" and
+	// the owner gets one bell note.
+	campaigns.ConfigureLeaving(campaignService,
+		&leaveCharacterAdapter{store: entityRepo.(leaveCharacterStore)},
+		&leaveNotifierAdapter{svc: sessionsService})
 	// The campaign's Sync API switch governs outside apps, the notebook too.
 	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
@@ -4860,6 +4908,7 @@ func (a *App) RegisterRoutes() {
 	pageSafetyService.AddTrashKind(gameNightTrash{svc: sessionsService, backOn: sessionsHandler.EmailBackOn})
 	pageSafetyService.AddTrashKind(pictureTrash{svc: mediaService})
 	pageSafetyService.AddTrashKind(mapTrash{svc: mapsService})
+	campaignHandler.RegisterDeskProvider(entities.NewDeskProvider(pageSafetyService))
 	pageSafetyHandler := entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService)
 	pageSafetyHandler.SetAuditService(auditService)
 	entities.RegisterPageSafetyRoutes(e, pageSafetyHandler, campaignService, authService)
@@ -4896,6 +4945,7 @@ func (a *App) RegisterRoutes() {
 		pageSafetyService.SetLongTermTrash(playerChangesSvc)
 		adminHandler.SetLongTermTrashSizer(playerChangesSvc)
 		go playerChangesSvc.StartPacker(a.ShutdownCtx)
+		campaignHandler.RegisterDeskProvider(playerchanges.NewDeskProvider(playerChangesSvc))
 	} else {
 		slog.Warn("player changes plugin degraded — What players changed is not available")
 	}
@@ -5067,7 +5117,7 @@ func (a *App) RegisterRoutes() {
 	// entity's linked events" engine. Distinct from calendar_preview
 	// (dashboard upcoming-events card) by design.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "entity_calendar", Label: "Calendar (this entity)", Icon: "fa-calendar-days",
+		Type: "entity_calendar", Label: "Calendar (this page)", Icon: "fa-calendar-days",
 		Description: "Upcoming events for a bound calendar",
 		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5080,7 +5130,7 @@ func (a *App) RegisterRoutes() {
 	// this renders sky only, not yet the hourglass shelf (real UI work of
 	// its own).
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "entity_worldstate", Label: "Worldstate timepiece", Icon: "fa-hourglass-half",
+		Type: "entity_worldstate", Label: "World sky", Icon: "fa-hourglass-half",
 		Description: "Ambient sky for the current world date",
 		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5180,7 +5230,7 @@ func (a *App) RegisterRoutes() {
 	// it); none + Scribe+ → create-or-pick prompt; none + Player → friendly
 	// empty state.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "map_editor", Label: "Map Editor", Icon: "fa-map-location-dot",
+		Type: "map_editor", Label: "Map", Icon: "fa-map-location-dot",
 		Description: "Framed map preview that opens the full map",
 		Addon:       "maps", Contexts: []string{"template"},
 		// No ConfigFields — the source of truth is entity.MapID. The
@@ -5237,8 +5287,8 @@ func (a *App) RegisterRoutes() {
 
 	// Entity manager block — sortable, filterable entity list with visibility controls.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "entity_manager", Label: "Entity Manager", Icon: "fa-list-check",
-		Description: "Sortable, filterable entity list with visibility controls",
+		Type: "entity_manager", Label: "Page manager", Icon: "fa-list-check",
+		Description: "Sortable, filterable page list with visibility controls",
 		Contexts:    []string{"template"},
 	}, func(bctx entities.BlockRenderContext) templ.Component {
 		typeID := entities.BlockConfigInt(bctx.Block.Config, "entity_type_id", 0)
@@ -5417,6 +5467,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
+		campaignHandler.RegisterDeskProvider(ai_workspace.NewDeskProvider(aiConnectorSvc))
 		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheckDid)
 		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)
@@ -5860,7 +5911,13 @@ func (a *App) RegisterRoutes() {
 			// rather than failing the page.
 			if !middleware.IsHTMX(c) {
 				if vp, err := authService.GetViewPrefs(ctx, session.UserID); err == nil {
-					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast})
+					// The saved time zone, so dates read in it (static/js/dates.js).
+					// A failed read leaves the device's zone.
+					var tz string
+					if zones, zerr := authService.GetTimezonesByIDs(ctx, []string{session.UserID}); zerr == nil {
+						tz = zones[session.UserID]
+					}
+					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz})
 				} else {
 					slog.Warn("reading view prefs", slog.String("user_id", session.UserID), slog.Any("error", err))
 				}
@@ -5927,6 +5984,8 @@ func (a *App) RegisterRoutes() {
 					CraftArt:      ap.CraftArt,
 					PageLook:      ap.PageLook,
 					StyleKit:      ap.StyleKit,
+					Entrance:      ap.Entrance,
+					MomentSheen:   ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
 					DmScreenKit:   ap.DmScreenKit,
 					TimelinePopup: ap.TimelinePopup,
 				}
@@ -6008,6 +6067,17 @@ func (a *App) RegisterRoutes() {
 				effectiveRole = int(campaigns.RolePlayer)
 				ctx = layouts.SetViewingAsPlayer(ctx, true)
 			}
+			// A guest preview arrives already downgraded to a visitor's context
+			// (campaigns.AllowPublicCampaignAccess), so everything above and
+			// below is built from the visitor's values. The preview is noted
+			// only to draw its own chrome, and the site-admin flag, which the
+			// session carries, is blanked so the shell is a visitor's too.
+			if cc.Preview == campaigns.PreviewGuest {
+				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewGuest)
+				ctx = layouts.SetIsAdmin(ctx, false)
+			} else if viewingAsPlayer {
+				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewPlayer)
+			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
 			ctx = layouts.SetVisitUntil(ctx, cc.VisitUntil)
@@ -6085,16 +6155,26 @@ func (a *App) RegisterRoutes() {
 				}
 				// A member who is not the owner has pins of their own; they
 				// are read for this user only.
+				// The owner's are only Manage tools, which sit outside the
+				// layout, so they go to Pinned after ViewNav, not through it.
 				var pins []string
-				if cc.IsMember && cc.MemberRole < campaigns.RoleOwner && layoutUserID != "" {
+				if cc.IsMember && layoutUserID != "" {
 					if p, err := campaignService.NavPins(reqCtx, cc.Campaign.ID, layoutUserID); err == nil {
 						pins = p
 					} else {
 						slog.Warn("reading member nav pins", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 					}
 				}
-				viewer := campaigns.NavViewer{Owner: navOwner, Access: navAccessFor(cc), Pins: pins}
+				viewerPins := pins
+				if cc.MemberRole >= campaigns.RoleOwner {
+					viewerPins = nil
+				}
+				viewer := campaigns.NavViewer{Owner: navOwner, Access: navAccessFor(cc), Pins: viewerPins}
 				secs := campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)
+				if navOwner {
+					secs = campaigns.AppendManagePins(secs, pins, "/campaigns/"+cc.Campaign.ID,
+						enabledSlugs["media-gallery"], enabledSlugs["sync-api"])
+				}
 				ctx = layouts.SetNavSections(ctx, navSectionViews(secs))
 				ctx = layouts.SetNavDrawer(ctx, buildNavDrawer(in, secs,
 					campaigns.NavDrawerRows(in.layout, in.apps, viewer), navOwner, addonIDs))
@@ -6269,8 +6349,9 @@ func (a *App) RegisterRoutes() {
 		dmSources.Homebrew = &dmHomebrewAdapter{trackers: a.PluginHealth.IsHealthy(trackers.PluginSlug)}
 	}
 	// The Fight tab runs encounters, so it needs their tables.
+	dmFight := &dmFightAdapter{}
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
-		dmSources.Fight = dmFightAdapter{}
+		dmSources.Fight = dmFight
 	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
@@ -6644,8 +6725,10 @@ func (a *App) RegisterRoutes() {
 	a.registerPlugin(PluginRegistration{Slug: transformations.PluginSlug})
 	var layersSvc transformations.Service // nil while degraded; the AI part is left out then
 	if a.PluginHealth.IsHealthy(transformations.PluginSlug) {
-		layersSvc = transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages})
+		layersSvc = transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages},
+			transformations.WithNotifier(&transformationsLayersPublisher{bus: wsEventBus}))
 		transformations.RegisterRoutes(e, transformations.NewHandler(layersSvc), campaignService, authService, addonService)
+		syncAPIHandler.SetLayersReader(&transformationsLayersSyncAdapter{svc: layersSvc})
 	} else {
 		slog.Warn("transformations plugin degraded — layers on heroes are not available")
 	}
@@ -6706,6 +6789,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
 		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB), encounterPages, encounterResults)
 		encounterAPI.attach(encounterSvc)
+		dmFight.svc = encounterSvc
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 		runSvc := encounters.NewRunService(encounters.NewRunRepository(a.DB), encounterSvc, encounterPages)
 		// Scenes show things to players: pages they may open, NPCs the
@@ -6916,6 +7000,8 @@ func (a *App) RegisterRoutes() {
 // /static/js/widgets/ rather than in a plugin: each loads on the first page
 // that mounts it (ADR-063). Helpers come first, the registering script last.
 var coreWidgets = []PluginWidget{
+	{Name: "campaign-leave", Scripts: []string{"/static/js/widgets/campaign_leave.js"}},
+	{Name: "invitation-time", Scripts: []string{"/static/js/widgets/invitation_time.js"}},
 	{Name: "calendar_event_roll", Scripts: []string{"/static/js/widgets/calendar_event_roll.js"}},
 	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},
 	{Name: "permissions", Scripts: []string{"/static/js/widgets/permissions.js"}},
@@ -6924,7 +7010,9 @@ var coreWidgets = []PluginWidget{
 	{Name: "db-explorer", Scripts: []string{"/static/js/widgets/db_explorer.js"}},
 	{Name: "entity-posts", Scripts: []string{"/static/js/widgets/entity_posts.js"}},
 	{Name: "entity-notes", Scripts: []string{"/static/js/widgets/entity_notes.js"}},
-	{Name: "entity_manager", Scripts: []string{"/static/js/widgets/entity_manager.js"}},
+	{Name: "entity_manager", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/entity_manager.js"}},
+	{Name: "tag-picker", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/tag_picker.js"}},
+	{Name: "transaction_log", Scripts: []string{"/static/js/widgets/transaction_log.js"}},
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
 	{Name: "diag-picker", Scripts: []string{"/static/js/widgets/diag_picker.js"}},
@@ -6939,12 +7027,15 @@ var coreWidgets = []PluginWidget{
 	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
 	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},
 	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
-	{Name: "customize-shell", Scripts: []string{"/static/js/widgets/customize_shell.js"}},
+	{Name: "customize-shell", Scripts: []string{"/static/js/find_palette.js", "/static/js/widgets/customize_shell.js"}},
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
+	{Name: "customize-templates", Scripts: []string{"/static/js/widgets/customize_templates.js"}},
 	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/customize_page_editor.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "checkup", Scripts: []string{"/static/js/widgets/checkup.js"}},
 	{Name: "player-view", Scripts: []string{"/static/js/widgets/player_view.js"}},
+	{Name: "topbar-tools", Scripts: []string{"/static/js/widgets/topbar_tools.js"}},
+	{Name: "put-on-page", Scripts: []string{"/static/js/widgets/put_on_page.js"}},
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},

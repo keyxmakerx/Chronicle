@@ -26,7 +26,7 @@ func mapsOpening(ctx context.Context, data MapListData) layouts.AppOpeningData {
 		d.Action = &layouts.AppAction{
 			Label: "Add a map",
 			Icon:  "fa-plus",
-			Attrs: templ.Attributes{"onclick": "document.getElementById('create-map-modal').classList.remove('hidden')"},
+			Attrs: templ.Attributes{"data-opens": "create-map-modal"},
 		}
 	}
 	return d

@@ -45,8 +45,8 @@ Chronicle.register('tag-picker', {
       state.entityTags.forEach(function (tag) {
         var chip = document.createElement('span');
         chip.className = 'tp-chip';
-        chip.style.backgroundColor = tag.color + '22';
-        chip.style.color = tag.color;
+        if (window.ChronicleChip) window.ChronicleChip.paint(chip, tag.color);
+        else chip.style.color = tag.color;
         chip.textContent = tag.name;
 
         // Show DM-only indicator for dm_only tags.

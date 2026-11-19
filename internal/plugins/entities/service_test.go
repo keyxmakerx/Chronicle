@@ -200,6 +200,9 @@ func (m *mockEntityTypeRepo) MaxSortOrder(ctx context.Context, campaignID string
 
 // mockEntityRepo implements EntityRepository for testing.
 type mockEntityRepo struct {
+	findMentionSourcesFn func(ctx context.Context, campaignID string, role int, userID string) ([]MentionSource, error)
+	findMentionPagesFn   func(ctx context.Context, campaignID string, ids []string, role int, userID string) (map[string]MentionPage, error)
+
 	createFn           func(ctx context.Context, entity *Entity) error
 	findByIDFn         func(ctx context.Context, id string) (*Entity, error)
 	findBySlugFn       func(ctx context.Context, campaignID, slug string) (*Entity, error)
@@ -438,8 +441,18 @@ func (m *mockEntityRepo) SetAliases(ctx context.Context, entityID string, aliase
 	return nil
 }
 
-func (m *mockEntityRepo) FindAllMentionLinks(_ context.Context, _ string, _ int, _ string) ([]MentionLink, error) {
+func (m *mockEntityRepo) FindMentionSources(ctx context.Context, campaignID string, role int, userID string) ([]MentionSource, error) {
+	if m.findMentionSourcesFn != nil {
+		return m.findMentionSourcesFn(ctx, campaignID, role, userID)
+	}
 	return nil, nil
+}
+
+func (m *mockEntityRepo) FindMentionPages(ctx context.Context, campaignID string, ids []string, role int, userID string) (map[string]MentionPage, error) {
+	if m.findMentionPagesFn != nil {
+		return m.findMentionPagesFn(ctx, campaignID, ids, role, userID)
+	}
+	return map[string]MentionPage{}, nil
 }
 
 func (m *mockEntityRepo) UpdateCoverImage(ctx context.Context, id, coverImagePath string) error {

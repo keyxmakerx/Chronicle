@@ -13,6 +13,12 @@
  */
 (function () {
   'use strict';
+
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
   function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
 
 
@@ -442,7 +448,7 @@
         if (n) sigs[id] = sigOf(n);
         if (motionMode() !== 'full' || !body.animate) return;
         var to = body.offsetHeight;
-        body.animate([{ height: from + 'px' }, { height: to + 'px' }], { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+        body.animate([{ height: from + 'px' }, { height: to + 'px' }], { duration: tokMs('--dur-standard', 200), easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
       }
 
       function tickAgo() {
@@ -755,7 +761,7 @@
         if (instant || motionMode() === 'off' || !form.animate) { finish(); return; }
         var calm = motionMode() === 'calm';
         form.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: calm ? 'none' : 'scale(0.97)' }],
-          { duration: 120, easing: 'cubic-bezier(0.4, 0, 1, 1)' }).onfinish = finish;
+          { duration: tokMs('--dur-everyday-out', 80), easing: 'cubic-bezier(0.4, 0, 1, 1)' }).onfinish = finish;
       }
 
       function save() {

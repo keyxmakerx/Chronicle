@@ -80,8 +80,9 @@ test('the account menu reads the everyday tokens, not fixed durations', () => {
   const app = read('internal/templates/layouts/app.templ');
   assert.ok(!/duration-(75|100)\b/.test(app), 'app.templ still has a fixed 75ms or 100ms duration');
   assert.ok(!app.includes('transition-all'), 'app.templ still has transition-all');
-  assert.equal((app.match(/x-transition:enter="mn-enter"/g) || []).length, 4);
-  assert.equal((app.match(/x-transition:leave="mn-leave"/g) || []).length, 4);
+  // The four header menus and the phone header's "+N" tray.
+  assert.equal((app.match(/x-transition:enter="mn-enter"/g) || []).length, 5);
+  assert.equal((app.match(/x-transition:leave="mn-leave"/g) || []).length, 5);
 });
 
 test('a menu opens in 120ms and closes in 80ms on a click', async () => {

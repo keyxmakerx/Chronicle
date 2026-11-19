@@ -19,6 +19,12 @@
  */
 (function () {
   'use strict';
+
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
   function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
 
 
@@ -815,7 +821,7 @@
       var h = '<div class="cpe-pagehead">' + ic('fa-file-lines') + '<span>';
       if (PV.failed) h += 'The page couldn’t be drawn here, so widgets show their names.';
       else if (!PV.loaded) h += 'Loading a page to show the layout with…';
-      else if (HOME) h += 'Your ' + (KEY === 'dm' ? gmTerm() + ' dashboard' : 'campaign home') + ' as it is drawn, with your own pages';
+      else if (HOME) h += 'Your campaign home as it is drawn, with your own pages';
       else if (CATHOME) h += 'The ' + esc(S.plural || 'category') + ' home as it is drawn, with your own pages';
       else if (!PV.entityId) h += 'No ' + esc((S.plural || 'pages').toLowerCase()) + ' yet, so widgets show example content. Your pages will fill them with their own.';
       else h += 'Shown with ' + esc(pageName()) + ', one of your ' + esc((S.plural || 'pages').toLowerCase());
@@ -968,7 +974,7 @@
           var m = W[k], once = m.singleton && hasType(m.type);
           return '<div class="cpe-gwrap"><button type="button" class="cpe-gw" data-gw="' + esc(k) + '" title="' + esc(m.desc) + '"' + (once ? ' disabled' : '') + '>' +
             '<span class="cpe-gw-ic">' + ic(m.icon) + '</span><span class="cpe-gw-nm">' + esc(m.name) + '</span>' +
-            '<span class="cpe-gw-sz">' + (once ? 'Already on the page' : m.sizes.length ? esc(m.sizes.map(function (s) { return s.replace('x', '×'); }).join(' · ')) : 'Columns only') + '</span></button>' +
+            '<span class="cpe-gw-sz">' + (once ? 'Already on the page' : m.sizes.length ? esc(m.sizes.map(function (s) { return s.replace('x', '×'); }).join(' · ')) : 'Fills the column') + '</span></button>' +
             '<button type="button" class="cpe-eye" data-act="peek" data-k="' + esc(k) + '" aria-label="Preview ' + esc(m.name) + '" title="Preview">' + ic('fa-eye') + '</button></div>';
         }).join('') + '</div></div>';
       });
@@ -1182,7 +1188,7 @@
     // fadeFrame fades the page in after it changes how it is drawn.
     function fadeFrame() {
       var f = $('.cpe-frame');
-      if (f && f.animate && fades()) f.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      if (f && f.animate && fades()) f.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'cubic-bezier(.2,.8,.2,1)' });
     }
     function select(sel) {
       UI.sel = sel;
@@ -1328,7 +1334,7 @@
         var gone = popEl;
         popEl = null;
         gone.style.pointerEvents = 'none';
-        if (fades() && gone.animate) gone.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = function () { gone.remove(); };
+        if (fades() && gone.animate) gone.animate([{ opacity: 1 }, { opacity: 0 }], { duration: tokMs('--dur-everyday-out', 80), easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = function () { gone.remove(); };
         else gone.remove();
       }
       document.removeEventListener('pointerdown', popOff, true);
@@ -1382,7 +1388,7 @@
       }
       // It grows in beside the panel; Calm only fades it in.
       p.style.transformOrigin = 'right center';
-      if (fades() && p.animate) p.animate(moving() ? [{ opacity: 0, transform: 'scale(.97)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      if (fades() && p.animate) p.animate(moving() ? [{ opacity: 0, transform: 'scale(.97)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'cubic-bezier(.2,.8,.2,1)' });
       p.addEventListener('click', function (e) {
         if (e.target.closest('[data-peekx]')) { closePop(); btn.focus(); return; }
         var sw = e.target.closest('[data-peekkeep]');
@@ -1794,6 +1800,32 @@
         else if (UI.sel) select(null);
       }
     });
+    // On a phone the panel is a sheet: a swipe down on its handle strip folds
+    // it, a swipe up opens it, and a tap still goes through to the buttons.
+    on(el, 'pointerdown', function (e) {
+      var strip = e.target.closest && e.target.closest('.cpe-insp-tabs');
+      if (!strip || e.pointerType === 'mouse' || window.innerWidth > 1100) return;
+      var y0 = e.clientY, moved = false;
+      function end(ev) {
+        document.removeEventListener('pointermove', mv);
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        if (!moved) return;
+        var dy = ev.clientY - y0;
+        if (Math.abs(dy) < 24) return;
+        UI.sheet = dy < 0;
+        var ins = $('.cpe-insp');
+        if (ins) ins.classList.toggle('open', UI.sheet);
+        // The press that ended the swipe must not also click a tab.
+        var stop = function (c) { c.stopPropagation(); c.preventDefault(); };
+        document.addEventListener('click', stop, true);
+        setTimeout(function () { document.removeEventListener('click', stop, true); }, 0);
+      }
+      function mv(ev) { if (Math.abs(ev.clientY - y0) > 8) moved = true; }
+      document.addEventListener('pointermove', mv);
+      document.addEventListener('pointerup', end);
+      document.addEventListener('pointercancel', end);
+    });
     on(el, 'pointerdown', function (e) {
       if (UI.reading) return;
       if (e.target.closest('.cpe-tbar button, .cpe-addt')) return;
@@ -1860,8 +1892,10 @@
     render();
     showLook(UI.look);
     loadPalette();
+    document.documentElement.classList.add('cpe-open');
     return function destroy() {
       alive = false;
+      document.documentElement.classList.remove('cpe-open');
       clearTimeout(PV.timer);
       clearTimeout(pageTimer);
       closePop();

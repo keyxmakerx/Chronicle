@@ -49,7 +49,7 @@ templ wizardShell(stepLabel string, body templ.Component) {
 				aria-label="New calendar"
 				tabindex="-1"
 				x-ref="panel"
-				x-init="$nextTick(() => $el.focus())"
+				x-init="$nextTick(() => { $el.focus(); if (window.Chronicle && Chronicle.modal) Chronicle.modal($el, { opener: null, escape: false, focus: false, aria: false, watch: $el.closest('#calv5-wizard-root') }) })"
 				@keydown.escape.window="tryClose()"
 				@input="dirty=true;nag=false"
 				@calv5-dirty="dirty=true;nag=false"

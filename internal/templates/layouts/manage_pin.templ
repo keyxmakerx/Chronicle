@@ -1,0 +1,32 @@
+// manage_pin.templ is the owner's pin for a Manage tool: the same control on a
+// desk line and beside a page's title. It adds the tool to the owner's own
+// Pinned group in the sidebar, which only they see.
+
+package layouts
+
+import "strconv"
+
+// ManagePin draws the pin for a tool key ("manage:trash"). It draws nothing
+// when the viewer cannot pin (not the owner, previewing as a player, or an
+// archived campaign), so a control is never offered that would be refused.
+templ ManagePin(key string, name string) {
+	if key != "" && NavCanOwnPin(ctx) {
+		<button
+			type="button"
+			class="manage-pin"
+			data-manage-pin={ key }
+			data-pin-name={ name }
+			aria-pressed={ strconv.FormatBool(ManagePinned(ctx, key)) }
+			if ManagePinned(ctx, key) {
+				aria-label={ "Unpin " + name + " from your sidebar" }
+				title="Unpin"
+			} else {
+				aria-label={ "Pin " + name + " to your sidebar" }
+				title="Pin to your sidebar"
+			}
+			onclick={ managePinCall() }
+		>
+			<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path class="manage-pin-head" d="M9.5 2.5l4 4-1.7.9-2.2 2.2.3 2.5-1 1-6-6 1-1 2.5.3 2.2-2.2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"></path><path d="M6 10l-3.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg>
+		</button>
+	}
+}

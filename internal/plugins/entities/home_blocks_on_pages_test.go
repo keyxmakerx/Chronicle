@@ -200,7 +200,7 @@ func TestHomeBlocksOnAPageShowEachViewerOnlyTheirOwn(t *testing.T) {
 		allSee string
 	}{
 		{block: "welcome_banner", who: everyone, allSee: "Therin", ownerSees: "/settings"},
-		{block: "quick_actions", who: everyone, allSee: "All Pages", ownerSees: "/entity-types"},
+		{block: "quick_actions", who: everyone, allSee: "All pages", ownerSees: "/entity-types"},
 		{block: "category_grid", who: everyone, allSee: "Characters", ownerSees: "Secret Vaults"},
 		{block: "recent_pages", who: everyone, allSee: "Harbour Gate"},
 		{block: "entity_list", cfg: map[string]any{"entity_type_id": float64(7), "limit": float64(5)}, who: everyone, allSee: "/campaigns/camp-1/entity-list?type=7&amp;limit=5"},
@@ -222,6 +222,11 @@ func TestHomeBlocksOnAPageShowEachViewerOnlyTheirOwn(t *testing.T) {
 		{block: "where_we_play", cfg: map[string]any{"foundry_url": "https://play.example.com", "voice": "Discord"}, who: everyone, allSee: "play.example.com"},
 		{block: "where_we_play", who: owner, ownerSees: "Tell your players"},
 		{block: "house_rules", who: members, allSee: "/campaigns/camp-1/house-rules"},
+		{block: "table_agreement", cfg: map[string]any{"content": "No phones at the table."}, who: everyone, allSee: "No phones at the table."},
+		{block: "table_agreement", who: owner, ownerSees: "Safety and lines"},
+		{block: "making_a_hero", cfg: map[string]any{"content": "Start at level 1."}, who: everyone, allSee: "Start at level 1."},
+		{block: "making_a_hero", who: owner, ownerSees: "Starting level"},
+		{block: "run_by", who: members, allSee: "/campaigns/camp-1/run-by"},
 		{block: "last_time", who: members, allSee: "/campaigns/camp-1/last-time"},
 		{block: "activity_feed", who: owner, ownerSees: "/campaigns/camp-1/activity/embed"},
 		{block: "sync_status", who: owner, ownerSees: "/campaigns/camp-1/foundry-vtt/dashboard-sync-block"},
