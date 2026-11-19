@@ -17,7 +17,7 @@ templ CampaignIndexPage(campaigns []Campaign, total int, opts ListOptions, csrfT
 
 // CampaignListContent renders the campaign list content (for HTMX partial swap).
 templ CampaignListContent(campaigns []Campaign, total int, opts ListOptions, csrfToken string, leave LeaveView) {
-	<div id="campaign-list" data-widget="campaign-leave">
+	<div id="campaign-list" data-widget="campaign-leave" data-more-pages?={ total > opts.PerPage }>
 		<div class="flex items-center justify-between mb-6">
 			<h1 class="text-2xl font-bold text-fg">My campaigns</h1>
 			<a href="/campaigns/new" class="btn-primary">New campaign</a>

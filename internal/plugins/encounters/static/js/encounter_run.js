@@ -369,6 +369,9 @@
     if (S.mode !== m) {
       Object.keys(S.folds).forEach(function (id) { C.CreatureFold.dispose(S.folds[id]); });
       S.folds = {}; S.nodes = {}; S.open = {};
+      // The adventure chooser belongs to the list of fights; a started or
+      // ended fight starts from a closed one.
+      S.plan = null;
       S.el.textContent = '';
       S.mode = m;
       if (m === 'loading') S.el.appendChild(h('p', 'erun-note', 'Loading the fight\u2026'));
@@ -894,7 +897,8 @@
   }
 
   function onKey(S, e) {
-    if (e.key === 'Escape' && S.plan && S.el.querySelector('.erun-plan').contains(e.target)) {
+    var planBox = S.plan && S.el.querySelector('.erun-plan');
+    if (e.key === 'Escape' && planBox && planBox.contains(e.target)) {
       e.preventDefault();
       e.stopPropagation();
       togglePlan(S);

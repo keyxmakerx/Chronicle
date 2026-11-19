@@ -10,7 +10,9 @@
  * (GET .../entity-types/placement), so this file holds no category rules.
  * The Game & features page and the DM Screen's Trackers section both use it.
  * The list grows out of its button with the menus' .mn-* motion, which Calm
- * and Off already retime. Owner and co-DM only: the routes check the role.
+ * and Off already retime. The campaign's owner only, as for the
+ * Customizer's layouts: the routes check the role, and a caller offers the
+ * button only to the owner.
  */
 (function () {
   'use strict';

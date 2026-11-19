@@ -140,9 +140,10 @@ type SystemSource interface {
 
 // HomebrewSource draws what fills the Homebrew drawer: its stylesheets and
 // the widget that reads the campaign's homebrew itself, so the screen holds
-// no homebrew data of its own.
+// no homebrew data of its own. canPlace offers placing a Trackers block,
+// which only the campaign's owner may do.
 type HomebrewSource interface {
-	DrawerMount(campaignID string) templ.Component
+	DrawerMount(campaignID string, canPlace bool) templ.Component
 }
 
 // FightSource draws the Fight tab: the encounter tracker's own widget, which

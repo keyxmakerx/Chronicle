@@ -152,7 +152,7 @@ func TestAppendLayoutBlockAPI(t *testing.T) {
 	}
 }
 
-// The route is the owner's, and a co-DM arrives as the owner.
+// The route is the owner's alone, like the Customizer's own layout routes.
 func TestAppendLayoutBlockRouteIsOwnerPost(t *testing.T) {
 	raw, err := os.ReadFile("routes.go")
 	if err != nil {

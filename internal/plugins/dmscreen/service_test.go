@@ -122,10 +122,13 @@ func TestBuild_Roles(t *testing.T) {
 }
 
 // drawerMount stands in for homebrew's drawer content.
-type drawerMount struct{ asked string }
+type drawerMount struct {
+	asked    string
+	canPlace bool
+}
 
-func (d *drawerMount) DrawerMount(campaignID string) templ.Component {
-	d.asked = campaignID
+func (d *drawerMount) DrawerMount(campaignID string, canPlace bool) templ.Component {
+	d.asked, d.canPlace = campaignID, canPlace
 	return templ.Raw("drawer")
 }
 
@@ -138,6 +141,18 @@ func TestBuild_HomebrewOwnerOnly(t *testing.T) {
 	}
 	if owner.Homebrew == nil || d.asked != "c1" {
 		t.Errorf("owner drawer = %v, asked for %q", owner.Homebrew, d.asked)
+	}
+	// Placing a Trackers block changes a page layout: the owner's, not a co-DM's.
+	for _, tt := range []struct {
+		name    string
+		layouts bool
+	}{{"co-DM", false}, {"owner", true}} {
+		if _, err := svc.Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3, Layouts: tt.layouts}); err != nil {
+			t.Fatal(err)
+		}
+		if d.canPlace != tt.layouts {
+			t.Errorf("%s: canPlace = %v, want %v", tt.name, d.canPlace, tt.layouts)
+		}
 	}
 	if none, _ := NewService(Sources{}).Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3}); none.Homebrew != nil {
 		t.Error("no source should mean no drawer")

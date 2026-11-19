@@ -156,10 +156,12 @@ html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [d
 .chc__row:hover, .chc__row:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 .chc__row + .chc__row { border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
 /* Links in page text, outside an editor: the card is the long press's, so the
-   phone's own link callout (and the entity pill's select-all) stay off them. Links to other sites are not matched. */
-.prose:not(:has([contenteditable="true"])) a[data-entity-preview] { -webkit-touch-callout: none; }
+   phone's own link callout (and the entity pill's select-all) stay off them.
+   The editor's own root is .prose too, hence both :not()s; links to other
+   sites are not matched. */
+.prose:not([contenteditable="true"]):not(:has([contenteditable="true"])) a[data-entity-preview] { -webkit-touch-callout: none; }
 @media (pointer: coarse) {
-  .prose:not(:has([contenteditable="true"])) a[data-entity-preview] { -webkit-user-select: none; user-select: none; }
+  .prose:not([contenteditable="true"]):not(:has([contenteditable="true"])) a[data-entity-preview] { -webkit-user-select: none; user-select: none; }
 }
 .chc__x { display: none; position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: inherit; opacity: 0.7; cursor: pointer; font-size: 16px; line-height: 1; }
 .chc__x:hover { opacity: 1; }

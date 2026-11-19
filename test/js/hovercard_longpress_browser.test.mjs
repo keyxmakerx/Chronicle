@@ -22,6 +22,7 @@ const page = () => `<!doctype html><html><head><style>${file('static/css/paper.c
 <a id="inner" href="/campaigns/c1/entities/e1" data-mention-id="e1" data-entity-preview="/campaigns/c1/entities/e1/preview">Captain Vell</a>
 and read <a id="outer" href="https://example.com/x">a site</a>.</p></div>
 <ul><li><a id="listed" href="/campaigns/c1/entities/e2" data-entity-preview="/campaigns/c1/entities/e2/preview">In a list</a></li></ul>
+<div class="prose" contenteditable="true"><p><a id="editing" href="/campaigns/c1/entities/e3" data-entity-preview="/campaigns/c1/entities/e3/preview">Being edited</a></p></div>
 <script>
 window.__peeked = []; window.__toasts = []; window.__copied = [];
 window.Chronicle = { register: function () {}, notify: function (m) { window.__toasts.push(m); },
@@ -109,9 +110,13 @@ test('the phone\'s link menu is suppressed on a page link in text only', { skip 
   assert.equal(r.inner, true, 'a page link in text');
   assert.equal(r.outer, false, 'a link to another site keeps the phone\'s menu');
   assert.equal(r.listed, false, 'a link outside page text is left alone');
-  // Chromium has no touch callout to read back; the rule's scope is the CSS.
+  // Chromium has no touch callout to read back; the same rule turns off text
+  // selection on touch, which it does report. An editor's own links keep it,
+  // since there a press places the caret.
+  const sel = await p.evaluate(() => ['inner', 'outer', 'editing'].map((id) => getComputedStyle(document.getElementById(id)).userSelect));
+  assert.deepEqual(sel.map((v) => v === 'none'), [true, false, false], 'only the page link in read text loses selection: ' + sel.join(', '));
   const css = file('static/css/paper.css');
-  assert.match(css, /\.prose:not\(:has\(\[contenteditable="true"\]\)\) a\[data-entity-preview\] \{ -webkit-touch-callout: none; \}/);
+  assert.match(css, /\.prose:not\(\[contenteditable="true"\]\):not\(:has\(\[contenteditable="true"\]\)\) a\[data-entity-preview\] \{ -webkit-touch-callout: none; \}/);
   await browser.close();
 });
 

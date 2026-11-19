@@ -226,7 +226,7 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 	}
 
 	if s.src.Homebrew != nil && v.IsOwner() {
-		view.Homebrew = s.src.Homebrew.DrawerMount(campaignID)
+		view.Homebrew = s.src.Homebrew.DrawerMount(campaignID, v.Layouts)
 	}
 
 	if s.src.Board != nil && s.src.Adventures != nil {

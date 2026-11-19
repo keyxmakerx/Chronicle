@@ -16,11 +16,12 @@ type dmHomebrewAdapter struct {
 	trackers bool
 }
 
-// DrawerMount returns the drawer's content for campaignID.
-func (a *dmHomebrewAdapter) DrawerMount(campaignID string) templ.Component {
+// DrawerMount returns the drawer's content for campaignID. canPlace offers
+// placing a Trackers block from the drawer (the campaign's owner only).
+func (a *dmHomebrewAdapter) DrawerMount(campaignID string, canPlace bool) templ.Component {
 	if !a.trackers {
-		return homebrew.DrawerMount(campaignID, "", "")
+		return homebrew.DrawerMount(campaignID, "", "", false)
 	}
 	return homebrew.DrawerMount(campaignID, "/campaigns/"+campaignID+"/trackers",
-		layouts.AssetURL("/static/plugins/trackers/css/trackers.css"))
+		layouts.AssetURL("/static/plugins/trackers/css/trackers.css"), canPlace)
 }

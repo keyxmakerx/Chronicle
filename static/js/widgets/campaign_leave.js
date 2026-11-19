@@ -91,18 +91,43 @@
 
   // Remove the card as the person's own list changes: it shrinks away unless
   // motion is off, then the empty message shows when it was the last one.
+  // Focus was on the card's dots, so it moves to the next card (or the one
+  // before, or the heading) rather than dropping to the page.
   function dropCard(id) {
     var card = document.querySelector('[data-campaign-card="' + id + '"]');
     if (!card) return;
     var grid = card.parentNode;
+    var list = card.closest('#campaign-list');
+    function sibling(el, dir) {
+      for (el = el[dir]; el; el = el[dir]) if (el.hasAttribute && el.hasAttribute('data-campaign-card')) return el;
+      return null;
+    }
+    var next = sibling(card, 'nextElementSibling') || sibling(card, 'previousElementSibling');
     function gone() {
+      var hadFocus = card.contains(document.activeElement) || document.activeElement === document.body;
       card.remove();
+      var to = next && next.querySelector('a[href]');
       if (grid && !grid.querySelector('[data-campaign-card]')) {
+        // Other pages may still hold campaigns; then this page is the empty one.
+        var more = list && list.hasAttribute('data-more-pages');
         var p = document.createElement('p');
         p.className = 'text-fg-secondary text-lg py-16 text-center';
-        p.textContent = "You don't have any campaigns yet.";
+        p.textContent = more ? 'No campaigns left on this page. ' : "You don't have any campaigns yet.";
+        if (more) {
+          var a = document.createElement('a');
+          a.href = '/campaigns';
+          a.className = 'text-accent-link underline';
+          a.textContent = 'See your campaigns';
+          p.appendChild(a);
+          to = a;
+        }
         grid.replaceWith(p);
       }
+      if (!to && list) {
+        to = list.querySelector('h1');
+        if (to) to.setAttribute('tabindex', '-1');
+      }
+      if (hadFocus && to) to.focus({ preventScroll: true });
     }
     if (calm()) { gone(); return; }
     card.style.transition = 'opacity var(--dur-everyday, 120ms) var(--ease-in, ease-in), transform var(--dur-everyday, 120ms) var(--ease-in, ease-in)';
@@ -122,7 +147,8 @@
       .then(function (r) {
         if (r.ok) return null;
         return r.json().catch(function () { return {}; }).then(function (j) {
-          throw new Error((j && (j.error || j.message)) || 'Could not leave. Try again.');
+          // message is the server's sentence; error is its machine code.
+          throw new Error((j && (j.message || j.error)) || 'Could not leave. Try again.');
         });
       })
       .then(function () {

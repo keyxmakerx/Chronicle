@@ -18,6 +18,9 @@ type Viewer struct {
 	UserID string
 	// Role is the campaign visibility role (3 owner or co-DM, 2 scribe).
 	Role int
+	// Layouts is true for the campaign's owner, who alone may change a
+	// category's page layout; a co-DM sees the owner's view but not that.
+	Layouts bool
 }
 
 // IsOwner reports whether the viewer is the owner or a Co-DM, who alone may

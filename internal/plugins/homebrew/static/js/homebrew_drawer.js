@@ -282,7 +282,12 @@
     var s = section('Trackers', 'fa-list-check');
     if (!S.pages.length) {
       // The Trackers block is placed by the shared chooser (put_on_page.js),
-      // which loads on sight from this wrapper.
+      // which loads on sight from this wrapper. Placing it changes a page
+      // layout, which only the owner may do, so a co-DM reads the line plain.
+      if (S.cfg.canPlace !== true) {
+        s.appendChild(h('p', 'hbd-muted', 'No page has a tracker yet. Put a Trackers block on a page and it shows here.'));
+        return s;
+      }
       var line = h('p', 'hbd-muted', 'No page has a tracker yet. ', { 'data-widget': 'put-on-page', 'data-campaign-id': S.cfg.campaignId });
       line.appendChild(h('button', 'hbd-btn quiet', 'Put a Trackers block on a page', { type: 'button', 'data-put-block': 'trackers', 'aria-haspopup': 'dialog', 'aria-expanded': 'false' }));
       line.appendChild(document.createTextNode(' and it shows here.'));

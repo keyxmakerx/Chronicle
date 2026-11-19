@@ -8,8 +8,10 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
 // DrawerMount is the drawer's content. trackersEndpoint is the campaign's
 // trackers API ("" when the trackers plugin is off, which leaves the pages
-// section out) and trackersCSS the stylesheet its widget needs.
-templ DrawerMount(campaignID, trackersEndpoint, trackersCSS string) {
+// section out) and trackersCSS the stylesheet its widget needs. canPlace
+// offers placing a Trackers block, which changes a category's page layout
+// and so is the campaign owner's alone.
+templ DrawerMount(campaignID, trackersEndpoint, trackersCSS string, canPlace bool) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/homebrew/css/drawer.css") }/>
 	if trackersCSS != "" {
 		<link rel="stylesheet" href={ trackersCSS }/>
@@ -21,6 +23,9 @@ templ DrawerMount(campaignID, trackersEndpoint, trackersCSS string) {
 		data-endpoint={ "/campaigns/" + campaignID + "/homebrew" }
 		if trackersEndpoint != "" {
 			data-trackers={ trackersEndpoint }
+		}
+		if canPlace {
+			data-can-place="true"
 		}
 	>
 		<p class="hbd-loading" role="status">Opening the drawer…</p>
