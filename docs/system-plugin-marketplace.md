@@ -183,7 +183,7 @@ Each category has a `data/<slug>.json` file. Items are keyed by `id` or `slug` (
 `ValidateManifest` in `internal/systems/manifest.go`:
 
 - `id`, `name` and `api_version` are required. `id`, category, preset, widget and text-renderer slugs match `^[a-z0-9][a-z0-9_-]*$`. `status` is `available` or `coming_soon` (default `coming_soon`).
-- Limits: 20 categories, 100 fields per category, 10 entity presets, 100 fields per preset, 20 relation presets, 10 widgets, 5 text renderers, 10 renderers, 10 entity panels.
+- Limits: 40 categories, 100 fields per category, 10 entity presets, 100 fields per preset, 20 relation presets, 10 widgets, 5 text renderers, 10 renderers, 10 entity panels.
 - `script_file` and text-renderer `file` end in `.js` and contain no path traversal. Field types are limited to the list above.
 - Warnings, not errors: no categories, no entity presets, no preset slug ending in `-character` (Foundry character sync won't work), no `foundry_system_id`, no field with `foundry_path`.
 

@@ -230,6 +230,34 @@ func TestValidateManifest(t *testing.T) {
 // (maxFieldsPerPreset). A data-rich preset at the cap must validate; one field
 // over must be rejected. This guards the boundary that previously rejected a
 // 58-field Draw Steel hero preset back when the cap was 50.
+func TestValidateManifest_CategoryCap(t *testing.T) {
+	mk := func(n int) SystemManifest {
+		cats := make([]CategoryDef, n)
+		for i := range cats {
+			cats[i] = CategoryDef{Slug: fmt.Sprintf("c%d", i), Name: fmt.Sprintf("Category %d", i)}
+		}
+		return SystemManifest{ID: "test", Name: "Test", Version: "1.0.0", APIVersion: "1", Categories: cats}
+	}
+	tests := []struct {
+		name    string
+		n       int
+		wantErr bool
+	}{
+		{"23 categories (Draw Steel with perks, titles, treasures, projects) is accepted", 23, false},
+		{"at cap is accepted", maxCategories, false},
+		{"one over cap is rejected", maxCategories + 1, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := mk(tt.n)
+			err := ValidateManifest(&m)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidateManifest() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestValidateManifest_PresetFieldCap(t *testing.T) {
 	mkPreset := func(n int) EntityPresetDef {
 		fields := make([]FieldDef, n)
