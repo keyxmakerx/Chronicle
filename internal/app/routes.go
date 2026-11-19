@@ -3919,6 +3919,20 @@ func (a *App) RegisterRoutes() {
 	// request logging, security monitoring, and admin dashboard.
 	syncRepo := syncapi.NewSyncAPIRepository(a.DB)
 	syncService := syncapi.NewSyncAPIService(syncRepo)
+	// A campaign has a Foundry world syncing once an active sync key of its
+	// has been used; sheets say "set in Foundry" only then.
+	entities.SetFoundryLinkChecker(func(ctx context.Context, campaignID string) bool {
+		keys, err := syncService.ListKeysByCampaign(ctx, campaignID)
+		if err != nil {
+			return false
+		}
+		for _, k := range keys {
+			if k.IsActive && k.LastUsedAt != nil {
+				return true
+			}
+		}
+		return false
+	})
 	// The campaign "Sync API" addon toggle is what gates external Bearer
 	// access (REST via syncapi.RequireSyncAPIAddon, WebSocket via
 	// AuthenticateKeyForWS). Both read it through this gate; the WS path

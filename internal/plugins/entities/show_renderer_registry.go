@@ -178,9 +178,9 @@ func MakeWidgetMountRenderer(widget string) EntityShowRenderer {
 			// The same rule the server applies to the identity writes, so a
 			// widget never offers an edit the server would refuse.
 			m.canEditIdentity = ctx.Entity != nil && CanEditIdentity(ctx.CC.MemberRole, ctx.Entity, ctx.UserID)
-			// The image route is Scribe-only; a claimed owner can rename and set
-			// identity fields but not replace the picture.
-			m.canChangeImage = ctx.CC.MemberRole >= campaigns.RoleScribe
+			// The same rule the picture route applies: Scribes and the player
+			// who claimed the page.
+			m.canChangeImage = ctx.Entity != nil && CanEditOwnPage(ctx.CC.MemberRole, ctx.Entity, ctx.UserID)
 		}
 		return m
 	}
@@ -199,7 +199,22 @@ type widgetMount struct {
 	claimed         bool   // someone has claimed this entity
 	claimedName     string // the claimant's display name, when known
 	canEditIdentity bool   // viewer may edit identity fields and rename (Scribe+ or the claimed owner)
-	canChangeImage  bool   // viewer may replace the picture (Scribe+)
+	canChangeImage  bool   // viewer may replace the picture (Scribe+ or the claimed owner)
+}
+
+// FoundryLinkChecker reports whether a campaign has a Foundry world syncing
+// with it, so a sheet only says a value is "set in Foundry" when one is.
+type FoundryLinkChecker func(ctx context.Context, campaignID string) bool
+
+var foundryLinkChecker atomic.Pointer[FoundryLinkChecker]
+
+// SetFoundryLinkChecker wires the check, once at boot. Without it no
+// campaign reads as linked.
+func SetFoundryLinkChecker(f FoundryLinkChecker) { foundryLinkChecker.Store(&f) }
+
+func foundryLinked(ctx context.Context, campaignID string) bool {
+	f := foundryLinkChecker.Load()
+	return f != nil && campaignID != "" && (*f)(ctx, campaignID)
 }
 
 // Render writes the mount div. data-armory-items is true when the
@@ -213,7 +228,7 @@ func (w widgetMount) Render(ctx context.Context, out io.Writer) error {
 	_, err := fmt.Fprintf(
 		out,
 		`<div data-widget="%s" data-entity-id="%s" data-campaign-id="%s" data-is-gm="%t" data-is-owner="%t" data-visibility="%s"`+
-			` data-can-edit-identity="%t" data-can-change-image="%t" data-armory-items="%t"`+
+			` data-can-edit-identity="%t" data-can-change-image="%t" data-armory-items="%t" data-foundry-linked="%t"`+
 			` data-claimed="%t" data-claimed-by-me="%t" data-claimed-name="%s"></div>`,
 		templ.EscapeString(w.widget),
 		templ.EscapeString(w.entityID),
@@ -224,6 +239,7 @@ func (w widgetMount) Render(ctx context.Context, out io.Writer) error {
 		w.canEditIdentity,
 		w.canChangeImage,
 		autoPagePanel(ctx),
+		foundryLinked(ctx, w.campaignID),
 		w.claimed,
 		w.claimed && w.isOwner,
 		templ.EscapeString(claimedName),

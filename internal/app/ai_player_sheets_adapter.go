@@ -122,6 +122,7 @@ func (a aiPlayerSheets) PatchSheet(ctx context.Context, campaignID, userID, enti
 		return nil
 	}
 	wctx := changesource.With(ctx, changesource.Source{Kind: changesource.KindAI, Label: label, UserID: userID})
+	entities.ClearStaleStepOptions(e, patch)
 	return a.entities.MergeFields(wctx, e.ID, patch)
 }
 

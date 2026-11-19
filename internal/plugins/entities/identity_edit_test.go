@@ -38,7 +38,9 @@ func (s *identityStubSvc) GetByID(_ context.Context, _ string) (*Entity, error) 
 
 // The type marks "background" GM-only, so the allowlist alone is not enough.
 func (s *identityStubSvc) GetEntityTypeByID(_ context.Context, _ int) (*EntityType, error) {
-	return &EntityType{Fields: []FieldDefinition{{Key: "ancestry"}, {Key: "background", GMOnly: true}}}, nil
+	return &EntityType{Fields: []FieldDefinition{{Key: "ancestry"}, {Key: "culture"}, {Key: "career"}, {Key: "kit"},
+		{Key: "race"}, {Key: "species"}, {Key: "class"}, {Key: "might"}, {Key: "backstory"}, {Key: "skills_json"},
+		{Key: "background", GMOnly: true}}}, nil
 }
 
 func (s *identityStubSvc) MergeFields(_ context.Context, _ string, p map[string]any) error {
@@ -114,6 +116,12 @@ func TestUpdateFieldsAPI_ClaimedOwnerIdentityOnly(t *testing.T) {
 		{"owner may clear an allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":null}}`, 200, true},
 		{"owner denied a non-allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"might":5}}`, 403, false},
 		{"owner denied when one key is outside the list", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"ancestry":"Elf","stamina":99}}`, 403, false},
+		{"owner denied an identity key the character doesn't have", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"heritage2":"x","languages_json":"[]"}}`, 403, false},
+		{"owner writes their backstory", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"backstory":"Raised in a forge."}}`, 200, true},
+		{"owner denied an overlong backstory", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"backstory":"` + strings.Repeat("x", 20001) + `"}}`, 400, false},
+		{"owner writes a list of skills", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"skills_json":"[\"Sneak\",\"Lie\"]"}}`, 200, true},
+		{"owner denied a list that isn't names", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"skills_json":"[{\"name\":\"Sneak\"}]"}}`, 400, false},
+		{"owner denied a list with a name twice", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"skills_json":"[\"Sneak\",\"sneak\"]"}}`, 400, false},
 		{"owner denied fields_data", campaigns.RolePlayer, owner, "c1", `{"fields_data":{"ancestry":"Elf"}}`, 403, false},
 		{"owner denied an empty patch", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{}}`, 403, false},
 		{"owner denied a body with neither", campaigns.RolePlayer, owner, "c1", `{}`, 403, false},

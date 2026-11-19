@@ -2416,6 +2416,7 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 	var saveErr error
 	if body.FieldsPatch != nil {
 		patch := fieldsPatch
+		ClearStaleStepOptions(entity, patch)
 		saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
 	} else {
 		saveErr = h.service.UpdateFields(webWriteContext(c), entityID, fieldsData)

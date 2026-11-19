@@ -26,8 +26,8 @@ func TestMakeWidgetMountRenderer_PageAttributes(t *testing.T) {
 		wantAll []string
 	}{
 		{"claimant", claimed, campaigns.RolePlayer, robin, "Robin", true, []string{
-			`data-can-edit-identity="true"`, `data-can-change-image="false"`, `data-armory-items="true"`,
-			`data-claimed="true"`, `data-claimed-by-me="true"`, `data-claimed-name="Robin"`}},
+			`data-can-edit-identity="true"`, `data-can-change-image="true"`, `data-armory-items="true"`,
+			`data-claimed="true"`, `data-claimed-by-me="true"`, `data-claimed-name="Robin"`, `data-foundry-linked="false"`}},
 		{"another player", claimed, campaigns.RolePlayer, "u-other", "Robin", false, []string{
 			`data-can-edit-identity="false"`, `data-can-change-image="false"`, `data-armory-items="false"`,
 			`data-claimed="true"`, `data-claimed-by-me="false"`, `data-claimed-name="Robin"`}},

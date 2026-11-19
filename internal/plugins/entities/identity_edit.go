@@ -25,11 +25,21 @@ import (
 // as "Dragon Knight", never a document.
 const maxOwnerIdentityValue = 200
 
-// ownerIdentityFieldKeys are the only field keys a claimed owner may change.
-// They describe who the character is (ancestry, upbringing, calling), never
-// rules-bearing numbers or GM-facing data, so a player cannot rewrite their
-// own stats. Game systems name the same idea differently, hence the synonyms
-// (race/species/heritage, career/kit).
+// maxOwnerStoryValue bounds a story a player writes about their hero.
+const maxOwnerStoryValue = 20000
+
+// A list the player keeps on their hero (skills, languages, perks) holds at
+// most maxOwnerListItems names of at most maxOwnerListItem characters each.
+const (
+	maxOwnerListItems = 40
+	maxOwnerListItem  = 64
+)
+
+// ownerIdentityFieldKeys are the short free-text keys a claimed owner may
+// change. They describe who the character is (ancestry, upbringing,
+// calling), never rules-bearing numbers or GM-facing data, so a player
+// cannot rewrite their own stats. Game systems name the same idea
+// differently, hence the synonyms (race/species/heritage, career/kit).
 var ownerIdentityFieldKeys = map[string]bool{
 	"ancestry":   true,
 	"culture":    true,
@@ -41,7 +51,23 @@ var ownerIdentityFieldKeys = map[string]bool{
 	"background": true,
 }
 
-// OwnerIdentityFieldKeys returns the allowlist, sorted, for UI and docs.
+// ownerStoryFieldKeys are the long texts that are the player's own words
+// about their hero.
+var ownerStoryFieldKeys = map[string]bool{
+	"backstory": true,
+}
+
+// ownerListFieldKeys are the lists of names the player chooses for their
+// hero from what their picks grant: a JSON array of short strings, the form
+// the system's sheet reads. Names only, never numbers.
+var ownerListFieldKeys = map[string]bool{
+	"skills_json":    true,
+	"languages_json": true,
+	"perks_json":     true,
+}
+
+// OwnerIdentityFieldKeys returns the short free-text keys, sorted, for UI and
+// docs.
 func OwnerIdentityFieldKeys() []string {
 	keys := make([]string, 0, len(ownerIdentityFieldKeys))
 	for k := range ownerIdentityFieldKeys {
@@ -65,8 +91,8 @@ func CanEditIdentity(role campaigns.Role, entity *Entity, userID string) bool {
 }
 
 // builderPicks is what the hero builder lets a player choose: for each step's
-// field key, the names on that step's list, keyed by their lower-case form.
-type builderPicks map[string]map[string]bool
+// field key, the entries on that step's list, keyed by their lower-case name.
+type builderPicks map[string]map[string]HeroChoice
 
 // builderPicksFrom turns the campaign's creator plan, as a player sees it,
 // into builderPicks. A nil plan gives none, so the door stays at identity.
@@ -76,20 +102,21 @@ func builderPicksFrom(plan *HeroPlan) builderPicks {
 		return out
 	}
 	for _, st := range plan.Steps {
-		names := make(map[string]bool, len(st.Choices))
+		names := make(map[string]HeroChoice, len(st.Choices))
 		for _, ch := range st.Choices {
-			names[strings.ToLower(strings.TrimSpace(ch.Name))] = true
+			names[strings.ToLower(strings.TrimSpace(ch.Name))] = ch
 		}
 		out[st.FieldKey] = names
 	}
 	return out
 }
 
-// needsBuilderPicks reports whether a patch reaches past the identity keys,
-// so the handler loads the creator plan only when it can matter.
+// needsBuilderPicks reports whether a patch reaches past the keys judged
+// without the creator plan, so the handler loads the plan only when it can
+// matter.
 func needsBuilderPicks(patch map[string]any) bool {
 	for k := range patch {
-		if !ownerIdentityFieldKeys[k] {
+		if !ownerIdentityFieldKeys[k] && !ownerStoryFieldKeys[k] && !ownerListFieldKeys[k] {
 			return true
 		}
 	}
@@ -99,12 +126,8 @@ func needsBuilderPicks(patch map[string]any) bool {
 // authorizeFieldsWrite decides whether a fields PUT may proceed. Scribes pass
 // untouched. A claimed owner may send only fields_patch; fields_data replaces
 // the whole map, so it is never allowed to a Player, and one disallowed key
-// rejects the whole request rather than being silently dropped. Each key must
-// be in ownerIdentityFieldKeys, which take short free text, or be a hero
-// builder step in picks, which takes only a name from that step's list, so a
-// player can choose their class but never type a stat into it. A key the type
-// marks GM-only is refused either way, since the owner may not see it, and
-// every value must be a string or null.
+// rejects the whole request rather than being silently dropped (the first,
+// by key, is named). What each key may hold is ownerFieldVerdicts.
 func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignID string, hasFieldsData bool, patch map[string]any, typeFields []FieldDefinition, picks builderPicks) error {
 	if role >= campaigns.RoleScribe {
 		return nil
@@ -115,32 +138,190 @@ func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignI
 	if hasFieldsData || len(patch) == 0 {
 		return apperror.NewForbidden("you can only change your character's identity fields")
 	}
+	held := ownerFieldVerdicts(entity, patch, typeFields, picks)
+	keys := make([]string, 0, len(held))
+	for k := range held {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if len(keys) > 0 {
+		return held[keys[0]]
+	}
+	return nil
+}
+
+// ownerFieldVerdicts judges each key of a claimed owner's patch on its own
+// and returns the refusal for every key that may not be written; an empty
+// map means the whole patch may. A key must be a field of the character's
+// category (when typeFields is known) and one of: a short identity text
+// (ownerIdentityFieldKeys), the player's story (ownerStoryFieldKeys), a list
+// of names (ownerListFieldKeys), a hero builder step in picks, which takes
+// only a name from that step's list, so a player can choose their class but
+// never type a stat into it, or what a step's entry lets the hero buy, which
+// must be on its list and fit its points. A key the type marks GM-only is
+// refused whatever it is, since the owner may not see it.
+func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []FieldDefinition, picks builderPicks) map[string]error {
 	gmOnly := map[string]bool{}
+	onType := map[string]bool{}
 	for i := range typeFields {
+		onType[typeFields[i].Key] = true
 		if typeFields[i].GMOnly {
 			gmOnly[typeFields[i].Key] = true
 		}
 	}
+	known := func(k string) bool { return typeFields == nil || onType[k] }
+	held := map[string]error{}
 	for k, v := range patch {
 		listed, isStep := picks[k]
-		if gmOnly[k] || (!ownerIdentityFieldKeys[k] && !isStep) {
-			// Naming the key lets a player's AI drop it and resend the rest.
-			return apperror.NewForbidden(fmt.Sprintf("you can only change your character's identity fields, and %q isn't one", k))
+		step, isOptions := strings.CutSuffix(k, heroOptionsSuffix)
+		if isOptions {
+			_, isOptions = picks[step]
 		}
-		switch val := v.(type) {
-		case nil:
-		case string:
-			if utf8.RuneCountInString(val) > maxOwnerIdentityValue {
-				return apperror.NewBadRequest("that value is too long")
-			}
-			if !ownerIdentityFieldKeys[k] && !listed[strings.ToLower(strings.TrimSpace(val))] {
-				return apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", val, k))
+		switch {
+		case gmOnly[k] || (!ownerIdentityFieldKeys[k] && !ownerStoryFieldKeys[k] && !ownerListFieldKeys[k] && !isStep && !isOptions):
+			// Naming the key lets a player's AI drop it and resend the rest.
+			held[k] = apperror.NewForbidden(fmt.Sprintf("you can only change your character's identity fields, and %q isn't one", k))
+		case isOptions && !known(step):
+			held[k] = apperror.NewForbidden(fmt.Sprintf("this character has no %q field", step))
+		case !isOptions && !known(k):
+			held[k] = apperror.NewForbidden(fmt.Sprintf("this character has no %q field", k))
+		case isOptions:
+			if err := checkStepOptions(entity, patch, step, v, picks[step]); err != nil {
+				held[k] = err
 			}
 		default:
-			return apperror.NewBadRequest("identity fields take text")
+			if err := checkOwnerValue(k, v, listed, isStep); err != nil {
+				held[k] = err
+			}
+		}
+	}
+	return held
+}
+
+// checkOwnerValue checks the value a claimed owner writes to key k.
+func checkOwnerValue(k string, v any, listed map[string]HeroChoice, isStep bool) error {
+	if v == nil {
+		return nil
+	}
+	val, ok := v.(string)
+	if !ok {
+		return apperror.NewBadRequest(fmt.Sprintf("%q takes text", k))
+	}
+	switch {
+	case ownerStoryFieldKeys[k]:
+		if utf8.RuneCountInString(val) > maxOwnerStoryValue {
+			return apperror.NewBadRequest(fmt.Sprintf("%q is too long; keep it under %d characters", k, maxOwnerStoryValue))
+		}
+	case ownerListFieldKeys[k]:
+		_, err := ownerNameList(k, val)
+		return err
+	default:
+		if utf8.RuneCountInString(val) > maxOwnerIdentityValue {
+			return apperror.NewBadRequest(fmt.Sprintf("%q is too long", k))
+		}
+		if isStep && !ownerIdentityFieldKeys[k] {
+			if _, on := listed[strings.ToLower(strings.TrimSpace(val))]; !on {
+				return apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", val, k))
+			}
 		}
 	}
 	return nil
+}
+
+// ownerNameList parses a list a player writes: "" or a JSON array of
+// distinct short names.
+func ownerNameList(k, val string) ([]string, error) {
+	if strings.TrimSpace(val) == "" {
+		return nil, nil
+	}
+	var names []string
+	if err := json.Unmarshal([]byte(val), &names); err != nil {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("%q takes a list of names", k))
+	}
+	if len(names) > maxOwnerListItems {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("%q holds at most %d names", k, maxOwnerListItems))
+	}
+	seen := map[string]bool{}
+	for _, n := range names {
+		t := strings.ToLower(strings.TrimSpace(n))
+		if t == "" || utf8.RuneCountInString(n) > maxOwnerListItem || seen[t] {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("%q takes distinct names of up to %d characters", k, maxOwnerListItem))
+		}
+		seen[t] = true
+	}
+	return names, nil
+}
+
+// checkStepOptions checks what a hero buys from a step's entry (an
+// ancestry's traits): names on that entry's list, each once, within its
+// points. The entry is the one the same patch picks, else the one the hero
+// has.
+func checkStepOptions(entity *Entity, patch map[string]any, step string, v any, listed map[string]HeroChoice) error {
+	k := step + heroOptionsSuffix
+	if v == nil {
+		return nil
+	}
+	val, ok := v.(string)
+	if !ok {
+		return apperror.NewBadRequest(fmt.Sprintf("%q takes a list of names", k))
+	}
+	names, err := ownerNameList(k, val)
+	if err != nil || len(names) == 0 {
+		return err
+	}
+	entry, has := patch[step]
+	if !has && entity != nil {
+		entry = entity.FieldsData[step]
+	}
+	name, _ := entry.(string)
+	choice, on := listed[strings.ToLower(strings.TrimSpace(name))]
+	if !on {
+		return apperror.NewBadRequest(fmt.Sprintf("choose the %s before what it lets you buy", step))
+	}
+	costs, budget, ok := heroBuyList(choice.Properties)
+	if !ok {
+		return apperror.NewBadRequest(choice.Name + " has nothing to choose from")
+	}
+	spent := 0.0
+	for _, n := range names {
+		cost, known := costs[strings.ToLower(strings.TrimSpace(n))]
+		if !known {
+			return apperror.NewBadRequest(fmt.Sprintf("%q can't be chosen for %s", n, choice.Name))
+		}
+		spent += cost
+	}
+	if spent > budget {
+		return apperror.NewBadRequest(fmt.Sprintf("those choices cost %g points; %s has %g", spent, choice.Name, budget))
+	}
+	return nil
+}
+
+// ClearStaleStepOptions adds a clear of what a hero bought from a step's
+// entry when the patch changes that step and says nothing of the options:
+// traits bought from the old ancestry don't belong to the new one. It works
+// on any writer's patch, and needs no plan.
+func ClearStaleStepOptions(entity *Entity, patch map[string]any) {
+	if entity == nil {
+		return
+	}
+	for k, v := range patch {
+		if strings.HasSuffix(k, heroOptionsSuffix) {
+			continue
+		}
+		opts := k + heroOptionsSuffix
+		if _, said := patch[opts]; said {
+			continue
+		}
+		had, _ := entity.FieldsData[opts].(string)
+		if strings.TrimSpace(had) == "" || strings.TrimSpace(had) == "[]" {
+			continue
+		}
+		old, _ := entity.FieldsData[k].(string)
+		now, _ := v.(string)
+		if !strings.EqualFold(strings.TrimSpace(old), strings.TrimSpace(now)) {
+			patch[opts] = nil
+		}
+	}
 }
 
 // CheckClaimedOwnerPatch is authorizeFieldsWrite for a sheet change that
@@ -150,6 +331,20 @@ func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignI
 // AI can change exactly what the player could change by hand and no more.
 func CheckClaimedOwnerPatch(entity *Entity, userID, campaignID string, patch map[string]any, typeFields []FieldDefinition, plan *HeroPlan) error {
 	return authorizeFieldsWrite(campaigns.RolePlayer, entity, userID, campaignID, false, patch, typeFields, builderPicksFrom(plan))
+}
+
+// ClaimedOwnerPatchHeld is CheckClaimedOwnerPatch key by key: it returns
+// why each key may not be written, so a player's AI change can keep the
+// rest. err is set when the writer may not change the character at all.
+func ClaimedOwnerPatchHeld(entity *Entity, userID, campaignID string, patch map[string]any, typeFields []FieldDefinition, plan *HeroPlan) (held map[string]string, err error) {
+	if entity.CampaignID != campaignID || !IsClaimedOwnerPlayer(campaigns.RolePlayer, entity, userID) {
+		return nil, apperror.NewForbidden("insufficient permissions")
+	}
+	held = map[string]string{}
+	for k, e := range ownerFieldVerdicts(entity, patch, typeFields, builderPicksFrom(plan)) {
+		held[k] = apperror.SafeMessage(e)
+	}
+	return held, nil
 }
 
 // authorizeMetadataWrite decides whether a metadata PUT may proceed. A claimed
