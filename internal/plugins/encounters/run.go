@@ -101,12 +101,16 @@ type RunLine struct {
 }
 
 // RunView is what the Fight tab receives. Run is nil when no fight is on;
-// Ready lists the encounters the DM can start.
+// Ready lists the encounters the DM can start; Planned lists every other
+// one, newest change first, up to the search cap, and PlannedTotal counts
+// them all so the card can say how many more there are.
 type RunView struct {
-	Run        *Run        `json:"run"`
-	Version    int         `json:"version"`
-	Ready      []Summary   `json:"ready"`
-	StatBlocks []StatBlock `json:"statBlocks"`
+	Run          *Run        `json:"run"`
+	Version      int         `json:"version"`
+	Ready        []Summary   `json:"ready"`
+	Planned      []Summary   `json:"planned"`
+	PlannedTotal int         `json:"plannedTotal"`
+	StatBlocks   []StatBlock `json:"statBlocks"`
 	// Leaves says, by page, what a creature will leave when the fight ends
 	// ("Has a drop list"), as the fight listener tells it; empty without one.
 	Leaves map[string]string `json:"leaves,omitempty"`

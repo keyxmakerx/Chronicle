@@ -375,3 +375,32 @@ func TestRunMountCarriesOnlyConditionNames(t *testing.T) {
 		t.Errorf("no conditions: %s, %v", buf.String(), err)
 	}
 }
+
+// The Fight card lists every fight: the Ready ones to start, then the rest
+// with their page, and a total so it can fold the tail behind "Show all".
+func TestRunCurrentListsPlannedFightsBelowReady(t *testing.T) {
+	runs, enc, _, readyID := newRunTest(t)
+	ctx := context.Background()
+	in := ramparts()
+	in.Name = "Toll bridge"
+	planned, err := enc.Create(ctx, "c1", "page1", dm, in)
+	if err != nil {
+		t.Fatalf("create planned: %v", err)
+	}
+	view, err := runs.Current(ctx, "c1", dm)
+	if err != nil {
+		t.Fatalf("current: %v", err)
+	}
+	if len(view.Ready) != 1 || view.Ready[0].ID != readyID {
+		t.Fatalf("ready = %+v", view.Ready)
+	}
+	if len(view.Planned) != 1 || view.Planned[0].ID != planned.ID || view.Planned[0].Ready {
+		t.Fatalf("planned = %+v", view.Planned)
+	}
+	if view.PlannedTotal != 1 {
+		t.Errorf("planned total = %d, want 1", view.PlannedTotal)
+	}
+	if view.Planned[0].Page.ID != "page1" {
+		t.Errorf("a planned fight names its page: %+v", view.Planned[0].Page)
+	}
+}

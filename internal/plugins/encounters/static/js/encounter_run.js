@@ -1,6 +1,11 @@
 /**
  * encounter_run.js: the DM Screen's Fight tab.
  *
+ * With no fight on, the tab lists every fight: the Ready ones with Start, the
+ * rest still being planned, the nearest few shown and the rest behind "Show
+ * all". A fight opens on its Adventure page, and "Plan a fight" asks which
+ * adventure to start a new one on.
+ *
  * It runs a prepped fight when nobody is in Foundry: the DM starts one of the
  * encounters marked Ready, types each side's initiative, and steps through
  * the turns, with a hit point box for each copy of a creature and conditions
@@ -161,7 +166,44 @@
     return l.entityId ? leaves[l.entityId] || '' : 'No page, so no drops';
   }
 
+  // How many fights the tab shows before folding the rest behind "Show all".
+  var SHOW_NEAREST = 3;
+
+  // groupFights splits the campaign's fights for the tab: Ready first, then
+  // the ones still being planned, each already in the server's order. Folded,
+  // only the nearest few of the two together show; total is every fight in the
+  // campaign, listed or not (the server lists up to its cap).
+  function groupFights(ready, planned, plannedTotal, all) {
+    ready = ready || []; planned = planned || [];
+    var total = ready.length + (typeof plannedTotal === 'number' && plannedTotal >= planned.length ? plannedTotal : planned.length);
+    var r = ready, p = planned;
+    if (!all) {
+      r = ready.slice(0, SHOW_NEAREST);
+      p = planned.slice(0, Math.max(0, SHOW_NEAREST - r.length));
+    }
+    return {
+      ready: r, planned: p, total: total,
+      canFold: total > SHOW_NEAREST,
+      unlisted: total - ready.length - planned.length
+    };
+  }
+
+  // fightLine is the grey line under a fight's name: its adventure, then what
+  // is in it.
+  function fightLine(e) {
+    var what;
+    if (e.kind === 'scene') {
+      var k = e.showCount || 0;
+      what = 'Scene \u00b7 ' + k + (k === 1 ? ' thing to show' : ' things to show');
+    } else {
+      var n = e.creatureCount || 0;
+      what = n ? n + (n === 1 ? ' foe' : ' foes') : 'no foes yet';
+    }
+    return (e.page && e.page.name ? e.page.name + ' \u00b7 ' : '') + what;
+  }
+
   window.EncounterRunHelpers = {
+    groupFights: groupFights, fightLine: fightLine, SHOW_NEAREST: SHOW_NEAREST,
     normaliseRun: normaliseRun, parseNum: parseNum, order: order, shown: shown, nextTurn: nextTurn,
     setInit: setInit, setMax: setMax, setHP: setHP, bringIn: bringIn, addCond: addCond,
     removeCond: removeCond, current: current, isDown: isDown, dropNote: dropNote, LIM: LIM
@@ -209,7 +251,8 @@
       try { conds = JSON.parse(el.getAttribute('data-conditions') || '[]') || []; } catch (e) { conds = []; }
       var url = '/campaigns/' + encodeURIComponent(cid) + '/encounter-run';
       var S = {
-        el: el, cid: cid, url: url, conds: conds, run: null, version: 0, ready: [], blocks: [], leaves: {},
+        el: el, cid: cid, url: url, conds: conds, run: null, version: 0, ready: [], planned: [], plannedTotal: 0, blocks: [], leaves: {},
+        showAll: false, plan: null,
         nodes: {}, open: {}, folds: {}, timer: 0, dirty: false, saving: null, again: false,
         confirmEnd: false, loaded: false, gone: false, report: null
       };
@@ -253,6 +296,8 @@
       S.run = normaliseRun(v && v.run);
       S.version = (v && v.version) || 0;
       S.ready = (v && v.ready) || [];
+      S.planned = (v && v.planned) || [];
+      S.plannedTotal = (v && v.plannedTotal) || 0;
       S.blocks = (v && v.statBlocks) || [];
       S.leaves = (v && v.leaves) || {};
       S.players = (v && v.players) || [];
@@ -376,30 +421,139 @@
     var box = S.el.querySelector('.erun-none');
     box.textContent = '';
     if (S.report) box.appendChild(ended(S));
-    box.appendChild(h('p', 'erun-lbl', 'Ready to run'));
-    if (!S.ready.length) {
+    var g = groupFights(S.ready, S.planned, S.plannedTotal, S.showAll);
+    if (!g.total) {
+      box.appendChild(h('p', 'erun-lbl', 'Ready to run'));
       box.appendChild(h('p', 'erun-note', 'No fight is marked Ready yet. Fights are planned on Adventure pages: open one, build the fight in its Encounters block and turn on Ready.'));
-      return;
+    } else {
+      if (g.ready.length) {
+        box.appendChild(h('p', 'erun-lbl', 'Ready to run'));
+        box.appendChild(fightList(S, g.ready, true));
+      } else {
+        box.appendChild(h('p', 'erun-lbl', 'Ready to run'));
+        box.appendChild(h('p', 'erun-note', 'No fight is marked Ready yet. Open one below and turn on Ready.'));
+      }
+      if (g.planned.length) {
+        box.appendChild(h('p', 'erun-lbl', 'Still being planned'));
+        box.appendChild(fightList(S, g.planned, false));
+      }
+      if (g.canFold) {
+        var all = btn('erun-quiet', S.showAll ? 'Show fewer' : 'Show all ' + g.total, 'fights-all');
+        all.setAttribute('aria-expanded', S.showAll ? 'true' : 'false');
+        box.appendChild(all);
+      }
+      if (S.showAll && g.unlisted > 0) {
+        box.appendChild(h('p', 'erun-note', 'The newest ' + (g.total - g.unlisted) + ' are listed. The other ' + g.unlisted + ' are on their Adventure pages.'));
+      }
     }
+    box.appendChild(planBox(S));
+  }
+
+  // fightList draws fights as rows: the name and its adventure open the
+  // fight on its page; Ready ones also carry Start.
+  function fightList(S, list, withStart) {
     var ul = h('ul', 'erun-ready');
-    S.ready.forEach(function (e) {
+    list.forEach(function (e) {
       var li = h('li', 'erun-pick');
-      var txt = h('span', 'erun-pick-txt');
-      txt.appendChild(h('b', '', e.name || 'Untitled encounter'));
-      var n = e.kind === 'scene' ? (e.showCount || 0) : (e.creatureCount || 0);
-      var what = e.kind === 'scene'
-        ? 'Scene \u00b7 ' + n + (n === 1 ? ' thing to show' : ' things to show')
-        : n + (n === 1 ? ' creature' : ' creatures');
-      var sub = (e.page && e.page.name ? 'On ' + e.page.name + ' \u00b7 ' : '') + what;
-      txt.appendChild(h('span', 'erun-sub', sub));
-      li.appendChild(txt);
-      var b = btn('erun-go', 'Start', 'start');
-      b.setAttribute('data-id', e.id);
-      b.setAttribute('aria-label', 'Start ' + (e.name || 'this encounter'));
-      li.appendChild(b);
+      var open = h('button', 'erun-pick-txt erun-open');
+      open.type = 'button';
+      open.setAttribute('data-act', 'open-fight');
+      open.setAttribute('data-page', (e.page && e.page.id) || '');
+      open.appendChild(h('b', '', e.name || 'Untitled encounter'));
+      open.appendChild(h('span', 'erun-sub', fightLine(e)));
+      open.setAttribute('aria-label', 'Open ' + (e.name || 'this encounter') + ' on its page');
+      li.appendChild(open);
+      if (withStart) {
+        var b = btn('erun-go', 'Start', 'start');
+        b.setAttribute('data-id', e.id);
+        b.setAttribute('aria-label', 'Start ' + (e.name || 'this encounter'));
+        li.appendChild(b);
+      }
       ul.appendChild(li);
     });
-    box.appendChild(ul);
+    return ul;
+  }
+
+  // planBox is the "Plan a fight" button and, once pressed, the chooser of
+  // which adventure the new fight belongs to.
+  function planBox(S) {
+    var wrap = h('div', 'erun-plan');
+    var p = S.plan;
+    var go = btn('', 'Plan a fight', 'plan');
+    go.setAttribute('aria-expanded', p ? 'true' : 'false');
+    wrap.appendChild(go);
+    if (!p) return wrap;
+    var ch = h('div', 'erun-choose');
+    ch.setAttribute('role', 'group');
+    ch.setAttribute('aria-labelledby', 'erun-choose-h');
+    var hd = h('p', 'erun-lbl', 'For which adventure?');
+    hd.id = 'erun-choose-h';
+    ch.appendChild(hd);
+    if (p.loading) {
+      ch.appendChild(h('p', 'erun-note', 'Looking for your adventures\u2026'));
+    } else if (p.failed) {
+      ch.appendChild(h('p', 'erun-note', 'The adventures could not be loaded. Try again.'));
+    } else {
+      var res = p.res || {};
+      if (!res.has_category) {
+        ch.appendChild(h('p', 'erun-note', 'This campaign has no Adventures category yet. The owner can add it in Customize, under Categories.'));
+      } else {
+        var ul = h('ul', 'erun-ready');
+        (res.pages || []).forEach(function (pg) {
+          var li = h('li');
+          var b = h('button', 'erun-open erun-choice', pg.name);
+          b.type = 'button';
+          b.setAttribute('data-act', 'plan-on');
+          b.setAttribute('data-page', pg.id);
+          li.appendChild(b);
+          ul.appendChild(li);
+        });
+        var nl = h('li');
+        var a = h('a', 'erun-open erun-choice', 'A new adventure\u2026');
+        a.href = '/campaigns/' + encodeURIComponent(S.cid) + '/entities/new' + (res.new_type_id ? '?type=' + encodeURIComponent(res.new_type_id) : '');
+        nl.appendChild(a);
+        ul.appendChild(nl);
+        ch.appendChild(ul);
+      }
+    }
+    wrap.appendChild(ch);
+    return wrap;
+  }
+
+  // openFight opens a fight's Adventure page over the screen; with plan set,
+  // its builder opens on a new fight. Without the sheet script it goes there.
+  function openFight(S, btnEl, pageId, plan) {
+    if (!pageId) return;
+    var base = '/campaigns/' + encodeURIComponent(S.cid) + '/entities/' + encodeURIComponent(pageId);
+    if (C.dmsSheet && typeof C.dmsSheet.open === 'function') {
+      btnEl.setAttribute('data-sheet-url', base + '/sheet');
+      C.dmsSheet.open(btnEl, { planFight: !!plan });
+    } else {
+      window.location.href = base;
+    }
+  }
+
+  function togglePlan(S) {
+    if (S.plan) { S.plan = null; draw(S); focusSel(S, '[data-act="plan"]'); return; }
+    var p = S.plan = { loading: true, failed: false, res: null };
+    draw(S);
+    C.apiFetch('/campaigns/' + encodeURIComponent(S.cid) + '/dm-screen/adventures/pages', { method: 'GET' }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function (v) {
+      if (S.gone || S.plan !== p) return;
+      p.loading = false; p.res = v;
+      draw(S);
+    }).catch(function () {
+      if (S.gone || S.plan !== p) return;
+      p.loading = false; p.failed = true;
+      draw(S);
+    });
+  }
+
+  function focusSel(S, sel) {
+    var n = S.el.querySelector(sel);
+    if (n) n.focus({ preventScroll: true });
   }
 
   function skeleton(S) {
@@ -740,6 +894,12 @@
   }
 
   function onKey(S, e) {
+    if (e.key === 'Escape' && S.plan && S.el.querySelector('.erun-plan').contains(e.target)) {
+      e.preventDefault();
+      e.stopPropagation();
+      togglePlan(S);
+      return;
+    }
     if (e.key !== 'Enter') return;
     var t = e.target;
     if (t.classList.contains('erun-condin')) {
@@ -765,6 +925,10 @@
     var act = b.getAttribute('data-act'), id = lineId(b);
     if (act === 'retry') { S.loaded = false; S.failed = false; draw(S); load(S, ''); return; }
     if (act === 'start') { start(S, b.getAttribute('data-id'), b); return; }
+    if (act === 'open-fight') { openFight(S, b, b.getAttribute('data-page'), false); return; }
+    if (act === 'plan') { togglePlan(S); return; }
+    if (act === 'plan-on') { openFight(S, b, b.getAttribute('data-page'), true); return; }
+    if (act === 'fights-all') { S.showAll = !S.showAll; draw(S); focusSel(S, '[data-act="fights-all"]'); return; }
     if (act === 'report-done') { S.report = null; draw(S); return; }
     if (!S.run) return;
     if (act === 'show') { show(S, b.getAttribute('data-id'), b); return; }

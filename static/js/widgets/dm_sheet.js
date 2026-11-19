@@ -69,7 +69,9 @@
     return true;
   }
 
-  function open(btn) {
+  // opts.planFight opens the page's encounter builder on a new fight once the
+  // page is in.
+  function open(btn, opts) {
     if (!btn || cur) return;
     var url = btn.getAttribute('data-sheet-url');
     if (!url) return;
@@ -79,7 +81,7 @@
     var still = reduced();
     var screen = document.querySelector('.dms-dock');
 
-    cur = { el: sheet, panel: panel, id: btn.getAttribute('data-dms-sheet'), opener: btn, token: 0, screen: screen };
+    cur = { el: sheet, panel: panel, id: btn.getAttribute('data-dms-sheet') || '', opener: btn, token: 0, screen: screen, plan: !!(opts && opts.planFight) };
     document.body.appendChild(sheet);
     // The screen stays as it is but is out of the tab order and the reader's
     // tree while the page is over it.
@@ -119,6 +121,13 @@
       body.removeAttribute('aria-busy');
       // The page's own lazy loads (history, backlinks, files) are htmx.
       if (window.htmx) window.htmx.process(body);
+      // The Encounters block reads this once it has loaded and starts a new
+      // fight in its builder.
+      if (c.plan) {
+        c.plan = false;
+        var eb = body.querySelector('[data-widget="encounters"]');
+        if (eb) eb.setAttribute('data-plan-fight', '1');
+      }
       if (C.mountWidgets) C.mountWidgets(body);
       c.panel.scrollTop = 0;
     }).catch(function () {
@@ -175,7 +184,7 @@
       if (o) {
         back = Array.prototype.filter.call(o.querySelectorAll('[data-dms-sheet]'), function (n) {
           return n.getAttribute('data-dms-sheet') === c.id;
-        })[0] || o.querySelector('[data-dms-tab="adventures"]');
+        })[0] || (c.opener && c.opener.isConnected ? c.opener : null) || o.querySelector('[data-dms-tab="adventures"]');
       }
       if (back && back.focus) back.focus({ preventScroll: true });
     };
