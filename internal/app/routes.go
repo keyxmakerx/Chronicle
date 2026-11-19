@@ -5478,6 +5478,17 @@ func (a *App) RegisterRoutes() {
 		})
 		aiAsks = aiConnectorSvc
 		aiKeys.svc = aiConnectorSvc
+		// Players' AI is for players with an account: a key a guest made
+		// before that rule held is ended here, at every start.
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if n, err := aiConnectorSvc.EndGuestKeys(ctx); err != nil {
+				slog.Error("ending guests' AI keys failed", slog.Any("error", err))
+			} else if n > 0 {
+				slog.Info("ended guests' AI keys", slog.Int64("count", n))
+			}
+		}()
 		// A key ends whenever its maker's sign-ins do (password reset or
 		// change, force sign-out), in every campaign.
 		auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {

@@ -648,7 +648,7 @@ func (r *campaignRepository) RemoveMember(ctx context.Context, campaignID, userI
 // FindMember retrieves a user's membership with their display info.
 func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID string) (*CampaignMember, error) {
 	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.character_entity_id, cm.joined_at,
-	                 u.display_name, u.email, u.avatar_path
+	                 u.display_name, u.email, u.avatar_path, u.guest_campaign_id IS NOT NULL
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
 	          INNER JOIN campaigns c ON c.id = cm.campaign_id AND c.deleted_at IS NULL
@@ -658,7 +658,7 @@ func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID 
 	var roleStr string
 	err := r.db.QueryRowContext(ctx, query, campaignID, userID).Scan(
 		&m.CampaignID, &m.UserID, &roleStr, &m.CharacterEntityID, &m.JoinedAt,
-		&m.DisplayName, &m.Email, &m.AvatarPath,
+		&m.DisplayName, &m.Email, &m.AvatarPath, &m.IsGuest,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("member not found")

@@ -82,6 +82,21 @@ func (r *memRepo) RevokeAllMadeBy(_ context.Context, userID string, at time.Time
 	return nil
 }
 
+// RevokeGuestKeys ends the keys of the users listed in testGuests.
+func (r *memRepo) RevokeGuestKeys(_ context.Context, at time.Time) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var n int64
+	for _, c := range r.conns {
+		if testGuests[c.UserID] && c.RevokedAt == nil {
+			t := at
+			c.RevokedAt = &t
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (r *memRepo) SetPaused(_ context.Context, campaignID string, id int64, at *time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -260,6 +275,9 @@ type owners map[string]string
 // testMembers is who else is in each campaign, for player keys.
 var testMembers = map[string][]string{"camp-1": {"player-1", "player-2"}}
 
+// testGuests is the members who joined with a guest code.
+var testGuests = map[string]bool{}
+
 func (o owners) Check(_ context.Context, campaignID, userID string) (string, error) {
 	if owner, ok := o[campaignID]; ok && owner == userID {
 		return "Ashfall", nil
@@ -276,6 +294,9 @@ func (o owners) CheckMember(ctx context.Context, campaignID, userID string) (str
 	}
 	for _, m := range testMembers[campaignID] {
 		if m == userID {
+			if testGuests[userID] {
+				return "", ErrGuest
+			}
 			return "Ashfall", nil
 		}
 	}
