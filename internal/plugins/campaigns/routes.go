@@ -55,6 +55,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 
 	// All members.
 	cg.GET("/members", h.Members, RequireRole(RolePlayer))
+	cg.GET("/run-by", h.RunByBlock, RequireRole(RolePlayer))
 	cg.GET("/plugins", h.PluginHub, RequireRole(RolePlayer))
 	cg.GET("/plugins/fragment", h.PluginHubFragment, RequireRole(RolePlayer))
 	// /foundry-presence is registered by foundry_vtt.RegisterOwnerRoutes.

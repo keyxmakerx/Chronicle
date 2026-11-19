@@ -910,6 +910,9 @@ const (
 	BlockLastTime        = "last_time"        // The latest session's recap, as its viewer may read it (sessions plugin).
 	BlockGettingStarted  = "getting_started"  // A new player's steps, ticked as they are done (sessions plugin).
 	BlockYourHero        = "your_hero"        // The viewer's own claimed hero, or a way to choose one (entities plugin).
+	BlockTableAgreement  = "table_agreement"  // The owner's table agreement, typed into the block's config.
+	BlockMakingAHero     = "making_a_hero"    // The owner's notes on making a hero, typed into the block's config.
+	BlockRunBy           = "run_by"           // The owner and co-Directors by name (campaigns).
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -952,6 +955,9 @@ var ValidBlockTypes = map[string]bool{
 	BlockHouseRules:      true,
 	BlockLastTime:        true,
 	BlockYourHero:        true,
+	BlockTableAgreement:  true,
+	BlockMakingAHero:     true,
+	BlockRunBy:           true,
 	BlockGettingStarted:  true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,

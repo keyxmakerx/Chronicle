@@ -1,0 +1,21 @@
+// run_by_block.templ draws the campaign home's "Run by" block, which the
+// home's placeholder (dashFragment) loads. It marks the shared block parts
+// (cb-info, cb-line) so the Material page look sets it like the party.
+package campaigns
+
+// runByBlock replaces the placeholder (hx-swap outerHTML).
+templ runByBlock(people []runByPerson) {
+	<section class="cb-info cb-run-by" data-block="run-by" aria-labelledby="run-by-h">
+		<div class="cb-info-top flex items-baseline justify-between mb-3">
+			<h2 id="run-by-h" class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">Run by</h2>
+		</div>
+		<div class="cb-info-rows card cb-card divide-y divide-edge px-4">
+			for _, p := range people {
+				<div class="cb-line flex items-baseline gap-3 py-2 text-sm">
+					<span class="cb-line-name min-w-0 flex-1 truncate font-semibold text-fg">{ p.Name }</span>
+					<span class="cb-line-end whitespace-nowrap text-xs text-fg-muted">{ p.Title }</span>
+				</div>
+			}
+		</div>
+	</section>
+}
