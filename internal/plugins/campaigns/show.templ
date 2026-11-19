@@ -103,7 +103,7 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 
 			<!-- Footer meta -->
 			<div class="flex items-center gap-3 text-xs text-fg-muted mt-8">
-				if label := ViewerAccessLabel(cc); label != "" {
+				if label := ViewerAccessLabel(shown); label != "" {
 					<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
 						<i class="fa-solid fa-user-shield text-[10px]"></i>
 						{ label }

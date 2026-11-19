@@ -3944,7 +3944,7 @@ func (a *App) RegisterRoutes() {
 	// decision and is left alone. Best-effort: logs and never blocks startup.
 	if n, err := syncapi.ReconcileAddonEnablement(context.Background(), syncService, addonService); err != nil {
 		slog.Error("sync-api addon enablement backfill failed; campaigns that already use the "+
-			"Sync API may be refused until an owner enables Sync API on the campaign's Game & features page (Manage → Game & features)",
+			"Sync API may be refused until an owner enables Sync API on the campaign's Game & features page (Campaign settings → Game & features)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("sync-api addon enablement backfill complete", slog.Int("campaigns", n))
@@ -4286,7 +4286,7 @@ func (a *App) RegisterRoutes() {
 	// owner choice is left alone. Best-effort: logs and never blocks startup.
 	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {
 		slog.Error("game nights addon enablement backfill failed; campaigns that already use game nights "+
-			"may not see them until an owner turns on Game nights (Manage → Game & features)",
+			"may not see them until an owner turns on Game nights (Campaign settings → Game & features)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("game nights addon enablement backfill complete", slog.Int("campaigns", n))
