@@ -38,6 +38,12 @@
 (function () {
   'use strict';
 
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
+
   var LONG_PRESS_MS = 550;
   var EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
 
@@ -393,7 +399,7 @@
     menu.classList.add('is-open');
     if (!reduced() && menu.animate) {
       menu.animate([{ opacity: 0, transform: 'translateY(-4px) scale(.97)' }, { opacity: 1, transform: 'none' }],
-        { duration: 130, easing: EASE_OUT });
+        { duration: tokMs('--dur-everyday', 120), easing: EASE_OUT });
     }
     M = { el: menu, items: items, info: info, opener: opener || null, row: row, x: x, y: y };
     if (M.opener) M.opener.setAttribute('aria-expanded', 'true');

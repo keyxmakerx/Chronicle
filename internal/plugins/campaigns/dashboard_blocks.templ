@@ -212,7 +212,7 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 // the owner's pages, so everyone else gets All Pages alone.
 templ dashQuickActions(cc *CampaignContext) {
 	<div class="cb-shortcuts grid grid-cols-1 md:grid-cols-3 gap-4">
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-elev-hover block group">
 			<div class="flex items-center gap-3">
 				<div class="cb-tile w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
 					<i class="fa-solid fa-scroll text-indigo-600 dark:text-indigo-400"></i>
@@ -226,7 +226,7 @@ templ dashQuickActions(cc *CampaignContext) {
 
 		// The People page is the owner's; anyone else would get a 403.
 		if OwnerCardVisible(ctx, cc) {
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-elev-hover block group">
 				<div class="flex items-center gap-3">
 					<div class="cb-tile w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
 						<i class="fa-solid fa-users text-blue-600 dark:text-blue-400"></i>
@@ -240,7 +240,7 @@ templ dashQuickActions(cc *CampaignContext) {
 		}
 
 		if OwnerCardVisible(ctx, cc) {
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-elev-hover block group">
 				<div class="flex items-center gap-3">
 					<div class="cb-tile w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
 						<i class="fa-solid fa-layer-group text-purple-600 dark:text-purple-400"></i>
@@ -294,7 +294,7 @@ templ dashCategoryWord(cc *CampaignContext, et layouts.SidebarEntityType) {
 	{{ n := layouts.GetEntityCount(ctx, et.ID) }}
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
-		class="cb-word card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
+		class="cb-word card px-4 py-3 hover:shadow-elev-hover block group"
 		aria-label={ et.NamePlural + ", " + pageCountLabel(n) }
 		data-empty?={ n == 0 }
 	>

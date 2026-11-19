@@ -638,7 +638,7 @@
   };
 
   // ---- acting ----
-  // _say puts a line where the roll note sits, and nudges the choose row
+  // _say puts a line where the roll note sits, and glows the choose row
   // when the line asks for days first.
   Panel.prototype._say = function (msg, nudge) {
     var S = this.state;
@@ -646,7 +646,13 @@
     this._renderSel();
     S.note = '';
     var row = nudge && $('#cal5-wxsel', this.el);
-    if (row && row.animate && !reducedMotion()) row.animate([{ transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'none' }], { duration: 260 });
+    if (row) {
+      // Restart the glow if it is already running.
+      row.classList.remove('cz-glow');
+      void row.offsetWidth;
+      row.classList.add('cz-glow');
+      row.addEventListener('animationend', function () { row.classList.remove('cz-glow'); }, { once: true });
+    }
   };
 
   Panel.prototype._paintChosen = function (id) {

@@ -10,7 +10,7 @@ import (
 
 // SearchResultsFragment renders search results as an HTMX fragment.
 templ SearchResultsFragment(results []Entity, total int, cc *campaigns.CampaignContext) {
-	<div id="search-results" class="absolute mt-1 w-full bg-surface border border-edge rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
+	<div id="search-results" class="absolute mt-1 w-full bg-surface border border-edge rounded-md shadow-elev-hover z-50 max-h-80 overflow-y-auto">
 		if len(results) == 0 {
 			<div class="px-4 py-3 text-sm text-fg-secondary">No results found.</div>
 		} else {

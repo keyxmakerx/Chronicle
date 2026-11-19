@@ -386,6 +386,7 @@
   .mn-from { opacity: 0; transform: scale(0.95); }
   .mn-to { opacity: 1; transform: scale(1); }
   :has(> :focus-visible) > :is(.mn-enter, .mn-leave) { transition-duration: 0s; }
+  .tb-notif { transform-origin: top right; }
   /* menu-motion:end */
   /* Press: sinks 4% with an inner shadow, quick down (60ms) and easing back up
      (the transform duration above). Calm and Off: colour only. */
@@ -5317,8 +5318,10 @@ html[data-motion="off"] .manage-find { transition: none; }
 [data-cz-btn="keystone"] .btn:active {
   transform: scale(0.92) translateY(1px); box-shadow: inset 0 2px 5px rgb(16 24 40 / 0.35); transition-duration: 70ms;
 }
-.dark [data-cz-btn="keystone"] .btn:not(:active, .btn-primary, .btn-danger, .btn-warning, .btn-success) { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 18px -8px rgb(0 0 0 / 0.6); }
-html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
+.dark[data-cz-btn="keystone"] .btn:not(:active, .btn-primary, .btn-danger, .btn-warning, .btn-success) { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 18px -8px rgb(0 0 0 / 0.6); }
+html[data-motion][data-cz-btn="keystone"] .btn:active,
+html[data-cz-reduce][data-cz-btn="keystone"] .btn:active,
+html[data-view-motion="calm"][data-cz-btn="keystone"] .btn:active { transform: none; }
 
 /* Ambient: shadows tinted with the accent (czElevation) and a faint light
    from the page's top corner, as if the page were lamplit. */
@@ -5429,13 +5432,6 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
 .ai-chip-host[hidden] { display: none; }
 .ai-chip { position: relative; }
 .ai-chip[aria-expanded="true"] { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
-.ai-chip-n {
-  position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
-  display: inline-grid; place-items: center; font-size: 0.65rem; font-weight: 700; line-height: 16px;
-  background: var(--color-accent); color: #fff;
-}
-.ai-chip-n[data-tone="bad"] { background: rgb(var(--color-bad-rgb)); }
-.ai-chip-n[hidden] { display: none; }
 .ai-chip-note {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: max-content; max-width: min(320px, calc(100vw - 32px));
   display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px;
@@ -6265,11 +6261,11 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .rt-reel { display: block; }
 .rt-reel--flick { opacity: .55; animation: rt-flick linear both; }
 .rt-reel--land { animation: rt-in .22s ease-out both; }
-.rt-block .rt-btn, .rtd .rt-btn { width: 30px; height: 30px; flex: none; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--rt-mut); cursor: pointer; display: grid; place-items: center; transition: transform var(--dur-micro), background var(--dur-micro), color var(--dur-micro); }
-.rt-block .rt-btn:hover, .rtd .rt-btn:hover { background: var(--rt-fill); color: var(--rt-ink); transform: translateY(-1px); }
+.rt-block .rt-btn, .rtd .rt-btn { width: 30px; height: 30px; flex: none; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--rt-mut); cursor: pointer; display: grid; place-items: center; transition: background var(--dur-micro), color var(--dur-micro); }
+.rt-block .rt-btn:hover, .rtd .rt-btn:hover { background: var(--rt-fill); color: var(--rt-ink); }
 .rt-block .rt-btn[aria-pressed="true"] { color: var(--rt-acc); border-color: rgb(var(--rt-acc-rgb) / .35); background: rgb(var(--rt-acc-rgb) / .08); }
 .rt-block .rt-btn:disabled, .rtd .rt-btn:disabled { opacity: .35; cursor: default; transform: none; }
-.rt-block .rt-btn.is-spinning i, .rtd .rt-btn.is-spinning i { animation: rt-spin .5s cubic-bezier(.3, 1.4, .5, 1); }
+.rt-block .rt-btn.is-spinning i, .rtd .rt-btn.is-spinning i { animation: rt-spin .5s var(--ease-out); }
 .rt-block .rt-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--rt-edge); }
 .rt-block .rt-main, .rtd .rt-main { border: 0; border-radius: 8px; background: var(--rt-acc); color: #fff; font-size: 13px; font-weight: 600; padding: 8px 13px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center; transition: transform var(--dur-micro), box-shadow var(--dur-micro); }
 .rt-block .rt-main:hover, .rtd .rt-main:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -8px rgb(var(--rt-acc-rgb) / .9); }
@@ -7058,6 +7054,10 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .en-icon[aria-pressed="true"] { color: var(--color-accent-link, rgb(var(--color-accent-rgb))); }
 .en-icon--danger:hover { color: rgb(var(--color-bad-rgb)); }
 
+/* The standard's Glow for a row that needs attention: an accent halo that fades over about 1.2s; the same under Calm. */
+.cz-glow { animation: cz-glow 1.2s ease-out; }
+@keyframes cz-glow { 0%, 20% { box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0.4); } 100% { box-shadow: 0 0 0 3px transparent; } }
+
 .en-note.en-arrive { animation: en-arrive var(--dur-standard) var(--ease-out); }
 .en-note.en-glow { animation: en-arrive var(--dur-standard) var(--ease-out), en-glow 1.2s ease-out; }
 @keyframes en-arrive { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
@@ -7473,14 +7473,19 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .tt-tab { position: relative; }
 .tt-tab[aria-expanded="true"] { color: var(--color-accent-link, var(--color-accent)); }
 .tt-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.tt-n {
-  position: absolute; top: -2px; right: -4px;
+.hdr-n {
+  position: absolute; top: -2px; right: -2px;
   min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
   background: var(--color-accent-fill, var(--color-accent)); color: var(--color-accent-on-fill, #fff);
-  font-size: 10.5px; line-height: 16px; letter-spacing: 0; display: inline-grid; place-items: center;
+  font-size: 10.5px; font-weight: 700; line-height: 16px; letter-spacing: 0; font-variant-numeric: tabular-nums;
+  display: inline-grid; place-items: center;
 }
-.tt-n[hidden] { display: none; }
-.tt-n.tt-grow { animation: tt-grow var(--dur-large) var(--ease-out); }
+.hdr-n[data-tone="bad"] { background: rgb(var(--color-bad-rgb)); color: #fff; }
+.hdr-n[hidden] { display: none; }
+/* The count-change grow: a script adds the class when the number changes.
+   Calm and Off just swap the number. */
+.hdr-n.hdr-n-grow { animation: tt-grow 280ms var(--ease-out); }
+:is(html[data-motion], html[data-cz-reduce], html[data-view-motion="calm"]) .hdr-n.hdr-n-grow { animation: none; }
 @keyframes tt-grow { from { transform: scale(0.7); } to { transform: scale(1); } }
 
 /* The AI helper (Site admin > Health): everyday questions that unroll their

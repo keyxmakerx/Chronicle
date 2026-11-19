@@ -95,7 +95,7 @@ templ fullApp(title string) {
 				:tabindex="sidebarHidden && !navDrawer ? 0 : -1"
 				:aria-hidden="sidebarHidden && !navDrawer ? 'false' : 'true'"
 				@click="sidebarHidden = false; localStorage.setItem('chronicle-sidebar-hidden', 'false')"
-				class="sidebar-restore fixed left-3 bottom-1 z-50 w-8 h-8 flex items-center justify-center rounded-lg bg-sidebar-bg text-sidebar-text shadow-lg hover:bg-sidebar-hover"
+				class="sidebar-restore fixed left-3 bottom-1 z-50 w-8 h-8 flex items-center justify-center rounded-lg bg-sidebar-bg text-sidebar-text shadow-elev-hover hover:bg-sidebar-hover"
 				title="Show sidebar"
 				aria-label="Show sidebar"
 				x-cloak
@@ -227,7 +227,7 @@ templ Sidebar() {
 		class={ "nav-sb fixed inset-y-0 left-0 z-[var(--z-drawer)] w-64 bg-sidebar-bg text-sidebar-text flex flex-col -translate-x-full md:translate-x-0 transition-transform duration-[var(--dur-large)] ease-out md:transition-[width,transform] md:duration-300 md:ease-in-out md:static md:z-auto md:shrink-0",
 			templ.KV("nav-admin-mode", InSiteAdmin(ctx)), templ.KV("nav-tools-gated", NavToolsWordSection(ctx) != "") }
 		:class="[
-			sidebarOpen ? 'sidebar-mobile-open shadow-2xl' : '',
+			sidebarOpen ? 'sidebar-mobile-open shadow-elev-dragged' : '',
 			!pinned ? 'sidebar-unpinned' : '',
 			(!navDrawer && !pinned && !hovered && !editing && !sidebarHidden) ? 'sidebar-collapsed' : '',
 			(!navDrawer && sidebarHidden) ? 'sidebar-fully-hidden' : ''
@@ -791,7 +791,7 @@ templ Topbar() {
 							x-transition:leave="mn-leave"
 							x-transition:leave-start="mn-to"
 							x-transition:leave-end="mn-from"
-							class="tb-pop absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
+							class="tb-pop absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-elev-hover border border-edge z-50 overflow-hidden"
 							hx-get="/campaigns/picker"
 							hx-trigger="intersect once"
 							hx-swap="innerHTML"
@@ -829,7 +829,7 @@ templ Topbar() {
 							x-transition:leave="mn-leave"
 							x-transition:leave-start="mn-to"
 							x-transition:leave-end="mn-from"
-							class="tb-pop absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
+							class="tb-pop absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-elev-hover border border-edge z-50 overflow-hidden"
 						>
 							for _, uc := range GetUserCampaigns(ctx) {
 								<a
@@ -869,7 +869,7 @@ templ Topbar() {
 							x-transition:leave="mn-leave"
 							x-transition:leave-start="mn-to"
 							x-transition:leave-end="mn-from"
-							class="tb-pop absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
+							class="tb-pop absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-elev-hover border border-edge z-50 overflow-hidden"
 							hx-get="/campaigns/picker"
 							hx-trigger="intersect once"
 							hx-swap="innerHTML"
@@ -909,7 +909,7 @@ templ Topbar() {
 					</kbd>
 				</div>
 				<!-- Search results dropdown (populated by JS) -->
-				<div id="topbar-search-results" class="tb-pop absolute left-0 right-0 top-full mt-1 mx-auto max-w-lg bg-surface border border-edge rounded-lg shadow-xl z-50 hidden max-h-[60vh] overflow-y-auto"></div>
+				<div id="topbar-search-results" class="tb-pop absolute left-0 right-0 top-full mt-1 mx-auto max-w-lg bg-surface border border-edge rounded-lg shadow-elev-hover z-50 hidden max-h-[60vh] overflow-y-auto"></div>
 			</div>
 		}
 
@@ -1011,7 +1011,7 @@ templ Topbar() {
 							<path d="M12 7l4.6 8H7.4z"></path>
 							<path d="M12 2.5V7M20.5 7.4L16.6 15M3.5 7.4L7.4 15M7.4 15L3.5 16.6M16.6 15l3.9 1.6M7.4 15L12 21.5l4.6-6.5"></path>
 						</svg>
-						<span class="tt-n" data-tt-count hidden></span>
+						<span class="hdr-n" data-tt-count hidden></span>
 					</button>
 				</div>
 			}
@@ -1036,8 +1036,9 @@ templ Topbar() {
 					</button>
 					<div
 						data-notif-panel
+						data-kit-open
 						hidden
-						class="tb-pop fixed left-3 right-3 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-80 mt-1 max-h-[70vh] overflow-y-auto bg-surface rounded-lg shadow-lg border border-edge z-50"
+						class="tb-pop tb-notif fixed left-3 right-3 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-80 mt-1 max-h-[70vh] overflow-y-auto bg-surface rounded-lg shadow-elev-hover border border-edge z-50"
 					>
 						<div class="flex items-center justify-between px-3 py-2 border-b border-edge">
 							<span class="text-sm font-semibold text-fg">Notifications</span>
@@ -1097,7 +1098,7 @@ templ Topbar() {
 						x-transition:leave="mn-leave"
 						x-transition:leave-start="mn-to"
 						x-transition:leave-end="mn-from"
-						class="tb-pop absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-1rem)] bg-surface rounded-lg shadow-lg border border-edge z-50 py-1"
+						class="tb-pop absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-1rem)] bg-surface rounded-lg shadow-elev-hover border border-edge z-50 py-1"
 					>
 						<!-- Under 480 wide the bell steps into this menu to leave the
 						     campaign name room (phone_shell.css). It opens the bell's own
@@ -1233,7 +1234,14 @@ templ topbarCenterContent(ctx context.Context) {
 					id="topbar-tray"
 					x-show="more"
 					x-cloak
-					class="tb-pop md:hidden absolute left-2 right-2 top-full mt-1.5 z-50 flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-edge bg-surface text-fg shadow-xl"
+					x-transition:enter="mn-enter"
+					x-transition:enter-start="mn-from"
+					x-transition:enter-end="mn-to"
+					x-transition:leave="mn-leave"
+					x-transition:leave-start="mn-to"
+					x-transition:leave-end="mn-from"
+					:style="(more, 'transform-origin:' + Math.round($refs.moreBtn.getBoundingClientRect().left + $refs.moreBtn.offsetWidth / 2 - document.getElementById('app-topbar').getBoundingClientRect().left - 8) + 'px 0')"
+					class="tb-pop md:hidden absolute left-2 right-2 top-full mt-1.5 z-50 flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-edge bg-surface text-fg shadow-elev-hover"
 				>
 					<div class="tb-first-copy">
 						@topbarWidget(ctx, tc, ws[0])

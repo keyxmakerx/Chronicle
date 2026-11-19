@@ -15,7 +15,7 @@ import (
 templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-		class="ec-card card p-0 overflow-hidden hover:shadow-md transition-shadow block group"
+		class="ec-card card p-0 overflow-hidden hover:shadow-elev-hover transition-shadow block group"
 		data-entity-preview={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, entity.ID) }
 	>
 		<!-- Image or placeholder header -->

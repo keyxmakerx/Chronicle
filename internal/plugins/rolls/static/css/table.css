@@ -219,10 +219,10 @@ html[data-motion="calm"] .tt-island.tt-out { transform: none; opacity: 0; }
 /* Calm: the sheet changes height at once and the new height fades in. */
 html[data-motion="calm"] .tt-sheet { transition: none; }
 html[data-motion="calm"] .tt-sheet.tt-fadein { animation: tt-fade var(--dur-standard) linear; }
-html[data-motion="off"] :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .tt-n, .tt-last) { animation: none !important; transition: none !important; }
+html[data-motion="off"] :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .hdr-n, .tt-last) { animation: none !important; transition: none !important; }
 html[data-motion="off"] .tt-island { transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .tt-n, .tt-last) { animation: none !important; transition: none !important; }
+  :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .hdr-n, .tt-last) { animation: none !important; transition: none !important; }
   .tt-island { transform: none; }
 }
 

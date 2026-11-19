@@ -180,7 +180,7 @@
     });
 
     var modal = document.createElement('div');
-    modal.className = 'card w-full max-w-lg shadow-2xl overflow-hidden';
+    modal.className = 'card w-full max-w-lg shadow-elev-dragged overflow-hidden';
     modal.style.maxHeight = '60vh';
     modal.style.display = 'flex';
     modal.style.flexDirection = 'column';

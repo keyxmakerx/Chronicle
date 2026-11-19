@@ -64,8 +64,7 @@
   }
 
   function standardMs() {
-    var v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dur-standard'));
-    return isFinite(v) && v > 0 ? v : 200;
+    return window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs('--dur-standard', 200) : 200;
   }
 
   Chronicle.register('dm-screen', {

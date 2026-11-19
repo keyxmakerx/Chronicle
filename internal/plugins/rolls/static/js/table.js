@@ -15,6 +15,12 @@
 (function () {
   'use strict';
 
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
+
   var W = window;
   var C = W.Chronicle;
 
@@ -761,9 +767,9 @@
     var c = this.count;
     c.hidden = false;
     c.textContent = this.unseen > 99 ? '99+' : String(this.unseen);
-    c.classList.remove('tt-grow');
+    c.classList.remove('hdr-n-grow');
     void c.offsetWidth;
-    c.classList.add('tt-grow');
+    c.classList.add('hdr-n-grow');
   };
 
   Table.prototype.closeMenus = function () {
@@ -1102,7 +1108,7 @@
     if (!open && det) {
       det.hidden = false;
       b.setAttribute('aria-expanded', 'true');
-      if (motion() === 'full' && det.animate) det.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: 'cubic-bezier(0.16,1,0.3,1)' });
+      if (motion() === 'full' && det.animate) det.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: tokMs('--dur-standard', 200), easing: 'cubic-bezier(0.16,1,0.3,1)' });
     }
   };
 

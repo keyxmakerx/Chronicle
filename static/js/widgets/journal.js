@@ -17,6 +17,12 @@
  */
 (function () {
   'use strict';
+
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
   function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
 
 
@@ -2733,7 +2739,7 @@
     // A collapsed list keeps its place in the tab order out of reach.
     el.inert = size === 'collapsed' && !isPhone();
     if (!opts.first && size !== 'collapsed' && el.animate) {
-      el.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
+      el.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'ease-out' });
     }
     var h = this.dom.handle;
     h.setAttribute('aria-valuenow', String(SIZES.indexOf(size)));

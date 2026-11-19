@@ -152,7 +152,7 @@
     return modeOf({ motion: R.getAttribute('data-motion'), viewMotion: R.getAttribute('data-view-motion'), czReduce: R.hasAttribute('data-cz-reduce') });
   }
   function dur(root) {
-    var full = msOf(getComputedStyle(root || R).getPropertyValue('--dur-slide')) || 360;
+    var full = (window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs('--dur-slide', 0, root || R) : msOf(getComputedStyle(root || R).getPropertyValue('--dur-slide'))) || 360;
     return durFor(mode(), full);
   }
   // A style's habits are tokens on the root, never read from the style's name.
