@@ -112,7 +112,7 @@ templ timelineListContent(cc *campaigns.CampaignContext, data TimelineListData) 
 templ timelineCard(campaignID string, t Timeline) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines/%s", campaignID, t.ID)) }
-		class="card p-4 hover:ring-2 hover:ring-accent/30 hover:shadow-elev-hover transition-all group"
+		class="card p-4 hover:ring-2 hover:ring-accent/30 hover:shadow-elev-hover transition-shadow group"
 		data-dm-only?={ t.IsDMOnly() }
 	>
 		<div class="flex items-center gap-3 mb-2">
