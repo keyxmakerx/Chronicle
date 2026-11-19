@@ -29,14 +29,15 @@ try {
   // The owner previewing as a guest rides the owner's own session with the
   // guest cookie on. The server lowers each read to a visitor's, so this walk
   // must see what the signed-out stranger sees, under the same leak checks.
-  // The cookie is dropped straight after the walk so no later owner step runs
-  // with it (writes ignore it anyway).
+  // The cookie's value is the campaign it was turned on in, as the server
+  // writes it; any other value is no preview at all. It is dropped straight
+  // after the walk so no later owner step runs with it (writes ignore it anyway).
   const GUEST_COOKIE = 'chronicle_view_as_guest';
   const viewers = { player: s.player, 'other player': s.player2, scribe: s.scribe, signedout: s.guest, 'owner previewing as a guest': s.owner };
   const walks = {};
   for (const [who, client] of Object.entries(viewers)) {
     const previewing = who === 'owner previewing as a guest';
-    if (previewing) client.jar.set(GUEST_COOKIE, '1');
+    if (previewing) client.jar.set(GUEST_COOKIE, s.ids.cid);
     const r = await crawl(client, s.ids.cid, s.ids.all, { ...s.markers, ...s.playerOnly }, { term: 'ZQ' + RUN, controls: s.controls });
     if (previewing) client.jar.delete(GUEST_COOKIE);
     walks[who] = r;
