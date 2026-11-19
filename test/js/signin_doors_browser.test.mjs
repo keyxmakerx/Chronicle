@@ -88,6 +88,9 @@ test('a hidden tab pauses the drift', { skip }, async () => {
       Object.defineProperty(document, 'hidden', { value: true, configurable: true });
       document.dispatchEvent(new Event('visibilitychange'));
     });
+    // A pause is pending until the animation's next frame, and its time runs
+    // on until then; read the resting place only once every pause has landed.
+    await p.evaluate(() => Promise.all(document.getAnimations().map((a) => a.ready)));
     const a = await front(p, 'castle');
     await p.waitForTimeout(300);
     assert.equal(await front(p, 'castle'), a);
