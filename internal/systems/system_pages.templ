@@ -111,19 +111,46 @@ templ systemCategoryBrowser(cc *campaigns.CampaignContext, manifest *SystemManif
 	</div>
 }
 
+// SystemBrowsePage renders the category browser at its own address.
+templ SystemBrowsePage(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo, hasBook bool) {
+	@layouts.App("Reference lists - " + manifest.Name) {
+		@SystemBrowseContent(cc, manifest, cats, hasBook)
+	}
+}
+
+// SystemBrowseContent is the category browser whether or not the system has a
+// book; with one, its crumb leads up to the book.
+templ SystemBrowseContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo, hasBook bool) {
+	<div id="module-content">
+		if hasBook {
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
+				{Label: manifest.Name, Href: systemIndexURL(cc, manifest)},
+				{Label: "Reference lists"},
+			})
+		} else {
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
+				{Label: manifest.Name},
+			})
+		}
+		@systemCategoryBrowser(cc, manifest, cats)
+	</div>
+}
+
 // CategoryListPage renders the full category item list page.
-templ CategoryListPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, items []ReferenceItem) {
+templ CategoryListPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, items []ReferenceItem, hasBook bool) {
 	@layouts.App(cat.Name + " - " + manifest.Name) {
-		@CategoryListContent(cc, manifest, cat, items)
+		@CategoryListContent(cc, manifest, cat, items, hasBook)
 	}
 }
 
 // CategoryListContent renders the category item list (for HTMX swap).
-templ CategoryListContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, items []ReferenceItem) {
+templ CategoryListContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, items []ReferenceItem, hasBook bool) {
 	<div id="module-content">
 		@components.Breadcrumbs([]components.BreadcrumbItem{
 			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
-			{Label: manifest.Name, Href: fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, manifest.ID)},
+			{Label: manifest.Name, Href: systemCrumbURL(cc, manifest, hasBook)},
 			{Label: cat.Name},
 		})
 		<div class="mb-6">
@@ -183,18 +210,18 @@ templ CategoryListContent(cc *campaigns.CampaignContext, manifest *SystemManifes
 }
 
 // ItemDetailPage renders the full item detail page.
-templ ItemDetailPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, item *ReferenceItem) {
+templ ItemDetailPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, item *ReferenceItem, hasBook bool) {
 	@layouts.App(item.Name + " - " + manifest.Name) {
-		@ItemDetailContent(cc, manifest, cat, item)
+		@ItemDetailContent(cc, manifest, cat, item, hasBook)
 	}
 }
 
 // ItemDetailContent renders the item detail view (for HTMX swap).
-templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, item *ReferenceItem) {
+templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, item *ReferenceItem, hasBook bool) {
 	<div id="module-content">
 		@components.Breadcrumbs([]components.BreadcrumbItem{
 			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
-			{Label: manifest.Name, Href: fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, manifest.ID)},
+			{Label: manifest.Name, Href: systemCrumbURL(cc, manifest, hasBook)},
 			{Label: cat.Name, Href: fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)},
 			{Label: item.Name},
 		})

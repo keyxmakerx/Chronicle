@@ -1242,6 +1242,7 @@ GET	/campaigns/:id/systems/:mod/book/files/:name	session	systems.(*SystemHandler
 GET	/campaigns/:id/systems/:mod/book/find	session	systems.(*SystemHandler).BookFindAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/index/:cat	session	systems.(*SystemHandler).BookIndexAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/source	session	systems.(*SystemHandler).BookSourceAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/browse	session	systems.(*SystemHandler).Browse	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/data/:file	session	systems.(*SystemHandler).SystemDataAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/rules-glossary	session	systems.(*SystemHandler).RulesGlossaryAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/search	session	systems.(*SystemHandler).SearchAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
