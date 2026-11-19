@@ -7,8 +7,22 @@ package entities
 // allowed to see them. Every egress point — syncapi GetEntity/ListEntities,
 // the entities-plugin GetFieldsAPI/PreviewAPI, and
 // CharacterSurfaceSchemaJSON — calls FilterRestrictedFields so the paths
-// can't drift. Server is the authority; a widget's client-side "hide the
-// box" is not a fix.
+// can't drift, with RestrictionDefs as the definitions whenever the page is
+// at hand. Server is the authority; a widget's client-side "hide the box" is
+// not a fix.
+
+// RestrictionDefs is every definition that can restrict one of a page's
+// values: its category's fields and the fields added to just this page. The
+// category's full list is used rather than MergeFields, so hiding a field on
+// one page never un-restricts its value, and a page-added field marked
+// gm_only or owner_only is withheld like a category field.
+func RestrictionDefs(typeFields []FieldDefinition, overrides *FieldOverrides) []FieldDefinition {
+	if overrides == nil || len(overrides.Added) == 0 {
+		return typeFields
+	}
+	defs := make([]FieldDefinition, 0, len(typeFields)+len(overrides.Added))
+	return append(append(defs, typeFields...), overrides.Added...)
+}
 
 // FilterGMOnlyFields returns fieldsData with GM-only field VALUES removed
 // when the caller may not see GM content (canSeeGM == false). GM/owner

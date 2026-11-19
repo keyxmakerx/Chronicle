@@ -186,7 +186,9 @@ func (a *bestiaryEntityCreatorAdapter) creatureType(ctx context.Context, campaig
 // JSON text when the type declares one, else to the key itself: a list of
 // plain values (keywords) as comma text, anything else as JSON text. Keys the
 // type does not declare are left out; the whole statblock is kept under
-// statblock_json, as before, so nothing in it is lost.
+// statblock_json, as before, so nothing in it is lost. statblock_json is not a
+// declared field, so nothing strips it for players: a key the type marks
+// GM-only or owner-only is kept in its own field and left out of the copy.
 func creatureFields(defs []entities.FieldDefinition, statblock json.RawMessage) map[string]any {
 	out := map[string]any{"statblock_json": string(statblock)}
 	var sb map[string]any
@@ -194,8 +196,28 @@ func creatureFields(defs []entities.FieldDefinition, statblock json.RawMessage) 
 		return out
 	}
 	declared := make(map[string]bool, len(defs))
+	restricted := false
+	copySB := make(map[string]any, len(sb))
+	for k, v := range sb {
+		copySB[k] = v
+	}
 	for _, d := range defs {
 		declared[d.Key] = true
+		if d.GMOnly || d.OwnerOnly {
+			for _, k := range []string{d.Key, strings.TrimSuffix(d.Key, "_json")} {
+				if _, ok := copySB[k]; ok {
+					delete(copySB, k)
+					restricted = true
+				}
+			}
+		}
+	}
+	if restricted {
+		if raw, err := json.Marshal(copySB); err == nil {
+			out["statblock_json"] = string(raw)
+		} else {
+			delete(out, "statblock_json")
+		}
 	}
 	for k, v := range sb {
 		switch v := v.(type) {

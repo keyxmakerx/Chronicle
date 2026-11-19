@@ -3599,11 +3599,7 @@ func buildSearchText(entryHTML string, fieldsData map[string]any) string {
 // GM-only and owner-only values stay out, as they do from a player's copy of
 // the page. A field added to just this page counts like a category field.
 func searchableFields(fields map[string]any, typeFields []FieldDefinition, overrides *FieldOverrides) map[string]any {
-	defs := typeFields
-	if overrides != nil && len(overrides.Added) > 0 {
-		defs = append(append([]FieldDefinition{}, typeFields...), overrides.Added...)
-	}
-	return FilterRestrictedFields(fields, defs, false, false)
+	return FilterRestrictedFields(fields, RestrictionDefs(typeFields, overrides), false, false)
 }
 
 // searchFieldsOf loads the page's category and returns its searchableFields.

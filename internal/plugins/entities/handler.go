@@ -2297,14 +2297,14 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 	// Strip GM-only and owner-only field VALUES for viewers who can't see
 	// them. The field DEFINITIONS stay so the attributes widget can render
 	// its schema (and hide the box); only the restricted values are
-	// withheld. Gate on the full type schema
-	// (et.Fields), not effectiveFields, so a per-entity "hidden" override
-	// can't leave a restricted value un-stripped. The owner, Co-DMs and
+	// withheld. Gate on RestrictionDefs, not effectiveFields, so a
+	// per-entity "hidden" override can't leave a restricted value
+	// un-stripped and a field added to this page is gated too. The owner, Co-DMs and
 	// Foundry Bearer callers keep full data — same bar as inline secrets;
 	// an owner-only value is also kept for the entity's own claimed owner.
 	canSeeGM := cc.CanAuthorDmOnly()
 	isOwner := entity.IsOwnedBy(userID)
-	visible := FilterRestrictedFields(entity.FieldsData, et.Fields, canSeeGM, isOwner)
+	visible := FilterRestrictedFields(entity.FieldsData, RestrictionDefs(et.Fields, entity.FieldOverrides), canSeeGM, isOwner)
 	response := map[string]any{
 		"fields":          effectiveFields,
 		"fields_data":     visible,
@@ -2623,7 +2623,7 @@ func (h *Handler) PreviewAPI(c *echo.Context) error {
 	// campaign route.
 	var fieldsData map[string]any
 	if entityType != nil {
-		fieldsData = FilterRestrictedFields(entity.FieldsData, entityType.Fields, cc.CanAuthorDmOnly(), entity.IsOwnedBy(userID))
+		fieldsData = FilterRestrictedFields(entity.FieldsData, RestrictionDefs(entityType.Fields, entity.FieldOverrides), cc.CanAuthorDmOnly(), entity.IsOwnedBy(userID))
 	}
 
 	var tokenPath string

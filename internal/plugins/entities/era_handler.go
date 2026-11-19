@@ -328,7 +328,7 @@ func (h *Handler) GetEraFieldsAPI(c *echo.Context) error {
 	isOwner := t.entity.IsOwnedBy(t.userID)
 	merged := mergeEraFields(t.entity.FieldsData, v.FieldsData)
 	effective := MergeFields(et.Fields, t.entity.FieldOverrides)
-	visible := FilterRestrictedFields(merged, et.Fields, canSeeGM, isOwner)
+	visible := FilterRestrictedFields(merged, RestrictionDefs(et.Fields, t.entity.FieldOverrides), canSeeGM, isOwner)
 	resp := map[string]any{
 		"fields":          effective,
 		"fields_data":     visible,

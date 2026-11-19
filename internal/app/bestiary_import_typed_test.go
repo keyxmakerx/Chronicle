@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"errors"
@@ -83,6 +84,16 @@ func TestCreatureFields(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("fields =\n %v\nwant\n %v", got, want)
+	}
+	// A restricted key keeps its own (stripped-for-players) field and leaves
+	// the undeclared whole-statblock copy.
+	gmDefs := append([]entities.FieldDefinition{{Key: "book_source", GMOnly: true}}, defs...)
+	gm := creatureFields(gmDefs, json.RawMessage(`{"name":"Goblin","book_source":"Monsters p. 12"}`))
+	if gm["book_source"] != "Monsters p. 12" {
+		t.Errorf("book_source field = %v, want the value", gm["book_source"])
+	}
+	if blob, _ := gm["statblock_json"].(string); strings.Contains(blob, "book_source") || !strings.Contains(blob, "Goblin") {
+		t.Errorf("statblock_json = %q, want the statblock without book_source", blob)
 	}
 	if got := creatureFields(defs, json.RawMessage(`not json`)); len(got) != 1 {
 		t.Errorf("unreadable statblock gave %v, want only statblock_json", got)

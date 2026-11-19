@@ -108,10 +108,10 @@ func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaign
 	if entityType != nil {
 		fields := MergeFields(entityType.Fields, entity.FieldOverrides)
 		// Strip GM-only and owner-only field values for viewers who can't
-		// see them. Gate on the full type schema so a "hidden" override
-		// can't leave a value un-stripped; non-mutating, so other blocks
+		// see them. Gate on RestrictionDefs so a "hidden" override can't
+		// leave a value un-stripped and a page-added field is gated too; non-mutating, so other blocks
 		// rendering this entity see the original data.
-		fieldsData := FilterRestrictedFields(entity.FieldsData, entityType.Fields, canSeeGM, isOwner)
+		fieldsData := FilterRestrictedFields(entity.FieldsData, RestrictionDefs(entityType.Fields, entity.FieldOverrides), canSeeGM, isOwner)
 		order := []string{}
 		bySection := map[string]*characterSurfaceSection{}
 		for _, f := range fields {

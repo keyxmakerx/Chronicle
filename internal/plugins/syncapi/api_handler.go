@@ -507,7 +507,7 @@ func (h *APIHandler) GetEntity(c *echo.Context) error {
 				slog.Int("entity_type_id", entity.EntityTypeID), slog.Any("error", terr))
 			return apperror.NewInternal(fmt.Errorf("failed to load entity"))
 		}
-		entity.FieldsData = entities.FilterRestrictedFields(entity.FieldsData, et.Fields, false, entity.IsOwnedBy(userID))
+		entity.FieldsData = entities.FilterRestrictedFields(entity.FieldsData, entities.RestrictionDefs(et.Fields, entity.FieldOverrides), false, entity.IsOwnedBy(userID))
 	}
 
 	return c.JSON(http.StatusOK, entity)

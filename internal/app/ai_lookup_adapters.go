@@ -75,7 +75,18 @@ func (p *aiPartyAdapter) playerFields(ctx context.Context) dmscreen.FieldNarrowe
 		if !known[h.TypeID] {
 			return nil
 		}
-		return entities.FilterRestrictedFields(h.Fields, defs[h.TypeID], false, false)
+		fields := entities.FilterRestrictedFields(h.Fields, defs[h.TypeID], false, false)
+		if len(h.PageRestricted) == 0 {
+			return fields
+		}
+		out := make(map[string]any, len(fields))
+		for k, v := range fields {
+			out[k] = v
+		}
+		for _, k := range h.PageRestricted {
+			delete(out, k)
+		}
+		return out
 	}
 }
 
