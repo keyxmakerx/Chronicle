@@ -706,6 +706,28 @@
 
   // --- Extended Link Mark for Entity Mentions ---
 
+  // The kinds of address a link may carry.
+  var LINK_PROTOCOLS = ['http:', 'https:', 'mailto:', 'tel:', 'sms:', 'ftp:', 'ftps:', 'callto:', 'cid:', 'xmpp:'];
+
+  // What a link's address is to this site: 'inside' for a page of this site,
+  // 'outside' for anywhere else a link may go, 'refused' for an address that
+  // is not a link (one that runs code, or cannot be read). The browser's own
+  // address parser decides, so "//other.example" or a tab tucked into a path
+  // cannot pass for a page of this site.
+  function linkKind(href, base) {
+    if (typeof href !== 'string' || href === '') return 'outside';
+    var url, here;
+    try {
+      url = new URL(href, base);
+      here = new URL(base);
+    } catch (e) {
+      return 'refused';
+    }
+    if (LINK_PROTOCOLS.indexOf(url.protocol) === -1) return 'refused';
+    var web = url.protocol === 'http:' || url.protocol === 'https:';
+    return web && url.origin === here.origin ? 'inside' : 'outside';
+  }
+
   /**
    * Chronicle.MentionLink - Extended TipTap Link mark that preserves
    * entity mention attributes through the ProseMirror JSON round-trip.
@@ -773,6 +795,14 @@
       for (key in attrs) {
         if (attrs.hasOwnProperty(key)) merged[key] = attrs[key];
       }
+      // Saved text is loaded as JSON, which skips the check made when a link
+      // is typed or pasted, so the drawing repeats it: a refused address is
+      // drawn as a link to nowhere.
+      if (linkKind(merged.href, window.location.href) === 'refused') merged.href = '';
+      // A link opens a new tab cut off from this one, whatever the saved
+      // link says about itself.
+      merged.target = '_blank';
+      merged.rel = 'noopener noreferrer nofollow';
       // Entity mention links get distinctive styling + non-editable behavior.
       if (merged['data-mention-id']) {
         merged['class'] = 'entity-link';
