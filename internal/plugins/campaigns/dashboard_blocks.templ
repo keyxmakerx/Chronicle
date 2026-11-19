@@ -255,38 +255,87 @@ templ dashQuickActions(cc *CampaignContext) {
 	</div>
 }
 
-// dashCategoryGrid renders a quick-nav grid of entity types with counts.
+// dashCategoryGrid renders the campaign's categories with their page counts:
+// tiles in the Standard look, one running line of words under Annals, where a
+// long list would otherwise push the rest of the home below the screen.
 // Config: columns (int, default 4).
 templ dashCategoryGrid(cc *CampaignContext, config map[string]any) {
 	{{ types := dashVisibleCategories(ctx, cc) }}
 	if len(types) > 0 {
+		{{ shown, rest := splitCategoryLine(types) }}
 		<div class="cb-contents">
 			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">Categories</h2>
-			<div class={ "cb-rows", dashGridClass(config) }>
-				for _, et := range types {
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
-						class="cb-link cb-row card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
-					>
-						<div class="cb-row-main flex items-center gap-2.5 mb-1">
-							<span
-								class="cb-swatch w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
-								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-							>
-								if et.Icon != "" {
-									<i class={ "fa-solid " + et.Icon }></i>
-								}
-							</span>
-							<span class="cb-row-name text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
-						</div>
-						<div class="cb-row-meta pl-[2.375rem] text-xs text-fg-muted">
-							{ pageCountLabel(layouts.GetEntityCount(ctx, et.ID)) }
-						</div>
-					</a>
+			<div class={ "cb-rows cb-line", dashGridClass(config) }>
+				for _, et := range shown {
+					@dashCategoryWord(cc, et)
 				}
 			</div>
+			if len(rest) > 0 {
+				<details class="cb-line-more">
+					<summary class="cb-quiet-word mt-3 text-sm text-accent hover:underline">
+						<span class="cb-when-closed">and { strconv.Itoa(len(rest)) } more</span>
+						<span class="cb-when-open">Show fewer</span>
+					</summary>
+					<div class={ "cb-rows cb-line mt-3", dashGridClass(config) }>
+						for _, et := range rest {
+							@dashCategoryWord(cc, et)
+						}
+					</div>
+				</details>
+			}
 		</div>
 	}
+}
+
+// dashCategoryWord is one category in the Categories block: its name and how
+// many pages the viewer can open there. The link is named in full for screen
+// readers, since the Annals line shows the bare number.
+templ dashCategoryWord(cc *CampaignContext, et layouts.SidebarEntityType) {
+	{{ n := layouts.GetEntityCount(ctx, et.ID) }}
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
+		class="cb-word card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
+		aria-label={ et.NamePlural + ", " + pageCountLabel(n) }
+		data-empty?={ n == 0 }
+	>
+		<div class="cb-word-main flex items-center gap-2.5 mb-1">
+			<span
+				class="cb-swatch w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
+				style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+			>
+				if et.Icon != "" {
+					<i class={ "fa-solid " + et.Icon }></i>
+				}
+			</span>
+			<span class="cb-word-name text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
+		</div>
+		<div class="cb-word-meta pl-[2.375rem] text-xs text-fg-muted">
+			<span class="cb-word-n">{ strconv.Itoa(n) }</span><span class="cb-word-unit">{ pageCountUnit(n) }</span>
+		</div>
+	</a>
+}
+
+// categoryLineMax is how many categories the Categories block shows before
+// the rest wait behind "and N more", so a campaign with dozens stays short.
+const categoryLineMax = 30
+
+// splitCategoryLine divides the categories into the ones shown at once and
+// the ones behind "and N more". A single leftover is shown instead: a word
+// that hides one word saves nothing.
+func splitCategoryLine(types []layouts.SidebarEntityType) (shown, rest []layouts.SidebarEntityType) {
+	if len(types) <= categoryLineMax+1 {
+		return types, nil
+	}
+	return types[:categoryLineMax], types[categoryLineMax:]
+}
+
+// pageCountUnit is the word after a page count: " page" for one, " pages"
+// otherwise.
+func pageCountUnit(n int) string {
+	if n == 1 {
+		return " page"
+	}
+	return " pages"
 }
 
 // pageCountLabel is a category's page count in words: "1 page", "3 pages".
