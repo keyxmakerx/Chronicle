@@ -15,8 +15,11 @@ failing line is fixed, or the PR says why it is a signed exception.
       amber mark.
 - [ ] The lightest control weight that fits; nothing opens from a bordered
       "Show all ▾" button.
-- [ ] It matches the signed mockup, or the differences went back as a
-      "small differences" card.
+- [ ] Icons are one colour with nothing behind them at rest; none was added
+      to a row, a heading or a button that has a word.
+- [ ] It matches the signed mockup. A changed look or behaviour went back
+      as a new card; small differences are on the weekly list with a way to
+      reverse each.
 
 ## Motion
 
@@ -24,6 +27,8 @@ failing line is fixed, or the PR says why it is a signed exception.
 - [ ] It starts from the thing that opened it and closes back the same way.
 - [ ] Only `transform` and `opacity` animate; heights measure the content.
 - [ ] Clicking again mid-move reverses it smoothly.
+- [ ] Nothing jumps, blanks or flickers before the move; parts that move
+      together read as one move, and arrows point the way things travel.
 - [ ] Calm shows only fades; Off and a device set to reduce motion show the
       end state, and the feature still works.
 - [ ] Loops use `MotionRest`; nothing flashes more than three times a second.
@@ -53,7 +58,8 @@ failing line is fixed, or the PR says why it is a signed exception.
       have a label; state (open, selected, on) is announced.
 - [ ] Colour is never the only signal; there is also a word, icon or shape.
 - [ ] Usable at 200% browser zoom and at 320 px wide without sideways
-      scrolling.
+      scrolling; on a narrow screen blocks fold into one column and no
+      words are squeezed, cut off or covered.
 
 ## Words
 
