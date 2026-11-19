@@ -178,9 +178,12 @@ type EntityService interface {
 	// to the note sits inside one.
 	PagesLinkingNote(ctx context.Context, campaignID, noteID string, role int, userID string, seesSecrets bool) ([]Entity, error)
 
-	// GetMentionLinks returns all @mention references across a campaign for the
-	// relations graph. Each link is a source→target pair extracted from entry_html.
-	GetMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error)
+	// GetMentionGraph returns the @mention links across a campaign that the
+	// viewer may know of, with the pages at their ends, for the relations
+	// graph. A viewer who does not see inline secrets (seesSecrets false) gets
+	// no link that exists only inside one. A link to a page hidden from the
+	// viewer, in the trash or of another campaign is left out.
+	GetMentionGraph(ctx context.Context, campaignID string, role int, userID string, seesSecrets bool) (*MentionGraph, error)
 
 	// TogglePrivate flips an entity's is_private flag and returns the new state.
 	// Callers MUST have already verified the entity belongs to the acting
@@ -3416,14 +3419,76 @@ func (s *entityService) PagesLinkingNote(ctx context.Context, campaignID, noteID
 	return out, nil
 }
 
-// GetMentionLinks returns all @mention references across a campaign. Delegates
-// to the repository which scans entry_html for data-mention-id attributes.
-func (s *entityService) GetMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error) {
-	links, err := s.entities.FindAllMentionLinks(ctx, campaignID, role, userID)
-	if err != nil {
-		return nil, apperror.NewInternal(fmt.Errorf("finding mention links: %w", err))
+// mentionIDPattern matches data-mention-id="<uuid>" attributes in entry_html.
+var mentionIDPattern = regexp.MustCompile(`data-mention-id="([a-f0-9-]+)"`)
+
+// mentionTargets lists the pages a page's text names, once each, leaving out
+// the page itself. For a viewer who does not see inline secrets the text is
+// read the way the entry route strips it, so a name that appears only inside
+// a secret is not a link they can know of.
+func mentionTargets(sourceID, entryHTML string, seesSecrets bool) []string {
+	if !seesSecrets {
+		entryHTML = sanitize.StripSecretsHTML(entryHTML)
 	}
-	return links, nil
+	var targets []string
+	seen := make(map[string]bool)
+	for _, match := range mentionIDPattern.FindAllStringSubmatch(entryHTML, -1) {
+		id := match[1]
+		if id == sourceID || seen[id] {
+			continue
+		}
+		seen[id] = true
+		targets = append(targets, id)
+	}
+	return targets
+}
+
+// GetMentionGraph returns the @mention links across a campaign and the pages
+// at their ends; see the interface. The pages are looked up for the same
+// viewer as the links, and a link is kept only when both of its pages came
+// back, so every link a caller draws has two named, visible ends.
+func (s *entityService) GetMentionGraph(ctx context.Context, campaignID string, role int, userID string, seesSecrets bool) (*MentionGraph, error) {
+	sources, err := s.entities.FindMentionSources(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("finding mention sources: %w", err))
+	}
+
+	var found []MentionLink
+	var ids []string
+	listed := make(map[string]bool)
+	list := func(id string) {
+		if !listed[id] {
+			listed[id] = true
+			ids = append(ids, id)
+		}
+	}
+	for _, src := range sources {
+		for _, target := range mentionTargets(src.ID, src.EntryHTML, seesSecrets) {
+			found = append(found, MentionLink{SourceEntityID: src.ID, TargetEntityID: target})
+			list(src.ID)
+			list(target)
+		}
+	}
+
+	graph := &MentionGraph{Pages: map[string]MentionPage{}}
+	if len(found) == 0 {
+		return graph, nil
+	}
+	pages, err := s.entities.FindMentionPages(ctx, campaignID, ids, role, userID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("finding mention pages: %w", err))
+	}
+	for _, l := range found {
+		src, okSrc := pages[l.SourceEntityID]
+		dst, okDst := pages[l.TargetEntityID]
+		if !okSrc || !okDst {
+			continue
+		}
+		graph.Links = append(graph.Links, l)
+		graph.Pages[src.ID] = src
+		graph.Pages[dst.ID] = dst
+	}
+	return graph, nil
 }
 
 // extractMentionSnippet returns ~120 characters of plain text around the

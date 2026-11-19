@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -906,10 +905,14 @@ type EntityRepository interface {
 	// Deletes existing aliases and inserts new ones in a single transaction.
 	SetAliases(ctx context.Context, entityID string, aliases []string) error
 
-	// FindAllMentionLinks returns all @mention references across a campaign by
-	// scanning entry_html for data-mention-id attributes. Each result is a
-	// source→target pair. Used by the graph visualization to show mention edges.
-	FindAllMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error)
+	// FindMentionSources returns the pages of a campaign the viewer may see
+	// whose text carries an @mention, with that text.
+	FindMentionSources(ctx context.Context, campaignID string, role int, userID string) ([]MentionSource, error)
+
+	// FindMentionPages returns, of the given ids, the pages of this campaign
+	// the viewer may see, as a graph draws them. An id of another campaign, of
+	// a page in the trash or of a page hidden from the viewer is left out.
+	FindMentionPages(ctx context.Context, campaignID string, ids []string, role int, userID string) (map[string]MentionPage, error)
 
 	// UpdatePrivate sets an entity's is_private flag. Used by the NPC reveal toggle.
 	UpdatePrivate(ctx context.Context, entityID string, isPrivate bool) error
@@ -2209,7 +2212,7 @@ func (r *entityRepository) UpdateEntityType(ctx context.Context, entityID string
 // a lookup for an entity id matches every campaign's entry_html, and an
 // Owner-role viewer (empty visibilityFilter fragment) would collect other
 // campaigns' private entities too. Same scoping FilterViewableEntityIDs /
-// FindAllMentionLinks apply.
+// FindMentionSources / FindMentionPages apply.
 func backlinksWhere(campaignID, entityID string, role int, userID string) (string, []any) {
 	where := `WHERE e.campaign_id = ? AND e.entry_html LIKE ? AND e.id != ?`
 	escaped := strings.NewReplacer("%", `\%`, "_", `\_`).Replace(entityID)
@@ -2647,13 +2650,10 @@ func (r *entityRepository) SetAliases(ctx context.Context, entityID string, alia
 	return tx.Commit()
 }
 
-// mentionIDPattern matches data-mention-id="<uuid>" attributes in entry_html.
-var mentionIDPattern = regexp.MustCompile(`data-mention-id="([a-f0-9-]+)"`)
-
-// FindAllMentionLinks scans all entities in a campaign for @mention references
-// in their entry_html and returns source→target pairs. Respects visibility
-// filtering so players only see links from/to entities they can access.
-func (r *entityRepository) FindAllMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error) {
+// FindMentionSources returns the pages of a campaign whose entry_html carries
+// an @mention, with that text. Respects visibility filtering, so a viewer only
+// gets pages they can open.
+func (r *entityRepository) FindMentionSources(ctx context.Context, campaignID string, role int, userID string) ([]MentionSource, error) {
 	where := `WHERE e.campaign_id = ? AND e.entry_html LIKE '%data-mention-id=%'`
 	args := []any{campaignID}
 
@@ -2665,38 +2665,79 @@ func (r *entityRepository) FindAllMentionLinks(ctx context.Context, campaignID s
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("finding mention links: %w", err)
+		return nil, fmt.Errorf("finding mention sources: %w", err)
 	}
 	defer rows.Close()
 
-	var links []MentionLink
+	var sources []MentionSource
 	for rows.Next() {
-		var sourceID string
+		var src MentionSource
 		var entryHTML *string
-		if err := rows.Scan(&sourceID, &entryHTML); err != nil {
-			return nil, fmt.Errorf("scanning mention row: %w", err)
+		if err := rows.Scan(&src.ID, &entryHTML); err != nil {
+			return nil, fmt.Errorf("scanning mention source: %w", err)
 		}
 		if entryHTML == nil {
 			continue
 		}
+		src.EntryHTML = *entryHTML
+		sources = append(sources, src)
+	}
+	return sources, rows.Err()
+}
 
-		// Extract all mention target IDs from the HTML.
-		matches := mentionIDPattern.FindAllStringSubmatch(*entryHTML, -1)
-		seen := make(map[string]bool)
-		for _, match := range matches {
-			targetID := match[1]
-			// Skip self-mentions and dedup within same entity.
-			if targetID == sourceID || seen[targetID] {
-				continue
-			}
-			seen[targetID] = true
-			links = append(links, MentionLink{
-				SourceEntityID: sourceID,
-				TargetEntityID: targetID,
-			})
+// mentionPagesChunk bounds one lookup's IN list, so a campaign with a great
+// many linked pages never builds a statement the server refuses.
+const mentionPagesChunk = 1000
+
+// FindMentionPages returns, of the given ids, the pages of this campaign the
+// viewer may see, with their category's name, icon and colour.
+//
+// SECURITY-SENSITIVE: a mention id is whatever a page's text carries, so it
+// can name a page of another campaign, a page in the trash or a page hidden
+// from the viewer. The campaign term and visibilityFilter are what keep such
+// a page's name from being returned.
+func (r *entityRepository) FindMentionPages(ctx context.Context, campaignID string, ids []string, role int, userID string) (map[string]MentionPage, error) {
+	pages := make(map[string]MentionPage, len(ids))
+	for start := 0; start < len(ids); start += mentionPagesChunk {
+		chunk := ids[start:min(start+mentionPagesChunk, len(ids))]
+
+		placeholders := make([]string, len(chunk))
+		args := []any{campaignID}
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+		query := `SELECT e.id, e.name, e.slug, COALESCE(et.name, ''), COALESCE(et.icon, 'fa-file'), COALESCE(et.color, '#6b7280')
+		          FROM entities e
+		          LEFT JOIN entity_types et ON et.id = e.entity_type_id
+		          WHERE e.campaign_id = ? AND e.id IN (` + strings.Join(placeholders, ", ") + `)`
+		visFilter, visArgs := visibilityFilter(role, userID)
+		query += visFilter
+		args = append(args, visArgs...)
+
+		if err := r.scanMentionPages(ctx, query, args, pages); err != nil {
+			return nil, err
 		}
 	}
-	return links, rows.Err()
+	return pages, nil
+}
+
+// scanMentionPages runs one FindMentionPages lookup and adds its rows to pages.
+func (r *entityRepository) scanMentionPages(ctx context.Context, query string, args []any, pages map[string]MentionPage) error {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("finding mention pages: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p MentionPage
+		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.TypeName, &p.TypeIcon, &p.TypeColor); err != nil {
+			return fmt.Errorf("scanning mention page: %w", err)
+		}
+		pages[p.ID] = p
+	}
+	return rows.Err()
 }
 
 // ReassignOwner moves a guest's characters in one campaign to the account

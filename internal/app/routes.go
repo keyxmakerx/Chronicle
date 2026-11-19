@@ -2147,8 +2147,9 @@ type mentionLinkAdapter struct {
 }
 
 // GetMentionLinksForGraph returns @mention references across a campaign for
-// the relations graph. Converts between entity and relations package types.
-func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campaignID string, includeDmOnly bool, userID string) ([]relations.MentionLinkData, error) {
+// the relations graph, with the pages at their ends. Converts between entity
+// and relations package types.
+func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campaignID string, includeDmOnly bool, userID string) ([]relations.MentionLinkData, map[string]relations.GraphNode, error) {
 	// Determine role for visibility filtering: DM sees everything, others
 	// see only entities they have access to.
 	role := permissions.RolePlayer
@@ -2156,18 +2157,26 @@ func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campai
 		role = permissions.RoleOwner
 	}
 
-	links, err := a.svc.GetMentionLinks(ctx, campaignID, role, userID)
+	// Whoever gets the graph's whole picture also gets the links that sit in
+	// DM-only text; nobody else does.
+	graph, err := a.svc.GetMentionGraph(ctx, campaignID, role, userID, includeDmOnly)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	result := make([]relations.MentionLinkData, len(links))
-	for i, l := range links {
-		result[i] = relations.MentionLinkData{
+	links := make([]relations.MentionLinkData, len(graph.Links))
+	for i, l := range graph.Links {
+		links[i] = relations.MentionLinkData{
 			SourceEntityID: l.SourceEntityID,
 			TargetEntityID: l.TargetEntityID,
 		}
 	}
-	return result, nil
+	nodes := make(map[string]relations.GraphNode, len(graph.Pages))
+	for id, p := range graph.Pages {
+		nodes[id] = relations.GraphNode{
+			ID: p.ID, Name: p.Name, Icon: p.TypeIcon, Color: p.TypeColor, Slug: p.Slug, Type: p.TypeName,
+		}
+	}
+	return links, nodes, nil
 }
 
 // registerPageTextBlocks registers Read-aloud, Table, Steps, Checklist and the Page map:
