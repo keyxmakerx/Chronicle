@@ -365,6 +365,7 @@
         '<div class="czs-acts"><button type="button" class="btn-secondary" data-x>Keep it</button><button type="button" class="btn-danger" data-ok>Delete category</button></div></div>';
       document.body.appendChild(sc);
       var opener = document.activeElement;
+      if (window.Chronicle && Chronicle.modal) Chronicle.modal(sc, { opener: null, escape: false, focus: false, aria: false });
       function close() { sc.remove(); if (opener && opener.focus && document.body.contains(opener)) opener.focus(); }
       $('[data-x]', sc).addEventListener('click', close);
       $('[data-ok]', sc).addEventListener('click', function () { sc.remove(); ok(); });
@@ -455,6 +456,7 @@
       sc.addEventListener('pointerdown', function (e) { if (e.target === sc) close(); });
       sc.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !document.querySelector('.czs-pop')) close(); });
       document.body.appendChild(sc);
+      if (window.Chronicle && Chronicle.modal) Chronicle.modal(sc, { opener: null, escape: false, focus: false, aria: false, allow: '.czs-pop' });
       drawDlg();
       focus('#czc-nn');
     }

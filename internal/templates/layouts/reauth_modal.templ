@@ -8,78 +8,79 @@ package layouts
 // an admin tries to perform a sensitive operation without recent re-authentication.
 // The modal POSTs to /account/reauth, and on success retries the original request.
 templ ReauthModal() {
-	<div
+	<dialog
 		id="reauth-modal"
-		class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50"
-		x-data="{ show: false }"
-		x-show="show"
-		x-cloak
-		@reauth-required.window="show = true; $nextTick(() => $refs.reauthPassword.focus())"
+		class="dlg-modal bg-surface text-fg rounded-xl shadow-elev-dragged p-6 w-[calc(100%-2rem)] max-w-sm"
+		aria-labelledby="reauth-title"
+		x-data="{ opener: null }"
+		@reauth-required.window="if (!$el.open) { opener = document.activeElement; $el.returnValue = ''; $el.showModal(); }"
+		@close="
+			$refs.reauthPassword.value = '';
+			$refs.reauthError.classList.add('hidden');
+			if ($el.returnValue !== 'confirmed') window.dispatchEvent(new CustomEvent('reauth-cancelled'));
+			if (opener && opener.isConnected) opener.focus();
+			opener = null;
+		"
 	>
-		<div
-			class="bg-surface rounded-lg shadow-xl p-6 w-full max-w-sm mx-4"
-			@click.outside="if (show) { show = false; window.dispatchEvent(new CustomEvent('reauth-cancelled')); }"
-		>
-			<h3 class="text-lg font-semibold text-fg mb-2">
-				Confirm Your Identity
-			</h3>
-			<p class="text-sm text-fg-secondary mb-4">
-				This action requires password confirmation.
-			</p>
-			<form id="reauth-form" @submit.prevent="
-				const pw = $refs.reauthPassword.value;
-				if (!pw) return;
-				const errEl = $refs.reauthError;
-				errEl.classList.add('hidden');
+		<h3 id="reauth-title" class="text-lg font-semibold text-fg mb-2">
+			Confirm it's you
+		</h3>
+		<p class="text-sm text-fg-secondary mb-4">
+			This action requires password confirmation.
+		</p>
+		<form id="reauth-form" @submit.prevent="
+			const pw = $refs.reauthPassword.value;
+			if (!pw) return;
+			const errEl = $refs.reauthError;
+			errEl.classList.add('hidden');
 
-				Chronicle.apiFetch('/account/reauth', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-					body: 'password=' + encodeURIComponent(pw)
-				}).then(r => {
-					if (r.ok) {
-						show = false;
-						$refs.reauthPassword.value = '';
-						// boot.js re-sends the refused request on this event.
-						window.dispatchEvent(new CustomEvent('reauth-confirmed'));
-					} else if (r.status === 429) {
-						errEl.textContent = 'Too many wrong passwords. Try again in 15 minutes.';
-						errEl.classList.remove('hidden');
-					} else {
-						errEl.textContent = 'Incorrect password. Please try again.';
-						errEl.classList.remove('hidden');
-						$refs.reauthPassword.select();
-					}
-				}).catch(() => {
-					errEl.textContent = 'Network error. Please try again.';
+			Chronicle.apiFetch('/account/reauth', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: 'password=' + encodeURIComponent(pw)
+			}).then(r => {
+				if (r.ok) {
+					$el.closest('dialog').close('confirmed');
+					// boot.js re-sends the refused request on this event.
+					window.dispatchEvent(new CustomEvent('reauth-confirmed'));
+				} else if (r.status === 429) {
+					errEl.textContent = 'Too many tries. Wait 15 minutes, then try again.';
 					errEl.classList.remove('hidden');
-				});
-			">
-				<input
-					x-ref="reauthPassword"
-					type="password"
-					name="password"
-					placeholder="Enter your password"
-					autocomplete="current-password"
-					class="input"
-				/>
-				<p x-ref="reauthError" class="hidden mt-2 text-sm text-red-600 dark:text-red-400"></p>
-				<div class="mt-4 flex justify-end gap-3">
-					<button
-						type="button"
-						@click="show = false; $refs.reauthPassword.value = ''; window.dispatchEvent(new CustomEvent('reauth-cancelled'))"
-						class="btn-secondary"
-					>
-						Cancel
-					</button>
-					<button
-						type="submit"
-						class="btn-primary"
-					>
-						Confirm
-					</button>
-				</div>
-			</form>
-		</div>
-	</div>
+				} else {
+					errEl.textContent = 'That password isn\x27t right.';
+					errEl.classList.remove('hidden');
+					$refs.reauthPassword.select();
+				}
+			}).catch(() => {
+				errEl.textContent = 'Couldn\x27t reach the server. Check your connection and try again.';
+				errEl.classList.remove('hidden');
+			});
+		">
+			<input
+				x-ref="reauthPassword"
+				type="password"
+				name="password"
+				placeholder="Enter your password"
+				autocomplete="current-password"
+				autofocus
+				class="input"
+			/>
+			<p x-ref="reauthError" role="alert" class="hidden mt-2 text-sm text-bad"></p>
+			<div class="mt-4 flex justify-end gap-3">
+				<button
+					type="button"
+					@click="$el.closest('dialog').close('cancelled')"
+					class="btn-secondary"
+				>
+					Cancel
+				</button>
+				<button
+					type="submit"
+					class="btn-primary"
+				>
+					Confirm
+				</button>
+			</div>
+		</form>
+	</dialog>
 }

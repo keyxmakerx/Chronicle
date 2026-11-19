@@ -131,7 +131,7 @@
     sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true');
     var m = motion(); if (m === 'full') sheet.classList.add('in'); else if (m === 'calm') sheet.classList.add('calm');
     // Inside an open modal dialog (the shop room is one) anything outside it is inert, so the sheet goes in it.
-    var dlgs = document.querySelectorAll('dialog[open]'), host = o.host || (dlgs.length ? dlgs[dlgs.length - 1] : document.body);
+    var host = o.host || (Chronicle.layerHost ? Chronicle.layerHost() : document.body);
     host.appendChild(scrim); host.appendChild(sheet);
     cur = { o: o, sheet: sheet, scrim: scrim, test: null, busy: false, result: null, err: '', charId: o.characterId || ((o.characters || [])[0] || {}).id || '' };
     // Escape closes only the sheet, not the shop around it.

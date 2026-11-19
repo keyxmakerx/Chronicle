@@ -3139,6 +3139,48 @@
   .popover-scale-in { animation: none; }
 }
 
+/* === Native dialogs: the shared motion ============================
+   A <dialog> opened with showModal() fades its backdrop and grows from 96% while
+   rising 6px: 200ms in, 150ms out. Calm fades in place; Off appears at once.
+   display and overlay are transitioned discretely so the close plays before the
+   dialog leaves the top layer. */
+dialog.dlg-modal {
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+  transition:
+    opacity calc(var(--dur-standard) * 3 / 4) var(--ease-in, ease-in),
+    transform calc(var(--dur-standard) * 3 / 4) var(--ease-in, ease-in),
+    overlay calc(var(--dur-standard) * 3 / 4) allow-discrete,
+    display calc(var(--dur-standard) * 3 / 4) allow-discrete;
+}
+dialog.dlg-modal[open] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--dur-standard) var(--ease-out),
+    transform var(--dur-standard) var(--ease-out),
+    overlay var(--dur-standard) allow-discrete,
+    display var(--dur-standard) allow-discrete;
+}
+@starting-style {
+  dialog.dlg-modal[open] { opacity: 0; transform: translateY(6px) scale(0.96); }
+}
+dialog.dlg-modal::backdrop {
+  background: var(--surface-overlay);
+  opacity: 0;
+  transition:
+    opacity calc(var(--dur-standard) * 3 / 4) var(--ease-in, ease-in),
+    overlay calc(var(--dur-standard) * 3 / 4) allow-discrete,
+    display calc(var(--dur-standard) * 3 / 4) allow-discrete;
+}
+dialog.dlg-modal[open]::backdrop { opacity: 1; transition-duration: var(--dur-standard); }
+@starting-style {
+  dialog.dlg-modal[open]::backdrop { opacity: 0; }
+}
+html[data-motion] dialog.dlg-modal { transform: none; }
+html[data-motion="off"] dialog.dlg-modal,
+html[data-motion="off"] dialog.dlg-modal::backdrop { transition: none; }
+
 /* === The player call-to-action banner ===========================
    ONE strip above the page content, carrying the single thing a player is
    expected to ACT on — an unanswered RSVP, or the timezone Chronicle would

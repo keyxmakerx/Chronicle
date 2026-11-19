@@ -28,10 +28,10 @@ func calendarsOpening(ctx context.Context, data CalendarsListData) layouts.AppOp
 			Label: "New calendar",
 			Icon:  "fa-plus",
 			Attrs: templ.Attributes{
-				"hx-get":    fmt.Sprintf("/campaigns/%s/calendars/wizard", data.CampaignID),
-				"hx-target": "#calv5-wizard-root",
-				"hx-swap":   "outerHTML",
-				"onclick":   "window.__calv5Opener=this",
+				"hx-get":             fmt.Sprintf("/campaigns/%s/calendars/wizard", data.CampaignID),
+				"hx-target":          "#calv5-wizard-root",
+				"hx-swap":            "outerHTML",
+				"data-opener-global": "__calv5Opener",
 			},
 		}
 	}

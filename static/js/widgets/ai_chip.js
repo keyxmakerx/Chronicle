@@ -353,6 +353,7 @@
           void panel.offsetWidth;
           scrim.classList.add('is-open'); panel.classList.add('is-open');
           document.documentElement.classList.add('overflow-hidden');
+          if (window.Chronicle && Chronicle.modal) Chronicle.modal(panel, { opener: null, escape: false, focus: false });
           panel.focus();
         }
         return load(mode || '').then(function () {

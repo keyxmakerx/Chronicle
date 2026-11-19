@@ -112,13 +112,12 @@
       'left: 50%',
       'transform: translateX(-50%)',
       'align-items: center',
-      'z-index: 10000',
+      'z-index: var(--z-toast, 10000)',
       'display: flex',
       'flex-direction: column',
       'gap: 8px',
       'pointer-events: none',
-      'max-width: 380px',
-      'width: 100%',
+      'width: min(380px, calc(100vw - 32px))',
     ].join(';');
     document.body.appendChild(container);
   }
@@ -146,6 +145,10 @@
     }
 
     ensureContainer();
+    // Inside an open modal dialog everything outside it is inert, so the
+    // container goes in the topmost one (or back in the body when none is).
+    var host = Chronicle.layerHost ? Chronicle.layerHost() : document.body;
+    if (container.parentNode !== host) host.appendChild(container);
 
     // A repeat of an on-screen toast (same message and type) reuses it --
     // a count badge and a restarted timer -- instead of stacking a copy
@@ -219,8 +222,13 @@
     // Close button.
     var close = document.createElement('button');
     close.type = 'button';
-    close.style.cssText = 'border:none;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;padding:0;font-size:14px;flex-shrink:0;line-height:1;';
+    close.style.cssText = 'border:none;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;padding:0;font-size:14px;flex-shrink:0;line-height:1;position:relative;';
     close.innerHTML = '&times;';
+    // A 44 by 44 hit area around the small glyph.
+    var hit = document.createElement('span');
+    hit.setAttribute('aria-hidden', 'true');
+    hit.style.cssText = 'position:absolute;top:50%;left:50%;width:44px;height:44px;transform:translate(-50%,-50%);';
+    close.appendChild(hit);
     close.setAttribute('aria-label', 'Dismiss');
     close.addEventListener('click', function () {
       if (record.timer) clearTimeout(record.timer);

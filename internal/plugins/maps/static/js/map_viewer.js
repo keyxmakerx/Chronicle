@@ -1977,7 +1977,10 @@
 		// The page may have been swapped away; stop listening if so.
 		if (!map.getContainer().isConnected) { document.removeEventListener('keydown', onKey); return; }
 		if (destroyed) return;
-		if (e.ctrlKey || e.metaKey || e.altKey || modalOpen()) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+		// The pin pop-up owns every key while it is open; Escape closes it
+		// (Chronicle.modal), and the map must not also step back or close a host.
+		if (modalOpen()) { if (e.key === 'Escape') e.mpConsumed = true; return; }
 		if (e.key === 'Escape') {
 			// Close the nearest thing first: results, popover, panel, card, then the tool.
 			// mpConsumed tells a host that wraps the viewer (the focus view) that
@@ -2036,7 +2039,7 @@
 		resetMarkerModal();
 		document.getElementById('mk-x').value = x.toFixed(2);
 		document.getElementById('mk-y').value = y.toFixed(2);
-		document.getElementById('marker-modal').classList.remove('hidden');
+		showMarkerModal();
 	};
 
 	window.openEditMarker = function(mk) {
@@ -2065,8 +2068,16 @@
 		// only their own; the server enforces it either way.
 		var canRemove = isOwner || (isScribe && userID && mk.created_by === userID);
 		document.getElementById('mk-delete-zone').classList.toggle('hidden', !canRemove);
-		document.getElementById('marker-modal').classList.remove('hidden');
+		showMarkerModal();
 	};
+
+	// Shows the pin pop-up as a modal: focus moves in, Tab stays inside, Escape
+	// closes it and focus goes back to where it was.
+	function showMarkerModal() {
+		var m = document.getElementById('marker-modal');
+		m.classList.remove('hidden');
+		if (window.Chronicle && Chronicle.modal) Chronicle.modal(m, { opener: document.activeElement, onClose: window.closeMarkerModal });
+	}
 
 	window.closeMarkerModal = function() {
 		document.getElementById('marker-modal').classList.add('hidden');
