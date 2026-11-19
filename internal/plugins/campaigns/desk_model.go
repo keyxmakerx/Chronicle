@@ -45,16 +45,6 @@ type DeskProvider interface {
 	Facts(ctx context.Context, req DeskRequest) (DeskFacts, error)
 }
 
-// DeskFolder is the optional second half of a provider: the few things people
-// come for when a line unfolds, read only when the owner opens it so the desk
-// itself stays quick. A provider without it leaves its line's fold as a plain
-// sentence and the link to the full page.
-type DeskFolder interface {
-	// Fold reads what the line's sub menu shows. An error is logged and
-	// shows the plain fallback, never a broken fold.
-	Fold(ctx context.Context, req DeskRequest) (*DeskFold, error)
-}
-
 // DeskFacts is the bag of numbers providers fill. Each pointer belongs to one
 // slot; nil means the line has no numbers this time.
 type DeskFacts struct {
@@ -178,8 +168,6 @@ type DeskLine struct {
 type DeskView struct {
 	As   string // "player" or "guest"
 	Next string // "home"
-	// Off is why the row cannot be opened ("" when it can).
-	Off string
 }
 
 // DeskPart is a piece of a sentence: plain words, bold words, the game
@@ -203,7 +191,7 @@ const (
 	DeskBlankName   DeskBlankKind = "name"
 )
 
-// DeskBlank is a dashed word that saves the moment it is changed, through the
+// DeskBlank is a row's value that saves the moment it is changed, through the
 // existing route for that setting.
 type DeskBlank struct {
 	Kind DeskBlankKind
@@ -219,13 +207,6 @@ type DeskBlank struct {
 	// of text, for the settings that are flags.
 	URL, Method, Field string
 	Bool               bool
-	// Expect says how the save answers: "" is JSON with an error status, and
-	// "redirect" is the People role route, which answers a redirect when it
-	// worked and a page with the reason when it did not.
-	Expect string
-	// Local says the choice is kept on the page and saved by something else
-	// (the invite's role): picking it sends nothing.
-	Local bool
 	// Off is why the blank cannot be changed right now ("" when it can): an
 	// archived campaign is read-only, and its writes are refused.
 	Off string
@@ -235,55 +216,4 @@ type DeskBlank struct {
 type DeskOption struct {
 	Value string `json:"v"`
 	Label string `json:"l"`
-}
-
-// DeskFold is what a line shows when it unfolds: a few rows and the one
-// thing people most often do there, with the full page still one quiet word
-// away on the line itself.
-type DeskFold struct {
-	// Note is a plain sentence above the rows ("why it stopped"). Also the
-	// whole fold when a provider fails.
-	Note string
-	Rows []DeskFoldRow
-	// More is how many rows are left out, drawn as "and N more" leading to
-	// MoreHref, the full page.
-	More     int
-	MoreHref string
-	// Invite is the invite field, drawn only on the People line.
-	Invite *DeskInvite
-	// Fallback marks a fold that could not be read: it shows Note and a link.
-	Fallback bool
-	// FullHref and FullLabel are the link under a fallback sentence.
-	FullHref, FullLabel string
-}
-
-// DeskFoldRow is one row of a fold: who or what, a quiet detail, and either a
-// dashed word that changes in place or one action.
-type DeskFoldRow struct {
-	// Initial is the letter in the round mark; empty draws none.
-	Initial string
-	Lead    string
-	Text    string
-	Meta    string
-	Blank   *DeskBlank
-	Act     *DeskFoldAct
-}
-
-// DeskFoldAct is one existing write route a row calls, with the words for it.
-// The page only calls routes that already check the owner; this never names a
-// new one.
-type DeskFoldAct struct {
-	Label  string
-	URL    string
-	Method string
-	// Busy is what the word says while the call runs.
-	Busy string
-}
-
-// DeskInvite is the invite field of the People fold: it posts to the existing
-// invite route.
-type DeskInvite struct {
-	URL string
-	// Roles are the choices offered for the invited person.
-	Roles []DeskOption
 }

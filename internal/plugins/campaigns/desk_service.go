@@ -36,10 +36,6 @@ type DeskService interface {
 	// Manage row. It asks only the providers that feed Needs-you, so a count
 	// on every page does not cost the whole desk.
 	NeedsCount(ctx context.Context, req DeskRequest, in DeskInputs) int
-	// Fold reads what a line shows when it unfolds. It never fails: a fold
-	// that cannot be read is a plain sentence and a link. False when the
-	// line does not exist or does not unfold.
-	Fold(ctx context.Context, req DeskRequest, in DeskInputs, id string) (*DeskFold, bool)
 }
 
 type deskService struct {
@@ -145,7 +141,7 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 	facts := s.gather(ctx, req)
 	line := func(id string) DeskLine { l, _ := s.line(id, c, in, facts, req.Now); return l }
 
-	look := []DeskLine{nameLine(c), lookLine(c), gameLine(c, in)}
+	look := []DeskLine{nameLine(c), descriptionLine(c), lookLine(c), gameLine(c, in)}
 	if in.Addons["media-gallery"] {
 		look = append(look, line("media"))
 	}
@@ -218,61 +214,6 @@ func (s *deskService) Line(ctx context.Context, req DeskRequest, in DeskInputs, 
 // has none.
 var deskSlotOf = map[string]DeskSlot{
 	"changes": DeskChanges, "media": DeskMedia, "foundry": DeskFoundry, "ai": DeskAI, "trash": DeskTrash,
-}
-
-func (s *deskService) Fold(ctx context.Context, req DeskRequest, in DeskInputs, id string) (*DeskFold, bool) {
-	c := in.Campaign
-	plain, ok := s.line(id, c, in, DeskFacts{}, req.Now)
-	if !ok || !s.foldable(id) {
-		return nil, false
-	}
-	if id == "people" {
-		return peopleFold(c, in), true
-	}
-	s.mu.RLock()
-	p, _ := s.providers[deskFoldSlots[id]].(DeskFolder)
-	s.mu.RUnlock()
-	f, err := callFold(ctx, p, req)
-	if err != nil || f == nil {
-		slog.Warn("desk: fold not read, showing a plain sentence",
-			slog.String("line", id), slog.String("campaign_id", req.CampaignID), slog.Any("error", err))
-		return fallbackFold(plain), true
-	}
-	if len(f.Rows) > deskFoldRows {
-		f.More += len(f.Rows) - deskFoldRows
-		f.Rows = f.Rows[:deskFoldRows]
-	}
-	if f.MoreHref == "" {
-		f.MoreHref = plain.Href
-	}
-	return f, true
-}
-
-// callFold is callProvider for a fold: under the same deadline, with a panic
-// turned into an error.
-func callFold(ctx context.Context, p DeskFolder, req DeskRequest) (*DeskFold, error) {
-	ctx, cancel := context.WithTimeout(ctx, deskProviderTimeout)
-	defer cancel()
-	type result struct {
-		f   *DeskFold
-		err error
-	}
-	done := make(chan result, 1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				done <- result{err: fmt.Errorf("provider panicked: %v", r)}
-			}
-		}()
-		f, err := p.Fold(ctx, req)
-		done <- result{f, err}
-	}()
-	select {
-	case r := <-done:
-		return r.f, r.err
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
 }
 
 // withoutDisabled drops the facts of a feature that is off, so the desk never

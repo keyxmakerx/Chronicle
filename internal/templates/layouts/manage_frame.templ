@@ -43,7 +43,7 @@ templ ManageFrame(d ManageFrameData) {
 	<div class="manage-frame" data-manage-frame>
 		<header class={ "manage-head cb-head", templ.KV("has-sentence", sentence != nil) }>
 			if !d.Home {
-				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow" data-manage-back onclick={ manageBackCall() }>Campaign settings</a>
+				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow">Campaign settings</a>
 			}
 			<h1 class="manage-title cb-title">{ d.Title }</h1>
 			{{ pinKey, pinName := ManageToolOfLine(d.Line) }}

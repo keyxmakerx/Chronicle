@@ -25,7 +25,6 @@ var deskFindWords = map[string]string{
 	"manage:foundry":        "sync module connection vtt",
 	"manage:ai":             "claude assistant keys connect requests",
 	"manage:trash":          "deleted restore bring back recover",
-	"manage:settings":       "details description data tabs transfer",
 }
 
 // deskFindGroups is the page's group each tool's row sits in, so a result
@@ -70,14 +69,19 @@ var deskFindRowTabs = map[string]bool{settingsTabAPIKeys: true, settingsTabData:
 // Details and data tab. A tool whose add-on is off is not a tool here, so
 // neither it nor anything inside it is offered.
 func buildDeskFind(in deskFindInput) []customizeFindEntry {
-	var out []customizeFindEntry
+	page := in.Base + "/dashboard"
+	// This page and Details and data lead the list, and list "settings", so
+	// typing it finds this place before the Customizer's "<Category> settings".
+	out := []customizeFindEntry{
+		{Label: "Campaign settings", Path: deskFindRoot, Href: page, Icon: "fa-sliders", Words: "settings rows overview"},
+		{Label: "Details and data", Path: deskFindRoot, Href: in.Base + "/settings", Icon: "fa-gear", Words: "settings details description keys export import activity"},
+	}
 	for _, t := range layouts.ManageToolRows(in.Base, in.Media, in.Foundry) {
-		if t.Key == "manage:dashboard" {
+		if t.Key == "manage:dashboard" || t.Key == "manage:settings" {
 			continue
 		}
 		out = append(out, customizeFindEntry{Label: t.Label, Path: deskFindPath(deskFindGroups[t.Key]), Href: t.URL, Icon: t.Icon, Words: deskFindWords[t.Key]})
 	}
-	page := in.Base + "/dashboard"
 	see := deskFindPath("What players and guests see")
 	safety := deskFindPath("Safety net")
 	end := deskFindPath("Archive or delete")
@@ -91,6 +95,7 @@ func buildDeskFind(in deskFindInput) []customizeFindEntry {
 		customizeFindEntry{Label: "New pages start", Path: see, Href: page + "#line-pages", Icon: "fa-eye", Words: "visibility hidden shown default new pages secret"},
 		customizeFindEntry{Label: "Who can read it", Path: see, Href: page + "#line-public", Icon: "fa-lock", Words: "public private visibility discover members link"},
 		customizeFindEntry{Label: "Name", Path: deskFindPath("Look and game"), Href: page + "#line-name", Icon: "fa-pen", Words: "rename called title campaign name"},
+		customizeFindEntry{Label: "Description", Path: deskFindPath("Look and game"), Href: in.Base + "/settings", Icon: "fa-align-left", Words: "description about summary blurb"},
 		customizeFindEntry{Label: "Keys", Path: deskFindPath("Connections"), Href: in.Base + "/settings?tab=" + settingsTabAPIKeys, Icon: "fa-key", Words: "api tokens other tools"},
 		customizeFindEntry{Label: "Export a copy", Path: safety, Href: in.Base + "/settings?tab=" + settingsTabData, Icon: "fa-file-export", Words: "download backup copy data"},
 		customizeFindEntry{Label: "Import", Path: safety, Href: in.Base + "/settings?tab=" + settingsTabImport, Icon: "fa-file-import", Words: "upload restore vault"},

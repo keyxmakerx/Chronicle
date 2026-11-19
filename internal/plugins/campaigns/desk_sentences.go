@@ -235,15 +235,45 @@ func playersHomeLine() DeskLine {
 }
 
 // guestsHomeLine opens the campaign's home as a guest sees it. A private
-// campaign has no guest view, so the row says so instead of offering a page
-// that would be refused.
+// campaign says guests can't open it but the row still opens: the home it lands
+// on shows that note and is where the owner arranges the guests' dashboard.
 func guestsHomeLine(c *Campaign) DeskLine {
 	l := DeskLine{ID: "guests-home", Name: "Guests' dashboard", Short: "See it", View: &DeskView{As: "guest", Next: "home"}}
 	if !c.IsPublic {
 		l.Short = "Private campaign: guests can't open it"
-		l.View.Off = l.Short
 	}
 	return l
+}
+
+// deskDescriptionWidth is about how much of the description a row shows.
+const deskDescriptionWidth = 40
+
+// descriptionLine shows the start of the campaign's description, cut on a
+// word, and leads to the Details tab where it is edited.
+func descriptionLine(c *Campaign) DeskLine {
+	l := DeskLine{ID: "description", Name: "Description", Short: "None yet", Href: deskHref(c.ID, "/settings")}
+	if c.Description != nil {
+		if d := strings.Join(strings.Fields(*c.Description), " "); d != "" {
+			l.Short = deskCut(d, deskDescriptionWidth)
+		}
+	}
+	return l
+}
+
+// deskCut shortens s to about n characters on a word boundary, with an
+// ellipsis; a word longer than n is cut where it stands.
+func deskCut(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	cut := r[:n]
+	if r[n] != ' ' {
+		if i := strings.LastIndex(string(cut), " "); i > 0 {
+			cut = []rune(string(cut)[:i])
+		}
+	}
+	return strings.TrimRight(string(cut), " ,.;:!?-") + "…"
 }
 
 // lookLine reads the owner's Customize choices back in a few words.

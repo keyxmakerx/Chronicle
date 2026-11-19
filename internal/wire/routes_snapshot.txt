@@ -751,8 +751,6 @@ DELETE	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).Rese
 GET	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).GetDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).UpdateDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dashboard/find	session	plugins/campaigns.(*Handler).DeskFind	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/dashboard/lines/:line/fold	session	plugins/campaigns.(*Handler).DeskLineFold	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/dashboard/lines/:line/sentence	session	plugins/campaigns.(*Handler).DeskLineSentence	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dashboard/needs	session	plugins/campaigns.(*Handler).DeskNeedsCount	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/default-visibility	session	plugins/campaigns.(*Handler).UpdateDefaultVisibilityAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs	session	plugins/designs.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

@@ -178,3 +178,31 @@ func TestBuildDeskFind_RowPathsNameTheGroup(t *testing.T) {
 		t.Errorf("%q is not offered", l)
 	}
 }
+
+// Typing "settings" finds this place first, ahead of the Customizer's category
+// entries, which sort after the page's own.
+func TestBuildDeskFind_SettingsLeadsWithThisPlace(t *testing.T) {
+	got := buildDeskFind(deskFindInput{Base: "/campaigns/c1", Customize: []customizeFindEntry{
+		{Label: "Characters settings", Path: "Categories › Characters", Href: "/campaigns/c1/customize/categories/1/settings"},
+	}})
+	if len(got) < 2 || got[0].Label != "Campaign settings" || got[0].Href != "/campaigns/c1/dashboard" || got[1].Label != "Details and data" {
+		t.Fatalf("first entries = %v", findLabels(got))
+	}
+	for _, w := range []string{"settings", "details", "description", "keys", "export", "import", "activity"} {
+		if !strings.Contains(" "+got[1].Words+" ", " "+w+" ") {
+			t.Errorf("Details and data lacks the word %q", w)
+		}
+	}
+	if !strings.Contains(got[0].Words, "settings") {
+		t.Error("Campaign settings must list the word settings")
+	}
+	for _, w := range []string{"description", "about", "summary", "blurb"} {
+		found := false
+		for _, e := range got {
+			found = found || (e.Label == "Description" && strings.Contains(e.Words, w))
+		}
+		if !found {
+			t.Errorf("Description is not found by %q", w)
+		}
+	}
+}

@@ -1,6 +1,6 @@
 /**
  * desk_blank.js -- the values the owner changes where they stand on Campaign
- * settings (and in the People fold).
+ * settings.
  *
  * A "blank" is a value on a row that the owner changes where it stands and
  * that saves the moment it is changed:
@@ -172,30 +172,9 @@
     return b;
   }
 
-  // The People role route answers a redirect when it worked and a page that
-  // says why when it did not, always with a 200 for the latter. So the save
-  // is read from the redirect, and the reason is taken from that page.
-  function sendForRedirect(url, body, method) {
-    var h = { 'Content-Type': 'application/json', Accept: 'text/html' };
-    var csrf = C.getCsrf && C.getCsrf();
-    if (csrf) h['X-CSRF-Token'] = csrf;
-    return fetch(url, { method: method, headers: h, credentials: 'same-origin', redirect: 'manual', body: JSON.stringify(body) }).then(function (r) {
-      if (r.type === 'opaqueredirect') return {};
-      if (r.status === 200) {
-        return r.text().then(function (t) {
-          var why = '';
-          try { var a = new DOMParser().parseFromString(t, 'text/html').querySelector('[role=alert]'); why = a ? a.textContent.trim() : ''; } catch (e) { why = ''; }
-          throw new Error(why || 'The change was refused.');
-        });
-      }
-      throw new Error('request failed (' + r.status + ')');
-    });
-  }
-
   function send(btn, value) {
     var opts = { method: btn.getAttribute('data-method') || 'PUT', body: bodyFor(btn, value) };
     var url = btn.getAttribute('data-url');
-    if (btn.getAttribute('data-expect') === 'redirect') return sendForRedirect(url, opts.body, opts.method);
     if (C.apiAction) return C.apiAction(url, opts);
     return C.apiFetch(url, opts).then(function (r) {
       return r.text().then(function (t) {
@@ -245,8 +224,6 @@
     btn.removeAttribute('aria-busy');
     tick(line);
     glow(line);
-    // A word inside a line's fold has changed what the line's sentence says.
-    if (C.deskFold && C.deskFold.changed) C.deskFold.changed(btn);
   }
 
   function choose(btn, value) {
@@ -254,13 +231,6 @@
     if (value === btn.getAttribute('data-value')) { btn.focus(); return; }
     var opt = options(btn).filter(function (o) { return o.v === value; })[0];
     if (!opt) { btn.focus(); return; }
-    // A local choice (the invite's role) is read by the button that sends it.
-    if (btn.hasAttribute('data-local')) {
-      setShown(btn, opt.l);
-      btn.setAttribute('data-value', value);
-      btn.focus({ preventScroll: true });
-      return;
-    }
     var was = { value: btn.getAttribute('data-value'), text: btn.textContent };
     // Feedback first: the new word and a working state, inside a tenth of a
     // second, then the save settles it or puts the old word back.

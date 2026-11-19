@@ -5,7 +5,9 @@
  * draws a field over a scrim, filters `finds` as the owner types and goes to
  * the chosen one. A find is { label, path, href, icon, words }: `label` and
  * `path` are shown, and `words` are extra names that match without showing,
- * so "colour" finds Look. A hit in the label ranks above one only in the path.
+ * so "colour" finds Look. A hit in the label ranks above one only in the path,
+ * and a typed word that is exactly one of `words` counts like a hit inside the
+ * label, so an entry listing "settings" is not buried under longer names.
  *
  * The Customizer and the Manage desk both use it, so Find reads and keys the
  * same in both places: arrows move, Enter goes, Escape closes and puts focus
@@ -34,6 +36,10 @@
       if (!q.every(function (w) { return hay.indexOf(w) >= 0; })) return null;
       var lab = words(f.label), rank = 2;
       if (q.length && q.every(function (w) { return lab.indexOf(w) >= 0; })) rank = lab.indexOf(q[0]) === 0 ? 0 : 1;
+      else {
+        var listed = words(f.words).split(/\s+/);
+        if (q.length && q.every(function (w) { return listed.indexOf(w) >= 0; })) rank = 1;
+      }
       return { f: f, rank: rank, i: i };
     }).filter(Boolean).sort(function (a, b) {
       return a.rank - b.rank || a.i - b.i;

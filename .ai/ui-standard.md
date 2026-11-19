@@ -439,12 +439,10 @@ place, and Off shows the end state.
   motion, unsaved changes, a modified click and a browser without view
   transitions keep the ordinary page load. The browser's Back button is the
   ordinary history restore and plays nothing.
-- **Campaign settings rows do not travel.** A row is one link, so pressing it
-  is an ordinary page load or boosted swap; no sentence lifts off the page.
-  A tool page's own sentence under its title is drawn by the server
-  (`ManageFrame`'s `Line`). The "Campaign settings" word above a tool's title still hands
-  its press to `static/js/desk_carry.js` (`back`), which has no sentence on
-  Campaign settings to land on and so only fades the old sentence out.
+- **Campaign settings rows are links; nothing travels.** Pressing a row is an
+  ordinary page load or boosted swap, and so is the "Campaign settings" word
+  above a tool's title. A tool page's own sentence under its title is drawn by
+  the server (`ManageFrame`'s `Line`).
 - **The title's rule draws on arrival.** Under Annals the accent rule under
   a page title draws from the left over `--dur-large`, after 120ms, under
   full motion only.

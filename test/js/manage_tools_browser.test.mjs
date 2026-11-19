@@ -137,6 +137,14 @@ test('Find ranks a label hit first, matches hidden words, moves with arrows and 
     assert.deepEqual(ranked.deleted, ['Trash'], 'words that are not shown still match');
     assert.deepEqual(ranked.manage, ['People', 'Trash', 'Campaign name'], 'path matches keep the server order');
     assert.equal(ranked.none, 0);
+    // A typed word listed in an entry's words counts like a hit inside its name,
+    // so the page's own "settings" entry is not buried under longer labels.
+    const settings = await page.evaluate(() => window.Chronicle.findPalette.match([
+      { label: 'Characters settings', path: 'Customize', href: '/a', words: '' },
+      { label: 'Details and data', path: 'Campaign settings', href: '/b', words: 'settings details' },
+      { label: 'Notes', path: 'Campaign settings', href: '/c', words: '' },
+    ], 'settings').map((f) => f.label));
+    assert.deepEqual(settings, ['Characters settings', 'Details and data', 'Notes'], 'label hit, then listed word, then path only');
 
     await page.evaluate((entries) => { window.went = null; window.Chronicle.findPalette.open({ finds: entries, onGo: (f) => { window.went = f.href; } }); }, ENTRIES);
     await page.keyboard.type('a');

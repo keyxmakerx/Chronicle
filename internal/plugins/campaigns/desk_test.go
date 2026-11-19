@@ -188,16 +188,17 @@ func TestDeskRows_DashboardsPostTheViewAsForm(t *testing.T) {
 		line      DeskLine
 		wantAs    string
 		wantShort string
-		wantOff   bool
 	}{
-		{"players", playersHomeLine(), "player", "See it", false},
-		{"guests, public campaign", guestsHomeLine(&Campaign{ID: "c", IsPublic: true}), "guest", "See it", false},
-		{"guests, private campaign", guestsHomeLine(&Campaign{ID: "c"}), "guest", "Private campaign: guests can't open it", true},
+		{"players", playersHomeLine(), "player", "See it"},
+		{"guests, public campaign", guestsHomeLine(&Campaign{ID: "c", IsPublic: true}), "guest", "See it"},
+		// A private campaign's guests row still opens: home shows the note and
+		// is where the guests' dashboard is arranged.
+		{"guests, private campaign", guestsHomeLine(&Campaign{ID: "c"}), "guest", "Private campaign: guests can't open it"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l := tt.line
-			if l.View == nil || l.View.As != tt.wantAs || l.View.Next != "home" || l.Short != tt.wantShort || (l.View.Off != "") != tt.wantOff {
+			if l.View == nil || l.View.As != tt.wantAs || l.View.Next != "home" || l.Short != tt.wantShort {
 				t.Fatalf("line = %+v", l)
 			}
 			var sb strings.Builder
@@ -205,12 +206,6 @@ func TestDeskRows_DashboardsPostTheViewAsForm(t *testing.T) {
 				t.Fatal(err)
 			}
 			html := sb.String()
-			if tt.wantOff {
-				if strings.Contains(html, "<form") || strings.Contains(html, "<button") {
-					t.Errorf("a row that cannot open must offer nothing to press: %s", html)
-				}
-				return
-			}
 			for _, want := range []string{`method="POST"`, `/view-as"`, `name="as" value="` + tt.wantAs + `"`, `name="next" value="home"`, `name="csrf_token"`, `type="submit" class="set-row"`, `id="line-` + l.ID + `"`} {
 				if !strings.Contains(html, want) {
 					t.Errorf("form is missing %q: %s", want, html)
@@ -685,7 +680,7 @@ func TestDeskService_Build_GroupsAndRows(t *testing.T) {
 		{"add-ons off", map[string]bool{}, map[string][]string{
 			"People":                      {"people", "changes"},
 			"What players and guests see": {"players-home", "guests-home", "pages", "public"},
-			"Look and game":               {"name", "look", "game"},
+			"Look and game":               {"name", "description", "look", "game"},
 			"Connections":                 {"ai", "keys"},
 			"Safety net":                  {"export", "import", "activity", "trash"},
 			"Archive or delete":           {"end", "delete"},
@@ -693,7 +688,7 @@ func TestDeskService_Build_GroupsAndRows(t *testing.T) {
 		{"media and Foundry on", map[string]bool{"media-gallery": true, "sync-api": true}, map[string][]string{
 			"People":                      {"people", "changes"},
 			"What players and guests see": {"players-home", "guests-home", "pages", "public"},
-			"Look and game":               {"name", "look", "game", "media"},
+			"Look and game":               {"name", "description", "look", "game", "media"},
 			"Connections":                 {"foundry", "ai", "keys"},
 			"Safety net":                  {"export", "import", "activity", "trash"},
 			"Archive or delete":           {"end", "delete"},
@@ -785,5 +780,51 @@ func TestUpdate_FormBodyKeepsAbsentKeysAbsent(t *testing.T) {
 				t.Errorf("name present = %v, public present = %v", svc.got.Name != nil, svc.got.IsPublic != nil)
 			}
 		})
+	}
+}
+
+func TestDeskRows_Description(t *testing.T) {
+	long := "The Shattered Heroes fight to keep the last free city out of the hands of the Ash King"
+	multi := "  Line one\n\nline two  "
+	empty := "   "
+	tests := []struct {
+		name string
+		desc *string
+		want string
+	}{
+		{"none", nil, "None yet"},
+		{"blank", &empty, "None yet"},
+		{"short", &multi, "Line one line two"},
+		{"long is cut on a word", &long, "The Shattered Heroes fight to keep the…"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := descriptionLine(&Campaign{ID: "c1", Description: tt.desc})
+			if l.Name != "Description" || l.Short != tt.want || l.Href != "/campaigns/c1/settings" {
+				t.Errorf("row = %+v, want short %q", l, tt.want)
+			}
+		})
+	}
+	if got := deskCut("Supercalifragilisticexpialidocious and more words", 20); got != "Supercalifragilistic…" {
+		t.Errorf("an over-long word is cut where it stands: %q", got)
+	}
+}
+
+// A name becomes a field, so its row promises that with a pencil; a choice
+// opens a menu and keeps the chevron-down.
+func TestDeskRow_NameHasPencilChoiceHasChevron(t *testing.T) {
+	c := &Campaign{ID: "c1", Name: "Therin", Settings: "{}"}
+	render := func(l DeskLine) string {
+		var sb strings.Builder
+		if err := deskRow(l).Render(context.Background(), &sb); err != nil {
+			t.Fatal(err)
+		}
+		return sb.String()
+	}
+	if h := render(nameLine(c)); strings.Contains(h, "set-chev-down") || !strings.Contains(h, "M10.5 3l2.5 2.5") {
+		t.Errorf("name row must carry the pencil and no chevron-down: %s", h)
+	}
+	if h := render(pagesLine(c)); !strings.Contains(h, "set-chev-down") || strings.Contains(h, "M10.5 3l2.5 2.5") {
+		t.Errorf("choice row keeps the chevron-down: %s", h)
 	}
 }

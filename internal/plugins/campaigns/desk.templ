@@ -28,7 +28,7 @@ templ deskPageBody(cc *CampaignContext, d *Desk) {
 							for _, n := range d.Needs {
 								<li class="set-ln">
 									<a class="set-row" href={ templ.SafeURL(n.URL) }>
-										@deskRowFace(DeskLine{Name: n.Lead, Short: n.Rest, State: n.State}, true)
+										@deskRowFace(DeskLine{Name: n.Lead, Short: n.Rest, State: n.State})
 									</a>
 								</li>
 							}
@@ -62,17 +62,16 @@ templ deskRow(l DeskLine) {
 						<span class="desk-acts"></span>
 						@deskBlank(l.Blank, "set-val")
 					</span>
-					<svg class="set-chev set-chev-down" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+					if l.Blank.Kind == DeskBlankName {
+						// A name turns into a field, not a menu, so it gets a pencil.
+						<svg class="set-chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M10.5 3l2.5 2.5L6 12.5l-3 .5.5-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+					} else {
+						<svg class="set-chev set-chev-down" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+					}
 				</div>
 				if l.Blank.Off != "" {
 					<p class="set-why">{ l.Blank.Off }</p>
 				}
-			</li>
-		case l.View != nil && l.View.Off != "":
-			<li class="set-ln" id={ "line-" + l.ID } data-line={ l.ID }>
-				<div class="set-row set-off">
-					@deskRowFace(l, false)
-				</div>
 			</li>
 		case l.View != nil:
 			<li class="set-ln" id={ "line-" + l.ID } data-line={ l.ID }>
@@ -82,14 +81,14 @@ templ deskRow(l DeskLine) {
 					<input type="hidden" name="as" value={ l.View.As }/>
 					<input type="hidden" name="next" value={ l.View.Next }/>
 					<button type="submit" class="set-row">
-						@deskRowFace(l, true)
+						@deskRowFace(l)
 					</button>
 				</form>
 			</li>
 		default:
 			<li class="set-ln" id={ "line-" + l.ID } data-line={ l.ID }>
 				<a class={ "set-row", templ.KV("set-danger", l.Danger) } href={ templ.SafeURL(l.Href) }>
-					@deskRowFace(l, true)
+					@deskRowFace(l)
 				</a>
 				// The pin sits at icon weight before the chevron, on a wide screen
 				// only; on a phone it stays on the tool page's own title.
@@ -105,7 +104,7 @@ templ deskRow(l DeskLine) {
 
 // deskRowFace is what sits in a row: the state dot, the name, what it is doing
 // in grey and, when the row leads somewhere, the chevron.
-templ deskRowFace(l DeskLine, chev bool) {
+templ deskRowFace(l DeskLine) {
 	if l.State != "" {
 		<i class={ "desk-dot", templ.KV("ok", l.State == "ok"), templ.KV("warn", l.State == "warn") } aria-hidden="true"></i>
 		if l.State == "warn" {
@@ -121,9 +120,7 @@ templ deskRowFace(l DeskLine, chev bool) {
 			}
 		</span>
 	}
-	if chev {
-		<svg class="set-chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-	}
+	<svg class="set-chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
 }
 
 // deskSentence is a line's sentence alone, also served by itself so a change
@@ -155,81 +152,6 @@ templ manageSentence(id string, l DeskLine) {
 templ manageSentenceSwap(id string, l DeskLine) {
 	<div id="manage-sentence" class="manage-sentence" data-manage-sentence data-line={ id } hx-swap-oob="true">
 		@deskSentence(l)
-	</div>
-}
-
-// DeskFoldBody is what a line unfolds into, served as a fragment when the line
-// is first opened. Every control has its own inline handler, built Go-side,
-// because the fragment arrives by innerHTML, where a script tag never runs.
-templ DeskFoldBody(cc *CampaignContext, id string, f *DeskFold) {
-	<div class="desk-fold-in" data-fold-line={ id } data-campaign={ cc.Campaign.ID }>
-		if f.Note != "" {
-			<p class="desk-note">{ f.Note }</p>
-		}
-		if f.Fallback {
-			if f.FullHref != "" {
-				<a class="desk-q" href={ templ.SafeURL(f.FullHref) }>{ f.FullLabel }</a>
-			}
-		} else {
-			for _, r := range f.Rows {
-				<div class="desk-fr">
-					if r.Initial != "" {
-						<span class="desk-av" aria-hidden="true">{ r.Initial }</span>
-					}
-					<span class="desk-ft">
-						if r.Lead != "" {
-							<b>{ r.Lead }</b>
-						}
-						if r.Text != "" {
-							{ r.Text }
-						}
-					</span>
-					if r.Meta != "" {
-						<span class="desk-m">{ r.Meta }</span>
-					}
-					<span class="desk-fill"></span>
-					if r.Blank != nil {
-						@deskBlank(r.Blank, "")
-					}
-					if r.Act != nil {
-						<button
-							type="button"
-							class="desk-q desk-act"
-							data-url={ r.Act.URL }
-							data-method={ r.Act.Method }
-							data-busy={ r.Act.Busy }
-							onclick={ deskFoldActCall() }
-						>{ r.Act.Label }</button>
-					}
-				</div>
-			}
-			if f.More > 0 {
-				<a class="desk-q desk-more" href={ templ.SafeURL(f.MoreHref) }>{ deskMore(f.More) }</a>
-			}
-			if f.Invite != nil {
-				<div class="desk-fr desk-inv">
-					<input
-						type="email"
-						class="desk-in"
-						data-desk-invite-email
-						placeholder="Email to invite"
-						aria-label="Email to invite"
-						autocomplete="off"
-						onkeydown={ deskFoldInviteKey() }
-					/>
-					<span>as a</span>
-					@deskBlank(deskInviteRole(f.Invite), "")
-					<button
-						type="button"
-						class="btn btn-primary desk-send"
-						data-url={ f.Invite.URL }
-						data-busy="Sending"
-						onclick={ deskFoldInviteCall() }
-					>Send invite</button>
-				</div>
-			}
-		}
-		<p class="desk-st" role="status" aria-live="polite" data-desk-status></p>
 	</div>
 }
 

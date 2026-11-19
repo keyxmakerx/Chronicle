@@ -115,32 +115,6 @@ func deskScript(name, file, attr, global, method, guard, params, args string) te
 	}
 }
 
-func deskFoldCall(name, method, guard string) templ.ComponentScript {
-	return deskScript(name, "desk_fold.js", "data-desk-fold-js", "deskFold", method, guard, "b,e", "this,event")
-}
-
-// The fold's handlers. Each is a plain inline attribute, so they work in a
-// fragment swapped in by innerHTML.
-func deskFoldActCall() templ.ComponentScript    { return deskFoldCall("deskFoldAct", "act", "") }
-func deskFoldInviteCall() templ.ComponentScript { return deskFoldCall("deskFoldInvite", "invite", "") }
-
-// deskFoldInviteKey sends the invite on Enter, like pressing its button.
-func deskFoldInviteKey() templ.ComponentScript {
-	return deskFoldCall("deskFoldInviteKey", "inviteKey", `if(e.key!=='Enter')return;e.preventDefault();`)
-}
-
-// deskMore words the rows a fold leaves out.
-func deskMore(n int) string { return "and " + strconv.Itoa(n) + " more" }
-
-// deskInviteRole is the invite's role, a dashed word that sends nothing by
-// itself: the Send button reads its value.
-func deskInviteRole(i *DeskInvite) *DeskBlank {
-	return &DeskBlank{
-		Kind: DeskBlankChoice, ID: "invite-role", Label: "Role for the invite",
-		Value: "player", Shown: "player", Options: i.Roles, Local: true,
-	}
-}
-
 // deskTabindex takes an off blank out of the tab order.
 func deskTabindex(b *DeskBlank) string {
 	if b.Off != "" {
