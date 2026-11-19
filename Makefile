@@ -173,6 +173,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: page-scripts";           ./tools/check-page-scripts.sh
 	@echo "==> guard: decision-citations";     ./tools/check-decision-citations.sh
 	@echo "==> guard: widget-mounts";          ./tools/check-widget-mounts.sh
+	@echo "==> guard: z-index";               ./tools/check-z-index.sh
 	@echo "==> guard: escape-helpers";         ./tools/check-escape-helpers.sh
 	@echo "==> guard: customize-discipline";   ./tools/check-customize-discipline.sh
 	@echo "==> guard: templ-packages";         ./tools/check-templ-packages.sh

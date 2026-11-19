@@ -10,6 +10,25 @@
  * ============================================================================ */
 
 /* ============================================================ */
+/* Layers: the one z-index scale (.ai/ui-standard.md, "Layers"). Values are the
+   ones the app already used; a surface takes its band's token instead of a
+   number of its own. A native <dialog> opened with showModal is in the top
+   layer and sits above every band. */
+:root {
+  --z-raised: 10;   /* in-page lift: sticky heads, overlays inside a block */
+  --z-chrome: 20;   /* the top bar at rest */
+  --z-scrim: 30;    /* the dim behind the phone sidebar drawer */
+  --z-drawer: 40;   /* the phone sidebar drawer */
+  --z-tab: 49;      /* the jot tab: under every pop-up with a backdrop */
+  --z-popup: 50;    /* hand-built pop-ups and the jot panel */
+  --z-sheet: 60;    /* docked sheets, such as the Table bar */
+  --z-menu-lift: 70; /* the top bar while one of its menus is open, peek and AI panels */
+  --z-modal: 9999;  /* hand-built modals that cover everything but toasts */
+  --z-toast: 10000; /* toasts */
+}
+/* ============================================================ */
+
+/* ============================================================ */
 /* Cascade layer ordering: reset → base → components → plugins → utilities.
    Per-plugin sub-layers declared but currently RESERVED — no plugin CSS files
    exist today. Reservation is forward-looking; the first plugin CSS file will
@@ -607,7 +626,7 @@
    * leaves it under a page's own raised toolbars. While one of its menus is
    * open the bar lifts over the page, but never over the open phone sidebar. */
   #app-topbar:has(.tb-pop:not([hidden], .hidden, [x-cloak], [style*="display: none"]), #ai-bubble:not([hidden])):not(:has(#nav-toggle[aria-expanded="true"])) {
-    z-index: 70;
+    z-index: var(--z-menu-lift);
   }
   @keyframes dropdown-in {
     from { opacity: 0; transform: translateY(-4px) scale(0.98); }
@@ -1836,7 +1855,7 @@
 
   /* The one way in: a small tab bottom-right with this page's jot count. */
   .jot-tab {
-    position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 50;
+    position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: var(--z-tab);
     display: inline-flex; align-items: center; gap: 7px;
     padding: 10px 14px; border: 0; border-radius: 999px; cursor: pointer;
     background: var(--color-accent-fill, var(--color-accent)); color: var(--color-accent-on-fill, #fff); font-size: 12.5px; font-weight: 700;
@@ -1861,6 +1880,10 @@
   .jot-tab-hidden { opacity: 0; transform: translateY(8px) scale(.96); pointer-events: none; visibility: hidden; }
   /* The open navigation drawer sits over the page; the tab must not sit on it. */
   body:has(.sidebar-mobile-open) .jot-tab { opacity: 0; visibility: hidden; pointer-events: none; }
+  /* A sheet that sits lower than the tab has its main button in the tab's
+     corner, so the tab steps aside while one is open. Pop-ups with a backdrop
+     need no rule: they are above the tab. */
+  body:has(.cal-v5 :is(.wing, .flap, .evp).live, .cal-v5 .drawer.open, .cra-drawer.is-open, .calv5-overlay) .jot-tab { opacity: 0; visibility: hidden; pointer-events: none; }
   .jot-tab[hidden] { display: none; }
   /* On a phone the tab is just its icon (and count), and the page gets room
      at the bottom so the tab never covers the end of the last rows. */
@@ -1879,7 +1902,8 @@
      handle; the size persists in localStorage. On a phone it is a bottom
      sheet from 18% down, sliding up from below the screen. */
   .notes-panel {
-    @apply fixed z-50 bg-surface shadow-2xl border border-edge flex flex-col;
+    @apply fixed bg-surface shadow-2xl border border-edge flex flex-col;
+    z-index: var(--z-popup);
     transition: opacity var(--dur-standard) var(--ease-out), transform var(--dur-standard) var(--ease-out);
     top: 18dvh;
     bottom: 0;
@@ -2073,6 +2097,12 @@
   .notes-list {
     @apply flex-1 overflow-y-auto p-2 space-y-2;
     min-height: 72px;
+    overscroll-behavior: contain;
+  }
+  /* A phone sheet's title bar answers a swipe itself (notes.js), so the
+     browser must not take the touch for a page scroll or pull-to-refresh. */
+  @media (max-width: 639px) {
+    .notes-header { touch-action: none; }
   }
   .notes-empty {
     @apply text-xs text-fg-secondary text-center py-8 italic;
@@ -5725,7 +5755,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-sheet-bg { position: absolute; inset: 0; background: rgba(10,10,20,.55); opacity: 0; transition: opacity var(--dur-large); }
   .dms-sheet-open .dms-sheet-bg { opacity: 1; }
   .dms-sheet-p {
-    position: absolute; inset: .75rem; overflow: auto; outline: none;
+    position: absolute; inset: .75rem; overflow: auto; overscroll-behavior: contain; outline: none;
     background: var(--color-bg-secondary, #f8fafc); color: var(--color-text-primary, #111827);
     border: 1px solid var(--color-border, #e5e7eb); border-radius: .85rem; box-shadow: 0 24px 60px rgba(0,0,0,.35);
     clip-path: inset(var(--ct, 40%) var(--cr, 40%) var(--cb, 40%) var(--cl, 40%) round .85rem);
@@ -7052,7 +7082,7 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .perm-card-title { font-size: 15px; font-weight: 600; color: var(--color-text-primary, #111827); display: flex; align-items: center; gap: 8px; }
 .perm-card-close { width: 32px; height: 32px; border-radius: 8px; border: none; background: transparent; color: var(--color-text-muted, #6b7280); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background var(--dur-micro); }
 .perm-card-close:hover { background: var(--color-bg-tertiary, #f3f4f6); color: var(--color-text-body, #374151); }
-.perm-card-body { flex: 1 1 auto; overflow-y: auto; padding: 16px 20px; }
+.perm-card-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px; }
 .perm-card-footer { padding: 10px 20px; border-top: 1px solid var(--color-border, #e5e7eb); font-size: 12px; color: var(--color-text-muted, #6b7280); min-height: 20px; }
 /* Inline error region. */
 .perm-error { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 8px; }
