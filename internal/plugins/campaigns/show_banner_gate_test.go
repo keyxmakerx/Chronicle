@@ -19,7 +19,7 @@ func renderShowFor(t *testing.T, role Role) string {
 		MemberRole: role,
 	}
 	var sb strings.Builder
-	if err := CampaignShowPage(cc, nil, nil, "tok").Render(context.Background(), &sb); err != nil {
+	if err := CampaignShowPage(cc, nil, nil, "tok", false).Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render show page: %v", err)
 	}
 	return sb.String()

@@ -157,6 +157,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 		return cc.CanAuthorDmOnly()
 	}, "only the campaign owner or a member with DM access may do this"))
 
+	// The one preview switch behind the "Dashboard for" line: self, player or
+	// guest. Same gate as the eye, and for the same reason it works on an
+	// archived campaign.
+	cgArchived.POST("/view-as", h.ViewAs, RequireCapability(func(cc *CampaignContext) bool {
+		return cc.CanAuthorDmOnly()
+	}, "only the campaign owner or a member with DM access may do this"))
+
 	// Member management (Owner only).
 	cg.POST("/members", h.AddMember, RequireRole(RoleOwner))
 	cg.DELETE("/members/:uid", h.RemoveMember, RequireRole(RoleOwner))

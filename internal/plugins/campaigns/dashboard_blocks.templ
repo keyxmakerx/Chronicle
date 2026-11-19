@@ -183,7 +183,7 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 						<p class="text-white/80 mt-1 max-w-2xl text-sm drop-shadow">{ *cc.Campaign.Description }</p>
 					}
 				</div>
-				if cc.MemberRole >= RoleOwner {
+				if OwnerCardVisible(ctx, cc) {
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="cb-quiet inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm transition-colors">
 						<i class="fa-solid fa-gear text-xs"></i> Settings
 					</a>
@@ -198,7 +198,7 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 					<p class="cb-epi text-fg-secondary mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
 				}
 			</div>
-			if cc.MemberRole >= RoleOwner {
+			if OwnerCardVisible(ctx, cc) {
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="cb-quiet btn-secondary text-sm">
 					<i class="fa-solid fa-gear text-xs"></i> Settings
 				</a>
@@ -225,7 +225,7 @@ templ dashQuickActions(cc *CampaignContext) {
 		</a>
 
 		// The People page is the owner's; anyone else would get a 403.
-		if cc.MemberRole >= RoleOwner {
+		if OwnerCardVisible(ctx, cc) {
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
 				<div class="flex items-center gap-3">
 					<div class="cb-tile w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
@@ -239,7 +239,7 @@ templ dashQuickActions(cc *CampaignContext) {
 			</a>
 		}
 
-		if cc.MemberRole >= RoleOwner {
+		if OwnerCardVisible(ctx, cc) {
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
 				<div class="flex items-center gap-3">
 					<div class="cb-tile w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
@@ -303,7 +303,7 @@ func pageCountLabel(n int) string {
 // counts by the viewer's role), so a zero means nothing here for them.
 func dashVisibleCategories(ctx context.Context, cc *CampaignContext) []layouts.SidebarEntityType {
 	all := layouts.GetEntityTypes(ctx)
-	if cc.MemberRole >= RoleOwner {
+	if OwnerCardVisible(ctx, cc) {
 		return all
 	}
 	var out []layouts.SidebarEntityType
@@ -344,7 +344,7 @@ templ dashRecentPages(cc *CampaignContext, config map[string]any, recentEntities
 // a widget that is not set up.
 // Config: entity_type_id (string or number), limit (int, default 8).
 templ dashEntityList(cc *CampaignContext, config map[string]any) {
-	if typeID := configInt(config, "entity_type_id", 0); typeID > 0 || cc.MemberRole >= RoleOwner {
+	if typeID := configInt(config, "entity_type_id", 0); typeID > 0 || OwnerCardVisible(ctx, cc) {
 		<div
 			hx-get={ fmt.Sprintf("/campaigns/%s/entity-list?type=%d&limit=%d", cc.Campaign.ID, typeID, configInt(config, "limit", 8)) }
 			hx-trigger="load"
@@ -384,7 +384,7 @@ templ dashTextBlock(cc *CampaignContext, config map[string]any) {
 		<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
 			@templ.Raw(sanitize.TextBlock(content))
 		</div>
-	} else if cc.MemberRole >= RoleOwner {
+	} else if OwnerCardVisible(ctx, cc) {
 		<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
 			<p class="text-fg-muted text-sm italic">Empty text block</p>
 		</div>
@@ -449,7 +449,7 @@ templ calendarCardUnavailableState(minHeightPx int) {
 // link into it, and a fragment with nothing for them drops the card.
 // Config: limit (int, default 5).
 templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
-	if !calendarCardUnavailable(ctx) || cc.MemberRole >= RoleOwner {
+	if !calendarCardUnavailable(ctx) || OwnerCardVisible(ctx, cc) {
 		<div data-block="upcoming">
 			<div class="flex items-center justify-between mb-3">
 				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
@@ -680,7 +680,7 @@ func dashGraphHeight(config map[string]any) int {
 // higher default limit and a taller card): real V5 data, not a placeholder.
 // Config: limit (int, default 10, max 20), height (int, default 400).
 templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
-	if !calendarCardUnavailable(ctx) || cc.MemberRole >= RoleOwner {
+	if !calendarCardUnavailable(ctx) || OwnerCardVisible(ctx, cc) {
 		<div data-block="upcoming">
 			<div class="flex items-center justify-between mb-3">
 				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">

@@ -1,0 +1,254 @@
+package campaigns
+
+// view_preview.go is the DM team's "look as someone else" switch: the player
+// preview (a display cookie, see ViewingAsPlayer) and the guest preview (a
+// middleware downgrade, see AllowPublicCampaignAccess and ADR-074). Both are
+// session cookies, only one is on at a time, and neither can grant anything:
+// the cookies are honoured only for the owner and co-DMs, and a preview can
+// only lower what a request may see.
+
+import (
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/labstack/echo/v5"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
+)
+
+const (
+	// viewAsPlayerCookie is the cookie name for the "view as player" display
+	// preview.
+	viewAsPlayerCookie = "chronicle_view_as_player"
+	// viewAsGuestCookie is the cookie name for the guest preview. Server-only
+	// (HttpOnly): no script needs it, the page reads the preview from the
+	// server-rendered chrome.
+	viewAsGuestCookie = "chronicle_view_as_guest"
+)
+
+// ViewingAsPlayer reports whether the owner or a co-DM has "view as player"
+// on. Handlers read it themselves because the layout context that also
+// carries it is only filled in when a page renders. Display only: never use
+// it to grant.
+func ViewingAsPlayer(c *echo.Context, cc *CampaignContext) bool {
+	if cc == nil || !cc.CanAuthorDmOnly() {
+		return false
+	}
+	cookie, err := c.Cookie(viewAsPlayerCookie)
+	return err == nil && cookie.Value == "1"
+}
+
+// ViewingAsGuest reports whether the REAL owner or co-DM has asked to look as
+// a guest. It is the request, not the effect: on a private campaign guests
+// cannot get in, so no downgrade happens and the page says so. A downgraded
+// guest-preview context is not the DM team any more, so it answers false;
+// read cc.Preview for that. Display only: never use it to grant.
+func ViewingAsGuest(c *echo.Context, cc *CampaignContext) bool {
+	return cc != nil && cc.CanAuthorDmOnly() && guestCookieOn(c)
+}
+
+func guestCookieOn(c *echo.Context) bool {
+	cookie, err := c.Cookie(viewAsGuestCookie)
+	return err == nil && cookie.Value == "1"
+}
+
+// isReadMethod reports whether the guest downgrade applies: only requests that
+// read. A write always runs as the real person, so leaving the preview and
+// anything the owner does is never lowered or refused.
+func isReadMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead
+}
+
+// guestPreviewActive decides, from the REAL context of a request, whether it
+// is lowered to a visitor's: the DM team's own request, a read, a public
+// campaign (a private one admits no guest, so there is nothing to look at)
+// and the guest cookie. The cookie from anyone else has no effect at all.
+func guestPreviewActive(c *echo.Context, real *CampaignContext) bool {
+	return real.IsMember && real.CanAuthorDmOnly() &&
+		isReadMethod(c.Request().Method) &&
+		real.Campaign.IsPublic &&
+		guestCookieOn(c)
+}
+
+// refuseDuringGuestPreview stops a read of a members-only route while the
+// guest preview is on, the way a visitor who is not a member would be
+// stopped. A page navigation gets a small page with a way back; a fragment or
+// API read just gets the 403. handled is false when no preview applies and the
+// request goes on; otherwise the response is already written (err nil) or err
+// is the refusal.
+func refuseDuringGuestPreview(c *echo.Context, real *CampaignContext) (handled bool, err error) {
+	if !guestPreviewActive(c, real) {
+		return false, nil
+	}
+	if middleware.IsHTMX(c) || !strings.Contains(c.Request().Header.Get("Accept"), "text/html") {
+		return true, apperror.NewForbidden("a guest can't open this; you are viewing this campaign as a guest")
+	}
+	// The page is drawn as the visitor, with the preview's chrome, so the
+	// way back is in the same place as everywhere else.
+	c.Set(contextKeyCampaign, real.GuestPreviewContext())
+	return true, middleware.Render(c, http.StatusForbidden, GuestPreviewRefusalPage(real.Campaign.ID, middleware.GetCSRFToken(c)))
+}
+
+// writePreviewCookie turns one preview cookie on or off. A session cookie, so
+// closing the browser ends the preview and an owner never comes back days
+// later to a campaign that looks like it lost its edit buttons. Clearing is
+// only sent when the request carries the cookie.
+func writePreviewCookie(c *echo.Context, name string, on, httpOnly bool) {
+	req := c.Request()
+	secure := req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https"
+	if on {
+		c.SetCookie(&http.Cookie{
+			Name:     name,
+			Value:    "1",
+			Path:     "/",
+			HttpOnly: httpOnly,
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
+		})
+		return
+	}
+	if _, err := c.Cookie(name); err != nil {
+		return
+	}
+	c.SetCookie(&http.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: httpOnly,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+}
+
+// setPreview puts the request's cookies in the state "as" names. One preview
+// at a time: entering one clears the other.
+func setPreview(c *echo.Context, as string) {
+	// The player cookie keeps its long-standing shape (readable by script).
+	writePreviewCookie(c, viewAsPlayerCookie, as == PreviewPlayer, false)
+	writePreviewCookie(c, viewAsGuestCookie, as == PreviewGuest, true)
+}
+
+// anyPreviewOn reports whether the eye would show as on for this DM-team
+// request: the player preview, or the guest preview where it has an effect.
+// On a private campaign the guest cookie changes nothing but the Home line,
+// so it does not count; the eye starts the player preview there.
+func anyPreviewOn(c *echo.Context, cc *CampaignContext) bool {
+	return ViewingAsPlayer(c, cc) || (cc.Campaign.IsPublic && ViewingAsGuest(c, cc))
+}
+
+// ToggleViewAsPlayer is the header eye (POST /campaigns/:id/toggle-view-mode)
+// for the owner and co-DMs: any preview on goes off, otherwise the player
+// preview starts. Display only: access control still uses the real role.
+func (h *Handler) ToggleViewAsPlayer(c *echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if anyPreviewOn(c, cc) {
+		setPreview(c, "")
+	} else {
+		setPreview(c, PreviewPlayer)
+	}
+	return previewRefresh(c, cc)
+}
+
+// viewAsRequest is the body of POST /campaigns/:id/view-as. Next and Home are
+// enums, never addresses, so the endpoint cannot be used to redirect anywhere.
+type viewAsRequest struct {
+	As   string `json:"as" form:"as"`     // self, player or guest.
+	Next string `json:"next" form:"next"` // "", home or arrange.
+	Home string `json:"home" form:"home"` // player or guest; only with next=arrange.
+}
+
+// ViewAs is the one preview switch (POST /campaigns/:id/view-as), for the
+// owner and co-DMs. "self" ends any preview. With next=home it lands on Home;
+// with next=arrange it first ends the preview, because the Customizer is a
+// members' page a guest cannot open, then opens the owner's editor for that
+// audience's dashboard.
+func (h *Handler) ViewAs(c *echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req viewAsRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	switch req.As {
+	case "self", PreviewPlayer, PreviewGuest:
+	default:
+		return apperror.NewBadRequest("as must be self, player or guest")
+	}
+	base := "/campaigns/" + cc.Campaign.ID
+	to := ""
+	switch req.Next {
+	case "":
+		if req.Home != "" {
+			return apperror.NewBadRequest("home goes only with next=arrange")
+		}
+	case "home":
+		if req.Home != "" {
+			return apperror.NewBadRequest("home goes only with next=arrange")
+		}
+		to = base
+	case "arrange":
+		if req.As != "self" || (req.Home != PreviewPlayer && req.Home != PreviewGuest) {
+			return apperror.NewBadRequest("arrange needs as=self and home=player or guest")
+		}
+		// The Customizer is the owner's; a co-DM is told so rather than sent
+		// to a 403 page.
+		if cc.MemberRole < RoleOwner {
+			return apperror.NewForbidden("only the campaign owner can arrange a dashboard")
+		}
+		to = base + "/customize/home/" + req.Home
+	default:
+		return apperror.NewBadRequest("next must be home or arrange")
+	}
+
+	if req.As == "self" {
+		setPreview(c, "")
+	} else {
+		setPreview(c, req.As)
+	}
+	if to != "" {
+		return middleware.HTMXRedirect(c, to)
+	}
+	return previewRefresh(c, cc)
+}
+
+// previewRefresh ends a preview change with the page the person was on:
+// HTMX does a full refresh so everything re-renders, anything else goes back
+// to a page of this campaign, or Home.
+func previewRefresh(c *echo.Context, cc *CampaignContext) error {
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, sameCampaignReferer(c.Request(), cc.Campaign.ID))
+}
+
+// sameCampaignReferer is the Referer's path and query when it is a page of
+// this campaign on this host, and the campaign's Home otherwise, so a forged
+// Referer cannot send anyone elsewhere.
+func sameCampaignReferer(r *http.Request, campaignID string) string {
+	home := "/campaigns/" + campaignID
+	u, err := url.Parse(r.Header.Get("Referer"))
+	if err != nil || u.Host != r.Host {
+		return home
+	}
+	if u.Path != home && !strings.HasPrefix(u.Path, home+"/") {
+		return home
+	}
+	return u.RequestURI()
+}
+
+// boolWord is the "true"/"false" an aria-pressed attribute needs.
+func boolWord(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}

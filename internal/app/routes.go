@@ -6061,6 +6061,17 @@ func (a *App) RegisterRoutes() {
 				effectiveRole = int(campaigns.RolePlayer)
 				ctx = layouts.SetViewingAsPlayer(ctx, true)
 			}
+			// A guest preview arrives already downgraded to a visitor's context
+			// (campaigns.AllowPublicCampaignAccess), so everything above and
+			// below is built from the visitor's values. The preview is noted
+			// only to draw its own chrome, and the site-admin flag, which the
+			// session carries, is blanked so the shell is a visitor's too.
+			if cc.Preview == campaigns.PreviewGuest {
+				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewGuest)
+				ctx = layouts.SetIsAdmin(ctx, false)
+			} else if viewingAsPlayer {
+				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewPlayer)
+			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
 			ctx = layouts.SetVisitUntil(ctx, cc.VisitUntil)
