@@ -5789,7 +5789,17 @@ func (a *App) RegisterRoutes() {
 		if err != nil {
 			return nil
 		}
-		return systems.Find(c.ParseSettings().SystemID)
+		if m := systems.Find(c.ParseSettings().SystemID); m != nil {
+			return m
+		}
+		// A system turned on as an add-on, without the settings' system
+		// choice, is still the campaign's system.
+		for _, sys := range systems.AllSystems() {
+			if on, err := addonService.IsEnabledForCampaign(ctx, campaignID, sys.Info().ID); err == nil && on {
+				return systems.Find(sys.Info().ID)
+			}
+		}
+		return nil
 	})
 	systemEntrySvc := systems.NewSystemEntryService(systems.NewSystemEntryRepository(a.DB), systems.EntryManifestResolver(manifestFor),
 		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
@@ -5801,6 +5811,11 @@ func (a *App) RegisterRoutes() {
 		slog.Error("adding system sheet fields failed", slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("added game-system sheet fields to existing categories", slog.Int("fields", n))
+	}
+	if n, err := bindCharacterPresetOnce(context.Background(), settingsRepo, campaignService, manifestFor, entityService); err != nil {
+		slog.Error("binding the character preset failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("bound Characters to the game system's character preset", slog.Int("campaigns", n))
 	}
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)

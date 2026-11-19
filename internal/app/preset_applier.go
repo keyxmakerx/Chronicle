@@ -144,6 +144,35 @@ func (p *presetApplier) applyManifestPresets(ctx context.Context, campaignID, sy
 			match = existingByName[strings.ToLower(preset.Name)]
 		}
 
+		// A character preset that found the seeded "Characters" type by name
+		// (D&D's preset is called "Character") binds it to the preset, as the
+		// adopt path below does for a differently named preset: the hero
+		// creator, the sheet and Foundry all find the system's character type
+		// by its preset category, so a name match alone leaves heroes on an
+		// empty category. Only when the system is turned on: the upgrade
+		// path stays additive (a campaign already in this state is healed
+		// once by bindCharacterPresetOnce).
+		if create && match != nil && preset.Category == presetCategoryCharacter &&
+			existingByCategory[preset.Category] == nil &&
+			(match.PresetCategory == nil || *match.PresetCategory == "") {
+			adopted, err := p.entityService.AdoptDefaultCharacterType(ctx, campaignID, preset.Category, declared)
+			if err != nil {
+				slog.Warn("failed to bind the Characters type to the system's character preset",
+					slog.String("campaign_id", campaignID),
+					slog.String("preset", preset.Slug),
+					slog.Any("error", err),
+				)
+			} else if adopted != nil {
+				existingByCategory[preset.Category] = adopted
+				slog.Info("default Characters type bound to the system character preset",
+					slog.String("campaign_id", campaignID),
+					slog.Int("entity_type_id", adopted.ID),
+					slog.String("preset", preset.Slug),
+					slog.String("system", systemSlug),
+				)
+			}
+		}
+
 		// Upgrade path: the type exists, so don't recreate it — just add any
 		// newly-declared fields it's missing. Idempotent: no-ops once the
 		// type already carries every declared field.
