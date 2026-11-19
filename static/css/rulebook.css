@@ -94,6 +94,7 @@
 .rb-mark:where(:not(.rb-wslot *)) { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font: 700 12px var(--rb-head); color: #fff; background: linear-gradient(135deg, color-mix(in srgb, var(--rb-acc) 82%, #000), var(--rb-acc3)); }
 .rb-name small:where(:not(.rb-wslot *)) { display: block; font: 600 9px var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-mut); }
 .rb-btn:where(:not(.rb-wslot *)) { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--rb-edge); background: var(--rb-box); font-size: 12.5px; color: var(--rb-ink2); white-space: nowrap; }
+.rb a.rb-btn:where(:not(.rb-wslot *)) { text-decoration: none; }
 .rb-btn:hover:where(:not(.rb-wslot *)) { border-color: var(--rb-acc3); color: var(--rb-ink); }
 .rb-btn[aria-expanded="true"]:where(:not(.rb-wslot *)) { background: color-mix(in srgb, var(--rb-acc) 16%, var(--rb-box)); color: var(--rb-ink); border-color: var(--rb-acc3); }
 .rb-btn-primary:where(:not(.rb-wslot *)) { background: var(--rb-acc3); border-color: var(--rb-acc3); color: #fff; padding: 8px 16px; font-weight: 600; }
@@ -673,9 +674,18 @@
 .rb-turnbar:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 10px; width: min(100% - 28px, 1600px); min-width: min(100% - 28px, 720px); margin: 10px auto 14px; }
 .rb-turn-where:where(:not(.rb-wslot *)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font: 700 13px/1 var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-ink2); }
 .rb-turn-ctl:where(:not(.rb-wslot *)) { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.rb .rb-pill:where(:not(.rb-wslot *)) { padding: 9px 12px; border: 1.5px solid var(--rb-ink); border-radius: 3px; font: 600 13px/1 var(--rb-ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--rb-ink); white-space: nowrap; }
-.rb .rb-pill:hover:not(:disabled):where(:not(.rb-wslot *)) { background: var(--rb-ink); color: var(--rb-paper); }
-.rb .rb-pill:disabled:where(:not(.rb-wslot *)) { opacity: 0.4; }
+/* A pill is filled, so one that works never reads as switched off; the one
+   that is off keeps only its outline. Hover is for pointers alone: on a touch
+   screen it would stay on the last pill tapped. */
+.rb .rb-pill:where(:not(.rb-wslot *)) { display: inline-flex; align-items: center; padding: 9px 12px; border: 1.5px solid var(--rb-ink); border-radius: 3px; background: var(--rb-ink); font: 600 13px/1 var(--rb-ui); letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; color: var(--rb-paper); white-space: nowrap; }
+@media (hover: hover) {
+  .rb .rb-pill:hover:not(:disabled):where(:not(.rb-wslot *)) { background: color-mix(in srgb, var(--rb-ink) 82%, var(--rb-paper)); }
+}
+.rb .rb-pill:active:not(:disabled):where(:not(.rb-wslot *)) { background: color-mix(in srgb, var(--rb-ink) 70%, var(--rb-paper)); }
+.rb .rb-pill:disabled:where(:not(.rb-wslot *)) { background: transparent; color: var(--rb-ink); opacity: 0.45; }
+/* The way back to the page that sent the reader here has a row of its own. */
+.rb-turnbar:has(.rb-return):where(:not(.rb-wslot *)) { flex-wrap: wrap; }
+.rb .rb-turnbar .rb-return:where(:not(.rb-wslot *)) { flex: 1 0 100%; justify-content: center; white-space: normal; }
 .rb .rb-pill:focus-visible:where(:not(.rb-wslot *)) { outline: 2px solid var(--rb-hot); outline-offset: 2px; }
 /* Chronicle's Jot notes tab is fixed in the window's bottom-right corner;
    the bar ends above it so Next is never under it. */
@@ -688,6 +698,7 @@ body:has(.jot-tab) .rb-turnbar:where(:not(.rb-wslot *)) { margin-bottom: calc(1.
   .rb-turnbar:where(:not(.rb-wslot *)) { width: calc(100% - 12px); min-width: 0; margin: 8px auto 10px; }
   .rb[data-look="bold"] .rb-turnbar:where(:not(.rb-wslot *)) { margin-top: 20px; }
   .rb-turn-where:where(:not(.rb-wslot *)) { display: none; }
+  .rb .rb-pill:where(:not(.rb-wslot *)) { min-height: 44px; }
 }
 
 /* Shut, the book lies on the desk without the open spread's shadow. */

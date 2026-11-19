@@ -155,7 +155,7 @@ async function withBook(fn, opts = {}) {
     });
     // The attribute an older Customize setting wrote; the reader must ignore it.
     if (opts.standard) await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => document.documentElement.setAttribute('data-cz-book', 'standard')));
-    await page.goto('https://chronicle.test/rules' + (opts.hash || ''));
+    await page.goto('https://chronicle.test/rules' + (opts.hash || ''), opts.referer ? { referer: opts.referer } : {});
     await page.waitForSelector('.rb-book');
     await fn(page);
     assert.deepEqual(errors, []);
@@ -333,7 +333,7 @@ test('a book with a cover opens shut on it every visit, opens on Enter and shuts
     let st = await frontState(page);
     assert.deepEqual([st.closed, st.shown, st.open, st.pageVisible, st.focusOnFace], [true, true, false, 'hidden', false]);
     // The bold look turns pages from a bar under the book; shut, only Next works.
-    assert.deepEqual([st.turn, st.where], ['\u2039 Back:off|Close the book:off|Next \u203A', 'The cover']);
+    assert.deepEqual([st.turn, st.where], ['\u2039 Previous:off|Close the book:off|Next \u203A', 'The cover']);
     assert.equal(await page.evaluate(() => !!document.querySelector('.rb-bar [data-act="shut"]')), false);
     const face = await page.$eval('.rb-front-face', (b) => ({ label: b.getAttribute('aria-label'), alt: b.querySelector('img').alt, src: b.querySelector('img').getAttribute('src') }));
     assert.deepEqual(face, { label: 'Open the Handbook', alt: 'Handbook: the cover', src: '/campaigns/camp-1/systems/demo/book/files/cover.svg' });
@@ -357,7 +357,7 @@ test('a book with a cover opens shut on it every visit, opens on Enter and shuts
     await page.waitForFunction(() => document.querySelector('.rb-front').hidden);
     st = await frontState(page);
     assert.deepEqual([st.closed, st.shown, st.pageVisible], [false, false, 'visible']);
-    assert.equal(st.turn, '\u2039 Back:off|Close the book|Next \u203A');
+    assert.equal(st.turn, '\u2039 Previous:off|Close the book|Next \u203A');
     assert.equal(st.where, 'Basics \u00B7 Start here');
     assert.equal(await page.evaluate(() => document.activeElement.closest('.rb-scroll') !== null), true);
 
@@ -734,4 +734,31 @@ test('with reduced motion the Sections ribbon has no transition and turns at onc
     await page.click('.rb-bm-list > li >> text=Tests');
     await page.waitForFunction(() => document.querySelector('.rb-where').textContent === 'Tests', null, { timeout: 1000 });
   }, { reducedMotion: true });
+});
+
+// --- the way back -------------------------------------------------------------
+
+const returnState = (page) => page.evaluate(() => {
+  const a = document.querySelector('.rb-return');
+  if (!a) return null;
+  const next = document.querySelector('.rb-turnbar [data-act="next"]'), cs = getComputedStyle(next);
+  return { text: a.textContent, href: a.getAttribute('href'), ownRow: a.getBoundingClientRect().bottom <= next.getBoundingClientRect().top, filled: cs.backgroundColor !== 'rgba(0, 0, 0, 0)', height: next.getBoundingClientRect().height };
+});
+
+test('a reader a link sent into the book gets a way back to that page, and working pills are filled', async () => {
+  await withBook(async (page) => {
+    const st = await returnState(page);
+    assert.deepEqual([st.text, st.href, st.ownRow, st.filled], ['\u21A9 Back to the campaign home', '/campaigns/camp-1', true, true]);
+    assert.ok(st.height >= 44, String(st.height));
+    assert.equal(await page.$eval('.rb-turnbar [data-act="prev"]', (b) => b.textContent), '\u2039 Previous');
+  }, { bold: true, viewport: { width: 390, height: 844 }, hash: '#basics', referer: 'https://chronicle.test/campaigns/camp-1' });
+  await withBook(async (page) => {
+    assert.equal((await returnState(page)).text, '\u21A9 Back to where you were');
+  }, { bold: true, hash: '#basics', referer: 'https://chronicle.test/campaigns/camp-1/pages/a?x=1' });
+});
+
+test('no way back is offered to a reader who opened the book themselves or came from another site', async () => {
+  await withBook(async (page) => { assert.equal(await returnState(page), null); }, { bold: true, referer: 'https://chronicle.test/campaigns/camp-1' });
+  await withBook(async (page) => { assert.equal(await returnState(page), null); }, { bold: true, hash: '#basics', referer: 'https://elsewhere.test/campaigns/camp-1' });
+  await withBook(async (page) => { assert.equal(await returnState(page), null); }, { bold: true, hash: '#basics' });
 });

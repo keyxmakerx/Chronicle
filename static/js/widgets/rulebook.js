@@ -415,6 +415,7 @@
     this.bmRoll = q('.rb-bm-roll');
     this.bmList = q('.rb-bm-list');
     var key = this.openingKey(place);
+    this.placeReturn();
     this.rebuild(key);
     // The book opens shut on its cover, as a book on the table does, but
     // never over a link that names a chapter: that reader asked for a page.
@@ -657,11 +658,40 @@
       '<div class="rb-sr" aria-live="polite"></div>';
   };
 
+  // returnLink is the way out for a reader a link elsewhere in Chronicle sent
+  // to a place in the book: the page they came from. The book's own page
+  // controls only turn pages, so without it the reader has no way back on the
+  // page. It is empty for a reader who opened the book themselves.
+  Rulebook.prototype.returnLink = function () {
+    if (this.inline || !this.deepLink) return null;
+    var ref;
+    try { ref = new URL(document.referrer); } catch (e) { return null; }
+    if (ref.origin !== window.location.origin || ref.pathname === window.location.pathname) return null;
+    return {
+      href: ref.pathname + ref.search + ref.hash,
+      label: /^\/campaigns\/[^/]+\/?$/.test(ref.pathname) ? 'Back to the campaign home' : 'Back to where you were'
+    };
+  };
+
+  // placeReturn adds the way back once the opening place is known: first in
+  // the turn bar of a bold book, else before Contents in the bar.
+  Rulebook.prototype.placeReturn = function () {
+    var r = this.returnLink(), before = this.turnEl ? this.turnEl.firstChild : this.tocBtn;
+    if (!r || !before) return;
+    var a = document.createElement('a');
+    a.className = (this.turnEl ? 'rb-pill' : 'rb-btn') + ' rb-return';
+    a.setAttribute('data-act', 'return');
+    a.href = r.href;
+    a.textContent = '\u21A9 ' + r.label;
+    before.parentNode.insertBefore(a, before);
+  };
+
   // The bold look turns its pages from a bar under the book, as a printed
-  // handbook's reader would expect: back, where the reader is, close the
+  // handbook's reader would expect: previous, where the reader is, close the
   // book, next. While the book is shut, Next opens it.
   Rulebook.prototype.turnbarHTML = function () {
-    return '<div class="rb-turnbar"><button type="button" class="rb-pill" data-act="prev">\u2039 Back</button>' +
+    return '<div class="rb-turnbar">' +
+      '<button type="button" class="rb-pill" data-act="prev">\u2039 Previous</button>' +
       '<span class="rb-turn-where" aria-hidden="true"></span><span class="rb-turn-ctl">' +
       (this.data.cover ? '<button type="button" class="rb-pill" data-act="shut">Close the book</button>' : '') +
       '<button type="button" class="rb-pill" data-act="next">Next \u203A</button></span></div>';
@@ -1863,6 +1893,8 @@
         case 'bm': this.bmSet(!this.bmOpen(), false); break;
         case 'front': this.openFront(); break;
         case 'shut': this.shutFront(); break;
+        // Going back in history returns the reader to their place on that page.
+        case 'return': if (window.history.length > 1) { e.preventDefault(); window.history.back(); } break;
         case 'more': this.setMore(x.getAttribute('aria-expanded') !== 'true'); break;
         case 'view': this.setView(x.getAttribute('data-view')); break;
         case 'roll': this.doRoll(x.closest('[data-roll]')); break;

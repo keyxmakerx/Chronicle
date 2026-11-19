@@ -83,7 +83,9 @@ parts:
   coloured result tiers, coloured from `theme` (`accent` colours banner edges
   and tiers). A book is `paper` or `bold`, not both. Navigation is the Sections
   ribbon and the bar under the book, so a bold book has no contents drawer or
-  tabs. Each chapter gets a colour from a fixed set, in book order, for its
+  tabs. A reader who followed a link from another Chronicle page to a chapter
+  (`…/systems/<id>#<chapter-id>`) also gets a link back to that page, in either
+  look. Each chapter gets a colour from a fixed set, in book order, for its
   banner edge, page numbers and the intro's first letter. A chapter that is a
   single `wide` contents page takes the left page, with the next chapter
   opening beside it.
