@@ -352,6 +352,26 @@ func calmColour(name, v string, deep bool) (string, error) {
 	return out, nil
 }
 
+// accentColour validates the campaign's colour. A new pick in the Director's
+// amber is refused, so a hand-sent save can't store what the picker won't
+// offer; the colour already stored is let through so a campaign that picked
+// amber before the rule can still save its other choices. Anything else is
+// toned like any colour and moved off the state red and green.
+func accentColour(v, stored string) (string, error) {
+	if v == "" {
+		return "", nil
+	}
+	if !isValidHexColor(v) {
+		return "", apperror.NewBadRequest("invalid chrome accent, expected #RRGGBB")
+	}
+	v = strings.ToLower(v)
+	if colour.NearAmber(v) && v != strings.ToLower(stored) {
+		return "", apperror.NewBadRequest("that colour is too close to amber, which marks what only the Director sees; pick another")
+	}
+	out, _ := colour.AccentTame(v)
+	return out, nil
+}
+
 // pictureName accepts a stored media filename, which the media service
 // files under its month ("2026/09/<id>.png"), or empty. Ownership is
 // checked by the handler; this only refuses anything that could climb out
@@ -500,7 +520,7 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 	// Colours. Buttons follow the chrome accent and apps follow Surface A,
 	// so the older Action and App slots are cleared.
 	var accent, s1, s2 string
-	if accent, err = calmColour("chrome accent", in.Colours.Accent, false); err != nil {
+	if accent, err = accentColour(in.Colours.Accent, s.AccentColor); err != nil {
 		return fail(err)
 	}
 	if s1, err = calmColour("surface A", in.Colours.S1, false); err != nil {
