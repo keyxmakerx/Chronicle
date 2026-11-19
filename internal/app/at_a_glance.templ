@@ -18,12 +18,9 @@ templ atAGlanceFragment(facts []glanceFact) {
 						<span class="cb-fact-l text-fg-muted">{ f.Label }</span>
 						<span class="cb-fact-v min-w-0 text-right text-fg">
 							if f.Href != "" {
-								<a href={ templ.SafeURL(f.Href) } class="cb-glance-link hover:text-accent hover:underline">{ f.Value }</a>
+								<a href={ templ.SafeURL(f.Href) } class="cb-glance-link hover:text-accent hover:underline">{ f.Value }</a>@glanceNote(f.Note)
 							} else {
-								{ f.Value }
-							}
-							if f.Note != "" {
-								<span class="cb-glance-note text-fg-muted">, { f.Note }</span>
+								{ f.Value }@glanceNote(f.Note)
 							}
 						</span>
 					</div>
@@ -31,4 +28,13 @@ templ atAGlanceFragment(facts []glanceFact) {
 			</div>
 		</div>
 	</section>
+}
+
+// glanceNote is a fact's quieter second part. It is called on the value's own
+// line because the comma has to touch the value: a line break before it in
+// this file would be written out as a space.
+templ glanceNote(note string) {
+	if note != "" {
+		<span class="cb-glance-note text-fg-muted">, { note }</span>
+	}
 }

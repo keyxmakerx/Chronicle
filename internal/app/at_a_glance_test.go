@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -220,5 +221,34 @@ func TestAtAGlanceHandler(t *testing.T) {
 	}
 	if rec.Body.Len() != 0 {
 		t.Errorf("nothing to say should be an empty body, got %q", rec.Body.String())
+	}
+}
+
+// A fact's second part follows its value with a comma and no gap before it,
+// whether the value is a link or plain text.
+func TestAtAGlanceFragment_NoteTouchesItsValue(t *testing.T) {
+	facts := []glanceFact{
+		{Label: "System", Value: "Draw Steel"},
+		{Label: "Last session", Value: "Session 2: The Dark Lighthouse", Note: "13 November", Href: "/campaigns/c1/sessions/s2"},
+		{Label: "Next game", Value: "Session 5", Note: "in 3 days"},
+	}
+	var b strings.Builder
+	if err := atAGlanceFragment(facts).Render(context.Background(), &b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := b.String()
+	for _, want := range []string{
+		`>Session 2: The Dark Lighthouse</a><span class="cb-glance-note text-fg-muted">, 13 November</span>`,
+		`Session 5<span class="cb-glance-note text-fg-muted">, in 3 days</span>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %s in %s", want, out)
+		}
+	}
+	if n := strings.Count(out, "cb-glance-note"); n != 2 {
+		t.Errorf("%d notes drawn, want 2: a fact with no second part draws none", n)
+	}
+	if regexp.MustCompile(`\s,`).MatchString(out) {
+		t.Errorf("a comma has a gap before it: %s", out)
 	}
 }
