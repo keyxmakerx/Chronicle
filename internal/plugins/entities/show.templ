@@ -297,6 +297,12 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 							hx-trigger="load"
 							hx-swap="outerHTML"
 						></span>
+						// "Add to Foundry" for creature pages, the same way.
+						<span
+							hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/creature-add/%s", cc.Campaign.ID, entity.ID) }
+							hx-trigger="load"
+							hx-swap="outerHTML"
+						></span>
 					}
 					if editor {
 						@pageEditorPen("header", "Edit the name and details")

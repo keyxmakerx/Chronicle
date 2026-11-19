@@ -144,6 +144,13 @@ const (
 	// published RequiresDM, and recorded in the change feed as
 	// `hero_layers` so a reconnecting module re-reads only those heroes.
 	MsgHeroLayersChanged MessageType = "hero_layers.changed"
+
+	// MsgCreatureAddRequested asks Foundry to make the actor for a creature
+	// page now, from the page's "Add to Foundry" button. ResourceID is the
+	// entity id and there is no payload. Always published RequiresDM, and
+	// recorded in the change feed as `creature_add` so a world that was
+	// closed makes the actor when it next connects.
+	MsgCreatureAddRequested MessageType = "creature_add.requested"
 )
 
 // Quest messages. They carry ids only (and a quest's version), so a page

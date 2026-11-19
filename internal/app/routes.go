@@ -6407,6 +6407,9 @@ func (a *App) RegisterRoutes() {
 	// "Show in Foundry" on NPC pages: npc.spotlight is not a change-feed
 	// type, so the recording wrapper passes it straight to the hub.
 	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService, lists: characterListService}, &npcSpotlightPublisher{bus: wsEventBus})
+	// "Add to Foundry" on creature pages: creature_add.requested is a
+	// change-feed type, so a closed world makes the actor when it connects.
+	fvttHandler.SetCreatureAdd(&creatureAddResolver{entities: entityService}, &creatureAddPublisher{bus: wsEventBus})
 
 	// Game-system widget panels under NPC page titles (manifest entity_panels).
 	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, characterListService))

@@ -29,7 +29,10 @@ type Handler struct {
 	activity       ActivityRecorder
 	npcResolver    NPCResolver
 	spotlight      SpotlightPublisher
-	owner          OwnerUpdates
+	// creatureResolver and creatureAdd back the creature page's "Add to Foundry".
+	creatureResolver CreatureResolver
+	creatureAdd      CreatureAddPublisher
+	owner            OwnerUpdates
 }
 
 // PresenceLookup is the narrow contract the presence-pill fragment
