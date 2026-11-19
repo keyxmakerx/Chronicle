@@ -3,6 +3,7 @@
 // words in its name (only for those who may create pages), and lists the
 // viewer's matching notes and matching palette commands under the pages it
 // finds. Ctrl+K opens this search, the same one the header button opens.
+// Every row is a name and then its kind in words, with nothing drawn in front.
 //
 // Runs static/js/topbar_search.js in a real Chromium against a stubbed search
 // endpoint. Needs playwright-core and a Chromium (see _browser_env.mjs).
@@ -143,4 +144,34 @@ test('the viewer\'s notes with a matching title follow the pages and open in the
   await p.evaluate(() => { window.opened = []; window.addEventListener('chronicle:open-note', (e) => window.opened.push(e.detail.noteId)); });
   await p.click('#topbar-search-results a:nth-of-type(3)');
   assert.deepEqual(await p.evaluate(() => window.opened), ['n5'], 'a jot opens on its page\'s notes panel');
+});
+
+test('every row is a name, then its kind in words, with nothing drawn in front', { skip }, async (t) => {
+  const p = await open(t, {
+    hits: [{ id: 'e9', name: 'Theme park', type_name: 'Place', type_icon: 'fa-map-pin', type_color: '#ef4444', url: '/campaigns/c1/entities/e9' }],
+    notes: [{ id: 'n1', title: 'Theme song' }],
+  });
+  const drawn = () => p.$$eval('#topbar-search-results a', (as) => as.map((a) => ({
+    parts: [...a.children].map((c) => c.textContent),
+    text: a.textContent.trim(),
+    marks: a.querySelectorAll('i, svg, img, [style]').length,
+  })));
+  const plain = async (label) => {
+    const html = await p.innerHTML('#topbar-search-results');
+    assert.ok(!/fa-|#ef4444|style=/.test(html), label + ': an icon or a colour is drawn: ' + html);
+  };
+
+  assert.deepEqual((await drawn()).map((x) => x.parts), [['Mira Vant', 'Recent'], ['Port Rell', 'Recent']]);
+  await plain('recent pages');
+
+  await type(p, 'theme');
+  assert.deepEqual((await drawn()).map((x) => x.parts.length ? x.parts : x.text), [
+    ['Theme park', 'Place'], ['Theme song', 'Note'], ['Toggle Theme', 'Command'], 'View all results']);
+  await plain('pages, notes and commands');
+
+  await type(p, 'ferryman');
+  assert.deepEqual((await drawn()).map((x) => x.parts.length ? x.parts : x.text), [
+    ['Theme park', 'Place'], ['Create a page named \u201cferryman\u201d', 'New page'], 'View all results']);
+  await plain('the offer to create a page');
+  for (const x of await drawn()) assert.equal(x.marks, 0);
 });

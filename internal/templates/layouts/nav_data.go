@@ -28,7 +28,6 @@ type NavRowView struct {
 	Kind     string // "app", "category" or "link"
 	Label    string
 	Icon     string // a Font Awesome name, or "" for none
-	Color    string // a category's colour
 	URL      string // absolute path, or a link's target
 	Caption  string // a few muted words beside the label
 	External bool   // a link leaving Chronicle
@@ -44,7 +43,6 @@ type NavSubRowView struct {
 	Key    string
 	TypeID int
 	Label  string
-	Color  string
 	URL    string
 	Count  int
 }

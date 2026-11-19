@@ -375,33 +375,17 @@
         html += this._sceneItemHTML(item, i, isDark);
         continue;
       }
+      // A page not everyone can read says so under its name, and so does the
+      // warning shown before such a page is linked.
       var note = Chronicle.linkRestrictionLabel(item);
-      var sub = Chronicle.escapeHtml(item.type_name || '');
+      var under = '';
       if (item._warned) {
-        sub = '<span style="color:#b45309;opacity:1">' + Chronicle.escapeHtml(LINK_WARNING) + '</span>';
+        under = '<div style="font-size:12px;white-space:normal;color:#b45309">' + Chronicle.escapeHtml(LINK_WARNING) + '</div>';
       } else if (note) {
-        sub += (sub ? ' · ' : '') + '<i class="fa-solid fa-lock" aria-hidden="true" style="font-size:10px"></i> ' + Chronicle.escapeHtml(note);
+        under = '<div style="font-size:12px;opacity:0.6"><i class="fa-solid fa-lock" aria-hidden="true" style="font-size:10px"></i> ' +
+          Chronicle.escapeHtml(note) + '</div>';
       }
-      var selectedClass = i === this.selectedIndex ? ' mention-popup__item--selected' : '';
-      var bgSelected = i === this.selectedIndex
-        ? (isDark ? 'background-color:#374151;' : 'background-color:#f3f4f6;')
-        : '';
-
-      html +=
-        '<div class="mention-popup__item' + selectedClass + '" ' +
-        'data-index="' + i + '" ' +
-        'style="display:flex;align-items:center;padding:8px 12px;cursor:pointer;' +
-        'transition:background-color 0.1s;' + bgSelected + '">' +
-        '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;' +
-        'margin-right:10px;flex-shrink:0;background-color:' +
-        Chronicle.escapeAttr(item.type_color || '#6b7280') + '"></span>' +
-        '<div style="min-width:0;flex:1">' +
-        '<div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
-        Chronicle.escapeHtml(item.name) + '</div>' +
-        '<div style="font-size:12px;' + (item._warned ? 'white-space:normal' : 'opacity:0.6') + '">' +
-        sub + '</div>' +
-        '</div>' +
-        '</div>';
+      html += this._rowHTML(i, isDark, Chronicle.escapeHtml(item.name), Chronicle.escapeHtml(item.type_name || ''), under);
     }
 
     this.el.innerHTML = html;
@@ -426,24 +410,33 @@
   };
 
   /**
-   * One Foundry scene row: its name and folder, or, for a name typed before
-   * the scene exists, the offer to mark it as needed.
+   * One row of the list: the name, then a quiet word at the end saying what
+   * it is, and under them an optional line. Nothing is drawn in front, so
+   * every name starts at the same edge and a long one keeps the most room.
+   */
+  MentionPopup.prototype._rowHTML = function (i, isDark, nameHTML, endHTML, underHTML) {
+    var selected = i === this.selectedIndex;
+    var bgSelected = selected ? (isDark ? 'background-color:#374151;' : 'background-color:#f3f4f6;') : '';
+    return '<div class="mention-popup__item' + (selected ? ' mention-popup__item--selected' : '') + '" ' +
+      'data-index="' + i + '" style="padding:8px 12px;cursor:pointer;transition:background-color 0.1s;' + bgSelected + '">' +
+      '<div style="display:flex;align-items:baseline;gap:12px">' +
+      '<span class="mention-popup__name" style="min-width:0;flex:1;font-weight:500;font-size:14px;' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + nameHTML + '</span>' +
+      (endHTML ? '<span class="mention-popup__kind" style="flex-shrink:0;max-width:45%;font-size:12px;opacity:0.6;' +
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + endHTML + '</span>' : '') +
+      '</div>' + (underHTML || '') + '</div>';
+  };
+
+  /**
+   * One Foundry scene row: its name with its folder at the end, or, for a
+   * name typed before the scene exists, the offer to mark it as needed.
    */
   MentionPopup.prototype._sceneItemHTML = function (item, i, isDark) {
-    var bgSelected = i === this.selectedIndex
-      ? (isDark ? 'background-color:#374151;' : 'background-color:#f3f4f6;')
-      : '';
-    var sub = item.needed ? 'Not in Foundry yet: mark the map as needed' : (item.folder || 'Top level');
-    return '<div class="mention-popup__item' + (i === this.selectedIndex ? ' mention-popup__item--selected' : '') + '" ' +
-      'data-index="' + i + '" style="display:flex;align-items:center;padding:8px 12px;cursor:pointer;' +
-      'transition:background-color 0.1s;' + bgSelected + '">' +
-      '<i class="fa-' + (item.needed ? 'regular' : 'solid') + ' fa-map" aria-hidden="true" ' +
-      'style="width:14px;margin-right:8px;font-size:12px;opacity:.75;flex-shrink:0"></i>' +
-      '<div style="min-width:0;flex:1">' +
-      '<div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
-      (item.needed ? '“' + Chronicle.escapeHtml(item.name) + '”' : Chronicle.escapeHtml(item.name)) + '</div>' +
-      '<div style="font-size:12px;opacity:0.6">' + Chronicle.escapeHtml(sub) + '</div>' +
-      '</div></div>';
+    if (item.needed) {
+      return this._rowHTML(i, isDark, '\u201c' + Chronicle.escapeHtml(item.name) + '\u201d', '',
+        '<div style="font-size:12px;opacity:0.6">Not in Foundry yet: mark the map as needed</div>');
+    }
+    return this._rowHTML(i, isDark, Chronicle.escapeHtml(item.name), Chronicle.escapeHtml(item.folder || 'Top level'), '');
   };
 
   /**

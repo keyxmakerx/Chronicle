@@ -333,16 +333,14 @@
 
   // --- Drawing the editor ----------------------------------------------------
 
+  // A row's mark is drawn as the sidebar draws it: in the one icon colour,
+  // with a dot standing in for a category that has no icon.
   function rowIcon(row) {
     var ic = el('span', 'nav-ic');
     if (row.kind === 'category' && !ICON_RE.test(row.icon || '')) {
-      var dot = el('span', 'nav-dot');
-      dot.style.backgroundColor = row.color || '';
-      ic.appendChild(dot);
+      ic.appendChild(el('span', 'nav-dot'));
     } else {
-      var i = faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle'));
-      if (row.color) i.style.color = row.color;
-      ic.appendChild(i);
+      ic.appendChild(faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle')));
     }
     return ic;
   }
@@ -573,9 +571,7 @@
       pv.appendChild(el('div', 'nav-pv-sec', null, sec.label || 'Untitled'));
       sec.rows.forEach(function (row) {
         var it = el('div', 'nav-pv-it');
-        var i = faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle'));
-        if (row.color) i.style.color = row.color;
-        it.appendChild(i);
+        it.appendChild(faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle')));
         it.appendChild(el('span', null, null, nameOf(row)));
         pv.appendChild(it);
       });

@@ -562,11 +562,11 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 		Categories
 	</button>
 	<div class="nav-drill-head">
-		<span class="nav-drill-ic" style={ fmt.Sprintf("color: %s", et.Color) }>
+		<span class="nav-drill-ic">
 			if et.Icon != "" {
 				<i class={ "fa-solid " + et.Icon } aria-hidden="true"></i>
 			} else {
-				<span class="nav-dot" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
+				<span class="nav-dot"></span>
 			}
 		</span>
 		<span class="nav-drill-name">{ et.NamePlural }</span>
@@ -624,7 +624,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 						if s.Icon != "" {
 							<i class={ "fa-solid " + s.Icon } aria-hidden="true"></i>
 						} else {
-							<span class="nav-dot" style={ fmt.Sprintf("background-color: %s", s.Color) }></span>
+							<span class="nav-dot"></span>
 						}
 					</span>
 					<span class="nav-drill-sub-lb">{ s.NamePlural }</span>

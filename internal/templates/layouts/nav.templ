@@ -353,13 +353,13 @@ templ navRow(row NavRowView) {
 // navRowInner is the inside of a row: icon, label, trailing text, marks and,
 // on the current row, the living ring.
 templ navRowInner(row NavRowView) {
+	// Every mark is the sidebar's one icon colour: a category's own colour
+	// tints neither its icon nor the dot that stands in for one.
 	<span class="nav-ic">
-		if row.Icon != "" && row.Color != "" {
-			<i class={ "fa-solid " + row.Icon } style={ fmt.Sprintf("color: %s", row.Color) } aria-hidden="true"></i>
-		} else if row.Icon != "" {
+		if row.Icon != "" {
 			<i class={ "fa-solid " + row.Icon } aria-hidden="true"></i>
 		} else if row.Kind == "category" {
-			<span class="nav-dot" style={ fmt.Sprintf("background-color: %s", row.Color) }></span>
+			<span class="nav-dot"></span>
 		} else {
 			<i class="fa-solid fa-link" aria-hidden="true"></i>
 		}
@@ -393,7 +393,7 @@ templ navSubRow(sub NavSubRowView, parentHidden bool) {
 			aria-current="page"
 		}
 	>
-		<span class="nav-ic"><span class="nav-dot" style={ fmt.Sprintf("background-color: %s", sub.Color) }></span></span>
+		<span class="nav-ic"><span class="nav-dot"></span></span>
 		<span class="nav-lb">{ sub.Label }</span>
 		@navTrail(sub.Key, navCount(sub.Count))
 		if NavHasRing(ctx, sub.Key) {

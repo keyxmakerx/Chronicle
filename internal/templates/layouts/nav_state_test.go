@@ -21,9 +21,9 @@ func navStateTestSections() []NavSectionView {
 			{Key: "app:maps", Kind: "app", Label: "Maps", Icon: "fa-map", URL: "/campaigns/c1/maps"},
 		}},
 		{ID: "categories", Kind: "categories", Label: "Categories", Rows: []NavRowView{
-			{Key: "cat:1", Kind: "category", Label: "Locations", Color: "#f87171", URL: "/campaigns/c1/locations", TypeID: 1, Count: 7,
-				Subs: []NavSubRowView{{Key: "cat:11", TypeID: 11, Label: "Cities", Color: "#f87171", URL: "/campaigns/c1/cities", Count: 3}}},
-			{Key: "cat:2", Kind: "category", Label: "Factions", Color: "#fbbf24", URL: "/campaigns/c1/factions", TypeID: 2},
+			{Key: "cat:1", Kind: "category", Label: "Locations", URL: "/campaigns/c1/locations", TypeID: 1, Count: 7,
+				Subs: []NavSubRowView{{Key: "cat:11", TypeID: 11, Label: "Cities", URL: "/campaigns/c1/cities", Count: 3}}},
+			{Key: "cat:2", Kind: "category", Label: "Factions", URL: "/campaigns/c1/factions", TypeID: 2},
 		}},
 		{ID: "sec_prep", Kind: "custom", Label: "Prep", Rows: []NavRowView{
 			{Key: "link:l1", Kind: "link", Label: "Tunnel map", URL: "/campaigns/c1/maps/tunnel"},

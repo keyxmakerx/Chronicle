@@ -38,7 +38,6 @@ type NavEditRow struct {
 	Kind   string `json:"kind"` // "app", "category" or "link"
 	Label  string `json:"label"`
 	Icon   string `json:"icon,omitempty"`
-	Color  string `json:"color,omitempty"`
 	URL    string `json:"url,omitempty"` // a link's target, as the owner typed it
 	Hidden bool   `json:"hidden,omitempty"`
 	// Off marks an app turned off in Extensions. It keeps its place in the

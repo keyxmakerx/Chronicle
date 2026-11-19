@@ -159,8 +159,6 @@
           return {
             name: e.name,
             type: e.type_name || '',
-            icon: e.type_icon || 'fa-file',
-            color: e.type_color || '#6b7280',
             url: resultUrl(e, campaignId),
           };
         });
@@ -187,7 +185,6 @@
 
   // --- Rows that are not pages ---
 
-  var ICON_RE = /^fa-[a-z0-9-]{1,40}$/;
   var MAX_RECENT = 5;
   var MAX_COMMANDS = 4;
 
@@ -201,8 +198,6 @@
       return {
         name: String(item.name),
         type: 'Recent',
-        icon: 'fa-clock-rotate-left',
-        color: '#6b7280',
         url: '/campaigns/' + encodeURIComponent(campaignId) + '/entities/' + encodeURIComponent(item.id),
       };
     });
@@ -244,8 +239,6 @@
       out.push({
         name: String(n.title),
         type: 'Note',
-        icon: 'fa-note-sticky',
-        color: '#7c3aed',
         // A jot belongs to a page and opens in that page's notes panel, so
         // it has no address of its own.
         url: n.entityId ? '' : journalUrl,
@@ -290,8 +283,6 @@
       out.push({
         name: c.label,
         type: 'Command',
-        icon: ICON_RE.test(c.icon || '') ? c.icon : 'fa-terminal',
-        color: '#6b7280',
         url: c.href || '',
         action: c.action || null,
       });
@@ -308,8 +299,6 @@
     return {
       name: 'Create a page named \u201c' + query + '\u201d',
       type: 'New page',
-      icon: 'fa-plus',
-      color: '#6b7280',
       url: '/campaigns/' + encodeURIComponent(campaignId) + '/entities/new?name=' + encodeURIComponent(query),
     };
   }
@@ -334,14 +323,14 @@
     }
 
     var html = heading ? '<div class="px-4 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted">' + Chronicle.escapeHtml(heading) + '</div>' : '';
+    // A row is its name, then what kind of thing it is as a quiet word at the
+    // end. Nothing is drawn in front: the name is what tells two rows apart.
     for (var i = 0; i < results.length; i++) {
       var r = results[i];
       var active = i === activeIndex ? ' bg-surface-alt' : '';
-      html += '<a href="' + Chronicle.escapeAttr(r.url || '#') + '" data-index="' + i + '" class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-surface-alt transition-colors' + active + '">' +
-        '<span class="w-5 h-5 rounded flex items-center justify-center text-[10px] shrink-0" style="background-color:' + Chronicle.escapeAttr(r.color) + '20;color:' + Chronicle.escapeAttr(r.color) + '">' +
-          '<i class="fa-solid ' + Chronicle.escapeAttr(r.icon) + '"></i></span>' +
+      html += '<a href="' + Chronicle.escapeAttr(r.url || '#') + '" data-index="' + i + '" class="flex items-baseline gap-3 px-4 py-2.5 text-sm hover:bg-surface-alt transition-colors' + active + '">' +
         '<span class="flex-1 truncate text-fg">' + Chronicle.escapeHtml(r.name) + '</span>' +
-        '<span class="text-xs text-fg-muted shrink-0">' + Chronicle.escapeHtml(r.type) + '</span>' +
+        '<span class="text-xs text-fg-muted shrink-0 max-w-[45%] truncate">' + Chronicle.escapeHtml(r.type) + '</span>' +
       '</a>';
     }
 
@@ -350,8 +339,8 @@
     var q = input ? input.value.trim() : '';
     if (campaignId && q.length >= 2) {
       html += '<a href="/campaigns/' + Chronicle.escapeAttr(campaignId) + '/search?q=' + encodeURIComponent(q) + '" ' +
-        'class="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-accent hover:bg-accent/10 border-t border-edge transition-colors">' +
-        '<i class="fa-solid fa-arrow-right text-[10px]"></i> View all results</a>';
+        'class="flex items-center justify-center px-4 py-2 text-xs font-medium text-accent hover:bg-accent/10 border-t border-edge transition-colors">' +
+        'View all results</a>';
     }
 
     resultsCt.innerHTML = html;

@@ -3382,7 +3382,8 @@
   .nav-list .nav-row { padding-right: 36px; }
   .nav-hid { flex: none; display: grid; place-items: center; font-size: 11px; color: #fbbf24; opacity: 0.85; }
   .nav-ext { flex: none; font-size: 9px; color: var(--nav-text-3); }
-  .nav-dot { display: block; width: 6px; height: 6px; border-radius: 50%; }
+  /* A category with no icon gets a dot in the one icon colour. */
+  .nav-dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   /* Chronicle's approved hover glow, unchanged in effect: accent edges on the
      right and bottom plus a wash from the right, faded in by opacity. */
   .nav-row::before {
@@ -3805,8 +3806,9 @@
   .nav-drill-back:hover { color: var(--nav-hi); background: var(--nav-hover); }
   .nav-drill-back i { font-size: 11px; }
   .nav-drill-head { position: relative; flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px 8px; }
-  .nav-drill-ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none; background: rgb(255 255 255 / 0.06); }
-  .nav-drill-ic i { font-size: 12px; }
+  /* The same box and colour as a row's icon, with nothing behind it, so the
+     panel's name starts where the rows' labels do. */
+  .nav-drill-ic { width: 18px; height: 18px; display: grid; place-items: center; flex: none; font-size: 13px; color: var(--nav-text-2); }
   .nav-drill-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 700; color: var(--nav-hi); }
   .nav-drill-count {
     flex: none; padding: 1px 7px; border-radius: 99px; background: rgb(255 255 255 / 0.07); color: var(--nav-text-2);

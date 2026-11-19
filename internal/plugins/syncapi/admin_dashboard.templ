@@ -241,7 +241,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 				// API Keys overview.
 				<div class="card p-6">
 					<h2 class="text-lg font-semibold text-fg mb-4">
-						<i class="fa-solid fa-key text-accent mr-2"></i>
+						<i class="fa-solid fa-key mr-2"></i>
 						API Keys ({ fmt.Sprintf("%d", data.TotalKeys) })
 					</h2>
 					if len(data.APIKeys) > 0 {
