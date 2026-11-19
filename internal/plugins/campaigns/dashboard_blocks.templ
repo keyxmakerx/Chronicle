@@ -117,6 +117,15 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			if cc.IsMember {
 				@dashFragment("house-rules", fmt.Sprintf("/campaigns/%s/house-rules", cc.Campaign.ID), "h-24")
 			}
+		case "table_agreement":
+			@dashWrittenBlock(cc, block.Config, "table-agreement", "Table agreement", "Safety and lines, Pacing, Missing a night, Table talk")
+		case "making_a_hero":
+			@dashWrittenBlock(cc, block.Config, "making-a-hero", "Making a hero", "What is allowed, Starting level, Where to build it, Ask me first")
+		case "run_by":
+			// Names of the people running the table are members' reading.
+			if cc.IsMember {
+				@dashFragment("run-by", fmt.Sprintf("/campaigns/%s/run-by", cc.Campaign.ID), "h-16")
+			}
 		case "last_time":
 			// Recaps are the table's own business, as game nights are.
 			if cc.IsMember {
@@ -966,6 +975,34 @@ templ dashWhereWePlay(cc *CampaignContext, config map[string]any) {
 				<p class="mt-1 text-xs text-fg-muted">
 					Only you see this until something is typed in.
 					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/customize/home") } class="text-accent hover:underline">Type it in the Customizer</a>
+				</p>
+			</div>
+		</section>
+	}
+}
+
+// dashWrittenBlock is a block of the owner's own words under a fixed heading
+// (Table agreement, Making a hero). The text goes through the same cleaning
+// as a Text Block. A block with nothing typed in is removed for players, and
+// the owner gets a dashed slot naming the starter headings.
+templ dashWrittenBlock(cc *CampaignContext, config map[string]any, slug, title, starters string) {
+	{{ body := sanitize.TextBlock(dashConfigString(config, "content")) }}
+	if body != "" {
+		<section class={ "cb-info", "cb-written" } data-block={ slug } aria-labelledby={ slug + "-h" }>
+			<div class="cb-info-top flex items-baseline justify-between mb-3">
+				<h2 id={ slug + "-h" } class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">{ title }</h2>
+			</div>
+			<div class="cb-written-body prose prose-sm dark:prose-invert max-w-none">
+				@templ.Raw(body)
+			</div>
+		</section>
+	} else if cc.CanAuthorDmOnly() && !layouts.IsViewingAsPlayer(ctx) {
+		<section class="cb-info cb-written" data-block={ slug } data-dm-only>
+			<div class="cb-start-slot border border-dashed border-edge rounded-lg px-4 py-3 text-sm text-fg-secondary">
+				<p>{ title }: write it in this block. Starter headings: { starters }.</p>
+				<p class="mt-1 text-xs text-fg-muted">
+					Only you see this until something is typed in.
+					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/customize/home") } class="text-accent hover:underline">Write it in the Customizer</a>
 				</p>
 			</div>
 		</section>
