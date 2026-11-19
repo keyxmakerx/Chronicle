@@ -489,7 +489,7 @@ func (h *SystemHandler) RulesGlossaryAPI(c *echo.Context) error {
 		return c.JSON(http.StatusOK, []any{})
 	}
 
-	// Private: only signed-in members may read it, so no shared cache may keep it.
+	// Private: only the campaign's readers may have it, so no shared cache may keep it.
 	c.Response().Header().Set("Cache-Control", "private, max-age=3600")
 	return c.Blob(http.StatusOK, "application/json", data)
 }

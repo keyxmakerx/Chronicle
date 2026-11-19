@@ -147,10 +147,15 @@
       });
   }
 
+  /** Favourites are a member's; a visitor's requests would only be refused. */
+  function isMember() {
+    return document.documentElement.hasAttribute('data-campaign-member');
+  }
+
   /** Initialize favorites on page load. */
   function init() {
     var campaignId = getCampaignID();
-    if (!campaignId) return;
+    if (!campaignId || !isMember()) return;
 
     // Load favorite IDs, then bind star buttons.
     loadFavoriteIDs(campaignId).then(function () {
@@ -169,7 +174,7 @@
   // Re-bind after HTMX swaps.
   document.addEventListener('htmx:afterSettle', function () {
     var campaignId = getCampaignID();
-    if (campaignId) {
+    if (campaignId && isMember()) {
       bindToggleButtons(campaignId);
       renderFavorites(campaignId);
     }

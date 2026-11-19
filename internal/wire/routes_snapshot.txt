@@ -468,16 +468,16 @@ POST	/campaigns/:id/ai/connection/pause	session	plugins/ai_workspace.(*Handler).
 POST	/campaigns/:id/ai/connection/resume	session	plugins/ai_workspace.(*Handler).ResumeAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/copy	session	plugins/ai_workspace.(*Handler).CopyForAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/cut-off	session	plugins/ai_workspace.(*Handler).CutOffAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-POST	/campaigns/:id/ai/me/apply	session	plugins/ai_workspace.(*Handler).PlayerApply	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/ai/me/bubble	session	plugins/ai_workspace.(*Handler).PlayerBubble	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/ai/me/chip	session	plugins/ai_workspace.(*Handler).PlayerChip	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/ai/me/copy	session	plugins/ai_workspace.(*Handler).PlayerCopy	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-POST	/campaigns/:id/ai/me/key	session	plugins/ai_workspace.(*Handler).PlayerConnect	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-POST	/campaigns/:id/ai/me/key/disconnect	session	plugins/ai_workspace.(*Handler).PlayerDisconnect	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/ai/me/panel	session	plugins/ai_workspace.(*Handler).PlayerPanel	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-POST	/campaigns/:id/ai/me/paste	session	plugins/ai_workspace.(*Handler).PlayerPaste	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-GET	/campaigns/:id/ai/me/requests/:rid	session	plugins/ai_workspace.(*Handler).PlayerReviewRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
-POST	/campaigns/:id/ai/me/requests/:rid/turn-down	session	plugins/ai_workspace.(*Handler).PlayerTurnDown	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/me/apply	session	plugins/ai_workspace.(*Handler).PlayerApply	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
+GET	/campaigns/:id/ai/me/bubble	session	plugins/ai_workspace.(*Handler).PlayerBubble	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
+GET	/campaigns/:id/ai/me/chip	session	plugins/ai_workspace.(*Handler).PlayerChip	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
+GET	/campaigns/:id/ai/me/copy	session	plugins/ai_workspace.(*Handler).PlayerCopy	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
+POST	/campaigns/:id/ai/me/key	session	plugins/ai_workspace.(*Handler).PlayerConnect	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
+POST	/campaigns/:id/ai/me/key/disconnect	session	plugins/ai_workspace.(*Handler).PlayerDisconnect	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
+GET	/campaigns/:id/ai/me/panel	session	plugins/ai_workspace.(*Handler).PlayerPanel	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
+POST	/campaigns/:id/ai/me/paste	session	plugins/ai_workspace.(*Handler).PlayerPaste	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
+GET	/campaigns/:id/ai/me/requests/:rid	session	plugins/ai_workspace.(*Handler).PlayerReviewRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
+POST	/campaigns/:id/ai/me/requests/:rid/turn-down	session	plugins/ai_workspace.(*Handler).PlayerTurnDown	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/ai_workspace.refuseGuests
 POST	/campaigns/:id/ai/notes	session	plugins/ai_workspace.(*Handler).ChangeNoteAccess	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/panel	session	plugins/ai_workspace.(*Handler).AIPanel	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/players	session	plugins/ai_workspace.(*Handler).SetPlayersAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1230,7 +1230,7 @@ GET	/campaigns/:id/system-state/:system/:key	session	plugins/systemstate.(*Handl
 GET	/campaigns/:id/systems/:mod	session	systems.(*SystemHandler).Index	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/:cat	session	systems.(*SystemHandler).CategoryList	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/:cat/:item	session	systems.(*SystemHandler).ItemDetail	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
-GET	/campaigns/:id/systems/:mod/:cat/:item/tooltip	session	systems.(*SystemHandler).TooltipAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/:cat/:item/tooltip	public-capable	systems.(*SystemHandler).TooltipAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > systems.requireSystemAddon > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/systems/:mod/book	session	systems.(*SystemHandler).BookAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 POST	/campaigns/:id/systems/:mod/book/chapters	session	systems.(*SystemHandler).BookChapterCreate	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 DELETE	/campaigns/:id/systems/:mod/book/chapters/:chapter	session	systems.(*SystemHandler).BookChapterDelete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
@@ -1246,10 +1246,10 @@ GET	/campaigns/:id/systems/:mod/book/find	session	systems.(*SystemHandler).BookF
 GET	/campaigns/:id/systems/:mod/book/index/:cat	session	systems.(*SystemHandler).BookIndexAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/source	session	systems.(*SystemHandler).BookSourceAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/browse	session	systems.(*SystemHandler).Browse	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
-GET	/campaigns/:id/systems/:mod/data/:file	session	systems.(*SystemHandler).SystemDataAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
-GET	/campaigns/:id/systems/:mod/rules-glossary	session	systems.(*SystemHandler).RulesGlossaryAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/data/:file	public-capable	systems.(*SystemHandler).SystemDataAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > systems.requireSystemAddon > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/systems/:mod/rules-glossary	public-capable	systems.(*SystemHandler).RulesGlossaryAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > systems.requireSystemAddon > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/systems/:mod/search	session	systems.(*SystemHandler).SearchAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
-GET	/campaigns/:id/systems/:mod/widgets/:slug	session	systems.(*SystemHandler).WidgetScriptAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/widgets/:slug	public-capable	systems.(*SystemHandler).WidgetScriptAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > systems.requireSystemAddon > plugins/campaigns.RequireViewAccess
 DELETE	/campaigns/:id/systems/custom	session	systems.(*CampaignSystemHandler).DeleteSystem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/systems/custom	session	systems.(*CampaignSystemHandler).GetCustomSystem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/systems/preview	session	systems.(*CampaignSystemHandler).PreviewSystem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess

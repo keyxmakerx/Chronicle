@@ -286,7 +286,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 			<div class="min-w-0">
 				<div class="flex flex-wrap items-center gap-2">
 					<h1 class="cb-title basis-full sm:basis-auto text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
-					@entityFavoriteButton(entity)
+					@entityFavoriteButton(cc, entity)
 					@pagePinMount(cc, entity)
 					@dmOnlyTitleLabel(cc, entity)
 					// "Show in Foundry" for NPC pages. foundry_vtt owns it and

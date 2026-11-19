@@ -16,18 +16,21 @@ import (
 
 // entityFavoriteButton is the star next to the page name: a starred page is in
 // the viewer's Favorites and among their own pins on the home's Pinned Pages.
-// favorites.js binds any [data-favorite-toggle] and paints its state.
-templ entityFavoriteButton(entity *Entity) {
-	<button
-		type="button"
-		class="text-fg-muted hover:text-amber-400 transition-colors"
-		data-favorite-toggle={ entity.ID }
-		data-entity-name={ entity.Name }
-		title="Star: keep this page in your Favorites and your pins on the home page"
-		aria-label="Star this page"
-	>
-		<i class="fa-regular fa-star text-lg"></i>
-	</button>
+// favorites.js binds any [data-favorite-toggle] and paints its state. Only a
+// member has Favorites, so a visitor gets no star.
+templ entityFavoriteButton(cc *campaigns.CampaignContext, entity *Entity) {
+	if cc.MemberRole >= campaigns.RolePlayer {
+		<button
+			type="button"
+			class="text-fg-muted hover:text-amber-400 transition-colors"
+			data-favorite-toggle={ entity.ID }
+			data-entity-name={ entity.Name }
+			title="Star: keep this page in your Favorites and your pins on the home page"
+			aria-label="Star this page"
+		>
+			<i class="fa-regular fa-star text-lg"></i>
+		</button>
+	}
 }
 
 // entityHistoryButton loads the page's earlier versions into #page-history-slot.
@@ -53,7 +56,7 @@ templ pageNameFold(cc *campaigns.CampaignContext, entity *Entity, structure bool
 		<div
 			class="ag-box"
 			data-box
-			style="max-width:620px"
+			style="max-width: 620px"
 			data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/metadata", cc.Campaign.ID, entity.ID) }
 			data-search-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
 			data-self-id={ entity.ID }
@@ -81,13 +84,13 @@ templ pageNameFold(cc *campaigns.CampaignContext, entity *Entity, structure bool
 					}
 				</div>
 				if structure {
-					<div style="margin-top:12px">
+					<div style="margin-top: 12px">
 						<label class="block text-xs font-medium text-fg-body mb-1" for="page-parent-search">Parent page</label>
 						<div class="ag-search">
 							<i class="fa-solid fa-magnifying-glass"></i>
 							<input id="page-parent-search" type="search" class="input w-full text-sm" placeholder="Search pages" aria-label="Search pages" autocomplete="off" data-parent-q oninput={ headerCall("parentSearch") }/>
 						</div>
-						<div class="ag-list" role="radiogroup" aria-label="Parent page" style="max-height:170px" data-parent-list>
+						<div class="ag-list" role="radiogroup" aria-label="Parent page" style="max-height: 170px" data-parent-list>
 							<label class="ag-row">
 								<input type="radio" name="page-parent" value="" checked?={ parent.ID == "" } onchange={ headerCall("nameInput") }/>
 								<span class="ag-name"><b>No parent</b></span>
