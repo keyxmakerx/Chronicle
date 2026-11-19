@@ -152,6 +152,12 @@ type EntityService interface {
 	// claimable flag and live and trashed page counts.
 	CustomizeCategories(ctx context.Context, campaignID string) ([]CustomizeCategoryInfo, error)
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
+	// AppendBlockToCategoryLayout puts a block at the end of a category's page
+	// layouts unless they already hold it; added is false when none needed it.
+	AppendBlockToCategoryLayout(ctx context.Context, campaignID string, typeID int, blockType string) (added bool, err error)
+	// BlockPlacementOptions lists the categories a block can be put on, the
+	// one it is made for first.
+	BlockPlacementOptions(ctx context.Context, campaignID, blockType string) ([]PlacementOption, error)
 	UpdateEntityTypeColor(ctx context.Context, id int, color string) error
 	UpdateEntityTypeDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error
 

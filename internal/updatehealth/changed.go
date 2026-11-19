@@ -32,4 +32,13 @@ var Changed = []Feature{
 		Routes: []string{"POST /campaigns/:id/leave"},
 		Try:    "/campaigns",
 	},
+	{
+		ID:   "put-on-a-page-2026-11",
+		Name: "Put on a page, from Game & features",
+		Routes: []string{
+			"GET /campaigns/:id/entity-types/placement",
+			"POST /campaigns/:id/entity-types/:etid/layout/blocks",
+		},
+		Try: "/campaigns",
+	},
 }

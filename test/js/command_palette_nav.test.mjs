@@ -160,6 +160,9 @@ const OWNER_ROWS = [
   { label: 'Export a copy', href: '/campaigns/camp-1/settings?tab=data', icon: 'fa-file-export', words: 'export backup download copy' },
   { label: 'Archive or delete this campaign', href: '/campaigns/camp-1/settings#danger', icon: 'fa-triangle-exclamation', words: 'delete archive remove end' },
   { label: 'Invite someone', href: '/campaigns/camp-1/members', icon: 'fa-user-plus', words: 'invite add player join' },
+  { label: 'Quest board', href: '/campaigns/camp-1/extensions#quest-board', icon: 'fa-scroll', words: 'quest board quests cork put on a page' },
+  { label: 'Trackers', href: '/campaigns/camp-1/extensions#trackers', icon: 'fa-gauge', words: 'tracker clock clocks counter steps put on a page' },
+  { label: 'Trash', href: '/campaigns/camp-1/trash', icon: 'fa-trash-can', words: 'delete deleted restore undo bin' },
 ];
 
 test('a command is found by its words as well as its label', () => {
@@ -169,6 +172,10 @@ test('a command is found by its words as well as its label', () => {
     ['remove', 'Go to Archive or delete'],
     ['join', 'Go to Invite someone'],
     ['manage', 'Go to Campaign settings'],
+    ['quest board', 'Go to Quest board'],
+    ['tracker', 'Go to Trackers'],
+    ['clock', 'Go to Trackers'],
+    ['restore', 'Go to Trash'],
   ];
   for (const [typed, expect] of cases) {
     const { type } = boot('/campaigns/camp-1/dashboard', OWNER_ROWS);
@@ -207,6 +214,8 @@ test('everyday words find the account, the theme, the table and the screen', () 
     ['dice', 'The table'],
     ['screen', 'GM Screen'],
     ['homebrew', 'GM Screen'],
+    ['encounter', 'GM Screen'],
+    ['fight', 'GM Screen'],
   ];
   for (const [typed, expect] of cases) {
     const { type } = boot('/campaigns/camp-1/dashboard', PLAYER_ROWS, CONTROLS);

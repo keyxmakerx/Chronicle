@@ -7032,6 +7032,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "checkup", Scripts: []string{"/static/js/widgets/checkup.js"}},
 	{Name: "player-view", Scripts: []string{"/static/js/widgets/player_view.js"}},
 	{Name: "topbar-tools", Scripts: []string{"/static/js/widgets/topbar_tools.js"}},
+	{Name: "put-on-page", Scripts: []string{"/static/js/widgets/put_on_page.js"}},
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
