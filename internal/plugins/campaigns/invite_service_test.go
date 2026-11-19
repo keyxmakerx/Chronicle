@@ -546,3 +546,7 @@ func TestCreateInvite_RejectsUnsafeAddresses(t *testing.T) {
 		}
 	}
 }
+
+func (m *mockCampaignRepoForInvites) ListOwnedMembershipIDs(context.Context, string) ([]string, error) {
+	return nil, nil
+}

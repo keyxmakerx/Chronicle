@@ -161,7 +161,7 @@ func TestLastTimeBlock(t *testing.T) {
 	call := func(h *Handler, role campaigns.Role, preview bool) string {
 		c, rec := recapCtx(role, false, http.MethodGet, "")
 		if preview {
-			c.Request().AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+			c.Request().AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "camp-1"})
 		}
 		if err := h.LastTimeBlock(c); err != nil {
 			t.Fatalf("LastTimeBlock: %v", err)

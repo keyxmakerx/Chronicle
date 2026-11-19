@@ -302,11 +302,39 @@ func (h *Handler) Index(c *echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
+	leave := h.leaveView(c.Request().Context(), userID, campaigns)
 
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, CampaignListContent(campaigns, total, opts, csrfToken))
+		return middleware.Render(c, http.StatusOK, CampaignListContent(campaigns, total, opts, csrfToken, leave))
 	}
-	return middleware.Render(c, http.StatusOK, CampaignIndexPage(campaigns, total, opts, csrfToken))
+	return middleware.Render(c, http.StatusOK, CampaignIndexPage(campaigns, total, opts, csrfToken, leave))
+}
+
+// leaveView works out each card's menu: Hand over for campaigns the person
+// owns, Leave for the rest, with the characters that would be freed. A failed
+// lookup degrades to no owned set and no character line, never to a failed
+// page; the service refuses an owner who tries to leave anyway.
+func (h *Handler) leaveView(ctx context.Context, userID string, list []Campaign) LeaveView {
+	v := LeaveView{Owned: map[string]bool{}, Characters: map[string][]string{}}
+	if owned, err := h.service.OwnedMemberships(ctx, userID); err == nil {
+		for _, id := range owned {
+			v.Owned[id] = true
+		}
+	} else {
+		slog.Warn("campaign list: owned campaigns unavailable", slog.Any("error", err))
+	}
+	var ids []string
+	for i := range list {
+		if !v.Owned[list[i].ID] {
+			ids = append(ids, list[i].ID)
+		}
+	}
+	if chars, err := h.service.ClaimedCharacters(ctx, userID, ids); err == nil {
+		v.Characters = chars
+	} else {
+		slog.Warn("campaign list: claimed characters unavailable", slog.Any("error", err))
+	}
+	return v
 }
 
 // Picker returns an HTMX fragment listing the user's campaigns for the
@@ -1250,6 +1278,31 @@ func (h *Handler) RemoveMember(c *echo.Context) error {
 		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, v))
 	}
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/members")
+}
+
+// LeaveCampaign is a member leaving by their own choice
+// (POST /campaigns/:id/leave). It always acts on the signed-in person, never
+// on a user id from the request, so nobody can make someone else leave.
+func (h *Handler) LeaveCampaign(c *echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	// A guest's account exists only for this campaign and ends when they
+	// leave it, which would sign everything they wrote "Former member". The
+	// DM ends a guest's access instead.
+	if sess := auth.GetSession(c); sess != nil && sess.GuestCampaignID != "" {
+		return apperror.NewForbidden("guests can't leave a campaign. Ask the DM to end your access")
+	}
+	userID := auth.GetUserID(c)
+	if err := h.service.LeaveCampaign(c.Request().Context(), cc.Campaign.ID, userID); err != nil {
+		return err
+	}
+	h.logAudit(c, cc.Campaign.ID, "member.left", map[string]any{
+		"target_user_id": userID,
+		"by":             "self",
+	})
+	return c.JSON(http.StatusOK, map[string]any{"left": true, "campaignName": cc.Campaign.Name})
 }
 
 // AllowMemberBack lets a removed person use the join link again

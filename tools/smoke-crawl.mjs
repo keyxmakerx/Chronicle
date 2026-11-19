@@ -117,6 +117,11 @@ async function visit(u) {
   const res = await page.goto(u, { waitUntil: 'networkidle', timeout: 20000 })
     .catch((e) => { problems.push(`${at}: did not load: ${e.message.split('\n')[0]}`); return null; });
   await page.waitForTimeout(250);
+  // templ prints this comment in place of an on* attribute it refused to
+  // write from a plain string, which leaves the control dead.
+  if (res && (await page.content()).includes('failed sanitization')) {
+    problems.push(`${at}: a control carries an attribute templ refused to print (failed sanitization)`);
+  }
   return res;
 }
 

@@ -9,6 +9,16 @@ package updatehealth
 // removed. internal/wire checks that every route here is a real route.
 var Changed = []Feature{
 	{
+		ID:   "page-menu-2026-11",
+		Name: "The page's three-dots menu",
+		Routes: []string{
+			"POST /campaigns/:id/entities/:eid/clone",
+			"GET /campaigns/:id/entities/:eid/history",
+			"DELETE /campaigns/:id/entities/:eid",
+		},
+		Try: "/campaigns",
+	},
+	{
 		ID:     "crafting-2026-11",
 		Name:   "Crafting",
 		Routes: []string{"/campaigns/:id/crafting*"},
@@ -25,5 +35,26 @@ var Changed = []Feature{
 		Name:   "Site admin's AI helper",
 		Routes: []string{"/admin/diagnostics/workspace*"},
 		Try:    "/admin/diagnostics/workspace",
+	},
+	{
+		ID:     "leave-campaign-2026-11",
+		Name:   "Leaving a campaign",
+		Routes: []string{"POST /campaigns/:id/leave"},
+		Try:    "/campaigns",
+	},
+	{
+		ID:   "put-on-a-page-2026-11",
+		Name: "Put on a page, from Game & features",
+		Routes: []string{
+			"GET /campaigns/:id/entity-types/placement",
+			"POST /campaigns/:id/entity-types/:etid/layout/blocks",
+		},
+		Try: "/campaigns",
+	},
+	{
+		ID:     "dm-screen-fights-phone-2026-11",
+		Name:   "The DM Screen's Fight card and phone lines",
+		Routes: []string{"GET /campaigns/:id/dm-screen", "GET /campaigns/:id/encounter-run", "GET /campaigns/:id/dm-screen/adventures/pages"},
+		Try:    "/campaigns",
 	},
 }

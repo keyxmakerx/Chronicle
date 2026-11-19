@@ -60,9 +60,8 @@
     this.selectedIndex = 0;
     this.filteredItems = COMMANDS.slice();
 
-    this.el.style.left = coords.left + 'px';
-    this.el.style.top = coords.bottom + 4 + 'px';
     this.el.style.display = 'block';
+    this._at = coords;
     this._render();
 
     var self = this;
@@ -225,6 +224,7 @@
     }
 
     this.el.innerHTML = html;
+    this.place();
 
     // Bind click/hover events.
     var self = this;
@@ -243,6 +243,12 @@
         });
       })(j);
     }
+  };
+
+  /** Keep the menu beside the caret and inside the window. */
+  SlashPopup.prototype.place = function (coords) {
+    if (coords) this._at = coords;
+    if (this.el && this._at) Chronicle.placeAtCaret(this.el, this._at);
   };
 
   SlashPopup.prototype._updateSelection = function () {
@@ -402,10 +408,7 @@
 
           // Update popup position.
           var updatedCoords = getCursorCoords(editor.view, from);
-          if (popup.el) {
-            popup.el.style.left = updatedCoords.left + 'px';
-            popup.el.style.top = updatedCoords.bottom + 4 + 'px';
-          }
+          popup.place(updatedCoords);
 
           popup.updateQuery(query);
         } else if (slashActive) {

@@ -632,6 +632,20 @@ func (a *dmAdventuresAdapter) Search(ctx context.Context, campaignID, query stri
 	return pages, true, nil
 }
 
+func (a *dmAdventuresAdapter) CategoryID(ctx context.Context, campaignID string) (int, error) {
+	types, err := a.adventureTypes(ctx, campaignID)
+	if err != nil {
+		return 0, err
+	}
+	id := 0
+	for k := range types {
+		if id == 0 || k < id {
+			id = k
+		}
+	}
+	return id, nil
+}
+
 // adventurePage shapes an Adventures entity for the tab: the sessions and
 // status fields make the subtitle, whichever of them the DM filled in.
 func adventurePage(e *entities.Entity) dmscreen.AdventurePage {

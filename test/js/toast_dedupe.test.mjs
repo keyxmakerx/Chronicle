@@ -103,6 +103,7 @@ function boot({ reducedMotion = false } = {}) {
     body: bodyEl,
     head: headEl,
     createElement: (tag) => makeElement(tag),
+    createTextNode: (text) => { const n = makeElement('#text'); n.textContent = text; return n; },
     getElementById: () => null,
     querySelector: () => null,
     addEventListener: (ev, fn) => { (docHandlers[ev] = docHandlers[ev] || []).push(fn); },
@@ -186,16 +187,16 @@ test('a different message, or a different type, still stacks its own toast', () 
 test('reusing a toast restarts its dismiss timer instead of leaving the old one armed', () => {
   const { Chronicle, container, advance } = boot();
 
-  Chronicle.notify('Kaelen Duskwood saved', 'success'); // t=0, dismiss scheduled for t=4000
+  Chronicle.notify('Kaelen Duskwood saved', 'success'); // t=0, dismiss scheduled for t=3000
   advance(1000); // t=1000
-  Chronicle.notify('Kaelen Duskwood saved', 'success'); // restarts: dismiss now scheduled for t=5000
+  Chronicle.notify('Kaelen Duskwood saved', 'success'); // restarts: dismiss now scheduled for t=4000
 
-  advance(3000); // t=4000 — the ORIGINAL schedule elapses
+  advance(2100); // t=3100 — the ORIGINAL schedule and its fade-out have elapsed
   assert.equal(container().children.length, 1,
     'the toast must survive its original dismiss time once the timer was restarted');
 
-  advance(1000); // t=5000 — the RESTARTED schedule elapses, starting the fade-out
-  advance(300); // the fade-out's own timer actually removes the element
+  advance(900); // t=4000 — the RESTARTED schedule elapses, starting the fade-out
+  advance(200); // the fade-out's own timer actually removes the element
   assert.equal(container().children.length, 0, 'the restarted timer must still dismiss the toast');
 });
 
@@ -231,7 +232,43 @@ test('a repeat that lands while a closed toast fades out gets its own toast', ()
   closeBtn._listeners.click.forEach((fn) => fn());
   Chronicle.notify('Kaelen Duskwood saved', 'success'); // during the fade-out
 
-  advance(300); // the fade-out removes the closed toast
+  advance(200); // the fade-out removes the closed toast
   assert.equal(container().children.length, 1, 'the repeat must still be on screen');
   assert.notEqual(container().children[0], first, 'the repeat must not reuse the toast being closed');
+});
+
+test('a toast leaves after three seconds, and an error stays until it is dismissed', () => {
+  const { Chronicle, container, advance } = boot();
+
+  Chronicle.notify('Saved', 'success');
+  Chronicle.notify('Could not save', 'error');
+  advance(3000);
+  advance(300);
+  assert.equal(container().children.length, 1, 'only the error is left');
+  assert.equal(container().children[0]._attrs.role, 'alert');
+  advance(60000);
+  assert.equal(container().children.length, 1, 'an error never leaves by itself');
+});
+
+test('a toast sits at the bottom of the window', () => {
+  const { Chronicle, container } = boot();
+  Chronicle.notify('Saved', 'success');
+  const css = container().style.cssText;
+  assert.match(css, /bottom: 16px/);
+  assert.doesNotMatch(css, /top:/);
+});
+
+test('undo adds an Undo button that runs the undo and dismisses the toast', () => {
+  const { Chronicle, container, advance } = boot();
+  let undone = 0;
+  Chronicle.notify('Page deleted', 'success', { undo: () => { undone++; } });
+  const toast = container().children[0];
+  const msg = toast.children.find((c) => c.tagName === 'span');
+  const undo = msg.children.find((c) => c.tagName === 'button');
+  assert.ok(undo, 'an Undo button follows the message');
+  assert.equal(undo.textContent, 'Undo');
+  undo._listeners.click.forEach((fn) => fn());
+  assert.equal(undone, 1);
+  advance(200);
+  assert.equal(container().children.length, 0, 'the toast is gone once it is undone');
 });

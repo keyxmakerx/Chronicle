@@ -157,12 +157,12 @@ func pluralWord(n int, one, many string) string {
 // packageTypeBadge renders a type indicator badge.
 templ packageTypeBadge(t PackageType) {
 	if t == PackageTypeFoundryModule {
-		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-500/10 text-purple-600">
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400">
 			<i class="fa-solid fa-cube mr-1"></i>
 			Foundry module
 		</span>
 	} else {
-		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-600">
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400">
 			<i class="fa-solid fa-dice-d20 mr-1"></i>
 			Game system
 		</span>
@@ -174,7 +174,7 @@ templ packageTypeBadge(t PackageType) {
 templ statusBadge(status PackageStatus) {
 	switch status {
 		case StatusPending:
-			<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/10 text-yellow-600">
+			<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
 				<i class="fa-solid fa-clock mr-1"></i>
 				Pending
 			</span>
@@ -184,7 +184,7 @@ templ statusBadge(status PackageStatus) {
 				Approved
 			</span>
 		case StatusRejected:
-			<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-600">
+			<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-600 dark:text-red-400">
 				<i class="fa-solid fa-xmark mr-1"></i>
 				Rejected
 			</span>

@@ -110,7 +110,7 @@
 @media (min-width: 768px) and (max-width: 1023.98px) and (pointer: coarse) {
   #sidebar {
     position: fixed;
-    z-index: 40;
+    z-index: var(--z-drawer);
     visibility: visible;
     transform: translateX(-100%);
     transition: transform var(--dur-large, 280ms) ease-out;

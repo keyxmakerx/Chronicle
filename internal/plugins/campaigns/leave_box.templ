@@ -1,0 +1,44 @@
+// leave_box.templ is the small box that asks before a member leaves.
+
+package campaigns
+
+import "fmt"
+
+// leaveBoxID names a campaign's box so its menu entry can find it.
+func leaveBoxID(campaignID string) string { return "leave-box-" + campaignID }
+
+// leaveBox asks before leaving and says, by name, what stays and what is put
+// away. It is hidden until the card's menu opens it through Chronicle.modal.
+// Stay and Leave call in through inline handlers so nothing depends on a
+// script inside a swapped fragment.
+templ leaveBox(campaign *Campaign, characters []string) {
+	<div
+		id={ leaveBoxID(campaign.ID) }
+		class="hidden fixed inset-0 flex items-center justify-center p-4"
+		style="z-index: var(--z-modal); background: var(--surface-overlay);"
+		data-leave-box
+		data-leave-url={ fmt.Sprintf("/campaigns/%s/leave", campaign.ID) }
+		data-campaign-id={ campaign.ID }
+		data-campaign-name={ campaign.Name }
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby={ leaveBoxID(campaign.ID) + "-title" }
+	>
+		<div class="popover-scale-in bg-surface text-fg rounded-xl shadow-elev-dragged p-6 w-full max-w-sm">
+			<h2 id={ leaveBoxID(campaign.ID) + "-title" } class="text-lg font-semibold text-fg text-balance">Leave { campaign.Name }?</h2>
+			<div class="mt-3 space-y-2 text-sm text-fg-secondary">
+				if line := leaveCharacterLine(characters); line != "" {
+					<p>{ line }</p>
+				}
+				<p>Your posts and shared notes stay, with your name on them.</p>
+				<p>Your private notes and journal are put away. They come back if you rejoin.</p>
+				<p>You can come back with an invite or the campaign&#39;s join link.</p>
+			</div>
+			<p class="mt-3 text-sm text-red-600 dark:text-red-400 hidden" role="alert" data-leave-error></p>
+			<div class="mt-5 flex flex-wrap justify-end gap-2">
+				<button type="button" class="btn-secondary" autofocus onclick={ leaveCall("stay") }>Stay</button>
+				<button type="button" class="btn-danger" data-working-label="Leaving…" onclick={ leaveCall("leave") }>Leave { campaign.Name }</button>
+			</div>
+		</div>
+	</div>
+}

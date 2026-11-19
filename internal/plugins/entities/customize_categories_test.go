@@ -422,3 +422,42 @@ func TestApplyCustomizeCategories_Home(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyCustomizeCategories_Fields(t *testing.T) {
+	fields := func(keys ...string) *[]FieldDefinition {
+		out := make([]FieldDefinition, 0, len(keys))
+		for _, k := range keys {
+			out = append(out, FieldDefinition{Key: k, Label: strings.ToUpper(k), Type: "text"})
+		}
+		return &out
+	}
+	tests := []struct {
+		name     string
+		items    map[string]CustomizeCategoryItem
+		wantLog  []string
+		wantCode int
+	}{
+		{"fields alone write the type once", map[string]CustomizeCategoryItem{"1": {Fields: fields("age", "role")}}, []string{"update:1"}, 0},
+		{"no fields at all is a real change", map[string]CustomizeCategoryItem{"1": {Fields: fields()}}, []string{"update:1"}, 0},
+		{"fields and a rename are one write", map[string]CustomizeCategoryItem{"1": {Name: "Place", Fields: fields("age")}}, []string{"update:1"}, 0},
+		{"a repeated name is refused before any write", map[string]CustomizeCategoryItem{"1": {Name: "Place"}, "3": {Fields: fields("age", "age")}}, nil, http.StatusBadRequest},
+		{"a field with no name is refused", map[string]CustomizeCategoryItem{"1": {Fields: &[]FieldDefinition{{Key: "", Label: ""}}}}, nil, http.StatusBadRequest},
+		{"a new category gets its fields once saved", map[string]CustomizeCategoryItem{"new-a": {New: true, Name: "A", NamePlural: "As", Fields: fields("x")}}, nil, http.StatusBadRequest},
+		{"a deleted category cannot carry fields", map[string]CustomizeCategoryItem{"3": {Delete: true, Fields: fields("x")}}, nil, http.StatusBadRequest},
+		{"another campaign's category is not found", map[string]CustomizeCategoryItem{"50": {Fields: fields("x")}}, nil, http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, svc := newCategoryWorld(typ(1, "c1", "Places", nil), typ(3, "c1", "Gods", nil), typ(50, "other", "Secret", nil))
+			_, err := svc.ApplyCustomizeCategories(context.Background(), "c1", patchOf(tt.items))
+			if tt.wantCode != 0 {
+				assertAppError(t, err, tt.wantCode)
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(w.log, tt.wantLog) {
+				t.Errorf("writes = %v, want %v", w.log, tt.wantLog)
+			}
+		})
+	}
+}

@@ -39,6 +39,10 @@ func TestNavCommandsJSON_OwnerPhrases(t *testing.T) {
 		{"Archive or delete this campaign", "/campaigns/c1/settings#danger"},
 		{"People", "/campaigns/c1/members"},
 		{"Trash", "/campaigns/c1/trash"},
+		{"Quest board", "/campaigns/c1/extensions#quest-board"},
+		{"Notice boards", "/campaigns/c1/extensions#notice-boards"},
+		{"Trackers", "/campaigns/c1/extensions#trackers"},
+		{"Tests", "/campaigns/c1/extensions#tests"},
 	}
 	for _, w := range want {
 		c := byLabel(owner, w.label)
@@ -64,7 +68,7 @@ func TestNavCommandsJSON_OwnerPhrases(t *testing.T) {
 	}
 
 	// What a person types finds something: the label or one of the words.
-	for _, typed := range []string{"settings", "guest", "dashboard", "export", "delete", "invite"} {
+	for _, typed := range []string{"settings", "guest", "dashboard", "export", "delete", "invite", "quest board", "notice board", "tracker", "test", "history"} {
 		found := false
 		for _, c := range owner {
 			if strings.Contains(strings.ToLower(c.Label), typed) || strings.Contains(" "+c.Words+" ", " "+typed+" ") {
@@ -126,6 +130,37 @@ func TestCampaignNavManage_Placement(t *testing.T) {
 	} {
 		if got := render(c); strings.TrimSpace(got) != "" {
 			t.Errorf("%s gets a row: %s", name, got)
+		}
+	}
+}
+
+// "delete" and "history" say where those live today: deleted pages wait in the
+// Trash, and the record of changes is the Activity log and What players
+// changed. A page's own Delete and History are on the page, so they are not
+// listed here.
+func TestNavCommandsJSON_DeleteAndHistoryWords(t *testing.T) {
+	var out []navCommand
+	if err := json.Unmarshal([]byte(NavCommandsJSON(navStateCase{role: 3, path: "/campaigns/c1"}.ctx())), &out); err != nil {
+		t.Fatal(err)
+	}
+	finds := func(typed string) map[string]bool {
+		got := map[string]bool{}
+		for _, c := range out {
+			if strings.Contains(strings.ToLower(c.Label), typed) || strings.Contains(" "+c.Words+" ", " "+typed+" ") {
+				got[c.Label] = true
+			}
+		}
+		return got
+	}
+	for typed, labels := range map[string][]string{
+		"delete":  {"Trash", "Archive or delete this campaign"},
+		"history": {"Activity log", "What players changed"},
+	} {
+		got := finds(typed)
+		for _, l := range labels {
+			if !got[l] {
+				t.Errorf("typing %q should find %q, found %v", typed, l, got)
+			}
 		}
 	}
 }

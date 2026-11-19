@@ -60,6 +60,13 @@ type CampaignService interface {
 	// Membership
 	GetMember(ctx context.Context, campaignID, userID string) (*CampaignMember, error)
 	RemoveMember(ctx context.Context, campaignID, userID string) error
+	// LeaveCampaign ends the user's own membership: not a removal, so the
+	// join link still works for them. The owner must hand over instead.
+	LeaveCampaign(ctx context.Context, campaignID, userID string) error
+	// OwnedMemberships lists the campaigns the user owns now.
+	OwnedMemberships(ctx context.Context, userID string) ([]string, error)
+	// ClaimedCharacters names the characters the user holds, by campaign.
+	ClaimedCharacters(ctx context.Context, userID string, campaignIDs []string) (map[string][]string, error)
 	// ListRemovedMembers returns the people the owner removed who have not
 	// come back; AllowRemovedMemberBack lets one use the join link again.
 	ListRemovedMembers(ctx context.Context, campaignID string) ([]MemberUser, error)
@@ -292,6 +299,9 @@ type campaignService struct {
 	// visits answers whether a non-member holds a look-around pass. Nil
 	// means no one is let in that way.
 	visits VisitPasses
+	// characters and leaveNotifier serve LeaveCampaign; nil skips that step.
+	characters    CharacterReleaser
+	leaveNotifier LeaveNotifier
 }
 
 // VisitPasses is the guest-code side of look-around passes, as the access
@@ -522,12 +532,12 @@ func (s *campaignService) UpdateNavPins(ctx context.Context, cc *CampaignContext
 		return nil, apperror.NewForbidden("only members of this campaign can pin rows")
 	}
 	if cc.MemberRole >= RoleOwner {
-		// The owner pins rows for everyone in the sidebar editor; for
+		// The owner pins rows for everyone with Edit the sidebar; for
 		// themselves they may pin only Manage tools, which the editor's
 		// layout does not hold. Anything else is still refused.
 		for _, key := range pins {
 			if !strings.HasPrefix(key, navManagePrefix) {
-				return nil, apperror.NewForbidden("the owner pins rows for everyone in the sidebar editor; only Manage tools can be pinned for yourself")
+				return nil, apperror.NewForbidden("the owner pins rows for everyone with Edit the sidebar; only Manage tools can be pinned for yourself")
 			}
 		}
 		clean, err := CleanOwnerNavPins(pins)

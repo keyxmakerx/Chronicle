@@ -23,7 +23,7 @@ func NewHandler(svc Service) *Handler {
 }
 
 func viewerOf(c *echo.Context, cc *campaigns.CampaignContext) Viewer {
-	return Viewer{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
+	return Viewer{UserID: auth.GetUserID(c), Role: cc.VisibilityRole(), Layouts: cc.MemberRole >= campaigns.RoleOwner}
 }
 
 // Show handles GET /campaigns/:id/dm-screen and returns the panel fragment

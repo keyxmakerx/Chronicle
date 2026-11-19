@@ -28,6 +28,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/maintenance"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/observability"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
@@ -468,6 +469,10 @@ func (a *App) errorHandler(c *echo.Context, err error) {
 		return
 	}
 
+	if id, name, ok := campaigns.MemberHome(c); ok {
+		_ = middleware.Render(c, code, pages.ErrorPageIn(code, message, id, name))
+		return
+	}
 	_ = middleware.Render(c, code, pages.ErrorPage(code, message))
 }
 

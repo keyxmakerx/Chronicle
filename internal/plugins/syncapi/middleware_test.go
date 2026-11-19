@@ -322,7 +322,7 @@ func TestRequireAuthOrAPIKey_GuestPreview(t *testing.T) {
 			req := httptest.NewRequest(tt.method, "/api/v1/campaigns/camp-1/entities", nil)
 			req.AddCookie(&http.Cookie{Name: "chronicle_session", Value: "any-valid-token"})
 			if tt.cookie {
-				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_guest", Value: "1"})
+				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_guest", Value: "camp-1"})
 			}
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, req)

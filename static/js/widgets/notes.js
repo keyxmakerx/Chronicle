@@ -253,6 +253,27 @@ Chronicle.register('notes', {
       document.body.style.userSelect = 'none';
     }
 
+    // On a phone the sheet's title bar takes a swipe: down folds it to the
+    // bar, up opens it again. A tap still reaches the buttons.
+    header.addEventListener('pointerdown', function (e) {
+      if (embedded || isDesk() || e.pointerType === 'mouse' || e.target.closest('button, input, .notes-settings-popover')) return;
+      var y0 = e.clientY;
+      function end(ev) {
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        var dy = ev.clientY - y0;
+        if (ev.type !== 'pointerup' || Math.abs(dy) < 24) return;
+        var fold = dy > 0;
+        if (!!place.folded === fold) return;
+        place.folded = fold;
+        place.dock = null;
+        applyPlace();
+        savePlace();
+      }
+      document.addEventListener('pointerup', end);
+      document.addEventListener('pointercancel', end);
+    });
+
     resizeHandle.addEventListener('pointerdown', function (e) {
       if (!isDesk() || e.button !== 0) return;
       e.preventDefault();

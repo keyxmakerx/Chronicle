@@ -29,15 +29,16 @@ const (
 )
 
 // ViewingAsPlayer reports whether the owner or a co-DM has "view as player"
-// on. Handlers read it themselves because the layout context that also
-// carries it is only filled in when a page renders. Display only: never use
-// it to grant.
+// on in this campaign. The cookie is site-wide but its value is the id of the
+// campaign it was turned on for, so a preview started in one campaign is not
+// honoured in another. Handlers read it themselves because the layout context
+// that also carries it is only filled in when a page renders. Display only:
+// never use it to grant.
 func ViewingAsPlayer(c *echo.Context, cc *CampaignContext) bool {
-	if cc == nil || !cc.CanAuthorDmOnly() {
+	if cc == nil || !cc.CanAuthorDmOnly() || cc.Campaign == nil {
 		return false
 	}
-	cookie, err := c.Cookie(viewAsPlayerCookie)
-	return err == nil && cookie.Value == "1"
+	return previewCookieFor(c, viewAsPlayerCookie, cc.Campaign.ID)
 }
 
 // ViewingAsGuest reports whether the REAL owner or co-DM has the guest cookie
@@ -46,7 +47,7 @@ func ViewingAsPlayer(c *echo.Context, cc *CampaignContext) bool {
 // is not the DM team any more, so it answers false; read cc.Preview for that.
 // Display only: never use it to grant.
 func ViewingAsGuest(c *echo.Context, cc *CampaignContext) bool {
-	return cc != nil && cc.CanAuthorDmOnly() && guestCookieOn(c)
+	return cc != nil && cc.CanAuthorDmOnly() && cc.Campaign != nil && previewCookieFor(c, viewAsGuestCookie, cc.Campaign.ID)
 }
 
 // homeGuestsNoteParam and homeGuestsNoteValue are the query that asks a
@@ -68,9 +69,11 @@ func GuestsNoteAsked(c *echo.Context, cc *CampaignContext) bool {
 		!ViewingAsPlayer(c, cc)
 }
 
-func guestCookieOn(c *echo.Context) bool {
-	cookie, err := c.Cookie(viewAsGuestCookie)
-	return err == nil && cookie.Value == "1"
+// previewCookieFor reports whether the named preview cookie was turned on for
+// this campaign.
+func previewCookieFor(c *echo.Context, name, campaignID string) bool {
+	cookie, err := c.Cookie(name)
+	return err == nil && campaignID != "" && cookie.Value == campaignID
 }
 
 // isReadMethod reports whether the guest downgrade applies: only requests that
@@ -88,14 +91,18 @@ func guestPreviewActive(c *echo.Context, real *CampaignContext) bool {
 	return real.IsMember && real.CanAuthorDmOnly() &&
 		isReadMethod(c.Request().Method) &&
 		real.Campaign.IsPublic &&
-		guestCookieOn(c)
+		previewCookieFor(c, viewAsGuestCookie, real.Campaign.ID)
 }
 
 // GuestPreviewAsked is the cheap first test for a door that does not run
-// AllowPublicCampaignAccess: a read carrying the guest cookie. Whether it has
-// any effect is GuestPreviewLowers' answer.
+// AllowPublicCampaignAccess: a read carrying a guest cookie. Whether it has
+// any effect, and for which campaign, is GuestPreviewLowers' answer.
 func GuestPreviewAsked(c *echo.Context) bool {
-	return isReadMethod(c.Request().Method) && guestCookieOn(c)
+	if !isReadMethod(c.Request().Method) {
+		return false
+	}
+	_, err := c.Cookie(viewAsGuestCookie)
+	return err == nil
 }
 
 // GuestPreviewLowers reports whether the guest preview lowers this member's
@@ -136,15 +143,17 @@ func refuseDuringGuestPreview(c *echo.Context, real *CampaignContext) (handled b
 
 // writePreviewCookie turns one preview cookie on or off. A session cookie, so
 // closing the browser ends the preview and an owner never comes back days
-// later to a campaign that looks like it lost its edit buttons. Clearing is
-// only sent when the request carries the cookie.
-func writePreviewCookie(c *echo.Context, name string, on, httpOnly bool) {
+// later to a campaign that looks like it lost its edit buttons. The value is
+// the campaign's id. Clearing is only sent when the request carries the
+// cookie for this campaign, so turning it off here leaves another campaign's
+// preview alone.
+func writePreviewCookie(c *echo.Context, name, campaignID string, on, httpOnly bool) {
 	req := c.Request()
 	secure := req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https"
 	if on {
 		c.SetCookie(&http.Cookie{
 			Name:     name,
-			Value:    "1",
+			Value:    campaignID,
 			Path:     "/",
 			HttpOnly: httpOnly,
 			Secure:   secure,
@@ -152,7 +161,7 @@ func writePreviewCookie(c *echo.Context, name string, on, httpOnly bool) {
 		})
 		return
 	}
-	if _, err := c.Cookie(name); err != nil {
+	if ck, err := c.Cookie(name); err != nil || ck.Value != campaignID {
 		return
 	}
 	c.SetCookie(&http.Cookie{
@@ -168,10 +177,10 @@ func writePreviewCookie(c *echo.Context, name string, on, httpOnly bool) {
 
 // setPreview puts the request's cookies in the state "as" names. One preview
 // at a time: entering one clears the other.
-func setPreview(c *echo.Context, as string) {
+func setPreview(c *echo.Context, campaignID, as string) {
 	// The player cookie keeps its long-standing shape (readable by script).
-	writePreviewCookie(c, viewAsPlayerCookie, as == PreviewPlayer, false)
-	writePreviewCookie(c, viewAsGuestCookie, as == PreviewGuest, true)
+	writePreviewCookie(c, viewAsPlayerCookie, campaignID, as == PreviewPlayer, false)
+	writePreviewCookie(c, viewAsGuestCookie, campaignID, as == PreviewGuest, true)
 }
 
 // anyPreviewOn reports whether the eye would show as on for this DM-team
@@ -191,9 +200,9 @@ func (h *Handler) ToggleViewAsPlayer(c *echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 	if anyPreviewOn(c, cc) {
-		setPreview(c, "")
+		setPreview(c, cc.Campaign.ID, "")
 	} else {
-		setPreview(c, PreviewPlayer)
+		setPreview(c, cc.Campaign.ID, PreviewPlayer)
 	}
 	return previewRefresh(c, cc)
 }
@@ -253,13 +262,13 @@ func (h *Handler) ViewAs(c *echo.Context) error {
 
 	switch {
 	case req.As == "self":
-		setPreview(c, "")
+		setPreview(c, cc.Campaign.ID, "")
 	case req.As == PreviewGuest && !cc.Campaign.IsPublic:
 		// Nothing to switch on: Home says why, once, and no cookie is left.
-		setPreview(c, "")
+		setPreview(c, cc.Campaign.ID, "")
 		return middleware.HTMXRedirect(c, base+"?"+homeGuestsNoteParam+"="+homeGuestsNoteValue)
 	default:
-		setPreview(c, req.As)
+		setPreview(c, cc.Campaign.ID, req.As)
 	}
 	if to != "" {
 		return middleware.HTMXRedirect(c, to)

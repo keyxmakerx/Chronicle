@@ -21,16 +21,16 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
-// sanitizeRedirect returns raw only if it is a safe same-site path. Anything
+// SameSitePath returns raw only if it is a safe same-site path. Anything
 // else becomes "" so the caller falls back to a default. Control characters
 // and backslashes are rejected outright because browsers strip tabs and
 // newlines and treat "\" as "/", turning "/\t/evil.example" into the
-// protocol-relative "//evil.example".
-func sanitizeRedirect(raw string) string {
-	if raw == "" || !strings.HasPrefix(raw, "/") {
-		return ""
-	}
-	if strings.HasPrefix(raw, "//") {
+// protocol-relative "//evil.example". Other plugins use it for the "return
+// here" fields of their own forms.
+func SameSitePath(raw string) string {
+	// One leading "/", and never "/" or "\" after it: either makes the
+	// browser read what follows as another host.
+	if len(raw) == 0 || raw[0] != '/' || (len(raw) > 1 && (raw[1] == '/' || raw[1] == '\\')) {
 		return ""
 	}
 	for i := 0; i < len(raw); i++ {
@@ -42,10 +42,19 @@ func sanitizeRedirect(raw string) string {
 	if err != nil || u.Scheme != "" || u.Host != "" {
 		return ""
 	}
-	// The join page with no code in hand is not somewhere to come back to:
-	// someone who signs in from the code tab means to sign in, and landing
-	// on "Join a campaign" afterwards reads as a code being demanded.
-	if u.Path == joinHref && u.Query().Get("code") == "" {
+	return raw
+}
+
+// sanitizeRedirect is SameSitePath for the login redirect, which also refuses
+// the join page with no code in hand: it is not somewhere to come back to,
+// since someone who signs in from the code tab means to sign in, and landing
+// on "Join a campaign" afterwards reads as a code being demanded.
+func sanitizeRedirect(raw string) string {
+	raw = SameSitePath(raw)
+	if raw == "" {
+		return ""
+	}
+	if u, err := url.Parse(raw); err == nil && u.Path == joinHref && u.Query().Get("code") == "" {
 		return ""
 	}
 	return raw

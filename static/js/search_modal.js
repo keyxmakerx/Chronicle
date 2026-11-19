@@ -61,7 +61,7 @@
 
     // Modal container.
     var modal = document.createElement('div');
-    modal.className = 'w-full max-w-lg bg-surface border border-edge rounded-lg shadow-2xl overflow-hidden';
+    modal.className = 'w-full max-w-lg bg-surface border border-edge rounded-lg shadow-elev-dragged overflow-hidden';
     modal.addEventListener('click', function (e) {
       e.stopPropagation();
     });

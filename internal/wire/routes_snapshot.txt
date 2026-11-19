@@ -918,9 +918,11 @@ POST	/campaigns/:id/entity-types/:etid/home-preview	session	plugins/entities.(*H
 GET	/campaigns/:id/entity-types/:etid/layout	session	plugins/entities.(*Handler).GetEntityTypeLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/entity-types/:etid/layout	session	plugins/entities.(*Handler).UpdateEntityTypeLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/entity-types/:etid/layout-preview	session	plugins/entities.(*Handler).LayoutPreview	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
+POST	/campaigns/:id/entity-types/:etid/layout/blocks	session	plugins/entities.(*Handler).AppendLayoutBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/entity-types/:etid/reorder	session	plugins/entities.(*Handler).ReorderEntityTypeAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/entity-types/:etid/template	session	plugins/entities.(*Handler).TemplateEditor	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/entity-types/block-types	session	plugins/entities.(*Handler).BlockTypesAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
+GET	/campaigns/:id/entity-types/placement	session	plugins/entities.(*Handler).BlockPlacementAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/event-tier-definitions	session	plugins/campaigns.(*Handler).GetEventTierDefinitionsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/event-tier-definitions	session	plugins/campaigns.(*Handler).UpdateEventTierDefinitionsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/export	session	plugins/campaigns.(*ExportHandler).ExportCampaign	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
@@ -1023,6 +1025,7 @@ POST	/campaigns/:id/layout-presets	session	plugins/entities.(*LayoutPresetHandle
 DELETE	/campaigns/:id/layout-presets/:pid	session	plugins/entities.(*LayoutPresetHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/layout-presets/:pid	session	plugins/entities.(*LayoutPresetHandler).GetAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/layout-presets/:pid	session	plugins/entities.(*LayoutPresetHandler).UpdateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/leave	session	plugins/campaigns.(*Handler).LeaveCampaign	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/maps	public-capable	plugins/maps.(*Handler).Index	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/maps	session	plugins/maps.(*Handler).CreateMapAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/maps/:mid	session	plugins/maps.(*Handler).DeleteMapAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
@@ -1242,6 +1245,7 @@ GET	/campaigns/:id/systems/:mod/book/files/:name	session	systems.(*SystemHandler
 GET	/campaigns/:id/systems/:mod/book/find	session	systems.(*SystemHandler).BookFindAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/index/:cat	session	systems.(*SystemHandler).BookIndexAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/source	session	systems.(*SystemHandler).BookSourceAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/browse	session	systems.(*SystemHandler).Browse	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/data/:file	session	systems.(*SystemHandler).SystemDataAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/rules-glossary	session	systems.(*SystemHandler).RulesGlossaryAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/search	session	systems.(*SystemHandler).SearchAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon

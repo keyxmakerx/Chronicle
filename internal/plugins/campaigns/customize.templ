@@ -89,7 +89,7 @@ templ customizeCategoriesArea(cc *CampaignContext, state, key, tab string) {
 
 // customizeCategoryWorkspace is one category: its header and tabs, drawn by
 // customize_categories.js, then the open tab. Settings is drawn by the same
-// script; the other tabs are today's editors until their rebuilds land.
+// script; the other tabs are editors that write into the same draft.
 templ customizeCategoryWorkspace(cc *CampaignContext, state, key, tab string, etID int) {
 	<div data-widget="customize-categories" data-state={ state } data-campaign-id={ cc.Campaign.ID }>
 		<div class="czs-ws-head" data-czs-ws-head></div>
@@ -100,13 +100,15 @@ templ customizeCategoryWorkspace(cc *CampaignContext, state, key, tab string, et
 	</div>
 	if tab == "text" {
 		<div class="czs-legacy">
-			@customizeSavesAlone()
-			<div class="max-w-3xl">
-				@contentTemplatesTab(cc)
-			</div>
+			<div
+				class="max-w-3xl"
+				data-widget="customize-templates"
+				data-campaign-id={ cc.Campaign.ID }
+				data-href={ fmt.Sprintf("/campaigns/%s/customize/categories/%s/text", cc.Campaign.ID, key) }
+			></div>
 		</div>
-	} else if (tab == "layout" || tab == "home") && etID > 0 {
-		// The page layout and the category home save through the draft like the rest of Customize.
+	} else if (tab == "layout" || tab == "home" || tab == "fields") && etID > 0 {
+		// The page layout, the category home and the fields save through the draft like the rest of Customize.
 		<div
 			class="czs-ped-host"
 			hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%s/customize-tab/%s", cc.Campaign.ID, strconv.Itoa(etID), tab) }
@@ -114,22 +116,8 @@ templ customizeCategoryWorkspace(cc *CampaignContext, state, key, tab string, et
 			hx-swap="innerHTML"
 		>
 			<div class="czs-legacy space-y-3" aria-busy="true">
-				<div class="h-4 w-1/3 rounded bg-surface-alt"></div>
-				<div class="h-40 rounded bg-surface-alt"></div>
-			</div>
-		</div>
-	} else if tab != "settings" && etID > 0 {
-		<div class="czs-legacy">
-			@customizeSavesAlone()
-			<div
-				hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%s/customize-tab/%s", cc.Campaign.ID, strconv.Itoa(etID), tab) }
-				hx-trigger="load"
-				hx-swap="innerHTML"
-			>
-				<div class="space-y-3" aria-busy="true">
-					<div class="h-4 w-1/3 rounded bg-surface-alt"></div>
-					<div class="h-40 rounded bg-surface-alt"></div>
-				</div>
+				<div class="skeleton h-4 w-1/3"></div>
+				<div class="skeleton h-40"></div>
 			</div>
 		</div>
 	}
@@ -148,221 +136,5 @@ templ customizeHomePages(cc *CampaignContext, key, hint, state string) {
 	<p class="czs-home-hint">{ hint }</p>
 	<div class="czs-ped-host">
 		<div data-widget="customize-page-editor" data-state={ state }></div>
-	</div>
-}
-
-// contentTemplatesTab renders the content template management interface.
-// Templates are loaded via HTMX from the entities plugin's API.
-templ contentTemplatesTab(cc *CampaignContext) {
-	<div class="space-y-4">
-		<div class="flex items-center justify-between">
-			<div>
-				<h2 class="text-base font-semibold text-fg mb-0.5">Content Templates</h2>
-				<p class="text-xs text-fg-secondary">
-					Pre-fill the page editor when creating new pages. Templates appear in the create form and the page editor's "/" menu.
-				</p>
-			</div>
-		</div>
-
-		// Template list and management (Alpine.js powered).
-		<div
-			x-data={ fmt.Sprintf(`{
-				templates: [],
-				loading: true,
-				editing: null,
-				creating: false,
-				form: { name: '', description: '', icon: 'fa-file-lines', entity_type_id: 0, content_json: '', content_html: '' },
-				async load() {
-					this.loading = true;
-					try {
-						var resp = await Chronicle.apiFetch('/campaigns/%s/content-templates');
-						if (resp.ok) this.templates = await resp.json();
-					} finally { this.loading = false; }
-				},
-				async save() {
-					var url = '/campaigns/%s/content-templates';
-					var method = 'POST';
-					if (this.editing) {
-						url += '/' + this.editing;
-						method = 'PUT';
-					}
-					if (!this.form.content_json) {
-						this.form.content_json = '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Start writing..."}]}]}';
-						this.form.content_html = '<p>Start writing...</p>';
-					}
-					var resp = await Chronicle.apiFetch(url, {
-						method: method,
-						body: this.form
-					});
-					if (resp.ok) {
-						this.editing = null;
-						this.creating = false;
-						this.form = { name: '', description: '', icon: 'fa-file-lines', entity_type_id: 0, content_json: '', content_html: '' };
-						this.load();
-						Chronicle.notify('Template saved.', 'success');
-					} else {
-						Chronicle.notify('Failed to save template.', 'error');
-					}
-				},
-				async remove(id) {
-					if (!confirm('Delete this template?')) return;
-					var resp = await Chronicle.apiFetch('/campaigns/%s/content-templates/' + id, {
-						method: 'DELETE'
-					});
-					if (resp.ok) {
-						this.load();
-						Chronicle.notify('Template deleted.', 'success');
-					}
-				},
-				edit(t) {
-					this.editing = t.id;
-					this.creating = true;
-					this.form = {
-						name: t.name,
-						description: t.description,
-						icon: t.icon,
-						entity_type_id: t.entity_type_id || 0,
-						content_json: t.content_json,
-						content_html: t.content_html
-					};
-				},
-				cancel() {
-					this.editing = null;
-					this.creating = false;
-					this.form = { name: '', description: '', icon: 'fa-file-lines', entity_type_id: 0, content_json: '', content_html: '' };
-				}
-			}`, cc.Campaign.ID, cc.Campaign.ID, cc.Campaign.ID) }
-			x-init="load()"
-		>
-			// Loading state.
-			<div x-show="loading" class="card p-6 text-center">
-				<i class="fa-solid fa-spinner fa-spin text-fg-muted"></i>
-				<span class="text-sm text-fg-muted ml-2">Loading templates...</span>
-			</div>
-
-			// Template list.
-			<div x-show="!loading && !creating" x-cloak>
-				<div class="space-y-2 mb-4">
-					<template x-for="t in templates" x-bind:key="t.id">
-						<div class="card p-4 flex items-center gap-3">
-							<span class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-								<i class="fa-solid text-accent text-sm" x-bind:class="t.icon || 'fa-file-lines'"></i>
-							</span>
-							<div class="flex-1 min-w-0">
-								<div class="font-medium text-sm text-fg truncate" x-text="t.name"></div>
-								<div x-show="t.description" class="text-xs text-fg-secondary truncate" x-text="t.description"></div>
-								<div x-show="t.entity_type_name" class="text-[10px] text-fg-muted mt-0.5">
-									<i class="fa-solid fa-folder-open mr-0.5"></i>
-									<span x-text="t.entity_type_name"></span>
-								</div>
-							</div>
-							<div class="flex items-center gap-1 shrink-0">
-								<template x-if="!t.is_global">
-									<button
-										@click="edit(t)"
-										class="w-7 h-7 flex items-center justify-center rounded text-fg-muted hover:text-accent hover:bg-accent/10 transition-colors"
-										title="Edit"
-									>
-										<i class="fa-solid fa-pen text-xs"></i>
-									</button>
-								</template>
-								<template x-if="!t.is_global">
-									<button
-										@click="remove(t.id)"
-										class="w-7 h-7 flex items-center justify-center rounded text-fg-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-										title="Delete"
-									>
-										<i class="fa-solid fa-trash text-xs"></i>
-									</button>
-								</template>
-								<template x-if="t.is_global">
-									<span class="text-[10px] text-fg-muted bg-surface-alt px-2 py-0.5 rounded-full">Built-in</span>
-								</template>
-							</div>
-						</div>
-					</template>
-				</div>
-
-				<div x-show="templates.length === 0 && !loading" class="card p-6 text-center">
-					<i class="fa-solid fa-file-lines text-2xl text-fg-muted mb-2"></i>
-					<p class="text-sm text-fg-secondary">No content templates yet.</p>
-				</div>
-
-				<button
-					@click="creating = true"
-					class="btn-primary text-sm"
-				>
-					<i class="fa-solid fa-plus"></i> New Template
-				</button>
-			</div>
-
-			// Create / Edit form.
-			<div x-show="creating" x-cloak>
-				<div class="card p-6 space-y-4">
-					<h3 class="text-sm font-semibold text-fg" x-text="editing ? 'Edit Template' : 'New Template'"></h3>
-
-					<div>
-						<label class="block text-sm font-medium text-fg-body mb-1">Name</label>
-						<input
-							type="text"
-							x-model="form.name"
-							class="input w-full"
-							placeholder="e.g., Session Recap, NPC Profile"
-							maxlength="200"
-						/>
-					</div>
-
-					<div>
-						<label class="block text-sm font-medium text-fg-body mb-1">Description (optional)</label>
-						<input
-							type="text"
-							x-model="form.description"
-							class="input w-full"
-							placeholder="Brief description of what this template is for"
-							maxlength="500"
-						/>
-					</div>
-
-					<div>
-						<label class="block text-sm font-medium text-fg-body mb-1">Icon</label>
-						<select x-model="form.icon" class="input w-full">
-							<option value="fa-file-lines">File</option>
-							<option value="fa-scroll">Scroll</option>
-							<option value="fa-user">Person</option>
-							<option value="fa-location-dot">Location</option>
-							<option value="fa-list-check">Checklist</option>
-							<option value="fa-dragon">Dragon</option>
-							<option value="fa-shield-halved">Shield</option>
-							<option value="fa-book">Book</option>
-							<option value="fa-map">Map</option>
-							<option value="fa-crown">Crown</option>
-							<option value="fa-skull">Skull</option>
-							<option value="fa-wand-magic-sparkles">Magic</option>
-						</select>
-					</div>
-
-					<div>
-						<label class="block text-sm font-medium text-fg-body mb-1">Content (TipTap JSON)</label>
-						<textarea
-							x-model="form.content_json"
-							class="input w-full h-32 font-mono text-xs"
-							placeholder='{"type":"doc","content":[...]}'
-						></textarea>
-						<p class="mt-1 text-xs text-fg-secondary">
-							Paste TipTap/ProseMirror document JSON. To get this, create the template content in
-							any entity's editor, then copy the entry JSON from the browser developer tools.
-						</p>
-					</div>
-
-					<div class="flex items-center gap-3">
-						<button @click="save()" class="btn-primary text-sm">
-							<i class="fa-solid fa-check"></i>
-							<span x-text="editing ? 'Update' : 'Create'"></span>
-						</button>
-						<button @click="cancel()" class="btn-secondary text-sm">Cancel</button>
-					</div>
-				</div>
-			</div>
-		</div>
 	</div>
 }

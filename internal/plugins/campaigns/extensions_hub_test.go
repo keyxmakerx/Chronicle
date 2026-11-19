@@ -311,3 +311,37 @@ func TestCurrentSystemID(t *testing.T) {
 		}
 	}
 }
+
+// The owner's Game & features page names the four finished page pieces, each
+// with its one line and a "Put on a page" button the shared chooser handles.
+func TestExtensionsHubPage_ForYourPages(t *testing.T) {
+	cc := &CampaignContext{Campaign: &Campaign{ID: "c-1", Name: "Test"}, MemberRole: RoleOwner}
+	var buf bytes.Buffer
+	if err := ExtensionsHubPage(cc, nil, "csrf", "[]", nil).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, want := range []string{
+		`>For your pages</h2>`,
+		`data-widget="put-on-page"`, `data-campaign-id="c-1"`,
+		"Quest board", "A quest’s page as a cork board: the notice, a map scrap, the reward.",
+		"Notice boards", "Boards in a town or tavern that players flip through.",
+		"Trackers", "Numbers, steps and clocks you tick during play.",
+		"Tests", "Montages and chases, scored as you go.",
+		`data-put-block="quest_board"`, `data-put-block="notice_boards"`,
+		`data-put-block="trackers"`, `data-put-block="page_tests"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+	if n := strings.Count(html, ">Put on a page</button>"); n != 4 {
+		t.Errorf("want 4 Put on a page buttons, got %d", n)
+	}
+	// The palette links to each row by its anchor.
+	for _, id := range []string{`id="quest-board"`, `id="notice-boards"`, `id="trackers"`, `id="tests"`} {
+		if !strings.Contains(html, id) {
+			t.Errorf("page missing anchor %s", id)
+		}
+	}
+}

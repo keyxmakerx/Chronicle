@@ -398,8 +398,8 @@ func TestSiteLookPage_PreviewContract(t *testing.T) {
 		`data-sl-view="signin"`, `data-sl-view="disc"`, `data-sl-view="tabs"`,
 		`data-sl-focus="sl-p-id"`, `data-sl-focus="sl-p-look"`, `data-sl-focus="sl-p-bg"`,
 		`id="sl-p-id"`, `id="sl-p-look"`, `id="sl-p-bg"`,
-		`data-accent="#c2410c" data-from="#1f2937" data-to="#4a1512"`, `data-sl-moving="on"`, `data-sl-look="on"`,
-		`name="move" value="1" checked`, `--sa:#c2410c;--hd1:#1f2937;--hd2:#4a1512`, `sl-bg-look`,
+		`data-accent="#c2410c" data-fill="#c2410c" data-on="#ffffff" data-from="#1f2937" data-to="#4a1512"`, `data-sl-moving="on"`, `data-sl-look="on"`,
+		`name="move" value="1" checked`, `--sa:#c2410c;--sa-fill:#c2410c;--sa-on:#ffffff;--hd1:#1f2937;--hd2:#4a1512`, `sl-bg-look`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page missing %q", want)

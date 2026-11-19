@@ -188,7 +188,7 @@ html.tkm-lock { overflow: hidden; }
   border: 1px solid var(--color-border, #e5e7eb); background: var(--color-card-bg, #fff); color: var(--color-text-body, #374151);
   transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), border-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out);
 }
-.tkm-chip:hover { border-color: var(--color-accent, #6366f1); color: var(--color-accent, #6366f1); }
+.tkm-chip:hover { border-color: var(--color-accent, #6366f1); color: var(--color-accent-link, var(--color-accent, #6366f1)); }
 .tkm-chip:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.15); }
 .tkm-chip[aria-pressed="true"] { border-color: var(--color-accent, #6366f1); background: rgb(var(--color-accent-rgb, 99 102 241) / 0.12); color: var(--color-text-primary, #111827); font-weight: 600; }
 

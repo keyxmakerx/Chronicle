@@ -318,8 +318,11 @@ leaving the list for another page.
   so no feature draws its own tooltip. It opens after the pointer rests
   250 ms and stays while the pointer is on it; keyboard focus opens it and
   Escape closes it, returning focus; one card at a time, kept inside the
-  window. A click on a link still follows it (a long press pins it on
-  touch); a click on a rule word pins the card with a close button.
+  window. A click on a link still follows it; on touch, a long press on a
+  link to a page in a page's text opens the card pinned, and the phone's own
+  link menu stays shut on that link. The card offers Open page, Read it below
+  (the page peek), Open in new tab and Copy link. A click on a rule word pins
+  the card with a close button.
 - **The hover card's look is the owner's choice** (Customize › Hover cards:
   Paper, Plain, Night, Compact; Paper by default). Paper stays paper in dark
   mode, and its tokens and classes (`static/css/paper.css`) are the shared
@@ -696,8 +699,9 @@ The same screens, folded to the width; never a second design.
 - **A banner takes one row on a phone**: its sentence wraps beside its
   button.
 - **A name in a page's written text opens in the same tab**, on every
-  screen, and Back returns. Ctrl-click, a middle click or a long press still
-  open a new tab; links to other websites open in a new one.
+  screen, and Back returns. Ctrl-click and a middle click open a new tab; a
+  long press opens the page's card, which offers a new tab; links to other
+  websites open in a new one and keep the phone's own long-press menu.
 - **A game night's long name wraps** onto a second line in Home's Coming
   up; it is never cut short.
 - **The top bar folds its tools into one Tools tab below 768 wide.** The bar
@@ -711,8 +715,42 @@ The same screens, folded to the width; never a second design.
   "Back to your view" on every width.
 - **Side panels become bottom sheets on a phone**: the page peek and the
   Table (under **What is on a page** and **Opening and closing**).
+- **A sheet that scrolls keeps the pull to itself**: a fixed sheet's scroll
+  area sets `overscroll-behavior: contain`, so pulling down at its top never
+  reloads the page. A grab line is drawn only where a swipe on it answers.
 - **A workshop previews all three**: Phone, Tablet and Computer (under
   **Editing**).
+
+## Layers
+
+Every surface that stacks over the page takes its z-index from one scale,
+the `--z-*` tokens at the top of `static/css/input.css`. A surface picks the
+band for its kind and never a number of its own. Lowest to highest:
+
+| Token | Value | What sits in it |
+|---|---|---|
+| `--z-raised` | 10 | in-page lift: sticky heads, a block's own overlays |
+| `--z-chrome` | 20 | the top bar at rest |
+| `--z-scrim` | 30 | the dim behind the phone sidebar |
+| `--z-drawer` | 40 | the phone sidebar drawer |
+| `--z-tab` | 49 | the jot tab |
+| `--z-popup` | 50 | hand-built pop-ups and the jot panel |
+| `--z-sheet` | 60 | docked sheets, such as the Table bar |
+| `--z-menu-lift` | 70 | the top bar while one of its menus is open, the peek and AI panels |
+| `--z-modal` | 9999 | hand-built modals that cover everything but toasts |
+| `--z-toast` | 10000 | toasts |
+
+- A native `<dialog>` opened with `showModal` is in the top layer and sits
+  above every band, so a dialog never needs a number.
+- The top bar sits low so full-screen page overlays cover it and a page's own
+  bars stay above it. It lifts to `--z-menu-lift` only while one of its menus
+  is open, and never over the open phone sidebar.
+- The jot tab sits under every pop-up with a backdrop, so a pop-up covers it.
+  A sheet that sits lower than the tab hides it while it is open.
+- A page bar stays below the top bar's lift, so a menu opened from the top
+  bar is never hidden behind it.
+- Layers move onto the tokens as each screen is brought to the Material look;
+  `tools/check-z-index.sh` stops the count of raw values above 10 from growing.
 
 ## Customize goes further
 
@@ -912,6 +950,11 @@ working and off states.
   glitch.
 - **A button's action** shows a spinner in the button with what it's doing
   ("Saving…"), and it can't be pressed twice.
+  A button gets it from `Chronicle.working(button, on)` (`static/js/theme.js`),
+  which an htmx request started by the button, or by the form it submits,
+  calls on its own: the ring shows after 0.3 s (CSS `.btn[data-working]`), the
+  label becomes `data-working-label` when the button has one, and a second
+  press is swallowed. Calm holds the ring still.
 - **A page or panel loading** shows grey placeholder lines in the shape of the
   content after 0.3 seconds, then the content fades in over them. Under Calm
   the placeholders stay still.
@@ -921,6 +964,9 @@ working and off states.
   message at the bottom saying who now sees the change, with Undo.
 - **Bigger actions** (create, publish, invite) get a message at the bottom for
   three seconds, with Undo when it can be undone.
+  `Chronicle.notify(message, type, { undo: fn })` (`static/js/notifications.js`)
+  is that message: bottom of the window, three seconds, an Undo button that
+  runs `fn` and closes it, and an error that stays until dismissed.
 - **Errors stay until dismissed**, sit next to the thing that failed, and say
   how to fix it. Nothing shakes.
 - **Deleting asks first** in a dialog naming exactly what goes, unless it can

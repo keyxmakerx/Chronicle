@@ -95,6 +95,10 @@ func NavCommandsJSON(ctx context.Context) string {
 	add := func(label, href, icon string) {
 		addWords(&out, label, href, icon, "")
 	}
+	// A tool that people look for under another name carries those names.
+	addTool := func(key, label, href, icon string) {
+		addWords(&out, label, href, icon, manageToolWords[key])
+	}
 	base := "/campaigns/" + GetCampaignID(ctx)
 	add("Home", base, "fa-house")
 	for _, sec := range GetNavSections(ctx) {
@@ -113,7 +117,7 @@ func NavCommandsJSON(ctx context.Context) string {
 		if row.Key == "manage:dashboard" || row.Key == "manage:settings" {
 			continue
 		}
-		add(row.Label, row.URL, row.Icon)
+		addTool(row.Key, row.Label, row.URL, row.Icon)
 	}
 	if len(NavManagePages(ctx)) > 0 {
 		for _, c := range ownerCommands(base) {
@@ -136,6 +140,15 @@ func addWords(out *[]navCommand, label, href, icon, words string) {
 	*out = append(*out, navCommand{Label: label, Href: href, Icon: SafeNavIcon(icon, ""), Words: words})
 }
 
+// manageToolWords are other names for the owner's tools. Deleted pages wait in
+// the Trash, and the page-by-page record of what players changed is the nearest
+// thing to a history the owner can open from here; a single page's own History
+// and Delete are on that page.
+var manageToolWords = map[string]string{
+	"manage:trash":          "delete deleted restore undo bin",
+	"manage:player-changes": "history changes undo revert",
+}
+
 // ownerCommands are the owner's own phrases: what people type when they want
 // a campaign setting ("export", "delete", "guest"), each with the words that
 // also find it. base is "/campaigns/<id>". The tab ids and the #danger,
@@ -151,6 +164,11 @@ func ownerCommands(base string) []navCommand {
 		{Label: "Activity log", Href: base + "/settings?tab=activity", Icon: "fa-clock-rotate-left", Words: "activity log history audit"},
 		{Label: "Keys", Href: base + "/settings?tab=api-keys", Icon: "fa-key", Words: "api keys tokens tools"},
 		{Label: "Invite someone", Href: base + "/members", Icon: "fa-user-plus", Words: "invite add player join"},
+		// The finished page pieces are on Game & features, each under its own anchor.
+		{Label: "Quest board", Href: base + "/extensions#quest-board", Icon: "fa-scroll", Words: "quest board quests cork put on a page"},
+		{Label: "Notice boards", Href: base + "/extensions#notice-boards", Icon: "fa-thumbtack", Words: "notice board boards tavern town put on a page"},
+		{Label: "Trackers", Href: base + "/extensions#trackers", Icon: "fa-gauge", Words: "tracker clock clocks counter steps put on a page"},
+		{Label: "Tests", Href: base + "/extensions#tests", Icon: "fa-flag-checkered", Words: "test montage chase put on a page"},
 		{Label: "Archive or delete this campaign", Href: base + "/settings#danger", Icon: "fa-triangle-exclamation", Words: "delete archive remove end"},
 	}
 }

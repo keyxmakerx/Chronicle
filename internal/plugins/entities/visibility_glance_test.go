@@ -53,17 +53,24 @@ func TestEffectiveVisibilityTooltip(t *testing.T) {
 			{TagSlug: "secrets", SubjectLabel: "Lorekeepers"},
 		},
 	}
-	got := effectiveVisibilityTooltip(ev, false)
+	got := effectiveVisibilityTooltip(ev, false, "GM")
 	// The safety contract: the tooltip must NAME the tag + subject that exposed
 	// the entity, never just the base state.
-	for _, want := range []string{"DM-Only", "Also visible to", "Players via ‹revealed-act-1›", "Lorekeepers via ‹secrets›"} {
+	for _, want := range []string{"Only you and your co-GMs can see this page", "Also visible to", "Players via ‹revealed-act-1›", "Lorekeepers via ‹secrets›"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("tooltip missing %q\ngot: %s", want, got)
 		}
 	}
 
+	if strings.Contains(got, "Scribe") {
+		t.Errorf("Scribes see what players see, so the tooltip must not name them: %s", got)
+	}
+	if d := effectiveVisibilityTooltip(&EffectiveVisibility{BaseState: VisStateDMOnly}, false, "Director"); !strings.Contains(d, "co-Directors") {
+		t.Errorf("the campaign's GM term must be used: %q", d)
+	}
+
 	// Not-widened: tooltip is just the base sentence, no "Also visible".
-	base := effectiveVisibilityTooltip(&EffectiveVisibility{BaseState: VisStateDMOnly}, false)
+	base := effectiveVisibilityTooltip(&EffectiveVisibility{BaseState: VisStateDMOnly}, false, "GM")
 	if strings.Contains(base, "Also visible") {
 		t.Errorf("non-widened tooltip must not claim tag exposure: %q", base)
 	}
@@ -130,13 +137,13 @@ func TestEffectiveVisibilityTooltip_VisitorsOnlyWhenCampaignIsPublic(t *testing.
 		return &EffectiveVisibility{BaseState: VisStateEveryone}
 	}
 
-	public := effectiveVisibilityTooltip(everyone(), true)
+	public := effectiveVisibilityTooltip(everyone(), true, "GM")
 	if !strings.Contains(public, "logged-out visitors") {
 		t.Errorf("on a PUBLIC campaign the glance must warn that strangers can read it "+
 			"(C-PERM-ANON-IDENTITY honesty); got %q", public)
 	}
 
-	private := effectiveVisibilityTooltip(everyone(), false)
+	private := effectiveVisibilityTooltip(everyone(), false, "GM")
 	if strings.Contains(private, "logged-out visitors") {
 		t.Errorf("on a PRIVATE campaign no logged-out visitor can read ANY page, so the "+
 			"glance must not claim they can; got %q", private)
@@ -149,7 +156,7 @@ func TestEffectiveVisibilityTooltip_VisitorsOnlyWhenCampaignIsPublic(t *testing.
 	// publicness must not leak into them.
 	for _, state := range []string{VisStateDMOnly, VisStateCustom} {
 		for _, isPublic := range []bool{true, false} {
-			got := effectiveVisibilityTooltip(&EffectiveVisibility{BaseState: state}, isPublic)
+			got := effectiveVisibilityTooltip(&EffectiveVisibility{BaseState: state}, isPublic, "GM")
 			if strings.Contains(got, "logged-out visitors") {
 				t.Errorf("state %q (public=%v) must never mention visitors: %q", state, isPublic, got)
 			}

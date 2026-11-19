@@ -26,6 +26,12 @@
 (function () {
   'use strict';
 
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
+
   var FLIP_MS = 320;
   var BACK_MS = 220;
   var EASE = 'cubic-bezier(.2,.8,.2,1)';
@@ -621,7 +627,7 @@
     o = o || {};
     if (!root) return;
     if (reduced()) {
-      play(root, [{ opacity: 0.35 }, { opacity: 1 }], { duration: 180, easing: 'linear' });
+      play(root, [{ opacity: 0.35 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'linear' });
       return;
     }
     $$(FLIP_SEL, root).forEach(function (node) {
@@ -719,17 +725,17 @@
     if (!reduced()) {
       $$('.nav-hd, .nav-eb', ed).forEach(function (b, i) {
         play(b, [{ opacity: 0, transform: 'translateX(-6px) scale(.9)' }, { opacity: 1, transform: 'none' }],
-          { duration: 240, delay: Math.min(i, 24) * 12, easing: EASE_OUT, fill: 'backwards' });
+          { duration: tokMs('--dur-standard', 200), delay: Math.min(i, 24) * 12, easing: EASE_OUT, fill: 'backwards' });
       });
       // The bar is centred with a transform everywhere but a phone.
       var phone = window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
       var x = phone ? '' : 'translateX(-50%) ';
       play(document.getElementById('nav-ebar'), [{ opacity: 0, transform: x + 'translateY(18px)' }, { opacity: 1, transform: x + 'translateY(0)' }],
-        { duration: 300, easing: EASE_OUT });
+        { duration: tokMs('--dur-large', 280), easing: EASE_OUT });
     } else {
-      play(document.getElementById('nav-ebar'), [{ opacity: 0 }, { opacity: 1 }], { duration: 180 });
+      play(document.getElementById('nav-ebar'), [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200) });
     }
-    play(document.getElementById('nav-pv'), [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 60, fill: 'backwards' });
+    play(document.getElementById('nav-pv'), [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), delay: 60, fill: 'backwards' });
     var wide = window.matchMedia && window.matchMedia('(min-width: 901px)').matches;
     announce('Editing navigation. Drag a handle, or focus it and use the arrow keys.' +
       (wide ? ' Watch the preview on the right.' : '') + ' Save when you are done.');
@@ -751,7 +757,7 @@
     playFlip(sidebarEl(), prev);
     // The ring comes back once the rows have landed.
     var ring = sidebarEl() && sidebarEl().querySelector('.nav-ring');
-    if (ring) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: reduced() ? 0 : 220, fill: 'backwards' });
+    if (ring) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), delay: reduced() ? 0 : 220, fill: 'backwards' });
     var pencil = document.querySelector('[data-sidebar-edit-toggle]');
     if (pencil) pencil.focus({ preventScroll: true });
   }
@@ -1048,7 +1054,7 @@
     var land = function () { row.classList.remove('nav-lifted', 'nav-dragged'); };
     if (reduced() || !from) {
       land();
-      play(row, [{ opacity: 0.35 }, { opacity: 1 }], { duration: 180, easing: 'linear' });
+      play(row, [{ opacity: 0.35 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'linear' });
       return;
     }
     whenDone(play(row, [{ transform: from }, { transform: 'none' }], { duration: BACK_MS, easing: EASE }), land);

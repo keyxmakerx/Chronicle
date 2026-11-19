@@ -211,7 +211,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToken string) {
 	// session_edit.js (loaded on sight) wires Save: a script tag here would be
 	// stripped when the page arrives by a boosted swap.
-	<dialog id="edit-session-modal" data-widget="session-edit" class="rounded-lg shadow-xl bg-surface border border-edge p-0 w-full max-w-md backdrop:bg-black/50">
+	<dialog id="edit-session-modal" data-widget="session-edit" class="rounded-lg shadow-elev-dragged bg-surface border border-edge p-0 w-full max-w-md backdrop:bg-black/50">
 		<div class="p-6">
 			<h2 class="text-lg font-semibold text-fg mb-4">Edit Session</h2>
 			<div class="space-y-4" x-data={ fmt.Sprintf("{ recurring: %t, recType: '%s' }", session.IsRecurring, jsEsc(derefStr(session.RecurrenceType))) }>

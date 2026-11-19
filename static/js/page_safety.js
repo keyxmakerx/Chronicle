@@ -11,6 +11,8 @@
  *    Another kind of thing (a game night) adds &kind=<kind>, on whichever
  *    campaign page its delete lands, and restores through the Trash's
  *    route for that kind.
+ * 3. A page opened at #history (the sidebar's Page history) loads its History
+ *    panel into the slot under the header, as the History button does.
  */
 (function () {
   'use strict';
@@ -82,9 +84,21 @@
     } } });
   }
 
+  function openHistory() {
+    if (window.location.hash !== '#history') return;
+    var slot = document.getElementById('page-history-slot');
+    var m = window.location.pathname.match(/^(\/campaigns\/[^/]+\/entities\/[^/]+)\/?$/);
+    if (!slot || !m || !window.htmx) return;
+    // Seen once: a reload or Back must not reopen what was closed.
+    history.replaceState(history.state, '', window.location.pathname + window.location.search);
+    window.htmx.ajax('GET', m[1] + '/history', { target: slot });
+    slot.scrollIntoView({ block: 'nearest' });
+  }
+
   function init() {
     localizeTimes(document);
     offerUndo();
+    openHistory();
   }
 
   if (document.readyState === 'loading') {
@@ -94,5 +108,6 @@
   }
   document.addEventListener('htmx:afterSwap', function (e) { localizeTimes(e.target); });
   // hx-boost navigation into the page list arrives without a page load.
-  document.addEventListener('htmx:afterSettle', function () { offerUndo(); });
+  document.addEventListener('htmx:afterSettle', function () { offerUndo(); openHistory(); });
+  window.addEventListener('hashchange', openHistory);
 })();

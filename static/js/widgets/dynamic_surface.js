@@ -30,11 +30,7 @@
 
   // durMs resolves a duration token ("200ms" / "0.2s") to a number of ms.
   function durMs(name, fallbackMs) {
-    var raw = cssVar(name, '');
-    if (!raw) return fallbackMs;
-    if (raw.indexOf('ms') !== -1) return parseFloat(raw) || fallbackMs;
-    if (raw.indexOf('s') !== -1) return (parseFloat(raw) || 0) * 1000 || fallbackMs;
-    return parseFloat(raw) || fallbackMs;
+    return window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs(name, fallbackMs) : fallbackMs;
   }
 
   // easeFn resolves an easing token to a CSS timing-function string.

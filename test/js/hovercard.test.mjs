@@ -79,3 +79,32 @@ test('the badge motion is off for reduced motion and Chronicle\'s Calm and Off',
   assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.chc--show \.chc__frame \.chc__pic, \.chc--show \.chc__badge \{ animation: none; \}/);
   assert.match(css, /html:is\(\[data-motion="calm"\], \[data-motion="off"\], \[data-view-motion="calm"\], \[data-cz-reduce\]\) \.chc--show :is\(\.chc__frame \.chc__pic, \.chc__badge\) \{ animation: none; \}/);
 });
+
+test('long press: the browser taking the touch or its own menu ends the press', () => {
+  for (const ev of ['touchend', 'touchcancel', 'contextmenu']) {
+    const noop = () => {};
+    const handlers = {};
+    const timers = new Map();
+    let next = 1;
+    const document = { addEventListener: noop, documentElement: { getAttribute: () => null } };
+    const window = { addEventListener: noop };
+    const sandbox = {
+      window, document,
+      setTimeout: (fn) => { timers.set(next, fn); return next++; },
+      clearTimeout: (id) => timers.delete(id),
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(src, sandbox);
+    const link = { closest: () => link };
+    const root = {
+      contains: () => true,
+      addEventListener: (name, fn) => { handlers[name] = fn; },
+      removeEventListener: noop,
+    };
+    window.Chronicle.hovercard.bind(root, 'a', () => null, {});
+    handlers.touchstart({ target: link });
+    assert.equal(timers.size, 1, `${ev}: the press timer is armed`);
+    handlers[ev]({ target: link });
+    assert.equal(timers.size, 0, `${ev}: the press timer is cleared`);
+  }
+});

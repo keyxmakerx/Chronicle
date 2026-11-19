@@ -89,6 +89,7 @@
     sheet.innerHTML = html;
     sheet.classList.remove('show');
     reader.hidden = false;
+    if (window.Chronicle && Chronicle.modal) Chronicle.modal(sheet, { opener: null, escape: false, focus: false, watch: reader });
     var pp = note.querySelector('.pp, .tg') || note, from = rectOf(pp), to = rectOf(sheet);
     var r = parseFloat(getComputedStyle(note).getPropertyValue('--r')) || 0;
     open = { note: note, r: r, onClose: onClose };

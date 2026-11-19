@@ -3140,6 +3140,7 @@ func (a *App) RegisterRoutes() {
 	entities.RegisterContentTemplateRoutes(e, contentTemplateHandler, campaignService, authService)
 	campaignService.SetContentTemplateSeeder(contentTemplateService)
 	entityHandler.SetContentTemplateService(contentTemplateService)
+	campaignHandler.RegisterCustomizeSection(newTemplatesSection(contentTemplateService))
 
 	// Worldbuilding prompt routes (guided writing prompts for content creators).
 	wbPromptRepo := entities.NewWorldbuildingPromptRepository(a.DB)
@@ -4798,6 +4799,11 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// Leaving a campaign: the leaver's characters go back to "Free to pick" and
+	// the owner gets one bell note.
+	campaigns.ConfigureLeaving(campaignService,
+		&leaveCharacterAdapter{store: entityRepo.(leaveCharacterStore)},
+		&leaveNotifierAdapter{svc: sessionsService})
 	// The campaign's Sync API switch governs outside apps, the notebook too.
 	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
@@ -5224,7 +5230,7 @@ func (a *App) RegisterRoutes() {
 	// it); none + Scribe+ → create-or-pick prompt; none + Player → friendly
 	// empty state.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "map_editor", Label: "Map Editor", Icon: "fa-map-location-dot",
+		Type: "map_editor", Label: "Map", Icon: "fa-map-location-dot",
 		Description: "Framed map preview that opens the full map",
 		Addon:       "maps", Contexts: []string{"template"},
 		// No ConfigFields — the source of truth is entity.MapID. The
@@ -6343,8 +6349,9 @@ func (a *App) RegisterRoutes() {
 		dmSources.Homebrew = &dmHomebrewAdapter{trackers: a.PluginHealth.IsHealthy(trackers.PluginSlug)}
 	}
 	// The Fight tab runs encounters, so it needs their tables.
+	dmFight := &dmFightAdapter{}
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
-		dmSources.Fight = dmFightAdapter{}
+		dmSources.Fight = dmFight
 	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
@@ -6782,6 +6789,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
 		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB), encounterPages, encounterResults)
 		encounterAPI.attach(encounterSvc)
+		dmFight.svc = encounterSvc
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 		runSvc := encounters.NewRunService(encounters.NewRunRepository(a.DB), encounterSvc, encounterPages)
 		// Scenes show things to players: pages they may open, NPCs the
@@ -6992,6 +7000,7 @@ func (a *App) RegisterRoutes() {
 // /static/js/widgets/ rather than in a plugin: each loads on the first page
 // that mounts it (ADR-063). Helpers come first, the registering script last.
 var coreWidgets = []PluginWidget{
+	{Name: "campaign-leave", Scripts: []string{"/static/js/widgets/campaign_leave.js"}},
 	{Name: "invitation-time", Scripts: []string{"/static/js/widgets/invitation_time.js"}},
 	{Name: "calendar_event_roll", Scripts: []string{"/static/js/widgets/calendar_event_roll.js"}},
 	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},
@@ -7001,7 +7010,9 @@ var coreWidgets = []PluginWidget{
 	{Name: "db-explorer", Scripts: []string{"/static/js/widgets/db_explorer.js"}},
 	{Name: "entity-posts", Scripts: []string{"/static/js/widgets/entity_posts.js"}},
 	{Name: "entity-notes", Scripts: []string{"/static/js/widgets/entity_notes.js"}},
-	{Name: "entity_manager", Scripts: []string{"/static/js/widgets/entity_manager.js"}},
+	{Name: "entity_manager", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/entity_manager.js"}},
+	{Name: "tag-picker", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/tag_picker.js"}},
+	{Name: "transaction_log", Scripts: []string{"/static/js/widgets/transaction_log.js"}},
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
 	{Name: "diag-picker", Scripts: []string{"/static/js/widgets/diag_picker.js"}},
@@ -7018,11 +7029,13 @@ var coreWidgets = []PluginWidget{
 	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
 	{Name: "customize-shell", Scripts: []string{"/static/js/find_palette.js", "/static/js/widgets/customize_shell.js"}},
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
+	{Name: "customize-templates", Scripts: []string{"/static/js/widgets/customize_templates.js"}},
 	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/customize_page_editor.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "checkup", Scripts: []string{"/static/js/widgets/checkup.js"}},
 	{Name: "player-view", Scripts: []string{"/static/js/widgets/player_view.js"}},
 	{Name: "topbar-tools", Scripts: []string{"/static/js/widgets/topbar_tools.js"}},
+	{Name: "put-on-page", Scripts: []string{"/static/js/widgets/put_on_page.js"}},
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},

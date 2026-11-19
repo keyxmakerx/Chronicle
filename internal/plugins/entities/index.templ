@@ -85,7 +85,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 						}
 					</p>
 				</div>
-				<div class="flex items-center gap-3">
+				<div class="flex w-full items-center gap-3 sm:w-auto">
 					<!-- Quick search -->
 					<!-- Filters this list in place. The input keeps its id so htmx
 				     hands focus and the caret back after each swap; without
@@ -93,7 +93,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					<form
 						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
 						method="GET"
-						class="relative"
+						class="relative min-w-0 flex-1 sm:flex-none"
 						role="search"
 						hx-get={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
 						hx-trigger="submit, input delay:300ms"
@@ -109,12 +109,12 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 							placeholder="Search pages..."
 							aria-label="Search pages"
 							autocomplete="off"
-							class="input pl-9 pr-3 py-2 w-56"
+							class="input pl-9 pr-3 py-2 w-full sm:w-56"
 						/>
 						<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs"></i>
 					</form>
 					<!-- Grid/Table toggle -->
-					<div class="flex items-center gap-1 bg-surface-alt rounded-md p-0.5">
+					<div class="flex shrink-0 items-center gap-1 bg-surface-alt rounded-md p-0.5">
 						<button
 							@click="view = 'grid'"
 							:class="view === 'grid' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg transition-colors'"
@@ -135,8 +135,9 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					if cc.MemberRole >= campaigns.RoleScribe {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
-							class="btn-primary"
-						><i class="fa-solid fa-plus text-xs"></i> New page</a>
+							class="btn-primary shrink-0"
+							aria-label="New page"
+						><i class="fa-solid fa-plus text-xs" aria-hidden="true"></i> <span class="max-[399px]:hidden">New page</span></a>
 					}
 				</div>
 			</div>

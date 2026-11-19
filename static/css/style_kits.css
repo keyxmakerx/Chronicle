@@ -92,7 +92,7 @@
 }
 
 /* ---------- Every kit: the page takes the kit's palette and faces ---------- */
-[data-cz-page="annals"][data-cz-kit] #main-content:has(.cb-title) {
+[data-cz-page="annals"][data-cz-kit] #main-content:has(.cb-title):not(:has([data-workshop])) {
   --color-bg-primary: var(--k-page);
   --color-card-bg: var(--k-paper);
   --color-bg-secondary: var(--k-paper);
@@ -111,7 +111,7 @@
   color: var(--k-ink);
   font-family: var(--kit-bf, inherit);
 }
-[data-cz-page="annals"][data-cz-kit] :is(.cb-title, .cb-head, .cb-section-h) {
+[data-cz-page="annals"][data-cz-kit] :is(.cb-title:not(:where([data-workshop] .cb-title)), .cb-head, .cb-section-h) {
   font-family: var(--kit-hf, var(--annals-head));
   text-transform: none;
   letter-spacing: var(--cz-hls, 0);
@@ -155,9 +155,9 @@
   font-family: var(--kit-lf, var(--kit-hf, inherit));
   text-transform: uppercase; letter-spacing: 0.08em;
 }
-[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title { font-weight: 600; letter-spacing: -0.01em; }
+[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 600; letter-spacing: -0.01em; }
 /* The title's rule is doubled, thick over thin, in ink. */
-[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 5px; border-radius: 0; background: none;
   border-top: 2px solid var(--k-ink); border-bottom: 1px solid var(--k-ink);
 }
@@ -215,10 +215,10 @@
   background: var(--k-gilt); box-shadow: 0 0 0 4px var(--k-band);
 }
 [data-cz-page="annals"][data-cz-kit="ornate"] [data-topbar-name] { font-weight: 600; letter-spacing: 0.06em; font-size: 1.05rem; }
-[data-cz-page="annals"][data-cz-kit="ornate"] #main-content:has(.cb-title) { font-size: 1.04em; }
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content:has(.cb-title):not(:has([data-workshop])) { font-size: 1.04em; }
 /* A centred title over a gilt flourish. */
-[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title { text-align: center; font-weight: 600; padding-bottom: 16px; }
-[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title:not(:where([data-workshop] .cb-title)) { text-align: center; font-weight: 600; padding-bottom: 16px; }
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 14px; border-radius: 0;
   background: var(--k-gilt);
   -webkit-mask: var(--k-flourish) center / auto 14px no-repeat;
@@ -292,9 +292,9 @@
   mask: var(--k-wave) 0 0 / 100% 100% no-repeat;
 }
 [data-cz-page="annals"][data-cz-kit="flowing"] [data-topbar-name] { font-style: italic; font-weight: 600; }
-[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title { font-weight: 600; letter-spacing: -0.01em; padding-bottom: 12px; }
+[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 600; letter-spacing: -0.01em; padding-bottom: 12px; }
 /* The title's rule is a drawn wave. */
-[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 8px; border-radius: 0; background: var(--kit-acc); opacity: 0.7;
   -webkit-mask: var(--k-wave-line) 0 50% / 46px 8px repeat-x;
   mask: var(--k-wave-line) 0 50% / 46px 8px repeat-x;
@@ -350,9 +350,9 @@
   animation: kit-sheen 8s ease-in-out infinite;
 }
 @keyframes kit-sheen { 0%, 62% { background-position: 0% 0; } 88%, 100% { background-position: 100% 0; } }
-[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title { font-weight: 400; letter-spacing: 0.01em; }
+[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 400; letter-spacing: 0.01em; }
 /* The title's rule is a hairline of light, fading at both ends. */
-[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 1px; border-radius: 0;
   background: linear-gradient(90deg, var(--kit-acc), var(--k-shine) 35%, var(--kit-acc) 60%, transparent);
   box-shadow: 0 0 8px var(--k-glow);
@@ -406,9 +406,9 @@
   mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
 }
 [data-cz-page="annals"][data-cz-kit="sketchbook"] [data-topbar-name] { font-weight: 700; font-size: 1.05rem; }
-[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title { font-weight: 700; }
+[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 700; }
 /* The title's rule is a pen stroke in the accent. */
-[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title::after {
+[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 7px; border-radius: 0; background: var(--kit-acc);
   -webkit-mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
   mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;

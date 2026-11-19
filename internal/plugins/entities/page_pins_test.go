@@ -347,7 +347,7 @@ func TestPagePinHandler_Widget(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/pinned-pages", nil)
 			if tt.asPlayer {
-				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "camp-1"})
 			}
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(req, rec)

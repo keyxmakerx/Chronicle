@@ -80,6 +80,9 @@ type AdventureSource interface {
 	// empty). hasCategory is false when the campaign has no Adventures
 	// category, so the picker can say where to add it.
 	Search(ctx context.Context, campaignID, query string, v Viewer, limit int) (pages []AdventurePage, hasCategory bool, err error)
+	// CategoryID is the Adventures category a new page is made in, or 0 when
+	// the campaign has none.
+	CategoryID(ctx context.Context, campaignID string) (int, error)
 }
 
 // AdventuresView is the tab: items in the order they were added.
@@ -115,6 +118,8 @@ type PickResult struct {
 	Pages []PickPage `json:"pages"`
 	// HasCategory is false when the campaign has no Adventures category.
 	HasCategory bool `json:"has_category"`
+	// NewTypeID is the category "A new adventure" is made in; 0 when none.
+	NewTypeID int `json:"new_type_id,omitempty"`
 }
 
 func requireTeam(v Viewer) error {
@@ -280,6 +285,11 @@ func (s *service) PickPages(ctx context.Context, campaignID string, v Viewer, qu
 		}
 	}
 	res := &PickResult{HasCategory: hasCat, Pages: []PickPage{}}
+	if hasCat {
+		if res.NewTypeID, err = s.src.Adventures.CategoryID(ctx, campaignID); err != nil {
+			return nil, apperror.NewInternal(err)
+		}
+	}
 	for _, p := range pages {
 		res.Pages = append(res.Pages, PickPage{ID: p.ID, Name: p.Name, TypeName: p.TypeName, Pinned: pinned[p.ID]})
 	}

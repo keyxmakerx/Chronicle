@@ -43,8 +43,13 @@
   padding-bottom: 8px;
   line-height: 1.05;
   font-size: clamp(1.5rem, 1.2rem + 1.6vw, 2.5rem);
-  min-width: 0;
-  overflow-wrap: break-word;
+  /* A name wraps between words and hyphenates by dictionary; it never shrinks
+     below its own one-line width or the line's, so a short row wraps the
+     row instead of stacking letters. Only a single word longer than the
+     whole line may break inside. */
+  min-width: min(100%, max-content);
+  overflow-wrap: anywhere;
+  hyphens: auto;
   color: var(--color-text-primary);
 }
 [data-cz-page="annals"] .cb-title::after {
@@ -558,6 +563,53 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
 [data-cz-page="annals"] .pe-saved .pe-i { width: 13px; height: 13px; }
 [data-cz-page="annals"] .pe-edit { min-width: 6.5rem; justify-content: center; }
 [data-cz-page="annals"] .pe-edit.is-done { color: var(--annals-acc); font-weight: 600; }
+
+/* The three dots: the page's own actions without opening the editor. The
+   menu grows from the dots toward the page and, like every menu, closes
+   faster than it opens. */
+[data-cz-page="annals"] .pe-bar[data-pe-off] > .pe-more { display: none; }
+[data-cz-page="annals"] .pe-more { position: relative; display: flex; align-items: center; }
+[data-cz-page="annals"] .pe-dots {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; border: 0; border-radius: var(--shape-r-tag, 6px);
+  background: none; color: var(--color-text-secondary); cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-standard), color var(--dur-micro, 120ms) var(--ease-standard);
+}
+[data-cz-page="annals"] .pe-dots:hover,
+[data-cz-page="annals"] .pe-dots[aria-expanded="true"] { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+[data-cz-page="annals"] .pe-dots:active { transform: scale(0.96); }
+[data-cz-page="annals"] .pe-dots:focus-visible { outline: 2px solid var(--annals-acc); outline-offset: 2px; }
+[data-cz-page="annals"] .pe-dots .pe-i { width: 18px; height: 18px; }
+[data-cz-page="annals"] .pe-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: var(--z-raised);
+  width: max-content; min-width: 14rem; max-width: min(20rem, calc(100vw - 32px)); padding: 6px;
+  border: var(--shape-edge, 1px) solid var(--color-border); border-radius: 12px;
+  background: var(--color-card-bg); box-shadow: var(--elev-hover);
+  transform-origin: 90% 0;
+  animation: pe-grow var(--dur-everyday, 120ms) var(--ease-out) both;
+}
+[data-cz-page="annals"] .pe-menu[hidden] { display: none; }
+[data-cz-page="annals"] .pe-menu form { margin: 0; }
+[data-cz-page="annals"] .pe-mi {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
+  width: 100%; min-height: 36px; padding: 6px 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--color-text-primary); font: inherit; font-size: 0.875rem; text-align: left; cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-standard);
+}
+[data-cz-page="annals"] .pe-mi small { font-size: 0.75rem; color: var(--color-text-muted); }
+[data-cz-page="annals"] .pe-mi:hover,
+[data-cz-page="annals"] .pe-mi:focus-visible { background: var(--color-bg-tertiary); outline: none; }
+[data-cz-page="annals"] .pe-mi:focus-visible { box-shadow: inset 0 0 0 2px var(--annals-acc); }
+[data-cz-page="annals"] .pe-mi:active { background: var(--color-bg-tertiary); }
+[data-cz-page="annals"] .pe-mi.is-bad { color: rgb(var(--color-bad-rgb)); }
+[data-cz-page="annals"] .pe-mi.is-bad small { color: inherit; opacity: 0.85; }
+@media (pointer: coarse) {
+  [data-cz-page="annals"] .pe-dots { width: 44px; height: 44px; }
+  [data-cz-page="annals"] .pe-mi { min-height: 44px; }
+}
+@keyframes pe-grow { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
+[data-cz-page="annals"][data-motion="calm"] .pe-menu { animation-name: pe-fade; animation-duration: var(--dur-everyday, 120ms); }
+[data-cz-page="annals"][data-motion="off"] .pe-menu { animation: none; }
 
 /* Line icons: the pen and its tick, and the Saved tick. */
 [data-cz-page="annals"] .pe-i {

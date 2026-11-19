@@ -36,9 +36,9 @@ function harnessHTML(kit) {
 <html lang="en" data-cz-page="annals" ${kit ? `data-cz-kit="${kit}"` : ''} style="--annals-hcase:uppercase">
 <head><meta charset="utf-8"><style>${annalsCSS}</style><style>${kitsCSS}</style></head>
 <body>
-  <header class="cb-head mb-6 flex flex-wrap items-center gap-x-4 gap-y-2" data-app-opening="full">
+  <header class="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2" data-app-opening="full">
     <h1 class="cb-title text-2xl font-bold text-fg">Characters</h1>
-    <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 text-sm text-fg-secondary"><span>The cast.</span></div>
+    <div class="flex min-w-0 flex-[1_1_16rem] flex-wrap items-center gap-x-4 gap-y-2 text-sm text-fg-secondary"><span>The cast.</span></div>
     <div class="ml-auto">
       <a href="#" class="btn-primary text-sm gap-2" data-t="action-link">Create hero</a>
       <button type="button" class="btn-primary text-sm gap-2" data-t="action-button">Add a map</button>
@@ -56,7 +56,8 @@ test('the opening draws its main action with a button class, as a link or a butt
   const action = openingTempl.slice(openingTempl.indexOf('templ appOpeningAction'));
   assert.match(action, /<a href=\{[^}]+\} class="btn-primary /, 'the link form');
   assert.match(action, /<button type="button" class="btn-primary /, 'the button form');
-  assert.match(openingTempl, /<header class="cb-head mb-6 flex[^"]*" data-app-opening="full">/, 'the opening is a heading row');
+  assert.match(openingTempl, /<header class="mb-6 flex[^"]*" data-app-opening="full">/, 'the opening row is plain; only its title is a heading');
+  assert.doesNotMatch(openingTempl, /<header class="[^"]*cb-head/, 'no opening header is a block heading');
 });
 
 for (const kit of ['', 'sharp']) {
@@ -66,7 +67,7 @@ for (const kit of ['', 'sharp']) {
       const page = await browser.newPage();
       await page.setContent(harnessHTML(kit));
       if (!kit) assert.equal(await page.$eval('h1.cb-title', (e) => getComputedStyle(e).textTransform), 'uppercase', 'the title keeps its capitals');
-      assert.equal(await page.$eval('header.cb-head', (e) => getComputedStyle(e).textTransform), 'uppercase', 'the opening row is capitals');
+      assert.notEqual(await page.$eval('[data-app-opening] div.ml-auto', (e) => getComputedStyle(e).textTransform), 'uppercase', 'the opening row is not capitals');
       assert.equal(await page.$eval('h2.cb-head', (e) => getComputedStyle(e).textTransform), 'uppercase', 'a block heading keeps its capitals');
       assert.equal(await caseOf(page, 'action-button'), 'none', 'a real button');
       assert.equal(await caseOf(page, 'action-link'), 'none', 'a link drawn as a button');

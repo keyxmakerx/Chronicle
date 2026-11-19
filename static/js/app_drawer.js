@@ -24,6 +24,12 @@
 (function () {
   'use strict';
 
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
+
   var GROW_IN = 200, GROW_OUT = 120, FOLD_MS = 200;
   var EASE_OUT = 'cubic-bezier(.16,1,.3,1)', EASE_IN = 'cubic-bezier(.4,0,1,1)';
   var DRAG_SLOP = 6, GAP_REST = 110;
@@ -455,7 +461,7 @@
     var r = d.tile.getBoundingClientRect(), g = d.ghost;
     if (motion() === 'full') {
       done(play(g, [{ transform: g.style.transform }, { transform: 'translate(' + (r.left - parseFloat(g.style.left)) + 'px,' + (r.top - parseFloat(g.style.top)) + 'px)' }],
-        { duration: 200, easing: EASE_OUT, fill: 'forwards' }), function () { g.remove(); });
+        { duration: tokMs('--dur-standard', 200), easing: EASE_OUT, fill: 'forwards' }), function () { g.remove(); });
     } else {
       g.remove();
     }

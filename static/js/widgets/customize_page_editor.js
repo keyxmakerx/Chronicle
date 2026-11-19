@@ -19,6 +19,12 @@
  */
 (function () {
   'use strict';
+
+  // A duration token in ms, read when the move starts so the owner's Motion
+  // speed retimes it.
+  function tokMs(name, fallback) {
+    return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
+  }
   function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
 
 
@@ -1182,7 +1188,7 @@
     // fadeFrame fades the page in after it changes how it is drawn.
     function fadeFrame() {
       var f = $('.cpe-frame');
-      if (f && f.animate && fades()) f.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      if (f && f.animate && fades()) f.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'cubic-bezier(.2,.8,.2,1)' });
     }
     function select(sel) {
       UI.sel = sel;
@@ -1328,7 +1334,7 @@
         var gone = popEl;
         popEl = null;
         gone.style.pointerEvents = 'none';
-        if (fades() && gone.animate) gone.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = function () { gone.remove(); };
+        if (fades() && gone.animate) gone.animate([{ opacity: 1 }, { opacity: 0 }], { duration: tokMs('--dur-everyday-out', 80), easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = function () { gone.remove(); };
         else gone.remove();
       }
       document.removeEventListener('pointerdown', popOff, true);
@@ -1382,7 +1388,7 @@
       }
       // It grows in beside the panel; Calm only fades it in.
       p.style.transformOrigin = 'right center';
-      if (fades() && p.animate) p.animate(moving() ? [{ opacity: 0, transform: 'scale(.97)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      if (fades() && p.animate) p.animate(moving() ? [{ opacity: 0, transform: 'scale(.97)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 0 }, { opacity: 1 }], { duration: tokMs('--dur-standard', 200), easing: 'cubic-bezier(.2,.8,.2,1)' });
       p.addEventListener('click', function (e) {
         if (e.target.closest('[data-peekx]')) { closePop(); btn.focus(); return; }
         var sw = e.target.closest('[data-peekkeep]');

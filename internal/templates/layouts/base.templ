@@ -228,9 +228,6 @@ templ Base(title string) {
 		<!-- Entity type config widget (unified sidebar + layout + color) -->
 		<script src={ AssetURL("/static/js/widgets/entity_type_config.js") } defer></script>
 
-		<!-- Tag picker widget (entity tag management) -->
-		<script src={ AssetURL("/static/js/widgets/tag_picker.js") } defer></script>
-
 		<!-- The one hover card, then the linked-page previews that use it -->
 		<script src={ AssetURL("/static/js/peek_address.js") } defer></script>
 		<script src={ AssetURL("/static/js/hovercard.js") } defer></script>
@@ -266,11 +263,6 @@ templ Base(title string) {
 
 		<!-- Header of a game-system-rendered page: more menu, Delete confirm, Claim. -->
 		<script src={ AssetURL("/static/js/widgets/page_header.js") } defer></script>
-
-		<!-- Transaction log widget (shop purchase/sale/gift/restock history).
-		     Mount is the `transaction_log` entity block; reads the armory
-		     plugin's /armory/shops/:eid/transactions endpoint. -->
-		<script src={ AssetURL("/static/js/widgets/transaction_log.js") } defer></script>
 
 		<!-- Entity aliases widget (alternative names; feeds auto-linking, search,
 		     @mentions). Mounts inside the `title` core block, i.e. effectively

@@ -118,8 +118,32 @@
         }
       }
     });
+    // Account settings and the two top-bar tools are offered only when the
+    // page itself shows their control, so the palette never lists what the
+    // viewer cannot open. The tools open the way their buttons do.
+    if (document.querySelector('#user-menu-panel a[href="/account"]')) {
+      cmds.push({
+        label: 'Account settings', icon: 'fa-gear', href: '/account', shortcut: '',
+        words: 'password email two-factor 2fa time zone notifications account profile'
+      });
+    }
+    var tableBtn = document.querySelector('[data-tt-tab]');
+    if (tableBtn) {
+      cmds.push({
+        label: 'The table', icon: 'fa-dice-d20', shortcut: '', words: 'dice roll my dice',
+        action: function () { tableBtn.click(); }
+      });
+    }
+    var screenBtn = document.querySelector('[data-dms-toggle]');
+    if (screenBtn) {
+      cmds.push({
+        label: screenBtn.getAttribute('title') || 'GM Screen', icon: 'fa-shield-halved', shortcut: '',
+        words: 'screen dm gm director fight encounter homebrew',
+        action: function () { screenBtn.click(); }
+      });
+    }
     cmds.push({
-      label: 'Toggle Theme', icon: 'fa-circle-half-stroke', shortcut: '',
+      label: 'Toggle Theme', icon: 'fa-circle-half-stroke', shortcut: '', words: 'dark light theme mode',
       action: function () {
         // One implementation of the toggle (static/js/theme.js): it saves to the
         // account when signed in and to this browser otherwise.
@@ -180,7 +204,7 @@
     });
 
     var modal = document.createElement('div');
-    modal.className = 'card w-full max-w-lg shadow-2xl overflow-hidden';
+    modal.className = 'card w-full max-w-lg shadow-elev-dragged overflow-hidden';
     modal.style.maxHeight = '60vh';
     modal.style.display = 'flex';
     modal.style.flexDirection = 'column';

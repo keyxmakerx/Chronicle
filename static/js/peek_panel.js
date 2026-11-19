@@ -29,6 +29,7 @@
   var opener = null;     // link to return focus to on close
   var token = 0;         // an older answer never overwrites a newer peek
   var hideTimer = 0;
+  var releaseBack = null; // gives back the history step the phone's Back gesture closes it with
   var SELECTOR = 'a[data-entity-preview], a[data-mention-id]';
 
   function link(el) {
@@ -103,7 +104,10 @@
     bodyEl.setAttribute('aria-busy', 'true');
     if (!wasOpen) message('Loading…');
     show();
-    if (!wasOpen) panel.focus({ preventScroll: true });
+    if (!wasOpen) {
+      panel.focus({ preventScroll: true });
+      if (C.backCloses) releaseBack = C.backCloses('peek', function () { close(false); });
+    }
 
     fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } })
       .then(function (res) {
@@ -132,6 +136,7 @@
   function close(restoreFocus) {
     if (!panel || !panel.isConnected || !panel.classList.contains('is-open')) return;
     token++;
+    if (releaseBack) { var give = releaseBack; releaseBack = null; give(); }
     panel.classList.remove('is-open');
     // Off (and a device that wants no motion) transitions in ~0ms: hide now.
     var ms = parseFloat(getComputedStyle(panel).transitionDuration) || 0;

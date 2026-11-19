@@ -32,7 +32,7 @@ const norm = (ip) => ip.toLowerCase().split(':').map((g) => g.replace(/^0+(?=.)/
 
 async function confirmReauth(page) {
   const box = page.locator('#reauth-modal');
-  const shown = await box.getByText('Confirm Your Identity').waitFor({ state: 'visible', timeout: 4000 }).then(() => true, () => false);
+  const shown = await box.getByText("Confirm it's you").waitFor({ state: 'visible', timeout: 4000 }).then(() => true, () => false);
   if (shown) {
     await box.locator('input[name=password]').fill(ADMIN.password);
     await box.getByRole('button', { name: 'Confirm' }).click();

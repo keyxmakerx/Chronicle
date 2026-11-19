@@ -112,7 +112,7 @@ templ timelineListContent(cc *campaigns.CampaignContext, data TimelineListData) 
 templ timelineCard(campaignID string, t Timeline) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines/%s", campaignID, t.ID)) }
-		class="card p-4 hover:ring-2 hover:ring-accent/30 hover:shadow-md transition-all group"
+		class="card p-4 hover:ring-2 hover:ring-accent/30 hover:shadow-elev-hover transition-shadow group"
 		data-dm-only?={ t.IsDMOnly() }
 	>
 		<div class="flex items-center gap-3 mb-2">
@@ -168,7 +168,7 @@ templ createTimelineModal(data TimelineListData) {
 				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Timeline Name</label>
-					<input type="text" name="name" class="input w-full" required placeholder="e.g. The War of Shadows"/>
+					<input type="text" name="name" class="input w-full" required autofocus placeholder="e.g. The War of Shadows"/>
 				</div>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Calendar (optional)</label>
@@ -270,14 +270,14 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 					if data.IsScribe {
 						<button
 							class="btn-primary text-xs"
-							onclick="document.getElementById('create-event-modal').classList.remove('hidden')"
+							data-opens="create-event-modal"
 						>
 							<i class="fa-solid fa-plus"></i> Create Event
 						</button>
 						if data.Timeline.HasCalendar() {
 							<button
 								class="btn-secondary text-xs"
-								onclick="document.getElementById('event-picker-modal').classList.remove('hidden')"
+								data-opens="event-picker-modal"
 							>
 								<i class="fa-solid fa-link"></i> Link Events
 							</button>
@@ -581,7 +581,7 @@ templ createStandaloneEventModal(data TimelineViewData) {
 			<form @submit.prevent="submitEvent()" class="space-y-3">
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Event Name</label>
-					<input type="text" class="input w-full" x-model="name" required placeholder="e.g. Battle of the Five Kings"/>
+					<input type="text" class="input w-full" x-model="name" required autofocus placeholder="e.g. Battle of the Five Kings"/>
 				</div>
 				<div class="grid grid-cols-3 gap-3">
 					<div>
@@ -713,7 +713,7 @@ templ editStandaloneEventModal(data TimelineViewData) {
 			<form @submit.prevent="submitEdit()" class="space-y-3">
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Event Name</label>
-					<input type="text" class="input w-full" x-model="name" required placeholder="e.g. Battle of the Five Kings"/>
+					<input type="text" class="input w-full" x-model="name" required autofocus placeholder="e.g. Battle of the Five Kings"/>
 				</div>
 				<div class="grid grid-cols-3 gap-3">
 					<div>

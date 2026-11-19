@@ -93,7 +93,7 @@ templ createMapModal(data MapListData) {
 				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Map Name</label>
-					<input type="text" name="name" class="input w-full" required placeholder="e.g. World Map, City of Neverwinter"/>
+					<input type="text" name="name" class="input w-full" required autofocus placeholder="e.g. World Map, City of Neverwinter"/>
 				</div>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
@@ -892,7 +892,7 @@ templ markerModal(data MapViewData) {
 				<input type="hidden" name="y" id="mk-y" value="50"/>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
-					<input type="text" name="name" id="mk-name" class="input w-full" required placeholder="Pin name"/>
+					<input type="text" name="name" id="mk-name" class="input w-full" required autofocus placeholder="Pin name"/>
 				</div>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>

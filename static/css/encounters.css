@@ -27,7 +27,7 @@
 .enc-btn:hover:not(:disabled) { background: var(--color-bg-tertiary, #f3f4f6); }
 .enc-btn:active:not(:disabled) { transform: scale(.96); }
 .enc-btn:disabled { opacity: .5; cursor: not-allowed; }
-.enc-new { color: var(--color-accent, #6366f1); }
+.enc-new { color: var(--color-accent-link, var(--color-accent, #6366f1)); }
 .enc-new::before { content: "+ "; }
 .enc-danger { color: rgb(var(--color-bad-rgb, 192 57 43)); margin-left: auto; }
 .enc-danger[data-armed] { background: rgb(var(--color-bad-rgb, 192 57 43)); border-color: transparent; color: #fff; }
@@ -46,7 +46,7 @@
 .enc-card:hover { background: var(--color-bg-tertiary, #f3f4f6); box-shadow: var(--elev-hover, none); }
 .enc-card-top { display: flex; align-items: center; gap: 8px; }
 .enc-card-name { font-weight: 600; color: var(--color-text-primary, #111827); min-width: 0; overflow-wrap: anywhere; }
-.enc-card-name::before { content: "⚔ "; color: var(--color-accent, #6366f1); }
+.enc-card-name::before { content: "⚔ "; color: var(--color-accent-link, var(--color-accent, #6366f1)); }
 .enc-card-scene::before { content: "◈ "; }
 .enc-card-sub { font-size: 12.5px; color: var(--color-text-muted, #6b7280); }
 .enc-ready {
@@ -157,15 +157,15 @@
 .enc-ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--color-text-muted, #6b7280); min-height: 32px; }
 .enc-quiet {
   all: unset; box-sizing: border-box; cursor: pointer; font-size: 12.5px; min-height: 32px; display: inline-flex; align-items: center;
-  color: var(--color-accent, #6366f1);
+  color: var(--color-accent-link, var(--color-accent, #6366f1));
 }
 .enc-quiet:hover:not(:disabled) { text-decoration: underline; }
 .enc-quiet:disabled { opacity: .5; cursor: not-allowed; }
-.enc-add-stage { align-self: flex-start; border-style: dashed; min-height: 32px; color: var(--color-accent, #6366f1); }
+.enc-add-stage { align-self: flex-start; border-style: dashed; min-height: 32px; color: var(--color-accent-link, var(--color-accent, #6366f1)); }
 .enc-seg { display: inline-flex; align-self: flex-start; border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; overflow: hidden; }
 .enc-seg-opt { position: relative; padding: 5px 14px; min-height: 32px; display: inline-flex; align-items: center; cursor: pointer; font-size: 12.5px; }
 .enc-seg-opt input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.enc-seg-opt.on { background: rgb(var(--color-accent-rgb, 99 102 241) / .12); color: var(--color-accent, #6366f1); font-weight: 600; }
+.enc-seg-opt.on { background: rgb(var(--color-accent-rgb, 99 102 241) / .12); color: var(--color-accent-link, var(--color-accent, #6366f1)); font-weight: 600; }
 .enc-seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent, #6366f1); outline-offset: -2px; }
 
 /* Versions: small-capital tabs with a hairline under them and up one side,
@@ -179,7 +179,7 @@
 }
 .enc-tab:hover { color: var(--color-text-primary, #111827); }
 .enc-tab.on {
-  color: var(--color-accent, #6366f1); font-weight: 600;
+  color: var(--color-accent-link, var(--color-accent, #6366f1)); font-weight: 600;
   border-left-color: var(--color-accent, #6366f1); border-bottom-color: var(--color-accent, #6366f1);
 }
 .enc-tab:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
@@ -213,7 +213,7 @@
 .cf-field { min-width: 0; }
 .cf-field dt { font-size: 11px; color: var(--color-text-muted, #6b7280); letter-spacing: .02em; }
 .cf-field dd { margin: 0; color: var(--color-text-primary, #111827); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.cf-open { align-self: flex-start; font-size: 12.5px; color: var(--color-accent, #6366f1); }
+.cf-open { align-self: flex-start; font-size: 12.5px; color: var(--color-accent-link, var(--color-accent, #6366f1)); }
 .cf-open:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .cf-chev { transition: none; } }
 
@@ -343,3 +343,23 @@ a.erun-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .erun-show { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--erun-edge); }
 .erun-show:first-child { border-top: 0; }
 .erun-shown .erun-pick-txt b { font-weight: 600; color: var(--erun-muted); }
+
+/* The Fight tab's list of every fight: a row opens the fight on its page,
+   the rest fold behind "Show all", and "Plan a fight" asks which adventure. */
+.erun-open {
+  font: inherit; text-align: left; background: transparent; color: var(--erun-ink); border: 0; cursor: pointer;
+  min-height: 44px; padding: 4px 6px; margin: 0 -6px; border-radius: 8px; display: block; width: calc(100% + 12px);
+}
+.erun-open:hover { background: color-mix(in srgb, var(--erun-ink) 6%, transparent); }
+a.erun-open { text-decoration: none; display: flex; align-items: center; }
+.erun-pick .erun-open { width: auto; flex: 1 1 auto; margin: 0; }
+.erun-quiet {
+  font: inherit; font-size: 12.5px; align-self: flex-start; min-height: 32px; padding: 4px 0; background: transparent; border: 0; cursor: pointer;
+  color: var(--color-accent-link, var(--erun-acc));
+}
+.erun-quiet:hover { text-decoration: underline; text-underline-offset: 2px; }
+.erun-plan { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.erun-choose { align-self: stretch; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--erun-edge); padding-top: 8px; }
+.erun-choice { font-weight: 600; }
+a.erun-choice { color: var(--color-accent-link, var(--erun-acc)); }
+@media (pointer: coarse) { .erun-quiet { min-height: 44px; } }

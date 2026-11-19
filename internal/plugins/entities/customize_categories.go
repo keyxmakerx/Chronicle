@@ -59,6 +59,9 @@ type CustomizeCategoryItem struct {
 	// Home replaces an existing category's home (its landing page) layout,
 	// checked like a direct save of it.
 	Home *campaigns.DashboardLayout `json:"home,omitempty"`
+	// Fields replaces an existing category's field definitions. They are
+	// checked by the same rules as a direct save of them.
+	Fields *[]FieldDefinition `json:"fields,omitempty"`
 	// Description replaces an existing category's description; empty clears it.
 	Description *string `json:"description,omitempty"`
 	// PageLayouts replaces an existing category's named layouts (the ones
@@ -180,6 +183,11 @@ func (s *entityService) ApplyCustomizeCategories(ctx context.Context, campaignID
 				return res, err
 			}
 		}
+		if fs := in.Items[key].Fields; fs != nil {
+			if err := checkCustomizeFields(*fs); err != nil {
+				return res, err
+			}
+		}
 	}
 
 	// resolve turns a parent key into an id: an existing id as is, a new key
@@ -257,7 +265,10 @@ func (s *entityService) ApplyCustomizeCategories(ctx context.Context, campaignID
 			}
 			upd.ParentTypeID = &pid
 		}
-		if customizeItemChangesType(item) {
+		if item.Fields != nil {
+			upd.Fields = *item.Fields
+		}
+		if customizeItemChangesType(item) || item.Fields != nil {
 			if _, err := s.UpdateEntityType(ctx, id, upd); err != nil {
 				return res, err
 			}
@@ -364,6 +375,9 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			if it.PageLayouts != nil {
 				return plan, apperror.NewBadRequest("a new category gets more layouts once it is saved")
 			}
+			if it.Fields != nil {
+				return plan, apperror.NewBadRequest("a new category gets its fields once it is saved")
+			}
 			if it.CopyFrom != 0 {
 				if _, ok := byID[it.CopyFrom]; !ok {
 					return plan, apperror.NewNotFound("the category to copy was not found")
@@ -381,13 +395,13 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			if it.CopyFrom != 0 {
 				return plan, apperror.NewBadRequest("only a new category can copy another")
 			}
-			if it.Delete && (it.Layout != nil || it.Home != nil || it.Description != nil || it.PageLayouts != nil) {
+			if it.Delete && (it.Layout != nil || it.Home != nil || it.Description != nil || it.PageLayouts != nil || it.Fields != nil) {
 				return plan, apperror.NewBadRequest("a category being deleted cannot get a new page layout or home")
 			}
 			if it.Delete {
 				deleting[k] = true
 				plan.deletes = append(plan.deletes, k)
-			} else if customizeItemChangesType(it) || it.Menu != nil || it.Layout != nil || it.Home != nil || it.Description != nil || it.PageLayouts != nil {
+			} else if customizeItemChangesType(it) || it.Menu != nil || it.Layout != nil || it.Home != nil || it.Description != nil || it.PageLayouts != nil || it.Fields != nil {
 				plan.updates = append(plan.updates, k)
 			}
 		default:
@@ -469,6 +483,30 @@ func checkCustomizeParentKey(parent string, items map[string]CustomizeCategoryIt
 		}
 	default:
 		return apperror.NewBadRequest("invalid parent category")
+	}
+	return nil
+}
+
+// maxCustomizeFields bounds the fields one category takes in a Save.
+const maxCustomizeFields = 200
+
+// checkCustomizeFields checks a category's fields before the Save writes
+// anything: a bounded count, and a key and a label on each that no other
+// field repeats. The kinds (links, rules, dates) are checked as a direct
+// save checks them, when the fields are written.
+func checkCustomizeFields(fs []FieldDefinition) error {
+	if len(fs) > maxCustomizeFields {
+		return apperror.NewBadRequest("a category can have at most 200 fields")
+	}
+	seen := make(map[string]bool, len(fs))
+	for _, f := range fs {
+		if f.Key == "" || f.Label == "" {
+			return apperror.NewBadRequest("every field needs a name")
+		}
+		if seen[f.Key] {
+			return apperror.NewBadRequest("two fields share the name " + f.Label)
+		}
+		seen[f.Key] = true
 	}
 	return nil
 }

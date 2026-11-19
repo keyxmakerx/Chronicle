@@ -140,3 +140,56 @@ test('a scene run keeps its rows and when each was shown; an old run reads as a 
   assert.equal(r.kind, 'scene');
   assert.deepEqual(plain(r.shows.map((s) => [s.id, !!s.shownAt, s.to || ''])), [['s1', true, ''], ['s2', false, 'u-ash']]);
 });
+
+// The Fight tab lists every fight: Ready first, the rest below, the nearest
+// few shown and the tail folded behind "Show all N".
+const fights = (n, ready) => Array.from({ length: n }, (_, i) => ({ id: (ready ? 'r' : 'p') + i, name: 'F' + i }));
+
+test('groupFights shows the nearest three, Ready first, and folds the rest', () => {
+  const H = load();
+  const g = plain(H.groupFights(fights(1, true), fights(8, false), 8, false));
+  assert.deepEqual(g.ready.map((e) => e.id), ['r0']);
+  assert.deepEqual(g.planned.map((e) => e.id), ['p0', 'p1']);
+  assert.equal(g.total, 9);
+  assert.equal(g.canFold, true);
+  assert.equal(g.unlisted, 0);
+});
+
+test('groupFights with Show all lists everything and says how many the server left out', () => {
+  const H = load();
+  const g = plain(H.groupFights(fights(1, true), fights(4, false), 150, true));
+  assert.equal(g.ready.length, 1);
+  assert.equal(g.planned.length, 4);
+  assert.equal(g.total, 151);
+  assert.equal(g.unlisted, 146);
+});
+
+test('groupFights keeps a short list whole and offers no fold', () => {
+  const H = load();
+  const g = plain(H.groupFights(fights(1, true), fights(2, false), 2, false));
+  assert.equal(g.ready.length + g.planned.length, 3);
+  assert.equal(g.canFold, false);
+});
+
+test('groupFights with more Ready than fit shows only Ready, and none planned', () => {
+  const H = load();
+  const g = plain(H.groupFights(fights(5, true), fights(2, false), 2, false));
+  assert.equal(g.ready.length, 3);
+  assert.equal(g.planned.length, 0);
+  assert.equal(g.total, 7);
+});
+
+test('groupFights with no fights at all has a zero total', () => {
+  const H = load();
+  const g = plain(H.groupFights([], [], 0, false));
+  assert.equal(g.total, 0);
+  assert.equal(g.canFold, false);
+});
+
+test('fightLine names the adventure and how many foes, or that there are none yet', () => {
+  const H = load();
+  assert.equal(H.fightLine({ page: { name: 'Clear the cellar' }, creatureCount: 6 }), 'Clear the cellar · 6 foes');
+  assert.equal(H.fightLine({ page: { name: 'The Shatter Road' }, creatureCount: 0 }), 'The Shatter Road · no foes yet');
+  assert.equal(H.fightLine({ page: { name: 'Hollowmere' }, creatureCount: 1 }), 'Hollowmere · 1 foe');
+  assert.equal(H.fightLine({ page: { name: 'Hollowmere' }, kind: 'scene', showCount: 2 }), 'Hollowmere · Scene · 2 things to show');
+});

@@ -10,7 +10,7 @@ import (
 func TestDMHomebrewAdapter(t *testing.T) {
 	render := func(a *dmHomebrewAdapter) string {
 		var buf bytes.Buffer
-		if err := a.DrawerMount("camp").Render(context.Background(), &buf); err != nil {
+		if err := a.DrawerMount("camp", true).Render(context.Background(), &buf); err != nil {
 			t.Fatal(err)
 		}
 		return buf.String()
@@ -21,6 +21,16 @@ func TestDMHomebrewAdapter(t *testing.T) {
 		if !strings.Contains(with, w) {
 			t.Errorf("missing %q in %s", w, with)
 		}
+	}
+	if !strings.Contains(with, `data-can-place="true"`) {
+		t.Errorf("the owner's drawer should offer placing a Trackers block: %s", with)
+	}
+	var codm bytes.Buffer
+	if err := (&dmHomebrewAdapter{trackers: true}).DrawerMount("camp", false).Render(context.Background(), &codm); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(codm.String(), "data-can-place") {
+		t.Errorf("a co-DM's drawer must not offer placing (the routes are the owner's): %s", codm.String())
 	}
 	without := render(&dmHomebrewAdapter{})
 	if strings.Contains(without, "data-trackers") || strings.Contains(without, "trackers.css") {

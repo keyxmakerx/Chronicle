@@ -112,12 +112,9 @@
   // players read therefore takes a second pick, after a warning.
   var LINK_WARNING = 'Players read this text and will see this name. Choose it again to link.';
 
-  // The list's tallest and shortest heights, its gap from the cursor's line
-  // and the space it keeps from the window's edges.
+  // The list's tallest height; Chronicle.placeAtCaret reads it back from the
+  // CSS to keep the list inside the window.
   var MAX_HEIGHT = 240;
-  var MIN_HEIGHT = 96;
-  var GAP = 4;
-  var EDGE = 8;
 
   function MentionPopup(options) {
     this.campaignId = options.campaignId;
@@ -170,20 +167,7 @@
   MentionPopup.prototype.place = function (coords) {
     if (coords) this._at = coords;
     if (!this.el || !this._at) return;
-    var vv = window.visualViewport;
-    var winTop = vv ? vv.offsetTop : 0;
-    var winLeft = vv ? vv.offsetLeft : 0;
-    var winH = vv ? vv.height : window.innerHeight;
-    var winW = vv ? vv.width : window.innerWidth;
-    var roomBelow = winTop + winH - EDGE - (this._at.bottom + GAP);
-    var roomAbove = this._at.top - GAP - (winTop + EDGE);
-    // The side is chosen for a full list, so it does not change as results
-    // arrive and the list grows.
-    var below = roomBelow >= MAX_HEIGHT || roomBelow >= roomAbove;
-    this.el.style.maxHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, below ? roomBelow : roomAbove)) + 'px';
-    this.el.style.top = (below ? this._at.bottom + GAP : this._at.top - GAP - this.el.offsetHeight) + 'px';
-    var maxLeft = winLeft + winW - this.el.offsetWidth - EDGE;
-    this.el.style.left = Math.max(winLeft + EDGE, Math.min(this._at.left, maxLeft)) + 'px';
+    Chronicle.placeAtCaret(this.el, this._at);
   };
 
   /**

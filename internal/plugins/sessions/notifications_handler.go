@@ -27,7 +27,9 @@ type notifDTO struct {
 	Read    bool   `json:"read"`
 	Type    string `json:"type"`
 	// Detail is the optional second line ("On Bren"), empty for most types.
-	Detail    string `json:"detail,omitempty"`
+	Detail string `json:"detail,omitempty"`
+	// Action labels the link, shown under the detail.
+	Action    string `json:"action,omitempty"`
 	CreatedAt string `json:"createdAt"`
 }
 
@@ -51,6 +53,7 @@ func (h *Handler) ListNotificationsAPI(c *echo.Context) error {
 			CreatedAt: n.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 			Message:   notificationMessage(n),
 			Detail:    notificationDetail(n),
+			Action:    notificationAction(n),
 		}
 		if n.Link != nil {
 			d.Link = *n.Link
@@ -83,7 +86,7 @@ func (h *Handler) NotificationBadgeAPI(c *echo.Context) error {
 		label = "99+"
 	}
 	return c.HTML(http.StatusOK, fmt.Sprintf(
-		`<span class="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center" data-count="%d">%s</span>`,
+		`<span class="hdr-n" data-count="%d">%s</span>`,
 		n, label))
 }
 
@@ -145,6 +148,19 @@ func notificationDetail(n Notification) string {
 		return ""
 	}
 	return p.Detail
+}
+
+// notificationAction is the link's label from the payload, empty for rows
+// without one.
+func notificationAction(n Notification) string {
+	if n.Payload == nil {
+		return ""
+	}
+	var p notificationPayload
+	if err := json.Unmarshal([]byte(*n.Payload), &p); err != nil {
+		return ""
+	}
+	return p.Action
 }
 
 // notificationMessage extracts the human-readable message from a notification's

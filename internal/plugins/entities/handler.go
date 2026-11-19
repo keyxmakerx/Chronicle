@@ -474,7 +474,7 @@ func (h *Handler) NewForm(c *echo.Context) error {
 	}
 
 	// ?name= comes from quick search's "Create a page named …" row.
-	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, ""))
+	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, "", NewPageDraft{Return: openedFrom(c)}))
 }
 
 // prefillName is a name to start the create form with, trimmed and cut to the
@@ -576,7 +576,16 @@ func (h *Handler) Create(c *echo.Context) error {
 		// Preserve the same variant-aware picker across error re-render so a
 		// failed submission doesn't drop the user back to the flat dropdown.
 		variants := collectVariants(entityTypes, req.EntityTypeID)
-		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, nil, prefillName(req.Name), csrfToken, errMsg))
+		// Nothing the person chose is forgotten: the parent they were
+		// adding under, and the descriptor, template and visibility.
+		var parentEntity *Entity
+		if req.ParentID != "" {
+			if parent, perr := h.service.GetByID(c.Request().Context(), req.ParentID); perr == nil && parent.CampaignID == cc.Campaign.ID {
+				parentEntity = parent
+			}
+		}
+		draft := NewPageDraft{TypeLabel: req.TypeLabel, TemplateID: req.TemplateID, IsPrivate: req.IsPrivate, Return: openedFrom(c)}
+		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, parentEntity, prefillName(req.Name), csrfToken, errMsg, draft))
 	}
 
 	// Apply content template if one was selected.
@@ -3544,6 +3553,59 @@ func (h *Handler) UpdateEntityTypeLayout(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// BlockPlacementAPI lists the categories a block can be put on.
+// GET /campaigns/:id/entity-types/placement?block=trackers
+func (h *Handler) BlockPlacementAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	opts, err := h.service.BlockPlacementOptions(c.Request().Context(), cc.Campaign.ID, c.QueryParam("block"))
+	if err != nil {
+		return err
+	}
+	if opts == nil {
+		opts = []PlacementOption{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"categories": opts})
+}
+
+// AppendLayoutBlock puts one block at the end of a category's page layout.
+// POST /campaigns/:id/entity-types/:etid/layout/blocks {"type": "..."}
+// It answers {"status": "added"|"already_there", "category": name}. The
+// block's own rules (one per page, its context) are the service's.
+func (h *Handler) AppendLayoutBlock(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+	var body struct {
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil || body.Type == "" {
+		return apperror.NewBadRequest("say which block to put on the page")
+	}
+	ctx := c.Request().Context()
+	// IDOR protection: the service rejects a category of another campaign.
+	added, err := h.service.AppendBlockToCategoryLayout(ctx, cc.Campaign.ID, etID, body.Type)
+	if err != nil {
+		return err
+	}
+	et, err := h.service.GetEntityTypeByID(ctx, etID)
+	if err != nil {
+		return err
+	}
+	status := "already_there"
+	if added {
+		status = "added"
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": status, "category": et.NamePlural})
+}
+
 // UpdateEntityTypeColor saves the entity type's display color.
 // PUT /campaigns/:id/entity-types/:etid/color
 func (h *Handler) UpdateEntityTypeColor(c *echo.Context) error {
@@ -4016,6 +4078,11 @@ func (h *Handler) Characters(c *echo.Context) error {
 	view, err := h.buildCastView(c, cc)
 	if err != nil {
 		return err
+	}
+	// A link that names the Players box (a leaver's note) opens it. Only
+	// staff have a roster, so anyone else's link just shows the page.
+	if c.QueryParam("open") == "players" && view.Roster != nil {
+		view.Open = "players"
 	}
 	return h.renderCast(c, cc, view)
 }
