@@ -601,7 +601,7 @@ func (h *Handler) Create(c *echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, entity.ID, entity.Name)
 
-	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entity.ID)
+	return middleware.HTMXRedirect(c, newPageURL(cc.Campaign.ID, entity.ID))
 }
 
 // showPage is everything the entity page and the DM Screen's sheet draw from,
@@ -631,6 +631,10 @@ func (h *Handler) Show(c *echo.Context) error {
 	// above on the real role.
 	if campaigns.ViewingAsPlayer(c, p.cc) {
 		p.cc = p.cc.PlayerPreview()
+	}
+	// Create lands here with ?write=1 and the text opens ready to type.
+	if c.QueryParam(startWritingParam) == "1" {
+		c.SetRequest(c.Request().WithContext(withStartWriting(c.Request().Context())))
 	}
 	return middleware.Render(c, http.StatusOK, EntityShowPage(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
 }

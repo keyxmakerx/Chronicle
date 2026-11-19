@@ -973,6 +973,19 @@
   // --- API ---
 
   /**
+   * An address asks for "write this now" once. With the mark gone, a reload
+   * or a copied link opens the page at rest like any other.
+   */
+  function forgetWriteNow() {
+    try {
+      var url = new URL(window.location.href);
+      if (url.searchParams.get('write') !== '1') return;
+      url.searchParams.delete('write');
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    } catch (e) { /* the address stays as it is */ }
+  }
+
+  /**
    * Load content from the API endpoint.
    */
   function loadContent(state) {
@@ -1006,6 +1019,7 @@
         if (state.startEditing) {
           state.startEditing = false;
           enterEditMode(state);
+          forgetWriteNow();
         }
       })
       .catch(function (err) {

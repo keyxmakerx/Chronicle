@@ -443,6 +443,9 @@ templ blockEntryEditor(cc *campaigns.CampaignContext, entity *Entity, csrfToken 
 		if canWriteDescription(ctx, cc, entity) {
 			data-editable="true"
 		}
+		if startsWriting(ctx) && canWriteDescription(ctx, cc, entity) {
+			data-start-editing="true"
+		}
 		data-autosave="30"
 		data-outline="true"
 		if baseVisibilityState(entity) == VisStateEveryone {
