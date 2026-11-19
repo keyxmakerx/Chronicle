@@ -11,6 +11,9 @@
  *   data-endpoint   - Fields API endpoint (GET/PUT),
  *                     e.g. /campaigns/:id/entities/:eid/fields
  *   data-editable   - "true" if user can modify fields (Scribe+)
+ *   (The claimed owner of a page gets owner_fields in the GET response: the
+ *   keys they may change, which the form is then limited to and saves as a
+ *   patch.)
  *   data-era        - "true" when the endpoint is a page's era version: the
  *                     per-page field settings (the gear) belong to the usual
  *                     page, so they are left out
@@ -76,6 +79,7 @@ Chronicle.register('attributes', {
           state.eraChanged = data.era_changed || null;
           state.shown = data.shown || {};
           state.calendar = data.dateBook || null;
+          state.ownerFields = data.owner_fields || null;
           render();
         })
         .catch(function (err) {
@@ -101,6 +105,16 @@ Chronicle.register('attributes', {
     document.addEventListener('chronicle:token-saved', tokenSaved);
     el._attributesTokenSaved = tokenSaved;
 
+    // ownerMode is a claimed owner on their own page: they change only the
+    // keys the server listed, never the box's settings.
+    function ownerMode() {
+      return !config.editable && !config.era && !!state.ownerFields && state.ownerFields.length > 0;
+    }
+
+    function canEdit() {
+      return !!config.editable || ownerMode();
+    }
+
     // --- Render ---
 
     function render() {
@@ -124,7 +138,7 @@ Chronicle.register('attributes', {
       title.textContent = 'Attributes';
       header.appendChild(title);
 
-      if (config.editable) {
+      if (canEdit()) {
         var btnGroup = document.createElement('div');
         btnGroup.className = 'flex items-center gap-1.5';
 
@@ -139,7 +153,7 @@ Chronicle.register('attributes', {
           state.isEditing = false;
           render();
         });
-        if (!config.era) btnGroup.appendChild(gearBtn);
+        if (config.editable && !config.era) btnGroup.appendChild(gearBtn);
 
         var editBtn = document.createElement('button');
         editBtn.type = 'button';
@@ -307,7 +321,7 @@ Chronicle.register('attributes', {
         var empty = document.createElement('div');
         empty.className = 'text-sm';
         empty.style.color = 'var(--color-text-muted)';
-        empty.textContent = config.editable
+        empty.textContent = canEdit()
           ? 'No attributes set. Click Edit to add values.'
           : 'No attributes set.';
         container.appendChild(empty);
@@ -412,7 +426,15 @@ Chronicle.register('attributes', {
       var sections = {};
       var sectionOrder = [];
 
-      state.fields.forEach(function (field) {
+      if (ownerMode()) {
+        var gm = document.documentElement.getAttribute('data-gm-term') || 'GM';
+        var ownNote = document.createElement('p');
+        ownNote.className = 'ag-note';
+        ownNote.textContent = 'These are yours to change. The rest of your hero is your ' + gm + '\u2019s.';
+        container.appendChild(ownNote);
+      }
+
+      editableFields().forEach(function (field) {
         var sec = field.section || 'General';
         if (!sections[sec]) {
           sections[sec] = [];
@@ -1051,10 +1073,71 @@ Chronicle.register('attributes', {
 
     // --- Save ---
 
+    // editableFields is what the edit form shows: every field, or for a
+    // claimed owner only the ones they may change.
+    function editableFields() {
+      if (!ownerMode()) return state.fields;
+      return state.fields.filter(function (f) { return state.ownerFields.indexOf(f.key) >= 0; });
+    }
+
+    // saveOwnFields sends a claimed owner's changes as a patch: only the keys
+    // they changed, an emptied one as null, since the server refuses them a
+    // whole-map write.
+    function saveOwnFields() {
+      var patch = {};
+      var changed = false;
+      editableFields().forEach(function (field) {
+        var input = el.querySelector('[data-field-key="' + field.key + '"]');
+        if (!input) return;
+        var was = state.fieldsData[field.key];
+        var now = field.type === 'checkbox' ? input.checked : input.value;
+        if (String(was === undefined || was === null ? '' : was) === String(now)) return;
+        patch[field.key] = now === '' ? null : now;
+        changed = true;
+      });
+      if (!changed) {
+        state.isSaving = false;
+        state.isEditing = false;
+        state.draft = null;
+        render();
+        return;
+      }
+      Chronicle.apiFetch(config.endpoint, { method: 'PUT', body: { fields_patch: patch } })
+        .then(function (r) {
+          if (!r.ok) {
+            return r.json().catch(function () { return {}; }).then(function (b) {
+              var e = new Error('Failed to save fields');
+              e.said = b && b.message;
+              throw e;
+            });
+          }
+          state.draft = null;
+          state.isEditing = false;
+          state.isSaving = false;
+          // Changing a pick can clear what was bought with the old one, so
+          // read the page back rather than guess.
+          return reload();
+        })
+        .catch(function (err) {
+          console.error('[attributes] Save failed:', err);
+          var draft = {};
+          Object.keys(state.fieldsData).forEach(function (k) { draft[k] = state.fieldsData[k]; });
+          Object.keys(patch).forEach(function (k) { draft[k] = patch[k] === null ? '' : patch[k]; });
+          state.draft = draft;
+          state.error = err.said || 'Failed to save. Please try again.';
+          state.isSaving = false;
+          render();
+        });
+    }
+
     function saveFields() {
       if (state.isSaving) return;
       state.isSaving = true;
       state.error = null;
+      if (ownerMode()) {
+        saveOwnFields();
+        return;
+      }
 
       // Collect values from form inputs.
       var newData = {};

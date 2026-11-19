@@ -2316,6 +2316,9 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 	if cal := h.dateFieldCalendar(c.Request().Context(), cc.Campaign.ID, effectiveFields); cal != nil {
 		response["dateBook"] = cal
 	}
+	if keys := h.ownerFieldsFor(c.Request().Context(), cc, entity, et, userID); len(keys) > 0 {
+		response["owner_fields"] = keys
+	}
 	return c.JSON(http.StatusOK, response)
 }
 
