@@ -61,8 +61,8 @@ func TestParseCalendaria_ElvenPresetOrderIsDeterministic(t *testing.T) {
 		t.Errorf("elven seasons must come out in their authored ordinal order; got %q", firstSeasons)
 	}
 	// Moons have no ordinal anywhere in Calendaria, so the map key ranks them:
-	// "lira000000000000" < "sehanine00000000".
-	if firstMoons != "Lira|Sehanine" {
+	// "lira000000000000" < "nythara000000000".
+	if firstMoons != "Lira|Nythara" {
 		t.Errorf("elven moons must come out in authored-key order; got %q", firstMoons)
 	}
 }
