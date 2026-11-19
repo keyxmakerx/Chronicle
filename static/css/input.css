@@ -7061,8 +7061,9 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .en-icon[aria-pressed="true"] { color: var(--color-accent-link, rgb(var(--color-accent-rgb))); }
 .en-icon--danger:hover { color: rgb(var(--color-bad-rgb)); }
 
-/* The standard's Glow for a row that needs attention: an accent halo that fades over about 1.2s; the same under Calm. */
-.cz-glow { animation: cz-glow 1.2s ease-out; }
+/* The standard's Glow for a row that needs attention: an accent halo that fades over about 1.2s
+   at the default Motion speed (six standard beats); the same under Calm. */
+.cz-glow { animation: cz-glow calc(var(--dur-standard) * 6) var(--ease-out); }
 @keyframes cz-glow { 0%, 20% { box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0.4); } 100% { box-shadow: 0 0 0 3px transparent; } }
 
 .en-note.en-arrive { animation: en-arrive var(--dur-standard) var(--ease-out); }
@@ -7491,7 +7492,7 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .hdr-n[hidden] { display: none; }
 /* The count-change grow: a script adds the class when the number changes.
    Calm and Off just swap the number. */
-.hdr-n.hdr-n-grow { animation: tt-grow 280ms var(--ease-out); }
+.hdr-n.hdr-n-grow { animation: tt-grow var(--dur-large) var(--ease-out); }
 :is(html[data-motion], html[data-cz-reduce], html[data-view-motion="calm"]) .hdr-n.hdr-n-grow { animation: none; }
 @keyframes tt-grow { from { transform: scale(0.7); } to { transform: scale(1); } }
 

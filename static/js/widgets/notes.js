@@ -238,6 +238,21 @@ Chronicle.register('notes', {
       gesture = { kind: 'press', x: e.clientX, y: e.clientY };
     });
 
+    function startMove(e) {
+      takeBack();
+      if (place.dock) {
+        // Pulled off its side, it floats under the pointer at its own size.
+        place.dock = null;
+        place.x = e.clientX - 120;
+        place.y = e.clientY - 18;
+        applyPlace();
+      }
+      var r = panel.getBoundingClientRect();
+      gesture = { kind: 'move', dx: e.clientX - r.left, dy: e.clientY - r.top };
+      panel.classList.add('notes-panel-moving');
+      document.body.style.userSelect = 'none';
+    }
+
     // On a phone the sheet's title bar takes a swipe: down folds it to the
     // bar, up opens it again. A tap still reaches the buttons.
     header.addEventListener('pointerdown', function (e) {
@@ -258,21 +273,6 @@ Chronicle.register('notes', {
       document.addEventListener('pointerup', end);
       document.addEventListener('pointercancel', end);
     });
-
-    function startMove(e) {
-      takeBack();
-      if (place.dock) {
-        // Pulled off its side, it floats under the pointer at its own size.
-        place.dock = null;
-        place.x = e.clientX - 120;
-        place.y = e.clientY - 18;
-        applyPlace();
-      }
-      var r = panel.getBoundingClientRect();
-      gesture = { kind: 'move', dx: e.clientX - r.left, dy: e.clientY - r.top };
-      panel.classList.add('notes-panel-moving');
-      document.body.style.userSelect = 'none';
-    }
 
     resizeHandle.addEventListener('pointerdown', function (e) {
       if (!isDesk() || e.button !== 0) return;

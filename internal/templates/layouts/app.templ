@@ -1477,8 +1477,8 @@ func topbarWantsLightWords(ctx context.Context) bool {
 	return white >= ink
 }
 
+// topbarScrimStyle is the shade over an image header: the owner's choice
 // of strength, medium by default, with a flat band across the words.
-// of strength, medium by default, darker at the top where the words sit.
 func topbarScrimStyle(ctx context.Context) string {
 	// Darkest at the top edge, a flat plateau across the band the name and
 	// icons sit in, lighter at the bottom. The plateau alone decides legibility:
