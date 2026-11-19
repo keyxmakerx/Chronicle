@@ -474,7 +474,7 @@ func (h *Handler) NewForm(c *echo.Context) error {
 	}
 
 	// ?name= comes from quick search's "Create a page named …" row.
-	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, ""))
+	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, "", NewPageDraft{Return: openedFrom(c)}))
 }
 
 // prefillName is a name to start the create form with, trimmed and cut to the
@@ -576,7 +576,16 @@ func (h *Handler) Create(c *echo.Context) error {
 		// Preserve the same variant-aware picker across error re-render so a
 		// failed submission doesn't drop the user back to the flat dropdown.
 		variants := collectVariants(entityTypes, req.EntityTypeID)
-		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, nil, prefillName(req.Name), csrfToken, errMsg))
+		// Nothing the person chose is forgotten: the parent they were
+		// adding under, and the descriptor, template and visibility.
+		var parentEntity *Entity
+		if req.ParentID != "" {
+			if parent, perr := h.service.GetByID(c.Request().Context(), req.ParentID); perr == nil && parent.CampaignID == cc.Campaign.ID {
+				parentEntity = parent
+			}
+		}
+		draft := NewPageDraft{TypeLabel: req.TypeLabel, TemplateID: req.TemplateID, IsPrivate: req.IsPrivate, Return: openedFrom(c)}
+		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, parentEntity, prefillName(req.Name), csrfToken, errMsg, draft))
 	}
 
 	// Apply content template if one was selected.

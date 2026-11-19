@@ -16,7 +16,7 @@ import (
 // "Create as:" picker when the preselect is a top-level parent that has
 // sub-category children. When nil/empty the form falls back to a flat
 // category dropdown.
-templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string) {
+templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string, draft NewPageDraft) {
 	@layouts.App("New page - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
 			<nav class="text-sm text-fg-secondary mb-4">
@@ -25,7 +25,7 @@ templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, pre
 				<span class="text-fg">New</span>
 			</nav>
 			<h1 class="text-2xl font-bold text-fg mb-6">Create page</h1>
-			@EntityCreateFormComponent(cc, entityTypes, preselect, variants, parentEntity, name, csrfToken, errMsg)
+			@EntityCreateFormComponent(cc, entityTypes, preselect, variants, parentEntity, name, csrfToken, errMsg, draft)
 		</div>
 	}
 }
@@ -48,7 +48,7 @@ templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 }
 
 // EntityCreateFormComponent renders the entity creation form.
-templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string) {
+templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string, draft NewPageDraft) {
 	<div id="entity-form">
 		<form
 			class="card p-8 space-y-6"
@@ -63,9 +63,12 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			// where the finished page shows it. First in the form, so the
 			// form's spacing doesn't push it down.
 			<div class="flex justify-end -mt-2 -mb-2">
-				@draftVisibilityControl()
+				@draftVisibilityControl(draft.IsPrivate)
 			</div>
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			if draft.Return != "" {
+				<input type="hidden" name="return" value={ draft.Return }/>
+			}
 
 			if errMsg != "" {
 				<div class="alert-error" role="alert">
@@ -157,6 +160,9 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			<div
 				id="template-picker"
 				data-campaign-id={ cc.Campaign.ID }
+				if draft.TemplateID > 0 {
+					data-selected-template={ strconv.Itoa(draft.TemplateID) }
+				}
 				class="hidden"
 			>
 				<label for="template_id" class="block text-sm font-medium text-fg-body mb-1">
@@ -174,6 +180,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 					type="text"
 					id="type_label"
 					name="type_label"
+					value={ draft.TypeLabel }
 					class="input w-full"
 					placeholder="e.g., City, NPC, Artifact"
 					maxlength="100"
@@ -186,7 +193,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			<div class="flex items-center space-x-4">
 				<button type="submit" class="btn-primary">Create page</button>
 				// Leaving isn't a command, so Cancel is a quiet word.
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="quiet-word">Cancel</a>
+				<a href={ templ.SafeURL(newPageCancelURL(cc.Campaign.ID, parentEntity, preselect, draft.Return)) } class="quiet-word">Cancel</a>
 			</div>
 		</form>
 	</div>

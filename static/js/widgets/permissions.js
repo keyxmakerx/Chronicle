@@ -596,6 +596,8 @@ Chronicle.register('permissions', {
         // No endpoint to load from in draft mode; widget operates on
         // local state seeded with defaults (Everyone / is_private=false).
         state.loading = false;
+        // A refused save comes back with the choice that was made.
+        if (String(config.draftPrivate) === 'true') setMode('dm_only');
         syncDraftTarget();
         renderTrigger();
         renderBody();
