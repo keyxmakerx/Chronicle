@@ -15,8 +15,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-const guestOn = viewAsGuestCookie + "=1"
-
 // previewRequest runs gate (AllowPublicCampaignAccess or RequireCampaignAccess)
 // for a signed-in user and returns the context the handler saw (nil if the
 // gate stopped the request) and the recorder.
@@ -144,7 +142,7 @@ func TestRequireCampaignAccess_GuestPreview(t *testing.T) {
 			s := &stubPublicSvc{campaign: tt.campaign, member: &CampaignMember{UserID: "u1", Role: tt.role}}
 			_ = svc
 			cc, rec := previewRequest(t, tt.gate, s, tt.method, tt.cookies, tt.hdr)
-			if rec.Code != tt.wantStatus && !(tt.wantStatus == 200 && rec.Code == 200) {
+			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
 			if tt.wantStatus == 200 && cc == nil {

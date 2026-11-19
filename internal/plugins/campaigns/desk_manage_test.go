@@ -21,7 +21,6 @@ func members(n int, role Role) []CampaignMember {
 	return out
 }
 
-
 func TestPeopleLine_WaitingInvites(t *testing.T) {
 	c := &Campaign{ID: "c1", Settings: "{}"}
 	tests := []struct {
@@ -42,7 +41,6 @@ func TestPeopleLine_WaitingInvites(t *testing.T) {
 		})
 	}
 }
-
 
 func TestDeskService_Line(t *testing.T) {
 	c := &Campaign{ID: "c1", Settings: "{}"}
@@ -71,9 +69,6 @@ func TestDeskService_Line(t *testing.T) {
 		})
 	}
 }
-
-
-func ptrTime(t time.Time) *time.Time { return &t }
 
 // deskSentenceService answers what ManageSentence reads.
 type deskSentenceService struct{ CampaignService }
