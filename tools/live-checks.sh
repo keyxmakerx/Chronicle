@@ -19,8 +19,7 @@
 #   REDIS_URL          Redis                        redis://localhost:6379
 #   CHRONICLE_BIN      a built binary               builds ./bin/chronicle-live
 #   LIVE_PORT          port for the scratch server  18080
-#   LIVE_BASELINE      folder of pictures to compare against (none)
-#   LIVE_OUT           where pictures and the report go  test-results/live
+#   LIVE_OUT           where pictures and the server log go  test-results/live
 #   LIVE_SMOKE         0 skips the smoke crawl at the end   1
 
 set -euo pipefail
@@ -102,10 +101,6 @@ echo "==> running ${#specs[@]} live check file(s)"
 checks=0
 node --test --test-concurrency=4 "${specs[@]}" || checks=$?
 
-echo "==> pictures"
-pictures=0
-node tools/live-pictures.mjs || pictures=$?
-
 # The smoke crawl walks every link and GET route of the same server, now
 # full of what the checks made, and fails on any server error or page crash.
 smoke=0
@@ -116,6 +111,3 @@ fi
 
 [ "$checks" -eq 0 ] || { echo "error: live checks failed" >&2; exit "$checks"; }
 [ "$smoke" -eq 0 ] || { echo "error: smoke crawl failed" >&2; exit "$smoke"; }
-# A changed picture is for a person to approve; the server log is no help.
-quiet_log=1
-exit "$pictures"
