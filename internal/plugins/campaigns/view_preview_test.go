@@ -44,7 +44,7 @@ func previewRequest(t *testing.T, gate func(CampaignService) echo.MiddlewareFunc
 }
 
 func guestCookie() []*http.Cookie {
-	return []*http.Cookie{{Name: viewAsGuestCookie, Value: "1"}}
+	return []*http.Cookie{{Name: viewAsGuestCookie, Value: "camp-1"}}
 }
 
 func TestAllowPublicAccess_GuestPreview(t *testing.T) {
@@ -192,7 +192,7 @@ func viewAsCall(t *testing.T, cc *CampaignContext, form url.Values, cookies []*h
 func cookieStates(rec *httptest.ResponseRecorder) (player, guest string) {
 	for _, ck := range rec.Result().Cookies() {
 		state := "off"
-		if ck.Value == "1" {
+		if ck.Value == "camp-1" {
 			state = "on"
 		}
 		switch ck.Name {
@@ -212,8 +212,8 @@ func TestViewAs(t *testing.T) {
 	player := &CampaignContext{Campaign: camp, MemberRole: RolePlayer, IsMember: true}
 	visitor := &CampaignContext{Campaign: camp}
 	privOwner := &CampaignContext{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RoleOwner, IsMember: true}
-	pCookie := &http.Cookie{Name: viewAsPlayerCookie, Value: "1"}
-	gCookie := &http.Cookie{Name: viewAsGuestCookie, Value: "1"}
+	pCookie := &http.Cookie{Name: viewAsPlayerCookie, Value: "camp-1"}
+	gCookie := &http.Cookie{Name: viewAsGuestCookie, Value: "camp-1"}
 
 	tests := []struct {
 		name         string
@@ -310,8 +310,8 @@ func TestToggleViewAsPlayer_ClearsEitherPreview(t *testing.T) {
 	owner := func(c *Campaign) *CampaignContext {
 		return &CampaignContext{Campaign: c, MemberRole: RoleOwner, IsMember: true}
 	}
-	pCookie := &http.Cookie{Name: viewAsPlayerCookie, Value: "1"}
-	gCookie := &http.Cookie{Name: viewAsGuestCookie, Value: "1"}
+	pCookie := &http.Cookie{Name: viewAsPlayerCookie, Value: "camp-1"}
+	gCookie := &http.Cookie{Name: viewAsGuestCookie, Value: "camp-1"}
 	tests := []struct {
 		name       string
 		campaign   *Campaign
@@ -447,7 +447,7 @@ func TestGuestsNoteAsked(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1"+tt.query, nil)
 			if tt.player {
-				req.AddCookie(&http.Cookie{Name: viewAsPlayerCookie, Value: "1"})
+				req.AddCookie(&http.Cookie{Name: viewAsPlayerCookie, Value: "camp-1"})
 			}
 			c := echo.New().NewContext(req, httptest.NewRecorder())
 			if got := GuestsNoteAsked(c, tt.cc); got != tt.want {

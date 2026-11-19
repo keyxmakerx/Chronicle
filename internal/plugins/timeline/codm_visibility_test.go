@@ -27,7 +27,7 @@ func newTimelineTestContext(viewingAsPlayer bool) *echo.Context {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/timelines", nil)
 	if viewingAsPlayer {
-		req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+		req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "camp-1"})
 	}
 	rec := httptest.NewRecorder()
 	return e.NewContext(req, rec)

@@ -40,7 +40,7 @@ func TestPresencePill_NeverConnectedIsForTheDMTeam(t *testing.T) {
 			h.SetPresenceLookup(tt.presence)
 			req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/foundry-vtt/presence-pill-fragment", nil)
 			if tt.viewAsPlayer {
-				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "camp-1"})
 			}
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(req, rec)

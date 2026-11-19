@@ -195,7 +195,7 @@ func TestAtAGlanceHandler(t *testing.T) {
 			e := echo.New()
 			req := httptest.NewRequest(http.MethodGet, "/campaigns/c1/at-a-glance", nil)
 			if tt.cookie {
-				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "c1"})
 			}
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)

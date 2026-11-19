@@ -59,7 +59,7 @@ func tlTestReq(path string, cc *campaigns.CampaignContext, userID string, viewAs
 	ctx := layouts.SetViewingAsPlayer(req.Context(), viewAsPlayer)
 	req = req.WithContext(ctx)
 	if viewAsPlayer {
-		req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "1"})
+		req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "camp-1"})
 	}
 	if htmx {
 		req.Header.Set("HX-Request", "true")
