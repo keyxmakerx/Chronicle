@@ -43,8 +43,13 @@
   padding-bottom: 8px;
   line-height: 1.05;
   font-size: clamp(1.5rem, 1.2rem + 1.6vw, 2.5rem);
-  min-width: 0;
-  overflow-wrap: break-word;
+  /* A name wraps between words and hyphenates by dictionary; it never shrinks
+     below its own one-line width or the line's, so a short row wraps the
+     row instead of stacking letters. Only a single word longer than the
+     whole line may break inside. */
+  min-width: min(100%, max-content);
+  overflow-wrap: anywhere;
+  hyphens: auto;
   color: var(--color-text-primary);
 }
 [data-cz-page="annals"] .cb-title::after {

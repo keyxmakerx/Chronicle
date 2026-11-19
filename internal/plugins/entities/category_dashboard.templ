@@ -78,14 +78,14 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 		@renderCategoryLead(cc, et)
 		<!-- Tag filter bar + View toggle. A bare category has nothing to filter. -->
 		if !categoryBare(total, opts) {
-		<div class="flex items-center justify-between mb-4 border-b border-edge pb-3">
-			<div class="flex items-center gap-2 overflow-x-auto">
+		<div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 mb-4 border-b border-edge pb-3">
+			<div class="contents sm:flex sm:items-center sm:gap-2">
 				<!-- Quick search within category -->
-				<div class="relative">
+				<div class="relative w-full sm:w-auto">
 					<input
 						type="text"
 						placeholder={ fmt.Sprintf("Search %s...", et.NamePlural) }
-						class="input pl-8 pr-3 py-1.5 w-48 text-sm"
+						class="input pl-8 pr-3 py-1.5 w-full sm:w-48 text-sm"
 						hx-get={ fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, et.ID) }
 						hx-trigger="keyup changed delay:300ms"
 						hx-target="#entity-list"
