@@ -7012,6 +7012,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "entity-notes", Scripts: []string{"/static/js/widgets/entity_notes.js"}},
 	{Name: "entity_manager", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/entity_manager.js"}},
 	{Name: "tag-picker", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/tag_picker.js"}},
+	{Name: "transaction_log", Scripts: []string{"/static/js/widgets/transaction_log.js"}},
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
 	{Name: "diag-picker", Scripts: []string{"/static/js/widgets/diag_picker.js"}},
