@@ -364,6 +364,27 @@
   .mn-to { opacity: 1; transform: scale(1); }
   :has(> :focus-visible) > :is(.mn-enter, .mn-leave) { transition-duration: 0s; }
   /* menu-motion:end */
+  /* Press: sinks 4% with an inner shadow, quick down (60ms) and easing back up
+     (the transform duration above). Calm and Off: colour only. */
+  .btn:active:not(:disabled) {
+    transform: scale(0.96);
+    box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.18);
+    transition-duration: var(--dur-micro), var(--dur-micro), var(--dur-micro), 60ms, 60ms;
+  }
+  html[data-motion] .btn:active:not(:disabled) { transform: none; }
+  /* Working: a button whose action is running shows a spinner after 0.3 s
+     (nothing sooner, so a quick save never flashes one) and can't be pressed
+     twice. Chronicle.working in theme.js sets it. Calm holds the ring still. */
+  .btn[data-working] { cursor: progress; opacity: 0.8; pointer-events: none; }
+  .btn[data-working]::before {
+    content: ""; width: 0.9em; height: 0.9em; margin-right: 0.15em; flex: none;
+    border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+    opacity: 0;
+    animation: btn-spin 800ms linear infinite, btn-spin-show 1ms linear 300ms forwards;
+  }
+  html[data-motion] .btn[data-working]::before { animation: btn-spin-show 1ms linear 300ms forwards; }
+  @keyframes btn-spin { to { transform: rotate(360deg); } }
+  @keyframes btn-spin-show { to { opacity: 1; } }
   .btn:disabled,
   .btn[disabled] {
     @apply opacity-50 cursor-not-allowed pointer-events-none;
@@ -597,8 +618,13 @@
       var(--color-bg-tertiary) 75%
     );
     background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+    /* Nothing shows for the first 0.3 s, so a quick load never flashes grey
+       lines; they fade in after that and then shimmer. Calm holds them still. */
+    opacity: 0;
+    animation: skeleton-in var(--dur-large) var(--ease-out) 300ms forwards, skeleton-shimmer 1.5s ease-in-out infinite;
   }
+  html[data-motion] .skeleton { animation: skeleton-in var(--dur-large) var(--ease-out) 300ms forwards; }
+  @keyframes skeleton-in { to { opacity: 1; } }
   .skeleton-text { @apply h-3 w-full; }
   .skeleton-title { @apply h-5 w-2/3; }
   .skeleton-avatar { @apply h-10 w-10 rounded-full; }

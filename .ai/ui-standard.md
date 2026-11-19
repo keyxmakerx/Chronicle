@@ -909,6 +909,11 @@ working and off states.
   glitch.
 - **A button's action** shows a spinner in the button with what it's doing
   ("Saving…"), and it can't be pressed twice.
+  A button gets it from `Chronicle.working(button, on)` (`static/js/theme.js`),
+  which an htmx request started by the button, or by the form it submits,
+  calls on its own: the ring shows after 0.3 s (CSS `.btn[data-working]`), the
+  label becomes `data-working-label` when the button has one, and a second
+  press is swallowed. Calm holds the ring still.
 - **A page or panel loading** shows grey placeholder lines in the shape of the
   content after 0.3 seconds, then the content fades in over them. Under Calm
   the placeholders stay still.
@@ -918,6 +923,9 @@ working and off states.
   message at the bottom saying who now sees the change, with Undo.
 - **Bigger actions** (create, publish, invite) get a message at the bottom for
   three seconds, with Undo when it can be undone.
+  `Chronicle.notify(message, type, { undo: fn })` (`static/js/notifications.js`)
+  is that message: bottom of the window, three seconds, an Undo button that
+  runs `fn` and closes it, and an error that stays until dismissed.
 - **Errors stay until dismissed**, sit next to the thing that failed, and say
   how to fix it. Nothing shakes.
 - **Deleting asks first** in a dialog naming exactly what goes, unless it can

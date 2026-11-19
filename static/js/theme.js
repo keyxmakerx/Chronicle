@@ -283,4 +283,44 @@
   ask.close = function (box) { hide(box, false); };
 
   C.askSlip = ask;
+
+  /**
+   * Working state for a button (ui-standard.md, "Waiting and feedback"): a
+   * spinner after 0.3 s, an optional "…ing" label from data-working-label,
+   * and no second press while it runs. An htmx request started by a button,
+   * or by the form it submits, sets and clears it on its own; other code
+   * calls Chronicle.working(button, true) and (button, false).
+   */
+  var working = function (btn, on) {
+    if (!btn || !btn.setAttribute) return;
+    if (on) {
+      if (btn.hasAttribute('data-working')) return;
+      btn.setAttribute('data-working', '');
+      btn.setAttribute('aria-busy', 'true');
+      var label = btn.getAttribute('data-working-label');
+      if (label) { btn._label = btn.textContent; btn.textContent = label; }
+    } else {
+      if (!btn.hasAttribute('data-working')) return;
+      btn.removeAttribute('data-working');
+      btn.removeAttribute('aria-busy');
+      if (btn._label != null) { btn.textContent = btn._label; btn._label = null; }
+    }
+  };
+  C.working = working;
+
+  function requestButton(e) {
+    var d = e.detail || {}, el = d.elt;
+    if (!el || !el.matches) return null;
+    if (el.matches('.btn')) return el;
+    var sub = d.requestConfig && d.requestConfig.triggeringEvent && d.requestConfig.triggeringEvent.submitter;
+    if (sub && sub.matches && sub.matches('.btn')) return sub;
+    return el.tagName === 'FORM' ? el.querySelector('[type="submit"].btn') : null;
+  }
+  document.addEventListener('htmx:beforeRequest', function (e) { working(requestButton(e), true); });
+  document.addEventListener('htmx:afterRequest', function (e) { working(requestButton(e), false); });
+  // A button that is working can't be pressed again, even by keyboard.
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('.btn[data-working]');
+    if (b) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
 })();
