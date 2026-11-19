@@ -93,3 +93,17 @@ test('phone: a long page scrolls in one place', async () => {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the page scrolls sideways');
   owner.assertClean();
 });
+
+test('phone: All pages fits at 360 wide without sliding sideways', async () => {
+  const owner = await person({ tag: 'pw', name: 'Mara Vell', context: { viewport: { width: 360, height: 780 }, isMobile: true, hasTouch: true } });
+  const cid = await newCampaign(owner, 'Phone Lists');
+  const { page } = owner;
+  await owner.go(`/campaigns/${cid}/entities`);
+  await page.locator('#main-content').waitFor();
+  // The shell check above reads only the document; the list scrolls inside
+  // #main-content, so a toolbar wider than the screen shows up here.
+  assert.ok(await page.evaluate(() => { const m = document.getElementById('main-content'); return m.scrollWidth <= m.clientWidth; }), '#main-content slides sideways on All pages');
+  const bounds = await page.locator('a[aria-label="New page"]').evaluate((e) => e.getBoundingClientRect().right);
+  assert.ok(bounds <= 360, `New page ends at ${bounds}, past the screen`);
+  owner.assertClean();
+});

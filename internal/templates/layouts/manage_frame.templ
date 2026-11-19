@@ -40,8 +40,8 @@ templ ManageFrame(d ManageFrameData) {
 	if d.NoSentence {
 		{{ sentence = nil }}
 	}
-	<div class="manage-frame" data-manage-frame>
-		<header class={ "manage-head cb-head", templ.KV("has-sentence", sentence != nil) }>
+	<div class="manage-frame" data-manage-frame data-workshop>
+		<header class={ "manage-head", templ.KV("has-sentence", sentence != nil) }>
 			if !d.Home {
 				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow">Campaign settings</a>
 			}

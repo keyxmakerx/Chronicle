@@ -38,8 +38,8 @@ templ MemberListComponent(cc *CampaignContext, v MemberListView) {
 		}
 		<div>
 			<div class="card overflow-x-auto">
-				<table class="w-full">
-					<thead>
+				<table class="w-full max-sm:block">
+					<thead class="max-sm:hidden">
 						<tr class="bg-surface-alt border-b border-edge">
 							<th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Name</th>
 							<th class="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Character</th>
@@ -53,14 +53,14 @@ templ MemberListComponent(cc *CampaignContext, v MemberListView) {
 							}
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-edge">
+					<tbody class="divide-y divide-edge max-sm:block">
 						if len(v.Members) > 0 {
 							for _, member := range v.Members {
 								@MemberRow(cc, &member, v.CSRFToken)
 							}
 						} else {
 							<tr>
-								<td colspan="6" class="px-6 py-12 text-center">
+								<td colspan="6" class="px-6 py-12 text-center max-sm:block">
 									<div class="text-fg-muted text-sm">No members yet. Add someone to get started.</div>
 								</td>
 							</tr>
@@ -165,8 +165,8 @@ func removeMemberConfirm(member *CampaignMember) string {
 
 // MemberRow renders a single member row in the table.
 templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
-	<tr>
-		<td class="px-3 sm:px-6 py-4">
+	<tr class="max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-2 max-sm:p-3">
+		<td class="px-3 sm:px-6 py-4 max-sm:basis-full max-sm:min-w-0 max-sm:p-0">
 			<div class="flex items-center gap-3">
 				@memberAvatar(member)
 				<div class="min-w-0">
@@ -208,7 +208,7 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 				<span class="text-fg-muted text-xs italic">None</span>
 			}
 		</td>
-		<td class="px-3 sm:px-6 py-4">
+		<td class="px-3 sm:px-6 py-4 max-sm:p-0">
 			<span
 				class={
 					"inline-block px-2 py-1 text-xs font-medium rounded-full",
@@ -234,9 +234,9 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 			</td>
 		}
 		if cc.MemberRole >= RoleOwner {
-			<td class="px-3 sm:px-6 py-4 text-right">
+			<td class="px-3 sm:px-6 py-4 text-right max-sm:ml-auto max-sm:p-0">
 				if member.Role != RoleOwner {
-					<div class="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:justify-end sm:gap-2">
+					<div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 sm:gap-2">
 						// Role change dropdown.
 						<form
 							method="POST"

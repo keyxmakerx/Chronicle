@@ -284,8 +284,8 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		// they never overlap the name or squeeze it to a word per line.
 		<div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
 			<div class="min-w-0">
-				<div class="flex items-center gap-2">
-					<h1 class="cb-title text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
+				<div class="flex flex-wrap items-center gap-2">
+					<h1 class="cb-title basis-full sm:basis-auto text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
 					@entityFavoriteButton(entity)
 					@pagePinMount(cc, entity)
 					@dmOnlyTitleLabel(cc, entity)
