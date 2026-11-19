@@ -120,6 +120,9 @@ templ InviteBox(d InviteBoxData) {
 		</div>
 		@inviteWaiting(d)
 	</section>
+	if d.Sentence != nil {
+		@d.Sentence
+	}
 }
 
 // inviteChoice is one of the three side-by-side choices.

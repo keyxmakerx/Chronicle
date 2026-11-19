@@ -56,6 +56,8 @@ test('adding sends an invite, and removing replaces the join link and turns them
   page.once('dialog', (d) => d.accept());
   await list.locator('form[hx-delete] button').click();
   await list.getByRole('heading', { name: 'Removed' }).waitFor();
+  // The summary under the title follows the removal without a reload.
+  await page.locator('[data-manage-sentence]').getByText(/^Just you/).waitFor();
   await picture(page, 'people-removed', { about: 'People page after removing someone: the notice and the Removed list', fullPage: true, mask: ['#invite-box li'] });
 
   const old = await player.page.goto(BASE + '/join/' + first.body.code);

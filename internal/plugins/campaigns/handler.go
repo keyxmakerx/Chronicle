@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/a-h/templ"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -1198,6 +1199,9 @@ type MemberListView struct {
 	Notice    string
 	// NoticeLink is a link the owner passes on by hand, shown under Notice.
 	NoticeLink string
+	// Sentence redraws the People page's summary line in place after a
+	// change; nil when the page itself is being drawn.
+	Sentence templ.Component
 }
 
 // memberListView loads the list for the People page. Removed people are the
@@ -1208,6 +1212,9 @@ func (h *Handler) memberListView(c *echo.Context, cc *CampaignContext, errMsg st
 	v.Members, _ = h.service.ListMembers(ctx, cc.Campaign.ID)
 	if cc.MemberRole >= RoleOwner {
 		v.Removed, _ = h.service.ListRemovedMembers(ctx, cc.Campaign.ID)
+	}
+	if c.Request().Method != http.MethodGet && middleware.IsHTMX(c) {
+		v.Sentence = h.manageSentenceSwap(ctx, "people")
 	}
 	return v
 }

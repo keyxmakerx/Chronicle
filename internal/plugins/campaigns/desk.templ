@@ -129,7 +129,15 @@ templ deskSentence(l DeskLine) {
 // words from the same service; the move from the desk carries one onto the
 // other, and the page opened by address starts the same way.
 templ manageSentence(id string, l DeskLine) {
-	<div class="manage-sentence" data-manage-sentence data-line={ id }>
+	<div id="manage-sentence" class="manage-sentence" data-manage-sentence data-line={ id }>
+		@deskSentence(l)
+	</div>
+}
+
+// manageSentenceSwap redraws the sentence in place from another response, so
+// it never lags behind a change made on the page.
+templ manageSentenceSwap(id string, l DeskLine) {
+	<div id="manage-sentence" class="manage-sentence" data-manage-sentence data-line={ id } hx-swap-oob="true">
 		@deskSentence(l)
 	</div>
 }

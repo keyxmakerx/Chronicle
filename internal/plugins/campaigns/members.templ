@@ -14,7 +14,7 @@ import (
 // manages members, invites and ownership.
 templ CampaignMembersPage(cc *CampaignContext, v MemberListView, transfer *OwnershipTransfer, smtpConfigured bool) {
 	@layouts.App(cc.Campaign.Name + " - People") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "People", Line: "people", NoSentence: true}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "People", Line: "people"}) {
 			@peopleSections(cc, v, transfer, smtpConfigured)
 		}
 	}
@@ -84,6 +84,9 @@ templ MemberListComponent(cc *CampaignContext, v MemberListView) {
 		}
 		if cc.MemberRole >= RoleOwner {
 			@roleGuide()
+		}
+		if v.Sentence != nil {
+			@v.Sentence
 		}
 	</div>
 }

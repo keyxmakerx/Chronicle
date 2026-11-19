@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"context"
+	"github.com/a-h/templ"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,6 +36,9 @@ type InviteBoxData struct {
 	Mode string
 	// Done is a plain confirmation; Err a refusal.
 	Done, Err string
+	// Sentence redraws the People page's summary line in place; the box's
+	// own changes move its invited count.
+	Sentence templ.Component
 	// DoneLink is an invite's accept link, shown once when the site can't
 	// email it, so the owner can send it themselves.
 	DoneLink string
@@ -122,6 +126,9 @@ func (h *Handler) boxResponse(c *echo.Context, fill func(*InviteBoxData)) error 
 	}
 	if fill != nil {
 		fill(&d)
+	}
+	if c.Request().Method != http.MethodGet {
+		d.Sentence = h.manageSentenceSwap(c.Request().Context(), "people")
 	}
 	return middleware.Render(c, http.StatusOK, InviteBox(d))
 }

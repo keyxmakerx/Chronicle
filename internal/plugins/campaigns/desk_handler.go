@@ -99,23 +99,37 @@ func (h *Handler) deskInputsFor(ctx context.Context, campaign *Campaign, parts d
 // anyone who is not the campaign's owner and when the line cannot be worded;
 // the frame then draws nothing.
 func (h *Handler) ManageSentence(ctx context.Context, lineID string) templ.Component {
-	if !layouts.InCampaign(ctx) || layouts.GetCampaignRole(ctx) < int(RoleOwner) {
+	line, ok := h.manageLine(ctx, lineID)
+	if !ok {
 		return nil
+	}
+	return manageSentence(lineID, line)
+}
+
+// ManageSentenceSwap is the same sentence as an out-of-band swap, for a
+// response that changes what the sentence counts (a removal, an invite).
+func (h *Handler) manageSentenceSwap(ctx context.Context, lineID string) templ.Component {
+	line, ok := h.manageLine(ctx, lineID)
+	if !ok {
+		return nil
+	}
+	return manageSentenceSwap(lineID, line)
+}
+
+func (h *Handler) manageLine(ctx context.Context, lineID string) (DeskLine, bool) {
+	if !layouts.InCampaign(ctx) || layouts.GetCampaignRole(ctx) < int(RoleOwner) {
+		return DeskLine{}, false
 	}
 	campaign, err := h.service.GetByID(ctx, layouts.GetCampaignID(ctx))
 	if err != nil || campaign == nil {
-		return nil
+		return DeskLine{}, false
 	}
 	parts := deskAddons | deskSystem
 	if lineID == "people" {
 		parts = deskMembers | deskInvites
 	}
 	in := h.deskInputsFor(ctx, campaign, parts)
-	line, ok := h.desk.Line(ctx, DeskRequest{CampaignID: campaign.ID, OwnerID: layouts.GetUserID(ctx), Now: time.Now()}, in, lineID)
-	if !ok {
-		return nil
-	}
-	return manageSentence(lineID, line)
+	return h.desk.Line(ctx, DeskRequest{CampaignID: campaign.ID, OwnerID: layouts.GetUserID(ctx), Now: time.Now()}, in, lineID)
 }
 
 // deskOwner returns the campaign context of an owner-only desk request.

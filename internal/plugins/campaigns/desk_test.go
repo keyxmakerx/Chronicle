@@ -487,3 +487,23 @@ func TestDeskPage_RendersNeedsYouAndBlanks(t *testing.T) {
 		t.Error("a blank must not be a real button: buttons cannot wrap across lines")
 	}
 }
+
+func TestManageSentenceSwapRedrawsInPlace(t *testing.T) {
+	var buf strings.Builder
+	line := DeskLine{ID: "people", Parts: []DeskPart{txt("Just you, so far.")}}
+	if err := manageSentenceSwap("people", line).Render(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`id="manage-sentence"`, `hx-swap-oob="true"`, "Just you, so far."} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("swap lacks %q: %s", want, buf.String())
+		}
+	}
+	buf.Reset()
+	if err := manageSentence("people", line).Render(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "hx-swap-oob") || !strings.Contains(buf.String(), `id="manage-sentence"`) {
+		t.Errorf("the page's own sentence must carry the id and no swap: %s", buf.String())
+	}
+}
