@@ -122,6 +122,15 @@
     document.body.appendChild(container);
   }
 
+  // A dialog that closes with the toasts inside it would hide them too, so
+  // they move back to the page, or to the next open dialog down, as it closes.
+  // The close event doesn't bubble, hence the capture listener.
+  document.addEventListener('close', function (e) {
+    if (!container || !e.target || container.parentNode !== e.target) return;
+    var host = Chronicle.layerHost ? Chronicle.layerHost() : document.body;
+    (host && host !== e.target ? host : document.body).appendChild(container);
+  }, true);
+
   /**
    * Show a toast notification.
    *

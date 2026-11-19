@@ -118,6 +118,25 @@ test('on a phone, Back closes an open sheet and leaves the address alone', { ski
   } finally { await browser.close(); }
 });
 
+test('on a phone, a link followed from an open sheet leaves no extra Back step', { skip }, async () => {
+  const { browser, tab } = await launch({ width: 390, height: 800 });
+  try {
+    await tab.goto('http://t.test/');
+    const before = await tab.evaluate(() => history.length);
+    await tab.evaluate(() => {
+      window.shut = 0;
+      window.release = Chronicle.backCloses('nav-drawer', () => { window.shut++; window.release(); });
+    });
+    await tab.evaluate(() => document.getElementById('go').click());
+    await tab.waitForSelector('#other');
+    assert.equal(await tab.evaluate(() => window.shut), 1, 'the sheet closed on the way');
+    assert.equal(await tab.evaluate(() => history.length), before + 1, 'the new page took the sheet step');
+    await tab.goBack();
+    await tab.waitForFunction(() => document.getElementById('f'));
+    assert.equal(new URL(tab.url()).pathname, '/');
+  } finally { await browser.close(); }
+});
+
 test('on a desktop window the helper does nothing', { skip }, async () => {
   const { browser, tab } = await launch({ width: 1200, height: 800 });
   try {

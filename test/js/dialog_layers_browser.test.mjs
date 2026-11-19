@@ -88,6 +88,15 @@ test('a toast raised over a modal dialog can be pressed', { skip }, async (t) =>
   assert.deepEqual(hit, { inside: true, onIt: true });
 });
 
+test('a toast raised just before its dialog closes stays on screen', { skip }, async (t) => {
+  const p = await open(t, '<dialog id="d"><button>x</button></dialog>');
+  await p.evaluate(() => document.getElementById('d').showModal());
+  await p.evaluate(() => { Chronicle.notify('Saved', 'info', { duration: 0 }); document.getElementById('d').close(); });
+  await p.waitForFunction(() => document.getElementById('chronicle-toasts').parentNode === document.body);
+  const seen = await p.evaluate(() => document.querySelector('#chronicle-toasts .chronicle-toast').getBoundingClientRect().height > 0);
+  assert.equal(seen, true);
+});
+
 test('a toast fits a 360 wide phone and its close button is 44 by 44', { skip }, async (t) => {
   const p = await open(t, '<main>page</main>', 360);
   await p.evaluate(() => Chronicle.notify('Saved', 'info', { duration: 0 }));

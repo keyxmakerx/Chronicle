@@ -32,7 +32,7 @@ sidebar active link highlighting, and shared utilities.
 | Loading indicator | Tracks active HTMX requests, toggles `body.htmx-request` class |
 | Unsaved changes | `Chronicle.markDirty(id)` / `Chronicle.markClean(id)` with `beforeunload` prompt; a boosted GET link or form is held on `htmx:confirm` while dirty and asked about with `Chronicle.askSlip` on the dirty form (a full page load, so the browser asks, when no such form is on screen); `Chronicle.discardChanges()` after the person chose to leave without saving |
 | Where you were | A boosted swap into `#main-content` scrolls it to the top; each page's `#main-content` offset is kept by address (sessionStorage) and put back on Back |
-| Back closes a sheet | `Chronicle.backCloses(name, close)` returns `release()`; on phones and touch tablets it pushes a same-address history step so Back closes the sheet. Used by the page peek and the phone sidebar drawer |
+| Back closes a sheet | `Chronicle.backCloses(name, close)` returns `release()`; on phones and touch tablets it pushes a same-address history step so Back closes the sheet. Used by the page peek and the phone sidebar drawer. A boosted link followed from inside an open sheet first steps back off the sheet's step (closing the sheet) and then goes, so the new page takes that step |
 | Form tracking | Forms with `data-track-changes="<id>"` auto-mark dirty on input |
 | Sidebar highlighting | After `htmx:pushedIntoHistory`, updates sidebar `.active` via longest-prefix-match |
 | Form validation | Inline error hints below invalid `.input` fields |

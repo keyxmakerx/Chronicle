@@ -716,6 +716,7 @@
   var SHEET_QUERY = '(max-width: 639.98px), (pointer: coarse) and (max-width: 899.98px)';
   var sheetStack = [];
   var sheetSkipNext = false;
+  var sheetAfterPop = null;
   function noop() {}
   Chronicle.backCloses = function (name, close) {
     if (!window.matchMedia || !window.matchMedia(SHEET_QUERY).matches || !window.history || !history.pushState) return noop;
@@ -739,6 +740,7 @@
     if (sheetSkipNext) {
       sheetSkipNext = false;
       e.stopImmediatePropagation();
+      if (sheetAfterPop) { var then = sheetAfterPop; sheetAfterPop = null; then(); }
       return;
     }
     var now = e.state && e.state.sheet;
@@ -758,6 +760,36 @@
     }
   }, true);
 
+  // leaveSheets(then): a link followed from inside an open sheet first steps
+  // back off the sheet's history step, closing the sheet, and only then goes.
+  // Going straight on would stack the new page on top of that step, and htmx
+  // rewrites the step as a copy of the page underneath, so Back would need two
+  // presses to get past it. With no sheet step current, then() runs at once.
+  function leaveSheets(then) {
+    if (!sheetStack.length || !(history.state && history.state.sheet)) { then(); return; }
+    var open = sheetStack.splice(0);
+    open.forEach(function (x) { x.released = true; });
+    var done = false;
+    function go() {
+      if (done) return;
+      done = true;
+      for (var i = open.length - 1; i >= 0; i--) {
+        try { if (open[i].close) open[i].close(); } catch (err) { /* the page still goes */ }
+      }
+      then();
+    }
+    sheetAfterPop = go;
+    sheetSkipNext = true;
+    history.go(-open.length);
+    // A step back that never reports must not strand the link.
+    setTimeout(function () {
+      if (sheetAfterPop !== go) return;
+      sheetAfterPop = null;
+      sheetSkipNext = false;
+      go();
+    }, 1000);
+  }
+
   // --- "Go back" on a page with nowhere else to go ---
   // An error page's "Go back" is drawn hidden and a plain link, so with no
   // history (a link pasted into a new tab) it never shows and never does
@@ -768,7 +800,7 @@
     if (!links.length) return;
     var fromHere = false;
     try { fromHere = !!document.referrer && new URL(document.referrer).origin === location.origin; } catch (e) { fromHere = false; }
-    if (history.length <= 1 && !fromHere) return;
+    if (!(window.history && history.length > 1) && !fromHere) return;
     for (var i = 0; i < links.length; i++) links[i].classList.remove('hidden');
   }
   document.addEventListener('DOMContentLoaded', function () { revealGoBack(document); });
@@ -891,9 +923,22 @@
       discard: 'Discard and leave',
       onDiscard: function () {
         dirtySources = {};
-        d.issueRequest(true);
+        leaveSheets(function () { d.issueRequest(true); });
       }
     });
+  });
+
+  // A page link followed from inside an open sheet (the phone menu, a peek)
+  // leaves the sheet's history step first; see leaveSheets. Registered after
+  // the unsaved-changes guard so a link that guard is asking about waits.
+  document.addEventListener('htmx:confirm', function (evt) {
+    if (evt.defaultPrevented || !sheetStack.length) return;
+    var d = evt.detail || {}, elt = d.elt;
+    if (!elt || d.verb !== 'get') return;
+    if (!((elt.tagName === 'A' || elt.tagName === 'FORM') && !elt.hasAttribute('hx-get'))) return;
+    if (!(history.state && history.state.sheet)) return;
+    evt.preventDefault();
+    leaveSheets(function () { d.issueRequest(true); });
   });
 
   // Warn user before leaving the page with unsaved changes.
