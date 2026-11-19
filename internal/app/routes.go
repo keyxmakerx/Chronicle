@@ -4636,6 +4636,8 @@ func (a *App) RegisterRoutes() {
 	syncHistoryHandler.SetFoundryMatcher(foundryMatcher)
 	// The scenes in each campaign's Foundry world, as the GM's client reports them.
 	syncHistoryHandler.SetFoundryScenes(syncapi.NewFoundrySceneRepository(a.DB))
+	// Codes a player types in Foundry to link their account without the GM.
+	syncHistoryHandler.SetLinkCodes(syncapi.NewLinkCodes())
 
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)))
