@@ -27,7 +27,7 @@ func timelinesOpening(ctx context.Context, data TimelineListData) layouts.AppOpe
 		d.Action = &layouts.AppAction{
 			Label: "Add a timeline",
 			Icon:  "fa-plus",
-			Attrs: templ.Attributes{"onclick": "document.getElementById('create-timeline-modal').classList.remove('hidden')"},
+			Attrs: templ.Attributes{"data-opens": "create-timeline-modal"},
 		}
 	}
 	return d

@@ -9,6 +9,14 @@
  * Alpine off until they exist, and init hands the page to Alpine.
  */
 (function () {
+  // Shows a pop-up and opens it as a modal (Escape, Tab stays inside, focus
+  // goes back to the button that opened it).
+  function openModal(id) {
+    var m = document.getElementById(id);
+    m.classList.remove('hidden');
+    if (window.Chronicle && Chronicle.modal) Chronicle.modal(m, { opener: document.activeElement });
+  }
+
   function visibilityManager(campaignID, timelineID, initVisibility, initRules) {
     return {
       visibility: initVisibility,
@@ -301,7 +309,7 @@
         this.color = detail.color || '';
         this.label = detail.label || '';
         this.errorMsg = '';
-        document.getElementById('edit-event-modal').classList.remove('hidden');
+        openModal('edit-event-modal');
       },
       closeEdit() {
         document.getElementById('edit-event-modal').classList.add('hidden');
@@ -387,7 +395,7 @@
             this.selectedUsers = detail.rules.denied_users.slice();
           }
         }
-        document.getElementById('event-vis-modal').classList.remove('hidden');
+        openModal('event-vis-modal');
       },
       closeVis() {
         document.getElementById('event-vis-modal').classList.add('hidden');

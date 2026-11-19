@@ -188,6 +188,7 @@
         st.dressing = { shop: shop, f: S.clean(shop.front || {}), from: from, peekShut: false, msg: '' };
         drawCard();
         card.hidden = false;
+        if (window.Chronicle && Chronicle.modal) Chronicle.modal(card, { opener: null, escape: false, focus: false });
         requestAnimationFrame(function () { card.classList.add('on'); scrim.classList.add('on'); card.focus({ preventScroll: true }); });
       }
       function closeDress() {

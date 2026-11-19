@@ -62,3 +62,22 @@ func TestMapListOpening_WithMaps(t *testing.T) {
 		t.Errorf("unexpected opening:\n%s", out)
 	}
 }
+
+// templ refuses an on* attribute built from a plain string and prints a
+// comment in its place, which leaves the button dead. The owner's "Add a map"
+// button must name its pop-up instead.
+func TestMapListOpening_ActionIsNotDead(t *testing.T) {
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}}
+	ctx := layouts.SetIsOwner(context.Background(), true)
+	var buf bytes.Buffer
+	if err := mapListContent(cc, MapListData{CampaignID: "c1", IsOwner: true}).Render(ctx, &buf); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "failed sanitization") {
+		t.Errorf("a button carries an attribute templ refused to print:\n%s", out)
+	}
+	if !strings.Contains(out, `data-opens="create-map-modal"`) {
+		t.Errorf("Add a map does not name its pop-up:\n%s", out)
+	}
+}

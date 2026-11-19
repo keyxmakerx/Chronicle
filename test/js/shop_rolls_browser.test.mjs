@@ -33,6 +33,7 @@ const FAKE = (room, rollResult) => `window.__calls = []; window.__state = { good
 window.Chronicle = {
   escapeHtml: function (s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); },
   register: function (n, impl) { impl.init(document.getElementById('w')); },
+  layerHost: function () { var d = document.querySelectorAll('dialog[open]'); return d.length ? d[d.length - 1] : document.body; },
   apiFetch: function (url, o) {
     var m = (o && o.method) || 'GET', body = o && o.body;
     if (body && typeof body !== 'string') body = JSON.stringify(body);
