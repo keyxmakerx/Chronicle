@@ -26,6 +26,10 @@
  * 250ms; stays open while the pointer is on the card; click or tap pins it
  * with a close button; keyboard focus opens it and Escape closes it; one
  * card at a time; kept inside the window, flipping above near the bottom.
+ * On touch, a long press on a link to a page inside a page's text opens the
+ * card pinned, with the phone's own link jobs on it (Open page, Read it below,
+ * Open in new tab, Copy link), and the phone's own link menu stays shut on
+ * that link; links to other sites keep it.
  * The fading corner sits above its trigger and flips below near the top of
  * the window, and to the trigger's left near the right edge.
  */
@@ -48,6 +52,7 @@
   var current = null;   // trigger the card belongs to
   var pinned = false;
   var corner = false;   // the card is drawn as the fading corner
+  var rows = false;     // opened by a long press on a link in text: the link jobs show
   var restoringFocus = false; // set while Escape hands focus back to the trigger
   var openTimer = 0, closeTimer = 0;
   var token = 0;        // guards against a slow contentFn answering for an old trigger
@@ -69,7 +74,27 @@
     return /^(\/(?![\/\\])|https?:\/\/|#)/i.test(h) ? h : '';
   }
 
-  function html(c, idPrefix) {
+  // A link to a page in a page's text: the long press is Chronicle's there.
+  // Not in an editor, where a press places the caret, and only same-site links.
+  var TEXT_LINK = '.prose a[data-entity-preview]';
+  function textLink(a) {
+    if (!a || !a.matches || !a.matches(TEXT_LINK) || a.closest('[contenteditable="true"]')) return false;
+    var h = a.getAttribute('href') || '';
+    return /^\/(?![\/\\])/.test(h);
+  }
+
+  // The long press card's rows: what the phone's link menu offered, plus the
+  // peek. Built from the content's own link and peek address.
+  function rowsHTML(href, peek) {
+    var h = '<div class="chc__foot chc__rows" role="group" aria-label="Actions">' +
+      '<a class="chc__row" href="' + esc(href) + '">Open page</a>';
+    if (peek) h += '<button type="button" class="chc__row" data-chc="peek" data-peek="' + esc(peek) + '">Read it below, keep this page</button>';
+    h += '<a class="chc__row" data-chc="tab" href="' + esc(href) + '" target="_blank" rel="noopener">Open in new tab</a>' +
+      '<button type="button" class="chc__row" data-chc="copy" data-href="' + esc(href) + '">Copy link</button></div>';
+    return h;
+  }
+
+  function html(c, idPrefix, withRows) {
     if (!c) return '';
     var title = '<h3 class="chc__title"' + (idPrefix ? ' id="' + idPrefix + '-t"' : '') + '>' + esc(c.title) +
       (c.locked ? ' <i class="fa-solid fa-lock chc__lock" aria-label="Private"></i>' : '') + '</h3>';
@@ -96,7 +121,9 @@
     // The address rides in a data attribute so the inline handler needs no escaping.
     var peek = c.peek && C.peekAddress ? C.peekAddress(c.peek) : '';
     var peekBtn = peek ? '<button type="button" class="chc__peek" data-peek="' + esc(peek) + '" onclick="(function(b){if(window.Chronicle&amp;&amp;Chronicle.peek){Chronicle.peek.open(b.getAttribute(\'data-peek\'));Chronicle.hovercard.close();}})(this)">Peek</button>' : '';
-    if (c.foot || href || peekBtn) {
+    if (withRows && href) {
+      h += rowsHTML(href, peek);
+    } else if (c.foot || href || peekBtn) {
       h += '<div class="chc__foot">' + (c.foot ? '<span>' + esc(c.foot) + '</span>' : '') + peekBtn +
         (href ? '<a class="chc__link" href="' + esc(href) + '">' + esc(c.link.label || 'Open') + ' &rarr;</a>' : '') + '</div>';
     }
@@ -125,6 +152,8 @@
     });
     card.addEventListener('click', function (e) {
       e.stopPropagation();
+      var job = e.target.closest && e.target.closest('[data-chc]');
+      if (job) { runJob(job); return; }
       if (e.target.closest('.chc__x')) {
         var t = current;
         close();
@@ -132,6 +161,26 @@
       }
     });
     return card;
+  }
+
+  function runJob(el) {
+    var job = el.getAttribute('data-chc');
+    if (job === 'peek') {
+      var addr = el.getAttribute('data-peek');
+      if (C.peek && addr) C.peek.open(addr);
+      close();
+    } else if (job === 'copy') {
+      var a = document.createElement('a');
+      a.href = el.getAttribute('data-href');
+      var url = a.href;
+      var ok = function () { if (C.notify) C.notify('Link copied', 'success'); };
+      var bad = function () { if (C.notify) C.notify('The link could not be copied.', 'error'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, bad); else bad();
+      close();
+    } else {
+      // Open in new tab: the link does its own opening.
+      close();
+    }
   }
 
   function place() {
@@ -165,7 +214,7 @@
   }
 
   function render(c) {
-    inner.innerHTML = html(c, 'chc');
+    inner.innerHTML = html(c, 'chc', rows);
     if (c && c.title) card.setAttribute('aria-labelledby', 'chc-t');
     else card.removeAttribute('aria-labelledby');
   }
@@ -178,6 +227,7 @@
     current = trigger;
     pinned = !!(opts && opts.pin);
     corner = !!(opts && opts.corner);
+    rows = !!(opts && opts.press);
     card.dataset.look = corner ? 'corner'
       : opts && opts.kit && document.documentElement.hasAttribute('data-cz-kit') ? 'kit' : look();
     card.style.maxWidth = '';
@@ -210,6 +260,7 @@
     if (current) detachTrigger(current);
     current = null;
     pinned = false;
+    rows = false;
     setTimeout(function () { if (card && !current) card.hidden = true; }, 160);
   }
 
@@ -221,9 +272,9 @@
 
   // Resolve the caller's content (value or Promise) and show it, with a
   // loading line while a fetch is in flight. A null answer closes the card.
-  function show(trigger, contentFn, pin, bopts) {
+  function show(trigger, contentFn, pin, bopts, press) {
     var my = ++token;
-    var res, o = { pin: pin, corner: !!bopts.corner, kit: !!bopts.kit };
+    var res, o = { pin: pin, corner: !!bopts.corner, kit: !!bopts.kit, press: !!press };
     try { res = contentFn(trigger); } catch (e) { res = null; }
     if (res && typeof res.then === 'function') {
       open(trigger, { title: trigger.textContent.trim(), loading: true }, o);
@@ -239,7 +290,7 @@
   function bind(root, selector, contentFn, opts) {
     root = root || document;
     opts = opts || {};
-    var pressTimer = 0, pressed = false;
+    var pressTimer = 0, pressed = false, lastTouch = 0;
     function find(e) { return e.target && e.target.closest ? e.target.closest(selector) : null; }
     function within(t) { return t && (root === document || root.contains(t)); }
 
@@ -291,18 +342,29 @@
     function onTouchStart(e) {
       var t = find(e);
       if (!within(t) || opts.pinOnClick) return;
+      lastTouch = Date.now();
       clearTimeout(pressTimer);
       pressed = false;
-      pressTimer = setTimeout(function () { pressed = true; show(t, contentFn, true, opts); }, LONG_PRESS);
+      pressTimer = setTimeout(function () { pressed = true; show(t, contentFn, true, opts, textLink(t)); }, LONG_PRESS);
     }
     function cancelPress() { clearTimeout(pressTimer); }
+    // The phone's own link menu is shut on a link in page text, and the press
+    // carries on to the card; anywhere else it ends the press.
+    function onContextMenu(e) {
+      var t = find(e);
+      if (within(t) && !opts.pinOnClick && textLink(t) && (e.pointerType === 'touch' || Date.now() - lastTouch < 2000)) {
+        e.preventDefault();
+        return;
+      }
+      cancelPress();
+    }
 
     var on = [
       ['pointerover', onOver], ['pointerout', onOut], ['focusin', onFocusIn], ['focusout', onFocusOut],
       ['click', onClick, true], ['keydown', onKey], ['touchstart', onTouchStart, { passive: true }],
       ['touchend', cancelPress], ['touchcancel', cancelPress], ['touchmove', cancelPress, { passive: true }],
       // The phone's own link menu taking the press ends it for the card too.
-      ['contextmenu', cancelPress]
+      ['contextmenu', onContextMenu, true]
     ];
     on.forEach(function (h) { root.addEventListener(h[0], h[1], h[2]); });
     return function unbind() {
@@ -341,7 +403,7 @@
     open: function (trigger, content, opts) { open(trigger, content, opts); },
     update: update,
     close: close,
-    html: function (c) { return html(c, ''); },
+    html: function (c) { return html(c, '', false); },
     look: look,
     current: function () { return current; }
   };

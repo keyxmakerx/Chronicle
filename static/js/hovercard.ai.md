@@ -36,6 +36,13 @@ safe markup. Links are followed only for same-site paths, `#` fragments and http
   it moved onto the card.
 - Click (`pinOnClick`) or a long press on a link (touch) pins it with a close
   button; a click elsewhere closes it.
+- A long press on a link to a page inside `.prose` (page text, not an editor)
+  opens the card pinned with four rows in place of the foot: Open page, Read
+  it below, keep this page (`Chronicle.peek`), Open in new tab and Copy link
+  (toast "Link copied"). On that link only, `-webkit-touch-callout: none`
+  (paper.css) and a touch `contextmenu` preventDefault keep the phone's own
+  link menu shut; links to other sites and links outside page text keep it.
+  Holding then dragging cancels the press.
 - Keyboard focus on the trigger opens it; Escape closes it and returns focus.
 - One card at a time. Kept 8 px inside the window; flips above the trigger
   near the bottom. Scrolling closes an unpinned card and moves a pinned one.
