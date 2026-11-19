@@ -75,7 +75,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					<span class="text-fg" data-page-crumb>{ entity.Name }</span>
 				</nav>
 				if editor {
-					@pageEditorBar(cc, entity) {
+					@pageEditorBar(cc, entity, csrfToken) {
 						@pageLayoutChip(cc, entity)
 						@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
 					}

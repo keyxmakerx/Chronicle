@@ -9,6 +9,16 @@ package updatehealth
 // removed. internal/wire checks that every route here is a real route.
 var Changed = []Feature{
 	{
+		ID:   "page-menu-2026-11",
+		Name: "The page's three-dots menu",
+		Routes: []string{
+			"POST /campaigns/:id/entities/:eid/clone",
+			"GET /campaigns/:id/entities/:eid/history",
+			"DELETE /campaigns/:id/entities/:eid",
+		},
+		Try: "/campaigns",
+	},
+	{
 		ID:     "crafting-2026-11",
 		Name:   "Crafting",
 		Routes: []string{"/campaigns/:id/crafting*"},

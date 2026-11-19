@@ -155,3 +155,22 @@ test('a turned-off tile offers the owner Turn on, and nobody else anything', () 
   assert.deepEqual(ids(menu.tileItemsFor({ key: 'app:rulebook', off: true, onIds: '', model: drawerModel(), editor })), ['features']);
   assert.equal(menu.tileItemsFor({ key: 'app:maps', off: true, onIds: '3', model: null, editor }).length, 0);
 });
+
+test('a page row offers Page history to a scribe and Delete page to the owner only', () => {
+  const { menu } = load();
+  const page = (extra) => menu.treeItemsFor({ kind: 'page', hasChildren: false, ...extra });
+  const owner = page({ canEdit: true, canDelete: true });
+  assert.deepEqual(labels(owner), ['Open', 'Open in new tab', 'Copy link', 'New page inside', 'New folder here', 'Rename', 'Move to folder…', 'Page history', 'Delete page']);
+  assert.equal(owner[owner.length - 1].danger, true);
+  assert.deepEqual(labels(page({ canEdit: true, canDelete: false })).slice(-2), ['Move to folder…', 'Page history']);
+  // A player, and a page's extra listing, get neither.
+  assert.deepEqual(labels(page({ canEdit: false, canDelete: false })), ['Open', 'Open in new tab', 'Copy link']);
+  assert.ok(!labels(menu.treeItemsFor({ kind: 'place', canEdit: true, canDelete: true })).includes('Delete page'));
+});
+
+test('a folder keeps Delete folder and gains no page rows', () => {
+  const { menu } = load();
+  const rows = labels(menu.treeItemsFor({ kind: 'folder', canEdit: true, canDelete: true }));
+  assert.ok(rows.includes('Delete folder'));
+  assert.ok(!rows.includes('Page history') && !rows.includes('Delete page'));
+});
