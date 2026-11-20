@@ -1,173 +1,189 @@
 /*
  * manage_desk.css: the owner's Campaign settings page
- * (internal/plugins/campaigns/desk.templ) and the sentence a Manage tool page
- * opens with.
+ * (internal/plugins/campaigns/desk.templ) and the figures a Manage tool page
+ * draws beside its title.
  *
- * The page is named rows, like a phone's settings: every row starts with its
- * name, what it is doing follows in grey, and a chevron ends it. A row is one
- * link over its whole width (48px tall, 56 on a phone's coarse pointer), so the
- * thing you tap is the easiest thing to see. A row that changes in place shows
- * its value where the state goes and opens the small menu. Colour comes from the
- * theme tokens, so light and dark both work. Only transform and opacity ever
- * animate; Calm keeps opacity and Off stops all of it (the script reads
- * html[data-motion] for the menu itself, the rules below cover the Saved tick
- * and the Glow).
+ * The page is a sheet: two columns of groups on a wide page, one on a narrow
+ * one. Each row is a short name with its value right beside it, and a value is
+ * one of three things: a control that changes where it stands (a menu that
+ * grows from the word, or a field in place), a figure that opens its page (a
+ * link ending in a small chevron), or a quiet word that acts or leads on. No
+ * row holds a sentence. Colour comes from the theme tokens, so light and dark
+ * both work. Only transform and opacity ever animate, plus background-colour
+ * and colour changes; Calm keeps opacity and Off stops all of it (the script
+ * reads html[data-motion] for the menu itself, the rules below cover the
+ * Saved tick, the Glow and the chevron).
  */
 
 .desk {
   position: relative; /* the menu is placed against this */
-  max-width: 46rem;
+  container: desk / inline-size; /* the sheet folds to one column by its own width, not the screen's */
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   color: var(--color-text-body);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
-/* Find as a full-width field, the first thing under the title --------------- */
-.manage-find-field {
-  width: 100%;
-  min-height: 2.75rem;
+/* Find, on the title's row at the right; under the title on a phone -------- */
+.manage-head .manage-find-field {
+  width: 15rem;
+  min-height: 2.25rem;
   padding: 0.25rem 0.75rem;
-  gap: 0.625rem;
-  font-size: 0.9375rem;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
   background: var(--color-bg-secondary);
   color: var(--color-text-muted);
 }
 .manage-find-field > span { flex: 1 1 auto; text-align: left; }
 .manage-find-field:hover { color: var(--color-text-primary); }
-
-/* Groups and rows --------------------------------------------------------- */
-.set-lab {
-  margin: 0;
-  padding: 0.25rem 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+@media (max-width: 640px) {
+  .manage-head .manage-actions:has(.manage-find-field) { flex: 0 0 100%; margin-left: 0; margin-top: 0.75rem; }
+  .manage-head .manage-find-field { width: 100%; min-height: 2.75rem; }
 }
+
+/* The sheet and its groups ------------------------------------------------- */
+.set-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem 2rem;
+  align-items: start;
+}
+.set-col { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
+@container desk (max-width: 43rem) {
+  .set-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+.set-grp { min-width: 0; }
+.set-lab {
+  margin: 0 0 0.25rem;
+  padding: 0 0 0.25rem;
+  border-bottom: var(--shape-rule) solid var(--color-border);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-accent-link, var(--color-accent));
+}
+.set-grp-danger .set-lab { color: rgb(var(--color-bad-rgb)); }
 .set-list { margin: 0; padding: 0; list-style: none; }
+
+/* A row: the name in a fixed column, its value right beside it. */
 .set-ln {
   position: relative;
   isolation: isolate;
-  border-top: var(--shape-rule) solid var(--color-border);
-}
-.set-ln:first-child { border-top: 0; }
-.set-ln form { margin: 0; }
-.set-anchor { display: block; height: 0; }
-
-/* One row: the name, the state in grey, the chevron. */
-.set-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.75rem;
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 3rem;
-  margin: 0;
-  padding: 0.5rem 0.5rem;
-  border: 0;
-  border-radius: var(--shape-r-ctl);
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  text-decoration: none;
-  color: var(--color-text-body);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--dur-micro) var(--ease-out);
+  gap: 0 0.75rem;
+  min-height: 2.25rem;
 }
-a.set-row:hover, button.set-row:hover { background: var(--color-bg-tertiary); }
-a.set-row:active, button.set-row:active { background: var(--color-border); }
-a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .set-name {
-  flex: 0 0 auto;
-  max-width: 100%;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+.set-vals {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 0.25rem;
   font-weight: 500;
   color: var(--color-text-primary);
 }
-.set-state {
-  flex: 1 1 0;
-  min-width: 0;
+.set-form { display: contents; margin: 0; }
+
+/* A value: soft fill on hover, a ring on focus, and padding that is pulled back
+   by a negative margin so the text still lines up with the column. */
+.set-v {
+  --pad: 0.5rem;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 0.5rem;
-  text-align: right;
-  overflow-wrap: anywhere; /* a long campaign name wraps, it never runs under the chevron */
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
-}
-.set-chev { flex: 0 0 auto; margin-left: auto; color: var(--color-text-muted); }
-.set-row:hover .set-chev { color: var(--color-text-secondary); }
-.set-danger .set-name { color: rgb(var(--color-bad-rgb)); }
-.set-why { margin: 0 0.5rem 0.5rem; font-size: 0.8125rem; color: var(--color-text-muted); }
-
-/* A needs-you row has a dot where a state row has none; no other mark. */
-.set-row > .desk-dot { margin: 0; flex: 0 0 auto; }
-
-/* Pin: icon weight, before the chevron, wide screens only. */
-.set-ln > .manage-pin { display: none; }
-@media (min-width: 641px) {
-  .set-ln > .manage-pin {
-    display: inline-flex;
-    position: absolute;
-    top: 50%;
-    right: 2.25rem;
-    margin: 0;
-    transform: translateY(-50%);
-  }
-  .set-ln > .manage-pin:active { transform: translateY(-50%) scale(0.88); }
-  .set-ln > .set-row { padding-right: 4.25rem; }
-}
-
-/* Rows that change in place: the value is the control, and its hit area is the
-   whole row (the stretched ::before), so the name is as tappable as the value. */
-.set-edit > .set-row { position: relative; cursor: pointer; }
-.set-edit > .set-row:hover { background: var(--color-bg-tertiary); }
-.set-edit .set-state { position: static; }
-.desk-b.set-val {
-  position: static;
-  padding: 0;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 1.75rem;
+  margin: 0;
+  padding: 0 var(--pad);
+  border: 0;
+  border-radius: var(--shape-r-small);
+  background: transparent;
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
   text-decoration: none;
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
-  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--dur-micro) var(--ease-out),
+              color var(--dur-micro) var(--ease-out);
 }
-.desk-b.set-val::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: var(--shape-r-ctl);
-}
-.desk-b.set-val:hover, .desk-b.set-val:active { background: transparent; color: var(--color-text-primary); text-decoration: none; }
-.desk-b.set-val:focus-visible { outline: none; }
-.desk-b.set-val:focus-visible::before { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.desk-b.set-val[aria-expanded="true"] { color: var(--color-accent-link, var(--color-accent)); text-decoration: none; }
-.desk-b.set-val[aria-disabled="true"] { text-decoration: none; }
-.desk-b.set-val[aria-disabled="true"]::before { cursor: not-allowed; }
-.set-edit:has(.desk-b.set-val[aria-disabled="true"]) > .set-row { cursor: not-allowed; }
-.set-edit:has(.desk-b.set-val[aria-disabled="true"]) > .set-row:hover { background: transparent; }
-.set-edit:has(.desk-b.set-val[aria-disabled="true"]) .set-chev { opacity: 0.4; }
-.set-state > .desk-acts:empty { display: none; }
-.set-edit .desk-ty { flex: 1 1 auto; min-width: 0; width: 100%; font-size: 1rem; text-align: right; position: relative; z-index: 1; }
+.set-word { --pad: 0.25rem; }
+.set-vals > .set-v:first-child,
+.set-vals > .set-form:first-child > .set-v { margin-left: calc(-1 * var(--pad)); }
+.set-v:hover { background: var(--color-bg-tertiary); }
+.set-v:active { background: var(--color-border); }
+.set-v:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 0; }
+.set-v[aria-expanded="true"] { background: var(--color-bg-tertiary); }
+.set-v[data-state="working"] { opacity: 0.6; cursor: progress; }
+.set-v.set-danger { color: rgb(var(--color-bad-rgb)); }
+/* Off: the reason is on hover and read aloud; nothing responds to a press. */
+.set-v[aria-disabled="true"] { cursor: not-allowed; color: var(--color-text-muted); }
+.set-v[aria-disabled="true"]:hover,
+.set-v[aria-disabled="true"]:active { background: transparent; }
+.desk-b.is-empty { color: var(--color-text-muted); font-weight: 400; }
 
-/* A tool page's sentence --------------------------------------------------- */
-.desk-s { margin: 0; flex: 1 1 auto; min-width: 0; color: var(--color-text-body); }
-.desk-s b { font-weight: 600; color: var(--color-text-primary); }
+.set-t { min-width: 0; overflow-wrap: anywhere; }
+.set-sub { flex: 0 0 auto; font-size: 0.8125rem; font-weight: 400; color: var(--color-text-muted); }
+.set-chev { flex: 0 0 auto; color: var(--color-text-muted); transition: transform var(--dur-micro) var(--ease-out); }
+.set-v:hover .set-chev { color: var(--color-text-secondary); }
+/* The chevron points the way the menu goes: it turns while the menu is open. */
+.set-v[aria-expanded="true"] .set-chev-down { transform: rotate(180deg); }
+/* A description is one line cut to the column; the full text opens in a field. */
+.set-wide .desk-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Its row never wraps: the Saved tick takes its room from the text, so the
+   row keeps its height when the tick lands. */
+.set-vals:has(> .set-wide) { flex-wrap: nowrap; }
+.set-wide { flex: 0 1 auto; }
+
+/* The reason a value is off sits under the row. Heard on a wide screen (it is
+   the value's description), drawn on a phone, where there is no hover. */
+.set-why {
+  grid-column: 1 / -1;
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+.set-why[hidden] { display: none; }
+@media (min-width: 641px) {
+  .set-why:not([hidden]) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
 .desk-acts {
   flex: 0 0 auto;
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.875rem;
+  align-items: center;
+  margin-left: 0.5rem;
   white-space: nowrap;
 }
+.desk-acts:empty { display: none; }
 
 /* The state dot: state colours mean state only. */
 .desk-dot {
   display: inline-block;
+  flex: 0 0 auto;
   width: 0.5rem;
   height: 0.5rem;
   margin-right: 0.5rem;
@@ -175,60 +191,23 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
   vertical-align: 0.05em;
   background: var(--color-text-muted);
 }
+.set-v > .desk-dot { margin-right: 0; }
 .desk-dot.ok { background: rgb(var(--color-ok-rgb)); }
 .desk-dot.warn { background: rgb(var(--color-warn-rgb)); }
 
-/* Blanks ----------------------------------------------------------------- */
-.desk-b {
-  /* a span with a button role, so a long blank wraps like the words around it */
-  display: inline;
-  margin: 0;
-  padding: 0.3125rem 0.0625rem;
-  border: 0;
-  border-radius: var(--shape-r-tag);
-  background: transparent;
-  font: inherit;
-  color: var(--color-text-primary);
-  cursor: pointer;
-  text-decoration: underline dashed;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 4px;
-  text-decoration-color: var(--color-text-muted);
-  -webkit-tap-highlight-color: transparent;
-  transition: color var(--dur-everyday) var(--ease-out),
-              background-color var(--dur-everyday) var(--ease-out);
-}
-.desk-b:hover {
-  color: var(--color-accent-link, var(--color-accent));
-  text-decoration-color: var(--color-accent);
-  background: rgb(var(--color-accent-rgb, 99 102 241) / 0.08);
-}
-.desk-b:active { background: rgb(var(--color-accent-rgb, 99 102 241) / 0.16); }
-.desk-b[aria-expanded="true"] {
-  color: var(--color-accent-link, var(--color-accent));
-  text-decoration-style: solid;
-  text-decoration-color: var(--color-accent);
-}
-.desk-b:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.desk-b[data-state="working"] { opacity: 0.6; cursor: progress; }
-.desk-b[aria-disabled="true"] {
-  cursor: not-allowed;
-  color: var(--color-text-muted);
-  text-decoration-style: dotted;
-  background: transparent;
-}
-
-/* The campaign's colour as a small dot (the Customize row). */
+/* The campaign's colour as a small dot (the Colour row). */
 .desk-sw {
   display: inline-block;
+  flex: 0 0 auto;
   width: 0.75rem;
   height: 0.75rem;
-  margin-inline: 0.125rem;
   border-radius: 50%;
-  vertical-align: -0.05em;
   background: var(--color-accent);
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+  box-shadow: inset 0 0 0 var(--shape-edge) rgb(0 0 0 / 0.12);
 }
+
+/* A tool page's figures beside its title: the dot keeps its gap from the words. */
+.manage-fig .desk-dot { vertical-align: 0.05em; }
 
 /* The menu ---------------------------------------------------------------- */
 .desk-menu {
@@ -237,7 +216,7 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
   min-width: 12rem;
   max-width: calc(100% - 1rem);
   padding: 0.25rem;
-  border: 1px solid var(--color-border);
+  border: var(--shape-edge) solid var(--color-border);
   border-radius: var(--shape-r-ctl);
   background: var(--color-bg-secondary);
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.12), var(--elev-resting);
@@ -250,7 +229,7 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
   gap: 0.75rem;
   width: 100%;
   min-height: 2.25rem;
-  padding: 0.375rem 0.625rem;
+  padding: 0.375rem 0.75rem;
   border: 0;
   border-radius: var(--shape-r-small);
   background: transparent;
@@ -260,25 +239,33 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
   cursor: pointer;
   transition: background-color var(--dur-everyday) var(--ease-out);
 }
+.desk-mi { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.desk-mh { font-size: 0.78125rem; font-weight: 400; color: var(--color-text-muted); }
 .desk-menu > button svg { flex: 0 0 auto; opacity: 0; color: var(--color-accent-link, var(--color-accent)); }
-.desk-menu > button[aria-checked="true"] { color: var(--color-text-primary); font-weight: 600; }
+.desk-menu > button[aria-checked="true"] { color: var(--color-text-primary); }
+.desk-menu > button[aria-checked="true"] .desk-ml { font-weight: 600; }
 .desk-menu > button[aria-checked="true"] svg { opacity: 1; }
 .desk-menu > button:hover { background: var(--color-bg-tertiary); }
 .desk-menu > button:active { background: var(--color-border); }
 .desk-menu > button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; background: var(--color-bg-tertiary); }
 
-/* Renaming in place --------------------------------------------------------- */
+/* Changing a name or a description in place --------------------------------- */
 .desk-ty {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: calc(100% + 0.5rem);
+  margin-left: -0.5rem;
+  padding: 0.25rem 0.5rem;
   font: inherit;
+  font-weight: 500;
   color: var(--color-text-primary);
   background: var(--color-bg-secondary);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--shape-r-tag);
-  padding: 0.125rem 0.375rem;
-  min-width: 10rem;
-  max-width: 100%;
+  border: var(--shape-edge) solid var(--color-accent);
+  border-radius: var(--shape-r-small);
 }
-.desk-ty:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.desk-ta { display: block; resize: vertical; line-height: 1.5; }
+.desk-ty:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 0; }
 
 /* Saved tick and Glow ---------------------------------------------------- */
 .desk-saved {
@@ -286,6 +273,7 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
   align-items: center;
   gap: 0.25rem;
   font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--color-ok-fg);
   animation: desk-settle var(--dur-large) var(--ease-out);
 }
@@ -303,7 +291,7 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
   position: absolute;
   inset: 0;
   z-index: -1;
-  border-radius: inherit;
+  border-radius: var(--shape-r-small);
   background: rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
   opacity: 0;
   pointer-events: none;
@@ -317,18 +305,22 @@ a.set-row:focus-visible, button.set-row:focus-visible { outline: 2px solid var(-
 }
 
 html[data-motion="calm"] .desk-saved { animation-name: desk-fade; }
+html[data-motion="calm"] .set-chev { transition: none; }
 @keyframes desk-fade { from { opacity: 0; } to { opacity: 1; } }
 html[data-motion="off"] .desk-saved { animation: none; }
 html[data-motion="off"] .set-ln.is-glow::after,
 html[data-motion="off"] .set-ln:target::after { animation: none; opacity: 1; }
-html[data-motion="off"] .set-row,
-html[data-motion="off"] .desk-b,
+html[data-motion="off"] .set-v,
+html[data-motion="off"] .set-chev,
 html[data-motion="off"] .desk-menu > button { transition: none; }
+html[data-motion="calm"] .set-v[aria-expanded="true"] .set-chev-down,
+html[data-motion="off"] .set-v[aria-expanded="true"] .set-chev-down { transform: none; }
 
-/* Phone: rows get a thumb-sized height, menus and fields follow ------------- */
+/* Phone: rows get a thumb-sized height with a hairline under each, and a value
+   is as tall as its row. ----------------------------------------------------- */
 @media (max-width: 640px) {
-  .desk { gap: 1.25rem; }
-  .set-row { min-height: 3.25rem; padding-inline: 0.25rem; }
-  .set-lab { padding: 0.5rem 0 0.25rem; }
+  .set-ln { min-height: 2.75rem; border-bottom: var(--shape-rule) solid var(--color-border); }
+  .set-v { min-height: 2.75rem; }
+  .set-lab { border-bottom-color: transparent; }
   .desk-menu > button { min-height: 2.75rem; }
 }

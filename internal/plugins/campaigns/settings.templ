@@ -307,8 +307,8 @@ templ peopleSections(cc *CampaignContext, v MemberListView, transfer *OwnershipT
 			<div id="invite-box" hx-get={ fmt.Sprintf("/campaigns/%s/invite-box", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML"></div>
 		}
 
-		// Transfer ownership.
-		<div class="card p-6">
+		// Transfer ownership. The desk's Transfer… word leads here.
+		<div id="transfer" class="card p-6">
 			<h2 class="text-lg font-semibold text-fg mb-4">Transfer Ownership</h2>
 			if transfer != nil {
 				<div class="alert-warning mb-4">

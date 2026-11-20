@@ -1,8 +1,8 @@
 // desk_service.go assembles the owner's desk. It owns the provider registry
 // (the seam other plugins register through) and the rule that a provider can
 // never break the page: each runs under a short deadline, a failure or a
-// panic is logged, and the line it would have filled falls back to a plain
-// link sentence.
+// panic is logged, and the row it would have filled falls back to the quiet
+// word "Open".
 
 package campaigns
 
@@ -25,13 +25,14 @@ type DeskService interface {
 	// Register adds a provider for its slot; a second one for the same slot
 	// replaces the first.
 	Register(p DeskProvider)
-	// Build reads every provider and words every line. It never fails: a
-	// line whose numbers are missing is a plain sentence.
+	// Build reads every provider and builds every row. It never fails: a
+	// figure whose numbers are missing is the word "Open".
 	Build(ctx context.Context, req DeskRequest, in DeskInputs) *Desk
-	// Line words one line again, from fresh numbers, so a change made inside
-	// its fold can update its sentence without redrawing the desk. False when
-	// the line does not exist for this campaign.
-	Line(ctx context.Context, req DeskRequest, in DeskInputs, id string) (DeskLine, bool)
+	// Figure builds the figures a Manage tool page draws beside its title,
+	// from fresh numbers, so a change made on the page can redraw them
+	// without redrawing the page. False when the page's line does not exist
+	// for this campaign; an empty figure draws nothing.
+	Figure(ctx context.Context, req DeskRequest, in DeskInputs, id string) (DeskFigure, bool)
 	// NeedsCount is how many things wait on the owner, for the sidebar's
 	// Manage row. It asks only the providers that feed Needs-you, so a count
 	// on every page does not cost the whole desk.
@@ -83,7 +84,7 @@ func (s *deskService) gather(ctx context.Context, req DeskRequest, only ...DeskS
 			slot := p.Slot()
 			f, err := callProvider(ctx, p, req)
 			if err != nil {
-				slog.Warn("desk: provider failed, line shows a plain sentence",
+				slog.Warn("desk: provider failed, row shows Open",
 					slog.String("slot", string(slot)), slog.String("campaign_id", req.CampaignID), slog.Any("error", err))
 				return
 			}
@@ -100,6 +101,8 @@ func (s *deskService) gather(ctx context.Context, req DeskRequest, only ...DeskS
 				merged.AI = f.AI
 			case DeskTrash:
 				merged.Trash = f.Trash
+			case DeskKeys:
+				merged.Keys = f.Keys
 			}
 		}(p)
 	}
@@ -139,62 +142,64 @@ func callProvider(ctx context.Context, p DeskProvider, req DeskRequest) (DeskFac
 func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs) *Desk {
 	c := in.Campaign
 	facts := s.gather(ctx, req)
-	line := func(id string) DeskLine { l, _ := s.line(id, c, in, facts, req.Now); return l }
 
-	look := []DeskLine{nameLine(c), descriptionLine(c), lookLine(c), gameLine(c, in)}
+	look := []DeskLine{styleLine(c), colourLine(c)}
 	if in.Addons["media-gallery"] {
-		look = append(look, line("media"))
+		look = append(look, mediaLine(c, facts.Media))
 	}
-
 	var conns []DeskLine
 	if in.Addons["sync-api"] {
-		conns = append(conns, line("foundry"))
+		conns = append(conns, foundryLine(c, facts.Foundry, req.Now))
 	}
-	conns = append(conns, line("ai"), keysLine(c))
+	conns = append(conns, aiLine(c, facts.AI), keysLine(c, facts.Keys))
 
 	return &Desk{
 		CampaignName: c.Name,
 		Needs:        needsYou(c, withoutDisabled(facts, in.Addons), req.Now),
-		Groups: []DeskGroup{
-			{Name: "People", Lines: []DeskLine{line("people"), line("changes")}},
-			{Name: "What players and guests see", Lines: []DeskLine{playersHomeLine(), guestsHomeLine(c), pagesLine(c), publicLine(c)}},
-			{Name: "Look and game", Lines: look},
+		Left: []DeskGroup{
+			{Name: "General", Lines: []DeskLine{nameLine(c), descriptionLine(c)}},
+			{Name: "Access", Lines: []DeskLine{publicLine(c), pagesLine(c), previewLine(c)}},
+			{Name: "People", Lines: []DeskLine{peopleLine(c, in.Members), invitedLine(c, in), changesLine(c, facts.Changes)}},
+			{Name: "Game", Lines: []DeskLine{systemLine(c, in), featuresLine(c, in)}},
+		},
+		Right: []DeskGroup{
+			{Name: "Look", Lines: look},
 			{Name: "Connections", Lines: conns},
-			{Name: "Safety net", Lines: []DeskLine{exportLine(c), importLine(c), activityLine(c), line("trash")}},
-			{Name: "Archive or delete", Lines: []DeskLine{endLine(c), deleteLine(c)}},
+			{Name: "Data", Lines: []DeskLine{copyLine(c), activityLine(c), trashLine(c, facts.Trash)}},
+			{Name: "Danger zone", Danger: true, Lines: []DeskLine{endLine(c)}},
 		},
 	}
 }
 
-// line words one line by its id. Foundry and Media exist only
-// while their add-on is on, the same rule Build applies. Only the lines a
-// tool page opens with are worded here; the rest are built by Build alone.
-func (s *deskService) line(id string, c *Campaign, in DeskInputs, f DeskFacts, now time.Time) (DeskLine, bool) {
+// figure builds one tool page's figures by the id of the line that page names.
+// Foundry and Media exist only while their add-on is on, the same rule Build
+// applies. Details and data is a page with a line but no figure.
+func (s *deskService) figure(id string, c *Campaign, in DeskInputs, f DeskFacts, now time.Time) (DeskFigure, bool) {
 	switch id {
 	case "people":
-		return peopleLine(c, in.Members, in.Invited), true
+		return peopleFigure(in.Members, in), true
 	case "changes":
-		return changesLine(c, f.Changes), true
+		return changesFigure(f.Changes), true
 	case "media":
 		if !in.Addons["media-gallery"] {
-			return DeskLine{}, false
+			return DeskFigure{}, false
 		}
-		return mediaLine(c, f.Media), true
+		return mediaFigure(f.Media), true
 	case "foundry":
 		if !in.Addons["sync-api"] {
-			return DeskLine{}, false
+			return DeskFigure{}, false
 		}
-		return foundryLine(c, f.Foundry, now), true
+		return foundryFigure(c, f.Foundry, now), true
 	case "game":
-		return gameLine(c, in), true
+		return gameFigure(in), true
 	case "settings":
-		return settingsLine(c), true
+		return DeskFigure{}, true
 	case "ai":
-		return aiLine(c, f.AI), true
+		return aiFigure(c, f.AI), true
 	case "trash":
-		return trashLine(c, f.Trash), true
+		return trashFigure(c, f.Trash), true
 	}
-	return DeskLine{}, false
+	return DeskFigure{}, false
 }
 
 func (s *deskService) NeedsCount(ctx context.Context, req DeskRequest, in DeskInputs) int {
@@ -202,16 +207,16 @@ func (s *deskService) NeedsCount(ctx context.Context, req DeskRequest, in DeskIn
 	return len(needsYou(in.Campaign, withoutDisabled(facts, in.Addons), req.Now))
 }
 
-func (s *deskService) Line(ctx context.Context, req DeskRequest, in DeskInputs, id string) (DeskLine, bool) {
+func (s *deskService) Figure(ctx context.Context, req DeskRequest, in DeskInputs, id string) (DeskFigure, bool) {
 	var facts DeskFacts
 	if slot, ok := deskSlotOf[id]; ok {
 		facts = s.gather(ctx, req, slot)
 	}
-	return s.line(id, in.Campaign, in, facts, req.Now)
+	return s.figure(id, in.Campaign, in, facts, req.Now)
 }
 
-// deskSlotOf is the provider slot whose numbers each line draws on; People
-// has none.
+// deskSlotOf is the provider slot whose numbers each tool page's figures draw
+// on; People and Game have none.
 var deskSlotOf = map[string]DeskSlot{
 	"changes": DeskChanges, "media": DeskMedia, "foundry": DeskFoundry, "ai": DeskAI, "trash": DeskTrash,
 }

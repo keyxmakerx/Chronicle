@@ -151,14 +151,12 @@ var manageToolWords = map[string]string{
 
 // ownerCommands are the owner's own phrases: what people type when they want
 // a campaign setting ("export", "delete", "guest"), each with the words that
-// also find it. base is "/campaigns/<id>". The tab ids and the #danger,
-// #line-players-home and #line-guests-home anchors are the ones the settings
-// and desk pages answer to.
+// also find it. base is "/campaigns/<id>". The tab ids and the #danger and
+// #line-preview anchors are the ones the settings and desk pages answer to.
 func ownerCommands(base string) []navCommand {
 	return []navCommand{
 		{Label: "Campaign settings", Href: base + "/dashboard", Icon: "fa-sliders", Words: "settings manage owner options"},
-		{Label: "Players' dashboard", Href: base + "/dashboard#line-players-home", Icon: "fa-users", Words: "player dashboard home view as see preview"},
-		{Label: "Guests' dashboard", Href: base + "/dashboard#line-guests-home", Icon: "fa-eye", Words: "guest visitor public dashboard home view as preview"},
+		{Label: "Preview as a player or guest", Href: base + "/dashboard#line-preview", Icon: "fa-eye", Words: "player guest visitor public dashboard home view as see preview"},
 		{Label: "Export a copy", Href: base + "/settings?tab=data", Icon: "fa-file-export", Words: "export backup download copy"},
 		{Label: "Import", Href: base + "/settings?tab=import", Icon: "fa-file-import", Words: "import upload restore"},
 		{Label: "Activity log", Href: base + "/settings?tab=activity", Icon: "fa-clock-rotate-left", Words: "activity log history audit"},

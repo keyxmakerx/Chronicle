@@ -1,13 +1,15 @@
 // desk_model.go holds the types of the owner's Campaign settings page (the
 // desk): the facts other plugins supply, the provider seam they register
-// through, and the page model the templates draw. Wording lives in
-// desk_sentences.go and the assembly in desk_service.go, so every row and
-// sentence is table-testable without a database, a socket or an Echo context.
+// through, and the page model the templates draw. The model can only say a
+// row's name and its values, never a phrase. The rows are built in
+// desk_rows.go and assembled in desk_service.go, so every row is
+// table-testable without a database, a socket or an Echo context.
 
 package campaigns
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -15,13 +17,14 @@ import (
 type DeskSlot string
 
 // The slots a plugin can fill. A slot nobody fills, or whose provider fails,
-// is drawn as a plain link sentence with no number.
+// is drawn as the quiet word "Open" with no figure.
 const (
 	DeskChanges DeskSlot = "changes" // what players changed
 	DeskMedia   DeskSlot = "media"   // pictures and files
 	DeskFoundry DeskSlot = "foundry" // the Foundry connection
 	DeskAI      DeskSlot = "ai"      // the owner's AI connection
 	DeskTrash   DeskSlot = "trash"   // pages waiting in the campaign Trash
+	DeskKeys    DeskSlot = "keys"    // the campaign's API keys
 )
 
 // DeskRequest says whose desk is being drawn. Providers read it, never an
@@ -40,8 +43,8 @@ type DeskRequest struct {
 type DeskProvider interface {
 	// Slot is the one line this provider fills.
 	Slot() DeskSlot
-	// Facts reads that line's live numbers. An error degrades the line to a
-	// plain sentence and is logged; it never fails the page.
+	// Facts reads that line's live numbers. An error degrades the line to
+	// "Open" and is logged; it never fails the page.
 	Facts(ctx context.Context, req DeskRequest) (DeskFacts, error)
 }
 
@@ -53,6 +56,7 @@ type DeskFacts struct {
 	Foundry *DeskFoundryFacts
 	AI      *DeskAIFacts
 	Trash   *DeskTrashFacts
+	Keys    *DeskKeysFacts
 }
 
 // DeskChangesFacts counts what players changed in the last week.
@@ -98,97 +102,139 @@ type DeskTrashFacts struct {
 	Days  int // how long each waits before it is gone for good
 }
 
+// DeskKeysFacts is how many API keys the campaign has in use.
+type DeskKeysFacts struct {
+	Count int
+}
+
+// DeskSystem is one game system the owner can pick, by registry id.
+type DeskSystem struct {
+	ID, Name string
+}
+
 // DeskInputs is everything campaigns itself knows that the desk draws: the
 // campaign, its members and the game and features read through the existing
 // listers. Gathered by the handler so the service stays free of Echo.
 type DeskInputs struct {
 	Campaign *Campaign
 	Members  []CampaignMember
-	// SystemName is the chosen game system's name; empty when none is chosen.
+	// SystemID is the campaign's current game system id; empty when none.
+	SystemID string
+	// SystemName is the chosen game system's name; empty when none is chosen
+	// or the chosen one is not in Systems.
 	SystemName string
+	// Systems are the systems the owner can pick; empty when the lister is
+	// missing, which turns the System row into a link to the features page.
+	Systems []DeskSystem
 	// FeaturesOn and FeaturesTotal count the installed features; both zero
 	// when the add-on list could not be read.
 	FeaturesOn, FeaturesTotal int
-	// Addons says which add-ons are on for this campaign: lines for Media and
+	// Addons says which add-ons are on for this campaign: rows for Media and
 	// Foundry exist only while theirs is.
 	Addons map[string]bool
-	// Invited is how many invitations still wait for an answer.
-	Invited int
+	// Invited is how many invitations still wait for an answer; InvitedRead
+	// says they could be counted, so an unread count is never drawn as zero.
+	Invited     int
+	InvitedRead bool
 	// GMTerm is the campaign's own word for its game master, for the words a
 	// service builds (the template reads it from its context instead).
 	GMTerm string
 }
 
-// Desk is the page: named rows in groups.
+// Desk is the page: named rows in groups, in two columns.
 type Desk struct {
 	CampaignName string
 	Needs        []NeedsYouItem
-	Groups       []DeskGroup
+	// Left and Right are the two columns of groups, in reading order (left
+	// top to bottom, then right). A narrow page stacks them in that order.
+	Left, Right []DeskGroup
 }
 
 // DeskGroup is a named run of rows, drawn under a quiet label.
 type DeskGroup struct {
-	Name  string
-	Lines []DeskLine
+	Name string
+	// Danger draws the label in the state red: only the Danger zone.
+	Danger bool
+	Lines  []DeskLine
 }
 
-// DeskLine is one setting. The page draws it as a row (Name, then Short in
-// grey, then a chevron); a tool page draws the same line as the sentence
-// under its title (Parts), so both read from one service and cannot disagree.
+// DeskLine is one setting: its name, and the values that stand beside it.
 type DeskLine struct {
 	ID string
-	// Name is what the row is called. It is the first thing on the row.
+	// Name is what the row is called, in a few words.
 	Name string
-	// Short is what the setting is doing, in a few words. Empty draws the
-	// name alone (a count that could not be read, or a row that only leads
-	// somewhere).
-	Short string
-	// Href is where the whole row goes. Empty for a row that changes in
-	// place (Blank) or posts a form (View).
-	Href string
-	// Danger draws the name in the state red: only Delete.
-	Danger bool
-	// Swatch draws the campaign's colour as a small dot after Short.
-	Swatch bool
-	// State is the dot before the row: "", "ok" or "warn". State colours mean
-	// state only.
-	State string
-	// Parts is the sentence a tool page draws under its title; nil for a line
-	// that opens no tool.
-	Parts []DeskPart
-	// Blank is set for a row whose value is changed where it stands.
-	Blank *DeskBlank
-	// View is set for a row that opens the campaign as another kind of
-	// viewer, by posting the view-as form.
-	View *DeskView
+	// Values stand beside the name: one value, or several quiet words.
+	Values []DeskValue
+	// Why is the reason a value of this row can be off, drawn under the row
+	// while one is. A blank carries its own reason (an archived campaign), so
+	// this is only for a row whose off state can change on the page.
+	Why string
 }
 
-// DeskView is the "See it" form of the two dashboard rows: it posts to the
+// DeskValue is what stands beside a row's name. It is one of four things: a
+// value that changes where it stands (Blank), a figure that opens its page
+// (Href), a quiet word that acts or leads on (Word, with View or Href), or a
+// figure with a state dot. It never holds a phrase.
+type DeskValue struct {
+	// Text is the figure or the word; Sub is a muted second part ("this
+	// week", "310 MB").
+	Text, Sub string
+	// Href makes the value a link; unless Word is set it ends in a chevron.
+	Href string
+	// Word is a quiet word: text weight, no chevron.
+	Word bool
+	// State is the dot before the value: "", "ok" or "warn". State colours
+	// mean state only.
+	State string
+	// Swatch draws the campaign's colour as a dot before the value.
+	Swatch bool
+	// Danger draws the word in the state red: only Delete.
+	Danger bool
+	// Blank is set for a value that is changed where it stands.
+	Blank *DeskBlank
+	// View is set for a word that opens the campaign as another kind of
+	// viewer, by posting the view-as form.
+	View *DeskView
+	// Off is why the value cannot be used right now ("" when it can).
+	Off string
+	// NeedsPublic marks the guest preview, which is off exactly while the
+	// campaign is private, so the page can enable it the moment the campaign
+	// is made public.
+	NeedsPublic bool
+}
+
+// DeskView is the form behind "As a player" and "As a guest": it posts to the
 // view-as route with who to look as and where to land.
 type DeskView struct {
 	As   string // "player" or "guest"
 	Next string // "home"
 }
 
-// DeskPart is a piece of a sentence: plain words, bold words, the game
-// master's term or the campaign's colour.
-type DeskPart struct {
-	Text string
-	Bold bool
-	// GM draws the campaign's own word for its game master (GMTerm), which
-	// only the template can read from its context.
-	GM bool
-	// Swatch draws the campaign's colour as a small dot.
-	Swatch bool
+// DeskFigure is what a Manage tool page draws beside its title: muted
+// figures joined by a middle dot, with an optional state dot before them.
+// It is built beside the desk's rows from the same facts, so the page and
+// the row cannot disagree. The zero value draws nothing.
+type DeskFigure struct {
+	// State is the dot before the figures: "", "ok" or "warn".
+	State string
+	Parts []string
 }
+
+// Empty reports whether there is nothing to draw.
+func (f DeskFigure) Empty() bool { return len(f.Parts) == 0 }
+
+// Text is the figures joined with a middle dot.
+func (f DeskFigure) Text() string { return strings.Join(f.Parts, " · ") }
 
 // DeskBlankKind is how a blank is changed.
 type DeskBlankKind string
 
-// The ways a blank changes: a small menu of choices, or typing a name.
+// The ways a blank changes: a small menu of choices, typing a one-line name,
+// or typing a longer text in a field of a few lines.
 const (
 	DeskBlankChoice DeskBlankKind = "choice"
 	DeskBlankName   DeskBlankKind = "name"
+	DeskBlankText   DeskBlankKind = "text"
 )
 
 // DeskBlank is a row's value that saves the moment it is changed, through the
@@ -201,12 +247,16 @@ type DeskBlank struct {
 	Label string
 	// Value is the stored value; Shown is the words on screen for it.
 	Value, Shown string
-	Options      []DeskOption
+	// Empty draws Shown (the word "None") in muted ink: there is no value.
+	Empty   bool
+	Options []DeskOption
 	// URL, Method and Field say where a change goes: a JSON body of
 	// {Field: value} to URL. Bool sends the value as true or false instead
 	// of text, for the settings that are flags.
 	URL, Method, Field string
 	Bool               bool
+	// Max is the longest text the route accepts; zero for a choice.
+	Max int
 	// Off is why the blank cannot be changed right now ("" when it can): an
 	// archived campaign is read-only, and its writes are refused.
 	Off string
@@ -216,4 +266,6 @@ type DeskBlank struct {
 type DeskOption struct {
 	Value string `json:"v"`
 	Label string `json:"l"`
+	// Hint is a muted second line under the label.
+	Hint string `json:"h,omitempty"`
 }

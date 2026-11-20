@@ -156,7 +156,7 @@ test('missing or malformed data yields no campaign rows, and no error', () => {
 
 const OWNER_ROWS = [
   { label: 'Campaign settings', href: '/campaigns/camp-1/dashboard', icon: 'fa-sliders', words: 'settings manage owner options' },
-  { label: "Guests' dashboard", href: '/campaigns/camp-1/dashboard#line-guests-home', icon: 'fa-eye', words: 'guest visitor public dashboard home view as preview' },
+  { label: 'Preview as a player or guest', href: '/campaigns/camp-1/dashboard#line-preview', icon: 'fa-eye', words: 'player guest visitor public dashboard home view as see preview' },
   { label: 'Export a copy', href: '/campaigns/camp-1/settings?tab=data', icon: 'fa-file-export', words: 'export backup download copy' },
   { label: 'Archive or delete this campaign', href: '/campaigns/camp-1/settings#danger', icon: 'fa-triangle-exclamation', words: 'delete archive remove end' },
   { label: 'Invite someone', href: '/campaigns/camp-1/members', icon: 'fa-user-plus', words: 'invite add player join' },
@@ -167,7 +167,7 @@ const OWNER_ROWS = [
 
 test('a command is found by its words as well as its label', () => {
   const cases = [
-    ['visitor', 'Go to Guests'],
+    ['visitor', 'Go to Preview as a player or guest'],
     ['backup', 'Go to Export a copy'],
     ['remove', 'Go to Archive or delete'],
     ['join', 'Go to Invite someone'],

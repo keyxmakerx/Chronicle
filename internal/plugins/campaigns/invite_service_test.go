@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // --- Mock Invite Repository ---
@@ -140,7 +141,7 @@ func (m *mockCampaignRepoForInvites) ListPublic(context.Context, int) ([]Campaig
 	return nil, nil
 }
 func (m *mockCampaignRepoForInvites) Update(context.Context, *Campaign) error { return nil }
-func (m *mockCampaignRepoForInvites) UpdateDetails(context.Context, string, *string, *string, *bool) error {
+func (m *mockCampaignRepoForInvites) UpdateDetails(context.Context, string, *string, *string, *bool, patch.Field[string]) error {
 	return nil
 }
 func (m *mockCampaignRepoForInvites) MoveToTrash(context.Context, string, string, string, time.Time) error {
