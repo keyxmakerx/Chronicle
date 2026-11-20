@@ -1395,9 +1395,26 @@
     @apply absolute top-0 right-[-2px] bottom-0 w-1 bg-accent/40 cursor-col-resize;
     pointer-events: auto;
   }
-  .chronicle-editor__content .tiptap table .tableWrapper {
-    @apply overflow-x-auto my-4;
+  /* A table wider than the page scrolls sideways on its own instead of being
+     cut by the editor's clipping edge. Editing wraps each table in
+     .tableWrapper (the column-resize plugin), which scrolls itself; reading
+     has no wrapper, so the table becomes the scroll box and its rows stay one
+     table that still fills the width. */
+  .chronicle-editor__content .tiptap .tableWrapper {
+    @apply overflow-x-auto;
   }
+  .chronicle-editor__content .tiptap > table,
+  .chronicle-editor__content .tiptap :not(.tableWrapper) > table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .chronicle-editor__content .tiptap > table > tbody,
+  .chronicle-editor__content .tiptap :not(.tableWrapper) > table > tbody {
+    display: table;
+    min-width: 100%;
+  }
+
 }
 @layer components {
   /* ---- Entity Type Tabs (entity list page filter) ---- */
@@ -3211,6 +3228,7 @@ dialog.dlg-modal[open]::backdrop { opacity: 1; transition-duration: var(--dur-st
 html[data-motion] dialog.dlg-modal { transform: none; }
 html[data-motion="off"] dialog.dlg-modal,
 html[data-motion="off"] dialog.dlg-modal::backdrop { transition: none; }
+}
 
 /* === The player call-to-action banner ===========================
    ONE strip above the page content, carrying the single thing a player is
