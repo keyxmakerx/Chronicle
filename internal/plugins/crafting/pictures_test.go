@@ -15,7 +15,7 @@ func TestPicturesMatchTheDrawings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	drawn := regexp.MustCompile(`(?m)^\s+\['([a-z]+)', '([^']+)', '(none|sway|slosh|glint|pulse|beat|flicker|drip|look|writhe)'`).FindAllStringSubmatch(string(src), -1)
+	drawn := regexp.MustCompile(`(?m)^\s+\['([a-z]+)', '([^']+)', '(none|sway|slosh|glint|pulse|beat|flicker|drip|look|writhe|float|spin)'`).FindAllStringSubmatch(string(src), -1)
 	if len(drawn) != len(Pictures) {
 		t.Fatalf("craft_pictures.js draws %d pictures, library.go lists %d", len(drawn), len(Pictures))
 	}

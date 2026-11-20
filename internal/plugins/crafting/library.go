@@ -44,6 +44,26 @@ var Tags = []Tag{
 	{Key: "powder", Label: "Powder", Group: "earth", Picture: "powder", Tint: "#e9e2d0"},
 	{Key: "cloth", Label: "Cloth", Group: "made", Picture: "cloth", Tint: "#c0504d"},
 	{Key: "paper", Label: "Paper", Group: "made", Picture: "scroll", Tint: "#b08a5a"},
+	{Key: "ore", Label: "Ore", Group: "earth", Picture: "ore", Tint: "#8a6f5a"},
+	{Key: "salt", Label: "Salt", Group: "earth", Picture: "salt", Tint: "#e8e4dc"},
+	{Key: "oil", Label: "Oil", Group: "made", Picture: "jar", Tint: "#c9a030"},
+	{Key: "ash", Label: "Ash", Group: "earth", Picture: "coal", Tint: "#6a6a6a"},
+	{Key: "silk", Label: "Silk", Group: "creature", Picture: "cocoon", Tint: "#f0ead6"},
+	{Key: "ice", Label: "Ice", Group: "earth", Picture: "ice", Tint: "#a8dcf0"},
+	{Key: "shadow", Label: "Shadow", Group: "magic", Picture: "shadow", Tint: "#7462b0"},
+	{Key: "sand", Label: "Sand", Group: "earth", Picture: "sand", Tint: "#d8c090"},
+	{Key: "glass", Label: "Glass", Group: "made", Picture: "glass", Tint: "#9fd0c9"},
+	{Key: "wax", Label: "Wax", Group: "made", Picture: "wax", Tint: "#e8c860"},
+	{Key: "coral", Label: "Coral", Group: "creature", Picture: "coral", Tint: "#e0503c"},
+	{Key: "starmetal", Label: "Starmetal", Group: "magic", Picture: "meteor", Tint: "#7f8fb0"},
+	{Key: "fruit", Label: "Fruit", Group: "grown", Picture: "fruit", Tint: "#c0392b"},
+	{Key: "grain", Label: "Grain", Group: "grown", Picture: "wheat", Tint: "#d8b04a"},
+	{Key: "flower", Label: "Flower", Group: "grown", Picture: "flower", Tint: "#d870a0"},
+	{Key: "blood", Label: "Blood", Group: "creature", Picture: "vial", Tint: "#a3262e"},
+	{Key: "horn", Label: "Horn", Group: "creature", Picture: "horn", Tint: "#d8c8a0"},
+	{Key: "shell", Label: "Shell", Group: "creature", Picture: "shell", Tint: "#e2c9a6"},
+	{Key: "clay", Label: "Clay", Group: "earth", Picture: "clay", Tint: "#b0623c"},
+	{Key: "spirit", Label: "Spirit", Group: "magic", Picture: "wisp", Tint: "#9fe8ff"},
 }
 
 // TagGroups name the groups of the editor's kind menu, in its order.
@@ -69,6 +89,14 @@ var Pictures = []Picture{
 	{"hide", "Hide"}, {"scale", "Scales"}, {"shell", "Shell"}, {"feather", "Feather"}, {"bone", "Bone"}, {"skull", "Skull"},
 	{"claw", "Claw"}, {"horn", "Horn"}, {"heart", "Heart"}, {"eye", "Eye"}, {"tentacle", "Tentacles"}, {"shard", "Shard"}, {"orb", "Orb"}, {"ring", "Ring"},
 	{"ember", "Ember"}, {"scroll", "Scroll"}, {"ink", "Ink and quill"}, {"bundle", "Wrapped bundle"},
+	{"berries", "Berries"}, {"thorn", "Thorny vine"}, {"cone", "Pine cone"}, {"nut", "Acorns"}, {"wheat", "Sheaf of wheat"}, {"bark", "Strip of bark"},
+	{"fruit", "Fruit"}, {"coral", "Coral"}, {"tusk", "Tusk"}, {"antler", "Antler"}, {"wing", "Leathery wing"}, {"paw", "Paw"},
+	{"stinger", "Stinger"}, {"egg", "Egg"}, {"web", "Spider web"}, {"cocoon", "Silk cocoon"}, {"beak", "Beak"}, {"quills", "Quills"},
+	{"fin", "Fin"}, {"slime", "Slime"}, {"coal", "Coal"}, {"clay", "Lump of clay"}, {"sand", "Pile of sand"}, {"pearl", "Pearl"},
+	{"ice", "Ice"}, {"flint", "Flint and steel"}, {"nugget", "Nugget"}, {"geode", "Geode"}, {"meteor", "Meteorite"}, {"rope", "Coil of rope"},
+	{"chain", "Chain"}, {"cog", "Cogs"}, {"nails", "Nails"}, {"barrel", "Barrel"}, {"bricks", "Bricks"}, {"yarn", "Ball of yarn"},
+	{"glass", "Glass"}, {"wax", "Cake of wax"}, {"wisp", "Wisp"}, {"star", "Star"}, {"moon", "Crescent moon"}, {"sigil", "Sigil"},
+	{"bolt", "Lightning bolt"}, {"snowflake", "Snowflake"}, {"cloud", "Cloud"}, {"shadow", "Shadow"},
 }
 
 func pictureKnown(k string) bool {
@@ -124,10 +152,10 @@ type StepKind struct {
 // the moment".
 var StepKinds = []StepKind{
 	{Key: "add", Name: "Add", Blurb: "Put an ingredient in", Item: true, Into: []string{"mortar", "flask"}},
-	{Key: "grind", Name: "Grind", Blurb: "Circle the pestle", Tool: "mortar", Accepts: []string{"herb", "bone", "body_part", "remnant_part", "fungus", "scale", "gem"},
+	{Key: "grind", Name: "Grind", Blurb: "Circle the pestle", Tool: "mortar", Accepts: []string{"herb", "bone", "body_part", "remnant_part", "fungus", "scale", "gem", "salt", "grain", "flower", "horn", "shell", "coral"},
 		Option: &StepOption{Key: "turns", Label: "turns", Choices: []int{2, 3, 5}, Min: 1, Max: 8, Default: 3}},
 	{Key: "tip", Name: "Tip into the flask", Blurb: "Drag the mortar over", Tool: "mortar"},
-	{Key: "pour", Name: "Pour to the line", Blurb: "Stop at the gold line", Tool: "flask", Graded: true, Item: true, Accepts: []string{"liquid", "magic_essence", "venom", "resin"}},
+	{Key: "pour", Name: "Pour to the line", Blurb: "Stop at the gold line", Tool: "flask", Graded: true, Item: true, Accepts: []string{"liquid", "magic_essence", "venom", "resin", "oil", "blood"}},
 	{Key: "simmer", Name: "Keep it steady", Blurb: "Hold the heat in its band", Tool: "burner", Graded: true,
 		Option: &StepOption{Key: "secs", Label: "", Choices: []int{5, 10}, Words: []string{"Short", "Long"}, Min: 2, Max: 20, Default: 5}},
 	{Key: "strike", Name: "Catch the moment", Blurb: "Press on the gold", Graded: true,
@@ -206,7 +234,8 @@ var Moments = []string{"success", "progress", "failure", "breakthrough"}
 // Look effects a moment or rule may place, from the shared item-look engine
 // (item_look_fx.js LOOKS, MOMENT_SPOTS) and the rules editor's two moves.
 var (
-	lookNames   = setOf("ember", "frost", "storm", "bloom", "dawn", "rot", "venom", "glass", "quiet")
+	lookNames = setOf("ember", "frost", "storm", "bloom", "dawn", "rot", "venom", "glass", "quiet",
+		"shadow", "blood", "tide", "sand", "quake", "arcane", "gale", "starfall", "song")
 	lookMoves   = setOf("shake", "dim")
 	momentSpots = []string{"window", "heat", "work", "bench", "result"}
 )

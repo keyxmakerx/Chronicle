@@ -49,12 +49,15 @@ func TestEveryItemHasWords(t *testing.T) {
 func TestFromName(t *testing.T) {
 	for _, c := range []struct{ name, want string }{
 		{"Potion of Giant Strength", "potion"},
-		{"Vial of venom", "bottle"},
+		{"Vial of venom", "poison"},
+		{"Vial of oil", "bottle"},
 		{"Dragon scale armour", "breastplate"},
 		{"Dragonscale", "scale"},
 		{"Bandage", ""},
 		{"Hand crossbow", "crossbow"},
-		{"Lockpicks", "pickaxe"},
+		{"Lockpicks", "lockpicks"},
+		{"Pirate's cutlass", "sabre"},
+		{"Silk rope", "rope"},
 		{"Vial of bubbling ink", "ink"},
 		{"Bubbling ink", "ink"},
 		{"Unicorn horn", "unicorn"},

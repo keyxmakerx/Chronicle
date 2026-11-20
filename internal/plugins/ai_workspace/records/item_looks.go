@@ -57,13 +57,19 @@ var (
 		"ember": "Ember strike", "frost": "Frost shard", "storm": "Storm arc",
 		"bloom": "Healing bloom", "dawn": "Dawn light", "rot": "Remnant rot",
 		"venom": "Venom", "glass": "Glass and starlight", "quiet": "Quiet glint",
+		"shadow": "Creeping shadow", "blood": "Blood price", "tide": "Tide surge",
+		"sand": "Sandstorm", "quake": "Stonebreak", "arcane": "Arcane runes",
+		"gale": "Gale and leaves", "starfall": "Starfall", "song": "Bard's tune",
 	}
 	itemLookColors = map[string]string{
 		"orange": "#ff7a2f", "gold": "#ffd66b", "green": "#8fe07a", "mint": "#7cf5c8",
 		"sky": "#8fd8ff", "violet": "#a99bff", "pink": "#f59ac0", "bone": "#e8dcc0",
+		"red": "#e5484d", "magenta": "#e056c1", "purple": "#c77dff", "blue": "#4f8cff",
+		"teal": "#2fc4b2", "lime": "#c8e34a", "sand": "#d8b070", "white": "#ffffff",
 	}
-	itemLookSounds = []string{"crackle", "ping", "zap", "chime", "bell", "thrum", "bubble", "hiss", "none"}
-	itemLookSpots  = []string{"item", "trail", "impact", "body", "ground"}
+	itemLookSounds = []string{"crackle", "ping", "zap", "chime", "bell", "thrum", "bubble", "hiss",
+		"whisper", "heartbeat", "splash", "rattle", "rumble", "hum", "gust", "twinkle", "lute", "none"}
+	itemLookSpots = []string{"item", "trail", "impact", "body", "ground"}
 )
 
 // ItemLookChoices lists the looks, colours, sounds and spots the kind

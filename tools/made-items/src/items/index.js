@@ -9,5 +9,7 @@ import * as remnant from './remnant.js';
 import * as more from './more.js';
 import * as more2 from './more2.js';
 import * as more3 from './more3.js';
-export const ITEMS = Object.assign({}, weapons, worn, tools, magic, food, goods, remnant, more, more2, more3);
+import * as more4 from './more4.js';
+import * as more5 from './more5.js';
+export const ITEMS = Object.assign({}, weapons, worn, tools, magic, food, goods, remnant, more, more2, more3, more4, more5);
 export { DEMO };

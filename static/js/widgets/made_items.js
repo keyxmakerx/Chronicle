@@ -106,7 +106,19 @@ window.MadeItems = (function () {
     boots: ["Boots", '#6b4a2e', '#b98a3a', '#3a2a20', 90, 143, 90, 0],
     torch: ["Burning torch", '#6e4a2c', '#3f4349', '#ff9a3a', 90, 90, 173, 1],
     bomb: ["Bomb", '#6a6c72', '#b8a47a', '#ffb347', 108, 165, 189, 1],
-    gems: ["Cut gems", '#1f9a5a', '#35204a', '#c0283c', 110, 90, 90, 0]
+    gems: ["Cut gems", '#1f9a5a', '#35204a', '#c0283c', 110, 90, 90, 0],
+    hat: ["Wizard's hat", '#3a3f8a', '#6a4a2e', '#d4af4a', 90, 90, 175, 0],
+    rope: ["Coil of rope", '#b89a62', '#6a4630', '#a3262e', 157, 90, 90, 0],
+    cheese: ["Wheel of cheese", '#b8322a', '#e8c860', '#7a5534', 90, 198, 92, 0],
+    fish: ["Fish", '#7f97a6', '#b0623c', '#b8a47a', 146, 117, 165, 0],
+    honey: ["Jar of honey", '#e0981c', '#a84a3a', '#9a7048', 159, 100, 120, 0],
+    lockpicks: ["Lockpicks", '#5a3a28', '#aab3bd', '#c9a23f', 90, 177, 162, 0],
+    poison: ["Vial of poison", '#3a5a3a', '#8f959c', '#8fe04a', 90, 148, 183, 1],
+    map: ["Treasure map", '#e2cf9a', '#b98a3a', '#a3262e', 200, 143, 90, 0],
+    cauldron: ["Cauldron", '#4a4d52', '#7a5534', '#7ad04a', 90, 92, 167, 1],
+    coral: ["Branch of coral", '#e0503c', '#6a6660', '#ffd0b0', 121, 103, 200, 0],
+    amber: ["Amber", '#e08a1c', '#5a4030', '#2f7a6a', 151, 90, 98, 0],
+    sabre: ["Sabre", '#aab3bd', '#c9a23f', '#7a1f2a', 177, 162, 90, 0]
   };
 
   /* The six shapes made items were drawn as before, and the painted item each

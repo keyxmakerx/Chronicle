@@ -55,10 +55,13 @@ const (
 var entityIDPattern = regexp.MustCompile(`^[0-9A-Za-z-]{1,36}$`)
 
 var (
-	itemLooks  = setOf("ember", "frost", "storm", "bloom", "dawn", "rot", "venom", "glass", "quiet")
-	itemTints  = setOf("#ff7a2f", "#ffd66b", "#8fe07a", "#7cf5c8", "#8fd8ff", "#a99bff", "#f59ac0", "#e8dcc0")
-	itemSounds = setOf("crackle", "ping", "zap", "chime", "bell", "thrum", "bubble", "hiss", "none")
-	itemSpots  = setOf("item", "trail", "impact", "body", "ground")
+	itemLooks = setOf("ember", "frost", "storm", "bloom", "dawn", "rot", "venom", "glass", "quiet",
+		"shadow", "blood", "tide", "sand", "quake", "arcane", "gale", "starfall", "song")
+	itemTints = setOf("#ff7a2f", "#ffd66b", "#8fe07a", "#7cf5c8", "#8fd8ff", "#a99bff", "#f59ac0", "#e8dcc0",
+		"#e5484d", "#e056c1", "#c77dff", "#4f8cff", "#2fc4b2", "#c8e34a", "#d8b070", "#ffffff")
+	itemSounds = setOf("crackle", "ping", "zap", "chime", "bell", "thrum", "bubble", "hiss",
+		"whisper", "heartbeat", "splash", "rattle", "rumble", "hum", "gust", "twinkle", "lute", "none")
+	itemSpots = setOf("item", "trail", "impact", "body", "ground")
 )
 
 // NormalizeItemLook validates a saved look and returns its canonical JSON.
