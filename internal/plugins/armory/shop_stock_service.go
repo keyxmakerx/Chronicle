@@ -38,10 +38,24 @@ type ShopGoodPages interface {
 	// EnsureShopGood returns the id of the shop good page called name,
 	// making it in the item type when there is none.
 	EnsureShopGood(ctx context.Context, campaignID, userID string, typeID int, name string, hiddenFromPlayers bool) (string, error)
-	// ItemPageExists reports whether id is a live page of the campaign.
-	ItemPageExists(ctx context.Context, campaignID, id string) (bool, error)
+	// PageInfo describes a live page of the campaign; nil when there is none.
+	PageInfo(ctx context.Context, campaignID, id string) (*ListablePage, error)
 	// Names maps page ids to names; ids that are gone are left out.
 	Names(ctx context.Context, campaignID string, ids []string) (map[string]string, error)
+}
+
+// ListablePage is what Keep needs to know about a page it is asked to sell.
+type ListablePage struct {
+	TypeID     int
+	IsTemplate bool
+	ShopGood   bool
+}
+
+// StockTx runs fn as one all-or-nothing unit: every page and listing fn
+// writes through the context is kept together or not at all. Implemented in
+// internal/app over the database handle.
+type StockTx interface {
+	Atomic(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 // ShopStockWriter creates and removes "sells" listings. Implemented in
@@ -126,7 +140,9 @@ type KeepResult struct {
 type ShopStockService interface {
 	Sources(ctx context.Context, campaignID, shopEntityID string, a Actor) (*FillSources, error)
 	Keep(ctx context.Context, campaignID, shopEntityID string, a Actor, in KeepInput) (*KeepResult, error)
-	Undo(ctx context.Context, campaignID, shopEntityID string, a Actor, batch string, relationIDs []int) (int, error)
+	// Undo removes the listings of one Keep and returns how many it removed
+	// and which it left because a roll, purchase or note is attached.
+	Undo(ctx context.Context, campaignID, shopEntityID string, a Actor, batch string, relationIDs []int) (removed int, kept []int, err error)
 	SaveFoodPrice(ctx context.Context, campaignID string, a Actor, price float64) (float64, error)
 }
 
@@ -140,11 +156,14 @@ type shopStockService struct {
 	items    ArmoryService
 	types    ItemTypeFinder
 	system   SystemGoodsSource
+	tx       StockTx
+	activity ListingActivity
 }
 
-// NewShopStockService wires the service. system may be nil.
-func NewShopStockService(shops ShopEntityChecker, pages ShopGoodPages, writer ShopStockWriter, listings ShopListingLister, finder RelationFinder, prices ShopPriceRepository, items ArmoryService, types ItemTypeFinder, system SystemGoodsSource) ShopStockService {
-	return &shopStockService{shops: shops, pages: pages, writer: writer, listings: listings, finder: finder, prices: prices, items: items, types: types, system: system}
+// NewShopStockService wires the service. system, tx and activity may be nil
+// (tests): without tx the batch is not atomic.
+func NewShopStockService(shops ShopEntityChecker, pages ShopGoodPages, writer ShopStockWriter, listings ShopListingLister, finder RelationFinder, prices ShopPriceRepository, items ArmoryService, types ItemTypeFinder, system SystemGoodsSource, tx StockTx, activity ListingActivity) ShopStockService {
+	return &shopStockService{shops: shops, pages: pages, writer: writer, listings: listings, finder: finder, prices: prices, items: items, types: types, system: system, tx: tx, activity: activity}
 }
 
 func requireDirector(a Actor) error {
@@ -280,11 +299,6 @@ func (s *shopStockService) Keep(ctx context.Context, campaignID, shopEntityID st
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}
-	sold := make(map[string]bool, len(have))
-	for _, l := range have {
-		sold[l.TargetEntityID] = true
-	}
-
 	typeID := 0
 	needType := false
 	for _, g := range goods {
@@ -300,73 +314,105 @@ func (s *shopStockService) Keep(ctx context.Context, campaignID, shopEntityID st
 		typeID = infos[0].ID
 	}
 
-	res := &KeepResult{Batch: newBatchID(), Relations: []int{}}
-	undo := func() {
-		for _, id := range res.Relations {
-			_ = s.writer.DeleteSells(ctx, id)
-		}
-	}
+	// Pages named by id are checked before anything is written: an Items
+	// page or a shop good, never a template, a character or another type.
+	var itemTypes map[int]bool
 	for _, g := range goods {
-		itemID := g.ItemID
-		if itemID != "" {
-			ok, err := s.pages.ItemPageExists(ctx, campaignID, itemID)
-			if err != nil {
-				undo()
-				return nil, apperror.NewInternal(err)
-			}
-			if !ok {
-				undo()
-				return nil, apperror.NewBadRequest("One of the pages in this draft is gone. Roll again to refresh it.")
-			}
-		} else {
-			if itemID, err = s.pages.EnsureShopGood(ctx, campaignID, a.UserID, typeID, g.Name, in.HiddenFromPlayers); err != nil {
-				undo()
-				return nil, asAppError(err)
-			}
-		}
-		if sold[itemID] {
-			res.Skipped++
+		if g.ItemID == "" {
 			continue
 		}
-		meta := map[string]any{"price": g.Price, "currency": g.Currency, "in_stock": true, fillBatchKey: res.Batch}
-		if g.Quantity != nil {
-			meta["quantity"] = *g.Quantity
+		if itemTypes == nil {
+			ids, err := s.types.FindItemTypeIDs(ctx, campaignID)
+			if err != nil {
+				return nil, apperror.NewInternal(err)
+			}
+			itemTypes = make(map[int]bool, len(ids))
+			for _, id := range ids {
+				itemTypes[id] = true
+			}
 		}
-		if g.Today {
-			meta["today"] = true
-		}
-		raw, _ := json.Marshal(meta)
-		id, err := s.writer.CreateSells(ctx, campaignID, shopEntityID, itemID, a.UserID, raw, in.HiddenFromPlayers)
+		pg, err := s.pages.PageInfo(ctx, campaignID, g.ItemID)
 		if err != nil {
-			undo()
-			return nil, asAppError(err)
+			return nil, apperror.NewInternal(err)
 		}
-		sold[itemID] = true
-		res.Relations = append(res.Relations, id)
+		if pg == nil {
+			return nil, apperror.NewBadRequest("One of the pages in this draft is gone. Roll again to refresh it.")
+		}
+		if pg.IsTemplate || !(pg.ShopGood || itemTypes[pg.TypeID]) {
+			return nil, apperror.NewBadRequest("Only item pages can be stocked. Roll again to refresh the draft.")
+		}
+	}
+
+	res := &KeepResult{Batch: newBatchID(), Relations: []int{}}
+	write := func(ctx context.Context) error {
+		// A retry of a failed attempt starts clean.
+		res.Relations, res.Skipped = res.Relations[:0], 0
+		sold := make(map[string]bool, len(have))
+		for _, l := range have {
+			sold[l.TargetEntityID] = true
+		}
+		for _, g := range goods {
+			itemID := g.ItemID
+			if itemID == "" {
+				id, err := s.pages.EnsureShopGood(ctx, campaignID, a.UserID, typeID, g.Name, in.HiddenFromPlayers)
+				if err != nil {
+					return asAppError(err)
+				}
+				itemID = id
+			}
+			if sold[itemID] {
+				res.Skipped++
+				continue
+			}
+			meta := map[string]any{"price": g.Price, "currency": g.Currency, "in_stock": true, fillBatchKey: res.Batch}
+			if g.Quantity != nil {
+				meta["quantity"] = *g.Quantity
+			}
+			if g.Today {
+				meta["today"] = true
+			}
+			raw, _ := json.Marshal(meta)
+			id, err := s.writer.CreateSells(ctx, campaignID, shopEntityID, itemID, a.UserID, raw, in.HiddenFromPlayers)
+			if err != nil {
+				return asAppError(err)
+			}
+			sold[itemID] = true
+			res.Relations = append(res.Relations, id)
+		}
+		return nil
+	}
+	var err2 error
+	if s.tx != nil {
+		err2 = s.tx.Atomic(ctx, write)
+	} else {
+		err2 = write(ctx)
+	}
+	if err2 != nil {
+		return nil, asAppError(err2)
 	}
 	sort.Ints(res.Relations)
 	return res, nil
 }
 
-func (s *shopStockService) Undo(ctx context.Context, campaignID, shopEntityID string, a Actor, batch string, relationIDs []int) (int, error) {
+func (s *shopStockService) Undo(ctx context.Context, campaignID, shopEntityID string, a Actor, batch string, relationIDs []int) (int, []int, error) {
 	if err := requireDirector(a); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	if err := requireShopInCampaign(ctx, s.shops, campaignID, shopEntityID); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	if batch == "" || len(relationIDs) > maxKeepGoods {
-		return 0, apperror.NewBadRequest("There is nothing to undo.")
+		return 0, nil, apperror.NewBadRequest("There is nothing to undo.")
 	}
-	removed := 0
+	// Only a listing of this shop that this Keep wrote: a good the
+	// Director has since changed by hand keeps the batch mark, but one
+	// added by hand never has it.
+	var mine []int
 	for _, id := range relationIDs {
 		rel, err := s.finder.GetByID(ctx, id)
 		if err != nil || rel == nil {
 			continue
 		}
-		// Only a listing of this shop that this Keep wrote: a good the
-		// Director has since changed by hand keeps the batch mark, but one
-		// added by hand never has it.
 		if rel.CampaignID != campaignID || rel.SourceEntityID != shopEntityID || rel.RelationType != shopSellsRelation {
 			continue
 		}
@@ -374,12 +420,30 @@ func (s *shopStockService) Undo(ctx context.Context, campaignID, shopEntityID st
 		if json.Unmarshal(rel.Metadata, &m) != nil || m[fillBatchKey] != batch {
 			continue
 		}
+		mine = append(mine, id)
+	}
+	// Removing a listing deletes the counter rolls and notes tied to it, so
+	// one a player has already rolled for or bought from stays.
+	active := map[int]bool{}
+	if s.activity != nil && len(mine) > 0 {
+		var err error
+		if active, err = s.activity.Active(ctx, campaignID, shopEntityID, mine); err != nil {
+			return 0, nil, apperror.NewInternal(err)
+		}
+	}
+	removed := 0
+	kept := []int{}
+	for _, id := range mine {
+		if active[id] {
+			kept = append(kept, id)
+			continue
+		}
 		if err := s.writer.DeleteSells(ctx, id); err != nil {
-			return removed, asAppError(err)
+			return removed, kept, asAppError(err)
 		}
 		removed++
 	}
-	return removed, nil
+	return removed, kept, nil
 }
 
 func (s *shopStockService) SaveFoodPrice(ctx context.Context, campaignID string, a Actor, price float64) (float64, error) {

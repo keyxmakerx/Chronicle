@@ -651,7 +651,15 @@ Chronicle.register('shop_inventory', {
           method: 'POST', body: { batch: k.batch, relations: k.relations },
         }).then(function (res) {
           if (!res.ok) throw new Error('undo');
+          return res.json().catch(function () { return {}; });
+        }).then(function (j) {
           state.kept = null; state.fresh = {};
+          // A good a player has already rolled for or bought from stays,
+          // since taking it off would delete that record.
+          var left = (j && j.kept && j.kept.length) || 0;
+          if (left > 0) {
+            Chronicle.notify(left + (left === 1 ? ' good stays' : ' goods stay') + ' on the shelves because a player has already rolled for or bought ' + (left === 1 ? 'it.' : 'them.'), 'info');
+          }
           loadInventory();
         }).catch(function () {
           undo.disabled = false;

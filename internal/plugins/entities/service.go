@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/database"
 	gohtml "html"
 	"log/slog"
 	"net/http"
@@ -37,6 +39,10 @@ type EntityService interface {
 	EnsureShopGood(ctx context.Context, campaignID, userID string, typeID int, name string, hiddenFromPlayers bool) (*Entity, error)
 	// SetShopGood marks a page as a shop good or, with false, makes it a full page.
 	SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error
+
+	// ReconcileShopGoodVisibility hides a shop good page unless a public
+	// listing sells it (publicListings > 0); other pages are untouched.
+	ReconcileShopGoodVisibility(ctx context.Context, campaignID, entityID string, publicListings int) error
 	GetByID(ctx context.Context, id string) (*Entity, error)
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
@@ -646,8 +652,13 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		slog.String("name", name),
 	)
 
-	s.recordVersion(WithActor(ctx, userID), nil, entity, VersionCreated)
-	s.publishEntity(ctx, "created", campaignID, entity.ID, entity)
+	// History and the live event wait for the commit when the page is made
+	// inside a larger transaction (Fill the shelves), so a rolled-back batch
+	// leaves no trace of the page.
+	database.AfterCommit(ctx, func() {
+		s.recordVersion(WithActor(ctx, userID), nil, entity, VersionCreated)
+		s.publishEntity(ctx, "created", campaignID, entity.ID, entity)
+	})
 	return entity, nil
 }
 
@@ -3956,12 +3967,8 @@ func (s *entityService) EnsureShopGood(ctx context.Context, campaignID, userID s
 		return nil, apperror.NewInternal(err)
 	}
 	if existing != nil {
-		if existing.IsPrivate && !hiddenFromPlayers {
-			if err := s.entities.UpdatePrivate(ctx, existing.ID, false); err != nil {
-				return nil, apperror.NewInternal(err)
-			}
-			existing.IsPrivate = false
-		}
+		// Who may see an existing good follows its listings, not this one:
+		// ReconcileShopGoodVisibility runs when the listing is written.
 		return existing, nil
 	}
 	return s.Create(ctx, campaignID, userID, CreateEntityInput{
@@ -3969,13 +3976,48 @@ func (s *entityService) EnsureShopGood(ctx context.Context, campaignID, userID s
 	})
 }
 
+// ReconcileShopGoodVisibility makes a shop good page hidden from players
+// unless at least one public listing sells it: used only by Director-only
+// listings it stays hidden, and when the last public listing goes it is
+// hidden again. Any other page is left alone.
+func (s *entityService) ReconcileShopGoodVisibility(ctx context.Context, campaignID, entityID string, publicListings int) error {
+	e, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return nil
+		}
+		return err
+	}
+	if e.CampaignID != campaignID || !e.ShopGood {
+		return nil
+	}
+	wantPrivate := publicListings == 0
+	if e.IsPrivate == wantPrivate {
+		return nil
+	}
+	if err := s.entities.UpdatePrivate(ctx, entityID, wantPrivate); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
 // SetShopGood changes the shop good mark. Who may is decided by the route.
 func (s *entityService) SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error {
 	if err := s.entities.SetShopGood(ctx, campaignID, entityID, shopGood); err != nil {
 		return err
 	}
-	if e, err := s.entities.FindByID(ctx, entityID); err == nil {
-		s.publishEntity(ctx, "updated", campaignID, entityID, e)
+	e, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return nil
 	}
+	if shopGood {
+		// Sync may already hold the page from before it became a shop good;
+		// tell it the page is gone from its world.
+		s.events.PublishEntityEvent("deleted", campaignID, entityID, &Entity{ID: entityID, CampaignID: campaignID})
+		return nil
+	}
+	// Promoted: to sync this is a page that has just appeared.
+	s.publishEntity(ctx, "created", campaignID, entityID, e)
 	return nil
 }

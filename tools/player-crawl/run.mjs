@@ -29,7 +29,7 @@ try {
   // Shop goods stay out of lists even for the Director: they show in their
   // shop, on their own page and in the Director's Shop goods tab, nowhere else.
   for (const k of Object.keys(s.markers).filter((x) => /SHOPGOOD/.test(x))) {
-    const ok = [s.ids.shop, s.ids.goodVis, s.ids.goodHid].filter(Boolean);
+    const ok = [s.ids.shop, s.ids.shopB, s.ids.goodVis, s.ids.goodHid, s.ids.goodFlip].filter(Boolean);
     const bad = o.hits.filter((h) => h.marker === k && !ok.some((id) => h.route.includes(id)) && !/\/armory\?goods=1/.test(h.route)
       // The AI export names a shop's goods only as its "sells" relations; the goods get no page of their own there.
       && !/\/ai-export\/generate/.test(h.route));

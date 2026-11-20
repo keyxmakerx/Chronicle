@@ -411,8 +411,12 @@
       }
 
       if (keepFocus) {
-        var again2 = root.querySelector('[aria-label="' + keepFocus.replace(/"/g, '\\"') + '"]');
-        if (again2 && again2.focus) again2.focus();
+        // Matched by comparing the label, never by building a selector from
+        // it: a good's name can hold quotes and backslashes.
+        var labelled = root.querySelectorAll('[aria-label]');
+        for (var li = 0; li < labelled.length; li++) {
+          if (labelled[li].getAttribute('aria-label') === keepFocus) { labelled[li].focus(); break; }
+        }
       }
     }
 
