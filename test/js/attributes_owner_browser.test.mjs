@@ -23,7 +23,7 @@ function page(editable) {
 </body></html>`;
 }
 
-async function open(editable, ownerFields) {
+async function open(editable, ownerFields, extra = {}, putReply = '{}', putStatus = 200) {
   const browser = await pw.chromium.launch({ executablePath: chromePath });
   const pg = await browser.newPage();
   const puts = [];
@@ -35,7 +35,7 @@ async function open(editable, ownerFields) {
     if (p === '/attributes.js') return route.fulfill({ contentType: 'text/javascript', body: readFileSync(join(root, 'static/js/widgets/attributes.js')) });
     if (p === EP && req.method() === 'PUT') {
       puts.push(JSON.parse(req.postData()));
-      return route.fulfill({ contentType: 'application/json', body: '{}' });
+      return route.fulfill({ status: putStatus, contentType: 'application/json', body: putReply });
     }
     if (p === EP) {
       const fields = [
@@ -45,7 +45,7 @@ async function open(editable, ownerFields) {
       ];
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify({
         fields, type_fields: fields, fields_data: { race: 'Elf', background: 'Sage', str: 14 },
-        field_overrides: {}, shown: {}, owner_fields: ownerFields,
+        field_overrides: {}, shown: {}, owner_fields: ownerFields, ...extra,
       }) });
     }
     if (p.includes('/choices') || p.includes('/systems/')) return route.fulfill({ status: 404, body: '' });
@@ -99,6 +99,33 @@ test('a Scribe still saves the whole map', { skip }, async () => {
     assert.equal(puts.length, 1);
     assert.deepEqual(Object.keys(puts[0]), ['fields_data']);
     assert.equal(puts[0].fields_data.race, 'Gnome');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('a hero that holds a pick the rules now exclude says so, and a waiting pick is named', { skip }, async () => {
+  const { browser, pg } = await open(false, ['race'], {
+    choice_breaks: [{ fieldKey: 'race', value: 'Fury', kind: 'not_offered', reason: 'No Furies this time' }],
+    choice_waiting: [{ id: 3, fieldKey: 'background', entryName: 'Noble' }],
+  });
+  try {
+    const text = await pg.textContent('.ag-rules');
+    assert.match(text, /Fury isn.t offered any more\. You keep it; a new pick must be on the list\./);
+    assert.match(text, /No Furies this time/);
+    assert.match(text, /Noble is waiting for your Director, for background\./);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('a refused save shows the server sentence and keeps the form open', { skip }, async () => {
+  const { browser, pg } = await open(false, ['race'], {}, JSON.stringify({ message: '"Fury" is not on the race list' }), 400);
+  try {
+    await edit(pg);
+    await pg.fill('[data-field-key="race"]', 'Fury');
+    await pg.getByRole('button', { name: 'Done' }).click();
+    await pg.waitForFunction(() => /not on the race list/.test(document.body.textContent));
   } finally {
     await browser.close();
   }
