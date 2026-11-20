@@ -423,14 +423,37 @@
       if (!cur || strip.scrollWidth <= strip.clientWidth) return;
       var w = cur.closest('.czs-tabw') || cur, x0 = strip.offsetLeft;
       if (!strip.hasAttribute('data-czs-catbar')) { strip.scrollLeft = Math.max(0, w.offsetLeft - x0 - 12); return; }
+      // The row lands with a whole item at its left edge. Near the end the
+      // row could not scroll that far, so a tail of room is added after the
+      // last item rather than leaving a cut-off word at the left.
       var right = w.offsetLeft - x0 + w.offsetWidth;
       var parts = Array.prototype.slice.call(strip.children);
       for (var i = 0; i < parts.length; i++) {
-        var left = parts[i].offsetLeft - x0;
-        if (right - left <= strip.clientWidth || parts[i] === w) { strip.scrollLeft = left; return; }
+        var left = Math.max(0, parts[i].offsetLeft - x0);
+        if (right - left <= strip.clientWidth || parts[i] === w) {
+          // Measured from the items, not scrollWidth, which can still hold
+          // the room the last call added.
+          var end = parts[parts.length - 1], tail = Math.max(0, left - (end.offsetLeft - x0 + end.offsetWidth - strip.clientWidth));
+          strip.style.paddingRight = tail ? tail + 'px' : '';
+          strip.scrollLeft = left;
+          // The new room only counts once a frame has been drawn with it.
+          if (tail) requestAnimationFrame(function () { requestAnimationFrame(function () { strip.scrollLeft = left; }); });
+          return;
+        }
       }
     }
     revealTab();
+    // Widths settle once the web fonts arrive; land on a whole item again.
+    // Widths settle as fonts and styles arrive, so the row lands again
+    // whenever its items change size, until the person moves it themselves.
+    var rowRO = null, rowStrip = topBar && topBar.querySelector('[data-czs-catbar]');
+    if (rowStrip && window.ResizeObserver) {
+      rowRO = new ResizeObserver(function () { if (alive && rowRO) revealTab(); });
+      rowRO.observe(rowStrip);
+      Array.prototype.forEach.call(rowStrip.children, function (k) { rowRO.observe(k); });
+      var settle = function () { if (rowRO) { rowRO.disconnect(); rowRO = null; } };
+      ['pointerdown', 'wheel', 'touchstart', 'keydown'].forEach(function (t) { on(rowStrip, t, settle, { passive: true }); });
+    }
     Chronicle.customizeRevealTab = revealTab;
     function drawerFor(id) { return $('[data-czs-drawer-for="' + id + '"]'); }
     function chevFor(id) { return $('[data-czs-drawer="' + id + '"]'); }
@@ -539,6 +562,7 @@
       closePop();
       if (palette) { palette.remove(); palette = null; }
       listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
+      if (rowRO) { rowRO.disconnect(); rowRO = null; }
     };
   }
 

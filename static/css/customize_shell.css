@@ -87,7 +87,7 @@
 :is(.czs-back, .czs-catname, .czs-lay-pick):focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .czs-bar-slot { flex: none; display: flex; align-items: center; align-self: center; margin-left: auto; }
 .czs-bar-slot:empty { display: none; }
-.czs-bar-slot + .czs-find { margin-left: 0; }
+.czs-bar-slot:not(:empty) + .czs-find { margin-left: 0; }
 .czs-lay-pick { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border: var(--shape-edge) solid transparent; border-radius: var(--shape-r-ctl); background: none; color: var(--color-text-secondary); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; transition: background-color var(--dur-micro), border-color var(--dur-micro); }
 .czs-lay-pick b { color: var(--color-text-primary); font-weight: 600; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
 .czs-lay-pick > i { font-size: 10px; transition: transform var(--dur-standard) var(--ease-out); }
@@ -100,9 +100,14 @@
 @media (max-width: 640px) {
   .czs-catname { font-size: 14px; }
   .czs-catname > span { max-width: 14ch; }
+  /* On a phone the picker is the last part of the swipeable row
+     (customize_page_editor.js moves it there), so it covers nothing. */
+  .czs-catbar .czs-lay-w { align-self: center; margin-left: 4px; }
+  /* A scrolling row clips what hangs past its start, so the chevron sits
+     whole inside the gutter here. */
+  .czs-catbar .czs-back { margin-left: 0; }
   .czs-lay-pick { min-height: 44px; padding: 0 8px; }
-  .czs-lay-lab { display: none; }
-  .czs-lay-pick b { max-width: 10ch; }
+  .czs-lay-pick b { max-width: 14ch; }
 }
 
 /* A drawer drapes down from its tab's side line over the area; nothing

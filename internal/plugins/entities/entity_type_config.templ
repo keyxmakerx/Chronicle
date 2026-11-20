@@ -139,14 +139,6 @@ func jsEsc(s string) string {
 	return result
 }
 
-// categoryDashboardBlockTypes returns the block palette JSON for category dashboards.
-func categoryDashboardBlockTypes() string {
-	// map_preview retired — superseded by map_editor on entity templates
-	// and map_full on campaign dashboards. Category dashboards have no
-	// dedicated entity context, so they use map_full when needed.
-	return `[{"type":"category_header","label":"Category Header","icon":"fa-heading","desc":"Category name, icon & description"},{"type":"pinned_pages","label":"Pinned Pages","icon":"fa-thumbtack","desc":"Pinned entity cards"},{"type":"entity_grid","label":"Entity Grid","icon":"fa-table-cells-large","desc":"All entities as card grid"},{"type":"recent_pages","label":"Recent Pages","icon":"fa-clock","desc":"Recently updated entities"},{"type":"text_block","label":"Text Block","icon":"fa-align-left","desc":"Custom rich text / HTML"},{"type":"search_bar","label":"Search Bar","icon":"fa-magnifying-glass","desc":"Search within this category"},{"type":"calendar_preview","label":"Calendar","icon":"fa-calendar-days","desc":"Upcoming calendar events"},{"type":"timeline_preview","label":"Timeline","icon":"fa-timeline","desc":"Timeline list with event counts"}]`
-}
-
 // catDescJS returns a JS-safe quoted string for initializing Alpine.js x-data.
 func catDescJS(desc *string) string {
 	if desc == nil || *desc == "" {
@@ -311,7 +303,6 @@ templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityT
 						data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard-layout", cc.Campaign.ID, et.ID) }
 						data-campaign-id={ cc.Campaign.ID }
 						data-csrf-token={ csrfToken }
-						data-block-types={ categoryDashboardBlockTypes() }
 					></div>
 				</div>
 			</div>
@@ -528,7 +519,6 @@ templ categoryDashboardTab(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard-layout", cc.Campaign.ID, et.ID) }
 				data-campaign-id={ cc.Campaign.ID }
 				data-csrf-token={ csrfToken }
-				data-block-types={ categoryDashboardBlockTypes() }
 			></div>
 		</div>
 	</div>

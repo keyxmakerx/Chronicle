@@ -313,7 +313,7 @@
     var VAR = 'main';
     var W = {};               // palette entries by key (type, or ext_widget:slug)
     var paletteState = 'loading';
-    var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, panel: false, shown: false, reading: false, look: lookNow(), addAt: null, peekKeep: false, pageQ: '', pageHits: null };
+    var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, panel: false, shown: false, shift: 0, shiftCss: 0, reading: false, look: lookNow(), addAt: null, peekKeep: false, pageQ: '', pageHits: null };
     // The page the layout is drawn with, and each widget's look on it, by
     // pvKey. A look is a node, or null when the widget draws nothing there.
     var PV = { entityId: '', pages: [], looks: {}, idx: {}, n: 0, pending: {}, busy: false, failed: false, loaded: false, timer: 0 };
@@ -833,7 +833,8 @@
       room = room && !UI.reading;
       L.rows.forEach(function (r, i) { h += (room ? insHTML(i) : '') + rowHTML(r); });
       if (!UI.reading) h += room ? insHTML(L.rows.length, true) : '<p class="cpe-hint cpe-full">A page holds ' + MAX_ROWS + ' sections at most. Remove one to add another.</p>';
-      return '<div class="cpe-frame ' + UI.device + '">' + draftHTML() + '<div class="cpe-page" data-page>' + h + '</div></div>';
+      // Drawn where the last render left it, so a slide plays only on change.
+      return '<div class="cpe-frame ' + UI.device + '"' + (UI.shift ? ' style="transform:translateX(' + UI.shiftCss + 'px)"' : '') + '>' + draftHTML() + '<div class="cpe-page" data-page>' + h + '</div></div>';
     }
 
     /* ---------- Layouts ----------
@@ -848,7 +849,10 @@
       return nl ? nl.name : mainLabel(p);
     }
     // renderSlot draws the picker into the bar, only when it changed, so an
-    // open menu keeps the button it grew from.
+    // open menu keeps the button it grew from. On a phone it is the last part
+    // of the category's swipeable row, so it never sits over the tabs; wider,
+    // it waits in the slot at the bar's right.
+    var PICK = null;
     function renderSlot() {
       if (!SLOT) return;
       var h = '';
@@ -857,14 +861,28 @@
         h = '<button type="button" class="czs-lay-pick" id="cpe-lay-pick" data-act="laymenu" aria-haspopup="menu" aria-expanded="' + open + '" title="The layout you are arranging">' +
           '<span class="czs-lay-lab">Layout:</span><b>' + esc(layoutName(plNow(), VAR)) + '</b><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>';
       }
-      if (SLOT._cpeHTML !== h) {
-        SLOT.innerHTML = h; SLOT._cpeHTML = h;
-        // The picker narrows the bar's row, so on a narrow screen the open
-        // tab may now sit past its end.
-        if (Chronicle.customizeRevealTab) Chronicle.customizeRevealTab();
+      var bar = SHELL.querySelector('[data-czs-catbar]');
+      var host = bar && window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? bar : SLOT;
+      var moved = false;
+      if (!h) {
+        if (PICK && PICK.parentNode) { PICK.remove(); moved = true; }
+      } else {
+        if (!PICK) {
+          PICK = document.createElement('span'); PICK.className = 'czs-tabw czs-lay-w';
+          // In the phone row it sits outside the editor and the slot, so it
+          // routes its own clicks.
+          PICK.addEventListener('click', function (e) {
+            if (PICK.parentNode === SLOT) return;
+            var b = e.target.closest('[data-act]'); if (b) doAct(b, e);
+          });
+        }
+        if (PICK.parentNode !== host) { host.appendChild(PICK); moved = true; }
+        if (PICK._cpeHTML !== h) { PICK.innerHTML = h; PICK._cpeHTML = h; moved = true; }
       }
+      // The picker changes how much of the row shows: bring the open tab back.
+      if (moved && Chronicle.customizeRevealTab) Chronicle.customizeRevealTab();
     }
-    function layoutMenu(btn) {
+    function layoutMenu(btn, ev) {
       var p = plNow(), cur = VAR, nm = layoutName(p, cur), full = p.extra.length >= PL_MAX;
       var row = function (key, name) {
         return '<button type="button" role="menuitemradio" data-act="lay" data-v="' + esc(key) + '" aria-checked="' + (cur === key) + '">' + esc(name) + '</button>';
@@ -882,7 +900,7 @@
       h += '<p class="cpe-hint cpe-menu-note">' + (p.extra.length
         ? 'Each page wears one layout. Change a page’s layout from the chip beside its name.'
         : 'One category can hold different kinds of page. Give it a second layout, like one for heroes and one for NPCs.') + '</p></div>';
-      menu(btn, 'lay', h, 'right');
+      menu(btn, 'lay', h, 'right', ev);
     }
     // wear switches the editor to another of the category's layouts.
     function wear(key) {
@@ -981,16 +999,16 @@
         return '<button type="button" role="menuitemradio" data-act="' + act + '" data-v="' + esc(r[0]) + '" aria-checked="' + (cur === r[0]) + '">' + esc(r[1]) + '</button>';
       }).join('');
     }
-    function deviceMenu(btn) {
-      menu(btn, 'devmenu', '<div class="cpe-menu" role="menu" aria-label="Screen size"><p class="cpe-menu-h">Screen size</p>' + menuRows('dev', UI.device, DEVICES) + '</div>');
+    function deviceMenu(btn, ev) {
+      menu(btn, 'devmenu', '<div class="cpe-menu" role="menu" aria-label="Screen size"><p class="cpe-menu-h">Screen size</p>' + menuRows('dev', UI.device, DEVICES) + '</div>', undefined, ev);
     }
-    function pageMenu(btn) {
+    function pageMenu(btn, ev) {
       var many = PV.pages.length > 8;
       var h = '<div class="cpe-menu cpe-menu-wide" role="menu" aria-label="Show it with"><p class="cpe-menu-h">Show it with</p>' +
         (many ? '<input class="cpe-inp cpe-menu-q" type="search" placeholder="Find a page" aria-label="Find a page" autocomplete="off">' : '') +
         '<div class="cpe-menu-list">' + menuRows('page', PV.entityId, PV.pages.map(function (p) { return [p.id, p.name]; })) + '</div>' +
         '<p class="cpe-hint cpe-menu-note">One of your ' + esc((S.plural || 'pages').toLowerCase()) + '. It only fills the widgets; nothing on it changes.</p></div>';
-      var p = menu(btn, 'pagemenu', h);
+      var p = menu(btn, 'pagemenu', h, undefined, ev);
       var q = p.querySelector('.cpe-menu-q');
       if (q) {
         q.addEventListener('input', function () {
@@ -1000,14 +1018,14 @@
         q.focus();
       }
     }
-    function moreMenu(btn) {
+    function moreMenu(btn, ev) {
       var h = '<div class="cpe-menu cpe-menu-wide" role="menu" aria-label="More tools"><p class="cpe-menu-h">Preview the page look</p>' +
         menuRows('look', UI.look, [['standard', 'Standard'], ['annals', 'Material']]) +
         '<p class="cpe-hint cpe-menu-note">Pages use the look chosen in Look › Pages.</p><hr>' +
         '<button type="button" role="menuitemcheckbox" data-act="read" aria-checked="' + UI.reading + '"><span>Reader view<small>The page as readers get it, with no frames, labels or handles</small></span></button>' +
         (UI.reading || ANYHOME ? '' : '<hr><button type="button" role="menuitem" data-act="start">Start from a layout in the Library</button>' +
           '<button type="button" role="menuitem" data-act="keep">Keep a copy in the Library</button>') + '</div>';
-      menu(btn, 'more', h);
+      menu(btn, 'more', h, undefined, ev);
     }
 
     /* ---------- The widget panel ----------
@@ -1283,6 +1301,7 @@
       fill();
       fit();
       syncPanel();
+      clearPanel(true);
       renderSlot();
       queuePreview();
     }
@@ -1292,11 +1311,13 @@
       var box = $('.cpe-editor');
       if (!box) return;
       // Measured from the top of whatever scrolls (the window, or the main
-      // column on a phone), and kept clear of a bar docked at the window's
-      // foot that reserves room under the column (the Table's sheet).
+      // column on a phone). The room left below is the main column's bottom
+      // padding less what the workshop already takes back with a negative
+      // margin: it grows when anything docked at the foot reserves room.
       var host = el.closest('#main-content'), hs = host ? getComputedStyle(host) : null;
+      var shell = el.closest('.czs'), ss = shell ? getComputedStyle(shell) : null;
       var top = box.getBoundingClientRect().top + window.scrollY + (host ? host.scrollTop : 0);
-      var foot = hs && document.documentElement.hasAttribute('data-tt-sheet') ? parseFloat(hs.paddingBottom) || 0 : 0;
+      var foot = Math.max(0, (hs ? parseFloat(hs.paddingBottom) || 0 : 0) + (ss ? parseFloat(ss.marginBottom) || 0 : 0));
       box.style.height = Math.max(520, window.innerHeight - top - 8 - foot) + 'px';
       // The page is drawn at the width it has on that screen and scaled to
       // fit, so text wraps where it will on the real page.
@@ -1308,6 +1329,35 @@
       var z = want && room < want ? Math.max(0.85, room / want) : 1;
       frame.style.width = z < 1 ? Math.min(want, Math.floor(room / z)) + 'px' : '';
       frame.style.zoom = z < 1 ? String(z) : '';
+    }
+
+    // clearPanel slides the page sheet left just far enough that what is
+    // selected sits clear of the floating panel, and back when it no longer
+    // needs to; the panel never pushes the page into a narrower layout. A
+    // widget too wide to clear keeps its left part and handle in view and
+    // stays there. UI.shift is in screen pixels; the sheet may be zoomed.
+    var SEL_SEEN = 240;
+    function clearPanel(animate) {
+      var frame = $('.cpe-frame'), cv = $('.cpe-canvas'), ins = $('.cpe-insp'), ed = $('.cpe-editor');
+      var want = 0;
+      if (frame && cv && ins && ed && UI.panel && UI.shown && UI.sel && !UI.reading && !DRAG && window.innerWidth > 640) {
+        var id = UI.sel.id, n = id && frame.querySelector('[data-id="' + CSS.escape(id) + '"], [data-rid="' + CSS.escape(id) + '"].cpe-sec');
+        if (n) {
+          var r = n.getBoundingClientRect(), left = r.left + UI.shift, right = r.right + UI.shift;
+          var edge = ed.getBoundingClientRect().right - 12 - ins.offsetWidth - 16;
+          var most = Math.max(0, left - (cv.getBoundingClientRect().left + 16));
+          want = right - edge;
+          if (want > most) want = left + Math.min(r.width, SEL_SEEN) - edge;
+          want = Math.round(Math.min(most, Math.max(0, want)));
+        }
+      }
+      if (!frame) { UI.shift = want; return; }
+      if (!animate) { frame.style.transition = 'none'; }
+      var z = parseFloat(frame.style.zoom) || 1;
+      UI.shiftCss = -want / z;
+      frame.style.transform = want ? 'translateX(' + UI.shiftCss + 'px)' : '';
+      if (!animate) { void frame.offsetWidth; frame.style.transition = ''; }
+      UI.shift = want;
     }
 
     /* ---------- Changing the layout ---------- */
@@ -1506,8 +1556,8 @@
     // button (a fade under Calm, nothing under Off or from the keyboard, where
     // the move would only slow the next key), the arrow keys walk its rows,
     // and its choices act as the editor's own buttons do.
-    function menu(btn, name, html, align) {
-      var kb = !!(window.event && window.event.detail === 0);
+    function menu(btn, name, html, align, ev) {
+      var kb = !!(ev && ev.detail === 0);
       var p = openPop(btn, html, align);
       p.setAttribute('data-menu', name);
       if (btn.hasAttribute('aria-expanded')) btn.setAttribute('aria-expanded', 'true');
@@ -1681,6 +1731,7 @@
       // the drop brings it back where UI.panel says.
       var ins = $('.cpe-insp');
       if (ins && UI.shown) { ins.classList.remove('open'); UI.shown = false; var ed = $('.cpe-editor'); if (ed) ed.classList.remove('panel-open'); }
+      clearPanel(true);
     }
     function clearMarks() {
       $$('.cpe-ph').forEach(function (p) { p.remove(); });
@@ -1922,10 +1973,10 @@
       switch (act) {
         case 'undo': undo(); return true;
         case 'redo': if (Chronicle.customizeRedo) Chronicle.customizeRedo(); return true;
-        case 'devmenu': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else deviceMenu(b); return true;
-        case 'pagemenu': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else pageMenu(b); return true;
-        case 'more': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else moreMenu(b); return true;
-        case 'laymenu': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else layoutMenu(b); return true;
+        case 'devmenu': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else deviceMenu(b, e); return true;
+        case 'pagemenu': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else pageMenu(b, e); return true;
+        case 'more': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else moreMenu(b, e); return true;
+        case 'laymenu': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else layoutMenu(b, e); return true;
         case 'dev': done(); UI.device = v; render(); return true;
         case 'page': done(); showWith(v); return true;
         case 'asplayer': UI.viewAs = UI.viewAs === 'player' ? 'dm' : 'player'; render(); return true;
@@ -2078,7 +2129,7 @@
       if (UI.addAt && !findRow(UI.addAt)) UI.addAt = null;
       render();
     });
-    on(window, 'resize', fit);
+    on(window, 'resize', function () { fit(); renderSlot(); clearPanel(false); });
 
     render();
     showLook(UI.look);
@@ -2090,7 +2141,7 @@
       clearTimeout(PV.timer);
       clearTimeout(pageTimer);
       closePop();
-      if (SLOT) { SLOT.innerHTML = ''; SLOT._cpeHTML = ''; }
+      if (PICK) PICK.remove();
       if (DRAG) { DRAG.ghost.remove(); DRAG = null; document.body.classList.remove('cpe-dragging'); }
       showLook(LOOK0);
       listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });

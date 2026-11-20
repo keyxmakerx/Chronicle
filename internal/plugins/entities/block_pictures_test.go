@@ -85,3 +85,32 @@ func coreBlocks(t *testing.T) *BlockRegistry {
 	RegisterCoreBlocks(reg)
 	return reg
 }
+
+// TestOldEditorFallbackNamesMatchRegistry pins the names the old layout
+// editor (layout_editor.js, still mounted by GET /entity-types/:etid/customize)
+// lists when it cannot fetch the registry: each must be the registry's own,
+// so the two lists cannot drift apart.
+func TestOldEditorFallbackNamesMatchRegistry(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "static", "js", "widgets", "layout_editor.js"))
+	if err != nil {
+		t.Fatalf("read layout_editor.js: %v", err)
+	}
+	labels := map[string]string{}
+	for _, m := range coreBlocks(t).Types() {
+		labels[m.Type] = m.Label
+	}
+	entry := regexp.MustCompile(`\{ type: '([a-z_]+)',\s*label: '([^']+)'`)
+	found := entry.FindAllStringSubmatch(string(src), -1)
+	if len(found) < 20 {
+		t.Fatalf("found only %d fallback entries; the scan has gone wrong", len(found))
+	}
+	for _, f := range found {
+		want, ok := labels[f[1]]
+		if !ok {
+			continue // a type the core no longer registers keeps its old name
+		}
+		if f[2] != want {
+			t.Errorf("layout_editor.js names %s %q; the registry calls it %q", f[1], f[2], want)
+		}
+	}
+}

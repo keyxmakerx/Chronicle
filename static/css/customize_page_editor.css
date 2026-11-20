@@ -51,7 +51,10 @@
 .cpe-pill.dm { background: rgb(var(--color-warn-rgb) / 0.15); color: var(--cpe-warn); }
 
 .cpe-canvas { overflow: auto; overscroll-behavior: contain; background-color: var(--color-bg-tertiary); background-image: radial-gradient(rgb(var(--color-accent-rgb) / 0.12) 1px, transparent 1px); background-size: 16px 16px; padding: 28px 28px 140px; min-width: 0; min-height: 0; }
-.cpe-frame { margin: 0 auto; transition: max-width var(--dur-standard) var(--ease-out); }
+/* The sheet slides aside (transform only) to clear the floating panel of
+   what is selected; Calm places it and Off jumps by the global rules. */
+.cpe-frame { margin: 0 auto; transition: max-width var(--dur-standard) var(--ease-out), transform var(--dur-slide) var(--ease-slide); }
+@media (prefers-reduced-motion: reduce) { .cpe-frame { transition: none; } }
 .cpe-frame.desktop { max-width: 1180px; }
 .cpe-frame.tablet { max-width: 780px; }
 .cpe-frame.phone { max-width: 392px; border-radius: 28px; padding: 14px 10px; background: var(--color-bg-secondary); box-shadow: var(--elev-dragged); }
