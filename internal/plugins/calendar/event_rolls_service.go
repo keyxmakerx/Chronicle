@@ -10,6 +10,8 @@ package calendar
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -62,14 +64,21 @@ type RollNightsInput struct {
 
 // RollTable is a rolling table as an event roll reads it.
 type RollTable struct {
-	Name    string
-	Entries []RollTableEntry
+	Name string
+	// Visibility is who sees what a roll on the table puts on a night:
+	// "dm_only" keeps a night's result from players unless the Director
+	// tells that night; anything else follows the roll's own setting.
+	Visibility string
+	Entries    []RollTableEntry
 }
 
 // RollTableEntry is one entry of a rolling table.
 type RollTableEntry struct {
 	Name, Brief string
 	Weight      float64
+	// When is the line's day conditions as the rolling tables plugin stores
+	// them (see roll_table_when.go); empty means any night.
+	When json.RawMessage
 }
 
 // RollTableSource finds one of a campaign's rolling tables. The rolltables
@@ -195,7 +204,7 @@ func calToday(cal *Calendar) DayDate {
 }
 
 // rollOne makes one night's result.
-func (s *calendarService) rollOne(ctx context.Context, campaignID string, cfg *RollConfig, d DayDate, source string, table *RollTable) (RollNight, error) {
+func (s *calendarService) rollOne(ctx context.Context, cal *Calendar, campaignID string, cfg *RollConfig, d DayDate, source string, table *RollTable) (RollNight, error) {
 	n := RollNight{Year: d.Year, Month: d.Month, Day: d.Day, Source: source}
 	switch cfg.Source {
 	case RollSourceDice:
@@ -215,7 +224,13 @@ func (s *calendarService) rollOne(ctx context.Context, campaignID string, cfg *R
 				return n, err
 			}
 		}
-		e, err := pickEntry(table.Entries)
+		// Only lines whose conditions hold that night can come up, as in
+		// the browser's Roll one.
+		fits := eligibleEntries(table, s.nightFactsFor(ctx, cal, d, table))
+		if len(fits) == 0 {
+			return n, errNothingFits
+		}
+		e, err := pickEntry(fits)
 		if err != nil {
 			return n, err
 		}
@@ -237,6 +252,25 @@ func (s *calendarService) loadRollTable(ctx context.Context, campaignID, tableID
 	}
 	return t, nil
 }
+
+// hideTableFromPlayers marks cfg when its table is Only you. A table that
+// cannot be read is treated as Only you: a lookup failing must never be the
+// reason a player sees a result the Director meant to keep back.
+func (s *calendarService) hideTableFromPlayers(ctx context.Context, campaignID string, cfg *RollConfig) {
+	if cfg == nil || cfg.Source != RollSourceTable {
+		return
+	}
+	cfg.tableHidden = true
+	if s.rollTables == nil {
+		return
+	}
+	if t, err := s.rollTables.RollTable(ctx, campaignID, cfg.TableID); err == nil && t != nil {
+		cfg.tableHidden = t.Visibility == RollTableDMOnly
+	}
+}
+
+// RollTableDMOnly is a table's Visibility for results only the Director sees.
+const RollTableDMOnly = "dm_only"
 
 // pickEntry draws one entry by weight, with crypto/rand like a dice roll.
 // Weights are scaled to whole thousandths; a weight that rounds to nothing
@@ -295,7 +329,10 @@ func (s *calendarService) rollArrived(ctx context.Context, cal *Calendar, campai
 			}
 			table = t
 		}
-		n, err := s.rollOne(ctx, campaignID, cfg, d, RollNightOnDay, table)
+		n, err := s.rollOne(ctx, cal, campaignID, cfg, d, RollNightOnDay, table)
+		if errors.Is(err, errNothingFits) {
+			continue
+		}
 		if err != nil {
 			return
 		}
@@ -347,6 +384,9 @@ func (s *calendarService) buildRollView(ctx context.Context, t *rollTarget, camp
 	}
 	s.rollArrived(ctx, t.cal, campaignID, t.evt.ID, cfg, dates, stored)
 
+	if !director {
+		s.hideTableFromPlayers(ctx, campaignID, cfg)
+	}
 	today := calToday(t.cal)
 	var briefs map[string]string
 	if director && cfg.Source == RollSourceTable && s.rollTables != nil {
@@ -439,6 +479,9 @@ func (s *calendarService) ListMonthRolls(ctx context.Context, calendarID, campai
 		cfg := cfgs[e.ID]
 		if cfg == nil {
 			continue
+		}
+		if !director {
+			s.hideTableFromPlayers(ctx, campaignID, cfg)
 		}
 		var dates []DayDate
 		if e.hasExpansion() {
@@ -602,11 +645,18 @@ func (s *calendarService) RollEventNights(ctx context.Context, eventID, calendar
 	}
 	nights := make([]RollNight, 0, len(targets))
 	for _, d := range targets {
-		n, err := s.rollOne(ctx, campaignID, cfg, d, RollNightAhead, table)
+		n, err := s.rollOne(ctx, t.cal, campaignID, cfg, d, RollNightAhead, table)
+		if errors.Is(err, errNothingFits) {
+			// No line can come up that night, so it stays unrolled.
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
 		nights = append(nights, n)
+	}
+	if len(nights) == 0 && len(targets) > 0 {
+		return nil, apperror.NewValidation("no line of that table can come up on those nights; change the lines' conditions or pick another table")
 	}
 	if err := s.rollRepo.PutNights(ctx, eventID, nights, in.OnlyUnrolled); err != nil {
 		return nil, fmt.Errorf("store roll nights: %w", err)
