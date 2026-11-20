@@ -91,48 +91,58 @@ func TestManageFrame_TitleAndWayBack(t *testing.T) {
 	}
 }
 
-// A page that names its desk line draws that line's sentence under the title,
-// from whatever the app registered; a page with no line, or a resolver that
-// has nothing true to say, draws none, and the frame never fails for it.
-func TestManageFrame_Sentence(t *testing.T) {
-	t.Cleanup(func() { SetManageSentence(nil) })
-	say := func(words string) ManageSentenceFunc {
+// A page that names its desk line draws that line's figures beside the title,
+// from whatever the app registered; a page with no line, a page that opts out,
+// or a resolver that has nothing true to show, draws none, and the frame never
+// fails for it.
+func TestManageFrame_Figure(t *testing.T) {
+	t.Cleanup(func() { SetManageFigure(nil) })
+	show := func(words string) ManageFigureFunc {
 		return func(_ context.Context, line string) templ.Component {
 			if words == "" {
 				return nil
 			}
-			return templ.Raw(`<div class="manage-sentence" data-line="` + line + `">` + words + `</div>`)
+			return templ.Raw(`<span id="manage-figure" class="manage-fig" data-line="` + line + `">` + words + `</span>`)
 		}
 	}
 	tests := []struct {
-		name string
-		fn   ManageSentenceFunc
-		line string
-		want string
+		name     string
+		fn       ManageFigureFunc
+		line     string
+		noFigure bool
+		want     string
 	}{
-		{"line and resolver", say("4 people."), "people", "4 people."},
-		{"no line", say("4 people."), "", ""},
-		{"nothing to say", say(""), "people", ""},
-		{"no resolver", nil, "people", ""},
+		{"line and resolver", show("5 members"), "people", false, "5 members"},
+		{"no line", show("5 members"), "", false, ""},
+		{"nothing to show", show(""), "people", false, ""},
+		{"no resolver", nil, "people", false, ""},
+		{"page opts out", show("5 members"), "people", true, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SetManageSentence(tt.fn)
+			SetManageFigure(tt.fn)
 			var buf bytes.Buffer
 			ctx := navStateCase{role: 3, path: "/campaigns/c1/members"}.ctx()
-			if err := ManageFrame(ManageFrameData{Title: "People", Line: tt.line}).Render(ctx, &buf); err != nil {
+			if err := ManageFrame(ManageFrameData{Title: "People", Line: tt.line, NoFigure: tt.noFigure}).Render(ctx, &buf); err != nil {
 				t.Fatal(err)
 			}
 			out := buf.String()
-			if got := strings.Contains(out, tt.want); tt.want != "" && !got {
+			if tt.want != "" && !strings.Contains(out, tt.want) {
 				t.Errorf("missing %q: %s", tt.want, out)
 			}
-			if tt.want == "" && strings.Contains(out, "manage-sentence") {
-				t.Errorf("no sentence expected: %s", out)
+			if tt.want == "" && strings.Contains(out, "manage-fig") {
+				t.Errorf("no figure expected: %s", out)
 			}
-			// The sentence sits after the title, outside the heading band.
-			if tt.want != "" && strings.Index(out, tt.want) < strings.Index(out, "</header>") {
-				t.Errorf("sentence must come after the header: %s", out)
+			if strings.Contains(out, "manage-sentence") {
+				t.Errorf("the sentence under the title is gone: %s", out)
+			}
+			if tt.want != "" {
+				// The figure sits inside the header, after the title and
+				// before the header closes, so it shares the title's line.
+				at, h1, end := strings.Index(out, tt.want), strings.Index(out, "</h1>"), strings.Index(out, "</header>")
+				if at < h1 || at > end {
+					t.Errorf("figure must sit beside the title inside the header: %s", out)
+				}
 			}
 		})
 	}

@@ -3124,11 +3124,11 @@ func (a *App) RegisterRoutes() {
 	inviteHandler := campaigns.NewInviteHandler(inviteService, campaignService, a.Config.BaseURL)
 	campaignHandler.SetInviteService(inviteService)
 	campaigns.RegisterInviteRoutes(e, inviteHandler, campaignService, authService)
-	// The desk's People line counts the invitations still waiting.
+	// The desk's Invited row counts the invitations still waiting.
 	campaignHandler.SetInviteLister(inviteService)
-	// Every Manage page opens with its own desk sentence, worded by the same
-	// service the desk uses.
-	layouts.SetManageSentence(campaignHandler.ManageSentence)
+	// Every Manage page shows its own figures beside its title, built by the
+	// same service the desk uses.
+	layouts.SetManageFigure(campaignHandler.ManageFigure)
 
 	// Guest codes: the owner's card, and auth's join page redeeming them.
 	// A guest exists only for their campaign, so removing them from it or
@@ -3991,6 +3991,8 @@ func (a *App) RegisterRoutes() {
 	// request logging, security monitoring, and admin dashboard.
 	syncRepo := syncapi.NewSyncAPIRepository(a.DB)
 	syncService := syncapi.NewSyncAPIService(syncRepo)
+	// The desk's Keys row counts the campaign's API keys.
+	campaignHandler.RegisterDeskProvider(syncapi.NewDeskProvider(syncService))
 	// A campaign has a Foundry world syncing once an active sync key of its
 	// has been used; sheets say "set in Foundry" only then.
 	// A system's preset-bound sheet draws only in its own campaigns; checks

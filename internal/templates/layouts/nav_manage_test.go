@@ -29,8 +29,7 @@ func TestNavCommandsJSON_OwnerPhrases(t *testing.T) {
 	owner := decode(navStateCase{role: 3, path: "/campaigns/c1"})
 	want := []struct{ label, href string }{
 		{"Campaign settings", "/campaigns/c1/dashboard"},
-		{"Players' dashboard", "/campaigns/c1/dashboard#line-players-home"},
-		{"Guests' dashboard", "/campaigns/c1/dashboard#line-guests-home"},
+		{"Preview as a player or guest", "/campaigns/c1/dashboard#line-preview"},
 		{"Export a copy", "/campaigns/c1/settings?tab=data"},
 		{"Import", "/campaigns/c1/settings?tab=import"},
 		{"Activity log", "/campaigns/c1/settings?tab=activity"},

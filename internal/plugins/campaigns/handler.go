@@ -1028,7 +1028,7 @@ func (h *Handler) OwnerDashboard(c *echo.Context) error {
 // own numbers, the way RegisterSettingsTab lets it add a settings tab.
 func (h *Handler) RegisterDeskProvider(p DeskProvider) { h.desk.Register(p) }
 
-// UpdateDetailsAPI saves the desk's name and public blanks (PUT
+// UpdateDetailsAPI saves the desk's name, description and public blanks (PUT
 // /campaigns/:id/details). It is a partial update: a key the body does not
 // carry keeps what is stored. Owner only, like every other campaign setting.
 func (h *Handler) UpdateDetailsAPI(c *echo.Context) error {
@@ -1043,7 +1043,7 @@ func (h *Handler) UpdateDetailsAPI(c *echo.Context) error {
 	if err := c.Bind(&in); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
-	if !in.Name.Present() && !in.IsPublic.Present() {
+	if !in.Name.Present() && !in.Description.Present() && !in.IsPublic.Present() {
 		return apperror.NewBadRequest("nothing to change")
 	}
 	camp, err := h.service.UpdateDetails(c.Request().Context(), cc.Campaign.ID, in)
@@ -1051,9 +1051,14 @@ func (h *Handler) UpdateDetailsAPI(c *echo.Context) error {
 		return err
 	}
 	h.logAudit(c, cc.Campaign.ID, "campaign.details.updated", map[string]any{
-		"name_sent": in.Name.Present(), "is_public_sent": in.IsPublic.Present(), "is_public": camp.IsPublic,
+		"name_sent": in.Name.Present(), "description_sent": in.Description.Present(),
+		"is_public_sent": in.IsPublic.Present(), "is_public": camp.IsPublic,
 	})
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "name": camp.Name, "isPublic": camp.IsPublic})
+	description := ""
+	if camp.Description != nil {
+		description = *camp.Description
+	}
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "name": camp.Name, "description": description, "isPublic": camp.IsPublic})
 }
 
 // GetOwnerDashboardLayout returns the owner dashboard layout JSON (GET /campaigns/:id/owner-dashboard-layout).
@@ -1164,9 +1169,9 @@ type MemberListView struct {
 	Notice    string
 	// NoticeLink is a link the owner passes on by hand, shown under Notice.
 	NoticeLink string
-	// Sentence redraws the People page's summary line in place after a
-	// change; nil when the page itself is being drawn.
-	Sentence templ.Component
+	// Figure redraws the People page's figures beside its title in place
+	// after a change; nil when the page itself is being drawn.
+	Figure templ.Component
 }
 
 // memberListView loads the list for the People page. Removed people are the
@@ -1179,7 +1184,7 @@ func (h *Handler) memberListView(c *echo.Context, cc *CampaignContext, errMsg st
 		v.Removed, _ = h.service.ListRemovedMembers(ctx, cc.Campaign.ID)
 	}
 	if c.Request().Method != http.MethodGet && middleware.IsHTMX(c) {
-		v.Sentence = h.manageSentenceSwap("people")
+		v.Figure = h.manageFigureSwap("people")
 	}
 	return v
 }

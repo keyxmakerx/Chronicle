@@ -6,13 +6,20 @@
  * that saves the moment it is changed:
  *
  *   choice  opens a small menu that grows out of the word; a pick saves at once
- *   name    turns the word into a field; Enter or leaving it saves, Escape keeps
+ *   name    turns the word into a one-line field; Enter or leaving it saves,
+ *           Escape keeps
+ *   text    turns the word into a field of a few lines (the description);
+ *           Ctrl or Cmd + Enter or leaving it saves, Escape keeps, Enter makes
+ *           a new line
  *
  * Each blank's button carries its own inline onclick (built in
  * campaigns/desk_view.go) that calls Chronicle.deskBlank.activate, because the
  * page arrives by a boosted swap where a script tag or a delegated listener may
  * never run. Nothing here listens on document except while a menu is open, and
  * that one goes away when the menu does.
+ *
+ * Making the campaign public also turns on the guest preview word on the
+ * same page, which is off only while the campaign is private.
  *
  * Keyboard: Enter or Space opens the menu with focus on the chosen row, the
  * arrow keys, Home and End move, Enter or Space picks, Escape closes and puts
@@ -65,9 +72,19 @@
     try { return JSON.parse(btn.getAttribute('data-options') || '[]'); } catch (e) { return []; }
   }
 
-  function setShown(btn, text) {
-    btn.textContent = text;
-    btn.setAttribute('aria-label', (btn.getAttribute('data-label') || '') + ': ' + text);
+  // The word lives in its own span when the blank also carries a chevron, so
+  // changing it leaves the chevron alone. A long text is cut for the screen
+  // reader's name for the blank.
+  function setShown(btn, text, empty) {
+    var t = btn.querySelector('.desk-t');
+    (t || btn).textContent = text;
+    var name = text.length > 80 ? text.slice(0, 80) + '\u2026' : text;
+    btn.setAttribute('aria-label', (btn.getAttribute('data-label') || '') + ': ' + name);
+    btn.classList.toggle('is-empty', !!empty);
+  }
+  function shownText(btn) {
+    var t = btn.querySelector('.desk-t');
+    return (t || btn).textContent;
   }
 
   // ---- the menu ----------------------------------------------------------
@@ -105,8 +122,15 @@
       it.setAttribute('role', 'menuitemradio');
       it.setAttribute('aria-checked', String(o.v === value));
       it.setAttribute('data-v', o.v);
-      it.innerHTML = '<span></span>' + CHECK;
-      it.firstChild.textContent = o.l;
+      it.innerHTML = '<span class="desk-mi"><span class="desk-ml"></span></span>' + CHECK;
+      it.querySelector('.desk-ml').textContent = o.l;
+      if (o.h) {
+        // The hint is a second, quieter line under the label.
+        var h = document.createElement('span');
+        h.className = 'desk-mh';
+        h.textContent = o.h;
+        it.firstChild.appendChild(h);
+      }
       menu.appendChild(it);
     });
     host.appendChild(menu);
@@ -217,11 +241,34 @@
     setTimeout(function () { line.classList.remove('is-glow'); }, 1300);
   }
 
+  // The guest preview is off exactly while the campaign is private, so the
+  // pick that changes that turns the word on or off where it stands.
+  function syncGuest(btn, value) {
+    if (btn.getAttribute('data-id') !== 'public') return;
+    var host = btn.closest('[data-desk]');
+    if (!host) return;
+    var pub = value === 'true';
+    [].forEach.call(host.querySelectorAll('[data-needs-public]'), function (g) {
+      var why = g.closest('[data-line]');
+      why = why && why.querySelector('.set-why');
+      g.setAttribute('aria-disabled', String(!pub));
+      if (pub) {
+        g.removeAttribute('title');
+        g.removeAttribute('aria-describedby');
+      } else {
+        g.setAttribute('title', g.getAttribute('data-off') || '');
+        if (why) g.setAttribute('aria-describedby', why.id);
+      }
+      if (why) why.hidden = pub;
+    });
+  }
+
   function saved(btn, value) {
     var line = btn.closest('[data-line]');
     btn.setAttribute('data-value', value);
     btn.removeAttribute('data-state');
     btn.removeAttribute('aria-busy');
+    syncGuest(btn, value);
     tick(line);
     glow(line);
   }
@@ -231,7 +278,7 @@
     if (value === btn.getAttribute('data-value')) { btn.focus(); return; }
     var opt = options(btn).filter(function (o) { return o.v === value; })[0];
     if (!opt) { btn.focus(); return; }
-    var was = { value: btn.getAttribute('data-value'), text: btn.textContent };
+    var was = { value: btn.getAttribute('data-value'), text: shownText(btn) };
     // Feedback first: the new word and a working state, inside a tenth of a
     // second, then the save settles it or puts the old word back.
     setShown(btn, opt.l);
@@ -248,20 +295,26 @@
     });
   }
 
-  // ---- the name ----------------------------------------------------------
+  // ---- the name and the description ---------------------------------------
 
-  function rename(btn) {
-    var wasName = btn.getAttribute('data-value');
-    var input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'desk-ty';
-    input.value = wasName;
-    input.maxLength = 200;
-    input.size = Math.max(10, wasName.length);
-    input.setAttribute('aria-label', btn.getAttribute('data-label') || 'Name');
+  // Turns the word into a field where it stands. A name is one line; a text
+  // is a field of a few lines the width of the row's value. Leaving the field
+  // saves; Escape keeps the old words. Enter saves a name, and in a text only
+  // Ctrl or Cmd + Enter saves, so Enter can make a new line.
+  function edit(btn, multi) {
+    var was = btn.getAttribute('data-value') || '';
+    var wasShown = shownText(btn);
+    var wasEmpty = btn.classList.contains('is-empty');
+    var max = parseInt(btn.getAttribute('data-maxlen'), 10) || (multi ? 5000 : 200);
+    var input = document.createElement(multi ? 'textarea' : 'input');
+    if (multi) input.rows = 3; else { input.type = 'text'; input.size = Math.max(10, was.length); }
+    input.className = 'desk-ty' + (multi ? ' desk-ta' : '');
+    input.value = was;
+    input.maxLength = max;
+    input.setAttribute('aria-label', btn.getAttribute('data-label') || (multi ? 'Description' : 'Name'));
     btn.replaceWith(input);
     input.focus();
-    input.select();
+    if (!multi) input.select();
     var done = false;
     function end(save) {
       if (done) return;
@@ -269,25 +322,28 @@
       var v = input.value.trim();
       input.replaceWith(btn);
       btn.focus({ preventScroll: true });
-      if (!save || v === wasName) return;
-      if (!v) { if (C.notify) C.notify('A campaign needs a name.', 'error'); return; }
-      setShown(btn, v);
+      if (!save || v === was) return;
+      if (!multi && !v) { if (C.notify) C.notify('A campaign needs a name.', 'error'); return; }
+      var shown = v.replace(/\s+/g, ' ');
+      setShown(btn, shown || 'None', !shown);
       btn.setAttribute('data-state', 'working');
       btn.setAttribute('aria-busy', 'true');
       send(btn, v).then(function (res) {
-        var name = (res && res.name) || v;
-        setShown(btn, name);
-        saved(btn, name);
+        var key = btn.getAttribute('data-field');
+        var kept = res && typeof res[key] === 'string' ? res[key] : v;
+        var s2 = kept.replace(/\s+/g, ' ');
+        setShown(btn, s2 || 'None', !s2);
+        saved(btn, kept);
       }, function (err) {
-        setShown(btn, wasName);
+        setShown(btn, wasShown, wasEmpty);
         btn.removeAttribute('data-state');
         btn.removeAttribute('aria-busy');
         fail(err);
       });
     }
     input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); end(true); }
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); end(false); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); end(false); }
+      else if (e.key === 'Enter' && (!multi || e.ctrlKey || e.metaKey)) { e.preventDefault(); end(true); }
     });
     input.addEventListener('blur', function () { end(true); });
   }
@@ -301,7 +357,8 @@
    */
   function activate(btn, ev) {
     if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
-    if (btn.getAttribute('data-desk-blank') === 'name') { rename(btn); return; }
+    var kind = btn.getAttribute('data-desk-blank');
+    if (kind === 'name' || kind === 'text') { edit(btn, kind === 'text'); return; }
     if (current && current.btn === btn) { closeMenu(); return; }
     openMenu(btn, !!ev && ev.detail === 0);
   }

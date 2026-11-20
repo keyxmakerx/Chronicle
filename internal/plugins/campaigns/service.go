@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/sitelook"
 	"github.com/keyxmakerx/chronicle/internal/tilegrid"
@@ -840,10 +841,10 @@ func (s *campaignService) Update(ctx context.Context, campaignID string, input U
 	return campaign, nil
 }
 
-// UpdateDetails merges the name and public flag the caller named over the
-// stored campaign and writes only those. A read of the stored campaign
-// settles the slug and whether the name really changed; the description and
-// every column the caller did not name are never written.
+// UpdateDetails merges the name, description and public flag the caller named
+// over the stored campaign and writes only those. A read of the stored
+// campaign settles the slug and whether anything really changed; every column
+// the caller did not name is never written.
 func (s *campaignService) UpdateDetails(ctx context.Context, campaignID string, input UpdateCampaignDetailsInput) (*Campaign, error) {
 	campaign, err := s.repo.FindByID(ctx, campaignID)
 	if err != nil {
@@ -874,10 +875,35 @@ func (s *campaignService) UpdateDetails(ctx context.Context, campaignID string, 
 		publicPtr = &want
 		campaign.IsPublic = want
 	}
-	if namePtr == nil && publicPtr == nil {
+	// The description follows the Details form's rules (trimmed, at most
+	// MaxDescriptionLen, empty clears); an explicit null clears it too.
+	desc := patch.Absent[string]()
+	if input.Description.Present() {
+		d := ""
+		if v, ok := input.Description.Get(); ok {
+			d = strings.TrimSpace(v)
+		}
+		if len(d) > MaxDescriptionLen {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("description must be at most %d characters", MaxDescriptionLen))
+		}
+		stored := ""
+		if campaign.Description != nil {
+			stored = *campaign.Description
+		}
+		if d != stored {
+			if d == "" {
+				desc = patch.Null[string]()
+				campaign.Description = nil
+			} else {
+				desc = patch.Of(d)
+				campaign.Description = &d
+			}
+		}
+	}
+	if namePtr == nil && publicPtr == nil && !desc.Present() {
 		return campaign, nil
 	}
-	if err := s.repo.UpdateDetails(ctx, campaignID, namePtr, slugPtr, publicPtr); err != nil {
+	if err := s.repo.UpdateDetails(ctx, campaignID, namePtr, slugPtr, publicPtr, desc); err != nil {
 		return nil, err
 	}
 	return campaign, nil
