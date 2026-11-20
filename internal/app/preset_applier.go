@@ -313,6 +313,7 @@ func mapPresetFields(fields []systems.FieldDef) []entities.FieldDefinition {
 			Min:      f.Min,
 			Max:      f.Max,
 			JSONList: f.JSONList,
+			Formula:  f.Formula,
 		})
 	}
 	return out
@@ -431,7 +432,7 @@ func checksByCategory(manifests []*systems.SystemManifest) map[string]map[string
 				if out[cat] == nil {
 					out[cat] = map[string]entities.FieldChecks{}
 				}
-				want := entities.FieldChecks{Min: f.Min, Max: f.Max, JSONList: f.JSONList}
+				want := entities.FieldChecks{Min: f.Min, Max: f.Max, JSONList: f.JSONList, Formula: f.Formula}
 				if prev, seen := out[cat][f.Key]; seen && !reflect.DeepEqual(prev, want) {
 					// An empty check stays recorded so a stored bound is cleared.
 					out[cat][f.Key] = entities.FieldChecks{}

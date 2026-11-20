@@ -375,8 +375,9 @@ func TestSyncFieldChecks_ConvergesAndIsIdempotent(t *testing.T) {
 	}
 	svc := newTestService(&mockEntityRepo{}, typeRepo).(*entityService)
 	want := map[string]map[string]FieldChecks{
-		"creature": {"level": {Min: &one, Max: &twenty}, "abilities_json": {JSONList: true}},
+		"creature": {"level": {Min: &one, Max: &twenty}, "abilities_json": {JSONList: true}, "ev": {Formula: true}},
 	}
+	t1.Fields = append(t1.Fields, FieldDefinition{Key: "ev", Label: "EV"})
 	if n, err := svc.SyncFieldChecks(context.Background(), want); err != nil || n != 1 {
 		t.Fatalf("first sync = %d, %v; want 1", n, err)
 	}
@@ -384,7 +385,7 @@ func TestSyncFieldChecks_ConvergesAndIsIdempotent(t *testing.T) {
 	if err := json.Unmarshal([]byte(saved[1]), &stored); err != nil {
 		t.Fatal(err)
 	}
-	if stored[0].Min == nil || *stored[0].Min != 1 || *stored[0].Max != 20 || !stored[1].JSONList {
+	if stored[0].Min == nil || *stored[0].Min != 1 || *stored[0].Max != 20 || !stored[1].JSONList || !stored[2].Formula {
 		t.Errorf("stored fields wrong: %+v", stored)
 	}
 	t1.Fields = stored

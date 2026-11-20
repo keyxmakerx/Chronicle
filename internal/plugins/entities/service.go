@@ -3810,7 +3810,7 @@ func (s *entityService) SyncFieldPlay(ctx context.Context, playByCategory map[st
 	return updated, nil
 }
 
-// SyncFieldChecks converges FieldDefinition.Min, Max and JSONList on stored
+// SyncFieldChecks converges FieldDefinition.Min, Max, JSONList and Formula on stored
 // entity types so AI Import's range checks reach categories created before a
 // system declared them. A key absent from the map is left alone.
 func (s *entityService) SyncFieldChecks(ctx context.Context, checksByCategory map[string]map[string]FieldChecks) (int, error) {
@@ -3838,8 +3838,8 @@ func (s *entityService) SyncFieldChecks(ctx context.Context, checksByCategory ma
 				continue
 			}
 			f := &et.Fields[j]
-			if !reflect.DeepEqual(f.Min, c.Min) || !reflect.DeepEqual(f.Max, c.Max) || f.JSONList != c.JSONList {
-				f.Min, f.Max, f.JSONList = c.Min, c.Max, c.JSONList
+			if !reflect.DeepEqual(f.Min, c.Min) || !reflect.DeepEqual(f.Max, c.Max) || f.JSONList != c.JSONList || f.Formula != c.Formula {
+				f.Min, f.Max, f.JSONList, f.Formula = c.Min, c.Max, c.JSONList, c.Formula
 				changed = true
 			}
 		}

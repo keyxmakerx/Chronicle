@@ -305,6 +305,11 @@ type FieldDefinition struct {
 	// JSONList says a text field holds a JSON list, so AI Import refuses text
 	// that is not one rather than store what the sheet's widgets cannot read.
 	JSONList bool `json:"json_list,omitempty"`
+	// Formula marks a number the game system works out from other fields.
+	// AI Import's review may add it to a page whose AI left it out, with the
+	// figure the system's sheet check proposes; no other unwritten key is
+	// ever added.
+	Formula bool `json:"formula,omitempty"`
 	// LinkTo is the category a "link" field's pages come from. The stored
 	// value is the linked page's id.
 	LinkTo int `json:"link_to,omitempty"`
@@ -323,6 +328,7 @@ type FieldChecks struct {
 	Min      *float64
 	Max      *float64
 	JSONList bool
+	Formula  bool
 }
 
 // FieldPlay mirrors the manifest's play block. It is a separate type from the

@@ -651,6 +651,7 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 			ConflictMode:    conflict,
 			Action:          action,
 			DeleteConfirmed: deleteConfirmed,
+			SheetFormula:    c.FormValue(prefix + "sheet_formula"),
 			// Re-checked by the committer against the live page.
 			ReplaceGMOnlyConfirmed: c.FormValue(prefix+"replace_gm_confirmed") == "on",
 		}

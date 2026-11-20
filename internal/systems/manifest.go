@@ -358,6 +358,12 @@ type FieldDef struct {
 	// abilities), so AI Import refuses text that does not parse as one.
 	JSONList bool `json:"json_list,omitempty"`
 
+	// Formula marks a number the system works out from other fields (a
+	// stat block's EV or Stamina). AI Import's review may then fill it in on
+	// a page where the AI left it out, with the figure the system's sheet
+	// check proposes; any other key is still never added by the review.
+	Formula bool `json:"formula,omitempty"`
+
 	// FoundryPath is the dot-notation path to the corresponding field in
 	// a Foundry VTT Actor's system data (e.g., "system.abilities.str.value").
 	// Used by the generic Foundry adapter to auto-generate field mappings.

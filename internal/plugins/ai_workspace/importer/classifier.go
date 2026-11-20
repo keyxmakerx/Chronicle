@@ -86,10 +86,13 @@ type Classification struct {
 	// there is nothing to check. SheetFields is the sheet as the row leaves
 	// it (the page's own fields under the AI's, on an update) and
 	// SheetWritten the keys the AI wrote, the only ones a check may offer
-	// to replace.
+	// to replace. SheetStored is the page's own fields before the change,
+	// on an update only, so a check can tell a figure that followed the old
+	// level from one somebody set.
 	SheetKind    string
 	SheetFields  map[string]any
 	SheetWritten []string
+	SheetStored  map[string]any
 }
 
 // Classifier holds the lookup + a per-classify-call type cache.
@@ -235,6 +238,7 @@ func (c *Classifier) checkFields(pages []ParsedPage, cls []Classification) {
 			}
 			cls[i].SheetKind = kind
 			cls[i].SheetFields, cls[i].SheetWritten = sheetForCheck(stored, checked)
+			cls[i].SheetStored = stored
 		}
 	}
 }

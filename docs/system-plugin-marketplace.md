@@ -103,6 +103,7 @@ Character presets can include `foundry_path` for automatic VTT sync:
 - `format` (optional, any preset field): how the value is written when it is not plain text or a number, such as the shape of one entry in a JSON list. AI Import's brief shows it beside the field
 - `min` / `max` (optional, number preset fields): the lowest and highest value AI Import accepts. Absent means no bound; a number must always be finite. A hand-typed sheet value is not checked
 - `json_list` (optional, text preset fields): the field holds a JSON list; AI Import flags text that does not parse as one
+- `formula` (optional, number preset fields): the system works this number out from other fields. AI Import's review may add it to a page whose AI left it out, with the figure the system's sheet check proposes (see `Chronicle.sheetChecks` in `system-package-rendering.md`). No other key the AI left out is ever added
 
 ### Play Controls (`play`)
 
