@@ -36,6 +36,9 @@ type GeneratorKind struct {
 	Weather WeatherSettingsAPI
 	// Rolls runs the `rolls` generator; without it that generator is refused.
 	Rolls EventRollAPI
+	// Structure makes a generated calendar and saves generated moons;
+	// without it those generators are refused.
+	Structure CalendarStructureAPI
 }
 
 // Weather tuning a row may set, with the generator's own bounds.
@@ -74,7 +77,9 @@ func (GeneratorKind) Doc() string {
 		"- `events`: festivals and other calendar events for one `year`.\n" +
 		"- `sky`: sky events (eclipses, meteor showers, comets) for one `year`.\n" +
 		"- `names`: `count` names (up to 30) of `names` kind `people` or `places`, in a `theme` (pastoral, nautical, dwarven, elven, desert, imperial, fey, grim), added to the rolling table `table`.\n" +
-		"- `rolls` (owner or co-DM): rolls every night of one `year` for the `event` (by name) that has a `roll:`, on Chronicle's own server roller. Locked nights keep their result (`keep_locked: true`, the only choice), and a night that has passed keeps a result it already has. `only_unrolled: true` rolls just the nights with no result yet.\n\n" +
+		"- `rolls` (owner or co-DM): rolls every night of one `year` for the `event` (by name) that has a `roll:`, on Chronicle's own server roller. Locked nights keep their result (`keep_locked: true`, the only choice), and a night that has passed keeps a result it already has. `only_unrolled: true` rolls just the nights with no result yet.\n" +
+		"- `calendar` (owner only): a whole new calendar, as the new-calendar wizard's Generate one makes. It never changes a calendar already there; it becomes the main calendar only when the campaign has none. Optional: `style` (familiar, tendays, deep-count, moon-reckoned, strange), `template` (gregorian-like, harptos-like, even, lunar, wild), `theme` (as for names), `randomness` (0 to 1, how far from the template), `months` (1 to 24), `week_length` (1 to 14), `current_year`, `calendar_name` (up to 80 characters), `moons` (0 to 5), `seasons` (0 to 6), `festival_days` (off, rare, normal, often), `leap_years` and `festivals` (true or false). Blocks that need the new calendar go in a later import.\n" +
+		"- `moons` (owner only): adds `count` new moons to the main calendar; the moons already there are kept as they are, and new ones get names and cycles clear of them. Up to 6 moons in all. Optional: `theme`, `cycles` (natural, varied, fast, slow), `pale`, `coloured` and `strange` (off, rare, normal, often), `hidden` (how many of the new moons players can't see).\n\n" +
 		"```\n---\nkind: generator\nname: Spring weather\ngenerator: weather\nyear: 1492\nmonth: 3\nday: 1\nend_year: 1492\nend_month: 3\nend_day: 30\nclimate: temperate\n---\n```"
 }
 
@@ -169,7 +174,7 @@ func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		return p, nil, fmt.Sprintf("%d %s names into the table %s", n, kind, quote(r.Str("table"))), nil
 	case "weather", "events", "sky":
 	default:
-		return p, nil, "", apperror.NewBadRequest("generator must be weather, events, sky, names or rolls")
+		return p, nil, "", apperror.NewBadRequest("generator must be weather, events, sky, names, rolls, calendar or moons")
 	}
 	if g == "weather" && !a.CanAuthorDmOnly() {
 		return p, nil, "", apperror.NewBadRequest("only the owner or a co-DM can set weather")
@@ -332,6 +337,12 @@ func (k GeneratorKind) planRolls(ctx context.Context, campaignID string, a Actor
 }
 
 func (k GeneratorKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
+	switch strings.ToLower(r.Str("generator")) {
+	case "calendar":
+		return k.planCalendar(ctx, campaignID, a, r)
+	case "moons":
+		return k.planMoons(ctx, campaignID, a, r)
+	}
 	if strings.EqualFold(r.Str("generator"), "rolls") {
 		row, err := k.planRolls(ctx, campaignID, a, r)
 		if err != nil {
@@ -385,6 +396,12 @@ type genDay struct {
 }
 
 func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r Record) error {
+	switch strings.ToLower(r.Str("generator")) {
+	case "calendar":
+		return k.applyCalendar(ctx, campaignID, a, r)
+	case "moons":
+		return k.applyMoons(ctx, campaignID, a, r)
+	}
 	if strings.EqualFold(r.Str("generator"), "rolls") {
 		row, err := k.planRolls(ctx, campaignID, a, r)
 		if err != nil {

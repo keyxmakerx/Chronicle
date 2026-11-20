@@ -116,11 +116,25 @@
     return enginePromise;
   }
 
+  // recipeOf lays the row's own settings over a built-in recipe, so the
+  // server never has to hold a copy of the engine's built-ins.
+  function recipeOf(G, plan) {
+    if (!plan.base) return plan.recipe;
+    var r = G.recipes.get(plan.base);
+    if (!r) throw new Error('unknown recipe');
+    var own = plan.recipe || {};
+    Object.keys(own.makes || {}).forEach(function (k) { r.makes[k] = own.makes[k]; });
+    Object.keys(own.details || {}).forEach(function (k) { r.details[k] = own.details[k]; });
+    delete r.id; delete r.builtIn; // a copy, so the engine checks it like any recipe
+    return r;
+  }
+
   // run turns one plan into the JSON the server's generator kind reads.
   function run(G, plan) {
-    var opts = { recipe: plan.recipe, seed: plan.seed };
+    var opts = { recipe: recipeOf(G, plan), seed: plan.seed };
     if (plan.calendar) opts.calendar = plan.calendar;
     if (plan.scope) opts.scope = plan.scope;
+    if (Array.isArray(plan.locked)) opts.locked = plan.locked;
     // The owner's own kinds of weather; one the engine can't read is left
     // out, as the calendar's weather sheet does, rather than failing the run.
     if (Array.isArray(plan.kinds)) {
@@ -128,6 +142,13 @@
     }
     var res = G.run(plan.generator, opts);
     if (plan.generator === 'names') return (res.names && res.names[plan.namesKind]) || [];
+    if (plan.generator === 'calendar') return res.preset;
+    // Only the new moons go back; the kept ones are already on the calendar.
+    if (plan.generator === 'moons') {
+      return (res.moons || []).filter(function (m) { return !(m.gen && m.gen.locked); }).map(function (m) {
+        return { name: m.name, cycle_days: m.cycle_days, phase_offset: m.phase_offset, color: m.color, hidden: m.visibility === 'dm_only' };
+      });
+    }
     if (plan.generator === 'weather') {
       return (res.days || []).map(function (d) {
         var w = G.weather.toWeatherInput(d);
