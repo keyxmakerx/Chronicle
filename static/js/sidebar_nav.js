@@ -30,10 +30,11 @@
     return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
   }
 
-  var FOLD_MS = 280;
-  // A closing section's rows fade out this fast, so none are left showing
-  // below a follower shorter than the section.
-  var FADE_OUT_MS = 120;
+  // Read when each fold starts. A closing section's rows fade out faster than
+  // the followers travel, so none are left showing below a follower shorter
+  // than the section.
+  function foldMs() { return tokMs('--dur-large', 280); }
+  function fadeOutMs() { return tokMs('--dur-micro', 120); }
   var EASE = 'cubic-bezier(.2,.8,.2,1)';
   var EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
   var COOKIE = 'chronicle_nav_folds';
@@ -150,14 +151,14 @@
     // over the opened rows, which are already drawn at full size underneath.
     after.forEach(function (el) {
       el.classList.add('nav-cover');
-      anims.push(play(el, [{ transform: 'translateY(' + (-h) + 'px)' }, { transform: 'none' }], { duration: FOLD_MS, easing: EASE }));
+      anims.push(play(el, [{ transform: 'translateY(' + (-h) + 'px)' }, { transform: 'none' }], { duration: foldMs(), easing: EASE }));
     });
     // The opened rows fade in drawn whole, each settling from a few pixels
     // up, as the signed mockup draws them.
     var rows = foldContent(body);
     for (var i = 0; i < rows.length; i++) {
       anims.push(play(rows[i], [{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'none' }],
-        { duration: FOLD_MS, delay: Math.min(i, 8) * 16, easing: EASE_OUT, fill: 'backwards' }));
+        { duration: foldMs(), delay: Math.min(i, 8) * 16, easing: EASE_OUT, fill: 'backwards' }));
     }
     var cleanup = function () {
       body._navSettle = null;
@@ -177,13 +178,13 @@
     var after = followers(body), anims = [];
     var rows = foldContent(body);
     for (var i = 0; i < rows.length; i++) {
-      anims.push(play(rows[i], [{ opacity: 1 }, { opacity: 0 }], { duration: FADE_OUT_MS, easing: 'ease-out', fill: 'forwards' }));
+      anims.push(play(rows[i], [{ opacity: 1 }, { opacity: 0 }], { duration: fadeOutMs(), easing: 'ease-out', fill: 'forwards' }));
     }
     // The rows below slide up over the closing section, like a drawer shutting.
     var lead = null;
     after.forEach(function (el) {
       el.classList.add('nav-cover');
-      var a = play(el, [{ transform: 'none' }, { transform: 'translateY(' + (-h) + 'px)' }], { duration: FOLD_MS, easing: EASE, fill: 'forwards' });
+      var a = play(el, [{ transform: 'none' }, { transform: 'translateY(' + (-h) + 'px)' }], { duration: foldMs(), easing: EASE, fill: 'forwards' });
       anims.push(a);
       if (!lead) lead = a;
     });

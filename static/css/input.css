@@ -5692,6 +5692,24 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   scroll-behavior: auto !important;
 }
 
+/* Menus built on keyframes fade under Calm instead of popping. The blanket
+   Calm rule above jumps every keyframe animation to its end, which also
+   defeats the fade each of these already names for Calm; here the fade gets
+   its time back. Only Calm: Off and a device that reduces motion keep the
+   jump (the guard is the media query, and Off sets data-motion="off").
+   A menu joins by listing its selector, so no other keyframe move changes. */
+@keyframes calm-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="calm"] :is(.ph-more-menu, .pl-pop, .pl-chip):not(.czp *) {
+    animation-name: calm-fade;
+    animation-duration: var(--dur-micro) !important;
+  }
+  /* The Table's drawer and sheet already name tt-fade under Calm. */
+  html[data-motion="calm"] :is(.tt-drawer.tt-opening, .tt-isl-detail.tt-opening, .tt-sheet.tt-fadein):not(.czp *) {
+    animation-duration: var(--dur-standard) !important;
+  }
+}
+
 /* ============================================================ */
 /* Admin Trash (internal/plugins/admin/trash.templ): rows and the notice
    settle in when the list is drawn or swapped. It is the Settle move
@@ -7085,7 +7103,8 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
   .ph-more-menu .ph-only-phone { display: flex; }
 }
 @media (prefers-reduced-motion: reduce) { .ph-more-menu, .ph-claim .btn-primary.is-loading i { animation: none !important; } }
-.nav-rm .ph-more-menu { animation: none !important; }
+/* Off and a reducing device show it at once; Calm fades it (calm-fade above). */
+.nav-rm:not([data-motion="calm"]) .ph-more-menu { animation: none !important; }
 
 @layer components {
 /* ============================================================ */

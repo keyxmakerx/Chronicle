@@ -109,7 +109,7 @@
   width: min(320px, calc(100vw - 24px));
   opacity: 0;
   transform: translateY(4px);
-  transition: opacity 140ms ease, transform 180ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+  transition: opacity var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
   pointer-events: none;
 }
 .chc[hidden] { display: none; }
