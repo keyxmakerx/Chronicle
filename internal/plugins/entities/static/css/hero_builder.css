@@ -159,6 +159,7 @@
 .hb-trait-n { flex: 1 1 auto; }
 .hb-trait-c { color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 .hb-trait.is-off { color: var(--color-text-secondary); cursor: default; }
+@media (pointer: coarse) { .hb-trait { min-height: 44px; } }
 .hb-pf { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--color-border); }
 .hb-steps { justify-content: space-between; padding-top: 6px; padding-bottom: 8px; border-top: 0; }
 

@@ -32,13 +32,13 @@ const PLAN = () => ({ systemName: 'Draw Steel', steps: [
     rules: { limited: true, suggested: { id: 4, entryName: 'Nomad', message: 'Try the coast' } } },
 ] });
 
-const html = `<!doctype html><html><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style></head><body>
+const html = (term) => `<!doctype html><html data-gm-term="${term}"><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style></head><body>
 <div class="hc" data-widget="hero-creator" data-hero-creator="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
   data-csrf="tok" data-type-name="Character" data-for-self="true"><p class="hc-loading__text">Opening</p></div>
-<script>window.Chronicle = { register: (n, d) => document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)), escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) };</script>
+<script>window.Chronicle = { register: (n, d) => document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)), escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])), gmTerm: () => document.documentElement.getAttribute('data-gm-term') || 'GM' };</script>
 <script src="/hero_rules_lines.js"></script><script src="/hero_creator.js"></script></body></html>`;
 
-async function open(t, { created = { id: 'e9', url: C + '/entities/e9' } } = {}) {
+async function open(t, { created = { id: 'e9', url: C + '/entities/e9' }, term = 'Director' } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const pg = await browser.newPage({ viewport: { width: 1100, height: 900 } });
@@ -50,7 +50,7 @@ async function open(t, { created = { id: 'e9', url: C + '/entities/e9' } } = {})
     if (p === '/hero_rules_lines.js') return route.fulfill({ contentType: 'text/javascript', body: js('hero_rules_lines.js') });
     if (p === C + '/characters/new/plan') return ok(PLAN());
     if (p === C + '/characters/new' && req.method() === 'POST') { seen.post.push(JSON.parse(req.postData())); return ok(created, 201); }
-    return route.fulfill({ contentType: 'text/html', body: html });
+    return route.fulfill({ contentType: 'text/html', body: html(term) });
   });
   await pg.goto('http://t.test/');
   await pg.waitForSelector('.hc-page');
@@ -82,6 +82,17 @@ test('not here folds open names and reasons at the list foot', { skip }, async (
   assert.match(list, /Null isn’t here\./);
   assert.match(list, /and 1 more/);
   assert.equal(await pg.locator('.hc-nh .hc-link').getAttribute('aria-expanded'), 'true');
+});
+
+test('the campaign\'s own word for its game master is used', { skip }, async (t) => {
+  const { pg } = await open(t, { term: 'DM' });
+  await next(pg);
+  await pg.click('.hc-nh .hc-link');
+  assert.match(await text(pg, '.hc-nh-list'), /Your DM says: “Not in this story”/);
+  await pg.locator('.hc-row', { hasText: 'Tactician' }).click();
+  await pg.click('[data-act="choose"]');
+  assert.match(await text(pg, '.hc-notes'), /Tactician is waiting for your DM/);
+  assert.doesNotMatch(await pg.locator('.hc-page').innerText(), /Director/);
 });
 
 test('an Ask first pick is marked, waits for the Director and is sent with the hero', { skip }, async (t) => {

@@ -44,6 +44,8 @@
   var DIRTY = 'own-entry';
 
   function esc(v) { return Chronicle.escapeHtml(v); }
+  // The campaign's own word for its game master, already HTML-safe.
+  function gm() { return window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM'; }
   function words(key) {
     var s = String(key).replace(/_display$/, '').replace(/[_-]+/g, ' ').trim();
     return s.charAt(0).toUpperCase() + s.slice(1);
@@ -387,7 +389,7 @@
   Entries.prototype.pageHTML = function () {
     if (!this.director) return this.playerPageHTML();
     var self = this, f = this.cur();
-    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · Directors only</p><h1 tabindex="-1">Entries and players’ drafts</h1>' +
+    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · ' + gm() + 's only</p><h1 tabindex="-1">Entries and players’ drafts</h1>' +
       '<p>Entries you add here sit beside ' + esc(this.system) + '’s own in the hero creator and the sheet’s pick lists. A system update never changes them. Players’ drafts wait here for you, and you let players make their own. Mark any entry to limit what players can pick, or to ask them to take it.</p></div>';
     if (!f) {
       return '<section class="hc-page paper" aria-label="Entries and players’ drafts">' + head +
@@ -552,7 +554,7 @@
     if (!e) return '';
     return (e.status === 'sent' ? ' <span class="hc-seal oe-seal--wait">Waiting for you · ' + esc(this.memberName(e.createdBy)) + '</span>' : '') +
       (e.status === 'draft' ? ' <span class="hc-seal oe-seal--dm">Draft · ' + esc(this.memberName(e.createdBy)) + '</span>' : '') +
-      (!isDraft(e) && e.visibility === 'directors' ? ' <span class="hc-seal oe-seal--dm">Directors only</span>' : '') +
+      (!isDraft(e) && e.visibility === 'directors' ? ' <span class="hc-seal oe-seal--dm">' + gm() + 's only</span>' : '') +
       (!isDraft(e) && e.visibility === 'character' ? ' <span class="hc-seal oe-seal--dm">For ' + esc(e.forName || 'one character') + '</span>' : '');
   };
 
@@ -885,10 +887,10 @@
     var self = this, f = this.cur();
     var back = this.backUrl ? '<p><a class="oe-link" href="' + esc(this.backUrl) + '">← Back to ' + esc(this.forName || 'the hero creator') + '</a></p>' : '';
     var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · yours</p><h1 tabindex="-1">Your own entries</h1>' + back +
-      '<p>Your Director lets you write your own. Only you and the Directors see it until a Director accepts it.</p></div>';
+      '<p>Your ' + gm() + ' lets you write your own. Only you and the ' + gm() + 's see it until a ' + gm() + ' accepts it.</p></div>';
     if (!f) {
       return '<section class="hc-page paper" aria-label="Your own entries">' + head +
-        '<p class="hc-empty">Your Director hasn’t let you make an entry of your own. Ask them, and it shows up here.</p></section>';
+        '<p class="hc-empty">Your ' + gm() + ' hasn’t let you make an entry of your own. Ask them, and it shows up here.</p></section>';
     }
     var tabs = this.fields.length > 1 ? '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + this.fields.map(function (x, i) {
       return '<button type="button" role="tab" data-field="' + i + '" aria-selected="' + (i === self.field) + '">' + esc(x.label) + '</button>';
@@ -936,7 +938,7 @@
     }).join('');
     var g = this.director ? null : this.grantFor(f.key);
     var budget = f.budgetKey && g && g.budget ? '<div class="oe-bud"><span class="oe-k">' + esc(words(f.budgetKey)) + '</span><output>' + d.budget + '</output>' +
-      '<span class="oe-hint">Set by your Director. You choose what the points buy.</span></div>'
+      '<span class="oe-hint">Set by your ' + gm() + '. You choose what the points buy.</span></div>'
       : f.budgetKey ? '<div class="oe-bud"><span class="oe-k" id="oe-bud-k">' + esc(words(f.budgetKey)) + '</span>' +
       '<span class="oe-step" role="group" aria-labelledby="oe-bud-k"><button type="button" data-act="minus" aria-label="One point fewer">−</button>' +
       '<output>' + d.budget + '</output><button type="button" data-act="plus" aria-label="One point more">+</button></span>' +
@@ -949,8 +951,8 @@
         // A player's own entry has no hidden passages: players never read them, its writer included.
         (this.director ? '<button type="button" data-act="secret">Hide from players</button>' : '') + '</div>' +
         '<div class="oe-text" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="oe-text-k" data-k="text" data-placeholder="Write it as you would a page.">' + d.text + '</div>' +
-        (this.director ? '<span class="oe-hint" data-hint>' + (hidden ? '<b>Part of this entry is hidden from players.</b> Directors still read it.'
-          : 'Select a passage and press “Hide from players” to keep it for Directors.') + '</span>' : '') + '</div>' +
+        (this.director ? '<span class="oe-hint" data-hint>' + (hidden ? '<b>Part of this entry is hidden from players.</b> ' + gm() + 's still read it.'
+          : 'Select a passage and press “Hide from players” to keep it for ' + gm() + 's.') + '</span>' : '') + '</div>' +
       '<div class="oe-f"><span class="oe-k">Facts</span>' + (d.facts.length ? '<div class="oe-facts">' + facts + '</div>' : '') +
         '<div><button type="button" class="oe-link" data-act="addfact">+ Add a fact</button></div></div>' +
       (d.wordLists || []).map(function (w, i) {
@@ -967,7 +969,7 @@
   Entries.prototype.whoHTML = function (d) {
     var f = this.cur();
     if (!this.director) {
-      return '<div class="oe-f"><span class="oe-k">Who sees it</span><p class="oe-hint">Only you and the Directors, until a Director accepts it' +
+      return '<div class="oe-f"><span class="oe-k">Who sees it</span><p class="oe-hint">Only you and the ' + gm() + 's, until a ' + gm() + ' accepts it' +
         (d.forName || this.forName ? '. It’s for ' + esc(d.forName || this.forName) : '') + '.</p></div>';
     }
     var review = isDraft(d) ? '<label class="oe-f"><span class="oe-k">What to change</span>' +
@@ -976,11 +978,11 @@
       '<fieldset class="oe-f oe-who"><legend class="oe-k">' + (isDraft(d) ? 'Who sees it once you accept it' : 'Who sees it') + '</legend>' +
         '<label><input type="radio" name="oe-who" value="everyone"' + (d.who === 'everyone' ? ' checked' : '') + '><span>Everyone</span>' +
           '<small>Players can pick it in the hero creator and on their sheet.</small></label>' +
-        '<label><input type="radio" name="oe-who" value="directors"' + (d.who === 'directors' ? ' checked' : '') + '><span>Directors only</span>' +
+        '<label><input type="radio" name="oe-who" value="directors"' + (d.who === 'directors' ? ' checked' : '') + '><span>' + gm() + 's only</span>' +
           '<small>For ' + an(f.label) + ' ' + esc(lower(f.label)) + ' the party hasn’t discovered yet. Switch it to Everyone when they do.</small></label>' +
         // Kept to one character (set from the AI page): offered only while it is, so a save never opens it by accident.
         (d.forName !== undefined ? '<label><input type="radio" name="oe-who" value="character"' + (d.who === 'character' ? ' checked' : '') + '><span>Only ' + esc(d.forName || 'one character') + '’s player</span>' +
-          '<small>Directors and whoever plays ' + esc(d.forName || 'that character') + ' see it.</small></label>' : '') +
+          '<small>' + gm() + 's and whoever plays ' + esc(d.forName || 'that character') + ' see it.</small></label>' : '') +
         '</fieldset>';
   };
 
@@ -1078,15 +1080,15 @@
     } else {
       body = (this.paste ? this.pasteHTML() : '') + '<div class="oe-cols">' + this.writeHTML(d) + '<aside class="oe-view" aria-label="What a player sees">' + this.viewHTML(d) + '</aside></div>';
     }
-    var asked = d.reviewNote && d.status === 'draft' && !this.director ? '<p class="oe-asked" role="note"><b>Your Director asked:</b> ' + esc(d.reviewNote) + '</p>' : '';
+    var asked = d.reviewNote && d.status === 'draft' && !this.director ? '<p class="oe-asked" role="note"><b>Your ' + gm() + ' asked:</b> ' + esc(d.reviewNote) + '</p>' : '';
     var handed = isDraft(d) && this.director && d.status === 'sent' ? '<p class="oe-asked" role="note"><b>' + esc(this.memberName(d.by)) + ' handed this in.</b> Accept it, or say what to change.</p>' : '';
     // A rewrite starts as the Directors' draft; it replaces nothing until
     // they change who sees it.
     var draftOnly = this.director && d.standsFor && d.savedWho === 'directors' && !isDraft(d)
-      ? '<p class="oe-asked oe-asked--dm" role="note" data-dm-only>Only Directors see this yet. Players still read ' + esc(this.system) + '’s ' + esc(d.standsForName || d.name) +
+      ? '<p class="oe-asked oe-asked--dm" role="note" data-dm-only>Only ' + gm() + 's see this yet. Players still read ' + esc(this.system) + '’s ' + esc(d.standsForName || d.name) +
         '. Choose Everyone under “Who sees it” to put yours in play.</p>' : '';
     if (!this.confirm) body = asked + handed + draftOnly + body;
-    pop.innerHTML = '<header class="oe-pop__head"><div><p class="oe-kind">' + esc(f.label) + ' · ' + (this.director ? 'this campaign · Directors only' : 'yours') + '</p>' +
+    pop.innerHTML = '<header class="oe-pop__head"><div><p class="oe-kind">' + esc(f.label) + ' · ' + (this.director ? 'this campaign · ' + gm() + 's only' : 'yours') + '</p>' +
       '<h2 data-pop-title tabindex="-1">' + esc(d.name.trim() || (isNew ? 'New ' + lower(f.label) : 'Unnamed')) + '</h2></div>' +
       '<div class="oe-pop__acts">' + (this.confirm ? '' : '<button type="button" class="oe-btn oe-btn--ghost" data-act="paste" aria-expanded="' + this.paste + '">Paste from an AI</button>') +
       '<button type="button" class="oe-x" data-act="close" aria-label="Close">×</button></div></header>' +
@@ -1257,8 +1259,8 @@
     this.draft.text = (box.textContent.trim() || box.querySelector('li')) ? box.innerHTML : '';
     var hint = this.root.querySelector('[data-hint]');
     if (hint) {
-      hint.innerHTML = box.querySelector('[data-secret]') ? '<b>Part of this entry is hidden from players.</b> Directors still read it.'
-        : 'Select a passage and press “Hide from players” to keep it for Directors.';
+      hint.innerHTML = box.querySelector('[data-secret]') ? '<b>Part of this entry is hidden from players.</b> ' + gm() + 's still read it.'
+        : 'Select a passage and press “Hide from players” to keep it for ' + gm() + 's.';
     }
   };
 
@@ -1358,7 +1360,7 @@
           self.render();
           var row = byAttr(self.root, '.hc-row[data-open]', 'data-open', String(e.id));
           if (row) row.focus({ preventScroll: true });
-          var said = { send: ' handed in to your Director', accept: ' accepted', ask: ' handed back with your note' }[mode];
+          var said = { send: ' handed in to your ' + gm(), accept: ' accepted', ask: ' handed back with your note' }[mode];
           notify(e.name + (said || (isNew ? (self.director ? ' added' : ' saved as a draft') : ' saved')));
         };
         // The marks list shows the new entry, or the changed name, at once.
