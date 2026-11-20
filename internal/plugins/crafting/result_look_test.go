@@ -11,7 +11,8 @@ func TestLookShape(t *testing.T) {
 	}{
 		{"own picture wins", &MaterialPicture{Picture: "vial", Tint: "#123456"}, "Iron Sword", "bottle"},
 		{"own picture with no shape falls to the name", &MaterialPicture{Picture: "leaf", Tint: "#123456"}, "Frost tonic", "potion"},
-		{"shield before blade", nil, "Swordbreaker Buckler", "shield"},
+		{"shield before blade", nil, "Swordbreaker Shield", "shield"},
+		{"the closer painting wins", nil, "Swordbreaker Buckler", "buckler"},
 		{"blade", nil, "Ember Shortsword", "sword"},
 		{"ring", nil, "Ring of Clear Water", "ring"},
 		{"tonic", nil, "Frost Tonic", "potion"},
@@ -69,7 +70,8 @@ func TestLookShapeMatchesWholeWords(t *testing.T) {
 	tests := []struct{ name, want string }{
 		{"Boiled leather", "pelt"},
 		{"Bandage", "bundle"},
-		{"Spring trap", "bundle"},
+		{"Spring trap", "trap"},
+		{"Canvas strap", "bundle"},
 		{"Waxed cloak", "cloak"},
 		{"Longsword", "sword"},
 		{"Throwing daggers", "dagger"},
@@ -78,7 +80,8 @@ func TestLookShapeMatchesWholeWords(t *testing.T) {
 		{"Oil of slipperiness", "bottle"},
 		{"Dragonscale shield", "shield"},
 		{"Dragonscale", "scale"},
-		{"Greataxe", "axe"},
+		{"Greataxe", "doubleaxe"},
+		{"Handaxe", "axe"},
 	}
 	for _, tt := range tests {
 		if got := lookShape(nil, tt.name); got != tt.want {

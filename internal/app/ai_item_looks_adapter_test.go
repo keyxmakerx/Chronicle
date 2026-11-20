@@ -13,7 +13,7 @@ import (
 // item-look block's docs never offer a choice the save refuses.
 func TestItemLookChoicesMatchService(t *testing.T) {
 	looks, colors, sounds, spots := records.ItemLookChoices()
-	if len(looks) != 9 || len(colors) != 8 || len(sounds) != 9 || len(spots) != 5 {
+	if len(looks) != 18 || len(colors) != 16 || len(sounds) != 18 || len(spots) != 5 {
 		t.Fatalf("the lists changed size (%d looks, %d colours, %d sounds, %d spots): update records/item_looks.go with the look service", len(looks), len(colors), len(sounds), len(spots))
 	}
 	for _, l := range looks {
