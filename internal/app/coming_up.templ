@@ -67,6 +67,7 @@ templ comingUpRowView(r comingUpRow) {
 templ comingUpRowBody(r comingUpRow) {
 	<span
 		class={ "shrink-0 w-10 h-10 rounded-lg flex flex-col items-center justify-center leading-none", tileClass(r) }
+		style={ tileStyle(r) }
 		aria-hidden="true"
 	>
 		<span class="text-[9px] font-semibold uppercase tracking-wider opacity-80">{ r.TileTop }</span>
@@ -90,12 +91,23 @@ templ comingUpRowBody(r comingUpRow) {
 }
 
 // tileClass tints the tile of the table's own items (nights, polls, asks)
-// with the accent; calendar events stay neutral.
+// with the accent; calendar events stay neutral (see tileStyle).
 func tileClass(r comingUpRow) string {
 	if r.SessionID != "" || r.TileIcon != "" {
 		return "bg-accent/10 text-accent"
 	}
 	return "bg-surface-alt text-fg-secondary border border-edge"
+}
+
+// tileStyle gives a calendar event's tile the campaign's Headers and events
+// colour when one is picked, unless the event has a colour of its own. Unset,
+// each fallback is the very token its class already paints, so the tile is
+// unchanged.
+func tileStyle(r comingUpRow) string {
+	if r.SessionID != "" || r.TileIcon != "" || r.OwnColour {
+		return ""
+	}
+	return "color: var(--color-accent-surface-1-ink, var(--color-text-secondary)); border-color: var(--color-accent-surface-1, var(--color-border))"
 }
 
 // answerPillClass colours the viewer's answer: green going, amber maybe,

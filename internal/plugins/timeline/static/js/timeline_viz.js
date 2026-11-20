@@ -417,7 +417,7 @@ var _impl = {
       .attr('orient', 'auto-start-reverse')
       .append('path')
       .attr('d', 'M 0 0 L 10 5 L 0 10 Z')
-      .attr('fill', 'var(--color-accent, #6366f1)');
+      .attr('fill', 'var(--color-accent-surface-2, var(--color-accent, #6366f1))');
 
     // X scale: maps year values to pixel positions.
     var xScale = d3.scaleLinear()
@@ -1108,7 +1108,7 @@ var _impl = {
         .attr('width', pillW).attr('height', 22)
         .attr('rx', 11)
         .attr('fill', 'var(--color-bg-tertiary, #24253a)')
-        .attr('stroke', 'var(--color-accent, #6366f1)')
+        .attr('stroke', 'var(--color-accent-surface-2, var(--color-accent, #6366f1))')
         .attr('stroke-width', 1.5);
       g.append('text')
         .attr('class', 'timeline-cluster-label')
@@ -1294,7 +1294,7 @@ var _impl = {
       var arcHeight = Math.min(dist * 0.3, 60);
       var midY = Math.min(y1, y2) - arcHeight;
 
-      var color = (conn.color) ? conn.color : 'var(--color-accent, #6366f1)';
+      var color = (conn.color) ? conn.color : 'var(--color-accent-surface-2, var(--color-accent, #6366f1))';
       var dashArray = '';
       if (conn.style === 'dashed') dashArray = '8,4';
       else if (conn.style === 'dotted') dashArray = '3,3';

@@ -22,8 +22,8 @@ test('the three colours are named for what they paint, each with its line', () =
   assert.match(src, /s1: +\{ k:'colours\.s1', list:PRESETS, follow:true, label:'Headers and events' \}/);
   assert.match(src, /s2: +\{ k:'colours\.s2', list:PRESETS, follow:true, label:'Tags and marks' \}/);
   assert.match(src, /crow\('accent', GROUPS\.accent\.label, 'The menu highlight, links, buttons, anything selected'/);
-  assert.match(src, /crow\('s1', GROUPS\.s1\.label, 'Character headers, calendar events'/);
-  assert.match(src, /crow\('s2', GROUPS\.s2\.label, 'Tags, badges, timeline marks'/);
+  assert.match(src, /crow\('s1', GROUPS\.s1\.label, 'Page title rules, and calendar events without their own colour'/);
+  assert.match(src, /crow\('s2', GROUPS\.s2\.label, 'Timeline marks and connections'/);
 });
 
 test('the old names and the long explaining paragraph are gone', () => {

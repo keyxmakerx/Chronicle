@@ -125,7 +125,7 @@
             var name = Chronicle.escapeHtml(evt.name || 'Untitled');
             var date = evt.display_date || '';
             html += '<li class="flex items-center gap-2">' +
-              '<span class="w-1.5 h-1.5 rounded-full bg-accent shrink-0"></span>' +
+              '<span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--color-accent-surface-2, var(--color-accent))"></span>' +
               '<span class="truncate">' + name + '</span>' +
               (date ? '<span class="text-fg-muted ml-auto shrink-0">' + Chronicle.escapeHtml(date) + '</span>' : '') +
             '</li>';

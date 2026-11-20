@@ -175,6 +175,59 @@ func TestAppearanceCSSAccent(t *testing.T) {
 	}
 }
 
+// TestAppearanceCSSSurfaceSlots pins the readable forms of Headers and events
+// (slot 1): written only when it is set, ink readable on every fill in each
+// theme. Tags and marks (slot 2) paints shapes only and gets none.
+func TestAppearanceCSSSurfaceSlots(t *testing.T) {
+	ink := regexp.MustCompile(`--color-accent-surface-1-ink:(#[0-9a-f]{6});`)
+	cases := []struct {
+		name    string
+		s1, s2  string
+		wantAny bool
+	}{
+		{"both unset", "", "", false},
+		{"only tags and marks", "", "#f59e0b", false},
+		{"rose headers", "#f43f5e", "", true},
+		{"pale headers", "#fde68a", "#f59e0b", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := SetAppearance(context.Background(), &AppearanceData{PageTone: "warm"})
+			if tc.s1 != "" {
+				ctx = SetAccentSurface(ctx, 1, tc.s1)
+			}
+			if tc.s2 != "" {
+				ctx = SetAccentSurface(ctx, 2, tc.s2)
+			}
+			css := AppearanceCSS(ctx)
+			if strings.Contains(css, "--color-accent-surface-2-") {
+				t.Errorf("slot 2 needs no derived forms: %s", css)
+			}
+			for _, tok := range []string{"--color-accent-surface-1-fill:", "--color-accent-surface-1-on-fill:", "--color-accent-surface-1-ink:", "--cz-s1-dot-opacity:"} {
+				if has := strings.Contains(css, tok); has != tc.wantAny {
+					t.Errorf("%s present = %v, want %v", tok, has, tc.wantAny)
+				}
+			}
+			if !tc.wantAny {
+				return
+			}
+			darkAt := strings.Index(css, ":root.dark{")
+			light, dark := ink.FindStringSubmatch(css[:darkAt]), ink.FindStringSubmatch(css[darkAt:])
+			if light == nil || dark == nil {
+				t.Fatalf("ink missing from a theme: %s", css)
+			}
+			warm := czTones["warm"]
+			for i, hex := range []string{light[1], dark[1]} {
+				for _, bg := range []string{warm[i].bg, warm[i].card, warm[i].alt} {
+					if r := colour.Contrast(hex, bg); r < 4.5 {
+						t.Errorf("theme %d ink %s on %s = %.2f:1, want at least 4.5", i, hex, bg, r)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestAppearanceCSSFonts(t *testing.T) {
 	withTestFonts(t)
 	cases := []struct {

@@ -24,7 +24,9 @@
    device asking for reduced motion show the line drawn. */
 
 .ptl {
-  --ptl-acc: var(--kit-acc, var(--color-accent));
+  /* Timeline marks take the campaign's Tags and marks colour when one is
+     picked; focus stays on the accent. */
+  --ptl-acc: var(--color-accent-surface-2, var(--kit-acc, var(--color-accent)));
   --ptl-bg: var(--color-bg-primary);
   --ptl-grey: color-mix(in srgb, var(--color-text-muted) 45%, var(--color-border));
   --ptl-dm: rgb(var(--color-warn-rgb));
@@ -91,7 +93,7 @@
 .ptl-ev--multi { box-shadow: 0 0 0 2px var(--ptl-bg), 0 0 0 3.5px color-mix(in srgb, var(--ptl-acc) 55%, transparent); }
 .ptl-ev--multi.ptl-ev--dm { box-shadow: 0 0 0 2px var(--ptl-bg), 0 0 0 3.5px rgb(var(--color-warn-rgb) / .6); }
 .ptl-ev:hover, .ptl-ev:focus-visible { transform: scale(1.45); }
-.ptl-ev:focus-visible { outline: 2px solid var(--ptl-acc); outline-offset: 2px; }
+.ptl-ev:focus-visible { outline: 2px solid var(--kit-acc, var(--color-accent)); outline-offset: 2px; }
 /* A taller target for a finger than the bead itself, kept narrow so beads
    close together still each take their own clicks. */
 .ptl-ev::before { content: ""; position: absolute; inset: -12px -3px; }

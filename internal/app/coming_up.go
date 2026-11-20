@@ -116,6 +116,9 @@ type comingUpRow struct {
 	// place instead of following Href.
 	SessionID string
 	Date      string
+	// OwnColour marks a calendar event with a colour or kind colour of its
+	// own; it keeps the neutral tile rather than the campaign's colour.
+	OwnColour bool
 }
 
 // comingUpView is the card's content. Sections with no rows are not drawn.
@@ -215,11 +218,12 @@ func comingUpWorld(ctx context.Context, svc comingUpCalendar, req comingUpReques
 		e := &events[i]
 		days := cal.AbsoluteDay(e.Year, e.Month, e.Day) - today
 		rows = append(rows, comingUpRow{
-			TileTop: monthAbbrev(cal.MonthName(e.Month)),
-			TileBig: fmt.Sprintf("%d", e.Day),
-			Title:   e.Name,
-			Sub:     inDaysLabel(days),
-			Chip:    strings.TrimSpace(e.KindName),
+			TileTop:   monthAbbrev(cal.MonthName(e.Month)),
+			TileBig:   fmt.Sprintf("%d", e.Day),
+			Title:     e.Name,
+			Sub:       inDaysLabel(days),
+			Chip:      strings.TrimSpace(e.KindName),
+			OwnColour: (e.Color != nil && *e.Color != "") || e.KindColor != "",
 		})
 	}
 	return cal, rows, true
