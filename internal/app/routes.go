@@ -3121,6 +3121,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
+			{Name: "brochure", Scripts: []string{"js/brochure.js"}},
 		},
 	})
 

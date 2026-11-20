@@ -567,6 +567,7 @@ POST	/campaigns/:id/bindings	session	plugins/widgetbindings.(*Handler).BindAPI	p
 POST	/campaigns/:id/bindings/create	session	plugins/widgetbindings.(*Handler).CreateBindAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/bindings/picker	session	plugins/widgetbindings.(*Handler).PickerAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/branding	session	plugins/campaigns.(*Handler).UpdateBrandingAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/brochure	public-capable	plugins/entities.(*Handler).Brochure	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/calendar	session	app.(*App).RegisterRoutes	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/calendar-sync-beacon	session	plugins/syncapi.(*Handler).GetCalendarSyncBeacon	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/calendars	session	plugins/calendar.(*Handler).Index	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
