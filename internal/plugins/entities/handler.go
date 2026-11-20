@@ -1164,6 +1164,14 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		if c.QueryParam("pages") == "1" {
 			return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})
 		}
+		// The other searchers are not paged, so they answer once, with the
+		// first page; asked again on page 2 they would list the same maps and
+		// events a second time. entity_total is the pages' own count, which is
+		// what a pager steps through: total also holds the unpaged hits.
+		entityTotal := total
+		if opts.Page > 1 {
+			return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total, "entity_total": entityTotal})
+		}
 		if h.timelineSearcher != nil && query != "" && h.isAddonEnabled(ctx, cc.Campaign.ID, "timeline") {
 			if tlResults, err := h.timelineSearcher.SearchTimelines(
 				ctx, cc.Campaign.ID, query, role, userID,
@@ -1205,7 +1213,7 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 				total += len(modResults)
 			}
 		}
-		return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})
+		return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total, "entity_total": entityTotal})
 	}
 
 	// Sidebar mode returns a compact list for the sidebar drill panel.

@@ -270,7 +270,9 @@
     current = null;
     pinned = false;
     rows = false;
-    setTimeout(function () { if (card && !current) card.hidden = true; }, 160);
+    // Hidden only once the fade has finished, which Motion speed can lengthen.
+    var fadeMs = window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs('--dur-micro', 120) : 120;
+    setTimeout(function () { if (card && !current) card.hidden = true; }, fadeMs + 40);
   }
 
   function soonClose() {

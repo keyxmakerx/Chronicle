@@ -55,10 +55,10 @@
     },
 
     addKeyboardShortcuts: function () {
+      // TipTap calls each shortcut bare, so a plain function has no `this`
+      // and throws; the arrow keeps the extension context captured here.
       return {
-        'Mod-Shift-s': function () {
-          return this.editor.commands.toggleSecret();
-        },
+        'Mod-Shift-s': () => this.editor.commands.toggleSecret(),
       };
     },
   });
