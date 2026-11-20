@@ -44,3 +44,27 @@ test('peekAddress accepts only the three page shapes', () => {
     assert.equal(peekAddress(input), want, name);
   }
 });
+
+const E = '/campaigns/c1/systems/drawsteel/ancestries/ashborn';
+
+test('peekAddress accepts a rules entry with only hero and printed', () => {
+  const cases = [
+    ['entry page', E, E + '/peek'],
+    ['entry peek', E + '/peek', E + '/peek'],
+    ['with a hero', E + '?hero=d80fb105-2923', E + '/peek?hero=d80fb105-2923'],
+    ['printed, rebuilt in order', E + '/peek?printed=1&hero=h1', E + '/peek?hero=h1&printed=1'],
+    ['another parameter', E + '?x=1', ''],
+    ['two heroes', E + '?hero=a&hero=b', ''],
+    ['printed other than 1', E + '?printed=yes', ''],
+    ['hero with a slash', E + '?hero=a/b', ''],
+    ['a fragment', E + '#traits', ''],
+    ['the book is not a category', '/campaigns/c1/systems/drawsteel/book/edit', ''],
+    ['data is not a category', '/campaigns/c1/systems/drawsteel/data/kits.json', ''],
+    ['a tooltip address', E + '/tooltip', ''],
+    ['a category alone', '/campaigns/c1/systems/drawsteel/ancestries', ''],
+    ['protocol-relative', '//evil.example' + E, ''],
+  ];
+  for (const [name, input, want] of cases) {
+    assert.equal(peekAddress(input), want, name);
+  }
+});
