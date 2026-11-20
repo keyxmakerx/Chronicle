@@ -57,7 +57,10 @@ const itemSelectColumns = `e.id, e.name, e.slug, e.image_path, e.type_label,
 // search/tag/instance filters can never drift between the id pass and a full
 // row fetch. Returns the join fragments, the WHERE clause, and its args.
 func itemIDsWhereAndJoins(campaignID string, itemTypeIDs []int, opts ItemListOptions) (instanceJoin, tagJoin, where string, args []any) {
-	where = "WHERE e.campaign_id = ? AND e.is_template = false AND e.deleted_at IS NULL"
+	where = "WHERE e.campaign_id = ? AND e.is_template = false AND e.deleted_at IS NULL AND e.shop_good = false"
+	if opts.ShopGoods {
+		where = "WHERE e.campaign_id = ? AND e.is_template = false AND e.deleted_at IS NULL AND e.shop_good = true"
+	}
 	args = []any{campaignID}
 
 	// A specific type narrows the item types but must never widen them: an

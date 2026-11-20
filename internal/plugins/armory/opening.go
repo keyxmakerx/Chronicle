@@ -10,7 +10,7 @@ import (
 // armoryFiltered is true when the viewer narrowed the list, so an empty
 // result means "nothing matched", not "nothing here yet".
 func armoryFiltered(opts ItemListOptions) bool {
-	return opts.Search != "" || opts.Tag != "" || opts.TypeID > 0 || opts.InstanceID > 0
+	return opts.Search != "" || opts.Tag != "" || opts.TypeID > 0 || opts.InstanceID > 0 || opts.ShopGoods
 }
 
 // armoryOpening is the Armory's opening. Items are pages of an item type, so

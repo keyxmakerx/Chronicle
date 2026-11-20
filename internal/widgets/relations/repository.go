@@ -112,7 +112,7 @@ func (r *relationRepository) ListByEntity(ctx context.Context, campaignID, entit
 	                  er.relation_type, er.reverse_relation_type, er.metadata, er.dm_only,
 	                  er.created_at, er.created_by,
 	                  e.name, COALESCE(et.icon, 'fa-file'), COALESCE(et.color, '#6b7280'),
-	                  e.slug, COALESCE(et.name, '')
+	                  e.slug, COALESCE(et.name, ''), e.shop_good
 	           FROM entity_relations er
 	           INNER JOIN entities e ON e.id = er.target_entity_id AND e.deleted_at IS NULL AND e.campaign_id = er.campaign_id
 	           LEFT JOIN entity_types et ON et.id = e.entity_type_id
@@ -134,7 +134,7 @@ func (r *relationRepository) ListByEntity(ctx context.Context, campaignID, entit
 			&rel.RelationType, &rel.ReverseRelationType, &metaBytes, &rel.DmOnly,
 			&rel.CreatedAt, &rel.CreatedBy,
 			&rel.TargetEntityName, &rel.TargetEntityIcon, &rel.TargetEntityColor,
-			&rel.TargetEntitySlug, &rel.TargetEntityType,
+			&rel.TargetEntitySlug, &rel.TargetEntityType, &rel.TargetEntityShopGood,
 		); err != nil {
 			return nil, fmt.Errorf("scanning relation row: %w", err)
 		}
@@ -268,6 +268,7 @@ func (r *relationRepository) ListByCampaign(ctx context.Context, campaignID stri
 	           LEFT JOIN entity_types ett ON ett.id = et.entity_type_id
 	           WHERE er.campaign_id = ?
 	             AND er.source_entity_id < er.target_entity_id
+	             AND es.shop_good = 0 AND et.shop_good = 0
 	           ORDER BY er.relation_type ASC`
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID)

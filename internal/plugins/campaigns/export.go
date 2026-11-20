@@ -108,15 +108,17 @@ type ExportEntity struct {
 	ParentSlug     *string `json:"parent_slug,omitempty"`
 	// AlsoListedUnder holds the slugs of the other pages this page is listed
 	// under in the page tree (additive; older files simply lack it).
-	AlsoListedUnder []string                 `json:"also_listed_under,omitempty"`
-	TypeLabel       *string                  `json:"type_label,omitempty"`
-	IsPrivate       bool                     `json:"is_private"`
-	IsTemplate      bool                     `json:"is_template"`
-	Visibility      string                   `json:"visibility,omitempty"`
-	Permissions     []ExportEntityPermission `json:"permissions,omitempty"`
-	FieldsData      json.RawMessage          `json:"fields_data,omitempty"`
-	FieldOverrides  json.RawMessage          `json:"field_overrides,omitempty"`
-	PopupConfig     json.RawMessage          `json:"popup_config,omitempty"`
+	AlsoListedUnder []string `json:"also_listed_under,omitempty"`
+	TypeLabel       *string  `json:"type_label,omitempty"`
+	IsPrivate       bool     `json:"is_private"`
+	IsTemplate      bool     `json:"is_template"`
+	// ShopGood is additive; a file without it is read as an ordinary page.
+	ShopGood       bool                     `json:"shop_good,omitempty"`
+	Visibility     string                   `json:"visibility,omitempty"`
+	Permissions    []ExportEntityPermission `json:"permissions,omitempty"`
+	FieldsData     json.RawMessage          `json:"fields_data,omitempty"`
+	FieldOverrides json.RawMessage          `json:"field_overrides,omitempty"`
+	PopupConfig    json.RawMessage          `json:"popup_config,omitempty"`
 	// Layout is the key of the category layout the page chose (additive);
 	// empty means it follows its category.
 	Layout string `json:"layout,omitempty"`

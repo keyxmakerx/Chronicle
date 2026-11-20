@@ -917,6 +917,11 @@ type EntityRepository interface {
 	// UpdatePrivate sets an entity's is_private flag. Used by the NPC reveal toggle.
 	UpdatePrivate(ctx context.Context, entityID string, isPrivate bool) error
 
+	// SetShopGood sets or clears the shop good mark on a live page of the campaign.
+	SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error
+	// FindShopGoodByName finds a live shop good by name, ignoring case; (nil, nil) when none.
+	FindShopGoodByName(ctx context.Context, campaignID, name string) (*Entity, error)
+
 	// UpdateEntityType changes an entity's entity_type_id. Used by bulk type reassignment.
 	UpdateEntityType(ctx context.Context, entityID string, typeID int) error
 }
@@ -962,16 +967,16 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 
 	query := `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, entry, entry_html, search_text,
 	          player_notes, player_notes_html,
-	          image_path, parent_id, parent_node_id, sort_order, type_label, is_private, is_template, fields_data,
+	          image_path, parent_id, parent_node_id, sort_order, type_label, is_private, is_template, shop_good, fields_data,
 	          created_by, owner_user_id, playable, map_id, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = r.db.ExecContext(ctx, query,
 		entity.ID, entity.CampaignID, entity.EntityTypeID,
 		entity.Name, entity.Slug, entity.Entry, entity.EntryHTML, searchText,
 		entity.PlayerNotes, entity.PlayerNotesHTML,
 		entity.ImagePath, entity.ParentID, entity.ParentNodeID, entity.SortOrder, entity.TypeLabel,
-		entity.IsPrivate, entity.IsTemplate, fieldsJSON,
+		entity.IsPrivate, entity.IsTemplate, entity.ShopGood, fieldsJSON,
 		entity.CreatedBy, entity.OwnerUserID, entity.Playable, entity.MapID, entity.CreatedAt, entity.UpdatedAt,
 	)
 	if err != nil {
@@ -980,11 +985,23 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 	return nil
 }
 
+// shopGoodClause is the SQL fragment that keeps shop goods in or out of a
+// listing on alias e. Hide is the default so a new query cannot leak one.
+func shopGoodClause(m ShopGoodsMode) string {
+	switch m {
+	case ShopGoodsOnly:
+		return " AND e.shop_good = 1"
+	case ShopGoodsInclude:
+		return ""
+	}
+	return " AND e.shop_good = 0"
+}
+
 // entitySelectColumns is the standard column list for entity queries with joined type info.
 const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	                 e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
-	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
+	                 e.is_private, e.visibility, e.is_template, e.shop_good, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at,
 	                 et.name, et.name_plural, et.icon, et.color, et.slug,
 	                 (et.preset_category <=> '` + PresetCategoryAdventures + `')`
@@ -1018,7 +1035,7 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
 		&e.Entry, &e.EntryHTML, &e.PlayerNotes, &e.PlayerNotesHTML,
 		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
-		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
+		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &e.ShopGood, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.OwnerUserID, &e.Playable, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeNamePlural, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 		&e.TypeDMOnly,
@@ -1508,6 +1525,7 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 	if opts.PrivateOnly {
 		where += " AND e.is_private = true"
 	}
+	where += shopGoodClause(opts.ShopGoods)
 
 	visFilter, visArgs := visibilityFilter(role, userID)
 	where += visFilter
@@ -1863,6 +1881,8 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 		args = append(args, tagArgs...)
 	}
 
+	where += shopGoodClause(opts.ShopGoods)
+
 	visFilter, visArgs := visibilityFilter(role, userID)
 	where += visFilter
 	args = append(args, visArgs...)
@@ -1908,7 +1928,7 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 // Respects visibility filtering for non-owner roles.
 func (r *entityRepository) CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error) {
 	// Use alias 'e' to match visibilityFilter expectations.
-	query := `SELECT e.entity_type_id, COUNT(*) FROM entities e WHERE e.campaign_id = ?`
+	query := `SELECT e.entity_type_id, COUNT(*) FROM entities e WHERE e.campaign_id = ?` + shopGoodClause(ShopGoodsHide)
 	args := []any{campaignID}
 
 	visFilter, visArgs := visibilityFilter(role, userID)
@@ -1936,7 +1956,7 @@ func (r *entityRepository) CountByType(ctx context.Context, campaignID string, r
 // ListRecent returns the most recently updated entities for a campaign,
 // ordered by updated_at DESC. Respects visibility filtering based on role.
 func (r *entityRepository) ListRecent(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error) {
-	where := "WHERE e.campaign_id = ?"
+	where := "WHERE e.campaign_id = ?" + shopGoodClause(ShopGoodsHide)
 	args := []any{campaignID}
 
 	visFilter, visArgs := visibilityFilter(role, userID)
@@ -2024,7 +2044,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string, r
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
-	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
+	           e.is_private, e.visibility, e.is_template, e.shop_good, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at, e.deleted_at,
 	           1 AS depth
 	    FROM entities e
@@ -2033,7 +2053,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string, r
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
-	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
+	           e.is_private, e.visibility, e.is_template, e.shop_good, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at, e.deleted_at,
 	           a.depth + 1
 	    FROM entities e
@@ -2043,7 +2063,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string, r
 	SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	       e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	       e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
-	       e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
+	       e.is_private, e.visibility, e.is_template, e.shop_good, e.fields_data, e.field_overrides, e.popup_config,
 	       e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at,
 	       et.name, et.name_plural, et.icon, et.color, et.slug,
 	       (et.preset_category <=> '`+PresetCategoryAdventures+`')
@@ -2167,6 +2187,50 @@ func (r *entityRepository) ResequenceSiblings(ctx context.Context, campaignID st
 		return fmt.Errorf("committing resequence: %w", err)
 	}
 	return nil
+}
+
+// SetShopGood sets or clears the shop good mark on a page in its campaign.
+func (r *entityRepository) SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE entities SET shop_good = ? WHERE id = ? AND campaign_id = ? AND deleted_at IS NULL`,
+		shopGood, entityID, campaignID)
+	if err != nil {
+		return fmt.Errorf("setting shop good mark: %w", err)
+	}
+	// MariaDB reports 0 rows when the value is unchanged, so a page that is
+	// already as asked is told apart from one that is not in this campaign.
+	if n, _ := res.RowsAffected(); n == 0 {
+		var live bool
+		if err := r.db.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM entities WHERE id = ? AND campaign_id = ? AND deleted_at IS NULL)`,
+			entityID, campaignID).Scan(&live); err != nil {
+			return fmt.Errorf("checking page for shop good mark: %w", err)
+		}
+		if !live {
+			return apperror.NewNotFound("entity not found")
+		}
+	}
+	return nil
+}
+
+// FindShopGoodByName finds a live shop good page by name, ignoring case, in
+// one campaign. The same good in two shops is one page, so this is how a
+// second shop finds the first one's.
+func (r *entityRepository) FindShopGoodByName(ctx context.Context, campaignID, name string) (*Entity, error) {
+	query := `SELECT ` + entitySelectColumns + `
+	          FROM entities e
+	          INNER JOIN entity_types et ON et.id = e.entity_type_id
+	          WHERE e.campaign_id = ? AND e.shop_good = 1 AND LOWER(e.name) = LOWER(?)` + liveOnly + `
+	          ORDER BY e.created_at ASC, e.id ASC LIMIT 1`
+	e, err := r.scanEntity(r.db.QueryRowContext(ctx, query, campaignID, name))
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == 404 {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return e, nil
 }
 
 // UpdatePrivate sets an entity's is_private flag. Used by the NPC reveal toggle.
@@ -2345,7 +2409,7 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
 		&e.Entry, &e.EntryHTML, &e.PlayerNotes, &e.PlayerNotesHTML,
 		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
-		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
+		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &e.ShopGood, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.OwnerUserID, &e.Playable, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeNamePlural, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 		&e.TypeDMOnly,
@@ -2553,7 +2617,7 @@ func stripFTOperators(query string) string {
 // length DESC so longer names match first (prevents "King" matching before
 // "King Arthur"). Alias entries have IsAlias=true.
 func (r *entityRepository) ListNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error) {
-	where := "WHERE e.campaign_id = ? AND CHAR_LENGTH(e.name) >= 3"
+	where := "WHERE e.campaign_id = ? AND CHAR_LENGTH(e.name) >= 3" + shopGoodClause(ShopGoodsHide)
 	args := []any{campaignID}
 
 	visFilter, visArgs := visibilityFilter(role, userID)
@@ -2561,7 +2625,7 @@ func (r *entityRepository) ListNames(ctx context.Context, campaignID string, rol
 	args = append(args, visArgs...)
 
 	// UNION entity names with aliases. Aliases get is_alias=1.
-	aliasWhere := "WHERE e.campaign_id = ? AND CHAR_LENGTH(ea.alias) >= 3"
+	aliasWhere := "WHERE e.campaign_id = ? AND CHAR_LENGTH(ea.alias) >= 3" + shopGoodClause(ShopGoodsHide)
 	aliasArgs := []any{campaignID}
 	aliasArgs = append(aliasArgs, visArgs...)
 

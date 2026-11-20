@@ -185,6 +185,24 @@
       "additionalProperties": false,
       "description": "How the game rolls and counts a crafting project. Recipes and benches are the campaign's own; this is only the arithmetic."
     },
+    "goods": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["category"],
+        "properties": {
+          "category": {"type": "string", "description": "A category slug of this manifest whose entries a shop may stock."},
+          "kind_key": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$", "description": "The property that says what kind of good an entry is."},
+          "kinds": {"type": "array", "items": {"type": "string"}, "description": "Only entries of these kinds are offered. Needs kind_key. Absent: every entry."},
+          "rarity_key": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$", "description": "The property holding the rarity as an ordinal such as \"2nd\" or a number."},
+          "rarity_label": {"type": "string", "maxLength": 24, "description": "The word for the rarity scale, like \"echelon\"."},
+          "price_key": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$", "description": "The property holding a price in the campaign's main coin. An entry with none is left for the Director to price."}
+        },
+        "additionalProperties": false
+      },
+      "description": "Which categories a shop's Fill the shelves may stock. Absent: none of this system's entries."
+    },
     "shop_tests": {
       "type": "object",
       "properties": {
