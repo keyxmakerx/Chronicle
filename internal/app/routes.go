@@ -2854,7 +2854,7 @@ func registerManifestRenderers(showRegistry *entities.EntityShowRendererRegistry
 			if r.Slug != "" {
 				showRegistry.Register(r.Slug, renderer)
 			} else if r.PresetCategory != "" {
-				showRegistry.RegisterByPresetCategory(r.PresetCategory, renderer)
+				showRegistry.RegisterByPresetCategoryFor(manifest.ID, r.PresetCategory, renderer)
 			}
 		}
 	}
@@ -3921,6 +3921,16 @@ func (a *App) RegisterRoutes() {
 	syncService := syncapi.NewSyncAPIService(syncRepo)
 	// A campaign has a Foundry world syncing once an active sync key of its
 	// has been used; sheets say "set in Foundry" only then.
+	// A system's preset-bound sheet draws only in its own campaigns; checks
+	// made outside a page render ask which system that is.
+	entities.SetCampaignSystemResolver(func(ctx context.Context, campaignID string) string {
+		list, err := addonService.ListForCampaign(ctx, campaignID)
+		if err != nil {
+			return ""
+		}
+		_, sys := navAddonsFrom(list)
+		return sys.Slug
+	})
 	entities.SetFoundryLinkChecker(func(ctx context.Context, campaignID string) bool {
 		keys, err := syncService.ListKeysByCampaign(ctx, campaignID)
 		if err != nil {

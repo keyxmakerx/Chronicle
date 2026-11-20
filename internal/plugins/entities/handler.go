@@ -3279,14 +3279,16 @@ func (h *Handler) BlockTypesAPI(c *echo.Context) error {
 	// When a game system owns the character sheet — it registers a page renderer
 	// bound to the "character" preset_category, which takes over every character
 	// entity's show page — the generic core "character_surface" block is
-	// redundant, so drop it from the palette. The renderer registry is global
-	// (lookupEntityShowRenderer is not campaign-scoped), so once such a renderer
-	// is registered the generic block is overridden everywhere; hiding it here
-	// stays consistent with that. System-agnostic campaigns (no character
-	// renderer registered) keep the block.
+	// redundant, so drop it from the palette. The binding is the system's, so
+	// only a campaign running one of the binding systems loses the block.
 	systemOwnsCharacterSheet := false
 	if reg := globalEntityShowRendererRegistry.Load(); reg != nil {
-		_, systemOwnsCharacterSheet = reg.LookupByPresetCategory("character")
+		for _, sys := range reg.PresetSystems("character") {
+			if sys == "" || h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, sys) {
+				systemOwnsCharacterSheet = true
+				break
+			}
+		}
 	}
 	types = hideRedundantCharacterSurface(types, systemOwnsCharacterSheet)
 

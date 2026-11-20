@@ -113,6 +113,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				UserID:         userID,
 				OwnerName:      ownerName,
 				NPCPage:        isNPCPageCtx(ctx),
+				System:         systemFor(ctx, entityType),
 				NamedLayout:    wearsNamedLayout(ctx),
 			}); comp != nil {
 				// A page renderer replaces the layout, and with it the title

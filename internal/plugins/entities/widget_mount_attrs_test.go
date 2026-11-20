@@ -77,3 +77,38 @@ func TestMakeWidgetMountRenderer_EscapesClaimedName(t *testing.T) {
 		t.Errorf("claimed name not escaped: %s", buf.String())
 	}
 }
+
+// A visitor can't fetch the entity API, so the mount carries what they may
+// read of the page; GM-only values stay out, and a member still fetches.
+func TestMakeWidgetMountRenderer_VisitorSeed(t *testing.T) {
+	renderer := MakeWidgetMountRenderer("w")
+	e := &Entity{ID: "e1", CampaignID: "c1", Name: "Vex", FieldsData: map[string]any{"might": "2", "secret": "a spy"}}
+	et := &EntityType{Fields: []FieldDefinition{{Key: "might"}, {Key: "secret", GMOnly: true}}}
+	cases := []struct {
+		name     string
+		member   bool
+		wantSeed bool
+	}{
+		{"visitor", false, true},
+		{"member", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := &bytesBufferLike{}
+			cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleNone, IsMember: tc.member}
+			if tc.member {
+				cc.MemberRole = campaigns.RolePlayer
+			}
+			if err := renderer(EntityShowRenderContext{CC: cc, Entity: e, EntityType: et}).Render(context.Background(), buf); err != nil {
+				t.Fatal(err)
+			}
+			out := buf.String()
+			if got := strings.Contains(out, "data-fields-data="); got != tc.wantSeed {
+				t.Fatalf("seed = %v, want %v: %s", got, tc.wantSeed, out)
+			}
+			if tc.wantSeed && (!strings.Contains(out, "&#34;might&#34;:&#34;2&#34;") || strings.Contains(out, "a spy")) {
+				t.Fatalf("seed should hold might and not the GM-only value: %s", out)
+			}
+		})
+	}
+}

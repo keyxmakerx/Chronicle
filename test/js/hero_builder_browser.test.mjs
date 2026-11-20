@@ -178,7 +178,7 @@ const DEVIL = { slug: 'devil', name: 'Devil', summary: 'Silver-tongued.', source
 } };
 const BUY_PLAN = { systemName: 'Draw Steel', steps: [
   { fieldKey: 'ancestry', label: 'Ancestry', choices: [DEVIL, PLAN.steps[0].choices[1]] },
-  { fieldKey: 'culture', label: 'Culture', choices: [{ slug: 'wode', name: 'Wode', summary: 'Forest folk.', source: 'Draw Steel', properties: { languages: 'One language', skills: 'One skill' } }] },
+  { fieldKey: 'culture', label: 'Culture', choices: [{ slug: 'wode', name: 'Wode', summary: 'Forest folk.', source: 'Draw Steel', properties: { languages: 'One language', skill_options: 'One skill', skill_options_quick_build: 'Lore' } }] },
 ] };
 
 test('an ancestry with points keeps the panel on it to buy traits, within its points', { skip }, async (t) => {
@@ -195,7 +195,7 @@ test('an ancestry with points keeps the panel on it to buy traits, within its po
   await p.check('[data-buy="Silver Tongue"]');
   // The culture's grants are chosen on the sheet, which the panel says.
   await p.click('.hb-panel [data-go="culture"]');
-  assert.match(await p.locator('.hb-detail').innerText(), /You choose the languages, skills this gives on your hero’s sheet once they’re made/);
+  assert.match(await p.locator('.hb-detail').innerText(), /You choose the skills and languages this gives on your hero’s sheet once they’re made/);
   const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/campaigns/c1/entities/e9');
   await p.click('[data-make]');
   await nav;

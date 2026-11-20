@@ -121,20 +121,27 @@ func TestSystemPageHeader_DeleteIsOwnerOnly(t *testing.T) {
 
 // The picture upload the widget's Change button reaches exists only for those
 // who may replace the picture (the image route is Scribe-only).
-func TestSystemImageMount_ScribeOnly(t *testing.T) {
-	ent := &Entity{ID: "e1", CampaignID: "c1"}
+func TestSystemImageMount_WhoMayChangeThePicture(t *testing.T) {
+	owner := "u1"
+	ent := &Entity{ID: "e1", CampaignID: "c1", OwnerUserID: &owner}
 	for _, tc := range []struct {
 		role campaigns.Role
+		user string
 		want bool
-	}{{campaigns.RolePlayer, false}, {campaigns.RoleScribe, true}, {campaigns.RoleOwner, true}} {
+	}{
+		{campaigns.RolePlayer, "u2", false},
+		{campaigns.RolePlayer, "u1", true}, // the claimed player
+		{campaigns.RoleScribe, "u2", true},
+		{campaigns.RoleOwner, "u2", true},
+	} {
 		var buf bytes.Buffer
-		if err := systemImageMount(foldTestCC(tc.role), ent, "tok").Render(context.Background(), &buf); err != nil {
+		if err := systemImageMount(foldTestCC(tc.role), ent, "tok").Render(layouts.SetUserID(context.Background(), tc.user), &buf); err != nil {
 			t.Fatal(err)
 		}
 		got := strings.Contains(buf.String(), `data-image-upload-for="e1"`) &&
 			strings.Contains(buf.String(), `data-endpoint="/campaigns/c1/entities/e1/image"`)
 		if got != tc.want {
-			t.Errorf("role %v: mount = %v, want %v", tc.role, got, tc.want)
+			t.Errorf("role %v, user %s: mount = %v, want %v", tc.role, tc.user, got, tc.want)
 		}
 	}
 }

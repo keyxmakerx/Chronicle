@@ -63,8 +63,8 @@
   // Grants a culture or career lists (skills, languages, perks) are chosen on
   // the sheet, which keeps those lists; the builder only says so.
   function grantsOf(c) {
-    var props = (c && c.properties) || {};
-    return Object.keys(props).filter(function (k) { return !/_display$/.test(k) && /skill|language|perk/i.test(k); });
+    var keys = Object.keys((c && c.properties) || {}).join(' ');
+    return ['skills', 'languages', 'perks'].filter(function (w) { return new RegExp(w.slice(0, -1), 'i').test(keys); });
   }
 
   // Roll ranges: a list of up to ten is read off one d10, a longer one off
@@ -336,7 +336,7 @@
   Builder.prototype.grantsNote = function (c, h) {
     var g = grantsOf(c);
     if (!g.length) return '';
-    var what = g.map(function (k) { return lower(words(k)); }).join(', ');
+    var what = g.length > 1 ? g.slice(0, -1).join(', ') + ' and ' + g[g.length - 1] : g[0];
     return '<p class="hb-note">You choose the ' + esc(what) + ' this gives on ' + (h && !h.isNew ? esc(possessive(h.name)) : 'your hero’s') + ' sheet' + (h && h.isNew ? ' once they’re made' : '') + '.</p>';
   };
 

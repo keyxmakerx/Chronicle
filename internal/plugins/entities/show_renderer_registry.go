@@ -11,6 +11,7 @@ package entities
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/a-h/templ"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // EntityShowRenderContext is everything a registered renderer receives
@@ -44,6 +46,10 @@ type EntityShowRenderContext struct {
 	// to the character preset draws a hero's sheet, so it skips these pages
 	// and they keep their layout.
 	NPCPage bool
+	// System is the campaign's game system (its module id). A renderer bound
+	// to a preset belongs to the system that declared it, so a Draw Steel
+	// sheet never takes over a D&D campaign's characters.
+	System string
 	// NamedLayout is a page that wears one of its category's named layouts.
 	// The layout draws it, so no renderer takes the page over; the
 	// renderer's sheet is the game_system_sheet block the layout can place.
@@ -69,7 +75,9 @@ type EntityShowRendererRegistry struct {
 	// the system-agnostic seam. A system maps its widget to a PRESET so it
 	// renders any type carrying that preset (e.g. the addon's Player Characters
 	// category), not just one bespoke slug. Slug wins over preset at lookup.
-	presetRenderers map[string]EntityShowRenderer
+	// Keyed by system id, then category: a preset is shared by every system,
+	// so the binding is only that system's. "" holds a binding for any system.
+	presetRenderers map[string]map[string]EntityShowRenderer
 }
 
 // NewEntityShowRendererRegistry returns an empty registry ready for
@@ -77,7 +85,7 @@ type EntityShowRendererRegistry struct {
 func NewEntityShowRendererRegistry() *EntityShowRendererRegistry {
 	return &EntityShowRendererRegistry{
 		renderers:       map[string]EntityShowRenderer{},
-		presetRenderers: map[string]EntityShowRenderer{},
+		presetRenderers: map[string]map[string]EntityShowRenderer{},
 	}
 }
 
@@ -112,20 +120,71 @@ func (r *EntityShowRendererRegistry) Lookup(slug string) (EntityShowRenderer, bo
 // a no-op. This is how a system fills a Chronicle-owned category (e.g. the
 // addon's player-character type) without owning its slug.
 func (r *EntityShowRendererRegistry) RegisterByPresetCategory(category string, renderer EntityShowRenderer) {
+	r.RegisterByPresetCategoryFor("", category, renderer)
+}
+
+// RegisterByPresetCategoryFor binds a renderer to a preset_category for one
+// game system: it draws that category's pages only in campaigns running that
+// system.
+func (r *EntityShowRendererRegistry) RegisterByPresetCategoryFor(system, category string, renderer EntityShowRenderer) {
 	if category == "" || renderer == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.presetRenderers[category] = renderer
+	if r.presetRenderers[system] == nil {
+		r.presetRenderers[system] = map[string]EntityShowRenderer{}
+	}
+	r.presetRenderers[system][category] = renderer
 }
 
-// LookupByPresetCategory returns the renderer registered for a preset_category,
-// or (nil, false). Consulted only after a slug miss — slug is more specific.
+// LookupByPresetCategory reports whether any system binds a renderer to a
+// preset_category, for callers that are not drawing one campaign's page.
 func (r *EntityShowRendererRegistry) LookupByPresetCategory(category string) (EntityShowRenderer, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	rend, ok := r.presetRenderers[category]
+	for _, byCat := range r.presetRenderers {
+		if rend, ok := byCat[category]; ok {
+			return rend, true
+		}
+	}
+	return nil, false
+}
+
+// PresetSystems lists the systems that bind a renderer to a preset_category;
+// "" stands for a binding made for any system.
+func (r *EntityShowRendererRegistry) PresetSystems(category string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var out []string
+	for sys, byCat := range r.presetRenderers {
+		if _, ok := byCat[category]; ok {
+			out = append(out, sys)
+		}
+	}
+	return out
+}
+
+// LookupByPresetCategoryFor returns the renderer the given system binds to a
+// preset_category, or one bound for any system, or (nil, false). Consulted
+// only after a slug miss — slug is more specific.
+func (r *EntityShowRendererRegistry) LookupByPresetCategoryFor(system, category string) (EntityShowRenderer, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if system == anySystem {
+		for _, byCat := range r.presetRenderers {
+			if rend, ok := byCat[category]; ok {
+				return rend, true
+			}
+		}
+		return nil, false
+	}
+	if system != "" {
+		if rend, ok := r.presetRenderers[system][category]; ok {
+			return rend, true
+		}
+	}
+	rend, ok := r.presetRenderers[""][category]
 	return rend, ok
 }
 
@@ -181,6 +240,12 @@ func MakeWidgetMountRenderer(widget string) EntityShowRenderer {
 			// The same rule the picture route applies: Scribes and the player
 			// who claimed the page.
 			m.canChangeImage = ctx.Entity != nil && CanEditOwnPage(ctx.CC.MemberRole, ctx.Entity, ctx.UserID)
+			// A visitor (a look-around pass, a public campaign) can't read the
+			// entity API a widget would fetch, so the page hands over what they
+			// may read of it, filtered as the fields read filters it.
+			if !ctx.CC.IsMember && ctx.Entity != nil {
+				m.seed = visitorSeed(ctx)
+			}
 		}
 		return m
 	}
@@ -200,6 +265,30 @@ type widgetMount struct {
 	claimedName     string // the claimant's display name, when known
 	canEditIdentity bool   // viewer may edit identity fields and rename (Scribe+ or the claimed owner)
 	canChangeImage  bool   // viewer may replace the picture (Scribe+ or the claimed owner)
+	seed            string // the entity as JSON, for a visitor who can't fetch it; "" for members
+}
+
+// visitorSeed is the entity as a visitor may read it: name, visibility and
+// the field values left after GM-only and owner-only ones are taken out.
+func visitorSeed(ctx EntityShowRenderContext) string {
+	var defs []FieldDefinition
+	if ctx.EntityType != nil {
+		defs = ctx.EntityType.Fields
+	}
+	fields := FilterRestrictedFields(ctx.Entity.FieldsData, defs, ctx.CC.CanAuthorDmOnly(), ctx.Entity.IsOwnedBy(ctx.UserID))
+	if fields == nil {
+		fields = map[string]any{}
+	}
+	b, err := json.Marshal(map[string]any{
+		"id":          ctx.Entity.ID,
+		"name":        ctx.Entity.Name,
+		"visibility":  string(ctx.Entity.Visibility),
+		"fields_data": fields,
+	})
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // FoundryLinkChecker reports whether a campaign has a Foundry world syncing
@@ -229,7 +318,7 @@ func (w widgetMount) Render(ctx context.Context, out io.Writer) error {
 		out,
 		`<div data-widget="%s" data-entity-id="%s" data-campaign-id="%s" data-is-gm="%t" data-is-owner="%t" data-visibility="%s"`+
 			` data-can-edit-identity="%t" data-can-change-image="%t" data-armory-items="%t" data-foundry-linked="%t"`+
-			` data-claimed="%t" data-claimed-by-me="%t" data-claimed-name="%s"></div>`,
+			` data-claimed="%t" data-claimed-by-me="%t" data-claimed-name="%s"%s></div>`,
 		templ.EscapeString(w.widget),
 		templ.EscapeString(w.entityID),
 		templ.EscapeString(w.campaignID),
@@ -243,8 +332,16 @@ func (w widgetMount) Render(ctx context.Context, out io.Writer) error {
 		w.claimed,
 		w.claimed && w.isOwner,
 		templ.EscapeString(claimedName),
+		seedAttr(w.seed),
 	)
 	return err
+}
+
+func seedAttr(seed string) string {
+	if seed == "" {
+		return ""
+	}
+	return ` data-fields-data="` + templ.EscapeString(seed) + `"`
 }
 
 // lookupEntityShowRenderer is the templ-callable helper that
@@ -265,7 +362,7 @@ func lookupEntityShowRenderer(ctx EntityShowRenderContext) templ.Component {
 	// widget can render the addon's Player Characters category.
 	rend, ok := reg.Lookup(ctx.EntityType.Slug)
 	if !ok && ctx.EntityType.PresetCategory != nil && !ctx.NPCPage {
-		rend, ok = reg.LookupByPresetCategory(*ctx.EntityType.PresetCategory)
+		rend, ok = reg.LookupByPresetCategoryFor(ctx.System, *ctx.EntityType.PresetCategory)
 	}
 	if !ok {
 		return nil
@@ -302,8 +399,36 @@ func hasEntityShowRenderer(ctx context.Context, et *EntityType) bool {
 		return true
 	}
 	if et.PresetCategory != nil && !isNPCPageCtx(ctx) {
-		_, ok := reg.LookupByPresetCategory(*et.PresetCategory)
+		_, ok := reg.LookupByPresetCategoryFor(systemFor(ctx, et), *et.PresetCategory)
 		return ok
 	}
 	return false
+}
+
+// CampaignSystemResolver names the game system a campaign runs (its module
+// id), "" for none.
+type CampaignSystemResolver func(ctx context.Context, campaignID string) string
+
+var campaignSystemResolver atomic.Pointer[CampaignSystemResolver]
+
+// SetCampaignSystemResolver wires the lookup, once at boot. Without it a
+// check made outside a page render can't tell the systems apart and takes a
+// renderer any system binds.
+func SetCampaignSystemResolver(f CampaignSystemResolver) { campaignSystemResolver.Store(&f) }
+
+// anySystem stands for "the campaign's system is not known here".
+const anySystem = "*"
+
+// systemFor is the game system of the campaign a type belongs to. A page
+// render already carries it; elsewhere (a handler deciding how to draw) it is
+// looked up.
+func systemFor(ctx context.Context, et *EntityType) string {
+	if layouts.InCampaign(ctx) {
+		sys, _ := layouts.GetEnabledSystem(ctx)
+		return sys.Slug
+	}
+	if f := campaignSystemResolver.Load(); f != nil && et != nil && et.CampaignID != "" {
+		return (*f)(ctx, et.CampaignID)
+	}
+	return anySystem
 }
