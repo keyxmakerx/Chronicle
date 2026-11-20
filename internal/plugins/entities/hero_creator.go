@@ -66,6 +66,10 @@ type HeroPlan struct {
 	SystemID   string     `json:"systemId,omitempty"`
 	SystemName string     `json:"systemName"`
 	Steps      []HeroStep `json:"steps"`
+	// Practice marks the plan a practice hero is made from: every entry the
+	// rules keep from this player is back in the lists, labelled, and no rule
+	// locks or forces a step.
+	Practice bool `json:"practice,omitempty"`
 }
 
 // HeroPlanner supplies a campaign's creator steps. director says whether the
@@ -203,32 +207,40 @@ func heroBuyList(props map[string]any) (costs map[string]float64, budget float64
 	return nil, 0, false
 }
 
-// buildHeroFields checks every pick against the plan and returns the hero's
-// fields: each step's field holds the chosen entry's name, as the sheet and
-// the Foundry module expect, and bought options sit in the field beside it.
+// heroPickResult is one step's pick after it has been checked against the
+// plan: the entry it names (as the plan spells it) and the options bought.
+type heroPickResult struct {
+	choice *HeroChoice
+	bought []string
+}
+
+// resolveHeroPicks checks every pick against the plan and returns, by step
+// key, the entry each names and the options bought from it, normalised to the
+// plan's spelling. Unknown steps and entries, options the entry does not
+// offer, duplicates and overspending are refused. A step sent with no name is
+// skipped. Both the real hero and a practice hero are checked here, so the
+// two cannot drift on what a valid pick is.
 //
-// A pick of an ask-first entry is not stored: it comes back in asks, to be
-// recorded as a request once the hero exists. A step the rules require can't
-// be skipped; when it is left with one entry that entry is filled in, so the
-// hero never rests on the client having sent it.
-func buildHeroFields(plan *HeroPlan, picks map[string]HeroPick) (fields map[string]any, asks []HeroAsk, err error) {
-	fields = map[string]any{}
+// An ask-first entry's options are checked only when checkAsked is set: the
+// real hero never stores an ask-first pick, so what was bought beside it is
+// dropped with it, while a practice hero stores the pick as it is.
+func resolveHeroPicks(plan *HeroPlan, picks map[string]HeroPick, checkAsked bool) (map[string]heroPickResult, error) {
 	steps := map[string]*HeroStep{}
 	if plan != nil {
 		for i := range plan.Steps {
 			steps[plan.Steps[i].FieldKey] = &plan.Steps[i]
 		}
 	}
-	asked := map[string]bool{}
+	out := make(map[string]heroPickResult, len(picks))
 	for key, pick := range picks {
 		step := steps[key]
 		if step == nil {
-			return nil, nil, apperror.NewBadRequest("the creator has no step for " + key)
+			return nil, apperror.NewBadRequest("the creator has no step for " + key)
 		}
 		name := strings.TrimSpace(pick.Name)
 		if name == "" {
 			if len(pick.Options) > 0 {
-				return nil, nil, apperror.NewBadRequest("choose the " + strings.ToLower(step.Label) + " before its options")
+				return nil, apperror.NewBadRequest("choose the " + strings.ToLower(step.Label) + " before its options")
 			}
 			continue
 		}
@@ -240,38 +252,62 @@ func buildHeroFields(plan *HeroPlan, picks map[string]HeroPick) (fields map[stri
 			}
 		}
 		if choice == nil {
-			return nil, nil, apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", name, strings.ToLower(step.Label)))
+			return nil, apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", name, strings.ToLower(step.Label)))
 		}
-		if choice.State == HeroChoiceStateAskFirst {
-			asks = append(asks, HeroAsk{FieldKey: key, EntryName: choice.Name})
+		res := heroPickResult{choice: choice}
+		if len(pick.Options) > 0 && (checkAsked || choice.State != HeroChoiceStateAskFirst) {
+			costs, budget, ok := heroBuyList(choice.Properties)
+			if !ok {
+				return nil, apperror.NewBadRequest(choice.Name + " has nothing to choose from")
+			}
+			seen := map[string]bool{}
+			spent := 0.0
+			res.bought = make([]string, 0, len(pick.Options))
+			for _, o := range pick.Options {
+				k := strings.ToLower(strings.TrimSpace(o))
+				cost, known := costs[k]
+				if !known || seen[k] {
+					return nil, apperror.NewBadRequest(fmt.Sprintf("%q can't be chosen for %s", o, choice.Name))
+				}
+				seen[k] = true
+				spent += cost
+				res.bought = append(res.bought, strings.TrimSpace(o))
+			}
+			if spent > budget {
+				return nil, apperror.NewBadRequest(fmt.Sprintf("those choices cost %g points; %s has %g", spent, choice.Name, budget))
+			}
+		}
+		out[key] = res
+	}
+	return out, nil
+}
+
+// buildHeroFields checks every pick against the plan and returns the hero's
+// fields: each step's field holds the chosen entry's name, as the sheet and
+// the Foundry module expect, and bought options sit in the field beside it.
+//
+// A pick of an ask-first entry is not stored: it comes back in asks, to be
+// recorded as a request once the hero exists. A step the rules require can't
+// be skipped; when it is left with one entry that entry is filled in, so the
+// hero never rests on the client having sent it.
+func buildHeroFields(plan *HeroPlan, picks map[string]HeroPick) (fields map[string]any, asks []HeroAsk, err error) {
+	resolved, err := resolveHeroPicks(plan, picks, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	fields = map[string]any{}
+	asked := map[string]bool{}
+	for key, r := range resolved {
+		if r.choice.State == HeroChoiceStateAskFirst {
+			asks = append(asks, HeroAsk{FieldKey: key, EntryName: r.choice.Name})
 			asked[key] = true
 			continue
 		}
-		fields[key] = choice.Name
-		if len(pick.Options) == 0 {
+		fields[key] = r.choice.Name
+		if len(r.bought) == 0 {
 			continue
 		}
-		costs, budget, ok := heroBuyList(choice.Properties)
-		if !ok {
-			return nil, nil, apperror.NewBadRequest(choice.Name + " has nothing to choose from")
-		}
-		seen := map[string]bool{}
-		spent := 0.0
-		bought := make([]string, 0, len(pick.Options))
-		for _, o := range pick.Options {
-			k := strings.ToLower(strings.TrimSpace(o))
-			cost, known := costs[k]
-			if !known || seen[k] {
-				return nil, nil, apperror.NewBadRequest(fmt.Sprintf("%q can't be chosen for %s", o, choice.Name))
-			}
-			seen[k] = true
-			spent += cost
-			bought = append(bought, strings.TrimSpace(o))
-		}
-		if spent > budget {
-			return nil, nil, apperror.NewBadRequest(fmt.Sprintf("those choices cost %g points; %s has %g", spent, choice.Name, budget))
-		}
-		raw, err := json.Marshal(bought)
+		raw, err := json.Marshal(r.bought)
 		if err != nil {
 			return nil, nil, apperror.NewInternal(err)
 		}

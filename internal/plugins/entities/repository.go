@@ -2839,3 +2839,21 @@ func (r *entityRepository) ClaimedNames(ctx context.Context, userID string, camp
 	}
 	return out, rows.Err()
 }
+
+// ReleaseOne clears the user's claim on one page and marks it playable, as
+// ReleaseOwned does for every page they hold, so it joins "Free to pick". The
+// owner is part of the match: a page that changed hands in between is left
+// alone. It reports whether a page was released.
+func (r *entityRepository) ReleaseOne(ctx context.Context, campaignID, entityID, userID string) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE entities SET owner_user_id = NULL, playable = 1, updated_at = NOW()
+		 WHERE id = ? AND campaign_id = ? AND owner_user_id = ?`, entityID, campaignID, userID)
+	if err != nil {
+		return false, fmt.Errorf("releasing claimed page: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("releasing claimed page: %w", err)
+	}
+	return n > 0, nil
+}

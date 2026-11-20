@@ -790,6 +790,11 @@ type CastView struct {
 	// Builder is the hero builder for the viewer's own heroes and a new
 	// one; nil hides it.
 	Builder *HeroBuilderView
+	// Practice is the player's Practice shelf; nil for anyone who may not
+	// make practice heroes. PracticeDirector is every practice hero of the
+	// campaign for the Directors; nil for everyone else, or when none exist.
+	Practice         *PracticeShelfView
+	PracticeDirector *PracticeDirectorView
 }
 
 // --- Slug Generation ---
