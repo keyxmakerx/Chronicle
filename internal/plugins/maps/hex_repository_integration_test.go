@@ -532,3 +532,95 @@ func deref(p *string) string {
 	}
 	return *p
 }
+
+func TestOldRoadReconcile_Integration(t *testing.T) {
+	db := newMapsScratchDB(t)
+	ctx := context.Background()
+	store := NewOldRoadStore(db)
+	repo := NewHexRepository(db)
+
+	userID := newMapsDBID(t)
+	campaignID := newMapsDBID(t)
+	mustExecMaps(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+		userID, userID+"@example.test", "Road Int Test", "x")
+	mustExecMaps(t, db, `INSERT INTO campaigns (id, name, slug, created_by) VALUES (?, ?, ?, ?)`,
+		campaignID, "Road Int Test", campaignID, userID)
+	newMap := func() string {
+		id := newMapsDBID(t)
+		mustExecMaps(t, db, `INSERT INTO maps (id, campaign_id, name) VALUES (?, ?, ?)`, id, campaignID, "Road Map")
+		return id
+	}
+
+	roadMap, plainMap := newMap(), newMap()
+	// Old road hexes (4,4), (5,4), (6,4) in a row, forest to the north-east and
+	// a town beside; (5,4) also carries a name, notes and the explored flag.
+	writes := []HexCellWrite{
+		{Col: 4, Row: 4, TerrainSet: true, Terrain: hexStrp("road")},
+		{Col: 5, Row: 4, TerrainSet: true, Terrain: hexStrp("road"), NameSet: true, Name: "Crossing", NotesSet: true, Notes: hexStrp("toll")},
+		{Col: 6, Row: 4, TerrainSet: true, Terrain: hexStrp("road"), PieceSet: true, Piece: intp(2)},
+	}
+	for _, n := range Neighbors(5, 4) {
+		if n.Row == 3 {
+			writes = append(writes, HexCellWrite{Col: n.Col, Row: n.Row, TerrainSet: true, Terrain: hexStrp("forest")})
+		}
+	}
+	if _, err := repo.ApplyCells(ctx, roadMap, userID, writes); err != nil {
+		t.Fatal(err)
+	}
+	mustExecMaps(t, db, "UPDATE map_hex_cells SET explored = 1 WHERE map_id = ? AND col = 5 AND `row` = 4", roadMap)
+	if _, err := repo.ApplyCells(ctx, plainMap, userID, []HexCellWrite{
+		{Col: 1, Row: 1, TerrainSet: true, Terrain: hexStrp("hills")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	before, _ := repo.GetLayer(ctx, roadMap)
+	plainBefore, _ := repo.GetLayer(ctx, plainMap)
+	cellsBefore, _ := repo.ListCells(ctx, roadMap)
+	want := map[HexKey]OldRoadConversion{}
+	for _, c := range PlanOldRoadConversion(cellsBefore) {
+		want[HexKey{c.Col, c.Row}] = c
+	}
+
+	m, h, err := ReconcileOldRoadHexes(ctx, store)
+	if err != nil || m != 1 || h != 3 {
+		t.Fatalf("first run = %d maps, %d hexes, %v; want 1, 3, nil", m, h, err)
+	}
+
+	after, _ := repo.GetLayer(ctx, roadMap)
+	if after.Version <= before.Version {
+		t.Errorf("version %d -> %d; want it to move", before.Version, after.Version)
+	}
+	cells, _ := repo.ListCells(ctx, roadMap)
+	byKey := map[HexKey]HexCell{}
+	for _, c := range cells {
+		byKey[HexKey{c.Col, c.Row}] = c
+		if c.Terrain != nil && *c.Terrain == "road" {
+			t.Errorf("(%d,%d) is still road terrain", c.Col, c.Row)
+		}
+	}
+	for k, w := range want {
+		got := byKey[k]
+		if got.Road == nil || *got.Road != w.Road || !eqStrPtr(got.Terrain, w.Terrain) || got.Piece != nil {
+			t.Errorf("(%d,%d) = road %s terrain %v piece %s; want road %d terrain %v, no piece",
+				k.Col, k.Row, ptrStr(got.Road), deref(got.Terrain), ptrStr(got.Piece), w.Road, deref(w.Terrain))
+		}
+	}
+	mid := byKey[HexKey{5, 4}]
+	if mid.Name != "Crossing" || deref(mid.Notes) != "toll" || !mid.Explored || deref(mid.UpdatedBy) != userID {
+		t.Errorf("(5,4) other columns changed: %+v", mid)
+	}
+
+	// A second run finds nothing and leaves the version alone.
+	m, h, err = ReconcileOldRoadHexes(ctx, store)
+	if err != nil || m != 0 || h != 0 {
+		t.Fatalf("second run = %d, %d, %v; want 0, 0, nil", m, h, err)
+	}
+	if again, _ := repo.GetLayer(ctx, roadMap); again.Version != after.Version {
+		t.Errorf("second run moved the version %d -> %d", after.Version, again.Version)
+	}
+	// A map without old roads is never touched.
+	if plainAfter, _ := repo.GetLayer(ctx, plainMap); plainAfter.Version != plainBefore.Version {
+		t.Errorf("plain map version %d -> %d; want unchanged", plainBefore.Version, plainAfter.Version)
+	}
+}

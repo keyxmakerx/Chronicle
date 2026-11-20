@@ -4305,6 +4305,15 @@ func (a *App) RegisterRoutes() {
 	drawingRepo := maps.NewDrawingRepository(a.DB)
 	drawingService := maps.NewDrawingService(drawingRepo)
 	hexService := maps.NewHexService(maps.NewHexRepository(a.DB))
+	// One-time, idempotent: hexes still painted with the old road terrain become
+	// land with a road line. Best-effort, never blocks startup.
+	nm, nh, roadErr := maps.ReconcileOldRoadHexes(context.Background(), maps.NewOldRoadStore(a.DB))
+	if roadErr != nil {
+		slog.Error("maps: old road hex conversion failed; unconverted maps convert on the next boot", slog.Any("error", roadErr))
+	}
+	if nh > 0 {
+		slog.Info("maps: old road hexes converted to road lines", slog.Int("maps", nm), slog.Int("hexes", nh))
+	}
 	// Pins under a shadow area are withheld from players; the map service asks
 	// the drawing service (which owns drawings) where the shadows are.
 	wireMapShadows(mapsService, drawingService)
