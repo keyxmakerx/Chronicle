@@ -297,6 +297,14 @@ type FieldDefinition struct {
 	// field, so whatever acts on play edits reads one stored source and core
 	// never hard-codes a system's field names. Nil = not a play field.
 	Play *FieldPlay `json:"play,omitempty"`
+	// Min and Max bound a number field's value; absent means unbounded.
+	// Only AI Import's field check reads them, so a hand-typed sheet value
+	// is never refused by them.
+	Min *float64 `json:"min,omitempty"`
+	Max *float64 `json:"max,omitempty"`
+	// JSONList says a text field holds a JSON list, so AI Import refuses text
+	// that is not one rather than store what the sheet's widgets cannot read.
+	JSONList bool `json:"json_list,omitempty"`
 	// LinkTo is the category a "link" field's pages come from. The stored
 	// value is the linked page's id.
 	LinkTo int `json:"link_to,omitempty"`
@@ -307,6 +315,14 @@ type FieldDefinition struct {
 	DateAgo bool `json:"date_ago,omitempty"`
 	// Countdowns run from a "calendar_date" field's date (field_dates.go).
 	Countdowns []FieldCountdown `json:"countdowns,omitempty"`
+}
+
+// FieldChecks is the value check a system declares for one field, kept apart
+// from the field so SyncFieldChecks can converge it onto stored categories.
+type FieldChecks struct {
+	Min      *float64
+	Max      *float64
+	JSONList bool
 }
 
 // FieldPlay mirrors the manifest's play block. It is a separate type from the

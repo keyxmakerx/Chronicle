@@ -99,7 +99,7 @@ func (h *Handler) Peek(c *echo.Context) error {
 	// before anything is listed.
 	// A campaign that switched the attributes addon off shows no field values
 	// on the page, so the panel shows none either.
-	fieldsData := FilterRestrictedFields(entity.FieldsData, entityType.Fields, canSeeGM, entity.IsOwnedBy(userID))
+	fieldsData := FilterRestrictedFields(entity.FieldsData, RestrictionDefs(entityType.Fields, entity.FieldOverrides), canSeeGM, entity.IsOwnedBy(userID))
 	if !h.isAddonEnabled(ctx, cc.Campaign.ID, "attributes") {
 		fieldsData = nil
 	}

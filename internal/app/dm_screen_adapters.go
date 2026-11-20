@@ -413,6 +413,13 @@ func (a *dmPartyAdapter) Heroes(ctx context.Context, campaignID string, v dmscre
 	out := make([]dmscreen.Hero, 0, len(claimed))
 	for _, e := range claimed {
 		h := dmscreen.Hero{ID: e.ID, TypeID: e.EntityTypeID, Name: e.Name, Fields: e.FieldsData}
+		if e.FieldOverrides != nil {
+			for _, f := range e.FieldOverrides.Added {
+				if f.GMOnly || f.OwnerOnly {
+					h.PageRestricted = append(h.PageRestricted, f.Key)
+				}
+			}
+		}
 		if e.OwnerUserID != nil {
 			h.PlayerName = names[*e.OwnerUserID]
 			h.PlayerUserID = *e.OwnerUserID

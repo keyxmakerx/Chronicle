@@ -21,6 +21,11 @@ func TestPartyFacts(t *testing.T) {
 	if ancestry != "High Elf" || class != "" || level != "3" {
 		t.Errorf("got ancestry %q class %q level %q; a GM-only or owner-only field must never be read", ancestry, class, level)
 	}
+	// A second, open definition of a restricted key (a field added to the
+	// page) never opens it.
+	if _, c, _ := partyFacts(map[string]any{"class": "Secret Class"}, []FieldDefinition{{Key: "class"}, {Key: "class", GMOnly: true}}); c != "" {
+		t.Errorf("class = %q; any restricting definition must keep the key closed", c)
+	}
 	// A system that names the same ideas differently still shows them.
 	a, c, l := partyFacts(
 		map[string]any{"race": "Polder", "calling": "Shadow", "level": 2},

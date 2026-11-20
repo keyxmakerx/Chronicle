@@ -155,6 +155,22 @@ func (a *bestiaryEntityCreatorAdapter) CreateFromStatblock(ctx context.Context, 
 	return ent.ID, nil
 }
 
+// EntityExists reports whether a page an earlier import made is still in the
+// campaign. A missing page, or one that now belongs to another campaign, is
+// "gone" so the creature can be imported again; any other lookup failure is an
+// error rather than a guess.
+func (a *bestiaryEntityCreatorAdapter) EntityExists(ctx context.Context, campaignID, entityID string) (bool, error) {
+	ent, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return ent != nil && ent.CampaignID == campaignID, nil
+}
+
 // creatureType picks the campaign's switched-on creature type, preferring the
 // publication's system's own ("<system>-creature") when there are several.
 func (a *bestiaryEntityCreatorAdapter) creatureType(ctx context.Context, campaignID, systemID string) (*entities.EntityType, error) {
@@ -186,16 +202,44 @@ func (a *bestiaryEntityCreatorAdapter) creatureType(ctx context.Context, campaig
 // JSON text when the type declares one, else to the key itself: a list of
 // plain values (keywords) as comma text, anything else as JSON text. Keys the
 // type does not declare are left out; the whole statblock is kept under
-// statblock_json, as before, so nothing in it is lost.
+// statblock_json, as before, so nothing in it is lost. statblock_json is not a
+// declared field, so nothing strips it for players: a key the type marks
+// GM-only or owner-only is kept in its own field and left out of the copy.
 func creatureFields(defs []entities.FieldDefinition, statblock json.RawMessage) map[string]any {
-	out := map[string]any{"statblock_json": string(statblock)}
+	out := map[string]any{}
+	blob := string(statblock)
+	// The whole-statblock copy is set last so a statblock carrying its own
+	// top-level statblock_json key cannot replace it.
+	defer func() { out["statblock_json"] = blob }()
 	var sb map[string]any
 	if json.Unmarshal(statblock, &sb) != nil {
 		return out
 	}
 	declared := make(map[string]bool, len(defs))
+	types := make(map[string]string, len(defs))
+	restricted := false
+	copySB := make(map[string]any, len(sb))
+	for k, v := range sb {
+		copySB[k] = v
+	}
 	for _, d := range defs {
 		declared[d.Key] = true
+		types[d.Key] = d.Type
+		if d.GMOnly || d.OwnerOnly {
+			for _, k := range []string{d.Key, strings.TrimSuffix(d.Key, "_json")} {
+				if _, ok := copySB[k]; ok {
+					delete(copySB, k)
+					restricted = true
+				}
+			}
+		}
+	}
+	if restricted {
+		if raw, err := json.Marshal(copySB); err == nil {
+			blob = string(raw)
+		} else {
+			blob = "{}"
+		}
 	}
 	for k, v := range sb {
 		switch v := v.(type) {
@@ -214,11 +258,33 @@ func creatureFields(defs []entities.FieldDefinition, statblock json.RawMessage) 
 			}
 		default:
 			if declared[k] {
-				out[k] = v
+				if fv, ok := fieldValue(types[k], v); ok {
+					out[k] = fv
+				}
 			}
 		}
 	}
 	return out
+}
+
+// fieldValue fits a plain statblock value to its declared field type, so a
+// string cannot land in a number or checkbox field. A value that does not fit
+// is dropped (ok false); the full statblock copy still holds it.
+func fieldValue(fieldType string, v any) (any, bool) {
+	switch fieldType {
+	case "number":
+		f, ok := v.(float64)
+		return f, ok
+	case "checkbox":
+		b, ok := v.(bool)
+		return b, ok
+	case "text", "textarea", "select", "url":
+		if _, ok := v.(string); ok {
+			return v, true
+		}
+		return fmt.Sprint(v), true
+	}
+	return v, true
 }
 
 // plainList joins a list of plain values with commas; ok is false for
@@ -3007,6 +3073,7 @@ func (a *App) RegisterRoutes() {
 		// Same for play blocks, so an installed system's play declarations
 		// reach types created before it declared them.
 		reconcileFieldPlay(ctx, entityService)
+		reconcileFieldChecks(ctx, entityService)
 	}()
 
 	// Campaigns plugin: CRUD, membership, ownership transfer.
@@ -3544,6 +3611,7 @@ func (a *App) RegisterRoutes() {
 		reconcileFieldGMFlags(context.Background(), entityService)
 		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
 		reconcileFieldPlay(context.Background(), entityService)
+		reconcileFieldChecks(context.Background(), entityService)
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
@@ -4176,6 +4244,14 @@ func (a *App) RegisterRoutes() {
 	bestiarySvc.SetCampaignSystemFetcher(&bestiaryCampaignSystemAdapter{svc: campaignService})
 	bestiaryHandler := bestiary.NewHandler(bestiarySvc)
 	if a.PluginHealth.IsHealthy("bestiary") {
+		// Names and descriptions the old write path HTML-escaped are unescaped
+		// once per row, before any request can read them. A failure is logged;
+		// the rows keep their marker and the next boot retries.
+		if n, err := bestiaryRepo.ReconcileEscapedText(context.Background()); err != nil {
+			slog.Error("bestiary text reconcile failed", slog.Any("error", err), slog.Int("rows_fixed", n))
+		} else if n > 0 {
+			slog.Info("bestiary text reconcile: unescaped stored text", slog.Int("rows", n))
+		}
 		bestiary.RegisterRoutes(e, bestiaryHandler, authService)
 		bestiary.RegisterAdminRoutes(e, bestiaryHandler, authService)
 	} else {

@@ -198,7 +198,7 @@ Community-shared creature stat blocks, instance-wide (not campaign-scoped).
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `bestiary_publications` | A published/draft stat block | `slug` UNIQUE; `statblock_json`; `visibility` enum(`draft`,`published`,`unlisted`,`archived`,`flagged`); `system_id` DEFAULT `''` (must come from the publishing campaign's own system, not a hard-coded fallback); `FULLTEXT(name, description)` |
+| `bestiary_publications` | A published/draft stat block | `slug` UNIQUE; `statblock_json`; `visibility` enum(`draft`,`published`,`unlisted`,`archived`,`flagged`); `system_id` DEFAULT `''` (must come from the publishing campaign's own system, not a hard-coded fallback); `FULLTEXT(name, description)`; `prior_visibility` (state to restore after moderation); `legacy_escaped_text` (1 = text escaped by the old write path, cleared by the boot reconciler) |
 | `bestiary_ratings` | 1–5 star rating + review text | `UNIQUE(user_id, publication_id)` |
 | `bestiary_favorites` | Per-user favorites | composite PK |
 | `bestiary_imports` | Which campaigns imported a publication, and the resulting entity | `UNIQUE(publication_id, campaign_id)` |

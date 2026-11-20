@@ -62,11 +62,18 @@ type partyView struct {
 // a hero's class private shows no class here either. fields is the page's
 // effective field list (its type's fields with the page's own changes).
 func partyFacts(data map[string]any, fields []FieldDefinition) (ancestry, class, level string) {
-	open := map[string]bool{}
+	// A key is open only when no definition restricts it, so a page-added
+	// field can't open a key its category keeps from players.
+	open, closed := map[string]bool{}, map[string]bool{}
 	for _, f := range fields {
-		if !f.GMOnly && !f.OwnerOnly {
+		if f.GMOnly || f.OwnerOnly {
+			closed[f.Key] = true
+		} else {
 			open[f.Key] = true
 		}
+	}
+	for k := range closed {
+		delete(open, k)
 	}
 	read := func(keys []string) string {
 		for _, k := range keys {
@@ -119,8 +126,11 @@ func buildParty(campaignID string, members []CastMember, types map[int]*EntityTy
 		var fields []FieldDefinition
 		if t := types[e.EntityTypeID]; t != nil {
 			fields = MergeFields(t.Fields, e.FieldOverrides)
-			if e.FieldOverrides != nil {
-				fields = append(fields, e.FieldOverrides.Added...)
+			// A category field hidden on this page still restricts its key.
+			for _, f := range t.Fields {
+				if f.GMOnly || f.OwnerOnly {
+					fields = append(fields, f)
+				}
 			}
 		}
 		ancestry, class, level := partyFacts(e.FieldsData, fields)

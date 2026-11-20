@@ -940,7 +940,7 @@ func sheetFieldsText(e *entities.Entity, types []entities.EntityType, canSeeGM, 
 			defs = t.Fields
 		}
 	}
-	vals := entities.FilterRestrictedFields(e.FieldsData, defs, canSeeGM, isOwner)
+	vals := entities.FilterRestrictedFields(e.FieldsData, entities.RestrictionDefs(defs, e.FieldOverrides), canSeeGM, isOwner)
 	var b strings.Builder
 	for _, d := range defs {
 		v, ok := vals[d.Key]

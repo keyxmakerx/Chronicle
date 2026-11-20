@@ -405,7 +405,7 @@ func sheetLine(e *entities.Entity, defs []entities.FieldDefinition, opts Options
 	if len(e.FieldsData) == 0 || len(defs) == 0 {
 		return ""
 	}
-	fields := entities.FilterRestrictedFields(e.FieldsData, defs, opts.Privacy != PrivacyModeSafe, false)
+	fields := entities.FilterRestrictedFields(e.FieldsData, entities.RestrictionDefs(defs, e.FieldOverrides), opts.Privacy != PrivacyModeSafe, false)
 	var parts []string
 	for _, d := range defs {
 		v, ok := fields[d.Key]
