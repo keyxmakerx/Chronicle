@@ -190,7 +190,7 @@ templ eraDetails(cc *campaigns.CampaignContext, entity *Entity, v *eraView, csrf
 						hx-select="#main-content > *"
 						hx-swap="innerHTML show:none"
 						class="btn-secondary btn-sm"
-					><i class="fa-solid fa-pen mr-1"></i> Edit this version</a>
+					><i class="fa-solid fa-pen mr-1 word-ic"></i> Edit this version</a>
 				}
 			} else if focus != nil && v.Selected != eraUsual {
 				<button
@@ -236,14 +236,14 @@ templ eraVersionIdentity(cc *campaigns.CampaignContext, entity *Entity, v *eraVi
 					class="btn-ghost btn-sm"
 					hx-patch={ base + "?era=" + strconv.Itoa(focus.ID) + "&hl=0" }
 					hx-vals={ `{"usual_image":"1"}` }
-				><i class="fa-regular fa-image"></i> Use the usual picture</button>
+				><i class="fa-regular fa-image word-ic"></i> Use the usual picture</button>
 			}
 			<button
 				type="button"
 				class="btn-ghost btn-ghost-danger btn-sm"
 				hx-delete={ base }
 				hx-confirm={ "Remove the " + focus.Name + " version of this page? In that era it will show the usual page again." }
-			><i class="fa-solid fa-trash"></i> Remove version</button>
+			><i class="fa-solid fa-trash word-ic"></i> Remove version</button>
 		</div>
 	</div>
 }

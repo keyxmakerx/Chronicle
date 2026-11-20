@@ -129,7 +129,7 @@ Chronicle.register('relations', {
           var addBtn = document.createElement('button');
           addBtn.type = 'button';
           addBtn.className = 'rel-add-btn';
-          addBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size:10px"></i> Add relation';
+          addBtn.innerHTML = '<i class="fa-solid fa-plus word-ic" style="font-size:10px"></i> Add relation';
           addBtn.addEventListener('click', function () {
             state.isAdding = true;
             state.selectedTarget = null;

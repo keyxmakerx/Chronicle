@@ -37,9 +37,9 @@ templ journalContent(cc *campaigns.CampaignContext, view JournalView) {
 		data-note-id={ view.NoteID }
 	>
 		<div class="jnl-panetabs" role="tablist" aria-label="Journal panes">
-			<button type="button" role="tab" data-pane="list" aria-selected="true"><i class="fa-solid fa-folder" aria-hidden="true"></i> Notes</button>
-			<button type="button" role="tab" data-pane="note" aria-selected="false"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> Note</button>
-			<button type="button" role="tab" data-pane="links" aria-selected="false"><i class="fa-solid fa-link" aria-hidden="true"></i> Links</button>
+			<button type="button" role="tab" data-pane="list" aria-selected="true"><i class="fa-solid fa-folder word-ic" aria-hidden="true"></i> Notes</button>
+			<button type="button" role="tab" data-pane="note" aria-selected="false"><i class="fa-solid fa-file-lines word-ic" aria-hidden="true"></i> Note</button>
+			<button type="button" role="tab" data-pane="links" aria-selected="false"><i class="fa-solid fa-link word-ic" aria-hidden="true"></i> Links</button>
 		</div>
 		<div class="jnl-row">
 			<section class="jnl-list" id="jnl-list" aria-label="Notes">
@@ -58,8 +58,8 @@ templ journalContent(cc *campaigns.CampaignContext, view JournalView) {
 							<button type="button" class="nl-newbody" data-new="note"><i class="fa-solid fa-plus nl-ico" aria-hidden="true"></i><span>New</span></button>
 							<button type="button" class="nl-newcaret" aria-haspopup="true" aria-expanded="false" title="New note or folder" aria-label="New note or folder"><i class="fa-solid fa-chevron-right nl-ico chev" aria-hidden="true"></i></button>
 							<div class="nl-newmenu" role="menu" aria-label="New">
-								<button type="button" role="menuitem" data-new="note"><i class="fa-solid fa-file-lines nl-ico" aria-hidden="true"></i>Note</button>
-								<button type="button" role="menuitem" data-new="folder"><i class="fa-solid fa-folder nl-ico" aria-hidden="true"></i>Folder</button>
+								<button type="button" role="menuitem" data-new="note"><i class="fa-solid fa-file-lines nl-ico word-ic" aria-hidden="true"></i>Note</button>
+								<button type="button" role="menuitem" data-new="folder"><i class="fa-solid fa-folder nl-ico word-ic" aria-hidden="true"></i>Folder</button>
 							</div>
 						</div>
 					</div>
@@ -102,7 +102,7 @@ templ journalContent(cc *campaigns.CampaignContext, view JournalView) {
 					<i class="fa-solid fa-book-open" aria-hidden="true"></i>
 					<p class="t">No note open</p>
 					<p class="s">Pick one from the list, or start a new one.</p>
-					<button type="button" class="jnl-btn" data-new="note"><i class="fa-solid fa-plus" aria-hidden="true"></i> New note</button>
+					<button type="button" class="jnl-btn" data-new="note"><i class="fa-solid fa-plus word-ic" aria-hidden="true"></i> New note</button>
 				</div>
 				<div class="jnl-note" hidden>
 					<div class="ed-head">
@@ -151,8 +151,8 @@ templ journalContent(cc *campaigns.CampaignContext, view JournalView) {
 						<span class="ed-status" aria-live="polite">Saved</span>
 						<span class="ed-updated"></span>
 						<span class="grow"></span>
-						<button type="button" class="ed-mini" data-jump="history"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> History</button>
-						<button type="button" class="ed-mini" data-jump="audio"><i class="fa-solid fa-microphone" aria-hidden="true"></i> Audio</button>
+						<button type="button" class="ed-mini" data-jump="history"><i class="fa-solid fa-clock-rotate-left word-ic" aria-hidden="true"></i> History</button>
+						<button type="button" class="ed-mini" data-jump="audio"><i class="fa-solid fa-microphone word-ic" aria-hidden="true"></i> Audio</button>
 					</div>
 				</div>
 			</section>

@@ -59,10 +59,10 @@ templ AvailabilityPage(cc *campaigns.CampaignContext, csrfToken string, canSeeDe
 			<!-- Segmented control: my grid vs the team heatmap -->
 			<div class="inline-flex bg-surface-alt border border-edge rounded-lg p-0.5 mb-5" role="tablist" aria-label="Availability view">
 				<button type="button" class="px-4 py-1.5 rounded-md text-sm font-semibold" role="tab" data-avail-tab="mine" aria-selected="true">
-					<i class="fa-solid fa-user-pen mr-1" aria-hidden="true"></i> My availability
+					<i class="fa-solid fa-user-pen mr-1 word-ic" aria-hidden="true"></i> My availability
 				</button>
 				<button type="button" class="px-4 py-1.5 rounded-md text-sm font-semibold" role="tab" data-avail-tab="overlay" aria-selected="false">
-					<i class="fa-solid fa-layer-group mr-1" aria-hidden="true"></i>
+					<i class="fa-solid fa-layer-group mr-1 word-ic" aria-hidden="true"></i>
 					if canSeeDetail {
 						Team heatmap
 					} else {

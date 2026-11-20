@@ -277,8 +277,8 @@ templ sectionBody(v *View, id string, csrf string) {
 templ brewBody(v *View) {
 	<div class="dms-brew" data-dms-brew-pane>
 		<div class="dms-brew-acts">
-			<a class="dms-tool" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/homebrew", v.CampaignID)) } data-dms-brew-workshop title="Open the Homebrew Workshop"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i>Workshop</a>
-			<button type="button" class="dms-tool" data-dms-brew-pv aria-pressed="false" title="See it as a player sees it"><i class="fa-solid fa-users" aria-hidden="true"></i>Player view</button>
+			<a class="dms-tool" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/homebrew", v.CampaignID)) } data-dms-brew-workshop title="Open the Homebrew Workshop"><i class="fa-solid fa-screwdriver-wrench word-ic" aria-hidden="true"></i>Workshop</a>
+			<button type="button" class="dms-tool" data-dms-brew-pv aria-pressed="false" title="See it as a player sees it"><i class="fa-solid fa-users word-ic" aria-hidden="true"></i>Player view</button>
 		</div>
 		<p class="dms-brew-pvbar"><i class="fa-solid fa-users" aria-hidden="true"></i>Player view: only what players see. Press Player view again to go back.</p>
 		@v.Homebrew

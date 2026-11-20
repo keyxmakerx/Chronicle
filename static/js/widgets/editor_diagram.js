@@ -391,7 +391,7 @@
     var delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'ce-diagram__btn';
-    delBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i> Remove';
+    delBtn.innerHTML = '<i class="fa-solid fa-trash word-ic" aria-hidden="true"></i> Remove';
     delBtn.title = 'Remove this diagram';
     bar.appendChild(delBtn);
     dom.appendChild(bar);

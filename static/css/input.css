@@ -5548,6 +5548,12 @@ html[data-view-motion="calm"][data-cz-btn="keystone"] .btn:active { transform: n
   color: color-mix(in oklab, var(--kind-colour, var(--nav-text-2)) 55%, var(--nav-text));
 }
 
+/* .word-ic is an icon on a button or a menu row that already says what it
+   does in words. It repeats the word, so it is drawn only when the campaign
+   asks for icons everywhere. Icons that are the control, point the way a fold
+   opens, or carry a meaning of their own never take this class. */
+:root:not([data-cz-icons="all"]) .word-ic { display: none; }
+
 /* Menu highlight on the page you are on. The living ring is drawn by
    .nav-ring itself; each other style shows some of its layers
    or styles the row. Strength: Lively is brighter and quicker. */

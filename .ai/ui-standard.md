@@ -783,7 +783,8 @@ their tokens.
   heavy press.
 - **Icons** (`data-cz-icons`, `data-cz-icon-colour`): Few is the base; Beside
   names draws a category's icon in front of a page's name in header search, the
-  link list, page rows and cards; Everywhere is the same for now. Ink is the
+  link list, page rows and cards; Everywhere also draws the icon on a button
+  or menu row that has a word (`.word-ic`, hidden otherwise). Ink is the
   base colour; Accent takes the campaign accent; Category mixes the category's
   saved colour toward the text colour so every category reads alike.
 - **Depth** (`data-cz-elev`, shadows from `czElevation`): Standard is the

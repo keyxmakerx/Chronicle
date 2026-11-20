@@ -321,7 +321,7 @@
     this.renderCadencePicker(cad);
 
     var save = el('button', 'btn-primary text-sm'); save.type = 'button';
-    save.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i> Save';
+    save.innerHTML = '<i class="fa-solid fa-floppy-disk word-ic mr-1"></i> Save';
     save.addEventListener('click', function () { self.saveMine(save); });
     bar.appendChild(save);
 
@@ -589,7 +589,7 @@
     // DM slot builder toggle (owner detail only).
     if (this.canDetail) {
       var build = el('button', 'btn-secondary text-sm'); build.type = 'button'; build.setAttribute('data-ov-build-toggle', '');
-      build.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Propose times';
+      build.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles word-ic mr-1"></i> Propose times';
       build.addEventListener('click', function () { self.toggleBuilder(); });
       bar.appendChild(build);
     }
@@ -1047,7 +1047,7 @@
     var row = el('div', 'flex flex-wrap items-center gap-2');
     var title = el('input'); title.type = 'text'; title.placeholder = 'Proposal title (e.g. Next session)';
     title.className = 'text-sm border border-edge rounded-md px-2 py-1 bg-surface flex-1'; title.setAttribute('data-ov-proptitle', '');
-    var create = el('button', 'btn-primary text-sm'); create.type = 'button'; create.innerHTML = '<i class="fa-solid fa-paper-plane mr-1"></i> Send proposal';
+    var create = el('button', 'btn-primary text-sm'); create.type = 'button'; create.innerHTML = '<i class="fa-solid fa-paper-plane word-ic mr-1"></i> Send proposal';
     create.disabled = this.selectedSlots.length < 1;
     create.addEventListener('click', function () { self.submitProposal(create); });
     var st = el('span', 'text-xs text-fg-muted'); st.setAttribute('data-ov-propstatus', '');
@@ -1110,7 +1110,7 @@
     var date = el('input'); date.type = 'date'; date.className = 'text-sm border border-edge rounded-md px-2 py-1 bg-surface';
     date.value = isoOf(todayUTC());
     var editBtn = el('button', 'btn-secondary text-sm'); editBtn.type = 'button';
-    editBtn.innerHTML = '<i class="fa-solid fa-pen mr-1"></i> Edit this date';
+    editBtn.innerHTML = '<i class="fa-solid fa-pen word-ic mr-1"></i> Edit this date';
     editBtn.addEventListener('click', function () { if (date.value) self.openDayEditor(date.value); });
     picker.appendChild(date); picker.appendChild(editBtn);
     head.appendChild(picker);
@@ -1252,7 +1252,7 @@
     card.appendChild(strip);
 
     var actions = el('div', 'flex items-center gap-2 mt-3');
-    var save = el('button', 'btn-primary text-sm'); save.type = 'button'; save.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i> Save this date';
+    var save = el('button', 'btn-primary text-sm'); save.type = 'button'; save.innerHTML = '<i class="fa-solid fa-floppy-disk word-ic mr-1"></i> Save this date';
     save.addEventListener('click', function () { self.saveDayException(dateISO, self.dayStateToBlocks(dayState), save); });
     var st = el('span', 'text-xs text-fg-muted'); st.setAttribute('data-exc-editor-status', '');
     actions.appendChild(save); actions.appendChild(st);
@@ -1318,8 +1318,8 @@
     if (!btn) return;
     var active = !!(this.outWeek && this.outWeek.created.length);
     btn.innerHTML = active
-      ? '<i class="fa-solid fa-rotate-left mr-1"></i> Undo — you’re marked out'
-      : '<i class="fa-solid fa-plane mr-1"></i> Out this week';
+      ? '<i class="fa-solid fa-rotate-left word-ic mr-1"></i> Undo — you’re marked out'
+      : '<i class="fa-solid fa-plane word-ic mr-1"></i> Out this week';
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   };
 

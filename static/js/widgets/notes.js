@@ -1331,7 +1331,7 @@ Chronicle.register('notes', {
             html += '<input type="text" class="note-check-text-input" value="' + Chronicle.escapeAttr(item.text) + '" data-block="' + bIdx + '" data-item="' + iIdx + '" placeholder="List item...">';
             html += '</label>';
           });
-          html += '<button class="note-add-check-item" data-block="' + bIdx + '"><i class="fa-solid fa-plus text-[9px]"></i> Add item</button>';
+          html += '<button class="note-add-check-item" data-block="' + bIdx + '"><i class="fa-solid fa-plus word-ic text-[9px]"></i> Add item</button>';
           html += '</div>';
         });
         html += '<div class="note-add-block"><button class="note-add-tasks" type="button" title="Checklist" aria-label="Checklist"><i class="fa-solid fa-list-check"></i></button>' +
@@ -1369,9 +1369,9 @@ Chronicle.register('notes', {
         html += '<div class="jot-card-foot">';
         html += '<button type="button" class="jot-mini-btn note-pin-btn"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i>' + (note.pinned ? 'Unpin' : 'Pin') + '</button>';
         if (note.linkedNoteId) {
-          html += '<button type="button" class="jot-mini-btn linked" data-open-journal="' + Chronicle.escapeAttr(note.linkedNoteId) + '"><i class="fa-solid fa-link" aria-hidden="true"></i>Open in Journal</button>';
+          html += '<button type="button" class="jot-mini-btn linked" data-open-journal="' + Chronicle.escapeAttr(note.linkedNoteId) + '"><i class="fa-solid fa-link word-ic" aria-hidden="true"></i>Open in Journal</button>';
         } else {
-          html += '<button type="button" class="jot-mini-btn linked" data-send-journal><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>Send to Journal</button>';
+          html += '<button type="button" class="jot-mini-btn linked" data-send-journal><i class="fa-solid fa-paper-plane word-ic" aria-hidden="true"></i>Send to Journal</button>';
         }
         html += '</div>';
       }
@@ -1927,7 +1927,7 @@ Chronicle.register('notes', {
         : '';
 
       var footHtml = eid
-        ? '<div class="jot-foot"><button class="jot-add-btn" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New jot on this page</button></div>'
+        ? '<div class="jot-foot"><button class="jot-add-btn" type="button"><i class="fa-solid fa-plus word-ic" aria-hidden="true"></i> New jot on this page</button></div>'
         : '<div class="notes-foot-hint">Jots live on pages: open one to add a jot there.</div>';
 
       // The title bar is the handle: drag it, or focus it and use the arrow keys.

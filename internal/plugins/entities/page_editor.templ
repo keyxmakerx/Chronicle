@@ -173,7 +173,7 @@ templ pageCloneForm(cc *campaigns.CampaignContext, entity *Entity, csrfToken, cl
 	>
 		<input type="hidden" name="csrf_token" value={ csrfToken }/>
 		<button type="submit" class={ class } title="Create a copy of this page">
-			<i class="fa-regular fa-clone mr-1"></i> Clone
+			<i class="fa-regular fa-clone mr-1 word-ic"></i> Clone
 		</button>
 	</form>
 }
@@ -191,7 +191,7 @@ templ pageDeleteForm(cc *campaigns.CampaignContext, entity *Entity, csrfToken, c
 		<input type="hidden" name="_method" value="DELETE"/>
 		<input type="hidden" name="csrf_token" value={ csrfToken }/>
 		<button type="submit" class={ class }>
-			<i class="fa-solid fa-trash mr-1"></i> { label }
+			<i class="fa-solid fa-trash mr-1 word-ic"></i> { label }
 		</button>
 	</form>
 }

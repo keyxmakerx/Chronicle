@@ -933,7 +933,7 @@
           '<p class="hint">Point at a sample and press it. The buttons in the preview use your choice.</p>'));
       if (id === 'icons') return (
         fld('i-amount', 'How many icons', null, opts('i-amount', 'icons.amount', 'i-amount-l', ICON_AMOUNTS) +
-          '<p class="hint">Few is how Chronicle looks today. Beside names draws each category’s icon in front of a page’s name in search, the list that opens when you link a page, page lists and page cards. Everywhere is the same for now and will also bring icons to buttons and menu rows.</p>') +
+          '<p class="hint">Few is how Chronicle looks today. Beside names adds each category’s icon in front of a page’s name. Everywhere also keeps the icon on buttons and menu rows that have a word.</p>') +
         fld('i-colour', 'Icon colour', null, iconColourOpts() +
           '<p class="hint">One choice colours every icon that stands for a category.</p>'));
       if (id === 'motion') return (

@@ -137,7 +137,7 @@ templ BlockStanding(campaignID, entityID, entityName string, v *StandingView) {
 templ standingDMTools(entityID string, first StandingSubjectView, v *StandingView) {
 	<div class="sg-addrow" data-dm-only data-sg-addrow>
 		<button type="button" class="sg-addb" data-sg-add aria-expanded="false" aria-controls={ "sg-form-" + entityID } onclick={ standingCall("addOpen") }>
-			<i class="fa-solid fa-plus" aria-hidden="true"></i>Add a reason
+			<i class="fa-solid fa-plus word-ic" aria-hidden="true"></i>Add a reason
 		</button>
 		<form class="sg-addf" id={ "sg-form-" + entityID } data-sg-form role="group" aria-label="Add a reason" novalidate hidden onsubmit={ standingCall("addSave") }>
 			<div class="sg-ph sg-full"><strong>Add a reason</strong><span class="sg-sm" data-sg-for>{ "for " + first.Name }</span></div>

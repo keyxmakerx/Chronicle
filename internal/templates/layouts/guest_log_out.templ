@@ -12,7 +12,7 @@ templ guestLogOut() {
 			x-show="!sure"
 			@click.stop="sure = true"
 		>
-			<i class="fa-solid fa-arrow-right-from-bracket text-xs w-4"></i> Log out
+			<i class="fa-solid fa-arrow-right-from-bracket text-xs w-4 word-ic"></i> Log out
 		</button>
 		<div x-show="sure" x-cloak class="px-3 py-2" data-guest-logout-confirm>
 			<p class="text-sm text-fg mb-1 font-medium">You can't get back in after this.</p>

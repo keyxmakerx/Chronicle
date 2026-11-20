@@ -385,10 +385,10 @@ templ SettingsDataSection(cc *CampaignContext) {
 		<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file, or as a ZIP that adds an archive of your media files, to move it to another Chronicle or keep a copy of your pages.</p>
 		<div class="flex flex-wrap items-center gap-3">
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
-				<i class="fa-solid fa-download text-xs"></i> Export JSON
+				<i class="fa-solid fa-download text-xs word-ic"></i> Export JSON
 			</a>
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export?include_media=1", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
-				<i class="fa-solid fa-file-zipper text-xs"></i> Export ZIP (+ media archive)
+				<i class="fa-solid fa-file-zipper text-xs word-ic"></i> Export ZIP (+ media archive)
 			</a>
 		</div>
 		<p class="text-[11px] text-fg-muted mt-2">
@@ -525,7 +525,7 @@ templ pluginHubCard(cc *CampaignContext, addon PluginHubAddon, isOwner bool, csr
 					} else {
 						<input type="hidden" name="action" value="enable"/>
 						<button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge hover:bg-accent/10 hover:text-accent transition-colors" title="Click to enable">
-							<i class="fa-solid fa-plus text-[10px]"></i>
+							<i class="fa-solid fa-plus text-[10px] word-ic"></i>
 							Enable
 						</button>
 					}

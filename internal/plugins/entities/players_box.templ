@@ -62,7 +62,7 @@ templ castPlayersBox(campaignID, csrf string, roster *ClaimRoster, open bool) {
 								data-ph={ "Find a character for " + row.Name }
 								onclick={ castFinderCall("give") }
 							>
-								<i class="fa-solid fa-plus" aria-hidden="true"></i> Give a character
+								<i class="fa-solid fa-plus word-ic" aria-hidden="true"></i> Give a character
 							</button>
 						</div>
 					}
@@ -78,7 +78,7 @@ templ castPlayersBox(campaignID, csrf string, roster *ClaimRoster, open bool) {
 						data-ph="Find a character to set aside"
 						onclick={ castFinderCall("free") }
 					>
-						<i class="fa-solid fa-plus" aria-hidden="true"></i> Add a character
+						<i class="fa-solid fa-plus word-ic" aria-hidden="true"></i> Add a character
 					</button>
 				</div>
 				<div class="pw-chars pw-freelist">

@@ -59,7 +59,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 				<div class="flex items-center gap-2">
 					<span class="text-xs text-fg-muted">Last 24 hours</span>
 					<button onclick="location.reload()" class="btn-secondary text-sm">
-						<i class="fa-solid fa-refresh"></i> Refresh
+						<i class="fa-solid fa-refresh word-ic"></i> Refresh
 					</button>
 				</div>
 			</div>
@@ -118,7 +118,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 					<div class="flex items-center justify-between">
 						<p class="text-xs text-fg-muted">One origin per line (e.g., <code class="text-xs">http://localhost:30000</code>)</p>
 						<button type="submit" class="btn-primary text-sm">
-							<i class="fa-solid fa-save"></i> Save Origins
+							<i class="fa-solid fa-save word-ic"></i> Save Origins
 						</button>
 					</div>
 				</form>
@@ -212,7 +212,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 									<form method="POST" hx-delete={ fmt.Sprintf("/admin/api/ip-blocks/%d", b.ID) } hx-confirm={ "Unblock " + b.IPAddress + "? It will be able to use the API again." } class="inline">
 										<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 										<button type="submit" class="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300" title="Unblock">
-											<i class="fa-solid fa-unlock"></i> Unblock
+											<i class="fa-solid fa-unlock word-ic"></i> Unblock
 										</button>
 									</form>
 								</div>
