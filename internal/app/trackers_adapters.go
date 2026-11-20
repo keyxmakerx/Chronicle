@@ -96,7 +96,7 @@ func (a *trackersMemberAdapter) Members(ctx context.Context, campaignID string) 
 	}
 	out := make([]trackers.Member, 0, len(list))
 	for _, m := range list {
-		tm := trackers.Member{UserID: m.UserID, Name: m.DisplayName, Director: m.Role >= campaigns.RoleOwner || grants[m.UserID]}
+		tm := trackers.Member{UserID: m.UserID, Name: m.DisplayName, Director: m.Role >= campaigns.RoleOwner || grants[m.UserID], JoinedAt: m.JoinedAt}
 		if m.CharacterName != nil {
 			tm.Character = *m.CharacterName
 		}

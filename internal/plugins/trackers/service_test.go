@@ -1242,3 +1242,73 @@ func TestPlayerChangeFiresListener(t *testing.T) {
 		t.Fatalf("listener heard %+v by %+v", l.got, l.seen)
 	}
 }
+
+// A grant made before the member's joined_at is from an earlier stay: the
+// player rejoined and was not chosen again, so they see and change nothing,
+// and the Director's picker shows them unticked. Choosing them again works.
+func TestGrantFromEarlierStayDoesNotCount(t *testing.T) {
+	ctx := context.Background()
+	r, tr := playersRig(t)
+	granted := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	rejoined := granted.Add(48 * time.Hour)
+	stored := r.repo.trackers[tr.ID]
+	stored.Players = []Player{{UserID: "tam-1", CanChange: true, GrantedAt: granted}, {UserID: "jo-1", GrantedAt: granted}}
+	r.repo.trackers[tr.ID] = stored
+	members := r.svc.(*service).repo.(*grantFilter).members.(*fakeMembers)
+	for i := range members.list {
+		switch members.list[i].UserID {
+		case "tam-1":
+			members.list[i].JoinedAt = rejoined
+		case "jo-1":
+			members.list[i].JoinedAt = granted.Add(-time.Hour)
+		}
+	}
+	jo := Viewer{UserID: "jo-1", MemberRole: 1, VisibilityRole: 1}
+	if p, err := r.svc.Page(ctx, cmp, pageA, tam); err != nil || len(p.Trackers) != 0 {
+		t.Fatalf("a rejoined player sees %+v err=%v", p.Trackers, err)
+	}
+	if _, err := r.svc.Log(ctx, cmp, pageA, tam, LogInput{TrackerID: tr.ID, Op: OpAdd, Amount: 1}); code(err) != http.StatusNotFound {
+		t.Errorf("rejoined player's log = %v want 404", err)
+	}
+	if p, err := r.svc.Page(ctx, cmp, pageA, jo); err != nil || len(p.Trackers) != 1 {
+		t.Fatalf("a player who stayed must still see it: %+v err=%v", p.Trackers, err)
+	}
+	dmView, err := r.svc.Page(ctx, cmp, pageA, dm)
+	if err != nil || len(dmView.Trackers) != 1 {
+		t.Fatal(err)
+	}
+	if got := dmView.Trackers[0].Players; len(got) != 1 || got[0].UserID != "jo-1" {
+		t.Errorf("the picker must show the stale grant unticked: %+v", got)
+	}
+	// Choosing the returning player again is a fresh grant.
+	picks := []PlayerPick{{UserID: "tam-1", CanChange: true}, {UserID: "jo-1"}}
+	if _, err := r.svc.Patch(ctx, cmp, tr.ID, dm, TrackerPatch{Players: &picks}); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := r.svc.Page(ctx, cmp, pageA, tam); err != nil || len(p.Trackers) != 1 {
+		t.Fatalf("a re-chosen player should see it: %+v err=%v", p.Trackers, err)
+	}
+	for _, p := range r.repo.trackers[tr.ID].Players {
+		if p.UserID == "jo-1" && !p.GrantedAt.Equal(granted) {
+			t.Errorf("an unchanged pick must keep its grant time, got %v", p.GrantedAt)
+		}
+	}
+}
+
+// A rename that clashes is refused before the player list is touched.
+func TestPatchRefusalLeavesPlayersAlone(t *testing.T) {
+	ctx := context.Background()
+	r, tr := playersRig(t)
+	k := r.addKind(t, Kind{ID: "k-dread", Name: "Dread", Shape: ShapeCount, Min: ip(0), Max: ip(5), Visibility: SeeDirectors})
+	r.addTracker(t, Tracker{ID: "t-dread", KindID: k.ID, Name: "Dread", Visibility: SeeDirectors})
+	name := "dread"
+	picks := []PlayerPick{{UserID: "ilse-1"}}
+	_, err := r.svc.Patch(ctx, cmp, tr.ID, dm, TrackerPatch{Name: &name, Players: &picks})
+	if code(err) != http.StatusUnprocessableEntity {
+		t.Fatalf("clashing rename = %v want 422", err)
+	}
+	got := r.repo.trackers[tr.ID]
+	if len(got.Players) != 2 || got.Players[0].UserID != "tam-1" || got.Name != "Hunger" {
+		t.Fatalf("a refused patch changed the tracker: %+v", got)
+	}
+}

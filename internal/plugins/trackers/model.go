@@ -111,6 +111,9 @@ type Player struct {
 	// CanChange lets the player log add and set lines. It never lets them
 	// strike a line, rename, hide, remove or reshape the tracker.
 	CanChange bool
+	// GrantedAt is when the Director chose the player. A grant older than the
+	// member's joined_at belongs to an earlier stay and counts for nothing.
+	GrantedAt time.Time
 }
 
 // Entry is one log line.

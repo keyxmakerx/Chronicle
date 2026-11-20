@@ -1,6 +1,9 @@
 package trackers
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // EntityDirectory is owned by this plugin and implemented in internal/app
 // over the entities service, so trackers never imports another plugin.
@@ -47,4 +50,7 @@ type Member struct {
 	// Director is the owner or a co-Director: someone who already sees every
 	// tracker and so cannot be chosen as a player.
 	Director bool
+	// JoinedAt is when the member joined; a player grant made before it is
+	// from an earlier stay and no longer counts.
+	JoinedAt time.Time
 }

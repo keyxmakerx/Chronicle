@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -92,6 +93,9 @@ type service struct {
 // unavailable; log lines are then undated. members may be nil, in which case
 // no player can be chosen and no log line is named.
 func NewService(repo Repository, entities EntityDirectory, members MemberDirectory, clock GameClock) Service {
+	if members != nil {
+		repo = &grantFilter{Repository: repo, members: members}
+	}
 	return &service{repo: repo, entities: entities, members: members, clock: clock, newID: func() string { return uuid.NewString() }}
 }
 
@@ -464,7 +468,7 @@ func (s *service) Patch(ctx context.Context, campaignID, trackerID string, v Vie
 	case in.Players != nil && t.Visibility != SeePlayers:
 		return nil, errInvalid("choose players as the visibility before naming them")
 	case t.Visibility == SeePlayers && in.Players != nil:
-		picks, err := s.checkPlayers(ctx, campaignID, *in.Players)
+		picks, err := s.checkPlayers(ctx, campaignID, *in.Players, t.Players)
 		if err != nil {
 			return nil, err
 		}
@@ -474,6 +478,19 @@ func (s *service) Patch(ctx context.Context, campaignID, trackerID string, v Vie
 		t.Players, setPlayers = nil, true
 	case t.Visibility != SeePlayers:
 		t.Players = nil
+	}
+	// Every refusal comes before the first write, so a rejected rename never
+	// leaves a replaced player list behind.
+	if in.Name != nil {
+		siblings, err := s.repo.ListTrackers(ctx, campaignID, t.EntityID)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
+		for _, o := range siblings {
+			if o.ID != t.ID && strings.EqualFold(o.Name, t.Name) {
+				return nil, errInvalid("this page already has a tracker called " + t.Name)
+			}
+		}
 	}
 	// Players go in before the visibility opens to them, and out after it
 	// closes, so no step leaves a tracker visible to the wrong people.
@@ -499,7 +516,7 @@ func (s *service) Patch(ctx context.Context, campaignID, trackerID string, v Vie
 // checkPlayers turns a Director's picks into the stored list. Each must be a
 // current member who is not a Director: a Director already sees everything,
 // and an unknown id must not be stored as if it were a person.
-func (s *service) checkPlayers(ctx context.Context, campaignID string, picks []PlayerPick) ([]Player, error) {
+func (s *service) checkPlayers(ctx context.Context, campaignID string, picks []PlayerPick, current []Player) ([]Player, error) {
 	if len(picks) > MaxPlayersChosen {
 		return nil, errInvalid("too many players chosen")
 	}
@@ -510,6 +527,13 @@ func (s *service) checkPlayers(ctx context.Context, campaignID string, picks []P
 	if err != nil {
 		return nil, err
 	}
+	// A pick already in force keeps its grant time; a new or lapsed one is
+	// granted now, so choosing a returning player again starts a fresh grant.
+	since := make(map[string]time.Time, len(current))
+	for _, c := range current {
+		since[c.UserID] = c.GrantedAt
+	}
+	now := time.Now().UTC()
 	out := make([]Player, 0, len(picks))
 	at := map[string]int{}
 	for _, p := range picks {
@@ -525,7 +549,11 @@ func (s *service) checkPlayers(ctx context.Context, campaignID string, picks []P
 			continue
 		}
 		at[p.UserID] = len(out)
-		out = append(out, Player{UserID: p.UserID, CanChange: p.CanChange})
+		granted, kept := since[p.UserID]
+		if !kept {
+			granted = now
+		}
+		out = append(out, Player{UserID: p.UserID, CanChange: p.CanChange, GrantedAt: granted})
 	}
 	return out, nil
 }
@@ -956,4 +984,79 @@ func (s *service) DeleteKind(ctx context.Context, campaignID, kindID string, v V
 		return errInvalid("this kind is still on pages; remove those trackers first")
 	}
 	return nil
+}
+
+// grantFilter drops a chosen player's grant once it is older than the
+// member's joined_at, or the member is gone. Doing it where trackers are read
+// means no caller can decide who sees a tracker from a grant left by an
+// earlier stay: a player removed and invited back is chosen again, not
+// silently restored.
+type grantFilter struct {
+	Repository
+	members MemberDirectory
+}
+
+func (g *grantFilter) live(ctx context.Context, campaignID string, ts []Tracker) error {
+	need := false
+	for _, t := range ts {
+		need = need || (t.Visibility == SeePlayers && len(t.Players) > 0)
+	}
+	if !need {
+		return nil
+	}
+	list, err := g.members.Members(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	joined := make(map[string]time.Time, len(list))
+	for _, m := range list {
+		joined[m.UserID] = m.JoinedAt
+	}
+	for i := range ts {
+		kept := ts[i].Players[:0:0]
+		for _, p := range ts[i].Players {
+			if j, ok := joined[p.UserID]; ok && !p.GrantedAt.Before(j) {
+				kept = append(kept, p)
+			}
+		}
+		ts[i].Players = kept
+	}
+	return nil
+}
+
+func (g *grantFilter) ListTrackers(ctx context.Context, campaignID, entityID string) ([]Tracker, error) {
+	ts, err := g.Repository.ListTrackers(ctx, campaignID, entityID)
+	if err != nil {
+		return nil, err
+	}
+	return ts, g.live(ctx, campaignID, ts)
+}
+
+func (g *grantFilter) ListAllTrackers(ctx context.Context, campaignID string) ([]Tracker, error) {
+	ts, err := g.Repository.ListAllTrackers(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return ts, g.live(ctx, campaignID, ts)
+}
+
+func (g *grantFilter) one(ctx context.Context, campaignID string, t Tracker, found bool, err error) (Tracker, bool, error) {
+	if err != nil || !found {
+		return t, found, err
+	}
+	ts := []Tracker{t}
+	if err := g.live(ctx, campaignID, ts); err != nil {
+		return Tracker{}, false, err
+	}
+	return ts[0], true, nil
+}
+
+func (g *grantFilter) GetTracker(ctx context.Context, campaignID, id string) (Tracker, bool, error) {
+	t, found, err := g.Repository.GetTracker(ctx, campaignID, id)
+	return g.one(ctx, campaignID, t, found, err)
+}
+
+func (g *grantFilter) TrackerForKind(ctx context.Context, campaignID, entityID, kindID string) (Tracker, bool, error) {
+	t, found, err := g.Repository.TrackerForKind(ctx, campaignID, entityID, kindID)
+	return g.one(ctx, campaignID, t, found, err)
 }

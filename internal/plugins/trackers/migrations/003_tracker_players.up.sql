@@ -10,12 +10,18 @@
 -- merely leaves the campaign stops matching because campaign access fails
 -- before any tracker is read.
 --
+-- created_at is when the Director granted the sight. A grant counts only while
+-- created_at is not before the member's campaign_members.joined_at, so a player
+-- who is removed and invited back does not silently regain sight or the right
+-- to change; the Director chooses them again. The service enforces it on read.
+--
 -- Idempotent: applies on a fresh database and a second time on top of itself.
 CREATE TABLE IF NOT EXISTS tracker_players (
     tracker_id  CHAR(36)   NOT NULL,
     campaign_id CHAR(36)   NOT NULL,
     user_id     CHAR(36)   NOT NULL,
     can_change  TINYINT(1) NOT NULL DEFAULT 0,
+    created_at  DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (tracker_id, user_id),
     KEY idx_tracker_players_campaign (campaign_id),
     CONSTRAINT fk_tracker_players_tracker  FOREIGN KEY (tracker_id)  REFERENCES trackers(id)  ON DELETE CASCADE,

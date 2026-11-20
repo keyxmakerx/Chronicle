@@ -319,7 +319,7 @@ func (r *sqlRepository) attachPlayers(ctx context.Context, campaignID string, ts
 	if len(idx) == 0 {
 		return nil
 	}
-	q := `SELECT tracker_id, user_id, can_change FROM tracker_players WHERE campaign_id = ?`
+	q := `SELECT tracker_id, user_id, can_change, created_at FROM tracker_players WHERE campaign_id = ?`
 	args := []any{campaignID}
 	if !all {
 		q += ` AND tracker_id IN (?` + strings.Repeat(",?", len(idx)-1) + `)`
@@ -336,7 +336,7 @@ func (r *sqlRepository) attachPlayers(ctx context.Context, campaignID string, ts
 		var tid string
 		var p Player
 		var can bool
-		if err := rows.Scan(&tid, &p.UserID, &can); err != nil {
+		if err := rows.Scan(&tid, &p.UserID, &can, &p.GrantedAt); err != nil {
 			return fmt.Errorf("scan tracker player: %w", err)
 		}
 		p.CanChange = can
@@ -398,6 +398,16 @@ func (r *sqlRepository) UpdateTracker(ctx context.Context, t Tracker) error {
 	return nil
 }
 
+// grantedAt is the stored grant time: the caller's, so an unchanged pick keeps
+// its original moment, or now for a new one. UTC like joined_at, so the two
+// compare without a time-zone skew.
+func grantedAt(p Player) time.Time {
+	if p.GrantedAt.IsZero() {
+		return time.Now().UTC()
+	}
+	return p.GrantedAt.UTC()
+}
+
 func (r *sqlRepository) SetPlayers(ctx context.Context, campaignID, trackerID string, players []Player) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -410,8 +420,8 @@ func (r *sqlRepository) SetPlayers(ctx context.Context, campaignID, trackerID st
 	}
 	for _, p := range players {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO tracker_players (tracker_id, campaign_id, user_id, can_change) VALUES (?, ?, ?, ?)`,
-			trackerID, campaignID, p.UserID, p.CanChange); err != nil {
+			`INSERT INTO tracker_players (tracker_id, campaign_id, user_id, can_change, created_at) VALUES (?, ?, ?, ?, ?)`,
+			trackerID, campaignID, p.UserID, p.CanChange, grantedAt(p)); err != nil {
 			return fmt.Errorf("insert tracker player: %w", err)
 		}
 	}
