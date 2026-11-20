@@ -33,7 +33,7 @@
 .hc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-items: center; width: 100%; text-align: left; border: 0;
   border-bottom: 1px dashed var(--paper-edge); background: none; padding: 9px 6px; color: inherit; }
 .hc-row:hover { background: var(--hc-lit); }
-.hc-row b { display: flex; gap: 8px; align-items: center; min-width: 0; font: 700 16px var(--paper-font); color: var(--paper-ink); }
+.hc-row b { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; font: 700 16px var(--paper-font); color: var(--paper-ink); }
 .hc-row small { grid-column: 1 / -1; font: 500 12.5px/1.35 var(--paper-font); color: var(--paper-ink-soft);
   display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .hc-row__go { font: 600 11px var(--paper-ui-font); color: var(--hc-mute); transition: transform var(--dur-micro) var(--ease-out); }
