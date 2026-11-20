@@ -63,7 +63,7 @@ function staticFile(path) {
   return join(root, path);
 }
 
-async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROES, canCreate = false, failSave = false, noSteps = false, plan = PLAN } = {}) {
+async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROES, canCreate = false, failSave = false, noSteps = false, plan = PLAN, putBody = '{"status":"ok"}', postBody = '{"id":"e9","url":"/campaigns/c1/entities/e9"}' } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport });
@@ -77,9 +77,9 @@ async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROE
     if (u.pathname === '/campaigns/c1/characters/new/plan') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(noSteps ? { ...plan, steps: [] } : plan) });
     if (u.pathname.startsWith('/campaigns/c1/')) {
       sent.push({ method: req.method(), path: u.pathname, csrf: req.headers()['x-csrf-token'], body: JSON.parse(req.postData() || 'null') });
-      if (req.method() === 'POST') return route.fulfill({ status: 201, contentType: 'application/json', body: '{"id":"e9","url":"/campaigns/c1/entities/e9"}' });
+      if (req.method() === 'POST') return route.fulfill({ status: 201, contentType: 'application/json', body: postBody });
       if (failSave) return route.fulfill({ status: 400, contentType: 'application/json', body: '{"message":"\\"Fury\\" is not on the class list"}' });
-      return route.fulfill({ contentType: 'application/json', body: '{"status":"ok"}' });
+      return route.fulfill({ contentType: 'application/json', body: putBody });
     }
     if (u.pathname.startsWith('/static/')) {
       const file = staticFile(u.pathname);
@@ -286,4 +286,80 @@ test('with the dice engine on the page, its faces pick the entry', { skip }, asy
   assert.equal(await p.locator('.hb-pt').innerText(), 'Choose Tess’s class');
   await p.click('.hb-panel [data-rollone]');
   await p.waitForFunction(() => document.querySelector('[data-blank="class"]').textContent !== 'class');
+});
+
+// A Director's rules on the class and ancestry lists: Fury is Ask first, Null
+// is Not here, and ancestry is a required list left with one entry.
+const RULED = { ...PLAN, steps: [
+  { fieldKey: 'ancestry', label: 'Ancestry', rules: { limited: true, required: true, prefilled: 'Human' }, choices: [PLAN.steps[0].choices[0]] },
+  { fieldKey: 'class', label: 'Class', rules: { limited: true, notHereCount: 1, notHere: [{ name: 'Null', reason: 'No psionics here' }] }, choices: [
+    { slug: 'fury', name: 'Fury', summary: 'Rage.', source: 'Draw Steel', state: 'ask_first', properties: {} },
+    { slug: 'tactician', name: 'Tactician', summary: 'Orders.', source: 'Draw Steel', properties: {} },
+    { slug: 'censor', name: 'Censor', summary: 'Fear.', source: 'Draw Steel', properties: {} },
+  ] },
+] };
+
+test('an Ask first entry has a mark, is skipped by the dice, and is asked for, not saved', { skip }, async (t) => {
+  const { p, sent } = await open(t, { plan: RULED, heroes: [{ id: 'e1', name: 'Tess', values: { ancestry: 'Human' }, hidden: [] }],
+    putBody: '{"status":"ok","requests":[{"id":3,"fieldKey":"class","entryName":"Fury","status":"waiting"}]}' });
+  await p.click('[data-blank="class"]');
+  const panel = p.locator('.hb-panel');
+  assert.deepEqual(await panel.locator('.hb-rg').allInnerTexts(), ['', '1–5', '6–10'], 'Ask first takes no number');
+  assert.equal(await panel.locator('.hb-ask').innerText(), 'Ask first');
+  await panel.locator('.hb-opt', { hasText: 'Fury' }).click();
+  assert.equal(await panel.locator('[data-choose]').innerText(), 'Ask for Fury');
+  await panel.locator('[data-choose]').click();
+  await p.waitForSelector('.hb-blank.is-wait');
+  assert.match(await sentence(p), /class is Fury waiting for your Director/);
+  assert.match(await p.locator('[data-hero-card="e1"] .hb-progress').innerText(), /1 waiting for your Director/);
+  assert.deepEqual(sent.map((x) => x.body), [{ fields_patch: { class: 'Fury' } }]);
+  // Rolling everything left never lands on it: nothing is left to roll.
+  assert.equal(await p.locator('[data-rollall]').count(), 0);
+});
+
+test('what is not here folds open at the list foot with the Director\'s reason', { skip }, async (t) => {
+  const { p } = await open(t, { plan: RULED });
+  await p.click('[data-blank="class"]');
+  const foot = p.locator('.hb-nh [data-act="nothere"]');
+  assert.equal(await foot.innerText(), '1 not here');
+  assert.equal(await p.locator('.hb-nh-list').count(), 0);
+  await foot.click();
+  assert.match(await p.locator('.hb-nh-list').innerText(), /Null isn’t here\. Your Director says: “No psionics here”/);
+});
+
+test('a required step with one entry left is filled in and locked on a new hero', { skip }, async (t) => {
+  const { p, sent } = await open(t, { plan: RULED, heroes: [], canCreate: true });
+  await p.click('[data-create-hero]');
+  await p.fill('[data-hb-name]', 'Rook');
+  const lock = p.locator('[data-hero-card="new"] .hb-blank.is-locked');
+  assert.equal(await lock.innerText(), 'Human');
+  assert.equal(await p.locator('[data-hero-card="new"] [data-blank="ancestry"]').count(), 0, 'no button to change it');
+  assert.match(await p.locator('[data-hero-card="new"] .hb-lock').innerText(), /everyone starts with this/);
+  const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/campaigns/c1/entities/e9');
+  await p.click('[data-make]');
+  await nav;
+  assert.deepEqual(sent[0].body.picks, { ancestry: { name: 'Human' } });
+});
+
+test('a pick the server could not send to the Director is said, not lost', { skip }, async (t) => {
+  const { p } = await open(t, { plan: RULED, heroes: [], canCreate: true,
+    postBody: '{"id":"e9","url":"/campaigns/c1/entities/e9","requestFailed":["class"]}' });
+  await p.click('[data-create-hero]');
+  await p.fill('[data-hb-name]', 'Rook');
+  await p.click('[data-hero-card="new"] [data-blank="class"]');
+  await p.locator('.hb-opt', { hasText: 'Fury' }).click();
+  await p.click('[data-choose]');
+  await p.click('[data-make]');
+  await p.waitForSelector('[data-hb-error]:not([hidden])');
+  assert.match(await p.locator('[data-hb-error]').innerText(), /pick for class could not be sent to your Director/);
+  assert.equal(await p.locator('[data-hb-error] a').getAttribute('href'), '/campaigns/c1/entities/e9');
+});
+
+test('the Director\'s note asking for another pick is shown, and a request waiting is shown beside a held pick', { skip }, async (t) => {
+  const plan = { ...RULED, steps: [RULED.steps[0], { ...RULED.steps[1], rules: { limited: true, suggested: { id: 4, entryName: 'Fury', message: 'Try a Censor' } } }] };
+  const { p } = await open(t, { plan, heroes: [{ id: 'e1', name: 'Tess', values: { ancestry: 'Human' }, hidden: [] }] });
+  assert.match(await p.locator('[data-hero-card="e1"] .hb-suggest').innerText(), /asked for another class instead of Fury: “Try a Censor”/);
+  const held = { ...RULED, steps: [RULED.steps[0], { ...RULED.steps[1], rules: { limited: true, waiting: { id: 5, entryName: 'Fury', entityId: 'e1' } } }] };
+  const b = await open(t, { plan: held, heroes: [{ id: 'e1', name: 'Tess', values: { ancestry: 'Human', class: 'Censor' }, hidden: [] }] });
+  assert.match(await b.p.locator('[data-hero-card="e1"] .hb-sentence').innerText(), /class is Censor asking for Fury, waiting for your Director/);
 });

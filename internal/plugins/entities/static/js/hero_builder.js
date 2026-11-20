@@ -254,6 +254,13 @@
       return '<span class="hb-blank is-locked" aria-label="' + esc(st.label + ': ' + v + ', everyone starts with this') + '">' + esc(v) + '</span>' +
         ' <span class="hb-lock">everyone starts with this</span>';
     }
+    // A hero that already holds a pick keeps showing it; the request that
+    // would replace it waits beside it.
+    if (wait && v && !h.isNew) {
+      return '<button type="button" class="hb-blank' + (on ? ' is-cur' : '') + (c && c.source === 'campaign' ? ' is-own' : '') + '" data-blank="' + esc(st.fieldKey) + '" data-hero="' + esc(h.id) + '"' +
+        ' aria-label="' + esc(st.label + ': ' + v + '. Asking your Director for ' + wait + '. Show every choice') + '" aria-expanded="' + !!on + '">' + esc(v) + '</button>' +
+        ' <span class="hb-waiting">asking for ' + esc(wait) + ', waiting for your Director</span>';
+    }
     if (wait) {
       return '<button type="button" class="hb-blank is-wait' + (on ? ' is-cur' : '') + '" data-blank="' + esc(st.fieldKey) + '" data-hero="' + esc(h.id) + '"' +
         ' aria-label="' + esc(st.label + ': ' + wait + ', waiting for your Director. Show every choice') + '" aria-expanded="' + !!on + '">' +
