@@ -40,7 +40,7 @@ const PLAN = {
 const HEROES = [{ id: 'e1', name: 'Tess', values: { ancestry: 'Human' }, hidden: ['secret'] }];
 
 const attr = (v) => JSON.stringify(v).replace(/&/g, '&amp;').replace(/'/g, '&#39;');
-const page = (heroes, canCreate) => `<!doctype html><html><head><meta charset="utf-8">
+const page = (heroes, canCreate) => `<!doctype html><html data-gm-term="Director"><head><meta charset="utf-8">
 <style>:root{--color-accent:#4f46e5;--color-accent-rgb:79 70 229;--color-ok-rgb:22 163 74;--color-warn-rgb:217 119 6;--color-bad-rgb:220 38 38;
 --color-bg-primary:#f9fafb;--color-bg-secondary:#fff;--color-bg-tertiary:#f3f4f6;--color-border:#e5e7eb;--color-text-primary:#111827;--color-text-body:#374151;--color-text-secondary:#6b7280;
 --elev-resting:0 1px 2px rgb(0 0 0/.05);--elev-hover:0 6px 16px -4px rgb(0 0 0/.12);--elev-dragged:0 16px 36px -8px rgb(0 0 0/.22);

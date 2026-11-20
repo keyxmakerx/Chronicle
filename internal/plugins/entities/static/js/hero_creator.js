@@ -36,6 +36,9 @@
 
   function esc(v) { return Chronicle.escapeHtml(v); }
 
+  // The campaign's own word for its game master, already HTML-safe.
+  function gm() { return Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM'; }
+
   // Package prose: {@category term|shown} markers keep their shown text and
   // **bold** becomes bold. Escaped first, so nothing in it can become markup.
   function prose(s) {
@@ -176,7 +179,7 @@
   };
   // What a pick still needs from the Director or the rules, as a short phrase.
   Creator.prototype.pickNote = function (st) {
-    if (this.waitName(st)) return 'waiting for your Director';
+    if (this.waitName(st)) return 'waiting for your ' + gm();
     return this.locked(st) ? window.ChronicleHeroRules.LOCK : '';
   };
   Creator.prototype.notesHTML = function (st) {
@@ -228,7 +231,7 @@
         (picked ? ' <span class="hc-row__pick" aria-label="chosen">✓</span>' : '') +
         '</b><span class="hc-row__go" aria-hidden="true">Read ›</span><small>' + esc(c.summary) + '</small></button></li>';
     }).join('');
-    var make = st.canMake ? '<p class="hc-make">Your Director lets you make your own ' + esc(lower(st.label)) + '. ' +
+    var make = st.canMake ? '<p class="hc-make">Your ' + gm() + ' lets you make your own ' + esc(lower(st.label)) + '. ' +
       '<a class="hc-link" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/characters/entries?field=' + encodeURIComponent(st.fieldKey) + '&back=new">Make yours ›</a> ' +
       'Your picks here are kept while you do.</p>' : '';
     var none = !rows && st.rules ? '<p class="hc-empty">Nothing is on this list for you right now.</p>' : '';
@@ -268,7 +271,7 @@
     var whose = this.forSelf ? 'The hero will be yours, on a new ' + esc(this.typeName) + ' page.'
       : 'The hero goes on a new ' + esc(this.typeName) + ' page, not yet claimed by a player.';
     var none = this.plan.steps.length ? '' : '<p class="hc-empty">' + (this.plan.systemName ? esc(this.plan.systemName) + ' doesn’t list' : 'This campaign’s game system doesn’t list') +
-      ' choices for heroes yet, so the creator only asks for a name. Directors can add their own entries.</p>';
+      ' choices for heroes yet, so the creator only asks for a name. ' + gm() + 's can add their own entries.</p>';
     return '<div class="hc-head"><p class="paper-kind">Step ' + this.stepCount() + ' of ' + this.stepCount() + '</p>' +
       '<h1 tabindex="-1">Name your hero</h1></div>' + none +
       '<label class="hc-field"><span class="hc-k">Name</span><input type="text" maxlength="200" autocomplete="off" data-name value="' + esc(this.name) + '" required></label>' +
@@ -300,7 +303,7 @@
     return '<div class="hc-kind"><span class="paper-kind">' + esc(st.label) + ' · ' + (c.source === 'campaign' ? 'this campaign' : esc(this.plan.systemName || 'game system')) + '</span>' +
       (c.source === 'campaign' ? '<span class="hc-seal">Campaign</span>' : '') + '</div>' +
       '<h2 class="hc-name" tabindex="-1">' + esc(c.name) + '</h2>' + (c.summary ? '<p class="hc-lede">' + esc(c.summary) + '</p>' : '') +
-      (c.state === 'ask_first' ? '<p class="hc-note">Ask first: your Director allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>' : '') +
+      (c.state === 'ask_first' ? '<p class="hc-note">Ask first: your ' + gm() + ' allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>' : '') +
       (facts ? '<div class="hc-facts">' + facts + '</div>' : '') + body;
   };
 
@@ -479,8 +482,9 @@
       // way on, instead of moving past it.
       var failed = res.body.requestFailed || [];
       if (failed.length) {
-        err.textContent = 'Your hero is made, but a pick for ' + failed.map(function (k) { var s2 = self.stepByKey(k); return s2 ? lower(s2.label) : k; }).join(', ') +
-          ' could not be sent to your Director. Open the hero and pick it again: ' + res.body.url;
+        err.innerHTML = esc('Your hero is made, but a pick for ' + failed.map(function (k) { var s2 = self.stepByKey(k); return s2 ? lower(s2.label) : k; }).join(', ') +
+          ' could not be sent to your ') + gm() + '. Open the hero and pick it again.' +
+          ' <a class="hc-link" href="' + esc(res.body.url) + '">Open the hero</a>';
         err.hidden = false;
         return;
       }

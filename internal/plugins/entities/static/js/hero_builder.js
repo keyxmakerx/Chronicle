@@ -26,6 +26,9 @@
 
   function esc(v) { return Chronicle.escapeHtml(v); }
 
+  // The campaign's own word for its game master, already HTML-safe.
+  function gm() { return Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM'; }
+
   // Package prose: {@category term|shown} markers keep their shown text and
   // **bold** becomes bold. Escaped first, so nothing in it can become markup.
   function prose(s) {
@@ -258,13 +261,13 @@
     // would replace it waits beside it.
     if (wait && v && !h.isNew) {
       return '<button type="button" class="hb-blank' + (on ? ' is-cur' : '') + (c && c.source === 'campaign' ? ' is-own' : '') + '" data-blank="' + esc(st.fieldKey) + '" data-hero="' + esc(h.id) + '"' +
-        ' aria-label="' + esc(st.label + ': ' + v + '. Asking your Director for ' + wait + '. Show every choice') + '" aria-expanded="' + !!on + '">' + esc(v) + '</button>' +
-        ' <span class="hb-waiting">asking for ' + esc(wait) + ', waiting for your Director</span>';
+        ' aria-label="' + esc(st.label + ': ' + v + '. Asking your ' + gm() + ' for ' + wait + '. Show every choice') + '" aria-expanded="' + !!on + '">' + esc(v) + '</button>' +
+        ' <span class="hb-waiting">asking for ' + esc(wait) + ', waiting for your ' + gm() + '</span>';
     }
     if (wait) {
       return '<button type="button" class="hb-blank is-wait' + (on ? ' is-cur' : '') + '" data-blank="' + esc(st.fieldKey) + '" data-hero="' + esc(h.id) + '"' +
-        ' aria-label="' + esc(st.label + ': ' + wait + ', waiting for your Director. Show every choice') + '" aria-expanded="' + !!on + '">' +
-        esc(wait) + '</button> <span class="hb-waiting">waiting for your Director</span>';
+        ' aria-label="' + esc(st.label + ': ' + wait + ', waiting for your ' + gm() + '. Show every choice') + '" aria-expanded="' + !!on + '">' +
+        esc(wait) + '</button> <span class="hb-waiting">waiting for your ' + gm() + '</span>';
     }
     return '<button type="button" class="hb-blank' + (v ? '' : ' is-empty') + (on ? ' is-cur' : '') +
       (c && c.source === 'campaign' ? ' is-own' : '') + '" data-blank="' + esc(st.fieldKey) + '" data-hero="' + esc(h.id) + '"' +
@@ -285,7 +288,7 @@
   Builder.prototype.progressHtml = function (h) {
     var all = this.stepsFor(h).length, left = this.left(h).length, w = this.waiting(h).length;
     if (!all) return '';
-    var said = left ? left + ' of ' + all + ' left' + (w ? ' · ' + w + ' waiting' : '') : (w ? w + ' waiting for your Director' : 'Every choice made');
+    var said = left ? left + ' of ' + all + ' left' + (w ? ' · ' + w + ' waiting' : '') : (w ? w + ' waiting for your ' + gm() : 'Every choice made');
     return '<div class="hb-below"><span class="hb-progress">' + said +
       '<span class="hb-bar" aria-hidden="true"><i style="width:' + Math.round((all - left) / all * 100) + '%"></i></span></span>' +
       (left ? '<span class="hb-hint">Pick a blank to read every choice first.</span>' : '') + this.suggestedHtml(h) + '</div>';
@@ -390,7 +393,7 @@
       body = c.source === 'campaign' ? '<div class="hb-text">' + c.description + '</div>'
         : (c.description.trim() !== (c.summary || '').trim() ? '<div class="hb-text">' + prose(c.description) + '</div>' : '');
     }
-    return '<h4 class="hb-dn">' + esc(c.name) + '</h4>' + (c.state === 'ask_first' ? '<p class="hb-note">Ask first: your Director allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>' : '') +
+    return '<h4 class="hb-dn">' + esc(c.name) + '</h4>' + (c.state === 'ask_first' ? '<p class="hb-note">Ask first: your ' + gm() + ' allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>' : '') +
       (c.summary ? '<p class="hb-lede">' + esc(c.summary) + '</p>' : '') +
       (facts.length ? '<dl class="hb-facts">' + facts.map(function (k) {
         return '<div class="hb-f"><dt>' + esc(words(k)) + '</dt><dd>' + esc(props[k]) + '</dd></div>';
@@ -616,13 +619,13 @@
     return req.then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (b) {
         if (!r.ok) throw new Error(b.message || b.error || 'That choice could not be sent. Try again.');
-        if (b.requestFailed && b.requestFailed.indexOf(st.fieldKey) >= 0) throw new Error('Your pick of ' + c.name + ' could not be sent to your Director. Try again.');
+        if (b.requestFailed && b.requestFailed.indexOf(st.fieldKey) >= 0) throw new Error('Your pick of ' + c.name + ' could not be sent to your ' + gm() + '. Try again.');
         var q = (b.requests || []).filter(function (x) { return x.fieldKey === st.fieldKey; })[0];
         if (q) {
           st.rules = st.rules || {};
           st.rules.waiting = { id: q.id, entryName: q.entryName || c.name, entityId: h.id };
           delete st.rules.suggested;
-          self.toast(c.name + ' is waiting for your Director. Carry on with the rest of your hero.');
+          self.toast(c.name + ' is waiting for your ' + gm() + '. Carry on with the rest of your hero.');
         } else {
           h.values[st.fieldKey] = c.name;
           self.tick(h, st.fieldKey);
@@ -747,7 +750,7 @@
       var failed = res.body.requestFailed || [];
       if (failed.length) {
         var labels = failed.map(function (k) { var st = self.stepByKey(k); return st ? lower(st.label) : k; }).join(', ');
-        err.innerHTML = esc('Your hero is made, but your pick for ' + labels + ' could not be sent to your Director. Open the hero and pick it again.') +
+        err.innerHTML = esc('Your hero is made, but your pick for ' + labels + ' could not be sent to your ' + gm() + '. Open the hero and pick it again.') +
           ' <a class="hb-link" href="' + esc(res.body.url) + '">Open the hero</a>';
         err.hidden = false;
         btn.disabled = true;

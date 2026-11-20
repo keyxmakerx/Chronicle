@@ -32,9 +32,7 @@ templ EntityListWidget(cc *campaigns.CampaignContext, et *EntityType, pages []En
 					<li class="cb-row rounded-lg hover:bg-surface-alt group">
 						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, pages[i].ID)) } class="cb-link flex items-center gap-2 min-w-0 px-2 py-1.5">
 							<span class="text-sm text-fg truncate group-hover:text-accent transition-colors">{ pages[i].Name }</span>
-							if pages[i].IsPrivate {
-								<span class="text-xs text-fg-muted shrink-0">GM only</span>
-							}
+							@listLock(cc, &pages[i])
 						</a>
 					</li>
 				}

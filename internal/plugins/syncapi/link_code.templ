@@ -14,20 +14,16 @@ import "fmt"
 // code itself. The whole fragment swaps itself after a press.
 templ FoundryLinkLine(v LinkCodeView) {
 	if v.LinkedAs != "" {
-		<div class="mb-4 rounded-md border border-edge bg-surface-alt px-4 py-2 flex items-center gap-3 text-sm text-fg" data-foundry-link="linked">
-			<i class="fa-solid fa-link text-accent" aria-hidden="true"></i>
-			<p>Linked to Foundry as <span class="font-medium">{ v.LinkedAs }</span>.</p>
-		</div>
+		<p class="mb-4 text-sm text-fg-muted" data-foundry-link="linked">Linked to Foundry as <span class="font-medium text-fg">{ v.LinkedAs }</span>.</p>
 	} else {
 		<form
-			class="mb-4 rounded-md border border-edge bg-surface-alt px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1"
+			class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1"
 			data-foundry-link={ linkState(v) }
 			hx-post={ fmt.Sprintf("/campaigns/%s/foundry/link", v.CampaignID) }
 			hx-swap="outerHTML"
 			hx-disabled-elt="find button"
 		>
 			<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
-			<i class="fa-solid fa-link text-accent" aria-hidden="true"></i>
 			if v.Code == "" {
 				<div class="flex-1 min-w-0">
 					<p class="text-sm text-fg">Play this hero in Foundry</p>
@@ -40,9 +36,9 @@ templ FoundryLinkLine(v LinkCodeView) {
 						Link to Foundry
 						<span class="ml-2 font-mono text-base font-semibold tracking-wider" data-link-code>{ v.Code }</span>
 					</p>
-					<p class="text-xs text-fg-muted">Good for 10 minutes. In Foundry, type it in the Link to Chronicle window: it opens when you join the world, or from the link button in Chronicle's tools on the left.</p>
+					<p class="text-xs text-fg-muted">Good for 10 minutes. In Foundry, type it in the Link to Chronicle window: it opens when you join the world, or from the link button in Chronicle's tools on the left. A new code stops the one shown working.</p>
 				</div>
-				<button type="submit" class="btn-ghost btn-sm" title="Make a new code; the one shown stops working">New code</button>
+				<button type="submit" class="btn-ghost btn-sm">New code</button>
 			}
 		</form>
 	}

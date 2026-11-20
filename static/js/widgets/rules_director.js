@@ -214,8 +214,10 @@
       return;
     }
     m.removeAttribute('data-open');
-    var calm = document.documentElement.getAttribute('data-motion') === 'off';
-    setTimeout(function () { if (btn.getAttribute('aria-expanded') !== 'true') m.hidden = true; }, calm ? 0 : 120);
+    // Hide once the closing move (--dur-everyday-out) has played; Off has none.
+    var off = document.documentElement.getAttribute('data-motion') === 'off';
+    var out = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dur-everyday-out')) || 80;
+    setTimeout(function () { if (btn.getAttribute('aria-expanded') !== 'true') m.hidden = true; }, off ? 0 : out);
   };
 
   // fold takes a line away: it fades and folds closed (the standard's

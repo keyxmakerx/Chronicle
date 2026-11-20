@@ -20,7 +20,7 @@ templ BeforePage(cc *campaigns.CampaignContext, v *BeforeView) {
 
 // BeforePageContent is the gathered page for an HTMX swap.
 templ BeforePageContent(v *BeforeView) {
-	<div id="module-content">
+	<div id="module-content" class={ layouts.AppFrameClass } data-app-frame>
 		@rulesStyles()
 		<article class="rp rp-before" data-widget="rules-page" aria-labelledby="rp-before-title">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
@@ -36,7 +36,7 @@ templ BeforePageContent(v *BeforeView) {
 						<p class="rp-line">{ "Nothing of " + v.CampaignName + "’s own yet. Open any entry of " + v.SystemName + " to rewrite it for " + v.CampaignName + " or leave it out, or write a new entry of your own." }</p>
 						<p class="rp-dm" data-dm-only>
 							@newEntry(v)
-							<span class="cb-dm rp-dm__tag">Directors only</span>
+							<span class="cb-dm rp-dm__tag">{ layouts.GMTerm(ctx) + "s only" }</span>
 						</p>
 					} else {
 						<p class="rp-line">{ v.CampaignName + " plays " + v.SystemName + " as printed: nothing is added, changed or left out." }</p>
@@ -46,7 +46,7 @@ templ BeforePageContent(v *BeforeView) {
 					if v.IsDirector && !hasRun(v, RunOnly) {
 						<p class="rp-dm" data-dm-only>
 							@newEntry(v)
-							<span class="cb-dm rp-dm__tag">Directors only</span>
+							<span class="cb-dm rp-dm__tag">{ layouts.GMTerm(ctx) + "s only" }</span>
 						</p>
 					}
 					for _, run := range v.Runs {
@@ -95,7 +95,7 @@ templ BeforePageContent(v *BeforeView) {
 						if v.Waiting > 0 {
 							<span>{ itoa(v.Waiting) + " waiting for you" }</span>
 						}
-						<span class="cb-dm rp-dm__tag">Directors only</span>
+						<span class="cb-dm rp-dm__tag">{ layouts.GMTerm(ctx) + "s only" }</span>
 					</p>
 				}
 			</div>
@@ -109,7 +109,7 @@ templ beforeRowItem(row beforeRow) {
 			<span class="rp-row__name">
 				{ row.Name }
 				if row.DirectorsOnly {
-					<span class="cb-dm rp-dm__tag rp-row__tag">Directors only</span>
+					<span class="cb-dm rp-dm__tag rp-row__tag">{ layouts.GMTerm(ctx) + "s only" }</span>
 				}
 			</span>
 			if row.Line != "" {

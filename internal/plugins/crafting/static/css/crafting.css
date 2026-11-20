@@ -131,11 +131,16 @@ html[data-motion="off"] .cra-drawer { transition: none; }
 /* ---------- Recipes: list, form, what players see ---------- */
 .cra-red { display: grid; grid-template-columns: 230px minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
 .cra-rlist, .cra-rprev { position: sticky; top: 12px; }
-.cra-rl { display: grid; gap: 4px; margin-bottom: 10px; }
+.cra-rl { display: grid; gap: 4px; margin-bottom: 4px; }
 .cra-ritem { display: flex; gap: 10px; align-items: center; width: 100%; min-height: 48px; padding: 8px 10px; font: inherit; text-align: left; border: 0;
   border-radius: var(--cra-r-sm); background: none; color: var(--cra-ink); cursor: pointer; }
 .cra-ritem:hover { background: var(--cra-tint); }
 .cra-ritem[aria-current="true"] { background: color-mix(in srgb, var(--cra-acc) 9%, transparent); box-shadow: inset 2px 0 0 var(--cra-acc); }
+/* Adding a recipe is the list's last row, a quiet word lined up with the
+   names above it, rather than a boxed button under the list. */
+.cra-newrow { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 8px 10px; font: inherit; font-weight: 600; text-align: left; border: 0;
+  border-radius: var(--cra-r-sm); background: none; color: var(--color-accent-link, var(--cra-acc)); cursor: pointer; transition: background-color var(--dur-micro, .12s); }
+.cra-newrow:hover { background: var(--cra-tint); text-decoration: underline; text-underline-offset: 2px; }
 .cra-rtxt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cra-rtxt b { font-weight: 600; overflow-wrap: anywhere; }
 .cra-rtxt small { font-size: 12.5px; color: var(--cra-muted); }
@@ -202,23 +207,30 @@ html[data-motion="off"] .cra-drawer { transition: none; }
 .cra-rules-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .cra-rules-head h3 { font-size: 16px; font-weight: 700; color: var(--cra-ink); }
 
-/* The page players read: paper (paper.css), ruled like a recipe book. */
-.cra-page { padding: 20px 22px 16px; line-height: 1.5; font-size: 15px;
-  background-image: repeating-linear-gradient(transparent 0 27px, rgb(var(--paper-burn, 110 80 40) / .13) 27px 28px); }
-.cra-page.paper { background-image: repeating-linear-gradient(transparent 0 27px, rgb(var(--paper-burn, 110 80 40) / .13) 27px 28px),
-  radial-gradient(130% 120% at 50% 0%, transparent 55%, rgb(var(--paper-burn) / 0.22) 100%), var(--paper-fibre), var(--paper-grain), linear-gradient(var(--paper-cut), var(--paper) 38%); }
-.cra-page h3 { font-family: var(--paper-font, Georgia, serif); font-size: 24px; font-weight: 700; line-height: 1.15; color: var(--paper-ink, #2b2433); margin: 2px 0 6px; overflow-wrap: anywhere; }
-.cra-bk-kind { font: 600 10.5px/1.3 var(--paper-ui-font, system-ui, sans-serif); letter-spacing: .14em; text-transform: uppercase; color: var(--paper-ink-soft, #4a4152); opacity: .8; }
-.cra-bk-h { font-family: var(--paper-font, Georgia, serif); font-style: italic; font-size: 19px; color: var(--paper-ink, #2b2433); margin-top: 8px !important; }
-.cra-page ul, .cra-page ol { margin: 2px 0 4px; padding-left: 22px; }
+/* The page players read: paper (paper.css), ruled like a recipe book. Every
+   line of it is one 28px rule tall and sits on a rule, so the rules run under
+   the words, never through them: line heights and gaps come in whole rules,
+   and the rules start where the words do (the top padding). */
+.cra-page { --cra-rule: 28px; --cra-rule-at: 20px; padding: var(--cra-rule-at) 22px 16px; line-height: var(--cra-rule); font-size: 15px;
+  background-image: repeating-linear-gradient(transparent 0 calc(var(--cra-rule) - 3px), rgb(var(--paper-burn, 110 80 40) / .13) calc(var(--cra-rule) - 3px) calc(var(--cra-rule) - 2px), transparent calc(var(--cra-rule) - 2px) var(--cra-rule));
+  background-position: 0 var(--cra-rule-at); }
+.cra-page.paper { background-image: repeating-linear-gradient(transparent 0 calc(var(--cra-rule) - 3px), rgb(var(--paper-burn, 110 80 40) / .13) calc(var(--cra-rule) - 3px) calc(var(--cra-rule) - 2px), transparent calc(var(--cra-rule) - 2px) var(--cra-rule)),
+  radial-gradient(130% 120% at 50% 0%, transparent 55%, rgb(var(--paper-burn) / 0.22) 100%), var(--paper-fibre), var(--paper-grain), linear-gradient(var(--paper-cut), var(--paper) 38%);
+  background-position: 0 var(--cra-rule-at), 0 0, 0 0, 0 0, 0 0; }
+.cra-page > *, .cra-page li { margin: 0; line-height: var(--cra-rule); }
+.cra-page h3 { font-family: var(--paper-font, Georgia, serif); font-size: 24px; font-weight: 700; color: var(--paper-ink, #2b2433); overflow-wrap: anywhere; }
+.cra-bk-kind { font: 600 10.5px/var(--cra-rule) var(--paper-ui-font, system-ui, sans-serif); letter-spacing: .14em; text-transform: uppercase; color: var(--paper-ink-soft, #4a4152); opacity: .8; }
+.cra-bk-h { font-family: var(--paper-font, Georgia, serif); font-style: italic; font-size: 19px; color: var(--paper-ink, #2b2433); }
+.cra-page ul, .cra-page ol { padding-left: 22px; }
 .cra-page ul { list-style: disc; } .cra-page ol { list-style: decimal; }
 .cra-page li { padding-left: 2px; }
 .cra-bk-dim { opacity: .6; font-style: italic; }
 .cra-bk-cost, .cra-bk-makes { font-style: italic; }
-.cra-page .cra-bk-lines { list-style: none; padding: 6px 0 0; margin-top: 6px; border-top: 1px dashed var(--paper-edge, #c4b89a); }
+.cra-page .cra-bk-lines { list-style: none; padding: 0; }
 .cra-bk-lines li::before { content: "✦ "; color: var(--paper-accent, #5b3d8a); }
-.cra-bk-foot { margin-top: 10px !important; padding-top: 8px; border-top: 1px solid rgb(var(--paper-burn, 110 80 40) / .35); font-size: 14px; }
-.cra-bk-src { margin-top: 4px !important; text-align: right; font-style: italic; font-size: 13.5px; opacity: .8; }
+/* One blank rule above the project line sets it apart, as a written page would. */
+.cra-page .cra-bk-foot { margin-top: var(--cra-rule); font-size: 14px; }
+.cra-bk-src { text-align: right; font-style: italic; font-size: 13.5px; opacity: .8; }
 
 /* ---------- Materials ---------- */
 .cra-mats-pane { position: relative; display: grid; gap: 14px; }

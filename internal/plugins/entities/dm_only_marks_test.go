@@ -60,14 +60,18 @@ func TestSidebarEntityList_DMOnlyLock(t *testing.T) {
 		{ID: "secret", Name: "Tobias", EntityTypeID: 7, IsPrivate: true},
 		{ID: "open", Name: "Pell", EntityTypeID: 7},
 		{ID: "in-dm-cat", Name: "Adventure", EntityTypeID: 7, IsPrivate: true, TypeDMOnly: true},
+		// A page in a DM-only category is hidden whatever its own setting, so
+		// it is locked too: a drilled-in list has no category row to say so.
+		{ID: "open-in-dm-cat", Name: "The Easy Job", EntityTypeID: 7, TypeDMOnly: true},
+		{ID: "custom", Name: "Mira", EntityTypeID: 7, IsPrivate: true, Visibility: VisibilityCustom},
 	}
 	tests := []struct {
 		name  string
 		cc    *campaigns.CampaignContext
 		locks int
 	}{
-		{"owner", marksContext(campaigns.RoleOwner, false), 1},
-		{"co-DM", marksContext(campaigns.RolePlayer, true), 1},
+		{"owner", marksContext(campaigns.RoleOwner, false), 3},
+		{"co-DM", marksContext(campaigns.RolePlayer, true), 3},
 		{"player", marksContext(campaigns.RolePlayer, false), 0},
 	}
 	for _, tt := range tests {
