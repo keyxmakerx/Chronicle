@@ -62,7 +62,7 @@
 
 /* The Director's mark: a 3px amber leading edge and the amber word. */
 .rp-dm { margin: 10px 0 0; padding: 2px 0 2px 10px; box-shadow: inset 3px 0 0 var(--rp-dm); font-size: 0.8125rem; color: var(--color-text-secondary); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
-.rp-dm__tag { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--rp-dm-ink); white-space: nowrap; }
+.rp-dm__tag { padding: 0 6px; border: var(--shape-edge) solid var(--rp-dm); border-radius: var(--shape-r-tag); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; line-height: 1.5; text-transform: uppercase; color: var(--rp-dm-ink); white-space: nowrap; }
 .rp .rp-dm__link { color: var(--rp-dm-ink); text-decoration-color: color-mix(in srgb, var(--rp-dm) 50%, transparent); }
 
 /* ---------- Reading ---------- */
@@ -174,3 +174,92 @@
 .rp nav[aria-label="Breadcrumb"] a:hover { color: var(--color-text-primary); }
 /* A secret span reaches only Directors; it wears their amber edge. */
 .rp-prose [data-secret] { border-left: 3px solid var(--rp-dm); padding-left: 6px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+
+/* ---------- The Director's amber words ---------- */
+/* Quiet words in the Director's amber: no border, fill or shadow, an
+   underline on hover, and a hit area the size the standard asks. */
+.rp-tools { align-items: center; gap: 0 6px; color: var(--color-text-secondary); }
+.rp .rp-dmword {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 0; border: 0; background: none;
+  font: inherit; font-weight: 600; color: var(--rp-dm-ink); cursor: pointer;
+  text-decoration: none; text-underline-offset: 2px;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+@media (pointer: coarse) { .rp .rp-dmword { min-height: var(--rp-hit); } }
+.rp .rp-dmword:hover { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--rp-dm) 60%, transparent); }
+.rp .rp-dmword:active { color: var(--color-text-primary); }
+.rp .rp-dmword[disabled], .rp .rp-dmword[data-working] { opacity: 0.55; cursor: default; text-decoration: none; }
+.rp .rp-pen { justify-content: center; min-width: 32px; }
+@media (pointer: coarse) { .rp .rp-pen { min-width: var(--rp-hit); } }
+.rp-dmsep { color: var(--color-text-muted); }
+.rp-tools .rp-dm__tag { margin-left: 4px; }
+.rp-tools__msg:empty { display: none; }
+.rp-tools__msg { flex-basis: 100%; color: rgb(var(--color-bad-rgb)); }
+
+/* The dialogs those words open: a plain sheet over the page. */
+.rp-dlg {
+  width: calc(100% - 2rem); max-width: 30rem; padding: 0;
+  border: var(--shape-edge) solid var(--color-border); border-radius: var(--shape-r-panel);
+  background: var(--color-bg-secondary); color: var(--color-text-body); box-shadow: var(--elev-dragged);
+  font-size: 0.875rem; line-height: 1.55;
+}
+.rp-dlg__body { padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
+.rp-dlg__body > p { margin: 0; }
+.rp-dlg__h { margin: 0 0 2px; font-size: 1.0625rem; font-weight: 600; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.rp-dlg__who { color: var(--color-text-primary); }
+.rp-dlg__label { margin-top: 4px; font-weight: 600; color: var(--color-text-primary); }
+.rp-dlg__opt { font-weight: 400; color: var(--color-text-secondary); }
+.rp-dlg__field {
+  width: 100%; min-height: var(--rp-hit, 40px); padding: 8px 12px; resize: vertical;
+  border: var(--shape-edge) solid var(--color-border); border-radius: var(--shape-r-ctl);
+  background: var(--color-bg-primary); color: var(--color-text-primary); font: inherit;
+  transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+.rp-dlg__field:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.rp-dlg__hint { margin: 0; font-size: 0.8125rem; color: var(--color-text-secondary); }
+.rp-dlg__choice { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 0; border-top: var(--shape-rule) solid var(--color-border-light); }
+.rp-dlg__fresh { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; margin-top: 6px; }
+.rp-dlg__err { margin: 0; color: rgb(var(--color-bad-rgb)); }
+.rp-dlg__foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.rp-dlg .btn-primary, .rp-dlg .btn-secondary { min-height: 40px; }
+@media (pointer: coarse) { .rp-dlg .btn-primary, .rp-dlg .btn-secondary { min-height: 44px; } }
+.rp-dlg [hidden] { display: none !important; }
+
+/* ---------- Before you play in <campaign> ---------- */
+/* A page, not a workshop: runs of hairline rows under plain headings. */
+.rp-main--wide { max-width: 52rem; }
+.rp-before__intro { max-width: 36rem; color: var(--color-text-body); }
+.rp-brun__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; border-bottom: var(--shape-rule) solid var(--rp-line); margin-bottom: 0; }
+.rp-brun__head .rp-h2 { border-bottom: 0; margin: 0; flex: 1; min-width: 0; }
+.rp-brun__act { flex: none; font-size: 0.8125rem; }
+.rp .rp-row--stack { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name end" "line line"; }
+.rp-row--stack .rp-row__name { color: var(--color-text-primary); }
+.rp-row--stack .rp-row__line { font-size: 0.875rem; }
+.rp-row__tag { margin-left: 8px; vertical-align: 1px; }
+.rp-change { margin: 0 8px 10px; }
+.rp-oldname { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-height: 44px; padding: 6px 8px 6px 12px; box-shadow: inset 3px 0 0 var(--rp-dm); }
+.rp-oldname__name { font-weight: 600; color: var(--color-text-primary); }
+.rp-before__drafts { margin-top: 24px; }
+
+/* The Director's "New entry" menu grows out of its word (the standard's
+   menu move); Calm fades and Off shows it at once. */
+.rp-newmenu { position: relative; display: inline-flex; }
+.rp-menu {
+  position: absolute; top: 100%; right: 0; z-index: var(--z-popup); min-width: 11rem; margin-top: 4px; padding: 4px;
+  display: flex; flex-direction: column;
+  background: var(--color-card-bg); border: var(--shape-edge) solid var(--color-border);
+  border-radius: var(--shape-r-ctl); box-shadow: var(--elev-hover);
+  transform-origin: top right; opacity: 0; transform: scale(0.96);
+  transition: opacity var(--dur-everyday-out) var(--ease-in), transform var(--dur-everyday-out) var(--ease-in);
+}
+.rp-menu[data-open] { opacity: 1; transform: none; transition-duration: var(--dur-everyday); transition-timing-function: var(--ease-out); }
+html[data-motion] .rp-menu { transform: none; }
+html[data-motion="off"] .rp-menu { transition: none; }
+.rp .rp-menu__item {
+  display: flex; align-items: center; min-height: 36px; padding: 0 10px; border-radius: var(--shape-r-small);
+  color: var(--color-text-primary); text-decoration: none; font-size: 0.875rem;
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+@media (pointer: coarse) { .rp .rp-menu__item { min-height: 44px; } }
+.rp .rp-menu__item:hover, .rp .rp-menu__item:focus-visible { background: var(--color-bg-tertiary); outline-offset: -2px; }
+@media (pointer: coarse) { .rp .rp-menu__item { min-height: var(--rp-hit); } }

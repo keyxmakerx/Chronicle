@@ -92,6 +92,9 @@
         el._rulesPage = state;
         initFilter(el, state);
         initRail(el, state);
+        // The Director's amber words (rules_director.js), when the page has any.
+        var d = window.ChronicleRulesDirector && window.ChronicleRulesDirector.init(el);
+        if (d) state.off.push(function () { d.unwire(); });
       },
       destroy: function (el) {
         var state = el._rulesPage;

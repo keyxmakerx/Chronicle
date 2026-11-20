@@ -139,10 +139,131 @@ templ entryHead(v *EntryView, tag string, titleClass string) {
 	</header>
 }
 
-// entryDirectorSlot is where the Director's own amber words on an entry
-// will go (rewriting it for the campaign, leaving it out). It draws
-// nothing yet.
+// entryDirectorSlot holds the Director's own amber words on an entry, and
+// the small dialogs they open (static/js/widgets/rules_director.js). The
+// view carries Tools only for a Director, so a player's page has none.
 templ entryDirectorSlot(v *EntryView) {
+	if t := v.Tools; t != nil {
+		<div
+			class="rp-dm rp-tools"
+			data-dm-only
+			data-rp-director
+			data-api={ t.APIBase }
+			data-field={ t.FieldKey }
+			data-slug={ t.Slug }
+			data-entry={ itoa64(t.EntryID) }
+			data-page={ t.PageURL }
+			data-kind={ t.Kind }
+			data-editor-base={ editorBase(v.CampaignID, t.FieldKey) }
+		>
+			switch t.Kind {
+				case ToolsStandard:
+					if t.Rewritable {
+						<button type="button" class="rp-dmword" data-rp-act="rewrite">{ "Rewrite for " + t.CampaignName }</button>
+						<span class="rp-dmsep" aria-hidden="true">·</span>
+					}
+					<button type="button" class="rp-dmword" data-rp-act="open" data-dialog="rp-dlg-notin" aria-haspopup="dialog">{ "Not in " + t.CampaignName }</button>
+				case ToolsLeftOut:
+					<button type="button" class="rp-dmword" data-rp-act="bringback">Bring back</button>
+					<span class="rp-dmsep" aria-hidden="true">·</span>
+					<button type="button" class="rp-dmword" data-rp-act="open" data-dialog="rp-dlg-notin" aria-haspopup="dialog">
+						if t.Sentence != "" {
+							Change the sentence
+						} else {
+							Add a sentence
+						}
+					</button>
+				case ToolsRewritten:
+					if t.WhoReads != "" {
+						<span>{ t.WhoReads }</span>
+					}
+					<a class="rp-dmword rp-pen" href={ templ.SafeURL(t.EditURL) } aria-label={ "Edit " + t.CampaignName + "’s " + t.Name }><i class="fa-solid fa-pen" aria-hidden="true"></i></a>
+					if t.CanSetAside {
+						<button type="button" class="rp-dmword" data-rp-act="open" data-dialog="rp-dlg-aside" aria-haspopup="dialog">{ "Set " + t.CampaignName + "’s " + t.Name + " aside" }</button>
+					}
+				case ToolsCampaign:
+					<a class="rp-dmword rp-pen" href={ templ.SafeURL(t.EditURL) } aria-label={ "Edit " + t.Name }><i class="fa-solid fa-pen" aria-hidden="true"></i></a>
+			}
+			<span class="cb-dm rp-dm__tag">Directors only</span>
+			<span class="rp-tools__msg" role="status" data-rp-msg></span>
+		</div>
+		@directorDialogs(t)
+	}
+}
+
+// directorDialogs are the questions the amber words ask before a change:
+// one plain dialog each, on the shared dialog move.
+templ directorDialogs(t *directorTools) {
+	if t.Kind == ToolsStandard && t.SameName != nil {
+		<dialog class="dlg-modal rp-dlg" id="rp-dlg-rewrite" aria-labelledby="rp-dlg-rewrite-h">
+			<div class="rp-dlg__body">
+				<h2 class="rp-dlg__h" id="rp-dlg-rewrite-h">{ "Rewrite " + t.Name + " for " + t.CampaignName }</h2>
+				<p>{ t.CampaignName + " already has " + aOr(t.SameName.Name) + " of its own." }</p>
+				<div class="rp-dlg__choice">
+					<button type="button" class="btn-primary" data-rp-act="tie" data-tie={ itoa64(t.SameName.ID) } data-working-label="Using it…">{ "Use the " + t.SameName.Name + " I already wrote" }</button>
+					<p class="rp-dlg__hint">{ "Yours takes the printed " + t.Name + "’s place for everyone who can read it." }</p>
+				</div>
+				<div class="rp-dlg__choice">
+					<button type="button" class="btn-secondary" data-rp-act="fresh" aria-expanded="false" aria-controls="rp-dlg-fresh">{ "Start from " + t.SystemName + "’s" }</button>
+					<p class="rp-dlg__hint">{ "A new copy of the printed " + t.Name + " that only Directors see to start. Two entries cannot share a name, so give the copy another." }</p>
+					<div class="rp-dlg__fresh" id="rp-dlg-fresh" hidden>
+						<label class="rp-dlg__label" for="rp-dlg-name">Name for the copy</label>
+						<input class="rp-dlg__field" id="rp-dlg-name" type="text" maxlength="100" autocomplete="off" data-rp-name/>
+						<button type="button" class="btn-primary" data-rp-act="rewrite-named" data-working-label="Making the copy…">Make the copy</button>
+					</div>
+				</div>
+				<p class="rp-dlg__err" role="alert" hidden data-rp-err></p>
+				<div class="rp-dlg__foot">
+					<button type="button" class="btn-secondary" data-rp-act="close">Cancel</button>
+				</div>
+			</div>
+		</dialog>
+	}
+	if t.Kind == ToolsStandard || t.Kind == ToolsLeftOut {
+		<dialog class="dlg-modal rp-dlg" id="rp-dlg-notin" aria-labelledby="rp-dlg-notin-h">
+			<div class="rp-dlg__body">
+				if t.Kind == ToolsStandard {
+					<h2 class="rp-dlg__h" id="rp-dlg-notin-h">{ "Leave " + t.Name + " out of " + t.CampaignName + "?" }</h2>
+					<p>The hero creator stops offering it. Its name still answers everywhere with one line.</p>
+					<p class="rp-dlg__who">{ t.NotInHeroes() }</p>
+				} else {
+					<h2 class="rp-dlg__h" id="rp-dlg-notin-h">{ "The sentence for " + t.Name }</h2>
+				}
+				<label class="rp-dlg__label" for="rp-dlg-sentence">A sentence for players <span class="rp-dlg__opt">(optional)</span></label>
+				<textarea class="rp-dlg__field" id="rp-dlg-sentence" rows="2" maxlength="300" data-rp-sentence aria-describedby="rp-dlg-sentence-hint">{ t.Sentence }</textarea>
+				<p class="rp-dlg__hint" id="rp-dlg-sentence-hint">{ "Players read “" + NotInLine(t.Name, t.FieldKey, t.CampaignName, "") + "” and then your sentence." }</p>
+				<p class="rp-dlg__err" role="alert" hidden data-rp-err></p>
+				<div class="rp-dlg__foot">
+					<button type="button" class="btn-secondary" data-rp-act="close">
+						if t.Kind == ToolsStandard {
+							Keep it
+						} else {
+							Cancel
+						}
+					</button>
+					if t.Kind == ToolsStandard {
+						<button type="button" class="btn-primary" data-rp-act="leaveout" data-working-label="Leaving it out…">Leave it out</button>
+					} else {
+						<button type="button" class="btn-primary" data-rp-act="leaveout" data-working-label="Saving…">Save the sentence</button>
+					}
+				</div>
+			</div>
+		</dialog>
+	}
+	if t.Kind == ToolsRewritten && t.CanSetAside {
+		<dialog class="dlg-modal rp-dlg" id="rp-dlg-aside" aria-labelledby="rp-dlg-aside-h">
+			<div class="rp-dlg__body">
+				<h2 class="rp-dlg__h" id="rp-dlg-aside-h">{ "Set " + t.CampaignName + "’s " + t.Name + " aside?" }</h2>
+				<p>{ "Players go back to reading the printed " + t.PrintedName + ". Your text stays, only Directors read it, and nothing is deleted." }</p>
+				<p class="rp-dlg__who">{ t.AsideHeroes() }</p>
+				<p class="rp-dlg__err" role="alert" hidden data-rp-err></p>
+				<div class="rp-dlg__foot">
+					<button type="button" class="btn-secondary" data-rp-act="close">Keep it in play</button>
+					<button type="button" class="btn-primary" data-rp-act="aside" data-working-label="Setting it aside…">Set it aside</button>
+				</div>
+			</div>
+		</dialog>
+	}
 }
 
 templ paras(ps []para) {
@@ -280,7 +401,7 @@ templ entryNotes(notes []noteLine) {
 			for _, n := range notes {
 				<p class="rp-note">
 					<span>Changed on </span>
-					@components.Date(n.At, timeutil.DateWeekday)
+					@components.Date(n.At, timeutil.DateRecent)
 					<span>{ ": " + n.Line }</span>
 				</p>
 			}

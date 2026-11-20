@@ -291,6 +291,9 @@
     this.el = el;
     this.campaignId = str(config.campaignId);
     this.url = str(config.bookUrl);
+    // "Before you play in <campaign>", for every reader of the campaign's own book.
+    this.beforeUrl = str(config.beforeUrl);
+    this.campaignName = str(config.campaignName);
     // data-book-json carries the book itself (a draft shown for review
     // before it is saved); such a book has no address to search or edit.
     this.inline = str(config.bookJson);
@@ -855,11 +858,11 @@
     var edit = d.canEdit && this.url
       ? '<button type="button" class="rb-btn" data-act="edit" data-href="' + esc(this.url.replace(/[?#].*$/, '').replace(/\/+$/, '') + '/edit') + '">Edit</button>'
       : '';
-    // The Directors' own ancestries, kits and other picks are house rules, so
-    // their page is reached from the rulebook; the same Directors may edit both.
-    var own = d.canEdit && this.campaignId && !this.inline
-      ? '<button type="button" class="rb-btn" data-act="edit" data-own-entries-link="true" data-href="/campaigns/' +
-        encodeURIComponent(this.campaignId) + '/characters/entries">Your own entries</button>'
+    // What the campaign wrote, rewrote and left out of its rules is read
+    // from the rulebook, by players and Directors alike.
+    var own = this.beforeUrl && this.campaignName && !this.inline
+      ? '<button type="button" class="rb-btn" data-act="edit" data-before-link="true" data-href="' + esc(this.beforeUrl) + '">' +
+        esc('Before you play in ' + this.campaignName) + '</button>'
       : '';
     // The Homebrew Workshop builds the campaign's house-rule recipes, so it
     // opens from here too; it is the Directors' alone.

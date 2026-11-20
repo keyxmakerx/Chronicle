@@ -34,6 +34,8 @@ type RulesCatalog interface {
 	Notes(ctx context.Context, campaignID string, actor EntryActor, entryID int64) ([]EntryNote, error)
 	OldNames(ctx context.Context, campaignID, fieldKey string, actor EntryActor) ([]EntryOldName, error)
 	LeftOutList(ctx context.Context, campaignID, fieldKey string) ([]LeftOut, error)
+	Rewritable(ctx context.Context, campaignID, fieldKey, slug string) (bool, error)
+	StandardChange(ctx context.Context, campaignID string, actor EntryActor, id int64) (string, error)
 }
 
 // NewRulesPages wires the builder. Any argument may be nil: without the
@@ -212,6 +214,8 @@ type EntryView struct {
 	Hero       *heroView
 	IsDirector bool
 	Contents   []contentsLink
+	// Tools are the Director's amber words; nil for anyone else.
+	Tools *directorTools
 }
 
 // kindWord is the kind in small words above the name: the character field's
@@ -265,6 +269,9 @@ func (p *RulesPages) Page(ctx context.Context, sys System, category, slug string
 		return nil, err
 	}
 	if err := p.fillPeople(ctx, sys, v, r); err != nil {
+		return nil, err
+	}
+	if err := p.fillTools(ctx, sys, v, r); err != nil {
 		return nil, err
 	}
 	v.Contents = contentsFor(v)

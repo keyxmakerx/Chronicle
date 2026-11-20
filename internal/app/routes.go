@@ -7059,7 +7059,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_paint", Scripts: []string{"/static/js/widgets/craft_paint.js", "/static/js/widgets/craft_paint_forge.js", "/static/js/widgets/craft_paint_stage.js"}},
 	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules_more.js", "/static/js/widgets/craft_rules.js"}},
-	{Name: "rules-page", Scripts: []string{"/static/js/widgets/rules_page.js"}},
+	{Name: "rules-page", Scripts: []string{"/static/js/widgets/rules_director.js", "/static/js/widgets/rules_page.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

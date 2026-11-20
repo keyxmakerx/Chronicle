@@ -1240,6 +1240,7 @@ GET	/campaigns/:id/systems/:mod/:cat	session	systems.(*SystemHandler).CategoryLi
 GET	/campaigns/:id/systems/:mod/:cat/:item	session	systems.(*SystemHandler).ItemDetail	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/:cat/:item/peek	session	systems.(*SystemHandler).EntryPeek	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/:cat/:item/tooltip	session	systems.(*SystemHandler).TooltipAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/before-you-play	session	systems.(*SystemHandler).BeforeYouPlay	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book	session	systems.(*SystemHandler).BookAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 POST	/campaigns/:id/systems/:mod/book/chapters	session	systems.(*SystemHandler).BookChapterCreate	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 DELETE	/campaigns/:id/systems/:mod/book/chapters/:chapter	session	systems.(*SystemHandler).BookChapterDelete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
