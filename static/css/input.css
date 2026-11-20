@@ -646,7 +646,7 @@
    * light ink; the menu takes the page's own ink back, as the shelf does. */
   .brush-menu {
     position: absolute; inset-inline-end: 0; inset-block-start: 100%; z-index: var(--z-popup);
-    margin-top: 4px; inline-size: 18rem; max-inline-size: calc(100vw - 1.5rem);
+    margin-top: 4px; inline-size: 20rem; max-inline-size: calc(100vw - 1.5rem);
     padding: 4px; transform-origin: top right;
     background: var(--color-bg-secondary); color: var(--color-text-primary); text-shadow: none;
     border: var(--shape-edge) solid var(--color-border); border-radius: var(--shape-r-panel);
@@ -684,6 +684,52 @@
       position: fixed; inset-inline: 0.75rem; inset-block-start: 3.5rem; inline-size: auto; margin-top: 0;
       transform-origin: top center;
     }
+  }
+
+  /* ---- "Try a style kit here": the strip at the window's foot (kit_try.js) ----
+   * An inverse surface, centred, the six kits as words with the one on the
+   * page underlined. The page keeps room below its last line while the strip
+   * is up (--kit-try-h). It Settles in; Calm fades it in place, Off shows it.
+   * Its own words keep the site's face whatever kit is on the page. */
+  html[data-kit-try] #main-content { padding-bottom: calc(var(--kit-try-h, 0px) + 2rem); }
+  .kit-try {
+    position: fixed; z-index: var(--z-sheet); inset-inline: 0; inset-block-end: 16px; margin-inline: auto;
+    inline-size: fit-content; max-inline-size: calc(100vw - 32px);
+    padding: 6px 8px 4px 16px; border-radius: var(--shape-r-panel);
+    background: var(--color-text-primary); color: var(--color-bg-primary);
+    font-family: Inter, system-ui, -apple-system, sans-serif; text-shadow: none;
+    box-shadow: 0 10px 30px -8px rgb(0 0 0 / 0.45);
+  }
+  .kit-try.kt-from { opacity: 0; transform: translateY(6px); }
+  .kit-try.kt-in { transition: opacity var(--dur-large) var(--ease-out), transform var(--dur-large) var(--ease-out); }
+  html[data-motion="calm"] .kit-try.kt-from { transform: none; }
+  html[data-motion="off"] .kit-try.kt-in { transition: none; }
+  .kit-try-top { display: flex; align-items: center; gap: 12px; min-inline-size: 0; }
+  .kit-try-l {
+    flex: 1 1 auto; min-inline-size: 0; margin: 0; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.02em;
+    opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .kit-try-acts { display: flex; flex: none; }
+  .kit-try-q, .kit-try-k {
+    min-block-size: 44px; padding-inline: 10px; border-radius: var(--shape-r-ctl);
+    background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
+  }
+  .kit-try-q { font-size: 0.8125rem; opacity: 0.8; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  .kit-try-q:hover:not(:disabled) { opacity: 1; }
+  .kit-try-q:disabled { opacity: 0.35; cursor: default; text-decoration: none; }
+  .kit-try-kits {
+    display: flex; gap: 2px; margin-inline-start: -10px; overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .kit-try-kits::-webkit-scrollbar { display: none; }
+  .kit-try-k { flex: none; scroll-snap-align: start; font-size: 0.9375rem; font-weight: 500; opacity: 0.7; position: relative; }
+  .kit-try-k:hover { opacity: 1; }
+  .kit-try-k[aria-pressed="true"] { opacity: 1; font-weight: 600; }
+  .kit-try-k[aria-pressed="true"] > span:first-child { box-shadow: inset 0 -2px 0 currentColor; padding-block: 4px; }
+  .kit-try :is(.kit-try-q, .kit-try-k):focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+  @media (max-width: 767.98px) {
+    .kit-try { inline-size: auto; inset-inline: 16px; inset-block-end: calc(max(12px, env(safe-area-inset-bottom)) + var(--kit-try-lift, 0px)); padding-inline-start: 12px; }
+    .kit-try-l { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   }
 
   /* ---- Skeleton Loader ---- */

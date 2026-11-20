@@ -17,7 +17,9 @@ templ topbarBrush() {
 }
 
 // topbarBrushHost is the brush button and its menu. The rows are words only,
-// each with a quiet second line, the way the signed mockup draws them.
+// each with a quiet second line, the way the signed mockup draws them. "Try
+// a style kit here" exists only while pages wear the Material page look, the
+// one kits dress; customize_brush.js shows it on a page a kit dresses.
 templ topbarBrushHost() {
 	{{ base := "/campaigns/" + GetCampaignID(ctx) + "/customize" }}
 	<div
@@ -26,6 +28,9 @@ templ topbarBrushHost() {
 		data-widget="customize-brush"
 		data-campaign-id={ GetCampaignID(ctx) }
 		data-here-url={ base + "/here" }
+		if PageLookAnnals(ctx) {
+			data-kit-url={ base + "/kit-try" }
+		}
 	>
 		<button
 			type="button"
@@ -56,6 +61,12 @@ templ topbarBrushHost() {
 				<span class="brush-t" data-brush-here-t></span>
 				<span class="brush-s" data-brush-here-s></span>
 			</a>
+			if PageLookAnnals(ctx) {
+				<button type="button" class="brush-row" role="menuitem" tabindex="-1" data-brush-kit hidden>
+					<span class="brush-t">Try a style kit here</span>
+					<span class="brush-s">See this page in another kit. Nothing is saved.</span>
+				</button>
+			}
 			<a class="brush-row" role="menuitem" tabindex="-1" href={ templ.SafeURL(base + "/look") }>
 				<span class="brush-t">This campaign’s look</span>
 				<span class="brush-s">Colours, fonts, style kit</span>

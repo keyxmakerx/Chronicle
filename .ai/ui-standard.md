@@ -722,6 +722,17 @@ The same screens, folded to the width; never a second design.
   hangs across the top of the page like the bell's list. Hiding it is the
   person's own choice; Campaign settings › Customize › Brush in the header
   brings it back.
+- **"Try a style kit here" shows the real page in another kit, unsaved.**
+  The brush offers it on a page a kit dresses while the page look is
+  Material. A strip on the inverse surface sits centred at the window's foot
+  (above the table's tab on a phone, never over the page's last line): the
+  page's name, the kit and "not saved", the six kits as words with the one on
+  the page underlined, and quiet "Keep this kit" and "Put it back". A kit
+  pressed redraws the page at once; arrows move between kits and Enter
+  picks. The try-out follows the owner across pages in that tab until "Put
+  it back" or Escape; "Keep this kit" puts the kit into Customize's draft and
+  opens Customize › Look on it. The strip Settles in (Calm fades, Off shows
+  it).
 - **Side panels become bottom sheets on a phone**: the page peek and the
   Table (under **What is on a page** and **Opening and closing**).
 - **A sheet that scrolls keeps the pull to itself**: a fixed sheet's scroll

@@ -73,3 +73,36 @@ func TestTopbarBrush_Menu(t *testing.T) {
 		}
 	}
 }
+
+// "Try a style kit here" is drawn for the owner only while the pages wear
+// the Material page look, the one kits dress; a player gets no brush and so
+// never the row.
+func TestTopbarBrush_KitRow(t *testing.T) {
+	annals := func(ctx context.Context) context.Context {
+		return SetAppearance(ctx, &AppearanceData{PageLook: "annals", StyleKit: "ornate"})
+	}
+	tests := []struct {
+		name string
+		ctx  context.Context
+		want bool
+	}{
+		{"owner, Material page look", annals(viewer(3, true, false, false, false)), true},
+		{"owner, standard page look", SetAppearance(viewer(3, true, false, false, false), &AppearanceData{PageLook: "standard"}), false},
+		{"owner, no look saved", viewer(3, true, false, false, false), false},
+		{"player, Material page look", annals(viewer(1, false, false, false, false)), false},
+		{"owner viewing as a player", annals(viewer(1, true, false, true, false)), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			html := renderBar(t, tc.ctx)
+			row := strings.Contains(html, "data-brush-kit") && strings.Contains(html, "Try a style kit here")
+			url := strings.Contains(html, `data-kit-url="/campaigns/camp-1/customize/kit-try"`)
+			if row != tc.want || url != tc.want {
+				t.Fatalf("kit row = %v, kit url = %v; want %v", row, url, tc.want)
+			}
+			if tc.want && !strings.Contains(html, "See this page in another kit. Nothing is saved.") {
+				t.Error("kit row misses its second line")
+			}
+		})
+	}
+}

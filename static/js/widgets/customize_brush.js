@@ -17,6 +17,10 @@
  * page-wide guards. Enter or Space opens it, the arrows move, Home and End
  * jump, Escape closes it and gives focus back to the brush, Tab closes it.
  *
+ * "Try a style kit here" (kit_try.js) shows only where the pages wear the
+ * Material page look (the server draws the row then) and on a page a kit
+ * dresses; a try-out left open on the last page comes back on this one.
+ *
  * "Hide this brush" saves the person's own display choice (PUT
  * /account/view-prefs {brush:"hidden"}) and puts the brush away as an inert
  * template, from which Campaign settings brings it back.
@@ -46,7 +50,10 @@
       var menu = host.querySelector('[data-brush-menu]');
       var here = host.querySelector('[data-brush-here]');
       var hide = host.querySelector('[data-brush-hide]');
+      var kitRow = host.querySelector('[data-brush-kit]');
       var url = host.getAttribute('data-here-url');
+      var kitUrl = host.getAttribute('data-kit-url');
+      var cid = host.getAttribute('data-campaign-id');
       if (!btn || !menu || !here || !url) return;
       var isOpen = false, timer = 0, alive = true;
 
@@ -93,6 +100,7 @@
         isOpen = true;
         clearTimeout(timer);
         refresh();
+        if (kitRow) kitRow.hidden = !(kitUrl && C.kitTry && C.kitTry.dressed());
         btn.setAttribute('aria-expanded', 'true');
         menu.hidden = false;
         menu.classList.remove('mn-leave', 'mn-to');
@@ -167,6 +175,15 @@
         var row = e.target.closest('[role="menuitem"]');
         if (row && row !== hide) close(false);
       });
+
+      // A try-out hands focus back to the brush when it is put back.
+      function toBrush() { if (alive) btn.focus(); }
+      if (kitRow && kitUrl && C.kitTry) {
+        kitRow.addEventListener('click', function () {
+          C.kitTry.open({ url: kitUrl, campaign: cid, onEnd: toBrush });
+        });
+        C.kitTry.resume({ url: kitUrl, campaign: cid, onEnd: toBrush });
+      }
 
       hide.addEventListener('click', function () {
         hide.setAttribute('aria-busy', 'true');

@@ -1,0 +1,114 @@
+// kit_try_browser.test.mjs — "Try a style kit here": a tried kit reaches
+// the page the way a saved one does, nothing is written until Keep, the
+// try-out follows a reload in the same tab, and Put it back (or Escape)
+// returns the page exactly as the server drew it.
+//
+// Runs static/js/kit_try.js in a real Chromium against a stubbed server.
+// Needs playwright-core and a Chromium (see _browser_env.mjs); skips
+// locally, and fails under CI, when either is missing.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { pw, chromePath, skip } from './_browser_env.mjs';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+const KITS = [['material', 'Material'], ['sharp', 'Sharp'], ['ornate', 'Ornate'], ['flowing', 'Flowing'], ['lumen', 'Lumen'], ['sketchbook', 'Sketchbook']]
+  .map(([id, label]) => ({ id, label }));
+const CSS = ':root[data-kit-try="ornate"]{--kit-hf:serif;}';
+
+// The server drew the saved kit (Sketchbook) on <html>; the page has a
+// title, so a kit dresses it, unless it is a workshop.
+const page = (workshop) => `<!doctype html><html data-cz-page="annals" data-cz-kit="sketchbook"><head>
+<script>
+window.writes = [];
+window.Chronicle = { apiFetch: function (url, opts) {
+  if (opts && opts.method) {
+    window.writes.push(opts.method + ' ' + url + ' ' + JSON.stringify(opts.body));
+    sessionStorage.setItem('writes', JSON.stringify(window.writes));
+  }
+  var body = /keep$/.test(url) ? { href: '/kept' } : { kits: ${JSON.stringify(KITS)}, css: ${JSON.stringify(CSS)}, entrance: 'bloom' };
+  return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(body); } });
+} };
+</script>
+<script src="/kit_try.js"></script></head><body>
+<span data-topbar-name>Saltgrave</span>
+<main id="main-content"><div class="cb-title"><h1>Saltgrave Harbour</h1></div>${workshop ? '<div data-workshop></div>' : ''}</main>
+<button id="brush">brush</button>
+</body></html>`;
+
+const attrs = () => [document.documentElement.getAttribute('data-cz-kit'), document.documentElement.getAttribute('data-cz-entrance'), document.documentElement.getAttribute('data-kit-try')];
+
+async function withTab(fn) {
+  const browser = await pw.chromium.launch({ executablePath: chromePath });
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://t.test/**', (route) => {
+      const p = new URL(route.request().url()).pathname;
+      if (p === '/kit_try.js') return route.fulfill({ contentType: 'text/javascript; charset=utf-8', body: readFileSync(join(root, 'static/js/kit_try.js')) });
+      return route.fulfill({ contentType: 'text/html; charset=utf-8', body: page(p === '/workshop') });
+    });
+    await fn(tab);
+  } finally { await browser.close(); }
+}
+
+test('a kit dresses a titled page but never a workshop', { skip }, async () => {
+  await withTab(async (tab) => {
+    await tab.goto('http://t.test/');
+    assert.equal(await tab.evaluate(() => Chronicle.kitTry.dressed()), true);
+    await tab.goto('http://t.test/workshop');
+    assert.equal(await tab.evaluate(() => Chronicle.kitTry.dressed()), false);
+  });
+});
+
+test('a tried kit is drawn as a saved one, and Put it back restores the page', { skip }, async () => {
+  await withTab(async (tab) => {
+    await tab.goto('http://t.test/');
+    await tab.evaluate(() => Chronicle.kitTry.open({ url: '/c/customize/kit-try', campaign: 'c1', onEnd: () => document.getElementById('brush').focus() }));
+    // The kit the page wears is marked and focused, and nothing changed yet.
+    assert.equal(await tab.evaluate(() => document.activeElement.getAttribute('data-kit')), 'sketchbook');
+    assert.deepEqual(await tab.evaluate(attrs), ['sketchbook', null, 'sketchbook']);
+    assert.match(await tab.textContent('[data-kit-try-label]'), /Saltgrave Harbour in Sketchbook · as saved/);
+    assert.equal(await tab.isDisabled('[data-kit-keep]'), true);
+
+    await tab.keyboard.press('ArrowLeft');
+    await tab.keyboard.press('ArrowLeft');
+    assert.equal(await tab.evaluate(() => document.activeElement.getAttribute('data-kit')), 'flowing');
+    await tab.click('[data-kit="ornate"]');
+    assert.deepEqual(await tab.evaluate(attrs), ['ornate', null, 'ornate']);
+    assert.equal(await tab.evaluate(() => document.querySelector('style[data-kit-try-css]').textContent), CSS);
+    assert.match(await tab.textContent('[data-kit-try-label]'), /Saltgrave Harbour in Ornate · not saved/);
+    // Material takes the card entrance back, as the server writes it only then.
+    await tab.click('[data-kit="material"]');
+    assert.deepEqual(await tab.evaluate(attrs), [null, 'bloom', 'material']);
+    assert.deepEqual(await tab.evaluate(() => window.writes), [], 'trying writes nothing');
+
+    // A reload in the same tab carries the try-out over.
+    await tab.click('[data-kit="lumen"]');
+    await tab.reload();
+    await tab.evaluate(() => Chronicle.kitTry.resume({ url: '/c/customize/kit-try', campaign: 'c1', onEnd: () => document.getElementById('brush').focus() }));
+    assert.deepEqual(await tab.evaluate(attrs), ['lumen', null, 'lumen']);
+    assert.equal(await tab.isVisible('[data-kit-try-strip]'), true);
+
+    await tab.focus('[data-kit="lumen"]');
+    await tab.keyboard.press('Escape');
+    assert.deepEqual(await tab.evaluate(attrs), ['sketchbook', null, null]);
+    assert.equal(await tab.evaluate(() => !!document.querySelector('[data-kit-try-strip], style[data-kit-try-css]')), false);
+    assert.equal(await tab.evaluate(() => sessionStorage.getItem('chronicle-kit-try')), null);
+    assert.equal(await tab.evaluate(() => document.activeElement.id), 'brush');
+  });
+});
+
+test('Keep this kit is the only write, and leads where the server says', { skip }, async () => {
+  await withTab(async (tab) => {
+    await tab.goto('http://t.test/');
+    await tab.evaluate(() => Chronicle.kitTry.open({ url: '/c/customize/kit-try', campaign: 'c1' }));
+    await tab.click('[data-kit="ornate"]');
+    await Promise.all([tab.waitForURL('http://t.test/kept'), tab.click('[data-kit-keep]')]);
+    assert.equal(await tab.evaluate(() => sessionStorage.getItem('chronicle-kit-try')), null);
+    assert.deepEqual(await tab.evaluate(() => JSON.parse(sessionStorage.getItem('writes'))), ['POST /c/customize/kit-try/keep {"kit":"ornate"}']);
+  });
+});
