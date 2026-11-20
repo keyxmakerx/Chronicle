@@ -9,7 +9,7 @@ func pkg(key, name string) Choice {
 	return Choice{Key: key, Slug: key, Name: name, Source: ChoiceSourcePackage}
 }
 
-func camp(key, name string) Choice {
+func campChoice(key, name string) Choice {
 	return Choice{Key: key, Name: name, Source: ChoiceSourceCampaign}
 }
 
@@ -27,9 +27,9 @@ func names(cs []Choice) []string {
 
 func TestApplyChoiceRulesPrecedence(t *testing.T) {
 	fury, devil, human := pkg("fury", "Fury"), pkg("devil", "Devil"), pkg("human", "Human")
-	moth := camp("7", "Mothfolk")
+	moth := campChoice("7", "Mothfolk")
 	all := []Choice{devil, fury, human, moth}
-	own := camp("9", "Pat's Own")
+	own := campChoice("9", "Pat's Own")
 	own.Mine = true
 
 	tests := []struct {
