@@ -28,12 +28,24 @@ const (
 	TerrainSnow     = "snow"
 	TerrainTown     = "town"
 	TerrainRoad     = "road"
+	TerrainJungle   = "jungle"
+	TerrainFarmland = "farmland"
+	TerrainScrub    = "scrub"
+	TerrainBadlands = "badlands"
+	TerrainWaste    = "waste"
+	TerrainVolcanic = "volcanic"
+	TerrainCoast    = "coast"
+	TerrainDeep     = "deep"
+	TerrainIce      = "ice"
+	TerrainCavern   = "cavern"
 )
 
 // hexTerrains is the closed set of terrain kinds, in palette order.
 var hexTerrains = []string{
 	TerrainPlains, TerrainForest, TerrainHills, TerrainMountain, TerrainWater,
 	TerrainSwamp, TerrainDesert, TerrainSnow, TerrainTown, TerrainRoad,
+	TerrainJungle, TerrainFarmland, TerrainScrub, TerrainBadlands, TerrainWaste,
+	TerrainVolcanic, TerrainCoast, TerrainDeep, TerrainIce, TerrainCavern,
 }
 
 // IsValidTerrain reports whether t is one of the allowed terrain kinds.

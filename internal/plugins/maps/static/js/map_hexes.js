@@ -72,7 +72,11 @@
   var TERRAINS = [
     ['plains', 'Plains', '#c9d58a'], ['forest', 'Forest', '#5f8f4a'], ['hills', 'Hills', '#b8a46a'],
     ['mountain', 'Mountains', '#8d8478'], ['water', 'Water', '#6f9fc0'], ['swamp', 'Swamp', '#6f7d55'],
-    ['desert', 'Desert', '#e3cc8c'], ['snow', 'Snow', '#e8eef2'], ['town', 'Places', '#c4a27a'],
+    ['desert', 'Desert', '#e3cc8c'], ['snow', 'Snow', '#e8eef2'],
+    ['jungle', 'Jungle', '#3f8f6a'], ['farmland', 'Farmland', '#d6c463'], ['scrub', 'Scrubland', '#b3a771'],
+    ['badlands', 'Badlands', '#cf8f63'], ['waste', 'Wasteland', '#7a6f6a'], ['volcanic', 'Volcanic', '#8c4638'],
+    ['coast', 'Coast', '#bfe0cf'], ['deep', 'Deep sea', '#3d5f92'], ['ice', 'Ice', '#bfe1ee'],
+    ['cavern', 'Caverns', '#5a5470'], ['town', 'Places', '#c4a27a'],
     ['road', 'Road', '#a0805a']
   ];
   var COLOR = {};
@@ -89,7 +93,17 @@
     desert: '<path d="M-11 5Q-3-5 5-2Q9 0 11 5z" fill="#e3c37c" stroke="#a5874a" stroke-width="1"/><circle cx="6" cy="-6" r="2.4" fill="#e6a23c"/>',
     snow: '<path d="M0-8V8M-7-4L7 4M-7 4L7-4" stroke="#6f8ea4" stroke-width="1.6" stroke-linecap="round"/><circle r="1.6" fill="#6f8ea4"/>',
     town: '<path d="M-9 6V0l4-4 4 4v6z" fill="#d8c7a2" stroke="#6b5233" stroke-width="1"/><path d="M-10 0.5l5-5.5 5 5.5" fill="none" stroke="#9b4a32" stroke-width="2" stroke-linejoin="round"/><path d="M1 6V-2l4-4.5 4 4.5v8z" fill="#e6d8b8" stroke="#6b5233" stroke-width="1"/><path d="M0-1.5l5-5.5 5 5.5" fill="none" stroke="#7a3f2c" stroke-width="2" stroke-linejoin="round"/>',
-    plains: '<path d="M-6 6L-8-1M-4 6V-3M-2 6L0 0M3 6L2-2M5 6V-4M7 6L9 0" stroke="#5a7530" stroke-width="1.4" stroke-linecap="round" fill="none"/>'
+    plains: '<path d="M-6 6L-8-1M-4 6V-3M-2 6L0 0M3 6L2-2M5 6V-4M7 6L9 0" stroke="#5a7530" stroke-width="1.4" stroke-linecap="round" fill="none"/>',
+    jungle: '<path d="M0 7Q1.6 1-.6-4" fill="none" stroke="#5b3f24" stroke-width="1.8" stroke-linecap="round"/><path d="M-.6-4q-5-4.4-9.4.4M-.6-4q5-4.4 9.4.4M-.6-4q-3.2-5.6-7.4-5M-.6-4q3.2-5.6 7.4-5" fill="none" stroke="#1f6b3a" stroke-width="2.2" stroke-linecap="round"/>',
+    farmland: '<path d="M-11 5L-5-5H11L5 5z" fill="#d2b84f" stroke="#7a6a2a" stroke-width="1" stroke-linejoin="round"/><path d="M-6.4 5L-.4-5M-1.6 5L4.4-5" fill="none" stroke="#7a6a2a" stroke-width="1"/>',
+    scrub: '<circle cx="-4.5" cy="2.4" r="4" fill="#77803f"/><circle cx="1.4" cy="1" r="5.2" fill="#8d9550" stroke="#4f5628" stroke-width="1"/><path d="M7.4 6.4L9.2 1M10 6.4V2.6" fill="none" stroke="#5a6230" stroke-width="1.4" stroke-linecap="round"/>',
+    badlands: '<path d="M-11 7L-7.6-6H7.6L11 7z" fill="#c07a52" stroke="#6e3f27" stroke-width="1" stroke-linejoin="round"/><path d="M-9-.6H9M-10 3.2H10" fill="none" stroke="#6e3f27" stroke-width=".9"/>',
+    waste: '<path d="M0 7V-8M0-1L-5.4-6.4M0-3.6L5-8.6M0 2.2L4.2-.8" fill="none" stroke="#3f3632" stroke-width="1.8" stroke-linecap="round"/><path d="M-8 7h16" stroke="#3f3632" stroke-width="1.5" stroke-linecap="round"/>',
+    volcanic: '<path d="M-11 7L-3.4-6h6.8L11 7z" fill="#4f3d3d" stroke="#241a1a" stroke-width="1" stroke-linejoin="round"/><path d="M-3.4-6h6.8L2-2.2.4-4.4-1.2-1z" fill="#ff7a1a"/><path d="M0-7.4q-2.2-1.8 0-4" fill="none" stroke="#6b5a5a" stroke-width="1.4" stroke-linecap="round"/>',
+    coast: '<path d="M-11 7Q-4-7 11-3V7z" fill="#eedfa9" stroke="#a5874a" stroke-width="1" stroke-linejoin="round"/><path d="M-10-5.4q2-3 4 0t4 0" fill="none" stroke="#2f6488" stroke-width="1.6" stroke-linecap="round"/>',
+    deep: '<path d="M0 3Q0-2.4-6-7Q-1.4-6 0-2.6Q1.4-6 6-7Q0-2.4 0 3z" fill="#1d3558"/><path d="M-9 6.4q2.25-3 4.5 0t4.5 0t4.5 0t4.5 0" fill="none" stroke="#1d3558" stroke-width="1.7" stroke-linecap="round"/>',
+    ice: '<path d="M-7 7L-2.6-8L2 7z" fill="#a4d3e8" stroke="#4d7f99" stroke-width="1" stroke-linejoin="round"/><path d="M1 7L5-2.6L9 7z" fill="#d2ecf6" stroke="#4d7f99" stroke-width="1" stroke-linejoin="round"/>',
+    cavern: '<path d="M-10 7Q-10-8 0-8Q10-8 10 7z" fill="#6d6680" stroke="#2e2a3a" stroke-width="1" stroke-linejoin="round"/><path d="M-4.4 7Q-4.4-2.4 0-2.4Q4.4-2.4 4.4 7z" fill="#231f2e"/>'
   };
 
   // Icons are drawn a little larger than a hex's radius divided by 26, as the
@@ -300,6 +314,131 @@
       if (!linked) d += 'M' + ac[0].toFixed(1) + ' ' + ac[1].toFixed(1) + 'h0.01';
     }
     return d;
+  }
+
+  // LINES are the three lines a hex can carry, each a bit of the hex's lines
+  // number, so a road, a river and a trail can share a hex and its land.
+  var LINES = [[1, 'road', 'Road'], [4, 'trail', 'Trail'], [2, 'river', 'River']];
+
+  // FAMILIES is the palette's reading order: like kinds sit together.
+  var FAMILIES = [
+    ['Green lands', ['plains', 'farmland', 'forest', 'jungle', 'swamp']],
+    ['High and dry', ['hills', 'mountain', 'scrub', 'desert', 'badlands']],
+    ['Harsh lands', ['snow', 'ice', 'waste', 'volcanic', 'cavern']],
+    ['Water and places', ['coast', 'water', 'deep', 'town']]
+  ];
+  // COMB places the nineteen kinds on a honeycomb: one in the middle, six
+  // around it, twelve around those. A kind keeps its place, so the hand learns it.
+  var COMB = ['plains', 'forest', 'jungle', 'swamp', 'farmland', 'hills', 'mountain',
+    'scrub', 'desert', 'badlands', 'waste', 'volcanic', 'cavern', 'snow', 'ice', 'deep', 'water', 'coast', 'town'];
+
+  // SPIRAL lists a hex and the two rings around it as steps east and south-east.
+  var SPIRAL = [[0, 0], [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1],
+    [2, 0], [1, 1], [0, 2], [-1, 2], [-2, 2], [-2, 1], [-2, 0], [-1, -1], [0, -2], [1, -2], [2, -2], [2, -1]];
+  var STAMP_KEY = { p: 'plains', f: 'forest', h: 'hills', m: 'mountain', w: 'water', s: 'swamp', d: 'desert', n: 'snow', t: 'town',
+    J: 'jungle', F: 'farmland', S: 'scrub', B: 'badlands', W: 'waste', V: 'volcanic', C: 'coast', D: 'deep', I: 'ice', K: 'cavern' };
+  // STAMPS are ready-made groups of hexes, written along SPIRAL; a dot leaves
+  // the hex under it alone.
+  var STAMPS = [
+    ['Mountain range', 'mmhhmhhmh...hmh...h'],
+    ['Lake and shore', 'wwwwwwwpffpsspffppf'],
+    ['Island', 'hfpffpfCCCCCCCCCCCC'],
+    ['Forest clearing', 'pffffffffhfffffhfff'],
+    ['City and farms', 'tFFFFFFFFpffpFFphhp'],
+    ['Volcano', 'VVVVVVVWBWWBWWBWWBW'],
+    ['Oasis', 'wpSppSpdddddddddddd'],
+    ['Marsh delta', 'sswssppswCwCwspfpfp'],
+    ['Frozen north', 'IIIIIIInnmnnIDDInnm'],
+    ['Canyon lands', 'BBSSBSSBSdddSBSdddS'],
+    ['Cursed ruin', 'tWWWWWWWsfWsfWsfWsf'],
+    ['Cave system', 'KKKKKKKmhmmhmmhmmhm']
+  ];
+
+  // stampCells is where a stamp's hexes land when its middle is on (col,row),
+  // turned rot sixths of a circle.
+  function stampCells(st, col, row, rot) {
+    var c0 = cubeOf(col, row), out = [];
+    for (var i = 0; i < st[1].length; i++) {
+      var t = STAMP_KEY[st[1].charAt(i)];
+      if (!t) continue;
+      var q = SPIRAL[i][0], r = SPIRAL[i][1];
+      for (var k = 0; k < (rot % 6 + 6) % 6; k++) { var q2 = 0 - r; r = q + r; q = q2; }
+      var x = c0[0] + q, z = c0[2] + r;
+      out.push({ col: x + (z - (z & 1)) / 2, row: z, terrain: t });
+    }
+    return out;
+  }
+
+  // around lists the hexes within n steps of (col,row).
+  function around(col, row, n) {
+    var out = [], h = { col: col, row: row };
+    for (var r = row - n; r <= row + n; r++) {
+      for (var c = col - n - 1; c <= col + n + 1; c++) {
+        if (distance(h, { col: c, row: r }) <= n) out.push({ col: c, row: r });
+      }
+    }
+    return out;
+  }
+
+  // noise01 is a steady number from 0 to 1 for a hex, so a rough edge or a
+  // river's bends come out the same on every draw.
+  function noise01(col, row, salt) {
+    var n = Math.sin(col * 127.1 + row * 311.7 + (salt || 0) * 74.7) * 43758.5453;
+    return n - Math.floor(n);
+  }
+
+  // flowPath draws a line of one kind as curves through its hexes: each hex
+  // bends the line through a point near its middle, and two neighbours meet
+  // halfway between their points, so the line has no corners.
+  function flowPath(g, cells, bend) {
+    var set = {}, i, d = '';
+    function pt(c) {
+      var p = center(g, c.col, c.row);
+      return [p[0] + (noise01(c.col, c.row, 1) - 0.5) * bend * g.r, p[1] + (noise01(c.col, c.row, 2) - 0.5) * bend * g.r];
+    }
+    for (i = 0; i < cells.length; i++) set[key(cells[i].col, cells[i].row)] = true;
+    function f(n) { return n.toFixed(1); }
+    for (i = 0; i < cells.length; i++) {
+      var a = cells[i], p = pt(a);
+      var nb = neighbors(a.col, a.row).filter(function (n) { return set[key(n.col, n.row)]; });
+      var mids = nb.map(function (n) { var q = pt(n); return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; });
+      if (!nb.length) d += 'M' + f(p[0]) + ' ' + f(p[1]) + 'h0.01';
+      else if (nb.length === 1) d += 'M' + f(p[0]) + ' ' + f(p[1]) + 'L' + f(mids[0][0]) + ' ' + f(mids[0][1]);
+      else for (var j = 1; j < mids.length; j++) d += 'M' + f(mids[0][0]) + ' ' + f(mids[0][1]) + 'Q' + f(p[0]) + ' ' + f(p[1]) + ' ' + f(mids[j][0]) + ' ' + f(mids[j][1]);
+    }
+    return d;
+  }
+
+  // edgeWalk is a river that keeps to the borders between hexes: it walks
+  // hex corners from near one map point to near the next.
+  function edgeWalk(g, pts) {
+    function corner(p, i) { var a = Math.PI / 3 * i - Math.PI / 2; return [p[0] + g.r * Math.cos(a), p[1] + g.r * Math.sin(a)]; }
+    function near(p) {
+      var h = hexAt(g, p[0], p[1]) || { col: 0, row: 0 }, c = center(g, h.col, h.row), best = null, bd = 1e9;
+      for (var i = 0; i < 6; i++) { var q = corner(c, i), dd = Math.hypot(q[0] - p[0], q[1] - p[1]); if (dd < bd) { bd = dd; best = q; } }
+      return best;
+    }
+    var cur = near(pts[0]), out = [cur], up = null;
+    for (var s = 1; s < pts.length; s++) {
+      var goal = near(pts[s]), guard = 0;
+      while (Math.hypot(cur[0] - goal[0], cur[1] - goal[1]) > g.r * 0.3 && guard++ < 400) {
+        // A corner has three borders leaving it; which three depends on which way it points.
+        var best = null, bd = 1e9;
+        for (var k = 0; k < 6; k++) {
+          var a = Math.PI / 3 * k - Math.PI / 6, q = [cur[0] + g.r * Math.cos(a), cur[1] + g.r * Math.sin(a)];
+          var h2 = hexAt(g, q[0] + 0.01, q[1] + 0.01);
+          if (!h2) continue;
+          var c2 = center(g, h2.col, h2.row), on = false;
+          for (var m = 0; m < 6; m++) { var cc = corner(c2, m); if (Math.hypot(cc[0] - q[0], cc[1] - q[1]) < g.r * 0.2) { on = true; q = cc; } }
+          if (!on || (up && Math.hypot(q[0] - up[0], q[1] - up[1]) < 1)) continue;
+          var dd = Math.hypot(q[0] - goal[0], q[1] - goal[1]);
+          if (dd < bd) { bd = dd; best = q; }
+        }
+        if (!best) break;
+        up = cur; cur = best; out.push(cur);
+      }
+    }
+    return 'M' + out.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join('L');
   }
 
   // batches splits queued changes into requests the server accepts. Each entry
@@ -562,7 +701,7 @@
     var even = !(row & 1);
     function raised(c, r) {
       var x = cells[key(c, r)];
-      return !!(x && x.terrain && x.terrain !== 'water' && x.terrain !== 'road');
+      return !!(x && x.terrain && x.terrain !== 'water' && x.terrain !== 'deep' && x.terrain !== 'road');
     }
     return { bl: raised(even ? col - 1 : col, row + 1), br: raised(even ? col : col + 1, row + 1) };
   }
@@ -653,7 +792,7 @@
     var renderPending = false;
     var saving = Promise.resolve();
     var overlay = null;
-    var gFills, gLines, gTop, gHover, hoverPath, defs;
+    var gFills, gLines, gTop, gHover, hoverPath, hoverGhost, defs;
     var dragDisabled = false;
     var stroke = null;        // { last: {col,row} } while the pointer is down in Paint mode
     var canWrite = !!ctx.canPaintHexes;
@@ -684,6 +823,19 @@
     var art = DEFAULT_ART;    // the map's saved terrain art, from the read
     var lastArtMode = null;
     var paintPiece = null;    // the piece the brush paints, or null for Mix
+    var ptab = 'land';        // the open Paint drawer: land, lines or stamps
+    var tool = 'brush';       // brush, fill, erase or pick
+    var bsize = 0;            // the brush reaches this many hexes from the pointer
+    var rough = false;        // a wide brush leaves a broken edge
+    var paintLine = 2;        // the line the Lines drawer draws
+    var stampSel = 0, stampRot = 0, stampOwn = false;
+    var undoLog = [], redoLog = [], step = null;
+    var recent = ['forest', 'plains', 'hills', 'water', 'mountain'];
+    var palVar = (/[?&]pal=([abc])/.exec(location.search) || [0, 'b'])[1];
+    var edgeRivers = [];      // rivers that keep to hex borders, as paths
+    var comb = null;          // the honeycomb picker while it is open
+    var hoverAt = null;
+    var strokeSalt = 0;
     var pfold = null;         // [terrain, folder index] while a piece folder is open
     var artQ = null;          // an art change waiting to be saved
     var destroyed = false;
@@ -817,6 +969,9 @@
         'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke'
       });
       hoverPath.style.display = 'none';
+      hoverGhost = svgEl('g');
+      hoverGhost.style.pointerEvents = 'none';
+      gHover.appendChild(hoverGhost);
       gHover.appendChild(hoverPath);
       // Everything is drawn in the field's own units inside one group; its
       // transform is all that moves when a pinned picture does.
@@ -1402,19 +1557,9 @@
       } else if (mode === 'detailed') {
         d += HA.detailedDefs(uid);
       }
-      // Roads are drawn over the terrain, with the stroke of the chosen art.
-      if (byTerrain.road) {
-        var rd = roadPath(geo, byTerrain.road);
-        if (mode === 'simple') {
-          f += '<path d="' + rd + '" fill="none" stroke="#7a5a35" stroke-width="' + (2.6 * kk0).toFixed(2) +
-            '" stroke-linecap="round" stroke-dasharray="' + (5 * kk0).toFixed(2) + ' ' + (3 * kk0).toFixed(2) + '"/>';
-        } else {
-          f += '<path d="' + rd + '" fill="none" stroke="' + (mode === 'real' ? '#3e2e1c' : '#5a4128') + '" stroke-width="' + (5.5 * kk0).toFixed(2) +
-            '" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>' +
-            '<path d="' + rd + '" fill="none" stroke="#c19a66" stroke-width="' + (3.4 * kk0).toFixed(2) + '" stroke-linecap="round" stroke-linejoin="round"/>' +
-            '<path d="' + rd + '" fill="none" stroke="#ead6ad" stroke-width="' + (0.8 * kk0).toFixed(2) + '" stroke-dasharray="' + (3 * kk0).toFixed(2) + ' ' + (4 * kk0).toFixed(2) + '"/>';
-        }
-      }
+      // Lines are drawn over the terrain, with the stroke of the chosen art.
+      f += linesMarkup(mode, kk0);
+      if (byTerrain.road) f += roadMarkup(roadPath(geo, byTerrain.road), mode, kk0);
       // Hexes in transition: the old art fades out as the new fades in.
       for (k in fx) {
         var e = fx[k], cc = cells[k];
@@ -1706,6 +1851,7 @@
       var c = cellAt(col, row);
       var before = c.piece === undefined ? null : c.piece;
       if (c.terrain === e.terrain && (!HA || before === e.piece)) return;
+      logBefore(c);
       var prev = c.terrain;
       c.terrain = e.terrain;
       if (HA) c.piece = e.piece;
@@ -1875,11 +2021,194 @@
     function moveHover(e) {
       if (!active || !geo || !layout) { hoverPath.style.display = 'none'; return; }
       var h = pointToHex(e);
-      if (!h) { hoverPath.style.display = 'none'; return; }
-      var c = center(geo, h.col, h.row);
-      hoverPath.setAttribute('d', hexD(c[0], c[1], geo.r));
+      if (!h) { hoverPath.style.display = 'none'; hoverGhost.innerHTML = ''; return; }
+      hoverAt = h;
+      var list = [h], ghost = '';
+      if (mode === 'paint' && ptab === 'stamps') {
+        list = inField(stampCells(STAMPS[stampSel], h.col, h.row, stampRot));
+        list.forEach(function (c) { var p = center(geo, c.col, c.row); ghost += '<path d="' + hexD(p[0], p[1], geo.r) + '" fill="' + COLOR[c.terrain] + '" fill-opacity=".72"/>'; });
+      } else if ((mode === 'paint' && ptab === 'land' && (tool === 'brush' || tool === 'erase')) || mode === 'fog') {
+        list = brushHexes(h, true);
+      }
+      hoverGhost.innerHTML = ghost;
+      hoverPath.setAttribute('fill-opacity', list.length > 1 ? '.3' : '.14');
+      hoverPath.setAttribute('d', cellsPath(geo, list));
       hoverPath.style.display = '';
     }
+
+    function inField(list) {
+      return list.filter(function (c) { return c.col >= 0 && c.row >= 0 && c.col < geo.cols && c.row < geo.rows; });
+    }
+
+    // brushHexes is what the brush covers with its middle on h. A rough brush
+    // drops some of its outer ring, differently on each stroke.
+    function brushHexes(h, preview) {
+      if (!bsize) return [h];
+      var list = inField(around(h.col, h.row, bsize));
+      if (!rough || preview) return list;
+      return list.filter(function (c) { return distance(h, c) < bsize || noise01(c.col, c.row, strokeSalt) > 0.45; });
+    }
+
+    // fillFrom floods the land that touches h and is the same kind as h.
+    function fillFrom(h) {
+      var want = cellAt(h.col, h.row).terrain, seen = {}, todo = [h], out = [];
+      seen[key(h.col, h.row)] = true;
+      while (todo.length && out.length < 4000) {
+        var c = todo.pop();
+        out.push(c);
+        inField(neighbors(c.col, c.row)).forEach(function (n) {
+          var k = key(n.col, n.row);
+          if (seen[k]) return;
+          seen[k] = true;
+          if ((cells[k] ? cells[k].terrain : null) === want) todo.push(n);
+        });
+      }
+      return out;
+    }
+
+    // ---- Undo ----
+
+    function logBefore(c) {
+      if (!step) return;
+      var k = key(c.col, c.row);
+      if (!step[k]) step[k] = { col: c.col, row: c.row, terrain: c.terrain, piece: c.piece == null ? null : c.piece, lines: c.lines || 0 };
+    }
+
+    function closeStep() {
+      if (step && Object.keys(step).length) { undoLog.push(step); redoLog = []; if (undoLog.length > 60) undoLog.shift(); }
+      step = null;
+    }
+
+    function swapStep(from, to) {
+      var st = from.pop();
+      if (!st) return;
+      var back = {};
+      Object.keys(st).forEach(function (k) {
+        var b = st[k], c = cellAt(b.col, b.row);
+        back[k] = { col: c.col, row: c.row, terrain: c.terrain, piece: c.piece == null ? null : c.piece, lines: c.lines || 0 };
+        c.terrain = b.terrain; c.piece = b.piece; c.lines = b.lines;
+        markArt(c.col, c.row);
+        queueChange(c.col, c.row, { terrain: b.terrain, piece: b.piece });
+      });
+      to.push(back);
+      scheduleFlush(FLUSH_MS);
+      renderSoon();
+      renderPanel();
+    }
+
+    // ---- Lines ----
+
+    function paintLineHex(col, row, erase) {
+      var c = cellAt(col, row), next = erase ? 0 : ((c.lines || 0) | paintLine);
+      if ((c.lines || 0) === next) return;
+      logBefore(c);
+      c.lines = next;
+    }
+
+    function linesMarkup(amode, kk0) {
+      var by = { 1: [], 2: [], 4: [] }, k, f = '';
+      for (k in cells) { var c = cells[k], n = c.lines || 0; if (n & 1) by[1].push(c); if (n & 2) by[2].push(c); if (n & 4) by[4].push(c); }
+      var kw = amode === 'real' ? 1.45 : 1;
+      function w(n) { return (n * kk0 * kw).toFixed(2); }
+      function river(d) {
+        if (amode === 'simple') return '<path d="' + d + '" fill="none" stroke="#3f7fb5" stroke-width="' + w(3) + '" stroke-linecap="round" stroke-linejoin="round"/>';
+        return '<path d="' + d + '" fill="none" stroke="' + (amode === 'real' ? '#1f4468' : '#2f5d86') + '" stroke-width="' + w(6.4) + '" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>' +
+          '<path d="' + d + '" fill="none" stroke="#5fa3d4" stroke-width="' + w(4.4) + '" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '<path d="' + d + '" fill="none" stroke="#d6ebf8" stroke-width="' + w(0.9) + '" stroke-linecap="round" stroke-dasharray="' + w(4) + ' ' + w(6) + '" opacity=".8"/>';
+      }
+      if (by[2].length) f += river(flowPath(geo, by[2], 0.55));
+      edgeRivers.forEach(function (d) { f += river(d); });
+      if (by[4].length) {
+        var tr = flowPath(geo, by[4], 0.5);
+        f += '<path d="' + tr + '" fill="none" stroke="#f4e8c9" stroke-width="' + w(3.4) + '" stroke-linecap="round" opacity="' + (amode === 'real' ? '.85' : '.5') + '"/>' +
+          '<path d="' + tr + '" fill="none" stroke="' + (amode === 'simple' ? '#7a5a35' : '#5a3f22') + '" stroke-width="' + w(1.7) + '" stroke-linecap="round" stroke-dasharray="' + w(0.1) + ' ' + w(3.6) + '"/>';
+      }
+      if (by[1].length) f += roadMarkup(roadPath(geo, by[1]), amode, kk0);
+      return f;
+    }
+
+    function roadMarkup(rd, amode, kk0) {
+      if (amode === 'simple') {
+        return '<path d="' + rd + '" fill="none" stroke="#7a5a35" stroke-width="' + (2.6 * kk0).toFixed(2) +
+          '" stroke-linecap="round" stroke-dasharray="' + (5 * kk0).toFixed(2) + ' ' + (3 * kk0).toFixed(2) + '"/>';
+      }
+      return '<path d="' + rd + '" fill="none" stroke="' + (amode === 'real' ? '#3e2e1c' : '#5a4128') + '" stroke-width="' + (5.5 * kk0).toFixed(2) +
+        '" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>' +
+        '<path d="' + rd + '" fill="none" stroke="#c19a66" stroke-width="' + (3.4 * kk0).toFixed(2) + '" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<path d="' + rd + '" fill="none" stroke="#ead6ad" stroke-width="' + (0.8 * kk0).toFixed(2) + '" stroke-dasharray="' + (3 * kk0).toFixed(2) + ' ' + (4 * kk0).toFixed(2) + '"/>';
+    }
+
+    // ---- Stamps ----
+
+    function placeStamp(h) {
+      inField(stampCells(STAMPS[stampSel], h.col, h.row, stampRot)).forEach(function (c) {
+        var keepT = paintTerrain, keepP = paintPiece;
+        paintTerrain = c.terrain; paintPiece = null;
+        paintHex(c.col, c.row);
+        paintTerrain = keepT; paintPiece = keepP;
+      });
+    }
+
+    function stampThumb(st) {
+      var out = '', r = 4.4, w = r * SQRT3;
+      for (var i = 0; i < st[1].length; i++) {
+        var t = STAMP_KEY[st[1].charAt(i)];
+        if (!t) continue;
+        var q = SPIRAL[i][0], rr = SPIRAL[i][1];
+        out += '<path d="' + hexD((q + rr / 2) * w, rr * 1.5 * r, r - 0.35) + '" fill="' + COLOR[t] + '"/>';
+      }
+      return '<svg viewBox="-20 -16 40 32" width="60" height="48" aria-hidden="true">' + out + '</svg>';
+    }
+
+    function useKind(t) {
+      if (paintTerrain !== t) paintPiece = null;
+      paintTerrain = t;
+      if (t) { recent = [t].concat(recent.filter(function (x) { return x !== t; })).slice(0, 5); }
+    }
+
+    // ---- Honeycomb picker ----
+
+    function openComb(x, y) {
+      closeComb();
+      var am = artMode(), R = 25, W = R * SQRT3, el = document.createElement('div');
+      el.className = 'mp-fl mp-hx-comb';
+      var svg = '', back = '';
+      COMB.forEach(function (t, i) {
+        var cx = (SPIRAL[i][0] + SPIRAL[i][1] / 2) * W, cy = SPIRAL[i][1] * 1.5 * R;
+        back += '<path d="' + hexD(cx, cy, R + 7) + '"/>';
+        svg += '<g class="mp-hx-cb" data-cb="' + t + '" aria-label="' + esc(terrainName(t)) + '" transform="translate(' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')"' + (t === paintTerrain ? ' data-on="1"' : '') + '>' +
+          '<g transform="scale(' + ((R - 2.5) / 13).toFixed(3) + ')">' + palSwatch(t, am === 'real' ? 'detailed' : am) + '</g><path class="mp-hx-cbr" d="' + hexD(0, 0, R - 2.5) + '"/></g>';
+      });
+      el.innerHTML = '<svg viewBox="-125 -112 250 224" width="250" height="224"><defs>' + HA.detailedDefs(uid + 'p') + '</defs><g class="mp-hx-cbb">' + back + '</g>' + svg + '</svg><div class="mp-hx-cbn">' + esc(terrainName(paintTerrain || 'plains')) + '</div>';
+      el.style.left = (x - 125) + 'px';
+      el.style.top = (y - 112) + 'px';
+      (panel ? panel.parentNode : container.parentNode).appendChild(el);
+      Array.prototype.forEach.call(el.querySelectorAll('[data-cb]'), function (g) {
+        g.addEventListener('pointerenter', function () { el.querySelector('.mp-hx-cbn').textContent = terrainName(g.dataset.cb); });
+        g.addEventListener('click', function () { useKind(g.dataset.cb); closeComb(); renderPanel(); });
+      });
+      comb = el;
+    }
+
+    function closeComb() { if (comb && comb.parentNode) comb.parentNode.removeChild(comb); comb = null; }
+
+    // For the design samples only: set lines and border rivers from outside.
+    window.__hexProto = {
+      lines: function (list) { list.forEach(function (c) { cellAt(c[0], c[1]).lines = c[2]; }); renderSoon(); },
+      edges: function (routes) { edgeRivers = routes.map(function (r) { return edgeWalk(geo, r.map(function (h) { return center(geo, h[0], h[1]); })); }); renderSoon(); },
+      comb: openComb,
+      set: function (o) {
+        if (o.ptab) ptab = o.ptab; if (o.tool) tool = o.tool; if (o.bsize != null) bsize = o.bsize; if (o.rough != null) rough = o.rough;
+        if (o.pal) palVar = o.pal; if (o.stamp != null) stampSel = o.stamp; if (o.rot != null) stampRot = o.rot; if (o.line) paintLine = o.line;
+        if (o.ter) useKind(o.ter); if (o.recent) recent = o.recent; if (o.own != null) stampOwn = o.own; if (o.mode) { mode = o.mode; applyMode(); }
+        renderPanel();
+      },
+      pt: function (col, row) {
+        var c = center(geo, col, row), x = c[0] * layout.xf.s + layout.xf.x, y = c[1] * layout.xf.s + layout.xf.y;
+        var q = map.latLngToContainerPoint([mapH - y, x]), r = container.getBoundingClientRect();
+        return [r.left + q.x, r.top + q.y];
+      }
+    };
 
     // strokeKind is what a drag does in the current mode: paint terrain, reveal
     // or hide hexes, or nothing (Look, Party and Move pan the map).
@@ -1905,8 +2234,25 @@
       e.preventDefault();
       try { container.setPointerCapture(e.pointerId); } catch (err) { /* capture is a nicety */ }
       stroke = { last: h, kind: kind };
-      if (kind === 'fog') fogStroke(h); else paintHex(h.col, h.row);
+      strokeSalt = (strokeSalt + 1) % 97;
+      if (kind === 'fog') brushHexes(h).forEach(fogStroke);
+      else { step = {}; paintAt(h, true); }
       renderSoon();
+    }
+
+    // paintAt is one touch of the open drawer's tool on hex h.
+    function paintAt(h, first) {
+      if (ptab === 'stamps') { if (first) placeStamp(h); return; }
+      if (ptab === 'lines') { paintLineHex(h.col, h.row, tool === 'erase'); return; }
+      if (tool === 'pick') {
+        var c = cells[key(h.col, h.row)];
+        if (first && c && c.terrain && c.terrain !== 'road') { useKind(c.terrain); paintPiece = c.piece == null ? null : c.piece; tool = 'brush'; renderPanel(); }
+        return;
+      }
+      var keepT = paintTerrain;
+      if (tool === 'erase') paintTerrain = '';
+      (tool === 'fill' ? (first ? fillFrom(h) : []) : brushHexes(h)).forEach(function (p) { paintHex(p.col, p.row); });
+      paintTerrain = keepT;
     }
 
     function onPointerMove(e) {
@@ -1914,7 +2260,7 @@
       if (!stroke) return;
       var h = pointToHex(e);
       if (!h || (h.col === stroke.last.col && h.row === stroke.last.row)) return;
-      hexLine(stroke.last, h).forEach(function (p) { if (stroke.kind === 'fog') fogStroke(p); else paintHex(p.col, p.row); });
+      hexLine(stroke.last, h).slice(1).forEach(function (p) { if (stroke.kind === 'fog') brushHexes(p).forEach(fogStroke); else paintAt(p, false); });
       stroke.last = h;
       renderSoon();
     }
@@ -1922,11 +2268,14 @@
     function endStroke() {
       if (!stroke) return;
       stroke = null;
+      var had = step && Object.keys(step).length;
+      closeStep();
+      if (had) renderPanel();
       // One request for the whole drag; a quick second stroke joins it.
       scheduleFlush(FLUSH_MS);
     }
 
-    function onPointerLeave() { if (hoverPath) hoverPath.style.display = 'none'; }
+    function onPointerLeave() { if (hoverPath) hoverPath.style.display = 'none'; if (hoverGhost) hoverGhost.innerHTML = ''; }
 
     // Look mode: a click selects a hex and opens its card. Party mode: a click
     // moves the party there.
@@ -2025,7 +2374,9 @@
       if (!active || !layerOn) { panel.hidden = true; return; }
       var ms = modes();
       if (!ms.some(function (m) { return m[0] === mode; })) mode = 'look';
-      var h = '<div class="mp-hx-head">Hexes<button type="button" class="mp-hx-x" aria-label="Close hexes"><svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>';
+      var ur = mode === 'paint' ? '<span class="mp-hx-ur"><button type="button" class="mp-hx-ib" id="mp-hx-undo" aria-label="Undo" title="Undo"' + (undoLog.length ? '' : ' disabled') + '><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>' +
+        '<button type="button" class="mp-hx-ib" id="mp-hx-redo" aria-label="Redo" title="Redo"' + (redoLog.length ? '' : ' disabled') + '><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button></span>' : '';
+      var h = '<div class="mp-hx-head">Hexes' + ur + '<button type="button" class="mp-hx-x" aria-label="Close hexes"><svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>';
       h += '<div class="mp-chips">' + ms.map(function (m) {
         return '<button type="button" class="mp-chip" data-hm="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>';
       }).join('') + '</div>';
@@ -2040,13 +2391,73 @@
         }
         // The Detailed swatches need its shading, defined once per panel.
         if (am === 'detailed') h += '<svg class="mp-hx-defs" width="0" height="0" aria-hidden="true"><defs>' + HA.detailedDefs(uid + 'p') + '</defs></svg>';
-        h += '<div class="mp-hx-pal">' + TERRAINS.map(function (t) {
-          return '<button type="button" data-ter="' + t[0] + '" aria-pressed="' + (paintTerrain === t[0]) + '"><svg viewBox="' + (tall && t[0] !== 'road' ? '-15 -24 30 40' : '-15 -14 30 28') + '" width="36" height="' + (tall && t[0] !== 'road' ? 46 : 32) + '" aria-hidden="true">' + palSwatch(t[0], am) + '</svg>' + esc(t[1]) + '</button>';
-        }).join('') + '<button type="button" data-ter="" aria-pressed="' + (paintTerrain === '') + '"><i></i>Clear</button></div>' +
-          (HA ? piecePicker(am) : '') +
-          '<p>Click or drag across hexes. The picture still shows through.</p>';
+        h += '<div class="mp-hx-tabs" role="tablist">' + [['land', 'Land'], ['lines', 'Lines'], ['stamps', 'Stamps']].map(function (t) {
+          return '<button type="button" role="tab" data-pt="' + t[0] + '" aria-selected="' + (ptab === t[0]) + '">' + t[1] + '</button>';
+        }).join('') + '</div>';
+        var sw = function (t, w) {
+          var tl = tall && t !== 'road';
+          return '<svg viewBox="' + (tl ? '-15 -24 30 40' : '-15 -14 30 28') + '" width="' + w + '" height="' + Math.round(w * (tl ? 40 : 28) / 30) + '" aria-hidden="true">' + palSwatch(t, am) + '</svg>';
+        };
+        var toolRow = function (list, sizes) {
+          var icons = { brush: 'fa-paintbrush', fill: 'fa-fill-drip', erase: 'fa-eraser', pick: 'fa-eye-dropper' };
+          var names = { brush: 'Brush', fill: 'Fill', erase: 'Rub out', pick: 'Pick up a kind from the map' };
+          var r = '<div class="mp-hx-tools">' + list.map(function (t) {
+            return '<button type="button" class="mp-hx-ib" data-tool="' + t + '" aria-pressed="' + (tool === t) + '" aria-label="' + names[t] + '" title="' + names[t] + '"><i class="fa-solid ' + icons[t] + '" aria-hidden="true"></i></button>';
+          }).join('');
+          if (sizes) {
+            r += '<span class="mp-hx-sep"></span>' + [0, 1, 2].map(function (n) {
+              var dots = SPIRAL.slice(0, [1, 7, 19][n]).map(function (p) { return '<path d="' + hexD((p[0] + p[1] / 2) * [7, 6.2, 4.5][n], p[1] * [6, 5.4, 3.9][n], [5.2, 3.1, 2.25][n]) + '"/>'; }).join('');
+              return '<button type="button" class="mp-hx-ib mp-hx-sz" data-bs="' + n + '" aria-pressed="' + (bsize === n) + '" aria-label="' + ['One hex', 'Seven hexes', 'Nineteen hexes'][n] + '" title="' + ['One hex', 'Seven hexes', 'Nineteen hexes'][n] + '"><svg viewBox="-12 -12 24 24" width="22" height="22" aria-hidden="true">' + dots + '</svg></button>';
+            }).join('');
+          }
+          return r + '</div>';
+        };
+        if (ptab === 'land') {
+          h += toolRow(['brush', 'fill', 'erase', 'pick'], true);
+          if (bsize > 0) h += '<label class="mp-hx-chk"><input type="checkbox" id="mp-hx-rough"' + (rough ? ' checked' : '') + '> Rough edge</label>';
+          var kindBtn = function (t, named) {
+            return '<button type="button" data-ter="' + t + '" aria-pressed="' + (paintTerrain === t) + '" title="' + esc(terrainName(t)) + '" aria-label="' + esc(terrainName(t)) + '">' + sw(t, named ? 36 : 38) + (named ? esc(terrainName(t)) : '') + '</button>';
+          };
+          if (palVar === 'a') {
+            h += FAMILIES.map(function (f) {
+              return '<div class="mp-hx-fam">' + esc(f[0]) + '</div><div class="mp-hx-pal">' + f[1].map(function (t) { return kindBtn(t, true); }).join('') + '</div>';
+            }).join('');
+          } else if (palVar === 'b') {
+            h += '<div class="mp-hx-now"><b id="mp-hx-nowname">' + esc(terrainName(paintTerrain || 'plains')) + '</b><span id="mp-hx-nowfam"></span></div>' +
+              '<div class="mp-hx-pal mp-hx-pal5">' + FAMILIES.map(function (f) { return f[1].map(function (t) { return kindBtn(t, false); }).join('') + (f[1].length < 5 ? '<span></span>' : ''); }).join('') + '</div>';
+          } else {
+            h += '<div class="mp-hx-now"><b id="mp-hx-nowname">' + esc(terrainName(paintTerrain || 'plains')) + '</b><span>Lately used</span></div>' +
+              '<div class="mp-hx-pal mp-hx-pal5">' + recent.map(function (t) { return kindBtn(t, false); }).join('') + '</div>' +
+              '<p>Hold <kbd>Space</kbd> over the map for every kind of land, or <button type="button" class="mp-hx-quiet" id="mp-hx-all">open them here</button>.</p>';
+          }
+          h += (HA ? piecePicker(am) : '');
+          if (palVar !== 'c') h += '<p>Click or drag across hexes. The picture still shows through.</p>';
+        }
+        if (ptab === 'lines') {
+          h += toolRow(['brush', 'erase'], false);
+          h += '<div class="mp-hx-pal">' + LINES.map(function (l) {
+            var art = l[1] === 'road' ? '<path d="M-11 5Q0-6 11 2" fill="none" stroke="#5a4128" stroke-width="4" stroke-linecap="round"/><path d="M-11 5Q0-6 11 2" fill="none" stroke="#c19a66" stroke-width="2.4" stroke-linecap="round"/>' :
+              l[1] === 'river' ? '<path d="M-11 6Q-4-7 1 0T11-4" fill="none" stroke="#2f5d86" stroke-width="4.4" stroke-linecap="round"/><path d="M-11 6Q-4-7 1 0T11-4" fill="none" stroke="#5fa3d4" stroke-width="2.8" stroke-linecap="round"/>' :
+              '<path d="M-11 4Q-3-7 2 1T11-3" fill="none" stroke="#5a3f22" stroke-width="1.9" stroke-linecap="round" stroke-dasharray="0.1 3.6"/>';
+            return '<button type="button" data-ln="' + l[0] + '" aria-pressed="' + (paintLine === l[0]) + '"><svg viewBox="-15 -14 30 28" width="36" height="32" aria-hidden="true"><path d="' + hexD(0, 0, 13) + '" fill="#e8dcc0"/>' + art + '</svg>' + l[2] + '</button>';
+          }).join('') + '</div><p>Drag across hexes to draw. A line lies on top of the land, so a river can run through a forest and a road can cross it.</p>';
+        }
+        if (ptab === 'stamps') {
+          if (stampOwn) {
+            h += '<div class="mp-hx-fam">Yours</div><div class="mp-hx-pal mp-hx-stamps">' + [['Greyhollow vale', 'tFpFfhFffhmmhfpFFpp'], ['The Three Sisters', 'mVmhVhm']].map(function (st) {
+              return '<button type="button" aria-pressed="false">' + stampThumb(st) + esc(st[0]) + '</button>';
+            }).join('') + '<button type="button" class="mp-hx-new" aria-pressed="false"><svg viewBox="-20 -16 40 32" width="60" height="48" aria-hidden="true"><path d="M0-7V7M-7 0H7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Save a piece of the map</button></div><div class="mp-hx-fam">Ready-made</div>';
+          }
+          h += '<div class="mp-hx-pal mp-hx-stamps">' + STAMPS.map(function (st, i) {
+            return '<button type="button" data-st="' + i + '" aria-pressed="' + (stampSel === i) + '">' + stampThumb(st) + esc(st[0]) + '</button>';
+          }).join('') + '</div><div class="mp-hx-row"><button type="button" class="mp-hx-ib" id="mp-hx-turn" aria-label="Turn the stamp" title="Turn the stamp"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button><span class="mp-hx-dim">Turn it, then click the map to set it down. Undo takes it back.</span></div>';
+        }
       }
       if (mode === 'fog') {
+        h += '<div class="mp-hx-tools">' + [0, 1, 2].map(function (n) {
+          var dots = SPIRAL.slice(0, [1, 7, 19][n]).map(function (p) { return '<path d="' + hexD((p[0] + p[1] / 2) * [7, 6.2, 4.5][n], p[1] * [6, 5.4, 3.9][n], [5.2, 3.1, 2.25][n]) + '"/>'; }).join('');
+          return '<button type="button" class="mp-hx-ib mp-hx-sz" data-bs="' + n + '" aria-pressed="' + (bsize === n) + '" aria-label="' + ['One hex', 'Seven hexes', 'Nineteen hexes'][n] + '"><svg viewBox="-12 -12 24 24" width="22" height="22" aria-hidden="true">' + dots + '</svg></button>';
+        }).join('') + '</div>';
         h += '<p>Click or drag to reveal hexes; drag over revealed ones to cover them again. Players see unexplored hexes under a moving shadow.</p>';
         if (!fogOn()) h += '<p>Fog of war is off, so players see every hex. Turn it on in Map settings.</p>';
         h += '<button type="button" class="mp-chip" id="mp-hx-reset">Cover everything again</button>';
@@ -2082,11 +2493,28 @@
       });
       Array.prototype.forEach.call(panel.querySelectorAll('[data-ter]'), function (b) {
         b.onclick = function () {
-          if (paintTerrain !== b.dataset.ter) paintPiece = null;
-          paintTerrain = b.dataset.ter;
+          useKind(b.dataset.ter);
+          if (tool === 'erase' || tool === 'pick') tool = 'brush';
           renderPanel();
         };
+        b.onmouseenter = function () { var n = document.getElementById('mp-hx-nowname'); if (n) n.textContent = terrainName(b.dataset.ter); };
+        b.onmouseleave = function () { var n = document.getElementById('mp-hx-nowname'); if (n) n.textContent = terrainName(paintTerrain || 'plains'); };
       });
+      function each(sel, fn) { Array.prototype.forEach.call(panel.querySelectorAll(sel), function (b) { b.onclick = function () { fn(b); renderPanel(); }; }); }
+      each('[data-pt]', function (b) { ptab = b.dataset.pt; if (ptab === 'lines' && tool !== 'erase') tool = 'brush'; });
+      each('[data-tool]', function (b) { tool = b.dataset.tool; });
+      each('[data-bs]', function (b) { bsize = +b.dataset.bs; });
+      each('[data-ln]', function (b) { paintLine = +b.dataset.ln; if (tool === 'erase') tool = 'brush'; });
+      each('[data-st]', function (b) { stampSel = +b.dataset.st; });
+      var rg = document.getElementById('mp-hx-rough');
+      if (rg) rg.onchange = function () { rough = rg.checked; };
+      var tn = document.getElementById('mp-hx-turn');
+      if (tn) tn.onclick = function () { stampRot = (stampRot + 1) % 6; };
+      var ud = document.getElementById('mp-hx-undo'), rd2 = document.getElementById('mp-hx-redo');
+      if (ud) ud.onclick = function () { swapStep(undoLog, redoLog); };
+      if (rd2) rd2.onclick = function () { swapStep(redoLog, undoLog); };
+      var all = document.getElementById('mp-hx-all');
+      if (all) all.onclick = function () { var r = panel.getBoundingClientRect(), p = panel.parentNode.getBoundingClientRect(); openComb(r.right - p.left + 140, r.top - p.top + 250); };
       Array.prototype.forEach.call(panel.querySelectorAll('[data-pc]'), function (b) {
         b.onclick = function () { var i = +b.dataset.pc; paintPiece = i < 0 ? null : i; renderPanel(); };
       });

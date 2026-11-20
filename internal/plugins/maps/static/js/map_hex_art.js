@@ -25,7 +25,9 @@
   // The palette colours, the same as the Simple art's (map_hexes.js TERRAINS).
   var TER_COLOR = {
     plains: '#c9d58a', forest: '#5f8f4a', hills: '#b8a46a', mountain: '#8d8478', water: '#6f9fc0',
-    swamp: '#6f7d55', desert: '#e3cc8c', snow: '#e8eef2', town: '#c4a27a', road: '#a0805a'
+    swamp: '#6f7d55', desert: '#e3cc8c', snow: '#e8eef2', town: '#c4a27a', road: '#a0805a',
+    jungle: '#3f8f6a', farmland: '#d6c463', scrub: '#b3a771', badlands: '#cf8f63', waste: '#7a6f6a',
+    volcanic: '#8c4638', coast: '#bfe0cf', deep: '#3d5f92', ice: '#bfe1ee', cavern: '#5a5470'
   };
 
   // Each hex's art is seeded from a string: the same scatter every time it is
@@ -51,7 +53,26 @@
     tuft:function(x,y,s){return '<path'+T(x,y,s)+' d="M-2 0L-3.2-4M0 0V-5.2M2 0L3.2-4" stroke="#5a7530" stroke-width="1" stroke-linecap="round" fill="none"/>'},
     flower:function(x,y,s,c){return '<g'+T(x,y,s)+'><circle r="1.3" fill="'+c+'"/><circle r=".5" fill="#a0702a"/></g>'},
     drift:function(x,y,s){return '<g'+T(x,y,s)+'><path d="M-10 0Q-4-6 2-3Q7-5 10 0z" fill="#fff"/><path d="M-10 0Q-4-6 2-3Q7-5 10 0" fill="none" stroke="#9db4c5" stroke-width=".8"/><path d="M-1-1.5q3-1.5 6-.6" stroke="#c6d6e1" stroke-width=".7" fill="none"/></g>'},
-    rock:function(x,y,s){return '<g'+T(x,y,s)+'><path d="M-4.5 0L-3.2-3.4L0-4.4L3.4-2.4L4.5 0z" fill="#857b6d"/><path d="M-4.5 0L-3.2-3.4L0-4.4L-.8 0z" fill="#aea494"/></g>'}
+    rock:function(x,y,s){return '<g'+T(x,y,s)+'><path d="M-4.5 0L-3.2-3.4L0-4.4L3.4-2.4L4.5 0z" fill="#857b6d"/><path d="M-4.5 0L-3.2-3.4L0-4.4L-.8 0z" fill="#aea494"/></g>'},
+    palm:function(x,y,s){return '<g'+T(x,y,s)+'><ellipse cx="1.5" cy=".6" rx="6" ry="1.9" fill="#000" opacity=".2"/><path d="M0 0Q1.6-7-.6-13.5" fill="none" stroke="#6b4a2a" stroke-width="1.8" stroke-linecap="round"/><path d="M-.6-13.5q-5-3.4-8.6.8M-.6-13.5q5-3.4 8.6.8M-.6-13.5q-3.4-5-7-4.4M-.6-13.5q3.4-5 7.4-4" fill="none" stroke="#1f6b3a" stroke-width="2.1" stroke-linecap="round"/><path d="M-.6-13.5q-4.4-2-7 1.4M-.6-13.5q.6-4.6 2.4-6" fill="none" stroke="#4ea85a" stroke-width="1.5" stroke-linecap="round"/></g>'},
+    jtree:function(x,y,s){return '<g'+T(x,y,s)+'><ellipse cx="1.5" cy=".6" rx="8" ry="2.3" fill="#000" opacity=".22"/><rect x="-1.1" y="-6" width="2.2" height="6.6" fill="#4d3520"/><circle cx="-4.4" cy="-8.4" r="5" fill="#1f6b46"/><circle cx="4.2" cy="-8" r="5.2" fill="#175a3c"/><circle cx="0" cy="-13" r="6" fill="#2f8f55"/><circle cx="-2.2" cy="-15" r="2.6" fill="#6cc27a" opacity=".9"/><path d="M4.4-4.6v3.4M-5-4.6v2.6" stroke="#175a3c" stroke-width=".9" stroke-linecap="round"/></g>'},
+    plot:function(x,y,s,c,d){return '<g'+T(x,y,s)+'><path d="M-10 2L-3-5L10-2L3 5z" fill="'+c+'" stroke="'+d+'" stroke-width=".8" stroke-linejoin="round"/><path d="M-6.5 3.2L.5-3.8M-3 4.1L4-2.9M.4 4.7L7.2-2.4" stroke="'+d+'" stroke-width=".7" opacity=".7"/></g>'},
+    barn:function(x,y,s){return '<g'+T(x,y,s)+'><ellipse cx="1" cy=".6" rx="6.5" ry="1.8" fill="#000" opacity=".18"/><path d="M-5 0V-5l5-4 5 4V0z" fill="#b9523c" stroke="#5e241a" stroke-width=".8" stroke-linejoin="round"/><path d="M-6-4.6L0-9.6L6-4.6" fill="none" stroke="#5e241a" stroke-width="1.6" stroke-linejoin="round"/><rect x="-1.5" y="-3.4" width="3" height="3.4" fill="#5e241a"/></g>'},
+    bush:function(x,y,s){return '<g'+T(x,y,s)+'><ellipse cx="1" cy=".5" rx="5.6" ry="1.6" fill="#000" opacity=".16"/><circle cx="-2.4" cy="-2.6" r="3.2" fill="#6c783b"/><circle cx="2.2" cy="-3" r="3.6" fill="#7f8a45"/><circle cx="-.2" cy="-4.6" r="2.3" fill="#a3ab63"/></g>'},
+    acacia:function(x,y,s){return '<g'+T(x,y,s)+'><ellipse cx="1.5" cy=".6" rx="8" ry="2" fill="#000" opacity=".18"/><path d="M0 0V-6M0-5L-4.5-9M0-5.6L4.5-9.4" fill="none" stroke="#6b4a2a" stroke-width="1.4" stroke-linecap="round"/><ellipse cx="0" cy="-11" rx="9" ry="3.4" fill="#6f8140"/><ellipse cx="-2" cy="-12" rx="5.4" ry="1.7" fill="#9fb062"/></g>'},
+    mesa:function(x,y,s){return '<g'+T(x,y,s)+'><ellipse cx="2" cy=".6" rx="13" ry="2.4" fill="#000" opacity=".16"/><path d="M-12 0L-8-11H8L12 0z" fill="#b06a47"/><path d="M-12 0L-8-11H-1L-3 0z" fill="#dc9a6c"/><path d="M-9.8-6H9.8M-10.9-3H10.9" stroke="#7a4129" stroke-width=".7" opacity=".7"/><path d="M-12 0L-8-11H8L12 0" fill="none" stroke="#5e3220" stroke-width=".8" stroke-linejoin="round"/></g>'},
+    hoodoo:function(x,y,s){return '<g'+T(x,y,s)+'><ellipse cx="1" cy=".5" rx="4.6" ry="1.4" fill="#000" opacity=".18"/><path d="M-2.6 0L-1.8-9L-3-11.5Q0-15.5 3-11.5L1.8-9L2.6 0z" fill="#b06a47"/><path d="M-2.6 0L-1.8-9L-3-11.5Q-1.4-14 0-14.4L-.4 0z" fill="#dc9a6c"/><path d="M-2.2-4.6H2.2" stroke="#7a4129" stroke-width=".7"/></g>'},
+    snag:function(x,y,s,c){return '<g'+T(x,y,s)+'><ellipse cx="1.5" cy=".5" rx="5" ry="1.5" fill="#000" opacity=".16"/><path d="M0 0V-13M0-6L-4.6-10.4M0-8.4L4.4-12.6M0-3.6L3.6-6.2" fill="none" stroke="'+(c||'#4a403a')+'" stroke-width="1.5" stroke-linecap="round"/></g>'},
+    rubble:function(x,y,s){return '<g'+T(x,y,s)+'><path d="M-5 0V-3h4V0zM0 0V-4.6h3.4V0z" fill="#8f8880"/><path d="M-5-3h4L-.2-3.8H-4.2zM0-4.6h3.4l.8-.8H.8z" fill="#bdb6ac"/><path d="M3.8 0l1.6-2 1.8 2z" fill="#746d66"/></g>'},
+    crack:function(x,y,s,c){return '<path'+T(x,y,s)+' d="M-8 1L-4-1.4L-1.6 1L2-1.8L4.6.4L8-1.2M-1.6 1L-2.6 3.6M2-1.8L3-4" fill="none" stroke="'+c+'" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>'},
+    cone:function(x,y,s){return '<g'+T(x,y,s)+'><ellipse cx="3" cy=".6" rx="14" ry="2.6" fill="#000" opacity=".2"/><path d="M-13 0L-4-16H4L13 0z" fill="#3c3131"/><path d="M-13 0L-4-16H0L-2 0z" fill="#6a5957"/><path d="M-4-16H4L2.6-12.6L1-14.2L-.6-11L-2.2-14z" fill="#ff8a2a"/><path d="M-.6-11Q-1.4-7-.2-3.6" fill="none" stroke="#ff8a2a" stroke-width="1.3" stroke-linecap="round"/><path d="M-13 0L-4-16H4L13 0" fill="none" stroke="#231a1a" stroke-width=".8" stroke-linejoin="round"/></g>'},
+    lava:function(x,y,s){return '<g'+T(x,y,s)+'><path d="M-8 1L-4-1.4L-1.6 1L2-1.8L4.6.4L8-1.2" fill="none" stroke="#3a1a10" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M-8 1L-4-1.4L-1.6 1L2-1.8L4.6.4L8-1.2" fill="none" stroke="#ff9a3a" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></g>'},
+    sand:function(x,y,s){return '<g'+T(x,y,s)+'><path d="M-12 0Q-5-8 3-5.4Q9-3.4 12 0z" fill="#f3e4b6"/><path d="M3-5.4Q9-3.4 12 0H1Q3.6-2.8 3-5.4z" fill="#d9c48c"/><path d="M-12 0Q-5-8 3-5.4" fill="none" stroke="#a5874a" stroke-width=".7"/><path d="M-12 1.6q2-1.9 4 0t4 0t4 0t4 0t4 0t4 0" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity=".95"/></g>'},
+    swell:function(x,y,s){return '<g'+T(x,y,s)+'><path d="M-9 1.4q3-4.4 6 0t6 0t6 0" fill="none" stroke="#12294a" stroke-width="1.5" stroke-linecap="round" opacity=".55"/><path d="M-9 0q3-4.4 6 0t6 0t6 0" fill="none" stroke="#a9c8ea" stroke-width="1.2" stroke-linecap="round" opacity=".85"/></g>'},
+    fluke:function(x,y,s){return '<g'+T(x,y,s)+'><path d="M0 2Q0-3-5.4-7.4Q-1.2-6.4 0-3.4Q1.2-6.4 5.4-7.4Q0-3 0 2z" fill="#1d3558"/><path d="M-4 2.6q2-1.8 4 0t4 0" fill="none" stroke="#dbe9f7" stroke-width="1.1" stroke-linecap="round"/></g>'},
+    shard:function(x,y,s,a,b){return '<g'+T(x,y,s)+'><ellipse cx="1.5" cy=".5" rx="5" ry="1.4" fill="#000" opacity=".13"/><path d="M-4 0L-1-14L3.6 0z" fill="'+(b||'#7fb6d6')+'"/><path d="M-4 0L-1-14L-.2 0z" fill="'+(a||'#d3eefa')+'"/><path d="M-4 0L-1-14L3.6 0" fill="none" stroke="#3f6f8c" stroke-width=".7" stroke-linejoin="round" opacity=".7"/></g>'},
+    spike:function(x,y,s){return '<g'+T(x,y,s)+'><ellipse cx="1.5" cy=".5" rx="5" ry="1.4" fill="#000" opacity=".25"/><path d="M-3.6 0Q-1.6-6-.6-13Q1.2-6 3.6 0z" fill="#4d4660"/><path d="M-3.6 0Q-1.6-6-.6-13L-.2 0z" fill="#8a829c"/></g>'},
+    shroom:function(x,y,s,c){return '<g'+T(x,y,s)+'><circle cx="0" cy="-5" r="6" fill="'+c+'" opacity=".22"/><rect x="-1" y="-5" width="2" height="5" fill="#d8d0e0"/><path d="M-4.6-4.4Q0-11 4.6-4.4z" fill="'+c+'"/><circle cx="-1.4" cy="-6.4" r=".8" fill="#fff" opacity=".8"/></g>'}
   };
   // A place in Detailed art is the Simple icon, a little larger.
   var TOWN_ICON='<path d="M-9 6V0l4-4 4 4v6z" fill="#d8c7a2" stroke="#6b5233" stroke-width="1"/><path d="M-10 0.5l5-5.5 5 5.5" fill="none" stroke="#9b4a32" stroke-width="2" stroke-linejoin="round"/><path d="M1 6V-2l4-4.5 4 4.5v8z" fill="#e6d8b8" stroke="#6b5233" stroke-width="1"/><path d="M0-1.5l5-5.5 5 5.5" fill="none" stroke="#7a3f2c" stroke-width="2" stroke-linejoin="round"/>';
@@ -82,6 +103,16 @@
     else if(t==='snow'){scatter(R,cx,cy,r,3,.36).forEach(function(p,i){o+=i===1?ART.conifer(p[0],p[1],s*.9,true):ART.drift(p[0],p[1],s*(.75+R()*.3))})}
     else if(t==='town')o+='<g'+T(cx,cy+r*.08,s*1.25)+'>'+TOWN_ICON+'</g>';
     else if(t==='plains'){scatter(R,cx,cy,r,7,.2).forEach(function(p,i){o+=i%3===2?ART.flower(p[0],p[1]-r*.05,s,R()<.5?'#f6e27a':'#fbfbf4'):ART.tuft(p[0],p[1],s*(.85+R()*.3))})}
+    else if(t==='jungle'){scatter(R,cx,cy,r,7,.27).forEach(function(p){o+=R()<.62?ART.jtree(p[0],p[1],s*(.82+R()*.3)):ART.palm(p[0],p[1],s*(.85+R()*.3))})}
+    else if(t==='farmland'){var FP=[['#d8c05a','#8a7526'],['#9db552','#566b26'],['#b98f5a','#6e4d2a'],['#e3d27c','#93802f']];scatter(R,cx,cy,r,4,.42).forEach(function(p,i){o+=i===3?ART.barn(p[0],p[1],s*.95):ART.plot(p[0],p[1]-r*.06,s*(1+R()*.15),FP[(i+Math.floor(R()*4))%4][0],FP[(i+Math.floor(R()*4))%4][1])})}
+    else if(t==='scrub'){scatter(R,cx,cy,r,7,.21).forEach(function(p,i){o+=i===3||i===6?ART.acacia(p[0],p[1],s*(.8+R()*.25)):i%3===1?ART.tuft(p[0],p[1],s*(.85+R()*.3)):ART.bush(p[0],p[1],s*(.8+R()*.35))})}
+    else if(t==='badlands'){o+=ART.mesa(cx-.12*r,cy+.02*r,s*1.05);scatter(R,cx,cy+.3*r,r*.9,3,.34).forEach(function(p,i){o+=i===2?ART.rock(p[0],p[1],s):ART.hoodoo(p[0],p[1],s*(.8+R()*.35))})}
+    else if(t==='waste'){scatter(R,cx,cy,r,2,.5).forEach(function(p){o+=ART.crack(p[0],p[1]-r*.1,s*(1+R()*.3),'#3b3532')});scatter(R,cx,cy,r,5,.26).forEach(function(p,i){o+=i%2?ART.rubble(p[0],p[1],s*(.8+R()*.3)):ART.snag(p[0],p[1],s*(.8+R()*.35))})}
+    else if(t==='volcanic'){o+=ART.cone(cx+(R()-.5)*.14*r,cy+.12*r,s*1.12);scatter(R,cx,cy+.42*r,r*.8,3,.3).forEach(function(p,i){o+=i===2?ART.snag(p[0],p[1],s*.7,'#2b2222'):ART.lava(p[0],p[1],s*(.8+R()*.3))})}
+    else if(t==='coast'){var cs2=scatter(R,cx,cy-.2*r,r*.8,2,.5);cs2.forEach(function(p,i){o+=ART.sand(p[0],p[1],s*(1+R()*.2));if(i===0)o+=R()<.6?ART.palm(p[0]-r*.1,p[1]-r*.06,s*.8):ART.rock(p[0]+r*.1,p[1]-r*.08,s)});scatter(R,cx,cy+.42*r,r*.8,2,.4).forEach(function(p){o+=ART.wave(p[0],p[1],s*(.85+R()*.3))})}
+    else if(t==='deep'){scatter(R,cx,cy,r,4,.34).forEach(function(p,i){o+=i===1&&R()<.4?ART.fluke(p[0],p[1],s):ART.swell(p[0],p[1]-r*.1,s*(.9+R()*.3))})}
+    else if(t==='ice'){scatter(R,cx,cy,r,2,.5).forEach(function(p){o+=ART.crack(p[0],p[1]-r*.1,s*(1+R()*.3),'#6f9fbd')});scatter(R,cx,cy,r,4,.3).forEach(function(p){o+=ART.shard(p[0],p[1],s*(.7+R()*.5))})}
+    else if(t==='cavern'){scatter(R,cx,cy,r,6,.24).forEach(function(p,i){o+=i%3===1?ART.shroom(p[0],p[1],s*(.8+R()*.4),R()<.5?'#7fe0d0':'#b58cf0'):i===5?ART.shard(p[0],p[1],s*.75,'#e0c8ff','#9a6fe0'):ART.spike(p[0],p[1],s*(.8+R()*.5))})}
     return o}
 
   // ---- Realistic: noise, height and colour per terrain ----
@@ -128,12 +159,22 @@
     desert:['Dunes','Great dunes','Rocky desert','Oasis','Mesas','Salt flat','Cactus field','Canyon','Bones','Pyramid','Ruins','Nomad camp'],
     snow:['Snowfield','Snowy pines','Ice spikes','Frozen lake','Crevasses','Snowy hills','Tundra','Frost rocks','Snowed ruins','Igloo camp','Ice cave','Hot spring'],
     water:['Open water','Calm lake','Rough sea','Shallows','Reef','Sea rocks','Islet','Kelp','Whirlpool','Ice floes','Shipwreck','Sea stacks'],
-    town:['Hamlet','Village','Town','Walled city','Capital','Castle','Watchtower','Temple','Ruins','Port','Fort','Wizard’s tower']};
+    town:['Hamlet','Village','Town','Walled city','Capital','Castle','Watchtower','Temple','Ruins','Port','Fort','Wizard’s tower'],
+    jungle:['Rainforest','Palm jungle','Bamboo grove','Giant trees','Jungle river','Vine thicket','Jungle clearing','Waterfall pool','Overgrown temple','Tree village','Flowering jungle','Jungle hills'],
+    farmland:['Patchwork fields','Wheat fields','Orchard','Vineyard','Pasture','Rice paddies','Ploughed fields','Mill','Farm village','Barns','Hedgerows','Harvest'],
+    scrub:['Dry grass','Thornbrush','Savanna trees','Rocky scrub','Dry riverbed','Waterhole','Termite mounds','Tall grass','Red earth','Herders’ camp','Lone baobab','Burnt scrub'],
+    badlands:['Broken ground','Hoodoos','Mesa','Deep canyon','Buttes','Striped hills','Dry gulch','Boulder field','Petrified forest','Cliff dwellings','Bone yard','Bandit hideout'],
+    waste:['Ash plain','Cracked earth','Dead trees','Rubble field','Tar pits','Battlefield','Bone field','Poison pools','Fallen city','Crater','Cursed ground','Scavenger camp'],
+    volcanic:['Lava field','Cinder cones','Lava river','Lava lake','Obsidian spires','Ash dunes','Steam vents','Caldera','Basalt columns','Sulphur springs','Burnt forest','Fire temple'],
+    coast:['Sandy beach','Rocky shore','Dunes','Sea cliffs','Tidal flats','Cove','Palm beach','Lagoon','Fishing village','Lighthouse','Wreck on the sand','River mouth'],
+    deep:['Deep water','Swells','Abyss','Maelstrom','Sea serpent','Icebergs','Kraken','Weed sea','Drowned spires','Ghost ship','Storm','Lonely rock'],
+    ice:['Ice sheet','Pack ice','Ice ridges','Blue ice','Ice spires','Crevasses','Meltwater lakes','Ice cliffs','Frozen ship','Ice tower','Hunters’ camp','Giant’s bones'],
+    cavern:['Cave floor','Stalagmites','Mushroom grove','Underground lake','Crystal cave','Chasm','Lava vein','Glowworm cave','Dwarven hall','Underground river','Bone pit','Dark city']};
   /* Mix: a stable piece per hex, so repainting the same hex keeps its look. */
   function pieceOf(t,seed,v){if(v!=null&&v>=0)return v;var h=2166136261;for(var i=0;i<seed.length;i++){h^=seed.charCodeAt(i);h=Math.imul(h,16777619)}return ((h>>>0)%997)%12}
   /* Scene for one piece: ground kind, landforms, water and roads, then objects. Everything is in hex units (centre 0,0, corner distance 1). */
   function scene(t,v,R){
-    var G={gb:t==='town'?'plains':t,peaks:[],mounds:[],obs:[],water:[],roads:[],fields:[],wl:.012,wcol:[40,86,120],snowline:.52,rock:'grey',snowy:t==='snow',bank:t==='water',up:.7,dirt:0,tint:null},O=G.obs;
+    var G={gb:t==='town'?'plains':t,peaks:[],mounds:[],obs:[],water:[],roads:[],fields:[],wl:.012,wcol:[40,86,120],snowline:.52,rock:'grey',snowy:t==='snow',bank:t==='water'||t==='deep',up:.7,dirt:0,tint:null},O=G.obs;
     function P(n,gap,inset,ok){var o=[],tries=0;while(o.length<n&&tries<n*80){tries++;var a=R()*Math.PI*2,d=Math.sqrt(R())*inset,px=Math.cos(a)*d*.86,py=Math.sin(a)*d;if((!ok||ok(px,py))&&o.every(function(q){return Math.hypot(q[0]-px,q[1]-py)>gap}))o.push([px,py])}return o}
     function pick(a){return a[Math.floor(R()*a.length)]}
     var GREEN=[[80,122,50],[98,132,56],[66,108,44],[112,128,58]],PINE=[[38,78,46],[46,88,50],[34,70,52]];
@@ -153,9 +194,15 @@
     function pond(p,rad,wob){G.water.push({x:p[0],y:p[1],r:rad,wob:wob==null?.25:wob})}
     function river(pts,wd){G.water.push({line:pts,w:wd})}
     function road(pts,wd,col){G.roads.push({line:pts,w:wd,c:col||[150,124,88]})}
-    function field(p,w,d,ang,cols){G.fields.push({x:p[0],y:p[1],w:w,d:d,ca:Math.cos(ang),sa:Math.sin(ang),cols:cols})}
+    function field(p,w,d,ang,cols,wet){G.fields.push({x:p[0],y:p[1],w:w,d:d,ca:Math.cos(ang),sa:Math.sin(ang),cols:cols,wet:wet})}
     function peak(x,y,rad,a){G.peaks.push({x:x,y:y,r:rad,a:a})}
     function mound(x,y,a,s,sy){G.mounds.push({x:x,y:y,a:a,s:s,sy:sy||s})}
+    /* A smooth cone of rock or, glossy, of ice or crystal; a tree with a bare trunk; a low bush. */
+    function spire(p,rad,top,col){O.push({k:'c',x:p[0],y:p[1],r:rad,b:0,t:top,c:col,sp:1})}
+    function shard(p,rad,top,col){O.push({k:'c',x:p[0],y:p[1],r:rad,b:0,t:top,c:col||[150,200,230],ice:1})}
+    function palm(p,s,col){O.push({k:'pm',x:p[0],y:p[1],r:.1*s,t:(.2+R()*.1)*s,c:col||pick([[70,150,60],[90,160,60],[50,130,70]]),wc:[44,92,48]})}
+    function bush(p,s,col){O.push({k:'o',x:p[0],y:p[1],r:(.04+R()*.02)*s,b:.01,t:(.05+R()*.02)*s,c:col})}
+    function ribs(x0,y0,n,gap,span,hi,col){for(var i=0;i<n;i++){var a=Math.sin(i/(n-1)*Math.PI);stem([x0+i*gap,y0-span],.022,hi*(.5+.5*a),col);stem([x0+i*gap,y0+span],.022,hi*(.5+.5*a),col)}}
     var ROOF=[[150,72,52],[120,64,48],[92,86,84],[164,96,58],[70,74,92]],PLASTER=[[222,208,178],[206,190,160],[196,176,146],[230,222,204]];
     function town(n,inset,gap,s,avoid){P(n,gap,inset,avoid).forEach(function(p){var ang=pick([0,Math.PI/2,.3,-.3,Math.PI/2+.3]);house(p,(.16+R()*.07)*s,(.11+R()*.04)*s,(.06+R()*.03)*s,(.05+R()*.02)*s,ang,pick(ROOF),pick(PLASTER))})}
     function inHex(x,y,m){var ax=Math.abs(x);return ax<.866-m&&Math.abs(y)+ax*.57735<1-m}
@@ -271,6 +318,136 @@
       else if(v===9){G.port=1;town(9,.82,.2,1,function(x,y){return y<.05&&inHex(x,y,.08)});for(var d9=0;d9<3;d9++)blk([-.4+d9*.38,.36],.07,.34,.02,0,[120,92,60]);[[-.2,.42],[.2,.5],[.55,.35]].forEach(function(p){blk(p,.2,.07,.04,0,[110,80,50]);stem([p[0],p[1]],.012,.16,[100,76,50])})}
       else if(v===10){G.gb='dirt';for(var s10=0;s10<4;s10++){var a10=[[-.4,-.4],[.4,-.4],[.4,.4],[-.4,.4]],b10=a10[(s10+1)%4];for(var k10=0;k10<12;k10++){var f10=k10/12;stem([a10[s10][0]+(b10[0]-a10[s10][0])*f10,a10[s10][1]+(b10[1]-a10[s10][1])*f10],.022,.08+R()*.02,[110,82,52])}}P(4,.24,.28).forEach(function(p){tent(p,.11,.13,[200,186,150])});tower([.4,-.4],.06,.22,0,null,[110,82,52])}
       else{G.gb='plains';mound(0,0,.12,.4);tower([0,0],.1,.75,.22,[70,50,120],[140,130,150]);glow([0,-.02],.012,[200,180,255]);G.up=1.1;P(6,.15,.9).forEach(function(p){con(p,.8)})}}
+
+    else if(t==='jungle'){G.gb='jungle';var JG=[[40,130,60],[60,150,50],[30,110,70],[90,160,60],[24,96,52]],JR=[[-.9,-.5],[-.35,-.25],[-.1,.1],[.4,.2],[.9,.5]];
+      if(v===0)P(38,.11,.93).forEach(function(p){oak(p,.8+R()*.8,pick(JG))});
+      else if(v===1){P(30,.11,.92).forEach(function(p){palm(p,.9+R()*.6)});P(16,.1,.92).forEach(function(p){bush(p,1.5,pick(JG))})}
+      else if(v===2){G.gb='meadow';P(26,.13,.92).forEach(function(p){for(var b2=0;b2<7;b2++)stem([p[0]+(R()-.5)*.1,p[1]+(R()-.5)*.1],.014,.2+R()*.2,pick([[112,164,64],[134,180,76],[92,146,60]]))})}
+      else if(v===3){P(6,.36,.78).forEach(function(p){oak(p,2.3+R()*.4,pick(JG))});P(16,.1,.92).forEach(function(p){bush(p,1.4,pick(JG))})}
+      else if(v===4){G.wcol=[78,116,92];river(JR,.2);P(36,.11,.93,function(x,y){return lineD(x,y,JR)[0]>.17}).forEach(function(p){oak(p,.8+R()*.7,pick(JG))})}
+      else if(v===5)P(70,.075,.94).forEach(function(p){bush(p,2+R()*.8,pick([[24,82,46],[30,98,52],[20,72,52],[44,104,48]]))});
+      else if(v===6){G.gb='meadow';P(30,.11,.93,function(x,y){return Math.hypot(x,y)>.5}).forEach(function(p){oak(p,.8+R()*.7,pick(JG))});P(5,.12,.36).forEach(function(p){bush(p,1,[60,150,50])})}
+      else if(v===7){G.wcol=[64,150,150];G.rock='grey';G.snowline=9;peak(-.1,-.55,.5,.6);river([[-.12,-.5],[-.06,-.2],[.02,.1]],.08);pond([.05,.28],.3,.2);P(26,.11,.93,function(x,y){return Math.hypot(x-.05,y-.28)>.36&&Math.hypot(x+.1,y+.5)>.4}).forEach(function(p){oak(p,.8+R()*.6,pick(JG))})}
+      else if(v===8){pyr([0,-.02],.62,.32,[150,150,124]);blk([0,-.02],.12,.12,.4,0,[134,134,112]);P(30,.11,.93,function(x,y){return Math.max(Math.abs(x),Math.abs(y+.02))>.4}).forEach(function(p){oak(p,.8+R()*.6,pick(JG))});P(5,.1,.3).forEach(function(p){bush(p,1.2,pick(JG))})}
+      else if(v===9){G.gb='meadow';[[-.25,-.2],[.2,-.28],[.28,.18],[-.15,.25],[0,0]].forEach(function(p){house(p,.2,.15,.09,.11,R()*.6,[206,176,100],[150,116,74])});glow([.06,.14],.03,[255,170,60]);P(24,.11,.93,function(x,y){return Math.hypot(x,y)>.55}).forEach(function(p){oak(p,.8+R()*.6,pick(JG))})}
+      else if(v===10)P(36,.11,.93).forEach(function(p){oak(p,.8+R()*.7,R()<.34?pick([[232,112,152],[242,164,72],[204,124,224],[244,222,96]]):pick(JG))});
+      else{P(4,.4,.6).forEach(function(p){mound(p[0],p[1],.2+R()*.14,.22+R()*.08)});P(32,.11,.93).forEach(function(p){oak(p,.7+R()*.6,pick(JG))})}}
+    else if(t==='farmland'){G.gb='plains';var FC=[[[150,160,70],[130,146,60]],[[176,150,80],[160,134,70]],[[110,140,60],[96,128,52]],[[122,92,60],[110,82,52]],[[214,180,90],[196,162,76]],[[134,152,64],[150,168,76]]],fa=R()*.5-.25,
+        grid=function(n,sz,gapf,each){for(var a=0;a<n;a++)for(var b=0;b<n;b++){var u=(a-(n-1)/2)*sz,w2=(b-(n-1)/2)*sz;each([u*Math.cos(fa)-w2*Math.sin(fa),u*Math.sin(fa)+w2*Math.cos(fa)],sz*gapf)}};
+      if(v===0)grid(4,.5,.9,function(p,z){field(p,z,z,fa+(R()<.5?0:Math.PI/2),pick(FC))});
+      else if(v===1){G.gb='wheat';field([0,0],2,2,fa+.4,[[214,180,90],[196,162,76]]);road([[-1,.25],[-.2,.05],[1,-.3]],.05);P(5,.3,.8).forEach(function(p){O.push({k:'o',x:p[0],y:p[1],r:.05,b:.01,t:.07,c:[226,196,104]})})}
+      else if(v===2){G.gb='meadow';grid(7,.24,1,function(p){if(inHex(p[0],p[1],.06))oak(p,.62,R()<.2?[226,150,150]:pick([[84,140,56],[100,150,60]]))})}
+      else if(v===3){field([0,0],2,2,fa+.5,[[72,112,52],[156,126,86]]);mound(-.2,-.15,.14,.5);house([.3,.3],.24,.16,.09,.07,fa,[150,72,52],[222,208,178]);road([[.3,.42],[.4,1]],.05)}
+      else if(v===4){G.gb='meadow';var pen=[[-.5,-.35],[.45,-.42],[.55,.3],[-.42,.4]];for(var f4=0;f4<4;f4++)wall(pen[f4],pen[(f4+1)%4],.014,.035,[124,96,62]);P(9,.1,.42).forEach(function(p){O.push({k:'o',x:p[0],y:p[1],r:.03,b:.02,t:.048,c:R()<.7?[234,230,216]:[110,80,56]})});P(4,.3,.9,function(x,y){return Math.hypot(x,y)>.7}).forEach(function(p){oak(p,.7)});house([-.62,-.05],.16,.12,.07,.05,.2,[120,64,48],[150,110,70])}
+      else if(v===5){G.wl=.02;G.calm=1;grid(5,.4,.86,function(p,z){field(p,z,z,fa,R()<.3?[[116,160,84],[98,146,80]]:[[96,150,138],[84,138,130]],1)})}
+      else if(v===6)grid(3,.66,.92,function(p,z){field(p,z,z,fa+(R()<.5?0:Math.PI/2),pick([[[122,92,60],[104,78,50]],[[140,106,70],[120,90,58]],[[112,84,58],[96,72,48]]]))});
+      else if(v===7){grid(3,.66,.9,function(p,z){if(Math.hypot(p[0],p[1])>.3)field(p,z,z,fa,pick(FC))});mound(0,-.05,.1,.26);tower([0,-.08],.085,.36,.12,[120,70,50],[228,218,198]);house([.2,.12],.2,.14,.07,.05,fa,[150,72,52],[222,208,178]);road([[0,.05],[-.1,.5],[-.2,1]],.05)}
+      else if(v===8){grid(4,.5,.9,function(p,z){if(Math.hypot(p[0],p[1])>.45)field(p,z,z,fa,pick(FC))});town(8,.4,.17,1);road([[-1,.1],[0,0],[1,-.15]],.06)}
+      else if(v===9){G.gb='dirt';house([-.22,-.15],.42,.24,.14,.11,fa,[150,60,48],[150,110,70]);house([.3,.12],.34,.22,.12,.1,fa+Math.PI/2,[132,54,44],[140,104,66]);tower([.42,-.3],.08,.3,.07,[92,86,84],[190,184,170]);tower([.24,-.36],.07,.24,.06,[92,86,84],[190,184,170]);field([-.2,.5],.9,.3,fa,[[176,150,80],[160,134,70]]);P(6,.1,.3,function(x,y){return y>.1&&x<0}).forEach(function(p){O.push({k:'o',x:p[0],y:p[1],r:.04,b:.01,t:.06,c:[226,196,104]})})}
+      else if(v===10){grid(3,.66,.84,function(p,z){field(p,z,z,fa,pick(FC))});for(var h10=-2;h10<=2;h10++)for(var g10=-9;g10<=9;g10++){var a10=(h10+.5)*.66*(h10%1?1:1),b10=g10*.1;if(Math.abs(h10+.5)>1.6)continue;[[a10,b10],[b10,a10]].forEach(function(q){var px=q[0]*Math.cos(fa)-q[1]*Math.sin(fa),py=q[0]*Math.sin(fa)+q[1]*Math.cos(fa);if(inHex(px,py,.04)&&R()<.85)bush([px,py],1.5,pick([[60,104,46],[74,118,50],[52,92,48]]))})}}
+      else{field([0,0],2,2,fa+.3,[[222,198,120],[204,178,104]]);grid(5,.34,1,function(p){if(inHex(p[0],p[1],.08)&&R()<.8)O.push({k:'o',x:p[0]+(R()-.5)*.08,y:p[1]+(R()-.5)*.08,r:.045,b:.012,t:.062,c:[232,204,112]})});house([.5,-.4],.2,.14,.08,.06,fa,[150,72,52],[222,208,178])}}
+    else if(t==='scrub'){G.gb='scrub';var SB=[[122,130,68],[104,116,58],[138,134,76]],SD=[[84,96,50],[96,104,56],[70,84,48]],SW=[[-1,-.3],[-.3,.05],[.3,-.1],[1,.25]];
+      if(v===0){P(12,.17,.9).forEach(function(p){bush(p,1,pick(SB))});P(3,.3,.8).forEach(function(p){rock(p,.8,[176,150,110])})}
+      else if(v===1)P(50,.085,.93).forEach(function(p){bush(p,1.2+R()*.5,pick(SD))});
+      else if(v===2){P(6,.3,.82).forEach(function(p){oak(p,1.15+R()*.2,[110,124,58],true)});P(10,.14,.92).forEach(function(p){bush(p,1,pick(SB))})}
+      else if(v===3){P(14,.13,.92).forEach(function(p){rock(p,.9+R(),[176,150,110])});P(9,.14,.92).forEach(function(p){bush(p,1,pick(SB))})}
+      else if(v===4){road(SW,.24,[214,198,158]);P(8,.12,.92,function(x,y){return lineD(x,y,SW)[0]<.12}).forEach(function(p){rock(p,.6,[170,156,130])});P(18,.12,.92,function(x,y){return lineD(x,y,SW)[0]>.16}).forEach(function(p){bush(p,1.1,pick(SB))})}
+      else if(v===5){G.wcol=[96,134,124];pond([0,.05],.27,.3);P(6,.2,.6,function(x,y){return Math.hypot(x,y-.05)>.34}).forEach(function(p){oak(p,1,[100,124,58],true)});P(12,.13,.93,function(x,y){return Math.hypot(x,y-.05)>.34}).forEach(function(p){bush(p,1,pick(SB))})}
+      else if(v===6){P(10,.2,.85).forEach(function(p){spire(p,.04+R()*.02,.12+R()*.12,[180,124,84])});P(10,.13,.93).forEach(function(p){bush(p,1,pick(SB))})}
+      else if(v===7){P(170,.03,.96).forEach(function(p){stem(p,.011,.045+R()*.05,pick([[212,186,100],[196,170,88],[224,200,116]]))})}
+      else if(v===8){G.gb='redearth';P(14,.14,.92).forEach(function(p){bush(p,1.1,pick(SD))});P(5,.2,.9).forEach(function(p){rock(p,.9,[160,96,66])})}
+      else if(v===9){G.gb='redearth';P(5,.3,.6).forEach(function(p){tent(p,.1,.15,pick([[190,110,70],[206,186,150],[130,90,66]]))});glow([0,0],.035,[255,170,60]);var cp=[[.42,-.3],[.66,-.2],[.62,.06],[.4,.02]];for(var f9=0;f9<4;f9++)wall(cp[f9],cp[(f9+1)%4],.012,.03,[124,96,62]);P(5,.06,.1).forEach(function(p){O.push({k:'o',x:p[0]+.52,y:p[1]-.1,r:.026,b:.018,t:.044,c:[150,110,80]})});P(8,.14,.93,function(x,y){return Math.hypot(x,y)>.6}).forEach(function(p){bush(p,1,pick(SD))})}
+      else if(v===10){O.push({k:'o',x:0,y:-.02,r:.2,b:.34,t:.44,c:[110,130,60],wc:[156,128,98]});O.push({k:'s',x:0,y:-.02,r:.1,t:.3,c:[156,128,98]});P(10,.15,.93,function(x,y){return Math.hypot(x,y)>.4}).forEach(function(p){bush(p,1,pick(SB))})}
+      else{G.burnt=1;P(14,.15,.9).forEach(function(p){stem(p,.016,.08+R()*.1,[40,36,34])});P(6,.2,.9).forEach(function(p){bush(p,1,pick(SB))})}}
+    else if(t==='badlands'){G.gb='badland';var BR=[[196,124,80],[214,160,110],[176,104,70]];
+      if(v===0){G.gully=.15;P(5,.25,.9).forEach(function(p){rock(p,1,[186,126,88])})}
+      else if(v===1)P(15,.16,.86).forEach(function(p){spire(p,.04+R()*.025,.2+R()*.26,pick(BR))});
+      else if(v===2){G.rock='red';G.mesa=1;peak(0,-.02,.66,.52);G.up=1}
+      else if(v===3){G.canyon=1;G.gully=.03}
+      else if(v===4){G.rock='red';G.mesa=1;[[-.42,-.3,.26,.5],[.3,-.38,.22,.38],[.45,.2,.28,.58],[-.2,.35,.24,.44],[0,-.02,.18,.3]].forEach(function(b){peak(b[0],b[1],b[2],b[3])});G.up=1}
+      else if(v===5){G.gully=.02;P(5,.36,.62).forEach(function(p){mound(p[0],p[1],.2+R()*.14,.2+R()*.07)})}
+      else if(v===6){var BW=[[-1,.3],[-.35,.0],[.2,.12],[1,-.25]];road(BW,.2,[226,204,160]);G.gully=.1;P(8,.12,.92,function(x,y){return lineD(x,y,BW)[0]<.1}).forEach(function(p){rock(p,.6,[190,160,130])})}
+      else if(v===7){G.gully=.03;P(20,.13,.92).forEach(function(p){rock(p,1.3+R()*1.4,pick(BR))})}
+      else if(v===8){G.gully=.03;P(12,.17,.9).forEach(function(p){stem(p,.03,.08+R()*.2,pick([[150,130,116],[170,146,124],[132,112,100]]))});P(6,.2,.85).forEach(function(p){blk(p,.24,.05,.04,R()*3,[156,134,118])})}
+      else if(v===9){G.rock='red';G.mesa=1;peak(0,-.3,.75,.6);G.up=1;for(var c9=0;c9<6;c9++){var cx9=-.38+c9*.15,cy9=.2+Math.abs(c9-2.5)*-.03;blk([cx9,cy9],.11,.09,.1+(c9%2)*.07,0,[224,190,146]);blk([cx9,cy9+.05],.035,.02,.05,0,[60,40,30])}road([[0,.4],[.1,.7],[0,1]],.05,[226,204,160])}
+      else if(v===10){G.gully=.03;ribs(-.42,-.05,8,.11,.15,.34,[232,224,202]);blk([.58,-.05],.2,.16,.1,0,[232,224,202]);blk([.66,-.05],.05,.1,.12,0,[60,50,44]);P(4,.2,.9,function(x,y){return Math.abs(y+.05)>.3}).forEach(function(p){rock(p,.9,pick(BR))})}
+      else{G.gully=.04;for(var k11=0;k11<16;k11++){var a11=k11/16*Math.PI*2;if(k11===4)continue;stem([Math.cos(a11)*.36,Math.sin(a11)*.34],.024,.1+R()*.02,[110,82,52])}P(3,.2,.2).forEach(function(p){tent(p,.09,.12,pick([[150,60,50],[200,186,150]]))});tower([-.3,-.24],.055,.24,0,null,[110,82,52]);glow([.02,.02],.03,[255,170,60]);P(9,.14,.93,function(x,y){return Math.hypot(x,y)>.55}).forEach(function(p){rock(p,1.4+R(),pick(BR))})}}
+    else if(t==='waste'){G.gb='waste';var WG=[[70,62,56],[84,76,70],[58,52,50]];
+      if(v===0){P(5,.3,.6).forEach(function(p){mound(p[0],p[1],.03+R()*.03,.2+R()*.1)});P(4,.3,.85).forEach(function(p){rock(p,.9,[104,98,92])});P(3,.3,.85).forEach(function(p){stem(p,.02,.05+R()*.04,[70,62,56])})}
+      else if(v===1)G.cracked=1;
+      else if(v===2){P(16,.15,.9).forEach(function(p){stem(p,.022,.18+R()*.18,pick(WG))});P(4,.25,.85).forEach(function(p){blk(p,.24,.04,.03,R()*3,[84,74,66])})}
+      else if(v===3)P(18,.13,.9).forEach(function(p){blk(p,.06+R()*.07,.05+R()*.05,.03+R()*.07,R()*3,pick([[140,134,126],[124,118,112],[156,150,140]]))});
+      else if(v===4){G.wcol=[22,20,24];G.calm=1;[[-.3,-.2,.24],[.3,.1,.28],[-.1,.45,.17]].forEach(function(b){pond([b[0],b[1]],b[2],.3)});P(5,.2,.9,function(x,y){return Math.hypot(x+.3,y+.2)>.3&&Math.hypot(x-.3,y-.1)>.34}).forEach(function(p){stem(p,.016,.1+R()*.08,[226,218,196])})}
+      else if(v===5){P(30,.09,.9).forEach(function(p){stem(p,.011,.08+R()*.1,[110,96,80])});P(12,.14,.85).forEach(function(p){O.push({k:'o',x:p[0],y:p[1],r:.034,b:.006,t:.02,c:pick([[170,50,44],[66,84,140],[190,166,84]])})});[[-.32,.12,[170,50,44]],[.26,-.2,[66,84,140]],[.05,.4,[170,50,44]]].forEach(function(b){stem([b[0],b[1]],.016,.32,[110,96,80]);blk([b[0]+.07,b[1]],.12,.016,.32,0,b[2],b[2]);blk([b[0]+.07,b[1]+.012],.13,.02,.2,0,[110,96,80])});G.pit={x:.3,y:.25,r:.2,d:.05,c:[70,64,60]}}
+      else if(v===6){ribs(-.5,-.3,5,.09,.1,.2,[226,218,196]);ribs(.05,.25,6,.09,.11,.24,[226,218,196]);blk([.62,.25],.14,.12,.08,0,[226,218,196]);P(8,.14,.9).forEach(function(p){stem(p,.014,.03+R()*.03,[226,218,196])})}
+      else if(v===7){G.wcol=[104,150,66];G.calm=1;[[-.28,-.15,.22],[.3,-.05,.2],[0,.4,.24]].forEach(function(b){pond([b[0],b[1]],b[2],.35)});P(10,.1,.9).forEach(function(p){glow(p,.022,[196,244,120])});P(7,.2,.9).forEach(function(p){stem(p,.02,.14+R()*.12,pick(WG))})}
+      else if(v===8){var WS=[150,144,136];ring(7,.7,.06,.11,WS,{rf:0},2);[[-.3,-.2],[.22,-.3],[.3,.22],[-.12,.3],[0,-.02],[-.4,.15]].forEach(function(p){blk(p,.12,.1,.08+R()*.2,R(),pick([[150,144,136],[132,126,120]]))});tower([.05,.05],.08,.4,0,null,[140,134,126]);P(8,.1,.6).forEach(function(p){rock(p,.7,[124,118,112])})}
+      else if(v===9){G.pit={x:0,y:0,r:.6,d:.14,c:[60,54,52]};glow([0,.02],.05,[255,150,70]);rock([0,.02],1.6,[70,64,62]);P(6,.2,.92,function(x,y){return Math.hypot(x,y)>.72}).forEach(function(p){rock(p,.8,[104,98,92])})}
+      else if(v===10){G.tint=[104,64,128];for(var s10=0;s10<7;s10++){var c10=s10/7*Math.PI*2;O.push({k:'h',x:Math.cos(c10)*.34,y:Math.sin(c10)*.32,w:.07,d:.045,t:.17+R()*.08,rf:0,a:c10,ca:Math.cos(c10),sa:Math.sin(c10),r:.07,c:[62,56,70],wc:[50,44,58]})}glow([0,0],.06,[190,120,255]);P(8,.12,.9,function(x,y){return Math.hypot(x,y)>.5}).forEach(function(p){glow(p,.012,[190,120,255])})}
+      else{P(5,.3,.55).forEach(function(p){tent(p,.13,.17,pick([[150,124,96],[170,110,80],[134,120,104]]))});glow([0,0],.045,[255,170,60]);P(6,.15,.9,function(x,y){return Math.hypot(x,y)>.55}).forEach(function(p){blk(p,.07+R()*.05,.06,.04+R()*.05,R()*3,[132,126,120])});P(3,.3,.85).forEach(function(p){stem(p,.02,.15,pick(WG))})}}
+    else if(t==='volcanic'){G.gb='basalt';G.rock='dark';G.snowline=9;var VB=[[60,54,54],[78,70,68],[46,42,44]],VL=[[-.8,-.6],[-.3,-.3],[-.1,.05],[.3,.2],[.5,.55],[.9,.7]];
+      if(v===0)G.cracks=.07;
+      else if(v===1){G.cracks=.02;[[-.4,-.25,.36,.5],[.35,-.3,.3,.4],[.38,.25,.34,.52],[-.2,.32,.3,.42]].forEach(function(b){peak(b[0],b[1],b[2],b[3]);O.push({k:'g',x:b[0],y:b[1]-.01,r:.075,t:0,c:[255,120,40],lava:1})});G.up=1}
+      else if(v===2){G.cracks=.025;G.lavaRiver=1;river(VL,.15)}
+      else if(v===3){G.lavaRiver=1;pond([0,.03],.52,.2);[[-.12,-.05],[.2,.14],[.02,.26]].forEach(function(p){rock(p,1.6,[50,44,44])})}
+      else if(v===4){G.cracks=.02;P(13,.17,.86).forEach(function(p){shard(p,.045+R()*.03,.24+R()*.3,pick([[44,38,54],[36,32,44],[58,48,66]]))})}
+      else if(v===5){G.gb='ash';P(4,.3,.85).forEach(function(p){stem(p,.016,.1+R()*.1,[40,36,34])})}
+      else if(v===6){G.tint=[196,176,72];G.steams=[];P(5,.34,.7).forEach(function(p){spire(p,.09,.1,[84,74,68]);O.push({k:'g',x:p[0],y:p[1],r:.035,t:0,c:[255,170,80]});G.steams.push([p[0],p[1]-.2,.34])})}
+      else if(v===7){peak(0,.05,1.05,.62);G.crater={x:0,y:0,r:.5};O.push({k:'g',x:0,y:0,r:.38,t:0,c:[255,120,40],lava:1});G.up=1}
+      else if(v===8){G.cracks=.015;P(60,.062,.62).forEach(function(p){stem(p,.034,.06+(1-Math.hypot(p[0],p[1])/.62)*.3+R()*.06,pick([[104,96,94],[126,116,112],[88,80,80]]))})}
+      else if(v===9){G.tint=[204,184,76];G.wcol=[70,176,164];G.calm=1;[[-.25,-.12,.24],[.28,.02,.2],[-.02,.4,.2]].forEach(function(b){pond([b[0],b[1]],b[2],.3)});G.steams=[[-.25,-.3,.3],[.28,-.15,.26]]}
+      else if(v===10){G.gb='ash';P(22,.13,.9).forEach(function(p){stem(p,.018,.12+R()*.2,pick([[34,30,30],[48,40,38]]))});P(7,.2,.9).forEach(function(p){glow(p,.012,[255,140,50])})}
+      else{G.cracks=.02;G.lavaRiver=1;river([[-.9,.45],[-.3,.5],[.3,.5],[.9,.4]],.12);blk([0,-.1],.62,.44,.2,0,[96,82,82]);blk([0,-.1],.36,.26,.34,0,[116,98,96]);[[-.31,-.32],[.31,-.32],[-.31,.12],[.31,.12]].forEach(function(q){tower(q,.075,.4,.14,[190,64,40],[96,82,82])});blk([0,.13],.1,.03,.13,0,[255,150,60],[255,150,60]);road([[0,.14],[0,.42]],.1,[120,104,100])}}
+    else if(t==='coast'){G.gb='coast';G.wcol=[58,138,168];G.wl=.012;G.shore={k:'line',y:.2};var sea=function(y){return function(px,py){return py<y}};
+      if(v===0)P(4,.3,.5,sea(0)).forEach(function(p){rock(p,.5,[170,160,140])});
+      else if(v===1){G.pebble=1;G.shore.y=.12;P(22,.12,.94).forEach(function(p){rock(p,1+R()*1.3,pick([[110,106,100],[132,126,116],[92,90,88]]))})}
+      else if(v===2){G.shore.y=.42;G.duneland=1;P(16,.13,.9,sea(.2)).forEach(function(p){bush(p,.8,pick([[128,150,84],[150,160,96]]))})}
+      else if(v===3){G.shore.y=.1;G.cliffs=.24;G.grass=.02;G.up=.9;P(6,.2,.9,sea(-.1)).forEach(function(p){bush(p,1,[96,128,58])});P(4,.2,.9,function(x,y){return y>.3}).forEach(function(p){rock(p,1.3,[120,114,104])})}
+      else if(v===4){G.shore.y=.72;G.tidal=1;P(5,.25,.85,sea(.5)).forEach(function(p){rock(p,.6,[120,114,104])})}
+      else if(v===5){G.shore.k='cove';G.grass=.24;P(10,.14,.93,function(x,y){return Math.hypot(x,(y-.2)*1.15)>.7&&y<.5}).forEach(function(p){oak(p,.7)})}
+      else if(v===6){G.shore.y=.25;P(14,.13,.92,sea(.12)).forEach(function(p){palm(p,1+R()*.5)})}
+      else if(v===7){G.shore.k='lagoon';G.wcol=[64,170,176];P(7,.16,.93,function(x,y){return Math.hypot(x*.9,y+.08)>.52&&y<.6}).forEach(function(p){palm(p,.9+R()*.4)})}
+      else if(v===8){G.shore.y=.24;G.grass=.4;P(7,.2,.86,sea(.06)).forEach(function(p){house(p,.17,.12,.06,.05,pick([0,.3,-.3]),pick([[150,72,52],[120,64,48],[164,96,58]]),[214,200,170])});for(var d8=0;d8<2;d8++)blk([-.3+d8*.5,.36],.06,.3,.03,0,[120,92,60]);[[-.05,.5],[.42,.45],[-.5,.52]].forEach(function(p){blk(p,.17,.06,.035,R()*.6-.3,[110,80,50])})}
+      else if(v===9){G.shore.k='head';G.cliffs=.12;G.grass=.05;tower([0,-.26],.085,.52,.1,[170,50,44],[236,232,224]);O.push({k:'g',x:0,y:-.26,r:.03,t:0,c:[255,230,140]});house([.2,-.12],.18,.12,.07,.05,.2,[150,72,52],[222,208,178]);G.up=1}
+      else if(v===10){G.shore.y=.3;blk([-.05,.24],.5,.15,.09,.35,[96,70,46],[80,58,38]);stem([-.12,.2],.02,.34,[90,66,44]);stem([.1,.28],.016,.2,[90,66,44]);blk([.4,.02],.2,.05,.03,1.2,[110,80,50]);P(4,.2,.6,sea(0)).forEach(function(p){rock(p,.5,[170,160,140])})}
+      else{G.shore.y=.5;G.grass=.3;G.mouth=[[-.2,-1],[-.1,-.5],[.08,-.1],[.02,.5]];P(14,.13,.93,function(x,y){return y<.2&&lineD(x,y,G.mouth)[0]>.25}).forEach(function(p){bush(p,1,[96,128,58])})}}
+    else if(t==='deep'){G.wcol=[26,54,96];
+      if(v===1)G.rough=1;
+      else if(v===2)G.abyss=1;
+      else if(v===3){G.whirl=1;G.abyss=.5}
+      else if(v===4){var SS=[40,110,84];[[-.5,.12,.1,.1],[-.26,-.02,.12,.17],[0,-.1,.12,.2],[.24,-.03,.11,.15],[.46,.1,.09,.08]].forEach(function(b){O.push({k:'o',x:b[0],y:b[1],r:b[2],b:0,t:b[3],c:SS})});O.push({k:'o',x:-.68,y:.26,r:.08,b:.06,t:.15,c:[54,128,96]});stem([.62,.22],.03,.12,SS)}
+      else if(v===5)[[-.3,-.2,.2,.42],[.32,.05,.16,.3],[-.05,.42,.12,.2],[.4,-.42,.09,.14]].forEach(function(b){shard([b[0],b[1]],b[2],b[3],[214,234,246])});
+      else if(v===6){G.abyss=.6;O.push({k:'o',x:0,y:0,r:.2,b:0,t:.16,c:[150,60,80]});for(var k6=0;k6<7;k6++){var a6=k6/7*Math.PI*2+.3,d6=.42+R()*.2;spire([Math.cos(a6)*d6,Math.sin(a6)*d6*.9],.045,.2+R()*.2,[170,74,92])}}
+      else if(v===7)G.sarg=1;
+      else if(v===8){[[-.3,-.2,.07,.34],[.2,-.3,.06,.26],[.32,.2,.07,.4],[-.1,.3,.055,.2]].forEach(function(b){tower([b[0],b[1]],b[2],b[3],.1,[70,110,110],[128,140,136])});blk([-.5,.1],.2,.07,.05,.3,[128,140,136]);blk([.05,0],.22,.2,.06,.2,[120,134,130])}
+      else if(v===9){G.storm=1;var GH=[196,214,204];blk([0,0],.62,.19,.1,.3,GH,[160,180,172]);stem([-.15,-.06],.024,.46,GH);stem([.1,.03],.024,.4,GH);stem([.3,.09],.016,.22,GH);blk([-.15,-.06],.03,.26,.34,.3,[214,230,222]);blk([.1,.03],.03,.24,.3,.3,[214,230,222])}
+      else if(v===10){G.rough=1;G.storm=1}
+      else if(v===11){stem([0,0],.16,.2,[112,106,98]);P(5,.14,.3).forEach(function(p){rock(p,1.6,[96,92,88])});tower([0,-.02],.05,.5,.08,[150,60,50],[214,208,196]);O.push({k:'g',x:0,y:-.02,r:.02,t:0,c:[255,230,140]})}}
+    else if(t==='ice'){G.gb='ice';var IC=[[170,214,238],[196,228,244],[140,196,230]];
+      if(v===1)G.pack=1;
+      else if(v===2){G.ridges=.42;G.up=.9}
+      else if(v===3)G.blue=1;
+      else if(v===4)P(16,.15,.88).forEach(function(p){shard(p,.045+R()*.035,.2+R()*.32,pick(IC))});
+      else if(v===5)G.crev=1;
+      else if(v===6){G.wcol=[60,176,206];G.calm=1;[[-.3,-.2,.24],[.28,.02,.2],[-.02,.42,.2],[.3,-.45,.12]].forEach(function(b){pond([b[0],b[1]],b[2],.3)})}
+      else if(v===7){G.shelf=.26;G.up=.9;P(5,.2,.9,function(x,y){return y>.2}).forEach(function(p){shard(p,.05,.08+R()*.08,pick(IC))})}
+      else if(v===8){blk([0,0],.5,.15,.1,.3,[96,70,46],[80,58,38]);stem([-.12,-.05],.02,.36,[90,66,44]);stem([.12,.03],.018,.26,[90,66,44]);P(8,.14,.6,function(x,y){return Math.hypot(x,y)>.3}).forEach(function(p){shard(p,.05,.1+R()*.1,pick(IC))})}
+      else if(v===9){shard([0,-.02],.2,.7,[150,206,238]);for(var k9=0;k9<6;k9++){var a9=k9/6*Math.PI*2;shard([Math.cos(a9)*.36,Math.sin(a9)*.33],.07,.24+R()*.1,pick(IC))}glow([0,.22],.025,[150,220,255]);G.up=1}
+      else if(v===10){P(4,.38,.55).forEach(function(p){O.push({k:'o',x:p[0],y:p[1],r:.15,b:0,t:.13,c:[236,242,250]});blk([p[0],p[1]+.15],.07,.05,.055,0,[30,36,46])});glow([0,0],.05,[255,170,60]);blk([.5,-.3],.26,.04,.05,.4,[110,80,50]);tent([-.5,.3],.1,.14,[150,110,80])}
+      else if(v===11){ribs(-.45,-.02,8,.12,.17,.4,[232,236,236]);blk([.62,-.02],.22,.18,.12,0,[232,236,236]);blk([.71,-.02],.05,.11,.14,0,[60,70,84])}}
+    else if(t==='cavern'){G.gb='cave';var CV=[[96,90,104],[112,104,116],[80,74,90]],CR=[[-.9,-.35],[-.3,-.1],[.15,.2],[.9,.4]];
+      if(v===0){P(7,.22,.88).forEach(function(p){spire(p,.04+R()*.02,.08+R()*.1,pick(CV))});P(6,.18,.9).forEach(function(p){rock(p,1,pick(CV))})}
+      else if(v===1)P(28,.115,.9).forEach(function(p){spire(p,.03+R()*.03,.12+R()*.32,pick(CV))});
+      else if(v===2){P(13,.16,.86).forEach(function(p){mush(p,.055+R()*.05,.1+R()*.16,pick([[90,204,192],[150,112,224],[224,124,176]]))});P(14,.07,.9).forEach(function(p){glow(p,.02,[150,255,230])})}
+      else if(v===3){G.wcol=[30,76,98];G.calm=1;pond([0,.06],.52,.22);P(12,.13,.93,function(x,y){return Math.hypot(x,y-.06)>.6}).forEach(function(p){spire(p,.035+R()*.02,.1+R()*.2,pick(CV))})}
+      else if(v===4)P(15,.15,.88).forEach(function(p){shard(p,.055+R()*.04,.18+R()*.32,pick([[176,124,236],[112,204,236],[236,134,206]]))});
+      else if(v===5){G.chasm=[[-.9,-.5],[-.3,-.15],[.05,.1],[.5,.2],[.9,.55]];P(8,.16,.9,function(x,y){return lineD(x,y,G.chasm)[0]>.2}).forEach(function(p){spire(p,.035+R()*.02,.1+R()*.14,pick(CV))})}
+      else if(v===6){G.lavaRiver=1;river(CR,.11);P(9,.16,.9,function(x,y){return lineD(x,y,CR)[0]>.16}).forEach(function(p){spire(p,.035+R()*.02,.1+R()*.16,pick(CV))})}
+      else if(v===7){P(50,.07,.92).forEach(function(p){glow(p,.018+R()*.012,[150,236,255])});P(7,.2,.88).forEach(function(p){spire(p,.04+R()*.02,.1+R()*.14,pick(CV))})}
+      else if(v===8){road([[0,-1],[0,1]],.26,[122,116,124]);for(var k8=0;k8<5;k8++){stem([-.26,-.62+k8*.31],.045,.34,[140,134,142]);stem([.26,-.62+k8*.31],.045,.34,[140,134,142])}blk([0,-.5],.26,.14,.12,0,[150,144,150]);O.push({k:'g',x:0,y:-.5,r:.03,t:0,c:[255,170,60]});[[-.5,.0],[.5,.0]].forEach(function(p){blk(p,.16,.5,.2,0,[104,98,108])});G.up=.8}
+      else if(v===9){G.wcol=[34,84,110];river(CR,.17);P(11,.15,.92,function(x,y){return lineD(x,y,CR)[0]>.18}).forEach(function(p){spire(p,.035+R()*.02,.1+R()*.2,pick(CV))})}
+      else if(v===10){G.pit={x:0,y:0,r:.5,d:.12,c:[34,30,40]};ribs(-.22,0,5,.1,.1,.16,[226,218,196]);P(9,.1,.4).forEach(function(p){stem(p,.012,.02+R()*.03,[226,218,196])});P(7,.18,.93,function(x,y){return Math.hypot(x,y)>.66}).forEach(function(p){spire(p,.035,.1+R()*.12,pick(CV))})}
+      else{var DC=[84,72,112];[[-.3,-.22,.07,.5],[.22,-.3,.06,.38],[.3,.2,.075,.6],[-.12,.3,.055,.3],[0,-.02,.09,.74],[-.45,.15,.05,.26]].forEach(function(b){tower([b[0],b[1]],b[2],b[3],.14,[84,60,120],DC);O.push({k:'g',x:b[0],y:b[1]+b[2]+.03,r:.03,t:0,c:[214,170,255]})});wall([-.6,.42],[.0,.55],.05,.09,DC);wall([.0,.55],[.6,.4],.05,.09,DC);G.up=1.1}}
     return G}
   /* Cell noise with the two nearest distances, for crack and plate edges. */
   function wor2(x,y,s){var xi=Math.floor(x),yi=Math.floor(y),b1=9,b2=9,id=0;for(var j=-1;j<=1;j++)for(var i=-1;i<=1;i++){var cx=xi+i,cy=yi+j,px=cx+hsh(cx,cy,s),py=cy+hsh(cx,cy,s+1),d=(px-x)*(px-x)+(py-y)*(py-y);if(d<b1){b2=b1;b1=d;id=hsh(cx,cy,s+2)}else if(d<b2)b2=d}return [Math.sqrt(b1),Math.sqrt(b2),id]}
@@ -285,7 +462,7 @@
     var LAVA=[255,128,40];
     function grassC(Xs,Ys,tf,n){var c=lerpC(RT.plains.c(n*.9+vnoise(Xs*1.4,Ys*.3,62)*.1,Xs,Ys),[96,120,58],.3+.25*sstep(.4,.7,fbm(Xs/6,Ys/6,3,64)));return lerpC(c,[c[0]*.8,c[1]*.85,c[2]*.7],1-tf)}
     /* Ground: height (hex units), colour and material before landforms, water, roads and objects. */
-    function ground(p,q,X,Y,o){var Xs=X*sc,Ys=Y*sc,hh,c,mt=0,n=fbm(Xs/12,Ys/12,4,61),tf=hsh(Math.floor(X*Q),Math.floor(Y*Q),3);
+    function ground(p,q,X,Y,o){var Xs=X*sc,Ys=Y*sc,hh,c,mt=0,gw=null,n=fbm(Xs/12,Ys/12,4,61),tf=hsh(Math.floor(X*Q),Math.floor(Y*Q),3);
       if(gb==='plains'||gb==='meadow'||gb==='townground'||gb==='wheat'){hh=.02+n*.03+tf*.009;c=grassC(Xs,Ys,tf,n);if(gb==='meadow')c=lerpC(c,[150,170,84],.25);
         if(gb==='townground')c=lerpC(c,[164,146,114],sstep(.3,.6,fbm(Xs/5,Ys/5,3,66))*.85);
         if(G.flowers&&tf>.93)c=[[230,200,70],[220,110,150],[240,240,240],[160,120,220]][Math.floor(hsh(Math.floor(X*Q),Math.floor(Y*Q),8)*4)]}
@@ -306,16 +483,44 @@
         else{hh=.024+fbm(Xs/6,Ys/6,2,73)*.02;c=gb==='peat'?lerpC([70,60,40],[96,84,52],fbm(Xs/9,Ys/9,2,74)):lerpC([62,70,40],[96,98,56],fbm(Xs/9,Ys/9,2,74));if(G.dark)c=lerpC(c,[58,56,48],.6);
           /* Reeds: single-pixel spikes, densest at the water's edge. */
           var rd=hsh(Math.floor(X*Q),Math.floor(Y*Q),5),dens=G.reeds||.09;if(rd>1-dens*sstep(th-.09-(G.reeds?.2:0),th,sm)){hh+=.04+hsh(Math.floor(X*Q),Math.floor(Y*Q),6)*.06;c=[70,78,36];mt=1}}}
+
+      else if(gb==='scrub'||gb==='redearth'){var sb2=fbm(Xs/5,Ys/5,3,92);hh=.02+n*.025+tf*.008;c=gb==='redearth'?lerpC([190,116,74],[162,98,64],sb2):lerpC([194,174,110],[160,150,90],sb2);if(sb2>.56)c=lerpC(c,[122,130,68],Math.min(1,(sb2-.56)*4));c=lerpC(c,[c[0]*.84,c[1]*.84,c[2]*.78],1-tf);
+        if(G.burnt)c=lerpC(c,[42,38,36],sstep(.42,.56,fbm(Xs/7,Ys/7,3,93))*.92)}
+      else if(gb==='badland'){hh=.02+ridged(Xs/11,Ys/11,4,94)*(G.gully||.06);c=null;mt=11}
+      else if(gb==='waste'){var wz=wor2(Xs/5,Ys/5,95),ck=wz[1]-wz[0]<(G.cracked?.05:.012);hh=.02+n*.02-(ck?.007:0);c=lerpC([132,124,114],[100,94,90],fbm(Xs/6,Ys/6,3,96));if(G.tint)c=lerpC(c,G.tint,sstep(.38,.66,fbm(Xs/8,Ys/8,3,97))*.6);c=ck?[50,46,44]:lerpC(c,[c[0]*.88,c[1]*.88,c[2]*.88],1-tf)}
+      else if(gb==='basalt'){var bz=wor2(Xs/5,Ys/5,98),lk=G.cracks&&bz[1]-bz[0]<G.cracks*(.5+fbm(Xs/9,Ys/9,2,99));hh=.025+n*.03+bz[2]*.014;c=lerpC([50,44,44],[86,76,72],fbm(Xs/4,Ys/4,3,100));if(G.tint)c=lerpC(c,G.tint,sstep(.45,.7,fbm(Xs/6,Ys/6,3,97))*.75);if(lk){c=LAVA;mt=6;hh-=.008}}
+      else if(gb==='ash'){var ah=RT.desert.h(Xs*.8,Ys*.8);hh=.015+ah*.055;c=lerpC([104,100,98],[136,132,128],ah);c=lerpC(c,[68,64,62],sstep(.5,.8,fbm(Xs/10,Ys/10,3,101))*.4)}
+      else if(gb==='ice'){var izs=G.pack?9:6,iz=wor2(Xs/izs,Ys/izs,102),ie=iz[1]-iz[0];hh=.03+fbm(Xs/10,Ys/10,3,103)*.03;mt=9;c=lerpC([170,208,234],[210,232,246],fbm(Xs/5,Ys/5,3,104));if(G.ridges)hh+=Math.pow(ridged(Xs/8,Ys/8,4,119),2)*G.ridges;if(G.shelf){var shf=sstep(.06,-.02,q+(vnoise(Xs/3,0,120)-.5)*.14);hh+=G.shelf*shf;gw=[120,184,224]}
+        if(G.blue)c=lerpC(c,[104,172,212],.5+.4*fbm(Xs/8,Ys/8,2,107));else{var isn=fbm(Xs/6,Ys/6,3,108);if(isn>.56){c=lerpC(c,[244,248,252],Math.min(1,(isn-.56)*5));mt=4}}
+        if(G.pack&&ie<.1){hh=0;mt=3;c=[26,58,92]}else if(ie<.022){c=lerpC(c,[140,186,214],.7);mt=9}
+        if(G.crev){var cw2=wor2(Xs/5,Ys/9,37);if(cw2[1]-cw2[0]<.03){hh-=.05;c=[44,90,132];mt=9}}}
+      else if(gb==='cave'){hh=.02+fbm(Xs/7,Ys/7,3,105)*.045+tf*.006;c=lerpC([74,70,90],[112,106,124],fbm(Xs/5,Ys/5,3,106));if(G.tint)c=lerpC(c,G.tint,sstep(.4,.7,fbm(Xs/6,Ys/6,3,97))*.5);mt=2}
+      else if(gb==='coast'){var S=G.shore,wb2=(vnoise(Xs/4,Ys/9,110)-.5)*.14+(vnoise(Xs/1.4,Ys/3,111)-.5)*.03,sd;
+        if(S.k==='cove')sd=Math.max(q-.62,.44-Math.hypot(p,(q-.2)*1.15))+wb2*.6;
+        else if(S.k==='lagoon')sd=Math.max(q-.8,.4-Math.hypot(p*.9,q+.08),Math.abs(p-.12)<.06&&q>.2?.05:-9)+wb2*.5;
+        else if(S.k==='head')sd=Math.hypot(p,(q+.22)*.9)-.56+wb2;
+        else sd=q-S.y+wb2;
+        if(G.mouth){var rm=(.05+Math.max(0,q+.3)*.2)-lineD(p,q,G.mouth)[0];if(rm>sd)sd=rm}
+        if(sd>0){hh=G.wl;mt=3;c=lerpC([126,200,198],G.wcol,sstep(0,.24,sd));if(sd<.028+.012*Math.sin(Xs*1.3))c=[238,248,250]}
+        else{var ld=-sd;hh=.016+Math.min(.05,ld*.12)+n*.008;c=lerpC([238,220,172],[216,196,146],fbm(Xs/5,Ys/5,3,112));
+          if(G.pebble)c=lerpC(c,[146,140,132],.5+.35*tf);
+          if(G.tidal){c=lerpC([170,150,114],[200,180,136],n);var tp=worley(Xs/3.2,Ys/3.2,113);if(tp[0]<.3&&tp[1]>.45&&ld<.75){hh=G.wl;mt=3;c=[116,176,180]}}
+          c=lerpC([186,164,120],c,sstep(0,.07,ld));
+          if(G.duneland){hh+=RT.desert.h(Xs*.9,Ys*.9)*.08*sstep(.05,.3,ld);c=lerpC(c,[150,164,100],sstep(.56,.76,fbm(Xs/4,Ys/4,3,114))*sstep(.1,.3,ld)*.8)}
+          if(G.grass){var gf=sstep(G.grass,G.grass+.1,ld+(fbm(Xs/5,Ys/5,2,115)-.5)*.14);if(gf>0)c=lerpC(c,grassC(Xs,Ys,tf,n),gf)}
+          if(G.cliffs){hh+=G.cliffs*sstep(0,.035,ld);gw=[158,148,132]}}}
       else{hh=0;mt=3;c=G.wcol.slice();if(G.floes){var fw=wor2(Xs/7,Ys/7,60);if(fw[2]>.45&&fw[1]-fw[0]>.07){hh=.025;c=[228,236,244];mt=9}}}
-      o[0]=hh;o[1]=c;o[2]=mt}
-    var gnd=[0,null,0];
+      o[0]=hh;o[1]=c;o[2]=mt;o[3]=gw}
+    var gnd=[0,null,0,null];
     /* Height, top colour, wall colour and material of the whole surface at a point. */
-    function surf(p,q,X,Y,o){var Xs=X*sc,Ys=Y*sc,i,d;ground(p,q,X,Y,gnd);var hh=gnd[0],c=gnd[1],mt=gnd[2],wc=null;
+    function surf(p,q,X,Y,o){var Xs=X*sc,Ys=Y*sc,i,d;ground(p,q,X,Y,gnd);var hh=gnd[0],c=gnd[1],mt=gnd[2],wc=gnd[3];
       if(G.island||G.port){var land=G.island?Math.hypot(p-G.island.x,q-G.island.y)<G.island.r*(1+.25*(vnoise(Xs/3,Ys/3,41)-.5)):q<.12+(vnoise(Xs/4,0,42)-.5)*.08;
         if(land){var n2=fbm(Xs/12,Ys/12,4,61),tf2=hsh(Math.floor(X*Q),Math.floor(Y*Q),3);hh=.03+n2*.02;c=G.port?lerpC(grassC(Xs,Ys,tf2,n2),[150,132,100],.6):grassC(Xs,Ys,tf2,n2);mt=0}
         else{hh=G.port?.0:G.wl;mt=3;c=G.wcol.slice()}}
       for(i=0;i<G.mounds.length;i++){var md=G.mounds[i];hh+=md.a*Math.exp(-((p-md.x)*(p-md.x)/(2*md.s*md.s)+(q-md.y)*(q-md.y)/(2*md.sy*md.sy)))}
-      if(G.cliff&&q>-.1){var cf=sstep(.12,-.06,q+(vnoise(Xs/3,0,43)-.5)*.1);hh=.03+(hh-.03)*cf;if(cf<.98&&cf>.02)wc=[132,124,112]}
+      if(G.cliff&&q>-.1){var cf=sstep(.12,-.06,q+(vnoise(Xs/3,0,43)-.5)*.1);hh=.03+(hh-.03)*cf;if(cf<.98&&cf>.02)wc=G.cliffc||[132,124,112]}
+      if(G.pit){d=Math.hypot(p-G.pit.x,q-G.pit.y)/G.pit.r+(vnoise(Xs/3,Ys/3,118)-.5)*.12;if(d<1){hh-=G.pit.d*(1-d*d);c=lerpC(G.pit.c,c||G.pit.c,d*d*.5);if(mt===11||mt===10)mt=0}else if(d<1.3)hh+=G.pit.d*.22*(1-(d-1)/.3)}
+      if(G.chasm){d=lineD(p,q,G.chasm)[0]+(vnoise(Xs/3,Ys/3,117)-.5)*.07;if(d<.1){hh=-.34;c=[12,10,18];mt=6}else if(d<.14)wc=[40,36,48]}
       if(G.terrace&&hh>.06){var st=.055;hh=Math.floor(hh/st)*st+.01;var band=Math.floor(hh/st);c=band%2?[150,160,70]:[118,140,60]}
       if(G.quarry){d=Math.hypot(p-G.quarry.x,q-G.quarry.y);if(d<G.quarry.r){hh=Math.min(hh,-.02+d*.1);c=[160,156,146];mt=2;wc=[150,146,136]}}
       if(G.canyon){var cl=lineD(p,q,[[-1,-.3],[-.3,.05],[.3,-.1],[1,.25]])[0]+(vnoise(Xs/4,Ys/4,44)-.5)*.05;if(cl>.2){hh=.2+fbm(Xs/8,Ys/8,3,45)*.02;wc=[176,100,64]}else if(cl>.07){hh=.02+(cl-.07)/.13*.18;wc=[176,100,64];c=[190,120,76]}else{hh=.012;mt=3;c=[70,110,120]}}
@@ -325,14 +530,16 @@
         var gwd=.2+q*.06+(vnoise(Ys/3,0,62)-.5)*.06;if(G.glacier&&Math.abs(p)<gwd&&q>-.7){var ge=Math.abs(p)/gwd,gl=.2-q*.13-ge*ge*.05+fbm(Xs/5,Ys/5,3,48)*.015;if(gl>hh){hh=gl;mt=9;c=lerpC([210,228,240],[170,200,222],sstep(.06,.18,Math.abs(p)*.2+fbm(Xs/2,Ys/8,2,49)*.15))}}}
       for(i=0;i<G.water.length;i++){var wb=G.water[i],inW=false;if(wb.line){inW=lineD(p,q,wb.line)[0]<wb.w/2*(1+.4*(vnoise(Xs/3,Ys/3,50)-.5))}else inW=Math.hypot(p-wb.x,q-wb.y)<wb.r*(1+wb.wob*(vnoise(Xs/4,Ys/4,51)-.5)*2);
         if(inW){if(G.lavaRiver){c=LAVA;mt=6;hh+=.004}else if(G.ice){hh=Math.min(hh,G.wl);mt=9;var iw=wor2(Xs/3,Ys/3,52);c=iw[1]-iw[0]<.04?[240,248,252]:lerpC([176,210,228],[200,224,238],iw[0])}else{hh=Math.min(hh,G.wl);mt=3;c=G.wcol.slice()}}}
-      for(i=0;i<G.roads.length;i++){var rl=lineD(p,q,G.roads[i].line);if(rl[0]<G.roads[i].w/2*(1+.3*(vnoise(Xs/2,Ys/2,53)-.5))&&mt!==3){var rc=G.roads[i].c;c=lerpC(rc,[rc[0]*.82,rc[1]*.82,rc[2]*.82],hsh(Math.floor(X*Q),Math.floor(Y*Q),4));hh-=.004;if(mt===10)mt=0}}
-      for(i=0;i<G.fields.length;i++){var fd=G.fields[i],dx0=p-fd.x,dy0=q-fd.y,fu=dx0*fd.ca+dy0*fd.sa,fv=-dx0*fd.sa+dy0*fd.ca;if(Math.abs(fu)<fd.w/2&&Math.abs(fv)<fd.d/2&&mt!==3&&mt!==7){var sb=Math.floor((fv+5)*28)%2;c=lerpC(fd.cols[sb],[fd.cols[sb][0]*.85,fd.cols[sb][1]*.85,fd.cols[sb][2]*.8],hsh(Math.floor(X*Q),Math.floor(Y*Q),9));hh+=sb*.004;if(mt===10)mt=0}}
+      for(i=0;i<G.roads.length;i++){var rl=lineD(p,q,G.roads[i].line);if(rl[0]<G.roads[i].w/2*(1+.3*(vnoise(Xs/2,Ys/2,53)-.5))&&mt!==3&&mt!==6){var rc=G.roads[i].c;c=lerpC(rc,[rc[0]*.82,rc[1]*.82,rc[2]*.82],hsh(Math.floor(X*Q),Math.floor(Y*Q),4));hh-=.004;if(mt===10||mt===11)mt=0}}
+      for(i=0;i<G.fields.length;i++){var fd=G.fields[i],dx0=p-fd.x,dy0=q-fd.y,fu=dx0*fd.ca+dy0*fd.sa,fv=-dx0*fd.sa+dy0*fd.ca;if(Math.abs(fu)<fd.w/2&&Math.abs(fv)<fd.d/2&&mt!==3&&mt!==7){var sb=Math.floor((fv+5)*28)%2;c=lerpC(fd.cols[sb],[fd.cols[sb][0]*.85,fd.cols[sb][1]*.85,fd.cols[sb][2]*.8],hsh(Math.floor(X*Q),Math.floor(Y*Q),9));hh+=sb*.004;if(fd.wet){mt=3;hh=G.wl}if(mt===10||mt===11)mt=0}}
       if(mt===10){c=lerpC(RT.hills.c(Math.min(1,hh/.42),Xs,Ys),[70,92,42],sstep(.45,.75,fbm(Xs/7,Ys/7,3,24))*.45);if(gb==='heather')c=lerpC(c,[124,86,112],sstep(.35,.6,fbm(Xs/5,Ys/5,3,25))*.7);mt=0}
+      if(mt===11){var bb=Math.floor(hh*46+fbm(Xs/9,Ys/9,2,94)*2.2)%3,tb=.9+.1*hsh(Math.floor(X*Q),Math.floor(Y*Q),3);c=[[196,124,80],[218,166,114],[166,96,66]][bb];c=[c[0]*tb,c[1]*tb,c[2]*tb];mt=0}
       var gnd0=hh-.02;for(i=0;i<G.obs.length;i++){var ob=G.obs[i],dx=p-ob.x,dy=q-ob.y,d2=dx*dx+dy*dy;if(d2>=ob.r*ob.r*(ob.k==='w'?4:1))continue;var u=Math.sqrt(d2)/ob.r,th=-9,oc=ob.c,om=1,g0=gnd0;
-        if(ob.k==='c'){var yy=1-u,tier=yy*3-Math.floor(yy*3);th=ob.b+(ob.t-ob.b)*(yy-(ob.ice?0:.08*tier))+(vnoise(X*Q*.9+ob.r*99,Y*Q*.9,8)-.5)*.012;if(ob.ice)om=9}
+        if(ob.k==='c'){var yy=1-u,tier=yy*3-Math.floor(yy*3);th=ob.b+(ob.t-ob.b)*(yy-(ob.ice||ob.sp?0:.08*tier))+(vnoise(X*Q*.9+ob.r*99,Y*Q*.9,8)-.5)*.012;if(ob.ice)om=9;else if(ob.sp)om=2}
         else if(ob.k==='o'){th=ob.b+(ob.t-ob.b)*Math.sqrt(1-u*u)*(.86+.14*worley(dx/ob.r*2.4+ob.x*9,dy/ob.r*2.4,9)[1]+.06*(vnoise(X*Q*.7+ob.x*9,Y*Q*.7,8)-.5))}
         else if(ob.k==='r'){th=ob.flat?ob.t:ob.t*Math.sqrt(Math.max(0,1-u*u))*(.8+.4*vnoise(dx/ob.r*2+ob.x*9,dy/ob.r*2,4));om=ob.flat?9:2}
         else if(ob.k==='s'){th=ob.t*(1-u*u*.3)}
+        else if(ob.k==='pm'){if(u<.22||Math.abs(Math.sin(Math.atan2(dy,dx)*3+ob.x*40))>.42+u*.42)th=ob.t*(1-u*u*.55)}
         else if(ob.k==='h'){var lu=dx*ob.ca+dy*ob.sa,lv=-dx*ob.sa+dy*ob.ca;if(Math.abs(lu)<ob.w/2&&Math.abs(lv)<ob.d/2){th=ob.t+ob.rf*(1-Math.abs(lv)/(ob.d/2));om=8}}
         else if(ob.k==='tw'){th=ob.rf?ob.t+ob.rf*(1-u):ob.t+(u>.72&&Math.floor(Math.atan2(dy,dx)*4/Math.PI+8)%2?.018:0);om=8;oc=ob.rf?ob.c:ob.wc}
         else if(ob.k==='w'){var sg=segD(p,q,ob.ax,ob.ay,ob.bx,ob.by);if(sg[0]<ob.th/2){th=ob.t+(Math.floor(sg[1]*ob.r*2/(ob.th*.9))%2?.014:0);om=8}}
@@ -372,11 +579,14 @@
         c0=(c0*.8+dp*30)*bk;c1=(c1*.85+dp*40)*bk;c2=(c2*.9+dp*44)*bk;
         if(G.shallow){var sa2=sstep(.4,.7,fbm(Xs2/6,Ys2/6,3,55));c0+=(200-c0)*sa2*.5;c1+=(190-c1)*sa2*.5;c2+=(150-c2)*sa2*.4}
         if(G.reef){var rw=worley(Xs2/6,Ys2/6,56);if(rw[0]<.3){var rcl=[[230,120,110],[240,170,90],[200,110,180],[120,200,170]][Math.floor(hsh(Math.floor(Xs2/6),Math.floor(Ys2/6),57)*4)];var rf2=sstep(.3,.12,rw[0])*.6;c0+=(rcl[0]-c0)*rf2;c1+=(rcl[1]-c1)*rf2;c2+=(rcl[2]-c2)*rf2}}
-        if(G.kelp){var kf=sstep(.5,.65,fbm(Xs2/4,Ys2/8,3,58))*.7;c0+=(30-c0)*kf;c1+=(70-c1)*kf;c2+=(50-c2)*kf}}
+        if(G.kelp){var kf=sstep(.5,.65,fbm(Xs2/4,Ys2/8,3,58))*.7;c0+=(30-c0)*kf;c1+=(70-c1)*kf;c2+=(50-c2)*kf}
+        if(G.sarg){var sf=sstep(.46,.58,fbm(Xs2/5,Ys2/5,3,116))*.85;c0+=(128-c0)*sf;c1+=(124-c1)*sf;c2+=(50-c2)*sf}
+        if(G.abyss){var ab=sstep(.85,.1,Math.hypot(ap2,q2))*G.abyss;c0*=1-.8*ab;c1*=1-.75*ab;c2*=1-.6*ab}
+        if(G.storm){c0*=.62;c1*=.64;c2*=.72}}
       BC[id*3]=c0;BC[id*3+1]=c1;BC[id*3+2]=c2;if(WC[id*3]<0){WC[id*3]=c0;WC[id*3+1]=c1;WC[id*3+2]=c2}
       if(mt2===6){var fl2=.85+.3*vnoise(X2*Q*.3,Y2*Q*.3,59);COL[id*3]=c0*fl2;COL[id*3+1]=c1*fl2;COL[id*3+2]=c2*fl2;continue}
       var amb=(mt2===4||mt2===9?.6:.48)*ao*(.55+.45*nz),sun=1.12*dif*lit,spec=0;
-      if(mt2===3){var hx=SUN[0],hy=SUN[1],hz=SUN[2]+1,hl2=Math.hypot(hx,hy,hz);spec=Math.pow(Math.max(0,(nx*hx+ny*hy+nz*hz)/hl2),60)*lit*220;if(G.rough&&wv>.97)spec+=50}
+      if(mt2===3){var hx=SUN[0],hy=SUN[1],hz=SUN[2]+1,hl2=Math.hypot(hx,hy,hz);spec=Math.pow(Math.max(0,(nx*hx+ny*hy+nz*hz)/hl2),60)*lit*220;if(G.rough&&wv>.97)spec+=50;if(G.storm&&wv>.86)spec+=110}
       if(mt2===4||mt2===5)spec=Math.pow(dif,24)*lit*30;
       if(mt2===9)spec=Math.pow(dif,40)*lit*120;
       var gn=(hsh(i,j,7)-.5)*5;
@@ -385,7 +595,7 @@
     function make(nb){nb=nb||{};
     /* Draw front to back per column, each sample filling up to the last one drawn; the tile's cut sides are earth strata. */
     var cv=document.createElement('canvas');cv.width=w;cv.height=h;var x=cv.getContext('2d'),img=x.createImageData(w,h),D=img.data,offx=Math.round((gx0-ox)*Q),offy=(gy0-oy)*Q,Tp=T*Q;
-    var SOIL={mountain:[108,100,90],redrock:[170,100,64],desert:[178,140,90],rockdesert:[170,130,92],salt:[200,190,176],snow:[186,198,212],tundra:[150,150,150],swamp:[78,66,44],peat:[70,56,40],swampwater:[78,66,44]}[gb]||[104,80,52];
+    var SOIL={mountain:[108,100,90],redrock:[170,100,64],desert:[178,140,90],rockdesert:[170,130,92],salt:[200,190,176],snow:[186,198,212],tundra:[150,150,150],swamp:[78,66,44],peat:[70,56,40],swampwater:[78,66,44],scrub:[150,118,78],redearth:[150,92,60],badland:[166,98,64],waste:[82,76,72],basalt:[46,40,40],ash:[66,62,60],ice:[150,188,212],cave:[58,54,70],coast:[172,150,112]}[gb]||[104,80,52];
     function put(px,py,r0,g0,b0){var a=(py*w+px)*4;D[a]=r0;D[a+1]=g0;D[a+2]=b0;D[a+3]=255}
     for(i=0;i<gw;i++){var px=i+offx;if(px<0||px>=w)continue;var jf=-1;for(j=gh-1;j>=0;j--)if(IN[j*gw+i]){jf=j;break}if(jf<0)continue;
       var left=(gx0+i/Q)<cx,side=T&&!(left?nb.bl:nb.br),yb=Math.min(h,Math.floor(offy+jf+1+(side?Tp:0))),first=true;
@@ -406,7 +616,7 @@
         else for(var y3=top+1;y3<yb;y3++)put(px,y3,COL[id3*3]*.92,COL[id3*3+1]*.92,COL[id3*3+2]*.92);
         yb=top}}
     x.putImageData(img,0,0);
-    if(G.steam){x.save();x.scale(Q/Q,1);var sg=x.createRadialGradient((cx-ox)*Q,(cy+.05*r-oy)*Q,0,(cx-ox)*Q,(cy+.05*r-oy)*Q,r*.5*Q);sg.addColorStop(0,'rgba(255,255,255,.45)');sg.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=sg;x.fillRect(0,0,w,h);x.restore()}
+    (G.steams||(G.steam?[[0,.05,.5]]:[])).forEach(function(sv){var sx2=(cx+sv[0]*r-ox)*Q,sy2=(cy+sv[1]*r-oy)*Q,sg=x.createRadialGradient(sx2,sy2,0,sx2,sy2,r*sv[2]*Q);sg.addColorStop(0,'rgba(255,255,255,.45)');sg.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=sg;x.fillRect(0,0,w,h)});
     var out=document.createElement('canvas');out.width=Math.ceil(W*RQ);out.height=Math.ceil(H*RQ);var ox2=out.getContext('2d');ox2.imageSmoothingQuality='high';ox2.drawImage(cv,0,0,out.width,out.height);
     return {canvas:out,x:ox/r,y:oy/r,w:W/r,h:H/r}}
     /* The model is built in row-sized steps so a caller can stop at a time limit and carry on in the next slice; step(until) always does at least one row and is true once the model is whole. */
@@ -426,7 +636,17 @@
     desert:[['Sand',[0,1,6]],['Rock',[2,4,5,7]],['Oasis',[3]],['Places',[8,9,10,11]]],
     snow:[['Snow',[0,1,5,6]],['Ice',[2,3,4,10]],['Rocks & springs',[7,11]],['Places',[8,9]]],
     water:[['Open water',[0,1,2,8]],['Shallows',[3,4,7]],['Rocks & islands',[5,6,11]],['Ice & wrecks',[9,10]]],
-    town:[['Villages',[0,1,2]],['Cities',[3,4,9]],['Strongholds',[5,6,10]],['Special',[7,8,11]]]};
+    town:[['Villages',[0,1,2]],['Cities',[3,4,9]],['Strongholds',[5,6,10]],['Special',[7,8,11]]],
+    jungle:[['Trees',[0,1,2,3,5,10]],['Water',[4,7]],['Open ground',[6,11]],['Places',[8,9]]],
+    farmland:[['Fields',[0,1,6,11]],['Orchards & hedges',[2,3,10]],['Herds & water',[4,5]],['Farms',[7,8,9]]],
+    scrub:[['Grass',[0,7,8]],['Bush & trees',[1,2,10]],['Rock & dust',[3,4,6,11]],['Water & camps',[5,9]]],
+    badlands:[['Rock',[0,1,7]],['Mesas & canyons',[2,3,4,5]],['Dry & dead',[6,8,10]],['Places',[9,11]]],
+    waste:[['Barren',[0,1,2]],['Ruin',[3,5,8]],['Pits & pools',[4,7,9]],['Strange',[6,10,11]]],
+    volcanic:[['Lava',[0,2,3,7]],['Cones & stone',[1,4,8]],['Ash & steam',[5,6,9,10]],['Places',[11]]],
+    coast:[['Beaches',[0,2,6]],['Rock & cliffs',[1,3]],['Bays & flats',[4,5,7,11]],['Places',[8,9,10]]],
+    deep:[['Open sea',[0,1,2,10]],['Hazards',[3,5,7]],['Creatures',[4,6]],['Wrecks & ruins',[8,9,11]]],
+    ice:[['Ice',[0,1,3]],['Broken ice',[2,4,5,7]],['Meltwater',[6]],['Places',[8,9,10,11]]],
+    cavern:[['Stone',[0,1,5]],['Glow',[2,4,7]],['Water & fire',[3,6,9]],['Places',[8,10,11]]]};
 
   // ---- What the viewer needs around the drawing ----
 

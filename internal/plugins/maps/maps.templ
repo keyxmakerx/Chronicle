@@ -325,6 +325,40 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-hexpanel .mp-hx-pal button { border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-card-bg); padding: 5px 3px; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--color-text-primary); }
 		.mp-hexpanel .mp-hx-pal button[aria-pressed="true"] { border-color: var(--mp-accent); box-shadow: 0 0 0 2px var(--mp-accent-soft); }
 		.mp-hexpanel .mp-hx-pal svg { display: block; overflow: visible; }
+		.mp-hexpanel .mp-hx-ur { margin-left: auto; display: flex; gap: 2px; margin-right: 4px; }
+		.mp-hexpanel .mp-hx-ib { border: 0; background: none; width: 30px; height: 30px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-secondary); font-size: 14px; transition: background-color 0.12s, color 0.12s; }
+		.mp-hexpanel .mp-hx-ib:hover:not(:disabled) { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-ib:disabled { opacity: 0.35; }
+		.mp-hexpanel .mp-hx-ib[aria-pressed="true"] { background: var(--mp-accent-soft); color: var(--mp-accent); }
+		.mp-hexpanel .mp-hx-sz svg { fill: currentColor; }
+		.mp-hexpanel .mp-hx-tools { display: flex; align-items: center; gap: 2px; }
+		.mp-hexpanel .mp-hx-sep { width: 1px; height: 18px; background: var(--color-border); margin: 0 7px; }
+		.mp-hexpanel .mp-hx-tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--color-border); margin-top: 2px; }
+		.mp-hexpanel .mp-hx-tabs button { border: 0; background: none; padding: 5px 0 7px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--color-text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+		.mp-hexpanel .mp-hx-tabs button:hover { color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-tabs button[aria-selected="true"] { color: var(--color-text-primary); border-bottom-color: var(--mp-accent); }
+		.mp-hexpanel .mp-hx-fam { font-size: 9.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--color-text-secondary); margin-top: 3px; }
+		.mp-hexpanel .mp-hx-now { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+		.mp-hexpanel .mp-hx-now b { font-size: 13.5px; font-weight: 600; }
+		.mp-hexpanel .mp-hx-now span, .mp-hexpanel .mp-hx-dim { font-size: 11.5px; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-pal5 { grid-template-columns: repeat(5, 1fr); gap: 3px 2px; }
+		.mp-hexpanel .mp-hx-pal5 button { border-color: transparent; background: none; padding: 5px 0 4px; border-radius: 8px; }
+		.mp-hexpanel .mp-hx-pal5 button:hover { background: var(--color-bg-tertiary); }
+		.mp-hexpanel .mp-hx-pal5 button[aria-pressed="true"] { background: var(--mp-accent-soft); border-color: var(--mp-accent); box-shadow: none; }
+		.mp-hexpanel .mp-hx-stamps button { font-size: 10.5px; line-height: 1.2; text-align: center; padding: 3px 2px 5px; gap: 1px; }
+		.mp-hexpanel .mp-hx-chk { display: flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+		.mp-hexpanel .mp-hx-stamps .mp-hx-new { border-style: dashed; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-chk span { color: var(--color-text-secondary); font-size: 11.5px; }
+		.mp-hexpanel .mp-hx-quiet { border: 0; background: none; padding: 0; color: var(--mp-accent); text-decoration: underline; text-underline-offset: 2px; font: inherit; }
+		.mp-hexpanel kbd { font: 600 10.5px var(--font-sans, inherit); border: 1px solid var(--color-border); border-radius: 4px; padding: 0 4px; background: var(--color-bg-tertiary); }
+		.mp-hx-comb { width: 250px; padding: 0 0 6px; background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; text-align: center; animation: mp-hx-comb 0.16s cubic-bezier(0.2, 0.8, 0.2, 1); }
+		.mp-hx-comb svg { display: block; overflow: visible; filter: drop-shadow(0 6px 14px rgb(0 0 0 / 0.28)); }
+		.mp-hx-comb .mp-hx-cbb path { fill: var(--color-card-bg); stroke: var(--color-card-bg); stroke-width: 6; stroke-linejoin: round; }
+		.mp-hx-comb .mp-hx-cb { cursor: pointer; }
+		.mp-hx-comb .mp-hx-cbr { fill: none; stroke: transparent; stroke-width: 2.2; stroke-linejoin: round; }
+		.mp-hx-comb .mp-hx-cb:hover .mp-hx-cbr, .mp-hx-comb .mp-hx-cb[data-on] .mp-hx-cbr { stroke: var(--mp-accent); }
+		.mp-hx-comb .mp-hx-cbn { display: inline-block; margin-top: 6px; padding: 3px 12px; border-radius: 999px; background: var(--color-card-bg); color: var(--color-text-primary); font-size: 12.5px; font-weight: 600; box-shadow: 0 2px 8px rgb(0 0 0 / 0.2); }
+		@keyframes mp-hx-comb { from { opacity: 0; transform: scale(0.86); } }
 		.mp-hexpanel .mp-hx-pal i { width: 22px; height: 13px; border-radius: 3px; display: block; background: repeating-linear-gradient(45deg, #ccc 0 3px, #fff 3px 6px); }
 		/* The Art chips and the piece picker in Paint. Folders are dashed so they
 		   read as something to open rather than a piece to paint with. */
