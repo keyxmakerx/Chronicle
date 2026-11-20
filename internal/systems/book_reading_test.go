@@ -163,3 +163,42 @@ func TestBookText(t *testing.T) {
 		}
 	}
 }
+
+// A chapter grouped by a property keeps every entry when the Director wrote
+// one whose value is a list: it is listed on a last page named with the
+// kind's own word, and the chapter is never dropped.
+func TestReaderIndexChapter_EntryOutsideTheGroups(t *testing.T) {
+	m := readingManifest()
+	m.Categories[0].Name = "Ancestries"
+	l := &CatalogList{Category: "ancestries", FieldKey: "ancestry", Entries: []CatalogEntry{
+		{Slug: "dwarf", Name: "Dwarf", Origin: OriginStandard, Properties: map[string]any{"size": "1M"}},
+		{Slug: "polder", Name: "Polder", Origin: OriginStandard, Properties: map[string]any{"size": "1S"}},
+		{Slug: "shifter", Name: "Shifter", Origin: OriginCampaign, Properties: map[string]any{"size": []any{"1S", "1M"}}},
+	}}
+	kinds := func(string) (*CatalogList, error) { return l, nil }
+	ch := BookChapter{ID: "peoples-index", Title: "Peoples", Generated: true, Pages: []BookPage{
+		{Title: "Size 1M", Blocks: []BookBlock{{Type: "index", Category: "ancestries", Key: "size", Value: "1M", Count: 1}}},
+		{Title: "Size 1S", Blocks: []BookBlock{{Type: "index", Category: "ancestries", Key: "size", Value: "1S", Count: 1}}},
+	}}
+	b, err := readerBook(&Book{Parts: []BookPart{{Title: "Heroes", Chapters: []BookChapter{ch}}}}, m, kinds, "Therin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Parts[0].Chapters) != 1 {
+		t.Fatal("the chapter went because of an entry the Director wrote")
+	}
+	var titles []string
+	pages := b.Parts[0].Chapters[0].Pages
+	for _, p := range pages {
+		titles = append(titles, p.Title)
+	}
+	if got := strings.Join(titles, ","); got != "1M,1S,Other ancestries" {
+		t.Fatalf("pages = %s", got)
+	}
+	last := pages[len(pages)-1].Blocks[0]
+	ie := catalogIndex(l, findCategory(m, "ancestries"), "Therin")
+	got := ie.slice(bookIndexSlice{Key: last.Key, Value: last.Value})
+	if last.Count != 1 || len(got) != 1 || got[0].Name != "Shifter" {
+		t.Fatalf("the last page = %+v lists %+v", last, got)
+	}
+}

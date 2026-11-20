@@ -95,7 +95,7 @@ func closingItem(e CatalogEntry, campaignName string) ReferenceItem {
 // catalogIndex is a kind's index entries for one reader, in name order,
 // with the lines that close the chapter.
 func catalogIndex(l *CatalogList, def *CategoryDef, campaignName string) *indexEntries {
-	ie := &indexEntries{}
+	ie := &indexEntries{lenient: true}
 	if def != nil {
 		ie.fields, ie.label = def.Fields, def.Name
 	}
@@ -139,20 +139,16 @@ func readerBook(b *Book, m *SystemManifest, kinds BookKindList, campaignName str
 	for pi := range b.Parts {
 		chapters := b.Parts[pi].Chapters[:0:0]
 		for _, ch := range b.Parts[pi].Chapters {
-			var keep bool
 			var err error
 			if ch.Generated {
-				ch, keep, err = readerIndexChapter(ch, m, kinds, campaignName)
+				ch, err = readerIndexChapter(ch, m, kinds, campaignName)
 			} else {
 				ch, err = readerCards(ch, kinds, campaignName)
-				keep = true
 			}
 			if err != nil {
 				return nil, err
 			}
-			if keep {
-				chapters = append(chapters, ch)
-			}
+			chapters = append(chapters, ch)
 		}
 		b.Parts[pi].Chapters = chapters
 	}
@@ -160,29 +156,30 @@ func readerBook(b *Book, m *SystemManifest, kinds BookKindList, campaignName str
 }
 
 // readerIndexChapter lays a kind's generated chapter out again from the
-// reader's catalog. keep is false when it cannot be laid out truthfully.
-func readerIndexChapter(ch BookChapter, m *SystemManifest, kinds BookKindList, campaignName string) (BookChapter, bool, error) {
+// reader's catalog. The chapter never goes because of what the Director
+// wrote: an entry that fits no group is listed on the last, "other" page,
+// and a layout that would make too many pages falls back to pages by name,
+// then to one page listing every entry.
+func readerIndexChapter(ch BookChapter, m *SystemManifest, kinds BookKindList, campaignName string) (BookChapter, error) {
 	cat, group, other, per, ok := indexLayout(ch)
 	if !ok {
-		return ch, true, nil
+		return ch, nil
 	}
 	l, err := kinds(cat)
 	if err != nil || l == nil {
-		return ch, true, err
+		return ch, err
 	}
 	ie := catalogIndex(l, findCategory(m, cat), campaignName)
 	pages, problem := indexPages(ch, cat, group, other, per, ie)
-	if problem != "" {
-		// A campaign entry broke the grouping; leaving the package's pages
-		// would list what this reader cannot have, so the chapter goes.
-		return ch, false, nil
+	if problem != "" && group != "" {
+		pages, problem = indexPages(ch, cat, "", "", per, ie)
 	}
-	if len(pages) == 0 {
+	if problem != "" || len(pages) == 0 {
 		pages = []BookPage{{Title: ch.Title, Director: ch.Director,
-			Blocks: []BookBlock{{Type: "index", Category: cat}}}}
+			Blocks: []BookBlock{{Type: "index", Category: cat, Count: len(ie.items)}}}}
 	}
 	ch.Pages = pages
-	return ch, true, nil
+	return ch, nil
 }
 
 // readerCards changes the cards that name their entry: a card whose entry

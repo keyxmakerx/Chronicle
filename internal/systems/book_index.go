@@ -57,6 +57,11 @@ type indexEntries struct {
 	closing []ReferenceItem
 	fields  []FieldDef
 	label   string
+	// lenient marks a reader's list, whose campaign entries the Director
+	// wrote: an entry whose group value is a list or a set goes to the last,
+	// "other" page instead of failing the chapter, which a package's own
+	// file must not do.
+	lenient bool
 }
 
 // maxBookIndexCacheFiles bounds the parsed-file cache: the provider already
@@ -178,6 +183,12 @@ func (ie *indexEntries) slice(s bookIndexSlice) []ReferenceItem {
 // groupValue is an entry's value for a group property; missing and null are
 // both "", so they share one page.
 func groupValue(it ReferenceItem, key string) string {
+	switch it.Properties[key].(type) {
+	case []any, map[string]any:
+		// Not one plain value: a package's index refuses it (indexPages), a
+		// reader's lists it on the other page.
+		return ""
+	}
 	v := strings.TrimSpace(propString(it.Properties, key))
 	if v == "<nil>" {
 		return ""
@@ -268,7 +279,9 @@ func indexPages(ch BookChapter, cat, group, other string, per int, ie *indexEntr
 		for _, it := range ie.items {
 			switch it.Properties[group].(type) {
 			case []any, map[string]any:
-				return nil, fmt.Sprintf("index group %q holds lists or sets on some entries; group by a property with one plain value", group)
+				if !ie.lenient {
+					return nil, fmt.Sprintf("index group %q holds lists or sets on some entries; group by a property with one plain value", group)
+				}
 			}
 			counts[groupValue(it, group)]++
 		}
@@ -295,6 +308,11 @@ func indexPages(ch BookChapter, cat, group, other string, per int, ie *indexEntr
 		// Entries without the property, or with a null, share one last page.
 		if n := counts[""]; n > 0 {
 			other = strings.TrimSpace(other)
+			if other == "" && ie.lenient && ie.label != "" {
+				// The package had no such page; name it with the kind's own
+				// word ("Other ancestries").
+				other = "Other " + strings.ToLower(ie.label)
+			}
 			if other == "" {
 				other = "Other"
 			}
