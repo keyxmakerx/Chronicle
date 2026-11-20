@@ -39,6 +39,8 @@ type GeneratorKind struct {
 	// Structure makes a generated calendar and saves generated moons;
 	// without it those generators are refused.
 	Structure CalendarStructureAPI
+	// Eras writes a history run's eras; without it a history adds only events.
+	Eras EraAPI
 }
 
 // Weather tuning a row may set, with the generator's own bounds.
@@ -77,6 +79,7 @@ func (GeneratorKind) Doc() string {
 		"- `events`: festivals and other calendar events for one `year`.\n" +
 		"- `sky`: sky events (eclipses, meteor showers, comets) for one `year`.\n" +
 		"- `names`: `count` names (up to 30) of `names` kind `people` or `places`, in a `theme` (pastoral, nautical, dwarven, elven, desert, imperial, fey, grim), added to the rolling table `table`.\n" +
+		"- `history` (owner or co-DM): the default calendar's past, as eras and one-off events on real dates up to its current year. Optional: `recipe` (kingdom, frontier, dark), `years` back (up to 5000; 0 or left out lets the generator choose), `eras` (up to 8), `density` (events per century, 0.5 to 20), `tone` (bright, balanced, grim), `theme` (as for names), `realm` (the realm's name), `secrets` (true by default: adds hidden history only the owner and co-DMs see), and how often each kind happens, off, rare, normal or often: `foundings`, `wars`, `plagues`, `famines`, `discoveries`, `coronations`, `disasters`, `portents`, `migrations`, `schisms`. `years` times `density` over 100 can be at most 250. A calendar with more than one era keeps its eras: the run adds only events.\n" +
 		"- `rolls` (owner or co-DM): rolls every night of one `year` for the `event` (by name) that has a `roll:`, on Chronicle's own server roller. Locked nights keep their result (`keep_locked: true`, the only choice), and a night that has passed keeps a result it already has. `only_unrolled: true` rolls just the nights with no result yet.\n" +
 		"- `calendar` (owner only): a whole new calendar, as the new-calendar wizard's Generate one makes. It never changes a calendar already there; it becomes the main calendar only when the campaign has none. Optional: `style` (familiar, tendays, deep-count, moon-reckoned, strange), `template` (gregorian-like, harptos-like, even, lunar, wild), `theme` (as for names), `randomness` (0 to 1, how far from the template), `months` (1 to 24), `week_length` (1 to 14), `current_year`, `calendar_name` (up to 80 characters), `moons` (0 to 5), `seasons` (0 to 6), `festival_days` (off, rare, normal, often), `leap_years` and `festivals` (true or false). Blocks that need the new calendar go in a later import.\n" +
 		"- `moons` (owner only): adds `count` new moons to the main calendar; the moons already there are kept as they are, and new ones get names and cycles clear of them. Up to 6 moons in all. Optional: `theme`, `cycles` (natural, varied, fast, slow), `pale`, `coloured` and `strange` (off, rare, normal, often), `hidden` (how many of the new moons players can't see).\n\n" +
@@ -174,7 +177,7 @@ func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		return p, nil, fmt.Sprintf("%d %s names into the table %s", n, kind, quote(r.Str("table"))), nil
 	case "weather", "events", "sky":
 	default:
-		return p, nil, "", apperror.NewBadRequest("generator must be weather, events, sky, names, rolls, calendar or moons")
+		return p, nil, "", apperror.NewBadRequest("generator must be weather, events, sky, names, history, rolls, calendar or moons")
 	}
 	if g == "weather" && !a.CanAuthorDmOnly() {
 		return p, nil, "", apperror.NewBadRequest("only the owner or a co-DM can set weather")
@@ -356,6 +359,9 @@ func (k GeneratorKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		}
 		return p
 	}
+	if strings.EqualFold(r.Str("generator"), "history") {
+		return k.planHistoryRow(ctx, campaignID, a, r)
+	}
 	p, _, summary, err := k.plan(ctx, campaignID, a, r)
 	if err != nil {
 		return Plan{Error: planError(err)}
@@ -414,6 +420,9 @@ func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 		_, err = k.Rolls.RollEventNights(ctx, row.ev.ID, row.cal.ID, campaignID,
 			calendar.RollNightsInput{Year: row.year, OnlyUnrolled: row.only}, a.Viewer())
 		return err
+	}
+	if strings.EqualFold(r.Str("generator"), "history") {
+		return k.applyHistory(ctx, campaignID, a, r)
 	}
 	p, cal, _, err := k.plan(ctx, campaignID, a, r)
 	if err != nil {
