@@ -20,9 +20,13 @@
  *                     false for none. Without one, a natural 20 on a d20 that counts is a success
  *                     and a natural 1 a failure.
  *   crit              'succ' | 'fail': show that crit on the first d20 that counts (a preview)
- *   set, colour, succ, fail   the table's look and crits, for dice that don't name their own
+ *   set, colour, succ, fail   the table's look and crits, for dice that don't name their own.
+ *                     Left out, they come from opts.table, else Chronicle.diceTable, then the defaults.
+ *   table             { set, colour, succ, fail, quality } for this roll alone, in place of
+ *                     Chronicle.diceTable (the Table tab uses it to draw other people's rolls in the
+ *                     campaign's look)
  *   quality           { mode: 'auto' | 'basic' | 'hd', capBasic } (capBasic: the table holds
- *                     everyone to Basic)
+ *                     everyone to Basic). Left out, Chronicle.diceTable.quality, then Auto.
  *   still             set the dice down instead of throwing them
  *   skippable         false to keep a press from skipping the animations
  *   onSettle(points)  called once, when the dice land (points: where, in client pixels) or at once
@@ -35,6 +39,9 @@
  *
  *   Chronicle.dice.catalogue() -> Promise<{ sets, crits, defaults }>   every look, for pickers
  *   Chronicle.dice.defaults    { set, colour, succ, fail, quality }
+ *   Chronicle.diceTable        optional { set, colour, succ, fail, quality (a string) }: the look of
+ *                     this person's own rolls on the page, set by the Table tab. An empty or missing
+ *                     name means the default.
  *   Chronicle.dice.stop()
  *
  * The values and crits are decided here before anything is drawn, so Calm, Off and a browser
@@ -232,8 +239,18 @@
     if (W.requestIdleCallback) W.requestIdleCallback(go, { timeout: 5000 }); else setTimeout(go, 1500);
   }
 
+  // The page's dice look, for the names a roll doesn't carry. A colour belongs to its set, so one
+  // from the page's look is used only with the page's set.
+  function withTable(o) {
+    var t = o.table || (W.Chronicle && W.Chronicle.diceTable) || {}, r = Object.assign({}, o);
+    ['set', 'succ', 'fail'].forEach(function (k) { if (!r[k] && t[k]) r[k] = t[k]; });
+    if (!r.colour && t.colour && (!o.set || o.set === t.set)) r.colour = t.colour;
+    if (!r.quality && t.quality) r.quality = { mode: t.quality };
+    return r;
+  }
+
   function roll(groups, opts) {
-    opts = opts || {};
+    opts = withTable(opts || {});
     var out, told;
     try {
       out = decide(groups, opts.results);
@@ -293,6 +310,6 @@
     catalogue: catalogue,
     defaults: Object.assign({}, DEFAULTS),
     // Exposed for test/js/dice.test.mjs.
-    _internal: { decide: decide, critsOf: critsOf, forceCrit: forceCrit, engineDice: engineDice }
+    _internal: { decide: decide, critsOf: critsOf, forceCrit: forceCrit, engineDice: engineDice, withTable: withTable }
   };
 })();

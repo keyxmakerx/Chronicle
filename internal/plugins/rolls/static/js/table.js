@@ -8,9 +8,11 @@
  * or by crafting) arrives as a roll.made message on the campaign's socket,
  * already cut to what this person may see. This script only shows them.
  *
- * Per person, remembered in this browser: which section each leaf shows and
- * how dice are drawn (quick 2D, rune 3D or numbers only; a new player starts
- * on the table's choice).
+ * Per person, remembered in this browser: which section each leaf shows, how
+ * dice are drawn (quick 2D, rune 3D or numbers only; a new player starts on the
+ * table's choice) and, when the Director allows it, their own rune set,
+ * colour and crit animations. Everyone else's rolls are always drawn in the
+ * campaign's dice.
  */
 (function () {
   'use strict';
@@ -96,6 +98,11 @@
     this.phoneLeaf = 0;
     this.look = store('look.' + key) || '';
     this.tableLook = 'quick';
+    // The campaign's dice settings, once read; rolls use the defaults until then.
+    this.camp = null;
+    this.personal = readPicks(store('dice.' + key));
+    this.cat = null;
+    this.catAsked = false;
     this.rolls = [];
     this.byId = {};
     // What the director has shown tonight, oldest first.
@@ -156,9 +163,55 @@
     var self = this;
     C.apiFetch(this.base + '/settings').then(function (r) { return r.ok ? r.json() : null; }).then(function (s) {
       if (s && s.look) self.tableLook = s.look;
+      if (s) self.camp = s;
+      self.applyDice();
       if (self.open) self.renderSection('dice');
     }).catch(function () { /* the table's choice stays quick 2D */ });
   };
+
+  // The personal picks kept in this browser: only known keys, as strings.
+  function readPicks(raw) {
+    var out = { set: '', colour: '', succ: '', fail: '' };
+    try {
+      var o = JSON.parse(raw || '{}');
+      Object.keys(out).forEach(function (k) { if (typeof o[k] === 'string' && /^[a-z0-9-]{0,24}$/.test(o[k])) out[k] = o[k]; });
+    } catch (e) { /* nothing remembered */ }
+    return out;
+  }
+  Table.prototype.hasPicks = function () {
+    var p = this.personal;
+    return !!(p.set || p.colour || p.succ || p.fail);
+  };
+  Table.prototype.savePicks = function () {
+    store('dice.' + this.key, this.hasPicks() ? JSON.stringify(this.personal) : '');
+    this.applyDice();
+  };
+
+  // The campaign's own 3D dice. An empty name is the default, which dice.js fills in.
+  Table.prototype.campDice = function () {
+    var c = this.camp || {};
+    return { set: c.diceSet || '', colour: c.diceColour || '', succ: c.critSucc || '', fail: c.critFail || '', quality: c.quality || '' };
+  };
+
+  // Whether the Director has put a set on the shelf for players; none listed means all.
+  Table.prototype.offered = function (set) {
+    var o = this.camp && this.camp.diceOffered;
+    return !o || !o.length || o.indexOf(set) >= 0;
+  };
+
+  // The dice for this person's own rolls: their picks where the Director lets players pick
+  // (a set that is no longer offered falls back to the campaign's, colour with it), else the campaign's.
+  Table.prototype.myDice = function () {
+    var out = this.campDice(), p = this.personal;
+    if (!this.camp || !this.camp.playersPick) return out;
+    if (p.set && this.offered(p.set)) { out.set = p.set; out.colour = p.colour; }
+    if (p.succ) out.succ = p.succ;
+    if (p.fail) out.fail = p.fail;
+    return out;
+  };
+
+  // The page-wide look for this person's rolls from other places (shop, crafting, hero builder).
+  Table.prototype.applyDice = function () { C.diceTable = this.myDice(); };
 
   // ---------- Live rolls ----------
 
@@ -431,8 +484,47 @@
       out += '<div><p class="tt-k">The table’s dice</p><p class="tt-from">What a player who hasn’t picked starts on.</p></div>' +
         '<div class="tt-seg" role="group" aria-label="The table’s dice">' + seg('data-tt-tablelook', self.tableLook) + '</div>';
     }
+    if (mine === 'rune') out += this.pickHTML();
     out += '<div class="tt-ptray" id="tt-ptray"></div><button type="button" class="tt-quiet" data-tt-try>Throw a test set</button></div>';
     return out;
+  };
+
+  // The person's own rune dice: a die, its colour and the two crit animations, each starting on
+  // "the campaign's". Needs the catalogue, which the first draw asks for.
+  Table.prototype.pickHTML = function () {
+    var self = this;
+    if (!this.camp) return '';
+    if (!this.camp.playersPick) return '<p class="tt-from">Your ' + esc(this.gm) + ' has set everyone’s dice.</p>';
+    if (!this.cat) { this.loadCatalogue(); return '<p class="tt-from">Reading the dice…</p>'; }
+    var p = this.personal, cat = this.cat;
+    var sets = cat.sets.filter(function (x) { return self.offered(x.key); });
+    var set = sets.filter(function (x) { return x.key === p.set; })[0];
+    var opt = function (v, name, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(name) + '</option>'; };
+    var sel = function (id, label, body) {
+      return '<label class="tt-pick"><span class="tt-from">' + label + '</span><select class="tt-mode" data-tt-dpick="' + id + '">' + body + '</select></label>';
+    };
+    var out = '<div class="tt-picks"><div><p class="tt-k">Your rune dice</p><p class="tt-from">Your own rolls only. Everyone else still sees the campaign’s.</p></div>';
+    out += sel('set', 'Die', opt('', 'The campaign’s die', set ? p.set : '') + sets.map(function (x) { return opt(x.key, x.name, p.set); }).join(''));
+    if (set) {
+      var col = set.colours.some(function (c) { return c.key === p.colour; }) ? p.colour : set.colours[0].key;
+      out += sel('colour', 'Colour', set.colours.map(function (c) { return opt(c.key, c.name, col); }).join(''));
+    }
+    var crit = function (id, label, list) {
+      return sel(id, label, opt('', 'The campaign’s', p[id]) + list.map(function (c) { return opt(c.key, c.name, p[id]); }).join(''));
+    };
+    out += crit('succ', 'Crit success', cat.crits.succ) + crit('fail', 'Crit fail', cat.crits.fail);
+    if (this.hasPicks()) out += '<button type="button" class="tt-quiet" data-tt-picks-reset>Use the campaign’s dice</button>';
+    return out + '</div>';
+  };
+
+  Table.prototype.loadCatalogue = function () {
+    var self = this;
+    if (this.catAsked || !C.dice || typeof C.dice.catalogue !== 'function') return;
+    this.catAsked = true;
+    C.dice.catalogue().then(function (c) {
+      self.cat = c;
+      if (self.alive && self.open) self.renderSection('dice');
+    }).catch(function () { self.catAsked = false; });
   };
 
   function lookName(k) { var l = LOOKS.filter(function (x) { return x[0] === k; })[0]; return l ? l[1] : k; }
@@ -798,8 +890,11 @@
     if (r.hidden || look === 'none' || !dice.length) return Promise.resolve();
     var rune = look === 'rune' && C.dice && typeof C.dice.roll === 'function' &&
       dice.every(function (d) { return RUNE_SIDES[d.sides]; });
-    if (rune && !tray) {
+    // Rune dice are thrown full screen whether or not a preview tray was offered: the tray is for
+    // quick 2D. Your own rolls wear your dice; everyone else's wear the campaign's.
+    if (rune) {
       return C.dice.roll([{ label: r.label || r.formula, dice: dice.map(function (d) { return { sides: d.sides, value: d.value }; }) }], {
+        table: r.mine ? this.myDice() : this.campDice(),
         describe: function () { return ''; }
       }).then(function () {}, function () {});
     }
@@ -1022,6 +1117,12 @@
       if (d.ttRow) { self.toggleRow(b, d.ttRow); return; }
       if (d.ttQuick) { self.roll('1' + d.ttQuick, ''); return; }
       if (d.ttLook) { self.look = d.ttLook; store('look.' + self.key, self.look); self.renderSection('dice'); return; }
+      if (b.hasAttribute('data-tt-picks-reset')) {
+        self.personal = readPicks('');
+        self.savePicks();
+        self.renderSection('dice');
+        return;
+      }
       if (b.hasAttribute('data-tt-look-reset')) { self.look = ''; store('look.' + self.key, ''); self.renderSection('dice'); return; }
       if (d.ttTablelook) { self.setTableLook(d.ttTablelook); return; }
       if (b.hasAttribute('data-tt-try')) {
@@ -1050,6 +1151,17 @@
       if (self.isl && self.isl.expanded && !t.closest('#tt-isl-detail, .tt-island')) self.collapse(self.isl);
       if (self.open && !t.closest('#tt-drawer, [data-tt-tab], .tt-island, #tt-isl-detail')) self.closeTable(false);
     }, true);
+
+    // A pick of your own rune dice: the die, its colour, or a crit animation.
+    this.on(document, 'change', function (ev) {
+      var t = ev.target, id = t && t.getAttribute && t.getAttribute('data-tt-dpick');
+      if (!id || !(id in self.personal)) return;
+      self.personal[id] = /^[a-z0-9-]{0,24}$/.test(t.value) ? t.value : '';
+      // A colour belongs to its die.
+      if (id === 'set') self.personal.colour = '';
+      self.savePicks();
+      self.renderSection('dice');
+    });
 
     this.on(document, 'submit', function (ev) {
       if (!ev.target.matches || !ev.target.matches('[data-tt-form]')) return;
