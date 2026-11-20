@@ -606,17 +606,21 @@
     if (cur) cur.focus({ preventScroll: true });
   };
 
+  // A mark in a sentence: lower-cased, but never a player's name.
+  function markIn(st, who) {
+    if (st === 'required' && who) return who + ' takes it';
+    return lower(stateWord(st)) + (who ? ' for ' + who : '');
+  }
   // What the strip says it will do.
   Entries.prototype.phrase = function (ent, target, state, data) {
     var who = target ? this.memberLabel(data, target) : '';
     if (state === 'clear') return 'Put <b>' + esc(ent.name) + '</b> back to the same as everyone for <b>' + esc(who) + '</b>.';
-    if (target) return 'Mark <b>' + esc(ent.name) + '</b> as <b>' + esc(lower(markLabel(state, who))) + '</b>.';
-    return 'Mark <b>' + esc(ent.name) + '</b> as <b>' + esc(lower(stateWord(state))) + '</b> for everyone.';
+    return 'Mark <b>' + esc(ent.name) + '</b> as <b>' + esc(markIn(state, who)) + '</b>' + (target ? '' : ' for everyone') + '.';
   };
   Entries.prototype.markSaid = function (ent, target, state, data) {
     var who = target ? this.memberLabel(data, target) : '';
     if (state === 'clear') return ent.name + ' is the same as everyone again for ' + who;
-    return ent.name + ' is ' + lower(target ? markLabel(state, who) : stateWord(state));
+    return ent.name + (state === 'required' && who ? ': ' : ' is ') + markIn(state, who);
   };
 
   Entries.prototype.chooseMark = function (ref, target, state, reasonOnly) {

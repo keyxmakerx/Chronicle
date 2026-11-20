@@ -194,3 +194,4 @@
 .hb-nh-list { margin: 6px 0 0; padding: 8px 12px; list-style: none; display: grid; gap: 4px; border-radius: var(--hb-r-small); background: var(--color-bg-tertiary);
   font-size: 12.5px; color: var(--color-text-body); }
 .hb-ph .hb-note { margin: 0; }
+.hb-opt .hb-tag { white-space: nowrap; }
