@@ -275,7 +275,7 @@ func checkOwnerValue(entity *Entity, k string, v any, step builderStep, isStep, 
 		}
 		unchanged := holdsValue(entity, k, trimmed)
 		ch, on := step.names[strings.ToLower(trimmed)]
-		if (!on || ch.Held) && !(unchanged && step.limited) {
+		if (!on || ch.Held) && (!unchanged || !step.limited) {
 			return apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", val, k))
 		}
 		if on && !ch.Held && ch.State == HeroChoiceStateAskFirst && refuseAsk && !unchanged {
