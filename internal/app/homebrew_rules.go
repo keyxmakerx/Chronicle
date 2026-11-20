@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 )
@@ -116,5 +117,11 @@ func (t *trackerRules) TrackerChanged(ctx context.Context, campaignID string, v 
 		return err
 	}
 	hv := homebrew.Viewer{UserID: v.UserID, Director: v.Director, VisibilityRole: v.VisibilityRole}
+	if !v.Director {
+		// A chosen player's change sets off the Director's own recipe: its
+		// rules run with the Director's standing, since a player has none
+		// and Fire refuses them. The player stays the one who set it off.
+		hv.Director, hv.VisibilityRole = true, permissions.RoleOwner
+	}
 	return t.svc.Fire(ctx, campaignID, hv, homebrew.Fired{Event: "tracker.reached", RecipeID: parts[0], Part: parts[2], Scope: c.EntityID, Payload: payload})
 }

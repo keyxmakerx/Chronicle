@@ -168,7 +168,19 @@ func (f *fakeRepo) UpdateTracker(_ context.Context, t Tracker) error {
 			return errDuplicate
 		}
 	}
+	// Like the SQL one, it leaves the chosen players to SetPlayers.
+	t.Players = f.trackers[t.ID].Players
 	f.trackers[t.ID] = t
+	return nil
+}
+
+func (f *fakeRepo) SetPlayers(_ context.Context, c, id string, players []Player) error {
+	t, ok := f.trackers[id]
+	if !ok || t.CampaignID != c {
+		return nil
+	}
+	t.Players = append([]Player(nil), players...)
+	f.trackers[id] = t
 	return nil
 }
 
@@ -253,6 +265,14 @@ func (d *fakeDir) Names(_ context.Context, _ string, ids []string) (map[string]s
 	return out, nil
 }
 
+// fakeMembers lists a fixed roster.
+type fakeMembers struct {
+	list []Member
+	err  error
+}
+
+func (m *fakeMembers) Members(context.Context, string) ([]Member, error) { return m.list, m.err }
+
 type fakeClock struct {
 	date *GameDate
 	err  error
@@ -279,7 +299,14 @@ func newRig(t *testing.T) *rig {
 		types: []TypeRef{{ID: typeHero, Name: "Hero"}, {ID: 2, Name: "Place"}},
 	}
 	clock := &fakeClock{date: &GameDate{Year: 1, Month: 2, Day: 3, Label: "3 Frostfall 1"}}
-	svc := NewService(repo, dir, clock).(*service)
+	members := &fakeMembers{list: []Member{
+		{UserID: "dm-1", Name: "Dana", Director: true},
+		{UserID: "co-1", Name: "Cole", Director: true},
+		{UserID: "jo-1", Name: "Jo"},
+		{UserID: "tam-1", Name: "Tam", Character: "Brin"},
+		{UserID: "ilse-1", Name: "Ilse"},
+	}}
+	svc := NewService(repo, dir, members, clock).(*service)
 	n := 0
 	svc.newID = func() string { n++; return "id-" + string(rune('a'+n)) }
 	return &rig{svc: svc, repo: repo, clock: clock}
@@ -571,7 +598,7 @@ func TestLogDatesAndValidation(t *testing.T) {
 
 	t.Run("nil clock service", func(t *testing.T) {
 		r := newRig(t)
-		svc := NewService(r.repo, &fakeDir{pages: map[string]PageAccess{pageA: {Exists: true, CanView: true}}}, nil)
+		svc := NewService(r.repo, &fakeDir{pages: map[string]PageAccess{pageA: {Exists: true, CanView: true}}}, nil, nil)
 		k := r.addKind(t, Kind{ID: "k1", Name: "Gold", Shape: ShapeCount})
 		r.addTracker(t, Tracker{ID: "t1", KindID: k.ID, Name: "Gold"})
 		if _, err := svc.Log(ctx, cmp, pageA, dm, LogInput{TrackerID: "t1", Op: OpAdd, Amount: 1}); err != nil {
@@ -703,7 +730,7 @@ func TestKindLifecycle(t *testing.T) {
 		r := newRig(t)
 		r.addKind(t, Kind{ID: "k1", Name: "Gold", Shape: ShapeCount})
 		race := &racyRepo{fakeRepo: r.repo}
-		svc := NewService(race, &fakeDir{pages: map[string]PageAccess{}}, nil)
+		svc := NewService(race, &fakeDir{pages: map[string]PageAccess{}}, nil, nil)
 		_, err := svc.UpdateKind(ctx, cmp, "k1", dm, KindInput{Name: "Coin", Shape: ShapeCount, Version: 1})
 		if code(err) != http.StatusConflict {
 			t.Fatalf("err = %v", err)
@@ -781,7 +808,7 @@ func (racyRepo) UpdateKind(context.Context, Kind, int) (bool, error) { return fa
 
 func TestRepoFailureNeverLeaksRawError(t *testing.T) {
 	r := newRig(t)
-	svc := NewService(brokenRepo{r.repo}, &fakeDir{pages: map[string]PageAccess{pageA: {Exists: true, CanView: true}}}, nil)
+	svc := NewService(brokenRepo{r.repo}, &fakeDir{pages: map[string]PageAccess{pageA: {Exists: true, CanView: true}}}, nil, nil)
 	_, err := svc.Page(context.Background(), cmp, pageA, dm)
 	if code(err) != http.StatusInternalServerError {
 		t.Fatalf("err = %v", err)
@@ -795,4 +822,493 @@ type brokenRepo struct{ *fakeRepo }
 
 func (brokenRepo) ListKinds(context.Context, string) ([]Kind, error) {
 	return nil, errors.New("sql: connection refused")
+}
+
+var (
+	tam   = Viewer{UserID: "tam-1", MemberRole: 1, VisibilityRole: 1}
+	ilse  = Viewer{UserID: "ilse-1", MemberRole: 1, VisibilityRole: 1}
+	coDM  = Viewer{UserID: "co-1", MemberRole: 1, VisibilityRole: 3, Director: true}
+	exOne = Viewer{UserID: "tam-1", MemberRole: 0, VisibilityRole: 0}
+)
+
+// playersRig is a hero page with one tracker shown to Tam (may change it) and
+// Jo (may look), a second shown only to Directors, and one for everyone.
+func playersRig(t *testing.T) (*rig, Tracker) {
+	t.Helper()
+	r := newRig(t)
+	k := r.addKind(t, Kind{ID: "k-hunger", Name: "Hunger", Shape: ShapeCount, Min: ip(0), Max: ip(20), Visibility: SeeDirectors})
+	tr := r.addTracker(t, Tracker{ID: "t-hunger", KindID: k.ID, Name: "Hunger", Visibility: SeePlayers,
+		Players: []Player{{UserID: "tam-1", CanChange: true}, {UserID: "jo-1"}}})
+	return r, tr
+}
+
+func TestChosenPlayersSeeOnlyTheirTracker(t *testing.T) {
+	r, tr := playersRig(t)
+	ctx := context.Background()
+	tests := []struct {
+		name  string
+		v     Viewer
+		shown bool
+	}{
+		{"chosen, may change", tam, true},
+		{"chosen, look only", Viewer{UserID: "jo-1", MemberRole: 1, VisibilityRole: 1}, true},
+		{"not chosen", ilse, false},
+		{"a Director", dm, true},
+		{"a co-Director", coDM, true},
+		{"chosen once, no longer a member", exOne, false},
+		{"anonymous visitor", Viewer{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := r.svc.Page(ctx, cmp, pageA, tt.v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(p.Trackers) == 1; got != tt.shown {
+				t.Fatalf("shown = %v want %v: %+v", got, tt.shown, p.Trackers)
+			}
+			// A tracker the viewer cannot see is also missing on every
+			// route that names it, not forbidden.
+			if !tt.shown {
+				_, err := r.svc.Log(ctx, cmp, pageA, tt.v, LogInput{TrackerID: tr.ID, Op: OpAdd, Amount: 1})
+				if code(err) != http.StatusNotFound {
+					t.Errorf("log = %v want 404", err)
+				}
+				if code(r.svc.Remove(ctx, cmp, tr.ID, tt.v)) != http.StatusNotFound {
+					t.Error("remove did not answer 404")
+				}
+				name := "x"
+				_, err = r.svc.Patch(ctx, cmp, tr.ID, tt.v, TrackerPatch{Name: &name})
+				if code(err) != http.StatusNotFound {
+					t.Errorf("patch = %v want 404", err)
+				}
+			}
+		})
+	}
+}
+
+func TestChosenPlayerCopy(t *testing.T) {
+	r, _ := playersRig(t)
+	ctx := context.Background()
+	p, err := r.svc.Page(ctx, cmp, pageA, tam)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tv := p.Trackers[0]
+	if !tv.CanChange || p.CanEdit || len(p.Members) != 0 || len(tv.Players) != 0 {
+		t.Errorf("player copy leaks Director data or lacks canChange: %+v canEdit=%v", tv, p.CanEdit)
+	}
+	if len(tv.AlsoSeenBy) != 1 || tv.AlsoSeenBy[0] != "Jo" {
+		t.Errorf("alsoSeenBy = %v want [Jo]", tv.AlsoSeenBy)
+	}
+	look, _ := r.svc.Page(ctx, cmp, pageA, Viewer{UserID: "jo-1", MemberRole: 1, VisibilityRole: 1})
+	if look.Trackers[0].CanChange {
+		t.Error("look-only player has canChange")
+	}
+
+	d, _ := r.svc.Page(ctx, cmp, pageA, dm)
+	dv := d.Trackers[0]
+	if len(dv.Players) != 2 || dv.Players[0].Name != "Jo" && dv.Players[1].Name != "Jo" {
+		t.Errorf("director players = %+v", dv.Players)
+	}
+	// Members is everyone who can be chosen: no Director.
+	var names []string
+	for _, m := range d.Members {
+		names = append(names, m.Name)
+	}
+	if strings.Join(names, ",") != "Ilse,Jo,Tam" || d.Members[2].Character != "Brin" {
+		t.Errorf("members = %+v", d.Members)
+	}
+}
+
+func TestPlayerLog(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name string
+		v    Viewer
+		in   LogInput
+		want int
+	}{
+		{"may change: add", tam, LogInput{TrackerID: "t-hunger", Op: OpAdd, Amount: -3, Note: "Fed on the stag"}, 0},
+		{"may change: set", tam, LogInput{TrackerID: "t-hunger", Op: OpSet, Amount: 4}, 0},
+		{"look only", Viewer{UserID: "jo-1", MemberRole: 1, VisibilityRole: 1}, LogInput{TrackerID: "t-hunger", Op: OpAdd, Amount: 1}, http.StatusForbidden},
+		{"not chosen", ilse, LogInput{TrackerID: "t-hunger", Op: OpAdd, Amount: 1}, http.StatusNotFound},
+		{"by kind, no row", tam, LogInput{KindID: "k-hunger", Op: OpAdd, Amount: 1}, http.StatusForbidden},
+		{"another page's tracker", tam, LogInput{TrackerID: "t-hunger", Op: OpAdd, Amount: 1}, http.StatusNotFound},
+		{"bad op", tam, LogInput{TrackerID: "t-hunger", Op: "strike", Amount: 1}, http.StatusUnprocessableEntity},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, _ := playersRig(t)
+			page := pageA
+			if tt.name == "another page's tracker" {
+				r.svc.(*service).entities = &fakeDir{pages: map[string]PageAccess{pageA: {Exists: true, CanView: true}, "page-b": {Exists: true, CanView: true}}}
+				page = "page-b"
+			}
+			before := len(r.repo.entries)
+			tv, err := r.svc.Log(ctx, cmp, page, tt.v, tt.in)
+			if got := code(err); got != tt.want {
+				t.Fatalf("code = %d (%v) want %d", got, err, tt.want)
+			}
+			if tt.want != 0 {
+				if len(r.repo.entries) != before {
+					t.Fatal("a refused change wrote a line")
+				}
+				return
+			}
+			if len(r.repo.entries) != before+1 || r.repo.entries[before].CreatedBy != tt.v.UserID || r.repo.entries[before].Source != SourceHand {
+				t.Fatalf("entries = %+v", r.repo.entries)
+			}
+			if tv.Log[0].By != "You" || tv.Log[0].Note != tt.in.Note {
+				t.Errorf("player's own line = %+v", tv.Log[0])
+			}
+		})
+	}
+}
+
+func TestPlayerLinesNamedForDirector(t *testing.T) {
+	r, _ := playersRig(t)
+	ctx := context.Background()
+	if _, err := r.svc.Log(ctx, cmp, pageA, tam, LogInput{TrackerID: "t-hunger", Op: OpAdd, Amount: 3, Note: "Fed on the stag"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.svc.Log(ctx, cmp, pageA, dm, LogInput{TrackerID: "t-hunger", Op: OpAdd, Amount: 1, Note: "the DM's own note"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.svc.Log(ctx, cmp, pageA, coDM, LogInput{TrackerID: "t-hunger", Op: OpAdd, Amount: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	p, _ := r.svc.Page(ctx, cmp, pageA, dm)
+	log := p.Trackers[0].Log // newest first: co-DM, DM, Tam
+	if log[2].By != "Tam" || log[2].Note != "Fed on the stag" {
+		t.Errorf("player's line to the Director = %+v", log[2])
+	}
+	if log[1].By != "" || log[0].By != "" {
+		t.Errorf("Director lines were named: %+v %+v", log[1], log[0])
+	}
+
+	// Tam sees his own line with its note, and the Directors' lines bare.
+	p, _ = r.svc.Page(ctx, cmp, pageA, tam)
+	log = p.Trackers[0].Log
+	if log[2].By != "You" || log[2].Note != "Fed on the stag" {
+		t.Errorf("own line = %+v", log[2])
+	}
+	if log[1].By != "" || log[1].Note != "" || log[0].Note != "" {
+		t.Errorf("Director lines leaked a name or note: %+v %+v", log[1], log[0])
+	}
+
+	// Jo, chosen but not the writer, gets neither name nor note.
+	p, _ = r.svc.Page(ctx, cmp, pageA, Viewer{UserID: "jo-1", MemberRole: 1, VisibilityRole: 1})
+	if l := p.Trackers[0].Log[2]; l.By != "" || l.Note != "" {
+		t.Errorf("another player's line = %+v", l)
+	}
+}
+
+func TestRuleLineIsNotThePlayers(t *testing.T) {
+	r, tr := playersRig(t)
+	ctx := context.Background()
+	r.repo.entries = []Entry{{ID: 1, TrackerID: tr.ID, Op: OpAdd, Amount: 1, Source: SourceRule, CreatedBy: "tam-1", Note: "rule note"}}
+	for _, v := range []Viewer{dm, tam} {
+		p, _ := r.svc.Page(ctx, cmp, pageA, v)
+		if l := p.Trackers[0].Log[0]; l.By != "" || (!v.Director && l.Note != "") {
+			t.Errorf("rule line for %s = %+v", v.UserID, l)
+		}
+	}
+}
+
+func TestChosenPlayerCannotDoMore(t *testing.T) {
+	r, tr := playersRig(t)
+	ctx := context.Background()
+	if _, err := r.svc.Log(ctx, cmp, pageA, tam, LogInput{TrackerID: tr.ID, Op: OpAdd, Amount: 2}); err != nil {
+		t.Fatal(err)
+	}
+	name, vis := "Famine", SeeEveryone
+	for _, tt := range []struct {
+		name string
+		call func() error
+	}{
+		{"strike", func() error { _, err := r.svc.Strike(ctx, cmp, r.repo.entries[0].ID, true, tam); return err }},
+		{"rename", func() error { _, err := r.svc.Patch(ctx, cmp, tr.ID, tam, TrackerPatch{Name: &name}); return err }},
+		{"widen", func() error { _, err := r.svc.Patch(ctx, cmp, tr.ID, tam, TrackerPatch{Visibility: &vis}); return err }},
+		{"remove", func() error { return r.svc.Remove(ctx, cmp, tr.ID, tam) }},
+		{"place", func() error {
+			_, err := r.svc.Place(ctx, cmp, pageA, tam, PlaceInput{KindID: "k-hunger", Name: "Again"})
+			return err
+		}},
+		{"kinds", func() error { _, _, err := r.svc.Kinds(ctx, cmp, tam); return err }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := code(tt.call()); got != http.StatusForbidden {
+				t.Fatalf("code = %d want 403", got)
+			}
+		})
+	}
+	if got := r.repo.trackers[tr.ID]; got.Name != "Hunger" || got.Visibility != SeePlayers || r.repo.entries[0].StruckAt != nil {
+		t.Fatalf("a refused player write changed things: %+v", got)
+	}
+
+	// A player who cannot see the tracker is told it is missing, not refused.
+	if _, err := r.svc.Strike(ctx, cmp, r.repo.entries[0].ID, true, ilse); code(err) != http.StatusNotFound {
+		t.Errorf("strike by unseen player = %v want 404", err)
+	}
+}
+
+func TestDirectorStrikesPlayerLine(t *testing.T) {
+	r, tr := playersRig(t)
+	ctx := context.Background()
+	if _, err := r.svc.Log(ctx, cmp, pageA, tam, LogInput{TrackerID: tr.ID, Op: OpAdd, Amount: 5}); err != nil {
+		t.Fatal(err)
+	}
+	tv, err := r.svc.Strike(ctx, cmp, r.repo.entries[0].ID, true, dm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tv.Value != 0 || !tv.Log[0].Struck {
+		t.Fatalf("after strike = %+v", tv)
+	}
+}
+
+func TestChoosePlayers(t *testing.T) {
+	ctx := context.Background()
+	players := SeePlayers
+	pick := func(ps ...PlayerPick) *[]PlayerPick { return &ps }
+	tests := []struct {
+		name  string
+		patch TrackerPatch
+		want  int
+		check func(t *testing.T, tr Tracker)
+	}{
+		{"choose two", TrackerPatch{Visibility: &players, Players: pick(PlayerPick{"tam-1", true}, PlayerPick{"ilse-1", false})}, 0,
+			func(t *testing.T, tr Tracker) {
+				if tr.Visibility != SeePlayers || len(tr.Players) != 2 || !tr.Players[0].CanChange || tr.Players[1].CanChange {
+					t.Errorf("%+v", tr)
+				}
+			}},
+		{"duplicate pick keeps the last", TrackerPatch{Visibility: &players, Players: pick(PlayerPick{"tam-1", true}, PlayerPick{"tam-1", false})}, 0,
+			func(t *testing.T, tr Tracker) {
+				if len(tr.Players) != 1 || tr.Players[0].CanChange {
+					t.Errorf("%+v", tr)
+				}
+			}},
+		{"nobody chosen", TrackerPatch{Visibility: &players, Players: pick()}, 0,
+			func(t *testing.T, tr Tracker) {
+				if tr.Visibility != SeePlayers || len(tr.Players) != 0 {
+					t.Errorf("%+v", tr)
+				}
+			}},
+		{"players with no list", TrackerPatch{Visibility: &players}, 0,
+			func(t *testing.T, tr Tracker) {
+				if tr.Visibility != SeePlayers || len(tr.Players) != 0 {
+					t.Errorf("%+v", tr)
+				}
+			}},
+		{"a non-member", TrackerPatch{Visibility: &players, Players: pick(PlayerPick{"stranger-1", false})}, http.StatusUnprocessableEntity, nil},
+		{"the owner", TrackerPatch{Visibility: &players, Players: pick(PlayerPick{"dm-1", false})}, http.StatusUnprocessableEntity, nil},
+		{"a co-Director", TrackerPatch{Visibility: &players, Players: pick(PlayerPick{"co-1", true})}, http.StatusUnprocessableEntity, nil},
+		{"one bad pick refuses all", TrackerPatch{Visibility: &players, Players: pick(PlayerPick{"tam-1", true}, PlayerPick{"co-1", true})}, http.StatusUnprocessableEntity, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newRig(t)
+			k := r.addKind(t, Kind{ID: "k1", Name: "Hunger", Shape: ShapeCount})
+			tr := r.addTracker(t, Tracker{ID: "t1", KindID: k.ID, Name: "Hunger", Visibility: SeeDirectors})
+			_, err := r.svc.Patch(ctx, cmp, tr.ID, dm, tt.patch)
+			if got := code(err); got != tt.want {
+				t.Fatalf("code = %d (%v) want %d", got, err, tt.want)
+			}
+			got := r.repo.trackers[tr.ID]
+			if tt.want != 0 {
+				if got.Visibility != SeeDirectors || len(got.Players) != 0 {
+					t.Fatalf("a refused patch changed the tracker: %+v", got)
+				}
+				return
+			}
+			tt.check(t, got)
+		})
+	}
+}
+
+func TestPlayersPatchContract(t *testing.T) {
+	ctx := context.Background()
+	players, everyone := SeePlayers, SeeEveryone
+	newName := "Famine"
+	r, tr := playersRig(t)
+
+	// A rename leaves the chosen players alone (absent preserves).
+	if _, err := r.svc.Patch(ctx, cmp, tr.ID, dm, TrackerPatch{Name: &newName}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.repo.trackers[tr.ID]; got.Name != "Famine" || len(got.Players) != 2 {
+		t.Fatalf("rename lost players: %+v", got)
+	}
+	// Naming players on a tracker that is not "players" is refused.
+	r.addTracker(t, Tracker{ID: "t-open", KindID: "k-hunger", Name: "Open", Visibility: SeeEveryone})
+	list := []PlayerPick{{"tam-1", false}}
+	if _, err := r.svc.Patch(ctx, cmp, "t-open", dm, TrackerPatch{Players: &list}); code(err) != http.StatusUnprocessableEntity {
+		t.Errorf("players without the visibility = %v", err)
+	}
+	// Replacing the list on a "players" tracker needs no visibility key.
+	if _, err := r.svc.Patch(ctx, cmp, tr.ID, dm, TrackerPatch{Players: &list}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.repo.trackers[tr.ID]; len(got.Players) != 1 || got.Players[0].UserID != "tam-1" || got.Players[0].CanChange {
+		t.Fatalf("replace = %+v", got.Players)
+	}
+	// Re-sending "players" with no list keeps the list.
+	if _, err := r.svc.Patch(ctx, cmp, tr.ID, dm, TrackerPatch{Visibility: &players}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.repo.trackers[tr.ID]; len(got.Players) != 1 {
+		t.Fatalf("resend lost players: %+v", got.Players)
+	}
+	// Switching away clears them, so a later "players" starts from nobody.
+	if _, err := r.svc.Patch(ctx, cmp, tr.ID, dm, TrackerPatch{Visibility: &everyone}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.repo.trackers[tr.ID]; got.Visibility != SeeEveryone || len(got.Players) != 0 {
+		t.Fatalf("switch away = %+v", got)
+	}
+	if _, err := r.svc.Patch(ctx, cmp, tr.ID, dm, TrackerPatch{Visibility: &players}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.repo.trackers[tr.ID]; len(got.Players) != 0 {
+		t.Fatalf("stale players re-armed: %+v", got.Players)
+	}
+	// A place may not start as "players".
+	bad := SeePlayers
+	if _, err := r.svc.Place(ctx, cmp, pageA, dm, PlaceInput{KindID: "k-hunger", Name: "New", Visibility: bad}); code(err) != http.StatusUnprocessableEntity {
+		t.Errorf("place as players = %v", err)
+	}
+}
+
+func TestChosenTrackerAbsentFromEveryOtherRead(t *testing.T) {
+	r, _ := playersRig(t)
+	ctx := context.Background()
+	// The home's clocks block lists only trackers shown to everyone.
+	r.repo.entries = []Entry{{ID: 1, TrackerID: "t-hunger", Op: OpAdd, Amount: 2}}
+	for _, v := range []Viewer{dm, tam, ilse} {
+		got, err := r.svc.Shared(ctx, cmp, v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("world clocks for %s = %+v", v.UserID, got)
+		}
+	}
+	// A kind-level default can never be "players", so a virtual tracker is
+	// never shown to a chosen player by accident.
+	r.addKind(t, Kind{ID: "k-every", Name: "Heat", Shape: ShapeCount, Visibility: SeeDirectors, EveryTypeID: typeHero})
+	p, _ := r.svc.Page(ctx, cmp, pageA, tam)
+	for _, tv := range p.Trackers {
+		if tv.KindID == "k-every" {
+			t.Errorf("virtual tracker shown to a player: %+v", tv)
+		}
+	}
+}
+
+func TestMemberListFailureIsAnError(t *testing.T) {
+	r, _ := playersRig(t)
+	r.svc.(*service).members = &fakeMembers{err: errors.New("db down")}
+	for _, v := range []Viewer{dm, tam} {
+		if _, err := r.svc.Page(context.Background(), cmp, pageA, v); code(err) != http.StatusInternalServerError {
+			t.Errorf("page for %s = %v want 500", v.UserID, err)
+		}
+	}
+}
+
+type recListener struct {
+	seen []Viewer
+	got  []Change
+}
+
+func (l *recListener) TrackerChanged(_ context.Context, _ string, v Viewer, c Change) error {
+	l.seen = append(l.seen, v)
+	l.got = append(l.got, c)
+	return nil
+}
+
+func TestPlayerChangeFiresListener(t *testing.T) {
+	r, tr := playersRig(t)
+	k := r.repo.kinds["k-hunger"]
+	k.Owner = "homebrew:r1:tracker:hunger"
+	r.repo.kinds["k-hunger"] = k
+	l := &recListener{}
+	r.svc.(*service).listener = l
+	if _, err := r.svc.Log(context.Background(), cmp, pageA, tam, LogInput{TrackerID: tr.ID, Op: OpAdd, Amount: 4}); err != nil {
+		t.Fatal(err)
+	}
+	if len(l.got) != 1 || l.got[0].From != 0 || l.got[0].To != 4 || l.seen[0].UserID != "tam-1" || l.seen[0].Director {
+		t.Fatalf("listener heard %+v by %+v", l.got, l.seen)
+	}
+}
+
+// A grant made before the member's joined_at is from an earlier stay: the
+// player rejoined and was not chosen again, so they see and change nothing,
+// and the Director's picker shows them unticked. Choosing them again works.
+func TestGrantFromEarlierStayDoesNotCount(t *testing.T) {
+	ctx := context.Background()
+	r, tr := playersRig(t)
+	granted := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	rejoined := granted.Add(48 * time.Hour)
+	stored := r.repo.trackers[tr.ID]
+	stored.Players = []Player{{UserID: "tam-1", CanChange: true, GrantedAt: granted}, {UserID: "jo-1", GrantedAt: granted}}
+	r.repo.trackers[tr.ID] = stored
+	members := r.svc.(*service).repo.(*grantFilter).members.(*fakeMembers)
+	for i := range members.list {
+		switch members.list[i].UserID {
+		case "tam-1":
+			members.list[i].JoinedAt = rejoined
+		case "jo-1":
+			members.list[i].JoinedAt = granted.Add(-time.Hour)
+		}
+	}
+	jo := Viewer{UserID: "jo-1", MemberRole: 1, VisibilityRole: 1}
+	if p, err := r.svc.Page(ctx, cmp, pageA, tam); err != nil || len(p.Trackers) != 0 {
+		t.Fatalf("a rejoined player sees %+v err=%v", p.Trackers, err)
+	}
+	if _, err := r.svc.Log(ctx, cmp, pageA, tam, LogInput{TrackerID: tr.ID, Op: OpAdd, Amount: 1}); code(err) != http.StatusNotFound {
+		t.Errorf("rejoined player's log = %v want 404", err)
+	}
+	if p, err := r.svc.Page(ctx, cmp, pageA, jo); err != nil || len(p.Trackers) != 1 {
+		t.Fatalf("a player who stayed must still see it: %+v err=%v", p.Trackers, err)
+	}
+	dmView, err := r.svc.Page(ctx, cmp, pageA, dm)
+	if err != nil || len(dmView.Trackers) != 1 {
+		t.Fatal(err)
+	}
+	if got := dmView.Trackers[0].Players; len(got) != 1 || got[0].UserID != "jo-1" {
+		t.Errorf("the picker must show the stale grant unticked: %+v", got)
+	}
+	// Choosing the returning player again is a fresh grant.
+	picks := []PlayerPick{{UserID: "tam-1", CanChange: true}, {UserID: "jo-1"}}
+	if _, err := r.svc.Patch(ctx, cmp, tr.ID, dm, TrackerPatch{Players: &picks}); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := r.svc.Page(ctx, cmp, pageA, tam); err != nil || len(p.Trackers) != 1 {
+		t.Fatalf("a re-chosen player should see it: %+v err=%v", p.Trackers, err)
+	}
+	for _, p := range r.repo.trackers[tr.ID].Players {
+		if p.UserID == "jo-1" && !p.GrantedAt.Equal(granted) {
+			t.Errorf("an unchanged pick must keep its grant time, got %v", p.GrantedAt)
+		}
+	}
+}
+
+// A rename that clashes is refused before the player list is touched.
+func TestPatchRefusalLeavesPlayersAlone(t *testing.T) {
+	ctx := context.Background()
+	r, tr := playersRig(t)
+	k := r.addKind(t, Kind{ID: "k-dread", Name: "Dread", Shape: ShapeCount, Min: ip(0), Max: ip(5), Visibility: SeeDirectors})
+	r.addTracker(t, Tracker{ID: "t-dread", KindID: k.ID, Name: "Dread", Visibility: SeeDirectors})
+	name := "dread"
+	picks := []PlayerPick{{UserID: "ilse-1"}}
+	_, err := r.svc.Patch(ctx, cmp, tr.ID, dm, TrackerPatch{Name: &name, Players: &picks})
+	if code(err) != http.StatusUnprocessableEntity {
+		t.Fatalf("clashing rename = %v want 422", err)
+	}
+	got := r.repo.trackers[tr.ID]
+	if len(got.Players) != 2 || got.Players[0].UserID != "tam-1" || got.Name != "Hunger" {
+		t.Fatalf("a refused patch changed the tracker: %+v", got)
+	}
 }

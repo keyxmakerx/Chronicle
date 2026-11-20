@@ -10,21 +10,22 @@ import (
 // Limits. They bound what a Director can store and keep the block's layout
 // sane; the widget enforces the same numbers as a courtesy.
 const (
-	MaxNameChars    = 80
-	MaxTextChars    = 300
-	MaxNoteChars    = 200
-	MaxSteps        = 20
-	MinSteps        = 2
-	MaxBands        = 12
-	MinSegments     = 2
-	MaxSegments     = 24
-	MaxKindsPerCamp = 200
-	MaxTrackersPage = 40
-	MaxEntries      = 10000
-	MaxAbsValue     = 1000000
-	MaxIDChars      = 64
-	LogShown        = 100
-	MaxBodyBytes    = 64 << 10
+	MaxNameChars     = 80
+	MaxTextChars     = 300
+	MaxNoteChars     = 200
+	MaxSteps         = 20
+	MinSteps         = 2
+	MaxBands         = 12
+	MinSegments      = 2
+	MaxSegments      = 24
+	MaxKindsPerCamp  = 200
+	MaxTrackersPage  = 40
+	MaxPlayersChosen = 200
+	MaxEntries       = 10000
+	MaxAbsValue      = 1000000
+	MaxIDChars       = 64
+	LogShown         = 100
+	MaxBodyBytes     = 64 << 10
 )
 
 // validToken reports whether s is a short safe id: letters, digits, _ and -.
@@ -72,7 +73,12 @@ func cleanName(field, s string) (string, error) {
 	return s, nil
 }
 
+// validVisibility is what a kind's default and a newly placed tracker may be.
 func validVisibility(v string) bool { return v == SeeDirectors || v == SeeEveryone }
+
+// validTrackerVisibility adds "players", which only a placed tracker can have
+// because it needs its list of players.
+func validTrackerVisibility(v string) bool { return validVisibility(v) || v == SeePlayers }
 
 func inRange(n int) bool { return n >= -MaxAbsValue && n <= MaxAbsValue }
 

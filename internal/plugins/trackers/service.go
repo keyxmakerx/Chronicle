@@ -6,13 +6,18 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
-// Service owns the tracker rules. Only Directors define kinds, place, change
-// or remove trackers, and see hidden ones; players see the trackers marked
-// for everyone on pages they can open, without the log's notes.
+// Service owns the tracker rules. Only Directors define kinds, place, rename,
+// hide, strike or remove trackers, and see hidden ones. A player sees the
+// trackers marked for everyone and those that name them, on pages they can
+// open, without the log's notes except their own; a player named with "may
+// change it" may also log add and set lines.
 type Service interface {
 	// Page is every tracker on a page as v may see it, with the kinds a
 	// Director can add.
@@ -78,15 +83,20 @@ type PageRef struct {
 type service struct {
 	repo     Repository
 	entities EntityDirectory
+	members  MemberDirectory
 	clock    GameClock
 	listener ChangeListener
 	newID    func() string
 }
 
 // NewService builds the service. clock may be nil when the calendar plugin is
-// unavailable; log lines are then undated.
-func NewService(repo Repository, entities EntityDirectory, clock GameClock) Service {
-	return &service{repo: repo, entities: entities, clock: clock, newID: func() string { return uuid.NewString() }}
+// unavailable; log lines are then undated. members may be nil, in which case
+// no player can be chosen and no log line is named.
+func NewService(repo Repository, entities EntityDirectory, members MemberDirectory, clock GameClock) Service {
+	if members != nil {
+		repo = &grantFilter{Repository: repo, members: members}
+	}
+	return &service{repo: repo, entities: entities, members: members, clock: clock, newID: func() string { return uuid.NewString() }}
 }
 
 func requireDirector(v Viewer) error {
@@ -112,25 +122,106 @@ func (s *service) page(ctx context.Context, campaignID, entityID string, v Viewe
 	return a, nil
 }
 
-// sees reports whether v may see a tracker with this visibility.
-func sees(v Viewer, visibility string) bool { return v.Director || visibility == SeeEveryone }
+// sees reports whether v may see tracker t. A "players" tracker is seen only
+// by a current member named on it: the member check keeps a former member, or
+// a visitor to a public campaign, from matching a row left behind.
+func sees(v Viewer, t Tracker) bool {
+	if v.Director || t.Visibility == SeeEveryone {
+		return true
+	}
+	_, ok := chosen(v, t)
+	return ok
+}
+
+// seesKind is sees for a tracker no row exists for yet: a kind's own default,
+// which is never "players" because that needs a list of players.
+func seesKind(v Viewer, visibility string) bool { return v.Director || visibility == SeeEveryone }
+
+// chosen finds v among a "players" tracker's players.
+func chosen(v Viewer, t Tracker) (Player, bool) {
+	if t.Visibility != SeePlayers || v.UserID == "" || v.MemberRole < permissions.RolePlayer {
+		return Player{}, false
+	}
+	for _, p := range t.Players {
+		if p.UserID == v.UserID {
+			return p, true
+		}
+	}
+	return Player{}, false
+}
+
+// canChange says whether v may log add and set lines on t. It assumes v
+// already sees t.
+func canChange(v Viewer, t Tracker) bool {
+	if v.Director {
+		return true
+	}
+	p, ok := chosen(v, t)
+	return ok && p.CanChange
+}
+
+// roster is the campaign's members by user id.
+type roster map[string]Member
+
+// loadRoster reads the members when the answer needs names: always for a
+// Director (names on log lines and the picker), and for anyone else only when
+// one of ts is a "players" tracker.
+func (s *service) loadRoster(ctx context.Context, campaignID string, v Viewer, ts []Tracker) (roster, error) {
+	need := v.Director
+	for _, t := range ts {
+		need = need || t.Visibility == SeePlayers
+	}
+	if !need || s.members == nil {
+		return roster{}, nil
+	}
+	list, err := s.members.Members(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	ro := make(roster, len(list))
+	for _, m := range list {
+		ro[m.UserID] = m
+	}
+	return ro, nil
+}
 
 // view builds what v sees of one tracker. entries are oldest first.
-func view(k Kind, t Tracker, entries []Entry, v Viewer) TrackerView {
+func view(k Kind, t Tracker, entries []Entry, v Viewer, ro roster) TrackerView {
 	value, after := fold(k, entries)
 	tv := TrackerView{
 		ID: t.ID, KindID: k.ID, Name: t.Name, Shape: k.Shape, Visibility: t.Visibility,
 		Value: value, Min: k.Min, Max: k.Max, Steps: k.Steps, Bands: k.Bands,
 		Now: nowText(k, value), LogCount: len(entries), Log: []EntryView{},
+		CanChange: canChange(v, t),
+	}
+	if t.Visibility == SeePlayers {
+		for _, p := range t.Players {
+			m, ok := ro[p.UserID]
+			switch {
+			case !ok:
+				// No longer a member: nothing to show or to match.
+			case v.Director:
+				tv.Players = append(tv.Players, PlayerView{UserID: p.UserID, Name: m.Name, CanChange: p.CanChange})
+			case p.UserID != v.UserID:
+				tv.AlsoSeenBy = append(tv.AlsoSeenBy, m.Name)
+			}
+		}
 	}
 	for i := len(entries) - 1; i >= 0 && len(tv.Log) < LogShown; i-- {
 		e := entries[i]
 		ev := EntryView{ID: e.ID, Op: e.Op, Amount: e.Amount, Source: e.Source, At: e.CreatedAt,
 			Struck: e.StruckAt != nil, After: after[i]}
-		// Notes are the DM's working words; players get the change and its
-		// date only.
-		if v.Director {
+		// Notes are the DM's working words; a player gets the change and its
+		// date, plus their own lines in full. Only hand lines are anyone's own:
+		// a rule's line carries the player who set it off, but is the rule's.
+		switch {
+		case v.Director:
 			ev.Note = e.Note
+			if m, ok := ro[e.CreatedBy]; ok && e.Source == SourceHand && !m.Director && e.CreatedBy != v.UserID {
+				ev.By = m.Name
+			}
+		case e.Source == SourceHand && e.CreatedBy != "" && e.CreatedBy == v.UserID:
+			ev.Note, ev.By = e.Note, "You"
 		}
 		if e.Game != nil {
 			ev.When = e.Game.Label
@@ -183,7 +274,7 @@ func (s *service) pageView(ctx context.Context, campaignID, entityID, prefix str
 	for _, t := range placed {
 		hasKind[t.KindID], hasName[t.Name] = true, true
 		k, ok := kinds[t.KindID]
-		if ok && sees(v, t.Visibility) && (prefix == "" || ownedBy(k, prefix)) {
+		if ok && sees(v, t) && (prefix == "" || ownedBy(k, prefix)) {
 			ts = append(ts, t)
 		}
 	}
@@ -194,7 +285,7 @@ func (s *service) pageView(ctx context.Context, campaignID, entityID, prefix str
 		if !virtualOn(k, a.TypeID, prefix) || hasKind[k.ID] || hasName[k.Name] {
 			continue
 		}
-		if sees(v, k.Visibility) {
+		if seesKind(v, k.Visibility) {
 			ts = append(ts, Tracker{KindID: k.ID, Name: k.Name, Visibility: k.Visibility, SortOrder: 1 << 30})
 		}
 	}
@@ -208,9 +299,16 @@ func (s *service) pageView(ctx context.Context, campaignID, entityID, prefix str
 	if err != nil {
 		return nil, apperrorInternal(err)
 	}
+	ro, err := s.loadRoster(ctx, campaignID, v, ts)
+	if err != nil {
+		return nil, err
+	}
 	out := &PageView{Trackers: []TrackerView{}, CanEdit: v.Director}
 	for _, t := range ts {
-		out.Trackers = append(out.Trackers, view(kinds[t.KindID], t, entries[t.ID], v))
+		out.Trackers = append(out.Trackers, view(kinds[t.KindID], t, entries[t.ID], v, ro))
+	}
+	if v.Director {
+		out.Members = pickable(ro)
 	}
 	if v.Director && prefix == "" {
 		out.Kinds = []KindChoice{}
@@ -219,6 +317,25 @@ func (s *service) pageView(ctx context.Context, campaignID, entityID, prefix str
 		}
 	}
 	return out, nil
+}
+
+// pickable is the members a Director can choose for a tracker: everyone but
+// the Directors, by name.
+func pickable(ro roster) []MemberChoice {
+	out := []MemberChoice{}
+	for _, m := range ro {
+		if !m.Director {
+			out = append(out, MemberChoice{UserID: m.UserID, Name: m.Name, Character: m.Character})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name)
+		if a != b {
+			return a < b
+		}
+		return out[i].UserID < out[j].UserID
+	})
+	return out
 }
 
 // ownedBy says whether k is one of the kinds owned under prefix.
@@ -249,7 +366,11 @@ func (s *service) one(ctx context.Context, campaignID string, t Tracker, v Viewe
 	if err != nil {
 		return nil, apperrorInternal(err)
 	}
-	tv := view(k, t, entries[t.ID], v)
+	ro, err := s.loadRoster(ctx, campaignID, v, []Tracker{t})
+	if err != nil {
+		return nil, err
+	}
+	tv := view(k, t, entries[t.ID], v, ro)
 	return &tv, nil
 }
 
@@ -281,7 +402,7 @@ func (s *service) Place(ctx context.Context, campaignID, entityID string, v View
 		in.Visibility = k.Visibility
 	}
 	if !validVisibility(in.Visibility) {
-		return nil, errInvalid("visibility must be directors or everyone")
+		return nil, errInvalid("visibility must be directors or everyone; choose players on the tracker once it is placed")
 	}
 	existing, err := s.repo.ListTrackers(ctx, campaignID, entityID)
 	if err != nil {
@@ -309,7 +430,7 @@ func (s *service) tracker(ctx context.Context, campaignID, trackerID string, v V
 	if err != nil {
 		return Tracker{}, apperrorInternal(err)
 	}
-	if !ok || !sees(v, t.Visibility) {
+	if !ok || !sees(v, t) {
 		return Tracker{}, errNotFound("tracker")
 	}
 	if _, err := s.page(ctx, campaignID, t.EntityID, v); err != nil {
@@ -319,13 +440,16 @@ func (s *service) tracker(ctx context.Context, campaignID, trackerID string, v V
 }
 
 func (s *service) Patch(ctx context.Context, campaignID, trackerID string, v Viewer, in TrackerPatch) (*TrackerView, error) {
-	if err := requireDirector(v); err != nil {
-		return nil, err
-	}
+	// Find the tracker first: a player who cannot see it learns nothing,
+	// while one who can is told it is not theirs to change.
 	t, err := s.tracker(ctx, campaignID, trackerID, v)
 	if err != nil {
 		return nil, err
 	}
+	if err := requireDirector(v); err != nil {
+		return nil, err
+	}
+	wasPlayers := t.Visibility == SeePlayers
 	if in.Name != nil {
 		name, err := cleanName("name", *in.Name)
 		if err != nil {
@@ -334,10 +458,46 @@ func (s *service) Patch(ctx context.Context, campaignID, trackerID string, v Vie
 		t.Name = name
 	}
 	if in.Visibility != nil {
-		if !validVisibility(*in.Visibility) {
-			return nil, errInvalid("visibility must be directors or everyone")
+		if !validTrackerVisibility(*in.Visibility) {
+			return nil, errInvalid("visibility must be directors, everyone or players")
 		}
 		t.Visibility = *in.Visibility
+	}
+	setPlayers := false
+	switch {
+	case in.Players != nil && t.Visibility != SeePlayers:
+		return nil, errInvalid("choose players as the visibility before naming them")
+	case t.Visibility == SeePlayers && in.Players != nil:
+		picks, err := s.checkPlayers(ctx, campaignID, *in.Players, t.Players)
+		if err != nil {
+			return nil, err
+		}
+		t.Players, setPlayers = picks, true
+	case t.Visibility == SeePlayers && !wasPlayers:
+		// Newly "players" with nobody named: only the Directors see it.
+		t.Players, setPlayers = nil, true
+	case t.Visibility != SeePlayers:
+		t.Players = nil
+	}
+	// Every refusal comes before the first write, so a rejected rename never
+	// leaves a replaced player list behind.
+	if in.Name != nil {
+		siblings, err := s.repo.ListTrackers(ctx, campaignID, t.EntityID)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
+		for _, o := range siblings {
+			if o.ID != t.ID && strings.EqualFold(o.Name, t.Name) {
+				return nil, errInvalid("this page already has a tracker called " + t.Name)
+			}
+		}
+	}
+	// Players go in before the visibility opens to them, and out after it
+	// closes, so no step leaves a tracker visible to the wrong people.
+	if setPlayers {
+		if err := s.repo.SetPlayers(ctx, campaignID, t.ID, t.Players); err != nil {
+			return nil, apperrorInternal(err)
+		}
 	}
 	if err := s.repo.UpdateTracker(ctx, t); err != nil {
 		if errors.Is(err, errDuplicate) {
@@ -345,15 +505,71 @@ func (s *service) Patch(ctx context.Context, campaignID, trackerID string, v Vie
 		}
 		return nil, apperrorInternal(err)
 	}
+	if wasPlayers && t.Visibility != SeePlayers {
+		if err := s.repo.SetPlayers(ctx, campaignID, t.ID, nil); err != nil {
+			return nil, apperrorInternal(err)
+		}
+	}
 	return s.one(ctx, campaignID, t, v)
 }
 
-func (s *service) Remove(ctx context.Context, campaignID, trackerID string, v Viewer) error {
-	if err := requireDirector(v); err != nil {
-		return err
+// checkPlayers turns a Director's picks into the stored list. Each must be a
+// current member who is not a Director: a Director already sees everything,
+// and an unknown id must not be stored as if it were a person.
+func (s *service) checkPlayers(ctx context.Context, campaignID string, picks []PlayerPick, current []Player) ([]Player, error) {
+	if len(picks) > MaxPlayersChosen {
+		return nil, errInvalid("too many players chosen")
 	}
+	if len(picks) == 0 {
+		return nil, nil
+	}
+	ro, err := s.loadRosterAll(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	// A pick already in force keeps its grant time; a new or lapsed one is
+	// granted now, so choosing a returning player again starts a fresh grant.
+	since := make(map[string]time.Time, len(current))
+	for _, c := range current {
+		since[c.UserID] = c.GrantedAt
+	}
+	now := time.Now().UTC()
+	out := make([]Player, 0, len(picks))
+	at := map[string]int{}
+	for _, p := range picks {
+		m, ok := ro[p.UserID]
+		if !ok {
+			return nil, errInvalid("someone you chose is not in this campaign")
+		}
+		if m.Director {
+			return nil, errInvalid(m.Name + " is a Director and already sees every tracker")
+		}
+		if i, dup := at[p.UserID]; dup {
+			out[i].CanChange = p.CanChange
+			continue
+		}
+		at[p.UserID] = len(out)
+		granted, kept := since[p.UserID]
+		if !kept {
+			granted = now
+		}
+		out = append(out, Player{UserID: p.UserID, CanChange: p.CanChange, GrantedAt: granted})
+	}
+	return out, nil
+}
+
+// loadRosterAll reads the members regardless of who is asking, for a check
+// the Director's write needs.
+func (s *service) loadRosterAll(ctx context.Context, campaignID string) (roster, error) {
+	return s.loadRoster(ctx, campaignID, Viewer{Director: true}, nil)
+}
+
+func (s *service) Remove(ctx context.Context, campaignID, trackerID string, v Viewer) error {
 	t, err := s.tracker(ctx, campaignID, trackerID, v)
 	if err != nil {
+		return err
+	}
+	if err := requireDirector(v); err != nil {
 		return err
 	}
 	if err := s.repo.DeleteTracker(ctx, campaignID, t.ID); err != nil {
@@ -418,18 +634,43 @@ func (s *service) rowFor(ctx context.Context, campaignID, entityID string, k Kin
 }
 
 func (s *service) Log(ctx context.Context, campaignID, entityID string, v Viewer, in LogInput) (*TrackerView, error) {
-	if err := requireDirector(v); err != nil {
-		return nil, err
-	}
 	a, err := s.page(ctx, campaignID, entityID, v)
 	if err != nil {
 		return nil, err
+	}
+	if !v.Director {
+		return s.playerLog(ctx, campaignID, entityID, v, in)
 	}
 	in, err = validateLog(in)
 	if err != nil {
 		return nil, err
 	}
 	t, err := s.ensure(ctx, campaignID, entityID, a, v, in)
+	if err != nil {
+		return nil, err
+	}
+	return s.writeLine(ctx, campaignID, t, v, in, SourceHand)
+}
+
+// playerLog is a non-Director's change. It works only on a placed tracker
+// named by id (a player cannot make a row from a kind), found through sees so
+// an unseen tracker answers 404, and only where the Director said "may change
+// it". The line is the same add or set a Director's hand writes.
+func (s *service) playerLog(ctx context.Context, campaignID, entityID string, v Viewer, in LogInput) (*TrackerView, error) {
+	if in.TrackerID == "" {
+		return nil, errForbidden("only the campaign's Directors can change trackers")
+	}
+	t, err := s.tracker(ctx, campaignID, in.TrackerID, v)
+	if err != nil {
+		return nil, err
+	}
+	if t.EntityID != entityID {
+		return nil, errNotFound("tracker")
+	}
+	if !canChange(v, t) {
+		return nil, errForbidden("you can look at this tracker but not change it")
+	}
+	in, err = validateLog(in)
 	if err != nil {
 		return nil, err
 	}
@@ -485,9 +726,6 @@ func (s *service) changed(ctx context.Context, campaignID string, t Tracker, v V
 }
 
 func (s *service) Strike(ctx context.Context, campaignID string, entryID int64, struck bool, v Viewer) (*TrackerView, error) {
-	if err := requireDirector(v); err != nil {
-		return nil, err
-	}
 	e, ok, err := s.repo.GetEntry(ctx, campaignID, entryID)
 	if err != nil {
 		return nil, apperrorInternal(err)
@@ -497,6 +735,9 @@ func (s *service) Strike(ctx context.Context, campaignID string, entryID int64, 
 	}
 	t, err := s.tracker(ctx, campaignID, e.TrackerID, v)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireDirector(v); err != nil {
 		return nil, err
 	}
 	before, err := s.one(ctx, campaignID, t, v)
@@ -743,4 +984,79 @@ func (s *service) DeleteKind(ctx context.Context, campaignID, kindID string, v V
 		return errInvalid("this kind is still on pages; remove those trackers first")
 	}
 	return nil
+}
+
+// grantFilter drops a chosen player's grant once it is older than the
+// member's joined_at, or the member is gone. Doing it where trackers are read
+// means no caller can decide who sees a tracker from a grant left by an
+// earlier stay: a player removed and invited back is chosen again, not
+// silently restored.
+type grantFilter struct {
+	Repository
+	members MemberDirectory
+}
+
+func (g *grantFilter) live(ctx context.Context, campaignID string, ts []Tracker) error {
+	need := false
+	for _, t := range ts {
+		need = need || (t.Visibility == SeePlayers && len(t.Players) > 0)
+	}
+	if !need {
+		return nil
+	}
+	list, err := g.members.Members(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	joined := make(map[string]time.Time, len(list))
+	for _, m := range list {
+		joined[m.UserID] = m.JoinedAt
+	}
+	for i := range ts {
+		kept := ts[i].Players[:0:0]
+		for _, p := range ts[i].Players {
+			if j, ok := joined[p.UserID]; ok && !p.GrantedAt.Before(j) {
+				kept = append(kept, p)
+			}
+		}
+		ts[i].Players = kept
+	}
+	return nil
+}
+
+func (g *grantFilter) ListTrackers(ctx context.Context, campaignID, entityID string) ([]Tracker, error) {
+	ts, err := g.Repository.ListTrackers(ctx, campaignID, entityID)
+	if err != nil {
+		return nil, err
+	}
+	return ts, g.live(ctx, campaignID, ts)
+}
+
+func (g *grantFilter) ListAllTrackers(ctx context.Context, campaignID string) ([]Tracker, error) {
+	ts, err := g.Repository.ListAllTrackers(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return ts, g.live(ctx, campaignID, ts)
+}
+
+func (g *grantFilter) one(ctx context.Context, campaignID string, t Tracker, found bool, err error) (Tracker, bool, error) {
+	if err != nil || !found {
+		return t, found, err
+	}
+	ts := []Tracker{t}
+	if err := g.live(ctx, campaignID, ts); err != nil {
+		return Tracker{}, false, err
+	}
+	return ts[0], true, nil
+}
+
+func (g *grantFilter) GetTracker(ctx context.Context, campaignID, id string) (Tracker, bool, error) {
+	t, found, err := g.Repository.GetTracker(ctx, campaignID, id)
+	return g.one(ctx, campaignID, t, found, err)
+}
+
+func (g *grantFilter) TrackerForKind(ctx context.Context, campaignID, entityID, kindID string) (Tracker, bool, error) {
+	t, found, err := g.Repository.TrackerForKind(ctx, campaignID, entityID, kindID)
+	return g.one(ctx, campaignID, t, found, err)
 }

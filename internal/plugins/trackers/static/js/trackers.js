@@ -122,9 +122,68 @@
     return body;
   }
 
+  // namesOf is "Tam", "Tam and Ilse", or "3 players" once names would crowd
+  // the line; a Director reads it as who the tracker is shown to.
+  function namesOf(players) {
+    var names = (players || []).map(function (p) { return p.name; });
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return names[0] + ' and ' + names[1];
+    return names.length + ' players';
+  }
+
+  // whoLabel is the quiet word on a tracker: who sees it, as a Director reads it.
+  function whoLabel(t) {
+    if (t.visibility === 'everyone') return 'Players see this';
+    if (t.visibility === 'players') {
+      var n = (t.players || []).length;
+      if (!n) return 'No players chosen';
+      return n === 1 ? 'Only ' + namesOf(t.players) : namesOf(t.players);
+    }
+    return 'Director only';
+  }
+
+  // seenByLine is the muted line on a chosen player's own copy.
+  function seenByLine(also) {
+    also = also || [];
+    if (!also.length) return 'Only you and the Director';
+    if (also.length <= 2) return 'You, ' + also.join(' and ') + ' and the Director';
+    return 'You, ' + also.length + ' other players and the Director';
+  }
+
+  // lineText is one log line in words: date, change, who (a player's name to
+  // the Director, "You" to the player), then the note.
+  function lineText(t, e) {
+    return [e.when, change(t, e), e.by, e.note].filter(Boolean).join(' · ');
+  }
+
+  // withPlayer returns the chosen list with userId ticked (new ticks may only
+  // look) or unticked.
+  function withPlayer(players, userId, on) {
+    var rest = (players || []).filter(function (p) { return p.userId !== userId; });
+    if (!on) return rest;
+    var had = (players || []).filter(function (p) { return p.userId === userId; })[0];
+    return rest.concat([{ userId: userId, name: had ? had.name : '', canChange: had ? !!had.canChange : false }]);
+  }
+
+  // withCan returns the list with one player's permission changed.
+  function withCan(players, userId, can) {
+    return (players || []).map(function (p) {
+      return p.userId === userId ? { userId: p.userId, name: p.name, canChange: !!can } : p;
+    });
+  }
+
+  // whoBody is the PATCH body for the "Who sees this" panel. The player list
+  // is sent only with "players"; the server clears it when it is left.
+  function whoBody(visibility, players) {
+    if (visibility !== 'players') return { visibility: visibility };
+    return { visibility: 'players', players: (players || []).map(function (p) { return { userId: p.userId, canChange: !!p.canChange }; }) };
+  }
+
   var H = {
     LIM: LIM, parseSteps: parseSteps, parseBands: parseBands, bandIndex: bandIndex,
-    change: change, valueLabel: valueLabel, canStep: canStep, segments: segments, kindBody: kindBody
+    change: change, valueLabel: valueLabel, canStep: canStep, segments: segments, kindBody: kindBody,
+    namesOf: namesOf, whoLabel: whoLabel, seenByLine: seenByLine, lineText: lineText,
+    withPlayer: withPlayer, withCan: withCan, whoBody: whoBody
   };
   if (typeof window !== 'undefined') window.TrackerHelpers = H;
   if (typeof Chronicle === 'undefined' || !Chronicle.register) return;
@@ -176,7 +235,7 @@
 
   Chronicle.register('trackers', {
     init: function (el, cfg) {
-      var S = { el: el, cfg: cfg, view: null, open: {}, adding: false, menu: null, busy: false, status: '', statusErr: false };
+      var S = { el: el, cfg: cfg, view: null, open: {}, who: null, notes: {}, adding: false, menu: null, busy: false, status: '', statusErr: false };
       el._tk = S;
       load(S);
     },
@@ -235,28 +294,34 @@
 
   // ---------- One tracker ----------
   function row(S, t) {
-    var key = keyOf(t), edit = S.view.canEdit, hidden = t.visibility !== 'everyone';
+    var key = keyOf(t), edit = S.view.canEdit, may = !!t.canChange, hidden = t.visibility !== 'everyone';
     var r = h('section', 'tk-row', '', { 'aria-label': t.name });
-    if (hidden) r.setAttribute('data-dm-only', '');
+    // The amber edge is the Director's mark; a chosen player's own copy is
+    // not "hidden" from them.
+    if (edit && hidden) r.setAttribute('data-dm-only', '');
 
     var top = h('div', 'tk-top');
     append(top, [
       h('span', 'tk-name', t.name),
-      edit ? h('span', 'tk-who' + (hidden ? ' cb-dm' : ''), hidden ? 'Director only' : 'Players see this') : null,
+      edit ? whoWord(S, t, key, hidden) : null,
       h('span', 'tk-sp'),
-      edit ? icon('fa-minus', t.shape === 'steps' ? 'Step back' : 'Take one off', function () { step(S, t, -1); }, S.busy || !canStep(t, -1)) : null,
+      may ? icon('fa-minus', t.shape === 'steps' ? 'Step back' : 'Take one off', function () { step(S, t, -1); }, S.busy || !canStep(t, -1)) : null,
       h('span', 'tk-val', valueLabel(t), { 'aria-live': 'polite' }),
-      edit ? icon('fa-plus', t.shape === 'steps' ? 'Step forward' : (t.shape === 'clock' ? 'Tick the clock' : 'Add one'),
+      may ? icon('fa-plus', t.shape === 'steps' ? 'Step forward' : (t.shape === 'clock' ? 'Tick the clock' : 'Add one'),
         function () { step(S, t, 1); }, S.busy || !canStep(t, 1)) : null,
       edit && t.id ? icon('fa-ellipsis', 'More for ' + t.name, function () { S.menu = S.menu === key ? null : key; draw(S); }) : null
     ]);
     r.appendChild(top);
+    if (S.who === key && t.id) r.appendChild(whoPanel(S, t));
     if (S.menu === key) r.appendChild(menu(S, t));
+    if (!edit && t.visibility === 'players') r.appendChild(h('p', 'tk-seen', seenByLine(t.alsoSeenBy)));
 
     if (t.shape === 'steps') r.appendChild(stepsView(S, t));
     else if (t.shape === 'clock') r.appendChild(clockView(S, t));
     else if (t.bands && t.bands.length) r.appendChild(bandsView(t));
     if (t.now) r.appendChild(h('p', 'tk-now', t.now));
+    // A player's changes carry this note; a Director writes notes in the log form.
+    if (may && !edit) r.appendChild(noteRow(S, key));
 
     if (t.logCount || edit) {
       var open = !!S.open[key];
@@ -267,6 +332,81 @@
     return r;
   }
 
+  // whoWord is the visibility label. On a placed tracker it is a quiet word
+  // that opens the "Who sees this" panel; a tracker no row exists for yet has
+  // nothing to save a choice on, so its label is plain text.
+  function whoWord(S, t, key, hidden) {
+    var cls = 'tk-who' + (hidden ? ' cb-dm' : '');
+    var label = whoLabel(t);
+    if (!t.id) return h('span', cls, label);
+    var open = S.who === key;
+    return h('button', 'tk-q ' + cls, label, { type: 'button', 'aria-expanded': open ? 'true' : 'false', title: 'Who sees this' },
+      { click: function () { S.who = open ? null : key; draw(S); } });
+  }
+
+  // noteRow is the player's optional "Why, for the log"; it is kept across
+  // redraws and sent with the next change.
+  function noteRow(S, key) {
+    var id = 'tk-' + Math.random().toString(36).slice(2, 8);
+    var input = h('input', 'tk-field tk-whynote', '', { id: id, type: 'text', maxlength: String(LIM.note), value: S.notes[key] || '' },
+      { input: function () { S.notes[key] = input.value; } });
+    var w = h('div', 'tk-note');
+    append(w, [h('label', 'tk-l', 'Why, for the log', { for: id }), input]);
+    return w;
+  }
+
+  // whoPanel hangs under the label: who sees the tracker, and for chosen
+  // players which of them may change it. Every choice saves as it is made.
+  function whoPanel(S, t) {
+    var id = 'tk-' + Math.random().toString(36).slice(2, 8);
+    var panel = h('fieldset', 'tk-panel');
+    panel.appendChild(h('legend', 'tk-l', 'Who sees this'));
+    [['everyone', 'Everyone who can open this page'], ['directors', 'Director only'], ['players', 'Chosen players']].forEach(function (o) {
+      var lab = h('label', 'tk-radio');
+      append(lab, [
+        h('input', '', '', { type: 'radio', name: id, value: o[0], checked: o[0] === t.visibility, disabled: S.busy },
+          { change: function () { saveWho(S, t, o[0], t.players); } }),
+        h('span', '', o[1])
+      ]);
+      panel.appendChild(lab);
+    });
+    if (t.visibility === 'players') {
+      var members = S.view.members || [];
+      var picks = h('div', 'tk-picks');
+      if (!members.length) picks.appendChild(h('p', 'tk-empty', 'No players in this campaign yet.'));
+      members.forEach(function (m) {
+        var mine = (t.players || []).filter(function (p) { return p.userId === m.userId; })[0];
+        var line = h('div', 'tk-pick');
+        var lab = h('label', 'tk-radio');
+        append(lab, [
+          h('input', '', '', { type: 'checkbox', checked: !!mine, disabled: S.busy },
+            { change: function (ev) {
+              var list = withPlayer(t.players, m.userId, ev.target.checked);
+              list = list.map(function (p) { return p.userId === m.userId && !p.name ? { userId: p.userId, name: m.name, canChange: p.canChange } : p; });
+              saveWho(S, t, 'players', list);
+            } }),
+          h('span', '', m.character ? m.name + ' (' + m.character + ')' : m.name)
+        ]);
+        line.appendChild(lab);
+        if (mine) {
+          var sel = h('select', 'tk-field tk-can', '', { 'aria-label': 'What ' + m.name + ' may do', disabled: S.busy },
+            { change: function () { saveWho(S, t, 'players', withCan(t.players, m.userId, sel.value === 'change')); } });
+          [['look', 'May look'], ['change', 'May change it']].forEach(function (o) {
+            sel.appendChild(h('option', '', o[1], { value: o[0], selected: (o[0] === 'change') === !!mine.canChange }));
+          });
+          line.appendChild(sel);
+        }
+        picks.appendChild(line);
+      });
+      panel.appendChild(picks);
+    }
+    return panel;
+  }
+
+  function saveWho(S, t, visibility, players) {
+    return run(S, api(trackerURL(S, t), 'PATCH', whoBody(visibility, players), S.cfg.csrfToken), function (tv) { replace(S, keyOf(t), tv); });
+  }
+
   // stepsView shows every step; a Director moves to one by choosing it.
   function stepsView(S, t) {
     var ol = h('ol', 'tk-steps');
@@ -274,7 +414,7 @@
       var cls = 'tk-step' + (i === t.value ? ' on' : (i < t.value ? ' past' : ''));
       var label = s.name + (i === t.value ? ' (now)' : '');
       var li = h('li', '');
-      if (S.view.canEdit && i !== t.value) {
+      if (t.canChange && i !== t.value) {
         li.appendChild(h('button', cls, s.name, { type: 'button', 'aria-label': 'Set to ' + s.name, disabled: S.busy },
           { click: function () { log(S, t, { op: 'set', amount: i }); } }));
       } else {
@@ -299,7 +439,7 @@
       svg.appendChild(p);
     });
     wrap.appendChild(svg);
-    if (S.view.canEdit && t.value > 0) {
+    if (t.canChange && t.value > 0) {
       wrap.appendChild(quiet('Start again', function () { log(S, t, { op: 'set', amount: 0, note: 'started again' }); }));
     }
     return wrap;
@@ -326,7 +466,7 @@
     t.log.forEach(function (e) {
       var li = h('li', 'tk-line' + (e.struck ? ' struck' : ''));
       var words = h(e.struck ? 's' : 'span', 'tk-what');
-      words.textContent = [e.when, change(t, e), e.note].filter(Boolean).join(' · ');
+      words.textContent = lineText(t, e);
       append(li, [
         words,
         h('span', 'tk-after', e.struck ? 'struck' : '→ ' + (t.shape === 'steps' && t.steps[e.after] ? t.steps[e.after].name : e.after)),
@@ -404,11 +544,15 @@
   }
 
   function log(S, t, change) {
-    var body = { op: change.op, amount: change.amount, note: change.note || '' };
+    var key = keyOf(t);
+    var note = change.note || '';
+    // A player's controls carry the "Why, for the log" field beside them.
+    if (!note && !S.view.canEdit) note = (S.notes[key] || '').trim();
+    var body = { op: change.op, amount: change.amount, note: note };
     if (t.id) body.trackerId = t.id; else body.kindId = t.kindId;
     if (S.cfg.owner) body.owner = S.cfg.owner;
-    var key = keyOf(t);
     return run(S, api(S.cfg.endpoint + '/log', 'POST', body, S.cfg.csrfToken), function (tv) {
+      S.notes[key] = '';
       replace(S, key, tv);
       if (S.open[key]) { S.open[keyOf(tv)] = true; }
     });

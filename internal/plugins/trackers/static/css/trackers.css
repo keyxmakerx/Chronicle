@@ -102,3 +102,16 @@ textarea.tk-field { resize: vertical; }
 @media (max-width: 480px) {
   .tk-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Who sees a tracker. The label is a quiet word; its panel hangs under the
+ * row, and a chosen player's own copy carries one muted line and the note. */
+.tk-q.tk-who { font-size: 11px; padding: 0 4px; }
+.tk-q.tk-who.cb-dm { color: var(--tk-dm); }
+.tk-panel { display: grid; gap: 2px; margin: 0; padding: 6px 8px; border: 1px solid var(--tk-line); border-radius: var(--tk-r); background: var(--tk-tint); }
+.tk-panel legend { padding: 0 4px; }
+.tk-picks { display: grid; gap: 2px; padding: 2px 0 0 22px; }
+.tk-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.tk-can { min-height: 32px; }
+.tk-seen { margin: 0; font-size: 12px; color: var(--tk-muted); }
+.tk-note { display: flex; align-items: center; gap: 8px; }
+.tk-whynote { flex: 1; min-width: 0; max-width: 28em; }

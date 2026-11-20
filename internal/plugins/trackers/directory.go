@@ -1,6 +1,9 @@
 package trackers
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // EntityDirectory is owned by this plugin and implemented in internal/app
 // over the entities service, so trackers never imports another plugin.
@@ -29,4 +32,25 @@ type PageAccess struct {
 // calendar the viewer may see: a log line is still written, just undated.
 type GameClock interface {
 	Today(ctx context.Context, campaignID string, v Viewer) (*GameDate, error)
+}
+
+// MemberDirectory lists the campaign's members, implemented in internal/app
+// over the campaigns service. It names the players a Director can choose and
+// the people who wrote log lines.
+type MemberDirectory interface {
+	Members(ctx context.Context, campaignID string) ([]Member, error)
+}
+
+// Member is one person in the campaign.
+type Member struct {
+	UserID string
+	Name   string
+	// Character is the name of the member's own character page, or "".
+	Character string
+	// Director is the owner or a co-Director: someone who already sees every
+	// tracker and so cannot be chosen as a player.
+	Director bool
+	// JoinedAt is when the member joined; a player grant made before it is
+	// from an earlier stay and no longer counts.
+	JoinedAt time.Time
 }

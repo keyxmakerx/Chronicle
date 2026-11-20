@@ -131,3 +131,50 @@ test('kindBody builds each shape and names what to fix', () => {
   ];
   for (const [f, re] of bad) assert.match(H.kindBody(f).error || '', re, JSON.stringify(f));
 });
+
+test('whoLabel names the chosen players briefly', () => {
+  const { H } = load();
+  const cases = [
+    [{ visibility: 'everyone' }, 'Players see this'],
+    [{ visibility: 'directors' }, 'Director only'],
+    [{ visibility: 'players', players: [] }, 'No players chosen'],
+    [{ visibility: 'players', players: [{ name: 'Tam' }] }, 'Only Tam'],
+    [{ visibility: 'players', players: [{ name: 'Tam' }, { name: 'Ilse' }] }, 'Tam and Ilse'],
+    [{ visibility: 'players', players: [{ name: 'Tam' }, { name: 'Ilse' }, { name: 'Jo' }] }, '3 players'],
+  ];
+  for (const [t, want] of cases) assert.equal(H.whoLabel(t), want);
+});
+
+test('seenByLine is what a chosen player reads on their own copy', () => {
+  const { H } = load();
+  assert.equal(H.seenByLine([]), 'Only you and the Director');
+  assert.equal(H.seenByLine(undefined), 'Only you and the Director');
+  assert.equal(H.seenByLine(['Ilse']), 'You, Ilse and the Director');
+  assert.equal(H.seenByLine(['Ilse', 'Jo']), 'You, Ilse and Jo and the Director');
+  assert.equal(H.seenByLine(['A', 'B', 'C']), 'You, 3 other players and the Director');
+});
+
+test('lineText puts the name between the change and the note', () => {
+  const { H } = load();
+  const t = { shape: 'count', steps: [] };
+  assert.equal(H.lineText(t, { when: '16 Frostmoot', op: 'add', amount: -3, by: 'Tam', note: 'Fed on the stag' }),
+    '16 Frostmoot · −3 · Tam · Fed on the stag');
+  assert.equal(H.lineText(t, { op: 'add', amount: 1, by: 'You' }), '+1 · You');
+  assert.equal(H.lineText(t, { op: 'set', amount: 4 }), 'set to 4');
+});
+
+test('player picks: new ticks only look, unticking removes, whoBody sends ids only', () => {
+  const { H } = load();
+  let list = H.withPlayer([], 'u1', true);
+  assert.deepEqual(plain(list), [{ userId: 'u1', name: '', canChange: false }]);
+  list = H.withCan(list, 'u1', true);
+  assert.equal(list[0].canChange, true);
+  list = H.withPlayer(list, 'u1', true);
+  assert.equal(list.length, 1);
+  assert.equal(list[0].canChange, true, 'ticking again keeps the permission');
+  assert.deepEqual(plain(H.withPlayer(list, 'u1', false)), []);
+
+  assert.deepEqual(plain(H.whoBody('players', list)), { visibility: 'players', players: [{ userId: 'u1', canChange: true }] });
+  assert.deepEqual(plain(H.whoBody('players', undefined)), { visibility: 'players', players: [] });
+  assert.deepEqual(plain(H.whoBody('everyone', list)), { visibility: 'everyone' });
+});
