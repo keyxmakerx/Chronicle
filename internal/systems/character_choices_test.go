@@ -216,6 +216,8 @@ func (s *stubChoiceSvc) CreatorPlan(ctx context.Context, c string) (*CreatorPlan
 	return &CreatorPlan{}, nil
 }
 
+func (s *stubChoiceSvc) SetChoiceLimiter(ChoiceLimiter) {}
+
 func TestValidChoiceFieldKey(t *testing.T) {
 	cases := []struct {
 		key  string

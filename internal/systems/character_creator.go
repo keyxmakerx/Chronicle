@@ -22,6 +22,11 @@ type CreatorStep struct {
 	Choices  []Choice `json:"choices"`
 	// CanMake: the viewer may write their own entry for this step.
 	CanMake bool `json:"canMake,omitempty"`
+	// Rules says what the hero-choice rules did to this step for the viewer.
+	Rules *FieldRules `json:"rules,omitempty"`
+	// Excluded is what the rules took off the list, kept server-side so a
+	// hero that already holds one stays editable. Never served.
+	Excluded []Choice `json:"-"`
 }
 
 // CreatorPlan is everything the creator needs to draw its steps. Steps is
@@ -59,14 +64,17 @@ func (s *characterChoiceService) CreatorPlan(ctx context.Context, campaignID str
 		if err != nil {
 			return nil, err
 		}
-		if len(l.Choices) == 0 && !l.CanMake {
+		// A limited step stays even with nothing offered, or a typed value
+		// would slip past the list the rules leave.
+		limited := l.Rules != nil && l.Rules.Limited
+		if len(l.Choices) == 0 && !l.CanMake && !limited {
 			continue
 		}
 		label := strings.TrimSpace(f.Label)
 		if label == "" {
 			label = f.Key
 		}
-		plan.Steps = append(plan.Steps, CreatorStep{FieldKey: f.Key, Label: label, Choices: l.Choices, CanMake: l.CanMake})
+		plan.Steps = append(plan.Steps, CreatorStep{FieldKey: f.Key, Label: label, Choices: l.Choices, CanMake: l.CanMake, Rules: l.Rules, Excluded: l.Excluded})
 		if len(plan.Steps) == maxCreatorSteps {
 			break
 		}
