@@ -3480,6 +3480,8 @@ func (a *App) RegisterRoutes() {
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
+	// A campaign made from now on starts with the usual set of features on.
+	campaignService.SetFeatureEnabler(addonService)
 	// A member's own sidebar pins are checked against the sidebar they see,
 	// which only this composition root can draw.
 	campaignService.SetNavSectionsSource(&navSectionsSource{entities: entityService, addons: addonService})

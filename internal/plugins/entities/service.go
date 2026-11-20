@@ -2296,7 +2296,7 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	// Player characters default to the dynamic character-sheet surface (the "big
 	// widget"); everything else gets the standard two-column layout. Owners can
 	// re-arrange either in the layout editor afterwards.
-	layout := DefaultLayout()
+	layout := NewCategoryLayout()
 	if pcType {
 		layout = CharacterLayout()
 	}

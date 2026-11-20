@@ -196,6 +196,10 @@ type CampaignService interface {
 	// Game system
 	UpdateSystemID(ctx context.Context, campaignID, systemID string) error
 
+	// KeepSetupStep records that the owner passed on a setup step ("game" or
+	// "look") instead of doing it, so the setup line counts it as done.
+	KeepSetupStep(ctx context.Context, campaignID, step string) error
+
 	// Lifecycle hooks — set after construction to avoid circular initialization.
 	SetContentTemplateSeeder(seeder ContentTemplateSeeder)
 	SetWorldbuildingPromptSeeder(seeder WorldbuildingPromptSeeder)
@@ -204,6 +208,11 @@ type CampaignService interface {
 	// SetCharacterListSeeder sets what records a new campaign's character and
 	// NPC page types. Late-bound and nil-safe.
 	SetCharacterListSeeder(seeder CharacterListSeeder)
+
+	// SetFeatureEnabler sets what turns on the usual set of features for a
+	// new campaign. Late-bound and nil-safe: without it a campaign starts
+	// with every feature off.
+	SetFeatureEnabler(enabler FeatureEnabler)
 
 	// UpdateCharacterLists stores the page types the campaign lists as
 	// characters and as NPCs. Callers validate the IDs; this only persists.
@@ -227,6 +236,24 @@ type CampaignService interface {
 	// start with it. Late-bound and nil-safe: without it new campaigns start
 	// as Classic.
 	SetSiteLookSource(src SiteLookSource)
+}
+
+// FeatureEnabler turns a feature on for a campaign by its addon slug. The
+// addons service implements it, so every enable runs the same checks and
+// enable effects as the owner's own switch.
+type FeatureEnabler interface {
+	EnableForCampaignBySlug(ctx context.Context, campaignID, addonSlug, userID string) error
+}
+
+// newCampaignFeatures is the usual set a campaign made now starts with, in
+// the order they are turned on: the calendar comes before Game nights, which
+// needs it. Armory, Crafting, Transformations and the Sync API stay off
+// because each needs further setup or is only wanted by some tables. Existing
+// campaigns are never touched by this list.
+var newCampaignFeatures = []string{
+	"calendar", "sessions", "notes", "jot-notes", "maps", "timeline",
+	"media-gallery", "npcs", "player-character-claiming", "attributes",
+	"player-notes",
 }
 
 // SiteLookSource reads the site-wide look an admin chose. The settings
@@ -290,6 +317,7 @@ type campaignService struct {
 	connRevoker     ConnectionRevoker         // Drops live sockets when access is lowered. May be nil until wiring reaches it.
 	navSections     NavSectionsSource         // Draws a member's sidebar for pin checks. Pins are refused while nil.
 	siteLook        SiteLookSource            // Site-wide look new campaigns start with. May be nil.
+	features        FeatureEnabler            // Turns on the usual features for a new campaign. May be nil.
 	baseURL         string
 	// memberRemoved runs after a member is removed, so other plugins can end
 	// credentials they issued for that campaign without campaigns importing them.
@@ -355,6 +383,11 @@ func NewCampaignService(repo CampaignRepository, users UserFinder, mail MailServ
 		seeder:  seeder,
 		baseURL: baseURL,
 	}
+}
+
+// SetFeatureEnabler sets what turns on a new campaign's usual features.
+func (s *campaignService) SetFeatureEnabler(enabler FeatureEnabler) {
+	s.features = enabler
 }
 
 // SetContentTemplateSeeder sets the seeder for default content templates.
@@ -733,6 +766,22 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 				slog.String("campaign_id", campaign.ID),
 				slog.Any("error", err),
 			)
+		}
+	}
+
+	// Turn on the usual features last: some run enable effects (the Player
+	// Characters page type) that need the campaign's page types to exist.
+	// One failing feature is logged and skipped; the owner can still switch
+	// it on in Game & features.
+	if s.features != nil && !input.SkipDefaultFeatures {
+		for _, slug := range newCampaignFeatures {
+			if err := s.features.EnableForCampaignBySlug(ctx, campaign.ID, slug, userID); err != nil {
+				slog.Warn("failed to turn on a feature for the new campaign",
+					slog.String("campaign_id", campaign.ID),
+					slog.String("addon_slug", slug),
+					slog.Any("error", err),
+				)
+			}
 		}
 	}
 
@@ -2300,6 +2349,34 @@ func (s *campaignService) UpdateSystemID(ctx context.Context, campaignID, system
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
 
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
+}
+
+// setupKeepable are the setup steps the owner may pass on. The others (invite,
+// first page) are done by making something, so there is nothing to pass on.
+var setupKeepable = map[string]bool{"game": true, "look": true}
+
+// KeepSetupStep records that the owner chose to keep things as they are for a
+// setup step. It is idempotent and stores only the step's key.
+func (s *campaignService) KeepSetupStep(ctx context.Context, campaignID, step string) error {
+	if !setupKeepable[step] {
+		return apperror.NewBadRequest("unknown setup step")
+	}
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	settings := campaign.ParseSettings()
+	for _, k := range settings.SetupKept {
+		if k == step {
+			return nil
+		}
+	}
+	settings.SetupKept = append(settings.SetupKept, step)
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
 	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 

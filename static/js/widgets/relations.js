@@ -71,6 +71,9 @@ Chronicle.register('relations', {
 
     function render() {
       el.innerHTML = '';
+      // Nothing linked and no add form open: only an offer, which the Annals
+      // page editor shows while editing.
+      el.toggleAttribute('data-rel-empty', state.relations.length === 0 && !state.isAdding);
 
       // Error state.
       if (state.error && state.relations.length === 0) {
@@ -129,7 +132,7 @@ Chronicle.register('relations', {
           var addBtn = document.createElement('button');
           addBtn.type = 'button';
           addBtn.className = 'rel-add-btn';
-          addBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size:10px"></i> Add relation';
+          addBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size:10px"></i> ' + (groupOrder.length === 0 ? 'Add a relation' : 'Add relation');
           addBtn.addEventListener('click', function () {
             state.isAdding = true;
             state.selectedTarget = null;

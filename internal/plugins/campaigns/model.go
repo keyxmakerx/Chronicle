@@ -766,6 +766,7 @@ type CampaignSettings struct {
 	Appearance        *Appearance  `json:"appearance,omitempty"`          // Customize page style choices (look, menu highlight, type, buttons, motion); nil = Classic.
 	DefaultVisibility string       `json:"default_visibility,omitempty"`  // Default visibility for new entities: "", "dm_only", "private".
 	SystemID          string       `json:"system_id,omitempty"`           // Game system ID (e.g. "dnd5e", "drawsteel") or "custom:<url>".
+	SetupKept         []string     `json:"setup_kept,omitempty"`          // Setup steps the owner passed on instead of doing ("game", "look"); the others are worked out from what exists.
 
 	// HandoverAfterMonths is the owner's "If you're away" choice: how long
 	// they can be unseen before a site admin may hand the campaign to another
@@ -962,6 +963,7 @@ const (
 	BlockTableAgreement  = "table_agreement"  // The owner's table agreement, typed into the block's config.
 	BlockMakingAHero     = "making_a_hero"    // The owner's notes on making a hero, typed into the block's config.
 	BlockRunBy           = "run_by"           // The owner and co-Directors by name (campaigns).
+	BlockSetupSteps      = "setup_steps"      // The owner's "Getting your table ready" line, ticked from what exists (campaigns).
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -1008,6 +1010,7 @@ var ValidBlockTypes = map[string]bool{
 	BlockTableAgreement:  true,
 	BlockMakingAHero:     true,
 	BlockRunBy:           true,
+	BlockSetupSteps:      true,
 	BlockGettingStarted:  true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
@@ -1140,6 +1143,10 @@ type CreateCampaignInput struct {
 	// Import sets it when the file carries its own, which would otherwise
 	// arrive as a second copy of every default ("Character", "Character 2").
 	SkipEntityTypeSeed bool
+	// SkipDefaultFeatures leaves every feature off. Import sets it: a
+	// restored campaign carries its own switches, and the usual set would
+	// turn on features the original had off.
+	SkipDefaultFeatures bool
 }
 
 // UpdateCampaignInput is the validated input for updating a campaign.

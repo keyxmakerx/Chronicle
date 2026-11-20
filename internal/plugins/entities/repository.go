@@ -713,7 +713,7 @@ func (r *entityTypeRepository) SeedFromTypes(ctx context.Context, campaignID str
 		}
 		layout := et.Layout
 		if len(layout.Rows) == 0 {
-			layout = DefaultLayout()
+			layout = NewCategoryLayout()
 		}
 		layoutJSON, err := json.Marshal(withCreaturePanels(et, layout))
 		if err != nil {

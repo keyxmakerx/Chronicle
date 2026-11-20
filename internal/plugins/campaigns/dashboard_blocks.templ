@@ -123,6 +123,14 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashWrittenBlock(cc, block.Config, "table-agreement", "Table agreement", "Safety and lines, Pacing, Missing a night, Table talk")
 		case "making_a_hero":
 			@dashWrittenBlock(cc, block.Config, "making-a-hero", "Making a hero", "What is allowed, Starting level, Where to build it, Ask me first")
+		case "setup_steps":
+			// The owner's line loads for the owner; a co-Director gets their
+			// own note in its place, and nobody else sees anything.
+			if cc.MemberRole >= RoleOwner {
+				@dashFragment("setup-steps", fmt.Sprintf("/campaigns/%s/setup-steps", cc.Campaign.ID), "h-8")
+			} else if cc.IsDmGranted {
+				@dashTextBlock(cc, map[string]any{"content": codmNoteHTML(ctx, cc.Campaign.ID)})
+			}
 		case "run_by":
 			// Names of the people running the table are members' reading.
 			if cc.IsMember {

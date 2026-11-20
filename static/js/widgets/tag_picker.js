@@ -37,6 +37,9 @@ Chronicle.register('tag-picker', {
 
     function render() {
       el.innerHTML = '';
+      // A page with no tags and nothing open is just an offer to add one;
+      // the Annals page editor shows it only while editing.
+      el.toggleAttribute('data-tp-empty', state.entityTags.length === 0 && !state.isOpen);
 
       var wrap = document.createElement('div');
       wrap.className = 'tp-wrap';
@@ -78,7 +81,7 @@ Chronicle.register('tag-picker', {
         var addBtn = document.createElement('button');
         addBtn.className = 'tp-add-btn';
         addBtn.type = 'button';
-        addBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size:10px"></i> Tag';
+        addBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size:10px"></i> ' + (state.entityTags.length === 0 ? 'Add a tag' : 'Tag');
         addBtn.addEventListener('click', function (e) {
           e.stopPropagation();
           state.isOpen = !state.isOpen;
