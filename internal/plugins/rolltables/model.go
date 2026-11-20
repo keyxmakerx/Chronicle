@@ -17,8 +17,8 @@ type Table struct {
 	Name   string  `json:"name"`
 	Credit *Credit `json:"credit,omitempty"`
 	// Visibility says who sees what a calendar day's Roll one puts on the
-	// day: "everyone" or "dm_only". Empty means the roller's own default
-	// (hidden until the DM shows it).
+	// day: "everyone" or "dm_only". Only "dm_only" hides; empty or
+	// "everyone" leaves it to the roll's own tell-players setting.
 	Visibility string  `json:"visibility,omitempty"`
 	Entries    []Entry `json:"entries"`
 }
