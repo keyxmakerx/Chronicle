@@ -19,17 +19,22 @@ import (
 // kindDataEntry is a campaign entry in a data file's shape. The optional
 // fields beyond a package item's say whose words these are.
 type kindDataEntry struct {
-	Slug          string         `json:"slug"`
-	Name          string         `json:"name"`
-	Summary       string         `json:"summary"`
-	Description   string         `json:"description,omitempty"`
-	Properties    map[string]any `json:"properties"`
-	Tags          []string       `json:"tags,omitempty"`
-	Source        string         `json:"source"`
-	Origin        string         `json:"origin"`
-	StandsFor     string         `json:"standsFor,omitempty"`
-	DirectorsOnly bool           `json:"directorsOnly,omitempty"`
-	ToldRecently  bool           `json:"toldRecently,omitempty"`
+	Slug        string         `json:"slug"`
+	Name        string         `json:"name"`
+	Summary     string         `json:"summary"`
+	Description string         `json:"description,omitempty"`
+	Properties  map[string]any `json:"properties"`
+	Tags        []string       `json:"tags,omitempty"`
+	Source      string         `json:"source"`
+	Origin      string         `json:"origin"`
+	StandsFor   string         `json:"standsFor,omitempty"`
+	// StandsForName and OldNames are the other names this entry answers
+	// to for the reader: the printed name it replaces and its old names,
+	// so a widget finds it from a hero's stored name as the server would.
+	StandsForName string   `json:"standsForName,omitempty"`
+	OldNames      []string `json:"oldNames,omitempty"`
+	DirectorsOnly bool     `json:"directorsOnly,omitempty"`
+	ToldRecently  bool     `json:"toldRecently,omitempty"`
 }
 
 // KindData answers a data file for one reader. handled is false when the file
@@ -55,6 +60,14 @@ func (p *RulesPages) KindData(ctx context.Context, sys System, category string, 
 	list, err := p.catalog.Catalog(ctx, r.CampaignID, category, r.Actor)
 	if err != nil {
 		return nil, false, err
+	}
+	old, err := p.catalog.OldNames(ctx, r.CampaignID, list.FieldKey, r.Actor)
+	if err != nil {
+		return nil, false, err
+	}
+	oldOf := map[int64][]string{}
+	for _, n := range old {
+		oldOf[n.EntryID] = append(oldOf[n.EntryID], n.Name)
 	}
 	res := make([]any, 0, len(list.Entries))
 	// with copies a package object and adds marks to it, never to the shared one.
@@ -84,6 +97,7 @@ func (p *RulesPages) KindData(ctx context.Context, sys System, category string, 
 		props := withTwins(e.Properties, findCategory(sys.Info(), category))
 		res = append(res, kindDataEntry{Slug: e.Slug, Name: e.Name, Summary: e.Summary, Description: e.Description,
 			Properties: props, Tags: e.Tags, Source: r.CampaignName, Origin: e.Origin, StandsFor: e.StandsFor,
+			StandsForName: e.StandsForName, OldNames: oldOf[e.EntryID],
 			DirectorsOnly: e.DirectorsOnly, ToldRecently: e.ToldRecently})
 	}
 	outs, err := p.catalog.LeftOutList(ctx, r.CampaignID, list.FieldKey)

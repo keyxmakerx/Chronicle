@@ -215,3 +215,63 @@ func TestCampaignEntryTwins(t *testing.T) {
 	}
 	t.Fatal("Gillfolk is not in the data file")
 }
+
+// Each campaign object in the data file names what else it answers to for
+// the reader: the printed name a rewrite replaces and the entry's old names,
+// so a sheet finds it from a hero who still stores the printed or old name.
+func TestKindData_NamesAnEntryAnswersTo(t *testing.T) {
+	p, svc, repo, sys := newRulesPages(t)
+	ctx := context.Background()
+	elf, err := svc.Rewrite(ctx, "c1", dirActor, RewriteInput{FieldKey: "ancestry", Slug: "elf", Name: "Sea Elf"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Update(ctx, "c1", dirActor, elf.ID, UpdateSystemEntryInput{Visibility: patch.Of(EntryVisibilityEveryone)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Update(ctx, "c1", dirActor, entryByName(t, repo, "Ashborn").ID, UpdateSystemEntryInput{Name: patch.Of("Emberkin")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Update(ctx, "c1", dirActor, entryByName(t, repo, "Tideling").ID, UpdateSystemEntryInput{Name: patch.Of("Deepling")}); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name   string
+		reader EntryActor
+		want   string
+	}{
+		{"a player", playerActor, "Emberkin<Ashborn,Sea Elf=Elf"},
+		{"the Director also has the hidden entry's old name", dirActor, "Deepling<Tideling,Emberkin<Ashborn,Sea Elf=Elf"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, _, err := p.KindData(ctx, sys, "ancestries", []byte(rawAncestries), reader(tt.reader))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var items []map[string]any
+			if err := json.Unmarshal(out, &items); err != nil {
+				t.Fatal(err)
+			}
+			var words []string
+			for _, it := range items {
+				w, _ := it["name"].(string)
+				if s, _ := it["standsForName"].(string); s != "" {
+					w += "=" + s
+				}
+				if ns, _ := it["oldNames"].([]any); len(ns) > 0 {
+					for _, n := range ns {
+						w += "<" + n.(string)
+					}
+				}
+				if w != it["name"] {
+					words = append(words, w)
+				}
+			}
+			sort.Strings(words)
+			if got := strings.Join(words, ","); got != tt.want {
+				t.Fatalf("names = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
