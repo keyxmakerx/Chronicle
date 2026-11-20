@@ -251,8 +251,8 @@
     var v = h.values[st.fieldKey], on = this.panel && this.panel.hero === h.id && this.panel.key === st.fieldKey;
     var c = v && this.choiceByName(st, v), wait = this.waitingName(h, st);
     if (this.lockedFor(h, st)) {
-      return '<span class="hb-blank is-locked" aria-label="' + esc(st.label + ': ' + v + ', everyone starts with this') + '">' + esc(v) + '</span>' +
-        ' <span class="hb-lock">everyone starts with this</span>';
+      return '<span class="hb-blank is-locked" aria-label="' + esc(st.label + ': ' + v + ', ' + window.ChronicleHeroRules.LOCK) + '">' + esc(v) + '</span>' +
+        ' <span class="hb-lock">' + window.ChronicleHeroRules.LOCK + '</span>';
     }
     // A hero that already holds a pick keeps showing it; the request that
     // would replace it waits beside it.
@@ -297,8 +297,7 @@
     return this.stepsFor(h).map(function (st) {
       var g = st.rules && st.rules.suggested;
       if (!g || self.waitingName(h, st) || (h.values[st.fieldKey] && !h.isNew)) return '';
-      return '<span class="hb-note hb-suggest">Your Director asked for another ' + esc(lower(st.label)) + ' instead of ' + esc(g.entryName) +
-        (g.message ? ': “' + esc(g.message) + '”' : '.') + '</span>';
+      return '<span class="hb-note hb-suggest">' + window.ChronicleHeroRules.suggestedText(st.label, g) + '</span>';
     }).join('');
   };
 
@@ -374,22 +373,12 @@
 
   // What the Director's rules say about this list, above the entries.
   Builder.prototype.panelNotes = function (st, h, waitName) {
-    var r = st.rules || {}, out = '';
-    if (waitName) out += '<p class="hb-note">' + esc(waitName) + ' is waiting for your Director. Pick another to replace it.</p>';
-    else if (r.suggested) out += '<p class="hb-note">Your Director asked for another ' + esc(lower(st.label)) + ' instead of ' + esc(r.suggested.entryName) +
-      (r.suggested.message ? ': “' + esc(r.suggested.message) + '”' : '.') + '</p>';
-    if (r.required && !r.prefilled) out += '<p class="hb-note">Your Director has set a short list for this.</p>';
-    return out;
+    return window.ChronicleHeroRules.notes(st, waitName, 'hb');
   };
 
   // "1 not here" at the list's foot, folding open the names and the reasons.
   Builder.prototype.notHereHtml = function (r) {
-    if (!r || !r.notHereCount) return '';
-    var open = !!(this.panel && this.panel.nh), names = r.notHere || [];
-    var body = open ? '<ul class="hb-nh-list">' + names.map(function (n) {
-      return '<li><b>' + esc(n.name) + '</b> isn’t here.' + (n.reason ? ' Your Director says: “' + esc(n.reason) + '”' : '') + '</li>';
-    }).join('') + (r.notHereCount > names.length ? '<li>and ' + (r.notHereCount - names.length) + ' more</li>' : '') + '</ul>' : '';
-    return '<div class="hb-nh"><button type="button" class="hb-link" data-act="nothere" aria-expanded="' + open + '">' + r.notHereCount + ' not here</button>' + body + '</div>';
+    return window.ChronicleHeroRules.notHere(r, !!(this.panel && this.panel.nh), 'hb');
   };
 
   Builder.prototype.detailHtml = function (st, c, h) {

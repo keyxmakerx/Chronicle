@@ -3118,7 +3118,7 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
-			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
+			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/hero_builder.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
 		},
@@ -4134,6 +4134,7 @@ func (a *App) RegisterRoutes() {
 	// no-ops when its mount is absent.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
+		"/static/plugins/" + entities.PluginSlug + "/js/hero_rules_lines.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/own_entries.js",
 		"/static/js/widgets/calendar_era_blend.js",

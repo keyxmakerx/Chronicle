@@ -53,7 +53,7 @@ html,body{margin:0;font:14px system-ui}.sr-only{position:absolute;width:1px;heig
   data-fields-base="/campaigns/c1/entities/" data-campaign-id="c1" data-csrf="tok" data-can-create="${canCreate}" data-for-self="true"
   data-type-name="Hero" data-heroes='${attr(heroes)}'><p class="hb-wait">Opening the hero builder…</p></section>
 <div style="height:1200px"></div></div></main>
-<script type="application/json" id="chronicle-widget-scripts">{"hero-builder":["/static/plugins/entities/js/hero_builder.js"]}</script>
+<script type="application/json" id="chronicle-widget-scripts">{"hero-builder":["/static/plugins/entities/js/hero_rules_lines.js","/static/plugins/entities/js/hero_builder.js"]}</script>
 <script>window.htmx = { on: function () {}, process: function () {}, onLoad: function () {}, config: {} };</script>
 <script src="/static/js/boot.js"></script>
 </body></html>`;
