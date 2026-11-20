@@ -5849,6 +5849,45 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-sec-x { width: 28px; height: 28px; }
   .dms-sec-b { display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; padding: 4px 12px 12px; }
 
+  /* Leaves: a section dragged out of the rail opens on a leaf hinged off the
+     column's outer edge, lying over the page. They sit in a zero-width box at
+     the dock's left edge, each placed by its index (right: n x 264px), so a
+     tuck or slide of the dock carries them along. */
+  .dms-rail .dms-ic { touch-action: pan-y; }
+  .dms-leaves { position: absolute; top: 0; bottom: 0; right: 100%; width: 0; }
+  .dms-leaf {
+    position: absolute; top: 0; bottom: 0; width: 264px; display: flex; flex-direction: column;
+    background: var(--surface-alt); border-left: 1px solid var(--dms-leaf-edge);
+    box-shadow: -14px 0 26px -12px rgb(0 0 0 / .32); transform-origin: right center;
+  }
+  /* The seam where a leaf meets the panel inside it. */
+  .dms-leaf::after {
+    content: ""; position: absolute; top: 0; bottom: 0; right: -3px; width: 6px; pointer-events: none; z-index: 1;
+    background: linear-gradient(90deg, rgb(0 0 0 / .14), transparent 45%, rgb(0 0 0 / .10));
+  }
+  .dms-leafbar {
+    flex: none; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 8px;
+    font-size: .78rem; color: var(--dms-ink-muted); border-bottom: 1px solid var(--surface-border);
+    cursor: grab; touch-action: none; user-select: none;
+  }
+  .dms-lgrip { font-size: .65rem; opacity: .55; }
+  .dms-leaf-t { font-weight: 600; letter-spacing: .02em; }
+  .dms-leaf-tools { display: flex; gap: 2px; margin-left: auto; }
+  .dms-ic-sm { width: 28px; height: 28px; font-size: .75rem; }
+  .dms-leaf-b { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; scrollbar-width: thin; }
+  .dms-leaf .dms-sec:not(.dms-folded) { border-color: color-mix(in srgb, var(--dms-acc) 45%, var(--dms-leaf-edge)); }
+  .dms-leaf-ghost { pointer-events: none; z-index: 2; }
+  .dms-leaf.dms-lifting { opacity: .55; filter: saturate(.7); }
+  .dms-hot { outline: 2px solid var(--dms-acc); outline-offset: -2px; }
+  /* What rides the pointer while a section or a leaf is dragged. */
+  .dms-dragchip {
+    position: fixed; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 6px 10px; pointer-events: none;
+    font-size: .78rem; font-weight: 600; color: var(--dms-ink); white-space: nowrap;
+    background: var(--dms-leaf); border: 1px solid var(--dms-leaf-edge); border-radius: var(--dms-r); box-shadow: var(--elev-dragged);
+  }
+  .dms-dragchip i { color: var(--dms-acc); }
+  html.dms-dragging, html.dms-dragging * { user-select: none; cursor: grabbing !important; }
+
   /* The tucked dock: a small tab on the edge, carrying the waiting count. */
   .dms-tab {
     position: fixed; right: 0; top: calc(var(--dms-top, 3.5rem) + 12px); z-index: 15;
@@ -5900,7 +5939,8 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
 
   /* What fills the cards. */
-  .dms-brew { display: grid; gap: .5rem; }
+  .dms-brew { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; }
+  .dms-brew .hbd { padding: 0; }
   .dms-tool {
     display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border-radius: 8px;
     font-size: 12px; color: var(--dms-ink-muted); background: transparent;
