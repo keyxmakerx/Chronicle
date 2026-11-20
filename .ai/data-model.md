@@ -449,7 +449,7 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `campaign_roll_tables` | One JSON document per campaign holding all its rolling tables, replaced as a unit | `campaign_id` PK, FK→`campaigns` CASCADE; `data` LONGTEXT; `updated_by` |
+| `campaign_roll_tables` | One JSON document per campaign holding all its rolling tables, replaced as a unit. A table may carry `visibility` (`everyone` or `dm_only`, who sees a calendar day's roll), and a line may carry `when` (the day conditions the client engine reads; the service validates them) | `campaign_id` PK, FK→`campaigns` CASCADE; `data` LONGTEXT; `updated_by` |
 
 ### designs (`internal/plugins/designs/migrations/`)
 

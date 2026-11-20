@@ -189,7 +189,7 @@
           '<input class="rtp-line rtp-n" data-n maxlength="200" aria-label="' + (ex ? 'Example ' : 'Line ') + (i + 1) + '" placeholder="What happens, in a few words" value="' + esc(l.name) + '">' +
           '<button type="button" class="rtp-odds" data-odds aria-label="How often: ' + RT()._internal.weightLabel(l.weight) + '. Change">' + RT()._internal.weightLabel(l.weight) + '</button>' +
           '<button type="button" class="rtp-ico" data-del aria-label="Remove ' + (ex ? 'example ' : 'line ') + (i + 1) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>' +
-          '<input class="rtp-line rtp-b" data-b maxlength="1000" aria-label="More detail for ' + (ex ? 'example ' : 'line ') + (i + 1) + '" placeholder="One line a ' + esc(gm()) + ' can use as it stands" value="' + esc(l.brief) + '"></div>';
+          '<textarea class="rtp-line rtp-b" data-b rows="1" maxlength="1000" aria-label="More detail for ' + (ex ? 'example ' : 'line ') + (i + 1) + '" placeholder="One line a ' + esc(gm()) + ' can use as it stands">' + esc(l.brief) + '</textarea></div>';
       }).join('');
     }
     function formHTML(p) {
@@ -272,7 +272,12 @@
       host.classList.toggle('has-panel', !!S.panel);
       el.innerHTML = panelHTML();
       if (fade) { var b = el.querySelector('.rtp-body'); if (b) { b.classList.remove('is-fade'); void b.offsetWidth; b.classList.add('is-fade'); } }
+      grow(el);
       if (S.panel && S.panel.mode === 'new' && S.panel.tab === 'examples') drawTests();
+    }
+    /* A detail line grows to its words; none is ever cut off. */
+    function grow(root) {
+      [].forEach.call(root.querySelectorAll('textarea'), function (t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 1) + 'px'; });
     }
     function frame() {
       host.innerHTML =
@@ -289,10 +294,10 @@
       if (!box || !S.panel || S.panel.mode !== 'new') return;
       var d = S.panel.draft, es = filled(d);
       if (!es.length) { box.innerHTML = '<p class="rtp-hint">Write an example and a test roll appears here.</p>'; return; }
-      var t = tableFromDraft(d, '_draft', 'blank');
+      var t = tableFromDraft(d, 'draft-table', 'blank');
       var seen = {}, out = [], k = 0;
       while (out.length < Math.min(3, es.length) && k++ < 30) {
-        var r = RT().roll(S.G, S.list.concat([t]), '_draft');
+        var r = RT().roll(S.G, S.list.concat([t]), 'draft-table');
         if (r.problem) { out = [r]; break; }
         if (!seen[r.name]) { seen[r.name] = 1; out.push(r); }
       }
@@ -523,6 +528,7 @@
       }
       if (p && p.mode === 'new') {
         setDirty(true);
+        if (el.matches('textarea')) grow(el.parentNode);
         if (el.closest('.rtp-ex') || el.matches('[data-name]')) {
           clearTimeout(testTimer);
           testTimer = setTimeout(function () { readForm(); drawTests(); }, 150);
@@ -550,6 +556,7 @@
       if (S.menu) { e.stopPropagation(); openMenu(S.menu); return; }
       if (S.panel) { e.stopPropagation(); readForm(); askDiscard(closePanel); }
     });
+    window.addEventListener('resize', function () { grow(host); });
     document.addEventListener('mousedown', function (e) {
       if (S.menu && !e.target.closest('.rtp-menu') && !e.target.closest('[data-menu]')) { S.menu = null; drawList(); }
     });
