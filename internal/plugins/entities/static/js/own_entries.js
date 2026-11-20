@@ -22,6 +22,12 @@
  * may write what and validates every list. Descriptions are HTML the server sanitizes; a
  * passage wrapped in <span data-secret> is kept from players, as on pages.
  *
+ * An entry can hold more than this form edits (a rewritten copy of a
+ * system's own entry carries ability objects, rolls, extra keys on traits).
+ * What the form does not show goes back on save exactly as it was loaded, and
+ * a trait keeps its extra keys while its name is unchanged, so a save never
+ * drops a part the Director could not see.
+ *
  * Served from the plugin body-script registry so it survives boosted
  * navigation. Re-wires after HTMX swaps.
  */
@@ -80,6 +86,15 @@
   function namedList(v) {
     return Array.isArray(v) && v.length > 0 && v.every(function (it) { return it && typeof it === 'object' && typeof it.name === 'string'; });
   }
+  // A plain list of short words (a quick build), edited one per line.
+  function wordList(v) {
+    return Array.isArray(v) && v.length > 0 && v.every(function (w) { return typeof w === 'string'; });
+  }
+  // A fact too long for one line is written in a box (a benefit, a drawback).
+  function longFact(v) { return typeof v === 'string' && (v.length > 120 || v.indexOf('\n') >= 0); }
+  // Where the words came from is the page's credit, not a fact to edit; it
+  // goes back as loaded and is not named among the kept parts.
+  function creditKey(k) { return k === 'provenance' || k === 'provenance_display'; }
   // The shape a system's own entries share, so a Director's entry can carry
   // the same parts: scalar facts, lists of named items that at least half of
   // them have (a list whose items cost points is one a hero buys from), and
@@ -124,6 +139,12 @@
     this.forId = root.getAttribute('data-for-id') || '';
     this.forName = root.getAttribute('data-for-name') || '';
     this.backUrl = root.getAttribute('data-back-url') || '';
+    // Opened by address: straight on one entry (the page's pen, or landing
+    // after a rewrite), or on a new one; returnUrl is the page to go back to.
+    this.startEntry = root.getAttribute('data-entry') || '';
+    this.startNew = root.getAttribute('data-new') === 'true';
+    this.made = root.getAttribute('data-made') === 'true';
+    this.returnUrl = root.getAttribute('data-return-url') || '';
     this.grants = [];   // permissions: all for a Director, the player's own
     this.members = [];  // a Director's list of who can be given one
     this.giving = false;
@@ -161,8 +182,12 @@
         self.entries = self.entries.filter(function (e) { return e.createdBy === self.user; });
         self.fields = self.fields.filter(function (f) { return self.grantFor(f.key) || self.mine(f.key).length; });
       }
-      for (var i = 0; i < self.fields.length; i++) if (self.fields[i].key === self.startField) self.field = i;
+      var start = self.startEntry ? self.entries.filter(function (e) { return String(e.id) === self.startEntry; })[0] : null;
+      var key = start ? start.fieldKey : self.startField;
+      for (var i = 0; i < self.fields.length; i++) if (self.fields[i].key === key) self.field = i;
       self.render();
+      if (start && self.cur() && self.cur().key === start.fieldKey) { self.openPop(start, null); self.leaveTo = self.returnUrl; }
+      else if (self.startNew && self.cur()) { self.openPop(null, self.root.querySelector('[data-act="add"]')); self.leaveTo = self.returnUrl; }
     }).catch(function () {
       var t = self.root.querySelector('.hc-loading__text');
       if (t) t.textContent = 'Your entries could not be opened. Reload the page to try again.';
@@ -194,24 +219,44 @@
   }
   // Numbers stay numbers so the creator can do sums with them ("3" points).
   function factValue(v) { v = v.trim(); return /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; }
+  // An item as the form edits it; orig is the item as loaded, whose other
+  // keys go back with it while its name stays the same.
   function itemOf(it) {
-    return { name: String(it.name || ''), cost: typeof it.cost === 'number' ? it.cost : 1, description: String(it.description || '') };
+    var text = typeof it.description === 'string' || it.description == null;
+    return { name: String(it.name || ''), cost: typeof it.cost === 'number' ? it.cost : 1,
+      description: text ? String(it.description || '') : '', orig: it };
+  }
+  // The keys of a loaded item the form does not edit.
+  function extraKeys(orig) {
+    if (!orig || typeof orig !== 'object') return [];
+    return Object.keys(orig).filter(function (k) {
+      return k !== 'name' && k !== 'cost' && !(k === 'description' && (typeof orig.description === 'string' || orig.description == null));
+    });
   }
   // A draft holds facts as label/value lines, each shaped list by its key,
-  // and the points budget; lists the system doesn't share are kept as they are.
+  // word lists as lines, and the points budget. A list the system doesn't
+  // share is edited too (extraLists); anything else the form cannot edit
+  // (an object, a yes/no, an empty list) is carried as loaded.
   function draftOf(e, f, budget0) {
     var lists = {};
     f.lists.forEach(function (l) { lists[l.key] = []; });
     if (!e) {
       return { id: '', name: '', summary: '', text: '', who: 'everyone', budget: budget0 || f.budget, lists: lists, status: '', note: '', reviewNote: '',
-        facts: f.facts.map(function (k) { return { label: words(k), value: '', key: k }; }) };
+        facts: f.facts.map(function (k) { return { label: words(k), value: '', key: k }; }), wordLists: [], extraLists: [], carried: {} };
     }
-    var props = e.properties || {}, facts = [], budget = f.budget;
+    var props = e.properties || {}, facts = [], wls = [], extra = [], carried = {}, budget = f.budget;
+    var shared = {};
+    f.lists.forEach(function (l) { shared[l.key] = true; });
     Object.keys(props).forEach(function (k) {
       var v = props[k];
-      if (namedList(v)) lists[k] = v.map(itemOf);
-      else if (k === f.budgetKey && typeof v === 'number') budget = v;
-      else if (!Array.isArray(v) && v !== null && typeof v !== 'object') facts.push({ label: words(k), value: String(v), key: k });
+      if (creditKey(k)) carried[k] = v;
+      else if (namedList(v)) {
+        lists[k] = v.map(itemOf);
+        if (!shared[k]) extra.push({ key: k, label: words(k), buy: v.every(function (it) { return typeof it.cost === 'number'; }) });
+      } else if (k === f.budgetKey && typeof v === 'number') budget = v;
+      else if (wordList(v)) wls.push({ key: k, label: words(k), text: v.join('\n'), orig: v });
+      else if (typeof v === 'number' || typeof v === 'string') facts.push({ label: words(k), value: String(v), key: k, orig: v, long: longFact(v) });
+      else carried[k] = v;
     });
     var who = e.visibility || 'everyone';
     // A player's draft is only theirs until accepted; accepting it offers
@@ -219,8 +264,68 @@
     if (isDraft(e)) who = e.visibility === 'character' ? 'character' : 'everyone';
     return { id: e.id, name: e.name || '', summary: e.summary || '', text: e.description || '', who: who,
       forName: e.visibility === 'character' ? (e.forName || '') : undefined,
-      budget: budget0 || budget, lists: lists, facts: facts,
+      budget: budget0 || budget, lists: lists, facts: facts, wordLists: wls, extraLists: extra, carried: carried,
+      standsFor: e.standsFor || '', standsForName: e.standsForName || '', savedWho: e.visibility || 'everyone',
       status: e.status || 'accepted', reviewNote: e.reviewNote || '', note: '', by: e.createdBy || '' };
+  }
+  // Every list the form edits for a draft: the system's shared lists, then
+  // the entry's own.
+  function listsOf(d, f) { return f.lists.concat(d.extraLists || []); }
+
+  // propsOf builds the properties sent to Chronicle from a draft: what the
+  // form could not edit first, exactly as loaded, then facts under snake_case
+  // keys (numbers as numbers, an untouched value as it was), the budget, word
+  // lists, and each list with only its named items, an item keeping its
+  // other keys while its name is unchanged.
+  function propsOf(d, f) {
+    var props = {}, seen = {};
+    Object.keys(d.carried || {}).forEach(function (k) { props[k] = d.carried[k]; });
+    for (var i = 0; i < d.facts.length; i++) {
+      var p = d.facts[i];
+      if (!p.label.trim() || !p.value.trim()) continue;
+      // An untouched label keeps the key it came with, so a fact the system
+      // spells differently is not renamed by a save.
+      var k = (p.key && words(p.key) === p.label) ? p.key : keyOf(p.label);
+      if (seen[k]) return { error: 'Two facts are both called “' + p.label.trim() + '”. Rename or remove one.' };
+      seen[k] = true;
+      props[k] = (p.orig !== undefined && k === p.key && p.value === String(p.orig)) ? p.orig : factValue(p.value);
+    }
+    if (f.budgetKey) props[f.budgetKey] = d.budget;
+    (d.wordLists || []).forEach(function (w) {
+      var items = w.text.split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!items.length) return;
+      props[w.key] = w.orig && w.orig.join('\n') === items.join('\n') ? w.orig : items;
+    });
+    var buyOf = {};
+    listsOf(d, f).forEach(function (l) { buyOf[l.key] = l.buy; });
+    Object.keys(d.lists).forEach(function (key) {
+      var items = d.lists[key].filter(function (it) { return it.name.trim(); }).map(function (it) {
+        var o = {}, same = it.orig && String(it.orig.name || '').trim() === it.name.trim();
+        if (same) extraKeys(it.orig).forEach(function (x) { o[x] = it.orig[x]; });
+        o.name = it.name.trim();
+        if (buyOf[key]) o.cost = it.cost;
+        else if (same && typeof it.orig.cost === 'number') o.cost = it.orig.cost;
+        if (it.description.trim()) o.description = it.description.trim();
+        return o;
+      });
+      if (items.length) props[key] = items;
+    });
+    return { props: props };
+  }
+
+  // keptLine names the parts the form keeps but cannot edit, in one quiet
+  // line, or '' when there are none.
+  function keptLine(d, f) {
+    var parts = Object.keys(d.carried || {}).filter(function (k) { return !creditKey(k); }).map(words);
+    var traits = [];
+    listsOf(d, f).forEach(function (l) {
+      (d.lists[l.key] || []).forEach(function (it) {
+        if (extraKeys(it.orig).length && String(it.orig.name || '').trim() === it.name.trim()) traits.push(it.name.trim());
+      });
+    });
+    if (traits.length) parts.push('the rules attached to ' + (traits.length > 3 ? traits.slice(0, 3).join(', ') + ' and ' + (traits.length - 3) + ' more' : traits.join(', ')));
+    if (!parts.length) return '';
+    return 'Kept as printed, not edited here: ' + parts.join('; ') + '.';
   }
   // The writing box's HTML reduced to the few tags it can make, parsed in an
   // inert document and stripped of every attribute but data-secret, so the
@@ -261,10 +366,10 @@
   Entries.prototype.pageHTML = function () {
     if (!this.director) return this.playerPageHTML();
     var self = this, f = this.cur();
-    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · Directors only</p><h1 tabindex="-1">Your own entries</h1>' +
-      '<p>Entries you add here sit beside ' + esc(this.system) + '’s own in the hero creator and the sheet’s pick lists. A system update never changes them.</p></div>';
+    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · Directors only</p><h1 tabindex="-1">Entries and players’ drafts</h1>' +
+      '<p>Entries you add here sit beside ' + esc(this.system) + '’s own in the hero creator and the sheet’s pick lists. A system update never changes them. Players’ drafts wait here for you, and you let players make their own.</p></div>';
     if (!f) {
-      return '<section class="hc-page paper" aria-label="Your own entries">' + head +
+      return '<section class="hc-page paper" aria-label="Entries and players’ drafts">' + head +
         '<p class="hc-empty">' + esc(this.system) + ' doesn’t list any choices for making a hero, so there is nothing to add to here.</p></section>';
     }
     var tabs = this.fields.map(function (x, i) {
@@ -282,7 +387,7 @@
         '</b><span class="hc-row__go" aria-hidden="true">' + (e.status === 'sent' ? 'Review ›' : 'Edit ›') + '</span><small>' + esc(e.summary) + '</small></button></li>';
     }).join('') + '</ul>'
       : '<p class="hc-empty">No ' + esc(pl) + ' of your own yet. Add one and players see it next to ' + esc(this.system) + '’s ' + esc(pl) + ' when they make a hero.</p>';
-    return '<section class="hc-page paper" aria-label="Your own entries">' + head +
+    return '<section class="hc-page paper" aria-label="Entries and players’ drafts">' + head +
       '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + tabs + '</div>' + rows +
       '<p class="oe-pkg">' + esc(this.system) + ' brings ' + f.pkg + ' ' + esc(f.pkg === 1 ? lower(f.label) : pl) + ' of its own; they are not changed here.</p>' +
       this.grantsHTML() +
@@ -364,12 +469,14 @@
   Entries.prototype.writeHTML = function (d) {
     var f = this.cur();
     var facts = d.facts.map(function (p, i) {
-      return '<input aria-label="Fact name" data-fact="' + i + '" data-part="label" maxlength="40" value="' + esc(p.label) + '" placeholder="Name, e.g. Size">' +
-        '<input aria-label="Fact value" data-fact="' + i + '" data-part="value" maxlength="200" value="' + esc(p.value) + '" placeholder="Value">' +
+      var val = p.long
+        ? '<textarea class="oe-fact-long" rows="4" aria-label="' + esc(p.label || 'Fact') + '" data-fact="' + i + '" data-part="value" maxlength="2000">' + esc(p.value) + '</textarea>'
+        : '<input aria-label="Fact value" data-fact="' + i + '" data-part="value" maxlength="200" value="' + esc(p.value) + '" placeholder="Value">';
+      return '<input aria-label="Fact name" data-fact="' + i + '" data-part="label" maxlength="40" value="' + esc(p.label) + '" placeholder="Name, e.g. Size">' + val +
         '<button type="button" class="oe-rm" data-act="rmfact" data-i="' + i + '" aria-label="Remove ' + esc(p.label || 'this fact') + '">×</button>';
     }).join('');
     var hidden = /data-secret/.test(d.text);
-    var lists = f.lists.map(function (l) {
+    var lists = listsOf(d, f).map(function (l) {
       var items = d.lists[l.key] || [];
       return '<div class="oe-f"><span class="oe-k">' + esc(l.label) + '</span>' + items.map(function (it, i) {
         return '<div class="oe-item"><input class="oe-item__name" aria-label="' + esc(sing(l.label)) + ' name" data-li="' + esc(l.key) + '" data-ii="' + i + '" data-part="name" maxlength="100" value="' + esc(it.name) + '" placeholder="Name">' +
@@ -397,7 +504,11 @@
           : 'Select a passage and press “Hide from players” to keep it for Directors.') + '</span>' : '') + '</div>' +
       '<div class="oe-f"><span class="oe-k">Facts</span>' + (d.facts.length ? '<div class="oe-facts">' + facts + '</div>' : '') +
         '<div><button type="button" class="oe-link" data-act="addfact">+ Add a fact</button></div></div>' +
-      budget + lists + this.whoHTML(d) +
+      (d.wordLists || []).map(function (w, i) {
+        return '<label class="oe-f"><span class="oe-k">' + esc(w.label) + ' <small class="oe-hint">one per line</small></span>' +
+          '<textarea class="oe-words" rows="' + Math.min(6, Math.max(2, w.text.split('\n').length)) + '" data-word="' + i + '">' + esc(w.text) + '</textarea></label>';
+      }).join('') +
+      budget + lists + (keptLine(d, f) ? '<p class="oe-hint oe-kept">' + esc(keptLine(d, f)) + '</p>' : '') + this.whoHTML(d) +
       '</div>';
   };
 
@@ -430,7 +541,7 @@
   Entries.prototype.problems = function (d) {
     var f = this.cur(), out = [];
     if (!d.name.trim()) out.push(['Give it a name.', true]);
-    f.lists.forEach(function (l) {
+    listsOf(d, f).forEach(function (l) {
       var items = d.lists[l.key] || [], seen = {}, total = 0;
       items.forEach(function (it) {
         var k = lower(it.name.trim());
@@ -465,7 +576,7 @@
       var it = (d.lists[t.split(':')[0]] || [])[+t.split(':')[1]];
       return n + (it ? it.cost : 0);
     }, 0);
-    var lists = f.lists.map(function (l) {
+    var lists = listsOf(d, f).map(function (l) {
       var items = (d.lists[l.key] || []).filter(function (it) { return it.name.trim(); });
       if (!items.length) return '';
       if (!l.buy || !f.budgetKey) {
@@ -519,15 +630,62 @@
     }
     var asked = d.reviewNote && d.status === 'draft' && !this.director ? '<p class="oe-asked" role="note"><b>Your Director asked:</b> ' + esc(d.reviewNote) + '</p>' : '';
     var handed = isDraft(d) && this.director && d.status === 'sent' ? '<p class="oe-asked" role="note"><b>' + esc(this.memberName(d.by)) + ' handed this in.</b> Accept it, or say what to change.</p>' : '';
-    if (!this.confirm) body = asked + handed + body;
+    // A rewrite starts as the Directors' draft; it replaces nothing until
+    // they change who sees it.
+    var draftOnly = this.director && d.standsFor && d.savedWho === 'directors' && !isDraft(d)
+      ? '<p class="oe-asked oe-asked--dm" role="note" data-dm-only>Only Directors see this yet. Players still read ' + esc(this.system) + '’s ' + esc(d.standsForName || d.name) +
+        '. Choose Everyone under “Who sees it” to put yours in play.</p>' : '';
+    if (!this.confirm) body = asked + handed + draftOnly + body;
     pop.innerHTML = '<header class="oe-pop__head"><div><p class="oe-kind">' + esc(f.label) + ' · ' + (this.director ? 'this campaign · Directors only' : 'yours') + '</p>' +
       '<h2 data-pop-title tabindex="-1">' + esc(d.name.trim() || (isNew ? 'New ' + lower(f.label) : 'Unnamed')) + '</h2></div>' +
       '<div class="oe-pop__acts">' + (this.confirm ? '' : '<button type="button" class="oe-btn oe-btn--ghost" data-act="paste" aria-expanded="' + this.paste + '">Paste from an AI</button>') +
       '<button type="button" class="oe-x" data-act="close" aria-label="Close">×</button></div></header>' +
       '<div class="oe-pop__body">' + body + '</div>' +
-      '<footer class="oe-pop__foot">' + (isNew || !this.director ? '' : '<button type="button" class="oe-link oe-del" data-act="del">Delete</button>') +
+      (this.tell ? this.tellHTML() : this.footHTML(d, isNew));
+  };
+
+  Entries.prototype.footHTML = function (d, isNew) {
+    return '<footer class="oe-pop__foot">' + (isNew || !this.director ? '' : '<button type="button" class="oe-link oe-del" data-act="del">Delete</button>') +
       '<p class="oe-error" role="alert" hidden data-error></p><span class="hc-foot__sp"></span>' +
       '<button type="button" class="oe-btn oe-btn--ghost" data-act="close">Cancel</button>' + this.footActsHTML(d, isNew) + '</footer>';
+  };
+
+  // After a save that changed a trait a hero holds, the editor asks once, in
+  // place of its commands: tell the players, with a line they will read, or
+  // not now. The change is already saved and live either way.
+  Entries.prototype.tellHTML = function () {
+    var q = this.tell.q;
+    return '<footer class="oe-pop__foot oe-tell" role="group" aria-labelledby="oe-tell-q">' +
+      '<p class="oe-tell__q" id="oe-tell-q">Saved. Players read this now. <b>' + esc(q.holders) + '</b></p><span class="hc-foot__sp"></span>' +
+      '<button type="button" class="oe-btn oe-btn--ghost" data-act="tellno">Not now</button>' +
+      '<button type="button" class="oe-btn" data-act="tell" data-working-label="Telling…">Tell the players</button>' +
+      '<label class="oe-tell__line"><span class="oe-k">What they will read</span>' +
+      '<input data-tell-line maxlength="300" autocomplete="off" value="' + esc(this.tell.line) + '"></label>' +
+      '<p class="oe-error" role="alert" hidden data-error></p></footer>';
+  };
+
+  // tellPlayers posts the line; it shows on the entry's page and peek.
+  Entries.prototype.tellPlayers = function () {
+    var self = this, input = this.root.querySelector('[data-tell-line]'), line = input ? input.value.trim() : '';
+    var btn = this.root.querySelector('[data-act="tell"]'), err = this.root.querySelector('.oe-tell [data-error]');
+    if (!line) { if (err) { err.textContent = 'Write the line the players will read, or choose Not now.'; err.hidden = false; } return; }
+    if (this.busy) return;
+    this.busy = true;
+    if (window.Chronicle && Chronicle.working && btn) Chronicle.working(btn, true);
+    api(this.entriesUrl + '/' + encodeURIComponent(this.tell.id) + '/notes', { method: 'POST', body: { line: line }, csrfToken: this.csrf })
+      .then(json).then(function (res) {
+        self.busy = false;
+        if (window.Chronicle && Chronicle.working && btn) Chronicle.working(btn, false);
+        if (!res.ok) { if (err) { err.textContent = res.body.message || res.body.error || 'The players were not told. Try again.'; err.hidden = false; } return; }
+        self.tell = null;
+        self.closePop(true);
+        self.render();
+        notify('Told the players. They read it on the entry’s page.');
+      }).catch(function () {
+        self.busy = false;
+        if (window.Chronicle && Chronicle.working && btn) Chronicle.working(btn, false);
+        if (err) { err.textContent = 'The players were not told. Check your connection and try again.'; err.hidden = false; }
+      });
   };
 
   // The commands for the open entry. A Director saves, and on a player's
@@ -598,6 +756,9 @@
     this.open = null;
     this.draft = null;
     this.confirm = false;
+    this.tell = null;
+    // Opened from a page by address: closing goes back to that page.
+    if (this.leaveTo) { var to = this.leaveTo; this.leaveTo = ''; dirty(false); window.location.assign(to); return; }
     dirty(false);
     desk.classList.remove('is-open');
     this.root.querySelectorAll('.hc-row').forEach(function (r) { r.setAttribute('aria-expanded', 'false'); });
@@ -615,6 +776,13 @@
   Entries.prototype.touched = function () {
     if (!this.draft) return;
     dirty(this.isDirty());
+    // Writing again after the question puts the commands back: the new
+    // change has to be saved before anyone is told about it.
+    if (this.tell && this.isDirty()) {
+      this.tell = null;
+      var asked = this.root.querySelector('.oe-tell');
+      if (asked) asked.outerHTML = this.footHTML(this.draft, !this.draft.id);
+    }
     var d = this.draft, view = this.root.querySelector('.oe-view');
     if (view) view.innerHTML = this.viewHTML(d);
     var t = this.root.querySelector('[data-pop-title]');
@@ -680,33 +848,7 @@
     this.touched();
   };
 
-  // The properties sent to Chronicle: facts under snake_case keys (numbers
-  // as numbers), the budget, and each list with only its named items.
-  Entries.prototype.properties = function () {
-    var d = this.draft, f = this.cur(), props = {}, seen = {};
-    for (var i = 0; i < d.facts.length; i++) {
-      var p = d.facts[i];
-      if (!p.label.trim() || !p.value.trim()) continue;
-      // An untouched label keeps the key it came with, so a fact the system
-      // spells differently is not renamed by a save.
-      var k = (p.key && words(p.key) === p.label) ? p.key : keyOf(p.label);
-      if (seen[k]) return { error: 'Two facts are both called “' + p.label.trim() + '”. Rename or remove one.' };
-      seen[k] = true;
-      props[k] = factValue(p.value);
-    }
-    if (f.budgetKey) props[f.budgetKey] = d.budget;
-    Object.keys(d.lists).forEach(function (key) {
-      var buy = f.lists.some(function (l) { return l.key === key && l.buy; });
-      var items = d.lists[key].filter(function (it) { return it.name.trim(); }).map(function (it) {
-        var o = { name: it.name.trim() };
-        if (buy) o.cost = it.cost;
-        if (it.description.trim()) o.description = it.description.trim();
-        return o;
-      });
-      if (items.length) props[key] = items;
-    });
-    return { props: props };
-  };
+  Entries.prototype.properties = function () { return propsOf(this.draft, this.cur()); };
 
   // mode is '' (save), 'send' (a player hands it in), 'accept' or 'ask' (a
   // Director's answer to a player's draft).
@@ -740,7 +882,21 @@
       .then(json).then(function (res) {
         if (!res.ok || !res.body.entry) { self.fail(res.body.message || res.body.error || 'The entry could not be saved. Try again.'); return; }
         var e = res.body.entry;
+        var had = self.entries.filter(function (x) { return x.id === e.id; })[0];
+        if (had && had.standsForName && !e.standsForName) e.standsForName = had.standsForName;
         self.entries = self.entries.filter(function (x) { return x.id !== e.id; }).concat([e]);
+        if (res.body.tellPlayers && self.director && !isNew) {
+          var q = res.body.tellPlayers;
+          self.busy = false;
+          self.tell = { q: q, id: e.id, line: q.line || '' };
+          self.draft = draftOf(e, f);
+          self.saved = JSON.parse(JSON.stringify(self.draft));
+          dirty(false);
+          self.redraw();
+          var tb = self.root.querySelector('[data-act="tell"]');
+          if (tb) tb.focus();
+          return;
+        }
         if (isNew && !self.director) {
           self.grants.forEach(function (g) { if (g.fieldKey === f.key && g.userId === self.user) g.entryId = e.id; });
           // Made for their hero: the hero's sheet takes the new name at once.
@@ -1048,6 +1204,8 @@
         case 'nodel': self.confirm = false; self.redraw(); break;
         case 'dodel': self.remove(); break;
         case 'discard': self.closePop(true); break;
+        case 'tell': self.tellPlayers(); break;
+        case 'tellno': self.tell = null; self.closePop(true); self.render(); break;
       }
     });
     root.addEventListener('input', function (e) {
@@ -1058,7 +1216,8 @@
       else if (k) d[k] = el.value;
       if (el.hasAttribute('data-fact')) d.facts[+el.getAttribute('data-fact')][el.getAttribute('data-part')] = el.value;
       if (el.hasAttribute('data-li') && el.hasAttribute('data-part')) d.lists[el.getAttribute('data-li')][+el.getAttribute('data-ii')][el.getAttribute('data-part')] = el.value;
-      if (k || el.hasAttribute('data-fact') || el.hasAttribute('data-li')) self.touched();
+      if (el.hasAttribute('data-word')) d.wordLists[+el.getAttribute('data-word')].text = el.value;
+      if (k || el.hasAttribute('data-fact') || el.hasAttribute('data-li') || el.hasAttribute('data-word')) self.touched();
     });
     root.addEventListener('change', function (e) {
       var el = e.target;
@@ -1082,6 +1241,11 @@
       if (e.target.closest && e.target.closest('.oe-text')) e.preventDefault();
     });
     root.addEventListener('keydown', function (e) {
+      if (self.tell && self.open !== null && (e.key === 'Escape' || (e.key === 'Enter' && e.target.hasAttribute && e.target.hasAttribute('data-tell-line')))) {
+        e.preventDefault();
+        if (e.key === 'Enter') self.tellPlayers(); else { self.tell = null; self.closePop(true); self.render(); }
+        return;
+      }
       if (e.key === 'Escape' && self.open !== null) {
         e.preventDefault();
         if (self.paste) { self.paste = false; self.redraw(); }
@@ -1097,21 +1261,18 @@
     }
   };
 
-  function boot(scope) {
-    var nodes = (scope || document).querySelectorAll('[data-own-entries]:not([data-oe-ready])');
-    for (var i = 0; i < nodes.length; i++) {
-      nodes[i].setAttribute('data-oe-ready', 'true');
-      var p = new Entries(nodes[i]);
-      p.wire();
-      p.load();
-    }
-  }
+  window.ChronicleOwnEntries = { draftOf: draftOf, propsOf: propsOf, keptLine: keptLine, listsOf: listsOf };
 
-  function start() {
-    boot(document);
-    document.addEventListener('htmx:afterSettle', function (e) { boot(e.target); });
+  // Loaded on sight (ADR-063): boot.js fetches this file when it meets the
+  // page's data-widget="own-entries" mount, and register mounts it.
+  function register() {
+    Chronicle.register('own-entries', {
+      init: function (el) {
+        var p = new Entries(el);
+        p.wire();
+        p.load();
+      }
+    });
   }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
+  if (window.Chronicle && Chronicle.register) register();
 })();

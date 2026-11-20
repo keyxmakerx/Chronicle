@@ -3,7 +3,9 @@ package entities
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"slices"
+	"strings"
 
 	"github.com/labstack/echo/v5"
 
@@ -224,6 +226,13 @@ func (h *Handler) CreateHero(c *echo.Context) error {
 //
 // ?field= opens that list; ?for= names the player's character the new entry
 // is for, and the page links back to it (or to the hero creator, ?back=new).
+// ?entry= opens the editor on one entry (?made=1 when a rewrite just made it)
+// and ?new=1 on a new one; ?return= is the rules page to go back to after.
+//
+// A Director's bare address leads to "Before you play in <campaign>", which
+// gathers the campaign's own entries; the editor, players' drafts and the
+// permissions to give stay here, reached from there and by the addresses
+// above.
 func (h *Handler) OwnEntries(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -232,8 +241,16 @@ func (h *Handler) OwnEntries(c *echo.Context) error {
 	if h.heroPlanner == nil {
 		return apperror.NewForbidden("only the campaign's Directors manage its own entries")
 	}
-	view := OwnEntriesView{Director: cc.CanAuthorDmOnly(), CSRFToken: middleware.GetCSRFToken(c), Field: c.QueryParam("field")}
-	if !view.Director {
+	view := OwnEntriesView{Director: cc.CanAuthorDmOnly(), CSRFToken: middleware.GetCSRFToken(c), Field: c.QueryParam("field"),
+		Entry: c.QueryParam("entry"), New: c.QueryParam("new") == "1", Made: c.QueryParam("made") == "1"}
+	if view.Director {
+		if ownEntriesBare(c) {
+			if to := h.gatheredPageURL(c, cc); to != "" {
+				return c.Redirect(http.StatusSeeOther, to)
+			}
+		}
+		view.Return = sameCampaignRulesPath(cc.Campaign.ID, c.QueryParam("return"))
+	} else {
 		ok, err := h.mayReadHeroPlan(c, cc)
 		if err != nil {
 			return err
@@ -254,4 +271,38 @@ func (h *Handler) OwnEntries(c *echo.Context) error {
 		view.BackToCreator = true
 	}
 	return middleware.Render(c, http.StatusOK, OwnEntriesPage(cc, view))
+}
+
+// ownEntriesBare reports whether the address asks for nothing but the list,
+// which for a Director is the gathered page's job.
+func ownEntriesBare(c *echo.Context) bool {
+	for _, k := range []string{"field", "entry", "new", "back", "for", "return"} {
+		if c.QueryParam(k) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// gatheredPageURL is "Before you play in <campaign>" under the campaign's
+// game system, or "" when it has none. The system comes from the hero plan:
+// the layout's enabled system is only added when a page renders.
+func (h *Handler) gatheredPageURL(c *echo.Context, cc *campaigns.CampaignContext) string {
+	plan, err := h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), true)
+	if err != nil || plan == nil || plan.SystemID == "" {
+		// No system, or none with kinds: the list itself is the page.
+		return ""
+	}
+	return "/campaigns/" + url.PathEscape(cc.Campaign.ID) + "/systems/" + url.PathEscape(plan.SystemID) + "/before-you-play"
+}
+
+// sameCampaignRulesPath keeps a way back only to a rules page of this
+// campaign, so the editor never sends anyone off-site or elsewhere.
+func sameCampaignRulesPath(campaignID, to string) string {
+	prefix := "/campaigns/" + campaignID + "/systems/"
+	u, err := url.Parse(to)
+	if err != nil || u.Scheme != "" || u.Host != "" || !strings.HasPrefix(u.Path, prefix) || strings.Contains(u.Path, "..") {
+		return ""
+	}
+	return u.RequestURI()
 }
