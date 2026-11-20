@@ -398,7 +398,7 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 | `crafting_known_items` | An item the party has identified, PK (`campaign_id`, `item_id`): `character_id` (who studied it, NULL when the Director revealed it; FK to `entities`, sets NULL), `recipes` (that study also showed the recipes that use it), `learned_by`, `learned_at`; FKs to `campaigns` and the item cascade |
 | `crafting_studies` | Every study and reveal: `item_id`, `line_id` (FK to `crafting_spoil_lines`, sets NULL), `character_id` (sets NULL), `outcome` (`miss`/`known`/`lost`/`revealed`, `''` while its dice are being rolled), `rolled`, `respite_id` (the latest `crafting_respites` id when it was made, so a hero studies an item once per respite), `created_by`, `created_at`; FKs to `campaigns` and the item cascade |
 | `campaign_rolls` | The roll log behind the Table tab: `origin` (`chronicle`/`foundry`) and `origin_id` (Foundry's chat message id; unique per campaign and origin, so a replay is a no-op), `source` (`table`/`crafting`/`foundry`), `roller_id` (no FK) and `roller_name`, `label`, `formula`, `dice` (JSON, as they fell), `modifier`, `total`, `outcome`, `why`, `from_where`, `mode` (`public`/`gm`/`blind`/`self`, who may see it); FK to `campaigns` cascades |
-| `campaign_roll_settings` | The table's dice look (`quick`/`rune`/`none`), which a new player starts on; FK to `campaigns` cascades |
+| `campaign_roll_settings` | The campaign's dice: the table's look (`quick`/`rune`/`none`, which a new player starts on), the 3D set, colour, crit success, crit fail, detail, the sets on offer to players and whether players may pick their own (empty name = the default); FK to `campaigns` cascades |
 
 ### fieldrules (`internal/plugins/fieldrules/migrations/`)
 

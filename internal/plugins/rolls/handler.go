@@ -96,7 +96,7 @@ func (h *Handler) Roll(c *echo.Context) error {
 	return c.JSON(http.StatusCreated, out)
 }
 
-// Settings returns the table's dice look.
+// Settings returns the campaign's dice: the table's look and the 3D picks.
 func (h *Handler) Settings(c *echo.Context) error {
 	campaignID, _, err := h.viewer(c)
 	if err != nil {
@@ -109,14 +109,14 @@ func (h *Handler) Settings(c *echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-// SetSettings changes the table's dice look; the service refuses anyone but
-// a Director.
+// SetSettings changes the campaign's dice. The body is partial: only the keys
+// it carries change. The service refuses anyone but a Director.
 func (h *Handler) SetSettings(c *echo.Context) error {
 	campaignID, v, err := h.viewer(c)
 	if err != nil {
 		return err
 	}
-	var in Settings
+	var in UpdateSettingsInput
 	if err := bind(c, &in); err != nil {
 		return err
 	}

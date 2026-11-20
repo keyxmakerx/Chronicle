@@ -3,6 +3,7 @@ package rolls
 import (
 	"context"
 	"log/slog"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // Audience says who a live roll may reach. Exactly one shape is used:
@@ -50,10 +52,11 @@ type Service interface {
 	Record(ctx context.Context, campaignID string, in LogInput) (string, error)
 	// List is a page of the log as the viewer may see it, oldest first.
 	List(ctx context.Context, campaignID string, v Viewer, before string, limit int) (*Page, error)
-	// Settings is the table's dice look.
+	// Settings is the campaign's dice: the table's look and the 3D dice picks.
 	Settings(ctx context.Context, campaignID string) (*Settings, error)
-	// SetSettings changes the table's dice look. Directors only.
-	SetSettings(ctx context.Context, campaignID string, v Viewer, in Settings) (*Settings, error)
+	// SetSettings changes the campaign's dice, partially: only the fields sent
+	// change. Directors only.
+	SetSettings(ctx context.Context, campaignID string, v Viewer, in UpdateSettingsInput) (*Settings, error)
 }
 
 type service struct {
@@ -230,28 +233,148 @@ func (s *service) List(ctx context.Context, campaignID string, v Viewer, before 
 }
 
 func (s *service) Settings(ctx context.Context, campaignID string) (*Settings, error) {
-	look, err := s.repo.Look(ctx, campaignID)
+	st, err := s.repo.Settings(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
-	if look == "" {
-		look = LookQuick
+	if st.DiceOffered == nil {
+		st.DiceOffered = []string{}
 	}
-	return &Settings{Look: look}, nil
+	if st.Look == "" {
+		st.Look = LookQuick
+	}
+	return &st, nil
 }
 
-func (s *service) SetSettings(ctx context.Context, campaignID string, v Viewer, in Settings) (*Settings, error) {
+// diceColourSlug is the shape of a colour key. Whether it names a colour of
+// the chosen set is the picker's to know (the catalogue lives in the browser);
+// the engine falls back on a colour its set doesn't have.
+var diceColourSlug = regexp.MustCompile(`^[a-z0-9-]{1,24}$`)
+
+func oneOf(v string, list []string) bool {
+	for _, k := range list {
+		if v == k {
+			return true
+		}
+	}
+	return false
+}
+
+// checkChoice refuses a present value that is neither empty (the default) nor
+// in list.
+func checkChoice(f patch.Field[string], list []string, msg string) error {
+	if v, ok := f.Get(); ok && v != "" && !oneOf(v, list) {
+		return errInvalid(msg)
+	}
+	return nil
+}
+
+func (s *service) SetSettings(ctx context.Context, campaignID string, v Viewer, in UpdateSettingsInput) (*Settings, error) {
 	if !v.Director {
 		return nil, apperror.NewForbidden("only the Director sets the table's dice")
 	}
-	if in.Look != LookQuick && in.Look != LookRune && in.Look != LookNone {
+	if l, ok := in.Look.Get(); ok && l != LookQuick && l != LookRune && l != LookNone {
 		return nil, errInvalid("Pick quick 2D, rune 3D or numbers only.")
 	}
-	if err := s.repo.SetLook(ctx, campaignID, in.Look); err != nil {
+	if err := checkChoice(in.DiceSet, DiceSetKeys, "Pick one of the dice sets."); err != nil {
 		return nil, err
 	}
-	return &Settings{Look: in.Look}, nil
+	if c, ok := in.DiceColour.Get(); ok && c != "" && !diceColourSlug.MatchString(c) {
+		return nil, errInvalid("That dice colour isn't one of the set's.")
+	}
+	if err := checkChoice(in.CritSucc, CritSuccKeys, "Pick one of the crit success animations."); err != nil {
+		return nil, err
+	}
+	if err := checkChoice(in.CritFail, CritFailKeys, "Pick one of the crit fail animations."); err != nil {
+		return nil, err
+	}
+	if q, ok := in.Quality.Get(); ok && q != "" && q != QualityAuto && q != QualityBasic && q != QualityHD {
+		return nil, errInvalid("Pick auto, basic or HD detail.")
+	}
+
+	offered, err := cleanOffered(in.DiceOffered)
+	if err != nil {
+		return nil, err
+	}
+	cur, err := s.repo.Settings(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if cur.Look == "" {
+		cur.Look = LookQuick
+	}
+	next := Settings{
+		Look:        in.Look.Val(cur.Look),
+		DiceSet:     in.DiceSet.Val(cur.DiceSet),
+		DiceColour:  in.DiceColour.Val(cur.DiceColour),
+		CritSucc:    in.CritSucc.Val(cur.CritSucc),
+		CritFail:    in.CritFail.Val(cur.CritFail),
+		Quality:     in.Quality.Val(cur.Quality),
+		PlayersPick: in.PlayersPick.Val(cur.PlayersPick),
+		DiceOffered: cur.DiceOffered,
+	}
+	if in.DiceOffered.Present() && !in.DiceOffered.IsNull() {
+		next.DiceOffered = offered
+	}
+	if next.DiceOffered == nil {
+		next.DiceOffered = []string{}
+	}
+	// The campaign's own die is always on offer, whichever of the two changed.
+	own := next.DiceSet
+	if own == "" {
+		own = DiceSetKeys[0]
+	}
+	if len(next.DiceOffered) > 0 && !oneOf(own, next.DiceOffered) {
+		return nil, errInvalid("The campaign's own dice set has to be one of the sets on offer.")
+	}
+	// Only what the body carried is written, so a stale read of the rest can't
+	// undo someone else's change.
+	var changed []string
+	for _, c := range []struct {
+		key string
+		set bool
+	}{
+		{"look", has(in.Look)}, {"diceSet", has(in.DiceSet)}, {"diceColour", has(in.DiceColour)},
+		{"diceOffered", has(in.DiceOffered)}, {"critSucc", has(in.CritSucc)}, {"critFail", has(in.CritFail)}, {"quality", has(in.Quality)}, {"playersPick", has(in.PlayersPick)},
+	} {
+		if c.set {
+			changed = append(changed, c.key)
+		}
+	}
+	if err := s.repo.SaveSettings(ctx, campaignID, next, changed); err != nil {
+		return nil, err
+	}
+	return &next, nil
 }
+
+// cleanOffered checks a list of offered sets and returns it in catalogue
+// order without repeats. Every set listed (or none) means every set is on
+// offer, which is stored as the empty list.
+func cleanOffered(f patch.Field[[]string]) ([]string, error) {
+	list, ok := f.Get()
+	if !ok {
+		return nil, nil
+	}
+	for _, k := range list {
+		if !oneOf(k, DiceSetKeys) {
+			return nil, errInvalid("Pick offered dice from the dice sets.")
+		}
+	}
+	out := []string{}
+	for _, k := range DiceSetKeys {
+		if oneOf(k, list) {
+			out = append(out, k)
+		}
+	}
+	if len(out) == len(DiceSetKeys) {
+		return []string{}, nil
+	}
+	return out, nil
+}
+
+// has is whether a field carries a value to write: an explicit null keeps the
+// stored one (Field.Val), so it writes nothing.
+func has[T any](f patch.Field[T]) bool { _, ok := f.Get(); return ok }
 
 // visible is the repository's visibleTo again, so a repository that ever
 // returned too much still could not leak a roll.
