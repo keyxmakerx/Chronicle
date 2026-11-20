@@ -72,3 +72,19 @@ test('beside: only campaign pages of this site', () => {
   ];
   for (const [href, want] of cases) assert.equal(beside(href, o), want, href);
 });
+
+test('onSite: only a plain path on this site reaches a pane', () => {
+  const { onSite } = load();
+  const cases = [
+    ['/campaigns/abc/entities/1', true],
+    ['/campaigns/abc/maps?floor=2', true],
+    ['//other.example/campaigns/abc/entities/1', false],
+    ['https://chronicle.example/campaigns/abc/maps', false],
+    ['javascript:alert(1)', false],
+    ['campaigns/abc/maps', false],
+    ['', false],
+    [null, false],
+    [{ url: '/campaigns/abc/maps' }, false],
+  ];
+  for (const [url, want] of cases) assert.equal(onSite(url), want, String(url));
+});
