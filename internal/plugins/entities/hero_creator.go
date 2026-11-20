@@ -32,6 +32,13 @@ type HeroChoice struct {
 	Status  string `json:"status,omitempty"`
 	Mine    bool   `json:"mine,omitempty"`
 	EntryID int64  `json:"entryId,omitempty"`
+	// State is HeroChoiceStateAskFirst on an entry the player may pick only
+	// with a Director's yes; empty for an entry they may simply pick.
+	State string `json:"state,omitempty"`
+	// Held marks an entry the rules took off the player's list, carried only
+	// so a hero that already holds it stays editable. Never served, and never
+	// a valid new pick.
+	Held bool `json:"-"`
 }
 
 // HeroStep is one question: a character field and the entries it offers.
@@ -41,6 +48,12 @@ type HeroStep struct {
 	Choices  []HeroChoice `json:"choices"`
 	// CanMake: a Director let this player write their own entry here.
 	CanMake bool `json:"canMake,omitempty"`
+	// Rules says what the hero-choice rules did to the step for this player;
+	// nil when none applies.
+	Rules *HeroStepRules `json:"rules,omitempty"`
+	// Held is what the rules took off the list, kept server-side so a hero
+	// that holds one stays editable. Never served.
+	Held []HeroChoice `json:"-"`
 }
 
 // HeroPlan is every step for one campaign, in the order the system declares
@@ -189,23 +202,29 @@ func heroBuyList(props map[string]any) (costs map[string]float64, budget float64
 // buildHeroFields checks every pick against the plan and returns the hero's
 // fields: each step's field holds the chosen entry's name, as the sheet and
 // the Foundry module expect, and bought options sit in the field beside it.
-func buildHeroFields(plan *HeroPlan, picks map[string]HeroPick) (map[string]any, error) {
-	fields := map[string]any{}
+//
+// A pick of an ask-first entry is not stored: it comes back in asks, to be
+// recorded as a request once the hero exists. A step the rules require can't
+// be skipped; when it is left with one entry that entry is filled in, so the
+// hero never rests on the client having sent it.
+func buildHeroFields(plan *HeroPlan, picks map[string]HeroPick) (fields map[string]any, asks []HeroAsk, err error) {
+	fields = map[string]any{}
 	steps := map[string]*HeroStep{}
 	if plan != nil {
 		for i := range plan.Steps {
 			steps[plan.Steps[i].FieldKey] = &plan.Steps[i]
 		}
 	}
+	asked := map[string]bool{}
 	for key, pick := range picks {
 		step := steps[key]
 		if step == nil {
-			return nil, apperror.NewBadRequest("the creator has no step for " + key)
+			return nil, nil, apperror.NewBadRequest("the creator has no step for " + key)
 		}
 		name := strings.TrimSpace(pick.Name)
 		if name == "" {
 			if len(pick.Options) > 0 {
-				return nil, apperror.NewBadRequest("choose the " + strings.ToLower(step.Label) + " before its options")
+				return nil, nil, apperror.NewBadRequest("choose the " + strings.ToLower(step.Label) + " before its options")
 			}
 			continue
 		}
@@ -217,7 +236,12 @@ func buildHeroFields(plan *HeroPlan, picks map[string]HeroPick) (map[string]any,
 			}
 		}
 		if choice == nil {
-			return nil, apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", name, strings.ToLower(step.Label)))
+			return nil, nil, apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", name, strings.ToLower(step.Label)))
+		}
+		if choice.State == HeroChoiceStateAskFirst {
+			asks = append(asks, HeroAsk{FieldKey: key, EntryName: choice.Name})
+			asked[key] = true
+			continue
 		}
 		fields[key] = choice.Name
 		if len(pick.Options) == 0 {
@@ -225,7 +249,7 @@ func buildHeroFields(plan *HeroPlan, picks map[string]HeroPick) (map[string]any,
 		}
 		costs, budget, ok := heroBuyList(choice.Properties)
 		if !ok {
-			return nil, apperror.NewBadRequest(choice.Name + " has nothing to choose from")
+			return nil, nil, apperror.NewBadRequest(choice.Name + " has nothing to choose from")
 		}
 		seen := map[string]bool{}
 		spent := 0.0
@@ -234,22 +258,39 @@ func buildHeroFields(plan *HeroPlan, picks map[string]HeroPick) (map[string]any,
 			k := strings.ToLower(strings.TrimSpace(o))
 			cost, known := costs[k]
 			if !known || seen[k] {
-				return nil, apperror.NewBadRequest(fmt.Sprintf("%q can't be chosen for %s", o, choice.Name))
+				return nil, nil, apperror.NewBadRequest(fmt.Sprintf("%q can't be chosen for %s", o, choice.Name))
 			}
 			seen[k] = true
 			spent += cost
 			bought = append(bought, strings.TrimSpace(o))
 		}
 		if spent > budget {
-			return nil, apperror.NewBadRequest(fmt.Sprintf("those choices cost %g points; %s has %g", spent, choice.Name, budget))
+			return nil, nil, apperror.NewBadRequest(fmt.Sprintf("those choices cost %g points; %s has %g", spent, choice.Name, budget))
 		}
 		raw, err := json.Marshal(bought)
 		if err != nil {
-			return nil, apperror.NewInternal(err)
+			return nil, nil, apperror.NewInternal(err)
 		}
 		fields[key+heroOptionsSuffix] = string(raw)
 	}
-	return fields, nil
+	if plan != nil {
+		for i := range plan.Steps {
+			step := &plan.Steps[i]
+			if step.Rules == nil || !step.Rules.Required || asked[step.FieldKey] {
+				continue
+			}
+			if _, has := fields[step.FieldKey]; has {
+				continue
+			}
+			if step.Rules.Prefilled != "" {
+				fields[step.FieldKey] = step.Rules.Prefilled
+				continue
+			}
+			return nil, nil, apperror.NewBadRequest(fmt.Sprintf("choose the %s; it can't be skipped", strings.ToLower(step.Label)))
+		}
+	}
+	sort.Slice(asks, func(i, j int) bool { return asks[i].FieldKey < asks[j].FieldKey })
+	return fields, asks, nil
 }
 
 func sortedKeys(m map[string]any) []string {

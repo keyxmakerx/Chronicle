@@ -128,6 +128,7 @@ type Handler struct {
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
 	heroPlanner        HeroPlanner
+	heroRules          HeroRules
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
@@ -2319,6 +2320,7 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 	if keys := h.ownerFieldsFor(c.Request().Context(), cc, entity, et, userID); len(keys) > 0 {
 		response["owner_fields"] = keys
 	}
+	h.addHeroRuleNotes(c.Request().Context(), response, cc.Campaign.ID, entity, canSeeGM || isOwner)
 	return c.JSON(http.StatusOK, response)
 }
 
@@ -2403,6 +2405,16 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 		return err
 	}
 
+	// A claimed owner's pick of an ask-first entry is not written: it waits for
+	// a Director as a request, and the write answers with that outcome. The
+	// rest of the patch is saved as usual.
+	var asks []HeroAsk
+	if len(picks) > 0 && fieldsPatch != nil {
+		for _, t := range takeAskFirst(entity, fieldsPatch, picks) {
+			asks = append(asks, HeroAsk{FieldKey: t.fieldKey, EntryName: t.name})
+		}
+	}
+
 	// A Scribe is not served the hidden fields, so their save neither changes
 	// nor clears them.
 	fieldsData := body.FieldsData
@@ -2420,7 +2432,10 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 	if body.FieldsPatch != nil {
 		patch := fieldsPatch
 		ClearStaleStepOptions(entity, patch)
-		saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
+		// Nothing left to write when every key was an ask-first pick.
+		if len(patch) > 0 || len(asks) == 0 {
+			saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
+		}
 	} else {
 		saveErr = h.service.UpdateFields(webWriteContext(c), entityID, fieldsData)
 	}
@@ -2430,6 +2445,14 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
 
+	if len(asks) > 0 {
+		requests, failed := h.recordAsks(c, cc.Campaign.ID, entity, asks)
+		resp := map[string]any{"status": "ok", "requests": requests}
+		if len(failed) > 0 {
+			resp["requestFailed"] = failed
+		}
+		return c.JSON(http.StatusOK, resp)
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 

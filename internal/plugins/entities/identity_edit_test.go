@@ -284,9 +284,10 @@ func TestUpdateFieldsAPI_ClaimedOwnerBuilderPicks(t *testing.T) {
 		{"step with identity keys together", campaigns.RolePlayer, owner, `{"fields_patch":{"class":"Fury","culture":"anything"}}`, 200, true, 1},
 		{"name not on the step's list", campaigns.RolePlayer, owner, `{"fields_patch":{"class":"Wizard"}}`, 400, false, 1},
 		{"a step takes text, not a number", campaigns.RolePlayer, owner, `{"fields_patch":{"class":5}}`, 400, false, 1},
-		{"a step the type marks GM-only stays closed", campaigns.RolePlayer, owner, `{"fields_patch":{"background":"Sage"}}`, 403, false, 0},
+		{"a step the type marks GM-only stays closed", campaigns.RolePlayer, owner, `{"fields_patch":{"background":"Sage"}}`, 403, false, 1},
 		{"a field that is not a step stays closed", campaigns.RolePlayer, owner, `{"fields_patch":{"class":"Fury","might":3}}`, 403, false, 1},
-		{"identity keys alone never load the plan", campaigns.RolePlayer, owner, `{"fields_patch":{"ancestry":"Anything"}}`, 200, true, 0},
+		{"identity keys load the plan, which only limits a step a rule applies to", campaigns.RolePlayer, owner, `{"fields_patch":{"ancestry":"Anything"}}`, 200, true, 1},
+		{"story and list keys alone never load the plan", campaigns.RolePlayer, owner, `{"fields_patch":{"backstory":"A forge.","skills_json":"[\"Sneak\"]"}}`, 200, true, 0},
 		{"other player denied without loading the plan", campaigns.RolePlayer, "user-other", `{"fields_patch":{"class":"Fury"}}`, 403, false, 0},
 		{"scribe never loads the plan", campaigns.RoleScribe, "user-scribe", `{"fields_patch":{"class":"Wizard"}}`, 200, true, 0},
 	}

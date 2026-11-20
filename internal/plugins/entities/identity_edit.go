@@ -90,33 +90,58 @@ func CanEditIdentity(role campaigns.Role, entity *Entity, userID string) bool {
 	return role >= campaigns.RoleScribe || IsClaimedOwnerPlayer(role, entity, userID)
 }
 
+// builderStep is one hero builder step as a player gets it: the entries on
+// the list by lower-case name, and what the campaign's rules made of it.
+type builderStep struct {
+	names map[string]HeroChoice
+	// limited: a rule applies to this player here, so even an identity key
+	// (which takes free text elsewhere) must hold a name from the list.
+	limited bool
+	// required: the list is a short list; the step can't be emptied.
+	required bool
+}
+
 // builderPicks is what the hero builder lets a player choose: for each step's
-// field key, the entries on that step's list, keyed by their lower-case name.
-type builderPicks map[string]map[string]HeroChoice
+// field key, its entries and rules.
+type builderPicks map[string]builderStep
 
 // builderPicksFrom turns the campaign's creator plan, as a player sees it,
 // into builderPicks. A nil plan gives none, so the door stays at identity.
+// What the rules took off a list is carried flagged Held, so a hero that
+// already holds it stays editable but it is never a valid new pick.
 func builderPicksFrom(plan *HeroPlan) builderPicks {
 	out := builderPicks{}
 	if plan == nil {
 		return out
 	}
 	for _, st := range plan.Steps {
-		names := make(map[string]HeroChoice, len(st.Choices))
+		names := make(map[string]HeroChoice, len(st.Choices)+len(st.Held))
 		for _, ch := range st.Choices {
 			names[strings.ToLower(strings.TrimSpace(ch.Name))] = ch
 		}
-		out[st.FieldKey] = names
+		for _, ch := range st.Held {
+			k := strings.ToLower(strings.TrimSpace(ch.Name))
+			if _, on := names[k]; !on {
+				ch.Held = true
+				names[k] = ch
+			}
+		}
+		bs := builderStep{names: names}
+		if st.Rules != nil {
+			bs.limited, bs.required = st.Rules.Limited, st.Rules.Required
+		}
+		out[st.FieldKey] = bs
 	}
 	return out
 }
 
-// needsBuilderPicks reports whether a patch reaches past the keys judged
-// without the creator plan, so the handler loads the plan only when it can
-// matter.
+// needsBuilderPicks reports whether a patch reaches past the long texts and
+// lists judged without the creator plan, so the handler loads the plan only
+// when it can matter. An identity key needs it too: a rule on that step turns
+// its free text into a pick from the list.
 func needsBuilderPicks(patch map[string]any) bool {
 	for k := range patch {
-		if !ownerIdentityFieldKeys[k] && !ownerStoryFieldKeys[k] && !ownerListFieldKeys[k] {
+		if !ownerStoryFieldKeys[k] && !ownerListFieldKeys[k] {
 			return true
 		}
 	}
@@ -129,6 +154,13 @@ func needsBuilderPicks(patch map[string]any) bool {
 // rejects the whole request rather than being silently dropped (the first,
 // by key, is named). What each key may hold is ownerFieldVerdicts.
 func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignID string, hasFieldsData bool, patch map[string]any, typeFields []FieldDefinition, picks builderPicks) error {
+	return authorizeFieldsWriteAs(role, entity, userID, campaignID, hasFieldsData, patch, typeFields, picks, false)
+}
+
+// authorizeFieldsWriteAs is authorizeFieldsWrite with a say over ask-first
+// entries: the web door lets one through (the handler records it as a
+// request instead of storing it), a player's AI is refused.
+func authorizeFieldsWriteAs(role campaigns.Role, entity *Entity, userID, campaignID string, hasFieldsData bool, patch map[string]any, typeFields []FieldDefinition, picks builderPicks, refuseAsk bool) error {
 	if role >= campaigns.RoleScribe {
 		return nil
 	}
@@ -138,7 +170,7 @@ func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignI
 	if hasFieldsData || len(patch) == 0 {
 		return apperror.NewForbidden("you can only change your character's identity fields")
 	}
-	held := ownerFieldVerdicts(entity, patch, typeFields, picks)
+	held := ownerFieldVerdicts(entity, patch, typeFields, picks, refuseAsk)
 	keys := make([]string, 0, len(held))
 	for k := range held {
 		keys = append(keys, k)
@@ -160,7 +192,7 @@ func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignI
 // never type a stat into it, or what a step's entry lets the hero buy, which
 // must be on its list and fit its points. A key the type marks GM-only is
 // refused whatever it is, since the owner may not see it.
-func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []FieldDefinition, picks builderPicks) map[string]error {
+func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []FieldDefinition, picks builderPicks, refuseAsk bool) map[string]error {
 	gmOnly := map[string]bool{}
 	onType := map[string]bool{}
 	for i := range typeFields {
@@ -186,11 +218,11 @@ func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []Field
 		case !isOptions && !known(k):
 			held[k] = apperror.NewForbidden(fmt.Sprintf("this character has no %q field", k))
 		case isOptions:
-			if err := checkStepOptions(entity, patch, step, v, picks[step]); err != nil {
+			if err := checkStepOptions(entity, patch, step, v, picks[step], refuseAsk); err != nil {
 				held[k] = err
 			}
 		default:
-			if err := checkOwnerValue(k, v, listed, isStep); err != nil {
+			if err := checkOwnerValue(entity, k, v, listed, isStep, refuseAsk); err != nil {
 				held[k] = err
 			}
 		}
@@ -199,8 +231,17 @@ func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []Field
 }
 
 // checkOwnerValue checks the value a claimed owner writes to key k.
-func checkOwnerValue(k string, v any, listed map[string]HeroChoice, isStep bool) error {
+//
+// A step whose list the rules limit (or require) takes only a name from that
+// list, identity keys included, and a required step can't be emptied. The
+// refusal for an off-list name is the same whether or not an entry the player
+// can't read has that name, so it can't be used to find hidden entries. A hero
+// keeps what it already holds: re-sending its current value is always fine.
+func checkOwnerValue(entity *Entity, k string, v any, step builderStep, isStep, refuseAsk bool) error {
 	if v == nil {
+		if isStep && step.required {
+			return apperror.NewBadRequest(fmt.Sprintf("%q can't be left empty; choose from the list", k))
+		}
 		return nil
 	}
 	val, ok := v.(string)
@@ -219,13 +260,76 @@ func checkOwnerValue(k string, v any, listed map[string]HeroChoice, isStep bool)
 		if utf8.RuneCountInString(val) > maxOwnerIdentityValue {
 			return apperror.NewBadRequest(fmt.Sprintf("%q is too long", k))
 		}
-		if isStep && !ownerIdentityFieldKeys[k] {
-			if _, on := listed[strings.ToLower(strings.TrimSpace(val))]; !on {
-				return apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", val, k))
-			}
+		if !isStep {
+			return nil
+		}
+		trimmed := strings.TrimSpace(val)
+		if trimmed == "" && step.required {
+			return apperror.NewBadRequest(fmt.Sprintf("%q can't be left empty; choose from the list", k))
+		}
+		if ownerIdentityFieldKeys[k] && !step.limited {
+			return nil
+		}
+		if trimmed == "" && ownerIdentityFieldKeys[k] {
+			return nil
+		}
+		unchanged := holdsValue(entity, k, trimmed)
+		ch, on := step.names[strings.ToLower(trimmed)]
+		if (!on || ch.Held) && !(unchanged && step.limited) {
+			return apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", val, k))
+		}
+		if on && !ch.Held && ch.State == HeroChoiceStateAskFirst && refuseAsk && !unchanged {
+			return apperror.NewForbidden(askYourDirector(ch.Name))
 		}
 	}
 	return nil
+}
+
+// askYourDirector is the refusal for writing an ask-first entry where the
+// pick can't be recorded as a request, such as a player's AI.
+func askYourDirector(name string) string {
+	return fmt.Sprintf("%q needs your Director's yes first; ask your Director for it", name)
+}
+
+// holdsValue reports whether the hero already holds this value in the field,
+// so re-sending it changes nothing.
+func holdsValue(entity *Entity, key, value string) bool {
+	if entity == nil || strings.TrimSpace(value) == "" {
+		return false
+	}
+	cur, _ := entity.FieldsData[key].(string)
+	return strings.EqualFold(strings.TrimSpace(cur), strings.TrimSpace(value))
+}
+
+// askPick is a pick of an ask-first entry taken out of a write.
+type askPick struct {
+	fieldKey string
+	name     string
+}
+
+// takeAskFirst removes the picks of ask-first entries from a claimed owner's
+// patch, with what they would have bought, and returns them to be recorded as
+// requests. The hero's fields never hold a pick that waits for a Director:
+// the sheet and Foundry read the field as real. A pick the hero already holds
+// is left alone, since an entry it holds counts as allowed.
+func takeAskFirst(entity *Entity, patch map[string]any, picks builderPicks) []askPick {
+	var asks []askPick
+	for k, v := range patch {
+		st, isStep := picks[k]
+		val, _ := v.(string)
+		if !isStep || strings.TrimSpace(val) == "" {
+			continue
+		}
+		ch, on := st.names[strings.ToLower(strings.TrimSpace(val))]
+		if !on || ch.Held || ch.State != HeroChoiceStateAskFirst || holdsValue(entity, k, val) {
+			continue
+		}
+		asks = append(asks, askPick{fieldKey: k, name: ch.Name})
+		delete(patch, k)
+		delete(patch, k+heroOptionsSuffix)
+	}
+	sort.Slice(asks, func(i, j int) bool { return asks[i].fieldKey < asks[j].fieldKey })
+	return asks
 }
 
 // ownerNameList parses a list a player writes: "" or a JSON array of
@@ -256,7 +360,7 @@ func ownerNameList(k, val string) ([]string, error) {
 // ancestry's traits): names on that entry's list, each once, within its
 // points. The entry is the one the same patch picks, else the one the hero
 // has.
-func checkStepOptions(entity *Entity, patch map[string]any, step string, v any, listed map[string]HeroChoice) error {
+func checkStepOptions(entity *Entity, patch map[string]any, step string, v any, st builderStep, refuseAsk bool) error {
 	k := step + heroOptionsSuffix
 	if v == nil {
 		return nil
@@ -274,9 +378,17 @@ func checkStepOptions(entity *Entity, patch map[string]any, step string, v any, 
 		entry = entity.FieldsData[step]
 	}
 	name, _ := entry.(string)
-	choice, on := listed[strings.ToLower(strings.TrimSpace(name))]
+	choice, on := st.names[strings.ToLower(strings.TrimSpace(name))]
+	// An entry the rules took off the list only counts while the hero already
+	// holds it, so a grandfathered hero can still change what it bought.
+	if on && choice.Held && has && !holdsValue(entity, step, name) {
+		on = false
+	}
 	if !on {
 		return apperror.NewBadRequest(fmt.Sprintf("choose the %s before what it lets you buy", step))
+	}
+	if refuseAsk && has && choice.State == HeroChoiceStateAskFirst && !holdsValue(entity, step, name) {
+		return apperror.NewForbidden(askYourDirector(choice.Name))
 	}
 	costs, budget, ok := heroBuyList(choice.Properties)
 	if !ok {
@@ -330,7 +442,7 @@ func ClearStaleStepOptions(entity *Entity, patch map[string]any) {
 // their role, and takes the hero builder plan that player is shown, so the
 // AI can change exactly what the player could change by hand and no more.
 func CheckClaimedOwnerPatch(entity *Entity, userID, campaignID string, patch map[string]any, typeFields []FieldDefinition, plan *HeroPlan) error {
-	return authorizeFieldsWrite(campaigns.RolePlayer, entity, userID, campaignID, false, patch, typeFields, builderPicksFrom(plan))
+	return authorizeFieldsWriteAs(campaigns.RolePlayer, entity, userID, campaignID, false, patch, typeFields, builderPicksFrom(plan), true)
 }
 
 // ClaimedOwnerPatchHeld is CheckClaimedOwnerPatch key by key: it returns
@@ -341,7 +453,7 @@ func ClaimedOwnerPatchHeld(entity *Entity, userID, campaignID string, patch map[
 		return nil, apperror.NewForbidden("insufficient permissions")
 	}
 	held = map[string]string{}
-	for k, e := range ownerFieldVerdicts(entity, patch, typeFields, builderPicksFrom(plan)) {
+	for k, e := range ownerFieldVerdicts(entity, patch, typeFields, builderPicksFrom(plan), true) {
 		held[k] = apperror.SafeMessage(e)
 	}
 	return held, nil
@@ -470,8 +582,14 @@ func OwnerFieldKindOf(key string, typeFields []FieldDefinition, plan *HeroPlan) 
 	}
 	if plan != nil {
 		for _, st := range plan.Steps {
-			if st.FieldKey == key && len(st.Choices) > 0 {
-				return OwnerFieldChoice, ownerIdentityFieldKeys[key]
+			if st.FieldKey != key {
+				continue
+			}
+			limited := st.Rules != nil && st.Rules.Limited
+			if len(st.Choices) > 0 || limited {
+				// A limited step is a pick from the list even where the
+				// system's own text would be free.
+				return OwnerFieldChoice, ownerIdentityFieldKeys[key] && !limited
 			}
 		}
 	}

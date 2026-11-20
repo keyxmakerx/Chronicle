@@ -161,7 +161,7 @@ func TestBuildHeroFields(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildHeroFields(plan, tt.picks)
+			got, _, err := buildHeroFields(plan, tt.picks)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("got error %v, want one containing %q", err, tt.wantErr)

@@ -29,7 +29,7 @@ func TestStepOptions(t *testing.T) {
 			map[string]any{"name": "Silver Tongue", "cost": float64(1)},
 			map[string]any{"name": "Hellfire", "cost": float64(2)},
 		}}}
-	picks := builderPicks{"ancestry": {"devil": devil, "dwarf": HeroChoice{Name: "Dwarf"}}}
+	picks := builderPicks{"ancestry": {names: map[string]HeroChoice{"devil": devil, "dwarf": {Name: "Dwarf"}}}}
 	types := []FieldDefinition{{Key: "ancestry"}}
 	e := &Entity{CampaignID: "c1", OwnerUserID: &uid, FieldsData: map[string]any{"ancestry": "Devil"}}
 	tests := []struct {
