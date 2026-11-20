@@ -27,7 +27,7 @@ templ EntryPage(cc *campaigns.CampaignContext, v *EntryView) {
 // EntryPageContent is an entry's page for an HTMX swap: the trail without
 // the publisher, then the entry, world first.
 templ EntryPageContent(v *EntryView) {
-	<div id="module-content">
+	<div id="module-content" class={ layouts.AppFrameClass } data-app-frame>
 		@rulesStyles()
 		<article class="rp" data-widget="rules-page">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
@@ -126,7 +126,7 @@ templ entryHead(v *EntryView, tag string, titleClass string) {
 		}
 		for _, m := range v.Marks {
 			<p class="rp-dm" data-dm-only>
-				<span class="cb-dm rp-dm__tag">Directors only</span>
+				<span class="cb-dm rp-dm__tag">{ layouts.GMTerm(ctx) + "s only" }</span>
 				if m.Text != "" {
 					<span>{ m.Text }</span>
 				}
@@ -184,7 +184,7 @@ templ entryDirectorSlot(v *EntryView) {
 				case ToolsCampaign:
 					<a class="rp-dmword rp-pen" href={ templ.SafeURL(t.EditURL) } aria-label={ "Edit " + t.Name }><i class="fa-solid fa-pen" aria-hidden="true"></i></a>
 			}
-			<span class="cb-dm rp-dm__tag">Directors only</span>
+			<span class="cb-dm rp-dm__tag">{ layouts.GMTerm(ctx) + "s only" }</span>
 			<span class="rp-tools__msg" role="status" data-rp-msg></span>
 		</div>
 		@directorDialogs(t)
@@ -205,7 +205,7 @@ templ directorDialogs(t *directorTools) {
 				</div>
 				<div class="rp-dlg__choice">
 					<button type="button" class="btn-secondary" data-rp-act="fresh" aria-expanded="false" aria-controls="rp-dlg-fresh">{ "Start from " + t.SystemName + "’s" }</button>
-					<p class="rp-dlg__hint">{ "A new copy of the printed " + t.Name + " that only Directors see to start. Two entries cannot share a name, so give the copy another." }</p>
+					<p class="rp-dlg__hint">{ "A new copy of the printed " + t.Name + " that only " + layouts.GMTerm(ctx) + "s see to start. Two entries cannot share a name, so give the copy another." }</p>
 					<div class="rp-dlg__fresh" id="rp-dlg-fresh" hidden>
 						<label class="rp-dlg__label" for="rp-dlg-name">Name for the copy</label>
 						<input class="rp-dlg__field" id="rp-dlg-name" type="text" maxlength="100" autocomplete="off" data-rp-name/>
@@ -254,7 +254,7 @@ templ directorDialogs(t *directorTools) {
 		<dialog class="dlg-modal rp-dlg" id="rp-dlg-aside" aria-labelledby="rp-dlg-aside-h">
 			<div class="rp-dlg__body">
 				<h2 class="rp-dlg__h" id="rp-dlg-aside-h">{ "Set " + t.CampaignName + "’s " + t.Name + " aside?" }</h2>
-				<p>{ "Players go back to reading the printed " + t.PrintedName + ". Your text stays, only Directors read it, and nothing is deleted." }</p>
+				<p>{ "Players go back to reading the printed " + t.PrintedName + ". Your text stays, only " + layouts.GMTerm(ctx) + "s read it, and nothing is deleted." }</p>
 				<p class="rp-dlg__who">{ t.AsideHeroes() }</p>
 				<p class="rp-dlg__err" role="alert" hidden data-rp-err></p>
 				<div class="rp-dlg__foot">

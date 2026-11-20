@@ -19,9 +19,7 @@ templ CreatureAddButton(v CreatureAddView) {
 		hx-disabled-elt="find button"
 	>
 		<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
-		<button type="submit" class="btn-ghost btn-sm" title="Make this creature's actor in Foundry now. A fight that uses it makes one anyway.">
-			<i class="fa-solid fa-dragon"></i> Add to Foundry
-		</button>
+		<button type="submit" class="btn-ghost btn-sm">Add to Foundry</button>
 		if v.Status != "" {
 			<span
 				role="status"

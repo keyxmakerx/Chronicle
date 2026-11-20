@@ -3343,7 +3343,9 @@ dialog.cb-bro[open] { display: flex; flex-direction: column; }
 .cb-bro-panel :last-child { margin-bottom: 0; }
 .cb-bro-cover h1 {
   margin: 0 0 0.75rem; padding-bottom: 0.5rem;
-  font-size: 1.5rem; font-weight: 800; line-height: 1.15; letter-spacing: 0.01em; text-transform: uppercase;
+  /* The campaign's heading face, as every other title sets it. */
+  font-family: var(--annals-head, var(--font-heading, inherit)); text-transform: var(--annals-hcase, none);
+  font-size: 1.5rem; font-weight: var(--annals-hw, var(--cz-hw, 700)); line-height: 1.15; letter-spacing: var(--annals-hls, var(--cz-hls, 0.01em));
   color: var(--color-text-primary);
   border-bottom: 2px solid var(--color-accent);
 }
@@ -5862,6 +5864,8 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     background: var(--dms-warn); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
   }
   .dms-tab[hidden], .dms-dock[hidden], .dms-dock [hidden] { display: none; }
+  /* The tab sits over the top banner's row; the banner keeps its close clear of it. */
+  @media (min-width: 701px) { body:has(.dms-tab:not([hidden])) .cta-bar { padding-inline-end: 44px; } }
 
   /* On a phone the dock covers the page; the top-bar icon alone brings it
      back, so no tab sits over the page's text. */
