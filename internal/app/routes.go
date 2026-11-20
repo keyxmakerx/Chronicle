@@ -4202,8 +4202,7 @@ func (a *App) RegisterRoutes() {
 	// data-widget="calendar_view" and opens calendar_game_night.js;
 	// calendar_editor.js self-gates on data-can-edit="true" and opens
 	// calendar_event_drawer.js and calendar_weather_sheet.js (both loaded
-	// first; the drawer's repeat logic is calendar_rule.js, loaded before it)
-	// and attaches calendar_year_track.js (also loaded first);
+	// first; the drawer's repeat logic is calendar_rule.js, loaded before it);
 	// calendar_open.js opens the Calendars page's cards. rulebook.js and
 	// rulebook_editor.js mount on their data-widget pages. Every script
 	// no-ops when its mount is absent.
@@ -4216,7 +4215,6 @@ func (a *App) RegisterRoutes() {
 		"/static/js/widgets/calendar_rule.js",
 		"/static/js/widgets/calendar_event_drawer.js",
 		"/static/js/widgets/calendar_weather_sheet.js",
-		"/static/js/widgets/calendar_year_track.js",
 		"/static/js/widgets/calendar_editor.js",
 		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",

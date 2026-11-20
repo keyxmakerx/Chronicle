@@ -111,10 +111,41 @@
     this._bindMvCapture();
     this._bindFlapCapture();
     this._buildBulkBar();
-    // The year track (calendar_year_track.js, loaded first like the weather
-    // sheet) hangs off the deck's tool row, the chosen days' row and the
-    // Eras card through the few calls below; without it they all stay quiet.
-    this.yearTrack = Chronicle.calendarYearTrack ? Chronicle.calendarYearTrack.attach(this) : null;
+    // The year track (calendar_year_track.js) hangs off the deck's tool row,
+    // the chosen days' row and the Eras card through the few calls below.
+    // It is fetched the first time Edit opens; until then they all stay quiet.
+    this.yearTrack = null;
+    this._ytWait = null;
+  };
+
+  // Runs cb with the year track, fetching its script first if this page has
+  // not yet. A page that is only looked at never pays for it.
+  CalendarEditor.prototype._withYearTrack = function (cb) {
+    var self = this;
+    var attach = function () {
+      // A script that arrives after the page was swapped away has no deck to hang off.
+      if (!self.yearTrack && Chronicle.calendarYearTrack && document.contains(self.deck)) {
+        self.yearTrack = Chronicle.calendarYearTrack.attach(self);
+        self.yearTrack.onDeck();
+        self.yearTrack.onEditing();
+        if (self.editing) self._renderBar();
+      }
+      return self.yearTrack;
+    };
+    if (attach()) { if (cb) cb(this.yearTrack); return; }
+    var src = this.view.yearTrackSrc;
+    if (!src) return;
+    if (this._ytWait) { if (cb) this._ytWait.push(cb); return; }
+    this._ytWait = cb ? [cb] : [];
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = function () {
+      var wait = self._ytWait || [];
+      self._ytWait = null;
+      if (attach()) wait.forEach(function (f) { f(self.yearTrack); });
+    };
+    s.onerror = function () { self._ytWait = null; };
+    document.head.appendChild(s);
   };
 
   // The helpers the year track shares with the weather writes in this file,
@@ -150,7 +181,7 @@
       : '';
     // The year as a track of the whole year: a view for everyone who can edit,
     // with the generating tools added for the Owner (calendar_year_track.js).
-    var year = Chronicle.calendarYearTrack
+    var year = Chronicle.calendarYearTrack || view.yearTrackSrc
       ? '<button type="button" class="btn sm quiet" data-deck-year aria-expanded="false"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i><span class="btxt">The year</span></button>'
       : '';
     var deck = document.createElement('div');
@@ -177,7 +208,7 @@
       var t = e.target.closest('[data-deck-mode]');
       if (t) { self.setEditing(t.dataset.deckMode === 'edit'); return; }
       if (e.target.closest('[data-deck-pv]')) { self._togglePlayersView(); return; }
-      if (e.target.closest('[data-deck-year]')) { if (self.yearTrack) self.yearTrack.toggle(); return; }
+      if (e.target.closest('[data-deck-year]')) { self._withYearTrack(function (yt) { yt.toggle(); }); return; }
       if (e.target.closest('[data-deck-add]')) self._addEventFromDeck();
     });
     if (eras) $('#cal5-erabtn', deck).addEventListener('click', function () { view.toggleEra(); });
@@ -242,6 +273,7 @@
     if (on) view._announce('Editing on. Click or drag across days to choose them.'); else view.say('Editing off.');
     // A year-track draft shows on the grid only while editing.
     if (this.yearTrack) this.yearTrack.onEditing();
+    else if (on) this._withYearTrack();
   };
 
   // ------------------------------------------------------------------

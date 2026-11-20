@@ -7,7 +7,8 @@
  * in to the generator engine's mass tools (chronicle_gen.js, loaded on first
  * use through the editor's loadEngine): fill the rest of the year, copy a
  * month, repeat an event every month, roll generated events again, and write a
- * history of the years before now.
+ * history of the years before now. This file is itself fetched by the editor
+ * the first time Edit opens, so a page that is only looked at never loads it.
  *
  * Every tool makes a DRAFT first. A draft lives only in this page: it is drawn
  * as lighter marks on the lines and as hollow marks on the month grid (view.
