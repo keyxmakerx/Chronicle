@@ -36,12 +36,12 @@ const CATALOGUE = {
 };
 const START = { look: 'quick', diceSet: '', diceColour: '', critSucc: '', critFail: '', quality: '', playersPick: true, diceOffered: [] };
 
-const page = (failPuts) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+const page = (failPuts, o = {}) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>:root{--color-bg-primary:#fff;--color-bg-secondary:#f9fafb;--color-bg-tertiary:#f3f4f6;--color-border:#d1d5db;--color-text-primary:#111;--color-text-body:#333;--color-text-secondary:#666;--color-accent:#6366f1;--color-accent-rgb:99 102 241;--color-ok-rgb:22 163 74;--color-bad-rgb:220 38 38;--dur-micro:120ms;--ease-out:ease-out;--elev-resting:0 1px 2px rgb(0 0 0/.1)}
 body{margin:0;padding:16px;font:14px sans-serif}${css}</style></head><body>
 <div class="dcz" data-widget="dice-customize" data-campaign-id="c1" data-gm-term="Director"></div>
 <script>
-window.__puts = []; window.__rolls = []; window.__state = ${JSON.stringify(START)};
+window.__puts = []; window.__rolls = []; window.__state = ${JSON.stringify(o.start || START)}; window.__drawn = [];
 window.Chronicle = {
   register: function (n, o) { window.__reg = o; },
   escapeHtml: function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); },
@@ -54,7 +54,7 @@ window.Chronicle = {
     }
     return json(window.__state);
   },
-  dice: { catalogue: function () { return Promise.resolve(${JSON.stringify(CATALOGUE)}); }, roll: function (g, o) { window.__rolls.push({ groups: g, opts: { table: o.table, inTray: !!o.host && o.host.matches('.dcz-tray [data-dcz-stage]'), keep: !!o.keep } }); return Promise.resolve([{ values: [7] }]); }, stop: function () {} }
+  dice: { catalogue: function () { return Promise.resolve(${JSON.stringify(o.catalogue || CATALOGUE)}); },${o.portrait ? " portrait: function (q) { window.__drawn.push(q.set + '|' + q.px); return new Promise(function (r) { setTimeout(function () { r('data:image/png;base64,iVBORw0KGgo='); }, 5); }); }," : ''} roll: function (g, o) { window.__rolls.push({ groups: g, opts: { table: o.table, inTray: !!o.host && o.host.matches('.dcz-tray [data-dcz-stage]'), keep: !!o.keep } }); return Promise.resolve([{ values: [7] }]); }, stop: function () {} }
 };
 </script><script>${js}</script><script>window.__reg.init(document.querySelector('.dcz'));</script></body></html>`;
 
@@ -65,7 +65,7 @@ after(async () => { await browser?.close(); });
 async function open(opts = {}) {
   const ctx = await browser.newContext({ viewport: opts.viewport || { width: 1000, height: 900 } });
   const p = await ctx.newPage();
-  await p.setContent(page(!!opts.fail));
+  await p.setContent(page(!!opts.fail, opts));
   await p.waitForSelector('[data-dcz-set]');
   return { p, close: () => ctx.close() };
 }
@@ -161,6 +161,23 @@ test('every set is a tile with a picture of its die, in one radio group, however
   assert.equal(got.on, 'Jewelled');
   assert.equal(got.note, true);
   assert.equal(got.oldTry, 0);
+});
+
+test('the pictures are drawn one at a time: the campaign\'s own die first, then the tiles on screen, then the rest', async () => {
+  // Twenty-four sets on a short screen, the campaign's die being the last of them.
+  const many = Array.from({ length: 24 }, (_, i) => ({ key: 's' + i, name: 'Set ' + i, note: '', colours: [{ key: 'c' + i, name: 'C', swatch: ['#ccc', '#333'] }] }));
+  const { p, close } = await open({ viewport: { width: 1000, height: 340 }, portrait: true, catalogue: { ...CATALOGUE, sets: many }, start: { ...START, diceSet: 's23' } });
+  await p.waitForFunction(() => window.__drawn.length === 25);
+  const got = await p.evaluate(() => ({
+    drawn: window.__drawn,
+    seen: [...document.querySelectorAll('.dcz-tile')].filter((t) => { const r = t.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; }).map((t) => t.querySelector('input').value),
+  }));
+  await close();
+  assert.deepEqual(got.drawn.slice(0, 2), ['s23|72', 's23|140'], 'the chosen tile and the tray come first');
+  const onScreen = got.seen.filter((k) => k !== 's23').map((k) => k + '|72');
+  assert.ok(onScreen.length > 0 && onScreen.length < 23, `some tiles are on screen and some not (${onScreen.length})`);
+  assert.deepEqual(got.drawn.slice(2, 2 + onScreen.length), onScreen, 'then the tiles on screen');
+  assert.equal(new Set(got.drawn).size, 25, 'each picture is drawn once');
 });
 
 test('the tray throws the campaign\'s die inside itself on each pick and each word, and stays put across redraws', async () => {

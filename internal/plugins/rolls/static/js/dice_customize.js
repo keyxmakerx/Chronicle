@@ -90,6 +90,9 @@
     // Pictures by set|colour|value|px: a data URL once drawn.
     this.pics = {};
     this.asked = {};
+    // Pictures asked for but not drawn yet, by key, and whether one is being drawn now.
+    this.wait = {};
+    this.drawing = false;
     this.trayKey = '';
     this.throwN = 0;
     this.wire();
@@ -168,23 +171,57 @@
   function picKey(set, colour, value, px) { return [set, colour, value, px].join('|'); }
 
   // The picture for a die if it is drawn, else ''. Asks for it once; when it arrives every <img>
-  // waiting on it is filled. Without WebGL, or when the draw fails, the flat d20 stands in.
+  // waiting on it is filled. Without WebGL the flat d20 stands in at once, and it stands in too
+  // when a draw fails.
   Dice.prototype.pic = function (set, colour, value, px) {
-    var key = picKey(set.key, colour.key, value, px), self = this;
+    var key = picKey(set.key, colour.key, value, px), self = this, d = C.dice;
     if (this.pics[key]) return this.pics[key];
+    if (!hasGL() || !d || typeof d.portrait !== 'function') return (this.pics[key] = flatD20(colour, value));
     if (!this.asked[key]) {
       this.asked[key] = true;
-      var d = C.dice, done = function (url) {
-        self.pics[key] = url;
-        if (!self.alive) return;
-        self.el.querySelectorAll('img[data-dcz-pic]').forEach(function (img) {
-          if (img.getAttribute('data-dcz-pic') === key) self.fill(img, url);
-        });
-      };
-      var p = hasGL() && d && typeof d.portrait === 'function' ? d.portrait({ set: set.key, colour: colour.key, value: value, px: px }) : Promise.reject(new Error('no WebGL'));
-      p.then(done, function () { done(flatD20(colour, value)); });
+      this.wait[key] = { set: set, colour: colour, value: value, px: px, n: Object.keys(this.asked).length };
+      // After the redraw that asked has put its <img> on the page, so the order can see it.
+      Promise.resolve().then(function () { self.drawNext(); });
     }
     return '';
+  };
+
+  // Which waiting picture to draw next: the campaign's own die (the tray and its tile), then
+  // tiles on screen, then the rest in catalogue order. Asked again before every draw, so a
+  // scroll or a new pick changes what comes next.
+  Dice.prototype.rank = function (key) {
+    var set = this.curSet(), mine = picKey(set.key, this.curColour(set).key, 20, TILE_PX);
+    if (key === mine || (this.still && key === this.still.getAttribute('data-dcz-pic'))) return 0;
+    var imgs = this.el.querySelectorAll('img[data-dcz-pic]'), h = window.innerHeight || 0, w = window.innerWidth || 0;
+    for (var i = 0; i < imgs.length; i++) {
+      if (imgs[i].getAttribute('data-dcz-pic') !== key) continue;
+      var r = imgs[i].getBoundingClientRect();
+      if (r.bottom > 0 && r.top < h && r.right > 0 && r.left < w) return 1;
+    }
+    return 2;
+  };
+
+  // Draws the waiting pictures one at a time: the engine has one shared table for them, and
+  // choosing each next one only when the last is done is what lets the order follow the screen.
+  Dice.prototype.drawNext = function () {
+    var self = this, keys = Object.keys(this.wait);
+    if (this.drawing || !keys.length || !this.alive) return;
+    var key = keys.map(function (k) { return [self.rank(k), self.wait[k].n, k]; })
+      .sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; })[0][2];
+    var job = this.wait[key];
+    delete this.wait[key];
+    this.drawing = true;
+    var done = function (url) {
+      self.pics[key] = url;
+      self.drawing = false;
+      if (!self.alive) return;
+      self.el.querySelectorAll('img[data-dcz-pic]').forEach(function (img) {
+        if (img.getAttribute('data-dcz-pic') === key) self.fill(img, url);
+      });
+      self.drawNext();
+    };
+    C.dice.portrait({ set: job.set.key, colour: job.colour.key, value: job.value, px: job.px })
+      .then(done, function () { done(flatD20(job.colour, job.value)); });
   };
 
   // A picture fades in once decoded, so a tile never flashes half drawn.
