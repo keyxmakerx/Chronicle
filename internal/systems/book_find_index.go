@@ -34,6 +34,8 @@ type bookFindEntry struct {
 // order the book lists them.
 type bookFindIndex struct {
 	entries []bookFindEntry
+	// cats are the categories the generated chapters list.
+	cats map[string]bool
 }
 
 type bookFindCacheEntry struct {
@@ -125,7 +127,16 @@ func bookFilesVersion(sysDir string) string {
 // generated chapters to the chapter and page that show it. An entry listed on
 // more than one page keeps the first, as the search always did.
 func buildBookFindIndex(sysDir string, manifest *SystemManifest, b *Book) *bookFindIndex {
-	idx := &bookFindIndex{}
+	return buildBookFindIndexWith(b, func(cat string) (*indexEntries, error) {
+		return loadIndexEntries(sysDir, manifest, cat)
+	})
+}
+
+// buildBookFindIndexWith is buildBookFindIndex reading each category's
+// entries from entries, so a kind can be read from the reader's catalog. A
+// chapter's closing lines are found on its last page.
+func buildBookFindIndexWith(b *Book, entries func(cat string) (*indexEntries, error)) *bookFindIndex {
+	idx := &bookFindIndex{cats: map[string]bool{}}
 	seen := map[string]bool{}
 	for _, ch := range indexChapters(b) {
 		for pi, p := range ch.Pages {
@@ -133,11 +144,16 @@ func buildBookFindIndex(sysDir string, manifest *SystemManifest, b *Book) *bookF
 			if !ok {
 				continue
 			}
-			ie, err := loadIndexEntries(sysDir, manifest, cat)
+			idx.cats[cat] = true
+			ie, err := entries(cat)
 			if err != nil {
 				continue
 			}
-			for _, it := range ie.slice(s) {
+			items := ie.slice(s)
+			if pi == len(ch.Pages)-1 {
+				items = append(items, ie.closing...)
+			}
+			for _, it := range items {
 				k := cat + "/" + it.ID
 				if seen[k] {
 					continue

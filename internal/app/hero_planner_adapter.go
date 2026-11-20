@@ -26,7 +26,7 @@ func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID, userID str
 	if err != nil {
 		return nil, err
 	}
-	out := &entities.HeroPlan{SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps))}
+	out := &entities.HeroPlan{SystemID: p.SystemID, SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps))}
 	for _, s := range p.Steps {
 		step := entities.HeroStep{
 			FieldKey: s.FieldKey, Label: s.Label, CanMake: s.CanMake,

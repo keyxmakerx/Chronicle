@@ -68,6 +68,15 @@ type Choice struct {
 	// Visibility is a campaign entry's EntryVisibility*. Kept off the wire:
 	// the Directors' rules screen needs it to say who can read the entry.
 	Visibility string `json:"-"`
+	// Origin says whose words these are: "standard" (the package's),
+	// "campaign" (the campaign's own) or "rewritten" (a campaign entry in a
+	// standard entry's place, named by StandsFor). Empty when no campaign
+	// overlay ran.
+	Origin    string `json:"origin,omitempty"`
+	StandsFor string `json:"standsFor,omitempty"`
+	// ToldRecently marks a campaign entry the players were told changed
+	// within the last two weeks (ToldWindow).
+	ToldRecently bool `json:"toldRecently,omitempty"`
 }
 
 // ChoiceList is the full answer for one field: the choices plus the system
@@ -131,6 +140,21 @@ func ChoiceViewerUser(ctx context.Context) string {
 func ChoiceViewerIsDirector(ctx context.Context) bool {
 	v, _ := ctx.Value(choiceViewerKey{}).(bool)
 	return v
+}
+
+// ChoiceOverlay merges the campaign's entries into the package's choices
+// for the viewer the context marks, deciding which standard rows a stand-in
+// replaces and which are left out. It replaces the plain append of
+// ChoiceSources, so a tied entry never shows twice.
+type ChoiceOverlay func(ctx context.Context, campaignID, systemID, fieldKey string, pkg []Choice) ([]Choice, error)
+
+var choiceOverlay ChoiceOverlay
+
+// RegisterChoiceOverlay sets the overlay. Call at start-up; the last call wins.
+func RegisterChoiceOverlay(fn ChoiceOverlay) {
+	choiceSourcesMu.Lock()
+	choiceOverlay = fn
+	choiceSourcesMu.Unlock()
 }
 
 // MakeOwnCheck reports whether a player may write their own entry for a
@@ -438,7 +462,18 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 
 	choiceSourcesMu.RLock()
 	sources := append([]ChoiceSource(nil), choiceSources...)
+	overlay := choiceOverlay
 	choiceSourcesMu.RUnlock()
+	if overlay != nil {
+		merged, err := overlay(ctx, campaignID, res.SystemID, fieldKey, res.Choices)
+		if err != nil {
+			// No list rather than the package's own: that one still holds
+			// entries the Director left out or replaced, and a hero made from
+			// it would carry them. The picker and creator say to try again.
+			return nil, err
+		}
+		res.Choices = merged
+	}
 	for _, src := range sources {
 		extra, err := src(ctx, campaignID, fieldKey)
 		if err != nil {

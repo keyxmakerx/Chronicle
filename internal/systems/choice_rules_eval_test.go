@@ -17,7 +17,7 @@ func rule(source, key, target, state string) ChoiceRule {
 	return ChoiceRule{FieldKey: "ancestry", Source: source, Key: key, Target: target, State: state}
 }
 
-func names(cs []Choice) []string {
+func choiceNames(cs []Choice) []string {
 	out := []string{}
 	for _, c := range cs {
 		out = append(out, c.Name)
@@ -106,8 +106,8 @@ func TestApplyChoiceRulesPrecedence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := applyChoiceRules(tt.choices, tt.rows, tt.viewer)
-			if !reflect.DeepEqual(names(got.Kept), tt.kept) && !sameSet(names(got.Kept), tt.kept) {
-				t.Errorf("kept = %v, want %v", names(got.Kept), tt.kept)
+			if !reflect.DeepEqual(choiceNames(got.Kept), tt.kept) && !sameSet(choiceNames(got.Kept), tt.kept) {
+				t.Errorf("kept = %v, want %v", choiceNames(got.Kept), tt.kept)
 			}
 			nh := []string{}
 			for _, n := range got.NotHere {

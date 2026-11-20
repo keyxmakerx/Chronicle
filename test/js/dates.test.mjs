@@ -42,3 +42,21 @@ test('an unreadable instant or form leaves the fallback text', () => {
 test('an unknown saved zone falls back to the device zone', () => {
   assert.equal(D.format(ISO, 'long', { locale: 'en-GB', timeZone: 'Mars/Olympus' }) !== null, true);
 });
+
+// 'recent': the weekday within the last week in the reader's zone, then the
+// day and month, and the year only when it is not this year.
+const NOW = '2026-11-20T09:00:00Z';
+const recent = [
+  ['2026-11-17T12:00:00Z', 'en-GB', 'UTC', 'Tuesday'],
+  ['2026-11-14T12:00:00Z', 'en-GB', 'UTC', 'Saturday'],
+  ['2026-11-13T12:00:00Z', 'en-GB', 'UTC', '13 Nov'],
+  ['2026-11-13T12:00:00Z', 'en-US', 'UTC', 'Nov 13'],
+  ['2025-12-30T12:00:00Z', 'en-GB', 'UTC', '30 Dec 2025'],
+  // 03:00Z on the 14th is still the 13th in Chicago: eight days back there.
+  ['2026-11-14T03:00:00Z', 'en-GB', 'America/Chicago', '13 Nov'],
+];
+for (const [iso, locale, timeZone, want] of recent) {
+  test(`recent ${iso} in ${locale} (${timeZone})`, () => {
+    assert.equal(D.format(iso, 'recent', { locale, timeZone, now: NOW }), want);
+  });
+}

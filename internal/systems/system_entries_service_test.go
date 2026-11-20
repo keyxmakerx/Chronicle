@@ -13,9 +13,12 @@ import (
 
 // fakeEntryRepo is an in-memory SystemEntryRepository.
 type fakeEntryRepo struct {
-	rows   []SystemEntry
-	nextID int64
-	grants []EntryGrant
+	rows     []SystemEntry
+	nextID   int64
+	grants   []EntryGrant
+	leftOut  []LeftOut
+	oldNames []EntryOldName
+	notes    []EntryNote
 }
 
 func (f *fakeEntryRepo) List(_ context.Context, camp, sys, field string, dirs bool) ([]SystemEntry, error) {
@@ -62,6 +65,9 @@ func (f *fakeEntryRepo) Count(_ context.Context, camp, sys, field string) (int, 
 	return len(l), nil
 }
 func (f *fakeEntryRepo) Create(_ context.Context, e *SystemEntry) error {
+	if e.StandsFor != "" && f.standIn(e.CampaignID, e.SystemID, e.FieldKey, e.StandsFor) != nil {
+		return errStandInTaken
+	}
 	f.nextID++
 	e.ID = f.nextID
 	f.rows = append(f.rows, *e)
@@ -79,6 +85,7 @@ func (f *fakeEntryRepo) Delete(_ context.Context, camp string, id int64) (bool, 
 	for i := range f.rows {
 		if f.rows[i].ID == id && f.rows[i].CampaignID == camp {
 			f.rows = append(f.rows[:i], f.rows[i+1:]...)
+			f.cascade(id)
 			return true, nil
 		}
 	}
@@ -128,7 +135,8 @@ func TestSystemEntryService_Create(t *testing.T) {
 			"signature_traits": []any{map[string]any{"name": "Grounded", "description": "Hard to move."}},
 			"purchased_traits": []any{map[string]any{"name": "Durable", "cost": 1.0}, map[string]any{"name": "Wings", "cost": 2, "description": "Fly."}}}}, 0},
 		{"empty list", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{}}}, 422},
-		{"list of plain strings", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{"Durable"}}}, 422},
+		{"list of plain strings", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{"Durable"}}}, 0},
+		{"list of strings and items", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{"Durable", map[string]any{"name": "X"}}}}, 422},
 		{"item without a name", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{map[string]any{"cost": 1.0}}}}, 422},
 		{"negative cost", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{map[string]any{"name": "X", "cost": -1.0}}}}, 422},
 		{"fractional cost", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{map[string]any{"name": "X", "cost": 1.5}}}}, 422},

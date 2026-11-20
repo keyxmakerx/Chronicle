@@ -1237,14 +1237,24 @@ GET	/campaigns/:id/system-entries	session	systems.(*SystemEntryHandler).ListAPI	
 POST	/campaigns/:id/system-entries	session	systems.(*SystemEntryHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/system-entries/:entryId	session	systems.(*SystemEntryHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/system-entries/:entryId	session	systems.(*SystemEntryHandler).UpdateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/system-entries/:entryId/notes	session	systems.(*SystemEntryHandler).AddNoteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/system-entries/:entryId/seen	session	systems.(*SystemEntryHandler).SeenAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/system-entries/:entryId/tie	session	systems.(*SystemEntryHandler).UntieAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/system-entries/:entryId/tie	session	systems.(*SystemEntryHandler).TieAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/system-entries/grants	session	systems.(*SystemEntryHandler).GrantsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/system-entries/grants	session	systems.(*SystemEntryHandler).GrantAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/system-entries/grants/:grantId	session	systems.(*SystemEntryHandler).RevokeGrantAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/system-entries/left-out	session	systems.(*SystemEntryHandler).LeaveOutAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/system-entries/left-out/:fieldKey/:slug	session	systems.(*SystemEntryHandler).BringBackAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/system-entries/old-names/:nameId	session	systems.(*SystemEntryHandler).FreeOldNameAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/system-entries/rewrite	session	systems.(*SystemEntryHandler).RewriteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/system-state/:system/:key	session	plugins/systemstate.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/systems/:mod	session	systems.(*SystemHandler).Index	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/:cat	session	systems.(*SystemHandler).CategoryList	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/:cat/:item	session	systems.(*SystemHandler).ItemDetail	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/:cat/:item/peek	session	systems.(*SystemHandler).EntryPeek	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/:cat/:item/tooltip	public-capable	systems.(*SystemHandler).TooltipAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > systems.requireSystemAddon > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/systems/:mod/before-you-play	session	systems.(*SystemHandler).BeforeYouPlay	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book	session	systems.(*SystemHandler).BookAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 POST	/campaigns/:id/systems/:mod/book/chapters	session	systems.(*SystemHandler).BookChapterCreate	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 DELETE	/campaigns/:id/systems/:mod/book/chapters/:chapter	session	systems.(*SystemHandler).BookChapterDelete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
@@ -1261,8 +1271,11 @@ GET	/campaigns/:id/systems/:mod/book/index/:cat	session	systems.(*SystemHandler)
 GET	/campaigns/:id/systems/:mod/book/source	session	systems.(*SystemHandler).BookSourceAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/browse	session	systems.(*SystemHandler).Browse	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/data/:file	public-capable	systems.(*SystemHandler).SystemDataAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > systems.requireSystemAddon > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/systems/:mod/named/:kind	session	systems.(*SystemHandler).NamedEntry	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/named/:kind/peek	session	systems.(*SystemHandler).NamedEntryPeek	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/rules-glossary	public-capable	systems.(*SystemHandler).RulesGlossaryAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > systems.requireSystemAddon > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/systems/:mod/search	session	systems.(*SystemHandler).SearchAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/told	session	systems.(*SystemHandler).ToldAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/widgets/:slug	public-capable	systems.(*SystemHandler).WidgetScriptAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > systems.requireSystemAddon > plugins/campaigns.RequireViewAccess
 DELETE	/campaigns/:id/systems/custom	session	systems.(*CampaignSystemHandler).DeleteSystem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/systems/custom	session	systems.(*CampaignSystemHandler).GetCustomSystem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess

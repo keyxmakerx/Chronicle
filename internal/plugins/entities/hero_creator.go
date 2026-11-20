@@ -63,6 +63,7 @@ type HeroStep struct {
 // HeroPlan is every step for one campaign, in the order the system declares
 // its character fields.
 type HeroPlan struct {
+	SystemID   string     `json:"systemId,omitempty"`
 	SystemName string     `json:"systemName"`
 	Steps      []HeroStep `json:"steps"`
 }

@@ -7093,6 +7093,17 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
 }
 .peek-icon[hidden] { display: none; }
 .peek-icon:hover, .peek-icon:focus-visible { color: var(--color-accent-link, var(--color-accent)); border-color: var(--color-accent); }
+/* The small mark beside a hero's entry name whose change the players were
+   told about lately (entry_told.js). A dot in the accent, nothing louder; it
+   does not move. */
+.entry-told {
+  display: inline-block; width: 6px; height: 6px; margin-left: 0.3em; vertical-align: 0.2em;
+  border-radius: 50%; background: var(--color-accent);
+}
+.entry-told-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 @media (max-width: 640px) {
   .peek-panel {
     left: 0; width: 100%; top: auto; height: 78vh;

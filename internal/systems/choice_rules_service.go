@@ -641,7 +641,8 @@ func (s *choiceRuleService) ForgetEntry(ctx context.Context, campaignID, systemI
 	return s.repo.DeleteForEntry(ctx, campaignID, systemID, fieldKey, ChoiceSourceCampaign, fmt.Sprint(entryID))
 }
 
-func fieldLabel(m *SystemManifest, key string) string {
+// presetFieldLabel is the label a character preset gives a field, or its key.
+func presetFieldLabel(m *SystemManifest, key string) string {
 	for _, p := range m.EntityPresets {
 		for _, f := range p.Fields {
 			if f.Key == key && strings.TrimSpace(f.Label) != "" {
@@ -693,7 +694,7 @@ func (s *choiceRuleService) WaitingRequests(ctx context.Context, campaignID stri
 	names := memberNames(s.members(ctx, campaignID))
 	out := make([]WaitingChoiceRequest, 0, len(reqs))
 	for _, q := range reqs {
-		out = append(out, WaitingChoiceRequest{ChoiceRequest: q, FieldLabel: fieldLabel(m, q.FieldKey), PlayerName: names[q.UserID]})
+		out = append(out, WaitingChoiceRequest{ChoiceRequest: q, FieldLabel: presetFieldLabel(m, q.FieldKey), PlayerName: names[q.UserID]})
 	}
 	return out, nil
 }

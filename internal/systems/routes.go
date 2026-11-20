@@ -31,8 +31,15 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 	// The Rulebook book, filtered per viewer (static segment, before /:cat).
 	mg.GET("/book", h.BookAPI)
 	registerBookEditorRoutes(mg, h)
+	// What the campaign wrote, rewrote and left out (static, before /:cat).
+	mg.GET("/before-you-play", h.BeforeYouPlay)
+	// An entry by kind and name, for sheets that store names (static, before /:cat).
+	mg.GET("/named/:kind", h.NamedEntry)
+	mg.GET("/named/:kind/peek", h.NamedEntryPeek)
+	mg.GET("/told", h.ToldAPI)
 	mg.GET("/:cat", h.CategoryList)
 	mg.GET("/:cat/:item", h.ItemDetail)
+	mg.GET("/:cat/:item/peek", h.EntryPeek)
 
 	// What a page's sheet needs to draw: the system's scripts, its raw data
 	// and glossary, and tooltips. Anyone who may read the campaign's pages

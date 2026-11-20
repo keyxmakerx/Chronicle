@@ -1,7 +1,9 @@
-// own_entries.templ — the "Your own entries" page: one paper page with a tab
-// per pick list, and the creator's pull-out leaf for writing an entry. A
-// Director manages every entry there and lets players make their own; a
-// player sees only the entries a Director let them write. The page is a
+// own_entries.templ — the entry editor's page: one paper page with a tab per
+// pick list, and the creator's pull-out leaf for writing an entry. For a
+// Director it is "Entries and players' drafts", reached from "Before you play
+// in <campaign>": every entry, the drafts players hand in, and the permission
+// to make their own. A player's "Your own entries" holds only the entries a
+// Director let them write. The page is a
 // mount point; static/js/own_entries.js (loaded on sight, ADR-063) reads the pick lists from the creator's plan and the entries and
 // permissions from the systems plugin's entry API.
 
@@ -25,21 +27,37 @@ type OwnEntriesView struct {
 	// page links back to it. BackToCreator links back to the hero creator.
 	ForID, ForName string
 	BackToCreator  bool
+	// Entry opens the editor on that entry, New on a new one; Made says a
+	// rewrite just made it. Return is the rules page to go back to after.
+	Entry  string
+	New    bool
+	Made   bool
+	Return string
+}
+
+// ownEntriesTitle is the page's honest name for who reads it.
+func ownEntriesTitle(v OwnEntriesView) string {
+	if v.Director {
+		return "Entries and players’ drafts"
+	}
+	return "Your own entries"
 }
 
 // OwnEntriesPage renders the page inside the App shell.
 templ OwnEntriesPage(cc *campaigns.CampaignContext, v OwnEntriesView) {
-	@layouts.App("Your own entries - " + cc.Campaign.Name) {
+	@layouts.App(ownEntriesTitle(v) + " - " + cc.Campaign.Name) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
 		<div class="max-w-7xl mx-auto px-4 py-6">
 			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
-				if sys, ok := layouts.GetEnabledSystem(ctx); ok {
+				if sys, ok := layouts.GetEnabledSystem(ctx); ok && v.Director {
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s/before-you-play", cc.Campaign.ID, sys.Slug)) } class="hover:text-fg">{ "Before you play in " + cc.Campaign.Name }</a>
+				} else if ok {
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, sys.Slug)) } class="hover:text-fg">{ rulesCrumb(sys) }</a>
 				} else {
 					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID) } class="hover:text-fg">{ cc.Campaign.Name }</a>
 				}
 				<span aria-hidden="true">/</span>
-				<span class="text-fg">Your own entries</span>
+				<span class="text-fg">{ ownEntriesTitle(v) }</span>
 			</nav>
 			<div
 				class="hc hc--tool"
@@ -60,9 +78,13 @@ templ OwnEntriesPage(cc *campaigns.CampaignContext, v OwnEntriesView) {
 					data-back-url={ fmt.Sprintf("/campaigns/%s/characters/new", cc.Campaign.ID) }
 				}
 				data-csrf={ v.CSRFToken }
+				data-entry={ v.Entry }
+				data-new={ fmt.Sprint(v.New) }
+				data-made={ fmt.Sprint(v.Made) }
+				data-return-url={ v.Return }
 			>
 				<div class="hc-page paper paper-stack hc-loading" role="status">
-					<p class="paper-kind">Your own entries</p>
+					<p class="paper-kind">{ ownEntriesTitle(v) }</p>
 					<p class="hc-loading__text">Opening your entries…</p>
 				</div>
 				<noscript>

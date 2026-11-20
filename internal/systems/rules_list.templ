@@ -1,0 +1,103 @@
+// rules_list.templ draws a rules category as a page: rows that start with
+// the name, then the one line, ending only with what the floor allows. The
+// rows were chosen for this reader by RulesPages.List (rules_list.go).
+
+package systems
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CategoryListPage is a category's full page.
+templ CategoryListPage(cc *campaigns.CampaignContext, v *RulesListView) {
+	@layouts.App(v.Category.Name + " - " + cc.Campaign.Name) {
+		@CategoryListContent(v)
+	}
+}
+
+// CategoryListContent is a category's page for an HTMX swap.
+templ CategoryListContent(v *RulesListView) {
+	<div id="module-content">
+		@rulesStyles()
+		<section class="rp rp-list" data-widget="rules-page" aria-labelledby="rp-list-title">
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: v.CampaignName, Href: "/campaigns/" + v.CampaignID},
+				{Label: v.Category.Name},
+			})
+			<header class="rp-head">
+				<h1 class="rp-title" id="rp-list-title">
+					{ v.Category.Name }
+					<span class="rp-count" aria-label={ itoa(v.Count) + " entries" }>{ itoa(v.Count) }</span>
+				</h1>
+			</header>
+			if v.Filterable {
+				<form class="rp-filter" method="get" action={ templ.SafeURL(v.CategoryURL) } role="search" data-rp-filter-form>
+					<label class="sr-only" for="rp-filter">{ "Find in " + v.Category.Name }</label>
+					<input
+						class="rp-filter__field"
+						id="rp-filter"
+						type="search"
+						name="q"
+						value={ v.Query }
+						placeholder="Find by name"
+						autocomplete="off"
+						data-rp-filter
+					/>
+					<button type="submit" class="btn-secondary rp-filter__go" data-rp-filter-go>Find</button>
+				</form>
+			}
+			if len(v.Rows) > 0 {
+				<ul class="rp-rows" data-rp-rows>
+					for _, r := range v.Rows {
+						@listRowItem(r)
+					}
+				</ul>
+			}
+			<p class="rp-none" data-rp-none hidden?={ len(v.Rows) > 0 || v.Count == 0 }>
+				if v.Query != "" {
+					{ "Nothing in " + v.Category.Name + " matches “" + v.Query + "”." }
+				} else {
+					{ "Nothing in " + v.Category.Name + " matches." }
+				}
+			</p>
+			if v.Count == 0 && v.Query == "" {
+				<p class="rp-none">{ "There is nothing in " + v.Category.Name + " yet." }</p>
+			}
+			if len(v.LeftOut) > 0 {
+				<section class="rp-section rp-leftout" aria-labelledby="rp-out-h">
+					<h2 class="rp-h2" id="rp-out-h">{ "Not in " + v.CampaignName }</h2>
+					<ul class="rp-rows" data-rp-rows>
+						for _, r := range v.LeftOut {
+							@listRowItem(r)
+						}
+					</ul>
+				</section>
+			}
+		</section>
+	</div>
+}
+
+// listRowItem is one row: the whole row is the link, so it is one target
+// that answers everywhere on it.
+templ listRowItem(r listRow) {
+	<li class="rp-rowli" data-find={ r.Find } data-dm-only?={ r.DirectorsOnly }>
+		<a class="rp-row" href={ templ.SafeURL(r.URL) }>
+			<span class="rp-row__name">{ r.Name }</span>
+			if r.Line != "" {
+				<span class="rp-row__line">{ r.Line }</span>
+			}
+			if r.End != "" || r.DirectorsOnly {
+				<span class="rp-row__end">
+					if r.DirectorsOnly {
+						<span class="cb-dm rp-dm__tag">Directors only</span>
+					}
+					if r.End != "" {
+						<span>{ r.End }</span>
+					}
+				</span>
+			}
+		</a>
+	</li>
+}
