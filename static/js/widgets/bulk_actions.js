@@ -200,8 +200,20 @@
       // A change applies at once; the page reloads with an Undo message
       // that puts back exactly what changed.
 
+      // The Select word reads Done while the boxes are on or any page is
+      // picked (a pick made with the pointer on desktop included), so it
+      // always offers the way out.
+      function syncSelectWord(count) {
+        var w = el.querySelector('.el-select-word');
+        if (!w) return;
+        var on = count > 0 || el.hasAttribute('data-selecting');
+        w.textContent = on ? 'Done' : 'Select';
+        w.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+
       function updateActionBar() {
         var count = getSelectedIds().length;
+        syncSelectWord(count);
         if (count === 0) {
           closePicker();
           if (actionBar) { actionBar.remove(); actionBar = null; }
@@ -210,7 +222,7 @@
 
         if (!actionBar) {
           actionBar = document.createElement('div');
-          actionBar.className = 'bulk-action-bar fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-surface border border-edge rounded-xl shadow-elev-hover px-4 py-2 w-max flex flex-wrap items-center gap-4 text-sm max-w-[calc(100vw-2rem)]';
+          actionBar.className = 'bulk-action-bar fixed left-1/2 -translate-x-1/2 z-50 bg-surface border border-edge rounded-xl shadow-elev-hover px-4 py-2 w-max flex flex-wrap items-center gap-x-4 text-sm max-w-[calc(100vw-2rem)]';
           actionBar.setAttribute('role', 'toolbar');
           actionBar.setAttribute('aria-label', 'Change the selected pages');
           document.body.appendChild(actionBar);

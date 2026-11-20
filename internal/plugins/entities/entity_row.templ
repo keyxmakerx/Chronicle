@@ -1,5 +1,5 @@
 // entity_row.templ draws one page as a row on a hairline: the name first,
-// the Director's lock after it, then tags, and at the end its category, when
+// the Director's lock after it, then the owner's coloured tags on their own line, and at the end its category, when
 // it was edited and the page's own picture. The same row draws All pages and
 // every category's list, so a style kit that dresses one dresses both.
 
@@ -7,6 +7,7 @@ package entities
 
 import (
 	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/colour"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
@@ -35,7 +36,7 @@ templ EntityRow(entity *Entity, cc *campaigns.CampaignContext) {
 				if len(entity.Tags) > 0 {
 					<span class="el-tags">
 						for _, tag := range entity.Tags {
-							<span class="el-tag">{ tag.Name }</span>
+							<span class="el-tag chip-ink" style={ colour.ChipStyle(tag.Color) }>{ tag.Name }</span>
 						}
 					</span>
 				}

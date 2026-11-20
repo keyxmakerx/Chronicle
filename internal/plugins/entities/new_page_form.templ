@@ -30,7 +30,7 @@ templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, pre
 // the dialog new_page_sheet.js opens. It is only ever fetched, never a page.
 templ EntityNewSheet(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken string, draft NewPageDraft) {
 	<div class="np-sheet-head">
-		<h2 id="np-sheet-title" class="np-sheet-title cb-title">New page</h2>
+		<h2 id="np-sheet-title" class="np-sheet-title">New page</h2>
 		<button type="button" class="np-close" aria-label="Close" onclick={ newPageCloseJS() }>
 			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 		</button>
@@ -115,24 +115,32 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 				<div class="np-line np-cat">
 					<span class="np-in" aria-hidden="true">in</span>
 					<label for="entity_type_id" class="sr-only">Category</label>
-					<select id="entity_type_id" name="entity_type_id" required class="np-select">
-						<option value="">Pick a category</option>
-						// Top-level types only: sub-categories are layout variants
-						// of their parent and arrive through the picker above when
-						// that parent is the one the page was started from.
-						for _, et := range entityTypes {
-							if et.Enabled && et.ParentTypeID == nil {
-								<option
-									value={ strconv.Itoa(et.ID) }
-									selected?={ et.ID == preselect }
-								>{ et.Name }</option>
+					<span class="el-pick-wrap">
+						<select id="entity_type_id" name="entity_type_id" required class="ctl-pick np-select">
+							<option value="">Pick a category</option>
+							// Top-level types only: sub-categories are layout variants
+							// of their parent and arrive through the picker above when
+							// that parent is the one the page was started from.
+							for _, et := range entityTypes {
+								if et.Enabled && et.ParentTypeID == nil {
+									<option
+										value={ strconv.Itoa(et.ID) }
+										selected?={ et.ID == preselect }
+									>{ et.Name }</option>
+								}
 							}
-						}
-					</select>
+						</select>
+						<svg class="el-picker-ic" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"></path></svg>
+					</span>
 				</div>
 			}
 			@newPageWho(draft.IsPrivate, cc.CanAuthorDmOnly())
-			<details class="np-more" if !draft.Sheet { open }>
+			<details
+				class="np-more"
+				if !draft.Sheet {
+					open
+				}
+			>
 				<summary class="quiet-word np-more-word">More: template, descriptor, parent page</summary>
 				<div class="np-more-body">
 					// Content template picker (template_picker.js loads the
@@ -146,7 +154,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 						class="hidden"
 					>
 						<label for="template_id" class="np-lab">Content template</label>
-						<select id="template_id" name="template_id" class="input w-full">
+						<select id="template_id" name="template_id" class="ctl-field">
 							<option value="0">Blank, start from scratch</option>
 						</select>
 						<p class="np-hint">Starts the page with a set of headings.</p>
@@ -158,13 +166,13 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 							id="type_label"
 							name="type_label"
 							value={ draft.TypeLabel }
-							class="input w-full"
+							class="ctl-field"
 							placeholder="City, NPC, artifact"
 							maxlength="100"
 						/>
 						<p class="np-hint">A word or two shown after the category.</p>
 					</div>
-					@parentPicker(cc.Campaign.ID, parentEntity, "Parent page")
+					@parentPicker(cc.Campaign.ID, parentEntity, "Parent page", "np-lab", "ctl-field", "Leave empty to keep it at the top level.")
 				</div>
 			</details>
 			<div class="np-actions">

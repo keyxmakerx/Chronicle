@@ -36,7 +36,7 @@ templ SearchPage(cc *campaigns.CampaignContext, entityTypes []EntityType) {
 							<input
 								type="text"
 								x-model="query"
-								class="sp-input"
+								class="ctl-field sp-input"
 								placeholder="Search names, text and fields"
 								autocomplete="off"
 								autofocus
@@ -45,7 +45,7 @@ templ SearchPage(cc *campaigns.CampaignContext, entityTypes []EntityType) {
 						<div class="sp-pick" @keydown.escape.window="closePickers()" @click.outside="closeIf('type')">
 							<button
 								type="button"
-								class="sp-btn"
+								class="ctl-pick sp-btn"
 								:class="typeFilter ? 'sp-btn-on' : ''"
 								aria-haspopup="listbox"
 								:aria-expanded="openPicker === 'type'"
@@ -83,7 +83,7 @@ templ SearchPage(cc *campaigns.CampaignContext, entityTypes []EntityType) {
 						<div class="sp-pick" x-show="allTags.length > 0" x-cloak @click.outside="closeIf('tags')">
 							<button
 								type="button"
-								class="sp-btn"
+								class="ctl-pick sp-btn"
 								:class="activeTags.length ? 'sp-btn-on' : ''"
 								aria-haspopup="listbox"
 								:aria-expanded="openPicker === 'tags'"

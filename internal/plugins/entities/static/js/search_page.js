@@ -148,7 +148,7 @@
 
       tagLabel: function () {
         var n = this.activeTags.length;
-        if (n === 0) return 'Tags';
+        if (n === 0) return 'Any tag';
         return n === 1 ? this.tagName(this.activeTags[0]) : n + ' tags';
       },
 
@@ -318,7 +318,7 @@
 
       emptyText: function () {
         if (!this.hasQuery()) return 'No page is in that category with those tags.';
-        return 'Nothing has “' + this.query.trim() + '” in its name or text' + (this.hasFilters() ? ', in that category with those tags.' : '.');
+        return 'Nothing matches “' + this.query.trim() + '”. Try fewer or different words.';
       },
 
       createHref: function () {

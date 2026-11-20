@@ -15,6 +15,7 @@
   --sp-line: var(--color-border-light, #e5e7eb);
   --sp-dm: rgb(var(--color-warn-rgb, 217 119 6));
   --sp-hit: 44px;
+  --ctl-hit: var(--sp-hit);
   max-width: 56rem;
   min-width: 0;
   color: var(--color-text-body, #374151);
@@ -36,33 +37,12 @@
   flex: 1 1 16rem; min-width: 0;
 }
 .sp-glass { position: absolute; left: 12px; color: var(--color-text-muted, #6b7280); pointer-events: none; }
-.sp-input {
-  width: 100%; min-height: var(--sp-hit); padding: 0 12px 0 36px;
-  font: inherit; font-size: 0.875rem; color: var(--color-text-primary, #111827);
-  background: var(--color-input-bg, var(--color-bg-secondary, #fff));
-  border: var(--shape-edge, 1px) solid var(--color-input-border, var(--color-border, #d1d5db));
-  border-radius: var(--shape-r-ctl, 8px);
-  transition: border-color var(--dur-micro, 120ms) var(--ease-standard, ease), box-shadow var(--dur-micro, 120ms) var(--ease-standard, ease);
-}
-.sp-input::placeholder { color: var(--color-text-muted, #6b7280); }
-.sp-input:focus { outline: none; border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent, #6366f1) 25%, transparent); }
+.sp-input { padding-left: 36px; }
 
 /* A picker is a value picker, so it is a button: it says what is picked. */
 .sp-pick { position: relative; }
-.sp-btn {
-  display: inline-flex; align-items: center; gap: 8px; max-width: 14rem;
-  min-height: var(--sp-hit); padding: 0 12px;
-  font: inherit; font-size: 0.875rem; color: var(--color-text-secondary, #4b5563);
-  background: var(--color-card-bg, var(--color-bg-secondary, #fff));
-  border: var(--shape-edge, 1px) solid var(--color-border, #d1d5db);
-  border-radius: var(--shape-r-ctl, 8px);
-  box-shadow: var(--elev-resting, none);
-  cursor: pointer;
-  transition: background var(--dur-micro, 120ms) var(--ease-standard, ease), border-color var(--dur-micro, 120ms) var(--ease-standard, ease);
-}
+.sp-btn { display: inline-flex; align-items: center; gap: 8px; max-width: 14rem; }
 .sp-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-btn:hover { background: var(--color-bg-tertiary, #f3f4f6); }
-.sp-btn[aria-expanded="true"] { border-color: var(--color-accent, #6366f1); }
 .sp-btn-on { color: var(--color-accent-link, var(--color-accent, #6366f1)); border-color: var(--color-accent, #6366f1); }
 .sp-chev { flex: none; opacity: 0.7; }
 
@@ -107,10 +87,12 @@
   font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--color-accent-link, var(--color-accent, #6366f1));
 }
-.sp-group .cb-count {
-  display: inline-block; font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; letter-spacing: 0; text-transform: none;
-  border-radius: 999px; background: var(--color-bg-tertiary, #f3f4f6); color: var(--color-text-muted, #6b7280);
-  font-variant-numeric: tabular-nums;
+/* The count is a plain number beside the label: the page looks and kits dress
+   .cb-count as a far-right pill, so these doubled selectors outrank them. */
+.sp .sp-group > .cb-count.cb-count {
+  margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: none;
+  font-size: 0.75rem; font-weight: 500; line-height: inherit; letter-spacing: 0; text-transform: none; font-style: normal;
+  color: var(--color-text-muted, #6b7280); font-variant-numeric: tabular-nums;
 }
 
 /* A row: the name, what it is, the page's own picture, then the line. */
@@ -134,6 +116,9 @@
 .sp-kind { font-size: 0.75rem; color: var(--color-text-muted, #6b7280); text-align: right; }
 .sp-pic { width: 36px; height: 36px; object-fit: cover; border-radius: var(--shape-r-small, 6px); border: var(--shape-edge, 1px) solid var(--sp-line); }
 .sp-nopic { width: 36px; height: 0; }
+/* The Annals look makes a .cb-link's edge transparent; All pages keeps its
+   hairline between rows, so Search draws the same token (a kit sets its own rule). */
+:root:not([data-cz-kit]) #main-content .sp-row { border-bottom-color: var(--color-border-light, #e5e7eb); }
 .sp-line {
   grid-column: 1 / -1; margin-top: 2px;
   font-size: 0.8125rem; line-height: 1.5; color: var(--color-text-secondary, #4b5563);
@@ -144,6 +129,14 @@
   background: none; color: var(--color-text-primary, #111827); font-weight: 600;
   text-decoration: underline; text-decoration-color: var(--color-accent, #6366f1); text-underline-offset: 2px;
 }
+
+/* A style kit's colours for the marked words, the picked picker and the menus. */
+[data-cz-kit] .sp :focus-visible { outline-color: var(--kit-acc); }
+[data-cz-kit] .sp-mark { color: var(--k-ink); text-decoration-color: var(--kit-acc); }
+[data-cz-kit] .sp-btn-on { color: var(--kit-acc); border-color: var(--kit-acc); }
+[data-cz-kit] .sp-menu { background: var(--k-paper); border-color: var(--k-hair); color: var(--k-ink); }
+[data-cz-kit] .sp-opt { color: var(--k-ink); }
+[data-cz-kit] .sp-opt[aria-selected="true"] { color: var(--kit-acc); box-shadow: inset 2px 0 0 var(--kit-acc); }
 
 .sp-more { display: flex; align-items: center; gap: 16px; padding: 4px 10px 0; }
 .sp-more .quiet-word { min-height: var(--sp-hit); }

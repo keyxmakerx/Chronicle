@@ -203,11 +203,11 @@ templ DynamicField(field FieldDefinition, fieldsData map[string]any) {
 // for client-side search with the existing entity search JSON endpoint.
 // parentSelector is the Edit form's picker; the Create form labels it its own way.
 templ parentSelector(campaignID string, parentEntity *Entity) {
-	@parentPicker(campaignID, parentEntity, "Parent page (optional)")
+	@parentPicker(campaignID, parentEntity, "Parent page (optional)", "block text-sm font-medium text-fg-body mb-1", "input w-full", "Nest this page under another page to create a hierarchy.")
 }
 
 // parentPicker is the search-as-you-type parent page field both forms share.
-templ parentPicker(campaignID string, parentEntity *Entity, label string) {
+templ parentPicker(campaignID string, parentEntity *Entity, label, labelClass, fieldClass, hint string) {
 	<div
 		x-data={ fmt.Sprintf(`{
 			open: false,
@@ -240,7 +240,7 @@ templ parentPicker(campaignID string, parentEntity *Entity, label string) {
 		}`, parentSelectorID(parentEntity), jsEsc(parentSelectorName(parentEntity)), campaignID) }
 		class="relative"
 	>
-		<label class="block text-sm font-medium text-fg-body mb-1">{ label }</label>
+		<label class={ labelClass }>{ label }</label>
 		<input type="hidden" name="parent_id" x-bind:value="selectedID"/>
 
 		<!-- Selected parent display -->
@@ -259,7 +259,7 @@ templ parentPicker(campaignID string, parentEntity *Entity, label string) {
 				@input.debounce.300ms="search()"
 				@focus="open = true"
 				@click.outside="open = false"
-				class="input w-full"
+				class={ fieldClass }
 				placeholder="Search for a parent page..."
 			/>
 
@@ -285,7 +285,7 @@ templ parentPicker(campaignID string, parentEntity *Entity, label string) {
 			</div>
 		</div>
 
-		<p class="mt-1 text-xs text-fg-secondary">Nest this page under another page to create a hierarchy.</p>
+		<p class="mt-1 text-xs text-fg-secondary">{ hint }</p>
 	</div>
 }
 

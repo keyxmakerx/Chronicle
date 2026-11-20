@@ -32,7 +32,7 @@ func allPagesViewJS(view string) templ.ComponentScript {
 // waits for a pointer is never seen. Done also clears what was picked.
 func allPagesSelectJS() templ.ComponentScript {
 	return inlineHandler("allPagesSelect", `(function(b){`+
-		`var l=b.closest('#entity-list'),on=!l.hasAttribute('data-selecting');`+
+		`var l=b.closest('#entity-list'),on=!l.hasAttribute('data-selecting')&&!l.querySelector('[data-entity-row][data-picked]');`+
 		`if(on){l.setAttribute('data-selecting','');}else{l.removeAttribute('data-selecting');}`+
 		`b.textContent=on?'Done':'Select';b.setAttribute('aria-pressed',on?'true':'false');`+
 		`if(!on){l.dispatchEvent(new CustomEvent('bulk:clear'));}`+

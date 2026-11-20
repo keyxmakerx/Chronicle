@@ -71,7 +71,7 @@ test('the owner sees the named group, the mention group with marked lines, and t
 test('a word that is only inside a secret sentence finds nothing, for the owner too', async () => {
   const { owner, cid } = await seed();
   await owner.go(`/campaigns/${cid}/search?q=duskharrow`);
-  await owner.page.getByText(/Nothing has/).waitFor();
+  await owner.page.getByText(/Nothing matches/).waitFor();
   assert.equal(await owner.page.locator('.sp-row').count(), 0);
   owner.assertClean();
 });
@@ -96,7 +96,7 @@ test('a player never sees the hidden page, a lock, or the secret line', async ()
   }
 
   await player.go(`/campaigns/${cid}/search?q=duskharrow`);
-  await player.page.getByText(/Nothing has/).waitFor();
+  await player.page.getByText(/Nothing matches/).waitFor();
   player.assertClean();
 });
 

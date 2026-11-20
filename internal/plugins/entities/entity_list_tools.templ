@@ -38,13 +38,13 @@ templ entityListTools(cc *campaigns.CampaignContext, entityTypes []EntityType, c
 				value={ opts.Query }
 				placeholder="Find a page"
 				autocomplete="off"
-				class="el-find-input"
+				class="ctl-field el-find-input"
 			/>
-			<i class="fa-solid fa-magnifying-glass el-find-ic" aria-hidden="true"></i>
+			<svg class="el-find-ic" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M11 18a7 7 0 100-14 7 7 0 000 14z"></path></svg>
 		</form>
 		<span class="el-pick-wrap">
 			<label for="entity-list-category" class="sr-only">Show pages of one category</label>
-			<select id="entity-list-category" class="el-picker" onchange={ allPagesCategoryJS() }>
+			<select id="entity-list-category" class="ctl-pick el-picker" onchange={ allPagesCategoryJS() }>
 				<option value={ listURL } selected?={ activeTypeID == 0 && activeTypeSlug == "" }>All categories</option>
 				for _, et := range entityTypes {
 					if et.Enabled {
@@ -55,14 +55,14 @@ templ entityListTools(cc *campaigns.CampaignContext, entityTypes []EntityType, c
 					}
 				}
 			</select>
-			<i class="fa-solid fa-chevron-down el-picker-ic" aria-hidden="true"></i>
+			<svg class="el-picker-ic" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"></path></svg>
 		</span>
 		<span class="el-pick-wrap">
 			<label for="entity-list-sort" class="sr-only">Order</label>
 			<select
 				id="entity-list-sort"
 				name="sort"
-				class="el-picker"
+				class="ctl-pick el-picker"
 				hx-get={ listURL }
 				hx-trigger="change"
 				hx-target="#entity-list"
@@ -74,7 +74,7 @@ templ entityListTools(cc *campaigns.CampaignContext, entityTypes []EntityType, c
 				<option value="updated" selected?={ opts.Sort == "updated" }>Last edited</option>
 				<option value="created" selected?={ opts.Sort == "created" }>Newest</option>
 			</select>
-			<i class="fa-solid fa-chevron-down el-picker-ic" aria-hidden="true"></i>
+			<svg class="el-picker-ic" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"></path></svg>
 		</span>
 		<div class="el-views" role="tablist" aria-label="How to show the pages">
 			<button type="button" role="tab" class="el-view" data-view-tab data-view="list" aria-selected="true" onclick={ allPagesViewJS("list") }>List</button>

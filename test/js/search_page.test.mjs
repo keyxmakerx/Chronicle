@@ -156,7 +156,7 @@ test('nothing is asked for before there is a word or a filter', async () => {
 test('tags go to the server as slugs, joined, and the picker says what is picked', () => {
   const { data } = load(() => ({}));
   data.allTags = [{ slug: 'coast', name: 'Coast' }, { slug: 'debt', name: 'In debt' }];
-  assert.equal(data.tagLabel(), 'Tags');
+  assert.equal(data.tagLabel(), 'Any tag');
   data.activeTags = ['coast'];
   assert.equal(data.tagLabel(), 'Coast');
   data.activeTags = ['coast', 'debt'];
@@ -263,6 +263,6 @@ test('nothing found says so and offers to make the page, only with a word', asyn
   data.init();
   await settle(); await settle();
   assert.equal(data.showEmpty(), true);
-  assert.match(data.emptyText(), /Nothing has “tide” in its name or text/);
+  assert.match(data.emptyText(), /Nothing matches “tide”\. Try fewer or different words\./);
   assert.equal(data.createHref(), '/campaigns/c1/entities/new?name=tide');
 });
