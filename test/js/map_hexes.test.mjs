@@ -169,7 +169,8 @@ test('a later change to a hex merges into the queued one and keeps unrelated fie
 test('the palette matches the server allowlist', () => {
   assert.deepEqual(
     H.TERRAINS.map((t) => t[0]),
-    ['plains', 'forest', 'hills', 'mountain', 'water', 'swamp', 'desert', 'snow', 'town', 'road'],
+    ['plains', 'forest', 'hills', 'mountain', 'water', 'swamp', 'desert', 'snow',
+      'jungle', 'farmland', 'scrub', 'badlands', 'waste', 'volcanic', 'coast', 'deep', 'ice', 'cavern', 'town', 'road'],
   );
   // Every filled terrain has an icon; road is a line.
   for (const [id] of H.TERRAINS) assert.equal(id === 'road' ? !H.SIMPLE[id] : !!H.SIMPLE[id], true, id);
@@ -568,7 +569,10 @@ test('pieceOf keeps a chosen piece and gives Mix a stable piece in range', () =>
 
 test('every terrain with pieces has twelve, and its folders hold each exactly once', () => {
   const terrains = Object.keys(A.PIECES);
-  assert.deepEqual(terrains.sort(), ['desert', 'forest', 'hills', 'mountain', 'plains', 'snow', 'swamp', 'town', 'water']);
+  assert.deepEqual(terrains.sort(), [
+    'badlands', 'cavern', 'coast', 'deep', 'desert', 'farmland', 'forest', 'hills', 'ice', 'jungle',
+    'mountain', 'plains', 'scrub', 'snow', 'swamp', 'town', 'volcanic', 'waste', 'water',
+  ]);
   for (const t of terrains) {
     assert.equal(A.PIECES[t].length, 12, t); // the server's HexPiecesPerTerrain
     const all = A.PFOLD[t].flatMap((f) => f[1]).sort((a, b) => a - b);
