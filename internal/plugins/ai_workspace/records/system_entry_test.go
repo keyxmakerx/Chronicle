@@ -98,7 +98,7 @@ func TestSystemEntryKind_Plan(t *testing.T) {
 		{"update missing", owner, rec("system-entry", "update", "Nobody", map[string]any{"entry": "ancestry"}, ""), nil, "no ancestry entry"},
 		{"update with a trait list ok", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "ancestry_points": 3,
 			"purchased_traits": []any{map[string]any{"name": "Stone Skin", "cost": 2, "description": "Tough."}}}, ""), nil, ""},
-		{"update bad trait list refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "purchased_traits": []any{"Stone Skin"}}, ""), nil, "needs a name"},
+		{"update bad trait list refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "purchased_traits": []any{"Stone Skin", map[string]any{"cost": 1}}}, ""), nil, "needs a name"},
 		{"update nested detail refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "x": map[string]any{"a": 1}}, ""), nil, "must be text"},
 		{"delete ok", owner, rec("system-entry", "delete", "Stoneborn", map[string]any{"entry": "ancestry"}, ""), nil, ""},
 		{"delete missing", owner, rec("system-entry", "delete", "Nobody", map[string]any{"entry": "ancestry"}, ""), nil, "no ancestry entry"},

@@ -2,7 +2,6 @@ package systems
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -22,10 +21,16 @@ const (
 	maxEntryProps       = 20
 	maxEntryPropKey     = 40
 	maxEntryPropString  = 200
-	maxEntryPropsBytes  = 32768
+	// maxEntryPropText bounds one text detail (a benefit, a drawback); the
+	// bytes cap below still bounds the entry as a whole.
+	maxEntryPropText   = 2000
+	maxEntryPropsBytes = 32768
 	// A detail may also be a list of named items (traits, features), as a
 	// package's own entries carry, so the creator can show and sell them.
-	maxEntryLists     = 6
+	maxEntryLists = 6
+	// A detail may be a plain list of short words (a quick build, a list of
+	// skills), as package entries carry; its own cap keeps them few.
+	maxEntryWordLists = 6
 	maxEntryListItems = 40
 	maxEntryItemName  = 100
 	maxEntryItemText  = 2000
@@ -527,6 +532,8 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 	if e.Visibility != EntryVisibilityCharacter {
 		e.ForEntityID = ""
 	}
+	// What the row holds now is the only source a carried value may match.
+	stored := e.Properties
 	if in.Properties.IsNull() {
 		e.Properties = map[string]any{}
 	} else if v, ok := in.Properties.Get(); ok {
@@ -535,7 +542,7 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 	if grant != nil {
 		holdBudget(e.Properties, grant.Budget)
 	}
-	if err := normalizeEntry(e); err != nil {
+	if err := normalizeEntryCarrying(e, stored); err != nil {
 		return nil, err
 	}
 	if !keptFor || e.ForEntityID != prevFor {
@@ -752,7 +759,12 @@ func entryChoice(e SystemEntry, actor EntryActor) Choice {
 // normalizeEntry validates and cleans the editable fields in place. The
 // description is sanitized here, at the one write path, so no caller can
 // store script or event-handler markup.
-func normalizeEntry(e *SystemEntry) error {
+func normalizeEntry(e *SystemEntry) error { return normalizeEntryCarrying(e, nil) }
+
+// normalizeEntryCarrying is normalizeEntry for a write onto stored
+// properties: a value the validator does not understand passes only when it
+// is the one already stored (see validateEntryProperties).
+func normalizeEntryCarrying(e *SystemEntry, stored map[string]any) error {
 	if e.Name == "" {
 		return apperror.NewValidation("A name is required.")
 	}
@@ -779,89 +791,7 @@ func normalizeEntry(e *SystemEntry) error {
 	default:
 		return apperror.NewValidation("Visibility must be \"everyone\", \"directors\" or \"character\".")
 	}
-	return validateEntryProperties(e.Properties)
-}
-
-// ValidateEntryProperties is validateEntryProperties for callers outside the
-// package (AI import's review step).
-func ValidateEntryProperties(p map[string]any) error { return validateEntryProperties(p) }
-
-// validateEntryProperties accepts strings, numbers and booleans, plus a few
-// lists of named items shaped exactly like a package entry's (name, and
-// optionally a whole-number cost and a plain-text description), which is all
-// the hero creator and pick lists read. Nothing deeper is allowed, so a
-// consumer never walks arbitrary nested data.
-func validateEntryProperties(p map[string]any) error {
-	if len(p) > maxEntryProps {
-		return apperror.NewValidation(fmt.Sprintf("At most %d details are allowed.", maxEntryProps))
-	}
-	lists := 0
-	for k, v := range p {
-		if !entryPropKeyPattern.MatchString(k) || len(k) > maxEntryPropKey {
-			return apperror.NewValidation("Detail names must start with a letter and use only letters, digits and underscores.")
-		}
-		switch t := v.(type) {
-		case string:
-			if utf8.RuneCountInString(t) > maxEntryPropString {
-				return apperror.NewValidation(fmt.Sprintf("The detail %q is longer than %d characters.", k, maxEntryPropString))
-			}
-		case bool, float64, int, int64:
-		case []any:
-			if lists++; lists > maxEntryLists {
-				return apperror.NewValidation(fmt.Sprintf("At most %d lists are allowed.", maxEntryLists))
-			}
-			if err := validateEntryList(k, t); err != nil {
-				return err
-			}
-		default:
-			return apperror.NewValidation(fmt.Sprintf("The detail %q must be text, a number, yes/no or a list of named items.", k))
-		}
-	}
-	raw, err := json.Marshal(p)
-	if err != nil || len(raw) > maxEntryPropsBytes {
-		return apperror.NewValidation("The details are too large.")
-	}
-	return nil
-}
-
-// validateEntryList checks one list of named items.
-func validateEntryList(key string, items []any) error {
-	if len(items) == 0 || len(items) > maxEntryListItems {
-		return apperror.NewValidation(fmt.Sprintf("The list %q needs 1 to %d items.", key, maxEntryListItems))
-	}
-	seen := map[string]bool{}
-	for _, raw := range items {
-		it, ok := raw.(map[string]any)
-		if !ok {
-			return apperror.NewValidation(fmt.Sprintf("Each item in %q needs a name.", key))
-		}
-		name, _ := it["name"].(string)
-		name = strings.TrimSpace(name)
-		if name == "" || utf8.RuneCountInString(name) > maxEntryItemName {
-			return apperror.NewValidation(fmt.Sprintf("Each item in %q needs a name of at most %d characters.", key, maxEntryItemName))
-		}
-		if seen[strings.ToLower(name)] {
-			return apperror.NewValidation(fmt.Sprintf("%q is in %q twice.", name, key))
-		}
-		seen[strings.ToLower(name)] = true
-		for ik, iv := range it {
-			switch ik {
-			case "name":
-			case "cost":
-				if c, ok := wholeNumber(iv); !ok || c < 0 || c > maxEntryItemCost {
-					return apperror.NewValidation(fmt.Sprintf("%q needs a whole-number cost from 0 to %d.", name, maxEntryItemCost))
-				}
-			case "description":
-				d, ok := iv.(string)
-				if !ok || utf8.RuneCountInString(d) > maxEntryItemText {
-					return apperror.NewValidation(fmt.Sprintf("The text of %q can be at most %d characters.", name, maxEntryItemText))
-				}
-			default:
-				return apperror.NewValidation(fmt.Sprintf("Items in %q can only have a name, cost and description.", key))
-			}
-		}
-	}
-	return nil
+	return validateEntryProperties(e.Properties, stored)
 }
 
 // wholeNumber reads a cost from JSON (float64) or YAML (int) input.

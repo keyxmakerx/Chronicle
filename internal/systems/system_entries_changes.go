@@ -21,6 +21,14 @@ type namedItem struct {
 	Name string
 	Cost *int
 	Text string
+	// Extra holds any other keys a package item carries (an ability object,
+	// a roll); a change there reads as the item reworded.
+	Extra map[string]any
+}
+
+// samePlay reports whether two items read the same apart from cost.
+func samePlay(a, b namedItem) bool {
+	return strings.TrimSpace(a.Text) == strings.TrimSpace(b.Text) && sameJSON(a.Extra, b.Extra)
 }
 
 // namedLists reads every list of named items in properties, keyed by the
@@ -47,6 +55,14 @@ func namedLists(p map[string]any) map[string]map[string]namedItem {
 			it.Text, _ = m["description"].(string)
 			if c, ok := wholeNumber(m["cost"]); ok {
 				it.Cost = &c
+			}
+			for k, v := range m {
+				if k != "name" && k != "cost" && k != "description" {
+					if it.Extra == nil {
+						it.Extra = map[string]any{}
+					}
+					it.Extra[k] = v
+				}
 			}
 			items[strings.ToLower(name)] = it
 		}
@@ -97,7 +113,7 @@ func ChangedTraits(before, after *SystemEntry) []TraitChange {
 			if !sameCost(old.Cost, cur.Cost) {
 				c.CostChanged, c.CostBefore, c.CostAfter = true, old.Cost, cur.Cost
 			}
-			c.TextChanged = strings.TrimSpace(old.Text) != strings.TrimSpace(cur.Text)
+			c.TextChanged = !samePlay(old, cur)
 			if c.CostChanged || c.TextChanged {
 				out = append(out, c)
 			}
@@ -153,7 +169,7 @@ func DescribeStandardChange(was, now StandardSnapshot) string {
 		switch {
 		case !ok:
 			dropped = append(dropped, o.Name)
-		case strings.TrimSpace(o.Text) != strings.TrimSpace(n.Text):
+		case !samePlay(o, n):
 			reworded = append(reworded, o.Name)
 		}
 		if ok && !sameCost(o.Cost, n.Cost) {

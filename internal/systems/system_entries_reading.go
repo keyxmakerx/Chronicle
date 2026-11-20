@@ -172,17 +172,50 @@ func copyProps(p map[string]any) map[string]any {
 	return out
 }
 
+// unrewritableKinds are the fields whose standard entries are never copied.
+// A class's entry is only its outline; its abilities live elsewhere in the
+// package, so a copy would promise a rewrite it cannot deliver.
+// TODO(#2391): rewrite a class once its abilities can travel with it.
+var unrewritableKinds = map[string]bool{"class": true}
+
 // rewriteCopy is the campaign entry a standard entry becomes, before checks.
+// Properties are copied verbatim except the generated "_display" twins, and
+// the summary is cut the way the picker already shows package summaries.
 func rewriteCopy(campaignID string, m *SystemManifest, fieldKey string, it *ReferenceItem, name, by string) *SystemEntry {
 	if name == "" {
 		name = it.Name
 	}
+	props := copyProps(it.Properties)
+	dropDerivedTwins(props)
 	return &SystemEntry{
 		CampaignID: campaignID, SystemID: m.ID, FieldKey: fieldKey,
-		Name: strings.TrimSpace(name), Summary: strings.TrimSpace(it.Summary), Description: it.Description,
-		Properties: copyProps(it.Properties), Visibility: EntryVisibilityDirectors,
+		Name: strings.TrimSpace(name), Summary: cleanSummary(it.Summary), Description: it.Description,
+		Properties: props, Visibility: EntryVisibilityDirectors,
 		Status: EntryStatusAccepted, StandsFor: it.ID, StandsForSeen: snapshotOf(it), CreatedBy: by,
 	}
+}
+
+// checkRewrite is every refusal a rewrite of the standard entry would meet
+// apart from its name, so Rewritable and Rewrite never disagree.
+func (s *systemEntryService) checkRewrite(ctx context.Context, campaignID string, m *SystemManifest, fieldKey string, it *ReferenceItem) error {
+	if unrewritableKinds[fieldKey] {
+		return apperror.NewValidation("A class cannot be rewritten here yet: its entry is only the outline of the class, so a copy would leave its abilities behind.")
+	}
+	if err := s.refuseTie(ctx, campaignID, m.ID, fieldKey, it.ID); err != nil {
+		return err
+	}
+	if n, err := s.repo.Count(ctx, campaignID, m.ID, fieldKey); err != nil {
+		return err
+	} else if n >= maxEntriesPerField {
+		return apperror.NewValidation(fmt.Sprintf("A field can hold at most %d campaign entries.", maxEntriesPerField))
+	}
+	// The package's own values are what a copy may carry, so they are the
+	// stored side of the carried rule.
+	cp := rewriteCopy(campaignID, m, fieldKey, it, "", "")
+	if normalizeEntryCarrying(cp, copyProps(it.Properties)) != nil {
+		return apperror.NewValidation("The printed " + it.Name + " cannot be copied into a campaign entry without losing part of it, so it cannot be rewritten here.")
+	}
+	return nil
 }
 
 func (s *systemEntryService) Rewritable(ctx context.Context, campaignID, fieldKey, slug string) (bool, error) {
@@ -194,7 +227,14 @@ func (s *systemEntryService) Rewritable(ctx context.Context, campaignID, fieldKe
 	if err != nil || it == nil {
 		return false, err
 	}
-	return normalizeEntry(rewriteCopy(campaignID, m, fieldKey, it, "", "")) == nil, nil
+	if err := s.checkRewrite(ctx, campaignID, m, fieldKey, it); err != nil {
+		// A refusal is an answer; a failure to look is an error.
+		if ae, ok := err.(*apperror.AppError); ok && ae.Code < 500 {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *systemEntryService) Rewrite(ctx context.Context, campaignID string, actor EntryActor, in RewriteInput) (*SystemEntry, error) {
@@ -212,16 +252,11 @@ func (s *systemEntryService) Rewrite(ctx context.Context, campaignID string, act
 	if it == nil {
 		return nil, apperror.NewNotFound("that standard entry is not in this game system")
 	}
-	if err := s.refuseTie(ctx, campaignID, m.ID, in.FieldKey, it.ID); err != nil {
+	if err := s.checkRewrite(ctx, campaignID, m, in.FieldKey, it); err != nil {
 		return nil, err
 	}
-	// Losslessness is judged on the copy as printed; a chosen name is then
-	// checked like any other name.
-	if normalizeEntry(rewriteCopy(campaignID, m, in.FieldKey, it, "", "")) != nil {
-		return nil, apperror.NewValidation("The printed " + it.Name + " cannot be copied into a campaign entry without losing part of it, so it cannot be rewritten here.")
-	}
 	e := rewriteCopy(campaignID, m, in.FieldKey, it, in.Name, actor.UserID)
-	if err := normalizeEntry(e); err != nil {
+	if err := normalizeEntryCarrying(e, copyProps(it.Properties)); err != nil {
 		return nil, err
 	}
 	if dup, err := s.repo.FindByName(ctx, campaignID, m.ID, e.FieldKey, e.Name); err != nil {
@@ -231,11 +266,6 @@ func (s *systemEntryService) Rewrite(ctx context.Context, campaignID string, act
 	}
 	if err := s.refuseOldName(ctx, campaignID, m.ID, e.FieldKey, e.Name, 0); err != nil {
 		return nil, err
-	}
-	if n, err := s.repo.Count(ctx, campaignID, m.ID, e.FieldKey); err != nil {
-		return nil, err
-	} else if n >= maxEntriesPerField {
-		return nil, apperror.NewValidation(fmt.Sprintf("A field can hold at most %d campaign entries.", maxEntriesPerField))
 	}
 	if e.Slug, err = s.uniqueSlug(ctx, campaignID, m.ID, e.FieldKey, e.Name); err != nil {
 		return nil, err

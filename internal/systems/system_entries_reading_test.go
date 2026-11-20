@@ -17,8 +17,10 @@ func TestSystemEntryReading_Rewritable(t *testing.T) {
 		want        bool
 	}{
 		{"ancestry", "dwarf", true},
-		{"ancestry", "devil", false}, // a plain list of strings would be lost
+		{"ancestry", "elf", true},
+		{"ancestry", "devil", false}, // one text detail too long
 		{"class", "fury", false},
+		{"class", "censor", false},  // classes never, by kind
 		{"ancestry", "fury", false}, // another kind's entry
 		{"ancestry", "nope", false},
 		{"level", "dwarf", false},
@@ -42,7 +44,7 @@ func TestSystemEntryReading_Rewrite(t *testing.T) {
 		{"player refused", playerActor, RewriteInput{FieldKey: "ancestry", Slug: "elf"}, 403},
 		{"stranger refused", stranger, RewriteInput{FieldKey: "ancestry", Slug: "elf"}, 403},
 		{"not lossless", dirActor, RewriteInput{FieldKey: "ancestry", Slug: "devil"}, 422},
-		{"class not lossless", dirActor, RewriteInput{FieldKey: "class", Slug: "fury"}, 422},
+		{"class never", dirActor, RewriteInput{FieldKey: "class", Slug: "censor"}, 422},
 		{"unknown standard", dirActor, RewriteInput{FieldKey: "ancestry", Slug: "gnome"}, 404},
 		{"another kind's slug", dirActor, RewriteInput{FieldKey: "ancestry", Slug: "fury"}, 404},
 		{"not a kind", dirActor, RewriteInput{FieldKey: "level", Slug: "elf"}, 422},
@@ -60,7 +62,7 @@ func TestSystemEntryReading_Rewrite(t *testing.T) {
 				return
 			}
 			std, _ := data.Get("ancestries", tt.in.Slug)
-			if e.StandsFor != std.ID || e.Visibility != EntryVisibilityDirectors || e.Summary != std.Summary || e.CreatedBy != "dm" {
+			if e.StandsFor != std.ID || e.Visibility != EntryVisibilityDirectors || e.Summary != cleanSummary(std.Summary) || e.CreatedBy != "dm" {
 				t.Fatalf("copy = %+v", e)
 			}
 			var snap StandardSnapshot

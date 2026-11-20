@@ -29,18 +29,27 @@ func readingData() fakeData {
 	}
 	return fakeData{
 		"ancestries": {
+			// The Dwarf carries what only a package can hold: an object, an
+			// extra key on a trait, a generated twin and a twin with no base.
 			{ID: "dwarf", Name: "Dwarf", Summary: "Stone folk.", Description: "Dense and sturdy.", Properties: map[string]any{
 				"speed": 5.0, "ancestry_points": 3.0,
-				"signature_traits": []any{trait("Grounded", "Hard to move.", 0)},
-				"purchased_traits": []any{trait("Stone Skin", "Tough.", 1)}}},
-			{ID: "elf", Name: "Elf", Summary: "Old folk.", Properties: map[string]any{"speed": 6.0}},
+				"quick_build":              []any{"Grounded", "Stone Skin"},
+				"breath":                   map[string]any{"damage": "2d6", "keywords": []any{"Area"}},
+				"signature_traits":         []any{trait("Grounded", "Hard to move.", 0)},
+				"signature_traits_display": "Grounded — Hard to move.",
+				"provenance_display":       "Printed in the core rules.",
+				"purchased_traits": []any{map[string]any{"name": "Stone Skin", "description": "Tough.", "cost": 1.0,
+					"ability": map[string]any{"type": "triggered", "distance": "self"}}}}},
+			{ID: "elf", Name: "Elf", Summary: strings.Repeat("Old folk. ", 30), Properties: map[string]any{"speed": 6.0}},
 			{ID: "polder", Name: "Polder", Summary: "Small folk.", Properties: map[string]any{
 				"purchased_traits": []any{trait("Corruption Immunity", "Unbothered.", 1)}}},
-			// A plain list of strings is not something a campaign entry can
-			// hold, so the devil cannot be rewritten without loss.
-			{ID: "devil", Name: "Devil", Properties: map[string]any{"quick_build": []any{"Barbed Tail"}}},
+			// One text detail longer than a campaign entry can hold: the
+			// devil cannot be rewritten without loss.
+			{ID: "devil", Name: "Devil", Properties: map[string]any{"quick_build": []any{"Barbed Tail"}, "lore": strings.Repeat("x", maxEntryPropText+1)}},
 		},
-		"classes":   {{ID: "fury", Name: "Fury", Properties: map[string]any{"subclasses": []any{"Berserker", "Reaver"}}}},
+		// The censor would copy cleanly; classes are refused by kind.
+		"classes": {{ID: "fury", Name: "Fury", Properties: map[string]any{"subclasses": []any{"Berserker", "Reaver"}}},
+			{ID: "censor", Name: "Censor", Properties: map[string]any{"heroic_resource": "Wrath"}}},
 		"abilities": {{ID: "strike", Name: "Strike"}},
 		"monsters":  {{ID: "goblin", Name: "Goblin"}},
 	}
