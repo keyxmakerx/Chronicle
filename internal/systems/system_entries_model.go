@@ -64,10 +64,18 @@ type SystemEntry struct {
 	// Director has not accepted yet.
 	Status string `json:"status"`
 	// ReviewNote is what a Director asked the writer to change.
-	ReviewNote string    `json:"reviewNote,omitempty"`
-	CreatedBy  string    `json:"createdBy,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ReviewNote string `json:"reviewNote,omitempty"`
+	// StandsFor is the slug of the standard entry (same system and field)
+	// this entry takes the place of, set only by a Director's tie; empty for
+	// an entry the campaign wrote beside the package.
+	StandsFor string `json:"standsFor,omitempty"`
+	// StandsForSeen is the standard entry as it was when tied or last marked
+	// seen (a StandardSnapshot as JSON). Directors read it through the
+	// service; it never leaves in a list.
+	StandsForSeen string    `json:"-"`
+	CreatedBy     string    `json:"createdBy,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 // EntryActor is who is asking. The service decides what they may do; the
@@ -160,4 +168,48 @@ type EntryCharacters interface {
 	// CharacterNamed returns the campaign's one character page with this
 	// name (any casing), or nil when there is none or more than one.
 	CharacterNamed(ctx context.Context, campaignID, name string) (*EntryCharacter, error)
+}
+
+// StandardSnapshot is a standard entry's words and figures at one moment,
+// kept on its stand-in so a later package change can be described.
+type StandardSnapshot struct {
+	Name        string         `json:"name"`
+	Summary     string         `json:"summary"`
+	Description string         `json:"description"`
+	Properties  map[string]any `json:"properties"`
+}
+
+// LeftOut is a standard entry the campaign does not offer. Its name still
+// answers everywhere, with the Director's sentence when there is one.
+type LeftOut struct {
+	CampaignID string    `json:"-"`
+	SystemID   string    `json:"-"`
+	FieldKey   string    `json:"fieldKey"`
+	Slug       string    `json:"slug"`
+	Sentence   string    `json:"sentence"`
+	CreatedBy  string    `json:"-"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// EntryOldName is a name a campaign entry used to have. Heroes store the
+// name they picked, so a rename must not strand them.
+type EntryOldName struct {
+	ID         int64     `json:"id"`
+	CampaignID string    `json:"-"`
+	SystemID   string    `json:"-"`
+	FieldKey   string    `json:"fieldKey"`
+	Name       string    `json:"name"`
+	EntryID    int64     `json:"entryId"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// EntryNote is one line the Director told the players about a change to an
+// entry.
+type EntryNote struct {
+	ID         int64     `json:"id"`
+	CampaignID string    `json:"-"`
+	EntryID    int64     `json:"entryId"`
+	Line       string    `json:"line"`
+	CreatedBy  string    `json:"-"`
+	CreatedAt  time.Time `json:"createdAt"`
 }

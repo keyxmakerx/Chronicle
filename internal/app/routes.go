@@ -5781,7 +5781,8 @@ func (a *App) RegisterRoutes() {
 		return systems.Find(c.ParseSettings().SystemID)
 	})
 	systemEntrySvc := systems.NewSystemEntryService(systems.NewSystemEntryRepository(a.DB), systems.EntryManifestResolver(manifestFor),
-		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
+		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
+		systems.WithStandardSystem(systems.StandardSystemFor(campaignSystemMgr, systems.EntryManifestResolver(manifestFor))))
 	// AI Import's brief carries the system's notes on sheet fields, and the
 	// categories the system's sheets live on get its fields once
 	// (system_sheet_fields.go).

@@ -79,12 +79,21 @@ type SystemEntryService interface {
 	// CanMake reports whether the user holds an unspent permission for the
 	// field, so a pick list can offer "make your own".
 	CanMake(ctx context.Context, campaignID, fieldKey, userID string) (bool, error)
+
+	// EntryReading is how the campaign reads the standard entries in its own
+	// words: ties, left-out entries, old names and notes
+	// (system_entries_reading.go).
+	EntryReading
+	// EntryCatalog is the one per-reader list every consumer draws on
+	// (entry_catalog.go).
+	EntryCatalog
 }
 
 type systemEntryService struct {
 	repo     SystemEntryRepository
 	manifest EntryManifestResolver
 	chars    EntryCharacters
+	standard StandardSystemResolver
 }
 
 // EntryServiceOption adds an optional dependency to the service.
@@ -95,6 +104,13 @@ type EntryServiceOption func(*systemEntryService)
 // Directors only.
 func WithEntryCharacters(c EntryCharacters) EntryServiceOption {
 	return func(s *systemEntryService) { s.chars = c }
+}
+
+// WithStandardSystem gives the service the game system's own entries, so
+// ties, rewrites and the per-reader catalog can read them. Without it the
+// catalog holds the campaign's entries only and every tie is refused.
+func WithStandardSystem(r StandardSystemResolver) EntryServiceOption {
+	return func(s *systemEntryService) { s.standard = r }
 }
 
 // NewSystemEntryService wires the service to its repository and to the
@@ -108,10 +124,11 @@ func NewSystemEntryService(repo SystemEntryRepository, manifest EntryManifestRes
 }
 
 // RegisterSystemEntryChoices plugs the campaign's entries into the character
-// pick lists. Only 'everyone' entries are offered: the hook's context does
-// not say who is asking, and a hidden entry must never reach a player.
+// pick lists through the catalog's merge, for the viewer the pick-list
+// handler marked on the context; an unmarked context reads as a player with
+// no account, so a hidden entry never reaches a player.
 func RegisterSystemEntryChoices(svc SystemEntryService) {
-	RegisterChoiceSource(svc.Choices)
+	RegisterChoiceOverlay(svc.PickList)
 	RegisterMakeOwnCheck(svc.CanMake)
 }
 
@@ -351,6 +368,9 @@ func (s *systemEntryService) prepareCreate(ctx context.Context, campaignID strin
 	} else if dup != nil {
 		return nil, nil, apperror.NewConflict("an entry called " + e.Name + " already exists")
 	}
+	if err := s.refuseOldName(ctx, campaignID, m.ID, e.FieldKey, e.Name, 0); err != nil {
+		return nil, nil, err
+	}
 	n, err := s.repo.Count(ctx, campaignID, m.ID, e.FieldKey)
 	if err != nil {
 		return nil, nil, err
@@ -475,6 +495,7 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 		return nil, err
 	}
 	renamed := false
+	prevName := e.Name
 	if v, ok := in.Name.Get(); ok {
 		v = strings.TrimSpace(v)
 		renamed = !strings.EqualFold(v, e.Name)
@@ -528,9 +549,17 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 		} else if dup != nil && dup.ID != e.ID {
 			return nil, apperror.NewConflict("an entry called " + e.Name + " already exists")
 		}
+		if err := s.refuseOldName(ctx, campaignID, e.SystemID, e.FieldKey, e.Name, e.ID); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.repo.Update(ctx, e); err != nil {
 		return nil, err
+	}
+	if renamed {
+		if err := s.recordRename(ctx, e, prevName); err != nil {
+			return nil, err
+		}
 	}
 	return s.repo.Get(ctx, campaignID, id)
 }
@@ -694,25 +723,30 @@ func (s *systemEntryService) Choices(ctx context.Context, campaignID, fieldKey s
 	}
 	out := make([]Choice, 0, len(entries))
 	for _, e := range entries {
-		sum := e.Summary
-		if sum == "" {
-			sum = cleanSummary(e.Description)
-		}
-		c := Choice{
-			Slug: e.Slug, Name: e.Name, Summary: sum, Source: ChoiceSourceCampaign,
-			Description: e.Description, Properties: e.Properties, ForName: e.ForName,
-		}
-		// The writer of a draft is told it is theirs and still a draft, and
-		// gets its id to keep it to the hero they make with it.
-		if e.Status != EntryStatusAccepted {
-			c.Status = e.Status
-		}
-		if actor.UserID != "" && e.CreatedBy == actor.UserID && !actor.IsDirector {
-			c.Mine, c.EntryID = true, e.ID
-		}
-		out = append(out, c)
+		out = append(out, entryChoice(e, actor))
 	}
 	return out, nil
+}
+
+// entryChoice shapes a visible campaign entry as a pick-list row.
+func entryChoice(e SystemEntry, actor EntryActor) Choice {
+	sum := e.Summary
+	if sum == "" {
+		sum = cleanSummary(e.Description)
+	}
+	c := Choice{
+		Slug: e.Slug, Name: e.Name, Summary: sum, Source: ChoiceSourceCampaign,
+		Description: e.Description, Properties: e.Properties, ForName: e.ForName, Origin: OriginCampaign,
+	}
+	// The writer of a draft is told it is theirs and still a draft, and
+	// gets its id to keep it to the hero they make with it.
+	if e.Status != EntryStatusAccepted {
+		c.Status = e.Status
+	}
+	if actor.UserID != "" && e.CreatedBy == actor.UserID && !actor.IsDirector {
+		c.Mine, c.EntryID = true, e.ID
+	}
+	return c
 }
 
 // normalizeEntry validates and cleans the editable fields in place. The
