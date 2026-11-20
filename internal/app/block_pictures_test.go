@@ -19,54 +19,64 @@ import (
 // label), which has none and gets the plain lines drawing.
 func TestAppBlocksDeclareAPicture(t *testing.T) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+	entries, err := os.ReadDir(".")
 	if err != nil {
-		t.Fatalf("parse: %v", err)
+		t.Fatalf("read dir: %v", err)
+	}
+	files := map[string]*ast.File{}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+		files[name] = f
 	}
 	seen := 0
-	for _, pkg := range pkgs {
-		for name, f := range pkg.Files {
-			check := func(lit *ast.CompositeLit) {
-				fields := map[string]ast.Expr{}
-				for _, e := range lit.Elts {
-					if kv, ok := e.(*ast.KeyValueExpr); ok {
-						if id, ok := kv.Key.(*ast.Ident); ok {
-							fields[id.Name] = kv.Value
-						}
+	for name, f := range files {
+		check := func(lit *ast.CompositeLit) {
+			fields := map[string]ast.Expr{}
+			for _, e := range lit.Elts {
+				if kv, ok := e.(*ast.KeyValueExpr); ok {
+					if id, ok := kv.Key.(*ast.Ident); ok {
+						fields[id.Name] = kv.Value
 					}
-				}
-				if s, ok := fields["Type"].(*ast.BasicLit); ok && s.Value == `"ext_widget"` {
-					return
-				}
-				seen++
-				line := fset.Position(lit.Pos()).Line
-				pic, ok := fields["Picture"]
-				if !ok {
-					t.Errorf("%s:%d: a widget registered here names no Picture", name, line)
-					return
-				}
-				sel, ok := pic.(*ast.SelectorExpr)
-				if !ok || !entities.PictureKinds[pictureValue(sel.Sel.Name)] {
-					t.Errorf("%s:%d: Picture must be one of the entities.Picture* kinds", name, line)
 				}
 			}
-			ast.Inspect(f, func(n ast.Node) bool {
-				lit, ok := n.(*ast.CompositeLit)
-				if !ok {
-					return true
-				}
-				if isBlockMeta(lit.Type) {
-					check(lit)
-				} else if arr, ok := lit.Type.(*ast.ArrayType); ok && isBlockMeta(arr.Elt) {
-					for _, e := range lit.Elts {
-						if el, ok := e.(*ast.CompositeLit); ok {
-							check(el)
-						}
+			if s, ok := fields["Type"].(*ast.BasicLit); ok && s.Value == `"ext_widget"` {
+				return
+			}
+			seen++
+			line := fset.Position(lit.Pos()).Line
+			pic, ok := fields["Picture"]
+			if !ok {
+				t.Errorf("%s:%d: a widget registered here names no Picture", name, line)
+				return
+			}
+			sel, ok := pic.(*ast.SelectorExpr)
+			if !ok || !entities.PictureKinds[pictureValue(sel.Sel.Name)] {
+				t.Errorf("%s:%d: Picture must be one of the entities.Picture* kinds", name, line)
+			}
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.CompositeLit)
+			if !ok {
+				return true
+			}
+			if isBlockMeta(lit.Type) {
+				check(lit)
+			} else if arr, ok := lit.Type.(*ast.ArrayType); ok && isBlockMeta(arr.Elt) {
+				for _, e := range lit.Elts {
+					if el, ok := e.(*ast.CompositeLit); ok {
+						check(el)
 					}
 				}
-				return true
-			})
-		}
+			}
+			return true
+		})
 	}
 	if seen < 20 {
 		t.Fatalf("found only %d widget registrations; the scan has gone wrong", seen)
