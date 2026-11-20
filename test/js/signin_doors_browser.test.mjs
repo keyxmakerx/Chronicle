@@ -72,7 +72,9 @@ for (const [name, attr] of [['Calm', ' data-view-motion="calm"'], ['Off', ' data
   test(`${name} holds the scene still`, { skip }, async () => {
     const { browser, p } = await open(attr);
     try {
-      await p.waitForTimeout(100);
+      // A shortened animation still starts on its first keyframe and holds it
+      // until its first frame is drawn; read the resting place once each has ended.
+      await p.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
       const a = await front(p, 'castle');
       await p.waitForTimeout(400);
       assert.equal(await front(p, 'castle'), a);
