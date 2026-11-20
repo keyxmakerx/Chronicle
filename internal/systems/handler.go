@@ -16,6 +16,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -32,6 +33,7 @@ type SystemHandler struct {
 	campaignSystems *CampaignSystemManager
 	addonSvc        addonChecker
 	bookEdits       BookEditService
+	rules           *RulesPages
 }
 
 // NewSystemHandler creates a new system handler.
@@ -49,6 +51,20 @@ func (h *SystemHandler) SetCampaignSystems(mgr *CampaignSystemManager) {
 // the editor routes answer 404.
 func (h *SystemHandler) SetBookEdits(svc BookEditService) {
 	h.bookEdits = svc
+}
+
+// SetRulesPages wires what a reader sees of a rules category: the
+// per-reader catalog, ties, left-out entries and the campaign's characters.
+// Without it every system reads as its package.
+func (h *SystemHandler) SetRulesPages(p *RulesPages) {
+	h.rules = p
+}
+
+func (h *SystemHandler) rulesPages() *RulesPages {
+	if h.rules == nil {
+		return NewRulesPages(nil, nil, nil)
+	}
+	return h.rules
 }
 
 // SetAddonService wires the addon service for checking which system is
@@ -187,196 +203,186 @@ func (h *SystemHandler) indexData(c *echo.Context) (*campaigns.CampaignContext, 
 	return cc, mod, cats, nil
 }
 
-// CategoryList lists items in a system category.
-// GET /campaigns/:id/systems/:mod/:cat
+// rulesReader is who is reading a rules page, in the terms RulesPages takes.
+func rulesReader(c *echo.Context, cc *campaigns.CampaignContext) RulesReader {
+	return RulesReader{
+		CampaignID: cc.Campaign.ID, CampaignName: cc.Campaign.Name,
+		Actor: EntryActor{UserID: auth.GetUserID(c), IsDirector: bookViewerIsDirector(cc)},
+		Role:  cc.VisibilityRole(),
+	}
+}
+
+// rulesTarget resolves the campaign and the system a rules route reads.
+func (h *SystemHandler) rulesTarget(c *echo.Context) (*campaigns.CampaignContext, System, error) {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return nil, nil, apperror.NewMissingContext()
+	}
+	mod := h.resolveSystem(c)
+	if mod == nil {
+		return nil, nil, apperror.NewNotFound("system not found")
+	}
+	return cc, mod, nil
+}
+
+// CategoryList is a category's page, as the reader's list has it.
+// GET /campaigns/:id/systems/:mod/:cat?q=
 func (h *SystemHandler) CategoryList(c *echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	mod := h.resolveSystem(c)
-	if mod == nil {
-		return apperror.NewNotFound("system not found")
-	}
-
-	catSlug := c.Param("cat")
-	if hiddenFromViewer(cc, mod.Info(), catSlug) {
-		return apperror.NewNotFound("category not found")
-	}
-	dp := mod.DataProvider()
-	if dp == nil {
-		return apperror.NewNotFound("system has no data")
-	}
-
-	items, err := dp.List(catSlug)
+	cc, mod, err := h.rulesTarget(c)
 	if err != nil {
 		return err
 	}
-
-	// Find the category definition for display info.
-	manifest := mod.Info()
-	var catDef *CategoryDef
-	for i := range manifest.Categories {
-		if manifest.Categories[i].Slug == catSlug {
-			catDef = &manifest.Categories[i]
-			break
-		}
+	q := c.QueryParam("q")
+	if len(q) > 100 {
+		q = q[:100]
 	}
-	if catDef == nil {
-		return apperror.NewNotFound("category not found")
+	v, err := h.rulesPages().List(c.Request().Context(), mod, c.Param("cat"), q, rulesReader(c, cc))
+	if err != nil {
+		return err
 	}
-
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, CategoryListContent(cc, manifest, catDef, items, HasBook(h.systemDir(c, mod))))
+		return middleware.Render(c, http.StatusOK, CategoryListContent(v))
 	}
-	return middleware.Render(c, http.StatusOK, CategoryListPage(cc, manifest, catDef, items, HasBook(h.systemDir(c, mod))))
+	return middleware.Render(c, http.StatusOK, CategoryListPage(cc, v))
 }
 
-// ItemDetail shows a single reference item.
-// GET /campaigns/:id/systems/:mod/:cat/:item
+// ItemDetail is an entry's page. A rewritten entry's standard address and
+// an old name redirect to the entry they lead to; a left-out entry answers
+// with its one line.
+// GET /campaigns/:id/systems/:mod/:cat/:item?printed=1
 func (h *SystemHandler) ItemDetail(c *echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	mod := h.resolveSystem(c)
-	if mod == nil {
-		return apperror.NewNotFound("system not found")
-	}
-
-	catSlug := c.Param("cat")
-	itemID := c.Param("item")
-	if hiddenFromViewer(cc, mod.Info(), catSlug) {
-		return apperror.NewNotFound("item not found")
-	}
-	dp := mod.DataProvider()
-	if dp == nil {
-		return apperror.NewNotFound("system has no data")
-	}
-
-	item, err := dp.Get(catSlug, itemID)
+	cc, mod, err := h.rulesTarget(c)
 	if err != nil {
 		return err
 	}
-	if item == nil {
-		return apperror.NewNotFound("item not found")
+	v, err := h.rulesPages().Page(c.Request().Context(), mod, c.Param("cat"), c.Param("item"),
+		c.QueryParam("printed") == "1", rulesReader(c, cc))
+	if err != nil {
+		return err
 	}
-
-	// Find category definition for field schema.
-	manifest := mod.Info()
-	var catDef *CategoryDef
-	for i := range manifest.Categories {
-		if manifest.Categories[i].Slug == catSlug {
-			catDef = &manifest.Categories[i]
-			break
+	if v.Redirect != "" {
+		if middleware.IsHTMX(c) {
+			c.Response().Header().Set("HX-Redirect", v.Redirect)
+			return c.NoContent(http.StatusOK)
 		}
+		return c.Redirect(http.StatusSeeOther, v.Redirect)
 	}
-
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, ItemDetailContent(cc, manifest, catDef, item, HasBook(h.systemDir(c, mod))))
+		return middleware.Render(c, http.StatusOK, EntryPageContent(v))
 	}
-	return middleware.Render(c, http.StatusOK, ItemDetailPage(cc, manifest, catDef, item, HasBook(h.systemDir(c, mod))))
+	return middleware.Render(c, http.StatusOK, EntryPage(cc, v))
 }
 
-// SearchAPI returns JSON search results across all system categories.
+// EntryPeek is an entry as a fragment for the page peek; ?hero= names a
+// character whose traits it marks, when the reader may see that character.
+// GET /campaigns/:id/systems/:mod/:cat/:item/peek?hero=&printed=1
+func (h *SystemHandler) EntryPeek(c *echo.Context) error {
+	cc, mod, err := h.rulesTarget(c)
+	if err != nil {
+		return err
+	}
+	v, err := h.rulesPages().Peek(c.Request().Context(), mod, c.Param("cat"), c.Param("item"),
+		c.QueryParam("printed") == "1", c.QueryParam("hero"), rulesReader(c, cc))
+	if err != nil {
+		return err
+	}
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return middleware.Render(c, http.StatusOK, EntryPeekPanel(v))
+}
+
+// SearchAPI returns JSON search results across all system categories, from
+// the reader's own list.
 // GET /campaigns/:id/systems/:mod/search?q=...
 func (h *SystemHandler) SearchAPI(c *echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	mod := h.resolveSystem(c)
-	if mod == nil {
-		return apperror.NewNotFound("system not found")
-	}
-
-	query := strings.TrimSpace(c.QueryParam("q"))
-	dp := mod.DataProvider()
-	if dp == nil {
-		return c.JSON(http.StatusOK, map[string]any{"results": []any{}, "total": 0})
-	}
-
-	results, err := dp.Search(query)
+	cc, mod, err := h.rulesTarget(c)
 	if err != nil {
 		return err
 	}
-
-	items := make([]map[string]string, 0, len(results))
-	manifest := mod.Info()
-	for _, r := range results {
-		if hiddenFromViewer(cc, manifest, r.Category) {
-			continue
-		}
-		items = append(items, map[string]string{
-			"id":        r.ID,
+	hits, err := h.rulesPages().Search(c.Request().Context(), mod, c.QueryParam("q"), rulesReader(c, cc))
+	if err != nil {
+		return err
+	}
+	items := make([]map[string]string, 0, len(hits))
+	for _, r := range hits {
+		item := map[string]string{
+			"id":        r.Slug,
 			"name":      r.Name,
 			"category":  r.Category,
 			"summary":   r.Summary,
-			"system_id": manifest.ID,
-			"url":       "/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/" + r.Category + "/" + r.ID,
-		})
+			"system_id": mod.Info().ID,
+			"url":       r.URL,
+		}
+		// Optional fields: what kind of hit it is, the entry a trait
+		// belongs to, and "Rewritten" on a rewritten entry.
+		if r.Kind != "entry" {
+			item["kind"] = r.Kind
+		}
+		if r.EntryName != "" {
+			item["entry"] = r.EntryName
+		}
+		if r.Whose != "" {
+			item["whose"] = r.Whose
+		}
+		items = append(items, item)
 	}
-
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.JSON(http.StatusOK, map[string]any{
 		"results": items,
 		"total":   len(items),
 	})
 }
 
-// TooltipAPI returns a JSON tooltip payload for a specific item.
+// TooltipAPI returns a JSON tooltip payload for one address, resolved for
+// the reader: a rewritten or old name shows the entry it leads to, a
+// left-out name its one line.
 // GET /campaigns/:id/systems/:mod/:cat/:item/tooltip
 func (h *SystemHandler) TooltipAPI(c *echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	mod := h.resolveSystem(c)
-	if mod == nil {
-		return apperror.NewNotFound("system not found")
-	}
-
-	catSlug := c.Param("cat")
-	itemID := c.Param("item")
-	if hiddenFromViewer(cc, mod.Info(), catSlug) {
-		return apperror.NewNotFound("item not found")
-	}
-	dp := mod.DataProvider()
-	if dp == nil {
-		return apperror.NewNotFound("this system has no reference data")
-	}
-
-	item, err := dp.Get(catSlug, itemID)
+	cc, mod, err := h.rulesTarget(c)
 	if err != nil {
 		return err
 	}
-	if item == nil {
-		return apperror.NewNotFound("item not found")
+	tip, err := h.rulesPages().Tooltip(c.Request().Context(), mod, c.Param("cat"), c.Param("item"),
+		c.QueryParam("printed") == "1", rulesReader(c, cc))
+	if err != nil {
+		return err
 	}
-
-	// Try the system's tooltip renderer for rich HTML.
+	e := tip.Entry
+	item := &ReferenceItem{ID: e.Slug, Category: e.Category, Name: e.Name, Summary: e.Summary,
+		Description: e.Description, Properties: e.Properties, Tags: e.Tags}
 	var tooltipHTML string
-	if tr := mod.TooltipRenderer(); tr != nil {
+	if tip.LeftOut {
+		item.Summary, item.Properties, item.Tags = tip.Line, nil, nil
+	} else if tr := mod.TooltipRenderer(); tr != nil {
 		if html, err := tr.RenderTooltip(item); err == nil {
 			tooltipHTML = html
 		}
 	}
-
-	// Short cache; private, because what a viewer may read depends on their role.
-	c.Response().Header().Set("Cache-Control", "private, max-age=3600")
-
-	return c.JSON(http.StatusOK, map[string]any{
+	source := ""
+	if e.Item != nil {
+		source = e.Item.Source
+	}
+	// Private: what a viewer may read depends on who they are.
+	c.Response().Header().Set("Cache-Control", "private, max-age=60")
+	out := map[string]any{
 		"name":         item.Name,
 		"category":     item.Category,
 		"summary":      item.Summary,
 		"properties":   item.Properties,
 		"tags":         item.Tags,
-		"source":       item.Source,
+		"source":       source,
 		"tooltip_html": tooltipHTML,
-	})
+		"url":          tip.URL,
+		"origin":       e.Origin,
+	}
+	if tip.Whose != "" {
+		out["whose"] = tip.Whose
+	}
+	if tip.LeftOut {
+		out["left_out"] = true
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 // --- System Widget Support ---

@@ -80,9 +80,10 @@ type SessionSearcher interface {
 }
 
 // SystemSearcher provides game system search results for the quick
-// search popup. Implemented by systems.SystemSearchAdapter.
+// search popup. Implemented by systems.SystemSearchAdapter. The reader's
+// account and the campaign's name let it answer from that reader's own list.
 type SystemSearcher interface {
-	SearchSystemContent(ctx context.Context, campaignID, query string, director bool) ([]map[string]string, error)
+	SearchSystemContent(ctx context.Context, campaignID, query string, director bool, userID, campaignName string) ([]map[string]string, error)
 }
 
 // MemberLister retrieves campaign members for the permissions UI.
@@ -1197,7 +1198,7 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		if h.systemSearcher != nil && query != "" {
 			if modResults, err := h.systemSearcher.SearchSystemContent(
 				c.Request().Context(), cc.Campaign.ID, query,
-				cc.VisibilityRole() >= int(campaigns.RoleOwner),
+				cc.VisibilityRole() >= int(campaigns.RoleOwner), auth.GetUserID(c), cc.Campaign.Name,
 			); err == nil {
 				items = append(items, toAnyMaps(modResults)...)
 				total += len(modResults)

@@ -4889,7 +4889,8 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetMapSearcher(mapsService)
 	entityHandler.SetCalendarSearcher(calendarService)
 	entityHandler.SetSessionSearcher(sessionsService)
-	entityHandler.SetSystemSearcher(systems.NewSystemSearchAdapter(addonService))
+	systemSearch := systems.NewSystemSearchAdapter(addonService)
+	entityHandler.SetSystemSearcher(systemSearch)
 	entityHandler.SetMemberLister(campaignService)
 	entityHandler.SetGroupLister(groupService)
 	entityHandler.SetCache(a.Redis)
@@ -5793,6 +5794,10 @@ func (a *App) RegisterRoutes() {
 		slog.Info("added game-system sheet fields to existing categories", slog.Int("fields", n))
 	}
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
+	// What a reader sees of the rules (lists, pages, peeks, hover cards, search) draws on the same catalog.
+	rulesPages := systems.NewRulesPages(systemEntrySvc, systems.EntryManifestResolver(manifestFor), entryPeopleAdapter{entities: entityService, lists: characterListService})
+	systemHandler.SetRulesPages(rulesPages)
+	systemSearch.SetRulesPages(rulesPages)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
 	// Foundry fills the items it makes for these entries from the player view.
 	syncAPIHandler.SetSystemEntryLister(systemEntrySvc)
@@ -7053,6 +7058,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_paint", Scripts: []string{"/static/js/widgets/craft_paint.js", "/static/js/widgets/craft_paint_forge.js", "/static/js/widgets/craft_paint_stage.js"}},
 	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules_more.js", "/static/js/widgets/craft_rules.js"}},
+	{Name: "rules-page", Scripts: []string{"/static/js/widgets/rules_page.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

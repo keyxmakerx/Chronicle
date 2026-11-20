@@ -42,6 +42,7 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 	mg.GET("/:cat", h.CategoryList)
 	mg.GET("/:cat/:item", h.ItemDetail)
 	mg.GET("/:cat/:item/tooltip", h.TooltipAPI)
+	mg.GET("/:cat/:item/peek", h.EntryPeek)
 }
 
 // registerBookEditorRoutes mounts the Rulebook editor. Every handler checks the
