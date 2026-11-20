@@ -405,7 +405,7 @@ func sheetLine(e *entities.Entity, defs []entities.FieldDefinition, opts Options
 	if len(e.FieldsData) == 0 || len(defs) == 0 {
 		return ""
 	}
-	fields := entities.FilterRestrictedFields(e.FieldsData, defs, opts.Privacy != PrivacyModeSafe, false)
+	fields := entities.FilterRestrictedFields(e.FieldsData, entities.RestrictionDefs(defs, e.FieldOverrides), opts.Privacy != PrivacyModeSafe, false)
 	var parts []string
 	for _, d := range defs {
 		v, ok := fields[d.Key]
@@ -438,6 +438,9 @@ func sheetLine(e *entities.Entity, defs []entities.FieldDefinition, opts Options
 	}
 	if len(parts) == 0 {
 		return ""
+	}
+	if opts.SheetReadOnly {
+		return "**Sheet fields** (to read; how_to_write_changes says which of them you may change): " + strings.Join(parts, " · ")
 	}
 	return "**Sheet fields** (change them with `fields:`): " + strings.Join(parts, " · ")
 }

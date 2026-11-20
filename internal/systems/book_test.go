@@ -417,6 +417,11 @@ func TestBuildBookBlock_Links(t *testing.T) {
 		{"no chapter", "type: links\nitems:\n  - {title: Combat}\n", "needs chapter"},
 		{"bad chapter", "type: links\nitems:\n  - {title: Combat, chapter: ../x}\n", "needs chapter"},
 		{"no title", "type: links\nitems:\n  - {chapter: combat}\n", "needs a title"},
+		// A card may name the rules entry it describes; nothing else may.
+		{"card tied to an entry", "type: cards\nitems:\n  - {title: Human, entry: ancestries/human}\n", ""},
+		{"entry without a slug", "type: cards\nitems:\n  - {title: Human, entry: ancestries}\n", "entry must be"},
+		{"entry climbing out", "type: cards\nitems:\n  - {title: Human, entry: ../human}\n", "entry must be"},
+		{"entry on a flap", "type: flaps\nitems:\n  - {title: Human, entry: ancestries/human}\n", "entry must be"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

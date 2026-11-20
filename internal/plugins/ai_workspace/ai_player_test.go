@@ -254,3 +254,37 @@ func TestPlayersPanel_SwitchAndPause(t *testing.T) {
 		t.Error("a player turned players' AI off")
 	}
 }
+
+func TestPlayerCanDoNeverLineSaysSoInText(t *testing.T) {
+	for _, own := range []bool{true, false} {
+		var sb strings.Builder
+		if err := playerCanDo(own).Render(context.Background(), &sb); err != nil {
+			t.Fatal(err)
+		}
+		out := sb.String()
+		i := strings.Index(out, "data-never")
+		if i < 0 {
+			t.Fatalf("own=%v: no never line", own)
+		}
+		if !strings.Contains(out[i:], "<b>Never:</b>") {
+			t.Errorf("own=%v: never line has no text lead-in: %s", own, out[i:])
+		}
+		if strings.Contains(out[:i], "Never") {
+			t.Errorf("own=%v: a can-do line says never", own)
+		}
+	}
+}
+
+// TestPlayerFieldLabel: the review names a field in words, not as its key.
+func TestPlayerFieldLabel(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"backstory", "Backstory"},
+		{"skill_options", "Skill options"},
+		{"ancestry_choices_json", "Ancestry choices"},
+		{"", ""},
+	} {
+		if got := playerFieldLabel(tc.in); got != tc.want {
+			t.Errorf("playerFieldLabel(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

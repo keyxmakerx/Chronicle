@@ -106,7 +106,9 @@ func (k SystemEntryKind) Plan(ctx context.Context, campaignID string, a Actor, r
 		if cur == nil {
 			return Plan{Error: "no " + r.Str("entry") + " entry called " + quote(r.Name)}
 		}
-		if err := systems.ValidateEntryProperties(k.merged(cur, r)); err != nil {
+		// Checked onto what is stored, as the save will be, so a rewritten
+		// entry's carried package values do not refuse the review.
+		if err := systems.ValidateEntryPropertiesOnto(k.merged(cur, r), cur.Properties); err != nil {
 			return Plan{Error: planError(err)}
 		}
 		return Plan{Summary: "changes the entry"}

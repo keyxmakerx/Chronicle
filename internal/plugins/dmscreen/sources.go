@@ -107,6 +107,10 @@ type Hero struct {
 	PlayerName   string
 	PlayerUserID string
 	Fields       map[string]any
+	// PageRestricted names the fields added to just this hero's page that
+	// are GM-only or owner-only; a narrower withholds them along with the
+	// category's restricted fields.
+	PageRestricted []string
 }
 
 // PartySource lists the campaign's player characters.

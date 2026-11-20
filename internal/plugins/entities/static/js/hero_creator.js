@@ -17,6 +17,12 @@
  * stripped of Director-only text for players); package text is plain and is
  * escaped here. Picks are kept on this device until the hero is made.
  *
+ * A Director's rules shape each step (the plan's per-step `rules`, worded by
+ * hero_rules_lines.js as in the hero builder): Not here entries are gone with
+ * a quiet foot line, an Ask first entry carries a mark and is sent to the
+ * Director once the hero is made, and a required step with one entry left is
+ * filled in and locked.
+ *
  * A step whose list a Director let this player write in links to "Your own
  * entries"; the player's draft then shows in the list, and once the hero is
  * made the draft is kept to that hero.
@@ -91,6 +97,7 @@
     this.open = null;
     this.tab = 'overview';
     this.picks = {};
+    this.nh = {};
     this.name = '';
   }
 
@@ -104,6 +111,7 @@
       self.plan = plan || { steps: [] };
       self.plan.steps = self.plan.steps || [];
       self.restore();
+      self.prefill();
       self.render();
     }).catch(function () {
       var page = self.root.querySelector('.hc-loading__text');
@@ -149,6 +157,31 @@
     for (var i = 0; i < st.choices.length; i++) if (lower(st.choices[i].name) === lower(name)) return st.choices[i];
     return null;
   };
+  // A required step the rules leave one entry on starts filled in.
+  Creator.prototype.prefill = function () {
+    var self = this;
+    this.plan.steps.forEach(function (st) {
+      var want = st.rules && st.rules.prefilled, c = want && self.choice(st.fieldKey, want), p = self.picks[st.fieldKey];
+      if (c) self.picks[st.fieldKey] = { name: c.name, options: p && lower(p.name) === lower(c.name) ? p.options : [] };
+    });
+  };
+  Creator.prototype.locked = function (st) {
+    var want = st.rules && st.rules.prefilled, p = this.picks[st.fieldKey];
+    return !!(want && p && lower(p.name) === lower(want));
+  };
+  // The pick of a step that waits for the Director's yes: an Ask first entry.
+  Creator.prototype.waitName = function (st) {
+    var p = this.picks[st.fieldKey], c = p && p.name && this.choice(st.fieldKey, p.name);
+    return c && c.state === 'ask_first' ? c.name : '';
+  };
+  // What a pick still needs from the Director or the rules, as a short phrase.
+  Creator.prototype.pickNote = function (st) {
+    if (this.waitName(st)) return 'waiting for your Director';
+    return this.locked(st) ? window.ChronicleHeroRules.LOCK : '';
+  };
+  Creator.prototype.notesHTML = function (st) {
+    return '<div class="hc-notes" aria-live="polite">' + window.ChronicleHeroRules.notes(st, this.waitName(st), 'hc') + '</div>';
+  };
   Creator.prototype.mine = function (key, c) {
     var p = this.picks[key];
     return p && lower(p.name) === lower(c.name) ? p.options : [];
@@ -183,19 +216,27 @@
   Creator.prototype.stepHTML = function () {
     var st = this.cur(), self = this;
     var head = '<div class="hc-head"><p class="paper-kind">Step ' + (this.step + 1) + ' of ' + this.stepCount() + '</p>' +
-      '<h1 tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h1><p>Tap one to pull out its leaf and read the whole entry.</p></div>';
+      '<h1 tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h1><p>' +
+      (this.locked(st) ? 'Everyone starts with this. Tap it to pull out its leaf and read the whole entry.' : 'Tap one to pull out its leaf and read the whole entry.') + '</p></div>';
     var rows = st.choices.map(function (c, i) {
       var picked = self.picks[st.fieldKey] && lower(self.picks[st.fieldKey].name) === lower(c.name);
       return '<li><button type="button" class="hc-row" data-open="' + i + '" aria-expanded="false"><b>' + esc(c.name) +
         (c.mine && c.status ? ' <span class="hc-seal">Yours · ' + (c.status === 'sent' ? 'handed in' : 'draft') + '</span>'
           : c.source === 'campaign' ? ' <span class="hc-seal">Campaign</span>' : '') +
+        (c.state === 'ask_first' ? ' <span class="hc-seal">Ask first</span>' : '') +
+        (picked && self.locked(st) ? ' <span class="hc-seal">Everyone starts with this</span>' : '') +
         (picked ? ' <span class="hc-row__pick" aria-label="chosen">✓</span>' : '') +
         '</b><span class="hc-row__go" aria-hidden="true">Read ›</span><small>' + esc(c.summary) + '</small></button></li>';
     }).join('');
     var make = st.canMake ? '<p class="hc-make">Your Director lets you make your own ' + esc(lower(st.label)) + '. ' +
       '<a class="hc-link" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/characters/entries?field=' + encodeURIComponent(st.fieldKey) + '&back=new">Make yours ›</a> ' +
       'Your picks here are kept while you do.</p>' : '';
-    return head + (rows ? '<ul class="hc-list">' + rows + '</ul>' : '') + make;
+    var none = !rows && st.rules ? '<p class="hc-empty">Nothing is on this list for you right now.</p>' : '';
+    return head + this.notesHTML(st) + (rows ? '<ul class="hc-list">' + rows + '</ul>' : none) + this.notHereHTML(st) + make;
+  };
+
+  Creator.prototype.notHereHTML = function (st) {
+    return window.ChronicleHeroRules.notHere(st.rules, !!this.nh[st.fieldKey], 'hc');
   };
 
   Creator.prototype.footHTML = function () {
@@ -205,7 +246,9 @@
         '<button type="button" class="hc-btn" data-act="create">Create hero</button></div>';
     }
     var st = this.cur(), p = this.picks[st.fieldKey];
-    var chosen = p && p.name ? '<b>' + esc(p.name) + '</b>' + (p.options.length ? ' · ' + esc(p.options.join(', ')) : '')
+    var note = this.pickNote(st);
+    var chosen = p && p.name ? '<b>' + esc(p.name) + '</b>' + (p.options.length ? ' · ' + esc(p.options.join(', ')) : '') +
+      (note ? ' · <span class="hc-wait">' + esc(note) + '</span>' : '')
       : 'No ' + esc(lower(st.label)) + ' chosen yet';
     var next = this.step + 1 < this.plan.steps.length ? this.plan.steps[this.step + 1].label : 'Name';
     return '<div class="hc-foot"><span class="hc-chosen" data-chosen>' + chosen + '</span><span class="hc-foot__sp"></span>' + back +
@@ -217,9 +260,10 @@
     var rows = this.plan.steps.map(function (s, i) {
       var p = self.picks[s.fieldKey];
       return '<dt>' + esc(s.label) + '</dt>' + (p && p.name
-        ? '<dd>' + esc(p.name) + (p.options.length ? '<small>' + esc(p.options.join(', ')) + '</small>' : '') + '</dd>'
+        ? '<dd>' + esc(p.name) + (p.options.length ? '<small>' + esc(p.options.join(', ')) + '</small>' : '') +
+          (self.pickNote(s) ? '<small>' + esc(self.pickNote(s)) + '</small>' : '') + '</dd>'
         : '<dd class="is-none">Not chosen</dd>') +
-        '<dd><button type="button" class="hc-link" data-step="' + i + '">Change</button></dd>';
+        '<dd>' + (self.locked(s) ? '' : '<button type="button" class="hc-link" data-step="' + i + '">Change</button>') + '</dd>';
     }).join('');
     var whose = this.forSelf ? 'The hero will be yours, on a new ' + esc(this.typeName) + ' page.'
       : 'The hero goes on a new ' + esc(this.typeName) + ' page, not yet claimed by a player.';
@@ -256,6 +300,7 @@
     return '<div class="hc-kind"><span class="paper-kind">' + esc(st.label) + ' · ' + (c.source === 'campaign' ? 'this campaign' : esc(this.plan.systemName || 'game system')) + '</span>' +
       (c.source === 'campaign' ? '<span class="hc-seal">Campaign</span>' : '') + '</div>' +
       '<h2 class="hc-name" tabindex="-1">' + esc(c.name) + '</h2>' + (c.summary ? '<p class="hc-lede">' + esc(c.summary) + '</p>' : '') +
+      (c.state === 'ask_first' ? '<p class="hc-note">Ask first: your Director allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>' : '') +
       (facts ? '<div class="hc-facts">' + facts + '</div>' : '') + body;
   };
 
@@ -294,8 +339,9 @@
       }).join('') + '</div>' : '<div class="hc-ribbons hc-ribbons--none"></div>') +
       '<div class="hc-leaf__body"><div class="hc-pane" role="tabpanel">' + pane + '</div></div>' +
       '<div class="hc-leaf__foot">' + toBuy + '<span class="hc-foot__sp"></span>' +
-      '<button type="button" class="hc-btn" data-act="choose"' + (isPicked ? ' aria-pressed="true"' : '') + '>' +
-      (isPicked ? '✓ ' + esc(c.name) + ' chosen' : 'Choose ' + esc(c.name)) + '</button></div>';
+      '<button type="button" class="hc-btn" data-act="choose"' + (isPicked ? ' aria-pressed="true"' : '') + (isPicked && this.locked(st) ? ' disabled' : '') + '>' +
+      (c.state === 'ask_first' ? (isPicked ? '✓ Asking for ' : 'Ask for ') + esc(c.name)
+        : isPicked ? '✓ ' + esc(c.name) + (this.locked(st) ? ', everyone starts with this' : ' chosen') : 'Choose ' + esc(c.name)) + '</button></div>';
   };
 
   // The visible part of whatever scrolls the page: the app's main column, or
@@ -352,6 +398,8 @@
     if (trail) trail.outerHTML = this.trailHTML();
     var foot = this.root.querySelector('.hc-foot');
     if (foot) foot.outerHTML = this.footHTML();
+    var notes = this.root.querySelector('.hc-notes');
+    if (notes) notes.outerHTML = this.notesHTML(st);
     this.root.querySelectorAll('.hc-row').forEach(function (r) {
       var c = st.choices[+r.getAttribute('data-open')], p = self.picks[st.fieldKey];
       var b = r.querySelector('b'), mark = b.querySelector('.hc-row__pick');
@@ -427,6 +475,15 @@
     }).then(function (res) {
       if (!res.ok || !res.body.url) { fail(res.body.message || res.body.error || 'The hero could not be made. Try again.'); return; }
       self.clearDraft();
+      // A pick the Director has to allow could not be sent: say so, with a
+      // way on, instead of moving past it.
+      var failed = res.body.requestFailed || [];
+      if (failed.length) {
+        err.textContent = 'Your hero is made, but a pick for ' + failed.map(function (k) { var s2 = self.stepByKey(k); return s2 ? lower(s2.label) : k; }).join(', ') +
+          ' could not be sent to your Director. Open the hero and pick it again: ' + res.body.url;
+        err.hidden = false;
+        return;
+      }
       var go = function () { if (window.Chronicle && Chronicle.go) Chronicle.go(res.body.url); else window.location.href = res.body.url; };
       self.keepDraftsTo(res.body.id).then(go, go);
     }).catch(function () { fail('The hero could not be made. Check your connection and try again.'); });
@@ -467,6 +524,13 @@
         case 'next': self.go(self.step + 1); break;
         case 'back': self.go(self.step - 1); break;
         case 'create': self.create(); break;
+        case 'nothere':
+          var st = self.cur(), nh = root.querySelector('.hc-nh');
+          self.nh[st.fieldKey] = !self.nh[st.fieldKey];
+          if (nh) nh.outerHTML = self.notHereHTML(st);
+          var again = root.querySelector('.hc-nh .hc-link');
+          if (again) again.focus();
+          break;
       }
     });
     root.addEventListener('change', function (e) {
@@ -493,21 +557,18 @@
     });
   };
 
-  function boot(scope) {
-    var nodes = (scope || document).querySelectorAll('[data-hero-creator]:not([data-hc-ready])');
-    for (var i = 0; i < nodes.length; i++) {
-      nodes[i].setAttribute('data-hc-ready', 'true');
-      var c = new Creator(nodes[i]);
-      c.wire();
-      c.load();
-    }
+  // Loaded on sight (ADR-063): boot.js fetches this script when it meets the
+  // page's data-widget mount, then mounts it through register().
+  function register() {
+    Chronicle.register('hero-creator', {
+      init: function (el) {
+        if (el._heroCreator) return;
+        var p = new Creator(el);
+        el._heroCreator = p;
+        p.wire();
+        p.load();
+      }
+    });
   }
-
-  function start() {
-    boot(document);
-    document.addEventListener('htmx:afterSettle', function (e) { boot(e.target); });
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
+  if (window.Chronicle && Chronicle.register) register();
 })();

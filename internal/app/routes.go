@@ -155,6 +155,22 @@ func (a *bestiaryEntityCreatorAdapter) CreateFromStatblock(ctx context.Context, 
 	return ent.ID, nil
 }
 
+// EntityExists reports whether a page an earlier import made is still in the
+// campaign. A missing page, or one that now belongs to another campaign, is
+// "gone" so the creature can be imported again; any other lookup failure is an
+// error rather than a guess.
+func (a *bestiaryEntityCreatorAdapter) EntityExists(ctx context.Context, campaignID, entityID string) (bool, error) {
+	ent, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return ent != nil && ent.CampaignID == campaignID, nil
+}
+
 // creatureType picks the campaign's switched-on creature type, preferring the
 // publication's system's own ("<system>-creature") when there are several.
 func (a *bestiaryEntityCreatorAdapter) creatureType(ctx context.Context, campaignID, systemID string) (*entities.EntityType, error) {
@@ -186,16 +202,44 @@ func (a *bestiaryEntityCreatorAdapter) creatureType(ctx context.Context, campaig
 // JSON text when the type declares one, else to the key itself: a list of
 // plain values (keywords) as comma text, anything else as JSON text. Keys the
 // type does not declare are left out; the whole statblock is kept under
-// statblock_json, as before, so nothing in it is lost.
+// statblock_json, as before, so nothing in it is lost. statblock_json is not a
+// declared field, so nothing strips it for players: a key the type marks
+// GM-only or owner-only is kept in its own field and left out of the copy.
 func creatureFields(defs []entities.FieldDefinition, statblock json.RawMessage) map[string]any {
-	out := map[string]any{"statblock_json": string(statblock)}
+	out := map[string]any{}
+	blob := string(statblock)
+	// The whole-statblock copy is set last so a statblock carrying its own
+	// top-level statblock_json key cannot replace it.
+	defer func() { out["statblock_json"] = blob }()
 	var sb map[string]any
 	if json.Unmarshal(statblock, &sb) != nil {
 		return out
 	}
 	declared := make(map[string]bool, len(defs))
+	types := make(map[string]string, len(defs))
+	restricted := false
+	copySB := make(map[string]any, len(sb))
+	for k, v := range sb {
+		copySB[k] = v
+	}
 	for _, d := range defs {
 		declared[d.Key] = true
+		types[d.Key] = d.Type
+		if d.GMOnly || d.OwnerOnly {
+			for _, k := range []string{d.Key, strings.TrimSuffix(d.Key, "_json")} {
+				if _, ok := copySB[k]; ok {
+					delete(copySB, k)
+					restricted = true
+				}
+			}
+		}
+	}
+	if restricted {
+		if raw, err := json.Marshal(copySB); err == nil {
+			blob = string(raw)
+		} else {
+			blob = "{}"
+		}
 	}
 	for k, v := range sb {
 		switch v := v.(type) {
@@ -214,11 +258,33 @@ func creatureFields(defs []entities.FieldDefinition, statblock json.RawMessage) 
 			}
 		default:
 			if declared[k] {
-				out[k] = v
+				if fv, ok := fieldValue(types[k], v); ok {
+					out[k] = fv
+				}
 			}
 		}
 	}
 	return out
+}
+
+// fieldValue fits a plain statblock value to its declared field type, so a
+// string cannot land in a number or checkbox field. A value that does not fit
+// is dropped (ok false); the full statblock copy still holds it.
+func fieldValue(fieldType string, v any) (any, bool) {
+	switch fieldType {
+	case "number":
+		f, ok := v.(float64)
+		return f, ok
+	case "checkbox":
+		b, ok := v.(bool)
+		return b, ok
+	case "text", "textarea", "select", "url":
+		if _, ok := v.(string); ok {
+			return v, true
+		}
+		return fmt.Sprint(v), true
+	}
+	return v, true
 }
 
 // plainList joins a list of plain values with commas; ok is false for
@@ -2854,7 +2920,7 @@ func registerManifestRenderers(showRegistry *entities.EntityShowRendererRegistry
 			if r.Slug != "" {
 				showRegistry.Register(r.Slug, renderer)
 			} else if r.PresetCategory != "" {
-				showRegistry.RegisterByPresetCategory(r.PresetCategory, renderer)
+				showRegistry.RegisterByPresetCategoryFor(manifest.ID, r.PresetCategory, renderer)
 			}
 		}
 	}
@@ -3007,6 +3073,7 @@ func (a *App) RegisterRoutes() {
 		// Same for play blocks, so an installed system's play declarations
 		// reach types created before it declared them.
 		reconcileFieldPlay(ctx, entityService)
+		reconcileFieldChecks(ctx, entityService)
 	}()
 
 	// Campaigns plugin: CRUD, membership, ownership transfer.
@@ -3109,7 +3176,8 @@ func (a *App) RegisterRoutes() {
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
 	// mini→full launch enhancement, and the scripts below, each loaded on
 	// sight: the Contents block's, Standing's, the Family tree's and the
-	// Characters page's hero builder, the chip naming a page's layout, and
+	// Characters page's hero builder, the hero creator, the own-entries page,
+	// the chip naming a page's layout, and
 	// the search page's Alpine component).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
@@ -3118,9 +3186,12 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
-			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
+			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/hero_builder.js"}},
+			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/hero_creator.js"}},
+			{Name: "own-entries", Scripts: []string{"js/own_entries.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
+			{Name: "brochure", Scripts: []string{"js/brochure.js"}},
 		},
 	})
 
@@ -3544,6 +3615,7 @@ func (a *App) RegisterRoutes() {
 		reconcileFieldGMFlags(context.Background(), entityService)
 		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
 		reconcileFieldPlay(context.Background(), entityService)
+		reconcileFieldChecks(context.Background(), entityService)
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
@@ -3919,6 +3991,30 @@ func (a *App) RegisterRoutes() {
 	// request logging, security monitoring, and admin dashboard.
 	syncRepo := syncapi.NewSyncAPIRepository(a.DB)
 	syncService := syncapi.NewSyncAPIService(syncRepo)
+	// A campaign has a Foundry world syncing once an active sync key of its
+	// has been used; sheets say "set in Foundry" only then.
+	// A system's preset-bound sheet draws only in its own campaigns; checks
+	// made outside a page render ask which system that is.
+	entities.SetCampaignSystemResolver(func(ctx context.Context, campaignID string) string {
+		list, err := addonService.ListForCampaign(ctx, campaignID)
+		if err != nil {
+			return ""
+		}
+		_, sys := navAddonsFrom(list)
+		return sys.Slug
+	})
+	entities.SetFoundryLinkChecker(func(ctx context.Context, campaignID string) bool {
+		keys, err := syncService.ListKeysByCampaign(ctx, campaignID)
+		if err != nil {
+			return false
+		}
+		for _, k := range keys {
+			if k.IsActive && k.LastUsedAt != nil {
+				return true
+			}
+		}
+		return false
+	})
 	// The campaign "Sync API" addon toggle is what gates external Bearer
 	// access (REST via syncapi.RequireSyncAPIAddon, WebSocket via
 	// AuthenticateKeyForWS). Both read it through this gate; the WS path
@@ -4110,8 +4206,6 @@ func (a *App) RegisterRoutes() {
 	// no-ops when its mount is absent.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
-		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
-		"/static/plugins/" + entities.PluginSlug + "/js/own_entries.js",
 		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",
@@ -4176,6 +4270,14 @@ func (a *App) RegisterRoutes() {
 	bestiarySvc.SetCampaignSystemFetcher(&bestiaryCampaignSystemAdapter{svc: campaignService})
 	bestiaryHandler := bestiary.NewHandler(bestiarySvc)
 	if a.PluginHealth.IsHealthy("bestiary") {
+		// Names and descriptions the old write path HTML-escaped are unescaped
+		// once per row, before any request can read them. A failure is logged;
+		// the rows keep their marker and the next boot retries.
+		if n, err := bestiaryRepo.ReconcileEscapedText(context.Background()); err != nil {
+			slog.Error("bestiary text reconcile failed", slog.Any("error", err), slog.Int("rows_fixed", n))
+		} else if n > 0 {
+			slog.Info("bestiary text reconcile: unescaped stored text", slog.Int("rows", n))
+		}
 		bestiary.RegisterRoutes(e, bestiaryHandler, authService)
 		bestiary.RegisterAdminRoutes(e, bestiaryHandler, authService)
 	} else {
@@ -4636,6 +4738,8 @@ func (a *App) RegisterRoutes() {
 	syncHistoryHandler.SetFoundryMatcher(foundryMatcher)
 	// The scenes in each campaign's Foundry world, as the GM's client reports them.
 	syncHistoryHandler.SetFoundryScenes(syncapi.NewFoundrySceneRepository(a.DB))
+	// Codes a player types in Foundry to link their account without the GM.
+	syncHistoryHandler.SetLinkCodes(syncapi.NewLinkCodes())
 
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)))
@@ -4889,7 +4993,8 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetMapSearcher(mapsService)
 	entityHandler.SetCalendarSearcher(calendarService)
 	entityHandler.SetSessionSearcher(sessionsService)
-	entityHandler.SetSystemSearcher(systems.NewSystemSearchAdapter(addonService))
+	systemSearch := systems.NewSystemSearchAdapter(addonService)
+	entityHandler.SetSystemSearcher(systemSearch)
 	entityHandler.SetMemberLister(campaignService)
 	entityHandler.SetGroupLister(groupService)
 	entityHandler.SetCache(a.Redis)
@@ -5478,6 +5583,17 @@ func (a *App) RegisterRoutes() {
 		})
 		aiAsks = aiConnectorSvc
 		aiKeys.svc = aiConnectorSvc
+		// Players' AI is for players with an account: a key a guest made
+		// before that rule held is ended here, at every start.
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if n, err := aiConnectorSvc.EndGuestKeys(ctx); err != nil {
+				slog.Error("ending guests' AI keys failed", slog.Any("error", err))
+			} else if n > 0 {
+				slog.Info("ended guests' AI keys", slog.Int64("count", n))
+			}
+		}()
 		// A key ends whenever its maker's sign-ins do (password reset or
 		// change, force sign-out), in every campaign.
 		auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {
@@ -5778,10 +5894,33 @@ func (a *App) RegisterRoutes() {
 		if err != nil {
 			return nil
 		}
-		return systems.Find(c.ParseSettings().SystemID)
+		if m := systems.Find(c.ParseSettings().SystemID); m != nil {
+			return m
+		}
+		// A system turned on as an add-on, without the settings' system
+		// choice, is still the campaign's system.
+		for _, sys := range systems.AllSystems() {
+			if on, err := addonService.IsEnabledForCampaign(ctx, campaignID, sys.Info().ID); err == nil && on {
+				return systems.Find(sys.Info().ID)
+			}
+		}
+		return nil
 	})
-	systemEntrySvc := systems.NewSystemEntryService(systems.NewSystemEntryRepository(a.DB), systems.EntryManifestResolver(manifestFor),
-		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
+	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes
+	// editor, narrowed for each player by the Directors' hero-choice rules.
+	// Built ahead of the entries service, which tells the rules when an entry
+	// is deleted.
+	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
+	systemEntryRepo := systems.NewSystemEntryRepository(a.DB)
+	choiceRuleSvc := systems.NewChoiceRuleService(systems.NewChoiceRuleRepository(a.DB), systemEntryRepo,
+		characterChoiceSvc, systems.EntryManifestResolver(manifestFor),
+		systems.WithChoiceHeroes(choiceHeroesAdapter{entities: entityService, lists: characterListService, members: campaignService}))
+	characterChoiceSvc.SetChoiceLimiter(choiceRuleSvc)
+	systemEntrySvc := systems.NewSystemEntryService(systemEntryRepo, systems.EntryManifestResolver(manifestFor),
+		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
+		systems.WithEntryRules(choiceRuleSvc),
+		systems.WithStandardSystem(systems.StandardSystemFor(campaignSystemMgr, systems.EntryManifestResolver(manifestFor))),
+		systems.WithEntryPeople(entryPeopleAdapter{entities: entityService, lists: characterListService}))
 	// AI Import's brief carries the system's notes on sheet fields, and the
 	// categories the system's sheets live on get its fields once
 	// (system_sheet_fields.go).
@@ -5791,17 +5930,34 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("added game-system sheet fields to existing categories", slog.Int("fields", n))
 	}
+	if n, err := bindCharacterPresetOnce(context.Background(), settingsRepo, campaignService, manifestFor, entityService); err != nil {
+		slog.Error("binding the character preset failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("bound Characters to the game system's character preset", slog.Int("campaigns", n))
+	}
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
+	// What a reader sees of the rules (lists, pages, peeks, hover cards, search) draws on the same catalog.
+	rulesPages := systems.NewRulesPages(systemEntrySvc, systems.EntryManifestResolver(manifestFor), entryPeopleAdapter{entities: entityService, lists: characterListService})
+	systemHandler.SetRulesPages(rulesPages)
+	systemSearch.SetRulesPages(rulesPages)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
 	// Foundry fills the items it makes for these entries from the player view.
 	syncAPIHandler.SetSystemEntryLister(systemEntrySvc)
-	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
-	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
+	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	// A player's Foundry edit is judged with the same plan the web door uses.
+	syncAPIHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	entityHandler.SetHeroRules(heroRulesAdapter{rules: choiceRuleSvc})
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.
-	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc}})
+	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc},
+		gmTerm: func(ctx context.Context, campaignID string) string {
+			if m := manifestFor(ctx, campaignID); m != nil {
+				return m.GMTerm()
+			}
+			return ""
+		}})
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the
 	// version + files each system loader is ACTUALLY serving, to catch the
@@ -6407,6 +6563,9 @@ func (a *App) RegisterRoutes() {
 	// "Show in Foundry" on NPC pages: npc.spotlight is not a change-feed
 	// type, so the recording wrapper passes it straight to the hub.
 	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService, lists: characterListService}, &npcSpotlightPublisher{bus: wsEventBus})
+	// "Add to Foundry" on creature pages: creature_add.requested is a
+	// change-feed type, so a closed world makes the actor when it connects.
+	fvttHandler.SetCreatureAdd(&creatureAddResolver{entities: entityService}, &creatureAddPublisher{bus: wsEventBus})
 
 	// Game-system widget panels under NPC page titles (manifest entity_panels).
 	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, characterListService))
@@ -6890,6 +7049,7 @@ func (a *App) RegisterRoutes() {
 		RollTables:      rollTablesSvc,
 		Sessions:        sessionsService,
 		SystemEntries:   systemEntrySvc,
+		ChoiceRules:     choiceRuleSvc,
 		Systems:         systemHandler,
 		Tags:            tagService,
 		PageLayouts:     pageLayoutService,
@@ -7057,6 +7217,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_moments.js", "/static/js/widgets/craft_bench.js"}},
 	{Name: "craft_paint", Scripts: []string{"/static/js/widgets/craft_paint.js", "/static/js/widgets/craft_paint_forge.js", "/static/js/widgets/craft_paint_stage.js"}},
 	{Name: "craft_rules", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_logic.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_rules_editor.js", "/static/js/widgets/craft_rules_looks.js", "/static/js/widgets/craft_rules_more.js", "/static/js/widgets/craft_rules.js"}},
+	{Name: "rules-page", Scripts: []string{"/static/js/widgets/rules_director.js", "/static/js/widgets/rules_page.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

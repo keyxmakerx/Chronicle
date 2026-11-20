@@ -944,6 +944,7 @@ const (
 	BlockSyncStatus      = "sync_status"      // Foundry VTT sync health/status.
 	BlockComingUp        = "coming_up"        // Next game nights, what the viewer owes the table, next events.
 	BlockStartHere       = "start_here"       // One page the owner picks, as the home's lead (entities plugin).
+	BlockBrochure        = "brochure"         // One page the owner wrote for new players, as a small box that opens it folded out (entities plugin).
 	BlockAtAGlance       = "at_a_glance"      // System, next game, last session, page count (internal/app).
 	BlockParty           = "party"            // The claimed heroes: name, ancestry, class, level, player (entities plugin).
 	BlockWhenWePlay      = "when_we_play"     // The times most of the table is free (sessions plugin).
@@ -990,6 +991,7 @@ var ValidBlockTypes = map[string]bool{
 	BlockSyncStatus:      true,
 	BlockComingUp:        true,
 	BlockStartHere:       true,
+	BlockBrochure:        true,
 	BlockAtAGlance:       true,
 	BlockParty:           true,
 	BlockWhenWePlay:      true,

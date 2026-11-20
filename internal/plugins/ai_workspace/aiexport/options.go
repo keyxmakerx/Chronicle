@@ -123,6 +123,11 @@ type Options struct {
 	// since its stored text is that page's name. nil hides every mention.
 	// Filled by Service.Generate; ignored in the director's modes.
 	VisiblePages map[string]bool
+
+	// SheetReadOnly marks a reader who changes a sheet another way than
+	// `fields:` (a player's AI, whose changes follow its own brief), so the
+	// sheet line doesn't tell it every field is its to change.
+	SheetReadOnly bool
 }
 
 // EnabledCategories returns the canonical render order, filtered to

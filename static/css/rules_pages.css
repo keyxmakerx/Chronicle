@@ -1,0 +1,272 @@
+/*
+ * rules_pages.css: a rules category's list and an entry's page and peek
+ * (internal/systems/rules_list.templ, rules_page.templ).
+ *
+ * These are pages, not workshops: type, space and hairline rules carry the
+ * structure, nothing boxes the prose, and one accent marks what you can act
+ * on and where you are. Amber is only the Director's mark (a 3px leading
+ * edge and the "Directors only" word). Colours, corners, depth and timing
+ * come from the theme tokens, so light, dark and the page looks all apply.
+ * Rows lift from flat to resting on hover with no movement; nothing else
+ * moves, so Calm and Off need nothing of their own.
+ */
+.rp {
+  --rp-line: var(--color-border-light);
+  --rp-acc: var(--color-accent);
+  --rp-link: var(--color-accent-link, var(--color-accent));
+  --rp-dm: rgb(var(--color-warn-rgb));
+  --rp-dm-ink: color-mix(in srgb, rgb(var(--color-warn-rgb)) 72%, var(--color-text-primary));
+  --rp-head: var(--annals-head, var(--font-heading, inherit));
+  --rp-hit: 40px;
+  min-width: 0;
+  color: var(--color-text-body);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+@media (pointer: coarse) { .rp { --rp-hit: 44px; } }
+.rp [hidden] { display: none !important; }
+.rp :focus-visible { outline: 2px solid var(--rp-acc); outline-offset: 2px; border-radius: var(--shape-r-tag); }
+.rp a { color: var(--rp-link); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--rp-acc) 40%, transparent); text-underline-offset: 2px; }
+.rp a:hover { text-decoration-color: currentColor; }
+
+/* ---------- Layout: one column, a contents rail beside it when wide ---------- */
+.rp-grid { display: block; }
+.rp-main { min-width: 0; max-width: 42rem; }
+.rp-aside { display: none; }
+@media (min-width: 1024px) {
+  .rp-grid--rail { display: grid; grid-template-columns: minmax(0, 42rem) 12rem; gap: 48px; align-items: start; }
+  .rp-grid--rail .rp-aside { display: block; position: sticky; top: 72px; padding-top: 96px; }
+}
+
+/* ---------- The head: kind, name, whose words ---------- */
+.rp-head { margin-bottom: 12px; }
+.rp-kind { margin: 0 0 2px; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--rp-link); }
+.rp-title, .rp-peek-title {
+  position: relative; margin: 0; padding-bottom: 8px;
+  font-family: var(--rp-head); font-weight: var(--annals-hw, 700);
+  text-transform: var(--annals-hcase, none); letter-spacing: var(--annals-hls, 0);
+  color: var(--color-text-primary); line-height: 1.08;
+  overflow-wrap: anywhere; hyphens: auto;
+}
+.rp-title { font-size: clamp(1.5rem, 1.2rem + 1.6vw, 2.5rem); }
+.rp-peek-title { font-size: 1.375rem; padding-bottom: 4px; }
+.rp-title::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--rp-acc), color-mix(in srgb, var(--rp-acc) 25%, transparent));
+}
+.rp-count { margin-left: 10px; font-family: inherit; font-size: 0.875rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; vertical-align: middle; }
+.rp-whose { margin: 12px 0 0; font-size: 0.875rem; color: var(--color-text-primary); }
+.rp-whose--rewritten { padding: 2px 0 2px 10px; box-shadow: inset 2px 0 0 var(--rp-acc); }
+.rp-whose--credit, .rp-whose--mine { font-size: 0.78125rem; color: var(--color-text-secondary); }
+.rp-has { margin: 4px 0 0; font-size: 0.875rem; color: var(--color-text-secondary); }
+
+/* The Director's mark: a 3px amber leading edge and the amber word. */
+.rp-dm { margin: 10px 0 0; padding: 2px 0 2px 10px; box-shadow: inset 3px 0 0 var(--rp-dm); font-size: 0.8125rem; color: var(--color-text-secondary); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.rp-dm__tag { padding: 0 6px; border: var(--shape-edge) solid var(--rp-dm); border-radius: var(--shape-r-tag); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; line-height: 1.5; text-transform: uppercase; color: var(--rp-dm-ink); white-space: nowrap; }
+.rp .rp-dm__link { color: var(--rp-dm-ink); text-decoration-color: color-mix(in srgb, var(--rp-dm) 50%, transparent); }
+
+/* ---------- Reading ---------- */
+.rp-line { margin: 0 0 16px; font-size: 1rem; line-height: 1.5; color: var(--color-text-body); max-width: 40rem; }
+.rp-line--out { color: var(--color-text-primary); }
+.rp-jumps { display: flex; flex-wrap: wrap; gap: 0 8px; margin: -8px 0 16px; font-size: 0.8125rem; }
+.rp-jumps a { display: inline-flex; align-items: center; min-height: var(--rp-hit); }
+.rp-jumps__sep { color: var(--color-text-muted); align-self: center; }
+@media (min-width: 1024px) { .rp-grid--rail .rp-jumps { display: none; } }
+.rp-prose { max-width: 40rem; }
+.rp-prose p { margin: 0 0 10px; }
+.rp-prose--small p { margin-bottom: 4px; }
+.rp-prose strong { color: var(--color-text-primary); font-weight: 600; }
+.rp-story { margin-bottom: 8px; }
+
+.rp-section { margin-top: 24px; }
+.rp-h2 { margin: 0 0 8px; padding-bottom: 6px; border-bottom: var(--shape-rule) solid var(--rp-line); font-size: 1.0625rem; font-weight: 600; color: var(--color-text-primary); }
+.rp-h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 20px 0 0; padding-bottom: 6px; border-bottom: var(--shape-rule) solid var(--rp-line); font-size: 0.9375rem; font-weight: 600; color: var(--color-text-primary); }
+.rp-h3__aside { font-size: 0.78125rem; font-weight: 400; color: var(--color-text-secondary); white-space: nowrap; }
+.rp-cap { margin: 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
+
+/* In <campaign>: runs of names, each under a hairline. */
+.rp-run { padding: 8px 0; border-bottom: var(--shape-rule) solid var(--rp-line); }
+.rp-names { display: flex; flex-wrap: wrap; gap: 0 16px; margin: 2px 0 0; }
+.rp-names a { display: inline-flex; align-items: center; min-height: 28px; }
+@media (pointer: coarse) { .rp-names a { min-height: var(--rp-hit); } }
+.rp-more { align-self: center; color: var(--color-text-secondary); }
+
+/* At the table. */
+.rp-figs { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 4px 0 0; }
+.rp-fig { display: flex; gap: 6px; align-items: baseline; }
+.rp-fig dt { color: var(--color-text-secondary); }
+.rp-fig dd { margin: 0; font-weight: 600; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+.rp-detail { margin-top: 4px; }
+.rp-detail > .rp-prose, .rp-words { margin: 8px 0 0; }
+.rp-items { list-style: none; margin: 0; padding: 0; }
+.rp-item { padding: 10px 0; border-bottom: var(--shape-rule) solid var(--rp-line); scroll-margin-top: 80px; }
+.rp-item__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.rp-item__name { font-weight: 600; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.rp-item__cost { flex: none; font-size: 0.78125rem; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.rp-item--held { padding-left: 10px; box-shadow: inset 2px 0 0 var(--rp-acc); }
+.rp-item__mark { margin: 0; font-size: 0.78125rem; color: var(--rp-link); }
+.rp-item__mark--out { color: var(--color-text-secondary); }
+.rp-parts { margin: 6px 0 0; container-type: inline-size; }
+.rp-part { display: grid; grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr); gap: 0 12px; padding: 2px 0; }
+.rp-part dt { color: var(--color-text-secondary); }
+.rp-part dd { margin: 0; min-width: 0; }
+.rp-part dd p { margin: 0; }
+@media (max-width: 480px) { .rp-part { grid-template-columns: minmax(0, 1fr); padding: 4px 0; } }
+/* A narrow column, such as the peek panel, also puts each label above its value. */
+@container (max-width: 26rem) { .rp-part { grid-template-columns: minmax(0, 1fr); padding: 4px 0; } }
+.rp-lead { margin: 4px 0 0; color: var(--color-text-secondary); }
+.rp-lead p { margin: 0; }
+.rp-nest { margin: 8px 0 0; }
+.rp-nest__name { margin: 0; font-weight: 600; color: var(--color-text-primary); }
+
+.rp-notes { margin-top: 24px; padding-top: 8px; border-top: var(--shape-rule) solid var(--rp-line); }
+.rp-note { margin: 0 0 4px; font-size: 0.8125rem; color: var(--color-text-secondary); }
+
+/* The contents rail. */
+.rp-toc { display: flex; flex-direction: column; }
+.rp-toc .rp-cap { margin-bottom: 8px; color: var(--rp-link); }
+.rp .rp-toc__link {
+  display: flex; align-items: center; min-height: 32px; padding-left: 12px;
+  border-left: var(--shape-rule) solid var(--rp-line);
+  font-size: 0.8125rem; color: var(--color-text-secondary); text-decoration: none;
+  transition: color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+.rp .rp-toc__link:hover { color: var(--color-text-primary); }
+.rp .rp-toc__link[aria-current="true"] { color: var(--color-text-primary); font-weight: 600; box-shadow: inset 2px 0 0 var(--rp-acc); border-left-color: transparent; }
+
+/* ---------- The list ---------- */
+.rp-filter { display: flex; gap: 8px; align-items: center; margin: 4px 0 12px; max-width: 24rem; }
+.rp-filter__field {
+  flex: 1; min-width: 0; height: var(--rp-hit); padding: 0 12px;
+  border: var(--shape-edge) solid var(--color-border); border-radius: var(--shape-r-ctl);
+  background: var(--color-bg-secondary); color: var(--color-text-primary); font: inherit;
+  transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+.rp-filter__field::placeholder { color: var(--color-text-muted); }
+.rp-filter__field:focus { outline: none; border-color: var(--rp-acc); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rp-acc) 22%, transparent); }
+.rp-filter__go { flex: none; min-height: var(--rp-hit); }
+.rp-rows { list-style: none; margin: 0; padding: 0; }
+.rp-rowli { border-bottom: var(--shape-rule) solid var(--rp-line); }
+.rp .rp-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name end" "line line";
+  gap: 0 16px; align-items: baseline; min-height: 44px; padding: 10px 8px;
+  border-radius: var(--shape-r-ctl); color: inherit; text-decoration: none;
+  transition: background-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+.rp .rp-row:hover { background: var(--color-bg-tertiary); box-shadow: var(--elev-resting); }
+.rp .rp-row:active { background: var(--color-bg-tertiary); box-shadow: none; }
+.rp .rp-row:focus-visible { outline-offset: -2px; border-radius: var(--shape-r-ctl); }
+.rp-row__name { grid-area: name; font-weight: 600; color: var(--rp-link); overflow-wrap: anywhere; }
+.rp-row__line { grid-area: line; color: var(--color-text-secondary); font-size: 0.8125rem; line-height: 1.45; }
+.rp-row__end { grid-area: end; display: inline-flex; gap: 8px; align-items: baseline; font-size: 0.78125rem; color: var(--color-text-secondary); text-align: right; }
+@media (min-width: 768px) {
+  .rp .rp-row { grid-template-columns: minmax(8rem, 13rem) minmax(0, 1fr) auto; grid-template-areas: "name line end"; }
+  .rp-row__line { font-size: 0.875rem; }
+}
+.rp-rowli[data-dm-only] .rp-row { box-shadow: inset 3px 0 0 var(--rp-dm); border-radius: 0 var(--shape-r-ctl) var(--shape-r-ctl) 0; }
+.rp-rowli[data-dm-only] .rp-row:hover { box-shadow: inset 3px 0 0 var(--rp-dm), var(--elev-resting); }
+.rp-none { margin: 12px 0; color: var(--color-text-secondary); }
+.rp-leftout .rp-row__line { color: var(--color-text-body); }
+
+/* ---------- The peek ---------- */
+.rp-peek .rp-head { margin-bottom: 8px; }
+.rp-peek .rp-detail:first-of-type .rp-h3 { margin-top: 12px; }
+.rp-peek-foot { margin: 16px 0 0; }
+.rp .rp-quiet { font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; min-height: var(--rp-hit); }
+.rp .rp-quiet:hover { text-decoration: underline; }
+
+/* The trail keeps the site's quiet crumbs, not the page's link look. */
+.rp nav[aria-label="Breadcrumb"] a { color: inherit; text-decoration: none; }
+.rp nav[aria-label="Breadcrumb"] a:hover { color: var(--color-text-primary); }
+/* A secret span reaches only Directors; it wears their amber edge. */
+.rp-prose [data-secret] { border-left: 3px solid var(--rp-dm); padding-left: 6px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+
+/* ---------- The Director's amber words ---------- */
+/* Quiet words in the Director's amber: no border, fill or shadow, an
+   underline on hover, and a hit area the size the standard asks. */
+.rp-tools { align-items: center; gap: 0 6px; color: var(--color-text-secondary); }
+.rp .rp-dmword {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 0; border: 0; background: none;
+  font: inherit; font-weight: 600; color: var(--rp-dm-ink); cursor: pointer;
+  text-decoration: none; text-underline-offset: 2px;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+@media (pointer: coarse) { .rp .rp-dmword { min-height: var(--rp-hit); } }
+.rp .rp-dmword:hover { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--rp-dm) 60%, transparent); }
+.rp .rp-dmword:active { color: var(--color-text-primary); }
+.rp .rp-dmword[disabled], .rp .rp-dmword[data-working] { opacity: 0.55; cursor: default; text-decoration: none; }
+.rp .rp-pen { justify-content: center; min-width: 32px; }
+@media (pointer: coarse) { .rp .rp-pen { min-width: var(--rp-hit); } }
+.rp-dmsep { color: var(--color-text-muted); }
+.rp-tools .rp-dm__tag { margin-left: 4px; }
+.rp-tools__msg:empty { display: none; }
+.rp-tools__msg { flex-basis: 100%; color: rgb(var(--color-bad-rgb)); }
+
+/* The dialogs those words open: a plain sheet over the page. */
+.rp-dlg {
+  width: calc(100% - 2rem); max-width: 30rem; padding: 0;
+  border: var(--shape-edge) solid var(--color-border); border-radius: var(--shape-r-panel);
+  background: var(--color-bg-secondary); color: var(--color-text-body); box-shadow: var(--elev-dragged);
+  font-size: 0.875rem; line-height: 1.55;
+}
+.rp-dlg__body { padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
+.rp-dlg__body > p { margin: 0; }
+.rp-dlg__h { margin: 0 0 2px; font-size: 1.0625rem; font-weight: 600; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.rp-dlg__who { color: var(--color-text-primary); }
+.rp-dlg__label { margin-top: 4px; font-weight: 600; color: var(--color-text-primary); }
+.rp-dlg__opt { font-weight: 400; color: var(--color-text-secondary); }
+.rp-dlg__field {
+  width: 100%; min-height: var(--rp-hit, 40px); padding: 8px 12px; resize: vertical;
+  border: var(--shape-edge) solid var(--color-border); border-radius: var(--shape-r-ctl);
+  background: var(--color-bg-primary); color: var(--color-text-primary); font: inherit;
+  transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+.rp-dlg__field:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.rp-dlg__hint { margin: 0; font-size: 0.8125rem; color: var(--color-text-secondary); }
+.rp-dlg__choice { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 0; border-top: var(--shape-rule) solid var(--color-border-light); }
+.rp-dlg__fresh { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; margin-top: 6px; }
+.rp-dlg__err { margin: 0; color: rgb(var(--color-bad-rgb)); }
+.rp-dlg__foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.rp-dlg .btn-primary, .rp-dlg .btn-secondary { min-height: 40px; }
+@media (pointer: coarse) { .rp-dlg .btn-primary, .rp-dlg .btn-secondary { min-height: 44px; } }
+.rp-dlg [hidden] { display: none !important; }
+
+/* ---------- Before you play in <campaign> ---------- */
+/* A page, not a workshop: runs of hairline rows under plain headings. */
+.rp-main--wide { max-width: 52rem; }
+.rp-before__intro { max-width: 36rem; color: var(--color-text-body); }
+.rp-brun__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; border-bottom: var(--shape-rule) solid var(--rp-line); margin-bottom: 0; }
+.rp-brun__head .rp-h2 { border-bottom: 0; margin: 0; flex: 1; min-width: 0; }
+.rp-brun__act { flex: none; font-size: 0.8125rem; }
+.rp .rp-row--stack { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name end" "line line"; }
+.rp-row--stack .rp-row__name { color: var(--color-text-primary); }
+.rp-row--stack .rp-row__line { font-size: 0.875rem; }
+.rp-row__tag { margin-left: 8px; vertical-align: 1px; }
+.rp-change { margin: 0 8px 10px; }
+.rp-oldname { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-height: 44px; padding: 6px 8px 6px 12px; box-shadow: inset 3px 0 0 var(--rp-dm); }
+.rp-oldname__name { font-weight: 600; color: var(--color-text-primary); }
+.rp-oldname__after { flex-basis: 100%; font-size: 0.8125rem; color: var(--color-text-secondary); }
+.rp-before__drafts { margin-top: 24px; }
+
+/* The Director's "New entry" menu grows out of its word (the standard's
+   menu move); Calm fades and Off shows it at once. */
+.rp-newmenu { position: relative; display: inline-flex; }
+.rp-menu {
+  position: absolute; top: 100%; right: 0; z-index: var(--z-popup); min-width: 11rem; margin-top: 4px; padding: 4px;
+  display: flex; flex-direction: column;
+  background: var(--color-card-bg); border: var(--shape-edge) solid var(--color-border);
+  border-radius: var(--shape-r-ctl); box-shadow: var(--elev-hover);
+  transform-origin: top right; opacity: 0; transform: scale(0.96);
+  transition: opacity var(--dur-everyday-out) var(--ease-in), transform var(--dur-everyday-out) var(--ease-in);
+}
+.rp-menu[data-open] { opacity: 1; transform: none; transition-duration: var(--dur-everyday); transition-timing-function: var(--ease-out); }
+html[data-motion] .rp-menu { transform: none; }
+html[data-motion="off"] .rp-menu { transition: none; }
+.rp .rp-menu__item {
+  display: flex; align-items: center; min-height: 36px; padding: 0 10px; border-radius: var(--shape-r-small);
+  color: var(--color-text-primary); text-decoration: none; font-size: 0.875rem;
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+@media (pointer: coarse) { .rp .rp-menu__item { min-height: 44px; } }
+.rp .rp-menu__item:hover, .rp .rp-menu__item:focus-visible { background: var(--color-bg-tertiary); outline-offset: -2px; }
+@media (pointer: coarse) { .rp .rp-menu__item { min-height: var(--rp-hit); } }

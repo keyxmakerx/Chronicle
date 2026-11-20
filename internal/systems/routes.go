@@ -28,20 +28,33 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 	// The category browser at a stable address even when the system has a book
 	// (static segment, before /:cat).
 	mg.GET("/browse", h.Browse)
-	mg.GET("/widgets/:slug", h.WidgetScriptAPI)
-	// Raw glossary for client reference-renderers (must precede /:cat so it
-	// isn't shadowed by the category route).
-	mg.GET("/rules-glossary", h.RulesGlossaryAPI)
-	// Raw bundled data files (data/<file>.json), served verbatim like the
-	// glossary so widgets get the authored slug/properties. Static "data"
-	// segment, so it does not collide with the /:cat param route below.
-	mg.GET("/data/:file", h.SystemDataAPI)
 	// The Rulebook book, filtered per viewer (static segment, before /:cat).
 	mg.GET("/book", h.BookAPI)
 	registerBookEditorRoutes(mg, h)
+	// What the campaign wrote, rewrote and left out (static, before /:cat).
+	mg.GET("/before-you-play", h.BeforeYouPlay)
+	// An entry by kind and name, for sheets that store names (static, before /:cat).
+	mg.GET("/named/:kind", h.NamedEntry)
+	mg.GET("/named/:kind/peek", h.NamedEntryPeek)
+	mg.GET("/told", h.ToldAPI)
 	mg.GET("/:cat", h.CategoryList)
 	mg.GET("/:cat/:item", h.ItemDetail)
-	mg.GET("/:cat/:item/tooltip", h.TooltipAPI)
+	mg.GET("/:cat/:item/peek", h.EntryPeek)
+
+	// What a page's sheet needs to draw: the system's scripts, its raw data
+	// and glossary, and tooltips. Anyone who may read the campaign's pages
+	// gets them (a look-around pass, a public campaign's visitor), or the
+	// sheet stays blank for them; Director-only categories stay hidden by
+	// hiddenFromViewer, which treats every visitor as a player.
+	pub := e.Group("/campaigns/:id/systems/:mod",
+		auth.OptionalAuth(authSvc),
+		campaigns.AllowPublicCampaignAccess(campaignSvc),
+		requireSystemAddon(addonSvc, h.campaignSystems),
+	)
+	pub.GET("/widgets/:slug", h.WidgetScriptAPI, campaigns.RequireViewAccess())
+	pub.GET("/rules-glossary", h.RulesGlossaryAPI, campaigns.RequireViewAccess())
+	pub.GET("/data/:file", h.SystemDataAPI, campaigns.RequireViewAccess())
+	pub.GET("/:cat/:item/tooltip", h.TooltipAPI, campaigns.RequireViewAccess())
 }
 
 // registerBookEditorRoutes mounts the Rulebook editor. Every handler checks the

@@ -44,3 +44,55 @@ test('peekAddress accepts only the three page shapes', () => {
     assert.equal(peekAddress(input), want, name);
   }
 });
+
+const E = '/campaigns/c1/systems/drawsteel/ancestries/ashborn';
+
+test('peekAddress accepts a rules entry with only hero and printed', () => {
+  const cases = [
+    ['entry page', E, E + '/peek'],
+    ['entry peek', E + '/peek', E + '/peek'],
+    ['with a hero', E + '?hero=d80fb105-2923', E + '/peek?hero=d80fb105-2923'],
+    ['printed, rebuilt in order', E + '/peek?printed=1&hero=h1', E + '/peek?hero=h1&printed=1'],
+    ['another parameter', E + '?x=1', ''],
+    ['two heroes', E + '?hero=a&hero=b', ''],
+    ['printed other than 1', E + '?printed=yes', ''],
+    ['hero with a slash', E + '?hero=a/b', ''],
+    ['a fragment', E + '#traits', ''],
+    ['the book is not a category', '/campaigns/c1/systems/drawsteel/book/edit', ''],
+    ['data is not a category', '/campaigns/c1/systems/drawsteel/data/kits.json', ''],
+    ['a tooltip address', E + '/tooltip', ''],
+    ['a category alone', '/campaigns/c1/systems/drawsteel/ancestries', ''],
+    ['protocol-relative', '//evil.example' + E, ''],
+  ];
+  for (const [name, input, want] of cases) {
+    assert.equal(peekAddress(input), want, name);
+  }
+});
+
+const N = '/campaigns/c1/systems/drawsteel/named/ancestry';
+
+test('peekAddress accepts an entry by kind and name', () => {
+  const cases = [
+    ['named page', N + '?name=Ashborn', N + '/peek?name=Ashborn'],
+    ['named peek with a hero', N + '/peek?name=High%20Elf&hero=d80fb105', N + '/peek?name=High%20Elf&hero=d80fb105'],
+    ['hero first, rebuilt in order', N + '?hero=h1&name=Orc', N + '/peek?name=Orc&hero=h1'],
+    ['an apostrophe is encoded again', N + "?name=Can't", N + '/peek?name=Can%27t'],
+    ['no name', N + '?hero=h1', ''],
+    ['two names', N + '?name=a&name=b', ''],
+    ['an empty name', N + '?name=', ''],
+    ['a bad escape', N + '?name=%E0%A4%A', ''],
+    ['a raw space', N + '?name=High Elf', ''],
+    ['a plus', N + '?name=High+Elf', ''],
+    ['another parameter', N + '?name=Orc&x=1', ''],
+    ['a fragment', N + '?name=Orc#x', ''],
+    ['a slash in the kind', '/campaigns/c1/systems/drawsteel/named/a/b?name=Orc', ''],
+    ['named is never a category', '/campaigns/c1/systems/drawsteel/named/ancestry', ''],
+    ['a name over 100', N + '?name=' + 'a'.repeat(101), ''],
+    // Entry names are capped at 100 characters, as the server counts them.
+    ['100 characters outside the basic plane', N + '?name=' + encodeURIComponent('𐌰'.repeat(100)), N + '/peek?name=' + encodeURIComponent('𐌰'.repeat(100))],
+    ['101 characters outside the basic plane', N + '?name=' + encodeURIComponent('𐌰'.repeat(101)), ''],
+  ];
+  for (const [name, input, want] of cases) {
+    assert.equal(peekAddress(input), want, name);
+  }
+});

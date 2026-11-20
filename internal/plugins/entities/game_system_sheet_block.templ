@@ -19,6 +19,7 @@ templ blockGameSystemSheet(cc *campaigns.CampaignContext, entity *Entity, entity
 		CSRFToken:      csrfToken,
 		UserID:         userID,
 		NPCPage:        isNPCPageCtx(ctx),
+		System:         systemFor(ctx, entityType),
 	}); comp != nil {
 		<div data-block-game-system-sheet>
 			@comp

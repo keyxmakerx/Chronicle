@@ -355,3 +355,44 @@ func TestSyncFieldPlay_ConvergesAndIsIdempotent(t *testing.T) {
 		t.Errorf("clearing sync updated %d types, want 1", n3)
 	}
 }
+
+// TestSyncFieldChecks_ConvergesAndIsIdempotent covers the value-check
+// reconciler: bounds reach an existing type, a second run writes nothing,
+// and dropping a bound from the manifest clears it.
+func TestSyncFieldChecks_ConvergesAndIsIdempotent(t *testing.T) {
+	one, twenty := 1.0, 20.0
+	t1 := EntityType{ID: 1, PresetCategory: strptr("creature"), Fields: []FieldDefinition{
+		{Key: "level", Label: "Level"},
+		{Key: "abilities_json", Label: "Abilities"},
+	}}
+	saved := map[int]string{}
+	typeRepo := &mockEntityTypeRepo{
+		listAllFn: func(_ context.Context) ([]EntityType, error) { return []EntityType{t1}, nil },
+		updateFieldsSchemaFn: func(_ context.Context, id int, fieldsJSON string) error {
+			saved[id] = fieldsJSON
+			return nil
+		},
+	}
+	svc := newTestService(&mockEntityRepo{}, typeRepo).(*entityService)
+	want := map[string]map[string]FieldChecks{
+		"creature": {"level": {Min: &one, Max: &twenty}, "abilities_json": {JSONList: true}},
+	}
+	if n, err := svc.SyncFieldChecks(context.Background(), want); err != nil || n != 1 {
+		t.Fatalf("first sync = %d, %v; want 1", n, err)
+	}
+	var stored []FieldDefinition
+	if err := json.Unmarshal([]byte(saved[1]), &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored[0].Min == nil || *stored[0].Min != 1 || *stored[0].Max != 20 || !stored[1].JSONList {
+		t.Errorf("stored fields wrong: %+v", stored)
+	}
+	t1.Fields = stored
+	if n, _ := svc.SyncFieldChecks(context.Background(), want); n != 0 {
+		t.Errorf("second sync updated %d types, want 0", n)
+	}
+	n, _ := svc.SyncFieldChecks(context.Background(), map[string]map[string]FieldChecks{"creature": {"level": {}}})
+	if n != 1 {
+		t.Errorf("clearing sync updated %d types, want 1", n)
+	}
+}

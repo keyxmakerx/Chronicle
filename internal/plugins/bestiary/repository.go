@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -19,6 +21,14 @@ type BestiaryRepository interface {
 	UpdatePublication(ctx context.Context, p *Publication) error
 	ArchivePublication(ctx context.Context, id string) error
 	UpdateVisibility(ctx context.Context, id, visibility string) error
+	// ApplyModeration sets the visibility a moderator action produced, the
+	// state to return to later (nil clears it) and, when resetFlags is set,
+	// zeroes flagged_count so a restored publication needs a fresh round of
+	// flags to be hidden again.
+	ApplyModeration(ctx context.Context, id, visibility string, prior *string, resetFlags bool) error
+	// ReconcileEscapedText unescapes name, description and flavor text that the
+	// old write path HTML-escaped, once per row. Returns rows changed.
+	ReconcileEscapedText(ctx context.Context) (int, error)
 
 	// Listing.
 	ListPublished(ctx context.Context, page, perPage int) ([]Publication, int, error)
@@ -52,6 +62,12 @@ type BestiaryRepository interface {
 
 	// Imports.
 	CreateImport(ctx context.Context, imp *Import) error
+	// GetImport returns the import record for a publication in a campaign, or
+	// nil when there is none.
+	GetImport(ctx context.Context, publicationID, campaignID string) (*Import, error)
+	// DeleteImport removes the record, so a creature whose page is gone can be
+	// imported again.
+	DeleteImport(ctx context.Context, publicationID, campaignID string) error
 	ImportExists(ctx context.Context, publicationID, campaignID string) (bool, error)
 	IncrementDownloads(ctx context.Context, publicationID string) error
 
@@ -96,7 +112,17 @@ const pubCols = `id, creator_id, source_entity_id, source_campaign_id, system_id
        statblock_json, version, tags, organization, role, level,
        downloads, rating_sum, rating_count, favorites,
        visibility, flagged_count, reviewed_by, reviewed_at,
-       hub_id, hub_synced_at, created_at, updated_at`
+       hub_id, hub_synced_at, created_at, updated_at, prior_visibility`
+
+// qualifiedPubCols is pubCols prefixed with a table alias, for joins where
+// created_at and id exist on both sides.
+func qualifiedPubCols(alias string) string {
+	parts := strings.Split(pubCols, ",")
+	for i, p := range parts {
+		parts[i] = alias + "." + strings.TrimSpace(p)
+	}
+	return strings.Join(parts, ", ")
+}
 
 // scanPublication reads a row into a Publication struct.
 func scanPublication(scanner interface{ Scan(...any) error }) (*Publication, error) {
@@ -108,7 +134,7 @@ func scanPublication(scanner interface{ Scan(...any) error }) (*Publication, err
 		&statblock, &p.Version, &tags, &p.Organization, &p.Role, &p.Level,
 		&p.Downloads, &p.RatingSum, &p.RatingCount, &p.Favorites,
 		&p.Visibility, &p.FlaggedCount, &p.ReviewedBy, &p.ReviewedAt,
-		&p.HubID, &p.HubSyncedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.HubID, &p.HubSyncedAt, &p.CreatedAt, &p.UpdatedAt, &p.PriorVisibility,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -120,10 +146,6 @@ func scanPublication(scanner interface{ Scan(...any) error }) (*Publication, err
 	if tags != nil {
 		p.Tags = json.RawMessage(tags)
 	}
-	// Read-side scrub: any row missed by the write-side sanitizer is still
-	// served clean. Idempotent with a zero-allocation fast path for clean
-	// rows; see sanitize.go.
-	sanitizePublicationInPlace(p)
 	return p, nil
 }
 
@@ -133,8 +155,9 @@ func (r *bestiaryRepo) CreatePublication(ctx context.Context, p *Publication) er
 		`INSERT INTO bestiary_publications
 		 (id, creator_id, source_entity_id, source_campaign_id, system_id,
 		  name, slug, description, flavor_text, artwork_media_id,
-		  statblock_json, version, tags, organization, role, level, visibility)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		  statblock_json, version, tags, organization, role, level, visibility,
+		  legacy_escaped_text)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
 		p.ID, p.CreatorID, p.SourceEntityID, p.SourceCampaignID, p.SystemID,
 		p.Name, p.Slug, p.Description, p.FlavorText, p.ArtworkMediaID,
 		string(p.StatblockJSON), p.Version, nullableJSON(p.Tags),
@@ -205,13 +228,87 @@ func (r *bestiaryRepo) ArchivePublication(ctx context.Context, id string) error 
 // UpdateVisibility changes the visibility state of a publication.
 func (r *bestiaryRepo) UpdateVisibility(ctx context.Context, id, visibility string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE bestiary_publications SET visibility = ? WHERE id = ?`,
+		`UPDATE bestiary_publications SET visibility = ?, prior_visibility = NULL WHERE id = ?`,
 		visibility, id,
 	)
 	if err != nil {
 		return fmt.Errorf("update visibility: %w", err)
 	}
 	return nil
+}
+
+// ApplyModeration writes a moderator's outcome in one statement so the
+// visibility, the state to restore and the flag count never disagree.
+func (r *bestiaryRepo) ApplyModeration(ctx context.Context, id, visibility string, prior *string, resetFlags bool) error {
+	q := `UPDATE bestiary_publications SET visibility = ?, prior_visibility = ?`
+	if resetFlags {
+		q += `, flagged_count = 0`
+	}
+	q += ` WHERE id = ?`
+	if _, err := r.db.ExecContext(ctx, q, visibility, prior, id); err != nil {
+		return fmt.Errorf("apply moderation: %w", err)
+	}
+	return nil
+}
+
+// ReconcileEscapedText undoes the HTML escaping the old write path applied to
+// name, description and flavor text. Only rows still marked
+// legacy_escaped_text are touched and each is marked clean in the same
+// statement, so a value a user typed as "&amp;" after the fix is never
+// unescaped and a re-run changes nothing.
+func (r *bestiaryRepo) ReconcileEscapedText(ctx context.Context) (int, error) {
+	total := 0
+	for {
+		rows, err := r.db.QueryContext(ctx,
+			`SELECT id, name, description, flavor_text FROM bestiary_publications
+			 WHERE legacy_escaped_text = 1 LIMIT 500`)
+		if err != nil {
+			return total, fmt.Errorf("list legacy escaped rows: %w", err)
+		}
+		type row struct {
+			id, name     string
+			desc, flavor *string
+		}
+		var batch []row
+		for rows.Next() {
+			var x row
+			if err := rows.Scan(&x.id, &x.name, &x.desc, &x.flavor); err != nil {
+				rows.Close()
+				return total, fmt.Errorf("scan legacy escaped row: %w", err)
+			}
+			batch = append(batch, x)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return total, err
+		}
+		if len(batch) == 0 {
+			return total, nil
+		}
+		for _, x := range batch {
+			res, err := r.db.ExecContext(ctx,
+				`UPDATE bestiary_publications
+				 SET name = ?, description = ?, flavor_text = ?, legacy_escaped_text = 0
+				 WHERE id = ? AND legacy_escaped_text = 1`,
+				html.UnescapeString(x.name), unescapePtr(x.desc), unescapePtr(x.flavor), x.id)
+			if err != nil {
+				return total, fmt.Errorf("unescape publication %s: %w", x.id, err)
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				total++
+			}
+		}
+	}
+}
+
+// unescapePtr unescapes a nullable text column.
+func unescapePtr(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	v := html.UnescapeString(*s)
+	return &v
 }
 
 // ListPublished returns paginated publications visible to all users.
@@ -453,8 +550,8 @@ func (r *bestiaryRepo) GetCreatorStats(ctx context.Context, creatorID string) (*
 		        ELSE 0
 		   END
 		 FROM bestiary_publications
-		 WHERE creator_id = ? AND visibility IN (?, ?)`,
-		creatorID, VisibilityPublished, VisibilityUnlisted,
+		 WHERE creator_id = ? AND visibility = ?`,
+		creatorID, VisibilityPublished,
 	).Scan(&stats.PublicationCount, &stats.TotalDownloads, &stats.TotalRatings, &stats.AverageRating)
 	if err != nil {
 		return nil, fmt.Errorf("get creator stats: %w", err)
@@ -608,22 +705,31 @@ func (r *bestiaryRepo) IsFavorited(ctx context.Context, userID, publicationID st
 	return exists, nil
 }
 
-// ListFavorites returns paginated publications favorited by a user.
+// favoriteViewable is the visibility rule Show applies, for the favorites
+// list: the row stays so a restored publication reappears, but the content and
+// the count only include what this user may see now.
+const favoriteViewable = `(p.visibility IN ('published', 'unlisted') OR p.creator_id = f.user_id)`
+
+// ListFavorites returns paginated publications favorited by a user that the
+// user may still see.
 func (r *bestiaryRepo) ListFavorites(ctx context.Context, userID string, page, perPage int) ([]Publication, int, error) {
 	offset := (page - 1) * perPage
 
 	var total int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM bestiary_favorites WHERE user_id = ?`, userID,
+		`SELECT COUNT(*) FROM bestiary_favorites f
+		 INNER JOIN bestiary_publications p ON p.id = f.publication_id
+		 WHERE f.user_id = ? AND `+favoriteViewable,
+		userID,
 	).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count favorites: %w", err)
 	}
 
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+pubCols+` FROM bestiary_publications p
+		`SELECT `+qualifiedPubCols("p")+` FROM bestiary_publications p
 		 INNER JOIN bestiary_favorites f ON f.publication_id = p.id
-		 WHERE f.user_id = ?
+		 WHERE f.user_id = ? AND `+favoriteViewable+`
 		 ORDER BY f.created_at DESC
 		 LIMIT ? OFFSET ?`,
 		userID, perPage, offset,
@@ -663,6 +769,34 @@ func (r *bestiaryRepo) CreateImport(ctx context.Context, imp *Import) error {
 	)
 	if err != nil {
 		return fmt.Errorf("insert import: %w", err)
+	}
+	return nil
+}
+
+// GetImport returns the import record, or nil when the publication was never
+// imported into the campaign.
+func (r *bestiaryRepo) GetImport(ctx context.Context, publicationID, campaignID string) (*Import, error) {
+	imp := &Import{}
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, publication_id, user_id, campaign_id, entity_id, imported_at
+		 FROM bestiary_imports WHERE publication_id = ? AND campaign_id = ?`,
+		publicationID, campaignID,
+	).Scan(&imp.ID, &imp.PublicationID, &imp.UserID, &imp.CampaignID, &imp.EntityID, &imp.ImportedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get import: %w", err)
+	}
+	return imp, nil
+}
+
+// DeleteImport removes the import record for a publication in a campaign.
+func (r *bestiaryRepo) DeleteImport(ctx context.Context, publicationID, campaignID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM bestiary_imports WHERE publication_id = ? AND campaign_id = ?`,
+		publicationID, campaignID); err != nil {
+		return fmt.Errorf("delete import: %w", err)
 	}
 	return nil
 }
@@ -718,9 +852,9 @@ func (r *bestiaryRepo) IncrementFlaggedCount(ctx context.Context, publicationID 
 // AutoFlagIfThreshold sets visibility to flagged if flagged_count >= threshold.
 func (r *bestiaryRepo) AutoFlagIfThreshold(ctx context.Context, publicationID string, threshold int) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE bestiary_publications SET visibility = ?
-		 WHERE id = ? AND flagged_count >= ? AND visibility = ?`,
-		VisibilityFlagged, publicationID, threshold, VisibilityPublished,
+		`UPDATE bestiary_publications SET prior_visibility = visibility, visibility = ?
+		 WHERE id = ? AND flagged_count >= ? AND visibility IN (?, ?)`,
+		VisibilityFlagged, publicationID, threshold, VisibilityPublished, VisibilityUnlisted,
 	)
 	if err != nil {
 		return fmt.Errorf("auto-flag: %w", err)
@@ -1072,9 +1206,9 @@ func (r *bestiaryRepo) FlagPublicationAtomic(ctx context.Context, userID, public
 	// Auto-hide if threshold reached.
 	if newCount >= threshold {
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE bestiary_publications SET visibility = ?
-			 WHERE id = ? AND visibility = ?`,
-			VisibilityFlagged, publicationID, VisibilityPublished,
+			`UPDATE bestiary_publications SET prior_visibility = visibility, visibility = ?
+			 WHERE id = ? AND visibility IN (?, ?)`,
+			VisibilityFlagged, publicationID, VisibilityPublished, VisibilityUnlisted,
 		); err != nil {
 			return fmt.Errorf("auto-flag publication: %w", err)
 		}

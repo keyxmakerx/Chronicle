@@ -866,6 +866,7 @@ func (run *lookupRun) pageOf(e *entities.Entity) (LookupAnswer, error) {
 	} else {
 		opts.VisiblePages = run.visibleIDs()
 	}
+	opts.SheetReadOnly = run.a.ReadsOwnNotes
 	opts.ParentNames = run.parentNames()
 	var pageTagMap map[string][]tags.Tag
 	if run.l.Tags != nil {
@@ -940,7 +941,7 @@ func sheetFieldsText(e *entities.Entity, types []entities.EntityType, canSeeGM, 
 			defs = t.Fields
 		}
 	}
-	vals := entities.FilterRestrictedFields(e.FieldsData, defs, canSeeGM, isOwner)
+	vals := entities.FilterRestrictedFields(e.FieldsData, entities.RestrictionDefs(defs, e.FieldOverrides), canSeeGM, isOwner)
 	var b strings.Builder
 	for _, d := range defs {
 		v, ok := vals[d.Key]

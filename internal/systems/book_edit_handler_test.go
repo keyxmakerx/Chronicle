@@ -446,3 +446,69 @@ func renameChapters(b *Book, ids map[string]string) *Book {
 	}
 	return &out
 }
+
+// A card's entry tie survives every way a page goes round: a save, the
+// editor's source, keep mine, a house chapter written whole and its YAML,
+// and the export. Losing it would show players the printed card again.
+func TestBookEdit_EntryTieRoundTrips(t *testing.T) {
+	ctx := context.Background()
+	pkg := testPackage(t, nil)
+	repo := &fakeBookRepo{}
+	svc := newTestService(repo)
+	const tied = `{"title":"Peoples","blocks":[{"type":"cards","items":[{"title":"Human","summary":"Everywhere.","entry":"ancestries/human"}]}]}`
+	tie := func(where string, p authoredPage) {
+		t.Helper()
+		if len(p.Blocks) == 0 || len(p.Blocks[0].Items) == 0 || p.Blocks[0].Items[0].Entry != "ancestries/human" {
+			t.Errorf("%s lost the tie: %+v", where, p)
+		}
+	}
+	e, err := svc.SavePage(ctx, testCampaign, "u1", pkg, "basics", "p0", []byte(tied))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tie("the save's answer", e.Page)
+	if !strings.Contains(repo.pages[0].PageJSON, `"entry":"ancestries/human"`) {
+		t.Errorf("stored page = %s", repo.pages[0].PageJSON)
+	}
+	src, err := svc.EditorSource(ctx, testCampaign, pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tie("the editor's source", src.Parts[0].Chapters[0].Pages[0].Page)
+	b, err := svc.Edition(ctx, testCampaign, pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it := b.Parts[0].Chapters[0].Pages[0].Blocks[0].Items[0]; it.Entry != "ancestries/human" {
+		t.Errorf("the book's page lost the tie: %+v", it)
+	}
+	repo.pages[0].BaseHash = "older-package-page"
+	if e, err = svc.KeepPage(ctx, testCampaign, "u1", pkg, "basics", "p0"); err != nil {
+		t.Fatal(err)
+	}
+	tie("keep mine", e.Page)
+
+	d, err := ParseHouseChapterDraft([]byte("pages:\n  - title: Peoples\n    blocks:\n      - type: cards\n        items:\n          - title: Human\n            entry: ancestries/human\n"), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, err := svc.WriteHouseChapter(ctx, testCampaign, "u1", pkg, "", "Our peoples", d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tie("a house chapter written whole", ch.Pages[0].Page)
+	y, _, err := HouseChapterYAML(*ch, true, nil)
+	if err != nil || !strings.Contains(string(y), "entry: ancestries/human") {
+		t.Errorf("the house chapter's YAML = %s %v", y, err)
+	}
+
+	data, err := svc.Export(ctx, testCampaign, pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, _ := unzipBook(t, data)
+	basics, _ := os.ReadFile(filepath.Join(dir, "book/chapters/basics.yaml"))
+	if !strings.Contains(string(basics), "entry: ancestries/human") {
+		t.Errorf("the export lost the tie:\n%s", basics)
+	}
+}

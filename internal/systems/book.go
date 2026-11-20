@@ -59,6 +59,7 @@ var (
 	bookChapterID      = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 	bookDicePattern    = regexp.MustCompile(`^([1-9]|10)d([2-9]|[1-9][0-9]|100)$`)
 	bookWidgetSlug     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+	bookEntryRef       = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$`)
 	glossaryRefPattern = regexp.MustCompile(`\{@[a-z]+ ([^}|]+)(?:\|([^}]+))?\}`)
 	// The cover and fonts live in fixed subfolders with plain names, so a
 	// declared path can never climb out of book/ or name a hidden file.
@@ -190,6 +191,10 @@ type BookItem struct {
 	Summary string `json:"summary,omitempty"`
 	Text    string `json:"text,omitempty"`
 	Chapter string `json:"chapter,omitempty"`
+	// Entry ties a card to the rules entry it describes ("ancestries/human"),
+	// so each reader's book shows that entry as the campaign has it for them
+	// (book_reading.go). Never matched by name.
+	Entry string `json:"entry,omitempty"`
 }
 
 // BookStat is one creature number.
@@ -268,6 +273,7 @@ type bookBlockYAML struct {
 		Summary string `yaml:"summary"`
 		Text    string `yaml:"text"`
 		Chapter string `yaml:"chapter"`
+		Entry   string `yaml:"entry"`
 	} `yaml:"items"`
 	Steps   []string `yaml:"steps"`
 	Name    string   `yaml:"name"`
@@ -635,7 +641,11 @@ func buildBookBlock(y bookBlockYAML, widgets map[string]bool) (BookBlock, error)
 			if strings.TrimSpace(it.Title) == "" {
 				return b, fmt.Errorf("item %d needs a title", i+1)
 			}
-			b.Items = append(b.Items, BookItem{Title: it.Title, Summary: it.Summary, Text: it.Text})
+			entry := strings.TrimSpace(it.Entry)
+			if entry != "" && (t != "cards" || !bookEntryRef.MatchString(entry)) {
+				return b, fmt.Errorf("item %d: entry must be <category>/<slug> on a cards item", i+1)
+			}
+			b.Items = append(b.Items, BookItem{Title: it.Title, Summary: it.Summary, Text: it.Text, Entry: entry})
 		}
 		return b, nil
 	case "links":

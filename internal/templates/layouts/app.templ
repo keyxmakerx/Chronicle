@@ -1197,7 +1197,7 @@ func isPathPrefix(ctx context.Context, prefix string) bool {
 // so the panel can sit on the Journal page without the two editing the same
 // note.
 func notesWidgetVisible(ctx context.Context) bool {
-	return InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "jot-notes")
+	return InCampaign(ctx) && IsAuthenticated(ctx) && IsCampaignMember(ctx) && IsAddonEnabled(ctx, "jot-notes")
 }
 
 // isExternalURL returns true if the URL starts with http:// or https://,

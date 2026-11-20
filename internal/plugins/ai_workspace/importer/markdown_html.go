@@ -70,7 +70,7 @@ func MarkdownToHTML(input string, opts ...RenderOption) (string, error) {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	out := buf.String()
+	out := taskListMarkup(buf.String())
 	if HasSecretMarkerText(out) {
 		switch {
 		case o.markers:

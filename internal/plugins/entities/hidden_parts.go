@@ -118,10 +118,7 @@ func restrictedFieldKeys(entity *Entity, et *EntityType, canSeeGM, isOwner bool)
 	if canSeeGM || et == nil {
 		return nil
 	}
-	defs := et.Fields
-	if entity.FieldOverrides != nil && len(entity.FieldOverrides.Added) > 0 {
-		defs = append(append([]FieldDefinition{}, et.Fields...), entity.FieldOverrides.Added...)
-	}
+	defs := RestrictionDefs(et.Fields, entity.FieldOverrides)
 	var keys map[string]struct{}
 	for i := range defs {
 		if defs[i].GMOnly || (defs[i].OwnerOnly && !isOwner) {
@@ -132,6 +129,13 @@ func restrictedFieldKeys(entity *Entity, et *EntityType, canSeeGM, isOwner bool)
 		}
 	}
 	return keys
+}
+
+// RestrictedFieldKeys is restrictedFieldKeys for code outside this plugin
+// that reads a page's fields on a reader's behalf without the handler's
+// served copy, so it can leave out exactly what that copy leaves out.
+func RestrictedFieldKeys(entity *Entity, et *EntityType, canSeeGM, isOwner bool) map[string]struct{} {
+	return restrictedFieldKeys(entity, et, canSeeGM, isOwner)
 }
 
 // keepRestrictedFields is a whole-map save from a writer who was not served
@@ -181,7 +185,7 @@ func (h *Handler) servedCopy(c *echo.Context, cc *campaigns.CampaignContext, ent
 	cp.Entry, cp.EntryHTML, _ = h.servedText(c, cc, cp.Entry, cp.EntryHTML)
 	cp.PlayerNotes, cp.PlayerNotesHTML, _ = h.servedText(c, cc, cp.PlayerNotes, cp.PlayerNotesHTML)
 	if et != nil {
-		cp.FieldsData = FilterRestrictedFields(cp.FieldsData, et.Fields, false, cp.IsOwnedBy(userID))
+		cp.FieldsData = FilterRestrictedFields(cp.FieldsData, RestrictionDefs(et.Fields, cp.FieldOverrides), false, cp.IsOwnedBy(userID))
 	}
 	return &cp
 }

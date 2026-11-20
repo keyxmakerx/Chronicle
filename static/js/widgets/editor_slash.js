@@ -22,6 +22,7 @@
     { id: 'heading3',       label: 'Heading 3',       icon: 'fa-heading',        keywords: 'heading h3',            description: 'Small heading' },
     { id: 'bulletList',     label: 'Bullet List',      icon: 'fa-list-ul',        keywords: 'bullet unordered list', description: 'Unordered list' },
     { id: 'orderedList',    label: 'Numbered List',    icon: 'fa-list-ol',        keywords: 'numbered ordered list', description: 'Ordered list' },
+    { id: 'taskList',       label: 'Checklist',        icon: 'fa-square-check',   keywords: 'checklist task todo checkbox', description: 'Boxes to tick' },
     { id: 'blockquote',     label: 'Callout',          icon: 'fa-quote-left',     keywords: 'callout quote block',   description: 'Callout block' },
     { id: 'table',          label: 'Table',            icon: 'fa-table',          keywords: 'table grid',            description: '3×3 table' },
     { id: 'horizontalRule', label: 'Horizontal Rule',  icon: 'fa-minus',          keywords: 'horizontal rule divider line separator', description: 'Divider line' },
@@ -318,6 +319,9 @@
           break;
         case 'orderedList':
           editor.chain().focus().toggleOrderedList().run();
+          break;
+        case 'taskList':
+          if (editor.can().toggleTaskList) editor.chain().focus().toggleTaskList().run();
           break;
         case 'blockquote':
           editor.chain().focus().toggleBlockquote().run();

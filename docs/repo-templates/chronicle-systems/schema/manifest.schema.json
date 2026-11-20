@@ -287,6 +287,18 @@
           "type": "string",
           "description": "How the value is written when it is not plain text or a number, such as the shape of one entry in a JSON list. AI Import shows it beside the field."
         },
+        "min": {
+          "type": "number",
+          "description": "Lowest value AI Import accepts for a number field. Absent means no lower bound."
+        },
+        "max": {
+          "type": "number",
+          "description": "Highest value AI Import accepts for a number field. Absent means no upper bound."
+        },
+        "json_list": {
+          "type": "boolean",
+          "description": "The field holds a JSON list. AI Import refuses text that does not parse as one."
+        },
         "gm_only": {
           "type": "boolean",
           "description": "Only the GM sees this field."

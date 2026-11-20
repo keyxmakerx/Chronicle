@@ -259,7 +259,7 @@ label.aic-row { cursor: pointer; }
  * aside, the changes slide in one after another, and Not now folds them
  * back. The review sits flush in the card rather than as a card of its own. */
 .aic-request:has(.aic-req-review > *) .aic-req-actions { display: none; }
-.aic-req-review:not(:empty) { margin: 14px -20px -16px; border-top: 1px solid var(--color-border-light); }
+.aic-request .aic-req-review:not(:empty) { margin: 14px -20px -16px; border-top: 1px solid var(--color-border-light); }
 .aic-req-review .air { border: 0; box-shadow: none; margin: 0; border-radius: 0 0 12px 12px; background: transparent; overflow: visible; }
 .aic-req-review > form { animation: aic-unfold 320ms cubic-bezier(.2, .7, .2, 1) both; }
 .aic-req-review .air-row { position: relative; animation: aic-row-in 260ms cubic-bezier(.2, .7, .2, 1) both; }
@@ -393,3 +393,11 @@ label.aic-row { cursor: pointer; }
 .aib-warn { margin: 0 14px 12px; padding: 10px 12px; border-radius: 8px; border-left: 3px solid rgb(var(--color-warn-rgb)); background: rgb(var(--color-warn-rgb) / 0.12); font-size: 0.8125rem; color: var(--color-text-primary); display: flex; flex-direction: column; gap: 8px; }
 .aib-warn p { margin: 0; }
 .aib-warn-row { display: flex; align-items: center; gap: 12px; }
+
+/* A pasted answer's review is a card of its own in the side sheet, marked
+ * like a waiting request; inside a request's card it sits flush instead. */
+.aip-review { margin: 0; }
+#ai-player-paste-review > .aip-review { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent), var(--elev-hover); }
+.aic-request .aic-req-review > .aip-review { border: 0; box-shadow: none; background: transparent; border-radius: 0 0 12px 12px; }
+.aip-body:has(#ai-player-paste-review > *) .aip-empty { display: none; }
+.aip-yes { font-size: 0.875rem; color: var(--color-text-primary); }

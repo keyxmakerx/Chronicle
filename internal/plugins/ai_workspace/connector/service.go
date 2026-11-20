@@ -54,6 +54,10 @@ var (
 	ErrNotMember = errors.New("not in the campaign")
 	// ErrPlayerGone: the player who made the key has left the campaign.
 	ErrPlayerGone = errors.New("whoever made this key is no longer in the campaign")
+	// ErrGuest: CheckMember found a guest, who joined with only a name and
+	// has no account of their own. Players' AI is for players with an
+	// account, so a guest can neither make a key nor use one.
+	ErrGuest = errors.New("guests can't use an AI here")
 )
 
 // Owners checks that a key's maker still has their place in its campaign,
@@ -64,7 +68,7 @@ type Owners interface {
 	// (ErrNotOwner when they simply aren't the owner).
 	Check(ctx context.Context, campaignID, userID string) (campaignName string, err error)
 	// CheckMember is Check for anyone in the campaign, the owner included
-	// (ErrNotMember when they aren't in it).
+	// (ErrNotMember when they aren't in it, ErrGuest for a guest).
 	CheckMember(ctx context.Context, campaignID, userID string) (campaignName string, err error)
 }
 
@@ -128,6 +132,9 @@ func (s *Service) Connect(ctx context.Context, campaignID, userID string, privac
 	forPlayer := false
 	if _, err := s.owners.Check(ctx, campaignID, userID); err != nil {
 		if _, err := s.owners.CheckMember(ctx, campaignID, userID); err != nil {
+			if errors.Is(err, ErrGuest) {
+				return "", nil, apperror.NewForbidden("guests can't use an AI here; ask the campaign's owner for an account")
+			}
 			return "", nil, apperror.NewForbidden("only people in this campaign can connect an AI to it")
 		}
 		if err := s.checkPlayerSwitches(ctx, campaignID); err != nil {
@@ -190,9 +197,16 @@ func (s *Service) EndAllKeysMadeBy(ctx context.Context, userID string) error {
 	return s.repo.RevokeAllMadeBy(ctx, userID, s.now().UTC().Truncate(time.Second))
 }
 
+// EndGuestKeys revokes every key a guest made. Guests can't make a key, but
+// one made before that rule held would otherwise come back to life if the
+// guest later takes an account. It is safe to run at every start.
+func (s *Service) EndGuestKeys(ctx context.Context) (int64, error) {
+	return s.repo.RevokeGuestKeys(ctx, s.now().UTC().Truncate(time.Second))
+}
+
 // Authenticate checks a key against the campaign in the address. It returns
 // the connection and the campaign's name, or ErrBadKey, ErrKeyEnded,
-// ErrOwnerGone, ErrKeyPaused, ErrAIOff or ErrCutOff. It reads the connection
+// ErrOwnerGone, ErrPlayerGone, ErrGuest, ErrKeyPaused, ErrAIOff or ErrCutOff. It reads the connection
 // and the switches on every call, so a pause, a switch or a change of what
 // the key may do applies from the next call.
 func (s *Service) Authenticate(ctx context.Context, campaignID, raw string) (*Connection, string, error) {
@@ -217,6 +231,9 @@ func (s *Service) Authenticate(ctx context.Context, campaignID, raw string) (*Co
 	}
 	name, err := check(ctx, c.CampaignID, c.UserID)
 	if err != nil {
+		if errors.Is(err, ErrGuest) {
+			return nil, "", ErrGuest
+		}
 		if !errors.Is(err, ErrNotOwner) && !errors.Is(err, ErrNotMember) {
 			slog.Warn("ai connector: maker check failed", slog.Int64("connection", c.ID), slog.Any("error", err))
 		}

@@ -76,8 +76,12 @@
         break;
       case 'cards':
       case 'flaps':
+        // entry ties a card to its rules entry (cards only). The form has no
+        // field for it, so it rides along untouched and is saved back.
         b.items = arr(b.items).filter(isObj).map(function (it) {
-          return { title: str(it.title), summary: str(it.summary), text: str(it.text) };
+          var m = { title: str(it.title), summary: str(it.summary), text: str(it.text) };
+          if (b.type === 'cards' && str(it.entry)) m.entry = str(it.entry);
+          return m;
         });
         break;
       case 'example':
@@ -134,6 +138,7 @@
           put(r, 'title', it.title);
           if (t === 'cards') put(r, 'summary', it.summary);
           put(r, 'text', it.text);
+          if (t === 'cards') put(r, 'entry', it.entry);
           return r;
         });
         break;

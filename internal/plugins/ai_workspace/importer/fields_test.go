@@ -2,6 +2,7 @@ package importer
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 
@@ -253,4 +254,49 @@ func TestLinkFields(t *testing.T) {
 			t.Errorf("non-link values changed: %#v", checked)
 		}
 	})
+}
+
+// A system's declared bounds and list shape flag a value instead of saving it;
+// a field with none still takes any finite number.
+func TestCheckFields_Bounds(t *testing.T) {
+	one, twenty := 1.0, 20.0
+	defs := []entities.FieldDefinition{
+		{Key: "level", Label: "Level", Type: "number", Min: &one, Max: &twenty},
+		{Key: "stamina", Label: "Stamina", Type: "number", Min: &one},
+		{Key: "free", Label: "Free", Type: "number"},
+		{Key: "abilities_json", Label: "Abilities", Type: "textarea", JSONList: true},
+	}
+	tests := []struct {
+		name    string
+		in      map[string]any
+		problem string
+	}{
+		{"inside", map[string]any{"level": 5, "stamina": "30", "free": -400}, ""},
+		{"below", map[string]any{"level": -5}, "Level: needs a number from 1 to 20, not -5."},
+		{"above", map[string]any{"level": 99}, "from 1 to 20"},
+		{"fraction under a minimum", map[string]any{"stamina": 0.5}, "Stamina: needs a number of at least 1, not 0.5."},
+		{"huge with no maximum is fine", map[string]any{"stamina": 1e14}, ""},
+		{"huge text under a maximum", map[string]any{"level": "1e14"}, "from 1 to 20"},
+		{"unbounded takes negatives", map[string]any{"free": -5}, ""},
+		{"NaN refused", map[string]any{"free": math.NaN()}, "needs a number"},
+		{"Inf refused", map[string]any{"free": math.Inf(1)}, "needs a number"},
+		{"NaN text refused", map[string]any{"free": "NaN"}, "needs a number"},
+		{"plain text in a list field", map[string]any{"abilities_json": "a strong bite"}, "Abilities: needs a list of entries"},
+		{"an object is not a list", map[string]any{"abilities_json": `{"name":"Bite"}`}, "needs a list of entries"},
+		{"JSON text list passes", map[string]any{"abilities_json": `[{"name":"Bite"}]`}, ""},
+		{"YAML list passes", map[string]any{"abilities_json": []any{map[string]any{"name": "Bite"}}}, ""},
+		{"cleared list passes", map[string]any{"abilities_json": nil}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, problems := CheckFields(defs, tc.in)
+			joined := strings.Join(problems, " ")
+			if tc.problem == "" && len(problems) > 0 {
+				t.Fatalf("unexpected problems %q", problems)
+			}
+			if tc.problem != "" && !strings.Contains(joined, tc.problem) {
+				t.Fatalf("problems = %q, want one containing %q", problems, tc.problem)
+			}
+		})
+	}
 }

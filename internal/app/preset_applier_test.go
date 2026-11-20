@@ -178,6 +178,8 @@ func TestApplyPresets_CharacterSheetHome(t *testing.T) {
 			&fakePresetEntities{adoptable: false}, 0, 1, false, 1},
 		{"a failed adoption does not create a duplicate",
 			&fakePresetEntities{adoptErr: errors.New("db down")}, 0, 0, false, 0},
+		{"a preset named like the seeded Characters type binds it, then adds its fields",
+			&fakePresetEntities{adoptable: true, types: []entities.EntityType{{ID: 1, Name: "Hero", Slug: "character"}}}, 1, 0, true, 0},
 		{"a type already bound to the category is reused, never adopted over",
 			&fakePresetEntities{adoptable: true, types: []entities.EntityType{{ID: 5, Name: "Anything", PresetCategory: &bound}}}, 0, 0, true, 0},
 	}

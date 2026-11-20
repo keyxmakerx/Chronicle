@@ -1,0 +1,164 @@
+// rules_before.templ draws "Before you play in <campaign>" from the view
+// RulesPages.Before builds for the reader (rules_before.go). Like the entry
+// page it decides nothing: every row and every amber word was already chosen
+// for this reader.
+
+package systems
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// BeforePage is the gathered page in the app frame.
+templ BeforePage(cc *campaigns.CampaignContext, v *BeforeView) {
+	@layouts.App("Before you play in " + cc.Campaign.Name) {
+		@BeforePageContent(v)
+	}
+}
+
+// BeforePageContent is the gathered page for an HTMX swap.
+templ BeforePageContent(v *BeforeView) {
+	<div id="module-content">
+		@rulesStyles()
+		<article class="rp rp-before" data-widget="rules-page" aria-labelledby="rp-before-title">
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: v.CampaignName, Href: "/campaigns/" + v.CampaignID},
+				{Label: "Before you play in " + v.CampaignName},
+			})
+			<div class="rp-main rp-main--wide" data-rp-director data-api={ v.APIBase }>
+				<header class="rp-head">
+					<h1 class="rp-title" id="rp-before-title">{ "Before you play in " + v.CampaignName }</h1>
+				</header>
+				if v.Empty() {
+					if v.IsDirector {
+						<p class="rp-line">{ "Nothing of " + v.CampaignName + "’s own yet. Open any entry of " + v.SystemName + " to rewrite it for " + v.CampaignName + " or leave it out, or write a new entry of your own." }</p>
+						<p class="rp-dm" data-dm-only>
+							@newEntry(v)
+							<span class="cb-dm rp-dm__tag">Directors only</span>
+						</p>
+					} else {
+						<p class="rp-line">{ v.CampaignName + " plays " + v.SystemName + " as printed: nothing is added, changed or left out." }</p>
+					}
+				} else {
+					<p class="rp-line rp-before__intro">{ "What is only here, what is changed, and what is not here. Nobody writes this page: it gathers itself from the " + layouts.GMTerm(ctx) + "’s own entries." }</p>
+					if v.IsDirector && !hasRun(v, RunOnly) {
+						<p class="rp-dm" data-dm-only>
+							@newEntry(v)
+							<span class="cb-dm rp-dm__tag">Directors only</span>
+						</p>
+					}
+					for _, run := range v.Runs {
+						<section class="rp-section rp-brun" aria-labelledby={ "rp-run-" + run.ID }>
+							<div class="rp-brun__head">
+								<h2 class="rp-h2" id={ "rp-run-" + run.ID }>{ run.Title }</h2>
+								if run.ID == RunOnly && v.IsDirector {
+									<span class="rp-brun__act">
+										@newEntry(v)
+									</span>
+								}
+							</div>
+							<ul class="rp-rows">
+								for _, row := range run.Rows {
+									@beforeRowItem(row)
+								}
+							</ul>
+						</section>
+					}
+				}
+				if v.IsDirector && len(v.OldNames) > 0 {
+					<section class="rp-section rp-brun" aria-labelledby="rp-run-old">
+						<h2 class="rp-h2" id="rp-run-old">Old names</h2>
+						<ul class="rp-rows">
+							for _, n := range v.OldNames {
+								<li class="rp-rowli rp-oldname" data-dm-only data-rp-change>
+									<span class="rp-oldname__name">“{ n.Name }”</span>
+									if n.LeadURL != "" {
+										<span>still leads to <a href={ templ.SafeURL(n.LeadURL) }>{ n.Leads }</a>.</span>
+									} else {
+										<span>still leads to an entry, and no other entry can take it.</span>
+									}
+									<button type="button" class="rp-dmword" data-rp-act="free" data-name-id={ itoa64(n.ID) } aria-describedby={ "rp-free-" + itoa64(n.ID) } data-working-label="Freeing…">Free this name</button>
+								if n.AfterFree != "" {
+									<span class="rp-oldname__after" id={ "rp-free-" + itoa64(n.ID) }>{ n.AfterFree }</span>
+								}
+									<span class="rp-tools__msg" role="status" data-rp-msg></span>
+								</li>
+							}
+						</ul>
+					</section>
+				}
+				if v.IsDirector && v.DraftsURL != "" {
+					<p class="rp-dm rp-before__drafts" data-dm-only>
+						<a class="rp-dmword" href={ templ.SafeURL(v.DraftsURL) }>Entries and players’ drafts</a>
+						if v.Waiting > 0 {
+							<span>{ itoa(v.Waiting) + " waiting for you" }</span>
+						}
+						<span class="cb-dm rp-dm__tag">Directors only</span>
+					</p>
+				}
+			</div>
+		</article>
+	</div>
+}
+
+templ beforeRowItem(row beforeRow) {
+	<li class="rp-rowli" data-dm-only?={ row.DirectorsOnly }>
+		<a class="rp-row rp-row--stack" href={ templ.SafeURL(row.URL) }>
+			<span class="rp-row__name">
+				{ row.Name }
+				if row.DirectorsOnly {
+					<span class="cb-dm rp-dm__tag rp-row__tag">Directors only</span>
+				}
+			</span>
+			if row.Line != "" {
+				if row.Quoted {
+					<span class="rp-row__line">“{ row.Line }”</span>
+				} else {
+					<span class="rp-row__line">{ row.Line }</span>
+				}
+			}
+			<span class="rp-row__end">{ row.Kind }</span>
+		</a>
+		if row.Change != nil {
+			<div class="rp-dm rp-change" data-dm-only data-rp-change>
+				<span>{ row.Change.Text }</span>
+				<a class="rp-dmword" href={ templ.SafeURL(row.Change.CompareURL) }>Compare</a>
+				<span class="rp-dmsep" aria-hidden="true">·</span>
+				<button type="button" class="rp-dmword" data-rp-act="seen" data-entry={ itoa64(row.Change.EntryID) } data-working-label="Saving…">Seen</button>
+				if row.Change.AsideURL != "" {
+					<span class="rp-dmsep" aria-hidden="true">·</span>
+					<a class="rp-dmword" href={ templ.SafeURL(row.Change.AsideURL) }>{ row.Change.AsideLabel }</a>
+				}
+				<span class="rp-tools__msg" role="status" data-rp-msg></span>
+			</div>
+		}
+	</li>
+}
+
+// newEntry is the Director's amber "New entry": straight to the editor for a
+// campaign with one kind, or a small menu of kinds.
+templ newEntry(v *BeforeView) {
+	if len(v.NewKinds) == 1 {
+		<a class="rp-dmword" href={ templ.SafeURL(v.NewKinds[0].URL) }>New entry</a>
+	} else if len(v.NewKinds) > 1 {
+		<span class="rp-newmenu">
+			<button type="button" class="rp-dmword" data-rp-act="menu" aria-haspopup="menu" aria-expanded="false" aria-controls="rp-new-menu">New entry</button>
+			<span class="rp-menu" id="rp-new-menu" role="menu" aria-label="New entry" hidden>
+				for _, k := range v.NewKinds {
+					<a class="rp-menu__item" role="menuitem" href={ templ.SafeURL(k.URL) }>{ k.Label }</a>
+				}
+			</span>
+		</span>
+	}
+}
+
+func hasRun(v *BeforeView, id string) bool {
+	for _, r := range v.Runs {
+		if r.ID == id {
+			return true
+		}
+	}
+	return false
+}

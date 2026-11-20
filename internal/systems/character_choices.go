@@ -58,6 +58,25 @@ type Choice struct {
 	// Mine and EntryID are set for the player who wrote the entry.
 	Mine    bool  `json:"mine,omitempty"`
 	EntryID int64 `json:"entryId,omitempty"`
+	// Key is what a hero-choice rule names the entry by: a package entry's
+	// slug, a campaign entry's id (never its slug, which a deleted entry
+	// hands to the next one of that name).
+	Key string `json:"key,omitempty"`
+	// State is ChoiceStateAskFirst on an entry the viewer may pick only with
+	// a Director's yes; empty for an entry they may simply pick.
+	State string `json:"state,omitempty"`
+	// Visibility is a campaign entry's EntryVisibility*. Kept off the wire:
+	// the Directors' rules screen needs it to say who can read the entry.
+	Visibility string `json:"-"`
+	// Origin says whose words these are: "standard" (the package's),
+	// "campaign" (the campaign's own) or "rewritten" (a campaign entry in a
+	// standard entry's place, named by StandsFor). Empty when no campaign
+	// overlay ran.
+	Origin    string `json:"origin,omitempty"`
+	StandsFor string `json:"standsFor,omitempty"`
+	// ToldRecently marks a campaign entry the players were told changed
+	// within the last two weeks (ToldWindow).
+	ToldRecently bool `json:"toldRecently,omitempty"`
 }
 
 // ChoiceList is the full answer for one field: the choices plus the system
@@ -71,7 +90,16 @@ type ChoiceList struct {
 	// CanMake says the viewer may write their own entry for this field, a
 	// permission a Director gave them (see EntryGrant).
 	CanMake bool `json:"canMake,omitempty"`
+	// Rules says what the campaign's hero-choice rules did to this list for
+	// the viewer; nil when none applies.
+	Rules *FieldRules `json:"rules,omitempty"`
+	// Excluded holds the entries the rules took off the list, with their data,
+	// so a hero that already holds one stays editable. Never served.
+	Excluded []Choice `json:"-"`
 }
+
+// ChoiceStateAskFirst marks a Choice the viewer must ask a Director for.
+const ChoiceStateAskFirst = RuleAskFirst
 
 // ChoiceSource contributes extra choices for a field. It lets a later feature
 // add campaign-made entries (Source "campaign") without this package knowing
@@ -112,6 +140,21 @@ func ChoiceViewerUser(ctx context.Context) string {
 func ChoiceViewerIsDirector(ctx context.Context) bool {
 	v, _ := ctx.Value(choiceViewerKey{}).(bool)
 	return v
+}
+
+// ChoiceOverlay merges the campaign's entries into the package's choices
+// for the viewer the context marks, deciding which standard rows a stand-in
+// replaces and which are left out. It replaces the plain append of
+// ChoiceSources, so a tied entry never shows twice.
+type ChoiceOverlay func(ctx context.Context, campaignID, systemID, fieldKey string, pkg []Choice) ([]Choice, error)
+
+var choiceOverlay ChoiceOverlay
+
+// RegisterChoiceOverlay sets the overlay. Call at start-up; the last call wins.
+func RegisterChoiceOverlay(fn ChoiceOverlay) {
+	choiceSourcesMu.Lock()
+	choiceOverlay = fn
+	choiceSourcesMu.Unlock()
 }
 
 // MakeOwnCheck reports whether a player may write their own entry for a
@@ -267,6 +310,7 @@ func loadChoicesFile(path string) (out []Choice, ok bool) {
 		desc, _ := it["description"].(string)
 		props, _ := it["properties"].(map[string]any)
 		out = append(out, Choice{
+			Key:         slug,
 			Slug:        slug,
 			Name:        name,
 			Summary:     cleanSummary(summary),
@@ -299,6 +343,9 @@ type CharacterChoiceService interface {
 	CharacterChoiceList(ctx context.Context, campaignID, fieldKey string) (*ChoiceList, error)
 	// CreatorPlan lists every character field with entries, for the hero creator.
 	CreatorPlan(ctx context.Context, campaignID string) (*CreatorPlan, error)
+	// SetChoiceLimiter plugs in the hero-choice rules. Every list is then
+	// narrowed for the viewer after its sources are merged.
+	SetChoiceLimiter(l ChoiceLimiter)
 }
 
 type characterChoiceService struct {
@@ -306,7 +353,10 @@ type characterChoiceService struct {
 	custom    *CampaignSystemManager
 	manifests func() []*SystemManifest
 	dirOf     func(id string) string
+	limiter   ChoiceLimiter
 }
+
+func (s *characterChoiceService) SetChoiceLimiter(l ChoiceLimiter) { s.limiter = l }
 
 // NewCharacterChoiceService wires the service to the live system registry,
 // the campaign's addon switches and its custom uploaded system (either may
@@ -412,7 +462,18 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 
 	choiceSourcesMu.RLock()
 	sources := append([]ChoiceSource(nil), choiceSources...)
+	overlay := choiceOverlay
 	choiceSourcesMu.RUnlock()
+	if overlay != nil {
+		merged, err := overlay(ctx, campaignID, res.SystemID, fieldKey, res.Choices)
+		if err != nil {
+			// No list rather than the package's own: that one still holds
+			// entries the Director left out or replaced, and a hero made from
+			// it would carry them. The picker and creator say to try again.
+			return nil, err
+		}
+		res.Choices = merged
+	}
 	for _, src := range sources {
 		extra, err := src(ctx, campaignID, fieldKey)
 		if err != nil {
@@ -420,6 +481,13 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 			continue
 		}
 		res.Choices = append(res.Choices, extra...)
+	}
+	// The rules narrow the merged list last, so package and campaign entries
+	// are limited by the same code and every reader of the list agrees.
+	if s.limiter != nil {
+		if err := s.limiter.Limit(ctx, campaignID, res); err != nil {
+			return nil, err
+		}
 	}
 	res.CanMake = canMakeOwn(ctx, campaignID, fieldKey)
 	return res, nil
