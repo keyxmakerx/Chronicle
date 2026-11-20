@@ -28,7 +28,7 @@
 
   // The page is drawn at this size and scaled down, the example site's
   // proportions (880 x 520) at a desktop width.
-  var W = 1280, H = 756;
+  var W = 1040, H = 614;
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);

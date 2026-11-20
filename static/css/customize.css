@@ -1045,12 +1045,12 @@
    While the Pages part is open, the example column shows one of the owner's
    pages in a frame wearing the draft's kit. The frame lies over the example
    site, which fades out under it (and its blur and part marks with it); the
-   page is drawn at 1280 x 756 and scaled to the column by the script. A fade,
+   page is drawn at 1040 x 614 and scaled to the column by the script. A fade,
    instant at Off. The label takes the example's label style. */
 .czp .kf{ position:absolute; inset:0; z-index:3; overflow:hidden; opacity:0; pointer-events:none; background:var(--surface-2); transition:opacity 220ms ease; }
 .czp .pv-frame.kf-on .kf{ opacity:1; }
 .czp .pv-frame.kf-on > .zp[data-z="site"]{ opacity:0; pointer-events:none; }
-.czp .kf-f{ position:absolute; left:0; top:0; width:1280px; height:756px; border:0; transform-origin:0 0; pointer-events:none; }
+.czp .kf-f{ position:absolute; left:0; top:0; width:1040px; height:614px; border:0; transform-origin:0 0; pointer-events:none; }
 .czp .kf-l{ margin:0; font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .czp .kf-foot{ display:flex; flex-wrap:wrap; gap:4px 16px; }
 .czp .kf-q{ min-height:24px; padding:0; border:0; background:none; font:inherit; font-size:12px; color:var(--accent-ink); text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:3px; cursor:pointer; }
