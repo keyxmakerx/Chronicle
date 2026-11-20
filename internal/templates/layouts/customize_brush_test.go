@@ -1,9 +1,12 @@
 package layouts
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/a-h/templ"
 )
 
 // The brush is for whoever may open Customize (the campaign's owner), in
@@ -102,6 +105,40 @@ func TestTopbarBrush_KitRow(t *testing.T) {
 			}
 			if tc.want && !strings.Contains(html, "See this page in another kit. Nothing is saved.") {
 				t.Error("kit row misses its second line")
+			}
+		})
+	}
+}
+
+// An open try-out goes back on before the first paint only where the
+// owner's brush is drawn and pages wear the Material look: the head loads
+// kit_try_early.js and <html> carries the mark it acts on.
+func TestBase_KitTryEarly(t *testing.T) {
+	annals := func(ctx context.Context) context.Context {
+		return SetAppearance(ctx, &AppearanceData{PageLook: "annals"})
+	}
+	tests := []struct {
+		name string
+		ctx  context.Context
+		want bool
+	}{
+		{"owner, Material page look", annals(viewer(3, true, false, false, false)), true},
+		{"owner who hid the brush", annals(SetViewPrefs(viewer(3, true, false, false, false), &ViewPrefsData{Brush: "hidden"})), false},
+		{"owner, standard page look", SetAppearance(viewer(3, true, false, false, false), &AppearanceData{PageLook: "standard"}), false},
+		{"player", annals(viewer(1, false, false, false, false)), false},
+		{"owner viewing as a player", annals(viewer(1, true, false, true, false)), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := Base("t").Render(templ.WithChildren(tc.ctx, templ.Raw("")), &buf); err != nil {
+				t.Fatal(err)
+			}
+			html := buf.String()
+			script := strings.Contains(html, "/static/js/kit_try_early.js")
+			mark := strings.Contains(html, "data-kit-try-ok")
+			if script != tc.want || mark != tc.want {
+				t.Fatalf("early script = %v, mark = %v; want %v", script, mark, tc.want)
 			}
 		})
 	}

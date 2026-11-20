@@ -403,7 +403,7 @@ func tabLine(c *Campaign, t DeskTab) DeskLine {
 // never off on an archived campaign.
 func brushLine(hidden bool) DeskLine {
 	b := DeskBlank{
-		Kind: DeskBlankChoice, ID: "brush", Label: "Brush in the header",
+		Kind: DeskBlankChoice, ID: "brush", Label: "Header brush",
 		URL: "/account/view-prefs", Method: "PUT", Field: "brush",
 		Options: []DeskOption{
 			{Value: "shown", Label: deskBrushShown, Hint: "Customize from any page you're on"},
@@ -414,7 +414,7 @@ func brushLine(hidden bool) DeskLine {
 	if hidden {
 		b.Value, b.Shown = "hidden", deskBrushHidden
 	}
-	return DeskLine{ID: "brush", Name: "Brush in the header", Values: []DeskValue{{Blank: &b}}}
+	return DeskLine{ID: "brush", Name: "Header brush", Values: []DeskValue{{Blank: &b}}}
 }
 
 // customizeLines are the Customize block: one row per Customize area in its

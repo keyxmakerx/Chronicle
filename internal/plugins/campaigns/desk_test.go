@@ -177,8 +177,8 @@ func TestDeskRows_Customize(t *testing.T) {
 		{"homes", homesLine(c, DeskInputs{GMTerm: "GM"}), "Home pages", "Everyone|no player home yet", "/campaigns/c1/customize/home"},
 		{"a plugin's area with words", tabLine(c, DeskTab{ID: "dice", Label: "Dice", Summary: CustomizeSummary{Text: "Jewelled, onyx", Sub: "players pick their own"}}), "Dice", "Jewelled, onyx|players pick their own", "/campaigns/c1/customize/x/dice"},
 		{"a plugin's area without words", tabLine(c, DeskTab{ID: "maps", Label: "Maps"}), "Maps", "|", "/campaigns/c1/customize/x/maps"},
-		{"brush shown", brushLine(false), "Brush in the header", "blank:Shown", ""},
-		{"brush hidden", brushLine(true), "Brush in the header", "blank:Hidden", ""},
+		{"brush shown", brushLine(false), "Header brush", "blank:Shown", ""},
+		{"brush hidden", brushLine(true), "Header brush", "blank:Hidden", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

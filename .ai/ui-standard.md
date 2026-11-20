@@ -720,7 +720,7 @@ The same screens, folded to the width; never a second design.
   Customize" and a quiet "Hide this brush". Rows are words with a quiet second
   line, no icons. On a phone it is a shelf entry, Customize, and the menu
   hangs across the top of the page like the bell's list. Hiding it is the
-  person's own choice; Campaign settings › Customize › Brush in the header
+  person's own choice; Campaign settings › Customize › Header brush
   brings it back.
 - **"Try a style kit here" shows the real page in another kit, unsaved.**
   The brush offers it on a page a kit dresses while the page look is
@@ -732,7 +732,8 @@ The same screens, folded to the width; never a second design.
   picks. The try-out follows the owner across pages in that tab until "Put
   it back" or Escape; "Keep this kit" puts the kit into Customize's draft and
   opens Customize › Look on it. The strip Settles in (Calm fades, Off shows
-  it).
+  it). A page loaded in full during a try-out wears the tried kit from its
+  first paint.
 - **Side panels become bottom sheets on a phone**: the page peek and the
   Table (under **What is on a page** and **Opening and closing**).
 - **A sheet that scrolls keeps the pull to itself**: a fixed sheet's scroll

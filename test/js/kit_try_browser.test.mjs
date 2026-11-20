@@ -112,3 +112,34 @@ test('Keep this kit is the only write, and leads where the server says', { skip 
     assert.deepEqual(await tab.evaluate(() => JSON.parse(sessionStorage.getItem('writes'))), ['POST /c/customize/kit-try/keep {"kit":"ornate"}']);
   });
 });
+
+// kit_try_early.js: the try-out is on before the first paint, where it may be.
+const early = (ok) => `<!doctype html><html data-cz-page="annals" data-cz-kit="sketchbook" data-cz-entrance="bloom"${ok ? ' data-kit-try-ok' : ''}><head><meta charset="utf-8">
+<script src="/kit_try_early.js"></script>
+<script>var h = document.documentElement; window.seen = [h.getAttribute('data-cz-kit'), h.getAttribute('data-cz-entrance'), h.getAttribute('data-kit-try'), h.getAttribute('data-kit-saved'), h.getAttribute('data-kit-saved-entrance'), !!document.querySelector('style[data-kit-try-css]')];</script>
+</head><body>${ok === 'frame' ? '<iframe id="f" src="/campaigns/c1/framed"></iframe>' : ''}</body></html>`;
+
+test('kit_try_early puts an open try-out on before the first paint, only where it may', { skip }, async () => {
+  const browser = await pw.chromium.launch({ executablePath: chromePath });
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://t.test/**', (route) => {
+      const p = new URL(route.request().url()).pathname;
+      if (p === '/kit_try_early.js') return route.fulfill({ contentType: 'text/javascript; charset=utf-8', body: readFileSync(join(root, 'static/js/kit_try_early.js')) });
+      if (p === '/campaigns/c1/no-brush') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: early(false) });
+      if (p === '/campaigns/c1/with-frame') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: early('frame') });
+      return route.fulfill({ contentType: 'text/html; charset=utf-8', body: early(true) });
+    });
+    await tab.goto('http://t.test/campaigns/c1');
+    await tab.evaluate(() => sessionStorage.setItem('chronicle-kit-try', JSON.stringify({ c: 'c1', url: '/campaigns/c1/customize/kit-try', kit: 'ornate', css: ':root{}', kits: [], entrance: '' })));
+    const seen = async (path) => { await tab.goto('http://t.test' + path); return tab.evaluate(() => window.seen); };
+
+    assert.deepEqual(await seen('/campaigns/c1/entities/e1'), ['ornate', null, 'ornate', 'sketchbook', 'bloom', true]);
+    assert.deepEqual(await seen('/campaigns/c2/entities/e1'), ['sketchbook', 'bloom', null, null, null, false], 'another campaign');
+    assert.deepEqual(await seen('/campaigns/c1/no-brush'), ['sketchbook', 'bloom', null, null, null, false], 'no brush on the page');
+    await seen('/campaigns/c1/with-frame');
+    const frame = tab.frames().find((f) => f.url().includes('/framed'));
+    await frame.waitForFunction(() => window.seen);
+    assert.deepEqual(await frame.evaluate(() => window.seen), ['sketchbook', 'bloom', null, null, null, false], 'a framed page');
+  } finally { await browser.close(); }
+});

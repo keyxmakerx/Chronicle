@@ -16,7 +16,8 @@
  * (sessionStorage, so closing the tab ends it); "Put it back" or Escape in
  * the strip ends it too. The strip Settles in (a fade and a short rise),
  * fades only under Calm and simply appears under Off; picking a kit swaps it
- * at once.
+ * at once. kit_try_early.js puts an open try-out back on before a full
+ * page load's first paint.
  */
 (function () {
   'use strict';
@@ -40,8 +41,15 @@
     try { return JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { return null; }
   }
 
+  // remember keeps what the server drew; kit_try_early.js, having already
+  // put a kit on before the first paint, left it on data-kit-saved.
   function remember() {
-    if (!orig) orig = { kit: root.getAttribute('data-cz-kit') || 'material', entrance: root.getAttribute('data-cz-entrance') };
+    if (orig) return;
+    if (root.hasAttribute('data-kit-saved')) {
+      orig = { kit: root.getAttribute('data-kit-saved'), entrance: root.getAttribute('data-kit-saved-entrance') };
+    } else {
+      orig = { kit: root.getAttribute('data-cz-kit') || 'material', entrance: root.getAttribute('data-cz-entrance') };
+    }
   }
   function setAttr(n, v) {
     if (v == null || v === '') root.removeAttribute(n);
@@ -56,6 +64,7 @@
   }
 
   function apply(kit) {
+    if (!styleEl) styleEl = document.querySelector('style[data-kit-try-css]');
     if (!styleEl) {
       styleEl = document.createElement('style');
       styleEl.setAttribute('data-kit-try-css', '');
@@ -68,11 +77,14 @@
   }
   function unapply() {
     root.removeAttribute('data-kit-try');
+    root.removeAttribute('data-kit-saved');
+    root.removeAttribute('data-kit-saved-entrance');
     root.style.removeProperty('--kit-try-h');
     if (orig) {
       setAttr('data-cz-kit', orig.kit === 'material' ? null : orig.kit);
       setAttr('data-cz-entrance', orig.entrance);
     }
+    if (!styleEl) styleEl = document.querySelector('style[data-kit-try-css]');
     if (styleEl) { styleEl.remove(); styleEl = null; }
   }
 
