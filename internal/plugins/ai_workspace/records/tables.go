@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -24,11 +25,15 @@ type TableDoc struct {
 	Tables []Table `json:"tables"`
 }
 
-// Table is one rolling table.
+// Table is one rolling table. Credit and Visibility are carried untouched:
+// this kind rewrites the whole set, so a field it did not name would be lost
+// from every table it did not mean to change.
 type Table struct {
-	ID      string  `json:"id"`
-	Name    string  `json:"name"`
-	Entries []Entry `json:"entries"`
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	Credit     json.RawMessage `json:"credit,omitempty"`
+	Visibility string          `json:"visibility,omitempty"`
+	Entries    []Entry         `json:"entries"`
 }
 
 // Entry is one row of a table. Weight is always sent: the service keeps an
@@ -38,6 +43,8 @@ type Entry struct {
 	Name   string  `json:"name"`
 	Brief  string  `json:"brief"`
 	Weight float64 `json:"weight"`
+	// When is the line's day conditions, kept as read.
+	When json.RawMessage `json:"when,omitempty"`
 }
 
 // TableKind adds, replaces and removes rolling tables, matched by name.

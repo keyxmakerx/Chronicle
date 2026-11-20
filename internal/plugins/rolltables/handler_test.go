@@ -108,3 +108,35 @@ func TestHandler_PutInvalidBody(t *testing.T) {
 		t.Fatalf("code = %d (err %v), want 422", errCode(err), err)
 	}
 }
+
+// The Rolling tables page is the DM team's: players and scribes are refused,
+// and a request with no campaign context fails rather than draws.
+func TestHandler_ManageGating(t *testing.T) {
+	tests := []struct {
+		name string
+		cc   *campaigns.CampaignContext
+		want int
+	}{
+		{"player", ctxFor(campaigns.RolePlayer, false), http.StatusForbidden},
+		{"scribe without dm access", ctxFor(campaigns.RoleScribe, false), http.StatusForbidden},
+		{"no campaign context", nil, http.StatusInternalServerError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/roll-tables/manage", nil)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			if tt.cc != nil {
+				c.Set("campaign_context", tt.cc)
+			}
+			err := NewHandler(NewService(newFakeRepo())).Manage(c)
+			if errCode(err) != tt.want {
+				t.Fatalf("code = %d (err %v), want %d", errCode(err), err, tt.want)
+			}
+			if rec.Body.Len() != 0 {
+				t.Errorf("a refused request drew something")
+			}
+		})
+	}
+}

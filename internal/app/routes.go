@@ -7209,6 +7209,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
+	{Name: "roll-tables-page", Scripts: []string{"/static/js/widgets/roll_tables_page.js"}},
 	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/made_items.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
