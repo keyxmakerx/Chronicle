@@ -18,6 +18,11 @@
  * fades only under Calm and simply appears under Off; picking a kit swaps it
  * at once. kit_try_early.js puts an open try-out back on before a full
  * page load's first paint.
+ *
+ * Customize › Look uses two more ways in (look_kit_frame.js): dress() puts a
+ * kit on the page in its example frame, storing nothing, and walk() opens a
+ * page with this tab's try-out on in a kit. A framed page never takes the
+ * tab's try-out.
  */
 (function () {
   'use strict';
@@ -294,6 +299,9 @@
   // case the campaign's look changed.
   function resume(opts) {
     var s = saved();
+    // A framed page (Look's example) is dressed by its parent, never from
+    // the tab's try-out.
+    if (window.top !== window) return;
     if (state || !s || s.c !== opts.campaign || s.url !== opts.url || !s.css || !s.kits) return;
     remember();
     state = s;
@@ -310,9 +318,51 @@
     }, function () { /* the stored tokens stand */ });
   }
 
+  // dress puts kit on another document, the page in Customize › Look's
+  // example frame, the way apply puts it on this one, from the same tokens
+  // (o: { kit, css, entrance }). It stores nothing and shows no strip; the
+  // frame's brush and strip are hidden, and the page is inert, a picture.
+  // Called again it swaps the kit in place, without reloading the frame.
+  var FRAME_CSS = '[data-kit-frame] .tb-brush,[data-kit-frame] .kit-try{display:none!important}';
+  function dress(doc, o) {
+    var h = doc.documentElement;
+    if (!h.hasAttribute('data-kit-saved')) {
+      h.setAttribute('data-kit-saved', h.getAttribute('data-cz-kit') || 'material');
+      var e = h.getAttribute('data-cz-entrance');
+      if (e) h.setAttribute('data-kit-saved-entrance', e);
+    }
+    var st = doc.querySelector('style[data-kit-try-css]');
+    if (!st) {
+      st = doc.createElement('style');
+      st.setAttribute('data-kit-try-css', '');
+      doc.head.appendChild(st);
+    }
+    var css = FRAME_CSS + o.css;
+    if (st.textContent !== css) st.textContent = css;
+    h.setAttribute('data-kit-frame', '');
+    h.setAttribute('data-kit-try', o.kit);
+    if (o.kit === 'material') {
+      h.removeAttribute('data-cz-kit');
+      if (o.entrance) h.setAttribute('data-cz-entrance', o.entrance);
+      else h.removeAttribute('data-cz-entrance');
+    } else {
+      h.setAttribute('data-cz-kit', o.kit);
+      h.removeAttribute('data-cz-entrance');
+    }
+    if (doc.body) doc.body.inert = true;
+  }
+
+  // walk opens href with this tab's try-out on in kit, so the strip is
+  // there to walk the owner's pages in it (o: { url, campaign, kit, href,
+  // kits, css, entrance }).
+  function walk(o) {
+    save({ c: o.campaign, url: o.url, kit: o.kit, kits: o.kits, css: o.css, entrance: o.entrance || '' });
+    window.location.assign(o.href);
+  }
+
   // A boosted page change keeps the header and the strip; the label follows.
   document.addEventListener('htmx:afterSettle', function () { paint(); makeRoom(); });
   window.addEventListener('resize', makeRoom);
 
-  C.kitTry = { open: open, resume: resume, end: end, dressed: dressed, active: function () { return !!state; } };
+  C.kitTry = { open: open, resume: resume, end: end, dress: dress, walk: walk, dressed: dressed, active: function () { return !!state; } };
 })();

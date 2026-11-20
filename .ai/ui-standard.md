@@ -842,6 +842,15 @@ their tokens.
 - The editor's example site (`static/js/widgets/customize_look.js`,
   `static/css/customize.css`) shows each choice and keeps its numbers in step
   with the server's.
+- **Look's example for style kits is one of your own pages.** While the
+  Pages part is open, the example column shows one of the owner's pages in a
+  frame wearing the kit picked, changed at once on each press: a picture,
+  scaled like the example site, inert, with a text alternative. Above it a
+  label in the example's label style ("Saltgrave Harbour · in Ornate · not
+  saved", or "· as saved"); under it quiet "Another page" and "Walk your
+  pages in this kit". When the draft holds unsaved colours or fonts, one
+  quiet line says the frame cannot show them. The swap with the example site
+  is a fade, instant at Off.
 
 ## Style kits
 

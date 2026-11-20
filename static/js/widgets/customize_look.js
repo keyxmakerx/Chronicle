@@ -935,7 +935,7 @@
         fld('pg-look', 'Page look', 'Every page in the campaign', opts('pg-look', 'page.look', 'pg-look-l', PAGE_LOOKS) +
           '<p class="hint">Material draws sections without boxes or borders: headings over a rule, rows on hairlines, and an edge only on fact panels and tools. Standard puts a bordered card around each section. Nothing moves on the page either way.</p>') +
         fld('pg-kit', 'Style kit', 'The character of pages drawn in Material', opts('pg-kit', 'page.kit', 'pg-kit-l', STYLE_KITS) +
-          '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look; save and open any page to see yours.</p>') +
+          '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look. The example shows one of your own pages in the kit you press.' + kfBrushHint() + '</p>') +
         fld('pg-open', 'How cards open', 'Cards and panels that come out of something you click', '<div id="pg-open-pick">' + opts('pg-open', 'motion.entrance', 'pg-open-l', ENTRANCES) +
           '<p class="hint">Grow is the base. Bloom comes into focus from a soft blur, Unfold is revealed downward from its top edge and Drop is set down with weight. Menus, pickers and dialogs keep their quick moves, and Calm turns each into a short fade.</p></div>' +
           '<p class="hint" id="pg-open-kit" hidden></p>') +
@@ -1341,6 +1341,7 @@
       syncLookTiles(theme);
       syncStatus();
       if (SHELL) toShell();
+      kitFrame();
       runMotion();
     }
 
@@ -1702,6 +1703,7 @@
       $('#preview').dataset.zoom = z;
       $$('input[name="dpage"]').forEach(function(i){ i.disabled = z !== 'site'; });
       if (z !== 'site'){ fzHover(null); fzSet(null); }
+      kitFrame();
       runMotion();
     }
     function clearErrors(){ $$('.err').forEach(function(e){ e.hidden = true; }); }
@@ -2067,6 +2069,29 @@
       fzQueue();
       if (!phone() && !ui.strip) toggleStrip();
       ROOT.style.setProperty('--strip-h', phone() ? $('#pv-col').offsetHeight + 'px' : '0px');
+    }
+
+    /* ---------- Style kits on one of your own pages ----------
+       While the Pages part is open and the page look is Material, the
+       example is one of the owner's pages in a frame wearing the draft's kit
+       (look_kit_frame.js); everywhere else the example site stays. The
+       frame is made the first time it is wanted and kept. */
+    var kf = null;
+    function kitFrame(){
+      var on = ui.room === 'pages' && ui.section === 'page' && ui.zoom === 'site' && draft.page.look === 'annals';
+      if (!kf){
+        if (!on || !Chronicle.lookKitFrame || !Chronicle.kitTry) return;
+        kf = Chronicle.lookKitFrame({ pvw:$('#pv-col .pvw'), preview:$('#preview'), cid:CID });
+      }
+      var ch = changedSections();
+      kf.set({ on:on, kit:draft.page.kit, saved:saved.page.kit, theme:previewTheme(), unsaved:ch.indexOf('colours') >= 0 || ch.indexOf('type') >= 0 });
+      if (on){ fzHover(null); fzSet(null); }
+      $$('input[name="dpage"]').forEach(function(i){ i.disabled = ui.zoom !== 'site' || on; });
+    }
+    // The hint names the brush's try-out only while the owner's brush is on.
+    function kfBrushHint(){
+      return document.querySelector('#app-topbar [data-widget="customize-brush"]') ?
+        ' To walk your pages in a kit, use Try a style kit here on the brush at the top of any page.' : '';
     }
 
     /* ---------- Click to focus ----------

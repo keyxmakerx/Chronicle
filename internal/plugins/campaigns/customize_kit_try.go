@@ -7,6 +7,7 @@ package campaigns
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"slices"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -27,7 +29,8 @@ type kitTryKit struct {
 // style kits, the tokens that draw each of them on this campaign
 // (layouts.KitTryCSS) and Material's card entrance, which the page wears
 // only while no other kit is on. 404 when the page look is not Material,
-// where no kit is drawn. Owner-only.
+// where no kit is drawn. With ?pages=1 it also lists the owner's own pages
+// Customize › Look's example steps through (kitTryPages). Owner-only.
 func (h *Handler) CustomizeKitTry(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
@@ -51,8 +54,44 @@ func (h *Handler) CustomizeKitTry(c *echo.Context) error {
 	if a := layouts.GetAppearance(ctx); a != nil {
 		entrance = a.Entrance
 	}
+	out := map[string]any{"kits": kits, "css": css, "entrance": entrance}
+	if c.QueryParam("pages") == "1" {
+		out["pages"] = h.kitTryPages(c, cc)
+	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
-	return c.JSON(http.StatusOK, map[string]any{"kits": kits, "css": css, "entrance": entrance})
+	return c.JSON(http.StatusOK, out)
+}
+
+// kitTryPage is one of the owner's own pages Look's example can show.
+type kitTryPage struct {
+	Name string `json:"name"`
+	Href string `json:"href"`
+}
+
+// kitTryPagesMax is how many recently edited pages Look's example steps
+// through, besides the campaign home.
+const kitTryPagesMax = 4
+
+// kitTryPages are the pages Look's example shows a kit on: the most
+// recently edited pages first (every page wears the kit), then the campaign
+// home. They come from the same recent-pages lister the home's Recent
+// pages block uses, as this viewer may see them.
+func (h *Handler) kitTryPages(c *echo.Context, cc *CampaignContext) []kitTryPage {
+	base := "/campaigns/" + cc.Campaign.ID
+	var pages []kitTryPage
+	if h.recentLister != nil {
+		recent, err := h.recentLister.ListRecentForDashboard(c.Request().Context(), cc.Campaign.ID, int(cc.VisibilityRole()), auth.GetUserID(c), kitTryPagesMax)
+		if err != nil {
+			slog.Warn("kit try: recent pages not read", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		}
+		for _, e := range recent {
+			if len(pages) == kitTryPagesMax {
+				break
+			}
+			pages = append(pages, kitTryPage{Name: e.Name, Href: base + "/entities/" + e.ID})
+		}
+	}
+	return append(pages, kitTryPage{Name: cc.Campaign.Name, Href: base})
 }
 
 // CustomizeKitKeep answers POST /campaigns/:id/customize/kit-try/keep

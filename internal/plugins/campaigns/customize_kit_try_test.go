@@ -3,8 +3,13 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -98,5 +103,55 @@ func TestKitTryCoversStyleKits(t *testing.T) {
 		if LookChoiceLabel(id) == id {
 			t.Errorf("%s has no label", id)
 		}
+	}
+}
+
+// fakeRecent stands in for the recent-pages lister.
+type fakeRecent struct {
+	got   int
+	pages []RecentEntity
+}
+
+func (f *fakeRecent) ListRecentForDashboard(_ context.Context, _ string, _ int, _ string, limit int) ([]RecentEntity, error) {
+	f.got = limit
+	if len(f.pages) > limit {
+		return f.pages[:limit], nil
+	}
+	return f.pages, nil
+}
+
+// Look's example steps through up to four recently edited pages, then the
+// campaign home, and asks the lister for no more than it shows.
+func TestKitTryPages(t *testing.T) {
+	cc := &CampaignContext{Campaign: &Campaign{ID: "c1", Name: "The Sunken Reach"}, MemberRole: RoleOwner}
+	home := kitTryPage{Name: "The Sunken Reach", Href: "/campaigns/c1"}
+	page := func(id string) kitTryPage { return kitTryPage{Name: "P" + id, Href: "/campaigns/c1/entities/" + id} }
+	tests := []struct {
+		name   string
+		lister *fakeRecent
+		want   []kitTryPage
+	}{
+		{"no lister wired", nil, []kitTryPage{home}},
+		{"no pages yet", &fakeRecent{}, []kitTryPage{home}},
+		{"two pages", &fakeRecent{pages: []RecentEntity{{ID: "a", Name: "Pa"}, {ID: "b", Name: "Pb"}}}, []kitTryPage{page("a"), page("b"), home}},
+		{"more than four", &fakeRecent{pages: []RecentEntity{{ID: "a", Name: "Pa"}, {ID: "b", Name: "Pb"}, {ID: "c", Name: "Pc"}, {ID: "d", Name: "Pd"}, {ID: "e", Name: "Pe"}}},
+			[]kitTryPage{page("a"), page("b"), page("c"), page("d"), home}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &Handler{}
+			if tc.lister != nil {
+				h.recentLister = tc.lister
+			}
+			e := echo.New()
+			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+			got := h.kitTryPages(c, cc)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("pages = %v, want %v", got, tc.want)
+			}
+			if tc.lister != nil && tc.lister.got != kitTryPagesMax {
+				t.Errorf("asked the lister for %d pages, want %d", tc.lister.got, kitTryPagesMax)
+			}
+		})
 	}
 }

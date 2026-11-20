@@ -113,6 +113,62 @@ test('Keep this kit is the only write, and leads where the server says', { skip 
   });
 });
 
+// Customize › Look's example frame: the parent dresses the framed page; the
+// frame never takes the tab's try-out, and nothing is stored.
+const framed = `<!doctype html><html data-cz-page="annals" data-cz-kit="sketchbook"><head><meta charset="utf-8">
+<script>window.Chronicle = { apiFetch: function () { return Promise.reject(new Error('no fetch in a frame')); } };</script>
+<script src="/kit_try.js"></script></head><body><main id="main-content"><div class="cb-title"><h1>Brother Odwin</h1></div></main></body></html>`;
+const parent = `<!doctype html><html><head><meta charset="utf-8">
+<script>window.Chronicle = {};</script><script src="/kit_try.js"></script></head><body>
+<iframe id="f" src="/c1/framed"></iframe></body></html>`;
+
+test('dress puts a kit on a framed page, stores nothing and shows no strip', { skip }, async () => {
+  const browser = await pw.chromium.launch({ executablePath: chromePath });
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://t.test/**', (route) => {
+      const p = new URL(route.request().url()).pathname;
+      if (p === '/kit_try.js') return route.fulfill({ contentType: 'text/javascript; charset=utf-8', body: readFileSync(join(root, 'static/js/kit_try.js')) });
+      if (p === '/c1/framed') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: framed });
+      return route.fulfill({ contentType: 'text/html; charset=utf-8', body: parent });
+    });
+    // The tab has a try-out of its own, which the frame must leave alone.
+    const held = JSON.stringify({ c: 'c1', url: '/campaigns/c1/customize/kit-try', kit: 'lumen', kits: KITS, css: CSS, entrance: '' });
+    await tab.goto('http://t.test/');
+    await tab.evaluate((v) => sessionStorage.setItem('chronicle-kit-try', v), held);
+    await tab.evaluate(() => new Promise((r) => { const f = document.getElementById('f'); f.onload = r; f.src = '/c1/framed?x=1'; }));
+    const frame = tab.frames().find((f) => f.url().includes('/c1/framed'));
+    await frame.evaluate(() => Chronicle.kitTry.resume({ url: '/campaigns/c1/customize/kit-try', campaign: 'c1' }));
+    assert.deepEqual(await frame.evaluate(attrs), ['sketchbook', null, null], 'a framed page never takes the tab try-out');
+
+    const dressed = () => tab.evaluate(() => {
+      const d = document.getElementById('f').contentDocument, h = d.documentElement;
+      return {
+        attrs: [h.getAttribute('data-cz-kit'), h.getAttribute('data-cz-entrance'), h.getAttribute('data-kit-try')],
+        frame: h.hasAttribute('data-kit-frame'), saved: h.getAttribute('data-kit-saved'),
+        styles: d.querySelectorAll('style[data-kit-try-css]').length, inert: d.body.inert,
+        strip: !!d.querySelector('[data-kit-try-strip]'),
+      };
+    });
+    await tab.evaluate((css) => Chronicle.kitTry.dress(document.getElementById('f').contentDocument, { kit: 'ornate', css, entrance: 'bloom' }), CSS);
+    assert.deepEqual(await dressed(), { attrs: ['ornate', null, 'ornate'], frame: true, saved: 'sketchbook', styles: 1, inert: true, strip: false });
+    // A second press swaps the kit in place: Material takes the entrance back.
+    await tab.evaluate((css) => Chronicle.kitTry.dress(document.getElementById('f').contentDocument, { kit: 'material', css, entrance: 'bloom' }), CSS);
+    assert.deepEqual(await dressed(), { attrs: [null, 'bloom', 'material'], frame: true, saved: 'sketchbook', styles: 1, inert: true, strip: false });
+    assert.equal(await tab.evaluate(() => sessionStorage.getItem('chronicle-kit-try')), held, 'the tab try-out is untouched');
+    assert.equal(await tab.evaluate(() => !!document.querySelector('[data-kit-try-strip]')), false, 'the parent shows no strip');
+  } finally { await browser.close(); }
+});
+
+test('walk opens a page with the try-out on in the kit', { skip }, async () => {
+  await withTab(async (tab) => {
+    await tab.goto('http://t.test/look');
+    await Promise.all([tab.waitForURL('http://t.test/c1/page'), tab.evaluate((k) => Chronicle.kitTry.walk({ url: '/c/customize/kit-try', campaign: 'c1', kit: 'flowing', href: '/c1/page', kits: k, css: '', entrance: '' }), KITS)]);
+    const s = await tab.evaluate(() => JSON.parse(sessionStorage.getItem('chronicle-kit-try')));
+    assert.deepEqual([s.c, s.kit, s.url], ['c1', 'flowing', '/c/customize/kit-try']);
+  });
+});
+
 // kit_try_early.js: the try-out is on before the first paint, where it may be.
 const early = (ok) => `<!doctype html><html data-cz-page="annals" data-cz-kit="sketchbook" data-cz-entrance="bloom"${ok ? ' data-kit-try-ok' : ''}><head><meta charset="utf-8">
 <script src="/kit_try_early.js"></script>

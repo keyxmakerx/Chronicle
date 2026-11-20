@@ -7198,7 +7198,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
 	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
 	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},
-	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
+	{Name: "customize-look", Scripts: []string{"/static/js/kit_try.js", "/static/js/look_kit_frame.js", "/static/js/widgets/customize_look.js"}},
 	{Name: "customize-shell", Scripts: []string{"/static/js/find_palette.js", "/static/js/widgets/customize_shell.js"}},
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
 	{Name: "customize-templates", Scripts: []string{"/static/js/widgets/customize_templates.js"}},

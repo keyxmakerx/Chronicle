@@ -1040,3 +1040,27 @@
   .czp .rb .i{ width:9px; height:9px; }
   .czp .e-hc{ width:200px; }
 }
+
+/* ---------- Style kits on one of your own pages (look_kit_frame.js) ----------
+   While the Pages part is open, the example column shows one of the owner's
+   pages in a frame wearing the draft's kit. The frame lies over the example
+   site, which fades out under it (and its blur and part marks with it); the
+   page is drawn at 1280 x 756 and scaled to the column by the script. A fade,
+   instant at Off. The label takes the example's label style. */
+.czp .kf{ position:absolute; inset:0; z-index:3; overflow:hidden; opacity:0; pointer-events:none; background:var(--surface-2); transition:opacity 220ms ease; }
+.czp .pv-frame.kf-on .kf{ opacity:1; }
+.czp .pv-frame.kf-on > .zp[data-z="site"]{ opacity:0; pointer-events:none; }
+.czp .kf-f{ position:absolute; left:0; top:0; width:1280px; height:756px; border:0; transform-origin:0 0; pointer-events:none; }
+.czp .kf-l{ margin:0; font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.czp .kf-foot{ display:flex; flex-wrap:wrap; gap:4px 16px; }
+.czp .kf-q{ min-height:24px; padding:0; border:0; background:none; font:inherit; font-size:12px; color:var(--accent-ink); text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:3px; cursor:pointer; }
+.czp .kf-q:hover{ color:var(--accent-deep); }
+.czp .kf-q:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; border-radius:2px; }
+.czp .kf-note{ margin:0; font-size:11.5px; line-height:1.45; color:var(--muted); }
+.czp .kf-l[hidden], .czp .kf-foot[hidden], .czp .kf-note[hidden], .czp .kf-q[hidden]{ display:none; }
+.czp .pv-frame.kf-on ~ .pv-cap{ display:none; }
+.czp.rm .kf, .czp.rm .pv-frame > .zp[data-z="site"], html[data-motion="off"] .czp .kf, html[data-motion="off"] .czp .pv-frame > .zp[data-z="site"]{ transition:none; }
+@container cz (max-width: 760px){
+  .czp .kf-l{ font-size:10px; }
+  .czp .kf-foot{ gap:2px 14px; }
+}
