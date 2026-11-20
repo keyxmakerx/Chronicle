@@ -68,3 +68,28 @@ test('peekAddress accepts a rules entry with only hero and printed', () => {
     assert.equal(peekAddress(input), want, name);
   }
 });
+
+const N = '/campaigns/c1/systems/drawsteel/named/ancestry';
+
+test('peekAddress accepts an entry by kind and name', () => {
+  const cases = [
+    ['named page', N + '?name=Ashborn', N + '/peek?name=Ashborn'],
+    ['named peek with a hero', N + '/peek?name=High%20Elf&hero=d80fb105', N + '/peek?name=High%20Elf&hero=d80fb105'],
+    ['hero first, rebuilt in order', N + '?hero=h1&name=Orc', N + '/peek?name=Orc&hero=h1'],
+    ['an apostrophe is encoded again', N + "?name=Can't", N + '/peek?name=Can%27t'],
+    ['no name', N + '?hero=h1', ''],
+    ['two names', N + '?name=a&name=b', ''],
+    ['an empty name', N + '?name=', ''],
+    ['a bad escape', N + '?name=%E0%A4%A', ''],
+    ['a raw space', N + '?name=High Elf', ''],
+    ['a plus', N + '?name=High+Elf', ''],
+    ['another parameter', N + '?name=Orc&x=1', ''],
+    ['a fragment', N + '?name=Orc#x', ''],
+    ['a slash in the kind', '/campaigns/c1/systems/drawsteel/named/a/b?name=Orc', ''],
+    ['named is never a category', '/campaigns/c1/systems/drawsteel/named/ancestry', ''],
+    ['a name over 100', N + '?name=' + 'a'.repeat(101), ''],
+  ];
+  for (const [name, input, want] of cases) {
+    assert.equal(peekAddress(input), want, name);
+  }
+});

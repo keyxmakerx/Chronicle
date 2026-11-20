@@ -291,6 +291,10 @@ func (p *RulesPages) Peek(ctx context.Context, sys System, category, slug string
 	if err != nil {
 		return nil, err
 	}
+	return p.peekFrom(ctx, sys, cat, res, heroID, r)
+}
+
+func (p *RulesPages) peekFrom(ctx context.Context, sys System, cat *CategoryDef, res *Resolution, heroID string, r RulesReader) (*EntryView, error) {
 	switch res.Kind {
 	case ResolvedNotFound:
 		return nil, apperror.NewNotFound("entry not found")
@@ -302,8 +306,20 @@ func (p *RulesPages) Peek(ctx context.Context, sys System, category, slug string
 		return nil, err
 	}
 	if heroID != "" && p.people != nil && v.Entry.FieldKey != "" && !v.Printed {
+		// A left-out people's traits are drawn for a reader whose own hero
+		// is one; the peek opened from a hero's sheet draws them for that
+		// hero too, whoever may see the hero.
+		drawn := false
+		if v.LeftOut && len(v.Table) == 0 {
+			v.Table = buildTable(cat, v.Entry.Properties, false, "pk-")
+			markTraits(v.Table, itemNames(v.Entry.Properties), func(it *tableItem) { it.NoLongerOffered = true })
+			drawn = true
+		}
 		if err := p.fillHero(ctx, sys, v, heroID, r); err != nil {
 			return nil, err
+		}
+		if drawn && v.Hero == nil {
+			v.Table = nil
 		}
 	}
 	return v, nil

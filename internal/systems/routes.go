@@ -41,6 +41,10 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 	registerBookEditorRoutes(mg, h)
 	// What the campaign wrote, rewrote and left out (static, before /:cat).
 	mg.GET("/before-you-play", h.BeforeYouPlay)
+	// An entry by kind and name, for sheets that store names (static, before /:cat).
+	mg.GET("/named/:kind", h.NamedEntry)
+	mg.GET("/named/:kind/peek", h.NamedEntryPeek)
+	mg.GET("/told", h.ToldAPI)
 	mg.GET("/:cat", h.CategoryList)
 	mg.GET("/:cat/:item", h.ItemDetail)
 	mg.GET("/:cat/:item/tooltip", h.TooltipAPI)
