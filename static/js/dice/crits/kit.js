@@ -2,7 +2,7 @@
 // The start and the end every crit owes the die, flat pictures laid on the page, and the tarot cards
 // two of the crits deal. A crit's own file holds only what is its own.
 import {
-  canvas, drop, glowNumeral, mulberry, numberOnto, shadeDie, tintDie
+  canvas, drop, glowNumeral, mulberry, numberOnto, paintNumeral, shadeDie, strokePaths, strokeW, strokesFor, tintDie
 } from '../engine.js';
 
 // The frame round a crit: where the die landed, a list of everything the crit adds, and one way out
@@ -64,9 +64,17 @@ function flat(T, tex, w, h, o) {
   return m;
 }
 // The landed face's number as a picture of its own, upright on the page: for a crit that takes the die
-// away and still owes the table its result.
+// away and still owes the table its result. It glows the way the die's own number does; o.solid draws
+// it in one flat colour instead, for a dark number on a pale ground.
 function numeral(T, die, fi, color, o) {
-  var lay = die.faces[fi].lay, tex = picture(T, lay.cv, lay.cv, function (g) { numberOnto(g, lay, color); }), size = lay.cv / lay.s * die.size;
+  var lay = die.faces[fi].lay;
+  // A d4's face carries three small numbers, none of them the roll: its picture is the roll alone.
+  if (lay.sub) { var h = lay.r * 0.96; lay = Object.assign({}, lay, { sub: null, h: h, strokes: strokesFor(lay.label, lay.cx, lay.cy, h) }); }
+  var tex = picture(T, lay.cv, lay.cv, function (g) {
+    if (!(o && o.solid)) numberOnto(g, lay, color);
+    else if (lay.style === 'classic') { g.fillStyle = color; paintNumeral(g, lay, 'classic'); }
+    else { g.lineJoin = 'round'; g.lineCap = 'round'; g.strokeStyle = color; g.lineWidth = strokeW(lay) * 1.2; strokePaths(g, lay.strokes); }
+  }), size = lay.cv / lay.s * die.size;
   return flat(T, tex, size, size, o);
 }
 // A soft round patch, for glows, pools and shadows.

@@ -39,7 +39,7 @@ function fxDust(st, die, fi, th) {
   var wa = (rnd() < 0.5 ? 0 : Math.PI) + (rnd() - 0.5) * 0.5, wx = Math.cos(wa), wz = Math.sin(wa), R = 1.25 * s;
   var plane = new T.Plane(new T.Vector3(wx, 0, wz), 0); x.clip([plane]);
   var dune = x.add(flat(T, dustDune(T, DUST_PALE, DUST_DARK), 3.3 * s, 3.3 * s, { opacity: 0, y: 0.025, order: -1 })); dune.rotation.z = -wa; dune.position.set(c.x + wx * 0.35 * s, 0.025, c.z + wz * 0.35 * s);
-  var num = x.add(numeral(T, die, fi, '#2a1c08', { opacity: 0, y: 0.04, order: 2 })); num.position.set(c.x + wx * 0.35 * s, 0.04, c.z + wz * 0.35 * s); num.scale.setScalar(1.9);
+  var num = x.add(numeral(T, die, fi, '#2a1c08', { solid: true, opacity: 0, y: 0.04, order: 2 })); num.position.set(c.x + wx * 0.35 * s, 0.04, c.z + wz * 0.35 * s); num.scale.setScalar(1.9);
   var NG = hd ? 12 : 6, gusts = [];
   for (var i = 0; i < NG; i++) { var gm = x.add(flat(T, dustStreak(T), (3 + rnd() * 5) * s, 0.16 * s, { color: DUST_SAND, opacity: 0, y: 0.05 + i * 0.001, order: 7 })); gm.rotation.z = -wa; gusts.push({ m: gm, off: (rnd() - 0.5) * 9 * s, ph: rnd(), sp: 0.55 + rnd() * 0.5 }); }
   // Where the wind has got to: everything upwind of the front is gone.
