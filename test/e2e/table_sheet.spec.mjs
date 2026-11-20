@@ -66,7 +66,15 @@ async function phone(attrs, opts = {}) {
   await p.waitForFunction(() => document.querySelector('[data-tt-last]').textContent.includes('Mira'));
   return { p, close: () => ctx.close() };
 }
-const settle = (p) => p.waitForTimeout(450);
+// Wait out the slide, then until the sheet has no transition still running:
+// a fixed pause alone measured a sheet mid-slide on a busy CI runner.
+const settle = async (p) => {
+  await p.waitForTimeout(450);
+  await p.waitForFunction(() => {
+    const d = document.getElementById('tt-drawer');
+    return !d || d.getAnimations().every((a) => a.playState !== 'running');
+  }, null, { timeout: 5000 });
+};
 const top = (p) => p.$eval('#tt-drawer', (e) => Math.round(e.getBoundingClientRect().top));
 const heightOf = (p) => p.$eval('#tt-drawer', (e) => e.dataset.h);
 // A finger on the grab line, as real touch events.
