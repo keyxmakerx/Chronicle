@@ -6349,6 +6349,8 @@ func (a *App) RegisterRoutes() {
 			// resolved here.
 			calendarHealthy := a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug)
 			ctx = layouts.SetUpcomingEventsAvailable(ctx, enabledSlugs[calendar.PluginSlug] && calendarHealthy)
+			ctx = layouts.SetHomeBlocksOff(ctx, homeBlocksOff(enabledSlugs, calendarHealthy,
+				a.PluginHealth == nil || a.PluginHealth.IsHealthy(sessions.PluginSlug)))
 
 			// The header's data-backed widgets (date, weather, moon, game
 			// night) read today's world from the calendar and sessions. This
