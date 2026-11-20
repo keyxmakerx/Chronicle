@@ -116,8 +116,55 @@
     return enginePromise;
   }
 
+  // oklchHex turns the engine's oklch() colours into the hex the calendar
+  // stores; anything else comes back '' (no colour).
+  function oklchHex(s) {
+    var m = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(s || '');
+    if (!m) return '';
+    var L = +m[1], C = +m[2], h = +m[3] * Math.PI / 180, a = C * Math.cos(h), b = C * Math.sin(h);
+    var l = Math.pow(L + 0.3963377774 * a + 0.2158037573 * b, 3);
+    var mm = Math.pow(L - 0.1055613458 * a - 0.0638541728 * b, 3);
+    var sv = Math.pow(L - 0.0894841775 * a - 1.2914855480 * b, 3);
+    return '#' + [
+      4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * sv,
+      -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * sv,
+      -0.0041960863 * l - 0.7034186147 * mm + 1.7076147010 * sv
+    ].map(function (x) {
+      x = Math.min(1, Math.max(0, x));
+      x = x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
+      return ('0' + Math.round(x * 255).toString(16)).slice(-2);
+    }).join('');
+  }
+
+  // runHistory lays the row's settings over its built-in recipe and keeps
+  // the calendar's own eras: a generated era that overlaps one (an open end
+  // runs on forever, as the server reads it) is left out, and when the plan
+  // makes no eras none go back. Only the fields the server saves are sent.
+  function runHistory(G, plan) {
+    var recipe = JSON.parse(JSON.stringify(G.recipes.get(plan.basedOn)));
+    ['makes', 'details'].forEach(function (part) {
+      var over = (plan.recipe && plan.recipe[part]) || {};
+      Object.keys(over).forEach(function (k) { recipe[part][k] = over[k]; });
+    });
+    var keep = plan.keepEras || [];
+    var end = function (e) { return e.end_year == null ? Infinity : e.end_year; };
+    var res = G.run('history', { recipe: recipe, seed: plan.seed, calendar: plan.calendar, locked: { eras: keep } });
+    var eras = !plan.makesEras ? [] : (res.eras || []).filter(function (e) {
+      return !(e.gen && e.gen.locked) && !keep.some(function (k) { return e.start_year <= end(k) && k.start_year <= end(e); });
+    });
+    return {
+      eras: eras.map(function (e) {
+        return { name: e.name, start_year: e.start_year, end_year: e.end_year == null ? null : e.end_year, description: e.description, color: oklchHex(e.color) };
+      }),
+      events: (res.events || []).map(function (e) {
+        return { name: e.name, year: e.year, month: e.month, day: e.day, description: e.description, visibility: e.visibility };
+      })
+    };
+  }
+
   // run turns one plan into the JSON the server's generator kind reads.
   function run(G, plan) {
+    if (plan.generator === 'history') return runHistory(G, plan);
     var opts = { recipe: plan.recipe, seed: plan.seed };
     if (plan.calendar) opts.calendar = plan.calendar;
     if (plan.scope) opts.scope = plan.scope;

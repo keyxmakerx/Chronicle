@@ -36,6 +36,8 @@ type GeneratorKind struct {
 	Weather WeatherSettingsAPI
 	// Rolls runs the `rolls` generator; without it that generator is refused.
 	Rolls EventRollAPI
+	// Eras writes a history run's eras; without it a history adds only events.
+	Eras EraAPI
 }
 
 // Weather tuning a row may set, with the generator's own bounds.
@@ -74,6 +76,7 @@ func (GeneratorKind) Doc() string {
 		"- `events`: festivals and other calendar events for one `year`.\n" +
 		"- `sky`: sky events (eclipses, meteor showers, comets) for one `year`.\n" +
 		"- `names`: `count` names (up to 30) of `names` kind `people` or `places`, in a `theme` (pastoral, nautical, dwarven, elven, desert, imperial, fey, grim), added to the rolling table `table`.\n" +
+		"- `history` (owner or co-DM): the default calendar's past, as eras and one-off events on real dates up to its current year. Optional: `recipe` (kingdom, frontier, dark), `years` back (up to 5000; 0 or left out lets the generator choose), `eras` (up to 8), `density` (events per century, 0.5 to 20), `tone` (bright, balanced, grim), `theme` (as for names), `realm` (the realm's name), `secrets` (true by default: adds hidden history only the owner and co-DMs see), and how often each kind happens, off, rare, normal or often: `foundings`, `wars`, `plagues`, `famines`, `discoveries`, `coronations`, `disasters`, `portents`, `migrations`, `schisms`. `years` times `density` over 100 can be at most 250. A calendar with more than one era keeps its eras: the run adds only events.\n" +
 		"- `rolls` (owner or co-DM): rolls every night of one `year` for the `event` (by name) that has a `roll:`, on Chronicle's own server roller. Locked nights keep their result (`keep_locked: true`, the only choice), and a night that has passed keeps a result it already has. `only_unrolled: true` rolls just the nights with no result yet.\n\n" +
 		"```\n---\nkind: generator\nname: Spring weather\ngenerator: weather\nyear: 1492\nmonth: 3\nday: 1\nend_year: 1492\nend_month: 3\nend_day: 30\nclimate: temperate\n---\n```"
 }
@@ -169,7 +172,7 @@ func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		return p, nil, fmt.Sprintf("%d %s names into the table %s", n, kind, quote(r.Str("table"))), nil
 	case "weather", "events", "sky":
 	default:
-		return p, nil, "", apperror.NewBadRequest("generator must be weather, events, sky, names or rolls")
+		return p, nil, "", apperror.NewBadRequest("generator must be weather, events, sky, names, history or rolls")
 	}
 	if g == "weather" && !a.CanAuthorDmOnly() {
 		return p, nil, "", apperror.NewBadRequest("only the owner or a co-DM can set weather")
@@ -345,6 +348,9 @@ func (k GeneratorKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		}
 		return p
 	}
+	if strings.EqualFold(r.Str("generator"), "history") {
+		return k.planHistoryRow(ctx, campaignID, a, r)
+	}
 	p, _, summary, err := k.plan(ctx, campaignID, a, r)
 	if err != nil {
 		return Plan{Error: planError(err)}
@@ -397,6 +403,9 @@ func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 		_, err = k.Rolls.RollEventNights(ctx, row.ev.ID, row.cal.ID, campaignID,
 			calendar.RollNightsInput{Year: row.year, OnlyUnrolled: row.only}, a.Viewer())
 		return err
+	}
+	if strings.EqualFold(r.Str("generator"), "history") {
+		return k.applyHistory(ctx, campaignID, a, r)
 	}
 	p, cal, _, err := k.plan(ctx, campaignID, a, r)
 	if err != nil {
