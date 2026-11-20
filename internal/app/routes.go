@@ -7901,10 +7901,10 @@ func (m aiHexMapAdapter) PaintCells(ctx context.Context, campaignID, mapID strin
 		}
 		if c.Place {
 			e.Name = patch.Of(c.Name)
+			// A place written without notes keeps the notes already on the
+			// hex: renaming a hex must not cost the owner what they wrote.
 			if c.Notes != "" {
 				e.Notes = patch.Of(c.Notes)
-			} else {
-				e.Notes = patch.Null[string]()
 			}
 		}
 		entries[i] = e

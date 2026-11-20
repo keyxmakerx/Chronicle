@@ -130,8 +130,8 @@ func TestAIHexMapAdapter_PaintCellsKeepsPartialUpdateSemantics(t *testing.T) {
 	if n, _ := e[2].Name.Get(); n != "Inn" || e[2].Notes.IsNull() {
 		t.Errorf("place = %+v", e[2])
 	}
-	if !e[3].Notes.Present() || !e[3].Notes.IsNull() {
-		t.Errorf("a place without notes replaces them with nothing: %+v", e[3].Notes)
+	if e[3].Notes.Present() {
+		t.Errorf("a place without notes must leave the stored notes alone: %+v", e[3].Notes)
 	}
 }
 
