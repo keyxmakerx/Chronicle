@@ -126,6 +126,10 @@ func CharacterLayout() EntityTypeLayout {
 // pieces are blocks the owner adds (only character pages start with player
 // notes, in CharacterLayout). Visibility editing lives only in edit mode, not
 // an auto-appended read-page row (ADR-057 decision 5).
+//
+// It is also what a type with no stored layout falls back to when something
+// places a block into it, so it stays as it is; a category made new starts
+// from NewCategoryLayout instead.
 func DefaultLayout() EntityTypeLayout {
 	return EntityTypeLayout{
 		Rows: []TemplateRow{
@@ -153,6 +157,19 @@ func DefaultLayout() EntityTypeLayout {
 			},
 		},
 	}
+}
+
+// NewCategoryLayout is the layout a category made now is stored with: the
+// default plus tags and relations under the title, in the order the
+// no-layout fallback in show.templ draws them, so a new page can carry both.
+// The Annals page editor keeps their add controls out of sight until Edit
+// page. It is applied only when a category is created; stored layouts of
+// existing categories are never rewritten to match.
+func NewCategoryLayout() EntityTypeLayout {
+	l := DefaultLayout()
+	// Each goes right after the title, so relations first leaves tags above it.
+	l = insertAfterTitle(l, TemplateBlock{ID: "blk-relations", Type: "relations"})
+	return insertAfterTitle(l, TemplateBlock{ID: "blk-tags", Type: "tags"})
 }
 
 // entityNotesRow builds a full-width row holding the player-notes

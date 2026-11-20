@@ -7931,3 +7931,35 @@ html[data-motion] .dw-sheet { animation: none; }
 @media (max-width: 480px) {
   .cl-menu { width: min(250px, calc(100vw - 3rem)); }
 }
+
+/* The owner's setup line on the campaign home (internal/plugins/campaigns/
+   setup_steps.templ): one row, with the four steps folding out under it. */
+.su { margin: 0 0 1rem; color: var(--color-text-primary); font-size: 0.875rem; }
+.su-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-height: 44px; padding: 8px 0; border-bottom: var(--shape-rule, 1px) solid var(--color-border); }
+.su-title { font-weight: 600; }
+.su-count { color: var(--color-text-muted); }
+.su-next a { color: var(--color-text-primary); text-decoration: underline; text-underline-offset: 3px; }
+.su-all { margin-left: auto; min-height: 44px; padding: 0 4px; border: 0; background: none; font: inherit; color: var(--color-accent-link, var(--color-accent)); cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color var(--dur-micro) var(--ease-out); }
+.su-all:hover, .su-all:focus-visible { text-decoration-color: currentColor; }
+.su-fold { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--dur-micro) var(--ease-out), visibility 0s var(--dur-micro); }
+.su[data-open="true"] .su-fold { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows var(--dur-standard) var(--ease-out), visibility 0s; }
+.su-fold-in { overflow: hidden; min-height: 0; }
+.su-list { margin: 0; padding: 0; list-style: none; }
+.su-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 44px; padding: 4px 0; border-bottom: var(--shape-rule, 1px) solid var(--color-border); }
+.su-dot { flex: none; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: var(--shape-edge, 1px) solid var(--color-border); background: transparent; }
+.su-tick { width: 12px; height: 12px; fill: none; stroke: var(--color-accent-on-fill, #fff); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.su-row.is-done .su-dot { background: var(--color-accent-fill, var(--color-accent)); border-color: var(--color-accent-fill, var(--color-accent)); }
+.su-row.is-done .su-tick { opacity: 1; }
+.su-row.is-done .su-name { color: var(--color-text-muted); }
+.su-name { flex: 1 1 10rem; min-width: 0; }
+.su-value { color: var(--color-text-muted); }
+.su-act, .su-keep { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; border: 0; background: none; font: inherit; color: var(--color-accent-link, var(--color-accent)); cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color var(--dur-micro) var(--ease-out); }
+.su-act:hover, .su-act:focus-visible, .su-keep:hover, .su-keep:focus-visible { text-decoration-color: currentColor; }
+.su-note { margin: 0; padding: 8px 0 4px; font-size: 0.78rem; color: var(--color-text-muted); }
+/* A step that ticks in this response fills its circle: no bounce, and under
+   Calm and Off the tick simply appears. */
+@keyframes su-fill { from { background-color: transparent; border-color: var(--color-border); } }
+@keyframes su-tick-in { from { opacity: 0; } }
+html:not([data-motion="calm"]):not([data-motion="off"]) .su-row.is-new .su-dot { animation: su-fill var(--dur-standard) var(--ease-out); }
+html:not([data-motion="calm"]):not([data-motion="off"]) .su-row.is-new .su-tick { animation: su-tick-in var(--dur-standard) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .su-fold, .su[data-open="true"] .su-fold { transition: none; } }

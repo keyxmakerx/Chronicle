@@ -1,0 +1,81 @@
+// setup_steps.templ draws the owner's setup line on the campaign home: one row
+// with how many steps are done and the next one, and the four steps unfolding
+// from it. The home's placeholder (dashFragment) loads it; it replaces the
+// placeholder (hx-swap outerHTML) and answers empty once all four are done.
+package campaigns
+
+import "fmt"
+
+// setupToggle unfolds or folds the list. It is inline, not a templ script, so
+// it works after the placeholder's swap.
+func setupToggle() templ.ComponentScript {
+	return templ.ComponentScript{
+		Name:     "setupToggle",
+		Function: "",
+		Call: `(function(b){var s=b.closest('[data-block=setup-steps]');` +
+			`var o=s.getAttribute('data-open')!=='true';s.setAttribute('data-open',o?'true':'false');` +
+			`b.setAttribute('aria-expanded',o?'true':'false');})(this)`,
+	}
+}
+
+templ setupStepsBlock(v setupView) {
+	<section
+		class="su"
+		data-block="setup-steps"
+		data-open={ fmt.Sprint(v.Open) }
+		aria-label="Getting your table ready"
+	>
+		<div class="su-line">
+			<span class="su-title">Getting your table ready</span>
+			<span class="su-count" role="status" aria-live="polite">{ fmt.Sprintf("%d of %d done", v.DoneCount, len(v.Steps)) }</span>
+			if v.Next != nil {
+				<span class="su-next">Next: <a href={ templ.SafeURL(v.Next.Href) }>{ v.Next.Title }</a></span>
+			}
+			<button
+				type="button"
+				class="su-all"
+				aria-expanded={ fmt.Sprint(v.Open) }
+				aria-controls="su-list"
+				onclick={ setupToggle() }
+			>All four</button>
+		</div>
+		<div class="su-fold" id="su-list">
+			<div class="su-fold-in">
+				<ol class="su-list">
+					for _, s := range v.Steps {
+						<li class={ "su-row", templ.KV("is-done", s.Done), templ.KV("is-new", s.Key == v.JustDone) }>
+							<span class="su-dot" aria-hidden="true">
+								<svg viewBox="0 0 24 24" class="su-tick"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>
+							</span>
+							<span class="su-name">
+								{ s.Title }
+								if s.Done {
+									<span class="sr-only">, done</span>
+								}
+							</span>
+							if s.Value != "" {
+								<span class="su-value">{ s.Value }</span>
+							}
+							if !s.Done {
+								<a class="su-act" href={ templ.SafeURL(s.Href) }>{ s.Action }</a>
+								if s.KeepWord != "" {
+									<form
+										method="POST"
+										action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/setup-steps/%s/keep", v.CampaignID, s.Key)) }
+										hx-post={ fmt.Sprintf("/campaigns/%s/setup-steps/%s/keep", v.CampaignID, s.Key) }
+										hx-target="closest [data-block='setup-steps']"
+										hx-swap="outerHTML"
+									>
+										<input type="hidden" name="csrf_token" value={ v.CSRF }/>
+										<button type="submit" class="su-keep">{ s.KeepWord }</button>
+									</form>
+								}
+							}
+						</li>
+					}
+				</ol>
+				<p class="su-note">Only the people running this campaign see this. It leaves when the four are done.</p>
+			</div>
+		</div>
+	</section>
+}

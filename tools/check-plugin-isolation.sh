@@ -107,6 +107,9 @@ always_allowed_prefixes=(
   "internal/app/routes.go"
   "internal/app/plugins.go"
   "internal/app/app.go"
+  # The usual features a new campaign starts with, named in the composition
+  # root so the campaigns plugin only says when; the test pins the list.
+  "internal/app/starter_features"
   "tools/"
   ".github/"
   "cmd/"
