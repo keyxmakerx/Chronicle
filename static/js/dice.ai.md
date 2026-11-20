@@ -41,6 +41,11 @@ paths. Adding a set or crit means adding its key to that list in `engine.js`.
   - `onEnd()` fires once the dice have gone.
 - A die can carry its own `value`, `set`, `colour`, `succ`, `fail`, `crit` and
   `counts`.
+- A roll's look (`set`, `colour`, `succ`, `fail`, `quality`) comes from, in order:
+  the die's own fields, the roll's `opts`, `opts.table`, the page's
+  `Chronicle.diceTable`, then the defaults. A colour belongs to its set, so one
+  from the table is only used with the table's set. An empty or unknown name is
+  the default.
 - `opts.crits(group, values, index)` is the game system's crit rule. Without one,
   a natural 20 or 1 on a counting d20 crits.
 - `catalogue()` lists every set with its colours (swatch and glow), every crit
@@ -53,6 +58,17 @@ paths. Adding a set or crit means adding its key to that list in `engine.js`.
 
 **Defaults:** Jewelled set, onyx colour, Phoenix crit success, Eldritch grasp
 crit fail, quality Auto.
+
+**The campaign's picks.** The rolls plugin stores them (`campaign_roll_settings`,
+`GET/PUT /campaigns/:id/rolls/settings`) and the Director sets them on Customize's
+Dice tab (`dice_customize.js`). The Table tab (`table.js`, on every campaign page
+for members) reads them and sets `Chronicle.diceTable` to the look of this
+person's own rolls: their personal picks (kept in the browser) where the
+Director lets players pick, else the campaign's. Shop, crafting and hero-builder
+rolls name no look and so pick it up from there. The Table draws other people's
+rolls with `opts.table` set to the campaign's look, so everyone sees the
+campaign's dice on someone else's roll. Until the settings arrive, rolls use the
+defaults.
 
 **Crits in one throw.** The grand plays on one crit die. A die that counts goes
 before one that doesn't, a success before a failure, then the die nearest the
@@ -86,8 +102,10 @@ lets the shared ones go once no table is left, and the next table uploads them
 again. The face-image cache keeps the 24 most recent.
 
 **Changing the libraries:** `make dice-vendor` (versions pinned in `package.json`).
-Tests: `test/js/dice.test.mjs` covers values, crit rules, numbering, symmetry and
-landing. `test/js/dice_browser.test.mjs` runs Chromium: loading, throw, skip,
+Tests: `test/js/dice.test.mjs` covers values, crit rules, the look a roll falls
+back to, numbering, symmetry and landing. `test/e2e/table_dice.spec.mjs` (My dice
+and the test throw) and `test/e2e/dice_customize.spec.mjs` (the Dice tab) run the
+real scripts against a stub of `Chronicle`. `test/js/dice_browser.test.mjs` runs Chromium: loading, throw, skip,
 catalogue, and every set playing; `dice_crits_succ_browser.test.mjs` and
 `dice_crits_fail_browser.test.mjs` play every crit (their own files so CI runs
 them on runners of their own; they play in real time).

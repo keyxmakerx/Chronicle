@@ -99,6 +99,10 @@
 .tt-mydice p { margin: 0; }
 .tt-k { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-link, var(--color-accent)); }
 .tt-from { font-size: 12.5px; color: var(--color-text-secondary); }
+.tt-picks { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; max-width: 100%; }
+.tt-picks p { margin: 0; }
+.tt-pick { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; }
+.tt-pick .tt-mode { min-width: 12rem; }
 .tt-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--color-border); border-radius: var(--tt-r-ctl); background: var(--color-bg-secondary); box-shadow: var(--elev-resting); overflow: hidden; }
 .tt-seg button { border: 0; border-left: 1px solid var(--color-border); background: none; padding: 6px 11px; min-height: 32px; cursor: pointer; font: inherit; font-size: 13px; color: var(--color-text-body); }
 .tt-seg button:first-child { border-left: 0; }

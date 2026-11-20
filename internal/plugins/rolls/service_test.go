@@ -2,18 +2,25 @@ package rolls
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"reflect"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // fakeRepo keeps rolls in memory and applies visibleTo's rule in Go.
 type fakeRepo struct {
-	rolls []Roll
-	look  string
+	rolls    []Roll
+	settings Settings
+	has      bool
+	saved    [][]string
 }
 
 func (f *fakeRepo) Insert(_ context.Context, r Roll) (string, bool, error) {
@@ -37,9 +44,16 @@ func (f *fakeRepo) List(_ context.Context, campaignID string, v Viewer, _ string
 	return out, nil
 }
 
-func (f *fakeRepo) Look(context.Context, string) (string, error) { return f.look, nil }
-func (f *fakeRepo) SetLook(_ context.Context, _ string, l string) error {
-	f.look = l
+func (f *fakeRepo) Settings(context.Context, string) (Settings, error) {
+	if !f.has {
+		return Settings{PlayersPick: true}, nil
+	}
+	return f.settings, nil
+}
+
+func (f *fakeRepo) SaveSettings(_ context.Context, _ string, s Settings, changed []string) error {
+	f.settings, f.has = s, true
+	f.saved = append(f.saved, changed)
 	return nil
 }
 
@@ -323,19 +337,131 @@ func TestSettings(t *testing.T) {
 	s, _, _ := newTestService()
 	ctx := context.Background()
 	got, _ := s.Settings(ctx, "c1")
-	if got.Look != LookQuick {
-		t.Fatalf("default look = %q", got.Look)
+	if got.Look != LookQuick || !got.PlayersPick || got.DiceSet != "" || len(got.DiceOffered) != 0 {
+		t.Fatalf("defaults = %+v", got)
 	}
-	if _, err := s.SetSettings(ctx, "c1", player, Settings{Look: LookRune}); status(err) != http.StatusForbidden {
+	if _, err := s.SetSettings(ctx, "c1", player, UpdateSettingsInput{Look: patch.Of(LookRune)}); status(err) != http.StatusForbidden {
 		t.Fatalf("a player set the table's dice: %v", err)
 	}
-	if _, err := s.SetSettings(ctx, "c1", director, Settings{Look: "gold"}); status(err) != http.StatusBadRequest {
+	if _, err := s.SetSettings(ctx, "c1", director, UpdateSettingsInput{Look: patch.Of("gold")}); status(err) != http.StatusBadRequest {
 		t.Fatalf("unknown look: %v", err)
 	}
-	if _, err := s.SetSettings(ctx, "c1", director, Settings{Look: LookNone}); err != nil {
+	if _, err := s.SetSettings(ctx, "c1", director, UpdateSettingsInput{Look: patch.Of(LookNone)}); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := s.Settings(ctx, "c1"); got.Look != LookNone {
 		t.Fatalf("look = %q", got.Look)
+	}
+}
+
+func TestSetSettingsValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		in   UpdateSettingsInput
+		want int // 0 = accepted
+	}{
+		{"a known set", UpdateSettingsInput{DiceSet: patch.Of("oak")}, 0},
+		{"the default set, empty", UpdateSettingsInput{DiceSet: patch.Of("")}, 0},
+		{"an unknown set", UpdateSettingsInput{DiceSet: patch.Of("plastic")}, http.StatusBadRequest},
+		{"a path as a set", UpdateSettingsInput{DiceSet: patch.Of("../x")}, http.StatusBadRequest},
+		{"a colour slug", UpdateSettingsInput{DiceColour: patch.Of("walnut-2")}, 0},
+		{"a colour with spaces", UpdateSettingsInput{DiceColour: patch.Of("Dark Red")}, http.StatusBadRequest},
+		{"a colour too long", UpdateSettingsInput{DiceColour: patch.Of("abcdefghijklmnopqrstuvwxy")}, http.StatusBadRequest},
+		{"a crit success", UpdateSettingsInput{CritSucc: patch.Of("storm")}, 0},
+		{"a fail crit as a success", UpdateSettingsInput{CritSucc: patch.Of("grasp")}, http.StatusBadRequest},
+		{"a crit fail", UpdateSettingsInput{CritFail: patch.Of("abyss")}, 0},
+		{"a success crit as a fail", UpdateSettingsInput{CritFail: patch.Of("phoenix")}, http.StatusBadRequest},
+		{"quality hd", UpdateSettingsInput{Quality: patch.Of(QualityHD)}, 0},
+		{"quality unknown", UpdateSettingsInput{Quality: patch.Of("ultra")}, http.StatusBadRequest},
+		{"offered sets", UpdateSettingsInput{DiceOffered: patch.Of([]string{"jewelled", "oak"})}, 0},
+		{"an unknown offered set", UpdateSettingsInput{DiceOffered: patch.Of([]string{"jewelled", "plastic"})}, http.StatusBadRequest},
+		{"offered without the campaign's set", UpdateSettingsInput{DiceOffered: patch.Of([]string{"oak"})}, http.StatusBadRequest},
+		{"the campaign's set moved off the offer", UpdateSettingsInput{DiceSet: patch.Of("bone"), DiceOffered: patch.Of([]string{"jewelled"})}, http.StatusBadRequest},
+		{"the campaign's set joins the offer", UpdateSettingsInput{DiceSet: patch.Of("bone"), DiceOffered: patch.Of([]string{"bone"})}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, _, _ := newTestService()
+			_, err := s.SetSettings(context.Background(), "c1", director, tt.in)
+			if tt.want == 0 && err != nil || tt.want != 0 && status(err) != tt.want {
+				t.Fatalf("got %v, want status %d", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetSettingsIsPartial(t *testing.T) {
+	s, repo, _ := newTestService()
+	ctx := context.Background()
+	if _, err := s.SetSettings(ctx, "c1", director, UpdateSettingsInput{
+		Look: patch.Of(LookRune), DiceSet: patch.Of("oak"), DiceColour: patch.Of("walnut"), CritSucc: patch.Of("dawn"),
+		CritFail: patch.Of("frost"), Quality: patch.Of(QualityBasic), PlayersPick: patch.Of(false),
+		DiceOffered: patch.Of([]string{"oak", "bone"}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Only the colour is sent: everything else stays, and only it is written.
+	got, err := s.SetSettings(ctx, "c1", director, UpdateSettingsInput{DiceColour: patch.Of("pale")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Settings{Look: LookRune, DiceSet: "oak", DiceColour: "pale", CritSucc: "dawn", CritFail: "frost", Quality: QualityBasic, PlayersPick: false, DiceOffered: []string{"oak", "bone"}}
+	if !reflect.DeepEqual(*got, want) {
+		t.Fatalf("got %+v want %+v", *got, want)
+	}
+	if last := repo.saved[len(repo.saved)-1]; !reflect.DeepEqual(last, []string{"diceColour"}) {
+		t.Fatalf("wrote %v", last)
+	}
+	// An explicit null keeps the value; an empty string puts the default back.
+	var raw UpdateSettingsInput
+	if err := json.Unmarshal([]byte(`{"diceSet":null,"critSucc":"","diceOffered":null}`), &raw); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.SetSettings(ctx, "c1", director, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DiceSet != "oak" || got.CritSucc != "" || len(got.DiceOffered) != 2 {
+		t.Fatalf("null or empty handled wrong: %+v", *got)
+	}
+	// Offering every set is stored as "every set".
+	got, err = s.SetSettings(ctx, "c1", director, UpdateSettingsInput{DiceOffered: patch.Of(append([]string{"oak"}, DiceSetKeys...))})
+	if err != nil || len(got.DiceOffered) != 0 {
+		t.Fatalf("all sets offered: %+v %v", got, err)
+	}
+}
+
+// The server's lists must name exactly what the browser's engine can draw.
+func TestDiceKeysMatchEngine(t *testing.T) {
+	src, err := os.ReadFile("../../../static/js/dice/engine.js")
+	if err != nil {
+		t.Fatalf("read engine.js: %v", err)
+	}
+	keys := func(re string) []string {
+		m := regexp.MustCompile(re).FindStringSubmatch(string(src))
+		if m == nil {
+			t.Fatalf("engine.js has no match for %s", re)
+		}
+		var out []string
+		for _, k := range regexp.MustCompile(`'([a-z]+)'`).FindAllStringSubmatch(m[1], -1) {
+			out = append(out, k[1])
+		}
+		return out
+	}
+	tests := []struct {
+		name string
+		re   string
+		want []string
+	}{
+		{"sets", `var SET_KEYS = \[([^\]]*)\]`, DiceSetKeys},
+		{"crit successes", `succ: \[([^\]]*)\]`, CritSuccKeys},
+		{"crit fails", `fail: \[([^\]]*)\]`, CritFailKeys},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := keys(tt.re); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("engine has %v, server has %v", got, tt.want)
+			}
+		})
 	}
 }

@@ -6767,6 +6767,8 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "table", Scripts: []string{"js/table_dice.js", "js/table.js"}},
+			// The Dice tab on the Customize page.
+			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
 	})
 	var rollLog crafting.RollLog          // nil while the roll log is degraded
@@ -6774,6 +6776,9 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus})
 		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
+		// The campaign's dice are a "Dice" tab on the Customize page; the
+		// campaigns plugin only hosts it, rolls owns what is in it.
+		campaignHandler.RegisterCustomizeTab(rolls.CustomizeTabFactory())
 		syncAPIHandler.SetRolls(&rollsSyncAdapter{svc: rollsSvc}, foundryPlayerRepo)
 		rollLog = &craftingRollLog{svc: rollsSvc}
 		shopRollLogger = &shopRollLog{svc: rollsSvc}
