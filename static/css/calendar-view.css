@@ -2391,3 +2391,168 @@
 .cal-v5 .srp span{display:none}
 .cal-v5 .skytray{position:fixed;left:0!important;right:0;top:auto!important;bottom:0;width:auto!important;max-height:80vh!important;border-radius:18px 18px 0 0;border-left:0;border-right:0;border-bottom:0}
 }
+/* ── The year track: the whole year in the Edit drawer, and a draft in lighter ink until it is kept ── */
+.cal-v5{--yt-ev:oklch(var(--icL,.52) var(--icC,.1) 260);--yt-s0:.2}
+html[data-motion="calm"] .cal-v5{--yt-s0:1}
+
+/* quiet words */
+.cal-v5 .yt-word{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 9px;border-radius:8px;font:550 12px/1 var(--sans);color:var(--ink2);white-space:nowrap}
+@media (hover:hover){.cal-v5 .yt-word:hover{background:var(--hair2);color:var(--ink)}}
+.cal-v5 .yt-word:active{background:var(--hair)}
+.cal-v5 .yt-word:disabled{opacity:.45;pointer-events:none}
+.cal-v5 .yt-word:focus-visible, .cal-v5 .yt-chip:focus-visible, .cal-v5 .yt-rd:focus-visible, .cal-v5 .yt-lm:focus-visible, .cal-v5 .yt-mo:focus-visible, .cal-v5 .yt-tk:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .yt-word[aria-pressed="true"]{color:var(--ink);font-weight:650}
+.cal-v5 .yt-caret i{font-size:8.5px;color:var(--mut);transition:transform var(--dur-standard,200ms) var(--ease-out)}
+.cal-v5 .yt-caret[aria-expanded="true"] i{transform:rotate(180deg)}
+.cal-v5 .yt-sp{flex:1}
+.cal-v5 .dkr .btn[data-deck-year][aria-expanded="true"]{background:var(--hair2);color:var(--ink)}
+.cal-v5 .dkr .btn[data-deck-year]:disabled, .cal-v5 .bbb:disabled, .cal-v5 .addev:disabled{opacity:.45;pointer-events:none}
+
+/* the panel under the tool row */
+.cal-v5 .yt-year{margin-top:12px;padding:14px 0 2px;border-top:1px solid var(--hair)}
+.cal-v5 .yt-track{position:relative;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:thin}
+.cal-v5 .yt-pan{position:relative;min-width:560px}
+.cal-v5 .yt-rows{position:relative;z-index:1;transform-origin:100% 50%}
+.cal-v5 .yt-row{display:grid;grid-template-columns:86px minmax(0,1fr);align-items:stretch}
+.cal-v5 .yt-lb{position:relative}
+.cal-v5 .yt-ln{position:sticky;left:0;z-index:3;display:flex;align-items:center;background:var(--paper);font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut);white-space:nowrap}
+.cal-v5 .yt-seasons{height:18px}
+.cal-v5 .yt-sn{position:absolute;top:0;bottom:0;display:flex;align-items:center;padding-left:8px;overflow:hidden;white-space:nowrap;border-left:1px solid var(--hair);font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .yt-sn.yt-tight{color:transparent}
+.cal-v5 .yt-months{height:28px}
+.cal-v5 .yt-mo{position:absolute;top:0;bottom:0;border-left:1px solid var(--hair);cursor:pointer}
+.cal-v5 .yt-mo::after{content:"";position:absolute;left:0;right:0;top:0;height:var(--yt-colh,76px);border-radius:8px;background:var(--hair2);opacity:0;pointer-events:none;transition:opacity var(--dur-micro,120ms) var(--ease-out)}
+.cal-v5 .yt-mo span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;font:550 12px/1 var(--sans);color:var(--ink2);opacity:0;pointer-events:none;transition:opacity var(--dur-micro,120ms) var(--ease-out)}
+.cal-v5 .yt-mo.cur span{opacity:1;color:var(--ink);font-weight:650}
+.cal-v5 .yt-mo:focus-visible span{opacity:1}
+.cal-v5 .yt-mo:active::after{opacity:1;background:var(--hair)}
+@media (hover:hover){
+  .cal-v5 .yt-mo:hover::after{opacity:1}
+  .cal-v5 .yt-mo:hover span{opacity:1}
+  .cal-v5 .yt-months:has(.yt-mo:hover) .yt-mo.cur:not(:hover) span{opacity:0}
+}
+.cal-v5 .yt-months:has(.yt-mo:focus-visible) .yt-mo.cur:not(:focus-visible) span{opacity:0}
+.cal-v5 .yt-lane[data-lane="events"]{height:28px}
+.cal-v5 .yt-lane[data-lane="weather"]{height:20px}
+.cal-v5 .yt-lane .yt-lb::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:var(--hair)}
+
+/* events: one mark a day */
+.cal-v5 .yt-tk{position:absolute;top:0;bottom:0;width:6px;margin-left:-3px;cursor:pointer}
+.cal-v5 .yt-tk::before{content:"";position:absolute;left:2px;top:50%;width:2px;height:14px;margin-top:-7px;border-radius:1px;background:var(--yt-ev);transition:transform var(--dur-micro,120ms) var(--ease-out)}
+.cal-v5 .yt-tk.draft{--yt-o:.42}
+.cal-v5 .yt-tk.draft::before{opacity:var(--yt-o)}
+.cal-v5 .yt-tk.draft.pin{--yt-o:1}
+.cal-v5 .yt-tk.beside{margin-left:0}
+.cal-v5 .yt-tk:focus-visible::before{transform:scaleY(1.3)}
+@media (hover:hover){.cal-v5 .yt-tk:hover::before{transform:scaleY(1.3)}}
+.cal-v5 .yt-run{position:absolute;top:50%;height:2px;margin-top:-1px;border-radius:1px;background:var(--yt-ev);opacity:.5;pointer-events:none}
+.cal-v5 .yt-run.draft{opacity:.22}
+/* weather: where it is set */
+.cal-v5 .yt-band{position:absolute;top:50%;height:6px;margin-top:-3px;border-radius:3px;background:color-mix(in oklab,var(--ink) 32%,var(--paper))}
+.cal-v5 .yt-band.draft{background:color-mix(in oklab,var(--yt-ev) 42%,var(--paper))}
+/* the past: eras and years in place of seasons and months */
+.cal-v5 .yt-yr{position:absolute;top:0;bottom:0;display:flex;align-items:center;padding-left:7px;border-left:1px solid var(--hair);font:550 11px/1 var(--sans);font-variant-numeric:tabular-nums;color:var(--ink2);white-space:nowrap}
+.cal-v5 .yt-era{color:var(--ink2)}
+
+/* the month on show, and today */
+.cal-v5 .yt-over{position:absolute;z-index:0;pointer-events:none}
+.cal-v5 .yt-win{position:absolute;left:0;top:0;bottom:0;border-radius:8px;background:color-mix(in oklab,var(--ink) 6%,transparent);box-shadow:inset 0 0 0 1px var(--hair);transition:transform var(--dur-large,280ms) var(--ease-slide,cubic-bezier(.22,.8,.24,1)),opacity var(--dur-micro,120ms) var(--ease-out)}
+.cal-v5 .yt-now{position:absolute;left:0;top:28px;bottom:2px;width:1px;background:var(--ink);opacity:.7}
+.cal-v5 .yt-now::before{content:"";position:absolute;left:-2px;top:-2px;width:5px;height:5px;border-radius:50%;background:var(--ink)}
+html[data-motion="calm"] .cal-v5 .yt-win, html[data-motion="off"] .cal-v5 .yt-win{transition:none}
+
+/* a mark named, on hover or focus */
+.cal-v5 .yt-peek{position:absolute;left:0;top:0;z-index:5;max-width:min(320px,80%);padding:7px 10px;border-radius:9px;background:var(--ink);color:var(--paper);font:500 12px/1.35 var(--sans);pointer-events:none;box-shadow:0 6px 18px oklch(0 0 0 / .18)}
+.cal-v5 .yt-peek b{display:block;font-weight:600}
+.cal-v5 .yt-peek span{display:block;opacity:.7;font-size:11px}
+
+/* the foot: two quiet words at rest, the draft when there is one */
+.cal-v5 .yt-foot{margin-top:10px}
+.cal-v5 .yt-rest{display:flex;flex-wrap:wrap;gap:2px 6px;margin-left:77px}
+.cal-v5 .yt-pick{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-left:86px}
+.cal-v5 .yt-pl{font:550 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .yt-pm{display:flex;flex-wrap:wrap;gap:2px;flex:1;min-width:220px}
+.cal-v5 .yt-chip{display:inline-flex;align-items:center;min-height:28px;padding:0 9px;border-radius:8px;font:550 12px/1 var(--sans);color:var(--ink2);white-space:nowrap}
+@media (hover:hover){.cal-v5 .yt-chip:hover{background:var(--hair2);color:var(--ink)}}
+.cal-v5 .yt-draft{margin-left:86px}
+.cal-v5 .yt-say{margin:0;font:500 13.5px/1.5 var(--sans);color:var(--ink)}
+.cal-v5 .yt-nosave{color:var(--mut)}
+.cal-v5 .yt-acts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:10px 0 0 -9px}
+.cal-v5 .yt-acts .btn{flex:none}
+.cal-v5 .yt-fold{margin-top:12px}
+.cal-v5 .yt-makes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr));gap:12px 28px;padding:14px 16px;border-radius:12px;background:var(--paper2)}
+.cal-v5 .yt-mk{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.cal-v5 .yt-ml{min-width:88px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+
+/* the draft, read in order */
+.cal-v5 .yt-list{container-type:inline-size;max-height:min(34vh,264px);overflow:auto;overscroll-behavior:contain;border-radius:12px;border:1px solid var(--hair);padding:2px 16px 12px;background:var(--paper)}
+.cal-v5 .yt-list section+section{margin-top:8px}
+.cal-v5 .yt-lh{position:sticky;top:0;z-index:1;display:flex;align-items:baseline;gap:8px;margin:0;padding:12px 0 4px;background:var(--paper);font:400 17px/1.2 var(--serif,Georgia,serif);color:var(--ink)}
+.cal-v5 .yt-lh small{font:500 11px/1 var(--sans);color:var(--mut);font-variant-numeric:tabular-nums}
+.cal-v5 .yt-lm{font:inherit;color:inherit;border-radius:6px;padding:0 4px;margin-left:-4px}
+@media (hover:hover){.cal-v5 .yt-lm:hover{background:var(--hair2)}}
+.cal-v5 .yt-ld{margin:0 0 4px;font:500 12px/1.45 var(--sans);color:var(--mut);max-width:72ch}
+.cal-v5 .yt-list ul{list-style:none;margin:0;padding:0}
+.cal-v5 .yt-li{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:2px 10px;align-items:start;padding:8px 0;border-top:1px solid var(--hair2)}
+.cal-v5 .yt-rd{justify-self:start;min-width:30px;height:26px;padding:0 5px;border-radius:7px;font:600 13px/26px var(--sans);font-variant-numeric:tabular-nums;color:var(--ink);text-align:left}
+.cal-v5 .yt-rd small{font:600 10.5px/26px var(--sans);color:var(--ink2)}
+@media (hover:hover){.cal-v5 .yt-rd:hover{background:var(--hair2)}}
+.cal-v5 .yt-rb{min-width:0;padding-top:4px}
+.cal-v5 .yt-rb b{font:600 13px/1.35 var(--sans);color:var(--ink)}
+.cal-v5 .yt-rk{margin-left:8px;font:500 11.5px/1.35 var(--sans);color:var(--mut);white-space:nowrap}
+.cal-v5 .yt-rb p{margin:2px 0 0;font:500 12px/1.5 var(--sans);color:var(--ink2);max-width:68ch}
+.cal-v5 .yt-ra{display:flex;gap:0}
+.cal-v5 .yt-li.out .yt-rb b{text-decoration:line-through;color:var(--mut);font-weight:500}
+.cal-v5 .yt-li.out .yt-rb p, .cal-v5 .yt-li.out .yt-rk{display:none}
+.cal-v5 .yt-li.out .yt-rd{color:var(--mut)}
+@container (max-width:520px){.cal-v5 .yt-li{grid-template-columns:36px minmax(0,1fr)} .cal-v5 .yt-ra{grid-column:2;margin-left:-9px}}
+
+/* the grid: a draft event is a hollow dot until it is kept */
+.cal-v5 .mk.ghost .edot{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor}
+.cal-v5 .mk.ghost.yt-pin .edot{background:currentColor}
+.cal-v5 .cal.editing .day .mk.ghost{opacity:1}
+.cal-v5 .day.yt-lit{animation:yt-lit 1.2s var(--ease-out) both}
+@keyframes yt-lit{0%{box-shadow:inset 0 0 0 2px var(--ink)}100%{box-shadow:inset 0 0 0 2px transparent}}
+.cal-v5 .cal.editing .day .mk.yt-kept, .cal-v5 .cal.editing .day .cwx.yt-kept{animation:yt-kept 1.2s var(--ease-out) both}
+@keyframes yt-kept{0%{opacity:1;box-shadow:0 0 0 0 color-mix(in oklab,var(--yt-ev) 60%,transparent)}40%{opacity:1;box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 6px transparent}}
+
+/* motion: a draft inks in from today; what is kept glows once; a roll clears first */
+.cal-v5 .yt-tk.draft.yt-in::before{animation:yt-tick var(--dur-standard,200ms) var(--ease-out) both;animation-delay:inherit}
+@keyframes yt-tick{from{opacity:0;transform:scaleY(var(--yt-s0))}to{opacity:var(--yt-o);transform:none}}
+.cal-v5 .yt-run.draft.yt-in{animation:yt-fade var(--dur-standard,200ms) var(--ease-out) both}
+.cal-v5 .yt-band.draft.yt-in{animation:yt-wipe 420ms var(--ease-out) both}
+@keyframes yt-wipe{from{clip-path:inset(0 100% 0 0 round 3px)}to{clip-path:inset(0 0 0 0 round 3px)}}
+@keyframes yt-fade{from{opacity:0}}
+html[data-motion="calm"] .cal-v5 .yt-band.draft.yt-in{animation:yt-fade var(--dur-standard,200ms) var(--ease-out) both}
+.cal-v5 .yt-tk.kept::before{animation:yt-glow 1.2s var(--ease-out) both}
+.cal-v5 .yt-band.kept{animation:yt-glow 1.2s var(--ease-out) both}
+@keyframes yt-glow{0%{box-shadow:0 0 0 4px color-mix(in oklab,var(--yt-ev) 45%,transparent)}100%{box-shadow:0 0 0 4px transparent}}
+.cal-v5 .mk.ghost.yt-in, .cal-v5 .cwx.ghost.yt-in{animation:yt-mark var(--dur-standard,200ms) var(--ease-out) both}
+@keyframes yt-mark{from{opacity:0;transform:scale(var(--yt-s0))}}
+html[data-yt-roll="all"] .cal-v5 .mk.ghost, html[data-yt-roll="events"] .cal-v5 .mk.ghost, html[data-yt-roll="sky"] .cal-v5 .mk.ghost,
+html[data-yt-roll="all"] .cal-v5 .cwx.ghost, html[data-yt-roll="weather"] .cal-v5 .cwx.ghost,
+html[data-yt-roll="all"] .cal-v5 .yt-tk.draft, html[data-yt-roll="all"] .cal-v5 .yt-run.draft, html[data-yt-roll="all"] .cal-v5 .yt-band.draft,
+html[data-yt-roll="events"] .cal-v5 .yt-tk.draft, html[data-yt-roll="sky"] .cal-v5 .yt-tk.draft, html[data-yt-roll="weather"] .cal-v5 .yt-band.draft{opacity:0!important;transition:opacity var(--dur-everyday-out,80ms) var(--ease-in)}
+html[data-motion="off"] .cal-v5 .yt-tk.yt-in::before, html[data-motion="off"] .cal-v5 .yt-band.yt-in, html[data-motion="off"] .cal-v5 .yt-run.yt-in, html[data-motion="off"] .cal-v5 .mk.ghost.yt-in, html[data-motion="off"] .cal-v5 .cwx.ghost.yt-in,
+html[data-motion="off"] .cal-v5 .yt-tk.kept::before, html[data-motion="off"] .cal-v5 .yt-band.kept, html[data-motion="off"] .cal-v5 .day .mk.yt-kept, html[data-motion="off"] .cal-v5 .day .cwx.yt-kept, html[data-motion="off"] .cal-v5 .day.yt-lit{animation:none!important}
+@media (prefers-reduced-motion:reduce){.cal-v5 .yt-year *, .cal-v5 .yt-year *::before, .cal-v5 .mk.ghost, .cal-v5 .cwx.ghost, .cal-v5 .day.yt-lit{animation:none!important;transition:none!important}}
+
+/* narrow screens: the labels sit above their lines, and the lines pan sideways */
+@media (max-width:720px){
+  .cal-v5 .yt-row{grid-template-columns:64px minmax(0,1fr)}
+  .cal-v5 .yt-rest{margin-left:-9px}
+  .cal-v5 .yt-pick, .cal-v5 .yt-draft{margin-left:0}
+  .cal-v5 .yt-year{padding-top:14px}
+  .cal-v5 .yt-acts .yt-sp{flex-basis:100%;height:0}
+}
+@media (pointer:coarse){
+  .cal-v5 .yt-word, .cal-v5 .yt-chip{min-height:44px}
+  .cal-v5 .yt-acts .btn{height:44px;padding:0 16px}
+  .cal-v5 .yt-months{height:44px}
+  .cal-v5 .yt-lane[data-lane="events"]{height:44px}
+  .cal-v5 .yt-now{top:44px}
+  .cal-v5 .yt-rd{height:44px;line-height:44px}
+  .cal-v5 .yt-rd small{line-height:44px}
+}
+/* Keep and the tools that load the generator hold still while they work. */
+.cal-v5 .yt-word[aria-busy="true"], .cal-v5 .yt-working .btn:disabled{opacity:.55}
