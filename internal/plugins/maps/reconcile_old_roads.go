@@ -154,8 +154,7 @@ func keptRoadExits(keys []HexKey, road map[HexKey]bool) map[HexKey]int {
 	for _, k := range keys {
 		parent[k] = k
 	}
-	var find func(HexKey) HexKey
-	find = func(k HexKey) HexKey {
+	find := func(k HexKey) HexKey {
 		for parent[k] != k {
 			parent[k] = parent[parent[k]]
 			k = parent[k]

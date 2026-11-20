@@ -133,7 +133,8 @@ func checkRoadGraph(t *testing.T, keys []HexKey) [][2]HexKey {
 		without := map[HexKey][]HexKey{}
 		for k, ns := range kept {
 			for _, n := range ns {
-				if !(k == e[0] && n == e[1]) && !(k == e[1] && n == e[0]) {
+				isEdge := (k == e[0] && n == e[1]) || (k == e[1] && n == e[0])
+				if !isEdge {
 					without[k] = append(without[k], n)
 				}
 			}
