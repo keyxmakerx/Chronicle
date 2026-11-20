@@ -89,6 +89,7 @@ Used in both category fields (for reference item display) and entity preset fiel
 | `foundry_writable` | boolean | No | Whether Chronicle can write this field back to Foundry. Defaults to `true` when `foundry_path` is set. |
 | `min` / `max` | number | No | Lowest and highest value AI Import accepts for a number field. Absent means no bound. |
 | `json_list` | boolean | No | The field holds a JSON list; AI Import flags text that does not parse as one. |
+| `formula` | boolean | No | A number the system works out from other fields; AI Import's review may fill it in when the AI left it out, with the figure the system's sheet check proposes. |
 | `foundry_choices` | string | No | A list in the Foundry system's `CONFIG` (e.g. `"DRAW_STEEL.monsters.roles"`); the value is stored in Foundry as that list's matching key. |
 | `foundry_format` | string | No | How the value converts: `"set"` (comma-separated list to a Foundry set), `"integer"` (the number in text like "5 damage"), `"size"` ("1S" to size value and letter). |
 

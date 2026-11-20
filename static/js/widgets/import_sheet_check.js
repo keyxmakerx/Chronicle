@@ -12,8 +12,14 @@
  *
  * Each number gets a tile: "Matches the formula", or "Formula gives N" with a
  * press that takes the formula's number. The hidden input holds the check's
- * patch for the numbers taken, which the commit lays over the AI's. The
- * director decides; nothing is replaced without a press.
+ * patch for the numbers taken, which the commit lays over the AI's.
+ *
+ * A check may also open a number already taken (start: "used"), for a number
+ * the AI left blank or one that followed the formula before; the patch is in
+ * the input from the first draw and a press leaves it as it was (blank, or the
+ * stored figure). Nothing the director or the AI chose is replaced unless the
+ * check says so on the tile and the director can press it back. An item with
+ * only a `said` line has no number to offer and is shown as a plain line.
  */
 (function () {
   'use strict';
@@ -41,15 +47,27 @@
     var list = res && Array.isArray(res.items) ? res.items : [];
     var out = [], seen = {};
     out.dropped = 0;
+    out.said = [];
     for (var i = 0; i < list.length; i++) {
       var it = list[i];
       if (!it || typeof it !== 'object') continue;
       var id = str(it.id);
-      if (!id || seen[id] || !str(it.label)) continue;
+      if (!id || seen[id]) continue;
+      if (str(it.said) && !str(it.formula)) {
+        if (out.said.length < MAX_ITEMS) { seen[id] = true; out.said.push(str(it.said)); }
+        continue;
+      }
+      if (!str(it.label)) continue;
       if (!it.matches && !str(it.formula)) continue;
       if (out.length >= MAX_ITEMS) { out.dropped++; continue; }
       seen[id] = true;
-      out.push({ id: id, label: str(it.label), ai: str(it.ai), formula: str(it.formula), matches: !!it.matches });
+      // from says whose figure shows when the formula is not taken: the AI's,
+      // the page's stored one, or none (blank).
+      var from = it.blank ? 'blank' : it.from === 'stored' ? 'stored' : 'ai';
+      out.push({
+        id: id, label: str(it.label), ai: str(it.ai), formula: str(it.formula), matches: !!it.matches,
+        start: !it.matches && it.start === 'used', from: from, taken: str(it.taken), kept: str(it.kept)
+      });
     }
     return out;
   }
@@ -64,9 +82,12 @@
   function draw(el, input, res) {
     var list = items(res);
     var patch = res && typeof res.patch === 'function' ? res.patch : null;
-    if (!list.length) return;
+    if (!list.length && !list.said.length) return;
     var off = list.filter(function (it) { return !it.matches; });
     var used = {};
+    // Without a patch nothing could be applied, so nothing opens taken.
+    var opensTaken = !!patch && off.some(function (it) { return it.start; });
+    if (patch) off.forEach(function (it) { if (it.start) used[it.id] = true; });
 
     el.innerHTML = '';
     if (str(res.note)) el.appendChild(node('span', 'air-line', str(res.note)));
@@ -76,8 +97,8 @@
     }
     var grid = node('div', 'air-stats');
     grid.setAttribute('role', 'group');
-    grid.setAttribute('aria-label', 'Numbers the AI wrote, beside the published formulas');
-    el.appendChild(grid);
+    grid.setAttribute('aria-label', 'Numbers beside the published formulas');
+    if (list.length) el.appendChild(grid);
 
     var tiles = {};
     list.forEach(function (it) {
@@ -102,13 +123,24 @@
       all = node('button', 'air-quiet air-stats-all');
       all.type = 'button';
       all.addEventListener('click', function () {
-        var every = off.every(function (it) { return used[it.id]; });
+        var every = opensTaken ? off.some(function (it) { return used[it.id]; })
+          : off.every(function (it) { return used[it.id]; });
         used = {};
         if (!every) off.forEach(function (it) { used[it.id] = true; });
         update();
       });
       el.appendChild(all);
     }
+
+    // The words for putting the formula back down: what a press leaves.
+    function keepWord(items) {
+      var froms = items.map(function (it) { return it.from; });
+      if (froms.every(function (f) { return f === 'blank'; })) return 'blank';
+      if (froms.indexOf('ai') < 0) return 'old';
+      return 'ai';
+    }
+    var KEEP_ALL = { blank: 'Leave them blank', old: 'Keep the old figures', ai: 'Keep the AI’s numbers' };
+    var KEEP_ONE = { blank: 'Leave this one blank', old: 'Keep the old figure', ai: 'Keep the AI’s number' };
 
     function update() {
       list.forEach(function (it) {
@@ -117,18 +149,22 @@
         tile.classList.toggle('is-ok', it.matches);
         tile.classList.toggle('is-off', !it.matches && !on);
         tile.classList.toggle('is-used', on);
-        b.textContent = on ? it.formula : it.ai;
+        var blank = !on && !it.matches && it.from === 'blank';
+        b.textContent = on ? it.formula : blank ? 'blank' : it.ai;
+        b.classList.toggle('is-blank', blank);
         small.textContent = it.matches ? 'Matches the formula'
-          : on ? 'Formula used (AI wrote ' + it.ai + ')'
-          : 'Formula gives ' + it.formula;
+          : on ? (it.taken || (it.from === 'blank' ? 'Formula used (was blank)' : 'Formula used (AI wrote ' + it.ai + ')'))
+          : (it.kept || (blank ? 'Left blank. Formula gives ' + it.formula : 'Formula gives ' + it.formula));
         if (tile.tagName === 'BUTTON') {
           tile.setAttribute('aria-pressed', on ? 'true' : 'false');
-          tile.title = on ? 'Keep the AI’s number' : 'Use the formula for this one';
+          tile.title = on ? KEEP_ONE[keepWord([it])] : 'Use the formula for this one';
         }
       });
       var ids = off.filter(function (it) { return used[it.id]; }).map(function (it) { return it.id; });
       if (all) {
-        all.textContent = ids.length === off.length ? 'Keep the AI’s numbers'
+        var taken = off.filter(function (it) { return used[it.id]; });
+        var keepNow = opensTaken ? taken.length > 0 : taken.length === off.length;
+        all.textContent = keepNow ? KEEP_ALL[keepWord(taken)]
           : off.length === 1 ? 'Use the formula' : 'Use the formula for all ' + off.length;
       }
       var value = '';
@@ -142,6 +178,7 @@
       }
       if (input) input.value = value;
     }
+    list.said.forEach(function (text) { el.appendChild(node('span', 'air-line', text)); });
     update();
   }
 
@@ -171,7 +208,9 @@
       var fields = parse(el.getAttribute('data-fields'), {});
       var env = {
         campaignId: el.getAttribute('data-campaign-id') || '',
-        written: parse(el.getAttribute('data-written'), [])
+        written: parse(el.getAttribute('data-written'), []),
+        // The page's fields before the change; {} on a new page.
+        stored: parse(el.getAttribute('data-stored'), {})
       };
       Promise.resolve()
         .then(function () { return check.check(fields, env); })
