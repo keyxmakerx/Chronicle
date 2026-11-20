@@ -315,6 +315,11 @@ func featuresLine(c *Campaign, in DeskInputs) DeskLine {
 	return l
 }
 
+// tablesLine opens the Rolling tables page; the page lists its own counts.
+func tablesLine(c *Campaign) DeskLine {
+	return DeskLine{ID: "tables", Name: "Rolling tables", Values: []DeskValue{openValue(deskHref(c.ID, "/roll-tables/manage"))}}
+}
+
 // gameFigure is what the Game and features page draws beside its title:
 // "Draw Steel · 12 of 15 on". A part it cannot name is left out.
 func gameFigure(in DeskInputs) DeskFigure {

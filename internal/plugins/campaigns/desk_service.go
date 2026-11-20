@@ -160,7 +160,7 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 			{Name: "General", Lines: []DeskLine{nameLine(c), descriptionLine(c)}},
 			{Name: "Access", Lines: []DeskLine{publicLine(c), pagesLine(c), previewLine(c)}},
 			{Name: "People", Lines: []DeskLine{peopleLine(c, in.Members), invitedLine(c, in), changesLine(c, facts.Changes)}},
-			{Name: "Game", Lines: []DeskLine{systemLine(c, in), featuresLine(c, in)}},
+			{Name: "Game", Lines: []DeskLine{systemLine(c, in), featuresLine(c, in), tablesLine(c)}},
 		},
 		Right: []DeskGroup{
 			{Name: "Look", Lines: look},

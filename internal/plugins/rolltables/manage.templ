@@ -1,0 +1,16 @@
+package rolltables
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// ManagePage is the Rolling tables page in Campaign settings: every table the
+// campaign can roll on, and a panel to start a new one. The widget
+// (roll_tables_page.js) draws the list and panel and saves through the same
+// document the roller uses; the server only decides who may open the page.
+templ ManagePage(campaignID string) {
+	@layouts.App("Rolling tables") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/roll_tables_page.css") }/>
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Rolling tables", Line: "tables"}) {
+			<div data-widget="roll-tables-page" data-campaign-id={ campaignID }></div>
+		}
+	}
+}

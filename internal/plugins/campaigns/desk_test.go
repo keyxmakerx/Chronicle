@@ -77,6 +77,7 @@ func TestDeskRows_NameAndValue(t *testing.T) {
 		{"edits some", changesLine(c, &DeskChangesFacts{Changes: 3, Players: 2}), "Player edits", "3|this week", "/campaigns/c1/players/changes", ""},
 		{"features unread", featuresLine(c, DeskInputs{}), "Features", "Open|", "/campaigns/c1/extensions", ""},
 		{"features", featuresLine(c, DeskInputs{FeaturesOn: 12, FeaturesTotal: 15}), "Features", "12 of 15|on", "/campaigns/c1/extensions", ""},
+		{"tables", tablesLine(c), "Rolling tables", "Open|", "/campaigns/c1/roll-tables/manage", ""},
 		{"media no provider", mediaLine(c, nil), "Media", "Open|", "/campaigns/c1/media", ""},
 		{"media none", mediaLine(c, &DeskMediaFacts{}), "Media", "0 files|", "/campaigns/c1/media", ""},
 		{"media one", mediaLine(c, &DeskMediaFacts{Files: 1, Bytes: 2048}), "Media", "1 file|2 KB", "/campaigns/c1/media", ""},
@@ -986,10 +987,10 @@ func TestDeskService_Build_GroupsAndRows(t *testing.T) {
 		want   string
 	}{
 		{"add-ons off", map[string]bool{},
-			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features]" +
+			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables]" +
 				" || Look[style,colour] Connections[ai,keys] Data[copy,activity,trash] Danger zone[end]"},
 		{"media and Foundry on", map[string]bool{"media-gallery": true, "sync-api": true},
-			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features]" +
+			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables]" +
 				" || Look[style,colour,media] Connections[foundry,ai,keys] Data[copy,activity,trash] Danger zone[end]"},
 	}
 	for _, tt := range tests {
