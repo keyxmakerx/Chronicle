@@ -9,6 +9,12 @@
  * one line. The rail's top icon tucks the dock away to a small edge tab that
  * carries the waiting count.
  *
+ * A rail icon dragged out toward the page opens its section on a leaf of
+ * its own: the leaf swings open off the column's outer edge and hovers over
+ * the page, two leaves at most beside the column. A leaf's bar merges it back
+ * into the column or closes it, and dragging the bar onto the column or
+ * another leaf merges it there.
+ *
  * On a phone or touch screen there is no rail: all sections are always on
  * screen as one named line each (icon, name, what it holds), and a tap
  * unfolds or folds that line in place.
@@ -76,6 +82,24 @@
     try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* not remembered */ }
   }
 
+  var LEAF_W = 264;   // a leaf's width, the column's less its rail-side edge
+  var MAX_LEAVES = 2; // beside the column, so three panels in all
+
+  // A stored leaf list from storage, kept only if it is the shape we wrote.
+  function cleanLeaves(v) {
+    if (!Array.isArray(v)) return [];
+    return v.filter(Array.isArray).map(function (l) {
+      return l.filter(function (x) { return typeof x === 'string'; });
+    }).filter(function (l) { return l.length; }).slice(0, MAX_LEAVES);
+  }
+
+  // Off (and a device asking for less motion) shows the end state; Calm fades.
+  function motionOff() {
+    var h = document.documentElement;
+    return h.getAttribute('data-motion') === 'off' ||
+      !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
   function standardMs() {
     return window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs('--dur-standard', 200) : 200;
   }
@@ -92,6 +116,8 @@
       // A phone keeps its own unfolded lines, so the computer's order of
       // open cards is never disturbed.
       var LINES_KEY = 'chronicle.dms.lines.' + cid;
+      // Each leaf beside the column is a list of section ids, front card last.
+      var LEAVES_KEY = 'chronicle.dms.leaves.' + cid;
 
       var savedOpen = readJSON(OPEN_KEY, DEFAULT_OPEN);
       var savedLines = readJSON(LINES_KEY, DEFAULT_LINES);
@@ -99,6 +125,7 @@
         lines: Array.isArray(savedLines) ? savedLines.filter(function (x) { return typeof x === 'string'; }) : DEFAULT_LINES.slice(),
         out: readJSON(OUT_KEY, false) === true,
         open: Array.isArray(savedOpen) ? savedOpen.filter(function (s) { return typeof s === 'string'; }) : DEFAULT_OPEN.slice(),
+        leaves: cleanLeaves(readJSON(LEAVES_KEY, [])),
         dock: null, tab: null, loading: null, loaded: false, brewPv: false
       };
 
@@ -149,6 +176,15 @@
         document.addEventListener('keydown', onKey);
         document.addEventListener('click', onOutside);
         window.addEventListener('resize', place);
+        window.addEventListener('resize', onLeafRoom);
+        d.addEventListener('pointerdown', dragDown);
+        window.addEventListener('pointermove', dragMove);
+        window.addEventListener('pointerup', dragUp);
+        window.addEventListener('pointercancel', dragUp);
+        // The click that ends a drag must not also open or fold a section.
+        d.addEventListener('click', function (e) {
+          if (st.eatClick) { e.stopPropagation(); e.preventDefault(); }
+        }, true);
         // Crossing between phone lines and the icon bar redraws the cards.
         try {
           st.mq = window.matchMedia('(max-width: 700px), (hover: none) and (pointer: coarse)');
@@ -165,12 +201,16 @@
         var fold = t.closest('[data-dms-fold]');
         if (fold) {
           var fid = fold.closest('[data-dms-sec]').getAttribute('data-dms-sec');
-          if (phone()) lineToggle(fid); else headerPick(fid);
+          if (phone()) lineToggle(fid); else if (leafOf(fid) >= 0) leafHeaderPick(fid); else headerPick(fid);
           return;
         }
+        var lmerge = t.closest('[data-dms-lmerge]');
+        if (lmerge) { mergeLeaf(leafIndex(lmerge), 'col'); return; }
+        var lshut = t.closest('[data-dms-lshut]');
+        if (lshut) { closeLeaf(leafIndex(lshut)); return; }
         var shut = t.closest('[data-dms-shut]');
         if (shut) { closeSection(shut.closest('[data-dms-sec]').getAttribute('data-dms-sec')); return; }
-        if (t.closest('[data-dms-closeall]')) { st.open = []; saveOpen(); applyOpen(); return; }
+        if (t.closest('[data-dms-closeall]')) { closeAll(); return; }
         // The downtime switch asks first; its yes button does the post.
         if (t.closest('[data-dms-ask]')) showConfirm(true);
         if (t.closest('[data-dms-cancel]')) showConfirm(false);
@@ -186,6 +226,8 @@
       // A rail icon opens its section as the newest, brings a folded one to
       // the front, or closes the one already in front.
       function railPick(id) {
+        // A section on a leaf closes there; the leaf folds away once empty.
+        if (leafOf(id) >= 0) { removeFromLeaf(id); return; }
         var i = st.open.indexOf(id);
         if (i === st.open.length - 1 && i >= 0) st.open.pop();
         else {
@@ -209,6 +251,7 @@
       }
 
       function closeSection(id) {
+        if (leafOf(id) >= 0) { removeFromLeaf(id); return; }
         var i = st.open.indexOf(id);
         if (i < 0) return;
         st.open.splice(i, 1);
@@ -235,8 +278,10 @@
         var have = {};
         r.querySelectorAll('[data-dms-sec]').forEach(function (s) { have[s.getAttribute('data-dms-sec')] = true; });
         st.lines = st.lines.filter(function (id, i, a) { return have[id] && a.indexOf(id) === i; });
+        hideLeaves();
         r.querySelectorAll('[data-dms-sec]').forEach(function (s) {
           var open = st.lines.indexOf(s.getAttribute('data-dms-sec')) >= 0;
+          homeCard(s);
           s.hidden = false;
           s.style.order = '';
           setLine(s, open);
@@ -302,9 +347,12 @@
         r.querySelectorAll('[data-dms-sec]').forEach(function (s) { have[s.getAttribute('data-dms-sec')] = true; });
         // A section can leave the screen (no fight source any more); forget it.
         st.open = st.open.filter(function (id, i, a) { return have[id] && a.indexOf(id) === i; });
+        fitLeaves(have);
         var n = st.open.length;
         r.querySelectorAll('[data-dms-sec]').forEach(function (s) {
           var id = s.getAttribute('data-dms-sec'), i = st.open.indexOf(id);
+          if (leafOf(id) >= 0) return; // drawn onto its leaf below
+          homeCard(s);
           var front = i === n - 1 && i >= 0;
           s.hidden = i < 0;
           s.classList.toggle('dms-folded', i >= 0 && !front);
@@ -317,8 +365,10 @@
           // it is first shown, since a mount here doesn't run boot.js's pass.
           if (front && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(s);
         });
+        drawLeaves();
         r.querySelectorAll('[data-dms-open]').forEach(function (b) {
-          b.setAttribute('aria-pressed', st.open.indexOf(b.getAttribute('data-dms-open')) >= 0 ? 'true' : 'false');
+          var oid = b.getAttribute('data-dms-open');
+          b.setAttribute('aria-pressed', st.open.indexOf(oid) >= 0 || leafOf(oid) >= 0 ? 'true' : 'false');
         });
         var count = r.querySelector('[data-dms-count]');
         if (count) count.textContent = n ? n + ' open' : 'Nothing open';
@@ -331,6 +381,463 @@
           if (cards) cards.scrollTop = 0;
         }
         refreshParty();
+      }
+
+      // ---- Leaves ------------------------------------------------------
+      // A section dragged out of the rail opens on a leaf beside the column,
+      // hinged on the column's outer edge and lying over the page. Leaves are
+      // drawn inside the panel root, so its lookups and a refetch reach their
+      // cards; a refetch puts every card back in the column and this redraws
+      // them onto their leaves.
+
+      function saveLeaves() { writeJSON(LEAVES_KEY, st.leaves); }
+
+      function leafOf(id) {
+        for (var i = 0; i < st.leaves.length; i++) if (st.leaves[i].indexOf(id) >= 0) return i;
+        return -1;
+      }
+
+      function leafIndex(node) {
+        var l = node.closest('[data-dms-leaf]');
+        return l ? parseInt(l.getAttribute('data-dms-leaf'), 10) : -1;
+      }
+
+      // How many leaves fit to the left of the dock without leaving the window.
+      function leafRoom() {
+        var dockW = st.dock ? st.dock.offsetWidth || 320 : 320;
+        return Math.max(0, Math.min(MAX_LEAVES, Math.floor((window.innerWidth - dockW - 16) / LEAF_W)));
+      }
+
+      function onLeafRoom() {
+        if (st.loaded && !phone() && st.leaves.length > leafRoom()) applyOpen();
+      }
+
+      // Drops sections that left the screen, keeps each section in one place
+      // (a leaf wins over the column), and hands the cards of leaves that no
+      // longer fit back to the column, folded behind its front card.
+      function fitLeaves(have) {
+        var seen = {};
+        st.leaves = st.leaves.map(function (l) {
+          return l.filter(function (id) { if (!have[id] || seen[id]) return false; seen[id] = true; return true; });
+        }).filter(function (l) { return l.length; });
+        var room = leafRoom();
+        if (st.leaves.length > room) {
+          st.leaves.splice(room).forEach(function (l) {
+            l.forEach(function (id) { if (st.open.indexOf(id) < 0) st.open.unshift(id); });
+          });
+          saveOpen();
+          saveLeaves();
+        }
+        st.open = st.open.filter(function (id) { return !seen[id]; });
+      }
+
+      function cardsBox() { var r = root(); return r && r.querySelector('[data-dms-cards]'); }
+
+      // A card that sat on a leaf goes back into the column's list.
+      function homeCard(s) {
+        var box = cardsBox();
+        if (box && s.parentNode !== box) box.appendChild(s);
+      }
+
+      function leavesBox(make) {
+        var r = root(); if (!r) return null;
+        var box = r.querySelector('[data-dms-leaves]');
+        if (!box && make) {
+          box = document.createElement('div');
+          box.className = 'dms-leaves';
+          box.setAttribute('data-dms-leaves', '');
+          r.appendChild(box);
+        }
+        return box;
+      }
+
+      function hideLeaves() {
+        var box = leavesBox(false);
+        if (box) box.hidden = true;
+      }
+
+      function sectionTitle(id) {
+        var s = sectionEl(id), t = s && s.querySelector('[id^="dms-h-"]');
+        return t ? t.textContent.trim() : id;
+      }
+
+      function sectionIcon(id) {
+        var s = sectionEl(id), i = s && s.querySelector('.dms-sec-t > i');
+        return i ? i.className : 'fa-solid fa-table-columns';
+      }
+
+      function leafButton(attr, icon, label) {
+        return '<button type="button" class="dms-ic dms-ic-sm" ' + attr + ' aria-label="' + label + '" title="' + label + '">' +
+          '<i class="fa-solid ' + icon + '" aria-hidden="true"></i></button>';
+      }
+
+      function makeLeaf(i) {
+        var l = document.createElement('div');
+        l.className = 'dms-leaf';
+        l.setAttribute('role', 'region');
+        l.innerHTML =
+          '<div class="dms-leafbar" data-dms-leafdrag title="Drag onto the screen or another leaf to merge">' +
+            '<i class="fa-solid fa-grip-vertical dms-lgrip" aria-hidden="true"></i>' +
+            '<span class="dms-leaf-t"></span>' +
+            '<span class="dms-leaf-tools">' +
+              leafButton('data-dms-lmerge', 'fa-right-to-bracket', 'Merge into the screen') +
+              leafButton('data-dms-lshut', 'fa-xmark', 'Close this leaf') +
+            '</span>' +
+          '</div>' +
+          '<div class="dms-leaf-b"></div>';
+        setLeafIndex(l, i);
+        return l;
+      }
+
+      function setLeafIndex(l, i) {
+        l.setAttribute('data-dms-leaf', String(i));
+        l.style.right = (i * LEAF_W) + 'px';
+        l.querySelector('.dms-leaf-t').textContent = 'Leaf ' + (i + 2);
+      }
+
+      // Draws st.leaves: one leaf per list, its cards in order, the last one
+      // whole and the others folded to their one line.
+      function drawLeaves() {
+        var box = leavesBox(st.leaves.length > 0);
+        if (!box) return;
+        box.hidden = false;
+        var els = box.querySelectorAll('.dms-leaf:not(.dms-leaf-ghost)');
+        for (var k = st.leaves.length; k < els.length; k++) els[k].remove();
+        st.leaves.forEach(function (list, i) {
+          var l = box.querySelector('.dms-leaf[data-dms-leaf="' + i + '"]:not(.dms-leaf-ghost)');
+          if (!l) { l = makeLeaf(i); box.appendChild(l); }
+          l.style.visibility = '';
+          l.setAttribute('aria-label', 'Leaf ' + (i + 2) + ': ' + list.map(sectionTitle).join(', '));
+          var body = l.querySelector('.dms-leaf-b');
+          list.forEach(function (id, k) {
+            var s = sectionEl(id); if (!s) return;
+            var front = k === list.length - 1;
+            body.appendChild(s);
+            s.hidden = false;
+            s.style.order = '';
+            s.classList.toggle('dms-folded', !front);
+            var fold = s.querySelector('[data-dms-fold]');
+            if (fold) fold.setAttribute('aria-expanded', front ? 'true' : 'false');
+            var b = s.querySelector('.dms-sec-b');
+            if (b) b.hidden = !front;
+            if (front && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(s);
+          });
+        });
+      }
+
+      // Swings a leaf open on its hinge. Calm fades it in; Off shows it.
+      function leafIn(l) {
+        if (!l || !l.animate || motionOff()) return;
+        if (reduce()) { l.animate([{ opacity: 0 }, { opacity: 1 }], { duration: window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs('--dur-standard', 200) : 200, easing: 'ease-out' }); return; }
+        l.animate([
+          { transform: 'perspective(1400px) rotateY(-60deg)', opacity: 0 },
+          { transform: 'perspective(1400px) rotateY(0)', opacity: 1 }
+        ], { duration: window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs('--dur-slide', 360) : 360, easing: 'cubic-bezier(.22,.8,.24,1)' });
+      }
+
+      // Folds a leaf shut on its hinge, like closing a brochure, then runs done.
+      function leafOut(l, done) {
+        if (!l || !l.animate || reduce()) { done(); return; }
+        l.animate([
+          { transform: 'perspective(1400px) rotateY(0)', filter: 'brightness(1)' },
+          { transform: 'perspective(1400px) rotateY(-90deg)', filter: 'brightness(.7)' }
+        ], { duration: standardMs(), easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = function () {
+          l.style.visibility = 'hidden';
+          done();
+        };
+      }
+
+      function leafEl(i) {
+        var box = leavesBox(false);
+        return box && box.querySelector('.dms-leaf[data-dms-leaf="' + i + '"]:not(.dms-leaf-ghost)');
+      }
+
+      // Leaves beyond a removed one slide in to close the gap, so the screen
+      // stays one joined panel.
+      function dropLeaf(i) {
+        var box = leavesBox(false), gone = leafEl(i);
+        st.leaves.splice(i, 1);
+        if (gone) {
+          // Its cards go home first: they live on in the column's list.
+          gone.querySelectorAll('[data-dms-sec]').forEach(function (s) { homeCard(s); s.hidden = true; });
+          gone.remove();
+        }
+        if (box) {
+          box.querySelectorAll('.dms-leaf:not(.dms-leaf-ghost)').forEach(function (l) {
+            var k = parseInt(l.getAttribute('data-dms-leaf'), 10);
+            if (k <= i) return;
+            setLeafIndex(l, k - 1);
+            if (l.animate && !reduce()) {
+              l.animate([{ transform: 'translateX(-' + LEAF_W + 'px)' }, { transform: 'none' }],
+                { duration: standardMs(), easing: 'cubic-bezier(.2,.8,.2,1)' });
+            }
+          });
+        }
+        saveLeaves();
+      }
+
+      function removeFromLeaf(id) {
+        var i = leafOf(id); if (i < 0) return;
+        var rest = st.leaves[i].filter(function (x) { return x !== id; });
+        var s = sectionEl(id);
+        if (rest.length) {
+          st.leaves[i] = rest;
+          saveLeaves();
+          if (s) { homeCard(s); s.hidden = true; }
+          applyOpen();
+          return;
+        }
+        leafOut(leafEl(i), function () {
+          if (s) { homeCard(s); s.hidden = true; }
+          dropLeaf(i);
+          applyOpen();
+        });
+      }
+
+      // Pulling a section out opens a new leaf with it; it leaves the column
+      // and any other leaf.
+      function unfold(id) {
+        st.open = st.open.filter(function (x) { return x !== id; });
+        var was = leafOf(id);
+        if (was >= 0) {
+          st.leaves[was] = st.leaves[was].filter(function (x) { return x !== id; });
+          if (!st.leaves[was].length) dropLeaf(was);
+        }
+        st.leaves.push([id]);
+        saveOpen();
+        saveLeaves();
+        applyOpen();
+      }
+
+      // With every leaf open, a pulled section joins the leaf it is dropped on
+      // as its front card.
+      function dropOnLeaf(i, id) {
+        st.open = st.open.filter(function (x) { return x !== id; });
+        st.leaves = st.leaves.map(function (l, k) { return k === i ? l : l.filter(function (x) { return x !== id; }); });
+        st.leaves[i] = st.leaves[i].filter(function (x) { return x !== id; }).concat([id]);
+        st.leaves = st.leaves.filter(function (l) { return l.length; });
+        saveOpen();
+        saveLeaves();
+        applyOpen();
+      }
+
+      // Merging folds a leaf shut and hands its cards to the column (the last
+      // one in front) or to another leaf. Closing folds it and closes them.
+      function mergeLeaf(i, to) {
+        var cards = (st.leaves[i] || []).slice();
+        if (!cards.length) return;
+        leafOut(leafEl(i), function () {
+          dropLeaf(i);
+          if (to === 'col') {
+            cards.forEach(function (id) { if (st.open.indexOf(id) < 0) st.open.push(id); });
+            saveOpen();
+          } else {
+            var j = to > i ? to - 1 : to;
+            if (st.leaves[j]) st.leaves[j] = st.leaves[j].concat(cards);
+            saveLeaves();
+          }
+          applyOpen(to === 'col' ? cards[cards.length - 1] : null);
+        });
+      }
+
+      function closeLeaf(i) {
+        var cards = (st.leaves[i] || []).slice();
+        leafOut(leafEl(i), function () {
+          cards.forEach(function (id) { var s = sectionEl(id); if (s) { homeCard(s); s.hidden = true; } });
+          dropLeaf(i);
+          applyOpen();
+        });
+      }
+
+      // Close all folds the leaves shut, outermost first, then closes the column.
+      function closeAll() {
+        var i = st.leaves.length - 1;
+        if (i < 0) { st.open = []; saveOpen(); applyOpen(); return; }
+        closeLeaf(i);
+        setTimeout(closeAll, reduce() ? 0 : standardMs() + 20);
+      }
+
+      // A folded card on a leaf comes to the leaf's front; the front card
+      // folds behind the others.
+      function leafHeaderPick(id) {
+        var i = leafOf(id); if (i < 0) return;
+        var l = st.leaves[i], k = l.indexOf(id);
+        if (l.length < 2) return;
+        l.splice(k, 1);
+        if (k === l.length) l.unshift(id); else l.push(id);
+        saveLeaves();
+        applyOpen();
+      }
+
+      // ---- Dragging ----------------------------------------------------
+      // A rail icon dragged toward the page swings a new leaf open after the
+      // pointer, past a third of the way it settles open, short of that it
+      // swings shut. A leaf's bar dragged onto the column or another leaf
+      // merges it there. A plain click is untouched: a drag starts only after
+      // the pointer travels.
+
+      function dragDown(e) {
+        if (e.button !== 0 || phone() || st.drag) return;
+        var ic = e.target.closest('.dms-rail [data-dms-open]');
+        if (ic) {
+          st.drag = { kind: 'sec', id: ic.getAttribute('data-dms-open'), x: e.clientX, y: e.clientY, live: false, p: 0 };
+          return;
+        }
+        var bar = e.target.closest('[data-dms-leafdrag]');
+        if (bar && !e.target.closest('button')) {
+          e.preventDefault();
+          st.drag = { kind: 'leaf', i: leafIndex(bar), x: e.clientX, y: e.clientY, live: false };
+        }
+      }
+
+      function makeChip(icon, text) {
+        var c = document.createElement('div');
+        c.className = 'dms-dragchip';
+        c.setAttribute('aria-hidden', 'true');
+        var i = document.createElement('i');
+        i.className = icon;
+        c.appendChild(i);
+        c.appendChild(document.createTextNode(text));
+        st.dock.appendChild(c);
+        return c;
+      }
+
+      function placeChip(d, e) {
+        d.chip.style.left = (e.clientX + 10) + 'px';
+        d.chip.style.top = (e.clientY - 16) + 'px';
+      }
+
+      function clearHot() {
+        st.dock.querySelectorAll('.dms-hot').forEach(function (x) { x.classList.remove('dms-hot'); });
+      }
+
+      // The pointer's target under the chip, which never catches it.
+      function under(e) { return document.elementFromPoint(e.clientX, e.clientY); }
+
+      function startSecDrag(d) {
+        d.live = true;
+        document.documentElement.classList.add('dms-dragging');
+        d.chip = makeChip(sectionIcon(d.id), sectionTitle(d.id));
+        var others = st.leaves.filter(function (l) { return !(l.length === 1 && l[0] === d.id); });
+        // With nothing else open there is no screen to hinge on: it opens in
+        // the column. With every leaf out it joins the leaf it is dropped on.
+        d.toCol = !st.open.filter(function (x) { return x !== d.id; }).length && !others.length;
+        d.full = others.length >= leafRoom();
+        if (d.toCol || d.full) return;
+        d.at = others.length;
+        var g = makeLeaf(d.at);
+        g.classList.add('dms-leaf-ghost');
+        g.setAttribute('aria-hidden', 'true');
+        g.removeAttribute('role');
+        g.querySelector('.dms-leaf-tools').remove();
+        var s = sectionEl(d.id);
+        if (s) {
+          var copy = s.cloneNode(true);
+          copy.hidden = false;
+          copy.classList.remove('dms-folded');
+          copy.querySelectorAll('[id]').forEach(function (n) { n.removeAttribute('id'); });
+          copy.removeAttribute('aria-labelledby');
+          var cb = copy.querySelector('.dms-sec-b');
+          if (cb) cb.hidden = false;
+          g.querySelector('.dms-leaf-b').appendChild(copy);
+        }
+        leavesBox(true).hidden = false;
+        leavesBox(true).appendChild(g);
+        d.ghost = g;
+        setProgress(g, 0);
+      }
+
+      function setProgress(g, p) {
+        if (reduce()) { g.style.transform = ''; g.style.opacity = String(Math.max(0.15, p)); return; }
+        g.style.opacity = '';
+        g.style.transform = 'perspective(1400px) rotateY(' + (-90 * (1 - p)) + 'deg)';
+      }
+
+      function startLeafDrag(d) {
+        d.el = leafEl(d.i);
+        if (!d.el) { st.drag = null; return; }
+        d.live = true;
+        document.documentElement.classList.add('dms-dragging');
+        d.el.classList.add('dms-lifting');
+        var n = (st.leaves[d.i] || []).length;
+        d.chip = makeChip('fa-solid fa-table-columns', 'Leaf ' + (d.i + 2) + ' · ' + n + (n === 1 ? ' card' : ' cards'));
+      }
+
+      function dragMove(e) {
+        var d = st.drag; if (!d) return;
+        if (!d.live) {
+          if (d.kind === 'sec' && Math.abs(e.clientX - d.x) < 10) return;
+          if (d.kind === 'leaf' && Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < 8) return;
+          if (d.kind === 'sec') startSecDrag(d); else startLeafDrag(d);
+          if (!st.drag) return;
+        }
+        e.preventDefault();
+        placeChip(d, e);
+        clearHot();
+        if (d.kind === 'leaf') {
+          var o = under(e);
+          var lf = o && o.closest('.dms-leaf:not(.dms-lifting):not(.dms-leaf-ghost)');
+          var col = !lf && o && o.closest('.dms-col');
+          d.to = lf ? parseInt(lf.getAttribute('data-dms-leaf'), 10) : col ? 'col' : null;
+          if (lf) lf.classList.add('dms-hot'); else if (col) col.classList.add('dms-hot');
+          return;
+        }
+        if (d.ghost) {
+          // The leaf starts to open once the pointer passes its hinge.
+          var hinge = st.dock.getBoundingClientRect().left - d.at * LEAF_W;
+          d.p = Math.max(0, Math.min(1, (hinge - e.clientX) / (LEAF_W * 0.8)));
+          setProgress(d.ghost, d.p);
+        }
+        if (d.full) {
+          var over = under(e), leaf = over && over.closest('.dms-leaf:not(.dms-leaf-ghost)');
+          d.over = leaf ? parseInt(leaf.getAttribute('data-dms-leaf'), 10) : null;
+          if (leaf) leaf.classList.add('dms-hot');
+        }
+      }
+
+      // Puts the page back as it was before the drag, without acting on it.
+      function dragEnd() {
+        var d = st.drag; st.drag = null;
+        document.documentElement.classList.remove('dms-dragging');
+        if (!d || !st.dock) return d;
+        if (d.chip) d.chip.remove();
+        if (d.el) d.el.classList.remove('dms-lifting');
+        clearHot();
+        return d;
+      }
+
+      function dragUp(e) {
+        var d = st.drag;
+        if (!d) return;
+        if (!d.live) { st.drag = null; return; }
+        dragEnd();
+        st.eatClick = true;
+        setTimeout(function () { st.eatClick = false; }, 0);
+        if (e.type === 'pointercancel') { if (d.ghost) d.ghost.remove(); return; }
+        if (d.kind === 'leaf') {
+          if (d.to !== null && d.to !== undefined) mergeLeaf(d.i, d.to);
+          return;
+        }
+        if (d.toCol) {
+          if (st.open.indexOf(d.id) < 0) railPick(d.id);
+          return;
+        }
+        if (d.full) {
+          if (d.over !== null && d.over !== undefined) dropOnLeaf(d.over, d.id);
+          else if (Chronicle.notify) Chronicle.notify('The screen opens to ' + (leafRoom() + 1) + ' leaves at most here. Drop it on a leaf.', 'info');
+          return;
+        }
+        var g = d.ghost;
+        if (d.p < 0.35) {
+          if (reduce() || !g.animate) { g.remove(); return; }
+          g.animate([{ transform: g.style.transform }, { transform: 'perspective(1400px) rotateY(-90deg)' }],
+            { duration: window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs('--dur-standard', 200) : 200, easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = function () { g.remove(); };
+          return;
+        }
+        var finish = function () { g.remove(); unfold(d.id); };
+        if (reduce() || !g.animate) { finish(); return; }
+        g.animate([{ transform: g.style.transform }, { transform: 'perspective(1400px) rotateY(0)' }],
+          { duration: Math.round(220 * (1 - d.p)) + 60, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'forwards' }).onfinish = finish;
       }
 
       // ---- Out and tucked ----------------------------------------------
@@ -763,6 +1270,10 @@
       st.onKey = onKey;
       st.onOutside = onOutside;
       st.place = place;
+      st.onLeafRoom = onLeafRoom;
+      st.dragMove = dragMove;
+      st.dragUp = dragUp;
+      st.dragEnd = dragEnd;
       el._dmsState = st;
     },
     destroy: function (el) {
@@ -773,6 +1284,11 @@
       document.removeEventListener('keydown', st.onKey);
       document.removeEventListener('click', st.onOutside);
       window.removeEventListener('resize', st.place);
+      window.removeEventListener('resize', st.onLeafRoom);
+      window.removeEventListener('pointermove', st.dragMove);
+      window.removeEventListener('pointerup', st.dragUp);
+      window.removeEventListener('pointercancel', st.dragUp);
+      if (st.dragEnd) st.dragEnd();
       if (window.Chronicle && Chronicle.destroyWidget) st.dock.querySelectorAll('[data-widget]').forEach(Chronicle.destroyWidget);
       st.dock.remove();
       if (st.tab) st.tab.remove();

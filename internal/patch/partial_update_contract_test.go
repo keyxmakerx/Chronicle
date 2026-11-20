@@ -31,7 +31,7 @@ var contractGoverned = map[string]string{
 	"sessions.UpdateSessionInput":          "PUT /campaigns/:id/sessions/:sid — Mark Complete wiped the schedule, summary, in-world date and recurrence",
 	"campaigns.UpdateCampaignRequest":      "PUT /campaigns/:id is the Details tab's hx-put form, which posts only the description; the name and the public flag live on Campaign settings, so a save must not blank the name or flip a public campaign private. Every field is a pointer, nil means absent",
 	"campaigns.UpdateCampaignInput":        "the service-side twin of campaigns.UpdateCampaignRequest; same incident, same fix",
-	"campaigns.UpdateCampaignDetailsInput": "PUT /campaigns/:id/details — the desk's name and public blanks each send one key; a rename must not flip a public campaign private, and a public toggle must not rename or rewrite the description",
+	"campaigns.UpdateCampaignDetailsInput": "PUT /campaigns/:id/details — the desk's name, description and public blanks each send one key; a rename must not flip a public campaign private, and a public toggle must not rename or rewrite the description",
 	"entities.UpdateEntityInput":           "PUT /entities/:eid and the syncapi twin — every sync push un-parented the entity; {name} alone un-privated it",
 	"timeline.UpdateTimelineEventInput":    "PUT .../standalone-events/:eid — a rename cleared eight fields, including per-player visibility rules",
 	"maps.UpdateMarkerInput":               "PUT .../markers/:mkid — an edit or a drag cleared pin_category, visibility_rules and the Foundry pairing key",
@@ -82,6 +82,7 @@ var contractGoverned = map[string]string{
 	"rumours.UpdateRumourInput":            "PUT .../entities/:eid/rumours/:rid — an edit that names only the sureness must keep the words, and one that names only the speaker must keep the rumour; all three fields are required columns, so an explicit null preserves rather than blanks (born governed, no incident)",
 	"designs.UpdateDesignInput":            "PATCH /campaigns/:id/designs/:did — a rename must not clear the note, and a note edit must not rename (born governed, no incident)",
 	"auth.UpdateViewPrefsInput":            "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
+	"rolls.UpdateSettingsInput":            "PUT /campaigns/:id/rolls/settings — the Customize Dice tab saves each pick as it is made and the Table drawer sends only the look, so a body naming one setting must not reset the campaign's set, colours, crits, detail, offered sets or the players-may-pick switch (born governed, no incident)",
 }
 
 // governedFieldExceptions are value-typed fields deliberately left on a

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // CampaignRepository defines the data access contract for campaign operations.
@@ -29,8 +30,10 @@ type CampaignRepository interface {
 	Update(ctx context.Context, campaign *Campaign) error
 	// UpdateDetails writes only the columns it is given (nil leaves a column
 	// alone), so a rename or a public/private flip cannot overwrite a
-	// description saved a moment earlier somewhere else.
-	UpdateDetails(ctx context.Context, id string, name, slug *string, isPublic *bool) error
+	// description saved a moment earlier somewhere else. The description is a
+	// patch.Field because it has three states: absent keeps the column, null
+	// clears it, a value replaces it.
+	UpdateDetails(ctx context.Context, id string, name, slug *string, isPublic *bool, description patch.Field[string]) error
 	// MoveToTrash marks a campaign deleted without removing anything; Undo is
 	// RestoreFromTrash. See trash_repository.go.
 	MoveToTrash(ctx context.Context, id, byUserID, byName string, at time.Time) error
@@ -329,7 +332,7 @@ func (r *campaignRepository) Update(ctx context.Context, campaign *Campaign) err
 }
 
 // UpdateDetails sets just the named columns of one campaign.
-func (r *campaignRepository) UpdateDetails(ctx context.Context, id string, name, slug *string, isPublic *bool) error {
+func (r *campaignRepository) UpdateDetails(ctx context.Context, id string, name, slug *string, isPublic *bool, description patch.Field[string]) error {
 	sets := []string{"updated_at = NOW()"}
 	var args []any
 	if name != nil {
@@ -343,6 +346,14 @@ func (r *campaignRepository) UpdateDetails(ctx context.Context, id string, name,
 	if isPublic != nil {
 		sets = append(sets, "is_public = ?")
 		args = append(args, *isPublic)
+	}
+	if description.Present() {
+		sets = append(sets, "description = ?")
+		if v, ok := description.Get(); ok {
+			args = append(args, v)
+		} else {
+			args = append(args, nil)
+		}
 	}
 	args = append(args, id)
 	result, err := r.db.ExecContext(ctx, `UPDATE campaigns SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)

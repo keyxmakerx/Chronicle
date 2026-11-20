@@ -1,0 +1,72 @@
+/* The Dice tab on the Customize page. Colours and depth come from the style
+   kit's tokens, so light, dark and every kit follow; the control corner
+   follows the kit the way the Table tab's does. */
+:root { --dcz-r: 8px; }
+[data-cz-kit="sharp"] { --dcz-r: 2px; }
+[data-cz-kit="ornate"] { --dcz-r: 10px; }
+
+.dcz { display: flex; flex-direction: column; gap: 28px; max-width: 720px; min-width: 0; }
+.dcz p { margin: 0; }
+.dcz-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dcz-lede { color: var(--color-text-secondary); font-size: 14px; max-width: 60ch; }
+.dcz-status { min-height: 20px; font-size: 12.5px; white-space: nowrap; }
+.dcz-ok { color: rgb(var(--color-ok-rgb)); font-weight: 600; }
+.dcz-bad { color: rgb(var(--color-bad-rgb)); }
+.dcz-sec { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dcz-h { margin: 0; font-size: 16px; font-weight: 700; color: var(--color-text-primary); }
+.dcz-hint { font-size: 12.5px; color: var(--color-text-secondary); }
+.dcz-lab { font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); }
+.dcz-what { display: block; font-size: 12.5px; color: var(--color-text-secondary); font-weight: 400; }
+.dcz-nm { display: block; font-size: 14px; font-weight: 500; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.dcz-main { flex: 1; min-width: 0; }
+
+/* A pick from a list: the whole row is the control. */
+.dcz-rows { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--dcz-r); background: var(--color-bg-secondary); overflow: hidden; }
+.dcz-row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 9px 12px; cursor: pointer; border-top: 1px solid var(--color-border); transition: background-color var(--dur-micro); }
+.dcz-row:first-child { border-top: 0; }
+.dcz-row:hover { background: var(--color-bg-tertiary); }
+.dcz-row.is-on { background: rgb(var(--color-accent-rgb) / 0.1); }
+.dcz-row:has(input:focus-visible), .dcz-chk:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.dcz-row input[type="radio"], .dcz-chk input { accent-color: var(--color-accent); width: 18px; height: 18px; flex: none; margin: 0; }
+.dcz-sws { display: inline-flex; gap: 4px; flex: none; }
+
+.dcz-sw { display: inline-block; width: 28px; height: 28px; border-radius: var(--dcz-r); box-shadow: inset 0 0 0 1px var(--color-border), var(--elev-resting); }
+.dcz-sw-s { width: 16px; height: 16px; }
+.dcz-colours { display: flex; flex-direction: column; gap: 8px; }
+.dcz-cols { display: flex; flex-wrap: wrap; gap: 6px; }
+.dcz-col { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 2px solid transparent; border-radius: var(--dcz-r); background: none; cursor: pointer; transition: border-color var(--dur-micro); }
+.dcz-col:hover { border-color: var(--color-border); }
+.dcz-col[aria-pressed="true"] { border-color: var(--color-text-primary); }
+.dcz-col:focus-visible, .dcz-seg button:focus-visible, .dcz-switch:has(input:focus-visible) .dcz-track { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.dcz-col .dcz-sw { width: 30px; height: 30px; }
+
+.dcz-seg { display: inline-flex; flex-wrap: wrap; align-self: flex-start; border: 1px solid var(--color-border); border-radius: var(--dcz-r); background: var(--color-bg-secondary); box-shadow: var(--elev-resting); overflow: hidden; }
+.dcz-seg button { border: 0; border-left: 1px solid var(--color-border); background: none; padding: 8px 14px; min-height: 44px; cursor: pointer; font: inherit; font-size: 13.5px; color: var(--color-text-body); transition: background-color var(--dur-micro); }
+.dcz-seg button:first-child { border-left: 0; }
+.dcz-seg button:hover { background: var(--color-bg-tertiary); }
+.dcz-seg button[aria-pressed="true"] { background: rgb(var(--color-accent-rgb) / 0.14); color: var(--color-accent-link, var(--color-accent)); font-weight: 600; }
+
+/* The switch is the checkbox with its box drawn as a track. */
+.dcz-switch { position: relative; display: flex; align-items: flex-start; gap: 12px; cursor: pointer; min-height: 44px; }
+.dcz-switch input { position: absolute; z-index: 1; opacity: 0; width: 44px; height: 44px; margin: 0; cursor: pointer; }
+.dcz-track { position: relative; flex: none; width: 40px; height: 22px; margin-top: 2px; border-radius: 999px; background: var(--color-border); transition: background-color var(--dur-micro); }
+.dcz-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-bg-primary); box-shadow: var(--elev-resting); transition: transform var(--dur-micro) var(--ease-out); }
+.dcz-switch input:checked + .dcz-track { background: var(--color-accent); }
+.dcz-switch input:checked + .dcz-track::after { transform: translateX(18px); }
+.dcz-offer { display: flex; flex-direction: column; gap: 6px; padding-left: 52px; }
+.dcz-chks { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; }
+.dcz-chk { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; color: var(--color-text-primary); cursor: pointer; }
+.dcz-chk input:disabled { cursor: not-allowed; }
+.dcz-try { display: flex; flex-wrap: wrap; gap: 8px; }
+.dcz-try button { min-height: 44px; }
+
+@media (max-width: 639px) {
+  .dcz-head { flex-direction: column; gap: 4px; }
+  .dcz-offer { padding-left: 0; }
+  .dcz-sws { display: none; }
+  .dcz-seg { max-width: 100%; }
+}
+
+/* Calm and Off: the switch and the rows change at once. */
+html[data-motion="calm"] .dcz-track::after, html[data-motion="off"] .dcz-track::after { transition: none; }
+html[data-motion="off"] .dcz-row, html[data-motion="off"] .dcz-col, html[data-motion="off"] .dcz-seg button, html[data-motion="off"] .dcz-track { transition: none; }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -23,10 +24,14 @@ type Repository interface {
 	// List returns up to limit rolls the viewer may see, newest first, made
 	// before the roll before (all when empty).
 	List(ctx context.Context, campaignID string, v Viewer, before string, limit int) ([]Roll, error)
-	// Look returns the table's dice look, or "" when none was set.
-	Look(ctx context.Context, campaignID string) (string, error)
-	// SetLook saves the table's dice look.
-	SetLook(ctx context.Context, campaignID, look string) error
+	// Settings returns the campaign's dice settings: the stored row, or the
+	// defaults (empty names, players may pick) when none was saved. Look is ""
+	// until a Director sets it.
+	Settings(ctx context.Context, campaignID string) (Settings, error)
+	// SaveSettings writes s, but on an existing row only the named settings
+	// (keys of the Settings JSON, e.g. "diceSet"), so concurrent changes to
+	// different settings both land.
+	SaveSettings(ctx context.Context, campaignID string, s Settings, changed []string) error
 }
 
 type repository struct {
@@ -111,21 +116,52 @@ func (r *repository) List(ctx context.Context, campaignID string, v Viewer, befo
 	return out, nil
 }
 
-func (r *repository) Look(ctx context.Context, campaignID string) (string, error) {
-	var look string
-	err := r.db.QueryRowContext(ctx, `SELECT look FROM campaign_roll_settings WHERE campaign_id = ?`, campaignID).Scan(&look)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	if err != nil {
-		return "", apperror.NewInternal(fmt.Errorf("read roll settings: %w", err))
-	}
-	return look, nil
+// settingsColumns maps each changeable setting to its column. SaveSettings
+// builds its SQL only from this table, never from a caller's string.
+var settingsColumns = map[string]string{
+	"look": "look", "diceSet": "dice_set", "diceColour": "dice_colour",
+	"critSucc": "crit_succ", "critFail": "crit_fail", "quality": "quality", "playersPick": "players_pick",
+	"diceOffered": "dice_offered",
 }
 
-func (r *repository) SetLook(ctx context.Context, campaignID, look string) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO campaign_roll_settings (campaign_id, look, updated_at) VALUES (?, ?, ?)
-		ON DUPLICATE KEY UPDATE look = VALUES(look), updated_at = VALUES(updated_at)`, campaignID, look, time.Now().UTC())
+func (r *repository) Settings(ctx context.Context, campaignID string) (Settings, error) {
+	s := Settings{PlayersPick: true, DiceOffered: []string{}}
+	var offered string
+	err := r.db.QueryRowContext(ctx, `SELECT look, dice_set, dice_colour, crit_succ, crit_fail, quality, players_pick, dice_offered
+		FROM campaign_roll_settings WHERE campaign_id = ?`, campaignID).
+		Scan(&s.Look, &s.DiceSet, &s.DiceColour, &s.CritSucc, &s.CritFail, &s.Quality, &s.PlayersPick, &offered)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Settings{PlayersPick: true, DiceOffered: []string{}}, nil
+	}
+	if err != nil {
+		return Settings{}, apperror.NewInternal(fmt.Errorf("read roll settings: %w", err))
+	}
+	if offered != "" {
+		s.DiceOffered = strings.Split(offered, ",")
+	}
+	return s, nil
+}
+
+func (r *repository) SaveSettings(ctx context.Context, campaignID string, s Settings, changed []string) error {
+	// The row is created from the whole merged value, but a conflict updates
+	// only the columns this call changed, so two Directors changing different
+	// settings at once don't undo each other.
+	var updates []string
+	for _, k := range changed {
+		col, ok := settingsColumns[k]
+		if !ok {
+			return apperror.NewInternal(fmt.Errorf("save roll settings: unknown setting %q", k))
+		}
+		updates = append(updates, col+" = VALUES("+col+")")
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, `INSERT INTO campaign_roll_settings
+		(campaign_id, look, dice_set, dice_colour, crit_succ, crit_fail, quality, players_pick, dice_offered, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE `+strings.Join(updates, ", ")+`, updated_at = VALUES(updated_at)`,
+		campaignID, s.Look, s.DiceSet, s.DiceColour, s.CritSucc, s.CritFail, s.Quality, s.PlayersPick, strings.Join(s.DiceOffered, ","), time.Now().UTC())
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("save roll settings: %w", err))
 	}

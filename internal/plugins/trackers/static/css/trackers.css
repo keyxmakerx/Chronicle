@@ -9,7 +9,8 @@
   --tk-line: var(--color-border); --tk-tint: var(--color-bg-tertiary); --tk-panel: var(--color-card-bg, var(--color-bg-primary));
   --tk-acc: var(--annals-acc, var(--color-accent));
   --tk-dm: rgb(var(--color-warn-rgb, 217 119 6));
-  display: grid; gap: 10px; color: var(--tk-body); font-size: 14px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; color: var(--tk-body); font-size: 14px;
+  container-type: inline-size;
 }
 .tk :focus-visible { outline: 2px solid var(--tk-acc); outline-offset: 2px; }
 .tk-head { display: flex; align-items: center; gap: 8px; }
@@ -19,7 +20,7 @@
 .tk-empty, .tk-more, .tk-none { margin: 0; color: var(--tk-muted); font-size: 13px; }
 .tk-status { margin: 0; min-height: 1em; font-size: 12px; color: var(--tk-muted); }
 .tk-status.err { color: rgb(var(--color-danger-rgb, 220 38 38)); }
-.tk-list { display: grid; gap: 8px; }
+.tk-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 
 /* Controls: quiet word, icon and button weights, each at least 32px to hit. */
 .tk-q { font: inherit; font-size: 13px; color: var(--tk-muted); background: none; border: 0; min-height: 32px; padding: 0 6px; border-radius: var(--tk-r); cursor: pointer; }
@@ -39,6 +40,15 @@
 .tk-name { font-weight: 600; color: var(--tk-ink); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tk-who { font-size: 11px; color: var(--tk-muted); white-space: nowrap; }
 .tk-who.cb-dm { color: var(--tk-dm); }
+/* In a narrow column (the DM Screen, a phone) the name and its label wrap in
+ * full and the controls take the line under them, rather than cutting the
+ * name off. */
+@container (max-width: 340px) {
+  .tk-top { flex-wrap: wrap; row-gap: 2px; column-gap: 8px; }
+  .tk-name { white-space: normal; overflow-wrap: anywhere; }
+  .tk-top > .tk-sp { flex: 1 0 100%; }
+  .tk-top > .tk-sp + * { margin-left: auto; }
+}
 .tk-row > .tk-q { justify-self: start; }
 .tk-val { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--tk-ink); min-width: 2.5em; text-align: center; }
 .tk-now { margin: 0; font-size: 13px; color: var(--tk-body); }

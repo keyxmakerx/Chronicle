@@ -20,34 +20,39 @@ type ManageFrameData struct {
 	// nothing.
 	Actions templ.Component
 	// Line names the desk line this page belongs to ("people", "trash"). The
-	// frame draws that line's sentence under the title, the same words the
-	// desk shows, so going from the desk to the page carries it. Empty draws
-	// none: pages with no line of their own, and anyone who is not the owner.
+	// frame draws that line's figures beside the title, built from the same
+	// facts as the desk's row, so going from the desk to the page carries
+	// them. Empty draws none: pages with no line of their own, and anyone who
+	// is not the owner.
 	Line string
-	// NoSentence keeps the line's pin but draws no sentence: for a page that
+	// NoFigure keeps the line's pin but draws no figures: for a page that
 	// states the same thing itself and changes it in place, where the frame's
 	// copy would go stale.
-	NoSentence bool
+	NoFigure bool
 }
 
 // ManageFrame gives every Manage page the same left edge and the same content
 // width, a quiet "Campaign settings" above the title that leads back to the desk, the
-// title, a slot for the page's own actions, then the page body. One
-// component, so the edge cannot drift page by page again. The Customizer is a
-// full-screen workshop and never sits in it.
+// title with the page's muted figures beside it, a slot for the page's own
+// actions, then the page body. One component, so the edge cannot drift page
+// by page again. The Customizer is a full-screen workshop and never sits in it.
 templ ManageFrame(d ManageFrameData) {
-	{{ sentence := manageSentenceFor(ctx, d.Line) }}
-	if d.NoSentence {
-		{{ sentence = nil }}
+	{{ figure := manageFigureFor(ctx, d.Line) }}
+	if d.NoFigure {
+		{{ figure = nil }}
 	}
 	<div class="manage-frame" data-manage-frame data-workshop>
-		<header class={ "manage-head", templ.KV("has-sentence", sentence != nil) }>
+		<header class="manage-head">
 			if !d.Home {
 				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow">Campaign settings</a>
 			}
 			<h1 class="manage-title cb-title">{ d.Title }</h1>
 			{{ pinKey, pinName := ManageToolOfLine(d.Line) }}
 			@ManagePin(pinKey, pinName)
+			if figure != nil {
+				<link rel="stylesheet" href={ AssetURL("/static/css/manage_desk.css") }/>
+				@figure
+			}
 			if d.Actions != nil || ManageFindShown(ctx) {
 				<div class="manage-actions">
 					if d.Actions != nil {
@@ -60,10 +65,6 @@ templ ManageFrame(d ManageFrameData) {
 				<p class="manage-intro">{ d.Intro }</p>
 			}
 		</header>
-		if sentence != nil {
-			<link rel="stylesheet" href={ AssetURL("/static/css/manage_desk.css") }/>
-			@sentence
-		}
 		{ children... }
 	</div>
 }

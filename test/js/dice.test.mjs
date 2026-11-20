@@ -18,11 +18,12 @@ const T = await import(join(root, 'static/vendor/three-dice.min.js'));
 const C = await import(join(root, 'static/vendor/cannon-es.js'));
 const E = await import(join(root, 'static/js/dice/engine.js'));
 
-function load() {
+function loadWindow() {
   const window = { crypto: webcrypto, Chronicle: {} };
   vm.runInNewContext(readFileSync(join(root, 'static/js/dice.js'), 'utf8'), { window, Uint32Array, Promise, setTimeout });
-  return window.Chronicle.dice;
+  return window;
 }
+function load() { return loadWindow().Chronicle.dice; }
 const D = load();
 const I = D._internal;
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -128,6 +129,33 @@ test('each die wears its own look, else the table\'s, else the default', () => {
   ]);
   const none = I.engineDice(E, groups, out, { set: 'nope' });
   assert.deepEqual(plain(none.map((d) => d.kind)), ['cage', 'jewelled', 'jewelled']);
+});
+
+test('a roll\'s look: its own opts, else Chronicle.diceTable, else the defaults', () => {
+  const win = loadWindow();
+  const wt = win.Chronicle.dice._internal.withTable;
+  assert.deepEqual(plain(wt({})), {}, 'no table: nothing is invented, the defaults apply later');
+  win.Chronicle.diceTable = { set: 'oak', colour: 'walnut', succ: 'dawn', fail: 'frost', quality: 'hd' };
+  assert.deepEqual(plain(wt({})), { set: 'oak', colour: 'walnut', succ: 'dawn', fail: 'frost', quality: { mode: 'hd' } });
+  assert.deepEqual(plain(wt({ set: 'bone', colour: 'pale', succ: 'storm', fail: 'abyss', quality: { mode: 'basic' } })),
+    { set: 'bone', colour: 'pale', succ: 'storm', fail: 'abyss', quality: { mode: 'basic' } }, 'explicit opts win');
+  assert.equal(wt({ set: 'bone' }).colour, undefined, 'a colour of the page\'s set is not worn by another set');
+  assert.equal(wt({ set: 'oak' }).colour, 'walnut');
+  win.Chronicle.diceTable = { set: '', colour: '', succ: '', fail: '', quality: '' };
+  assert.deepEqual(plain(wt({})), {}, 'empty names mean the defaults');
+  win.Chronicle.diceTable = { set: 'oak', colour: 'walnut' };
+  assert.deepEqual(plain(wt({ table: { set: 'bone', colour: 'pale' } })), { table: { set: 'bone', colour: 'pale' }, set: 'bone', colour: 'pale' }, 'a roll\'s own table beats the page\'s');
+  assert.deepEqual(plain(wt({ table: {} })).set, undefined, 'an empty table does not borrow the page\'s look');
+  const opts = { crit: 'succ' };
+  wt(opts);
+  assert.deepEqual(opts, { crit: 'succ' }, 'the caller\'s opts are not changed');
+  // What reaches the engine: a name it doesn't know falls back to the default set.
+  const groups = [{ dice: [{ sides: 20 }] }], out = [{ values: [7], crits: [null] }];
+  assert.equal(I.engineDice(E, groups, out, wt({ set: 'plastic' }))[0].kind, 'jewelled');
+  win.Chronicle.diceTable = { set: 'oak', colour: 'walnut' };
+  assert.equal(I.engineDice(E, groups, out, wt({}))[0].kind, 'oak');
+  win.Chronicle.diceTable = { set: 'not-a-set' };
+  assert.equal(I.engineDice(E, groups, out, wt({}))[0].kind, 'jewelled');
 });
 
 // ---------- The engine ----------

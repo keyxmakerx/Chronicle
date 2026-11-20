@@ -12,9 +12,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// DeskPage renders the owner's Campaign settings page. The page draws its own
-// full-width Find field, so the frame is told not to draw the small one in its
-// header: two Finds would also give the "/" shortcut two buttons to press.
+// DeskPage renders the owner's Campaign settings page. The page draws Find as
+// a field on the title's row, so the frame is told not to draw the small
+// button in its header: two Finds would also give the "/" shortcut two
+// buttons to press.
 func DeskPage(cc *CampaignContext, d *Desk) templ.Component {
 	page := deskPageBody(cc, d)
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
@@ -22,38 +23,68 @@ func DeskPage(cc *CampaignContext, d *Desk) templ.Component {
 	})
 }
 
-// deskNodeKind is how the template draws one piece of a sentence.
-type deskNodeKind int
-
-const (
-	deskNodeText deskNodeKind = iota
-	deskNodeBold
-	deskNodeGM
-	deskNodeSwatch
-)
-
-// deskNodeView is a DeskPart ready to draw.
-type deskNodeView struct {
-	Kind deskNodeKind
-	Text string
-}
-
-// deskNodes turns a sentence's parts into what the template draws.
-func deskNodes(parts []DeskPart) []deskNodeView {
-	out := make([]deskNodeView, 0, len(parts))
-	for _, p := range parts {
-		switch {
-		case p.GM:
-			out = append(out, deskNodeView{Kind: deskNodeGM})
-		case p.Swatch:
-			out = append(out, deskNodeView{Kind: deskNodeSwatch})
-		case p.Bold:
-			out = append(out, deskNodeView{Kind: deskNodeBold, Text: p.Text})
-		default:
-			out = append(out, deskNodeView{Kind: deskNodeText, Text: p.Text})
+// deskWhy is the reason drawn under a row: the row's own, or the first one a
+// blank on it carries (an archived campaign's).
+func deskWhy(l DeskLine) string {
+	if l.Why != "" {
+		return l.Why
+	}
+	for _, v := range l.Values {
+		if v.Blank != nil && v.Blank.Off != "" {
+			return v.Blank.Off
 		}
 	}
-	return out
+	return ""
+}
+
+// deskAnyOff reports whether a value on the row is off now, which is when its
+// reason is shown.
+func deskAnyOff(l DeskLine) bool {
+	for _, v := range l.Values {
+		if v.Off != "" || (v.Blank != nil && v.Blank.Off != "") {
+			return true
+		}
+	}
+	return false
+}
+
+// deskValueLabel is a value's accessible name: the row's name, then the value,
+// so a screen reader hears "Campaign: Private" or "Members: 5". A warning dot
+// is said in words, since the dot itself is hidden from it.
+func deskValueLabel(name string, v DeskValue) string {
+	s := name + ": "
+	if v.State == "warn" {
+		s += "warning, "
+	}
+	s += v.Text
+	if v.Sub != "" {
+		s += " " + v.Sub
+	}
+	return s
+}
+
+// deskBlankLabel is a blank's accessible name. A long description is cut so a
+// screen reader does not read thousands of characters as a button's name.
+func deskBlankLabel(b *DeskBlank) string {
+	return b.Label + ": " + deskCut(b.Shown, 80)
+}
+
+// deskMax is a text blank's length limit for the script.
+func deskMax(b *DeskBlank) string { return strconv.Itoa(b.Max) }
+
+// deskOffAttr is aria-disabled for a value that is a word, not a blank.
+func deskOffAttr(v DeskValue) string { return strconv.FormatBool(v.Off != "") }
+
+// deskOffGuard stops the view-as form from posting while its word is off. The
+// word stays a real, focusable submit button so a screen reader still finds
+// it and reads why; only the press is refused. Inline, like the blanks, so it
+// works after a boosted swap.
+func deskOffGuard() templ.ComponentScript {
+	return templ.ComponentScript{
+		Name:     "deskOffGuard",
+		Function: "",
+		Call:     `(function(b,e){if(b.getAttribute('aria-disabled')==='true'){e.preventDefault();}})(this,event)`,
+	}
 }
 
 // deskOptionsJSON is a blank's menu as the script reads it.
@@ -68,8 +99,8 @@ func deskOptionsJSON(o []DeskOption) string {
 	return string(b)
 }
 
-// deskHasPopup is aria-haspopup for a blank: a choice opens a menu, a name
-// opens a field in place.
+// deskHasPopup is aria-haspopup for a blank: a choice opens a menu, a name or
+// a description opens a field in place.
 func deskHasPopup(b *DeskBlank) string {
 	if b.Kind == DeskBlankChoice {
 		return "menu"

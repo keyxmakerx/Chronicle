@@ -34,7 +34,7 @@ templ Panel(v *View, csrf string) {
 					data-dms-open={ sec.ID }
 					aria-pressed="false"
 					aria-label={ sec.Title }
-					title={ sec.Title + ": " + sec.Summary }
+					title={ sec.Title + ": " + sec.Summary + ". Drag toward the page to open it on its own leaf." }
 				>
 					<i class={ "fa-solid fa-" + sec.Icon } aria-hidden="true"></i>
 					if sec.Badge > 0 {

@@ -19,7 +19,7 @@ templ CategoryListPage(cc *campaigns.CampaignContext, v *RulesListView) {
 
 // CategoryListContent is a category's page for an HTMX swap.
 templ CategoryListContent(v *RulesListView) {
-	<div id="module-content">
+	<div id="module-content" class={ layouts.AppFrameClass } data-app-frame>
 		@rulesStyles()
 		<section class="rp rp-list" data-widget="rules-page" aria-labelledby="rp-list-title">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
@@ -91,7 +91,7 @@ templ listRowItem(r listRow) {
 			if r.End != "" || r.DirectorsOnly {
 				<span class="rp-row__end">
 					if r.DirectorsOnly {
-						<span class="cb-dm rp-dm__tag">Directors only</span>
+						<span class="cb-dm rp-dm__tag">{ layouts.GMTerm(ctx) + "s only" }</span>
 					}
 					if r.End != "" {
 						<span>{ r.End }</span>

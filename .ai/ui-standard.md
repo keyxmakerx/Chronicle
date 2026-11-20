@@ -279,8 +279,8 @@ leaving the list for another page.
   adding and resizing many things (Customize, a page layout) collects into
   one draft with the save bar (`customize_shell.js`): what is waiting, Undo,
   Redo, Discard, Save changes, and Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y. A single
-  pick elsewhere (a field, a switch, a blank in a sentence) saves the moment
-  it is made and confirms in place.
+  pick elsewhere (a field, a switch, a value on Campaign settings that changes
+  where it stands) saves the moment it is made and confirms in place.
 - **Find with "/".** A workshop with many settings has Find: "/" outside a
   text field, or the Find button, opens it, and it jumps to the setting by
   name. One field serves them all (`static/js/find_palette.js`, styled by
@@ -449,10 +449,10 @@ place, and Off shows the end state.
   motion, unsaved changes, a modified click and a browser without view
   transitions keep the ordinary page load. The browser's Back button is the
   ordinary history restore and plays nothing.
-- **Campaign settings rows are links; nothing travels.** Pressing a row is an
-  ordinary page load or boosted swap, and so is the "Campaign settings" word
-  above a tool's title. A tool page's own sentence under its title is drawn by
-  the server (`ManageFrame`'s `Line`).
+- **Campaign settings values that open a page are links; nothing travels.**
+  Pressing one is an ordinary page load or boosted swap, and so is the
+  "Campaign settings" word above a tool's title. A tool page's own figures
+  beside its title are drawn by the server (`ManageFrame`'s `Line`).
 - **The title's rule draws on arrival.** Under Annals the accent rule under
   a page title draws from the left over `--dur-large`, after 120ms, under
   full motion only.

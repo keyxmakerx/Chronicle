@@ -1,6 +1,6 @@
-// desk_manage_test.go pins the lines a Manage tool page opens with: the
-// people sentence, the service's single-line wording, the frame's sentence
-// resolver and the Needs-you count.
+// desk_manage_test.go pins the figures a Manage tool page draws beside its
+// title: the People figure and its plurals, the service's per-page figures,
+// the frame's figure resolver and the Needs-you count.
 
 package campaigns
 
@@ -21,66 +21,108 @@ func members(n int, role Role) []CampaignMember {
 	return out
 }
 
-func TestPeopleLine_WaitingInvites(t *testing.T) {
-	c := &Campaign{ID: "c1", Settings: "{}"}
+func TestPeopleFigure(t *testing.T) {
 	tests := []struct {
 		name    string
 		members []CampaignMember
 		invited int
+		read    bool
 		want    string
 	}{
-		{"none waiting", members(2, RolePlayer), 0, "3 people: you and 2 players."},
-		{"one waiting", members(2, RolePlayer), 1, "3 people: you and 2 players, with 1 invited."},
-		{"alone with some waiting", members(0, RolePlayer), 2, "Just you, so far, with 2 invited."},
+		{"members unread", nil, 0, true, ""},
+		{"alone, nobody waiting", members(0, RolePlayer), 0, true, "1 member"},
+		{"three, nobody waiting", members(2, RolePlayer), 0, true, "3 members"},
+		{"one waiting", members(2, RolePlayer), 1, true, "3 members · 1 invited"},
+		{"alone with some waiting", members(0, RolePlayer), 2, true, "1 member · 2 invited"},
+		{"invitations unread leave out the invited part", members(2, RolePlayer), 0, false, "3 members"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := deskText(peopleLine(c, tt.members, tt.invited)); got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
+			got := peopleFigure(tt.members, DeskInputs{Invited: tt.invited, InvitedRead: tt.read})
+			if got.Text() != tt.want || got.Empty() != (tt.want == "") {
+				t.Errorf("figure = %q, want %q", got.Text(), tt.want)
 			}
 		})
 	}
 }
 
-func TestDeskService_Line(t *testing.T) {
+func TestDeskService_Figure(t *testing.T) {
 	c := &Campaign{ID: "c1", Settings: "{}"}
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	old := now.Add(-24 * 24 * time.Hour)
 	s := NewDeskService()
 	s.Register(stubProvider{DeskTrash, func(context.Context) (DeskFacts, error) {
 		return DeskFacts{Trash: &DeskTrashFacts{Items: 2, Days: 30}}, nil
 	}})
-	in := DeskInputs{Campaign: c, Members: members(1, RoleScribe), Invited: 1, Addons: map[string]bool{}}
+	s.Register(stubProvider{DeskChanges, func(context.Context) (DeskFacts, error) {
+		return DeskFacts{Changes: &DeskChangesFacts{Changes: 3, Players: 2}}, nil
+	}})
+	s.Register(stubProvider{DeskMedia, func(context.Context) (DeskFacts, error) {
+		return DeskFacts{Media: &DeskMediaFacts{Files: 212, Bytes: 310 << 20}}, nil
+	}})
+	s.Register(stubProvider{DeskFoundry, func(context.Context) (DeskFacts, error) {
+		return DeskFacts{Foundry: &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: &old}}}, nil
+	}})
+	s.Register(stubProvider{DeskAI, func(context.Context) (DeskFacts, error) {
+		return DeskFacts{AI: &DeskAIFacts{State: DeskAIConnected, Client: "Claude", CanAsk: true}}, nil
+	}})
+	in := DeskInputs{
+		Campaign: c, Members: members(4, RolePlayer), Invited: 1, InvitedRead: true,
+		SystemID: "drawsteel", SystemName: "Draw Steel", FeaturesOn: 12, FeaturesTotal: 15,
+		Addons: map[string]bool{"media-gallery": true, "sync-api": true},
+	}
 	tests := []struct {
-		id     string
-		want   string
-		wantOK bool
+		id        string
+		want      string
+		wantState string
+		wantOK    bool
 	}{
-		{"people", "2 people: you and 1 scribe, with 1 invited.", true},
-		{"trash", "Trash holds 2 items for 30 days.", true},
-		{"media", "", false}, // its add-on is off
-		{"foundry", "", false},
-		{"nonsense", "", false},
+		{"people", "5 members · 1 invited", "", true},
+		{"changes", "3 this week", "", true},
+		{"media", "212 files · 310 MB", "", true},
+		{"game", "Draw Steel · 12 of 15 on", "", true},
+		{"foundry", "No answer · 24 days", "warn", true},
+		{"ai", "Claude · can ask", "ok", true},
+		{"trash", "2 items · kept 30 days", "", true},
+		{"settings", "", "", true}, // Details and data shows nothing beside its title
+		{"nonsense", "", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.id, func(t *testing.T) {
-			l, ok := s.Line(context.Background(), DeskRequest{}, in, tt.id)
-			if ok != tt.wantOK || (ok && deskText(l) != tt.want) {
-				t.Errorf("got %q ok=%v, want %q ok=%v", deskText(l), ok, tt.want, tt.wantOK)
+			f, ok := s.Figure(context.Background(), DeskRequest{Now: now}, in, tt.id)
+			if ok != tt.wantOK || f.Text() != tt.want || f.State != tt.wantState {
+				t.Errorf("got %q state %q ok=%v, want %q state %q ok=%v", f.Text(), f.State, ok, tt.want, tt.wantState, tt.wantOK)
 			}
 		})
 	}
+	// A page whose add-on is off has no figure at all, and a figure that
+	// cannot be read is empty: the header shows nothing, never a placeholder.
+	off := in
+	off.Addons = map[string]bool{}
+	for _, id := range []string{"media", "foundry"} {
+		if _, ok := s.Figure(context.Background(), DeskRequest{Now: now}, off, id); ok {
+			t.Errorf("%s has a figure with its add-on off", id)
+		}
+	}
+	bare := NewDeskService()
+	for _, id := range []string{"changes", "media", "foundry", "ai", "trash"} {
+		if f, _ := bare.Figure(context.Background(), DeskRequest{Now: now}, in, id); !f.Empty() {
+			t.Errorf("%s figure with no provider = %q, want nothing", id, f.Text())
+		}
+	}
 }
 
-// deskSentenceService answers what ManageSentence reads.
-type deskSentenceService struct{ CampaignService }
+// deskFigureService answers what ManageFigure reads.
+type deskFigureService struct{ CampaignService }
 
-func (deskSentenceService) GetByID(_ context.Context, id string) (*Campaign, error) {
+func (deskFigureService) GetByID(_ context.Context, id string) (*Campaign, error) {
 	return &Campaign{ID: id, Name: "Therin", Settings: "{}"}, nil
 }
-func (deskSentenceService) ListMembers(context.Context, string) ([]CampaignMember, error) {
+func (deskFigureService) ListMembers(context.Context, string) ([]CampaignMember, error) {
 	return members(3, RolePlayer), nil
 }
 
-func sentenceCtx(role int, in bool) context.Context {
+func figureCtx(role int, in bool) context.Context {
 	ctx := layouts.SetUserID(context.Background(), "owner")
 	if in {
 		ctx = layouts.SetCampaignID(ctx, "c1")
@@ -89,10 +131,10 @@ func sentenceCtx(role int, in bool) context.Context {
 	return ctx
 }
 
-// A Manage page's own sentence is the owner's alone and is the same words the
-// desk shows, from the same provider.
-func TestManageSentence(t *testing.T) {
-	h := NewHandler(deskSentenceService{})
+// A Manage page's own figures are the owner's alone and are the same figures
+// the desk's rows carry, from the same provider.
+func TestManageFigure(t *testing.T) {
+	h := NewHandler(deskFigureService{})
 	h.RegisterDeskProvider(stubProvider{DeskTrash, func(context.Context) (DeskFacts, error) {
 		return DeskFacts{Trash: &DeskTrashFacts{Items: 2, Days: 30}}, nil
 	}})
@@ -100,37 +142,63 @@ func TestManageSentence(t *testing.T) {
 		name string
 		ctx  context.Context
 		line string
-		want string // "" means no sentence at all
+		want string // "" means nothing at all
 	}{
-		{"owner, people", sentenceCtx(int(RoleOwner), true), "people", "4 people: you and 3 players."},
-		{"owner, trash", sentenceCtx(int(RoleOwner), true), "trash", "Trash holds 2 items for 30 days."},
-		{"owner, a line with no page", sentenceCtx(int(RoleOwner), true), "keys", ""},
-		{"scribe", sentenceCtx(int(RoleScribe), true), "people", ""},
-		{"player", sentenceCtx(int(RolePlayer), true), "people", ""},
-		{"owner viewing as a player reads as player", sentenceCtx(int(RolePlayer), true), "trash", ""},
-		{"outside a campaign", sentenceCtx(0, false), "people", ""},
+		{"owner, people", figureCtx(int(RoleOwner), true), "people", "4 members"},
+		{"owner, trash", figureCtx(int(RoleOwner), true), "trash", "2 items · kept 30 days"},
+		{"owner, a row with no page", figureCtx(int(RoleOwner), true), "keys", ""},
+		{"owner, Details and data", figureCtx(int(RoleOwner), true), "settings", ""},
+		{"scribe", figureCtx(int(RoleScribe), true), "people", ""},
+		{"player", figureCtx(int(RolePlayer), true), "people", ""},
+		{"owner viewing as a player reads as player", figureCtx(int(RolePlayer), true), "trash", ""},
+		{"outside a campaign", figureCtx(0, false), "people", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			comp := h.ManageSentence(tt.ctx, tt.line)
+			comp := h.ManageFigure(tt.ctx, tt.line)
 			if tt.want == "" {
 				if comp != nil {
-					t.Fatal("this viewer or line must get no sentence")
+					t.Fatal("this viewer or page must get no figure")
 				}
 				return
 			}
 			if comp == nil {
-				t.Fatal("want a sentence")
+				t.Fatal("want a figure")
 			}
 			var sb strings.Builder
 			if err := comp.Render(tt.ctx, &sb); err != nil {
 				t.Fatal(err)
 			}
 			out := sb.String()
-			if !strings.Contains(out, tt.want) || !strings.Contains(out, `data-manage-sentence`) || !strings.Contains(out, `data-line="`+tt.line+`"`) {
-				t.Errorf("sentence = %s, want it to say %q", out, tt.want)
+			if !strings.Contains(out, tt.want) || !strings.Contains(out, `data-manage-figure`) || !strings.Contains(out, `data-line="`+tt.line+`"`) || !strings.Contains(out, `id="manage-figure"`) {
+				t.Errorf("figure = %s, want it to say %q", out, tt.want)
+			}
+			if strings.Contains(out, "hx-swap-oob") {
+				t.Errorf("the page's own figure must carry no swap: %s", out)
 			}
 		})
+	}
+}
+
+// After a change the response redraws the figure in place, and a figure that
+// can no longer be read is swapped for an empty one rather than left stale.
+func TestManageFigureSwap(t *testing.T) {
+	h := NewHandler(deskFigureService{})
+	var sb strings.Builder
+	if err := h.manageFigureSwap("people").Render(figureCtx(int(RoleOwner), true), &sb); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`id="manage-figure"`, `hx-swap-oob="true"`, "4 members"} {
+		if !strings.Contains(sb.String(), want) {
+			t.Errorf("swap lacks %q: %s", want, sb.String())
+		}
+	}
+	sb.Reset()
+	if err := manageFigureSwap("people", DeskFigure{}).Render(context.Background(), &sb); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sb.String(), `hx-swap-oob="true"`) || strings.Contains(sb.String(), "member") {
+		t.Errorf("an unreadable figure swaps in empty: %s", sb.String())
 	}
 }
 

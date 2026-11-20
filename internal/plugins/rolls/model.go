@@ -1,6 +1,10 @@
 package rolls
 
-import "time"
+import (
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
+)
 
 // Who may see a roll, the same four modes Foundry has.
 const (
@@ -157,7 +161,52 @@ type Page struct {
 	More  bool   `json:"more"`
 }
 
-// Settings is the table's dice look.
+// Quality is how much detail the 3D dice draw. Empty means Auto, which the
+// browser measures per device.
+const (
+	QualityAuto  = "auto"
+	QualityBasic = "basic"
+	QualityHD    = "hd"
+)
+
+// DiceSetKeys and the two crit lists name what the browser's dice engine can
+// draw (static/js/dice/engine.js, SET_KEYS and CRIT_KEYS). The names live in
+// both places because the server must refuse a name the engine would never
+// load; TestDiceKeysMatchEngine in service_test.go keeps the two lists equal.
+var (
+	DiceSetKeys  = []string{"jewelled", "confetti", "acrylic", "cage", "heartlight", "gothic", "obsidian", "moonstone", "oak", "nebula", "bone", "scale"}
+	CritSuccKeys = []string{"storm", "phoenix", "dawn", "starfall", "bloom", "hoard"}
+	CritFailKeys = []string{"grasp", "frost", "shatter", "hex", "crows", "abyss"}
+)
+
+// Settings is the campaign's dice: the table's look (what a player who hasn't
+// picked starts on) and the 3D dice every roll is drawn with. An empty string
+// in a dice field means "the default", so the browser's own defaults apply.
 type Settings struct {
-	Look string `json:"look"`
+	Look        string `json:"look"`
+	DiceSet     string `json:"diceSet"`
+	DiceColour  string `json:"diceColour"`
+	CritSucc    string `json:"critSucc"`
+	CritFail    string `json:"critFail"`
+	Quality     string `json:"quality"`
+	PlayersPick bool   `json:"playersPick"`
+	// DiceOffered is the sets a player may pick from, in catalogue order. It
+	// is empty when every set is on offer. The campaign's own set is always
+	// among them.
+	DiceOffered []string `json:"diceOffered"`
+}
+
+// UpdateSettingsInput is a partial change to Settings: a key left out keeps
+// what is stored. An empty string on a dice field puts it back to the default;
+// an explicit null keeps it, since none of these columns can hold NULL.
+type UpdateSettingsInput struct {
+	Look        patch.Field[string] `json:"look"`
+	DiceSet     patch.Field[string] `json:"diceSet"`
+	DiceColour  patch.Field[string] `json:"diceColour"`
+	CritSucc    patch.Field[string] `json:"critSucc"`
+	CritFail    patch.Field[string] `json:"critFail"`
+	Quality     patch.Field[string] `json:"quality"`
+	PlayersPick patch.Field[bool]   `json:"playersPick"`
+	// DiceOffered replaces the whole list; an empty list offers every set.
+	DiceOffered patch.Field[[]string] `json:"diceOffered"`
 }

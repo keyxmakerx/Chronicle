@@ -302,7 +302,7 @@ window.CraftingRecipes = (function () {
     function bump(v, d, lo, hi) { return Math.max(lo, Math.min(hi, v + d)); }
 
     el.innerHTML = '<div class="cra-red"><aside class="cra-rlist"><h3 class="cra-ph">Recipes</h3><ul class="cra-rl"></ul>' +
-      '<button type="button" class="btn btn-secondary btn-sm" data-act="new">New crafting recipe</button></aside>' +
+      '<button type="button" class="cra-newrow" data-act="new">New crafting recipe</button></aside>' +
       '<div class="cra-rform"></div><aside class="cra-rprev"><h3 class="cra-ph">What players see</h3><div class="cra-book"></div><h3 class="cra-ph">Checks</h3><ul class="cra-checks"></ul></aside></div>' +
       '<section class="cra-rules" hidden></section>';
 

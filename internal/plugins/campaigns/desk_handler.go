@@ -1,8 +1,8 @@
-// desk_handler.go serves the desk's fragments: what a line unfolds into, and a
-// line's sentence worded again after a change made inside its fold. Both are
-// owner-only, like the desk, and both read only the campaign the route names.
-// They bind, call the desk service and render; the wording lives in the
-// service.
+// desk_handler.go gathers the desk's inputs and serves its owner-only
+// answers: the figures a Manage tool page draws beside its title, the count
+// behind the sidebar's Manage row, and Find's list. Each reads only the
+// campaign the route names. They bind, call the desk service and render; the
+// wording lives in the service.
 
 package campaigns
 
@@ -54,6 +54,7 @@ func (h *Handler) deskInputsFor(ctx context.Context, campaign *Campaign, parts d
 		if inv, err := h.invites.ListInvites(ctx, campaign.ID); err != nil {
 			slog.Warn("desk: invitations not read", slog.String("campaign_id", campaign.ID), slog.Any("error", err))
 		} else {
+			in.InvitedRead = true
 			for i := range inv {
 				if inv[i].IsPending() {
 					in.Invited++
@@ -83,7 +84,9 @@ func (h *Handler) deskInputsFor(ctx context.Context, campaign *Campaign, parts d
 	}
 	if parts&deskSystem != 0 && h.systemLister != nil {
 		id := currentSystemID(campaign.ParseSettings().SystemID, addons)
+		in.SystemID = id
 		for _, o := range h.systemLister.ListSystems() {
+			in.Systems = append(in.Systems, DeskSystem{ID: o.ID, Name: o.Name})
 			if id != "" && o.ID == id {
 				in.SystemName = o.Name
 			}
@@ -92,48 +95,49 @@ func (h *Handler) deskInputsFor(ctx context.Context, campaign *Campaign, parts d
 	return in
 }
 
-// ManageSentence is a Manage page's own desk sentence, for the frame to draw
-// under the title (layouts.SetManageSentence). It words the line from the
-// same service and providers the desk uses, so the page opened by address and
-// the page reached from the desk start with the same words. It returns nil for
-// anyone who is not the campaign's owner and when the line cannot be worded;
-// the frame then draws nothing.
-func (h *Handler) ManageSentence(ctx context.Context, lineID string) templ.Component {
-	line, ok := h.manageLine(ctx, lineID)
-	if !ok {
+// ManageFigure is a Manage page's own figures, for the frame to draw beside
+// the title (layouts.SetManageFigure). It builds them from the same service
+// and providers the desk uses, so the page opened by address and the page
+// reached from the desk show the same figures. It returns nil for anyone who
+// is not the campaign's owner and when the figures cannot be read; the frame
+// then draws nothing.
+func (h *Handler) ManageFigure(ctx context.Context, lineID string) templ.Component {
+	fig, ok := h.manageFigureOf(ctx, lineID)
+	if !ok || fig.Empty() {
 		return nil
 	}
-	return manageSentence(lineID, line)
+	return manageFigure(lineID, fig)
 }
 
-// manageSentenceSwap is the same sentence as an out-of-band swap, for a
-// response that changes what the sentence counts (a removal, an invite). It is
-// worded when the response is drawn, because the campaign and the owner are
-// only in the render context, not the request's.
-func (h *Handler) manageSentenceSwap(lineID string) templ.Component {
+// manageFigureSwap is the same figure as an out-of-band swap, for a response
+// that changes what the figure counts (a removal, an invite). It is built when
+// the response is drawn, because the campaign and the owner are only in the
+// render context, not the request's. A figure that can no longer be read
+// swaps in an empty one rather than leaving a stale count.
+func (h *Handler) manageFigureSwap(lineID string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		line, ok := h.manageLine(ctx, lineID)
+		fig, ok := h.manageFigureOf(ctx, lineID)
 		if !ok {
 			return nil
 		}
-		return manageSentenceSwap(lineID, line).Render(ctx, w)
+		return manageFigureSwap(lineID, fig).Render(ctx, w)
 	})
 }
 
-func (h *Handler) manageLine(ctx context.Context, lineID string) (DeskLine, bool) {
+func (h *Handler) manageFigureOf(ctx context.Context, lineID string) (DeskFigure, bool) {
 	if !layouts.InCampaign(ctx) || layouts.GetCampaignRole(ctx) < int(RoleOwner) {
-		return DeskLine{}, false
+		return DeskFigure{}, false
 	}
 	campaign, err := h.service.GetByID(ctx, layouts.GetCampaignID(ctx))
 	if err != nil || campaign == nil {
-		return DeskLine{}, false
+		return DeskFigure{}, false
 	}
 	parts := deskAddons | deskSystem
 	if lineID == "people" {
 		parts = deskMembers | deskInvites
 	}
 	in := h.deskInputsFor(ctx, campaign, parts)
-	return h.desk.Line(ctx, DeskRequest{CampaignID: campaign.ID, OwnerID: layouts.GetUserID(ctx), Now: time.Now()}, in, lineID)
+	return h.desk.Figure(ctx, DeskRequest{CampaignID: campaign.ID, OwnerID: layouts.GetUserID(ctx), Now: time.Now()}, in, lineID)
 }
 
 // deskOwner returns the campaign context of an owner-only desk request.

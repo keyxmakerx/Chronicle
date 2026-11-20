@@ -160,6 +160,8 @@
             name: e.name,
             type: e.type_name || '',
             url: resultUrl(e, campaignId),
+            // The page's own setting, or its category, hides it from players.
+            locked: e.restricted === 'dm_only',
           };
         });
         results = pages.concat(matchingNotes(loaded[1], query, campaignId), matchingCommands(query));
@@ -334,11 +336,14 @@
     var html = heading ? '<div class="px-4 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted">' + Chronicle.escapeHtml(heading) + '</div>' : '';
     // A row is its name, then what kind of thing it is as a quiet word at the
     // end. Nothing is drawn in front: the name is what tells two rows apart.
+    // A page players can't see carries the same lock as the other page lists.
+    var lockLabel = (Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' team only';
     for (var i = 0; i < results.length; i++) {
       var r = results[i];
       var active = i === activeIndex ? ' bg-surface-alt' : '';
       html += '<a href="' + Chronicle.escapeAttr(r.url || '#') + '" data-index="' + i + '" class="flex items-baseline gap-3 px-4 py-2.5 text-sm hover:bg-surface-alt transition-colors' + active + '">' +
-        '<span class="flex-1 truncate text-fg">' + Chronicle.escapeHtml(r.name) + '</span>' +
+        '<span class="flex-1 min-w-0 flex items-baseline gap-1.5"><span class="truncate text-fg">' + Chronicle.escapeHtml(r.name) + '</span>' +
+          (r.locked ? '<i class="cb-dm fa-solid fa-lock shrink-0 text-[10px] text-fg-muted" role="img" aria-label="' + lockLabel + '" title="' + lockLabel + '"></i>' : '') + '</span>' +
         '<span class="text-xs text-fg-muted shrink-0 max-w-[45%] truncate">' + Chronicle.escapeHtml(r.type) + '</span>' +
       '</a>';
     }

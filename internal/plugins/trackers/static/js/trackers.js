@@ -236,7 +236,7 @@
   // ---------- One tracker ----------
   function row(S, t) {
     var key = keyOf(t), edit = S.view.canEdit, hidden = t.visibility !== 'everyone';
-    var r = h('section', 'tk-row cb-group', '', { 'aria-label': t.name });
+    var r = h('section', 'tk-row', '', { 'aria-label': t.name });
     if (hidden) r.setAttribute('data-dm-only', '');
 
     var top = h('div', 'tk-top');

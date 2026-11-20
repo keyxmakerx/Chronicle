@@ -1092,13 +1092,15 @@ type UpdateCampaignRequest struct {
 	IsPublic    *bool   `json:"is_public" form:"is_public"`
 }
 
-// UpdateCampaignDetailsInput is the owner's save of the two details the desk
-// changes where they stand: the name, and whether people outside the
-// campaign may read it. It is a partial update: a body naming one key leaves
-// the other, and the description it never mentions, exactly as stored.
+// UpdateCampaignDetailsInput is the owner's save of the details the desk
+// changes where they stand: the name, the description, and whether people
+// outside the campaign may read it. It is a partial update: a body naming one
+// key leaves the others exactly as stored, and an explicit null description
+// clears it.
 type UpdateCampaignDetailsInput struct {
-	Name     patch.Field[string] `json:"name"`
-	IsPublic patch.Field[bool]   `json:"isPublic"`
+	Name        patch.Field[string] `json:"name"`
+	Description patch.Field[string] `json:"description"`
+	IsPublic    patch.Field[bool]   `json:"isPublic"`
 }
 
 // AddMemberRequest holds the data for adding a member to a campaign.

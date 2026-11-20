@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -152,18 +153,30 @@ func TestRepoIntegration(t *testing.T) {
 			t.Fatalf("rest %+v %v", rest, err)
 		}
 	})
-	t.Run("the table's look", func(t *testing.T) {
-		if l, err := repo.Look(ctx, campaign); err != nil || l != "" {
-			t.Fatalf("unset look = %q %v", l, err)
+	t.Run("the campaign's dice", func(t *testing.T) {
+		got, err := repo.Settings(ctx, campaign)
+		if err != nil || got.Look != "" || !got.PlayersPick || got.DiceSet != "" || len(got.DiceOffered) != 0 {
+			t.Fatalf("unset settings = %+v %v", got, err)
 		}
-		if err := repo.SetLook(ctx, campaign, LookRune); err != nil {
+		all := Settings{Look: LookRune, DiceSet: "oak", DiceColour: "walnut", CritSucc: "dawn", CritFail: "frost", Quality: QualityHD, PlayersPick: false, DiceOffered: []string{"bone", "oak"}}
+		if err := repo.SaveSettings(ctx, campaign, all, []string{"look", "diceSet", "diceColour", "critSucc", "critFail", "quality", "playersPick", "diceOffered"}); err != nil {
 			t.Fatal(err)
 		}
-		if err := repo.SetLook(ctx, campaign, LookNone); err != nil {
+		if got, _ := repo.Settings(ctx, campaign); !reflect.DeepEqual(got, all) {
+			t.Fatalf("saved %+v, read %+v", all, got)
+		}
+		// Only the named column changes, even if the rest of the value is stale.
+		stale := Settings{Look: LookNone, DiceSet: "bone", DiceColour: "pale", PlayersPick: true}
+		if err := repo.SaveSettings(ctx, campaign, stale, []string{"diceColour"}); err != nil {
 			t.Fatal(err)
 		}
-		if l, _ := repo.Look(ctx, campaign); l != LookNone {
-			t.Fatalf("look = %q", l)
+		want := all
+		want.DiceColour = "pale"
+		if got, _ := repo.Settings(ctx, campaign); !reflect.DeepEqual(got, want) {
+			t.Fatalf("partial save: got %+v want %+v", got, want)
+		}
+		if err := repo.SaveSettings(ctx, campaign, all, []string{"drop table"}); err == nil {
+			t.Fatal("an unknown setting name was accepted")
 		}
 	})
 }

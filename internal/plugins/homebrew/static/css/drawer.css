@@ -11,7 +11,7 @@
   --hbd-dm: rgb(var(--color-warn-rgb, 217 119 6));
   --hbd-bad: rgb(var(--color-danger-rgb, 220 38 38));
   --hbd-ok: rgb(var(--color-ok-rgb, 22 163 74));
-  display: grid; gap: 14px; padding: 12px 14px 14px; font-size: 14px; color: var(--hbd-ink);
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 12px 14px 14px; font-size: 14px; color: var(--hbd-ink);
 }
 .hbd *, .hbd *::before, .hbd *::after { box-sizing: border-box; }
 .hbd :focus-visible { outline: 2px solid var(--hbd-acc); outline-offset: 2px; }
@@ -21,7 +21,7 @@
 .hbd-status:empty { display: none; }
 .hbd-status.err { color: var(--hbd-bad); }
 
-.hbd-sec { display: grid; gap: 8px; padding: 10px 12px; border-radius: 8px; background: var(--hbd-tint); }
+.hbd-sec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px 12px; border-radius: 8px; background: var(--hbd-tint); }
 .hbd-sec.hbd-dm { box-shadow: inset 3px 0 0 var(--hbd-dm); }
 .hbd-h { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--hbd-acc); margin: 0; }
 .hbd-dm > .hbd-h { color: var(--hbd-dm); }
@@ -49,10 +49,14 @@
 .hbd-done .hbd-pill { color: var(--hbd-ok); }
 .hbd-failed .hbd-pill, .hbd-stopped .hbd-pill { color: var(--hbd-bad); }
 
-.hbd-page { display: grid; gap: 4px; padding-top: 8px; border-top: 1px solid var(--hbd-line); }
+.hbd-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding-top: 8px; border-top: 1px solid var(--hbd-line); }
 .hbd-page:first-of-type { border-top: 0; padding-top: 0; }
 .hbd-page-name { font-weight: 600; color: var(--hbd-ink); text-decoration: none; }
 .hbd-page-name:hover { text-decoration: underline; }
+/* The section is already headed Trackers, so each page's own heading and
+ * count would only repeat it; its Add action stays. */
+.hbd-page .tk-title, .hbd-page .tk-count { display: none; }
+.hbd-page .tk-head:not(:has(.tk-q)) { display: none; }
 
 [data-player-view] .hbd-dm,
 [data-player-view] .hbd-status,

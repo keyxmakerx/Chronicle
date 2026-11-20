@@ -198,6 +198,8 @@
 .rp .rp-pen { justify-content: center; min-width: 32px; }
 @media (pointer: coarse) { .rp .rp-pen { min-width: var(--rp-hit); } }
 .rp-dmsep { color: var(--color-text-muted); }
+/* On a phone the tools stack one to a line, so no dot is left hanging. */
+@media (max-width: 639px) { .rp-dmsep { display: none; } }
 .rp-tools .rp-dm__tag { margin-left: 4px; }
 .rp-tools__msg:empty { display: none; }
 .rp-tools__msg { flex-basis: 100%; color: rgb(var(--color-bad-rgb)); }

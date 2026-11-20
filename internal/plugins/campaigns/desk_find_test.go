@@ -40,10 +40,10 @@ func TestBuildDeskFind(t *testing.T) {
 		wantNot        []string
 	}{
 		{"nothing switched on", false, false,
-			[]string{"People", "Trash", "Customize", "Game & features", "Your AI", "What players changed", "Name", "Colours", "Details",
-				"Players' dashboard", "Guests' dashboard", "New pages start", "Who can read it", "Keys", "Export a copy", "Import", "Activity log",
-				"Archive this campaign", "Delete this campaign"},
-			[]string{"Media", "Foundry", "Overview", "Hidden from the owner's own page", "Export"}},
+			[]string{"People", "Trash", "Customize", "Game & features", "Your AI", "What players changed", "Name", "Description", "Colours", "Details",
+				"Preview as a player", "Preview as a guest", "New pages", "Private or public", "Game system", "Keys", "Export", "Import", "Activity log",
+				"Archive", "Transfer ownership", "Delete"},
+			[]string{"Media", "Foundry", "Overview", "Hidden from the owner's own page", "Unarchive"}},
 		{"media on", true, false, []string{"Media"}, []string{"Foundry"}},
 		{"foundry on", false, true, []string{"Foundry"}, []string{"Media"}},
 	}
@@ -123,13 +123,22 @@ func TestBuildDeskFind_WordsFindTheirRows(t *testing.T) {
 		word string
 		want []string
 	}{
-		{"guest", []string{"Guests' dashboard"}},
-		{"dashboard", []string{"Players' dashboard", "Guests' dashboard"}},
-		{"export", []string{"Export a copy"}},
-		{"delete", []string{"Delete this campaign"}},
-		{"archive", []string{"Archive this campaign"}},
+		{"guest", []string{"Preview as a guest"}},
+		{"preview", []string{"Preview as a player", "Preview as a guest"}},
+		{"export", []string{"Export"}},
+		{"delete", []string{"Delete"}},
+		{"archive", []string{"Archive"}},
+		{"transfer", []string{"Transfer ownership"}},
 		{"invite", []string{"People"}},
 		{"rename", []string{"Name"}},
+		{"blurb", []string{"Description"}},
+		{"rules", []string{"Game system"}},
+		// The names the page used to carry still find their rows.
+		{"safety net", []string{"Export", "Import", "Activity log", "Trash"}},
+		{"who can read", []string{"Private or public"}},
+		{"archive or delete", []string{"Archive", "Delete", "Transfer ownership"}},
+		{"what players and guests see", []string{"Private or public", "New pages", "Preview as a guest"}},
+		{"look and game", []string{"Name", "Description", "Media", "Game & features"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.word, func(t *testing.T) {
@@ -157,21 +166,41 @@ func TestBuildDeskFind_WordsFindTheirRows(t *testing.T) {
 }
 
 func TestBuildDeskFind_RowPathsNameTheGroup(t *testing.T) {
-	got := buildDeskFind(deskFindInput{Base: "/campaigns/c1", Archived: true})
-	want := map[string]string{
-		"People":                  "Campaign settings › People",
-		"Guests' dashboard":       "Campaign settings › What players and guests see",
-		"Export a copy":           "Campaign settings › Safety net",
-		"Unarchive this campaign": "Campaign settings › Archive or delete",
-		"Delete this campaign":    "Campaign settings › Archive or delete",
-		"Your AI":                 "Campaign settings › Connections",
+	got := buildDeskFind(deskFindInput{Base: "/campaigns/c1", Media: true, Foundry: true, Archived: true})
+	type where struct{ path, href string }
+	want := map[string]where{
+		"Name":                 {"Campaign settings › General", "/campaigns/c1/dashboard#line-name"},
+		"Description":          {"Campaign settings › General", "/campaigns/c1/dashboard#line-description"},
+		"Private or public":    {"Campaign settings › Access", "/campaigns/c1/dashboard#line-public"},
+		"New pages":            {"Campaign settings › Access", "/campaigns/c1/dashboard#line-pages"},
+		"Preview as a player":  {"Campaign settings › Access", "/campaigns/c1/dashboard#line-preview"},
+		"Preview as a guest":   {"Campaign settings › Access", "/campaigns/c1/dashboard#line-preview"},
+		"People":               {"Campaign settings › People", "/campaigns/c1/members"},
+		"What players changed": {"Campaign settings › People", "/campaigns/c1/players/changes"},
+		"Game system":          {"Campaign settings › Game", "/campaigns/c1/dashboard#line-system"},
+		"Game & features":      {"Campaign settings › Game", "/campaigns/c1/extensions"},
+		"Customize":            {"Campaign settings › Look", "/campaigns/c1/customize"},
+		"Media":                {"Campaign settings › Look", "/campaigns/c1/media"},
+		"Foundry":              {"Campaign settings › Connections", "/campaigns/c1/foundry"},
+		"Your AI":              {"Campaign settings › Connections", "/campaigns/c1/ai"},
+		"Keys":                 {"Campaign settings › Connections", "/campaigns/c1/settings?tab=api-keys"},
+		"Export":               {"Campaign settings › Data", "/campaigns/c1/settings?tab=data"},
+		"Import":               {"Campaign settings › Data", "/campaigns/c1/settings?tab=import"},
+		"Activity log":         {"Campaign settings › Data", "/campaigns/c1/settings?tab=activity"},
+		"Trash":                {"Campaign settings › Data", "/campaigns/c1/trash"},
+		"Unarchive":            {"Campaign settings › Danger zone", "/campaigns/c1/dashboard#line-end"},
+		"Transfer ownership":   {"Campaign settings › Danger zone", "/campaigns/c1/dashboard#line-end"},
+		"Delete":               {"Campaign settings › Danger zone", "/campaigns/c1/dashboard#line-end"},
 	}
 	for _, e := range got {
-		if p, ok := want[e.Label]; ok {
-			if e.Path != p {
-				t.Errorf("%q path = %q, want %q", e.Label, e.Path, p)
+		if w, ok := want[e.Label]; ok {
+			if e.Path != w.path || e.Href != w.href {
+				t.Errorf("%q = %q → %q, want %q → %q", e.Label, e.Path, e.Href, w.path, w.href)
 			}
 			delete(want, e.Label)
+		}
+		if e.Label == "Archive" {
+			t.Error("an archived campaign offers Unarchive, not Archive")
 		}
 	}
 	for l := range want {
