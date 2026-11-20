@@ -72,8 +72,10 @@ func TestPatchCells_LinePartialUpdateContract(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, want := repo.applied[0][0], tc.want
-			if got != want && !(lineEq(got.Road, want.Road) && lineEq(got.River, want.River) && lineEq(got.Trail, want.Trail) &&
-				got.RoadSet == want.RoadSet && got.RiverSet == want.RiverSet && got.TrailSet == want.TrailSet) {
+			// The masks are pointers, so the writes are compared by value.
+			same := lineEq(got.Road, want.Road) && lineEq(got.River, want.River) && lineEq(got.Trail, want.Trail) &&
+				got.RoadSet == want.RoadSet && got.RiverSet == want.RiverSet && got.TrailSet == want.TrailSet
+			if !same {
 				t.Errorf("write = %+v, want %+v", got, want)
 			}
 			if got.TerrainSet || got.PieceSet || got.NameSet || got.NotesSet {
