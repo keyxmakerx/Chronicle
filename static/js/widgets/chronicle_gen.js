@@ -2417,6 +2417,8 @@ var COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW
 var COMPASS_WORDS = { N: 'north', NNE: 'north', NE: 'north-east', ENE: 'east', E: 'east', ESE: 'east', SE: 'south-east', SSE: 'south', S: 'south', SSW: 'south', SW: 'south-west', WSW: 'west', W: 'west', WNW: 'west', NW: 'north-west', NNW: 'north' };
 var DIR_DEG = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 };
 function compassOf(deg) { return COMPASS[Math.round(mod(deg, 360) / 22.5) % 16]; }
+// A whole bearing from 0 to 359: a wind a hair short of due north is north, never 360.
+function bearingOf(deg) { return mod(Math.round(deg), 360); }
 function windTier(kph) { return kph <= 5 ? 'calm' : kph <= 20 ? 'light' : kph <= 40 ? 'moderate' : kph <= 60 ? 'strong' : kph <= 90 ? 'severe' : 'extreme'; }
 var TIER_RANK = { calm: 0, light: 1, moderate: 2, strong: 3, severe: 4, extreme: 5 };
 
@@ -3253,7 +3255,7 @@ function runWeather(opts) {
         year: date.year, month: date.month, day: date.day,
         preset_id: d.id, preset_label: P.label, icon: P.glyph, color: P.color,
         temperature_celsius: Math.round(d.T),
-        wind: { speed_kph: kph, speed_tier: windTier(kph), direction: compassOf(d.deg), direction_degrees: Math.round(d.deg) },
+        wind: { speed_kph: kph, speed_tier: windTier(kph), direction: compassOf(d.deg), direction_degrees: bearingOf(d.deg) },
         precipitation: P.precipType ? { type: P.precipType, intensity: round2(d.intensity) } : null,
         zone_id: zone.id, zone_name: zone.name, description: words,
         gen: { key: makeKey('wx', zone.id, t), generator: 'weather', zone: zone.id, locked: false, low_celsius: Math.round(d.low), glyph: P.glyph, category: P.category, season: d.p.season, system: d.sys, normal_celsius: Math.round(d.p.tmid) }
@@ -3285,7 +3287,7 @@ function fillLockedDay(L, d, zone, reg) {
   if (!L.preset_label) { L.preset_label = (reg[L.preset_id] || P).label; filled.push('preset_label'); }
   if (!L.icon) { L.icon = (reg[L.preset_id] || P).glyph; filled.push('icon'); }
   if (typeof L.temperature_celsius !== 'number') { L.temperature_celsius = Math.round(d.T - presetOffset(d.id, d.p.summerness, reg) + presetOffset(L.preset_id, d.p.summerness, reg)); filled.push('temperature_celsius'); }
-  if (!L.wind) { var k = Math.round(reg[L.preset_id] && reg[L.preset_id].forced ? reg[L.preset_id].forced : d.kph); L.wind = { speed_kph: k, speed_tier: windTier(k), direction: compassOf(d.deg), direction_degrees: Math.round(d.deg) }; filled.push('wind'); }
+  if (!L.wind) { var k = Math.round(reg[L.preset_id] && reg[L.preset_id].forced ? reg[L.preset_id].forced : d.kph); L.wind = { speed_kph: k, speed_tier: windTier(k), direction: compassOf(d.deg), direction_degrees: bearingOf(d.deg) }; filled.push('wind'); }
   if (L.precipitation === undefined) { var Q = reg[L.preset_id]; L.precipitation = Q && Q.precipType ? { type: Q.precipType, intensity: Q.intensity } : null; filled.push('precipitation'); }
   if (!L.description) { var Q3 = reg[L.preset_id] || P; L.description = Q3.custom ? Q3.words[0] : Q3.label; filled.push('description'); }
   if (!L.zone_id) { L.zone_id = zone.id; L.zone_name = zone.name; }
