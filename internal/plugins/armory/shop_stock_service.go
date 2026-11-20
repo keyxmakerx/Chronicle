@@ -338,7 +338,7 @@ func (s *shopStockService) Keep(ctx context.Context, campaignID, shopEntityID st
 		if pg == nil {
 			return nil, apperror.NewBadRequest("One of the pages in this draft is gone. Roll again to refresh it.")
 		}
-		if pg.IsTemplate || !(pg.ShopGood || itemTypes[pg.TypeID]) {
+		if pg.IsTemplate || (!pg.ShopGood && !itemTypes[pg.TypeID]) {
 			return nil, apperror.NewBadRequest("Only item pages can be stocked. Roll again to refresh the draft.")
 		}
 	}
