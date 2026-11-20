@@ -67,6 +67,8 @@ const (
 	secretCloseMark = "\uE001"
 	secretOpenText  = "{gm{"
 	secretCloseText = "}gm}"
+	taskOpenMark    = "\uE004"
+	taskDoneMark    = "\uE005"
 	rollerOpenMark  = "\uE002"
 	rollerCloseMark = "\uE003"
 	rollerOpenText  = "{roll{"
@@ -83,12 +85,13 @@ func convertToMarkdown(p *string, keepSecrets bool, rollNames map[string]string)
 	if clean == nil || *clean == "" {
 		return "", nil
 	}
-	in := strings.NewReplacer(secretOpenMark, "", secretCloseMark, "", rollerOpenMark, "", rollerCloseMark, "").Replace(*clean)
+	in := strings.NewReplacer(secretOpenMark, "", secretCloseMark, "", rollerOpenMark, "", rollerCloseMark, "", taskOpenMark, "", taskDoneMark, "").Replace(*clean)
+	in = markTaskItems(in)
 	got, err := getConverter().ConvertString(in)
 	if err != nil {
 		return "", err
 	}
-	got = strings.TrimSpace(got)
+	got = strings.NewReplacer(taskOpenMark, "[ ] ", taskDoneMark, "[x] ").Replace(strings.TrimSpace(got))
 	// Literal marker text in the page is broken with a zero-width space so
 	// the only markers in the output are the ones written below.
 	got = strings.NewReplacer(

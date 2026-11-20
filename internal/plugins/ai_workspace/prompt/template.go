@@ -250,6 +250,11 @@ same paste. A name that matches no page I can see is saved as plain text, so use
 the exact page name. Do not link inside code, and do not use a markdown link for a
 page.
 
+A page can be the campaign's new-player brochure, which Home shows as a small box that
+opens folded out: the title and the italic line under it make the cover, and each ` + "`" + `##` + "`" + `
+heading starts a new panel. Write a checklist as ` + "`" + `- [ ] item` + "`" + ` (` + "`" + `- [x]` + "`" + ` when ticked), which
+becomes real boxes on the page.
+
 To hide part of a body from players, put it between ` + "`" + `{gm{` + "`" + ` and ` + "`" + `}gm}` + "`" + `, for example
 ` + "`" + `The mayor is {gm{secretly a cultist.}gm} He greets everyone.` + "`" + `. It becomes a GM-only
 passage that only I (the director) can see. A passage cannot cross a blank line, so
