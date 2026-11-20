@@ -247,7 +247,7 @@ its two siblings are one-way (`docs/deployment.md` §6). `sessions` and
 | `map_tokens` | Positioned tokens (often an entity's avatar) | `entity_id` FK SET NULL; `bar1/2_value/max`, `aura_*`, `light_*`, `vision_enabled/range` (Foundry-parity fields); `status_effects`/`flags` JSON; `foundry_id` |
 | `map_fog` | Explored/unexplored fog-of-war polygons | `points` JSON; `is_explored` |
 | `map_hex_layers` | A map's hex layer (at most one per map, on when `display_settings` grid type is hex) | PK `map_id` FK→`maps` CASCADE; `anchor_drawing_id` (a picture on the map, no FK); `fog_enabled`; `party_col`/`party_row`; `miles_per_hex`, `miles_per_day`; `version` |
-| `map_hex_cells` | Painted hexes, sparse (an unpainted hex has no row) | PK `(map_id, col, row)`, FK→`maps` CASCADE; `terrain` (VARCHAR checked in Go), `piece`, `name`, `notes`, `explored`; `updated_by` (no FK) |
+| `map_hex_cells` | Painted hexes, sparse (an unpainted hex has no row) | PK `(map_id, col, row)`, FK→`maps` CASCADE; `terrain` (VARCHAR checked in Go), `piece`, `road`/`river`/`trail` (nullable six-bit side masks, bit i = neighbour i in `Neighbors()` order, 0 = a dot; lie on top of the terrain; range checked in Go; migration 012), `name`, `notes`, `explored`; `updated_by` (no FK). A row with any line is not empty |
 
 `entities.map_id` FKs `maps.id` (constraint added by maps migration 005, since
 core migrations cannot reference a plugin table on a fresh DB).

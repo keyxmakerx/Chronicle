@@ -23,13 +23,23 @@ func TestHexMigration_Reapply_Integration(t *testing.T) {
 			t.Fatalf("table %s missing (n=%d, err=%v)", tbl, n, err)
 		}
 	}
-	// Re-running the DDL must be harmless (CREATE TABLE IF NOT EXISTS).
-	sqlBytes, err := MigrationsFS.ReadFile("migrations/009_hex_layers.up.sql")
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
+	// Re-running the DDL must be harmless (CREATE TABLE IF NOT EXISTS, ADD
+	// COLUMN IF NOT EXISTS).
+	for _, file := range []string{"migrations/009_hex_layers.up.sql", "migrations/012_hex_lines.up.sql"} {
+		sqlBytes, err := MigrationsFS.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read migration: %v", err)
+		}
+		for _, stmt := range splitSQLStatements(string(sqlBytes)) {
+			mustExecMaps(t, db, stmt)
+		}
 	}
-	for _, stmt := range splitSQLStatements(string(sqlBytes)) {
-		mustExecMaps(t, db, stmt)
+	for _, col := range []string{"road", "river", "trail"} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM information_schema.columns
+			WHERE table_schema = DATABASE() AND table_name = 'map_hex_cells' AND column_name = ?`, col).Scan(&n); err != nil || n != 1 {
+			t.Fatalf("column %s missing (n=%d, err=%v)", col, n, err)
+		}
 	}
 }
 
@@ -188,6 +198,124 @@ func TestHexRepository_Integration(t *testing.T) {
 						deref(c.Terrain), c.Name, deref(c.Notes), ptrStr(c.Piece), deref(tc.wantTerrain), tc.wantName, deref(tc.wantNotes), ptrStr(tc.wantPiece))
 				}
 			})
+		}
+	})
+
+	t.Run("lines merge per field and never disturb the rest", func(t *testing.T) {
+		tests := []struct {
+			name                    string
+			second                  HexCellWrite
+			wantRoad, wantRiver     *int
+			wantTrail               *int
+			wantTerrain, wantName   string
+			wantPiece               *int
+			wantExplored, wantExist bool
+		}{
+			{"a river write leaves road, trail and the land alone",
+				HexCellWrite{RiverSet: true, River: intp(12)},
+				intp(3), intp(12), intp(0), "hills", "Old", intp(4), true, true},
+			{"null road clears only the road",
+				HexCellWrite{RoadSet: true, Road: nil},
+				nil, intp(5), intp(0), "hills", "Old", intp(4), true, true},
+			{"zero is a dot, not a clear",
+				HexCellWrite{TrailSet: true, Trail: intp(0)},
+				intp(3), intp(5), intp(0), "hills", "Old", intp(4), true, true},
+			{"63 is stored whole",
+				HexCellWrite{RoadSet: true, Road: intp(63)},
+				intp(63), intp(5), intp(0), "hills", "Old", intp(4), true, true},
+			{"a terrain write leaves every line alone",
+				HexCellWrite{TerrainSet: true, Terrain: hexStrp("forest")},
+				intp(3), intp(5), intp(0), "forest", "Old", intp(4), true, true},
+			{"empty write changes nothing",
+				HexCellWrite{},
+				intp(3), intp(5), intp(0), "hills", "Old", intp(4), true, true},
+		}
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				mapID := newMap()
+				if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{{
+					Col: 2, Row: 3,
+					TerrainSet: true, Terrain: hexStrp("hills"),
+					PieceSet: true, Piece: intp(4),
+					NameSet: true, Name: "Old",
+					RoadSet: true, Road: intp(3),
+					RiverSet: true, River: intp(5),
+					TrailSet: true, Trail: intp(0),
+				}}); err != nil {
+					t.Fatalf("seed: %v", err)
+				}
+				mustExecMaps(t, db, "UPDATE map_hex_cells SET explored = 1 WHERE map_id = ?", mapID)
+				w := tc.second
+				w.Col, w.Row = 2, 3
+				if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{w}); err != nil {
+					t.Fatalf("second write: %v", err)
+				}
+				got, err := repo.GetCells(ctx, mapID, []HexKey{{2, 3}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				c, ok := got[HexKey{2, 3}]
+				if !ok {
+					t.Fatal("cell missing")
+				}
+				if !intPtrEq(c.Road, tc.wantRoad) || !intPtrEq(c.River, tc.wantRiver) || !intPtrEq(c.Trail, tc.wantTrail) {
+					t.Errorf("lines = %s/%s/%s; want %s/%s/%s",
+						ptrStr(c.Road), ptrStr(c.River), ptrStr(c.Trail), ptrStr(tc.wantRoad), ptrStr(tc.wantRiver), ptrStr(tc.wantTrail))
+				}
+				if deref(c.Terrain) != tc.wantTerrain || c.Name != tc.wantName || !intPtrEq(c.Piece, tc.wantPiece) || !c.Explored {
+					t.Errorf("land fields disturbed: terrain %q name %q piece %s explored %v",
+						deref(c.Terrain), c.Name, ptrStr(c.Piece), c.Explored)
+				}
+			})
+		}
+	})
+
+	t.Run("a lines-only write creates a row, and a row with lines is not empty", func(t *testing.T) {
+		mapID := newMap()
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{
+			{Col: 0, Row: 0, RiverSet: true, River: intp(0)},
+			{Col: 1, Row: 0, RoadSet: true, Road: intp(9), TerrainSet: true, Terrain: hexStrp("plains")},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		cells, _ := repo.ListCells(ctx, mapID)
+		if len(cells) != 2 || cells[0].River == nil || *cells[0].River != 0 || cells[0].Terrain != nil {
+			t.Fatalf("cells = %+v; want a terrain-less row holding a river dot, and a road hex", cells)
+		}
+		// Clearing the terrain leaves the road, so the row stays; clearing the
+		// last line then frees it.
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{{Col: 1, Row: 0, TerrainSet: true}}); err != nil {
+			t.Fatal(err)
+		}
+		if n, _ := repo.CountCells(ctx, mapID); n != 2 {
+			t.Fatalf("count = %d after clearing terrain; want 2 (the road keeps the row)", n)
+		}
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{
+			{Col: 0, Row: 0, RiverSet: true},
+			{Col: 1, Row: 0, RoadSet: true},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n, _ := repo.CountCells(ctx, mapID); n != 0 {
+			t.Errorf("count = %d after clearing the last lines; want 0", n)
+		}
+	})
+
+	t.Run("fog reset keeps an unexplored row that still has a line", func(t *testing.T) {
+		mapID := newMap()
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{
+			{Col: 0, Row: 0, RoadSet: true, Road: intp(1)},
+			{Col: 1, Row: 0, NameSet: true, Name: "n"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		mustExecMaps(t, db, "UPDATE map_hex_cells SET explored = 1 WHERE map_id = ?", mapID)
+		if _, err := repo.ResetExplored(ctx, mapID, userID); err != nil {
+			t.Fatal(err)
+		}
+		cells, _ := repo.ListCells(ctx, mapID)
+		if len(cells) != 2 {
+			t.Errorf("got %d rows after reset; want 2 (name and road both keep their rows)", len(cells))
 		}
 	})
 

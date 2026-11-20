@@ -38,13 +38,15 @@
  *
  * Data comes from, and is saved to, the REST API:
  *   GET   /campaigns/:id/maps/:mid/hexes          layer + the cells this viewer may see
- *   PATCH /campaigns/:id/maps/:mid/hexes/cells    { cells: [{col,row,terrain?,piece?,name?,notes?}] }
+ *   PATCH /campaigns/:id/maps/:mid/hexes/cells    { cells: [{col,row,terrain?,piece?,road?,river?,trail?,name?,notes?}] }
  *   PUT   /campaigns/:id/maps/:mid/hexes/layer    { anchor_drawing_id?, fog_enabled?, miles_per_hex?, miles_per_day?, art? } (owner or DM)
  *   POST  /campaigns/:id/maps/:mid/hexes/fog      { cells: [{col,row}], explored } or { reset: true } (DM)
  *   PUT   /campaigns/:id/maps/:mid/hexes/party    { col, row } -> { version, path }
  * PATCH is partial: a stroke sends only terrain, an edit of a name sends only
- * the name. The server decides who may write; ctx.canPaintHexes (the same rule
- * as HexService.requireWriter) only decides what is offered.
+ * the name. A line (road, river, trail) is a number 0..63 whose bit i is the
+ * exit through side i (east first, clockwise), or null to take it off the hex.
+ * The server decides who may write; ctx.canPaintHexes (the same rule as
+ * HexService.requireWriter) only decides what is offered.
  *
  * Fog of war. A viewer who cannot see DM-only content is sent explored cells
  * only, so "unexplored" on their side is simply every field hex without a
@@ -117,6 +119,9 @@
   var KEEPALIVE_MAX_BYTES = 60000;
   // The server's limit on entries per request.
   var BATCH_MAX = 500;
+  // The most hexes one Fill reaches, and the most strokes Undo remembers.
+  var FILL_MAX = 4000;
+  var UNDO_MAX = 60;
   // A layer this dense is skipped, as the plain grid does, so a tiny grid size
   // on a huge picture cannot freeze the page.
   var MAX_POSITIONS = 60000;
@@ -316,21 +321,19 @@
     return d;
   }
 
-  // LINES are the three lines a hex can carry, each a bit of the hex's lines
-  // number, so a road, a river and a trail can share a hex and its land.
-  var LINES = [[1, 'road', 'Road'], [4, 'trail', 'Trail'], [2, 'river', 'River']];
+  // LINES are the three lines a hex can carry, in the order the Lines drawer
+  // offers them. A line lies on top of the land, so a hex has any of them
+  // beside its terrain.
+  var LINES = [['road', 'Road'], ['trail', 'Trail'], ['river', 'River']];
 
-  // FAMILIES is the palette's reading order: like kinds sit together.
+  // FAMILIES is the palette's reading order: like kinds sit together, one
+  // family to a row of five. Road is not here: it is a line.
   var FAMILIES = [
     ['Green lands', ['plains', 'farmland', 'forest', 'jungle', 'swamp']],
     ['High and dry', ['hills', 'mountain', 'scrub', 'desert', 'badlands']],
     ['Harsh lands', ['snow', 'ice', 'waste', 'volcanic', 'cavern']],
     ['Water and places', ['coast', 'water', 'deep', 'town']]
   ];
-  // COMB places the nineteen kinds on a honeycomb: one in the middle, six
-  // around it, twelve around those. A kind keeps its place, so the hand learns it.
-  var COMB = ['plains', 'forest', 'jungle', 'swamp', 'farmland', 'hills', 'mountain',
-    'scrub', 'desert', 'badlands', 'waste', 'volcanic', 'cavern', 'snow', 'ice', 'deep', 'water', 'coast', 'town'];
 
   // SPIRAL lists a hex and the two rings around it as steps east and south-east.
   var SPIRAL = [[0, 0], [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1],
@@ -387,58 +390,150 @@
     return n - Math.floor(n);
   }
 
-  // flowPath draws a line of one kind as curves through its hexes: each hex
-  // bends the line through a point near its middle, and two neighbours meet
-  // halfway between their points, so the line has no corners.
-  function flowPath(g, cells, bend) {
-    var set = {}, i, d = '';
-    function pt(c) {
-      var p = center(g, c.col, c.row);
-      return [p[0] + (noise01(c.col, c.row, 1) - 0.5) * bend * g.r, p[1] + (noise01(c.col, c.row, 2) - 0.5) * bend * g.r];
+  // ---- Lines (pure) ----
+  //
+  // A hex carries a line as a number 0..63, or null for none: bit i says the
+  // line leaves the hex through side i. Sides run east first and clockwise,
+  // the order of Neighbors in hex.go. 0 is a line on the hex with no exit,
+  // drawn as a dot.
+
+  var SIDE_DCOL = [[1, 0, -1, -1, -1, 0], [1, 1, 0, -1, 0, 1]];  // [even row, odd row]
+  var SIDE_DROW = [0, 1, 1, 0, -1, -1];
+
+  // sideNeighbor is the hex across side i of (col,row).
+  function sideNeighbor(col, row, i) {
+    return { col: col + SIDE_DCOL[row & 1][i], row: row + SIDE_DROW[i] };
+  }
+
+  // sideToward is which side of a faces the hex b, or -1 if b is not next to a.
+  function sideToward(a, b) {
+    for (var i = 0; i < 6; i++) {
+      var n = sideNeighbor(a.col, a.row, i);
+      if (n.col === b.col && n.row === b.row) return i;
     }
-    for (i = 0; i < cells.length; i++) set[key(cells[i].col, cells[i].row)] = true;
+    return -1;
+  }
+
+  // oppositeSide is the side of the neighbour that faces back.
+  function oppositeSide(i) { return (i + 3) % 6; }
+
+  // lineValue reads a line number off the wire, or null for anything else.
+  function lineValue(v) {
+    return typeof v === 'number' && v >= 0 && v <= 63 && v === Math.floor(v) ? v : null;
+  }
+
+  // lineOf is the line of one kind on the hex a getter finds, or null.
+  function lineOf(get, kind, h) {
+    var c = get(h.col, h.row);
+    return c && c[kind] != null ? c[kind] : null;
+  }
+
+  // lineDraw is what drawing the line of kind does. With only a it marks the
+  // hex (no exits if it had none). With a then b, the next hex of the drag, it
+  // also opens the side of a that faces b and the side of b that faces a, so a
+  // line joins only where it was drawn through. Returns the changed hexes as
+  // { col, row, kind, value }; the cells are not touched.
+  function lineDraw(get, kind, a, b) {
+    var va = lineOf(get, kind, a), na = va == null ? 0 : va, out = [];
+    if (!b) {
+      if (va == null) out.push({ col: a.col, row: a.row, kind: kind, value: 0 });
+      return out;
+    }
+    var vb = lineOf(get, kind, b), nb = vb == null ? 0 : vb, s = sideToward(a, b);
+    if (s >= 0) { na |= 1 << s; nb |= 1 << oppositeSide(s); }
+    if (va !== na) out.push({ col: a.col, row: a.row, kind: kind, value: na });
+    if (vb !== nb) out.push({ col: b.col, row: b.row, kind: kind, value: nb });
+    return out;
+  }
+
+  // lineRubOut takes every line off a hex and, on each neighbour, the exit
+  // that pointed at it. A neighbour left with no exit only existed to join the
+  // hex, so it loses that line too; one that was already a dot is left alone.
+  // Land is not touched. allowed (optional) says which hexes may be changed:
+  // a hex that may not be changed is left as it is, and rubbing out a hex that
+  // may not be changed does nothing.
+  function lineRubOut(get, col, row, allowed) {
+    var out = [];
+    if (allowed && !allowed(col, row)) return out;
+    LINES.forEach(function (l) {
+      if (lineOf(get, l[0], { col: col, row: row }) != null) out.push({ col: col, row: row, kind: l[0], value: null });
+    });
+    for (var i = 0; i < 6; i++) {
+      var n = sideNeighbor(col, row, i), bit = 1 << oppositeSide(i);
+      if (allowed && !allowed(n.col, n.row)) continue;
+      LINES.forEach(function (l) {
+        var v = lineOf(get, l[0], n);
+        if (v != null && (v & bit)) out.push({ col: n.col, row: n.row, kind: l[0], value: (v & ~bit) || null });
+      });
+    }
+    return out;
+  }
+
+  // linePath draws every hex of cells (an object keyed "col,row") that carries
+  // the line of kind, as one path. A hex's point is its middle, nudged by bend
+  // (a fraction of a radius) so rivers and trails wander. Each exit ends at
+  // halfway to the neighbour's point where the neighbour carries the line too,
+  // else at the middle of the shared edge. One exit is a straight run, two a
+  // curve through the point, more a curve from the first exit to each other.
+  function linePath(g, cells, kind, bend) {
+    var d = '';
+    function pt(col, row) {
+      var p = center(g, col, row);
+      if (!bend) return p;
+      return [p[0] + (noise01(col, row, 1) - 0.5) * bend * g.r, p[1] + (noise01(col, row, 2) - 0.5) * bend * g.r];
+    }
     function f(n) { return n.toFixed(1); }
-    for (i = 0; i < cells.length; i++) {
-      var a = cells[i], p = pt(a);
-      var nb = neighbors(a.col, a.row).filter(function (n) { return set[key(n.col, n.row)]; });
-      var mids = nb.map(function (n) { var q = pt(n); return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; });
-      if (!nb.length) d += 'M' + f(p[0]) + ' ' + f(p[1]) + 'h0.01';
-      else if (nb.length === 1) d += 'M' + f(p[0]) + ' ' + f(p[1]) + 'L' + f(mids[0][0]) + ' ' + f(mids[0][1]);
-      else for (var j = 1; j < mids.length; j++) d += 'M' + f(mids[0][0]) + ' ' + f(mids[0][1]) + 'Q' + f(p[0]) + ' ' + f(p[1]) + ' ' + f(mids[j][0]) + ' ' + f(mids[j][1]);
+    for (var k in cells) {
+      var c = cells[k], v = c[kind];
+      if (v == null) continue;
+      var p = pt(c.col, c.row), here = center(g, c.col, c.row), joins = [];
+      for (var i = 0; i < 6; i++) {
+        if (!(v & (1 << i))) continue;
+        var n = sideNeighbor(c.col, c.row, i), nc = cells[key(n.col, n.row)];
+        var a = p, b = pt(n.col, n.row);
+        if (!(nc && nc[kind] != null)) { a = here; b = center(g, n.col, n.row); }
+        joins.push([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+      }
+      if (!joins.length) d += 'M' + f(p[0]) + ' ' + f(p[1]) + 'h0.01';
+      else if (joins.length === 1) d += 'M' + f(p[0]) + ' ' + f(p[1]) + 'L' + f(joins[0][0]) + ' ' + f(joins[0][1]);
+      else for (var j = 1; j < joins.length; j++) d += 'M' + f(joins[0][0]) + ' ' + f(joins[0][1]) + 'Q' + f(p[0]) + ' ' + f(p[1]) + ' ' + f(joins[j][0]) + ' ' + f(joins[j][1]);
     }
     return d;
   }
 
-  // edgeWalk is a river that keeps to the borders between hexes: it walks
-  // hex corners from near one map point to near the next.
-  function edgeWalk(g, pts) {
-    function corner(p, i) { var a = Math.PI / 3 * i - Math.PI / 2; return [p[0] + g.r * Math.cos(a), p[1] + g.r * Math.sin(a)]; }
-    function near(p) {
-      var h = hexAt(g, p[0], p[1]) || { col: 0, row: 0 }, c = center(g, h.col, h.row), best = null, bd = 1e9;
-      for (var i = 0; i < 6; i++) { var q = corner(c, i), dd = Math.hypot(q[0] - p[0], q[1] - p[1]); if (dd < bd) { bd = dd; best = q; } }
-      return best;
+  // floodSame lists the hexes that touch h through hexes of the same kind
+  // (kindAt gives a hex's terrain or null) and pass within. allowed (optional)
+  // names the hexes the flood may enter at all: it neither includes nor passes
+  // through any other, and a start hex that is not allowed floods nothing. It
+  // stops at max; capped says it did, so the caller can tell the person.
+  function floodSame(h, kindAt, within, max, allowed) {
+    if (allowed && !allowed(h)) return { list: [], capped: false };
+    var want = kindAt(h.col, h.row), seen = {}, todo = [h], out = [];
+    seen[key(h.col, h.row)] = true;
+    while (todo.length && out.length < max) {
+      var c = todo.pop();
+      out.push(c);
+      neighbors(c.col, c.row).forEach(function (n) {
+        var k = key(n.col, n.row);
+        if (seen[k] || !within(n) || (allowed && !allowed(n))) return;
+        seen[k] = true;
+        if (kindAt(n.col, n.row) === want) todo.push(n);
+      });
     }
-    var cur = near(pts[0]), out = [cur], up = null;
-    for (var s = 1; s < pts.length; s++) {
-      var goal = near(pts[s]), guard = 0;
-      while (Math.hypot(cur[0] - goal[0], cur[1] - goal[1]) > g.r * 0.3 && guard++ < 400) {
-        // A corner has three borders leaving it; which three depends on which way it points.
-        var best = null, bd = 1e9;
-        for (var k = 0; k < 6; k++) {
-          var a = Math.PI / 3 * k - Math.PI / 6, q = [cur[0] + g.r * Math.cos(a), cur[1] + g.r * Math.sin(a)];
-          var h2 = hexAt(g, q[0] + 0.01, q[1] + 0.01);
-          if (!h2) continue;
-          var c2 = center(g, h2.col, h2.row), on = false;
-          for (var m = 0; m < 6; m++) { var cc = corner(c2, m); if (Math.hypot(cc[0] - q[0], cc[1] - q[1]) < g.r * 0.2) { on = true; q = cc; } }
-          if (!on || (up && Math.hypot(q[0] - up[0], q[1] - up[1]) < 1)) continue;
-          var dd = Math.hypot(q[0] - goal[0], q[1] - goal[1]);
-          if (dd < bd) { bd = dd; best = q; }
-        }
-        if (!best) break;
-        up = cur; cur = best; out.push(cur);
-      }
-    }
-    return 'M' + out.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join('L');
+    return { list: out, capped: todo.length > 0 };
+  }
+
+  // hexChangeable is whether a writer may change a hex. With fog on, a viewer
+  // who is not sent every hex may change only hexes the party has explored (the
+  // server refuses a whole batch otherwise); everyone else may change any.
+  function hexChangeable(fogOn, seesAll, cell) {
+    return !fogOn || seesAll || !!(cell && cell.explored);
+  }
+
+  // pushStep adds a step to an undo or redo log, dropping the oldest past the cap.
+  function pushStep(log, st) {
+    log.push(st);
+    while (log.length > UNDO_MAX) log.shift();
   }
 
   // batches splits queued changes into requests the server accepts. Each entry
@@ -450,10 +545,11 @@
     return out;
   }
 
-  // mergeEntry folds a later change to the same hex into the queued one.
+  // mergeEntry folds a later change to the same hex into the queued one. A
+  // field set to null stays in the entry, because null is what clears it.
   function mergeEntry(queued, change) {
     var out = { col: queued.col, row: queued.row };
-    ['terrain', 'piece', 'name', 'notes'].forEach(function (f) {
+    ['terrain', 'piece', 'road', 'river', 'trail', 'name', 'notes'].forEach(function (f) {
       if (Object.prototype.hasOwnProperty.call(queued, f)) out[f] = queued[f];
       if (Object.prototype.hasOwnProperty.call(change, f)) out[f] = change[f];
     });
@@ -466,8 +562,9 @@
   var STEP_MS = 170;   // time the party token takes to cross one hex
   var LIFT = 0.12;     // the token's little hop, as a fraction of a hex radius
 
-  // neighbors lists the six hexes around (col,row), odd rows shifted right
-  // (the same order and rule as Neighbors in hex.go).
+  // neighbors lists the six hexes around (col,row), odd rows shifted right.
+  // Its order is not Go's Neighbors order: anything that names a side of a
+  // hex (a line's exits) uses sideNeighbor.
   function neighbors(col, row) {
     var odd = row & 1;
     return [
@@ -571,6 +668,14 @@
   function isStale(known, incoming, own) {
     if (typeof incoming !== 'number' || incoming <= 0) return false;
     return incoming <= known || !!(own && own[incoming]);
+  }
+
+  // anyNews is true when one of the events that waited for a save still tells
+  // something new. An echo often arrives before the save's own answer does, so
+  // it can only be told apart once the answer has named the version; without
+  // this every stroke would end in a reload, and a reload forgets Undo.
+  function anyNews(known, waiting, own) {
+    return (waiting || []).some(function (v) { return !isStale(known, v, own); });
   }
 
   // The mapped picture a viewer below DM level is shown while fog hides land
@@ -726,6 +831,11 @@
 
   function esc(s) { return Chronicle.escapeHtml(s); }
 
+  // DRAWERS are the three tabs of Paint, and BRUSH_SIZES the hexes a brush
+  // reaches from the pointer: one, seven or nineteen.
+  var DRAWERS = [['land', 'Land'], ['lines', 'Lines'], ['stamps', 'Stamps']];
+  var SIZE_NAMES = ['One hex', 'Seven hexes', 'Nineteen hexes'];
+
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       TERRAINS: TERRAINS, SIMPLE: SIMPLE, BATCH_MAX: BATCH_MAX, MAX_HEX_AXIS: MAX_HEX_AXIS, geometry: geometry, center: center,
@@ -735,13 +845,17 @@
       mergeEntry: mergeEntry,
       STEP_MS: STEP_MS, neighbors: neighbors, unexploredKeys: unexploredKeys, fogPolygons: fogPolygons,
       walkPoint: walkPoint, revealSchedule: revealSchedule, fogBatches: fogBatches,
-      partyMoverAllowed: partyMoverAllowed, isStale: isStale, playerImageURL: playerImageURL,
+      partyMoverAllowed: partyMoverAllowed, isStale: isStale, anyNews: anyNews, playerImageURL: playerImageURL,
       wantsPlayerCopy: wantsPlayerCopy,
       DEFAULT_MILES_PER_HEX: DEFAULT_MILES_PER_HEX, DEFAULT_MILES_PER_DAY: DEFAULT_MILES_PER_DAY, MAX_TRAVEL_MILES: MAX_TRAVEL_MILES,
       clampTravel: clampTravel, tripPath: tripPath, travelDays: travelDays, tripTerrain: tripTerrain, tripSummary: tripSummary,
       tripStorageKey: tripStorageKey, parseTrip: parseTrip,
       ART_STYLES: ART_STYLES, DEFAULT_ART: DEFAULT_ART, artOf: artOf, paintEntry: paintEntry, lowerRaised: lowerRaised,
-      ART_REACH: ART_REACH, artRange: artRange
+      ART_REACH: ART_REACH, artRange: artRange,
+      STAMPS: STAMPS, STAMP_KEY: STAMP_KEY, SPIRAL: SPIRAL, FAMILIES: FAMILIES, LINES: LINES, stampCells: stampCells, around: around,
+      sideNeighbor: sideNeighbor, sideToward: sideToward, oppositeSide: oppositeSide, lineValue: lineValue,
+      lineDraw: lineDraw, lineRubOut: lineRubOut, hexChangeable: hexChangeable, linePath: linePath, floodSame: floodSame, FILL_MAX: FILL_MAX,
+      UNDO_MAX: UNDO_MAX, pushStep: pushStep
     };
   }
   if (typeof window === 'undefined') return;
@@ -781,7 +895,7 @@
     var reloadedFor = null;
     var picUnsub = null;
     var root = null;
-    var cells = {};           // "col,row" -> { col, row, terrain, name, notes }
+    var cells = {};           // "col,row" -> { col, row, terrain, piece, road, river, trail, name, notes }
     var fx = {};              // "col,row" -> { prev, next, t }: hexes cross-fading now
     var version = 0;
     var loaded = false;
@@ -812,7 +926,7 @@
     var loadedVersion = 0;    // version of the state last read
     var own = {};             // versions of this client's own writes
     var pendingSaves = 0;
-    var remoteWaiting = false;
+    var remoteWaiting = [];   // versions of live events held back while edits were unsaved
     var hatchDirty = true;
     var dest = null;          // { col, row }: where this viewer plans to take the party; never sent to the server
     var tripT = 0;            // Date.now() when the destination was set, for the ease-in
@@ -827,14 +941,10 @@
     var tool = 'brush';       // brush, fill, erase or pick
     var bsize = 0;            // the brush reaches this many hexes from the pointer
     var rough = false;        // a wide brush leaves a broken edge
-    var paintLine = 2;        // the line the Lines drawer draws
-    var stampSel = 0, stampRot = 0, stampOwn = false;
-    var undoLog = [], redoLog = [], step = null;
-    var recent = ['forest', 'plains', 'hills', 'water', 'mountain'];
-    var palVar = (/[?&]pal=([abc])/.exec(location.search) || [0, 'b'])[1];
-    var edgeRivers = [];      // rivers that keep to hex borders, as paths
-    var comb = null;          // the honeycomb picker while it is open
-    var hoverAt = null;
+    var paintLine = 'river';  // the line the Lines drawer draws: road, trail or river
+    var stampSel = 0, stampRot = 0;
+    var undoLog = [], redoLog = [];   // page-lived: a reload from the server clears them
+    var step = null;          // the hexes the open stroke has changed, as they were before it
     var strokeSalt = 0;
     var pfold = null;         // [terrain, folder index] while a piece folder is open
     var artQ = null;          // an art change waiting to be saved
@@ -858,6 +968,9 @@
       var D = display();
       return Object.prototype.hasOwnProperty.call(D, 'hex_fog') ? !!D.hex_fog : fogLayerOn;
     }
+
+    // mayChange is whether Paint may touch a hex: see hexChangeable.
+    function mayChange(col, row) { return hexChangeable(fogOn(), seesAll, cells[key(col, row)]); }
 
     // ---- The trip plan ----
 
@@ -1834,7 +1947,7 @@
 
     function cellAt(col, row) {
       var k = key(col, row);
-      return cells[k] || (cells[k] = { col: col, row: row, terrain: null, piece: null, name: '', notes: null, explored: false });
+      return cells[k] || (cells[k] = { col: col, row: row, terrain: null, piece: null, road: null, river: null, trail: null, name: '', notes: null, explored: false });
     }
 
     function queueChange(col, row, change) {
@@ -1846,11 +1959,16 @@
     // paintHex paints the brush onto one hex: its terrain and, once the art
     // module is here to say which terrains have pieces, the chosen piece (null
     // is Mix), as the design's brush does.
+    // brushEntry is what the brush writes for a terrain; holds says a hex
+    // already has it, so painting it again changes nothing.
+    function brushEntry(terrain) { return paintEntry(terrain, paintPiece, !!(HA && terrain && HA.terrainHasPieces(terrain))); }
+    function holds(c, e) { return c.terrain === e.terrain && (!HA || (c.piece == null ? null : c.piece) === e.piece); }
+
     function paintHex(col, row) {
-      var e = paintEntry(paintTerrain, paintPiece, !!(HA && paintTerrain && HA.terrainHasPieces(paintTerrain)));
+      var e = brushEntry(paintTerrain);
       var c = cellAt(col, row);
       var before = c.piece === undefined ? null : c.piece;
-      if (c.terrain === e.terrain && (!HA || before === e.piece)) return;
+      if (holds(c, e)) return;
       logBefore(c);
       var prev = c.terrain;
       c.terrain = e.terrain;
@@ -1906,17 +2024,25 @@
           saving = saving.then(function () { return sendFog(body); }).then(settled);
         });
       }
+      // A flush that sent nothing has no save to follow, so what waited is read now.
+      readWaiting();
       return saving;
     }
 
-    // settled runs after each save. A remote change that arrived while edits
-    // were unsaved is read now, so it cannot overwrite what is on screen.
+    // readWaiting reads the layer if an event that waited for unsaved edits
+    // still tells something new, once nothing is unsaved or in flight, so it
+    // cannot overwrite what is on screen.
+    function readWaiting() {
+      if (pendingSaves !== 0 || !remoteWaiting.length || stroke || flushTimer || fogQ || travelQ || artQ || Object.keys(queue).length) return;
+      var news = anyNews(loadedVersion, remoteWaiting, own);
+      remoteWaiting = [];
+      if (news) load();
+    }
+
+    // settled runs after each save.
     function settled() {
       pendingSaves = Math.max(0, pendingSaves - 1);
-      if (pendingSaves === 0 && remoteWaiting && !stroke && !flushTimer && !fogQ && !travelQ && !artQ && !Object.keys(queue).length) {
-        remoteWaiting = false;
-        load();
-      }
+      readWaiting();
     }
 
     function sendFog(body) {
@@ -1980,9 +2106,13 @@
         (data.cells || []).forEach(function (c) {
           cells[key(c.col, c.row)] = {
             col: c.col, row: c.row, terrain: c.terrain || null, name: c.name || '', notes: c.notes || null,
-            piece: typeof c.piece === 'number' ? c.piece : null, explored: !!c.explored
+            piece: typeof c.piece === 'number' ? c.piece : null, explored: !!c.explored,
+            road: lineValue(c.road), river: lineValue(c.river), trail: lineValue(c.trail)
           };
         });
+        // Undo snapshots hold hexes as they were last read, so a fresh read drops them.
+        undoLog = []; redoLog = [];
+        if (step) step = {};
         version = data.version || 0;
         loadedVersion = version;
         var L2 = data.layer || {};
@@ -2022,13 +2152,14 @@
       if (!active || !geo || !layout) { hoverPath.style.display = 'none'; return; }
       var h = pointToHex(e);
       if (!h) { hoverPath.style.display = 'none'; hoverGhost.innerHTML = ''; return; }
-      hoverAt = h;
       var list = [h], ghost = '';
       if (mode === 'paint' && ptab === 'stamps') {
-        list = inField(stampCells(STAMPS[stampSel], h.col, h.row, stampRot));
+        list = stampHexes(h);
         list.forEach(function (c) { var p = center(geo, c.col, c.row); ghost += '<path d="' + hexD(p[0], p[1], geo.r) + '" fill="' + COLOR[c.terrain] + '" fill-opacity=".72"/>'; });
       } else if ((mode === 'paint' && ptab === 'land' && (tool === 'brush' || tool === 'erase')) || mode === 'fog') {
         list = brushHexes(h, true);
+      } else if (mode === 'paint' && !(ptab === 'land' && tool === 'pick')) {
+        list = list.filter(function (c) { return mayChange(c.col, c.row); });
       }
       hoverGhost.innerHTML = ghost;
       hoverPath.setAttribute('fill-opacity', list.length > 1 ? '.3' : '.14');
@@ -2042,88 +2173,127 @@
 
     // brushHexes is what the brush covers with its middle on h. A rough brush
     // drops some of its outer ring, differently on each stroke.
+    // In Paint it leaves out hexes the writer may not change.
     function brushHexes(h, preview) {
-      if (!bsize) return [h];
-      var list = inField(around(h.col, h.row, bsize));
-      if (!rough || preview) return list;
+      if (mode !== 'paint') return bsize ? inField(around(h.col, h.row, bsize)) : [h];
+      var list = bsize ? inField(around(h.col, h.row, bsize)) : [h];
+      list = list.filter(function (c) { return mayChange(c.col, c.row); });
+      if (!bsize || !rough || preview) return list;
       return list.filter(function (c) { return distance(h, c) < bsize || noise01(c.col, c.row, strokeSalt) > 0.45; });
     }
 
-    // fillFrom floods the land that touches h and is the same kind as h.
+    // fillFrom floods the land that touches h and is the same kind as h, inside
+    // the field. A flood that hits the cap stops there and says so.
+    // It does nothing where the clicked hex already holds what the brush would
+    // paint, and never enters a hex the writer may not change.
     function fillFrom(h) {
-      var want = cellAt(h.col, h.row).terrain, seen = {}, todo = [h], out = [];
-      seen[key(h.col, h.row)] = true;
-      while (todo.length && out.length < 4000) {
-        var c = todo.pop();
-        out.push(c);
-        inField(neighbors(c.col, c.row)).forEach(function (n) {
-          var k = key(n.col, n.row);
-          if (seen[k]) return;
-          seen[k] = true;
-          if ((cells[k] ? cells[k].terrain : null) === want) todo.push(n);
-        });
-      }
-      return out;
+      var here = cells[key(h.col, h.row)] || { terrain: null, piece: null };
+      if (holds(here, brushEntry(paintTerrain))) return [];
+      var fog = fogOn();
+      var r = floodSame(h, function (col, row) { var c = cells[key(col, row)]; return c ? c.terrain : null; },
+        function (n) { return n.col >= 0 && n.row >= 0 && n.col < geo.cols && n.row < geo.rows; }, FILL_MAX,
+        function (n) { return hexChangeable(fog, seesAll, cells[key(n.col, n.row)]); });
+      if (r.capped) Chronicle.notify('That area is large, so Fill stopped after ' + FILL_MAX + ' hexes. Fill again to go on.');
+      return r.list;
     }
 
     // ---- Undo ----
 
+    // A snapshot is what one hex held before a step: its land and its lines.
+    function snap(c) {
+      return { col: c.col, row: c.row, terrain: c.terrain, piece: c.piece == null ? null : c.piece,
+        road: c.road == null ? null : c.road, river: c.river == null ? null : c.river, trail: c.trail == null ? null : c.trail };
+    }
+
     function logBefore(c) {
       if (!step) return;
       var k = key(c.col, c.row);
-      if (!step[k]) step[k] = { col: c.col, row: c.row, terrain: c.terrain, piece: c.piece == null ? null : c.piece, lines: c.lines || 0 };
+      if (!step[k]) step[k] = snap(c);
     }
 
     function closeStep() {
-      if (step && Object.keys(step).length) { undoLog.push(step); redoLog = []; if (undoLog.length > 60) undoLog.shift(); }
+      if (step && Object.keys(step).length) { pushStep(undoLog, step); redoLog = []; }
       step = null;
     }
 
+    // swapStep puts the hexes of the last step in `from` back as they were and
+    // files what they held in `to`, so Undo and Redo are the same move. Only
+    // the fields that differ are saved.
     function swapStep(from, to) {
+      if (stroke) return;
       var st = from.pop();
       if (!st) return;
       var back = {};
       Object.keys(st).forEach(function (k) {
-        var b = st[k], c = cellAt(b.col, b.row);
-        back[k] = { col: c.col, row: c.row, terrain: c.terrain, piece: c.piece == null ? null : c.piece, lines: c.lines || 0 };
-        c.terrain = b.terrain; c.piece = b.piece; c.lines = b.lines;
-        markArt(c.col, c.row);
-        queueChange(c.col, c.row, { terrain: b.terrain, piece: b.piece });
+        var b = st[k], c = cellAt(b.col, b.row), change = {}, was = snap(c);
+        back[k] = was;
+        ['terrain', 'piece', 'road', 'river', 'trail'].forEach(function (f) {
+          if (was[f] !== b[f]) { c[f] = b[f]; change[f] = b[f]; }
+        });
+        if (!Object.keys(change).length) return;
+        if (change.terrain !== undefined || change.piece !== undefined) markArt(c.col, c.row);
+        queueChange(c.col, c.row, change);
       });
-      to.push(back);
+      pushStep(to, back);
       scheduleFlush(FLUSH_MS);
       renderSoon();
       renderPanel();
     }
 
+    function undo() { swapStep(undoLog, redoLog); }
+    function redo() { swapStep(redoLog, undoLog); }
+
     // ---- Lines ----
 
-    function paintLineHex(col, row, erase) {
-      var c = cellAt(col, row), next = erase ? 0 : ((c.lines || 0) | paintLine);
-      if ((c.lines || 0) === next) return;
-      logBefore(c);
-      c.lines = next;
+    function cellGet(col, row) { return cells[key(col, row)]; }
+
+    // applyLines writes the changes the pure line functions worked out, each
+    // hex remembered for Undo and queued for saving.
+    function applyLines(changes) {
+      changes.forEach(function (ch) {
+        var c = cellAt(ch.col, ch.row), one = {};
+        logBefore(c);
+        c[ch.kind] = ch.value;
+        one[ch.kind] = ch.value;
+        queueChange(ch.col, ch.row, one);
+      });
     }
 
+    function inFieldHex(h) { return h.col >= 0 && h.row >= 0 && h.col < geo.cols && h.row < geo.rows; }
+
+    // drawLineAt is one hex of a line drag: prev is the hex before it in the
+    // same drag, or null at the first hex.
+    // A hex outside the field or one the writer may not change is skipped, and
+    // no exit is opened toward it: the line starts afresh past it.
+    function lineOk(h) { return inFieldHex(h) && mayChange(h.col, h.row); }
+
+    function drawLineAt(h, prev) {
+      if (!lineOk(h)) return;
+      var from = prev && lineOk(prev) ? prev : null;
+      applyLines(lineDraw(cellGet, paintLine, from || h, from ? h : null));
+    }
+
+    function rubOutLinesAt(h) { applyLines(lineRubOut(cellGet, h.col, h.row, mayChange)); }
+
+    // linesMarkup draws the three lines over the land: river under trail
+    // under road, in the stroke of the map's art.
     function linesMarkup(amode, kk0) {
-      var by = { 1: [], 2: [], 4: [] }, k, f = '';
-      for (k in cells) { var c = cells[k], n = c.lines || 0; if (n & 1) by[1].push(c); if (n & 2) by[2].push(c); if (n & 4) by[4].push(c); }
+      var f = '', rv = linePath(geo, cells, 'river', 0.55), tr = linePath(geo, cells, 'trail', 0.5), rd = linePath(geo, cells, 'road', 0);
       var kw = amode === 'real' ? 1.45 : 1;
       function w(n) { return (n * kk0 * kw).toFixed(2); }
-      function river(d) {
-        if (amode === 'simple') return '<path d="' + d + '" fill="none" stroke="#3f7fb5" stroke-width="' + w(3) + '" stroke-linecap="round" stroke-linejoin="round"/>';
-        return '<path d="' + d + '" fill="none" stroke="' + (amode === 'real' ? '#1f4468' : '#2f5d86') + '" stroke-width="' + w(6.4) + '" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>' +
-          '<path d="' + d + '" fill="none" stroke="#5fa3d4" stroke-width="' + w(4.4) + '" stroke-linecap="round" stroke-linejoin="round"/>' +
-          '<path d="' + d + '" fill="none" stroke="#d6ebf8" stroke-width="' + w(0.9) + '" stroke-linecap="round" stroke-dasharray="' + w(4) + ' ' + w(6) + '" opacity=".8"/>';
+      if (rv) {
+        if (amode === 'simple') f += '<path d="' + rv + '" fill="none" stroke="#3f7fb5" stroke-width="' + w(3) + '" stroke-linecap="round" stroke-linejoin="round"/>';
+        else {
+          f += '<path d="' + rv + '" fill="none" stroke="' + (amode === 'real' ? '#1f4468' : '#2f5d86') + '" stroke-width="' + w(6.4) + '" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>' +
+            '<path d="' + rv + '" fill="none" stroke="#5fa3d4" stroke-width="' + w(4.4) + '" stroke-linecap="round" stroke-linejoin="round"/>' +
+            '<path d="' + rv + '" fill="none" stroke="#d6ebf8" stroke-width="' + w(0.9) + '" stroke-linecap="round" stroke-dasharray="' + w(4) + ' ' + w(6) + '" opacity=".8"/>';
+        }
       }
-      if (by[2].length) f += river(flowPath(geo, by[2], 0.55));
-      edgeRivers.forEach(function (d) { f += river(d); });
-      if (by[4].length) {
-        var tr = flowPath(geo, by[4], 0.5);
+      if (tr) {
         f += '<path d="' + tr + '" fill="none" stroke="#f4e8c9" stroke-width="' + w(3.4) + '" stroke-linecap="round" opacity="' + (amode === 'real' ? '.85' : '.5') + '"/>' +
           '<path d="' + tr + '" fill="none" stroke="' + (amode === 'simple' ? '#7a5a35' : '#5a3f22') + '" stroke-width="' + w(1.7) + '" stroke-linecap="round" stroke-dasharray="' + w(0.1) + ' ' + w(3.6) + '"/>';
       }
-      if (by[1].length) f += roadMarkup(roadPath(geo, by[1]), amode, kk0);
+      if (rd) f += roadMarkup(rd, amode, kk0);
       return f;
     }
 
@@ -2140,8 +2310,13 @@
 
     // ---- Stamps ----
 
+    // stampHexes are the hexes a stamp with its middle on h really paints.
+    function stampHexes(h) {
+      return inField(stampCells(STAMPS[stampSel], h.col, h.row, stampRot)).filter(function (c) { return mayChange(c.col, c.row); });
+    }
+
     function placeStamp(h) {
-      inField(stampCells(STAMPS[stampSel], h.col, h.row, stampRot)).forEach(function (c) {
+      stampHexes(h).forEach(function (c) {
         var keepT = paintTerrain, keepP = paintPiece;
         paintTerrain = c.terrain; paintPiece = null;
         paintHex(c.col, c.row);
@@ -2163,52 +2338,7 @@
     function useKind(t) {
       if (paintTerrain !== t) paintPiece = null;
       paintTerrain = t;
-      if (t) { recent = [t].concat(recent.filter(function (x) { return x !== t; })).slice(0, 5); }
     }
-
-    // ---- Honeycomb picker ----
-
-    function openComb(x, y) {
-      closeComb();
-      var am = artMode(), R = 25, W = R * SQRT3, el = document.createElement('div');
-      el.className = 'mp-fl mp-hx-comb';
-      var svg = '', back = '';
-      COMB.forEach(function (t, i) {
-        var cx = (SPIRAL[i][0] + SPIRAL[i][1] / 2) * W, cy = SPIRAL[i][1] * 1.5 * R;
-        back += '<path d="' + hexD(cx, cy, R + 7) + '"/>';
-        svg += '<g class="mp-hx-cb" data-cb="' + t + '" aria-label="' + esc(terrainName(t)) + '" transform="translate(' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')"' + (t === paintTerrain ? ' data-on="1"' : '') + '>' +
-          '<g transform="scale(' + ((R - 2.5) / 13).toFixed(3) + ')">' + palSwatch(t, am === 'real' ? 'detailed' : am) + '</g><path class="mp-hx-cbr" d="' + hexD(0, 0, R - 2.5) + '"/></g>';
-      });
-      el.innerHTML = '<svg viewBox="-125 -112 250 224" width="250" height="224"><defs>' + HA.detailedDefs(uid + 'p') + '</defs><g class="mp-hx-cbb">' + back + '</g>' + svg + '</svg><div class="mp-hx-cbn">' + esc(terrainName(paintTerrain || 'plains')) + '</div>';
-      el.style.left = (x - 125) + 'px';
-      el.style.top = (y - 112) + 'px';
-      (panel ? panel.parentNode : container.parentNode).appendChild(el);
-      Array.prototype.forEach.call(el.querySelectorAll('[data-cb]'), function (g) {
-        g.addEventListener('pointerenter', function () { el.querySelector('.mp-hx-cbn').textContent = terrainName(g.dataset.cb); });
-        g.addEventListener('click', function () { useKind(g.dataset.cb); closeComb(); renderPanel(); });
-      });
-      comb = el;
-    }
-
-    function closeComb() { if (comb && comb.parentNode) comb.parentNode.removeChild(comb); comb = null; }
-
-    // For the design samples only: set lines and border rivers from outside.
-    window.__hexProto = {
-      lines: function (list) { list.forEach(function (c) { cellAt(c[0], c[1]).lines = c[2]; }); renderSoon(); },
-      edges: function (routes) { edgeRivers = routes.map(function (r) { return edgeWalk(geo, r.map(function (h) { return center(geo, h[0], h[1]); })); }); renderSoon(); },
-      comb: openComb,
-      set: function (o) {
-        if (o.ptab) ptab = o.ptab; if (o.tool) tool = o.tool; if (o.bsize != null) bsize = o.bsize; if (o.rough != null) rough = o.rough;
-        if (o.pal) palVar = o.pal; if (o.stamp != null) stampSel = o.stamp; if (o.rot != null) stampRot = o.rot; if (o.line) paintLine = o.line;
-        if (o.ter) useKind(o.ter); if (o.recent) recent = o.recent; if (o.own != null) stampOwn = o.own; if (o.mode) { mode = o.mode; applyMode(); }
-        renderPanel();
-      },
-      pt: function (col, row) {
-        var c = center(geo, col, row), x = c[0] * layout.xf.s + layout.xf.x, y = c[1] * layout.xf.s + layout.xf.y;
-        var q = map.latLngToContainerPoint([mapH - y, x]), r = container.getBoundingClientRect();
-        return [r.left + q.x, r.top + q.y];
-      }
-    };
 
     // strokeKind is what a drag does in the current mode: paint terrain, reveal
     // or hide hexes, or nothing (Look, Party and Move pan the map).
@@ -2236,14 +2366,15 @@
       stroke = { last: h, kind: kind };
       strokeSalt = (strokeSalt + 1) % 97;
       if (kind === 'fog') brushHexes(h).forEach(fogStroke);
-      else { step = {}; paintAt(h, true); }
+      else { step = {}; paintAt(h, true, null); }
       renderSoon();
     }
 
-    // paintAt is one touch of the open drawer's tool on hex h.
-    function paintAt(h, first) {
+    // paintAt is one touch of the open drawer's tool on hex h. prev is the hex
+    // before h in the same drag (a line joins them), null for the first.
+    function paintAt(h, first, prev) {
       if (ptab === 'stamps') { if (first) placeStamp(h); return; }
-      if (ptab === 'lines') { paintLineHex(h.col, h.row, tool === 'erase'); return; }
+      if (ptab === 'lines') { if (tool === 'erase') rubOutLinesAt(h); else drawLineAt(h, prev); return; }
       if (tool === 'pick') {
         var c = cells[key(h.col, h.row)];
         if (first && c && c.terrain && c.terrain !== 'road') { useKind(c.terrain); paintPiece = c.piece == null ? null : c.piece; tool = 'brush'; renderPanel(); }
@@ -2260,7 +2391,11 @@
       if (!stroke) return;
       var h = pointToHex(e);
       if (!h || (h.col === stroke.last.col && h.row === stroke.last.row)) return;
-      hexLine(stroke.last, h).slice(1).forEach(function (p) { if (stroke.kind === 'fog') brushHexes(p).forEach(fogStroke); else paintAt(p, false); });
+      var prev = stroke.last;
+      hexLine(stroke.last, h).slice(1).forEach(function (p) {
+        if (stroke.kind === 'fog') brushHexes(p).forEach(fogStroke); else paintAt(p, false, prev);
+        prev = p;
+      });
       stroke.last = h;
       renderSoon();
     }
@@ -2312,19 +2447,29 @@
     container.addEventListener('pointerleave', onPointerLeave);
     map.on('click', onMapClick);
 
+    // Ctrl or Cmd with Z undoes, with Shift (or Ctrl+Y) redoes, while the
+    // Hexes tool is painting; typing in a field keeps its own undo.
+    function onKey(e) {
+      if (!active || !layerOn || mode !== 'paint' || stroke || e.altKey || !(e.ctrlKey || e.metaKey)) return;
+      var t = e.target, tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      var k = String(e.key || '').toLowerCase();
+      if (k === 'z' && !e.shiftKey) undo();
+      else if ((k === 'z' && e.shiftKey) || (k === 'y' && !e.shiftKey)) redo();
+      else return;
+      e.preventDefault();
+    }
+    document.addEventListener('keydown', onKey);
+
     // ---- Panel ----
 
     function swatch(t) {
-      if (t === 'road') {
-        return '<path d="' + hexD(0, 0, 13) + '" fill="#e8dcc0"/><path d="M-11 5Q0-6 11 2" fill="none" stroke="#5a4128" stroke-width="4" stroke-linecap="round"/><path d="M-11 5Q0-6 11 2" fill="none" stroke="#c19a66" stroke-width="2.4" stroke-linecap="round"/>';
-      }
       return '<path d="' + hexD(0, 0, 13) + '" fill="#efe6cf"/>' + artFor(t, 0, 0, 13);
     }
 
     // palSwatch is a palette hex in the style the map is drawn in, as the
     // design's palette is: Realistic stands taller to show its relief.
     function palSwatch(t, am) {
-      if (t === 'road') return swatch(t);
       var bg = '<path d="' + hexD(0, 0, 13) + '" fill="#efe6cf"/>';
       if (am === 'real') return bg + thumb(t, HA.pieceOf(t, 'pal' + t));
       if (am === 'detailed') return bg + HA.detailedArt(t, 0, 0, 13, 'pal' + t, uid + 'p');
@@ -2369,14 +2514,41 @@
       return m;
     }
 
+    // sizeButtons are the three brush sizes, drawn as the hexes they reach.
+    function sizeButtons() {
+      return [0, 1, 2].map(function (n) {
+        var dots = SPIRAL.slice(0, [1, 7, 19][n]).map(function (p) { return '<path d="' + hexD((p[0] + p[1] / 2) * [7, 6.2, 4.5][n], p[1] * [6, 5.4, 3.9][n], [5.2, 3.1, 2.25][n]) + '"/>'; }).join('');
+        return '<button type="button" class="mp-hx-ib mp-hx-sz" data-bs="' + n + '" aria-pressed="' + (bsize === n) + '" aria-label="' + SIZE_NAMES[n] + '" title="' + SIZE_NAMES[n] + '"><svg viewBox="-12 -12 24 24" width="22" height="22" aria-hidden="true">' + dots + '</svg></button>';
+      }).join('');
+    }
+
+    // setTab opens a Paint drawer. Lines draws or rubs out; the land-only
+    // tools fall back to the brush there.
+    function setTab(t) {
+      ptab = t;
+      if (t === 'lines' && tool !== 'erase') tool = 'brush';
+      onPointerLeave();
+    }
+
+    // focusToken names the panel control that has focus, so the same control
+    // can take it back after the panel is drawn again.
+    function focusToken() {
+      var a = document.activeElement;
+      if (!a || !panel.contains(a)) return null;
+      var names = ['data-hm', 'data-pt', 'data-ptool', 'data-bs', 'data-ln', 'data-st', 'data-ter', 'data-pc', 'data-pf', 'data-art', 'id'];
+      for (var i = 0; i < names.length; i++) if (a.hasAttribute(names[i])) return '[' + names[i] + '="' + a.getAttribute(names[i]) + '"]';
+      return a.classList.contains('mp-hx-x') ? '.mp-hx-x' : null;
+    }
+
     function renderPanel() {
       if (!panel) return;
       if (!active || !layerOn) { panel.hidden = true; return; }
+      var again = focusToken();
       var ms = modes();
       if (!ms.some(function (m) { return m[0] === mode; })) mode = 'look';
       var ur = mode === 'paint' ? '<span class="mp-hx-ur"><button type="button" class="mp-hx-ib" id="mp-hx-undo" aria-label="Undo" title="Undo"' + (undoLog.length ? '' : ' disabled') + '><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>' +
         '<button type="button" class="mp-hx-ib" id="mp-hx-redo" aria-label="Redo" title="Redo"' + (redoLog.length ? '' : ' disabled') + '><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button></span>' : '';
-      var h = '<div class="mp-hx-head">Hexes' + ur + '<button type="button" class="mp-hx-x" aria-label="Close hexes"><svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>';
+      var h = '<div class="mp-hx-head">Hexes' + ur + '<button type="button" class="mp-hx-x" aria-label="Close hexes" title="Close hexes"><svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>';
       h += '<div class="mp-chips">' + ms.map(function (m) {
         return '<button type="button" class="mp-chip" data-hm="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>';
       }).join('') + '</div>';
@@ -2391,73 +2563,52 @@
         }
         // The Detailed swatches need its shading, defined once per panel.
         if (am === 'detailed') h += '<svg class="mp-hx-defs" width="0" height="0" aria-hidden="true"><defs>' + HA.detailedDefs(uid + 'p') + '</defs></svg>';
-        h += '<div class="mp-hx-tabs" role="tablist">' + [['land', 'Land'], ['lines', 'Lines'], ['stamps', 'Stamps']].map(function (t) {
-          return '<button type="button" role="tab" data-pt="' + t[0] + '" aria-selected="' + (ptab === t[0]) + '">' + t[1] + '</button>';
-        }).join('') + '</div>';
+        h += '<div class="mp-hx-tabs" role="tablist" aria-label="Paint">' + DRAWERS.map(function (t) {
+          return '<button type="button" role="tab" id="mp-hx-tab-' + t[0] + '" data-pt="' + t[0] + '" aria-selected="' + (ptab === t[0]) + '" aria-controls="mp-hx-drawer" tabindex="' + (ptab === t[0] ? 0 : -1) + '">' + t[1] + '</button>';
+        }).join('') + '</div><div class="mp-hx-drawer" id="mp-hx-drawer" role="tabpanel" aria-labelledby="mp-hx-tab-' + ptab + '">';
         var sw = function (t, w) {
-          var tl = tall && t !== 'road';
-          return '<svg viewBox="' + (tl ? '-15 -24 30 40' : '-15 -14 30 28') + '" width="' + w + '" height="' + Math.round(w * (tl ? 40 : 28) / 30) + '" aria-hidden="true">' + palSwatch(t, am) + '</svg>';
+          return '<svg viewBox="' + (tall ? '-15 -24 30 40' : '-15 -14 30 28') + '" width="' + w + '" height="' + Math.round(w * (tall ? 40 : 28) / 30) + '" aria-hidden="true">' + palSwatch(t, am) + '</svg>';
         };
         var toolRow = function (list, sizes) {
           var icons = { brush: 'fa-paintbrush', fill: 'fa-fill-drip', erase: 'fa-eraser', pick: 'fa-eye-dropper' };
           var names = { brush: 'Brush', fill: 'Fill', erase: 'Rub out', pick: 'Pick up a kind from the map' };
           var r = '<div class="mp-hx-tools">' + list.map(function (t) {
-            return '<button type="button" class="mp-hx-ib" data-tool="' + t + '" aria-pressed="' + (tool === t) + '" aria-label="' + names[t] + '" title="' + names[t] + '"><i class="fa-solid ' + icons[t] + '" aria-hidden="true"></i></button>';
+            return '<button type="button" class="mp-hx-ib" data-ptool="' + t + '" aria-pressed="' + (tool === t) + '" aria-label="' + names[t] + '" title="' + names[t] + '"><i class="fa-solid ' + icons[t] + '" aria-hidden="true"></i></button>';
           }).join('');
-          if (sizes) {
-            r += '<span class="mp-hx-sep"></span>' + [0, 1, 2].map(function (n) {
-              var dots = SPIRAL.slice(0, [1, 7, 19][n]).map(function (p) { return '<path d="' + hexD((p[0] + p[1] / 2) * [7, 6.2, 4.5][n], p[1] * [6, 5.4, 3.9][n], [5.2, 3.1, 2.25][n]) + '"/>'; }).join('');
-              return '<button type="button" class="mp-hx-ib mp-hx-sz" data-bs="' + n + '" aria-pressed="' + (bsize === n) + '" aria-label="' + ['One hex', 'Seven hexes', 'Nineteen hexes'][n] + '" title="' + ['One hex', 'Seven hexes', 'Nineteen hexes'][n] + '"><svg viewBox="-12 -12 24 24" width="22" height="22" aria-hidden="true">' + dots + '</svg></button>';
-            }).join('');
-          }
+          if (sizes) r += '<span class="mp-hx-sep" aria-hidden="true"></span>' + sizeButtons();
           return r + '</div>';
         };
         if (ptab === 'land') {
           h += toolRow(['brush', 'fill', 'erase', 'pick'], true);
           if (bsize > 0) h += '<label class="mp-hx-chk"><input type="checkbox" id="mp-hx-rough"' + (rough ? ' checked' : '') + '> Rough edge</label>';
-          var kindBtn = function (t, named) {
-            return '<button type="button" data-ter="' + t + '" aria-pressed="' + (paintTerrain === t) + '" title="' + esc(terrainName(t)) + '" aria-label="' + esc(terrainName(t)) + '">' + sw(t, named ? 36 : 38) + (named ? esc(terrainName(t)) : '') + '</button>';
-          };
-          if (palVar === 'a') {
-            h += FAMILIES.map(function (f) {
-              return '<div class="mp-hx-fam">' + esc(f[0]) + '</div><div class="mp-hx-pal">' + f[1].map(function (t) { return kindBtn(t, true); }).join('') + '</div>';
-            }).join('');
-          } else if (palVar === 'b') {
-            h += '<div class="mp-hx-now"><b id="mp-hx-nowname">' + esc(terrainName(paintTerrain || 'plains')) + '</b><span id="mp-hx-nowfam"></span></div>' +
-              '<div class="mp-hx-pal mp-hx-pal5">' + FAMILIES.map(function (f) { return f[1].map(function (t) { return kindBtn(t, false); }).join('') + (f[1].length < 5 ? '<span></span>' : ''); }).join('') + '</div>';
-          } else {
-            h += '<div class="mp-hx-now"><b id="mp-hx-nowname">' + esc(terrainName(paintTerrain || 'plains')) + '</b><span>Lately used</span></div>' +
-              '<div class="mp-hx-pal mp-hx-pal5">' + recent.map(function (t) { return kindBtn(t, false); }).join('') + '</div>' +
-              '<p>Hold <kbd>Space</kbd> over the map for every kind of land, or <button type="button" class="mp-hx-quiet" id="mp-hx-all">open them here</button>.</p>';
-          }
+          h += '<div class="mp-hx-now"><b id="mp-hx-nowname">' + esc(terrainName(paintTerrain || 'plains')) + '</b></div>' +
+            '<div class="mp-hx-pal mp-hx-pal5">' + FAMILIES.map(function (f) {
+              return f[1].map(function (t) {
+                return '<button type="button" data-ter="' + t + '" aria-pressed="' + (paintTerrain === t) + '" title="' + esc(terrainName(t)) + '" aria-label="' + esc(terrainName(t)) + '">' + sw(t, 38) + '</button>';
+              }).join('') + (f[1].length < 5 ? '<span aria-hidden="true"></span>' : '');
+            }).join('') + '</div>';
           h += (HA ? piecePicker(am) : '');
-          if (palVar !== 'c') h += '<p>Click or drag across hexes. The picture still shows through.</p>';
+          h += '<p>Click or drag across hexes. The picture still shows through.</p>';
         }
         if (ptab === 'lines') {
           h += toolRow(['brush', 'erase'], false);
           h += '<div class="mp-hx-pal">' + LINES.map(function (l) {
-            var art = l[1] === 'road' ? '<path d="M-11 5Q0-6 11 2" fill="none" stroke="#5a4128" stroke-width="4" stroke-linecap="round"/><path d="M-11 5Q0-6 11 2" fill="none" stroke="#c19a66" stroke-width="2.4" stroke-linecap="round"/>' :
-              l[1] === 'river' ? '<path d="M-11 6Q-4-7 1 0T11-4" fill="none" stroke="#2f5d86" stroke-width="4.4" stroke-linecap="round"/><path d="M-11 6Q-4-7 1 0T11-4" fill="none" stroke="#5fa3d4" stroke-width="2.8" stroke-linecap="round"/>' :
+            var art = l[0] === 'road' ? '<path d="M-11 5Q0-6 11 2" fill="none" stroke="#5a4128" stroke-width="4" stroke-linecap="round"/><path d="M-11 5Q0-6 11 2" fill="none" stroke="#c19a66" stroke-width="2.4" stroke-linecap="round"/>' :
+              l[0] === 'river' ? '<path d="M-11 6Q-4-7 1 0T11-4" fill="none" stroke="#2f5d86" stroke-width="4.4" stroke-linecap="round"/><path d="M-11 6Q-4-7 1 0T11-4" fill="none" stroke="#5fa3d4" stroke-width="2.8" stroke-linecap="round"/>' :
               '<path d="M-11 4Q-3-7 2 1T11-3" fill="none" stroke="#5a3f22" stroke-width="1.9" stroke-linecap="round" stroke-dasharray="0.1 3.6"/>';
-            return '<button type="button" data-ln="' + l[0] + '" aria-pressed="' + (paintLine === l[0]) + '"><svg viewBox="-15 -14 30 28" width="36" height="32" aria-hidden="true"><path d="' + hexD(0, 0, 13) + '" fill="#e8dcc0"/>' + art + '</svg>' + l[2] + '</button>';
-          }).join('') + '</div><p>Drag across hexes to draw. A line lies on top of the land, so a river can run through a forest and a road can cross it.</p>';
+            return '<button type="button" data-ln="' + l[0] + '" aria-pressed="' + (paintLine === l[0] && tool !== 'erase') + '"><svg viewBox="-15 -14 30 28" width="36" height="32" aria-hidden="true"><path d="' + hexD(0, 0, 13) + '" fill="#e8dcc0"/>' + art + '</svg>' + l[1] + '</button>';
+          }).join('') + '</div><p>' + (tool === 'erase' ? 'Drag over hexes to take every line off them. The land stays.' :
+            'Drag across hexes to draw. A line lies on top of the land, so a river can run through a forest and a road can cross it.') + '</p>';
         }
         if (ptab === 'stamps') {
-          if (stampOwn) {
-            h += '<div class="mp-hx-fam">Yours</div><div class="mp-hx-pal mp-hx-stamps">' + [['Greyhollow vale', 'tFpFfhFffhmmhfpFFpp'], ['The Three Sisters', 'mVmhVhm']].map(function (st) {
-              return '<button type="button" aria-pressed="false">' + stampThumb(st) + esc(st[0]) + '</button>';
-            }).join('') + '<button type="button" class="mp-hx-new" aria-pressed="false"><svg viewBox="-20 -16 40 32" width="60" height="48" aria-hidden="true"><path d="M0-7V7M-7 0H7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Save a piece of the map</button></div><div class="mp-hx-fam">Ready-made</div>';
-          }
           h += '<div class="mp-hx-pal mp-hx-stamps">' + STAMPS.map(function (st, i) {
             return '<button type="button" data-st="' + i + '" aria-pressed="' + (stampSel === i) + '">' + stampThumb(st) + esc(st[0]) + '</button>';
-          }).join('') + '</div><div class="mp-hx-row"><button type="button" class="mp-hx-ib" id="mp-hx-turn" aria-label="Turn the stamp" title="Turn the stamp"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button><span class="mp-hx-dim">Turn it, then click the map to set it down. Undo takes it back.</span></div>';
+          }).join('') + '</div><div class="mp-hx-row"><button type="button" class="mp-hx-ib" id="mp-hx-turn" aria-label="Turn the stamp a sixth" title="Turn the stamp a sixth"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button><span class="mp-hx-dim">Turn it, then click the map to set it down. Undo takes it back.</span></div>';
         }
+        h += '</div>';
       }
       if (mode === 'fog') {
-        h += '<div class="mp-hx-tools">' + [0, 1, 2].map(function (n) {
-          var dots = SPIRAL.slice(0, [1, 7, 19][n]).map(function (p) { return '<path d="' + hexD((p[0] + p[1] / 2) * [7, 6.2, 4.5][n], p[1] * [6, 5.4, 3.9][n], [5.2, 3.1, 2.25][n]) + '"/>'; }).join('');
-          return '<button type="button" class="mp-hx-ib mp-hx-sz" data-bs="' + n + '" aria-pressed="' + (bsize === n) + '" aria-label="' + ['One hex', 'Seven hexes', 'Nineteen hexes'][n] + '"><svg viewBox="-12 -12 24 24" width="22" height="22" aria-hidden="true">' + dots + '</svg></button>';
-        }).join('') + '</div>';
+        h += '<div class="mp-hx-tools">' + sizeButtons() + '</div>';
         h += '<p>Click or drag to reveal hexes; drag over revealed ones to cover them again. Players see unexplored hexes under a moving shadow.</p>';
         if (!fogOn()) h += '<p>Fog of war is off, so players see every hex. Turn it on in Map settings.</p>';
         h += '<button type="button" class="mp-chip" id="mp-hx-reset">Cover everything again</button>';
@@ -2497,24 +2648,37 @@
           if (tool === 'erase' || tool === 'pick') tool = 'brush';
           renderPanel();
         };
-        b.onmouseenter = function () { var n = document.getElementById('mp-hx-nowname'); if (n) n.textContent = terrainName(b.dataset.ter); };
-        b.onmouseleave = function () { var n = document.getElementById('mp-hx-nowname'); if (n) n.textContent = terrainName(paintTerrain || 'plains'); };
+        // The name above the swatches follows the pointer and the keyboard.
+        var say = function (t) { var n = document.getElementById('mp-hx-nowname'); if (n) n.textContent = terrainName(t); };
+        b.onmouseenter = b.onfocus = function () { say(b.dataset.ter); };
+        b.onmouseleave = b.onblur = function () { say(paintTerrain || 'plains'); };
       });
       function each(sel, fn) { Array.prototype.forEach.call(panel.querySelectorAll(sel), function (b) { b.onclick = function () { fn(b); renderPanel(); }; }); }
-      each('[data-pt]', function (b) { ptab = b.dataset.pt; if (ptab === 'lines' && tool !== 'erase') tool = 'brush'; });
-      each('[data-tool]', function (b) { tool = b.dataset.tool; });
+      each('[data-pt]', function (b) { setTab(b.dataset.pt); });
+      // Left and Right move between the tabs, as a tab list does.
+      Array.prototype.forEach.call(panel.querySelectorAll('[data-pt]'), function (b, i, all) {
+        b.onkeydown = function (e) {
+          var to = e.key === 'ArrowRight' ? (i + 1) % all.length : e.key === 'ArrowLeft' ? (i + all.length - 1) % all.length :
+            e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : -1;
+          if (to < 0) return;
+          e.preventDefault();
+          setTab(all[to].dataset.pt);
+          renderPanel();
+          var nt = panel.querySelector('[data-pt="' + ptab + '"]');
+          if (nt) nt.focus();
+        };
+      });
+      each('[data-ptool]', function (b) { tool = b.dataset.ptool; });
       each('[data-bs]', function (b) { bsize = +b.dataset.bs; });
-      each('[data-ln]', function (b) { paintLine = +b.dataset.ln; if (tool === 'erase') tool = 'brush'; });
+      each('[data-ln]', function (b) { paintLine = b.dataset.ln; if (tool === 'erase') tool = 'brush'; });
       each('[data-st]', function (b) { stampSel = +b.dataset.st; });
       var rg = document.getElementById('mp-hx-rough');
       if (rg) rg.onchange = function () { rough = rg.checked; };
       var tn = document.getElementById('mp-hx-turn');
       if (tn) tn.onclick = function () { stampRot = (stampRot + 1) % 6; };
       var ud = document.getElementById('mp-hx-undo'), rd2 = document.getElementById('mp-hx-redo');
-      if (ud) ud.onclick = function () { swapStep(undoLog, redoLog); };
-      if (rd2) rd2.onclick = function () { swapStep(redoLog, undoLog); };
-      var all = document.getElementById('mp-hx-all');
-      if (all) all.onclick = function () { var r = panel.getBoundingClientRect(), p = panel.parentNode.getBoundingClientRect(); openComb(r.right - p.left + 140, r.top - p.top + 250); };
+      if (ud) ud.onclick = undo;
+      if (rd2) rd2.onclick = redo;
       Array.prototype.forEach.call(panel.querySelectorAll('[data-pc]'), function (b) {
         b.onclick = function () { var i = +b.dataset.pc; paintPiece = i < 0 ? null : i; renderPanel(); };
       });
@@ -2538,6 +2702,8 @@
       if (reset) reset.onclick = resetFog;
       var off = document.getElementById('mp-hx-off');
       if (off) off.onclick = function () { flush(); cover.takeOff(); };
+      showHint();
+      if (again) { var back = panel.querySelector(again); if (back && !back.disabled) back.focus(); }
       if (mode === 'look' && selected) fillCard();
       if (mode === 'trip') { fillTrip(); bindTravel('mp-hx-mi', 'miles_per_hex'); bindTravel('mp-hx-sp', 'miles_per_day'); }
     }
@@ -2697,12 +2863,28 @@
       if (paintOn && !dragDisabled) { map.dragging.disable(); dragDisabled = true; }
       if (!paintOn && dragDisabled) { map.dragging.enable(); dragDisabled = false; }
       if (active && layerOn) container.style.cursor = paintOn ? 'crosshair' : '';
-      if (ctx.setHint && active) {
-        ctx.setHint({
-          paint: 'Click or drag to paint terrain', fog: 'Click or drag to reveal or cover hexes',
-          party: 'Click a hex to move the party', trip: 'Click where the party wants to go'
-        }[mode] || 'Click a hex to see it');
+      showHint();
+    }
+
+    // paintHint says what the open Paint drawer does with a click or a drag.
+    function paintHint() {
+      if (ptab === 'stamps') return 'Click to set the stamp down';
+      if (ptab === 'lines') {
+        return tool === 'erase' ? 'Drag over hexes to take their lines off' :
+          'Drag across hexes to draw a ' + paintLine;
       }
+      return {
+        brush: 'Click or drag to paint land', fill: 'Click a hex to fill the land around it',
+        erase: 'Click or drag to rub out land', pick: 'Click a hex to pick up its land'
+      }[tool] || 'Click or drag to paint land';
+    }
+
+    function showHint() {
+      if (!ctx.setHint || !active) return;
+      ctx.setHint(mode === 'paint' ? paintHint() : {
+        fog: 'Click or drag to reveal or cover hexes',
+        party: 'Click a hex to move the party', trip: 'Click where the party wants to go'
+      }[mode] || 'Click a hex to see it');
     }
 
     function setActive(on) {
@@ -2840,7 +3022,7 @@
       if (!msg || String(msg.map_id) !== String(ctx.mapID) || !loaded) return;
       if (isStale(loadedVersion, msg.version, own)) return;
       if (msg.party_path && msg.party_path.length) applyParty(msg.party_path, msg.version);
-      if (stroke || flushTimer || fogQ || travelQ || artQ || pendingSaves || Object.keys(queue).length) { remoteWaiting = true; return; }
+      if (stroke || flushTimer || fogQ || travelQ || artQ || pendingSaves || Object.keys(queue).length) { remoteWaiting.push(msg.version); return; }
       load();
     }
 
@@ -2891,6 +3073,7 @@
       },
       destroy: function () {
         window.removeEventListener('pagehide', onPageHide);
+        document.removeEventListener('keydown', onKey);
         if (picUnsub) { picUnsub(); picUnsub = null; }
         flush();
         destroyed = true;
