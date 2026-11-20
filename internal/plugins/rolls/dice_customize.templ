@@ -1,0 +1,16 @@
+package rolls
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// diceCustomizeSection is the body of the Dice tab on the Customize page. The
+// dice engine's catalogue (every set, colour and crit) lives in the browser,
+// so dice_customize.js draws the pickers; this only hands it the campaign and
+// says what to show if the script can't run. Each pick saves the moment it is
+// made, through PUT /campaigns/:id/rolls/settings.
+templ diceCustomizeSection(campaignID, gm string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/rolls/css/dice_customize.css") }/>
+	<div class="dcz" data-widget="dice-customize" data-campaign-id={ campaignID } data-gm-term={ gm }>
+		<p class="dcz-hint" data-dcz-loading>Reading the dice…</p>
+		<noscript><p class="dcz-hint">The dice settings need JavaScript.</p></noscript>
+	</div>
+}
