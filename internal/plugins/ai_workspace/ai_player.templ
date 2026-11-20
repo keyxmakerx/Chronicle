@@ -178,7 +178,7 @@ templ playerPasteBox(v PlayerAIView) {
 // is No to every change, then Apply.
 templ playerReview(r PlayerReview) {
 	<form
-		class="aic-panel space-y-3 mt-2"
+		class="aic-panel aip-review space-y-3"
 		hx-post={ fmt.Sprintf("/campaigns/%s/ai/me/apply", r.CampaignID) }
 		hx-target="closest [data-ai-panel-body]"
 		hx-swap="innerHTML"
@@ -189,6 +189,7 @@ templ playerReview(r PlayerReview) {
 		<input type="hidden" name="request" value={ strconv.FormatInt(r.RequestID, 10) }/>
 		if r.RequestID == 0 {
 			<textarea name="text" hidden aria-hidden="true">{ r.Text }</textarea>
+			<h3 class="aic-h">Changes from your AI</h3>
 		}
 		if len(r.Kept()) == 0 {
 			<p class="text-sm text-fg">Nothing here is something your AI may change.</p>
@@ -201,7 +202,7 @@ templ playerReview(r PlayerReview) {
 				}
 				<dl class="text-sm grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
 					for _, l := range ch.Lines {
-						<dt class="text-fg-secondary">{ l.Key }</dt>
+						<dt class="text-fg-secondary">{ playerFieldLabel(l.Key) }</dt>
 						<dd class="text-fg break-words">
 							if l.From != "" {
 								<span class="line-through text-fg-secondary">{ l.From }</span>
@@ -233,6 +234,9 @@ templ playerReview(r PlayerReview) {
 			} else {
 				<span class="flex-1"></span>
 			}
+			if r.RequestID == 0 {
+				<button type="button" class="quiet-word" @click="$el.closest('#ai-player-paste-review').innerHTML = ''">Not now</button>
+			}
 			if r.RequestID > 0 {
 				<button
 					type="button"
@@ -243,8 +247,8 @@ templ playerReview(r PlayerReview) {
 				>No to all</button>
 			}
 			if len(r.Kept()) > 0 {
-				<button type="submit" class="btn-primary">
-					<span class="aic-idle">Apply</span>
+				<button type="submit" class="btn-primary" :disabled="yes === 0">
+					<span class="aic-idle" x-text="yes === 1 ? 'Apply 1 change' : 'Apply ' + yes + ' changes'">{ playerApplyLabel(len(r.Kept())) }</span>
 					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Applying…</span>
 				</button>
 			}

@@ -274,3 +274,17 @@ func TestPlayerCanDoNeverLineSaysSoInText(t *testing.T) {
 		}
 	}
 }
+
+// TestPlayerFieldLabel: the review names a field in words, not as its key.
+func TestPlayerFieldLabel(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"backstory", "Backstory"},
+		{"skill_options", "Skill options"},
+		{"ancestry_choices_json", "Ancestry choices"},
+		{"", ""},
+	} {
+		if got := playerFieldLabel(tc.in); got != tc.want {
+			t.Errorf("playerFieldLabel(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

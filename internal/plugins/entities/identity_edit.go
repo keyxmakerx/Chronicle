@@ -180,7 +180,7 @@ func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []Field
 		switch {
 		case gmOnly[k] || (!ownerIdentityFieldKeys[k] && !ownerStoryFieldKeys[k] && !ownerListFieldKeys[k] && !isStep && !isOptions):
 			// Naming the key lets a player's AI drop it and resend the rest.
-			held[k] = apperror.NewForbidden(fmt.Sprintf("you can only change your character's identity fields, and %q isn't one", k))
+			held[k] = apperror.NewForbidden(fmt.Sprintf("%q is your GM's to change, not yours", k))
 		case isOptions && !known(step):
 			held[k] = apperror.NewForbidden(fmt.Sprintf("this character has no %q field", step))
 		case !isOptions && !known(k):

@@ -60,7 +60,7 @@ func (f *fakeSheets) HeldFields(_ context.Context, _, userID, id string, patch m
 				free = free || x == k
 			}
 			if _, pick := s.Picks[k]; !free && !pick {
-				held[k] = fmt.Sprintf("you can only change your character's identity fields, and %q isn't one", k)
+				held[k] = fmt.Sprintf("%q is your GM's to change, not yours", k)
 			}
 		}
 		return held, nil
@@ -95,7 +95,7 @@ func TestPlanPlayerChanges(t *testing.T) {
 		{"page text", "---\naction: update\nname: Tyne\nfields:\n  pronouns: x\n---\nA new backstory.\n", "not the page's text"},
 		{"visibility", "---\naction: update\nname: Tyne\nvisibility: public\nfields:\n  pronouns: x\n---\n", "can't set visibility"},
 		{"tags", "---\naction: update\nname: Tyne\ntags: [hero]\nfields:\n  pronouns: x\n---\n", "can't set tags"},
-		{"a field the sheet door refuses", "---\naction: update\nname: Tyne\nfields:\n  stamina: \"40\"\n---\n", "identity fields"},
+		{"a field the sheet door refuses", "---\naction: update\nname: Tyne\nfields:\n  stamina: \"40\"\n---\n", "your GM's to change"},
 		{"a record", "---\nkind: event\nname: Feast\ndate: 1 Deepwinter 1492\n---\n", "is a event"},
 		{"a lookup", "---\nkind: lookup\nwhat: pages\n---\n", "lookups aren't answered"},
 		{"no fields", "---\naction: update\nname: Tyne\n---\n", "changes no sheet fields"},
