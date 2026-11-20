@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/database"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -574,7 +575,7 @@ func (r *entityTypeRepository) MoveEntitiesAndDeleteType(ctx context.Context, ca
 // SlugExists returns true if an entity type with the given slug exists in the campaign.
 func (r *entityTypeRepository) SlugExists(ctx context.Context, campaignID, slug string) (bool, error) {
 	var exists bool
-	err := r.db.QueryRowContext(ctx,
+	err := database.Q(ctx, r.db).QueryRowContext(ctx,
 		`SELECT EXISTS(SELECT 1 FROM entity_types WHERE campaign_id = ? AND slug = ?)`,
 		campaignID, slug,
 	).Scan(&exists)
@@ -971,7 +972,7 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 	          created_by, owner_user_id, playable, map_id, created_at, updated_at)
 	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	_, err = r.db.ExecContext(ctx, query,
+	_, err = database.Q(ctx, r.db).ExecContext(ctx, query,
 		entity.ID, entity.CampaignID, entity.EntityTypeID,
 		entity.Name, entity.Slug, entity.Entry, entity.EntryHTML, searchText,
 		entity.PlayerNotes, entity.PlayerNotesHTML,
@@ -1013,7 +1014,7 @@ func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, er
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          WHERE e.id = ?` + liveOnly
 
-	return r.scanEntity(r.db.QueryRowContext(ctx, query, id))
+	return r.scanEntity(database.Q(ctx, r.db).QueryRowContext(ctx, query, id))
 }
 
 // FindBySlug retrieves an entity by campaign ID and slug with joined type info.
@@ -2191,7 +2192,7 @@ func (r *entityRepository) ResequenceSiblings(ctx context.Context, campaignID st
 
 // SetShopGood sets or clears the shop good mark on a page in its campaign.
 func (r *entityRepository) SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error {
-	res, err := r.db.ExecContext(ctx,
+	res, err := database.Q(ctx, r.db).ExecContext(ctx,
 		`UPDATE entities SET shop_good = ? WHERE id = ? AND campaign_id = ? AND deleted_at IS NULL`,
 		shopGood, entityID, campaignID)
 	if err != nil {
@@ -2201,7 +2202,7 @@ func (r *entityRepository) SetShopGood(ctx context.Context, campaignID, entityID
 	// already as asked is told apart from one that is not in this campaign.
 	if n, _ := res.RowsAffected(); n == 0 {
 		var live bool
-		if err := r.db.QueryRowContext(ctx,
+		if err := database.Q(ctx, r.db).QueryRowContext(ctx,
 			`SELECT EXISTS(SELECT 1 FROM entities WHERE id = ? AND campaign_id = ? AND deleted_at IS NULL)`,
 			entityID, campaignID).Scan(&live); err != nil {
 			return fmt.Errorf("checking page for shop good mark: %w", err)
@@ -2222,7 +2223,7 @@ func (r *entityRepository) FindShopGoodByName(ctx context.Context, campaignID, n
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          WHERE e.campaign_id = ? AND e.shop_good = 1 AND LOWER(e.name) = LOWER(?)` + liveOnly + `
 	          ORDER BY e.created_at ASC, e.id ASC LIMIT 1`
-	e, err := r.scanEntity(r.db.QueryRowContext(ctx, query, campaignID, name))
+	e, err := r.scanEntity(database.Q(ctx, r.db).QueryRowContext(ctx, query, campaignID, name))
 	if err != nil {
 		var ae *apperror.AppError
 		if errors.As(err, &ae) && ae.Code == 404 {
@@ -2236,7 +2237,7 @@ func (r *entityRepository) FindShopGoodByName(ctx context.Context, campaignID, n
 // UpdatePrivate sets an entity's is_private flag. Used by the NPC reveal toggle.
 func (r *entityRepository) UpdatePrivate(ctx context.Context, entityID string, isPrivate bool) error {
 	query := `UPDATE entities SET is_private = ?, updated_at = NOW() WHERE id = ?`
-	result, err := r.db.ExecContext(ctx, query, isPrivate, entityID)
+	result, err := database.Q(ctx, r.db).ExecContext(ctx, query, isPrivate, entityID)
 	if err != nil {
 		return fmt.Errorf("updating entity privacy: %w", err)
 	}

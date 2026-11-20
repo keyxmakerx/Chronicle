@@ -20,7 +20,8 @@ func (f ssShops) IsShopInCampaign(context.Context, string, string) (bool, error)
 type ssPages struct {
 	made    map[string]string // name -> id
 	gone    map[string]bool   // item ids that no longer exist
-	failOn  string            // name that fails to be made
+	info    map[string]*ListablePage
+	failOn  string // name that fails to be made
 	hidden  []bool
 	counter int
 }
@@ -41,8 +42,14 @@ func (f *ssPages) EnsureShopGood(_ context.Context, _, _ string, _ int, name str
 	f.made[name] = id
 	return id, nil
 }
-func (f *ssPages) ItemPageExists(_ context.Context, _, id string) (bool, error) {
-	return !f.gone[id], nil
+func (f *ssPages) PageInfo(_ context.Context, _, id string) (*ListablePage, error) {
+	if f.gone[id] {
+		return nil, nil
+	}
+	if p, ok := f.info[id]; ok {
+		return p, nil
+	}
+	return &ListablePage{TypeID: 7}, nil
 }
 func (f *ssPages) Names(_ context.Context, _ string, ids []string) (map[string]string, error) {
 	out := map[string]string{}
@@ -118,6 +125,7 @@ type ssTypes struct {
 	infos []ItemTypeInfo
 }
 
+func (f ssTypes) FindItemTypeIDs(context.Context, string) ([]int, error)        { return []int{7}, nil }
 func (f ssTypes) FindItemTypes(context.Context, string) ([]ItemTypeInfo, error) { return f.infos, nil }
 
 type ssSystem struct{ goods []SystemGood }
@@ -126,7 +134,39 @@ func (f ssSystem) Goods(context.Context, string) ([]SystemGood, string, string, 
 	return f.goods, "Test System", "Tier", nil
 }
 
+// ssTx behaves like the database transaction: when fn fails, everything it
+// wrote to the fakes is taken back.
+type ssTx struct {
+	pages  *ssPages
+	writer *ssWriter
+	rolled int
+}
+
+func (f *ssTx) Atomic(ctx context.Context, fn func(ctx context.Context) error) error {
+	nc, nm := len(f.writer.created), len(f.pages.made)
+	before := map[string]string{}
+	for k, v := range f.pages.made {
+		before[k] = v
+	}
+	if err := fn(ctx); err != nil {
+		f.writer.created = f.writer.created[:nc]
+		f.pages.made = before
+		_ = nm
+		f.rolled++
+		return err
+	}
+	return nil
+}
+
+type ssActivity struct{ active map[int]bool }
+
+func (f ssActivity) Active(context.Context, string, string, []int) (map[int]bool, error) {
+	return f.active, nil
+}
+
 type ssRig struct {
+	tx       *ssTx
+	activity *ssActivity
 	svc      ShopStockService
 	pages    *ssPages
 	writer   *ssWriter
@@ -136,9 +176,12 @@ type ssRig struct {
 
 func newSSRig(shopOK bool, listed []ShopListing, rels map[int]*RelationInfo, types []ItemTypeInfo) *ssRig {
 	r := &ssRig{pages: &ssPages{gone: map[string]bool{}}, writer: &ssWriter{}, prices: &ssPrices{food: 2, priced: map[string]ItemPrice{"it1": {Price: 12, Currency: "gp"}}}, listings: ssListings{listed}}
+	r.tx = &ssTx{pages: r.pages, writer: r.writer}
+	r.activity = &ssActivity{active: map[int]bool{}}
 	r.svc = NewShopStockService(ssShops{shopOK}, r.pages, r.writer, r.listings, ssFinder{rels}, r.prices,
 		ssItems{cards: []ItemCard{{ID: "it1", Name: "Rope"}, {ID: "it2", Name: "Lamp"}}},
-		ssTypes{infos: types}, ssSystem{goods: []SystemGood{{Slug: "a", Name: "Axe", HasPrice: false}}})
+		ssTypes{infos: types}, ssSystem{goods: []SystemGood{{Slug: "a", Name: "Axe", HasPrice: false}}},
+		r.tx, r.activity)
 	return r
 }
 
@@ -169,7 +212,7 @@ func TestShopStock_DirectorOnly(t *testing.T) {
 		if _, err := r.svc.Keep(ctx, "c", "s", a, KeepInput{Goods: []KeepGood{{Name: "x"}}}); err == nil {
 			t.Errorf("role %d: Keep allowed", a.Role)
 		}
-		if _, err := r.svc.Undo(ctx, "c", "s", a, "b", []int{1}); err == nil {
+		if _, _, err := r.svc.Undo(ctx, "c", "s", a, "b", []int{1}); err == nil {
 			t.Errorf("role %d: Undo allowed", a.Role)
 		}
 		if _, err := r.svc.SaveFoodPrice(ctx, "c", a, 2); err == nil {
@@ -263,19 +306,22 @@ func TestShopStock_KeepWritesBatch(t *testing.T) {
 	}
 }
 
+// A failure on any good leaves nothing behind: no listing and no new page,
+// whichever good it was.
 func TestShopStock_KeepRollsBack(t *testing.T) {
 	tests := []struct {
-		name   string
-		setup  func(r *ssRig)
-		goods  []KeepGood
-		wantDl int
+		name  string
+		setup func(r *ssRig)
+		goods []KeepGood
 	}{
-		{"later write fails", func(r *ssRig) { r.writer.failAt = 3 },
-			[]KeepGood{{Name: "a"}, {Name: "b"}, {Name: "c"}}, 2},
-		{"page gone mid-draft", func(r *ssRig) { r.pages.gone["it1"] = true },
-			[]KeepGood{{Name: "a"}, {ItemID: "it1"}}, 1},
-		{"page cannot be made", func(r *ssRig) { r.pages.failOn = "b" },
-			[]KeepGood{{Name: "a"}, {Name: "b"}}, 1},
+		{"third write fails", func(r *ssRig) { r.writer.failAt = 3 },
+			[]KeepGood{{Name: "a"}, {Name: "b"}, {Name: "c"}, {Name: "d"}}},
+		{"first write fails", func(r *ssRig) { r.writer.failAt = 1 },
+			[]KeepGood{{Name: "a"}, {Name: "b"}}},
+		{"last write fails", func(r *ssRig) { r.writer.failAt = 3 },
+			[]KeepGood{{Name: "a"}, {ItemID: "it1"}, {Name: "b"}}},
+		{"page cannot be made", func(r *ssRig) { r.pages.failOn = "c" },
+			[]KeepGood{{Name: "a"}, {Name: "b"}, {Name: "c"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -284,8 +330,45 @@ func TestShopStock_KeepRollsBack(t *testing.T) {
 			if _, err := r.svc.Keep(context.Background(), "c", "s", ssDirector, KeepInput{Goods: tt.goods}); err == nil {
 				t.Fatal("want error")
 			}
-			if len(r.writer.deleted) != tt.wantDl {
-				t.Fatalf("deleted %v, want %d removed", r.writer.deleted, tt.wantDl)
+			if len(r.writer.created) != 0 || len(r.pages.made) != 0 || r.tx.rolled != 1 {
+				t.Fatalf("left behind: %d listings, %d pages (rolled back %d times)", len(r.writer.created), len(r.pages.made), r.tx.rolled)
+			}
+		})
+	}
+}
+
+// A page named by id must be an item (or a shop good), never a template, a
+// character or another kind; nothing is written when one is refused.
+func TestShopStock_KeepOnlyItemPages(t *testing.T) {
+	tests := []struct {
+		name string
+		info *ListablePage
+		gone bool
+		ok   bool
+	}{
+		{"an item page", &ListablePage{TypeID: 7}, false, true},
+		{"a shop good", &ListablePage{TypeID: 99, ShopGood: true}, false, true},
+		{"a character", &ListablePage{TypeID: 3}, false, false},
+		{"an item template", &ListablePage{TypeID: 7, IsTemplate: true}, false, false},
+		{"a page that is gone", nil, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newSSRig(true, nil, nil, ssTypeInfo)
+			if tt.gone {
+				r.pages.gone["p"] = true
+			} else {
+				r.pages.info = map[string]*ListablePage{"p": tt.info}
+			}
+			_, err := r.svc.Keep(context.Background(), "c", "s", ssDirector, KeepInput{Goods: []KeepGood{{Name: "new"}, {ItemID: "p"}}})
+			if tt.ok != (err == nil) {
+				t.Fatalf("err = %v, want ok=%v", err, tt.ok)
+			}
+			if !tt.ok {
+				ssKind(t, err, 400)
+				if len(r.writer.created) != 0 || len(r.pages.made) != 0 {
+					t.Error("a refused draft wrote something")
+				}
 			}
 		})
 	}
@@ -305,14 +388,14 @@ func TestShopStock_Undo(t *testing.T) {
 		6: {ID: 6, CampaignID: "c", SourceEntityID: "s", RelationType: "mentions", Metadata: meta("B")},
 	}
 	r := newSSRig(true, nil, rels, ssTypeInfo)
-	n, err := r.svc.Undo(context.Background(), "c", "s", ssDirector, "B", []int{1, 2, 3, 4, 5, 6, 99})
+	n, kept, err := r.svc.Undo(context.Background(), "c", "s", ssDirector, "B", []int{1, 2, 3, 4, 5, 6, 99})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 1 || len(r.writer.deleted) != 1 || r.writer.deleted[0] != 1 {
+	if n != 1 || len(kept) != 0 || len(r.writer.deleted) != 1 || r.writer.deleted[0] != 1 {
 		t.Fatalf("removed %d, deleted %v; only relation 1 belongs to this shop and batch", n, r.writer.deleted)
 	}
-	if _, err := r.svc.Undo(context.Background(), "c", "s", ssDirector, "", []int{1}); err == nil {
+	if _, _, err := r.svc.Undo(context.Background(), "c", "s", ssDirector, "", []int{1}); err == nil {
 		t.Error("empty batch accepted")
 	}
 }
@@ -356,5 +439,29 @@ func TestShopStock_SaveFoodPrice(t *testing.T) {
 				t.Fatalf("got %v, %v; saved %v", got, err, r.prices.saved)
 			}
 		})
+	}
+}
+
+// Undo leaves a listing a player has rolled for or bought from, because
+// removing it would delete that record.
+func TestShopStock_UndoKeepsListingsWithRecords(t *testing.T) {
+	meta := json.RawMessage(`{"fill_batch":"B"}`)
+	rels := map[int]*RelationInfo{}
+	for _, id := range []int{1, 2, 3} {
+		rels[id] = &RelationInfo{ID: id, CampaignID: "c", SourceEntityID: "s", RelationType: "sells", Metadata: meta}
+	}
+	r := newSSRig(true, nil, rels, ssTypeInfo)
+	r.activity.active[2] = true
+	n, kept, err := r.svc.Undo(context.Background(), "c", "s", ssDirector, "B", []int{1, 2, 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 || len(kept) != 1 || kept[0] != 2 {
+		t.Fatalf("removed %d, kept %v; want 1 and 3 removed, 2 kept", n, kept)
+	}
+	for _, id := range r.writer.deleted {
+		if id == 2 {
+			t.Error("a listing with a record was deleted")
+		}
 	}
 }

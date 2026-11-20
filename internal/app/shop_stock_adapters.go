@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -27,16 +29,19 @@ func (a *shopGoodPagesAdapter) EnsureShopGood(ctx context.Context, campaignID, u
 	return e.ID, nil
 }
 
-func (a *shopGoodPagesAdapter) ItemPageExists(ctx context.Context, campaignID, id string) (bool, error) {
+func (a *shopGoodPagesAdapter) PageInfo(ctx context.Context, campaignID, id string) (*armory.ListablePage, error) {
 	e, err := a.svc.GetByID(ctx, id)
 	if err != nil {
 		var ae *apperror.AppError
 		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
-			return false, nil
+			return nil, nil
 		}
-		return false, err
+		return nil, err
 	}
-	return e.CampaignID == campaignID, nil
+	if e.CampaignID != campaignID {
+		return nil, nil
+	}
+	return &armory.ListablePage{TypeID: e.EntityTypeID, IsTemplate: e.IsTemplate, ShopGood: e.ShopGood}, nil
 }
 
 func (a *shopGoodPagesAdapter) Names(ctx context.Context, campaignID string, ids []string) (map[string]string, error) {
@@ -95,4 +100,41 @@ func (a *systemGoodsAdapter) Goods(ctx context.Context, campaignID string) ([]ar
 		out = append(out, armory.SystemGood{Slug: g.Slug, Name: g.Name, Kind: g.Kind, Rarity: g.Rarity, Price: g.Price, HasPrice: g.HasPrice, Summary: g.Summary})
 	}
 	return out, sys.Info().Name, label, nil
+}
+
+// stockTxAdapter runs Keep in one database transaction.
+type stockTxAdapter struct{ db *sql.DB }
+
+func (a *stockTxAdapter) Atomic(ctx context.Context, fn func(ctx context.Context) error) error {
+	return database.RunInTx(ctx, a.db, fn)
+}
+
+// shopGoodVisibilityObserver keeps a shop good's page hidden unless a public
+// listing sells it. A listing counts as public when its "sold by" side, seen
+// from the good, is not Director-only.
+func shopGoodVisibilityObserver(ents entities.EntityService, rels relations.RelationService) relations.ListingObserver {
+	return func(ctx context.Context, campaignID, entityID string) error {
+		e, err := ents.GetByID(ctx, entityID)
+		if err != nil {
+			var ae *apperror.AppError
+			if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+				return nil
+			}
+			return err
+		}
+		if e.CampaignID != campaignID || !e.ShopGood {
+			return nil
+		}
+		list, err := rels.ListByEntity(ctx, campaignID, entityID)
+		if err != nil {
+			return err
+		}
+		public := 0
+		for _, r := range list {
+			if r.RelationType == "sold by" && !r.DmOnly {
+				public++
+			}
+		}
+		return ents.ReconcileShopGoodVisibility(ctx, campaignID, entityID, public)
+	}
 }

@@ -24,7 +24,7 @@ const SOURCES = {
   systemName: 'Test System', rarityLabel: 'echelon',
 };
 
-const STUB = `
+const stub = (sources) => `
   window.calls = []; window.dirty = []; window.kept = null; window.sheetClosed = null;
   window.Chronicle = {
     notify: (m, t) => { (window.notes = window.notes || []).push({ m, t }); },
@@ -33,7 +33,7 @@ const STUB = `
     apiFetch: (url, opts) => {
       window.calls.push({ url, method: (opts && opts.method) || 'GET', body: opts && opts.body });
       let body = {};
-      if (url.endsWith('/fill-sources')) body = ${JSON.stringify(SOURCES)};
+      if (url.endsWith('/fill-sources')) body = ${JSON.stringify(sources)};
       else if (url.endsWith('/stock')) body = { batch: 'b1', relations: [11, 12], skipped: 0 };
       else if (url.endsWith('/food-price')) body = { foodPrice: opts.body.foodPrice };
       else if (url.endsWith('/room')) body = { roomType: 'forge' };
@@ -43,7 +43,7 @@ const STUB = `
   };
 `;
 
-async function openSheet(t) {
+async function openSheet(t, sources = SOURCES) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage();
@@ -56,7 +56,7 @@ async function openSheet(t) {
     return r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><div id="host"></div></body></html>' });
   });
   await p.goto('http://chronicle.test/campaigns/c1/entities/shop1');
-  await p.addScriptTag({ content: STUB });
+  await p.addScriptTag({ content: stub(sources) });
   await p.addScriptTag({ content: GEN });
   await p.addScriptTag({ content: FILL });
   await p.evaluate(() => {
@@ -159,4 +159,25 @@ test('Escape closes the sheet and Discard saves nothing', { skip }, async (t) =>
   await p.waitForFunction(() => window.sheetClosed === false);
   assert.equal(await p.$('.shop-draft'), null);
   assert.deepEqual(await stockPosts(p), []);
+});
+
+// Focus returns to the field being edited after the sheet redraws, found by
+// its label. A good's name can hold quotes and backslashes, which must not
+// break that lookup or throw.
+test('a good named with a quote and a backslash keeps focus after an edit', { skip }, async (t) => {
+  const name = 'Odd "quoted" \\ slashed\\"] x';
+  const p = await openSheet(t, {
+    foodPrice: 1, listed: [], system: [],
+    items: [{ id: 'it9', name, price: 4, currency: 'gp' }],
+  });
+  await p.click('.sf-sw:has-text("Everyday goods")');
+  const sel = '[data-good]';
+  await p.waitForSelector(sel);
+  const label = 'Price of ' + name;
+  const price = p.locator('input.sf-price').first();
+  assert.equal(await price.getAttribute('aria-label'), label);
+  await price.fill('9');
+  await price.dispatchEvent('change');
+  await p.waitForFunction((l) => document.activeElement && document.activeElement.getAttribute('aria-label') === l, label);
+  assert.equal(await p.$eval('input.sf-price', (i) => i.value), '9');
 });

@@ -70,11 +70,11 @@ func (h *ShopStockHandler) Undo(c *echo.Context) error {
 	if err := c.Bind(&in); err != nil {
 		return apperror.NewBadRequest("There is nothing to undo.")
 	}
-	n, err := h.svc.Undo(c.Request().Context(), cc.Campaign.ID, c.Param("eid"), stockActor(c, cc), in.Batch, in.Relations)
+	n, kept, err := h.svc.Undo(c.Request().Context(), cc.Campaign.ID, c.Param("eid"), stockActor(c, cc), in.Batch, in.Relations)
 	if err != nil {
 		return listError(err)
 	}
-	return c.JSON(http.StatusOK, map[string]int{"removed": n})
+	return c.JSON(http.StatusOK, map[string]any{"removed": n, "kept": kept})
 }
 
 type foodPriceRequest struct {

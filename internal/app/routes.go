@@ -1208,6 +1208,11 @@ func (a *entityEventPublisherAdapter) PublishEntityEvent(eventType, campaignID, 
 	if campaignID == "" {
 		return
 	}
+	// Shop goods never reach live sync or the change feed; the entities
+	// service holds them back too, this keeps any other publisher honest.
+	if entity != nil && entity.ShopGood && eventType != "deleted" {
+		return
+	}
 	var msgType ws.MessageType
 	switch eventType {
 	case "created":
@@ -5897,7 +5902,12 @@ func (a *App) RegisterRoutes() {
 		armorySvc,
 		&armoryItemTypeFinderAdapter{svc: entityService},
 		&systemGoodsAdapter{sys: systemHandler},
+		&stockTxAdapter{db: a.DB},
+		armory.NewListingActivity(a.DB),
 	)
+	// A shop good's page follows its listings: hidden unless a public one
+	// sells it, whoever adds or removes the listing.
+	relService.SetListingObserver(shopGoodVisibilityObserver(entityService, relService))
 	armory.RegisterShopStockRoutes(e, armory.NewShopStockHandler(shopStockSvc), campaignService, authService, addonService)
 	// The campaign's own pick-list entries, merged into the pick lists below.
 	// The manifest is the campaign's custom upload, else its chosen built-in.
