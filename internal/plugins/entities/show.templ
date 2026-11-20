@@ -95,6 +95,16 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			} else {
 				@claimBanner(cc, entity, entityType, claimingEnabled, ownerName, csrfToken)
 			}
+			// "Link to Foundry" for the player who claimed this page. syncapi owns
+			// it and answers empty unless the campaign's Foundry world has
+			// reported its players, so this stays VTT-agnostic.
+			if entity.OwnerUserID != nil && userID != "" && *entity.OwnerUserID == userID {
+				<div
+					hx-get={ fmt.Sprintf("/campaigns/%s/foundry/link", cc.Campaign.ID) }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				></div>
+			}
 			<!-- Slug-keyed system-package renderer (CH4). When a system
 			     package has registered a renderer for this entity_type
 			     slug, that renderer owns the page contents in place of
@@ -294,6 +304,12 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 					if cc.CanAuthorDmOnly() {
 						<span
 							hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/npc-spotlight/%s", cc.Campaign.ID, entity.ID) }
+							hx-trigger="load"
+							hx-swap="outerHTML"
+						></span>
+						// "Add to Foundry" for creature pages, the same way.
+						<span
+							hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/creature-add/%s", cc.Campaign.ID, entity.ID) }
 							hx-trigger="load"
 							hx-swap="outerHTML"
 						></span>

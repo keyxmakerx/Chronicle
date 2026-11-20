@@ -1,0 +1,56 @@
+// link_code.templ owns the "Link to Foundry" line a player sees on the page
+// they claimed. The entities page lazy-loads it, so entities stays
+// VTT-agnostic (T-B2).
+//
+// URL: GET/POST /campaigns/:id/foundry/link
+// Auth: a signed-in member who is not the owner; the code is the session
+// user's own.
+
+package syncapi
+
+import "fmt"
+
+// FoundryLinkLine renders the line: linked, a button for a code, or the
+// code itself. The whole fragment swaps itself after a press.
+templ FoundryLinkLine(v LinkCodeView) {
+	if v.LinkedAs != "" {
+		<div class="mb-4 rounded-md border border-edge bg-surface-alt px-4 py-2 flex items-center gap-3 text-sm text-fg" data-foundry-link="linked">
+			<i class="fa-solid fa-link text-accent" aria-hidden="true"></i>
+			<p>Linked to Foundry as <span class="font-medium">{ v.LinkedAs }</span>.</p>
+		</div>
+	} else {
+		<form
+			class="mb-4 rounded-md border border-edge bg-surface-alt px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1"
+			data-foundry-link={ linkState(v) }
+			hx-post={ fmt.Sprintf("/campaigns/%s/foundry/link", v.CampaignID) }
+			hx-swap="outerHTML"
+			hx-disabled-elt="find button"
+		>
+			<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
+			<i class="fa-solid fa-link text-accent" aria-hidden="true"></i>
+			if v.Code == "" {
+				<div class="flex-1 min-w-0">
+					<p class="text-sm text-fg">Play this hero in Foundry</p>
+					<p class="text-xs text-fg-muted">Link your account once, and your claimed hero is yours there.</p>
+				</div>
+				<button type="submit" class="btn-ghost btn-sm">Link to Foundry</button>
+			} else {
+				<div class="flex-1 min-w-0" role="status">
+					<p class="text-sm text-fg">
+						Link to Foundry
+						<span class="ml-2 font-mono text-base font-semibold tracking-wider" data-link-code>{ v.Code }</span>
+					</p>
+					<p class="text-xs text-fg-muted">Good for 10 minutes. In Foundry, type it in the Link to Chronicle window: it opens when you join the world, or from the link button in Chronicle's tools on the left.</p>
+				</div>
+				<button type="submit" class="btn-ghost btn-sm" title="Make a new code; the one shown stops working">New code</button>
+			}
+		</form>
+	}
+}
+
+func linkState(v LinkCodeView) string {
+	if v.Code != "" {
+		return "code"
+	}
+	return "ask"
+}

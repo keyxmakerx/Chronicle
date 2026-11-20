@@ -4712,6 +4712,8 @@ func (a *App) RegisterRoutes() {
 	syncHistoryHandler.SetFoundryMatcher(foundryMatcher)
 	// The scenes in each campaign's Foundry world, as the GM's client reports them.
 	syncHistoryHandler.SetFoundryScenes(syncapi.NewFoundrySceneRepository(a.DB))
+	// Codes a player types in Foundry to link their account without the GM.
+	syncHistoryHandler.SetLinkCodes(syncapi.NewLinkCodes())
 
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)))
@@ -6483,6 +6485,9 @@ func (a *App) RegisterRoutes() {
 	// "Show in Foundry" on NPC pages: npc.spotlight is not a change-feed
 	// type, so the recording wrapper passes it straight to the hub.
 	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService, lists: characterListService}, &npcSpotlightPublisher{bus: wsEventBus})
+	// "Add to Foundry" on creature pages: creature_add.requested is a
+	// change-feed type, so a closed world makes the actor when it connects.
+	fvttHandler.SetCreatureAdd(&creatureAddResolver{entities: entityService}, &creatureAddPublisher{bus: wsEventBus})
 
 	// Game-system widget panels under NPC page titles (manifest entity_panels).
 	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, characterListService))
