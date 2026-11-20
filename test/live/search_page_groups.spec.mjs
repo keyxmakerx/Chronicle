@@ -125,7 +125,7 @@ test('the tag picker narrows to the tagged pages and says which tag is picked', 
 
   await owner.go(`/campaigns/${cid}/search?q=tidewrights`);
   await owner.page.waitForSelector('#sp-named .sp-row');
-  await owner.page.getByRole('button', { name: /^Tags/ }).click();
+  await owner.page.getByRole('button', { name: /^(Any tag|Coast)/ }).click();
   await owner.page.getByRole('option', { name: 'Coast' }).click();
   await owner.page.waitForFunction(() => document.querySelectorAll('#sp-named .sp-row').length === 0);
   assert.deepEqual((await group(owner.page, 'sp-mention').locator('.sp-name').allInnerTexts()).map((s) => s.trim()), ['Harbour ledger']);
