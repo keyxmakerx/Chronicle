@@ -7966,6 +7966,8 @@ html[data-motion] .dw-sheet { animation: none; }
 .su-row.is-done .su-tick { opacity: 1; }
 .su-row.is-done .su-name { color: var(--color-text-muted); }
 .su-name { flex: 1 1 10rem; min-width: 0; }
+/* A row's actions always sit at its end, wrapped or not, so every row reads the same. */
+.su-acts { display: inline-flex; align-items: center; gap: 4px 12px; margin-left: auto; }
 .su-value { color: var(--color-text-muted); }
 .su-act, .su-keep { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; border: 0; background: none; font: inherit; color: var(--color-accent-link, var(--color-accent)); cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color var(--dur-micro) var(--ease-out); }
 .su-act:hover, .su-act:focus-visible, .su-keep:hover, .su-keep:focus-visible { text-decoration-color: currentColor; }
