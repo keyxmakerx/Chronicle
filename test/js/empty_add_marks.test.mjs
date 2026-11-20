@@ -31,7 +31,8 @@ function fakeEl(tag = 'div') {
   return el;
 }
 
-function mount(file, name, config, fetched) {
+// `first` is the content a page sends with the mount (null: none, so fetch).
+function mount(file, name, config, fetched, first = null) {
   let widget;
   const sandbox = {
     document: { createElement: (t) => fakeEl(t), documentElement: { hasAttribute: () => false } },
@@ -41,6 +42,7 @@ function mount(file, name, config, fetched) {
   sandbox.Chronicle = {
     register: (n, w) => { if (n === name) widget = w; },
     apiFetch: (url) => Promise.resolve({ ok: true, json: () => Promise.resolve(fetched(url)) }),
+    firstPaint: () => first, drawn() {},
     notify() {}, escapeHtml: (s) => s,
   };
   vm.runInNewContext(load(file), sandbox);
@@ -58,12 +60,16 @@ test('tags: empty marks the mount and words the button "Add a tag"', async () =>
     { name: 'one tag', tags: [{ id: 1, name: 'Harbour', color: '#123456' }], empty: false, word: ' Tag' },
   ];
   for (const c of cases) {
-    const el = mount('tag_picker.js', 'tag-picker', { editable: true, tagsEndpoint: '/t', entityTagsEndpoint: '/e' },
-      (url) => (url === '/t' ? c.tags : c.tags));
-    await settle();
-    assert.equal('data-tp-empty' in el.attrs, c.empty, c.name + ': empty mark');
-    const btn = flat(el).find((n) => n.className === 'tp-add-btn');
-    assert.ok(btn && btn.innerHTML.endsWith(c.word), c.name + ': button reads ' + (btn && btn.innerHTML));
+    // Once fetched, and once sent with the page: the mark must be the same.
+    for (const sent of [false, true]) {
+      const el = mount('tag_picker.js', 'tag-picker', { editable: true, tagsEndpoint: '/t', entityTagsEndpoint: '/e' },
+        () => c.tags, sent ? { all: c.tags, mine: c.tags } : null);
+      await settle();
+      const how = c.name + (sent ? ' (sent with page)' : ' (fetched)');
+      assert.equal('data-tp-empty' in el.attrs, c.empty, how + ': empty mark');
+      const btn = flat(el).find((n) => n.className === 'tp-add-btn');
+      assert.ok(btn && btn.innerHTML.endsWith(c.word), how + ': button reads ' + (btn && btn.innerHTML));
+    }
   }
 });
 
@@ -73,10 +79,14 @@ test('relations: empty marks the mount and words the button "Add a relation"', a
     { name: 'one', rels: [{ id: 1, relationType: 'ally', targetEntityId: 'x', targetEntityName: 'X' }], empty: false, word: 'Add relation' },
   ];
   for (const c of cases) {
-    const el = mount('relations.js', 'relations', { editable: true, relationsEndpoint: '/r' }, () => c.rels);
-    await settle();
-    assert.equal('data-rel-empty' in el.attrs, c.empty, c.name + ': empty mark');
-    const btn = flat(el).find((n) => n.className === 'rel-add-btn');
-    assert.ok(btn && btn.innerHTML.endsWith(c.word), c.name + ': button reads ' + (btn && btn.innerHTML));
+    for (const sent of [false, true]) {
+      const el = mount('relations.js', 'relations', { editable: true, relationsEndpoint: '/r' }, () => c.rels,
+        sent ? { relations: c.rels, types: [] } : null);
+      await settle();
+      const how = c.name + (sent ? ' (sent with page)' : ' (fetched)');
+      assert.equal('data-rel-empty' in el.attrs, c.empty, how + ': empty mark');
+      const btn = flat(el).find((n) => n.className === 'rel-add-btn');
+      assert.ok(btn && btn.innerHTML.endsWith(c.word), how + ': button reads ' + (btn && btn.innerHTML));
+    }
   }
 });
