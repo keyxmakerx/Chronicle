@@ -1,0 +1,169 @@
+/*
+ * search_page.css: the campaign Search page
+ * (internal/plugins/entities/search_page.templ, behaviour in
+ * internal/plugins/entities/static/js/search_page.js).
+ *
+ * Everything is scoped under .sp. Colours, corners, edges and shadows come
+ * from the theme and style-kit tokens, so the page follows light and dark and
+ * every kit. The title, group labels, counts and rows carry the shared block
+ * parts (cb-title, cb-group, cb-count, cb-link), which the page looks and kits
+ * already dress; the rules here are only the Material base under them. The
+ * leading amber edge marks a page only the Director sees; the pickers open
+ * with the menu move (mn-*) and Calm and Off are handled by the global guard.
+ */
+.sp {
+  --sp-line: var(--color-border-light, #e5e7eb);
+  --sp-dm: rgb(var(--color-warn-rgb, 217 119 6));
+  --sp-hit: 44px;
+  max-width: 56rem;
+  min-width: 0;
+  color: var(--color-text-body, #374151);
+}
+.sp *, .sp *::before, .sp *::after { box-sizing: border-box; }
+.sp [hidden] { display: none !important; }
+.sp :focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+.sp p { margin: 0; }
+
+/* Title and the count beside it */
+.sp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 16px; }
+.sp-head .cb-title { margin: 0; }
+.sp-sum { font-size: 0.8125rem; color: var(--color-text-muted, #6b7280); font-variant-numeric: tabular-nums; }
+
+/* The field and its two pickers share one line, and wrap on a phone. */
+.sp-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sp-field {
+  position: relative; display: flex; align-items: center;
+  flex: 1 1 16rem; min-width: 0;
+}
+.sp-glass { position: absolute; left: 12px; color: var(--color-text-muted, #6b7280); pointer-events: none; }
+.sp-input {
+  width: 100%; min-height: var(--sp-hit); padding: 0 12px 0 36px;
+  font: inherit; font-size: 0.875rem; color: var(--color-text-primary, #111827);
+  background: var(--color-input-bg, var(--color-bg-secondary, #fff));
+  border: var(--shape-edge, 1px) solid var(--color-input-border, var(--color-border, #d1d5db));
+  border-radius: var(--shape-r-ctl, 8px);
+  transition: border-color var(--dur-micro, 120ms) var(--ease-standard, ease), box-shadow var(--dur-micro, 120ms) var(--ease-standard, ease);
+}
+.sp-input::placeholder { color: var(--color-text-muted, #6b7280); }
+.sp-input:focus { outline: none; border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent, #6366f1) 25%, transparent); }
+
+/* A picker is a value picker, so it is a button: it says what is picked. */
+.sp-pick { position: relative; }
+.sp-btn {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 14rem;
+  min-height: var(--sp-hit); padding: 0 12px;
+  font: inherit; font-size: 0.875rem; color: var(--color-text-secondary, #4b5563);
+  background: var(--color-card-bg, var(--color-bg-secondary, #fff));
+  border: var(--shape-edge, 1px) solid var(--color-border, #d1d5db);
+  border-radius: var(--shape-r-ctl, 8px);
+  box-shadow: var(--elev-resting, none);
+  cursor: pointer;
+  transition: background var(--dur-micro, 120ms) var(--ease-standard, ease), border-color var(--dur-micro, 120ms) var(--ease-standard, ease);
+}
+.sp-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-btn:hover { background: var(--color-bg-tertiary, #f3f4f6); }
+.sp-btn[aria-expanded="true"] { border-color: var(--color-accent, #6366f1); }
+.sp-btn-on { color: var(--color-accent-link, var(--color-accent, #6366f1)); border-color: var(--color-accent, #6366f1); }
+.sp-chev { flex: none; opacity: 0.7; }
+
+.sp-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: var(--z-raised, 10);
+  min-width: 100%; width: max-content; max-width: min(20rem, calc(100vw - 32px));
+  padding: 4px;
+  background: var(--color-card-bg, var(--color-bg-secondary, #fff));
+  border: var(--shape-edge, 1px) solid var(--color-border, #d1d5db);
+  border-radius: var(--shape-r-panel, 12px);
+  box-shadow: var(--elev-hover, 0 6px 16px -4px rgb(0 0 0 / 0.12));
+  transform-origin: top left;
+}
+/* The last picker opens toward the page, so its menu never runs off the edge. */
+.sp-pick:last-child > .sp-menu { left: auto; right: 0; transform-origin: top right; }
+.sp-opts { max-height: 16rem; overflow-y: auto; }
+.sp-opt {
+  display: flex; align-items: center; width: 100%; min-height: var(--sp-hit); padding: 0 12px;
+  font: inherit; font-size: 0.875rem; text-align: left; color: var(--color-text-primary, #111827);
+  background: none; border: 0; border-radius: var(--shape-r-ctl, 8px); cursor: pointer;
+}
+.sp-opt:hover { background: var(--color-bg-tertiary, #f3f4f6); }
+/* The picked one has the accent edge a selected row has. */
+.sp-opt[aria-selected="true"] { box-shadow: inset 2px 0 0 var(--color-accent, #6366f1); color: var(--color-accent-link, var(--color-accent, #6366f1)); font-weight: 600; }
+.sp-find {
+  width: calc(100% - 8px); min-height: 36px; margin: 4px; padding: 0 12px;
+  font: inherit; font-size: 0.875rem; color: var(--color-text-primary, #111827);
+  background: var(--color-input-bg, var(--color-bg-secondary, #fff));
+  border: var(--shape-edge, 1px) solid var(--color-input-border, var(--color-border, #d1d5db));
+  border-radius: var(--shape-r-ctl, 8px);
+}
+.sp-clear { margin: 0 12px; }
+
+.sp-hint, .sp-none { font-size: 0.875rem; line-height: 1.5; color: var(--color-text-secondary, #4b5563); max-width: 62ch; }
+.sp-hint { margin: 16px 0; }
+.sp-empty { margin: 24px 0; display: grid; gap: 8px; }
+
+/* Groups: a small label in the accent with its count, rows under it. */
+.sp-section { margin-top: 24px; }
+.sp-group {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 4px; padding: 0 0 4px;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--color-accent-link, var(--color-accent, #6366f1));
+}
+.sp-group .cb-count {
+  display: inline-block; font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; letter-spacing: 0; text-transform: none;
+  border-radius: 999px; background: var(--color-bg-tertiary, #f3f4f6); color: var(--color-text-muted, #6b7280);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A row: the name, what it is, the page's own picture, then the line. */
+.sp-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 36px; align-items: center; column-gap: 12px;
+  min-height: var(--sp-hit); padding: 8px 8px 8px 10px;
+  color: inherit; text-decoration: none;
+  border-bottom: var(--shape-rule, 1px) solid var(--sp-line);
+  border-radius: var(--shape-r-ctl, 8px) var(--shape-r-ctl, 8px) 0 0;
+  transition: background var(--dur-micro, 120ms) var(--ease-out, ease), box-shadow var(--dur-standard, 200ms) var(--ease-out, ease);
+}
+.sp-row:hover { background: var(--color-bg-tertiary, #f3f4f6); }
+/* The leading amber edge says only the Director sees this page. */
+.sp-row[data-dm-only] { box-shadow: inset 3px 0 0 var(--sp-dm); padding-left: 12px; }
+.sp-name {
+  min-width: 0; display: flex; align-items: baseline; gap: 6px;
+  font-size: 0.9375rem; font-weight: 600; color: var(--color-text-primary, #111827);
+  overflow-wrap: anywhere;
+}
+.sp-lock { flex: none; font-size: 0.6875rem; color: var(--sp-dm); }
+.sp-kind { font-size: 0.75rem; color: var(--color-text-muted, #6b7280); text-align: right; }
+.sp-pic { width: 36px; height: 36px; object-fit: cover; border-radius: var(--shape-r-small, 6px); border: var(--shape-edge, 1px) solid var(--sp-line); }
+.sp-nopic { width: 36px; height: 0; }
+.sp-line {
+  grid-column: 1 / -1; margin-top: 2px;
+  font-size: 0.8125rem; line-height: 1.5; color: var(--color-text-secondary, #4b5563);
+  overflow-wrap: anywhere;
+}
+/* The reader's words: heavier and underlined in the accent, never a fill. */
+.sp-mark {
+  background: none; color: var(--color-text-primary, #111827); font-weight: 600;
+  text-decoration: underline; text-decoration-color: var(--color-accent, #6366f1); text-underline-offset: 2px;
+}
+
+.sp-more { display: flex; align-items: center; gap: 16px; padding: 4px 10px 0; }
+.sp-more .quiet-word { min-height: var(--sp-hit); }
+.sp-more .quiet-word:disabled { color: var(--color-text-muted, #6b7280); text-decoration: none; cursor: default; }
+.sp-pg { font-size: 0.8125rem; color: var(--color-text-muted, #6b7280); font-variant-numeric: tabular-nums; }
+
+@media (pointer: fine) {
+  .sp { --sp-hit: 36px; }
+  .sp-more .quiet-word { min-height: 32px; }
+}
+
+/* A phone: the kind drops under the name, the picture stays at the end. */
+@media (max-width: 520px) {
+  .sp-tools { gap: 8px; }
+  .sp-pick { flex: 1 1 8rem; }
+  .sp-btn { width: 100%; max-width: none; justify-content: space-between; }
+  .sp-menu { min-width: 0; width: max-content; }
+  .sp-row { grid-template-columns: minmax(0, 1fr) 36px; row-gap: 0; }
+  .sp-name { grid-column: 1; grid-row: 1; }
+  .sp-kind { grid-column: 1; grid-row: 2; text-align: left; }
+  .sp-pic, .sp-nopic { grid-column: 2; grid-row: 1 / span 2; }
+  .sp-line { grid-row: 3; }
+}

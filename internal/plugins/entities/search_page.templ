@@ -1,6 +1,8 @@
-// search_page.templ renders the dedicated search page with real-time filtering.
-// Allows users to search entities by name, filter by type and tags, without
-// page reloads. Results update live as the user types or changes filters.
+// search_page.templ renders the dedicated search page. It answers "where does
+// this come up?": first what has the words in its name, then every page that
+// mentions them, each with its line. The behaviour is in search_page.js; the
+// look is static/css/search_page.css, on the shared block parts (cb-title,
+// cb-group, cb-count, cb-link) so a style kit reaches it.
 
 package entities
 
@@ -10,90 +12,160 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// SearchPage renders the full-page search view with filters.
+// SearchPage renders the full-page search view with its two pickers.
 templ SearchPage(cc *campaigns.CampaignContext, entityTypes []EntityType) {
 	@layouts.App("Search - " + cc.Campaign.Name) {
 		<!-- searchPageData comes from search_page.js, loaded on sight: a page
 		     script tag here would be stripped by a boosted swap. x-ignore holds
 		     Alpine off until the widget hands the page over. -->
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/search_page.css") }/>
 		<div data-widget="search-page" x-data x-ignore>
-		<div class="max-w-5xl mx-auto py-6 px-4">
-			<div x-data={ fmt.Sprintf("searchPageData('%s')", cc.Campaign.ID) }>
-				<!-- Header -->
-				<div class="mb-6">
-					<h1 class="text-xl font-bold text-fg mb-1">
-						<i class="fa-solid fa-magnifying-glass mr-2"></i>Search
-					</h1>
-					<p class="text-sm text-fg-secondary">Find pages across your campaign</p>
-				</div>
-				<!-- Search input + filters -->
-				<div class="flex flex-col sm:flex-row gap-3 mb-3">
-					<div class="relative flex-1">
-						<input
-							type="text"
-							x-model="query"
-							class="input w-full pl-10"
-							placeholder="Search names, content, fields..."
-							autofocus
-						/>
-						<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-						</svg>
+			@layouts.AppFrame() {
+				<div class="sp" x-data={ fmt.Sprintf("searchPageData('%s', %t)", cc.Campaign.ID, layouts.GetCampaignRole(ctx) >= 2) }>
+					<header class="sp-head">
+						<h1 class="cb-title text-2xl font-bold text-fg">Search</h1>
+						<span class="sp-sum" x-show="!loading && total > 0" x-text="resultsLabel()"></span>
+						<span class="sp-sum" x-show="loading" x-cloak>Searching</span>
+					</header>
+					<div class="sp-tools" role="search">
+						<label class="sp-field">
+							<svg class="sp-glass" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M11 18a7 7 0 100-14 7 7 0 000 14z"></path>
+							</svg>
+							<span class="sr-only">Search names, text and fields</span>
+							<input
+								type="text"
+								x-model="query"
+								class="sp-input"
+								placeholder="Search names, text and fields"
+								autocomplete="off"
+								autofocus
+							/>
+						</label>
+						<div class="sp-pick" @keydown.escape.window="closePickers()" @click.outside="closeIf('type')">
+							<button
+								type="button"
+								class="sp-btn"
+								:class="typeFilter ? 'sp-btn-on' : ''"
+								aria-haspopup="listbox"
+								:aria-expanded="openPicker === 'type'"
+								@click="togglePicker('type')"
+							>
+								<span x-text="typeLabel()"></span>
+								<svg class="sp-chev" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"></path></svg>
+							</button>
+							<div
+								class="sp-menu"
+								role="listbox"
+								aria-label="Category"
+								x-show="openPicker === 'type'"
+								x-cloak
+								x-transition:enter="mn-enter"
+								x-transition:enter-start="mn-from"
+								x-transition:enter-end="mn-to"
+								x-transition:leave="mn-leave"
+								x-transition:leave-start="mn-to"
+								x-transition:leave-end="mn-from"
+							>
+								<button type="button" role="option" class="sp-opt" :aria-selected="typeFilter === ''" @click="pickType('')">All categories</button>
+								for _, et := range entityTypes {
+									<button
+										type="button"
+										role="option"
+										class="sp-opt"
+										data-type-id={ fmt.Sprintf("%d", et.ID) }
+										:aria-selected={ fmt.Sprintf("typeFilter === '%d'", et.ID) }
+										@click={ fmt.Sprintf("pickType('%d')", et.ID) }
+									>{ et.NamePlural }</button>
+								}
+							</div>
+						</div>
+						<div class="sp-pick" x-show="allTags.length > 0" x-cloak @click.outside="closeIf('tags')">
+							<button
+								type="button"
+								class="sp-btn"
+								:class="activeTags.length ? 'sp-btn-on' : ''"
+								aria-haspopup="listbox"
+								:aria-expanded="openPicker === 'tags'"
+								@click="togglePicker('tags')"
+							>
+								<span x-text="tagLabel()"></span>
+								<svg class="sp-chev" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"></path></svg>
+							</button>
+							<div
+								class="sp-menu"
+								role="listbox"
+								aria-label="Tags"
+								aria-multiselectable="true"
+								x-show="openPicker === 'tags'"
+								x-cloak
+								x-transition:enter="mn-enter"
+								x-transition:enter-start="mn-from"
+								x-transition:enter-end="mn-to"
+								x-transition:leave="mn-leave"
+								x-transition:leave-start="mn-to"
+								x-transition:leave-end="mn-from"
+							>
+								<input
+									type="text"
+									class="sp-find"
+									x-show="allTags.length > 8"
+									x-model="tagFind"
+									placeholder="Find a tag"
+									aria-label="Find a tag"
+									autocomplete="off"
+								/>
+								<div class="sp-opts">
+									<template x-for="tag in visibleTags()" :key="tag.slug">
+										<button type="button" role="option" class="sp-opt" :aria-selected="activeTags.includes(tag.slug)" @click="toggleTag(tag.slug)">
+											<span x-text="tag.name"></span>
+										</button>
+									</template>
+									<p class="sp-none" x-show="visibleTags().length === 0">No tag has that in its name.</p>
+								</div>
+								<button type="button" class="quiet-word sp-clear" x-show="activeTags.length > 0" @click="clearTags()">Clear tags</button>
+							</div>
+						</div>
 					</div>
-					<select x-model="typeFilter" class="input w-full sm:w-48">
-						<option value="">All types</option>
-						for _, et := range entityTypes {
-							<option value={ fmt.Sprintf("%d", et.ID) }>{ et.NamePlural }</option>
-						}
-					</select>
-				</div>
-				<!-- Tag filter chips -->
-				<div x-show="allTags.length > 0" class="flex flex-wrap gap-1.5 mb-6">
-					<template x-for="tag in allTags" :key="tag.slug">
-						<button
-							@click="toggleTag(tag.slug)"
-							class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all cursor-pointer"
-							:class="activeTags.includes(tag.slug)
-								? 'ring-2 ring-accent/50 font-medium'
-								: 'opacity-60 hover:opacity-100'"
-							:style="'background-color:' + (tag.color || '#6b7280') + '20; color:' + (tag.color || '#6b7280')"
-						>
-							<i class="fa-solid fa-tag text-[8px]"></i>
-							<span x-text="tag.name"></span>
-							<i x-show="activeTags.includes(tag.slug)" class="fa-solid fa-xmark text-[8px] ml-0.5"></i>
-						</button>
-					</template>
-					<button x-show="activeTags.length > 0" @click="clearTags()" class="text-[10px] text-fg-muted hover:text-accent ml-1">clear all</button>
-				</div>
-				<!-- Results count -->
-				<div class="flex items-center justify-between mb-4">
-					<span class="text-sm text-fg-secondary" x-show="!loading" x-text="resultsLabel()"></span>
-					<span class="text-sm text-fg-muted" x-show="loading">
-						<i class="fa-solid fa-spinner fa-spin mr-1"></i> Searching...
-					</span>
-				</div>
-				<!-- Results grid -->
-				<div id="search-results-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-				<!-- Empty state -->
-				<div x-show="!loading && results.length === 0 && query.length >= 2" class="empty-state py-12">
-					<div class="empty-state__icon">
-						<i class="fa-solid fa-magnifying-glass text-fg-muted"></i>
+					<p class="sp-hint" x-show="!hasQuery() && !hasFilters() && !loading" x-cloak>Type a word to see where it comes up: first what is named for it, then every page that mentions it.</p>
+					<section class="sp-section" x-show="groups.named.total > 0" x-cloak aria-labelledby="sp-named-h">
+						<h2 class="cb-group sp-group" id="sp-named-h">
+							<span x-text="namedHeading()"></span>
+							<span class="cb-count" x-text="groups.named.total"></span>
+						</h2>
+						<div class="sp-rows" id="sp-named"></div>
+						<div class="sp-more" x-show="moreFor('named')">
+							<button type="button" class="quiet-word" @click="showAll('named')" x-text="'Show all ' + groups.named.total"></button>
+						</div>
+						<div class="sp-more" x-show="groups.named.open && pagesOf('named') > 1">
+							<button type="button" class="quiet-word" :disabled="groups.named.page <= 1" @click="turn('named', -1)">Previous</button>
+							<span class="sp-pg" x-text="'Page ' + groups.named.page + ' of ' + pagesOf('named')"></span>
+							<button type="button" class="quiet-word" :disabled="groups.named.page >= pagesOf('named')" @click="turn('named', 1)">Next</button>
+						</div>
+					</section>
+					<section class="sp-section" x-show="groups.mention.total > 0" x-cloak aria-labelledby="sp-mention-h">
+						<h2 class="cb-group sp-group" id="sp-mention-h">
+							<span>Mention it</span>
+							<span class="cb-count" x-text="groups.mention.total"></span>
+						</h2>
+						<div class="sp-rows" id="sp-mention"></div>
+						<div class="sp-more" x-show="moreFor('mention')">
+							<button type="button" class="quiet-word" @click="showAll('mention')" x-text="'Show all ' + groups.mention.total"></button>
+						</div>
+						<div class="sp-more" x-show="groups.mention.open && pagesOf('mention') > 1">
+							<button type="button" class="quiet-word" :disabled="groups.mention.page <= 1" @click="turn('mention', -1)">Previous</button>
+							<span class="sp-pg" x-text="'Page ' + groups.mention.page + ' of ' + pagesOf('mention')"></span>
+							<button type="button" class="quiet-word" :disabled="groups.mention.page >= pagesOf('mention')" @click="turn('mention', 1)">Next</button>
+						</div>
+					</section>
+					<div class="sp-empty" x-show="showEmpty()" x-cloak>
+						<p class="sp-none" x-text="emptyText()"></p>
+						<p x-show="canCreate && hasQuery()">
+							<a class="quiet-word" :href="createHref()" x-text="'Create a page named “' + query.trim() + '”'"></a>
+						</p>
 					</div>
-					<div class="empty-state__title">No results found</div>
-					<div class="empty-state__description">Try a different search term or change the type filter.</div>
 				</div>
-				<!-- Pagination -->
-				<div class="flex items-center justify-center gap-3 mt-6" x-show="hasPager()">
-					<button class="btn-secondary btn-sm" @click="prevPage()" x-bind:disabled="page <= 1">
-						<i class="fa-solid fa-chevron-left text-xs"></i> Previous
-					</button>
-					<span class="text-sm text-fg-secondary">Page <span x-text="page"></span></span>
-					<button class="btn-secondary btn-sm" @click="nextPage()" x-bind:disabled="!hasNext()">
-						Next <i class="fa-solid fa-chevron-right text-xs"></i>
-					</button>
-				</div>
-			</div>
-		</div>
+			}
 		</div>
 	}
 }

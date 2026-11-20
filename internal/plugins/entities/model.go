@@ -618,7 +618,19 @@ type ListOptions struct {
 	// handler sends a query of two or more characters to Search instead and
 	// echoes it back so the box and the page links keep it.
 	Query string
+
+	// SearchScope narrows Search to one of the Search page's two groups:
+	// SearchScopeNamed (the words are in the name, another name or the
+	// descriptor) or SearchScopeMention (only the page's text has them).
+	// Empty is the whole answer, which quick search and the pickers use.
+	SearchScope string
 }
+
+// The Search page's two groups; see ListOptions.SearchScope.
+const (
+	SearchScopeNamed   = "named"
+	SearchScopeMention = "mention"
+)
 
 // DefaultListOptions returns sensible defaults for pagination.
 func DefaultListOptions() ListOptions {
