@@ -30,3 +30,21 @@ type PageAccess struct {
 type GameClock interface {
 	Today(ctx context.Context, campaignID string, v Viewer) (*GameDate, error)
 }
+
+// MemberDirectory lists the campaign's members, implemented in internal/app
+// over the campaigns service. It names the players a Director can choose and
+// the people who wrote log lines.
+type MemberDirectory interface {
+	Members(ctx context.Context, campaignID string) ([]Member, error)
+}
+
+// Member is one person in the campaign.
+type Member struct {
+	UserID string
+	Name   string
+	// Character is the name of the member's own character page, or "".
+	Character string
+	// Director is the owner or a co-Director: someone who already sees every
+	// tracker and so cannot be chosen as a player.
+	Director bool
+}

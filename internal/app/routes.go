@@ -6749,6 +6749,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(trackers.PluginSlug) {
 		trackersSvc = trackers.NewService(trackers.NewRepository(a.DB),
 			&trackersEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)},
+			&trackersMemberAdapter{svc: campaignService},
 			&trackersClockAdapter{svc: calendarService})
 		trackersHandler := trackers.NewHandler(trackersSvc)
 		trackersHandler.SetPlacementChecker(blockPlacement)

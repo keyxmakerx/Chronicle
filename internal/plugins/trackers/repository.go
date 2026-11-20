@@ -44,6 +44,9 @@ type Repository interface {
 	// UpdateTracker saves name and visibility; errDuplicate on a name clash.
 	UpdateTracker(ctx context.Context, t Tracker) error
 	DeleteTracker(ctx context.Context, campaignID, id string) error
+	// SetPlayers replaces the players chosen for a tracker; an empty list
+	// clears them. Every tracker read returns them in Tracker.Players.
+	SetPlayers(ctx context.Context, campaignID, trackerID string, players []Player) error
 
 	// ListEntries returns each tracker's log, oldest first.
 	ListEntries(ctx context.Context, campaignID string, trackerIDs []string) (map[string][]Entry, error)
@@ -273,7 +276,11 @@ func (r *sqlRepository) ListTrackers(ctx context.Context, campaignID, entityID s
 		}
 		out = append(out, t)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	return out, r.attachPlayers(ctx, campaignID, out, false)
 }
 
 func (r *sqlRepository) ListAllTrackers(ctx context.Context, campaignID string) ([]Tracker, error) {
@@ -292,7 +299,52 @@ func (r *sqlRepository) ListAllTrackers(ctx context.Context, campaignID string) 
 		}
 		out = append(out, t)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	return out, r.attachPlayers(ctx, campaignID, out, true)
+}
+
+// attachPlayers fills Players on the trackers shown to chosen players, so a
+// caller can never decide who sees a tracker without the list. all reads the
+// whole campaign's rows in one query instead of naming the trackers.
+func (r *sqlRepository) attachPlayers(ctx context.Context, campaignID string, ts []Tracker, all bool) error {
+	idx := map[string]int{}
+	for i, t := range ts {
+		if t.Visibility == SeePlayers {
+			idx[t.ID] = i
+		}
+	}
+	if len(idx) == 0 {
+		return nil
+	}
+	q := `SELECT tracker_id, user_id, can_change FROM tracker_players WHERE campaign_id = ?`
+	args := []any{campaignID}
+	if !all {
+		q += ` AND tracker_id IN (?` + strings.Repeat(",?", len(idx)-1) + `)`
+		for id := range idx {
+			args = append(args, id)
+		}
+	}
+	rows, err := r.db.QueryContext(ctx, q+` ORDER BY tracker_id, user_id`, args...)
+	if err != nil {
+		return fmt.Errorf("list tracker players: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tid string
+		var p Player
+		var can bool
+		if err := rows.Scan(&tid, &p.UserID, &can); err != nil {
+			return fmt.Errorf("scan tracker player: %w", err)
+		}
+		p.CanChange = can
+		if i, ok := idx[tid]; ok {
+			ts[i].Players = append(ts[i].Players, p)
+		}
+	}
+	return rows.Err()
 }
 
 func (r *sqlRepository) getTracker(ctx context.Context, where string, args ...any) (Tracker, bool, error) {
@@ -303,7 +355,11 @@ func (r *sqlRepository) getTracker(ctx context.Context, where string, args ...an
 	if err != nil {
 		return Tracker{}, false, fmt.Errorf("get tracker: %w", err)
 	}
-	return t, true, nil
+	one := []Tracker{t}
+	if err := r.attachPlayers(ctx, t.CampaignID, one, false); err != nil {
+		return Tracker{}, false, err
+	}
+	return one[0], true, nil
 }
 
 func (r *sqlRepository) GetTracker(ctx context.Context, campaignID, id string) (Tracker, bool, error) {
@@ -338,6 +394,29 @@ func (r *sqlRepository) UpdateTracker(ctx context.Context, t Tracker) error {
 	}
 	if err != nil {
 		return fmt.Errorf("update tracker: %w", err)
+	}
+	return nil
+}
+
+func (r *sqlRepository) SetPlayers(ctx context.Context, campaignID, trackerID string, players []Player) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin set tracker players: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM tracker_players WHERE campaign_id = ? AND tracker_id = ?`, campaignID, trackerID); err != nil {
+		return fmt.Errorf("clear tracker players: %w", err)
+	}
+	for _, p := range players {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO tracker_players (tracker_id, campaign_id, user_id, can_change) VALUES (?, ?, ?, ?)`,
+			trackerID, campaignID, p.UserID, p.CanChange); err != nil {
+			return fmt.Errorf("insert tracker player: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tracker players: %w", err)
 	}
 	return nil
 }

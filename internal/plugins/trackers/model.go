@@ -14,10 +14,14 @@ const (
 	ShapeClock = "clock"
 )
 
-// Who sees a tracker.
+// Who sees a tracker. A kind's default and a newly placed tracker use only
+// the first two; "players" is chosen per placed tracker, with its list.
 const (
 	SeeDirectors = "directors"
 	SeeEveryone  = "everyone"
+	// SeePlayers shows the tracker to the Directors and to the players named
+	// in Tracker.Players, and to nobody else.
+	SeePlayers = "players"
 )
 
 // Log operations. A step forward or back is an add of +1 or -1.
@@ -96,6 +100,17 @@ type Tracker struct {
 	Name       string
 	Visibility string
 	SortOrder  int
+	// Players is who a SeePlayers tracker is shown to. The repository fills
+	// it on every read, so sees() cannot be asked without it.
+	Players []Player
+}
+
+// Player is one player chosen to see a tracker.
+type Player struct {
+	UserID string
+	// CanChange lets the player log add and set lines. It never lets them
+	// strike a line, rename, hide, remove or reshape the tracker.
+	CanChange bool
 }
 
 // Entry is one log line.
@@ -132,6 +147,9 @@ type EntryView struct {
 	// At is the real time, for ordering and a tooltip.
 	At     time.Time `json:"at"`
 	Struck bool      `json:"struck"`
+	// By names who wrote a player's line: the player's name to a Director,
+	// "You" to the player. Empty for a Director's own lines and rule lines.
+	By string `json:"by,omitempty"`
 	// After is the value right after this line, so the log reads as a
 	// running balance.
 	After int `json:"after"`
@@ -156,6 +174,28 @@ type TrackerView struct {
 	Now      string      `json:"now"`
 	Log      []EntryView `json:"log"`
 	LogCount int         `json:"logCount"`
+	// CanChange is true for a Director and for a chosen player who may
+	// change this tracker; the widget draws its change controls from it.
+	CanChange bool `json:"canChange"`
+	// Players is who a "players" tracker is shown to; Directors only.
+	Players []PlayerView `json:"players,omitempty"`
+	// AlsoSeenBy names the other chosen players, for a chosen player's own
+	// copy, so it can say who else sees it.
+	AlsoSeenBy []string `json:"alsoSeenBy,omitempty"`
+}
+
+// PlayerView is a chosen player as a Director sees them.
+type PlayerView struct {
+	UserID    string `json:"userId"`
+	Name      string `json:"name"`
+	CanChange bool   `json:"canChange"`
+}
+
+// MemberChoice is a campaign player a Director can choose for a tracker.
+type MemberChoice struct {
+	UserID    string `json:"userId"`
+	Name      string `json:"name"`
+	Character string `json:"character,omitempty"`
 }
 
 // KindChoice is a kind a Director can place on a page.
@@ -172,6 +212,8 @@ type PageView struct {
 	CanEdit  bool          `json:"canEdit"`
 	// Kinds is filled for Directors only, for "Add a tracker".
 	Kinds []KindChoice `json:"kinds,omitempty"`
+	// Members is the players a Director can choose for a tracker.
+	Members []MemberChoice `json:"members,omitempty"`
 }
 
 // KindInput is a create or update body for a kind. Version is required on
@@ -195,10 +237,20 @@ type PlaceInput struct {
 	Visibility string `json:"visibility"`
 }
 
+// PlayerPick is one chosen player in a patch.
+type PlayerPick struct {
+	UserID    string `json:"userId"`
+	CanChange bool   `json:"canChange"`
+}
+
 // TrackerPatch renames a tracker or changes who sees it; nil leaves a field.
+// Players is a pointer to a slice so an absent key keeps the chosen players,
+// while an empty list chooses nobody; it is read only when the visibility is
+// (or becomes) "players".
 type TrackerPatch struct {
-	Name       *string `json:"name"`
-	Visibility *string `json:"visibility"`
+	Name       *string       `json:"name"`
+	Visibility *string       `json:"visibility"`
+	Players    *[]PlayerPick `json:"players"`
 }
 
 // LogInput is one change. TrackerID names a placed tracker; a tracker a kind

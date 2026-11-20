@@ -11,6 +11,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 )
@@ -67,6 +68,39 @@ func (a *trackersEntityAdapter) Types(ctx context.Context, campaignID string) ([
 	out := make([]trackers.TypeRef, 0, len(list))
 	for _, t := range list {
 		out = append(out, trackers.TypeRef{ID: t.ID, Name: t.Name})
+	}
+	return out, nil
+}
+
+// trackersMemberAdapter implements trackers.MemberDirectory over the
+// campaigns service.
+type trackersMemberAdapter struct {
+	svc campaigns.CampaignService
+}
+
+// Members lists the campaign's people. A Director is the owner or anyone
+// holding the campaign's DM-only grant, the same rule the request context
+// uses, so a co-Director is never offered as a player to choose.
+func (a *trackersMemberAdapter) Members(ctx context.Context, campaignID string) ([]trackers.Member, error) {
+	c, err := a.svc.GetByID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	list, err := a.svc.ListMembers(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	grants := map[string]bool{}
+	for _, id := range c.ParseSettings().DmGrantIDs {
+		grants[id] = true
+	}
+	out := make([]trackers.Member, 0, len(list))
+	for _, m := range list {
+		tm := trackers.Member{UserID: m.UserID, Name: m.DisplayName, Director: m.Role >= campaigns.RoleOwner || grants[m.UserID]}
+		if m.CharacterName != nil {
+			tm.Character = *m.CharacterName
+		}
+		out = append(out, tm)
 	}
 	return out, nil
 }

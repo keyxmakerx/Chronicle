@@ -33,7 +33,7 @@ func sharedRig(t *testing.T) (*rig, *recDir) {
 		pageA:   {Exists: true, CanView: true},
 		pageHid: {Exists: true, CanView: false},
 	}}}
-	r.svc = NewService(r.repo, dir, nil)
+	r.svc = NewService(r.repo, dir, nil, nil)
 	return r, dir
 }
 
