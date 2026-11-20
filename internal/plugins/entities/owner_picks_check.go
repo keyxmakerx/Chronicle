@@ -40,6 +40,18 @@ func PlayerPicksHeld(entity *Entity, patch map[string]any, plan *HeroPlan) map[s
 	return held
 }
 
+// PatchChangesNothing reports whether every key in patch is what the hero
+// already stores, so a caller can skip building the hero plan: Foundry
+// resends the whole mapped set, and most pushes change nothing a plan judges.
+func PatchChangesNothing(entity *Entity, patch map[string]any) bool {
+	for k, v := range patch {
+		if !sentBackUnchanged(entity, k, v) {
+			return false
+		}
+	}
+	return true
+}
+
 // isPickKey reports whether the web door judges k as a pick.
 func isPickKey(k string, picks builderPicks) bool {
 	if _, ok := picks[k]; ok || ownerIdentityFieldKeys[k] {

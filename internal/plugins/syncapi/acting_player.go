@@ -72,6 +72,9 @@ func (h *APIHandler) judgeActingPlayer(ctx context.Context, entity *entities.Ent
 	if err != nil || access == nil || !access.CanView {
 		return nil, apperror.NewNotFound("entity not found")
 	}
+	if entities.PatchChangesNothing(entity, patch) {
+		return nil, nil
+	}
 	var plan *entities.HeroPlan
 	if h.heroPlanner != nil {
 		// A plan that can't be read must not turn into "no limits".

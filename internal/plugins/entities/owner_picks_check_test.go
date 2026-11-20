@@ -65,3 +65,26 @@ func TestPlayerPicksHeld_SameRefusalForHiddenName(t *testing.T) {
 		t.Fatalf("refusals differ: %q vs %q", a, b)
 	}
 }
+
+func TestPatchChangesNothing(t *testing.T) {
+	hero := &Entity{ID: "e1", CampaignID: "c1", FieldsData: map[string]any{"class": "Fury", "stamina": float64(21), "kit": ""}}
+	cases := []struct {
+		name  string
+		patch map[string]any
+		want  bool
+	}{
+		{"whole set resent", map[string]any{"class": "fury ", "stamina": float64(21)}, true},
+		{"null over an empty value", map[string]any{"kit": nil}, true},
+		{"empty patch", map[string]any{}, true},
+		{"a number changed", map[string]any{"class": "Fury", "stamina": float64(18)}, false},
+		{"a pick changed", map[string]any{"class": "Null"}, false},
+		{"a new key", map[string]any{"ancestry": "Devil"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := PatchChangesNothing(hero, c.patch); got != c.want {
+				t.Errorf("PatchChangesNothing(%v) = %v, want %v", c.patch, got, c.want)
+			}
+		})
+	}
+}

@@ -197,32 +197,45 @@ func (r *choiceRuleRepository) queryRequests(ctx context.Context, q string, args
 }
 
 func (r *choiceRuleRepository) UpsertWaiting(ctx context.Context, q *ChoiceRequest) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE campaign_choice_requests
-		SET entry_source = ?, entry_key = ?, entry_name = ?, entity_name = ?, created_at = CURRENT_TIMESTAMP
-		WHERE campaign_id = ? AND system_id = ? AND field_key = ? AND user_id = ? AND entity_id = ? AND status = 'waiting'`,
-		q.Source, q.Key, q.Name, q.EntityName, q.CampaignID, q.SystemID, q.FieldKey, q.UserID, q.EntityID)
+	// Looked up by id under a row lock rather than judged by an UPDATE's
+	// affected rows: the driver reports changed rows, so re-sending the same
+	// pick within a second would change nothing and insert a duplicate. The
+	// locking read also makes a second concurrent pick wait for the first.
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return apperror.NewInternal(err)
 	}
-	if n, _ := res.RowsAffected(); n > 0 {
-		var id int64
-		if err := r.db.QueryRowContext(ctx, `SELECT id FROM campaign_choice_requests
-			WHERE campaign_id = ? AND system_id = ? AND field_key = ? AND user_id = ? AND entity_id = ? AND status = 'waiting'
-			ORDER BY id DESC LIMIT 1`,
-			q.CampaignID, q.SystemID, q.FieldKey, q.UserID, q.EntityID).Scan(&id); err != nil {
+	defer func() { _ = tx.Rollback() }()
+
+	var id int64
+	err = tx.QueryRowContext(ctx, `SELECT id FROM campaign_choice_requests
+		WHERE campaign_id = ? AND system_id = ? AND field_key = ? AND user_id = ? AND entity_id = ? AND status = 'waiting'
+		ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+		q.CampaignID, q.SystemID, q.FieldKey, q.UserID, q.EntityID).Scan(&id)
+	switch {
+	case err == sql.ErrNoRows:
+		ins, err := tx.ExecContext(ctx, `INSERT INTO campaign_choice_requests
+			(campaign_id, system_id, field_key, entry_source, entry_key, entry_name, user_id, entity_id, entity_name)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			q.CampaignID, q.SystemID, q.FieldKey, q.Source, q.Key, q.Name, q.UserID, q.EntityID, q.EntityName)
+		if err != nil {
 			return apperror.NewInternal(err)
 		}
-		q.ID = id
-		return nil
+		id, _ = ins.LastInsertId()
+	case err != nil:
+		return apperror.NewInternal(err)
+	default:
+		if _, err := tx.ExecContext(ctx, `UPDATE campaign_choice_requests
+			SET entry_source = ?, entry_key = ?, entry_name = ?, entity_name = ?, created_at = CURRENT_TIMESTAMP
+			WHERE id = ?`,
+			q.Source, q.Key, q.Name, q.EntityName, id); err != nil {
+			return apperror.NewInternal(err)
+		}
 	}
-	ins, err := r.db.ExecContext(ctx, `INSERT INTO campaign_choice_requests
-		(campaign_id, system_id, field_key, entry_source, entry_key, entry_name, user_id, entity_id, entity_name)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		q.CampaignID, q.SystemID, q.FieldKey, q.Source, q.Key, q.Name, q.UserID, q.EntityID, q.EntityName)
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		return apperror.NewInternal(err)
 	}
-	q.ID, _ = ins.LastInsertId()
+	q.ID = id
 	q.Status = RequestWaiting
 	return nil
 }
