@@ -55,11 +55,12 @@ test('Category home: edit, one save bar, landing page, home-widget list', async 
 
   // 4. The Home pages widget list holds home widgets only.
   await owner.go(`/campaigns/${cid}/customize/home`);
-  await page.locator('.cpe-gw').first().waitFor();
-  const widgets = await page.locator('.cpe-gw').allInnerTexts();
+  await page.locator('.cpe-gw').first().waitFor({ state: 'attached' });
+  // The panel starts put away, so read the list's words rather than what shows.
+  const widgets = await page.locator('.cpe-gw').allTextContents();
   const joined = widgets.join(' | ');
-  assert.match(joined, /Welcome Banner/);
-  assert.match(joined, /Quick Actions/);
-  assert.doesNotMatch(joined, /Category Header|Search Bar/, 'category-only widgets leaked into Home pages');
+  assert.match(joined, /Welcome banner/);
+  assert.match(joined, /Quick actions/);
+  assert.doesNotMatch(joined, /Category header|Search bar/i, 'category-only widgets leaked into Home pages');
   owner.assertClean();
 });

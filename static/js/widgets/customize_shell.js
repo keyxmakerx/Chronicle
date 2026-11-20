@@ -415,12 +415,23 @@
      * the drawer's Close and a click outside put it away. */
     var topBar = $('[data-czs-top]'), openDr = null;
     // On a narrow screen the tabs scroll; start with the open area's in view.
-    (function () {
+    // A category's bar keeps its name in view when it can, and otherwise
+    // starts at a whole part, so no word is cut at its left edge. The page
+    // layout calls it again once its picker has narrowed the row.
+    function revealTab() {
       var strip = topBar && topBar.querySelector('.czs-tabs-top'), cur = strip && strip.querySelector('.czs-tab[aria-current]');
       if (!cur || strip.scrollWidth <= strip.clientWidth) return;
-      var w = cur.closest('.czs-tabw') || cur;
-      strip.scrollLeft = Math.max(0, w.offsetLeft - strip.offsetLeft - 12);
-    })();
+      var w = cur.closest('.czs-tabw') || cur, x0 = strip.offsetLeft;
+      if (!strip.hasAttribute('data-czs-catbar')) { strip.scrollLeft = Math.max(0, w.offsetLeft - x0 - 12); return; }
+      var right = w.offsetLeft - x0 + w.offsetWidth;
+      var parts = Array.prototype.slice.call(strip.children);
+      for (var i = 0; i < parts.length; i++) {
+        var left = parts[i].offsetLeft - x0;
+        if (right - left <= strip.clientWidth || parts[i] === w) { strip.scrollLeft = left; return; }
+      }
+    }
+    revealTab();
+    Chronicle.customizeRevealTab = revealTab;
     function drawerFor(id) { return $('[data-czs-drawer-for="' + id + '"]'); }
     function chevFor(id) { return $('[data-czs-drawer="' + id + '"]'); }
     function placeDrawer(id) {

@@ -41,7 +41,7 @@ test('Home pages: tabs, the real home, and a Players change saved and seen', asy
   await page.locator('.cpe-sec').first().waitFor();
 
   // 3. Add a widget on the Players tab; it goes through the save bar.
-  await page.getByRole('tab', { name: 'Add widgets' }).click();
+  await page.locator('#cpe-dk-main').click();
   await page.locator('.cpe-gw[data-gw="text_block"]').click();
   await page.locator('.cpe-insp textarea').first().fill('Welcome, adventurers of the Grey Coast.');
   await page.locator('[data-czs-what]').filter({ hasText: '1 change waiting' }).waitFor();

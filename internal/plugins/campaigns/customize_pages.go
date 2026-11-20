@@ -94,6 +94,33 @@ type customizeShellData struct {
 	Version    int
 	Draft      string // The draft as JSON, never empty ("{}" when there is none).
 	Find       string // The Find palette's entries as JSON.
+	// Cat is set inside a category: its one bar then takes the place of
+	// the area tabs.
+	Cat *customizeCatBar
+}
+
+// customizeCatBar is a category's bar: the way back to Categories, its name
+// (which opens the Categories drawer to switch to another), and its tabs.
+// customize_categories.js keeps the name and the tabs' marks in step with the
+// draft.
+type customizeCatBar struct {
+	Key  string
+	Name string
+	Tab  string
+	New  bool // made in the draft: only Settings opens until it is saved
+	Base string
+}
+
+// customizeCatTab is one of a category's tabs in its bar.
+type customizeCatTab struct{ ID, Label string }
+
+// catBarTabs lists a category's tabs for its bar.
+func catBarTabs() []customizeCatTab {
+	out := make([]customizeCatTab, 0, len(categoryTabs))
+	for _, t := range categoryTabs {
+		out = append(out, customizeCatTab{ID: t.ID, Label: t.Label})
+	}
+	return out
 }
 
 // lookSections are the Look editor's sections, in its own order, so Find
@@ -252,6 +279,12 @@ func (h *Handler) customizeFindEntries(cc *CampaignContext, areas []CustomizeAre
 
 // renderCustomize draws an area inside the frame.
 func (h *Handler) renderCustomize(c *echo.Context, cc *CampaignContext, area, title string, crumbs []CustomizeCrumb, cats []CustomizeCategory, body templ.Component) error {
+	return h.renderCustomizeIn(c, cc, area, title, crumbs, cats, nil, body)
+}
+
+// renderCustomizeIn draws an area inside the frame, inside a category when
+// cat is set.
+func (h *Handler) renderCustomizeIn(c *echo.Context, cc *CampaignContext, area, title string, crumbs []CustomizeCrumb, cats []CustomizeCategory, cat *customizeCatBar, body templ.Component) error {
 	ctx := c.Request().Context()
 	version, draft := h.CustomizeDraftFor(ctx, cc.Campaign.ID, auth.GetUserID(c))
 	areas := h.customizeAreas(cc)
@@ -269,6 +302,7 @@ func (h *Handler) renderCustomize(c *echo.Context, cc *CampaignContext, area, ti
 		Version:    version,
 		Draft:      string(draft),
 		Find:       h.customizeFind(cc, areas, cats),
+		Cat:        cat,
 	}
 	if d.Draft == "" {
 		d.Draft = "{}"
@@ -432,7 +466,8 @@ func (h *Handler) CustomizeCategory(c *echo.Context) error {
 		{Label: name, Href: base + "/categories/" + key + "/layout"},
 		{Label: label},
 	}
-	return h.renderCustomize(c, cc, "categories", name+" - "+label, crumbs, cats,
+	cat := &customizeCatBar{Key: key, Name: name, Tab: tab, New: etID == 0, Base: base}
+	return h.renderCustomizeIn(c, cc, "categories", name+" - "+label, crumbs, cats, cat,
 		customizeCategoryWorkspace(cc, h.categoriesData(ctx, cc, cats, key, tab), key, tab, etID))
 }
 

@@ -1,8 +1,9 @@
 /**
  * customize_categories.js: Customize's Categories area.
  *
- * Draws the grid of categories, and a category's header, tabs and Settings,
- * from data-state (the saved categories) with the draft's "categories"
+ * Draws the grid of categories and a category's Settings, and keeps the
+ * category's name and tab marks in the frame's bar in step. It works from
+ * data-state (the saved categories) with the draft's "categories"
  * section laid over it. Every change goes into that section through
  * Chronicle.customizeSet (customize_shell.js); nothing is written until the
  * owner presses Save. Section shape, applied by the entities plugin:
@@ -48,7 +49,6 @@
     ['fa-puzzle-piece', 'other'], ['fa-dice-d20', 'game'], ['fa-music', 'song'], ['fa-language', 'language'],
     ['fa-leaf', 'plant'], ['fa-seedling', 'plant'], ['fa-virus', 'disease'], ['fa-cross', 'faith']
   ];
-  var TABS = [['layout', 'Page layout', 'fa-table-columns'], ['home', 'Category home', 'fa-house'], ['fields', 'Fields', 'fa-list-ul'], ['text', 'Starting text', 'fa-align-left'], ['settings', 'Settings', 'fa-sliders']];
 
   function esc(s) { return Chronicle.escapeHtml(s); }
   function parse(s, d) { try { var v = JSON.parse(s || ''); return v == null ? d : v; } catch (e) { return d; } }
@@ -210,31 +210,31 @@
         '<span class="czs-foot">' + pills.join('') + '</span></a>';
     }
 
-    /* ---------- A category's workspace ---------- */
+    /* ---------- A category's workspace ----------
+     * The category's name and tabs are the frame's one bar
+     * (customizeCatBarNav); this keeps the name and each tab's mark in step
+     * with the draft. The facts about it (pages, menu) are on its card in
+     * the Categories list and on Settings. */
     function drawWorkspace() {
-      var c = find(KEY), head = $('[data-czs-ws-head]'), tabs = $('[data-czs-ws-tabs]'), body = $('[data-czs-ws-settings]');
+      var c = find(KEY), head = $('[data-czs-ws-head]'), body = $('[data-czs-ws-settings]');
+      var bar = SHELL ? SHELL.querySelector('[data-czs-catbar]') : null;
       if (!c) {
-        head.innerHTML = '<a class="czs-icon-btn" href="' + esc(BASE + '/categories') + '" aria-label="All categories"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></a>' +
-          '<div><h1 class="czs-h1">Not in your draft</h1><p class="czs-lede">This category was made in a draft that has since been saved or thrown away.</p></div>';
-        tabs.innerHTML = '';
+        head.hidden = false;
+        head.innerHTML = '<div><h1 class="czs-h1">Not in your draft</h1><p class="czs-lede">This category was made in a draft that has since been saved or thrown away.</p></div>';
         if (body) body.innerHTML = '<a class="btn-secondary" href="' + esc(BASE + '/categories') + '">All categories</a>';
         return;
       }
-      var parent = c.parent ? find(c.parent) : null;
-      head.innerHTML = '<a class="czs-icon-btn" href="' + esc(BASE + '/categories') + '" aria-label="All categories" title="All categories"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></a>' +
-        '<a class="czs-ident" href="' + esc(BASE + '/categories/' + c.key + '/settings') + '" title="Change name, icon and colour">' + chip(c, 'lg') +
-        '<span><h1>' + esc(c.plural || c.name || 'New category') + '</h1><span class="czs-sub">' +
-        (c.isNew ? 'New, saved with your other changes' : pagesText(c.pages)) +
-        (parent ? ' · a kind of ' + esc(parent.plural || parent.name) : '') +
-        ' · ' + (c.dmOnly ? 'only the ' + gmTerm() + ' team sees it' : c.menu ? 'in the menu' : 'hidden from players’ menu') +
-        (c.deleted ? ' · deleted when you save' : '') + '</span></span></a>';
-      tabs.setAttribute('role', 'tablist');
-      tabs.innerHTML = TABS.map(function (t) {
-        var lbl = '<i class="fa-solid ' + t[2] + '" aria-hidden="true"></i> ' + t[1];
-        if (c.isNew && t[0] !== 'settings') return '<span title="Available once you save this category">' + lbl + '</span>';
-        var dot = (t[0] === 'settings' && c.changed) || (t[0] === 'layout' && c.layoutChanged) || (t[0] === 'fields' && c.fieldsChanged) ? '<span class="czs-dot" title="Unsaved changes"></span>' : '';
-        return '<a role="tab" href="' + esc(BASE + '/categories/' + c.key + '/' + t[0]) + '"' + (t[0] === TAB ? ' aria-current="page" aria-selected="true"' : ' aria-selected="false"') + '>' + lbl + dot + '</a>';
-      }).join('');
+      head.hidden = true;
+      if (bar) {
+        var nm = c.plural || c.name || 'New category', nmEl = bar.querySelector('[data-czs-catname]');
+        if (nmEl && nmEl.textContent !== nm) nmEl.textContent = nm;
+        bar.setAttribute('aria-label', nm);
+        var marks = { settings: c.changed, layout: c.layoutChanged, fields: c.fieldsChanged };
+        $$('[data-czs-cattab]', bar).forEach(function (t) {
+          var dot = t.querySelector('.czs-dot');
+          if (dot) dot.hidden = !marks[t.getAttribute('data-czs-cattab')];
+        });
+      }
       if (body && TAB === 'settings') drawSettings(c, body);
     }
 

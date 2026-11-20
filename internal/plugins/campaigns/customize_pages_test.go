@@ -143,8 +143,13 @@ func TestCustomizeTopBar(t *testing.T) {
 	}{
 		{"a category open", h.CustomizeCategory, "/campaigns/camp-1/customize/categories/8/layout", []string{"key", "8", "tab", "layout"},
 			[]string{
-				`data-czs-area="categories" aria-current="page"`,
-				`<span class="czs-part" data-czs-part>Towns</span>`,
+				// Inside a category its own bar stands in for the area tabs.
+				`data-czs-catbar`,
+				`href="/campaigns/camp-1/customize/categories" data-czs-area="categories" aria-label="All categories"`,
+				`<span data-czs-catname>Towns</span>`,
+				`href="/campaigns/camp-1/customize/categories/8/layout" data-czs-cattab="layout" aria-current="page"`,
+				`data-czs-cattab="settings"`,
+				`data-czs-bar-slot`,
 				`id="czs-dr-categories"`,
 				`href="/campaigns/camp-1/customize/categories/8/layout" class="czs-pt is-kind" aria-current="page"`,
 				`<span class="czs-sw" style="background:#ef4444;"`,
@@ -153,7 +158,7 @@ func TestCustomizeTopBar(t *testing.T) {
 				`id="czs-dr-look"`, `href="/campaigns/camp-1/customize/look#pages"`,
 				`id="czs-dr-home"`,
 			},
-			[]string{"czs-rail", "czs-crumbs", "background:red"}},
+			[]string{"czs-rail", "czs-crumbs", "background:red", `data-czs-part`, `data-czs-area="look"`}},
 		{"a home open", h.CustomizeHome, "/campaigns/camp-1/customize/home/player", []string{"who", "player"},
 			[]string{`<span class="czs-part" data-czs-part>Players</span>`, `<span class="czs-pl">Players</span>`,
 				`href="/campaigns/camp-1/customize/home/player" class="czs-pt" aria-current="page"`,

@@ -69,6 +69,42 @@
 .czs-tsep { flex: none; width: 1px; height: 16px; align-self: center; margin: 8px 6px 0; background: var(--color-border); }
 .czs-top .czs-find { align-self: center; margin-block: 7px; width: 220px; flex: none; }
 
+/* Inside a category the bar is the category's own: back to Categories, its
+   name (which opens the Categories drawer to switch), and its five tabs. The
+   page layout puts its layout picker in the slot at the bar's right. */
+.czs-back { position: relative; flex: none; display: inline-grid; place-items: center; width: 36px; min-height: 44px; margin-left: -10px; border-radius: var(--shape-r-ctl); color: var(--color-text-secondary); text-decoration: none; font-size: 13px; transition: color var(--dur-micro), background-color var(--dur-micro); }
+.czs-back:hover { color: var(--color-text-primary); background: var(--color-bg-tertiary); }
+.czs-back:active { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
+.czs-back .czs-dot { position: absolute; top: 10px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
+.czs-catname { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; margin-right: 8px; padding: 6px 8px 4px 2px; border: 0; border-radius: var(--shape-r-ctl); background: none; color: var(--color-text-primary); font: inherit; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color var(--dur-micro); }
+.czs-catname > span { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; }
+.czs-catname > i { font-size: 10px; color: var(--color-text-secondary); transition: transform var(--dur-standard) var(--ease-out); }
+.czs-catname:hover { background: var(--color-bg-tertiary); }
+.czs-catname:active { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
+.czs-catname[aria-expanded="true"] > i { transform: rotate(180deg); }
+.czs-catbar .czs-tab.is-off { opacity: 0.45; cursor: default; }
+.czs-catbar .czs-tab.is-off:hover { color: var(--color-text-secondary); }
+:is(.czs-back, .czs-catname, .czs-lay-pick):focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.czs-bar-slot { flex: none; display: flex; align-items: center; align-self: center; margin-left: auto; }
+.czs-bar-slot:empty { display: none; }
+.czs-bar-slot + .czs-find { margin-left: 0; }
+.czs-lay-pick { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border: var(--shape-edge) solid transparent; border-radius: var(--shape-r-ctl); background: none; color: var(--color-text-secondary); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; transition: background-color var(--dur-micro), border-color var(--dur-micro); }
+.czs-lay-pick b { color: var(--color-text-primary); font-weight: 600; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
+.czs-lay-pick > i { font-size: 10px; transition: transform var(--dur-standard) var(--ease-out); }
+.czs-lay-pick:hover { background: var(--color-bg-tertiary); }
+.czs-lay-pick:active { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
+.czs-lay-pick[aria-expanded="true"] { border-color: var(--color-border); background: var(--color-bg-tertiary); }
+.czs-lay-pick[aria-expanded="true"] > i { transform: rotate(180deg); }
+[data-motion="off"] :is(.czs-catname, .czs-lay-pick) > i { transition: none; }
+@media (prefers-reduced-motion: reduce) { :is(.czs-catname, .czs-lay-pick) > i { transition: none; } }
+@media (max-width: 640px) {
+  .czs-catname { font-size: 14px; }
+  .czs-catname > span { max-width: 14ch; }
+  .czs-lay-pick { min-height: 44px; padding: 0 8px; }
+  .czs-lay-lab { display: none; }
+  .czs-lay-pick b { max-width: 10ch; }
+}
+
 /* A drawer drapes down from its tab's side line over the area; nothing
    below moves. */
 .czs-drawer {

@@ -313,12 +313,15 @@
     var VAR = 'main';
     var W = {};               // palette entries by key (type, or ext_widget:slug)
     var paletteState = 'loading';
-    var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, sheet: false, reading: false, look: lookNow(), addAt: null, peekKeep: false, pageQ: '', pageHits: null };
+    var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, panel: false, shown: false, reading: false, look: lookNow(), addAt: null, peekKeep: false, pageQ: '', pageHits: null };
     // The page the layout is drawn with, and each widget's look on it, by
     // pvKey. A look is a node, or null when the widget draws nothing there.
     var PV = { entityId: '', pages: [], looks: {}, idx: {}, n: 0, pending: {}, busy: false, failed: false, loaded: false, timer: 0 };
     var OPTS = { types: null, maps: null };
     var alive = true, listeners = [], DRAG = null;
+    // The Customize frame's bar holds the layout picker (renderSlot).
+    var SHELL = el.closest('[data-widget="customize-shell"]');
+    var SLOT = SHELL ? SHELL.querySelector('[data-czs-bar-slot]') : null;
     function on(t, type, fn, o) { t.addEventListener(type, fn, o); listeners.push([t, type, fn, o]); }
     function $(sel, root) { return (root || el).querySelector(sel); }
     function $$(sel, root) { return Array.prototype.slice.call((root || el).querySelectorAll(sel)); }
@@ -494,8 +497,8 @@
     function meta(type, cfg) {
       var m = W[keyOf(type, cfg)];
       if (m) return m;
-      if (CONTAINER_KEYS[type]) return { key: type, type: type, name: humanize(type), icon: 'fa-object-group', desc: 'An old container widget.', sizes: [], container: true, fields: [] };
-      return { key: type, type: type, name: paletteState === 'ready' ? humanize(type) : 'Widget', icon: 'fa-puzzle-piece', desc: 'This widget is not offered in this campaign right now, so pages skip it.', sizes: [], fields: [], missing: paletteState === 'ready' };
+      if (CONTAINER_KEYS[type]) return { key: type, type: type, name: humanize(type), icon: 'fa-object-group', picture: 'grid', desc: 'An old container widget.', sizes: [], container: true, fields: [] };
+      return { key: type, type: type, name: paletteState === 'ready' ? humanize(type) : 'Widget', icon: 'fa-puzzle-piece', picture: 'lines', desc: 'This widget is not offered in this campaign right now, so pages skip it.', sizes: [], fields: [], missing: paletteState === 'ready' };
     }
     function loadPalette() {
       if (!S.blockTypes) { paletteState = 'failed'; render(); return; }
@@ -513,7 +516,7 @@
           if (b.preset_only) return;
           var k = b.widget_slug ? 'ext_widget:' + b.widget_slug : preset ? presetKey(b.type, preset) : b.type;
           W[k] = {
-            key: k, type: b.type, widgetSlug: b.widget_slug || '', name: b.label || humanize(b.type), icon: b.icon || 'fa-cube',
+            key: k, type: b.type, widgetSlug: b.widget_slug || '', name: b.label || humanize(b.type), icon: b.icon || 'fa-cube', picture: b.picture || 'lines',
             desc: b.description || '', sizes: Array.isArray(b.tile_sizes) ? b.tile_sizes : [], container: !!b.container,
             singleton: !!b.singleton, retired: !!b.retired, fields: Array.isArray(b.config_fields) ? b.config_fields : [],
             preset: preset
@@ -720,7 +723,7 @@
       var on = UI.addAt === r.id;
       return '<button type="button" class="cpe-addt' + (on ? ' on' : '') + '" data-act="tat" data-rid="' + esc(r.id) + '" aria-pressed="' + on + '" style="grid-column:span ' + (r.tiles.length ? 1 : 2) + '">' +
         ic(on ? 'fa-arrow-right' : 'fa-plus') + '<b>' + (on ? 'Pick one in the panel' : 'Add a widget') + '</b>' +
-        '<span>' + (on ? 'It goes in here. Click again to stop.' : 'Choose from the list beside the page') + '</span></button>';
+        '<span>' + (on ? 'It goes in here. Click again to stop.' : 'Choose from the widget list') + '</span></button>';
     }
     // aimAdd marks a tiles section as where the next widget picked in the
     // panel goes, and turns the panel to the list; again, it stops.
@@ -730,11 +733,11 @@
       UI.sel = null;
       UI.insp = 'add';
       UI.galTiles = true;
-      UI.sheet = true;
+      UI.panel = true;
       render();
-      var q = document.getElementById('cpe-q'), body = $('.cpe-insp-body');
+      var body = $('.cpe-insp-body');
       if (body) { body.scrollTop = 0; body.classList.remove('cpe-point'); void body.offsetWidth; body.classList.add('cpe-point'); }
-      if (q) q.focus({ preventScroll: true });
+      focusSearch();
     }
     function addTile(rid, k) {
       var m = W[k], item = null;
@@ -834,30 +837,52 @@
     }
 
     /* ---------- Layouts ----------
-     * The strip over the editor lists the category's layouts: its main one
-     * and the named ones. Each page wears one, picked from the chip beside
-     * the page's name; a player's character starts on the one chosen here. */
+     * A category's layouts: its main one and the named ones. Each page wears
+     * one, picked from the chip beside the page's name; a player's character
+     * starts on the one chosen here. Which one is arranged is a quiet picker
+     * at the end of the category's bar (the frame's data-czs-bar-slot); its
+     * menu holds the others, New layout, Rename, Remove and the hint. */
     function mainLabel(p) { return p.mainName || String(PLS.mainDefault || S.name || 'Main'); }
-    function layoutsHTML() {
-      if (!PLS || UI.reading) return '';
-      var p = plNow(), cur = VAR;
-      var chip = function (key, name) {
-        return '<button type="button" class="cpe-lay" data-act="lay" data-v="' + esc(key) + '" aria-pressed="' + (cur === key) + '">' + esc(name) + '</button>';
+    function layoutName(p, key) {
+      var nl = key === 'main' ? null : plFind(p, key);
+      return nl ? nl.name : mainLabel(p);
+    }
+    // renderSlot draws the picker into the bar, only when it changed, so an
+    // open menu keeps the button it grew from.
+    function renderSlot() {
+      if (!SLOT) return;
+      var h = '';
+      if (PLS && !UI.reading) {
+        var open = !!(popEl && popEl.getAttribute('data-menu') === 'lay');
+        h = '<button type="button" class="czs-lay-pick" id="cpe-lay-pick" data-act="laymenu" aria-haspopup="menu" aria-expanded="' + open + '" title="The layout you are arranging">' +
+          '<span class="czs-lay-lab">Layout:</span><b>' + esc(layoutName(plNow(), VAR)) + '</b><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>';
+      }
+      if (SLOT._cpeHTML !== h) {
+        SLOT.innerHTML = h; SLOT._cpeHTML = h;
+        // The picker narrows the bar's row, so on a narrow screen the open
+        // tab may now sit past its end.
+        if (Chronicle.customizeRevealTab) Chronicle.customizeRevealTab();
+      }
+    }
+    function layoutMenu(btn) {
+      var p = plNow(), cur = VAR, nm = layoutName(p, cur), full = p.extra.length >= PL_MAX;
+      var row = function (key, name) {
+        return '<button type="button" role="menuitemradio" data-act="lay" data-v="' + esc(key) + '" aria-checked="' + (cur === key) + '">' + esc(name) + '</button>';
       };
-      var h = '<div class="cpe-layouts" role="group" aria-label="Layouts"><span class="cpe-layouts-lab">Layouts</span><div class="cpe-lays">' +
-        chip('main', mainLabel(p)) + p.extra.map(function (l) { return chip(l.key, l.name); }).join('') +
-        '<button type="button" class="cpe-lay add" data-act="laynew"' + (p.extra.length >= PL_MAX ? ' disabled title="A category keeps ' + PL_MAX + ' layouts besides its main one"' : '') + '>' + ic('fa-plus') + ' New layout</button></div>' +
-        '<div class="cpe-lay-acts"><button class="btn-secondary btn-sm" type="button" data-act="layren">' + ic('fa-pen') + ' Rename</button>' +
-        (cur !== 'main' ? '<button class="btn-secondary btn-sm" type="button" data-act="layrm">' + ic('fa-trash-can') + ' Remove</button>' : '') + '</div>';
+      var h = '<div class="cpe-menu cpe-menu-wide" role="menu" aria-label="Layouts"><p class="cpe-menu-h">Layouts</p>' +
+        row('main', mainLabel(p)) + p.extra.map(function (l) { return row(l.key, l.name); }).join('') + '<hr>' +
+        '<button type="button" role="menuitem" data-act="laynew"' + (full ? ' disabled title="A category keeps ' + PL_MAX + ' layouts besides its main one"' : '') + '>New layout</button>' +
+        '<button type="button" role="menuitem" data-act="layren">Rename “' + esc(nm) + '”</button>' +
+        (cur !== 'main' ? '<button type="button" role="menuitem" data-act="layrm">Remove “' + esc(nm) + '”</button>' : '');
       if (PLS.claimable && p.extra.length) {
-        h += '<label class="cpe-lay-claim"><span>A page a player claims starts on</span><select class="cpe-inp" id="cpe-claimed">' +
+        h += '<hr><label class="cpe-menu-field"><span>A page a player claims starts on</span><select class="cpe-inp" id="cpe-claimed">' +
           '<option value="main"' + (p.claimed ? '' : ' selected') + '>' + esc(mainLabel(p)) + '</option>' +
           p.extra.map(function (l) { return '<option value="' + esc(l.key) + '"' + (p.claimed === l.key ? ' selected' : '') + '>' + esc(l.name) + '</option>'; }).join('') + '</select></label>';
       }
-      h += '<p class="cpe-hint cpe-lay-hint">' + (p.extra.length
+      h += '<p class="cpe-hint cpe-menu-note">' + (p.extra.length
         ? 'Each page wears one layout. Change a page’s layout from the chip beside its name.'
         : 'One category can hold different kinds of page. Give it a second layout, like one for heroes and one for NPCs.') + '</p></div>';
-      return h;
+      menu(btn, 'lay', h, 'right');
     }
     // wear switches the editor to another of the category's layouts.
     function wear(key) {
@@ -918,38 +943,130 @@
       if (plWrite(p, { step: true })) toast('Removed the “' + nl.name + '” layout. Pages that wore it go back to ' + mainLabel(p) + '.', false, undo);
     }
 
-    /* ---------- Toolbar ---------- */
-    function toolbarHTML() {
+    /* ---------- The tools ----------
+     * One small bar floats at the foot of the workshop, as Canva and the
+     * Photos app keep theirs, so the page has the room above: Undo, Redo, the
+     * screen, who sees it, the page it is shown with, "+ Widget", and More for
+     * the rarely used. Each choice opens a small menu that grows up out of
+     * its button. */
+    var DEVICES = [['desktop', 'Computer'], ['tablet', 'Tablet'], ['phone', 'Phone']];
+    function deviceName() { return DEVICES.filter(function (d) { return d[0] === UI.device; })[0][1]; }
+    function dockHTML() {
       var hist = Chronicle.customizeHistory ? Chronicle.customizeHistory() : { undo: false, redo: false };
-      var seg = function (label, act, cur, opts) {
-        return '<div class="cpe-seg" role="group" aria-label="' + label + '">' + opts.map(function (d) {
-          return '<button type="button" data-act="' + act + '" data-v="' + d[0] + '" aria-pressed="' + (cur === d[0]) + '" aria-label="' + d[2] + '"' + (d[3] ? ' title="' + d[3] + '"' : '') + '>' + ic(d[1]) + '<span class="' + (act === 'dev' ? 'cpe-hide-md' : 'cpe-hide-sm') + '">' + d[2] + '</span></button>';
-        }).join('') + '</div>';
+      var tool = function (id, act, label, extra, cls) {
+        return '<button type="button" class="cpe-dk' + (cls ? ' ' + cls : '') + '" id="cpe-dk-' + id + '" data-act="' + act + '"' + (extra || '') + '>' + label + '</button>';
       };
-      var pages = PV.pages.length > 1 ? '<label class="cpe-lab cpe-hide-sm" for="cpe-page">Show with</label><select class="cpe-inp" id="cpe-page" data-act="page">' +
-        PV.pages.map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === PV.entityId ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('') + '</select>' : '';
-      return '<div class="cpe-toolbar">' +
-        '<button class="cpe-icon-btn" type="button" data-act="undo" title="Undo (Ctrl+Z)" aria-label="Undo"' + (hist.undo ? '' : ' disabled') + '>' + ic('fa-rotate-left') + '</button>' +
-        '<button class="cpe-icon-btn" type="button" data-act="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"' + (hist.redo ? '' : ' disabled') + '>' + ic('fa-rotate-right') + '</button><span class="cpe-vr"></span>' +
-        seg('Screen size', 'dev', UI.device, [['desktop', 'fa-desktop', 'Computer', 'Computer'], ['tablet', 'fa-tablet-screen-button', 'Tablet', 'Tablet'], ['phone', 'fa-mobile-screen', 'Phone', 'Phone']]) +
-        seg('See it as', 'as', UI.viewAs, [['dm', 'fa-user-shield', 'You'], ['player', 'fa-user', 'A player']]) +
-        seg('Page look', 'look', UI.look, [['standard', 'fa-file-lines', 'Standard', 'Preview the Standard look. Pages use the look chosen in Look › Pages.'], ['annals', 'fa-scroll', 'Material', 'Preview the Material look. Pages use the look chosen in Look › Pages.']]) +
-        '<span class="cpe-read"><button type="button" class="toggle" role="switch" data-act="read" aria-checked="' + UI.reading + '" aria-label="See the page as readers do"><span class="toggle-knob"></span></button><span class="cpe-hide-md">See the page as readers do</span></span>' +
-        '<span class="cpe-sp"></span>' + pages +
-        (UI.reading || ANYHOME ? '</div>' : '<button class="btn-secondary btn-sm" type="button" data-act="start" title="Start from a layout in the Library" aria-label="Start from…">' + ic('fa-swatchbook') + '<span class="cpe-hide-md">Start from…</span></button>' +
-        '<button class="btn-secondary btn-sm" type="button" data-act="keep" title="Keep a copy of this layout in the Library" aria-label="Keep in Library">' + ic('fa-bookmark') + '<span class="cpe-hide-md">Keep in Library</span></button></div>');
+      var pick = function (id, act, label, aria) {
+        var open = !!(popEl && popEl.getAttribute('data-menu') === act);
+        return tool(id, act, '<span class="cpe-dk-v">' + esc(label) + '</span>', ' aria-haspopup="menu" aria-expanded="' + open + '" aria-label="' + esc(aria) + '" title="' + esc(aria) + '"');
+      };
+      var showPages = !ANYHOME && PV.pages.length > 1;
+      return '<div class="cpe-dock-wrap"><div class="cpe-dock" role="group" aria-label="Customizer tools">' +
+        tool('undo', 'undo', 'Undo', ' title="Undo (Ctrl+Z)" aria-keyshortcuts="Control+Z"' + (hist.undo ? '' : ' disabled')) +
+        tool('redo', 'redo', 'Redo', ' title="Redo (Ctrl+Shift+Z)" aria-keyshortcuts="Control+Shift+Z"' + (hist.redo ? '' : ' disabled')) +
+        '<span class="cpe-dk-sep" aria-hidden="true"></span>' +
+        pick('dev', 'devmenu', deviceName(), 'Screen size: ' + deviceName()) +
+        tool('as', 'asplayer', 'As a player', ' aria-pressed="' + (UI.viewAs === 'player') + '" title="See it as a player sees it"') +
+        (showPages ? pick('page', 'pagemenu', pageName() || 'A page', 'Shown with ' + (pageName() || 'a page')) : '') +
+        '<span class="cpe-dk-sep" aria-hidden="true"></span>' +
+        (UI.reading
+          ? tool('main', 'read', 'Leave reader view', '', 'cpe-dk-main')
+          : tool('main', 'panel', '+ Widget', ' aria-expanded="' + !!(UI.panel && UI.insp !== 'sel') + '" aria-controls="cpe-insp"', 'cpe-dk-main')) +
+        pick('more', 'more', 'More', 'More tools') +
+        '</div></div>';
+    }
+    // menuRows draws a menu's choices, the current one checked.
+    function menuRows(act, cur, rows) {
+      return rows.map(function (r) {
+        return '<button type="button" role="menuitemradio" data-act="' + act + '" data-v="' + esc(r[0]) + '" aria-checked="' + (cur === r[0]) + '">' + esc(r[1]) + '</button>';
+      }).join('');
+    }
+    function deviceMenu(btn) {
+      menu(btn, 'devmenu', '<div class="cpe-menu" role="menu" aria-label="Screen size"><p class="cpe-menu-h">Screen size</p>' + menuRows('dev', UI.device, DEVICES) + '</div>');
+    }
+    function pageMenu(btn) {
+      var many = PV.pages.length > 8;
+      var h = '<div class="cpe-menu cpe-menu-wide" role="menu" aria-label="Show it with"><p class="cpe-menu-h">Show it with</p>' +
+        (many ? '<input class="cpe-inp cpe-menu-q" type="search" placeholder="Find a page" aria-label="Find a page" autocomplete="off">' : '') +
+        '<div class="cpe-menu-list">' + menuRows('page', PV.entityId, PV.pages.map(function (p) { return [p.id, p.name]; })) + '</div>' +
+        '<p class="cpe-hint cpe-menu-note">One of your ' + esc((S.plural || 'pages').toLowerCase()) + '. It only fills the widgets; nothing on it changes.</p></div>';
+      var p = menu(btn, 'pagemenu', h);
+      var q = p.querySelector('.cpe-menu-q');
+      if (q) {
+        q.addEventListener('input', function () {
+          var w = q.value.trim().toLowerCase();
+          $$('[data-act="page"]', p).forEach(function (b) { b.hidden = !!w && b.textContent.toLowerCase().indexOf(w) < 0; });
+        });
+        q.focus();
+      }
+    }
+    function moreMenu(btn) {
+      var h = '<div class="cpe-menu cpe-menu-wide" role="menu" aria-label="More tools"><p class="cpe-menu-h">Preview the page look</p>' +
+        menuRows('look', UI.look, [['standard', 'Standard'], ['annals', 'Material']]) +
+        '<p class="cpe-hint cpe-menu-note">Pages use the look chosen in Look › Pages.</p><hr>' +
+        '<button type="button" role="menuitemcheckbox" data-act="read" aria-checked="' + UI.reading + '"><span>Reader view<small>The page as readers get it, with no frames, labels or handles</small></span></button>' +
+        (UI.reading || ANYHOME ? '' : '<hr><button type="button" role="menuitem" data-act="start">Start from a layout in the Library</button>' +
+          '<button type="button" role="menuitem" data-act="keep">Keep a copy in the Library</button>') + '</div>';
+      menu(btn, 'more', h);
     }
 
-    /* ---------- Inspector ---------- */
+    /* ---------- The widget panel ----------
+     * "+ Widget" slides the panel out from the workshop's right edge over the
+     * page (a sheet up from the foot on a phone); selecting a widget opens it
+     * on its Selected side. Its close mark and Escape put it away. While a
+     * widget is dragged it slides away so every drop target is open, and comes
+     * back with the dropped widget selected. */
     function inspectorHTML() {
       var found = findSel();
       if (!found) { UI.sel = null; if (UI.insp === 'sel') UI.insp = 'add'; }
-      var body = UI.insp === 'sel' && found ? selectedHTML(found) : galleryHTML();
-      return '<aside class="cpe-insp' + (UI.sheet ? ' open' : '') + '" aria-label="Widgets and settings"><div class="cpe-insp-tabs">' +
-        '<button type="button" class="cpe-handle" data-act="sheet" aria-label="Show or hide the panel"></button><div class="cpe-seg" role="tablist">' +
-        '<button type="button" role="tab" data-act="insp" data-v="add" aria-selected="' + !(UI.insp === 'sel' && found) + '">' + ic('fa-plus') + ' Add widgets</button>' +
-        '<button type="button" role="tab" data-act="insp" data-v="sel" aria-selected="' + !!(UI.insp === 'sel' && found) + '"' + (found ? '' : ' disabled') + '>' + ic('fa-sliders') + ' Selected</button></div></div>' +
+      var onSel = !!(UI.insp === 'sel' && found);
+      var body = onSel ? selectedHTML(found) : galleryHTML();
+      return '<aside id="cpe-insp" class="cpe-insp' + (UI.shown ? ' open' : '') + '" aria-label="Widgets"' + (UI.shown ? '' : ' inert') + '><div class="cpe-insp-tabs">' +
+        '<button type="button" class="cpe-handle" data-act="panelx" tabindex="-1" aria-hidden="true"></button><div class="cpe-insp-head"><div class="cpe-seg" role="tablist" aria-label="Widget panel">' +
+        '<button type="button" role="tab" id="cpe-tab-add" data-act="insp" data-v="add" aria-selected="' + !onSel + '">Add widgets</button>' +
+        '<button type="button" role="tab" id="cpe-tab-sel" data-act="insp" data-v="sel" aria-selected="' + onSel + '"' + (found ? '' : ' disabled') + '>Selected</button></div>' +
+        '<button type="button" class="cpe-insp-x" id="cpe-insp-x" data-act="panelx" aria-label="Put the panel away" title="Close (Esc)">' + ic('fa-xmark') + '</button></div></div>' +
         '<div class="cpe-insp-body">' + body + '</div></aside>';
+    }
+    // syncPanel slides the panel to where UI.panel says, after a render drew
+    // it where it last was, so the move plays only when it changes.
+    function syncPanel() {
+      var ins = $('.cpe-insp'), ed = $('.cpe-editor');
+      if (!ins) { UI.shown = false; return; }
+      if (UI.panel !== UI.shown) {
+        void ins.offsetWidth;
+        ins.classList.toggle('open', UI.panel);
+        UI.shown = UI.panel;
+      }
+      if (UI.panel) ins.removeAttribute('inert'); else ins.setAttribute('inert', '');
+      if (ed) ed.classList.toggle('panel-open', UI.panel);
+    }
+    function openPanel(side) {
+      UI.insp = side || 'add';
+      UI.panel = true;
+      render();
+      if (UI.insp === 'add' && window.innerWidth > 640) focusSearch();
+    }
+    // focusSearch puts focus in the panel's search once the panel can take
+    // it: under Off every part's visibility catches up a moment after the
+    // panel's own.
+    function focusSearch() {
+      requestAnimationFrame(function () { requestAnimationFrame(function () {
+        var q = document.getElementById('cpe-q');
+        if (q && UI.panel && alive) q.focus({ preventScroll: true });
+      }); });
+    }
+    function closePanel(back) {
+      if (!UI.panel) return;
+      UI.panel = false;
+      UI.addAt = null;
+      render();
+      if (back) { var b = document.getElementById('cpe-dk-main'); if (b) b.focus(); }
+    }
+    // pic is a widget's small drawing, framed.
+    function pic(m) {
+      var svg = window.Chronicle && Chronicle.widgetPicture ? Chronicle.widgetPicture(m.picture) : '';
+      return '<span class="cpe-gw-pic">' + svg + '</span>';
     }
     function galleryHTML() {
       if (paletteState === 'loading') return '<div class="cpe-note">Loading widgets…</div>';
@@ -964,7 +1081,7 @@
       });
       var h = '<div class="cpe-search">' + ic('fa-magnifying-glass') + '<input class="cpe-inp" id="cpe-q" data-act="q" placeholder="Search widgets" value="' + esc(UI.galQ) + '" autocomplete="off" aria-label="Search widgets"></div>' +
         '<div class="cpe-row-set"><span class="cpe-hint">Only ones that can be tiles</span><button type="button" class="toggle" role="switch" data-act="galtiles" aria-checked="' + UI.galTiles + '" aria-label="Only ones that can be tiles"><span class="toggle-knob"></span></button></div>' +
-        (UI.addAt && findRow(UI.addAt) ? '<p class="cpe-hint cpe-aim">' + ic('fa-arrow-left') + ' Click a widget to put it in the tiles section you marked.</p>'
+        (UI.addAt && findRow(UI.addAt) ? '<p class="cpe-hint cpe-aim">Click a widget to put it in the tiles section you marked.</p>'
           : '<p class="cpe-hint">Drag a widget onto the page, or click it to add it ' + (UI.sel ? 'next to what you selected.' : 'at the end.') + '</p>');
       var any = false;
       GROUPS.forEach(function (g) {
@@ -973,13 +1090,22 @@
         h += '<div class="cpe-gal-group"><h4>' + esc(g) + '</h4><div class="cpe-gal">' + groups[g].map(function (k) {
           var m = W[k], once = m.singleton && hasType(m.type);
           return '<div class="cpe-gwrap"><button type="button" class="cpe-gw" data-gw="' + esc(k) + '" title="' + esc(m.desc) + '"' + (once ? ' disabled' : '') + '>' +
-            '<span class="cpe-gw-ic">' + ic(m.icon) + '</span><span class="cpe-gw-nm">' + esc(m.name) + '</span>' +
-            '<span class="cpe-gw-sz">' + (once ? 'Already on the page' : m.sizes.length ? esc(m.sizes.map(function (s) { return s.replace('x', '×'); }).join(' · ')) : 'Fills the column') + '</span></button>' +
+            pic(m) + '<span class="cpe-gw-txt"><span class="cpe-gw-nm">' + esc(m.name) + '</span>' + (once ? '<span class="cpe-gw-sz">Already on the page</span>' : '') + '</span></button>' +
             '<button type="button" class="cpe-eye" data-act="peek" data-k="' + esc(k) + '" aria-label="Preview ' + esc(m.name) + '" title="Preview">' + ic('fa-eye') + '</button></div>';
         }).join('') + '</div></div>';
       });
       if (!any) h += '<div class="cpe-note"><b>No widgets match “' + esc(UI.galQ) + '”</b><span>Try a shorter word' + (UI.galTiles ? ', or turn off “Only ones that can be tiles”' : '') + '.</span></div>';
       return h;
+    }
+    // sizeWords says a tile size the way a DM would: how much of the row it
+    // takes and how many rows tall.
+    var WIDTHS = { 1: 'A quarter', 2: 'Half', 3: 'Three quarters', 4: 'Full width' };
+    function sizeWords(s) {
+      var z = sizeOf(s);
+      return (WIDTHS[z.w] || z.w + ' columns') + ', ' + z.h + (z.h === 1 ? ' row' : ' rows');
+    }
+    function sizesSentence(sizes) {
+      return sizes.map(function (s, i) { var w = sizeWords(s); return i ? w.charAt(0).toLowerCase() + w.slice(1) : w; }).join('; ');
     }
     function sizePic(s) {
       var z = sizeOf(s), h = '';
@@ -989,25 +1115,28 @@
     function selectedHTML(f) {
       if (UI.sel.kind === 'sec') return sectionHTML(f.row, f.i);
       var it = f.item, m = meta(it.type, it.config), cfg = it.config || {};
-      var h = '<div class="cpe-title"><span class="cpe-title-ic">' + ic(m.icon) + '</span><div><h3>' + esc(m.name) + '</h3>' + (m.desc ? '<p>' + esc(m.desc) + '</p>' : '') + '</div></div>';
+      var h = '<div class="cpe-title">' + pic(m) + '<div><h3>' + esc(m.name) + '</h3>' + (m.desc ? '<p>' + esc(m.desc) + '</p>' : '') + '</div></div>';
       if (m.container || CONTAINER_KEYS[it.type]) {
         var kids = containerKids(it);
         h += '<div class="cpe-grp"><span class="cpe-lab">An old container</span><p class="cpe-hint">Pages can’t draw containers, so its widgets don’t show. Unpack it to put ' +
           (kids.length ? 'its ' + kids.length + (kids.length === 1 ? ' widget' : ' widgets') : 'it') + ' straight into this column.</p>' +
-          '<div class="cpe-acts"><button class="btn-primary btn-sm" type="button" data-act="unpack">' + ic('fa-box-open') + ' Unpack</button></div></div>';
+          '<div class="cpe-acts"><button class="btn-primary btn-sm" type="button" data-act="unpack">Unpack</button></div></div>';
       }
       h += '<div class="cpe-grp"><span class="cpe-lab">Who sees it</span><div class="cpe-seg">' +
-        '<button type="button" data-act="vis" data-v="" aria-pressed="' + !isDm(it) + '">' + ic('fa-users') + ' Everyone</button>' +
-        '<button type="button" data-act="vis" data-v="dm_only" aria-pressed="' + isDm(it) + '">' + ic('fa-lock') + ' ' + gmTerm() + ' team only</button></div>' +
+        '<button type="button" data-act="vis" data-v="" aria-pressed="' + !isDm(it) + '">Everyone</button>' +
+        '<button type="button" data-act="vis" data-v="dm_only" aria-pressed="' + isDm(it) + '">' + gmTerm() + ' team only</button></div>' +
         '<span class="cpe-hint">' + (ANYHOME ? 'This sets it on this home.' : 'This sets it for every page in ' + esc(S.plural || 'this category') + '.') + ' The ' + gmTerm() + ' team is you and the members you gave ' + gmTerm() + ' access.</span></div>';
       if (f.kind === 'tile') {
         h += '<div class="cpe-grp"><span class="cpe-lab">Size</span><div class="cpe-sizes">' + m.sizes.map(function (s) {
-          return '<button type="button" data-act="size" data-v="' + esc(s) + '" aria-pressed="' + (it.size === s) + '">' + sizePic(s) + esc(s.replace('x', ' × ')) + '</button>';
+          return '<button type="button" data-act="size" data-v="' + esc(s) + '" aria-pressed="' + (it.size === s) + '">' + sizePic(s) + '<span>' + esc(sizeWords(s)) + '</span></button>';
         }).join('') + '</div><span class="cpe-hint">Or pull the tile’s corner on the page. It shows more as it grows, and never scrolls inside.</span></div>';
       } else if (!m.missing) {
         h += '<div class="cpe-grp"><span class="cpe-lab">Height</span><div class="cpe-seg cpe-seg-wrap">' + HEIGHTS.map(function (x) {
           return '<button type="button" data-act="height" data-v="' + x[0] + '" aria-pressed="' + ((cfg.minHeight || '') === x[0]) + '">' + x[1] + '</button>';
         }).join('') + '</div><span class="cpe-hint">Fit grows with what’s inside. The others keep at least that much room.</span></div>';
+        h += '<div class="cpe-grp"><span class="cpe-lab">As a tile</span><p class="cpe-hint">' + (m.sizes.length
+          ? 'In a tiles section it can be ' + esc(sizesSentence(m.sizes)) + '.'
+          : 'It can’t be a tile; it sits in a columns section.') + '</p></div>';
       }
       h += fieldsHTML(m, cfg);
       if (CATHOME && it.type === 'category_header') {
@@ -1018,15 +1147,15 @@
       if (it.type === 'attributes' && S.fieldsUrl) {
         h += '<div class="cpe-grp"><span class="cpe-lab">Which fields</span><p class="cpe-hint">This shows the fields the category asks for' +
           (S.fields ? ': ' + Number(S.fields) + (Number(S.fields) === 1 ? ' field' : ' fields') : '') + '.</p>' +
-          '<div class="cpe-acts"><a class="btn-secondary btn-sm" href="' + esc(S.fieldsUrl) + '">' + ic('fa-list-ul') + ' Edit fields</a></div></div>';
+          '<div class="cpe-acts"><a class="btn-secondary btn-sm" href="' + esc(S.fieldsUrl) + '">Edit fields</a></div></div>';
       }
       var room = f.kind === 'tile' || f.list.length < MAX_BLOCKS;
       h += '<div class="cpe-grp"><span class="cpe-lab">Place</span><div class="cpe-acts">' +
-        '<button class="btn-secondary btn-sm" type="button" data-act="mv" data-v="-1"' + (f.i === 0 ? ' disabled' : '') + '>' + ic('fa-arrow-up') + ' Earlier</button>' +
-        '<button class="btn-secondary btn-sm" type="button" data-act="mv" data-v="1"' + (f.i === f.list.length - 1 ? ' disabled' : '') + '>' + ic('fa-arrow-down') + ' Later</button>' +
-        '<button class="btn-secondary btn-sm" type="button" data-act="dup"' + (m.singleton || m.missing || !room ? ' disabled' : '') + '>' + ic('fa-clone') + ' Duplicate</button></div>' +
+        '<button class="btn-secondary btn-sm" type="button" data-act="mv" data-v="-1"' + (f.i === 0 ? ' disabled' : '') + '>Earlier</button>' +
+        '<button class="btn-secondary btn-sm" type="button" data-act="mv" data-v="1"' + (f.i === f.list.length - 1 ? ' disabled' : '') + '>Later</button>' +
+        '<button class="btn-secondary btn-sm" type="button" data-act="dup"' + (m.singleton || m.missing || !room ? ' disabled' : '') + '>Duplicate</button></div>' +
         '<span class="cpe-hint">On a phone, or without a mouse, these move it instead of dragging. <kbd>Alt</kbd> + <kbd>↑</kbd> <kbd>↓</kbd> work too.</span></div>';
-      h += '<div class="cpe-grp"><div class="cpe-acts"><button class="btn-danger btn-sm" type="button" data-act="rm">' + ic('fa-trash-can') + ' Remove from the layout</button></div>' +
+      h += '<div class="cpe-grp"><div class="cpe-acts"><button class="btn-danger btn-sm" type="button" data-act="rm">Remove from the layout</button></div>' +
         '<span class="cpe-hint">Removing it from the layout never deletes what pages wrote in it. Put it back and it all shows again.</span></div>';
       return h;
     }
@@ -1126,10 +1255,10 @@
           '<span class="cpe-hint">Fewer columns move their widgets into the last one; nothing is removed.</span></div>';
       }
       h += '<div class="cpe-grp"><span class="cpe-lab">Place</span><div class="cpe-acts">' +
-        '<button class="btn-secondary btn-sm" type="button" data-act="mvsec" data-v="-1"' + (i === 0 ? ' disabled' : '') + '>' + ic('fa-arrow-up') + ' Up</button>' +
-        '<button class="btn-secondary btn-sm" type="button" data-act="mvsec" data-v="1"' + (i === L.rows.length - 1 ? ' disabled' : '') + '>' + ic('fa-arrow-down') + ' Down</button>' +
-        '<button class="btn-secondary btn-sm" type="button" data-act="dupsec"' + (L.rows.length >= MAX_ROWS ? ' disabled' : '') + '>' + ic('fa-clone') + ' Duplicate</button></div></div>';
-      h += '<div class="cpe-grp"><div class="cpe-acts"><button class="btn-danger btn-sm" type="button" data-act="rm">' + ic('fa-trash-can') + ' Remove section</button></div>' +
+        '<button class="btn-secondary btn-sm" type="button" data-act="mvsec" data-v="-1"' + (i === 0 ? ' disabled' : '') + '>Up</button>' +
+        '<button class="btn-secondary btn-sm" type="button" data-act="mvsec" data-v="1"' + (i === L.rows.length - 1 ? ' disabled' : '') + '>Down</button>' +
+        '<button class="btn-secondary btn-sm" type="button" data-act="dupsec"' + (L.rows.length >= MAX_ROWS ? ' disabled' : '') + '>Duplicate</button></div></div>';
+      h += '<div class="cpe-grp"><div class="cpe-acts"><button class="btn-danger btn-sm" type="button" data-act="rm">Remove section</button></div>' +
         '<span class="cpe-hint">Its widgets leave the layout too. Undo brings them back.</span></div>';
       return h;
     }
@@ -1145,14 +1274,16 @@
       var ae = document.activeElement, fid = ae && el.contains(ae) ? ae.id : '', pos = fid === 'cpe-q' || (ae && ae.hasAttribute('data-pagepick')) ? ae.selectionStart : null;
       // The canvas carries the player-view mark while it shows a player's
       // view, so marked Director-only parts inside drawn widgets hide too.
-      el.innerHTML = '<div class="cpe' + (UI.reading ? ' reading' : '') + '">' + layoutsHTML() + notices() + '<div class="cpe-editor"><div class="cpe-main">' + toolbarHTML() +
-        '<div class="cpe-canvas"' + (UI.viewAs === 'player' ? ' data-view-as-player' : '') + '>' + canvasHTML() + '</div></div>' + (UI.reading ? '' : inspectorHTML()) + '</div></div>';
+      el.innerHTML = '<div class="cpe' + (UI.reading ? ' reading' : '') + '">' + notices() + '<div class="cpe-editor' + (UI.shown ? ' panel-open' : '') + '"><div class="cpe-main">' +
+        '<div class="cpe-canvas"' + (UI.viewAs === 'player' ? ' data-view-as-player' : '') + '>' + canvasHTML() + '</div></div>' + (UI.reading ? '' : inspectorHTML()) + dockHTML() + '</div></div>';
       cv = $('.cpe-canvas'); if (cv) cv.scrollTop = top;
       ib = $('.cpe-insp-body'); if (ib && UI.keepInsp) ib.scrollTop = itop;
       UI.keepInsp = false;
-      if (fid) { var f = document.getElementById(fid); if (f) { f.focus(); if (pos != null && f.setSelectionRange) f.setSelectionRange(pos, pos); } }
+      if (fid) { var f = document.getElementById(fid); if (f) { f.focus({ preventScroll: true }); if (pos != null && f.setSelectionRange) f.setSelectionRange(pos, pos); } }
       fill();
       fit();
+      syncPanel();
+      renderSlot();
       queuePreview();
     }
     // fit makes the editor reach the bottom of the window, so the canvas and
@@ -1160,8 +1291,13 @@
     function fit() {
       var box = $('.cpe-editor');
       if (!box) return;
-      var top = box.getBoundingClientRect().top + window.scrollY;
-      box.style.height = Math.max(520, window.innerHeight - top - 8) + 'px';
+      // Measured from the top of whatever scrolls (the window, or the main
+      // column on a phone), and kept clear of a bar docked at the window's
+      // foot that reserves room under the column (the Table's sheet).
+      var host = el.closest('#main-content'), hs = host ? getComputedStyle(host) : null;
+      var top = box.getBoundingClientRect().top + window.scrollY + (host ? host.scrollTop : 0);
+      var foot = hs && document.documentElement.hasAttribute('data-tt-sheet') ? parseFloat(hs.paddingBottom) || 0 : 0;
+      box.style.height = Math.max(520, window.innerHeight - top - 8 - foot) + 'px';
       // The page is drawn at the width it has on that screen and scaled to
       // fit, so text wraps where it will on the real page.
       var cv = $('.cpe-canvas'), frame = $('.cpe-frame');
@@ -1180,7 +1316,7 @@
     function readMode(on) {
       UI.reading = !!on;
       UI.addAt = null;
-      if (on) { UI.sel = null; UI.insp = 'add'; }
+      if (on) { UI.sel = null; UI.insp = 'add'; UI.panel = false; UI.shown = false; }
       closePop();
       render();
       fadeFrame();
@@ -1195,7 +1331,7 @@
       UI.addAt = null;
       UI.pageQ = ''; UI.pageHits = null;
       UI.insp = sel ? 'sel' : 'add';
-      if (sel) UI.sheet = true;
+      if (sel) UI.panel = true;
       render();
     }
     function glow(id) {
@@ -1328,8 +1464,10 @@
     }
 
     /* ---------- Menus ---------- */
-    var popEl = null;
+    var popEl = null, popAnchor = null;
     function closePop() {
+      if (popAnchor && popAnchor.hasAttribute('aria-expanded')) popAnchor.setAttribute('aria-expanded', 'false');
+      popAnchor = null;
       if (popEl) {
         var gone = popEl;
         popEl = null;
@@ -1354,11 +1492,45 @@
       var top = r.bottom + 6;
       if (top + hgt > window.innerHeight - 12) top = Math.max(12, r.top - hgt - 6);
       popEl.style.top = top + 'px';
-      popEl.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closePop(); anchor.focus(); } });
+      popEl.style.transformOrigin = (top < r.top ? 'bottom ' : 'top ') + (align === 'right' ? 'right' : 'center');
+      popAnchor = anchor;
+      popEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); closePop(); if (anchor.isConnected) anchor.focus(); }
+      });
       setTimeout(function () { document.addEventListener('pointerdown', popOff, true); }, 0);
-      var first = popEl.querySelector('button, input');
-      if (first) first.focus();
+      var first = popEl.querySelector('[role="menuitemradio"][aria-checked="true"]:not([disabled])') || popEl.querySelector('button:not([disabled]), input');
+      if (first) first.focus({ preventScroll: true });
       return popEl;
+    }
+    // menu opens one of the tools' menus from its button. It grows out of the
+    // button (a fade under Calm, nothing under Off or from the keyboard, where
+    // the move would only slow the next key), the arrow keys walk its rows,
+    // and its choices act as the editor's own buttons do.
+    function menu(btn, name, html, align) {
+      var kb = !!(window.event && window.event.detail === 0);
+      var p = openPop(btn, html, align);
+      p.setAttribute('data-menu', name);
+      if (btn.hasAttribute('aria-expanded')) btn.setAttribute('aria-expanded', 'true');
+      if (!kb && fades() && p.animate) {
+        p.animate(moving() ? [{ opacity: 0, transform: 'scale(.96)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 0 }, { opacity: 1 }],
+          { duration: tokMs('--dur-standard', 200), easing: 'cubic-bezier(.2,.8,.2,1)' });
+      }
+      p.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+        if (e.target.tagName === 'SELECT') return;
+        var rows = $$('[role^="menuitem"]:not([disabled]):not([hidden])', p);
+        if (!rows.length) return;
+        e.preventDefault();
+        var i = rows.indexOf(document.activeElement);
+        i = e.key === 'Home' ? 0 : e.key === 'End' ? rows.length - 1 : e.key === 'ArrowDown' ? (i + 1) % rows.length : (i <= 0 ? rows.length - 1 : i - 1);
+        rows[i].focus();
+      });
+      p.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-act]');
+        if (b && p.contains(b) && !b.disabled) doAct(b, e);
+      });
+      p.addEventListener('change', function (e) { if (e.target.id === 'cpe-claimed') { setClaimed(e.target.value); closePop(); } });
+      return p;
     }
     // peek opens a widget's example beside the panel. Its lists, chips and
     // steps answer clicks, so the owner can try what it does; the switch
@@ -1369,8 +1541,8 @@
       if (!m) return;
       if (popEl && popEl.getAttribute('data-panel') === k) { closePop(); return; }
       var z = sizeOf(m.sizes[0] || '4x2');
-      var p = openPop(btn, '<div class="cpe-peek"><div class="cpe-peek-h"><span class="cpe-title-ic">' + ic(m.icon) + '</span><div><b>' + esc(m.name) + '</b><span>' +
-        (m.sizes.length ? 'As a tile, ' + esc(m.sizes.map(function (x) { return x.replace('x', '×'); }).join(', ')) : 'In columns') + '</span></div>' +
+      var p = openPop(btn, '<div class="cpe-peek"><div class="cpe-peek-h">' + pic(m) + '<div><b>' + esc(m.name) + '</b><span>' +
+        (m.sizes.length ? 'As a tile: ' + esc(sizesSentence(m.sizes).replace(/^./, function (c) { return c.toLowerCase(); })) : 'In a columns section') + '</span></div>' +
         '<button type="button" class="cpe-icon-btn" data-peekx aria-label="Close the preview">' + ic('fa-xmark') + '</button></div>' +
         (m.desc ? '<p class="cpe-hint">' + esc(m.desc) + '</p>' : '') +
         '<div class="cpe-peek-box" style="width:' + Math.min(4, z.w) * 116 + 'px;min-height:' + z.h * 104 + 'px"></div>' +
@@ -1382,7 +1554,7 @@
       $('.cpe-peek-box', p).appendChild(exampleNode(m.type, m.name, m.icon, z.w, z.h));
       // Beside the panel, level with the widget, rather than over the list.
       var panel = $('.cpe-insp'), pr = panel && panel.getBoundingClientRect(), br = btn.getBoundingClientRect();
-      if (pr && window.innerWidth > 1100) {
+      if (pr && UI.shown && window.innerWidth > 640) {
         p.style.left = Math.max(12, pr.left - p.offsetWidth - 12) + 'px';
         p.style.top = Math.max(12, Math.min(br.top - 20, window.innerHeight - p.offsetHeight - 12)) + 'px';
       }
@@ -1490,9 +1662,9 @@
       if (src.from === 'gal') {
         g = document.createElement('div');
         g.className = 'cpe-ghost cpe-ph-card';
-        g.innerHTML = ic(src.m.icon) + '<span><b></b></span>';
+        g.innerHTML = pic(src.m) + '<span><b></b></span>';
         g.querySelector('b').textContent = src.m.name;
-        g.style.width = '220px';
+        g.style.width = '240px';
       } else {
         g = src.el.cloneNode(true);
         g.classList.add('cpe-ghost');
@@ -1505,7 +1677,10 @@
       DRAG = { src: src, ghost: g, ox: src.from === 'gal' ? 20 : ev.clientX - r.left, oy: src.from === 'gal' ? 18 : ev.clientY - r.top, target: null, key: '' };
       document.body.classList.add('cpe-dragging');
       if (window.getSelection) window.getSelection().removeAllRanges();
-      if (window.innerWidth <= 1100) { UI.sheet = false; var ins = $('.cpe-insp'); if (ins) ins.classList.remove('open'); }
+      // The panel slides away so every drop target is open; the render after
+      // the drop brings it back where UI.panel says.
+      var ins = $('.cpe-insp');
+      if (ins && UI.shown) { ins.classList.remove('open'); UI.shown = false; var ed = $('.cpe-editor'); if (ed) ed.classList.remove('panel-open'); }
     }
     function clearMarks() {
       $$('.cpe-ph').forEach(function (p) { p.remove(); });
@@ -1737,60 +1912,73 @@
     }
 
     /* ---------- Wiring ---------- */
+    // doAct runs a button's data-act. The tools' menus live on the body and
+    // the layout picker in the frame's bar, so their clicks come here too.
+    function doAct(b, e) {
+      var act = b.getAttribute('data-act'), v = b.getAttribute('data-v');
+      // A choice in a menu closes it and gives focus back to its button.
+      var inMenu = !!(popEl && popEl.contains(b) && popEl.hasAttribute('data-menu')), back = popAnchor;
+      var done = function () { if (inMenu) { closePop(); var n = back && back.id && document.getElementById(back.id); if (n) n.focus({ preventScroll: true }); } };
+      switch (act) {
+        case 'undo': undo(); return true;
+        case 'redo': if (Chronicle.customizeRedo) Chronicle.customizeRedo(); return true;
+        case 'devmenu': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else deviceMenu(b); return true;
+        case 'pagemenu': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else pageMenu(b); return true;
+        case 'more': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else moreMenu(b); return true;
+        case 'laymenu': e.stopPropagation(); if (popEl && popAnchor === b) closePop(); else layoutMenu(b); return true;
+        case 'dev': done(); UI.device = v; render(); return true;
+        case 'page': done(); showWith(v); return true;
+        case 'asplayer': UI.viewAs = UI.viewAs === 'player' ? 'dm' : 'player'; render(); return true;
+        case 'look': done(); UI.look = v === 'annals' ? 'annals' : 'standard'; showLook(UI.look); render(); fadeFrame(); return true;
+        case 'read': done(); readMode(!UI.reading); return true;
+        case 'panel': if (UI.panel && UI.insp !== 'sel') closePanel(false); else openPanel('add'); return true;
+        case 'panelx': closePanel(true); return true;
+        case 'sugkeep': UI.sel = null; addWidget(v); return true;
+        case 'sugall': {
+          // Each kept block lands beside the last, so they stay together.
+          UI.sel = null;
+          ghosts().forEach(function (t) { addWidget(t); });
+          return true;
+        }
+        case 'sugno': UI.sugOff = true; render(); return true;
+        case 'insp': UI.insp = v; render(); return true;
+        case 'galtiles': UI.galTiles = !UI.galTiles; render(); return true;
+        case 'addsec': e.stopPropagation(); sectionMenu(b, Number(b.getAttribute('data-at'))); return true;
+        case 'start': e.stopPropagation(); closePop(); presetsMenu(document.getElementById('cpe-dk-more') || b); return true;
+        case 'keep': e.stopPropagation(); closePop(); keepMenu(document.getElementById('cpe-dk-more') || b); return true;
+        case 'peek': e.stopPropagation(); peek(b, b.getAttribute('data-k')); return true;
+        case 'lay': done(); wear(v); return true;
+        case 'laynew': e.stopPropagation(); closePop(); layoutNameMenu(document.getElementById('cpe-lay-pick') || b, ''); return true;
+        case 'layren': e.stopPropagation(); closePop(); layoutNameMenu(document.getElementById('cpe-lay-pick') || b, VAR); return true;
+        case 'layrm': done(); removeLayout(); return true;
+        case 'pagepick':
+        case 'pageclr': {
+          var pk = b.getAttribute('data-k'), pn = b.getAttribute('data-n');
+          UI.keepInsp = true; UI.pageQ = ''; UI.pageHits = null; pageSeq++;
+          edit(function (lay) {
+            var c = cfgOf(findSel(lay).item);
+            if (act === 'pagepick') { c[pk] = v; c[pk + '_name'] = pn; } else { delete c[pk]; delete c[pk + '_name']; }
+          });
+          return true;
+        }
+        case 'vis': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.visibility = v; else delete c.visibility; }); return true;
+        case 'size': UI.keepInsp = true; edit(function (lay) { findSel(lay).item.size = v; }); return true;
+        case 'height': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.minHeight = v; else delete c.minHeight; }); return true;
+        case 'mv': UI.keepInsp = true; moveSel(Number(v)); return true;
+        case 'tmv': UI.sel = { kind: 'tile', id: b.getAttribute('data-id') }; UI.insp = 'sel'; moveSel(Number(v)); return true;
+        case 'trm': UI.sel = { kind: 'tile', id: b.getAttribute('data-id') }; removeSel(); return true;
+        case 'tat': e.stopPropagation(); aimAdd(b.getAttribute('data-rid')); return true;
+        case 'mvsec': UI.keepInsp = true; moveSection(Number(v)); return true;
+        case 'dup': case 'dupsec': duplicateSel(); return true;
+        case 'rm': removeSel(); return true;
+        case 'unpack': unpack(); return true;
+        case 'preset': UI.keepInsp = true; setColumns(v.split(',').map(Number)); return true;
+      }
+      return false;
+    }
     on(el, 'click', function (e) {
       var b = e.target.closest('[data-act]');
-      if (b && el.contains(b) && b.tagName !== 'SELECT' && b.tagName !== 'INPUT') {
-        var act = b.getAttribute('data-act'), v = b.getAttribute('data-v');
-        switch (act) {
-          case 'undo': undo(); return;
-          case 'redo': if (Chronicle.customizeRedo) Chronicle.customizeRedo(); return;
-          case 'dev': UI.device = v; render(); return;
-          case 'as': UI.viewAs = v; render(); return;
-          case 'look': UI.look = v === 'annals' ? 'annals' : 'standard'; showLook(UI.look); render(); fadeFrame(); return;
-          case 'read': readMode(!UI.reading); return;
-          case 'sugkeep': UI.sel = null; addWidget(v); return;
-          case 'sugall': {
-            // Each kept block lands beside the last, so they stay together.
-            UI.sel = null;
-            ghosts().forEach(function (t) { addWidget(t); });
-            return;
-          }
-          case 'sugno': UI.sugOff = true; render(); return;
-          case 'insp': UI.insp = v; render(); return;
-          case 'sheet': UI.sheet = !UI.sheet; $('.cpe-insp').classList.toggle('open', UI.sheet); return;
-          case 'galtiles': UI.galTiles = !UI.galTiles; render(); return;
-          case 'addsec': e.stopPropagation(); sectionMenu(b, Number(b.getAttribute('data-at'))); return;
-          case 'start': presetsMenu(b); return;
-          case 'peek': e.stopPropagation(); peek(b, b.getAttribute('data-k')); return;
-          case 'keep': keepMenu(b); return;
-          case 'lay': wear(v); return;
-          case 'laynew': e.stopPropagation(); layoutNameMenu(b, ''); return;
-          case 'layren': e.stopPropagation(); layoutNameMenu(b, VAR); return;
-          case 'layrm': removeLayout(); return;
-          case 'pagepick':
-          case 'pageclr': {
-            var pk = b.getAttribute('data-k'), pn = b.getAttribute('data-n');
-            UI.keepInsp = true; UI.pageQ = ''; UI.pageHits = null; pageSeq++;
-            edit(function (lay) {
-              var c = cfgOf(findSel(lay).item);
-              if (act === 'pagepick') { c[pk] = v; c[pk + '_name'] = pn; } else { delete c[pk]; delete c[pk + '_name']; }
-            });
-            return;
-          }
-          case 'vis': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.visibility = v; else delete c.visibility; }); return;
-          case 'size': UI.keepInsp = true; edit(function (lay) { findSel(lay).item.size = v; }); return;
-          case 'height': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.minHeight = v; else delete c.minHeight; }); return;
-          case 'mv': UI.keepInsp = true; moveSel(Number(v)); return;
-          case 'tmv': UI.sel = { kind: 'tile', id: b.getAttribute('data-id') }; UI.insp = 'sel'; moveSel(Number(v)); return;
-          case 'trm': UI.sel = { kind: 'tile', id: b.getAttribute('data-id') }; removeSel(); return;
-          case 'tat': e.stopPropagation(); aimAdd(b.getAttribute('data-rid')); return;
-          case 'mvsec': UI.keepInsp = true; moveSection(Number(v)); return;
-          case 'dup': case 'dupsec': duplicateSel(); return;
-          case 'rm': removeSel(); return;
-          case 'unpack': unpack(); return;
-          case 'preset': UI.keepInsp = true; setColumns(v.split(',').map(Number)); return;
-        }
-      }
+      if (b && el.contains(b) && b.tagName !== 'SELECT' && b.tagName !== 'INPUT' && doAct(b, e)) return;
       if (UI.reading) return;
       var tag = e.target.closest('[data-selsec]');
       if (tag) { e.stopPropagation(); select({ kind: 'sec', id: tag.getAttribute('data-selsec') }); return; }
@@ -1800,22 +1988,20 @@
         else if (UI.sel) select(null);
       }
     });
-    // On a phone the panel is a sheet: a swipe down on its handle strip folds
-    // it, a swipe up opens it, and a tap still goes through to the buttons.
+    if (SLOT) on(SLOT, 'click', function (e) { var b = e.target.closest('[data-act]'); if (b) doAct(b, e); });
+    // On a phone the panel is a sheet: a swipe down on its handle strip puts
+    // it away, and a tap still goes through to the buttons.
     on(el, 'pointerdown', function (e) {
       var strip = e.target.closest && e.target.closest('.cpe-insp-tabs');
-      if (!strip || e.pointerType === 'mouse' || window.innerWidth > 1100) return;
+      if (!strip || e.pointerType === 'mouse' || window.innerWidth > 640) return;
       var y0 = e.clientY, moved = false;
       function end(ev) {
         document.removeEventListener('pointermove', mv);
         document.removeEventListener('pointerup', end);
         document.removeEventListener('pointercancel', end);
         if (!moved) return;
-        var dy = ev.clientY - y0;
-        if (Math.abs(dy) < 24) return;
-        UI.sheet = dy < 0;
-        var ins = $('.cpe-insp');
-        if (ins) ins.classList.toggle('open', UI.sheet);
+        if (ev.clientY - y0 < 40) return;
+        closePanel(false);
         // The press that ended the swipe must not also click a tab.
         var stop = function (c) { c.stopPropagation(); c.preventDefault(); };
         document.addEventListener('click', stop, true);
@@ -1828,7 +2014,7 @@
     });
     on(el, 'pointerdown', function (e) {
       if (UI.reading) return;
-      if (e.target.closest('.cpe-tbar button, .cpe-addt')) return;
+      if (e.target.closest('.cpe-tbar button, .cpe-addt, .cpe-dock')) return;
       if (e.target.closest('.cpe-rsz')) { resizeStart(e); return; }
       if (e.target.closest('.cpe-div')) { dividerStart(e); return; }
       var g = e.target.closest('.cpe-gw');
@@ -1853,11 +2039,17 @@
         var n = el.querySelector('[data-id="' + CSS.escape(id) + '"]');
         if (n) n.focus();
       }
-      if (e.key === 'Escape' && UI.sel && !popEl) select(null);
     });
-    // Escape closes the peek wherever focus is, since clicks elsewhere don't.
+    // Escape, wherever focus is, puts away the nearest thing: the peek, then
+    // the panel (focus back on "+ Widget"), then the selection. A menu and a
+    // drag see the key first and take it; a dialog keeps its own.
     on(document, 'keydown', function (e) {
-      if (e.key === 'Escape' && popEl && popEl.hasAttribute('data-panel') && !DRAG) closePop();
+      if (e.key !== 'Escape' || e.defaultPrevented || DRAG || UI.reading) return;
+      if (e.target.closest && e.target.closest('[role="dialog"], [data-czs-find]')) return;
+      if (popEl && popEl.hasAttribute('data-panel')) { closePop(); return; }
+      if (popEl) return;
+      if (UI.panel) { e.preventDefault(); closePanel(true); return; }
+      if (UI.sel && el.contains(document.activeElement || el)) { select(null); }
     });
     on(el, 'input', function (e) {
       if (e.target.id === 'cpe-q') { UI.galQ = e.target.value; render(); }
@@ -1865,7 +2057,6 @@
     });
     on(el, 'change', function (e) {
       var t = e.target;
-      if (t.id === 'cpe-page') { showWith(t.value); return; }
       if (t.id === 'cpe-desc') { setDescription(t.value); return; }
       if (t.id === 'cpe-claimed') { setClaimed(t.value); return; }
       var key = t.getAttribute('data-cfg');
@@ -1899,6 +2090,7 @@
       clearTimeout(PV.timer);
       clearTimeout(pageTimer);
       closePop();
+      if (SLOT) { SLOT.innerHTML = ''; SLOT._cpeHTML = ''; }
       if (DRAG) { DRAG.ghost.remove(); DRAG = null; document.body.classList.remove('cpe-dragging'); }
       showLook(LOOK0);
       listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });

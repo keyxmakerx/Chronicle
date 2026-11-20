@@ -30,41 +30,46 @@ templ CustomizeShell(d customizeShellData, body templ.Component) {
 		>
 			<div class="czs-stage">
 				<div class="czs-top" data-czs-top>
-					<nav class="czs-tabs-top" aria-label="Customize" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
-						for i, a := range d.Areas {
-							if i == 4 {
-								<span class="czs-tsep" role="presentation"></span>
-							}
-							<span class={ "czs-tabw", templ.KV("has-parts", len(a.Parts) > 0) }>
-								<a
-									class="czs-tab"
-									href={ templ.SafeURL(a.Href) }
-									data-czs-area={ a.ID }
-									if a.ID == d.Area {
-										aria-current="page"
-									}
-								>
-									<span class="czs-lbl">{ a.Label }</span>
-									if a.ID == d.Area && len(a.Parts) > 0 {
-										<span class="czs-part" data-czs-part>{ a.Part }</span>
-									}
-									<span class="czs-dot" title="Unsaved changes" hidden></span>
-								</a>
-								if len(a.Parts) > 0 {
-									<button
-										type="button"
-										class="czs-chev"
-										data-czs-drawer={ a.ID }
-										aria-expanded="false"
-										aria-controls={ "czs-dr-" + a.ID }
-										aria-label={ "Parts of " + a.Label }
-									>
-										<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
-									</button>
+					if d.Cat != nil {
+						@customizeCatBarNav(d.Cat)
+					} else {
+						<nav class="czs-tabs-top" aria-label="Customize" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
+							for i, a := range d.Areas {
+								if i == 4 {
+									<span class="czs-tsep" role="presentation"></span>
 								}
-							</span>
-						}
-					</nav>
+								<span class={ "czs-tabw", templ.KV("has-parts", len(a.Parts) > 0) }>
+									<a
+										class="czs-tab"
+										href={ templ.SafeURL(a.Href) }
+										data-czs-area={ a.ID }
+										if a.ID == d.Area {
+											aria-current="page"
+										}
+									>
+										<span class="czs-lbl">{ a.Label }</span>
+										if a.ID == d.Area && len(a.Parts) > 0 {
+											<span class="czs-part" data-czs-part>{ a.Part }</span>
+										}
+										<span class="czs-dot" title="Unsaved changes" hidden></span>
+									</a>
+									if len(a.Parts) > 0 {
+										<button
+											type="button"
+											class="czs-chev"
+											data-czs-drawer={ a.ID }
+											aria-expanded="false"
+											aria-controls={ "czs-dr-" + a.ID }
+											aria-label={ "Parts of " + a.Label }
+										>
+											<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+										</button>
+									}
+								</span>
+							}
+						</nav>
+					}
+					<div class="czs-bar-slot" data-czs-bar-slot></div>
 					<button type="button" class="czs-find" data-czs-find aria-haspopup="dialog" aria-keyshortcuts="/">
 						<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
 						<span>Find a setting</span>
@@ -95,6 +100,52 @@ templ CustomizeShell(d customizeShellData, body templ.Component) {
 			<div class="czs-toasts" data-czs-toasts role="status" aria-live="polite"></div>
 		</div>
 	}
+}
+
+// customizeCatBarNav is the one bar inside a category, in place of the area
+// tabs: back to Categories, the category's name (it opens the Categories
+// drawer, to switch to another), and the category's tabs. The open tab wears
+// the index mark the area tabs wear. The page layout puts its layout picker in
+// the slot after it (data-czs-bar-slot).
+templ customizeCatBarNav(c *customizeCatBar) {
+	<nav class="czs-tabs-top czs-catbar" aria-label={ c.Name } data-czs-catbar hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
+		<a class="czs-back" href={ templ.SafeURL(c.Base + "/categories") } data-czs-area="categories" aria-label="All categories" title="All categories">
+			<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+			<span class="czs-dot" title="Unsaved changes" hidden></span>
+		</a>
+		<span class="czs-tabw czs-catname-w">
+			<button
+				type="button"
+				class="czs-catname"
+				data-czs-drawer="categories"
+				aria-expanded="false"
+				aria-controls="czs-dr-categories"
+				title="Switch to another category"
+			>
+				<span data-czs-catname>{ c.Name }</span>
+				<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+			</button>
+		</span>
+		for _, t := range catBarTabs() {
+			<span class="czs-tabw">
+				if c.New && t.ID != "settings" {
+					<span class="czs-tab is-off" data-czs-cattab={ t.ID } title="Available once you save this category">{ t.Label }</span>
+				} else {
+					<a
+						class="czs-tab"
+						href={ templ.SafeURL(c.Base + "/categories/" + c.Key + "/" + t.ID) }
+						data-czs-cattab={ t.ID }
+						if t.ID == c.Tab {
+							aria-current="page"
+						}
+					>
+						<span class="czs-lbl">{ t.Label }</span>
+						<span class="czs-dot" title="Unsaved changes" hidden></span>
+					</a>
+				}
+			</span>
+		}
+	</nav>
 }
 
 // customizeDrawer lists an area's parts. It hangs from its tab's side line;
