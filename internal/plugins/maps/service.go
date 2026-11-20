@@ -528,7 +528,7 @@ func (s *mapService) SetCampaignFrame(ctx context.Context, campaignID, frame str
 		return apperror.NewValidation("campaign ID is required")
 	}
 	if !IsValidFrame(frame) {
-		return apperror.NewValidation("frame must be one of: atlas, arcane, old, modern, futuristic, gilded")
+		return apperror.NewValidation("frame must be one of: " + frameIDList())
 	}
 	if err := s.repo.SetCampaignFrame(ctx, campaignID, frame); err != nil {
 		return fmt.Errorf("set campaign frame: %w", err)

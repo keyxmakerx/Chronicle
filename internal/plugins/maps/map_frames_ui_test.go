@@ -6,6 +6,7 @@ import (
 	"html"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -58,6 +59,75 @@ func TestMapPage_FrameFollowsCampaignThenMap(t *testing.T) {
 	}
 	if !strings.Contains(out, "/static/css/map_frames.css") {
 		t.Error("the frame stylesheet must be linked")
+	}
+}
+
+// A look is one id in three places: the server's list, the stylesheet or
+// viewer that draws it, and the control that offers it. A frame the stylesheet
+// does not know draws as a bare card, and a pin shape the viewer does not know
+// draws as a drop, so each list is checked against what draws it.
+func TestEveryFrameAndPinStyleIsDrawnAndOffered(t *testing.T) {
+	css, err := os.ReadFile("../../../static/css/map_frames.css")
+	if err != nil {
+		t.Fatalf("read map_frames.css: %v", err)
+	}
+	sheet := renderEditorFor(t, campaigns.RoleOwner, baseMap(), "")
+	plain := map[string]bool{"modern": true, "gilded": true}
+	for _, f := range FrameStyles {
+		if !strings.Contains(string(css), `.mp-frame[data-frame="`+f.ID+`"] {`) {
+			t.Errorf("frame %q has no rule in map_frames.css", f.ID)
+		}
+		if !strings.Contains(sheet, `data-k="frame" data-v="`+f.ID+`"`) {
+			t.Errorf("the settings sheet does not offer frame %q", f.ID)
+		}
+		if plain[f.ID] {
+			continue
+		}
+		if !strings.Contains(sheet, `data-o="`+f.ID+`"`) {
+			t.Errorf("frame %q has no ornament block", f.ID)
+		}
+		if !strings.Contains(string(css), `.mp-frame[data-frame="`+f.ID+`"] .mp-orn [data-o="`+f.ID+`"]`) {
+			t.Errorf("frame %q's ornaments are never shown", f.ID)
+		}
+	}
+	viewer := viewerScript(t)
+	for _, p := range PinStyles {
+		if !regexp.MustCompile(`(?m)^\t\t` + p.ID + `: \{ cx:`).MatchString(viewer) {
+			t.Errorf("pin shape %q has no metrics in the viewer", p.ID)
+		}
+		if p.ID != PinStyleDrop && !strings.Contains(viewer, `style === '`+p.ID+`'`) {
+			t.Errorf("pin shape %q is not drawn by the viewer", p.ID)
+		}
+		if !strings.Contains(sheet, `data-k="pin_style" data-v="`+p.ID+`"`) {
+			t.Errorf("the settings sheet does not offer pin shape %q", p.ID)
+		}
+	}
+}
+
+// The Illuminated frame paints the first letter and writes the rest beside it,
+// so the two halves must rejoin into the name whatever script it is in.
+func TestFrameInitialAndRest(t *testing.T) {
+	for _, tc := range []struct{ title, initial, rest string }{
+		{"Vellmoor Isle", "V", "ellmoor Isle"},
+		{"élan", "É", "lan"},
+		{"X", "X", ""},
+		{"", "·", ""},
+	} {
+		if got := frameInitial(tc.title); got != tc.initial {
+			t.Errorf("frameInitial(%q) = %q, want %q", tc.title, got, tc.initial)
+		}
+		if got := frameRest(tc.title); got != tc.rest {
+			t.Errorf("frameRest(%q) = %q, want %q", tc.title, got, tc.rest)
+		}
+	}
+}
+
+// Leaflet's stylesheet gives every svg inside the map z-index 200. A pin's
+// shape is an svg and its icon is not, so without an override the shape
+// covers the icon.
+func TestPinIconSitsAboveItsShape(t *testing.T) {
+	if !strings.Contains(templSource(t), ".chronicle-marker .mp-pin > svg { z-index: auto; }") {
+		t.Error("the pin's shape must not keep Leaflet's z-index, or it hides the pin's icon")
 	}
 }
 
@@ -185,15 +255,15 @@ func TestMapList_CardsWearTheCampaignFrame(t *testing.T) {
 	}
 }
 
-// The Customize tab body: six frames, the current one marked, and a form per
+// The Customize tab body: every frame, the current one marked, and a form per
 // other frame that PUTs to the maps route.
 func TestMapFrameSection(t *testing.T) {
 	out := render(t, mapFrameSection("c1", "old", true))
-	if n := strings.Count(out, `name="frame"`); n != 6 {
-		t.Errorf("want 6 frame forms, got %d", n)
+	if n := strings.Count(out, `name="frame"`); n != len(FrameStyles) {
+		t.Errorf("want %d frame forms, got %d", len(FrameStyles), n)
 	}
-	if strings.Count(out, "In use") != 1 || strings.Count(out, "Use this") != 5 {
-		t.Errorf("want one 'In use' and five 'Use this': in-use=%d use=%d", strings.Count(out, "In use"), strings.Count(out, "Use this"))
+	if strings.Count(out, "In use") != 1 || strings.Count(out, "Use this") != len(FrameStyles)-1 {
+		t.Errorf("want one 'In use' and a 'Use this' on every other frame: in-use=%d use=%d", strings.Count(out, "In use"), strings.Count(out, "Use this"))
 	}
 	if !strings.Contains(out, `hx-put="/campaigns/c1/maps/frame-style"`) {
 		t.Error("forms must PUT to the frame-style route")
