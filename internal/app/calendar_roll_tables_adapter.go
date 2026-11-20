@@ -22,9 +22,9 @@ func (a calendarRollTablesAdapter) RollTable(ctx context.Context, campaignID, ta
 		if t.ID != tableID {
 			continue
 		}
-		out := &calendar.RollTable{Name: t.Name, Entries: make([]calendar.RollTableEntry, 0, len(t.Entries))}
+		out := &calendar.RollTable{Name: t.Name, Visibility: t.Visibility, Entries: make([]calendar.RollTableEntry, 0, len(t.Entries))}
 		for _, e := range t.Entries {
-			out.Entries = append(out.Entries, calendar.RollTableEntry{Name: e.Name, Brief: e.Brief, Weight: e.Weight})
+			out.Entries = append(out.Entries, calendar.RollTableEntry{Name: e.Name, Brief: e.Brief, Weight: e.Weight, When: e.When})
 		}
 		return out, nil
 	}

@@ -67,6 +67,12 @@ type RollConfig struct {
 	// TellPlayers is a table roll's "tell players on the night": a table has
 	// no bands to carry it.
 	TellPlayers bool `json:"tell_players,omitempty"`
+
+	// tableHidden is set on the copy a viewer's reading is built from when
+	// the table is Only you (or can't be read, which is treated the same):
+	// its nights then reach a player only when the Director tells that
+	// night. It is never stored or sent.
+	tableHidden bool
 }
 
 // RollBand is one result of a dice roll.
@@ -334,7 +340,7 @@ func (c *RollConfig) view(n RollNight, director bool) (v RollNightView, ok bool)
 	case n.Entry != "":
 		v.Result = n.Entry
 		v.Players = n.Entry
-		tellDefault = c.TellPlayers
+		tellDefault = c.TellPlayers && !c.tableHidden
 	case n.Total != nil:
 		band = c.bandFor(*n.Total)
 		if band >= 0 {
