@@ -648,6 +648,9 @@
       var link = readable(acc, [T.bg, T.card], 4.5, dir).hex;
       // The server's ink for Headers and events, on the same three fills.
       var s1t = readable(s1, [T.bg, T.card, T.alt], 4.5, dir).hex;
+      // Tags stand for new tags, which wear Tags and marks; painted exactly
+      // as a real chip is (chip_ink.js), with the words for this theme.
+      var chip = window.ChronicleChip ? window.ChronicleChip.ink(s2) : { light:s2, dark:s2 };
       var accL = mix(acc, '#ffffff', 0.45);
       var sbAcc = readable(mix(acc, '#ffffff', 0.3), [sb.bg], 4.5, 'lighter').hex;
       var B = bodyFont(d.type.body), H = headFont(d.type.heading), fs = SCALES[d.type.scale][0];
@@ -659,7 +662,7 @@
         '--p-accent':acc, '--p-accent-rgb':rgbCh(acc), '--p-accent-l-rgb':rgbCh(accL), '--p-link':link,
         '--p-fill':f.fill, '--p-fill-rgb':rgbCh(f.fill), '--p-on-fill':f.on, '--p-fill-deep':mix(f.fill, '#000000', 0.3),
         '--p-s1-rgb':rgbCh(s1), '--p-s1-fill':f1.fill, '--p-s1-text':s1t,
-        '--p-s2-rgb':rgbCh(s2),
+        '--p-s2-rgb':rgbCh(s2), '--p-tag-bg':s2.toLowerCase() + '22', '--p-tag-ink':theme === 'dark' ? chip.dark : chip.light,
         '--p-sb':sb.bg, '--p-sb-text':sb.text, '--p-sb-text-2':sb.text2, '--p-sb-text-3':sb.text3, '--p-sb-hi':'#ffffff', '--p-sb-line':'rgb(255 255 255 / .07)', '--p-sb-accent':sbAcc,
         '--p-font':B[2], '--p-font-h':same_ ? B[2] : H[2], '--p-hw':same_ ? '700' : String(H[4]), '--p-hw-b':same_ ? '700' : String(H[4]), '--p-hls':H[6],
         '--p-fs':fs + 'px', '--p-h1':(fs * 1.8 * hz).toFixed(2) + 'px', '--p-h2':(fs * 1.38 * hz).toFixed(2) + 'px', '--p-h3':(fs * 1.16 * hz).toFixed(2) + 'px',
@@ -684,7 +687,7 @@
         else if (f.de > 0.03) parts.push('buttons use a slightly deeper shade');
         if (link.de > 0.03) parts.push('links use a deeper shade on light pages');
       } else if (which === 's1'){
-        // Tags and marks paints shapes only, so it needs no note.
+        // Tags and marks needs no note: a tag chip shades its own words.
         var t1 = readable(hex, [T.bg, T.card, T.alt], 4.5, 'darker');
         if (f.flip) parts.push('event dots on it use dark marks');
         else if (f.de > 0.03) parts.push('event dots use a slightly deeper shade');
@@ -917,7 +920,7 @@
         '<div class="crows">' +
         crow('accent', GROUPS.accent.label, 'The menu highlight, links, buttons, anything selected', swatches('accent', 'accent-l')) +
         crow('s1', GROUPS.s1.label, 'Page title rules, and calendar events without their own colour', swatches('s1', 's1-l')) +
-        crow('s2', GROUPS.s2.label, 'Timeline marks and connections', swatches('s2', 's2-l')) +
+        crow('s2', GROUPS.s2.label, 'Tags without a colour of their own, timeline marks', swatches('s2', 's2-l')) +
         '</div>' +
         fld('c-page', 'Page tone', null, opts('c-page', 'colours.page', 'c-page-l', [['cool', 'Cool', '#eef0f4'], ['warm', 'Warm', '#f1ebe3'], ['paper', 'Paper', '#eadfc6']])) +
         fld('c-con', 'Text contrast', null, opts('c-con', 'colours.contrast', 'c-con-l', [['standard', 'Standard'], ['high', 'High']]) +
@@ -2126,7 +2129,7 @@
       header: { all:['.s-hdr'], tip:'The bar across the top' },
       sidebar:{ all:['.s-sb'], tip:'The menu’s colour and top-left corner' },
       nav:    { all:['.s-list'], tip:'How the menu shows where you are' },
-      colours:{ all:['.p-link', '.chipe', '.tev'], tip:'Links, events and timeline marks' },
+      colours:{ all:['.p-link', '.chipe', '.tag', '.tev'], tip:'Links, events, tags and timeline marks' },
       type:   { dash:['.d-title .h1', '.c-h'], city:['.e-head', '.e-body p'], tip:'Headings and text' },
       buttons:{ all:['.pbtn'], tip:'Every button' },
       icons:  { all:['.s-row .ic.kic', '.s-row .dot.kic', '.pv-ic'], tip:'Category icons' },
@@ -2136,7 +2139,7 @@
       hover:  { all:['.e-hc'], tip:'The card that opens when you point at a link' }
     };
     // Most specific first: a button inside a card is a button.
-    var FZ_HIT = [['.pbtn', 'buttons'], ['.s-row .ic.kic, .s-row .dot.kic, .pv-ic', 'icons'], ['.e-hc', 'hover'], ['.p-link, .chipe, .tev', 'colours'],
+    var FZ_HIT = [['.pbtn', 'buttons'], ['.s-row .ic.kic, .s-row .dot.kic, .pv-ic', 'icons'], ['.e-hc', 'hover'], ['.p-link, .chipe, .tag, .tev', 'colours'],
       ['.h1, .c-h, .e-head, .e-body p', 'type'], ['.s-bnr, .s-bsub', 'sidebar'], ['.s-brand, #d-banner', 'brand'], ['.s-hdr', 'header'], ['.s-list', 'nav'], ['.s-sb', 'sidebar'],
       ['.pcard', 'motion'], ['[data-sheet]', 'sheet'], ['.e-body, .d-grid', 'page'], ['.s-page', 'colours']];
     var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', icons:'icons', motion:'motion', sheet:'sheet', page:'page', hover:'hover' };

@@ -56,3 +56,14 @@ test('focus and selection stay on the first colour', () => {
   const viz = read('internal/plugins/timeline/static/js/timeline_viz.js');
   assert.match(viz, /\.attr\('fill', 'var\(--color-accent, #6366f1\)'\)/);
 });
+
+test('a new tag follows the campaign colour instead of inventing one', () => {
+  // The picker and the bulk bar send no colour; the server fills in Tags and
+  // marks (internal/widgets/tags/colour.go) for every reader.
+  const picker = read('static/js/widgets/tag_picker.js');
+  assert.doesNotMatch(picker, /Math\.random/, 'the tag picker still picks a random colour');
+  assert.match(picker, /body: \{ name: name, dmOnly: !!dmOnly \}/);
+  assert.match(read('static/js/widgets/bulk_actions.js'), /body: \{ name: name \}/);
+  const go = read('internal/widgets/tags/colour.go');
+  assert.match(go, /case hexColorPattern\.MatchString\(marks\):\s*out = marks\s*case hexColorPattern\.MatchString\(accent\):\s*out = accent/);
+});

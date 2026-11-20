@@ -23,7 +23,7 @@ test('the three colours are named for what they paint, each with its line', () =
   assert.match(src, /s2: +\{ k:'colours\.s2', list:PRESETS, follow:true, label:'Tags and marks' \}/);
   assert.match(src, /crow\('accent', GROUPS\.accent\.label, 'The menu highlight, links, buttons, anything selected'/);
   assert.match(src, /crow\('s1', GROUPS\.s1\.label, 'Page title rules, and calendar events without their own colour'/);
-  assert.match(src, /crow\('s2', GROUPS\.s2\.label, 'Timeline marks and connections'/);
+  assert.match(src, /crow\('s2', GROUPS\.s2\.label, 'Tags without a colour of their own, timeline marks'/);
 });
 
 test('the old names and the long explaining paragraph are gone', () => {
@@ -55,4 +55,14 @@ test('the blur layer undoes the site scale and its clip is in screen pixels', ()
   const nums = d.match(/[\d.]+/g).map(Number);
   assert.equal(Math.max(...nums), 440, 'the clip reaches the scaled right edge, 880 x 0.5');
   assert.ok(nums.includes(48) && nums.includes(152), 'the hole edges are scaled with the padding');
+});
+
+test('the example tags wear Tags and marks, painted as a real tag chip is', () => {
+  // New tags follow the third colour, so the example's tags stand for them.
+  assert.match(src, /window\.ChronicleChip\.ink\(s2\)/);
+  assert.match(src, /'--p-tag-bg':s2\.toLowerCase\(\) \+ '22', '--p-tag-ink':theme === 'dark' \? chip\.dark : chip\.light/);
+  assert.match(css, /\.czp \.tag\{[^}]*background:var\(--p-tag-bg, var\(--p-alt\)\); color:var\(--p-tag-ink, var\(--p-body\)\);/);
+  // Clicking a tag in the example opens Colours, as the other coloured parts do.
+  assert.match(src, /colours:\{ all:\['\.p-link', '\.chipe', '\.tag', '\.tev'\]/);
+  assert.match(src, /\['\.p-link, \.chipe, \.tag, \.tev', 'colours'\]/);
 });

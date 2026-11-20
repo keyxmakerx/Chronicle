@@ -774,6 +774,23 @@ func (a *siteMediaAdapter) DeleteSitePicture(ctx context.Context, filename strin
 	return a.svc.Delete(ctx, mf.ID)
 }
 
+// tagColoursAdapter wraps campaigns.CampaignService to implement
+// tags.CampaignColours: the campaign's Tags and marks colour and its accent,
+// which a tag with no colour of its own wears.
+type tagColoursAdapter struct {
+	svc campaigns.CampaignService
+}
+
+// TagColours reads the two colours from the campaign's settings.
+func (a *tagColoursAdapter) TagColours(ctx context.Context, campaignID string) (string, string, error) {
+	c, err := a.svc.GetByID(ctx, campaignID)
+	if err != nil {
+		return "", "", err
+	}
+	s := c.ParseSettings()
+	return s.AccentSurface2, s.AccentColor, nil
+}
+
 // entityTagFetcherAdapter wraps tags.TagService to implement the
 // entities.EntityTagFetcher interface for batch tag loading in list views.
 // grantSvc backs the tag-grant glance methods.
@@ -4593,6 +4610,10 @@ func (a *App) RegisterRoutes() {
 	// Created before sync API so the tag service is available for the REST API handler.
 	tagRepo := tags.NewTagRepository(a.DB)
 	tagService := tags.NewTagService(tagRepo)
+	// A tag with no colour of its own wears the campaign's Tags and marks
+	// colour, read through this adapter so the widget never reads settings.
+	tagColours := &tagColoursAdapter{svc: campaignService}
+	tagService.SetCampaignColours(tagColours)
 	tagHandler := tags.NewHandler(tagService)
 	// Entity-privacy gate: the public per-entity tag read must respect
 	// entity visibility + campaign binding, like the entity page.
@@ -4602,6 +4623,7 @@ func (a *App) RegisterRoutes() {
 	// campaign (member/group lookups) and resolves labels for the badge.
 	tagGrantRepo := tags.NewTagPermissionRepository(a.DB)
 	tagGrantService := tags.NewTagGrantService(tagGrantRepo, tagRepo, campaignService, groupService)
+	tagGrantService.SetCampaignColours(tagColours)
 	tagHandler.SetGrantService(tagGrantService)
 	tags.RegisterRoutes(e, tagHandler, campaignService, authService)
 	// Shared tag adapter: feeds the entities glance (SetTagFetcher below) and the
@@ -7200,7 +7222,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
 	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
 	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},
-	{Name: "customize-look", Scripts: []string{"/static/js/kit_try.js", "/static/js/look_kit_frame.js", "/static/js/widgets/customize_look.js"}},
+	{Name: "customize-look", Scripts: []string{"/static/js/chip_ink.js", "/static/js/kit_try.js", "/static/js/look_kit_frame.js", "/static/js/widgets/customize_look.js"}},
 	{Name: "customize-shell", Scripts: []string{"/static/js/find_palette.js", "/static/js/widgets/customize_shell.js"}},
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
 	{Name: "customize-templates", Scripts: []string{"/static/js/widgets/customize_templates.js"}},

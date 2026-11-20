@@ -742,7 +742,7 @@
 .czp [data-icolour="accent"] .s-row:not(.on) .ic.kic, .czp [data-icolour="accent"] .s-row .dot.kic{ color:var(--p-sb-accent); }
 .czp [data-icolour="category"] .s-row:not(.on) .ic.kic, .czp [data-icolour="category"] .s-row .dot.kic{ color:color-mix(in oklab, var(--c) 55%, var(--p-sb-text)); }
 .czp .tags{ display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
-.czp .tag{ display:inline-flex; align-items:center; padding:1px 8px; border-radius:99px; font-size:calc(var(--p-fs) * .78); font-weight:600; background:var(--p-alt); color:var(--p-body); }
+.czp .tag{ display:inline-flex; align-items:center; padding:1px 8px; border-radius:99px; font-size:calc(var(--p-fs) * .78); font-weight:600; background:var(--p-tag-bg, var(--p-alt)); color:var(--p-tag-ink, var(--p-body)); }
 .czp .tline{ display:flex; align-items:flex-start; gap:0; margin-top:2px; }
 .czp .tev{ position:relative; flex:1; min-width:0; padding:12px 8px 0 0; }
 .czp .tev::before{ content:""; position:absolute; left:0; right:0; top:4px; height:2px; background:var(--p-line); }
