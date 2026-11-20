@@ -528,7 +528,7 @@
       // Swings a leaf open on its hinge. Calm fades it in; Off shows it.
       function leafIn(l) {
         if (!l || !l.animate || motionOff()) return;
-        if (reduce()) { l.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' }); return; }
+        if (reduce()) { l.animate([{ opacity: 0 }, { opacity: 1 }], { duration: window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs('--dur-standard', 200) : 200, easing: 'ease-out' }); return; }
         l.animate([
           { transform: 'perspective(1400px) rotateY(-60deg)', opacity: 0 },
           { transform: 'perspective(1400px) rotateY(0)', opacity: 1 }
@@ -831,7 +831,7 @@
         if (d.p < 0.35) {
           if (reduce() || !g.animate) { g.remove(); return; }
           g.animate([{ transform: g.style.transform }, { transform: 'perspective(1400px) rotateY(-90deg)' }],
-            { duration: 160, easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = function () { g.remove(); };
+            { duration: window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs('--dur-standard', 200) : 200, easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = function () { g.remove(); };
           return;
         }
         var finish = function () { g.remove(); unfold(d.id); };
