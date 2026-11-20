@@ -5886,6 +5886,19 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	systems.RegisterHouseRulesRoute(e, systemHandler, authService, campaignService)
+	// Fill the shelves: a Director's draft of a shop's stock, kept in one batch.
+	shopStockSvc := armory.NewShopStockService(
+		&armoryShopCheckerAdapter{svc: entityService},
+		&shopGoodPagesAdapter{svc: entityService},
+		&shopStockWriterAdapter{svc: relService},
+		&shopSellsAdapter{svc: relService},
+		&armoryRelationFinderAdapter{svc: relService},
+		armory.NewShopPriceRepository(a.DB),
+		armorySvc,
+		&armoryItemTypeFinderAdapter{svc: entityService},
+		&systemGoodsAdapter{sys: systemHandler},
+	)
+	armory.RegisterShopStockRoutes(e, armory.NewShopStockHandler(shopStockSvc), campaignService, authService, addonService)
 	// The campaign's own pick-list entries, merged into the pick lists below.
 	// The manifest is the campaign's custom upload, else its chosen built-in.
 	manifestFor := campaignManifest(func(ctx context.Context, campaignID string) *systems.SystemManifest {
@@ -7209,7 +7222,8 @@ var coreWidgets = []PluginWidget{
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
-	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
+	{Name: "shop_good_note", Scripts: []string{"/static/js/widgets/shop_good_note.js"}},
+	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_stock_gen.js", "/static/js/widgets/shop_stock_fill.js", "/static/js/widgets/shop_inventory.js"}},
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/made_items.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},

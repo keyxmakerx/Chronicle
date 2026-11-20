@@ -94,6 +94,7 @@ Validation lives in `internal/systems/manifest.go` (`ValidateManifest`).
 | widget `host_mounted` | `true` for a widget Chronicle mounts itself elsewhere (the encounter builder's budget panel); the Customizer doesn't offer it. A widget the package's book places is left out the same way. | `internal/systems/handler.go` |
 | `dm_screen` | Party tracker and conditions on the DM Screen | `internal/systems/manifest_dm_screen.go` |
 | `terms.gm` | The game's name for the game master ("Director"), used across the campaign; default "GM" | `internal/systems/manifest.go` |
+| `goods` | The categories a shop's Fill the shelves may stock, and the properties holding each entry's kind, rarity and price (see "Goods" below) | `internal/systems/shop_goods.go` |
 | `shop_tests` | The dice a player throws to haggle or look closer at a shop counter (see "Shop tests" below) | `internal/systems/shop_tests.go` |
 | `designs` | Saved designs the package ships (see "Shipping designs" below) | `internal/systems/package_designs.go` |
 | `foundry_system_id` | Matches Foundry's `game.system.id` for character sync | Foundry module |
@@ -209,6 +210,24 @@ system is missing from the picker. Open Admin > Health & diagnostics
 Faster loop on a dev server: put the folder at
 `<MEDIA_PATH>/packages/systems/mygame/0.0.1/` (default `./data/media`) and
 restart; the server scans that tree at startup.
+
+## Goods
+
+`goods` lists the categories a Director's shop may stock with Fill the shelves.
+Chronicle never guesses what is for sale: name the category, and the
+properties that say each entry's kind, rarity and price.
+
+```json
+"goods": [
+  {"category": "treasures", "kind_key": "type", "kinds": ["Consumable", "Trinket"],
+   "rarity_key": "echelon", "rarity_label": "echelon", "price_key": "price"}
+]
+```
+
+`kinds` keeps only entries whose `kind_key` property matches. `rarity_key` is
+read as an ordinal ("2nd", "3"); an entry without one counts as the commonest.
+`price_key` is a number in the campaign's main coin. An entry with no price is
+drafted marked "Set a price" and cannot be bought until the Director sets one.
 
 ## Further reading
 

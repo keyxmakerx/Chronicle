@@ -122,6 +122,11 @@ type SystemManifest struct {
 	// d20 against a DC.
 	ShopTests *ShopTestsDef `json:"shop_tests,omitempty"`
 
+	// Goods names the categories a shop may stock, and the fields that say
+	// each entry's kind, rarity and price (shop_goods.go). Absent: a shop's
+	// fill offers none of this system's entries.
+	Goods []GoodsDef `json:"goods,omitempty"`
+
 	// Designs are saved designs the package ships (room themes, crafting
 	// designs). Campaigns on this system see them read-only under "From
 	// <system>" in the design library. See package_designs.go.
@@ -1093,6 +1098,10 @@ func ValidateManifest(m *SystemManifest) error {
 
 	if err := validateShopTests(m.ShopTests); err != nil {
 		return fmt.Errorf("shop_tests: %w", err)
+	}
+
+	if err := validateGoods(m); err != nil {
+		return fmt.Errorf("goods: %w", err)
 	}
 
 	m.sanitizeDesigns()
