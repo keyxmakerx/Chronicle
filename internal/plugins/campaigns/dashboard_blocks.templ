@@ -65,6 +65,8 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashComingUp(cc)
 		case "start_here":
 			@dashStartHere(cc, block.Config)
+		case "brochure":
+			@dashBrochure(cc, block.Config)
 		case "at_a_glance":
 			@dashAtAGlance(cc)
 		case "party":
@@ -932,6 +934,23 @@ templ dashStartHere(cc *CampaignContext, config map[string]any) {
 	>
 		<span class="inline-block w-24 h-4 mb-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 		<span class="block h-16 rounded-xl bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+	</div>
+}
+
+// dashBrochure is the "Brochure" block's placeholder. The entities plugin
+// draws the small box for the page the owner picked (config entity_id) with
+// their words (config content); a viewer who can't open the page gets nothing,
+// and the owner gets a slot saying how to pick one.
+templ dashBrochure(cc *CampaignContext, config map[string]any) {
+	<div
+		data-block="brochure"
+		hx-get={ fmt.Sprintf("/campaigns/%s/brochure?page=%s&text=%s", cc.Campaign.ID, url.QueryEscape(dashConfigString(config, "entity_id")), url.QueryEscape(dashConfigString(config, "content"))) }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+		aria-busy="true"
+	>
+		<span class="inline-block w-24 h-4 mb-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+		<span class="block h-20 rounded-xl bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 	</div>
 }
 

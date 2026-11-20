@@ -1,0 +1,452 @@
+// rules_page.templ draws one rules entry as a page and as a peek, from the
+// view RulesPages builds for the reader (rules_pages.go). It decides nothing
+// about who sees what: every word here was already chosen for this reader.
+
+package systems
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
+)
+
+// rulesStyles links the rules pages' own stylesheet, so it travels with an
+// HTMX swap like the rulebook's does.
+templ rulesStyles() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/rules_pages.css") }/>
+}
+
+// EntryPage is an entry's full page.
+templ EntryPage(cc *campaigns.CampaignContext, v *EntryView) {
+	@layouts.App(v.Name + " - " + cc.Campaign.Name) {
+		@EntryPageContent(v)
+	}
+}
+
+// EntryPageContent is an entry's page for an HTMX swap: the trail without
+// the publisher, then the entry, world first.
+templ EntryPageContent(v *EntryView) {
+	<div id="module-content">
+		@rulesStyles()
+		<article class="rp" data-widget="rules-page">
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: v.CampaignName, Href: "/campaigns/" + v.CampaignID},
+				{Label: v.Category.Name, Href: v.CategoryURL},
+				{Label: v.Name},
+			})
+			<div class={ "rp-grid", templ.KV("rp-grid--rail", len(v.Contents) > 0) }>
+				<div class="rp-main">
+					@entryHead(v, "h1", "rp-title")
+					if v.LeftOut {
+						<p class="rp-line rp-line--out">{ v.LeftOutLine }</p>
+						if len(v.Table) > 0 {
+							<section class="rp-section" id="at-the-table" aria-labelledby="rp-table-h">
+								<h2 class="rp-h2" id="rp-table-h">At the table</h2>
+								@entryTable(v.Table, nil, false)
+							</section>
+						}
+					} else {
+						if v.Summary != "" {
+							<p class="rp-line">{ v.Summary }</p>
+						}
+						if jumps := v.jumps(); len(jumps) > 0 {
+							<nav class="rp-jumps" aria-label="Jump to">
+								for i, c := range jumps {
+									if i > 0 {
+										<span class="rp-jumps__sep" aria-hidden="true">·</span>
+									}
+									<a href={ templ.SafeURL("#" + c.ID) }>{ c.Label }</a>
+								}
+							</nav>
+						}
+						if len(v.Story) > 0 || v.StoryHTML != "" {
+							<section class="rp-story" id="story" aria-label="Story">
+								if v.StoryHTML != "" {
+									<div class="rp-prose">
+										@templ.Raw(v.StoryHTML)
+									</div>
+								} else {
+									<div class="rp-prose">
+										@paras(v.Story)
+									</div>
+								}
+							</section>
+						}
+						if !v.InCampaign.empty() {
+							@inCampaign(v)
+						}
+						if len(v.Table) > 0 {
+							<section class="rp-section" id="at-the-table" aria-labelledby="rp-table-h">
+								<h2 class="rp-h2" id="rp-table-h">At the table</h2>
+								@entryTable(v.Table, nil, false)
+							</section>
+						}
+						@entryNotes(v.Notes)
+					}
+				</div>
+				if len(v.Contents) > 0 {
+					<aside class="rp-aside">
+						<nav class="rp-toc" aria-label="On this page" data-rp-toc>
+							<p class="rp-cap">On this page</p>
+							for _, c := range v.Contents {
+								<a class="rp-toc__link" href={ templ.SafeURL("#" + c.ID) } data-rp-toc-link={ c.ID }>{ c.Label }</a>
+							}
+						</nav>
+					</aside>
+				}
+			</div>
+		</article>
+	</div>
+}
+
+// entryHead is the kind in small words, the name, the whose-words line and
+// the Director's amber marks, shared by the page and the peek.
+templ entryHead(v *EntryView, tag string, titleClass string) {
+	<header class="rp-head">
+		<p class="rp-kind">{ v.Kind }</p>
+		if tag == "h1" {
+			<h1 class={ titleClass }>{ v.Name }</h1>
+		} else {
+			<h2 class={ titleClass } id="peek-title">{ v.Name }</h2>
+		}
+		if v.Hero != nil && len(v.Hero.Traits) > 0 {
+			<p class="rp-has">
+				{ v.Hero.Short } has:
+				for i, t := range v.Hero.Traits {
+					if i > 0 {
+						{ ", " }
+					}
+					<a href={ templ.SafeURL("#" + t.Anchor) }>{ t.Name }</a>
+				}
+			</p>
+		}
+		if v.Whose != nil {
+			<p class={ "rp-whose", "rp-whose--" + v.Whose.Tone }>{ v.Whose.Text }</p>
+		}
+		for _, m := range v.Marks {
+			<p class="rp-dm" data-dm-only>
+				<span class="cb-dm rp-dm__tag">Directors only</span>
+				if m.Text != "" {
+					<span>{ m.Text }</span>
+				}
+				if m.Href != "" {
+					<a class="rp-dm__link" href={ templ.SafeURL(m.Href) }>{ m.LinkText }</a>
+				}
+			</p>
+		}
+		@entryDirectorSlot(v)
+	</header>
+}
+
+// entryDirectorSlot holds the Director's own amber words on an entry, and
+// the small dialogs they open (static/js/widgets/rules_director.js). The
+// view carries Tools only for a Director, so a player's page has none.
+templ entryDirectorSlot(v *EntryView) {
+	if t := v.Tools; t != nil {
+		<div
+			class="rp-dm rp-tools"
+			data-dm-only
+			data-rp-director
+			data-api={ t.APIBase }
+			data-field={ t.FieldKey }
+			data-slug={ t.Slug }
+			data-entry={ itoa64(t.EntryID) }
+			data-page={ t.PageURL }
+			data-kind={ t.Kind }
+			data-editor-base={ editorBase(v.CampaignID, t.FieldKey) }
+		>
+			switch t.Kind {
+				case ToolsStandard:
+					if t.Rewritable {
+						<button type="button" class="rp-dmword" data-rp-act="rewrite">{ "Rewrite for " + t.CampaignName }</button>
+						<span class="rp-dmsep" aria-hidden="true">·</span>
+					}
+					<button type="button" class="rp-dmword" data-rp-act="open" data-dialog="rp-dlg-notin" aria-haspopup="dialog">{ "Not in " + t.CampaignName }</button>
+				case ToolsLeftOut:
+					<button type="button" class="rp-dmword" data-rp-act="bringback">Bring back</button>
+					<span class="rp-dmsep" aria-hidden="true">·</span>
+					<button type="button" class="rp-dmword" data-rp-act="open" data-dialog="rp-dlg-notin" aria-haspopup="dialog">
+						if t.Sentence != "" {
+							Change the sentence
+						} else {
+							Add a sentence
+						}
+					</button>
+				case ToolsRewritten:
+					if t.WhoReads != "" {
+						<span>{ t.WhoReads }</span>
+					}
+					<a class="rp-dmword rp-pen" href={ templ.SafeURL(t.EditURL) } aria-label={ "Edit " + t.CampaignName + "’s " + t.Name }><i class="fa-solid fa-pen" aria-hidden="true"></i></a>
+					if t.CanSetAside {
+						<button type="button" class="rp-dmword" data-rp-act="open" data-dialog="rp-dlg-aside" aria-haspopup="dialog">{ "Set " + t.CampaignName + "’s " + t.Name + " aside" }</button>
+					}
+				case ToolsCampaign:
+					<a class="rp-dmword rp-pen" href={ templ.SafeURL(t.EditURL) } aria-label={ "Edit " + t.Name }><i class="fa-solid fa-pen" aria-hidden="true"></i></a>
+			}
+			<span class="cb-dm rp-dm__tag">Directors only</span>
+			<span class="rp-tools__msg" role="status" data-rp-msg></span>
+		</div>
+		@directorDialogs(t)
+	}
+}
+
+// directorDialogs are the questions the amber words ask before a change:
+// one plain dialog each, on the shared dialog move.
+templ directorDialogs(t *directorTools) {
+	if t.Kind == ToolsStandard && t.SameName != nil {
+		<dialog class="dlg-modal rp-dlg" id="rp-dlg-rewrite" aria-labelledby="rp-dlg-rewrite-h">
+			<div class="rp-dlg__body">
+				<h2 class="rp-dlg__h" id="rp-dlg-rewrite-h">{ "Rewrite " + t.Name + " for " + t.CampaignName }</h2>
+				<p>{ t.CampaignName + " already has " + aOr(t.SameName.Name) + " of its own." }</p>
+				<div class="rp-dlg__choice">
+					<button type="button" class="btn-primary" data-rp-act="tie" data-tie={ itoa64(t.SameName.ID) } data-working-label="Using it…">{ "Use the " + t.SameName.Name + " I already wrote" }</button>
+					<p class="rp-dlg__hint">{ "Yours takes the printed " + t.Name + "’s place for everyone who can read it." }</p>
+				</div>
+				<div class="rp-dlg__choice">
+					<button type="button" class="btn-secondary" data-rp-act="fresh" aria-expanded="false" aria-controls="rp-dlg-fresh">{ "Start from " + t.SystemName + "’s" }</button>
+					<p class="rp-dlg__hint">{ "A new copy of the printed " + t.Name + " that only Directors see to start. Two entries cannot share a name, so give the copy another." }</p>
+					<div class="rp-dlg__fresh" id="rp-dlg-fresh" hidden>
+						<label class="rp-dlg__label" for="rp-dlg-name">Name for the copy</label>
+						<input class="rp-dlg__field" id="rp-dlg-name" type="text" maxlength="100" autocomplete="off" data-rp-name/>
+						<button type="button" class="btn-primary" data-rp-act="rewrite-named" data-working-label="Making the copy…">Make the copy</button>
+					</div>
+				</div>
+				<p class="rp-dlg__err" role="alert" hidden data-rp-err></p>
+				<div class="rp-dlg__foot">
+					<button type="button" class="btn-secondary" data-rp-act="close">Cancel</button>
+				</div>
+			</div>
+		</dialog>
+	}
+	if t.Kind == ToolsStandard || t.Kind == ToolsLeftOut {
+		<dialog class="dlg-modal rp-dlg" id="rp-dlg-notin" aria-labelledby="rp-dlg-notin-h">
+			<div class="rp-dlg__body">
+				if t.Kind == ToolsStandard {
+					<h2 class="rp-dlg__h" id="rp-dlg-notin-h">{ "Leave " + t.Name + " out of " + t.CampaignName + "?" }</h2>
+					<p>The hero creator stops offering it. Its name still answers everywhere with one line.</p>
+					<p class="rp-dlg__who">{ t.NotInHeroes() }</p>
+				} else {
+					<h2 class="rp-dlg__h" id="rp-dlg-notin-h">{ "The sentence for " + t.Name }</h2>
+				}
+				<label class="rp-dlg__label" for="rp-dlg-sentence">A sentence for players <span class="rp-dlg__opt">(optional)</span></label>
+				<textarea class="rp-dlg__field" id="rp-dlg-sentence" rows="2" maxlength="300" data-rp-sentence aria-describedby="rp-dlg-sentence-hint">{ t.Sentence }</textarea>
+				<p class="rp-dlg__hint" id="rp-dlg-sentence-hint">{ "Players read “" + NotInLine(t.Name, t.FieldKey, t.CampaignName, "") + "” and then your sentence." }</p>
+				<p class="rp-dlg__err" role="alert" hidden data-rp-err></p>
+				<div class="rp-dlg__foot">
+					<button type="button" class="btn-secondary" data-rp-act="close">
+						if t.Kind == ToolsStandard {
+							Keep it
+						} else {
+							Cancel
+						}
+					</button>
+					if t.Kind == ToolsStandard {
+						<button type="button" class="btn-primary" data-rp-act="leaveout" data-working-label="Leaving it out…">Leave it out</button>
+					} else {
+						<button type="button" class="btn-primary" data-rp-act="leaveout" data-working-label="Saving…">Save the sentence</button>
+					}
+				</div>
+			</div>
+		</dialog>
+	}
+	if t.Kind == ToolsRewritten && t.CanSetAside {
+		<dialog class="dlg-modal rp-dlg" id="rp-dlg-aside" aria-labelledby="rp-dlg-aside-h">
+			<div class="rp-dlg__body">
+				<h2 class="rp-dlg__h" id="rp-dlg-aside-h">{ "Set " + t.CampaignName + "’s " + t.Name + " aside?" }</h2>
+				<p>{ "Players go back to reading the printed " + t.PrintedName + ". Your text stays, only Directors read it, and nothing is deleted." }</p>
+				<p class="rp-dlg__who">{ t.AsideHeroes() }</p>
+				<p class="rp-dlg__err" role="alert" hidden data-rp-err></p>
+				<div class="rp-dlg__foot">
+					<button type="button" class="btn-secondary" data-rp-act="close">Keep it in play</button>
+					<button type="button" class="btn-primary" data-rp-act="aside" data-working-label="Setting it aside…">Set it aside</button>
+				</div>
+			</div>
+		</dialog>
+	}
+}
+
+templ paras(ps []para) {
+	for _, p := range ps {
+		<p>
+			for _, r := range p {
+				if r.Bold {
+					<strong>{ r.Text }</strong>
+				} else {
+					{ r.Text }
+				}
+			}
+		</p>
+	}
+}
+
+// inCampaign is "In <campaign>": heroes first, then the others, each run
+// only where it has someone the reader may see.
+templ inCampaign(v *EntryView) {
+	<section class="rp-section" id="in-campaign" aria-labelledby="rp-in-h">
+		<h2 class="rp-h2" id="rp-in-h">In { v.CampaignName }</h2>
+		if len(v.InCampaign.Heroes) > 0 {
+			@peopleRun("Heroes", v.InCampaign.Heroes, v.InCampaign.MoreHeroes)
+		}
+		if len(v.InCampaign.Others) > 0 {
+			if v.IsDirector {
+				@peopleRun("Others", v.InCampaign.Others, v.InCampaign.MoreOthers)
+			} else {
+				@peopleRun("Others you have met", v.InCampaign.Others, v.InCampaign.MoreOthers)
+			}
+		}
+	</section>
+}
+
+templ peopleRun(label string, people []personLink, more int) {
+	<div class="rp-run">
+		<p class="rp-cap">{ label }</p>
+		<p class="rp-names">
+			for _, c := range people {
+				<a href={ templ.SafeURL(c.URL) } data-entity-preview={ c.Preview }>{ c.Name }</a>
+			}
+			if more > 0 {
+				<span class="rp-more">and { itoa(more) } more</span>
+			}
+		</p>
+	</div>
+}
+
+// entryTable is "At the table". hero names who holds a trait in a peek;
+// short draws a cost as its number alone.
+templ entryTable(details []tableDetail, hero *heroView, short bool) {
+	for _, d := range details {
+		switch d.Kind {
+			case detailFigures:
+				<dl class="rp-figs">
+					for _, f := range d.Figures {
+						<div class="rp-fig"><dt>{ f.Label }</dt><dd>{ f.Value }</dd></div>
+					}
+				</dl>
+			case detailText:
+				<div class="rp-detail">
+					<h3 class="rp-h3">{ d.Label }</h3>
+					<div class="rp-prose rp-prose--small">
+						@paras(d.Text)
+					</div>
+				</div>
+			case detailWords:
+				<div class="rp-detail">
+					<h3 class="rp-h3">{ d.Label }</h3>
+					<p class="rp-words">{ d.Words }</p>
+				</div>
+			case detailParts:
+				<div class="rp-detail">
+					<h3 class="rp-h3">{ d.Label }</h3>
+					@leadLine(d.Lead)
+					@partList(d.Parts)
+				</div>
+			case detailItems:
+				<div class="rp-detail">
+					<h3 class="rp-h3">
+						<span>{ d.Label }</span>
+						if d.Aside != "" {
+							<span class="rp-h3__aside">{ d.Aside }</span>
+						}
+					</h3>
+					<ul class="rp-items">
+						for _, it := range d.Items {
+							<li class={ "rp-item", templ.KV("rp-item--held", it.Held) } id={ it.Anchor }>
+								<div class="rp-item__head">
+									<span class="rp-item__name">{ it.Name }</span>
+									if short && it.CostShort != "" {
+										<span class="rp-item__cost">{ it.CostShort }</span>
+									} else if it.Cost != "" {
+										<span class="rp-item__cost">{ it.Cost }</span>
+									}
+								</div>
+								if it.Held && hero != nil {
+									<p class="rp-item__mark">{ hero.Short } has this</p>
+								}
+								if it.NoLongerOffered {
+									<p class="rp-item__mark rp-item__mark--out">No longer offered</p>
+								}
+								@leadLine(it.Lead)
+								if len(it.Text) > 0 {
+									<div class="rp-prose rp-prose--small">
+										@paras(it.Text)
+									</div>
+								}
+								if len(it.Parts) > 0 {
+									@partList(it.Parts)
+								}
+								for _, n := range it.Nested {
+									<div class="rp-nest">
+										if n.Name != "" {
+											<p class="rp-nest__name">{ n.Name }</p>
+										}
+										@leadLine(n.Lead)
+										if len(n.Parts) > 0 {
+											@partList(n.Parts)
+										}
+									</div>
+								}
+							</li>
+						}
+					</ul>
+				</div>
+		}
+	}
+}
+
+// leadLine is an object's flavor, read first in the quiet colour.
+templ leadLine(ps []para) {
+	if len(ps) > 0 {
+		<div class="rp-lead">
+			@paras(ps)
+		</div>
+	}
+}
+
+templ partList(parts []part) {
+	<dl class="rp-parts">
+		for _, p := range parts {
+			<div class="rp-part">
+				<dt>{ p.Label }</dt>
+				<dd>
+					@paras(p.Text)
+				</dd>
+			</div>
+		}
+	</dl>
+}
+
+// entryNotes are the dated lines the players were told, newest first.
+templ entryNotes(notes []noteLine) {
+	if len(notes) > 0 {
+		<section class="rp-notes" id="changes" aria-label="Changes">
+			for _, n := range notes {
+				<p class="rp-note">
+					<span>Changed on </span>
+					@components.Date(n.At, timeutil.DateRecent)
+					<span>{ ": " + n.Line }</span>
+				</p>
+			}
+		</section>
+	}
+}
+
+// EntryPeekPanel is an entry's body for the page peek
+// (static/js/peek_panel.js): its traits first, the hero's marked, and a
+// quiet way to the page. No script; links only.
+templ EntryPeekPanel(v *EntryView) {
+	<article class="peek-body rp rp-peek" data-peek-root="1">
+		@rulesStyles()
+		@entryHead(v, "h2", "rp-peek-title")
+		if v.LeftOut {
+			<p class="rp-line rp-line--out">{ v.LeftOutLine }</p>
+		} else if v.Hero == nil && v.Summary != "" {
+			<p class="rp-line">{ v.Summary }</p>
+		}
+		if len(v.Table) > 0 {
+			@entryTable(v.Table, v.Hero, true)
+		}
+		@entryNotes(v.Notes)
+		<p class="rp-peek-foot"><a class="rp-quiet" href={ templ.SafeURL(v.URL) }>Open the page</a></p>
+	</article>
+}

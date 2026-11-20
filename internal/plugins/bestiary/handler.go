@@ -37,44 +37,20 @@ func (h *Handler) Browse(c *echo.Context) error {
 // Show returns a single publication by slug.
 // GET /bestiary/:slug
 func (h *Handler) Show(c *echo.Context) error {
-	slug := c.Param("slug")
-	ctx := c.Request().Context()
-
-	pub, err := h.svc.GetBySlug(ctx, slug)
+	pub, err := h.svc.ViewBySlug(c.Request().Context(), auth.GetUserID(c), c.Param("slug"))
 	if err != nil {
 		return err
 	}
-
-	// Only the creator can view draft/archived/flagged publications.
-	userID := auth.GetUserID(c)
-	if pub.Visibility != VisibilityPublished && pub.Visibility != VisibilityUnlisted {
-		if pub.CreatorID != userID {
-			return apperror.NewNotFound("publication not found")
-		}
-	}
-
 	return c.JSON(http.StatusOK, pub)
 }
 
 // GetStatblock returns the raw statblock JSON for a publication.
 // GET /bestiary/:slug/statblock
 func (h *Handler) GetStatblock(c *echo.Context) error {
-	slug := c.Param("slug")
-	ctx := c.Request().Context()
-
-	pub, err := h.svc.GetBySlug(ctx, slug)
+	pub, err := h.svc.ViewBySlug(c.Request().Context(), auth.GetUserID(c), c.Param("slug"))
 	if err != nil {
 		return err
 	}
-
-	// Only published/unlisted are publicly accessible.
-	userID := auth.GetUserID(c)
-	if pub.Visibility != VisibilityPublished && pub.Visibility != VisibilityUnlisted {
-		if pub.CreatorID != userID {
-			return apperror.NewNotFound("publication not found")
-		}
-	}
-
 	return c.JSONBlob(http.StatusOK, pub.StatblockJSON)
 }
 

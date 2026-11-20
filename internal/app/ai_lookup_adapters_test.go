@@ -95,6 +95,7 @@ func TestAIPartyAdapter_PlayerViewNarrowsSheetValues(t *testing.T) {
 		{ID: "a", TypeID: 1, Name: "Aldric", Fields: map[string]any{"class": "Fury"}},
 		{ID: "b", TypeID: 2, Name: "Bram", Fields: map[string]any{"class": "Lich in disguise"}},
 		{ID: "c", TypeID: 9, Name: "Cora", Fields: map[string]any{"class": "Tactician"}},
+		{ID: "d", TypeID: 1, Name: "Dell", Fields: map[string]any{"class": "Doppelganger"}, PageRestricted: []string{"class"}},
 	}}
 	types := fakeTypeReader{fields: map[int][]entities.FieldDefinition{
 		1: {{Key: "class"}},
@@ -107,8 +108,8 @@ func TestAIPartyAdapter_PlayerViewNarrowsSheetValues(t *testing.T) {
 		actor records.Actor
 		want  map[string]string
 	}{
-		{"player view", records.Actor{UserID: "u1", Role: int(campaigns.RolePlayer)}, map[string]string{"Aldric": "Fury", "Bram": "", "Cora": ""}},
-		{"director view", records.Actor{UserID: "u1", Role: int(campaigns.RoleOwner)}, map[string]string{"Aldric": "Fury", "Bram": "Lich in disguise", "Cora": "Tactician"}},
+		{"player view", records.Actor{UserID: "u1", Role: int(campaigns.RolePlayer)}, map[string]string{"Aldric": "Fury", "Bram": "", "Cora": "", "Dell": ""}},
+		{"director view", records.Actor{UserID: "u1", Role: int(campaigns.RoleOwner)}, map[string]string{"Aldric": "Fury", "Bram": "Lich in disguise", "Cora": "Tactician", "Dell": "Doppelganger"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

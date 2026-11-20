@@ -36,6 +36,8 @@
   var TableRow = TipTap.TableRow;
   var TableCell = TipTap.TableCell;
   var TableHeader = TipTap.TableHeader;
+  var TaskList = TipTap.TaskList;
+  var TaskItem = TipTap.TaskItem;
   var CodeBlockLowlight = TipTap.CodeBlockLowlight;
   var lowlight = TipTap.lowlight;
 
@@ -167,6 +169,13 @@
           TableCell,
           TableHeader
         );
+      }
+
+      // Checklists. In the schema for every reader so a page holding one loads
+      // as a checklist; the boxes are display-only until per-player ticks
+      // exist (TODO(#2389)).
+      if (TaskList && TaskItem) {
+        extensions.push(TaskList, TaskItem.configure({ nested: true }));
       }
 
       // Add code block with syntax highlighting if lowlight is available.
@@ -669,6 +678,7 @@
       [
         { cmd: 'bulletList', icon: '&#8226;', title: 'Bullet List' },
         { cmd: 'orderedList', icon: '1.', title: 'Numbered List' },
+        { cmd: 'taskList', icon: '<i class="fa-regular fa-square-check" style="font-size:11px"></i>', title: 'Checklist' },
       ],
       // Misc
       [
@@ -929,6 +939,7 @@
       case 'heading3': chain.toggleHeading({ level: 3 }).run(); break;
       case 'bulletList': chain.toggleBulletList().run(); break;
       case 'orderedList': chain.toggleOrderedList().run(); break;
+      case 'taskList': if (chain.toggleTaskList) chain.toggleTaskList().run(); break;
       case 'blockquote': chain.toggleBlockquote().run(); break;
       case 'code': chain.toggleCodeBlock().run(); break;
       case 'horizontalRule': chain.setHorizontalRule().run(); break;
@@ -962,6 +973,7 @@
         case 'heading3': active = editor.isActive('heading', { level: 3 }); break;
         case 'bulletList': active = editor.isActive('bulletList'); break;
         case 'orderedList': active = editor.isActive('orderedList'); break;
+        case 'taskList': active = editor.isActive('taskList'); break;
         case 'blockquote': active = editor.isActive('blockquote'); break;
         case 'code': active = editor.isActive('codeBlock'); break;
       }

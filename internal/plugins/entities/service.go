@@ -295,6 +295,9 @@ type EntityService interface {
 	// from a (preset-category → field-key → play block) map; a nil block
 	// clears. Same idempotent, fields-column-only contract as the flag syncs.
 	SyncFieldPlay(ctx context.Context, playByCategory map[string]map[string]*FieldPlay) (int, error)
+	// SyncFieldChecks re-stamps the value checks (min, max, JSON list) a system
+	// declares onto stored entity types, the same way SyncFieldPlay does.
+	SyncFieldChecks(ctx context.Context, checksByCategory map[string]map[string]FieldChecks) (int, error)
 
 	// BulkUpdateType changes the entity type for multiple entities at once.
 	// Returns the count of successfully updated entities. Validates that the
@@ -3599,11 +3602,7 @@ func buildSearchText(entryHTML string, fieldsData map[string]any) string {
 // GM-only and owner-only values stay out, as they do from a player's copy of
 // the page. A field added to just this page counts like a category field.
 func searchableFields(fields map[string]any, typeFields []FieldDefinition, overrides *FieldOverrides) map[string]any {
-	defs := typeFields
-	if overrides != nil && len(overrides.Added) > 0 {
-		defs = append(append([]FieldDefinition{}, typeFields...), overrides.Added...)
-	}
-	return FilterRestrictedFields(fields, defs, false, false)
+	return FilterRestrictedFields(fields, RestrictionDefs(typeFields, overrides), false, false)
 }
 
 // searchFieldsOf loads the page's category and returns its searchableFields.
@@ -3803,6 +3802,58 @@ func (s *entityService) SyncFieldPlay(ctx context.Context, playByCategory map[st
 		}
 		if uErr := s.types.UpdateFieldsSchema(ctx, et.ID, string(fieldsJSON)); uErr != nil {
 			slog.Warn("play sync: failed to update fields",
+				slog.Int("entity_type_id", et.ID), slog.Any("error", uErr))
+			continue
+		}
+		updated++
+	}
+	return updated, nil
+}
+
+// SyncFieldChecks converges FieldDefinition.Min, Max and JSONList on stored
+// entity types so AI Import's range checks reach categories created before a
+// system declared them. A key absent from the map is left alone.
+func (s *entityService) SyncFieldChecks(ctx context.Context, checksByCategory map[string]map[string]FieldChecks) (int, error) {
+	if s.types == nil || len(checksByCategory) == 0 {
+		return 0, nil
+	}
+	types, err := s.types.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listing entity types for field check sync: %w", err)
+	}
+	updated := 0
+	for i := range types {
+		et := &types[i]
+		if et.PresetCategory == nil || *et.PresetCategory == "" {
+			continue
+		}
+		want, ok := checksByCategory[*et.PresetCategory]
+		if !ok {
+			continue
+		}
+		changed := false
+		for j := range et.Fields {
+			c, has := want[et.Fields[j].Key]
+			if !has {
+				continue
+			}
+			f := &et.Fields[j]
+			if !reflect.DeepEqual(f.Min, c.Min) || !reflect.DeepEqual(f.Max, c.Max) || f.JSONList != c.JSONList {
+				f.Min, f.Max, f.JSONList = c.Min, c.Max, c.JSONList
+				changed = true
+			}
+		}
+		if !changed {
+			continue
+		}
+		fieldsJSON, mErr := json.Marshal(et.Fields)
+		if mErr != nil {
+			slog.Warn("field check sync: failed to marshal fields",
+				slog.Int("entity_type_id", et.ID), slog.Any("error", mErr))
+			continue
+		}
+		if uErr := s.types.UpdateFieldsSchema(ctx, et.ID, string(fieldsJSON)); uErr != nil {
+			slog.Warn("field check sync: failed to update fields",
 				slog.Int("entity_type_id", et.ID), slog.Any("error", uErr))
 			continue
 		}

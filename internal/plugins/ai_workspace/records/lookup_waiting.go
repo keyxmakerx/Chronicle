@@ -22,6 +22,8 @@ type WaitingList struct {
 	// Entries are pick-list entries players wrote that no Director has
 	// accepted yet, handed in or still being written.
 	Entries []WaitingEntry
+	// Picks are heroes' ask-first picks waiting for a Director's yes.
+	Picks []WaitingPick
 	// Requests are players' stash moves and ask-to-buy requests.
 	Requests []WaitingRequest
 	Missing  []string
@@ -47,6 +49,13 @@ type WaitingEntry struct {
 	HandedIn bool
 	// Note is what a Director asked the writer to change.
 	Note string
+}
+
+// WaitingPick is one hero's pick of an entry the Directors want to be asked
+// about first.
+type WaitingPick struct {
+	Entry, Field, Player, Hero string
+	At                         time.Time
 }
 
 // WaitingRequest is one player's request, worded as the DM Screen words it.
@@ -75,7 +84,7 @@ func (run *lookupRun) waiting() (LookupAnswer, error) {
 			handedIn++
 		}
 	}
-	ans.Chip = fmt.Sprintf("Waiting for review · %d", len(w.Asks)+handedIn+len(w.Requests))
+	ans.Chip = fmt.Sprintf("Waiting for review · %d", len(w.Asks)+handedIn+len(w.Picks)+len(w.Requests))
 
 	var b strings.Builder
 	b.WriteString("## Waiting for review\n\nOnly a Director can say yes or no to these, in Chronicle. Nothing here can be accepted or turned down from a lookup or a request for changes.\n")
@@ -126,6 +135,23 @@ func (run *lookupRun) waiting() (LookupAnswer, error) {
 			line += "; the Director asked: " + quoted(n)
 		}
 		lines = append(lines, line)
+	}
+	writeOrNone(&b, lines, "None.")
+
+	fmt.Fprintf(&b, "\n### Heroes' picks waiting for a Director's yes (%d)\n\n", len(w.Picks))
+	lines = lines[:0]
+	for _, p := range w.Picks {
+		line := "- " + quoted(p.Entry)
+		if p.Field != "" {
+			line += " (" + p.Field + ")"
+		}
+		if p.Player != "" {
+			line += " asked for by " + p.Player
+		}
+		if p.Hero != "" {
+			line += " for " + p.Hero
+		}
+		lines = append(lines, line+" ("+askDay(p.At)+")")
 	}
 	writeOrNone(&b, lines, "None.")
 

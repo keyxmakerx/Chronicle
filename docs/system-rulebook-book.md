@@ -180,6 +180,10 @@ index:
 - A chapter has `index` or `pages`, never both. Generated chapters can't be
   changed in a campaign's book editor; they follow the package.
 - The book's search box searches written pages and every rules-index entry.
+- For a category that is a character choice (ancestries, kits...), the index
+  lists what each reader has in their campaign: its own entries, a rewritten
+  entry once marked "Rewritten", no left-out entries, and at the end a line
+  for each left-out entry the Director gave a sentence.
 
 ### Writing text
 
@@ -197,7 +201,7 @@ Every block is one item under `blocks:`. Plain text needs no `type`.
 | text | Paragraphs | `text:` |
 | callout | A highlighted box | `title:`, `text:` |
 | roll | Dice they can roll, with the result's band highlighted | `dice:` (`NdM`, 1-10 dice of 2-100 sides, like `2d10`), `label:`, `modifier: true` to offer a bonus picker, `bands:` |
-| cards | A row of cards that unfold for detail | `items:` each with `title:`, `summary:`, `text:` |
+| cards | A row of cards that unfold for detail | `items:` each with `title:`, `summary:`, `text:`, and optionally `entry: <category>/<slug>` naming the rules entry the card describes, so each campaign's readers see its version (rewritten, left out or added) |
 | flaps | Headings that open to explain | `items:` each with `title:`, `text:` |
 | example | A worked example, stepped through line by line | `title:`, `steps:` (a list of text) |
 | creature | A creature as heroes see it; Directors also see its numbers | `name:`, `tagline:`, `look:`, `notice:` (list), `stats:` (list of `label:`/`value:`), `note:` |

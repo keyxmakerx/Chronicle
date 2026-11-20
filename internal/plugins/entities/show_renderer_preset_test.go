@@ -139,3 +139,31 @@ func TestIsPlayersCharacter(t *testing.T) {
 		})
 	}
 }
+
+// A system's sheet bound to the character preset draws only in campaigns
+// running that system: a D&D campaign's characters keep their layout (and
+// their Attributes) even though Draw Steel is installed on the same site.
+func TestEntityShowRenderer_PresetIsTheSystems(t *testing.T) {
+	reg := NewEntityShowRendererRegistry()
+	reg.RegisterByPresetCategoryFor("drawsteel", "character", MakeWidgetMountRenderer("character-sheet"))
+	SetGlobalEntityShowRendererRegistry(reg)
+	defer SetGlobalEntityShowRendererRegistry(nil)
+
+	character := "character"
+	et := &EntityType{Slug: "characters", PresetCategory: &character}
+	tests := []struct {
+		system string
+		want   bool
+	}{
+		{"drawsteel", true},
+		{"dnd5e", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run("system "+tt.system, func(t *testing.T) {
+			if got := lookupEntityShowRenderer(EntityShowRenderContext{EntityType: et, System: tt.system}) != nil; got != tt.want {
+				t.Fatalf("renderer = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

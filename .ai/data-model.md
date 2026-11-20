@@ -169,7 +169,10 @@ tracked in `golang-migrate`'s `schema_migrations` table.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`,`character`); `for_entity_id` the character page a `character` entry is kept to (no FK: a deleted character leaves the entry with Directors); `properties` JSON (flat scalars); `description` sanitized HTML; `status` enum(`accepted`,`draft`,`sent`) and `review_note`: a player's entry stays a draft only its writer and Directors see until a Director accepts it; `created_by` carries no FK; FK to `campaigns` CASCADE |
+| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`,`character`); `for_entity_id` the character page a `character` entry is kept to (no FK: a deleted character leaves the entry with Directors); `properties` JSON (flat scalars); `description` sanitized HTML; `status` enum(`accepted`,`draft`,`sent`) and `review_note`: a player's entry stays a draft only its writer and Directors see until a Director accepts it; `created_by` carries no FK; `stands_for` the standard entry's slug this entry takes the place of, set only by a Director's tie (`UNIQUE(campaign_id, system_id, field_key, stands_for)`: one stand-in per standard entry), `stands_for_seen` that standard entry as JSON when tied or last marked seen; FK to `campaigns` CASCADE |
+| `campaign_system_left_out` | Standard entries a campaign does not offer; their names still answer with the Director's `sentence` | PK `(campaign_id, system_id, field_key, slug)`; `created_by` no FK; FK to `campaigns` CASCADE |
+| `campaign_system_entry_names` | Old names of renamed campaign entries, which heroes and links still resolve through | `UNIQUE(campaign_id, system_id, field_key, name)` (an old name is not given to another entry until freed); `entry_id` FK→`campaign_system_entries` CASCADE |
+| `campaign_system_entry_notes` | Lines a Director told the players about a change to an entry | `INDEX(campaign_id, entry_id, created_at)`; `line` VARCHAR(300); `entry_id` FK→`campaign_system_entries` CASCADE |
 | `campaign_entry_grants` | A Director's permission for one player to write one entry of their own for a pick list | `UNIQUE(campaign_id, system_id, field_key, user_id)`; `budget` the points total the player's entry gets (0 = none); `entry_id` set when used (no FK; renewing clears it); FK to `campaigns` and `users` CASCADE |
 
 ### Media, addons & extensions
@@ -198,7 +201,7 @@ Community-shared creature stat blocks, instance-wide (not campaign-scoped).
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `bestiary_publications` | A published/draft stat block | `slug` UNIQUE; `statblock_json`; `visibility` enum(`draft`,`published`,`unlisted`,`archived`,`flagged`); `system_id` DEFAULT `''` (must come from the publishing campaign's own system, not a hard-coded fallback); `FULLTEXT(name, description)` |
+| `bestiary_publications` | A published/draft stat block | `slug` UNIQUE; `statblock_json`; `visibility` enum(`draft`,`published`,`unlisted`,`archived`,`flagged`); `system_id` DEFAULT `''` (must come from the publishing campaign's own system, not a hard-coded fallback); `FULLTEXT(name, description)`; `prior_visibility` (state to restore after moderation); `legacy_escaped_text` (1 = text escaped by the old write path, cleared by the boot reconciler) |
 | `bestiary_ratings` | 1–5 star rating + review text | `UNIQUE(user_id, publication_id)` |
 | `bestiary_favorites` | Per-user favorites | composite PK |
 | `bestiary_imports` | Which campaigns imported a publication, and the resulting entity | `UNIQUE(publication_id, campaign_id)` |

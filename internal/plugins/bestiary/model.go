@@ -60,12 +60,30 @@ type Publication struct {
 	Favorites        int             `json:"favorites"`
 	Visibility       string          `json:"visibility"`
 	FlaggedCount     int             `json:"flagged_count"`
-	ReviewedBy       *string         `json:"reviewed_by,omitempty"`
-	ReviewedAt       *time.Time      `json:"reviewed_at,omitempty"`
-	HubID            *string         `json:"hub_id,omitempty"`
-	HubSyncedAt      *time.Time      `json:"hub_synced_at,omitempty"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	// PriorVisibility is where an approve or restore returns the publication to
+	// after moderation hid it; internal, never serialized.
+	PriorVisibility *string    `json:"-"`
+	ReviewedBy      *string    `json:"reviewed_by,omitempty"`
+	ReviewedAt      *time.Time `json:"reviewed_at,omitempty"`
+	HubID           *string    `json:"hub_id,omitempty"`
+	HubSyncedAt     *time.Time `json:"hub_synced_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+// ForViewer returns the publication as userID may see it. Source campaign and
+// page ids and the reviewing moderator belong to the creator's own campaign
+// and the moderation team, so everyone else gets a copy without them.
+func (p *Publication) ForViewer(userID string) *Publication {
+	if p.CreatorID == userID {
+		return p
+	}
+	cp := *p
+	cp.SourceCampaignID = nil
+	cp.SourceEntityID = nil
+	cp.ReviewedBy = nil
+	cp.ReviewedAt = nil
+	return &cp
 }
 
 // RatingAverage returns the average rating, or 0 if unrated.
@@ -266,6 +284,9 @@ type ModerateInput struct {
 // system's creature type when the campaign has more than one.
 type EntityCreator interface {
 	CreateFromStatblock(ctx context.Context, campaignID, userID, name, systemID string, statblock json.RawMessage) (entityID string, err error)
+	// EntityExists reports whether an imported page is still in the campaign,
+	// so an import record whose page was deleted does not block importing again.
+	EntityExists(ctx context.Context, campaignID, entityID string) (bool, error)
 }
 
 // CampaignRoleChecker verifies a user's role in a campaign.

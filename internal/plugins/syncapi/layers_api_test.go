@@ -78,3 +78,12 @@ func TestClassifyChange_HeroLayers(t *testing.T) {
 		t.Fatalf("map layer classified as %q", rt)
 	}
 }
+
+// A creature page's "Add to Foundry" must reach a world that was closed, so
+// the request is a feed row the module replays on connect.
+func TestClassifyChange_CreatureAdd(t *testing.T) {
+	rt, op, ok := classifyChange(ws.MsgCreatureAddRequested)
+	if rt != "creature_add" || op != "created" || !ok {
+		t.Fatalf("creature_add.requested = %q %q %v", rt, op, ok)
+	}
+}

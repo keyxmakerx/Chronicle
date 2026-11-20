@@ -4,7 +4,7 @@
  * Chronicle.FoundryScenes holds the campaign's scene list as the GM's
  * Foundry world last reported it (GET /campaigns/:id/foundry/scenes), in
  * Foundry's own folder order. Only the owner and those with DM access get
- * it; for everyone else it answers 403 and stays empty, so a player reads a
+ * it; for everyone else the list is never asked for and stays empty, so a player reads a
  * scene mention as its plain name and never learns whether the map exists.
  *
  * Chronicle.SceneMention is the TipTap inline node the @ picker inserts. A
@@ -98,6 +98,12 @@
     /** Asks the server once per campaign and page load. */
     want: function (campaignId) {
       if (!campaignId || lists[campaignId] || !Chronicle.apiFetch) return;
+      // The page says whether this viewer may read the list; asking when not
+      // is a 403 in the console on every page.
+      if (typeof document !== 'undefined' && document.documentElement && !document.documentElement.hasAttribute('data-can-see-scenes')) {
+        lists[campaignId] = { state: 'none', scenes: null };
+        return;
+      }
       lists[campaignId] = { state: 'loading', scenes: null };
       Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignId) + '/foundry/scenes')
         .then(function (r) { return r.ok ? r.json() : null; })

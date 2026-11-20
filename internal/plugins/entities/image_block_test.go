@@ -33,11 +33,15 @@ func TestBlockImage_ChangeChip(t *testing.T) {
 				t.Fatal(err)
 			}
 			out := buf.String()
-			if got := strings.Contains(out, "data-pick"); got != tt.wantChip {
+			if got := strings.Contains(out, `aria-label="Change image"`); got != tt.wantChip {
 				t.Errorf("chip present = %v, want %v\n%s", got, tt.wantChip, out)
 			}
 			if got := strings.Contains(out, "Add image"); got != tt.wantAdd {
 				t.Errorf("Add image present = %v, want %v", got, tt.wantAdd)
+			}
+			// Add image is a real button, so Tab and Enter reach it.
+			if tt.wantAdd && !strings.Contains(out, `<button type="button" data-pick`) {
+				t.Errorf("Add image is not a button\n%s", out)
 			}
 			if strings.Contains(out, "group-hover") {
 				t.Error("the upload control must not be hover-only")

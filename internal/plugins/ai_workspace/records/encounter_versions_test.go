@@ -176,3 +176,32 @@ func TestEncounterExport_RoundTrips(t *testing.T) {
 		t.Fatalf("versions read back: %+v %v\n%s", vs, err, b.String())
 	}
 }
+
+// With a partial Foundry list the warning says Chronicle couldn't check,
+// never that Foundry did not report the monster.
+func TestEncounterKind_TruncatedReportWarning(t *testing.T) {
+	at := time.Now()
+	tests := []struct {
+		name      string
+		truncated bool
+		want      string
+		notWant   string
+	}{
+		{"complete list", false, "but Foundry did not report a monster by that name", "only part"},
+		{"partial list", true, "but Foundry sent only part of its monster list, so Chronicle couldn't check whether Foundry has it", "did not report"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			report := fakeMonsters{FoundryMonsterReport{ReportedAt: &at, Truncated: tc.truncated, Monsters: []FoundryMonster{{Name: "Stalker", Pack: "Monsters"}}}}
+			k := EncounterKind{Svc: &fakeEncounters{byPage: map[string][]EncounterRef{}}, Entities: encounterPages(), Monsters: report}
+			p := k.Plan(context.Background(), camp, owner, encounterRecord(ActionCreate, map[string]any{"creatures": []any{"Wyrm", "Stalker"}}))
+			w := strings.Join(p.Warnings, "|")
+			if !strings.Contains(w, `"Wyrm" is not a page yet; it goes in by name, `+tc.want) || strings.Contains(w, tc.notWant) {
+				t.Errorf("warnings %q", p.Warnings)
+			}
+			if !strings.Contains(w, "and Foundry has it") {
+				t.Errorf("a monster in the partial list is still found: %q", p.Warnings)
+			}
+		})
+	}
+}

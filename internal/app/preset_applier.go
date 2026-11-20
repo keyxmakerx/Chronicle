@@ -144,6 +144,35 @@ func (p *presetApplier) applyManifestPresets(ctx context.Context, campaignID, sy
 			match = existingByName[strings.ToLower(preset.Name)]
 		}
 
+		// A character preset that found the seeded "Characters" type by name
+		// (D&D's preset is called "Character") binds it to the preset, as the
+		// adopt path below does for a differently named preset: the hero
+		// creator, the sheet and Foundry all find the system's character type
+		// by its preset category, so a name match alone leaves heroes on an
+		// empty category. Only when the system is turned on: the upgrade
+		// path stays additive (a campaign already in this state is healed
+		// once by bindCharacterPresetOnce).
+		if create && match != nil && preset.Category == presetCategoryCharacter &&
+			existingByCategory[preset.Category] == nil &&
+			(match.PresetCategory == nil || *match.PresetCategory == "") {
+			adopted, err := p.entityService.AdoptDefaultCharacterType(ctx, campaignID, preset.Category, declared)
+			if err != nil {
+				slog.Warn("failed to bind the Characters type to the system's character preset",
+					slog.String("campaign_id", campaignID),
+					slog.String("preset", preset.Slug),
+					slog.Any("error", err),
+				)
+			} else if adopted != nil {
+				existingByCategory[preset.Category] = adopted
+				slog.Info("default Characters type bound to the system character preset",
+					slog.String("campaign_id", campaignID),
+					slog.Int("entity_type_id", adopted.ID),
+					slog.String("preset", preset.Slug),
+					slog.String("system", systemSlug),
+				)
+			}
+		}
+
 		// Upgrade path: the type exists, so don't recreate it — just add any
 		// newly-declared fields it's missing. Idempotent: no-ops once the
 		// type already carries every declared field.
@@ -280,6 +309,10 @@ func mapPresetFields(fields []systems.FieldDef) []entities.FieldDefinition {
 			Choices: f.Choices,
 			// Carried so play controls read one stored declaration.
 			Play: mapPlayDef(f.Play),
+			// Value checks AI Import applies before it saves a number or list.
+			Min:      f.Min,
+			Max:      f.Max,
+			JSONList: f.JSONList,
 		})
 	}
 	return out
@@ -367,6 +400,69 @@ func reconcileFieldPlay(ctx context.Context, entityService entities.EntityServic
 	}
 	if n > 0 {
 		slog.Info("entity_types: play field sync updated types", slog.Int("rows", n))
+	}
+}
+
+// buildChecksByCategory collects every installed manifest's value checks by
+// preset category and field key. Every declared key is recorded, bounded or
+// not, so removing a bound from a manifest converges too. Two systems that
+// declare different checks for the same category and key cancel out, as
+// play blocks do, so one system's bounds never refuse another's values.
+func buildChecksByCategory() map[string]map[string]entities.FieldChecks {
+	return checksByCategory(systems.Registry())
+}
+
+func checksByCategory(manifests []*systems.SystemManifest) map[string]map[string]entities.FieldChecks {
+	out := map[string]map[string]entities.FieldChecks{}
+	conflicted := map[string]map[string]bool{}
+	for _, m := range manifests {
+		if m == nil {
+			continue
+		}
+		for _, preset := range m.EntityPresets {
+			if preset.Category == "" {
+				continue
+			}
+			cat := preset.Category
+			for _, f := range preset.Fields {
+				if conflicted[cat][f.Key] {
+					continue
+				}
+				if out[cat] == nil {
+					out[cat] = map[string]entities.FieldChecks{}
+				}
+				want := entities.FieldChecks{Min: f.Min, Max: f.Max, JSONList: f.JSONList}
+				if prev, seen := out[cat][f.Key]; seen && !reflect.DeepEqual(prev, want) {
+					// An empty check stays recorded so a stored bound is cleared.
+					out[cat][f.Key] = entities.FieldChecks{}
+					if conflicted[cat] == nil {
+						conflicted[cat] = map[string]bool{}
+					}
+					conflicted[cat][f.Key] = true
+					continue
+				}
+				out[cat][f.Key] = want
+			}
+		}
+	}
+	return out
+}
+
+// reconcileFieldChecks stamps manifest value checks onto existing entity
+// types so categories made before a system declared them are checked too.
+// Same idempotent, best-effort contract as reconcileFieldPlay.
+func reconcileFieldChecks(ctx context.Context, entityService entities.EntityService) {
+	checks := buildChecksByCategory()
+	if len(checks) == 0 {
+		return
+	}
+	n, err := entityService.SyncFieldChecks(ctx, checks)
+	if err != nil {
+		slog.Warn("entity_types: field check sync failed", slog.Any("error", err))
+		return
+	}
+	if n > 0 {
+		slog.Info("entity_types: field check sync updated types", slog.Int("rows", n))
 	}
 }
 

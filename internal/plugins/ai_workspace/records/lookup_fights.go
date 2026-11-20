@@ -57,8 +57,12 @@ func (run *lookupRun) encountersLookup(page string) (LookupAnswer, error) {
 			b.WriteString("Plays now: the base creatures; the DM can pick a version in Foundry.\n")
 		}
 		if haveReport {
-			if missing := cannotPlace(e, report); len(missing) > 0 {
+			missing, unchecked := cannotPlace(e, report)
+			if len(missing) > 0 {
 				b.WriteString("Foundry can't place: " + strings.Join(missing, ", ") + " (no page and no Foundry monster by that name).\n")
+			}
+			if len(unchecked) > 0 {
+				b.WriteString("Foundry sent only part of its monster list, so Chronicle couldn't check: " + strings.Join(unchecked, ", ") + " (no page; Foundry may still have them).\n")
 			}
 		}
 		b.WriteString("\n")
@@ -68,10 +72,11 @@ func (run *lookupRun) encountersLookup(page string) (LookupAnswer, error) {
 }
 
 // cannotPlace names the creatures of every version that have no page and
-// that Foundry did not report, once each.
-func cannotPlace(e EncounterRef, r FoundryMonsterReport) []string {
+// that Foundry did not report, once each. When Foundry's list was cut short
+// an absent name proves nothing, so those creatures come back as unchecked
+// instead of missing.
+func cannotPlace(e EncounterRef, r FoundryMonsterReport) (missing, unchecked []string) {
 	seen := map[string]bool{}
-	var out []string
 	check := func(cs []EncounterCreature) {
 		for _, c := range cs {
 			k := strings.ToLower(c.Name)
@@ -79,8 +84,13 @@ func cannotPlace(e EncounterRef, r FoundryMonsterReport) []string {
 				continue
 			}
 			seen[k] = true
-			if r.Find(c.Name) == nil {
-				out = append(out, quote(c.Name))
+			if r.Find(c.Name) != nil {
+				continue
+			}
+			if r.Truncated {
+				unchecked = append(unchecked, quote(c.Name))
+			} else {
+				missing = append(missing, quote(c.Name))
 			}
 		}
 	}
@@ -88,7 +98,7 @@ func cannotPlace(e EncounterRef, r FoundryMonsterReport) []string {
 	for _, v := range e.Versions {
 		check(v.Creatures)
 	}
-	return out
+	return missing, unchecked
 }
 
 // testsLookup lists the tests on pages, with their results and the one

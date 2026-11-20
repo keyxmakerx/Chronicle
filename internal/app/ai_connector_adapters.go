@@ -22,7 +22,8 @@ func (a aiConnectorOwners) Check(ctx context.Context, campaignID, userID string)
 }
 
 // CheckMember is Check for anyone in the campaign: a player's key works
-// while its maker is still a member.
+// while its maker is still a member. A guest is refused here, on every key
+// call, so the rule holds on the server and not only by hiding the button.
 func (a aiConnectorOwners) CheckMember(ctx context.Context, campaignID, userID string) (string, error) {
 	return a.check(ctx, campaignID, userID, campaigns.RolePlayer, connector.ErrNotMember)
 }
@@ -44,6 +45,9 @@ func (a aiConnectorOwners) check(ctx context.Context, campaignID, userID string,
 	}
 	if m.Role < least {
 		return "", no
+	}
+	if m.IsGuest && m.Role < campaigns.RoleOwner {
+		return "", connector.ErrGuest
 	}
 	return c.Name, nil
 }

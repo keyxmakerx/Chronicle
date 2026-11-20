@@ -2,6 +2,7 @@ package importer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/url"
@@ -66,15 +67,23 @@ const maxSheetFormula = 64 << 10
 // "Use the formula" on. raw is that screen's JSON object of key → value. Only
 // a key the AI wrote is replaced (matched ignoring case, kept under the AI's
 // spelling), so the screen can never add a field; the committer then checks
-// the result like any other `fields:`. Unreadable input changes nothing.
-func UseSheetFormula(fields map[string]any, raw string) map[string]any {
+// the result like any other `fields:`. Input that is too large or unreadable
+// changes nothing and is reported, so a director who pressed the button is
+// never left thinking the formula was applied.
+func UseSheetFormula(fields map[string]any, raw string) (map[string]any, error) {
 	raw = strings.TrimSpace(raw)
-	if len(fields) == 0 || raw == "" || len(raw) > maxSheetFormula {
-		return fields
+	if raw == "" {
+		return fields, nil
+	}
+	if len(raw) > maxSheetFormula {
+		return fields, errors.New("the game system's numbers for this page are too large to apply, so nothing was changed")
 	}
 	var formula map[string]any
 	if err := json.Unmarshal([]byte(raw), &formula); err != nil {
-		return fields
+		return fields, errors.New("the game system's numbers for this page could not be read, so nothing was changed")
+	}
+	if len(fields) == 0 {
+		return fields, nil
 	}
 	byKey := make(map[string]string, len(fields))
 	for k := range fields {
@@ -85,7 +94,7 @@ func UseSheetFormula(fields map[string]any, raw string) map[string]any {
 			fields[orig] = v
 		}
 	}
-	return fields
+	return fields, nil
 }
 
 // fieldValue checks one value against its field's type, returning what to
@@ -96,25 +105,23 @@ func fieldValue(def entities.FieldDefinition, v any) (any, string) {
 	}
 	switch def.Type {
 	case "number":
-		switch n := v.(type) {
-		case int:
-			return n, ""
-		case int64:
-			return n, ""
-		case float64:
-			if math.IsNaN(n) || math.IsInf(n, 0) {
-				return nil, "needs a number."
-			}
-			return n, ""
-		case string:
-			if f, err := strconv.ParseFloat(strings.TrimSpace(n), 64); err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
-				if f == math.Trunc(f) && math.Abs(f) < 1e15 {
-					return int(f), ""
-				}
-				return f, ""
-			}
+		n, ok := numberOf(v)
+		if !ok {
+			return nil, fmt.Sprintf("needs a number, not %s.", shown(v))
 		}
-		return nil, fmt.Sprintf("needs a number, not %s.", shown(v))
+		if p := rangeProblem(def, n); p != "" {
+			return nil, p
+		}
+		if i, isInt := v.(int); isInt {
+			return i, ""
+		}
+		if i, isInt := v.(int64); isInt {
+			return i, ""
+		}
+		if n == math.Trunc(n) && math.Abs(n) < 1e15 {
+			return int(n), ""
+		}
+		return n, ""
 	case "checkbox":
 		switch b := v.(type) {
 		case bool:
@@ -176,16 +183,69 @@ func fieldValue(def entities.FieldDefinition, v any) (any, string) {
 		}
 		return d.String(), ""
 	default: // text, textarea, and anything older
+		text := ""
 		if s, ok := scalarText(v); ok {
-			return s, ""
+			text = s
+		} else {
+			b, err := json.Marshal(jsonSafe(v))
+			if err != nil {
+				return nil, "could not be read as text or a list."
+			}
+			text = string(b)
 		}
-		b, err := json.Marshal(jsonSafe(v))
-		if err != nil {
-			return nil, "could not be read as text or a list."
+		// A list field's text is read by the system's widgets as JSON, so text
+		// that is not a list would save and then draw as empty.
+		if def.JSONList && text != "" {
+			var list []any
+			if json.Unmarshal([]byte(text), &list) != nil {
+				return nil, "needs a list of entries, not plain text."
+			}
 		}
-		return string(b), ""
+		return text, ""
 	}
 }
+
+// numberOf reads a number from the shapes YAML and the paste hand over,
+// refusing NaN and infinity so a bad figure never reaches a sheet.
+func numberOf(v any) (float64, bool) {
+	var f float64
+	switch n := v.(type) {
+	case int:
+		f = float64(n)
+	case int64:
+		f = float64(n)
+	case float64:
+		f = n
+	case string:
+		p, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
+		if err != nil {
+			return 0, false
+		}
+		f = p
+	default:
+		return 0, false
+	}
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, false
+	}
+	return f, true
+}
+
+// rangeProblem is the plain-words problem when n is outside the bounds the
+// system declared for the field, or "" when it is inside or unbounded.
+func rangeProblem(def entities.FieldDefinition, n float64) string {
+	switch {
+	case def.Min != nil && def.Max != nil && (n < *def.Min || n > *def.Max):
+		return fmt.Sprintf("needs a number from %s to %s, not %s.", num(*def.Min), num(*def.Max), num(n))
+	case def.Min != nil && n < *def.Min:
+		return fmt.Sprintf("needs a number of at least %s, not %s.", num(*def.Min), num(n))
+	case def.Max != nil && n > *def.Max:
+		return fmt.Sprintf("needs a number of at most %s, not %s.", num(*def.Max), num(n))
+	}
+	return ""
+}
+
+func num(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
 
 // scalarText is a plain value as text; lists and maps are not scalars.
 func scalarText(v any) (string, bool) {

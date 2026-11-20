@@ -61,7 +61,9 @@ func builderHeroes(ctx context.Context, mine []CastMember, charTypeIDs []int, ty
 			if t := byType[e.EntityTypeID]; t != nil {
 				typeFields = t.Fields
 			}
-			for _, f := range MergeFields(typeFields, e.FieldOverrides) {
+			// RestrictionDefs, not MergeFields: a field hidden on this page
+			// is still GM-only.
+			for _, f := range RestrictionDefs(typeFields, e.FieldOverrides) {
 				if f.GMOnly {
 					hidden[f.Key] = true
 				}

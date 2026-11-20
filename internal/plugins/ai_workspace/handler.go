@@ -599,6 +599,7 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 	}
 
 	decisions := make([]importer.RowDecision, len(pages))
+	var formulaErr error
 	for i := range pages {
 		prefix := "page_" + strconv.Itoa(i) + "_"
 		category := strings.TrimSpace(c.FormValue(prefix + "category"))
@@ -635,7 +636,11 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 		// independently against any client-side bypass.
 		deleteConfirmed := c.FormValue(prefix+"delete_confirmed") == "on"
 		// Numbers the director took from the game system's formulas.
-		pages[i].FrontMatter.Fields = importer.UseSheetFormula(pages[i].FrontMatter.Fields, c.FormValue(prefix+"sheet_formula"))
+		fields, ferr := importer.UseSheetFormula(pages[i].FrontMatter.Fields, c.FormValue(prefix+"sheet_formula"))
+		if ferr != nil && formulaErr == nil {
+			formulaErr = fmt.Errorf("%s: %w", pages[i].Name, ferr)
+		}
+		pages[i].FrontMatter.Fields = fields
 
 		decisions[i] = importer.RowDecision{
 			Include:         c.FormValue(prefix+"include") == "on",
@@ -649,6 +654,18 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 			// Re-checked by the committer against the live page.
 			ReplaceGMOnlyConfirmed: c.FormValue(prefix+"replace_gm_confirmed") == "on",
 		}
+	}
+
+	// Nothing is written yet, so a formula that could not be applied stops the
+	// whole Apply and frees the request to be tried again.
+	if formulaErr != nil {
+		if claimedID != 0 {
+			if rerr := h.connector.ReleaseRequest(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), claimedID); rerr != nil {
+				slog.Error("ai-workspace: releasing request after formula problem",
+					slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", rerr))
+			}
+		}
+		return apperror.NewBadRequest("Nothing was applied: " + formulaErr.Error() + ".")
 	}
 
 	early := h.commitEarlyFolders(c, cc, recs)
@@ -1119,7 +1136,7 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, conn *connector.Con
 				return "", err
 			}
 		}
-		return playerInstructions(campaignName, sheets), nil
+		return playerInstructions(campaignName, h.playerGMTerm(ctx, conn.CampaignID), sheets), nil
 	}
 	if h.promptBuilder == nil {
 		return "", errors.New("ai-workspace: prompt builder not configured")

@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // systemPageHeader is the header of a page a game-system renderer owns: name,
@@ -27,7 +28,7 @@ templ systemPageHeader(cc *campaigns.CampaignContext, entity *Entity, entityType
 	<div class="ph-title" data-page-header>
 		<div class="ph-title-l">
 			<h1 class="text-2xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
-			@entityFavoriteButton(entity)
+			@entityFavoriteButton(cc, entity)
 			@pagePinMount(cc, entity)
 			@dmOnlyTitleLabel(cc, entity)
 			@claimMarker(cc, entity, claim, ownerName)
@@ -146,10 +147,10 @@ templ claimMarker(cc *campaigns.CampaignContext, entity *Entity, state claimPill
 // systemImageMount is the image-upload mount a system widget's Change
 // picture button reaches through the chronicle:change-image event. It takes
 // no space but is not display:none, so the upload's progress strip and error
-// bar still show, pinned to the bottom of the screen. Only Scribes and up get
-// one: the image route is Scribe-only.
+// bar still show, pinned to the bottom of the screen. Scribes and the page's
+// claimed player get one, the same viewers the image route lets write.
 templ systemImageMount(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
-	if cc.MemberRole >= campaigns.RoleScribe {
+	if CanEditOwnPage(cc.MemberRole, entity, layouts.GetUserID(ctx)) {
 		<div
 			class="ph-image-mount"
 			data-widget="image-upload"

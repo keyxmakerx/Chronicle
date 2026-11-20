@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strconv"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -181,11 +183,21 @@ func (n aiFieldNotes) FieldNotes(ctx context.Context, campaignID string, t entit
 			}
 			for _, f := range p.Fields {
 				note := f.Format
-				if p.Category == presetCategoryCharacter && foundryKeeps(f) {
+				// A preset's pull list names what Foundry sends back live, such
+				// as a creature's current Stamina; a write here would be
+				// replaced at the next sync, or overwrite what the table tracks.
+				pulled := slices.Contains(p.FoundryPullFields, f.Key)
+				if (p.Category == presetCategoryCharacter && foundryKeeps(f)) || pulled {
 					if note != "" {
 						note += ". "
 					}
 					note += "Foundry keeps this one: leave it out"
+				}
+				if r := rangeNote(f); r != "" && !pulled {
+					if note != "" {
+						note += ". "
+					}
+					note += r
 				}
 				if note != "" {
 					out[f.Key] = note
@@ -194,4 +206,19 @@ func (n aiFieldNotes) FieldNotes(ctx context.Context, campaignID string, t entit
 		}
 	}
 	return out
+}
+
+// rangeNote tells the AI the bounds the review will hold a number to, so it
+// writes a sensible figure the first time rather than having the row flagged.
+func rangeNote(f systems.FieldDef) string {
+	num := func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
+	switch {
+	case f.Min != nil && f.Max != nil:
+		return "A number from " + num(*f.Min) + " to " + num(*f.Max)
+	case f.Min != nil:
+		return "A number of at least " + num(*f.Min)
+	case f.Max != nil:
+		return "A number of at most " + num(*f.Max)
+	}
+	return ""
 }

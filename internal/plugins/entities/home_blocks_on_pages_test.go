@@ -117,7 +117,7 @@ func TestHomeBlocksOfferedOnPages(t *testing.T) {
 	if byType["map_full"].Addon == "" || byType["calendar_full"].Addon == "" || byType["sync_status"].Addon == "" {
 		t.Error("an addon gate was lost")
 	}
-	if len(byType["where_we_play"].ConfigFields) != 2 || len(byType["entity_list"].ConfigFields) != 2 || len(byType["start_here"].ConfigFields) != 1 {
+	if len(byType["where_we_play"].ConfigFields) != 2 || len(byType["entity_list"].ConfigFields) != 2 || len(byType["start_here"].ConfigFields) != 1 || len(byType["brochure"].ConfigFields) != 2 {
 		t.Error("a settings field was lost")
 	}
 	if got := byType["map_full"].Contexts; len(got) != 2 || got[0] != "dashboard" || got[1] != "template" {
@@ -214,6 +214,7 @@ func TestHomeBlocksOnAPageShowEachViewerOnlyTheirOwn(t *testing.T) {
 		{block: "map_full", cfg: map[string]any{"map_id": "map-3"}, who: everyone, allSee: `data-map-id="map-3"`},
 		{block: "coming_up", who: everyone, allSee: "/campaigns/camp-1/coming-up"},
 		{block: "start_here", cfg: map[string]any{"entity_id": "page-77"}, who: everyone, allSee: "start-here?page=page-77"},
+		{block: "brochure", cfg: map[string]any{"entity_id": "page-77", "content": "Read me"}, who: everyone, allSee: "brochure?page=page-77&amp;text=Read+me"},
 		{block: "at_a_glance", who: everyone, allSee: "/campaigns/camp-1/at-a-glance"},
 		{block: "party", who: everyone, allSee: "/campaigns/camp-1/party"},
 		{block: "your_hero", who: members, allSee: "/campaigns/camp-1/your-hero"},

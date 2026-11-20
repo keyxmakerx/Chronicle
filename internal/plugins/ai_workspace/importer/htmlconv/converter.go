@@ -6,7 +6,7 @@
 //
 // Schema target: TipTap StarterKit + Link + Table. Covered
 // nodes/marks: doc, paragraph, text, heading (level 1-6), bulletList,
-// orderedList, listItem, codeBlock (no language attribute), blockquote,
+// orderedList, listItem, taskList, taskItem, codeBlock (no language attribute), blockquote,
 // horizontalRule, hardBreak, table/tableRow/tableHeader/tableCell,
 // marks bold/italic/strike/code/link/underline, and the editor's own
 // picture (chronicleImage, from a figure.ce-img or an img with a /media/<id> src)
@@ -145,6 +145,10 @@ func convertElement(s *goquery.Selection) ([]Node, bool) {
 			Content: convertInline(s),
 		}), false
 	case "ul":
+		// The editor's checklist, which is how stored HTML spells one.
+		if s.AttrOr("data-type", "") == "taskList" {
+			return []Node{{Type: "taskList", Content: convertListItems(s)}}, false
+		}
 		return []Node{{Type: "bulletList", Content: convertListItems(s)}}, false
 	case "ol":
 		attrs := map[string]any{}
@@ -164,6 +168,13 @@ func convertElement(s *goquery.Selection) ([]Node, bool) {
 		// ("- ![a](/media/id)") gets an empty one in front.
 		if len(kids) > 0 && kids[0].Type != "paragraph" {
 			kids = append([]Node{{Type: "paragraph"}}, kids...)
+		}
+		if s.AttrOr("data-type", "") == "taskItem" {
+			return []Node{{
+				Type:    "taskItem",
+				Attrs:   map[string]any{"checked": s.AttrOr("data-checked", "") == "true"},
+				Content: kids,
+			}}, false
 		}
 		return []Node{{Type: "listItem", Content: kids}}, false
 	case "pre":

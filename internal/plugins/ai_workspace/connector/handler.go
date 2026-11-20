@@ -152,6 +152,8 @@ func (e *Endpoint) Serve(c *echo.Context) error {
 			return refuse(c, http.StatusForbidden, "Whoever made this key no longer owns the campaign. The owner can make a new one on the Your AI page.")
 		case errors.Is(err, ErrPlayerGone):
 			return refuse(c, http.StatusForbidden, "Whoever made this key is no longer in the campaign.")
+		case errors.Is(err, ErrGuest):
+			return refuse(c, http.StatusForbidden, "Guests can't use an AI in this campaign.")
 		}
 		return refuse(c, http.StatusServiceUnavailable, "Chronicle couldn't check the key just now. Try again in a moment.")
 	}

@@ -24,6 +24,9 @@ func ctxForNotes(authed bool, campaignID string, notesEnabled bool, activePath s
 	// not the Jot notes one.
 	ctx = SetEnabledAddons(ctx, map[string]bool{"notes": true, "jot-notes": notesEnabled})
 	ctx = SetActivePath(ctx, activePath)
+	if authed {
+		ctx = SetCampaignRole(ctx, 1)
+	}
 	return ctx
 }
 
@@ -278,6 +281,12 @@ func TestNotesWidgetVisible(t *testing.T) {
 				t.Fatalf("notesWidgetVisible() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+
+	// A signed-in visitor (a look-around pass, a public campaign) has no jots.
+	visitor := SetCampaignRole(ctxForNotes(true, "camp1", true, "/campaigns/camp1/dashboard"), 0)
+	if notesWidgetVisible(visitor) {
+		t.Fatal("a visitor with no membership was given the Jot notes tab")
 	}
 }
 

@@ -2,16 +2,17 @@ package systems
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 )
 
-// SystemSearchAdapter adapts module DataProvider.Search() results to the
-// entity handler's SystemSearcher interface. It checks which modules are
-// enabled as addons for the campaign before searching.
+// SystemSearchAdapter adapts the rules search to the entity handler's
+// SystemSearcher interface. It checks which systems are enabled as addons
+// for the campaign before searching, and searches each through RulesPages,
+// so global search finds exactly what the reader's own list holds.
 type SystemSearchAdapter struct {
 	addonSvc addons.AddonService
+	rules    *RulesPages
 }
 
 // NewSystemSearchAdapter creates an adapter that will check addon
@@ -20,50 +21,60 @@ func NewSystemSearchAdapter(addonSvc addons.AddonService) *SystemSearchAdapter {
 	return &SystemSearchAdapter{addonSvc: addonSvc}
 }
 
-// SearchSystemContent searches all enabled modules for the given campaign
+// SetRulesPages gives the adapter the per-reader catalog. Without it every
+// system answers from its package alone.
+func (a *SystemSearchAdapter) SetRulesPages(p *RulesPages) { a.rules = p }
+
+// SearchSystemContent searches all enabled systems for the given campaign
 // and returns results formatted for the entity search API response.
-// Director-only categories are left out unless director is set.
-func (a *SystemSearchAdapter) SearchSystemContent(ctx context.Context, campaignID, query string, director bool) ([]map[string]string, error) {
+// Director-only categories and entries are left out unless director is set.
+func (a *SystemSearchAdapter) SearchSystemContent(ctx context.Context, campaignID, query string, director bool, userID, campaignName string) ([]map[string]string, error) {
 	if query == "" {
 		return nil, nil
 	}
+	rules := a.rules
+	if rules == nil {
+		rules = NewRulesPages(nil, nil, nil)
+	}
+	reader := RulesReader{CampaignID: campaignID, CampaignName: campaignName,
+		Actor: EntryActor{UserID: userID, IsDirector: director}}
 
 	var results []map[string]string
-
 	for _, mod := range AllSystems() {
 		info := mod.Info()
-
-		// Check if this module's addon is enabled for the campaign.
 		enabled, err := a.addonSvc.IsEnabledForCampaign(ctx, campaignID, info.ID)
 		if err != nil || !enabled {
 			continue
 		}
-
-		dp := mod.DataProvider()
-		if dp == nil {
-			continue
-		}
-
-		items, err := dp.Search(query)
+		hits, err := rules.Search(ctx, mod, query, reader)
 		if err != nil {
 			continue
 		}
-
-		// Format results to match the entity search API shape.
-		for _, item := range items {
-			if !director && info.DirectorOnly(item.Category) {
-				continue
+		for _, h := range hits {
+			typeName := info.Name + " · " + h.Category
+			switch h.Kind {
+			case "trait":
+				typeName = "Trait of " + h.EntryName + " · " + info.Name
+			case "left_out":
+				typeName = h.Summary
 			}
 			results = append(results, map[string]string{
-				"id":        item.ID,
-				"name":      item.Name,
-				"type_name": info.Name + " · " + item.Category,
-				"type_icon": info.Icon,
+				"id":         hitID(h),
+				"name":       h.Name,
+				"type_name":  typeName,
+				"type_icon":  info.Icon,
 				"type_color": "#6B7280",
-				"url":       fmt.Sprintf("/campaigns/%s/systems/%s/%s/%s", campaignID, info.ID, item.Category, item.ID),
+				"url":        h.URL,
 			})
 		}
 	}
-
 	return results, nil
+}
+
+// hitID keeps a trait's hit apart from its entry's.
+func hitID(h RulesHit) string {
+	if h.Kind == "trait" {
+		return h.Slug + "#" + slugFromName(h.Name)
+	}
+	return h.Slug
 }

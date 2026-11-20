@@ -44,6 +44,9 @@ safe markup. Links are followed only for same-site paths, `#` fragments and http
   link menu shut; links to other sites and links outside page text keep it.
   Holding then dragging cancels the press.
 - Keyboard focus on the trigger opens it; Escape closes it and returns focus.
+- A trigger inside an open modal dialog gets the card seated in that dialog
+  (a modal is in the top layer, above every z-index, and the page behind it is
+  inert); any other trigger puts it back on the body.
 - One card at a time. Kept 8 px inside the window; flips above the trigger
   near the bottom. Scrolling closes an unpinned card and moves a pinned one.
 - The fading corner sits above the trigger, its edge on the trigger's

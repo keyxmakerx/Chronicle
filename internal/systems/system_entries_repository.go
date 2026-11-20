@@ -52,6 +52,10 @@ type SystemEntryRepository interface {
 	// SetGrantEntry records the entry a claimed permission made, or with
 	// entryID 0 releases the claim after a failed save.
 	SetGrantEntry(ctx context.Context, campaignID string, id, entryID int64) error
+
+	// The ties, left-out lists, old names and notes live beside the entries
+	// (system_entries_reading_repository.go).
+	ReadingRepository
 }
 
 type systemEntryRepository struct {
@@ -64,13 +68,15 @@ func NewSystemEntryRepository(db *sql.DB) SystemEntryRepository {
 }
 
 const systemEntryColumns = `id, campaign_id, system_id, field_key, slug, name, summary, description,
-	properties, visibility, COALESCE(for_entity_id, ''), status, review_note, COALESCE(created_by, ''), created_at, updated_at`
+	properties, visibility, COALESCE(for_entity_id, ''), status, review_note, COALESCE(stands_for, ''),
+	COALESCE(stands_for_seen, ''), COALESCE(created_by, ''), created_at, updated_at`
 
 func scanSystemEntry(s rowScanner) (*SystemEntry, error) {
 	var e SystemEntry
 	var props []byte
 	if err := s.Scan(&e.ID, &e.CampaignID, &e.SystemID, &e.FieldKey, &e.Slug, &e.Name, &e.Summary,
-		&e.Description, &props, &e.Visibility, &e.ForEntityID, &e.Status, &e.ReviewNote, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		&e.Description, &props, &e.Visibility, &e.ForEntityID, &e.Status, &e.ReviewNote, &e.StandsFor, &e.StandsForSeen,
+		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
 		return nil, err
 	}
 	e.Properties = map[string]any{}
@@ -172,11 +178,15 @@ func (r *systemEntryRepository) Create(ctx context.Context, e *SystemEntry) erro
 	}
 	res, err := r.db.ExecContext(ctx,
 		`INSERT INTO campaign_system_entries
-		   (campaign_id, system_id, field_key, slug, name, summary, description, properties, visibility, for_entity_id, status, review_note, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, NULLIF(?, ''))`,
+		   (campaign_id, system_id, field_key, slug, name, summary, description, properties, visibility, for_entity_id, status, review_note,
+		    stands_for, stands_for_seen, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''))`,
 		e.CampaignID, e.SystemID, e.FieldKey, e.Slug, e.Name, e.Summary, e.Description, string(props), e.Visibility, e.ForEntityID,
-		entryStatusOrAccepted(e.Status), e.ReviewNote, e.CreatedBy)
+		entryStatusOrAccepted(e.Status), e.ReviewNote, e.StandsFor, e.StandsForSeen, e.CreatedBy)
 	if err != nil {
+		if isStandInConflict(err) {
+			return errStandInTaken
+		}
 		var me *mysql.MySQLError
 		if errors.As(err, &me) && me.Number == 1062 {
 			return apperror.NewConflict("an entry with that name already exists")

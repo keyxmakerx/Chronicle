@@ -139,10 +139,10 @@ func (h *SyncHistoryHandler) ProblemsFragment(c *echo.Context) error {
 	return middleware.Render(c, http.StatusOK, FoundryProblemsFragment(cc.Campaign.ID, events, h.now()))
 }
 
-// RegisterFoundryPageRoutes mounts the owner's Foundry page fragments and the
-// scene list pages read. The fragments are owner only: the page is, and what
-// Foundry reports about people is the owner's diagnostic, never shown to
-// players.
+// RegisterFoundryPageRoutes mounts the owner's Foundry page fragments, the
+// scene list pages read, and a player's own link line. The page fragments
+// are owner only: what Foundry reports about people is the owner's
+// diagnostic. The link line tells a player only about themselves.
 func RegisterFoundryPageRoutes(e *echo.Echo, h *SyncHistoryHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
 	cg := e.Group("/campaigns/:id", auth.RequireAuth(authSvc), campaigns.RequireCampaignAccess(campaignSvc))
 	owner := campaigns.RequireRole(campaigns.RoleOwner)
@@ -154,6 +154,10 @@ func RegisterFoundryPageRoutes(e *echo.Echo, h *SyncHistoryHandler, campaignSvc 
 	// Scenes are for anyone who may see DM-only material (checked in the
 	// handler), not only the owner: a co-DM writes pages too.
 	cg.GET("/foundry/scenes", h.ScenesJSON)
+	// A player's own "Link to Foundry" line and code (who may is checked in
+	// the handler: a member who is not the owner, never a preview).
+	cg.GET("/foundry/link", h.LinkFragment)
+	cg.POST("/foundry/link", h.IssueLinkCode)
 }
 
 // prunePlayers drops lists Foundry has not refreshed in a while.
