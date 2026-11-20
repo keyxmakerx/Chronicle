@@ -1083,6 +1083,16 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		opts.Page = p
 	}
 
+	// The Search page asks for its two groups separately. Any other caller
+	// leaves scope out and gets the whole answer, as quick search does.
+	scope := c.QueryParam("scope")
+	switch scope {
+	case SearchScopeNamed, SearchScopeMention:
+		opts.SearchScope = scope
+	default:
+		scope = ""
+	}
+
 	// Check if the caller wants JSON (used by the editor @mention widget).
 	wantsJSON := strings.Contains(c.Request().Header.Get("Accept"), "application/json")
 
@@ -1145,6 +1155,16 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 			if e.ParentID != nil {
 				item["parent_id"] = *e.ParentID
 			}
+			// The Search page draws the descriptor beside the category and
+			// the page's own small picture at the row's end.
+			if scope != "" {
+				if e.TypeLabel != nil && *e.TypeLabel != "" {
+					item["type_label"] = *e.TypeLabel
+				}
+				if e.ImagePath != nil && *e.ImagePath != "" {
+					item["image"] = layouts.MediaThumbURL(c.Request().Context(), *e.ImagePath, "300")
+				}
+			}
 			// Link pickers mark a page not everyone can read, so an author
 			// knows a link to it would show its name to players who can't
 			// open it. Only pages this viewer can already see are listed,
@@ -1153,6 +1173,21 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 				item["restricted"] = state
 			}
 			items[i] = item
+		}
+		// The mention group quotes where each page holds the words. The text
+		// comes from the same reader-safe column the match ran on, for the
+		// role this request searched as, in one query for the whole page.
+		if scope == SearchScopeMention && len(results) > 0 {
+			ids := make([]string, len(results))
+			for i := range results {
+				ids[i] = results[i].ID
+			}
+			snippets := h.service.SearchSnippets(c.Request().Context(), cc.Campaign.ID, query, ids, role, userID)
+			for i := range results {
+				if parts := snippets[results[i].ID]; len(parts) > 0 {
+					items[i]["snippet"] = parts
+				}
+			}
 		}
 		// Append cross-plugin search results from registered searchers.
 		// Each searcher is gated by its addon being enabled for the campaign,
@@ -1169,7 +1204,11 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		// events a second time. entity_total is the pages' own count, which is
 		// what a pager steps through: total also holds the unpaged hits.
 		entityTotal := total
-		if opts.Page > 1 {
+		// Maps, events and the rest are found by name only, so they belong
+		// to the named group, and a category or tag filter excludes them
+		// (they have neither).
+		onlyPages := scope == SearchScopeMention || (scope != "" && (typeID > 0 || len(opts.TagSlugs) > 0))
+		if opts.Page > 1 || onlyPages {
 			return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total, "entity_total": entityTotal})
 		}
 		if h.timelineSearcher != nil && query != "" && h.isAddonEnabled(ctx, cc.Campaign.ID, "timeline") {
