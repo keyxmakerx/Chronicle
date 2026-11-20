@@ -3,8 +3,9 @@
 // The real dice_customize.js and dice_customize.css run against a stub of the
 // Chronicle global: apiFetch keeps the campaign's settings and records every
 // PUT, dice.roll records its arguments. It pins what each control saves, that a
-// failed save puts the pick back, that the preview throws the campaign's picks,
-// and that the tab fits a phone with no sideways scroll.
+// failed save puts the pick back, that every set is a tile with a picture, that
+// the tray throws the campaign's picks inside itself, and that the tab fits a
+// phone with no sideways scroll.
 //
 // RUN: NODE_PATH="$(npm root -g)" node --test test/e2e/dice_customize.spec.mjs
 
@@ -53,7 +54,7 @@ window.Chronicle = {
     }
     return json(window.__state);
   },
-  dice: { catalogue: function () { return Promise.resolve(${JSON.stringify(CATALOGUE)}); }, roll: function (g, o) { window.__rolls.push({ groups: g, opts: { table: o.table } }); return Promise.resolve([]); } }
+  dice: { catalogue: function () { return Promise.resolve(${JSON.stringify(CATALOGUE)}); }, roll: function (g, o) { window.__rolls.push({ groups: g, opts: { table: o.table, inTray: !!o.host && o.host.matches('.dcz-tray [data-dcz-stage]'), keep: !!o.keep } }); return Promise.resolve([{ values: [7] }]); }, stop: function () {} }
 };
 </script><script>${js}</script><script>window.__reg.init(document.querySelector('.dcz'));</script></body></html>`;
 
@@ -143,27 +144,51 @@ test('a save the server refuses puts the pick back and says why', async () => {
   assert.match(got.msg, /That wasn’t saved\. Pick one of the dice sets\./);
 });
 
-test('the preview throws real dice with the campaign\'s picks, and a crit preview names its die', async () => {
+test('every set is a tile with a picture of its die, in one radio group, however many sets there are', async () => {
   const { p, close } = await open();
+  const got = await p.evaluate(() => ({
+    tiles: [...document.querySelectorAll('.dcz-tile')].map((t) => t.textContent.trim()),
+    radios: [...document.querySelectorAll('.dcz-tile input[type="radio"]')].map((i) => i.name),
+    pictured: [...document.querySelectorAll('.dcz-tile img')].filter((i) => /^data:image\//.test(i.getAttribute('src') || '')).length,
+    on: document.querySelector('.dcz-tile.is-on').textContent.trim(),
+    note: document.querySelector('.dcz-die').textContent.includes('A note for jewelled'),
+    oldTry: document.querySelectorAll('[data-dcz-roll="2d10"], [data-dcz-roll="d20"]').length,
+  }));
+  await close();
+  assert.deepEqual(got.tiles, ['Jewelled', 'Oak', 'Bone']);
+  assert.deepEqual(got.radios, ['dcz-set', 'dcz-set', 'dcz-set']);
+  assert.equal(got.pictured, 3);
+  assert.equal(got.on, 'Jewelled');
+  assert.equal(got.note, true);
+  assert.equal(got.oldTry, 0);
+});
+
+test('the tray throws the campaign\'s die inside itself on each pick and each word, and stays put across redraws', async () => {
+  const { p, close } = await open();
+  const stage = await p.$('[data-dcz-stage]');
   await p.click('[data-dcz-set="oak"]');
   await p.click('[data-dcz-colour="oak-c"]');
-  await p.click('[data-dcz-roll="2d10"]');
-  await p.click('[data-dcz-roll="d20"]');
+  await p.click('[data-dcz-roll="again"]');
   await p.click('[data-dcz-roll="succ"]');
   await p.click('[data-dcz-roll="fail"]');
   const rolls = await p.evaluate(() => window.__rolls);
+  const same = await p.evaluate((s) => s === document.querySelector('[data-dcz-stage]'), stage);
+  const label = await p.textContent('[data-dcz-tray-lab]');
   await close();
   assert.deepEqual(rolls.map((r) => r.groups[0].dice), [
-    [{ sides: 10 }, { sides: 10 }], [{ sides: 20 }], [{ sides: 20, value: 20, crit: 'succ' }], [{ sides: 20, value: 1, crit: 'fail' }],
+    [{ sides: 20 }], [{ sides: 20 }], [{ sides: 20 }], [{ sides: 20, value: 20, crit: 'succ' }], [{ sides: 20, value: 1, crit: 'fail' }],
   ]);
-  assert.deepEqual(rolls[0].opts.table, { set: 'oak', colour: 'oak-c', succ: 'phoenix', fail: 'grasp', quality: 'auto' });
+  assert.ok(rolls.every((r) => r.opts.inTray && r.opts.keep), 'every throw lands in the tray and stays there');
+  assert.deepEqual(rolls[4].opts.table, { set: 'oak', colour: 'oak-c', succ: 'phoenix', fail: 'grasp', quality: 'auto' });
+  assert.equal(same, true);
+  assert.equal(label, 'Oak · Colour c');
 });
 
 test('on a phone it folds to one column with no sideways scroll, and every control is 44 tall', async () => {
   const { p, close } = await open({ viewport: { width: 360, height: 800 } });
   const got = await p.evaluate(() => ({
     over: document.documentElement.scrollWidth - innerWidth,
-    small: [...document.querySelectorAll('.dcz-row, .dcz-seg button, .dcz-col, .dcz-chk, button.btn-secondary, .dcz-switch')].filter((e) => e.getBoundingClientRect().height < 43.5).map((e) => e.className + ':' + Math.round(e.getBoundingClientRect().height)),
+    small: [...document.querySelectorAll('.dcz-row, .dcz-seg button, .dcz-col, .dcz-chk, .dcz-tile, .dcz-switch')].filter((e) => e.getBoundingClientRect().height < 43.5).map((e) => e.className + ':' + Math.round(e.getBoundingClientRect().height)),
   }));
   await close();
   assert.ok(got.over <= 0, `scrolls sideways by ${got.over}px`);
