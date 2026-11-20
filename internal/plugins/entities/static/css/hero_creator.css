@@ -319,7 +319,7 @@ html[data-view-motion="calm"] .hc-leaf:not(.is-open), html[data-cz-reduce] .hc-l
   font: 600 9.5px/16px var(--paper-ui-font); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 .oe-mark--ask-first { color: var(--color-accent-link, var(--color-accent)); background: color-mix(in srgb, var(--color-accent) 9%, transparent); }
 .oe-mark--not-offered { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
-.oe-mark--required { color: var(--color-text-on-accent, #fff); border-color: var(--color-accent); background: var(--color-accent); }
+.oe-mark--required { color: #fff; border-color: var(--color-accent); background: var(--color-accent); }
 .oe-mark--left-out { color: var(--hc-mute); border-style: dashed; }
 .oe-dots { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: none; border-radius: 8px; color: var(--hc-mute);
   transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out); }
