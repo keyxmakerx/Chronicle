@@ -1182,6 +1182,7 @@ GET	/campaigns/:id/relations-graph	public-capable	widgets/relations.(*Handler).G
 GET	/campaigns/:id/relations-graph/page	public-capable	widgets/relations.(*Handler).GraphPage	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/roll-tables	session	plugins/rolltables.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 PUT	/campaigns/:id/roll-tables	session	plugins/rolltables.(*Handler).Put	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+GET	/campaigns/:id/roll-tables/manage	session	plugins/rolltables.(*Handler).Manage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/rolls	session	plugins/rolls.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/rolls	session	plugins/rolls.(*Handler).Roll	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/rolls/settings	session	plugins/rolls.(*Handler).Settings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
