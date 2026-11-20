@@ -662,7 +662,7 @@
       var a = t.dataset.bb;
       if (a === 'none') { self.selection = {}; self._syncPicks(); self._renderBar(); }
       else if (a === 'open') { var d = self._firstChosen(); if (d) self.view.openWing(d[0] + '_' + d[1] + '_' + d[2]); }
-      else if (a === 'hide' || a === 'reveal') self._bulkVisibility(a === 'hide' ? 'dm_only' : 'everyone');
+      else if (a === 'hide' || a === 'onday' || a === 'now') self._bulkVisibility(a);
       else if (a === 'shift') self._toggleShiftTray();
       else if (a === 'wx') self._openWeather();
       else if (a === 'lock') self._lockDays();
@@ -678,7 +678,7 @@
       '<div class="bbl"><b>' + (n === 1 ? '1 day' : n + ' days') + ' chosen</b><span>' + this._eventsInSelection().length + ' events touched</span></div>' +
       '<div class="bba">' +
         (n === 1 ? '<button type="button" class="bbb" data-bb="open"><i class="fa-solid fa-up-right-from-square"></i><span>Open day</span></button>' : '') +
-        (canVis ? '<button type="button" class="bbb" data-bb="hide"><i class="fa-solid fa-eye-slash"></i><span>Hide</span></button><button type="button" class="bbb" data-bb="reveal"><i class="fa-solid fa-eye"></i><span>Reveal</span></button>' : '') +
+        (canVis ? '<button type="button" class="bbb" data-bb="hide"><i class="fa-solid fa-eye-slash"></i><span>Hide</span></button><button type="button" class="bbb" data-bb="onday"><i class="fa-solid fa-calendar-days"></i><span>Show on the day</span></button><button type="button" class="bbb" data-bb="now"><i class="fa-solid fa-eye"></i><span>Show now</span></button>' : '') +
         '<button type="button" class="bbb" data-bb="shift" aria-expanded="' + !!this._shiftTray + '"><i class="fa-solid fa-arrows-left-right"></i><span>Shift events</span></button>' +
         (canVis ? (Chronicle.calendarWeatherSheet ? '<button type="button" class="bbb" data-bb="wx" aria-haspopup="dialog"><i class="fa-solid fa-cloud-sun"></i><span>Weather</span></button>' : '') +
           lockButtonHTML(lockState(this._selectedDates().map(function (d) { return (self.view.weatherByYear[d.year] || {})[d.month + '_' + d.day] || null; }))) : '') +
@@ -704,7 +704,7 @@
   // Refreshes the grid from the server (so it matches whatever actually
   // landed, even on a partial failure) and reports how many of a bulk
   // write's per-event requests succeeded. verb is past tense ("Hid",
-  // "Revealed", "Shifted"); tail is an optional clause inserted before the
+  // "Showed", "Shifted"); tail is an optional clause inserted before the
   // event count's trailing punctuation (e.g. " by 2 days").
   CalendarEditor.prototype._reportBulkResult = function (oks, verb, tail, note) {
     var view = this.view, okCount = oks.filter(Boolean).length, failCount = oks.length - okCount;
@@ -718,16 +718,23 @@
     }
   };
 
-  CalendarEditor.prototype._bulkVisibility = function (visibility) {
-    var self = this, view = this.view, events = this._eventsInSelection();
+  // What each bar action writes. Showing sets visibility and the announce
+  // rule in one request, so an event never sits shown under the wrong rule.
+  var BULK_VISIBILITY = {
+    hide: { body: { visibility: 'dm_only' }, verb: 'Hid', tail: '' },
+    onday: { body: { visibility: 'everyone', announced: 'on_day' }, verb: 'Set', tail: ' to show on their day' },
+    now: { body: { visibility: 'everyone', announced: 'ahead' }, verb: 'Showed', tail: ' now' }
+  };
+
+  CalendarEditor.prototype._bulkVisibility = function (action) {
+    var self = this, view = this.view, events = this._eventsInSelection(), how = BULK_VISIBILITY[action];
     if (!events.length) { view.say('No events in the selected days.'); return; }
-    var verb = visibility === 'dm_only' ? 'Hid' : 'Revealed';
     settleAll(events.map(function (e) {
       return Chronicle.apiFetch(view.apiBase + '/events/' + e.id + '/visibility', {
-        method: 'PUT', body: { visibility: visibility }
+        method: 'PUT', body: how.body
       });
     })).then(function (oks) {
-      self._reportBulkResult(oks, verb);
+      self._reportBulkResult(oks, how.verb, how.tail);
     });
   };
 

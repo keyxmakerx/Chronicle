@@ -282,6 +282,30 @@
       return null;
     },
 
+    // effectiveAnnounced mirrors Event.EffectiveAnnounced (model.go): the
+    // event's own setting, else "ahead" when it repeats yearly, else its
+    // kind's default, else "on_day".
+    effectiveAnnounced: function (cal, e) {
+      if (e.announced) return e.announced;
+      if (e.is_recurring && e.recurrence_type === CalDate.RECUR_YEARLY) return 'ahead';
+      var kinds = (cal && cal.event_kinds) || [];
+      for (var i = 0; e.kind_id != null && i < kinds.length; i++) {
+        if (kinds[i].id === e.kind_id) return kinds[i].default_announced || 'on_day';
+      }
+      return 'on_day';
+    },
+
+    // waitsForItsDay is true for an event players can see only once its
+    // day arrives, the rule the server applies to every non-author read
+    // (dropUnannouncedFutureEvents): shown to them eventually, start date
+    // strictly after today, and held by "on the day". Hidden events are
+    // not waiting; they stay hidden.
+    waitsForItsDay: function (cal, e) {
+      if (!e || e._draft || e.visibility === 'dm_only') return false;
+      if (CalDate.effectiveAnnounced(cal, e) !== 'on_day') return false;
+      return CalDate.dayIndex(cal, e.year, e.month, e.day) > CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+    },
+
     // occursOn mirrors Event.OccursOn exactly (model.go), including its
     // early-outs and its "recurrence only moves forward" rule, for an event
     // that arrived without occurrences.
@@ -1162,7 +1186,7 @@
     var cr = calEl.getBoundingClientRect();
     return (P.pairs || []).map(function (p, i) {
       var a = (back ? p.ric : p.mk).getBoundingClientRect(), b = (back ? p.mk : p.ric).getBoundingClientRect(), f = document.createElement('span');
-      f.className = 'flyer' + (p.mk.classList.contains('dir') ? ' dir' : '');
+      f.className = 'flyer' + (p.mk.classList.contains('dir') ? ' dir' : '') + (p.mk.classList.contains('wait') ? ' wait' : '');
       f.setAttribute('style', (p.mk.getAttribute('style') || '') + ';width:' + a.width.toFixed(1) + 'px;height:' + a.height.toFixed(1) + 'px');
       if (p.mk.classList.contains('gnm')) f.innerHTML = p.mk.innerHTML;
       else f.textContent = p.mk.textContent;
@@ -4918,8 +4942,10 @@
       var cap = Math.max(0, 4 - gn.length), shown = evs.slice(0, cap), extra = evs.length - shown.length;
       var html = '<div class="marks">' + gn.join('') + shown.map(function (e) {
         var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' && !e._draft ? ' dir' : '';
+        var waits = !dirRing && self.canAuthorDmOnly && CalDate.waitsForItsDay(self.cal, e);
+        if (waits) dirRing = ' wait';
         var occ = CalDate.occurrenceOn(e, y, m, d), skipped = occ && occ.skipped;
-        return '<span class="mk' + (e._draft ? ' ghost' + (e._pin ? ' yt-pin' : '') : '') + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
+        return '<span class="mk' + (e._draft ? ' ghost' + (e._pin ? ' yt-pin' : '') : '') + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '') + (waits ? ' (players see it on the day)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';
@@ -6359,7 +6385,8 @@
         recur = '<div class="row"><i class="fa-solid fa-rotate"></i><span class="tt">' + esc(this.repeatText(ev)) + '</span></div>';
       }
       var entity = ev.entity_id ? '<div class="row"><i class="fa-solid fa-link"></i><a class="tt" href="/campaigns/' + esc(this.campaignId) + '/entities/' + esc(ev.entity_id) + '">' + esc(ev.entity_name || 'Linked page') + '</a></div>' : '';
-      var visBadge = (this.canAuthorDmOnly && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>' + Chronicle.gmTerm() + ' only</span>' : '';
+      var visBadge = (this.canAuthorDmOnly && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>' + Chronicle.gmTerm() + ' only</span>'
+        : (this.canAuthorDmOnly && CalDate.waitsForItsDay(cal, ev)) ? '<span class="dirnote">Players see it on the day</span>' : '';
       var body = ev.description_html ? ev.description_html : (ev.description ? '<p>' + esc(ev.description) + '</p>' : '');
 
       return '<div class="grab" aria-hidden="true"></div>' +

@@ -18,8 +18,8 @@
  *
  * WHO MAY DO WHAT. Anyone who can open Edit gets the track as a view of the
  * year. The generating tools need two things at once: authoring DM-only
- * content (everything generated is saved dm_only, and weather writes are
- * gated on it) and the Owner role (Undo and a re-roll delete events, which
+ * content (everything generated is saved dm_only unless a fill is kept "On
+ * their day", and weather writes are gated on it) and the Owner role (Undo and a re-roll delete events, which
  * routes.go gates on RoleOwner). The client only decides what to offer; the
  * server gates are the safety.
  *
@@ -238,12 +238,15 @@
     history: [['history.kingdom', 'A kingdom'], ['history.frontier', 'A frontier'], ['history.dark', 'A dark age']]
   };
   var BUSY = [['0.25', 'Quiet'], ['0.5', 'Steady'], ['0.9', 'Busy']];
+  var SEE = [['later', 'When I reveal them'], ['day', 'On their day']];
 
   function blankDraft(kind, seed) {
     return {
       kind: kind, seed: seed, ev: [], wx: [], remove: [], pinned: {}, dropped: {}, note: '',
       on: { events: true, sky: true, weather: true },
       recipe: { events: 'events.frontier', sky: 'sky.classic', history: 'history.kingdom' }, busy: '0.5',
+      // When players learn of what a fill keeps: 'later' (a Director reveals each) or 'day' (each shows on its day).
+      see: 'later',
       n: { events: 0, sky: 0, weather: 0, history: 0 }, wxPrev: {}
     };
   }
@@ -289,7 +292,8 @@
       if (D.on.weather && !wxSet) parts.push(count(c.weather, 'day') + ' of weather');
       if (!parts.length) return 'Every part of this draft is switched off.';
       var old = removalsOf(D).length;
-      return 'From ' + ctx.now + ' to the end of ' + ctx.year + ': ' + listWords(parts) + '.' + (wxSet ? ' Every day already has its weather.' : '') + (old ? ' It replaces ' + count(old, 'event') + ' from an earlier fill.' : '');
+      var onDay = D.see === 'day' && (D.on.events || D.on.sky);
+      return 'From ' + ctx.now + ' to the end of ' + ctx.year + ': ' + listWords(parts) + '.' + (onDay ? ' Players see each event on its day.' : '') + (wxSet ? ' Every day already has its weather.' : '') + (old ? ' It replaces ' + count(old, 'event') + ' from an earlier fill.' : '');
     }
     if (D.kind === 'history') {
       var ys = activeEvents(D).map(function (e) { return e.year; });
@@ -320,7 +324,8 @@
     'recurrence_end_year', 'recurrence_end_month', 'recurrence_end_day', 'recurrence_max_occurrences', 'recurrence_rule',
     'visibility_rules', 'kind_id', 'tier', 'color', 'icon', 'all_day'];
   // The body POSTed to the events route. opts.lane saves a generated event: dm_only
-  // and marked. Without a lane the event is a copy, so it keeps its own visibility and
+  // and marked, or, with opts.onDay (never a history, which is already past), shown
+  // to everyone but held until its day. Without a lane the event is a copy, so it keeps its own visibility and
   // payload, except a generated marker, which belongs to the event it was made for;
   // opts.keepPayload (an Undo putting an event back as it was) keeps that too.
   function createBody(e, opts) {
@@ -332,7 +337,8 @@
     var ann = ANNOUNCED[e.announced] || ANNOUNCED[e.announce];
     if (ann) b.announced = ann;
     if (opts.lane) {
-      b.visibility = 'dm_only';
+      if (opts.onDay && opts.lane !== 'history') { b.visibility = 'everyone'; b.announced = 'on_day'; }
+      else b.visibility = 'dm_only';
       b.payload = markerFor(opts.lane, b);
     } else {
       b.visibility = e.visibility === 'dm_only' ? 'dm_only' : 'everyone';
@@ -1149,7 +1155,8 @@
     return row('Happenings', segHTML('Happenings', 'recipe:events', none.concat(RECIPES.events), D.on.events ? D.recipe.events : 'none')) +
       (D.on.events ? row('How busy', segHTML('How busy', 'busy', BUSY, D.busy)) : '') +
       row('Sky events', segHTML('Sky events', 'recipe:sky', none.concat(RECIPES.sky), D.on.sky ? D.recipe.sky : 'none')) +
-      row('Weather', segHTML('Weather', 'recipe:weather', none.concat([['climate', 'From your climate']]), D.on.weather ? 'climate' : 'none'));
+      row('Weather', segHTML('Weather', 'recipe:weather', none.concat([['climate', 'From your climate']]), D.on.weather ? 'climate' : 'none')) +
+      (D.on.events || D.on.sky ? row('Players see them', segHTML('Players see them', 'see', SEE, D.see)) : '');
   };
   P.actsHTML = function (D) {
     var canRoll = D.kind === 'fill' || D.kind === 'history', c = counts(D), none = !c.all && !c.weather && !removalsOf(D).length;
@@ -1226,6 +1233,7 @@
       else if (!D.on[lane]) { if (lane !== 'weather') D.recipe[lane] = val; D.on[lane] = true; this.reroll(lane); }
       else if (lane !== 'weather' && D.recipe[lane] !== val) { D.recipe[lane] = val; this.reroll(lane); }
     }
+    else if (p[0] === 'see' && D) { D.see = p[1] === 'day' ? 'day' : 'later'; this.refresh({ soft: true }); }
     else if (p[0] === 'busy' && D) { if (D.busy !== p[1]) { D.busy = p[1]; this.reroll('events'); } }
   };
 
@@ -1328,7 +1336,7 @@
     this.busy = true;
     this.workingBar();
     var rec = { created: [], removed: [], wx: [], prev: D.wxPrev || {} }, stop = null;
-    var items = evs.map(function (e) { return { e: e, body: createBody(e, { lane: laneOf(e) }) }; });
+    var items = evs.map(function (e) { return { e: e, body: createBody(e, { lane: laneOf(e), onDay: D.see === 'day' }) }; });
     // The new events first, then the old ones they replace, then the weather:
     // a failure part way never leaves less than there was.
     var pace = this.pacing('Keeping…');

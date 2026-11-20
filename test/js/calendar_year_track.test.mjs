@@ -342,3 +342,50 @@ test('a refill on a year whose weather is all set says so instead of counting ze
   D.on.events = false; D.on.sky = false;
   assert.equal(YT.sentence(D, ctx), 'From M2 10 to the end of 100: 0 days of weather.');
 });
+
+// ---- Fill: when players see what it keeps ----
+test('a fill kept "On their day" is shown to everyone but held until its day; the default stays dm_only', () => {
+  const e = { name: 'Fair', description: 'd', year: 100, month: 3, day: 4, gen: { key: 'k' } };
+  for (const lane of ['events', 'sky']) {
+    const held = YT.createBody(e, { lane });
+    const day = YT.createBody(e, { lane, onDay: true });
+    assert.equal(held.visibility, 'dm_only');
+    assert.equal(day.visibility, 'everyone');
+    assert.equal(day.announced, 'on_day');
+    assert.equal(YT.generatedLane(day), lane);
+    // The marker does not depend on who sees it, so Undo and a later fill still recognise it.
+    assert.equal(day.payload, held.payload);
+    assert.equal(YT.isHandMade(day), false);
+  }
+});
+
+test('a history is never saved to show on its day: it is already past', () => {
+  const b = YT.createBody({ name: 'War', year: 10, month: 1, day: 1 }, { lane: 'history', onDay: true });
+  assert.equal(b.visibility, 'dm_only');
+});
+
+test('the Fill body offers "Players see them" with the default on "When I reveal them"', () => {
+  const body = (D) => YT.YearTrack.prototype.makesHTML(D);
+  const D = YT.blankDraft('fill', 's');
+  assert.equal(D.see, 'later');
+  let html = body(D);
+  assert.match(html, /Players see them/);
+  assert.match(html, /data-yt="see:later" aria-pressed="true">When I reveal them/);
+  assert.match(html, /data-yt="see:day" aria-pressed="false">On their day/);
+  D.see = 'day';
+  html = body(D);
+  assert.match(html, /data-yt="see:day" aria-pressed="true">On their day/);
+  // Nothing to apply it to once happenings and sky events are both off.
+  D.on.events = false; D.on.sky = false;
+  assert.doesNotMatch(body(D), /Players see them/);
+  assert.doesNotMatch(body(YT.blankDraft('history', 's')), /Players see them/);
+});
+
+test('the sentence says so only when events are set to show on their day', () => {
+  const D = YT.blankDraft('fill', 's');
+  D.ev = [{ _lane: 'events', gen: { key: 'a' }, year: 100 }];
+  const ctx = { now: 'M2 10', year: '100 AS', yearOf: (n) => n + ' AS' };
+  assert.doesNotMatch(YT.sentence(D, ctx), /on its day/);
+  D.see = 'day';
+  assert.match(YT.sentence(D, ctx), /Players see each event on its day\./);
+});

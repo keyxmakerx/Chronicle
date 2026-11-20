@@ -290,6 +290,8 @@
 .cal-v5 .ci{position:relative;width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
 /* Director view only: a dashed ring marks what players can't see. */
 .cal-v5 .mk.dir::after, .cal-v5 .ric.dir::after, .cal-v5 .flyer.dir::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px dashed currentColor;opacity:.75;pointer-events:none}
+/* Director view only: a half ring marks an event players will see on its day. A dashed full ring (hidden) wins when both apply. */
+.cal-v5 .mk.wait::after, .cal-v5 .flyer.wait::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid currentColor;clip-path:inset(0 0 52% 0);opacity:.8;pointer-events:none}
 .cal-v5 .more{font:600 10.5px/22px var(--sans);color:var(--mut);padding:0 2px;white-space:nowrap;transition:opacity var(--dur-micro,120ms)}
 /* While a day's card is open, its marks are in the card, not the cell. */
 .cal-v5 .day.packed .mk, .cal-v5 .mk.away{visibility:hidden}
@@ -405,7 +407,7 @@
 .cal-v5 .carry{position:absolute;inset:0;z-index:45;pointer-events:none}
 .cal-v5 .flyer{position:absolute;left:0;top:0;display:grid;place-items:center;transform-origin:0 0;color:oklch(var(--icL) var(--icC) var(--h,260));will-change:transform}
 .cal-v5 .flyer .ci{display:block;width:100%;height:100%}
-.cal-v5 .flyer.dir::after{inset:-3px}
+.cal-v5 .flyer.dir::after, .cal-v5 .flyer.wait::after{inset:-3px}
 .cal-v5 .crease{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;min-height:40px;padding:6px 8px 6px 16px;border-bottom:1px dashed var(--edge);background:inherit;
   font:650 10px/1.2 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
 .cal-v5 .crease .x{margin-left:auto}
@@ -841,7 +843,7 @@
 .cal-v5 .mk{width:12px;height:12px}
 .cal-v5 .mk .ci{width:10px;height:10px;stroke-width:1.7}
 .cal-v5 .mk::before{display:none}
-.cal-v5 .mk.dir::after{inset:-1.5px}
+.cal-v5 .mk.dir::after, .cal-v5 .mk.wait::after{inset:-1.5px}
 .cal-v5 .mk>.ci{width:10px;height:10px}
 .cal-v5 .mk>.edot{width:5px;height:5px}
 .cal-v5 .more{width:12px;font-size:9px;line-height:12px;padding:0;text-align:center;letter-spacing:-.03em}
