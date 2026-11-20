@@ -33,9 +33,25 @@ const (
 	deskAll = deskMembers | deskInvites | deskAddons | deskSystem
 )
 
-// deskInputs gathers everything the whole desk draws.
+// deskInputs gathers everything the whole desk draws, the Customize block's
+// words included: the look, the categories, what each plugin's Customize
+// area says is chosen now, and this viewer's own brush choice.
 func (h *Handler) deskInputs(c *echo.Context, cc *CampaignContext) DeskInputs {
-	return h.deskInputsFor(c.Request().Context(), cc.Campaign, deskAll)
+	ctx := c.Request().Context()
+	in := h.deskInputsFor(ctx, cc.Campaign, deskAll)
+	in.Look = lookSummaryOf(ctx, cc.Campaign)
+	if h.categoryLister != nil {
+		if cats, err := h.categoryLister.ListCustomizeCategories(ctx, cc.Campaign.ID); err != nil {
+			slog.Warn("desk: categories not read", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		} else {
+			in.Categories, in.CategoriesRead = cats, true
+		}
+	}
+	for _, t := range h.customizeTabsOn(cc, in.Addons) {
+		in.Tabs = append(in.Tabs, DeskTab{ID: t.ID, Label: t.Label, Summary: t.summary(ctx)})
+	}
+	in.BrushHidden = h.brushHidden(ctx, auth.GetUserID(c))
+	return in
 }
 
 // deskInputsFor gathers the asked-for facts that campaigns itself knows. A part

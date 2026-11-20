@@ -331,38 +331,100 @@ func gameFigure(in DeskInputs) DeskFigure {
 	return f
 }
 
-// ---- Look ----------------------------------------------------------------
+// ---- Customize -------------------------------------------------------------
 
-// styleLine reads the owner's page look back: "Standard", or "Material" with
-// the style kit as the muted part.
-func styleLine(c *Campaign) DeskLine {
-	href := deskHref(c.ID, "/customize")
-	l := DeskLine{ID: "style", Name: "Style", Values: []DeskValue{figureValue("Standard", "", href)}}
-	a := c.ParseSettings().Appearance
-	if a == nil || a.PageLook != "annals" {
+// The words of the brush choice, which is the viewer's own.
+const (
+	deskBrushShown  = "Shown"
+	deskBrushHidden = "Hidden"
+)
+
+// lookLine reads the saved look back in a DM's words: the starter look's
+// name, the colour's name beside its swatch and the page style ("Parchment ·
+// Sienna · Sketchbook pages"). A colour the owner mixed has no name, so only
+// its swatch stands there.
+func lookLine(c *Campaign, s LookSummary) DeskLine {
+	v := figureValue(s.Look, joinParts(s.Colour, s.Pages), deskHref(c.ID, "/customize/look"))
+	v.Joined, v.SubSwatch = true, true
+	return DeskLine{ID: "look", Name: "Look", Values: []DeskValue{v}}
+}
+
+// joinParts joins the non-empty parts with a middle dot.
+func joinParts(parts ...string) string {
+	var out []string
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, " · ")
+}
+
+// categoriesLine is how many categories there are, as the sidebar counts
+// them, and how many only the DM team sees.
+func categoriesLine(c *Campaign, in DeskInputs) DeskLine {
+	href := deskHref(c.ID, "/customize/categories")
+	l := DeskLine{ID: "categories", Name: "Categories", Values: []DeskValue{openValue(href)}}
+	if !in.CategoriesRead {
 		return l
 	}
-	// The kit is named only when it is not the look's own: "Material" beside
-	// "Material kit" says one thing twice.
+	n, hidden := categoriesSummaryOf(in.Categories)
 	sub := ""
-	if kit := a.StyleKit; kit != "" && kit != "material" {
-		sub = strings.ToUpper(kit[:1]) + kit[1:] + " kit"
+	if hidden > 0 {
+		sub = fmt.Sprintf("%d hidden from players", hidden)
 	}
-	l.Values = []DeskValue{figureValue("Material", sub, href)}
+	v := figureValue(strconv.Itoa(n), sub, href)
+	v.Joined = true
+	l.Values = []DeskValue{v}
 	return l
 }
 
-// colourLine is the campaign's accent: its swatch and its hex, or "Default"
-// when none is stored. The Customizer has no named accent colours (its
-// presets are whole looks), so the hex is the only honest name.
-func colourLine(c *Campaign) DeskLine {
-	text := "Default"
-	if hex := c.ParseSettings().AccentColor; isValidHexColor(hex) {
-		text = strings.ToUpper(hex)
+// homesLine says who sees which home.
+func homesLine(c *Campaign, in DeskInputs) DeskLine {
+	text, sub := homesSummaryOf(c, in.GMTerm)
+	v := figureValue(text, sub, deskHref(c.ID, "/customize/home"))
+	v.Joined = true
+	return DeskLine{ID: "homes", Name: "Home pages", Values: []DeskValue{v}}
+}
+
+// tabLine is an area another plugin adds, with the words that plugin gives
+// for what is chosen now. A plugin that gives none shows its name and the
+// chevron alone.
+func tabLine(c *Campaign, t DeskTab) DeskLine {
+	v := figureValue(t.Summary.Text, "", deskHref(c.ID, "/customize/x/"+t.ID))
+	if t.Summary.Text != "" {
+		v.Sub, v.Joined = t.Summary.Sub, true
 	}
-	v := figureValue(text, "", deskHref(c.ID, "/customize"))
-	v.Swatch = true
-	return DeskLine{ID: "colour", Name: "Colour", Values: []DeskValue{v}}
+	return DeskLine{ID: "x-" + t.ID, Name: t.Label, Values: []DeskValue{v}}
+}
+
+// brushLine is whether the header's Customize brush shows for this person.
+// It is their own choice, saved with their other display choices, so it is
+// never off on an archived campaign.
+func brushLine(hidden bool) DeskLine {
+	b := DeskBlank{
+		Kind: DeskBlankChoice, ID: "brush", Label: "Brush in the header",
+		URL: "/account/view-prefs", Method: "PUT", Field: "brush",
+		Options: []DeskOption{
+			{Value: "shown", Label: deskBrushShown, Hint: "Customize from any page you're on"},
+			{Value: "hidden", Label: deskBrushHidden, Hint: "Only you stop seeing it"},
+		},
+		Value: "shown", Shown: deskBrushShown,
+	}
+	if hidden {
+		b.Value, b.Shown = "hidden", deskBrushHidden
+	}
+	return DeskLine{ID: "brush", Name: "Brush in the header", Values: []DeskValue{{Blank: &b}}}
+}
+
+// customizeLines are the Customize block: one row per Customize area in its
+// own order, then the brush.
+func customizeLines(c *Campaign, in DeskInputs) []DeskLine {
+	out := []DeskLine{lookLine(c, in.Look), categoriesLine(c, in), homesLine(c, in)}
+	for _, t := range in.Tabs {
+		out = append(out, tabLine(c, t))
+	}
+	return append(out, brushLine(in.BrushHidden))
 }
 
 // mediaLine is what the picture store holds: a file count and its size.

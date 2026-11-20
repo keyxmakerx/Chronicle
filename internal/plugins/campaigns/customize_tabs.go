@@ -10,7 +10,9 @@
 package campaigns
 
 import (
+	"context"
 	"sort"
+	"strings"
 
 	"github.com/a-h/templ"
 )
@@ -24,6 +26,17 @@ import (
 //     built-in Layouts / Content Templates / Appearance tabs).
 //   - Content: the tab body; the factory builds it per request so it can read
 //     live state for cc.Campaign.
+//   - Summary: optional. What is chosen now, in a few words ("Atlas frame"),
+//     for the tab's row in the Customize block of Campaign settings and its
+//     card on the Overview. The plugin reads its own storage here, so the
+//     campaigns plugin never reads another plugin's tables. Nil shows the
+//     tab's name alone.
+//   - Addon: optional. The add-on the tab belongs to; while it is off for the
+//     campaign the Customize block and the header's brush leave the tab out.
+//   - Paths: optional. Campaign-relative path prefixes of the plugin's own
+//     pages ("/maps"); on them the header's brush offers this tab first.
+//   - Here: the words of that brush row ("The frame around maps"); empty
+//     falls back to the tab's label.
 //
 // The Customize page is Owner-only, so a contributed tab needs no role of its
 // own: every viewer of it is already an Owner.
@@ -33,6 +46,54 @@ type CustomizeTab struct {
 	Icon      string
 	SortOrder int
 	Content   templ.Component
+	Summary   func(ctx context.Context) CustomizeSummary
+	Addon     string
+	Paths     []string
+	Here      string
+}
+
+// CustomizeSummary is a tab's "what is chosen now": a figure and an optional
+// muted second part ("Jewelled, onyx" and "players pick their own").
+type CustomizeSummary struct {
+	Text, Sub string
+}
+
+// summary calls the tab's summary, or returns nothing when it has none. A
+// panicking summary reads as none: a plugin's words must never break the
+// settings page.
+func (t CustomizeTab) summary(ctx context.Context) (s CustomizeSummary) {
+	if t.Summary == nil {
+		return CustomizeSummary{}
+	}
+	defer func() {
+		if recover() != nil {
+			s = CustomizeSummary{}
+		}
+	}()
+	return t.Summary(ctx)
+}
+
+// owns reports whether a campaign-relative path is one of the tab's pages.
+func (t CustomizeTab) owns(rel string) bool {
+	for _, p := range t.Paths {
+		p = strings.TrimRight(p, "/")
+		if p != "" && (rel == p || strings.HasPrefix(rel, p+"/")) {
+			return true
+		}
+	}
+	return false
+}
+
+// customizeTabsOn is customizeTabs without the tabs whose add-on is off.
+func (h *Handler) customizeTabsOn(cc *CampaignContext, addons map[string]bool) []CustomizeTab {
+	all := h.customizeTabs(cc)
+	out := all[:0:0]
+	for _, t := range all {
+		if t.Addon == "" || addons[t.Addon] {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // RegisterCustomizeTab appends a tab factory, called by other plugins at

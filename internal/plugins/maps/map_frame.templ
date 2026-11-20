@@ -168,6 +168,16 @@ func (h *Handler) CustomizeTabFactory() func(*campaigns.CampaignContext) campaig
 				}
 				return mapFrameSection(cc.Campaign.ID, frame, false).Render(ctx, w)
 			}),
+			Summary: func(ctx context.Context) campaigns.CustomizeSummary {
+				frame, err := h.svc.GetCampaignFrame(ctx, cc.Campaign.ID)
+				if err != nil {
+					return campaigns.CustomizeSummary{}
+				}
+				return campaigns.CustomizeSummary{Text: frameSummary(frame)}
+			},
+			Addon: PluginSlug,
+			Paths: []string{"/maps"},
+			Here:  "The frame around maps",
 		}
 	}
 }

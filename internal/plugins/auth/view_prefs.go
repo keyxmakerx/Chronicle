@@ -17,6 +17,9 @@ type ViewPrefs struct {
 	Motion   string `json:"motion"`   // owner | calm | off
 	TextSize string `json:"textSize"` // standard | larger | largest
 	Contrast string `json:"contrast"` // standard | high
+	// Brush is whether the header shows the Customize brush to this person
+	// on the campaigns they may customize.
+	Brush string `json:"brush"` // shown | hidden
 }
 
 // Allowed values per choice. The default is first so an empty or cleared
@@ -28,22 +31,24 @@ var (
 	viewMotions   = []string{"owner", "calm", "off"}
 	viewTextSizes = []string{"standard", "larger", "largest"}
 	viewContrasts = []string{"standard", "high"}
+	viewBrushes   = []string{"shown", "hidden"}
 )
 
 // DefaultViewPrefs is the look a person gets before choosing anything.
 func DefaultViewPrefs() ViewPrefs {
-	return ViewPrefs{Theme: viewThemes[0], Motion: viewMotions[0], TextSize: viewTextSizes[0], Contrast: viewContrasts[0]}
+	return ViewPrefs{Theme: viewThemes[0], Motion: viewMotions[0], TextSize: viewTextSizes[0], Contrast: viewContrasts[0], Brush: viewBrushes[0]}
 }
 
 // UpdateViewPrefsInput is a PARTIAL update: each choice saves on its own as
 // the person taps it, so an absent key preserves the stored choice, an
 // explicit null or "" resets that one choice to its default, and a value
-// replaces it. Echoing the other three back would race a second device.
+// replaces it. Echoing the others back would race a second device.
 type UpdateViewPrefsInput struct {
 	Theme    patch.Field[string] `json:"theme"`
 	Motion   patch.Field[string] `json:"motion"`
 	TextSize patch.Field[string] `json:"textSize"`
 	Contrast patch.Field[string] `json:"contrast"`
+	Brush    patch.Field[string] `json:"brush"`
 }
 
 // merge resolves one field over its stored value: absent keeps cur, null or
@@ -82,6 +87,9 @@ func (in UpdateViewPrefsInput) ApplyTo(cur ViewPrefs) (ViewPrefs, error) {
 	if out.Contrast, err = mergeViewChoice("contrast", in.Contrast, cur.Contrast, viewContrasts); err != nil {
 		return cur, err
 	}
+	if out.Brush, err = mergeViewChoice("brush", in.Brush, cur.Brush, viewBrushes); err != nil {
+		return cur, err
+	}
 	return out, nil
 }
 
@@ -110,5 +118,6 @@ func ParseViewPrefs(raw []byte) ViewPrefs {
 	out.Motion = pick(stored["motion"], viewMotions, out.Motion)
 	out.TextSize = pick(stored["textSize"], viewTextSizes, out.TextSize)
 	out.Contrast = pick(stored["contrast"], viewContrasts, out.Contrast)
+	out.Brush = pick(stored["brush"], viewBrushes, out.Brush)
 	return out
 }

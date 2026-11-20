@@ -26,7 +26,7 @@ func decodeViewPrefsInput(t *testing.T, body string) UpdateViewPrefsInput {
 }
 
 func TestUpdateViewPrefsInput_ApplyTo(t *testing.T) {
-	stored := ViewPrefs{Theme: "dark", Motion: "calm", TextSize: "larger", Contrast: "high"}
+	stored := ViewPrefs{Theme: "dark", Motion: "calm", TextSize: "larger", Contrast: "high", Brush: "shown"}
 	tests := []struct {
 		name    string
 		body    string
@@ -35,18 +35,20 @@ func TestUpdateViewPrefsInput_ApplyTo(t *testing.T) {
 		wantErr bool
 	}{
 		{"absent keys preserve everything", `{}`, stored, stored, false},
-		{"a theme-only body keeps the other three", `{"theme":"light"}`, stored, ViewPrefs{"light", "calm", "larger", "high"}, false},
-		{"each value replaces", `{"theme":"device","motion":"owner","textSize":"largest","contrast":"standard"}`, stored, ViewPrefs{"device", "owner", "largest", "standard"}, false},
-		{"explicit null resets just that choice", `{"textSize":null}`, stored, ViewPrefs{"dark", "calm", "standard", "high"}, false},
-		{"empty string means the default", `{"motion":""}`, stored, ViewPrefs{"dark", "owner", "larger", "high"}, false},
+		{"a theme-only body keeps the other three", `{"theme":"light"}`, stored, ViewPrefs{"light", "calm", "larger", "high", "shown"}, false},
+		{"each value replaces", `{"theme":"device","motion":"owner","textSize":"largest","contrast":"standard"}`, stored, ViewPrefs{"device", "owner", "largest", "standard", "shown"}, false},
+		{"explicit null resets just that choice", `{"textSize":null}`, stored, ViewPrefs{"dark", "calm", "standard", "high", "shown"}, false},
+		{"empty string means the default", `{"motion":""}`, stored, ViewPrefs{"dark", "owner", "larger", "high", "shown"}, false},
 		{"unknown theme refused", `{"theme":"sepia"}`, stored, stored, true},
-		{"off is a motion choice", `{"motion":"off"}`, stored, ViewPrefs{"dark", "off", "larger", "high"}, false},
+		{"off is a motion choice", `{"motion":"off"}`, stored, ViewPrefs{"dark", "off", "larger", "high", "shown"}, false},
 		{"unknown motion refused", `{"motion":"none"}`, stored, stored, true},
 		{"unknown size refused", `{"textSize":"huge"}`, stored, stored, true},
 		{"unknown contrast refused", `{"contrast":"max"}`, stored, stored, true},
 		{"case matters", `{"theme":"Dark"}`, stored, stored, true},
 		{"one bad key refuses the whole body", `{"theme":"light","contrast":"x"}`, stored, stored, true},
-		{"defaults from nothing", `{"theme":"dark"}`, DefaultViewPrefs(), ViewPrefs{"dark", "owner", "standard", "standard"}, false},
+		{"the brush can be hidden", `{"brush":"hidden"}`, stored, ViewPrefs{"dark", "calm", "larger", "high", "hidden"}, false},
+		{"unknown brush refused", `{"brush":"off"}`, stored, stored, true},
+		{"defaults from nothing", `{"theme":"dark"}`, DefaultViewPrefs(), ViewPrefs{"dark", "owner", "standard", "standard", "shown"}, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -73,9 +75,10 @@ func TestParseViewPrefs(t *testing.T) {
 		{"NULL column", ``, def},
 		{"malformed JSON", `{nope`, def},
 		{"not an object", `["dark"]`, def},
-		{"full row", `{"theme":"light","motion":"calm","textSize":"largest","contrast":"high"}`, ViewPrefs{"light", "calm", "largest", "high"}},
-		{"partial row fills defaults", `{"theme":"dark"}`, ViewPrefs{"dark", "owner", "standard", "standard"}},
-		{"invalid value falls back for that choice only", `{"theme":"neon","contrast":"high"}`, ViewPrefs{"device", "owner", "standard", "high"}},
+		{"full row", `{"theme":"light","motion":"calm","textSize":"largest","contrast":"high"}`, ViewPrefs{"light", "calm", "largest", "high", "shown"}},
+		{"partial row fills defaults", `{"theme":"dark"}`, ViewPrefs{"dark", "owner", "standard", "standard", "shown"}},
+		{"hidden brush", `{"brush":"hidden"}`, ViewPrefs{"device", "owner", "standard", "standard", "hidden"}},
+		{"invalid value falls back for that choice only", `{"theme":"neon","contrast":"high"}`, ViewPrefs{"device", "owner", "standard", "high", "shown"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -98,7 +101,7 @@ func TestService_UpdateViewPrefs_MergesAndPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second update: %v", err)
 	}
-	if want := (ViewPrefs{"dark", "owner", "standard", "high"}); got != want {
+	if want := (ViewPrefs{"dark", "owner", "standard", "high", "shown"}); got != want {
 		t.Errorf("second update returned %+v, want %+v (the theme must survive a contrast-only save)", got, want)
 	}
 	if read, _ := svc.GetViewPrefs(ctx, "u1"); read != got {

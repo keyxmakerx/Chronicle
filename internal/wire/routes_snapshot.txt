@@ -750,6 +750,7 @@ GET	/campaigns/:id/customize/categories/:key/:tab	session	plugins/campaigns.(*Ha
 DELETE	/campaigns/:id/customize/draft	session	plugins/campaigns.(*Handler).DeleteCustomizeDraftAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/draft	session	plugins/campaigns.(*Handler).GetCustomizeDraftAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/customize/draft	session	plugins/campaigns.(*Handler).PutCustomizeDraftAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/customize/here	session	plugins/campaigns.(*Handler).CustomizeHere	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/home	session	plugins/campaigns.(*Handler).CustomizeHome	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/customize/home-preview	session	plugins/campaigns.(*Handler).HomePreview	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/home/:who	session	plugins/campaigns.(*Handler).CustomizeHome	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

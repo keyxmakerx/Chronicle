@@ -32,8 +32,8 @@ var deskFindWords = map[string]string{
 var deskFindGroups = map[string]string{
 	"manage:members":        "People",
 	"manage:player-changes": "People",
-	"manage:media":          "Look",
-	"manage:customize":      "Look",
+	"manage:media":          "Data",
+	"manage:customize":      "Customize",
 	"manage:extensions":     "Game",
 	"manage:foundry":        "Connections",
 	"manage:ai":             "Connections",

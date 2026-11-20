@@ -713,6 +713,15 @@ The same screens, folded to the width; never a second design.
   remembered per browser; none by default. Someone with fewer than two tools
   keeps the bar as it is. The "Viewing as player" banner carries a quiet
   "Back to your view" on every width.
+- **The owner's Customize brush is a header tool.** On a computer it sits
+  among the tools and opens a small menu that Grows from it: first the place's
+  own part of Customize when it has one ("How Character pages are laid out",
+  with the quiet path under it), then "This campaign's look", "Everything in
+  Customize" and a quiet "Hide this brush". Rows are words with a quiet second
+  line, no icons. On a phone it is a shelf entry, Customize, and the menu
+  hangs across the top of the page like the bell's list. Hiding it is the
+  person's own choice; Campaign settings › Customize › Brush in the header
+  brings it back.
 - **Side panels become bottom sheets on a phone**: the page peek and the
   Table (under **What is on a page** and **Opening and closing**).
 - **A sheet that scrolls keeps the pull to itself**: a fixed sheet's scroll

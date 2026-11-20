@@ -3104,6 +3104,10 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
 	campaignHandler.SetRecentEntityLister(&recentEntityListerAdapter{svc: entityService})
 	campaignHandler.SetCustomizeCategoryLister(&customizeCategoryAdapter{svc: entityService})
+	// The header's Customize brush: a page's category, and the person's own
+	// choice to hide the brush.
+	campaignHandler.SetPageCategoryLookup(&pageCategoryAdapter{svc: entityService})
+	campaignHandler.SetBrushPrefs(&brushPrefsAdapter{svc: authService})
 	campaignHandler.SetCustomizeDrafts(campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB)))
 	// After the look, which NewHandler registers first: a category's menu
 	// setting is applied on top of the saved sidebar.
@@ -6075,7 +6079,7 @@ func (a *App) RegisterRoutes() {
 					if zones, zerr := authService.GetTimezonesByIDs(ctx, []string{session.UserID}); zerr == nil {
 						tz = zones[session.UserID]
 					}
-					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz})
+					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz, Brush: vp.Brush})
 				} else {
 					slog.Warn("reading view prefs", slog.String("user_id", session.UserID), slog.Any("error", err))
 				}
@@ -6779,7 +6783,7 @@ func (a *App) RegisterRoutes() {
 		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
-		campaignHandler.RegisterCustomizeTab(rolls.CustomizeTabFactory())
+		campaignHandler.RegisterCustomizeTab(rolls.CustomizeTabFactory(rollsSvc))
 		syncAPIHandler.SetRolls(&rollsSyncAdapter{svc: rollsSvc}, foundryPlayerRepo)
 		rollLog = &craftingRollLog{svc: rollsSvc}
 		shopRollLogger = &shopRollLog{svc: rollsSvc}
@@ -7203,6 +7207,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "checkup", Scripts: []string{"/static/js/widgets/checkup.js"}},
 	{Name: "player-view", Scripts: []string{"/static/js/widgets/player_view.js"}},
 	{Name: "topbar-tools", Scripts: []string{"/static/js/widgets/topbar_tools.js"}},
+	{Name: "customize-brush", Scripts: []string{"/static/js/widgets/customize_brush.js"}},
 	{Name: "put-on-page", Scripts: []string{"/static/js/widgets/put_on_page.js"}},
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},

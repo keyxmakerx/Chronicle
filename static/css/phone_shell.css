@@ -216,7 +216,7 @@
     block-size: 100%;
     min-inline-size: 0;
   }
-  #app-topbar[data-tb-tools] [data-tb-tool]:not(.tb-kept) :is([data-ai-chip], [data-tt-tab], [data-notif-toggle], [data-dms-toggle]),
+  #app-topbar[data-tb-tools] [data-tb-tool]:not(.tb-kept) :is([data-ai-chip], [data-brush-toggle], [data-tt-tab], [data-notif-toggle], [data-dms-toggle]),
   #app-topbar[data-tb-tools] button[data-tb-tool]:not(.tb-kept) {
     visibility: hidden;
     position: absolute;

@@ -1,0 +1,73 @@
+package layouts
+
+// topbarBrush is the header's Customize brush and its menu, for a viewer who
+// may open Customize (topbarMayCustomize). Its first row depends on the page
+// the owner is on; static/js/widgets/customize_brush.js asks the server for
+// it by the page's address, because the header is never redrawn by a boosted
+// page change. Put away (the person's own choice), the brush is kept only as
+// an inert template, so Campaign settings can bring it back on this page.
+templ topbarBrush() {
+	if topbarHasBrush(ctx) {
+		@topbarBrushHost()
+	} else if topbarMayCustomize(ctx) {
+		<template data-brush-kept>
+			@topbarBrushHost()
+		</template>
+	}
+}
+
+// topbarBrushHost is the brush button and its menu. The rows are words only,
+// each with a quiet second line, the way the signed mockup draws them.
+templ topbarBrushHost() {
+	{{ base := "/campaigns/" + GetCampaignID(ctx) + "/customize" }}
+	<div
+		class="relative tb-brush"
+		data-tb-tool="brush"
+		data-widget="customize-brush"
+		data-campaign-id={ GetCampaignID(ctx) }
+		data-here-url={ base + "/here" }
+	>
+		<button
+			type="button"
+			class="btn-ghost btn-icon"
+			id="tb-brush-btn"
+			data-brush-toggle
+			aria-haspopup="menu"
+			aria-expanded="false"
+			aria-controls="tb-brush-menu"
+			aria-label="Customize this campaign"
+			title="Customize"
+		>
+			<i class="fa-solid fa-paintbrush text-sm" aria-hidden="true"></i>
+		</button>
+		<div
+			id="tb-brush-menu"
+			class="tb-pop brush-menu"
+			role="menu"
+			aria-labelledby="tb-brush-btn"
+			data-brush-menu
+			hx-boost="true"
+			hx-target="#main-content"
+			hx-select="#main-content > *"
+			hx-swap="innerHTML show:window:top"
+			hidden
+		>
+			<a class="brush-row" role="menuitem" tabindex="-1" href={ templ.SafeURL(base) } data-brush-here hidden>
+				<span class="brush-t" data-brush-here-t></span>
+				<span class="brush-s" data-brush-here-s></span>
+			</a>
+			<a class="brush-row" role="menuitem" tabindex="-1" href={ templ.SafeURL(base + "/look") }>
+				<span class="brush-t">This campaign’s look</span>
+				<span class="brush-s">Colours, fonts, style kit</span>
+			</a>
+			<a class="brush-row" role="menuitem" tabindex="-1" href={ templ.SafeURL(base) }>
+				<span class="brush-t">Everything in Customize</span>
+			</a>
+			<div class="brush-rule" role="separator"></div>
+			<button type="button" class="brush-row brush-quiet" role="menuitem" tabindex="-1" data-brush-hide>
+				<span class="brush-t">Hide this brush</span>
+				<span class="brush-s">Campaign settings brings it back</span>
+			</button>
+		</div>
+	</div>
+}

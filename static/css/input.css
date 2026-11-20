@@ -638,6 +638,54 @@
     to   { opacity: 1; transform: translateY(0) scale(1); }
   }
 
+  /* ---- The header's Customize brush menu (layouts/customize_brush.templ) ----
+   * A small menu that Grows from the brush's corner (.mn-* above). Rows are
+   * words with a quiet second line, no icons; the last row is quiet. On a
+   * phone the brush lives in the Tools shelf, so the menu hangs across the
+   * top of the page like the bell's list. A header with light words sets
+   * light ink; the menu takes the page's own ink back, as the shelf does. */
+  .brush-menu {
+    position: absolute; inset-inline-end: 0; inset-block-start: 100%; z-index: var(--z-popup);
+    margin-top: 4px; inline-size: 18rem; max-inline-size: calc(100vw - 1.5rem);
+    padding: 4px; transform-origin: top right;
+    background: var(--color-bg-secondary); color: var(--color-text-primary); text-shadow: none;
+    border: var(--shape-edge) solid var(--color-border); border-radius: var(--shape-r-panel);
+    box-shadow: var(--elev-hover);
+  }
+  .brush-menu[hidden] { display: none; }
+  /* Calm: the Grow fades in place, nothing scales. */
+  html[data-motion="calm"] .brush-menu.mn-from, html[data-motion="calm"] .brush-menu.mn-to { transform: none; }
+  .cz-hdr-light .brush-menu {
+    --color-text-primary: var(--cz-page-ink-1);
+    --color-text-secondary: var(--cz-page-ink-3);
+    --color-text-muted: var(--cz-page-ink-4);
+    --color-bg-tertiary: var(--cz-page-fill);
+    --color-border: var(--cz-page-line);
+  }
+  .brush-row {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+    inline-size: 100%; min-block-size: 2.75rem; justify-content: center;
+    padding: 6px 10px; border: 0; border-radius: var(--shape-r-ctl);
+    background: transparent; color: var(--color-text-primary); font: inherit; text-align: start;
+    text-decoration: none; cursor: pointer;
+    transition: background-color var(--dur-micro) var(--ease-out);
+  }
+  .brush-row[hidden] { display: none; }
+  .brush-row:hover { background: var(--color-bg-tertiary); }
+  .brush-row:active { background: var(--color-border); }
+  .brush-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; background: var(--color-bg-tertiary); }
+  .brush-row[aria-busy="true"] { opacity: 0.6; cursor: progress; }
+  .brush-t { font-size: 0.875rem; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+  .brush-s { font-size: 0.75rem; line-height: 1.3; color: var(--color-text-muted); overflow-wrap: anywhere; }
+  .brush-quiet .brush-t { color: var(--color-text-secondary); font-weight: 400; }
+  .brush-rule { block-size: var(--shape-rule); margin: 4px 6px; background: var(--color-border); }
+  @media (max-width: 767.98px) {
+    #app-topbar[data-tb-tools] .tb-brush:not(.tb-kept) .brush-menu {
+      position: fixed; inset-inline: 0.75rem; inset-block-start: 3.5rem; inline-size: auto; margin-top: 0;
+      transform-origin: top center;
+    }
+  }
+
   /* ---- Skeleton Loader ---- */
   .skeleton {
     @apply rounded-md;

@@ -317,7 +317,11 @@ func (h *Handler) Customize(c *echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 	areas := h.customizeAreas(cc)
-	return h.renderCustomize(c, cc, "overview", "Customize", nil, nil, customizeOverview(areas))
+	sums := map[string]CustomizeSummary{}
+	for _, t := range h.customizeTabs(cc) {
+		sums["x-"+t.ID] = t.summary(c.Request().Context())
+	}
+	return h.renderCustomize(c, cc, "overview", "Customize", nil, nil, customizeOverview(areas, sums))
 }
 
 // CustomizeLook is the signed Look editor: GET /campaigns/:id/customize/look.
