@@ -69,6 +69,9 @@ type oldNameRow struct {
 	Name    string
 	Leads   string
 	LeadURL string
+	// AfterFree says, with the real names, what heroes still carrying the
+	// name read once it is freed.
+	AfterFree string
 }
 
 // BeforeView is the gathered page as one reader has it.
@@ -123,6 +126,9 @@ func (p *RulesPages) Before(ctx context.Context, sys System, r RulesReader) (*Be
 	notIn := beforeRun{ID: RunNotIn, Title: "Not in " + r.CampaignName}
 	byEntry := map[int64]beforeRow{}
 	firstField := ""
+	// For the old names: each kind's category and its left-out names.
+	catOf := map[string]string{}
+	leftOutOf := map[string]map[string]bool{}
 	for _, cat := range kindCategories(m) {
 		if hiddenCategory(m, cat.Slug, r) {
 			continue
@@ -138,6 +144,12 @@ func (p *RulesPages) Before(ctx context.Context, sys System, r RulesReader) (*Be
 		if firstField == "" {
 			firstField = field
 		}
+		catOf[field] = cat.Slug
+		outNames := map[string]bool{}
+		for _, e := range l.LeftOut {
+			outNames[strings.ToLower(strings.TrimSpace(e.Name))] = true
+		}
+		leftOutOf[field] = outNames
 		kind := kindWord(&cat, field)
 		if r.Actor.IsDirector {
 			v.NewKinds = append(v.NewKinds, kindLink{Label: kind, URL: newEntryURL(r.CampaignID, field, v.URL)})
@@ -193,15 +205,57 @@ func (p *RulesPages) Before(ctx context.Context, sys System, r RulesReader) (*Be
 		if err != nil {
 			return nil, err
 		}
+		pkgNames := map[string]map[string]string{}
 		for _, n := range names {
 			row := oldNameRow{ID: n.ID, Name: n.Name}
 			if to, ok := byEntry[n.EntryID]; ok {
 				row.Leads, row.LeadURL = to.Name, to.URL
 			}
+			std, err := packageEntryNamed(sys, catOf[n.FieldKey], n.Name, pkgNames)
+			if err != nil {
+				return nil, err
+			}
+			row.AfterFree = afterFreeLine(n.Name, std, leftOutOf[n.FieldKey][strings.ToLower(std)], v.SystemName, r.CampaignName)
 			v.OldNames = append(v.OldNames, row)
 		}
 	}
 	return v, nil
+}
+
+// packageEntryNamed is the name of the game system's own entry in category
+// that a freed name falls back to, or "" when the system has none. seen caches
+// each category's names, lowercased to the printed name.
+func packageEntryNamed(sys System, category, name string, seen map[string]map[string]string) (string, error) {
+	dp := sys.DataProvider()
+	if category == "" || dp == nil {
+		return "", nil
+	}
+	names, ok := seen[category]
+	if !ok {
+		items, err := dp.List(category)
+		if err != nil {
+			return "", err
+		}
+		names = map[string]string{}
+		for _, it := range items {
+			names[strings.ToLower(strings.TrimSpace(it.Name))] = strings.TrimSpace(it.Name)
+		}
+		seen[category] = names
+	}
+	return names[strings.ToLower(strings.TrimSpace(name))], nil
+}
+
+// afterFreeLine tells the Director what heroes still called name read once
+// it is freed: the system's own entry of that name, its left-out line, or
+// nothing until they are renamed.
+func afterFreeLine(name, std string, stdLeftOut bool, systemName, campaignName string) string {
+	switch {
+	case std == "":
+		return "Heroes still called " + name + " will have no entry to read until you rename them."
+	case stdLeftOut:
+		return "Heroes still called " + name + " will read that " + std + " is not in " + campaignName + "."
+	}
+	return "Heroes still called " + name + " will read " + systemName + "’s " + std + " again."
 }
 
 // changeLine is the Director's notice that the package changed the standard

@@ -106,12 +106,18 @@
 .rp-item--held { padding-left: 10px; box-shadow: inset 2px 0 0 var(--rp-acc); }
 .rp-item__mark { margin: 0; font-size: 0.78125rem; color: var(--rp-link); }
 .rp-item__mark--out { color: var(--color-text-secondary); }
-.rp-parts { margin: 6px 0 0; }
+.rp-parts { margin: 6px 0 0; container-type: inline-size; }
 .rp-part { display: grid; grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr); gap: 0 12px; padding: 2px 0; }
 .rp-part dt { color: var(--color-text-secondary); }
 .rp-part dd { margin: 0; min-width: 0; }
 .rp-part dd p { margin: 0; }
-@media (max-width: 480px) { .rp-part { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .rp-part { grid-template-columns: minmax(0, 1fr); padding: 4px 0; } }
+/* A narrow column, such as the peek panel, also puts each label above its value. */
+@container (max-width: 26rem) { .rp-part { grid-template-columns: minmax(0, 1fr); padding: 4px 0; } }
+.rp-lead { margin: 4px 0 0; color: var(--color-text-secondary); }
+.rp-lead p { margin: 0; }
+.rp-nest { margin: 8px 0 0; }
+.rp-nest__name { margin: 0; font-weight: 600; color: var(--color-text-primary); }
 
 .rp-notes { margin-top: 24px; padding-top: 8px; border-top: var(--shape-rule) solid var(--rp-line); }
 .rp-note { margin: 0 0 4px; font-size: 0.8125rem; color: var(--color-text-secondary); }
@@ -239,6 +245,7 @@
 .rp-change { margin: 0 8px 10px; }
 .rp-oldname { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-height: 44px; padding: 6px 8px 6px 12px; box-shadow: inset 3px 0 0 var(--rp-dm); }
 .rp-oldname__name { font-weight: 600; color: var(--color-text-primary); }
+.rp-oldname__after { flex-basis: 100%; font-size: 0.8125rem; color: var(--color-text-secondary); }
 .rp-before__drafts { margin-top: 24px; }
 
 /* The Director's "New entry" menu grows out of its word (the standard's

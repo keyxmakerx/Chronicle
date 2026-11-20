@@ -386,11 +386,26 @@ func TestBuildTable_DisplayRule(t *testing.T) {
 		want     string
 	}{
 		{"package entry", dwarf.Properties, false,
-			"figures:Speed=5,Points to spend=3|words:Quick build=Grounded, Stone Skin|items:Signature trait=Grounded|items:Traits to buy(3 points to spend)=Stone Skin/1 point"},
+			"figures:Speed=5,Points to spend=3|words:Quick build=Grounded, Stone Skin|items:Signature trait=Grounded|items:Traits to buy(3 points to spend)=Stone Skin/1 point[Type:triggered,Distance:self]"},
 		{"twin with no structured base is drawn as text", map[string]any{"signature_traits_display": "Grounded — Hard to move."}, false,
 			"figures:Signature traits=Grounded — Hard to move."},
 		{"campaign entry draws the rest", map[string]any{"speed": 6.0, "breath": map[string]any{"damage": "2d6"}, "lore_display": "x", "lore": "Old songs."}, true,
-			"figures:Speed=6|parts:Breath=Damage:2d6|figures-late:Lore=Old songs."},
+			"figures:Speed=6,Lore=Old songs.|parts:Breath=Damage:2d6"},
+		{"an ability inside a trait is its own block, its repeated name dropped", map[string]any{
+			"signature_traits": []any{map[string]any{"name": "Shadowmeld", "description": "You have the following ability.",
+				"ability": map[string]any{"name": "Shadowmeld", "flavor": "You become an actual {@condition hidden|shadow}.",
+					"type": "maneuver", "keywords": []any{"Magic"}, "distance": "Self"}}}}, true,
+			"items:Signature trait=Shadowmeld[lead=You become an actual shadow.;Type:maneuver,Keywords:Magic,Distance:Self]"},
+		{"a nested object with its own name keeps it", map[string]any{
+			"signature_traits": []any{map[string]any{"name": "Ember Heart",
+				"ability": map[string]any{"name": "Flare", "effect": "Dazed."}}}}, true,
+			"items:Signature trait=Ember Heart[Flare;Effect:Dazed.]"},
+		{"a kit's ability leads with its flavor", map[string]any{
+			"signature_ability": map[string]any{"name": "Exploding Arrow", "flavor": "Your ammunition explodes.", "distance": "Ranged 15"}}, true,
+			"items:Signature ability=Exploding Arrow{Your ammunition explodes.}(Distance:Ranged 15)"},
+		{"an object without a name leads with its flavor too", map[string]any{
+			"breath": map[string]any{"flavor": "Smoke first.", "damage": "2d6"}}, true,
+			"parts:Breath{Smoke first.}=Damage:2d6"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -412,6 +427,23 @@ func TestBuildTable_DisplayRule(t *testing.T) {
 						if it.Cost != "" {
 							w += "/" + it.Cost
 						}
+						if len(it.Lead) > 0 {
+							w += "{" + it.Lead[0][0].Text + "}"
+						}
+						if len(it.Parts) > 0 {
+							w += "(" + partWords(it.Parts) + ")"
+						}
+						for _, n := range it.Nested {
+							var bits []string
+							if n.Name != "" {
+								bits = append(bits, n.Name)
+							}
+							if len(n.Lead) > 0 {
+								bits = append(bits, "lead="+n.Lead[0][0].Text)
+							}
+							bits = append(bits, partWords(n.Parts))
+							w += "[" + strings.Join(bits, ";") + "]"
+						}
 						is = append(is, w)
 					}
 					l := d.Label
@@ -420,25 +452,29 @@ func TestBuildTable_DisplayRule(t *testing.T) {
 					}
 					got = append(got, "items:"+l+"="+strings.Join(is, ","))
 				case detailParts:
-					var ps []string
-					for _, pt := range d.Parts {
-						ps = append(ps, pt.Label+":"+pt.Text[0][0].Text)
+					l := d.Label
+					if len(d.Lead) > 0 {
+						l += "{" + d.Lead[0][0].Text + "}"
 					}
-					got = append(got, "parts:"+d.Label+"="+strings.Join(ps, ","))
+					got = append(got, "parts:"+l+"="+partWords(d.Parts))
 				case detailText:
 					got = append(got, "text:"+d.Label)
 				}
 			}
-			want := strings.ReplaceAll(tt.want, "|figures-late:Lore=Old songs.", "")
-			if tt.name == "campaign entry draws the rest" {
-				// Short scalars all gather into the one line of figures.
-				want = "figures:Speed=6,Lore=Old songs.|parts:Breath=Damage:2d6"
-			}
-			if strings.Join(got, "|") != want {
-				t.Fatalf("table = %s\nwant    %s", strings.Join(got, "|"), want)
+			if strings.Join(got, "|") != tt.want {
+				t.Fatalf("table = %s\nwant    %s", strings.Join(got, "|"), tt.want)
 			}
 		})
 	}
+}
+
+// partWords writes parts as "Label:text,..." from each part's first run.
+func partWords(parts []part) string {
+	var ps []string
+	for _, pt := range parts {
+		ps = append(ps, pt.Label+":"+pt.Text[0][0].Text)
+	}
+	return strings.Join(ps, ",")
 }
 
 func TestRichParas(t *testing.T) {

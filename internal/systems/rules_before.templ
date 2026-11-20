@@ -79,7 +79,10 @@ templ BeforePageContent(v *BeforeView) {
 									} else {
 										<span>still leads to an entry, and no other entry can take it.</span>
 									}
-									<button type="button" class="rp-dmword" data-rp-act="free" data-name-id={ itoa64(n.ID) } data-working-label="Freeing…">Free this name</button>
+									<button type="button" class="rp-dmword" data-rp-act="free" data-name-id={ itoa64(n.ID) } aria-describedby={ "rp-free-" + itoa64(n.ID) } data-working-label="Freeing…">Free this name</button>
+								if n.AfterFree != "" {
+									<span class="rp-oldname__after" id={ "rp-free-" + itoa64(n.ID) }>{ n.AfterFree }</span>
+								}
 									<span class="rp-tools__msg" role="status" data-rp-msg></span>
 								</li>
 							}

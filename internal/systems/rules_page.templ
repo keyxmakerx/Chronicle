@@ -338,6 +338,7 @@ templ entryTable(details []tableDetail, hero *heroView, short bool) {
 			case detailParts:
 				<div class="rp-detail">
 					<h3 class="rp-h3">{ d.Label }</h3>
+					@leadLine(d.Lead)
 					@partList(d.Parts)
 				</div>
 			case detailItems:
@@ -365,6 +366,7 @@ templ entryTable(details []tableDetail, hero *heroView, short bool) {
 								if it.NoLongerOffered {
 									<p class="rp-item__mark rp-item__mark--out">No longer offered</p>
 								}
+								@leadLine(it.Lead)
 								if len(it.Text) > 0 {
 									<div class="rp-prose rp-prose--small">
 										@paras(it.Text)
@@ -373,11 +375,31 @@ templ entryTable(details []tableDetail, hero *heroView, short bool) {
 								if len(it.Parts) > 0 {
 									@partList(it.Parts)
 								}
+								for _, n := range it.Nested {
+									<div class="rp-nest">
+										if n.Name != "" {
+											<p class="rp-nest__name">{ n.Name }</p>
+										}
+										@leadLine(n.Lead)
+										if len(n.Parts) > 0 {
+											@partList(n.Parts)
+										}
+									</div>
+								}
 							</li>
 						}
 					</ul>
 				</div>
 		}
+	}
+}
+
+// leadLine is an object's flavor, read first in the quiet colour.
+templ leadLine(ps []para) {
+	if len(ps) > 0 {
+		<div class="rp-lead">
+			@paras(ps)
+		</div>
 	}
 }
 

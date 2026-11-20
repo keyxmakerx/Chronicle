@@ -193,3 +193,39 @@ func TestBeforePage_Empty(t *testing.T) {
 		}
 	}
 }
+
+// Freeing an old name says what heroes still carrying it will read: the
+// game system's own entry of that name, its left-out line, or nothing.
+func TestBeforePage_AfterFree(t *testing.T) {
+	p, svc, repo, sys := newRulesPages(t)
+	ctx := context.Background()
+	for _, rename := range []struct{ from, to string }{{"Dwarf", "Sea Dwarf"}, {"Ashborn", "Emberkin"}} {
+		e := entryByName(t, repo, rename.from)
+		if _, err := svc.Update(ctx, "c1", dirActor, e.ID, UpdateSystemEntryInput{Name: patch.Of(rename.to)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	v, err := p.Before(ctx, sys, reader(dirActor))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, n := range v.OldNames {
+		got[n.Name] = n.AfterFree
+	}
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"Dwarf", "Heroes still called Dwarf will read Draw Steel’s Dwarf again."},
+		{"Ashborn", "Heroes still called Ashborn will have no entry to read until you rename them."},
+	}
+	for _, tt := range tests {
+		if got[tt.name] != tt.want {
+			t.Fatalf("after freeing %s = %q, want %q", tt.name, got[tt.name], tt.want)
+		}
+	}
+	if line := afterFreeLine("polder", "Polder", true, "Draw Steel", "Therin"); line != "Heroes still called polder will read that Polder is not in Therin." {
+		t.Fatalf("left-out line = %q", line)
+	}
+}

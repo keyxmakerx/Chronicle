@@ -53,6 +53,16 @@ type part struct {
 	Text  []para
 }
 
+// nestedObject is an object inside an item, such as a trait's ability,
+// drawn under the item's own text like a kit's ability: its name as a small
+// heading unless it repeats the item's, its flavor as the lead line, then
+// its parts as label and value rows.
+type nestedObject struct {
+	Name  string
+	Lead  []para
+	Parts []part
+}
+
 // tableItem is one named row: a trait, a feature, an ability.
 type tableItem struct {
 	Name   string
@@ -60,8 +70,11 @@ type tableItem struct {
 	// Cost and CostShort are "2 points" and "2"; empty when the item has none.
 	Cost      string
 	CostShort string
-	Text      []para
-	Parts     []part
+	// Lead is the item's flavor, read before its text in the quiet colour.
+	Lead   []para
+	Text   []para
+	Parts  []part
+	Nested []nestedObject
 	// Held marks a trait the peek's hero holds; NoLongerOffered a trait of
 	// a left-out entry its reader's hero still has.
 	Held            bool
@@ -77,6 +90,7 @@ type tableDetail struct {
 	Text    []para
 	Words   string
 	Items   []tableItem
+	Lead    []para
 	Parts   []part
 }
 
@@ -335,6 +349,16 @@ func objectParts(m map[string]any, skip map[string]bool) []part {
 	return out
 }
 
+// leadOf takes an object's flavor as its lead line and marks it skipped.
+func leadOf(m map[string]any, skip map[string]bool) []para {
+	s, ok := m["flavor"].(string)
+	if !ok || strings.TrimSpace(s) == "" {
+		return nil
+	}
+	skip["flavor"] = true
+	return richParas(s)
+}
+
 // itemRow turns one named object into a row; anchorPrefix keeps a peek's
 // anchors apart from its page's.
 func itemRow(m map[string]any, anchorPrefix string) tableItem {
@@ -344,11 +368,30 @@ func itemRow(m map[string]any, anchorPrefix string) tableItem {
 	if c, ok := m["cost"].(float64); ok {
 		row.Cost, row.CostShort = points(c), strconv.FormatFloat(c, 'f', -1, 64)
 	}
+	row.Lead = leadOf(m, skip)
 	for _, k := range textKeys {
 		if s, ok := m[k].(string); ok && strings.TrimSpace(s) != "" {
 			row.Text = richParas(s)
 			skip[k] = true
 			break
+		}
+	}
+	// An object inside the item is drawn as its own block, not one prose run.
+	for _, k := range orderedKeys(m, skip) {
+		obj, isObj := m[k].(map[string]any)
+		if !isObj || len(obj) == 0 {
+			continue
+		}
+		skip[k] = true
+		inner := map[string]bool{"name": true}
+		n := nestedObject{Lead: leadOf(obj, inner)}
+		if on, _ := obj["name"].(string); strings.TrimSpace(on) != "" &&
+			!strings.EqualFold(strings.TrimSpace(flattenRefMarkup(on)), row.Name) {
+			n.Name = flattenRefMarkup(strings.TrimSpace(on))
+		}
+		n.Parts = objectParts(obj, inner)
+		if n.Name != "" || len(n.Lead) > 0 || len(n.Parts) > 0 {
+			row.Nested = append(row.Nested, n)
 		}
 	}
 	row.Parts = objectParts(m, skip)
@@ -467,7 +510,9 @@ func buildTable(cat *CategoryDef, props map[string]any, campaign bool, anchorPre
 			if name, _ := m["name"].(string); strings.TrimSpace(name) != "" {
 				rest = append(rest, tableDetail{Kind: detailItems, Label: tk.label, Items: []tableItem{itemRow(m, anchorPrefix)}})
 			} else {
-				rest = append(rest, tableDetail{Kind: detailParts, Label: tk.label, Parts: objectParts(m, nil)})
+				skip := map[string]bool{}
+				lead := leadOf(m, skip)
+				rest = append(rest, tableDetail{Kind: detailParts, Label: tk.label, Lead: lead, Parts: objectParts(m, skip)})
 			}
 		}
 	}
