@@ -1,0 +1,197 @@
+{
+  "format": "chronicle-calendar-v1",
+  "version": 2,
+  "calendar": {
+    "name": "Imperial Civil Calendar",
+    "description": "An orderly state calendar: ten months of exactly six six-day weeks, five days of tribute at the year’s end, and a sixth in every fourth year.",
+    "mode": "fantasy",
+    "epoch_name": "Year of the Founding",
+    "current_year": 847,
+    "current_month": 1,
+    "current_day": 1,
+    "current_hour": 0,
+    "current_minute": 0,
+    "hours_per_day": 24,
+    "minutes_per_hour": 60,
+    "seconds_per_minute": 60,
+    "leap_year_every": 4,
+    "leap_year_offset": 0,
+    "tracks_real_time": false,
+    "forecasts_enabled": false,
+    "month_starts_new_week": true,
+    "months": [
+      {
+        "name": "Crownmonth",
+        "days": 36,
+        "sort_order": 0,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Lawmonth",
+        "days": 36,
+        "sort_order": 1,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Legionmonth",
+        "days": 36,
+        "sort_order": 2,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Roadmonth",
+        "days": 36,
+        "sort_order": 3,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Forgemonth",
+        "days": 36,
+        "sort_order": 4,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Harvestmonth",
+        "days": 36,
+        "sort_order": 5,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Coinmonth",
+        "days": 36,
+        "sort_order": 6,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Censusmonth",
+        "days": 36,
+        "sort_order": 7,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Senatemonth",
+        "days": 36,
+        "sort_order": 8,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Templemonth",
+        "days": 36,
+        "sort_order": 9,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Days of Tribute",
+        "days": 5,
+        "sort_order": 10,
+        "is_intercalary": true,
+        "leap_year_days": 1
+      }
+    ],
+    "weekdays": [
+      {
+        "name": "Foundersday",
+        "sort_order": 0,
+        "is_rest_day": false
+      },
+      {
+        "name": "Lawday",
+        "sort_order": 1,
+        "is_rest_day": false
+      },
+      {
+        "name": "Marketday",
+        "sort_order": 2,
+        "is_rest_day": false
+      },
+      {
+        "name": "Drillday",
+        "sort_order": 3,
+        "is_rest_day": false
+      },
+      {
+        "name": "Guildday",
+        "sort_order": 4,
+        "is_rest_day": false
+      },
+      {
+        "name": "Templeday",
+        "sort_order": 5,
+        "is_rest_day": true
+      }
+    ],
+    "moons": [
+      {
+        "name": "The Seal",
+        "cycle_days": 30.4,
+        "phase_offset": 8,
+        "color": "#d9d4c4"
+      }
+    ],
+    "seasons": [
+      {
+        "name": "Marching Season",
+        "start_month": 1,
+        "start_day": 1,
+        "end_month": 3,
+        "end_day": 36,
+        "color": "oklch(0.68 0.11 145)"
+      },
+      {
+        "name": "High Summer",
+        "start_month": 4,
+        "start_day": 1,
+        "end_month": 6,
+        "end_day": 36,
+        "color": "oklch(0.78 0.13 85)"
+      },
+      {
+        "name": "Tax-gathering",
+        "start_month": 7,
+        "start_day": 1,
+        "end_month": 8,
+        "end_day": 36,
+        "color": "oklch(0.62 0.12 50)"
+      },
+      {
+        "name": "Winter Quarters",
+        "start_month": 9,
+        "start_day": 1,
+        "end_month": 11,
+        "end_day": 5,
+        "color": "oklch(0.60 0.04 250)"
+      }
+    ],
+    "eras": [
+      {
+        "name": "Before the Founding",
+        "start_year": -2000,
+        "start_month": 1,
+        "start_day": 1,
+        "color": "oklch(0.50 0.03 60)",
+        "sort_order": 0,
+        "description": "The years before the Empire kept a count.",
+        "end_year": 0
+      },
+      {
+        "name": "The Imperial Age",
+        "start_year": 1,
+        "start_month": 1,
+        "start_day": 1,
+        "color": "oklch(0.55 0.14 25)",
+        "sort_order": 1,
+        "description": "Counted from the founding of the capital."
+      }
+    ]
+  }
+}

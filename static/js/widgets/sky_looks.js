@@ -2,14 +2,14 @@
  * sky_looks.js — how weather looks in the sky (window.SkyLooks, window.SkyFX).
  *
  * Ported from the signed sky pane mockup's sky-looks.js (#763, #842). Every
- * weather resolves into one recipe from the 41-effect vocabulary: the painted
+ * weather resolves into one recipe from the effect vocabulary: the painted
  * sky's physics (cloud, darkness, fog, rain, snow, hail, storm, wind), a sky
- * tint, air layers, near particles, aurora, fireballs, sigils, a funnel and
- * lightning. The WebGL painter (sky_gl.js) reads all of it; the basic 2D sky
+ * tint, air layers, near particles, drawn shapes, aurora, fireballs, sigils,
+ * a funnel and lightning. The WebGL painter (sky_gl.js) reads all of it; the basic 2D sky
  * (sky_2d.js) reads the physics and tint.
  *
- * A weather row's preset_id picks its Calendaria built-in. A campaign's own
- * preset draws like the built-in its icon and precipitation are closest to.
+ * A weather row's preset_id picks its built-in. A campaign's own preset
+ * draws like the built-in its icon and precipitation are closest to.
  *
  * SkyFX draws on the page what the painter lays into the sky: particles near
  * the viewer, and shapes (sigils, halos, the warm glow of a harvest moon).
@@ -36,28 +36,39 @@
 
   /* ── How weather looks in the sky. Every weather, built-in or an owner's own, is drawn through one path: a main effect
      and up to two more layers from one vocabulary, a strength and a tint. The vocabulary is Calendaria's 38 effects plus
-     motes, sparks and sigils; each is a hand-tuned building block (a state for the painted sky, layers of air, particles
+     Chronicle's own; each is a hand-tuned building block (a state for the painted sky, layers of air, particles
      near the viewer), so an owner chooses blocks and the renderer owns the art. ── */
   var LOOKS = (function(){
     var L = {};
     /* Groups, in the order the look editor shows them. */
     L.GROUPS = [
-      ['Clouds and sky', ['clear', 'clouds-light', 'clouds-heavy', 'clouds-overcast', 'fog', 'haze', 'aurora', 'meteors']],
-      ['Rain and snow', ['rain', 'rain-heavy', 'lightning', 'sleet', 'hail', 'snow', 'snow-heavy', 'ice', 'rain-acid', 'rain-blood']],
-      ['Wind and dust', ['gust', 'sand', 'tornado', 'hurricane', 'leaves', 'petals', 'spores']],
-      ['Fire and smoke', ['embers', 'ashfall', 'smoke', 'sparks']],
-      ['Magic', ['aether', 'arcane', 'arcane-wind', 'ley-surge', 'nullstatic', 'spectral', 'void', 'veil', 'divine', 'miasma', 'motes', 'sigils']]
+      ['Clouds and sky', ['clear', 'clouds-light', 'clouds-heavy', 'clouds-overcast', 'fog', 'haze', 'aurora', 'meteors',
+        'mist-low', 'gloom', 'sunbeams', 'red-sky', 'rainbow', 'sun-halo', 'night-clouds', 'frost', 'diamond-dust']],
+      ['Rain and snow', ['rain', 'rain-heavy', 'lightning', 'sleet', 'hail', 'snow', 'snow-heavy', 'ice', 'rain-acid', 'rain-blood',
+        'flurries', 'freezing-rain', 'thundersnow', 'dry-lightning', 'rain-gold', 'rain-ink', 'snow-glow', 'cinders', 'star-rain', 'shardfall']],
+      ['Wind and dust', ['gust', 'sand', 'tornado', 'hurricane', 'leaves', 'petals', 'spores', 'sea-spray', 'waterspout', 'dust-wall']],
+      ['Fire and smoke', ['embers', 'ashfall', 'smoke', 'sparks', 'firestorm', 'horizon-fire', 'brimstone', 'smog', 'witchfire', 'lanterns']],
+      ['Living things', ['fireflies', 'wings', 'swarm', 'feathers', 'pollen', 'thistledown', 'gossamer']],
+      ['Magic', ['aether', 'arcane', 'arcane-wind', 'ley-surge', 'nullstatic', 'spectral', 'void', 'veil', 'divine', 'miasma', 'motes', 'sigils',
+        'wisps', 'dreamfog', 'shadow', 'rift', 'bubbles', 'fey-lights']]
     ];
     L.VOCAB = [];
     L.GROUPS.forEach(function(g){ g[1].forEach(function(id){ L.VOCAB.push(id); }); });
-    /* Calendaria's own effect for each of the 42 built-in weathers. */
+    /* The effect each built-in weather draws with: Calendaria's own for its 42, ours for the rest. */
     L.PRESET_EFFECT = {
       'clear':'clear', 'partly-cloudy':'clouds-light', 'cloudy':'clouds-heavy', 'overcast':'clouds-overcast', 'drizzle':'rain', 'rain':'rain', 'fog':'fog', 'mist':'fog',
       'windy':'gust', 'sunshower':'rain', 'snow':'snow', 'sleet':'sleet', 'heat-wave':'haze', 'thunderstorm':'lightning', 'blizzard':'snow-heavy', 'hail':'hail',
       'tornado':'tornado', 'hurricane':'hurricane', 'ice-storm':'ice', 'monsoon':'rain-heavy', 'ashfall':'ashfall', 'sandstorm':'sand', 'luminous-sky':'aurora',
       'sakura-bloom':'petals', 'autumn-leaves':'leaves', 'rolling-fog':'fog', 'wildfire-smoke':'smoke', 'dust-devil':'sand', 'black-sun':'void', 'ley-surge':'ley-surge',
       'aether-haze':'aether', 'nullfront':'nullstatic', 'permafrost-surge':'ice', 'gravewind':'spectral', 'veilfall':'veil', 'arcane-winds':'arcane-wind',
-      'acid-rain':'rain-acid', 'blood-rain':'rain-blood', 'meteor-shower':'meteors', 'spore-cloud':'spores', 'divine-light':'divine', 'plague-miasma':'miasma'
+      'acid-rain':'rain-acid', 'blood-rain':'rain-blood', 'meteor-shower':'meteors', 'spore-cloud':'spores', 'divine-light':'divine', 'plague-miasma':'miasma',
+      'showers':'rain', 'flurries':'flurries', 'hard-frost':'frost', 'ground-mist':'mist-low', 'gloom':'gloom', 'sunbeams':'sunbeams', 'bitter-cold':'diamond-dust',
+      'thaw':'mist-low', 'gale':'gust', 'squall':'hurricane', 'dry-lightning':'dry-lightning', 'thundersnow':'thundersnow', 'freezing-rain':'freezing-rain',
+      'waterspout':'waterspout', 'firestorm':'firestorm', 'dust-wall':'dust-wall', 'rainbow':'rainbow', 'red-sky':'red-sky', 'sun-halo':'sun-halo',
+      'night-clouds':'night-clouds', 'firefly-dusk':'fireflies', 'pollen-haze':'pollen', 'thistledown':'thistledown', 'gossamer':'gossamer', 'sea-spray':'sea-spray',
+      'locust-swarm':'swarm', 'smog':'smog', 'butterfly-days':'wings', 'wisp-lights':'wisps', 'dreamfog':'dreamfog', 'shadowfall':'shadow', 'sky-rift':'rift',
+      'golden-rain':'rain-gold', 'ink-rain':'rain-ink', 'glass-rain':'shardfall', 'cinder-rain':'cinders', 'star-rain':'star-rain', 'glimmersnow':'snow-glow',
+      'witchfire':'witchfire', 'brimstone':'brimstone', 'featherfall':'feathers', 'fey-lights':'fey-lights'
     };
     /* The engine's physics for each built-in (cloud cover, wetness, energy, precipitation and its amount), which the
        painted sky follows: a drizzle is lighter than rain, mist thinner than fog, a dust devil gentler than a sandstorm. */
@@ -72,16 +83,28 @@
       'black-sun':[.5, 0, .5, null, 0], 'ley-surge':[.5, .1, .7, null, 0], 'aether-haze':[.5, .1, .2, null, 0], 'nullfront':[.8, .1, .6, null, 0],
       'permafrost-surge':[.9, .6, .7, 'snow', .7], 'gravewind':[.6, .05, .7, null, 0], 'veilfall':[.9, .3, .3, 'rain', .3], 'arcane-winds':[.4, 0, .8, null, 0],
       'acid-rain':[.95, .7, .4, 'rain', .6], 'blood-rain':[.95, .6, .4, 'rain', .5], 'meteor-shower':[.05, 0, .2, null, 0], 'spore-cloud':[.5, .2, .2, null, 0],
-      'divine-light':[.1, 0, .3, null, 0], 'plague-miasma':[.7, .4, .1, null, 0]
+      'divine-light':[.1, 0, .3, null, 0], 'plague-miasma':[.7, .4, .1, null, 0],
+      'showers':[.6, .5, .35, 'rain', .4], 'flurries':[.6, .3, .25, 'snow', .2], 'hard-frost':[.05, 0, .05, null, 0], 'ground-mist':[.2, .15, 0, null, 0],
+      'gloom':[1, .15, .1, null, 0], 'sunbeams':[.6, .05, .2, null, 0], 'bitter-cold':[.05, 0, .1, null, 0], 'thaw':[.55, .35, .1, 'drizzle', .1],
+      'gale':[.5, .05, .9, null, 0], 'squall':[.95, .8, .95, 'rain', .75], 'dry-lightning':[.8, 0, .85, null, 0], 'thundersnow':[1, .75, .9, 'snow', .8],
+      'freezing-rain':[.95, .65, .35, 'rain', .45], 'waterspout':[1, .7, .9, 'rain', .5], 'firestorm':[.8, 0, 1, null, 0], 'dust-wall':[.75, 0, 1, null, 0],
+      'rainbow':[.4, .2, .15, 'rain', .1], 'red-sky':[.4, 0, .1, null, 0], 'sun-halo':[.25, 0, .1, null, 0], 'night-clouds':[.05, 0, .05, null, 0],
+      'firefly-dusk':[.1, 0, .05, null, 0], 'pollen-haze':[.15, 0, .15, null, 0], 'thistledown':[.2, 0, .3, null, 0], 'gossamer':[.1, 0, .1, null, 0],
+      'sea-spray':[.5, .3, .8, null, 0], 'locust-swarm':[.35, 0, .5, null, 0], 'smog':[.5, .05, 0, null, 0], 'butterfly-days':[.2, 0, .15, null, 0],
+      'wisp-lights':[.3, .2, 0, null, 0], 'dreamfog':[.4, .3, .05, null, 0], 'shadowfall':[.5, 0, .3, null, 0], 'sky-rift':[.3, 0, .5, null, 0],
+      'golden-rain':[.6, .5, .2, 'rain', .4], 'ink-rain':[1, .8, .4, 'rain', .65], 'glass-rain':[.85, .4, .6, 'hail', .4], 'cinder-rain':[.85, 0, .5, null, 0],
+      'star-rain':[.05, 0, .2, null, 0], 'glimmersnow':[.8, .5, .2, 'snow', .45], 'witchfire':[.3, 0, .2, null, 0], 'brimstone':[.6, .05, .2, null, 0],
+      'featherfall':[.45, 0, .2, null, 0], 'fey-lights':[.1, 0, .1, null, 0]
     };
     return L;
   })();
 
-  /* ── The 41 building blocks. Each says what the painted sky does (base: cloud, darkness, fog, rain, snow, hail, storm,
+  /* ── The building blocks. Each says what the painted sky does (base: cloud, darkness, fog, rain, snow, hail, storm,
      wind, as 0..1 at full strength), how it colours the sky (sky: colour, how much, and a light factor), and what it adds:
      air (sheets, fog banks, haze, streaks, rays drawn into the sky by the shader; depth 0 sky, 1 valleys, 2 near), parts
-     (particles near the viewer), aurora, sigils, fireballs, a funnel, a flash. Names are the owner's words. best: the
-     hour its preview is shown at. ── */
+     (particles near the viewer; band keeps them to a share of the height, wink and flap are their own rhythms), shapes
+     (drawn into the sky behind the clouds: a rainbow, a halo, a rift), aurora, sigils, fireballs, a funnel, a flash.
+     Names are the owner's words. best: the hour its preview is shown at. ── */
   LOOKS.AIR = {veil:0, blob:1, haze:2, gust:3, sand:4, rays:5, 'void':6, plume:7};
   LOOKS.EFFECTS = {
     'clear':{n:'Clear', best:12.3, base:{cloud:.08, wind:.2}},
@@ -151,7 +174,103 @@
       air:[{t:'blob', c:'#6b7f35', k:.6, sx:.004, sy:.001, v:[-.15, .35], d:1}]},
     'motes':{n:'Motes of light', best:20, base:{cloud:.1},
       parts:[{p:'mote', n:32, s:[1.5, 2.8], c:'#fff3c4', c2:'#ffffff', v:[4, -4], wob:7, fl:.3, e:.9, a:.95, mode:'drift'}]},
-    'sigils':{n:'Sigils', best:21.5, base:{cloud:.1}, sigils:{c:'#c9b3ff', k:.8}}
+    'sigils':{n:'Sigils', best:21.5, base:{cloud:.1}, sigils:{c:'#c9b3ff', k:.8}},
+    /* Clouds and sky */
+    'mist-low':{n:'Ground mist', best:7.2, base:{cloud:.15, fog:.16, wind:.08}, sky:['#dfe5ea', .1, 1.02],
+      air:[{t:'blob', c:'#eef2f5', k:.9, sx:.006, sy:0, v:[-.14, .2], d:1}, {t:'blob', c:'#e3e9ee', k:.5, sx:.003, sy:0, v:[-.15, .12], d:2}]},
+    'gloom':{n:'Gloom', best:13, base:{cloud:.98, dark:.62, fog:.14, wind:.15}, sky:['#35343c', .5, .66], grey:.25},
+    'sunbeams':{n:'Sunbeams', best:16.6, base:{cloud:.6, dark:.1, wind:.25}, sky:['#e9d7a8', .12, 1.04],
+      air:[{t:'rays', c:'#ffeec2', k:.4, v:[-.1, 1.1], d:0, e:.35}]},
+    'red-sky':{n:'Red sky', best:18.7, base:{cloud:.42, wind:.25}, sky:['#e0552e', .5, 1], sun:{tint:'#ff5a2a', dim:.1},
+      air:[{t:'haze', c:'#ff7a4a', k:.45, v:[-.06, .6], d:0, e:.3}]},
+    'rainbow':{n:'Rainbow', best:17.3, base:{cloud:.4, fog:.04, rain:.16, wind:.3}, sky:['#9fb6d6', .1, 1.03], shapes:[{s:'rainbow', k:.9}]},
+    'sun-halo':{n:'Halo', best:11.2, base:{cloud:.22, fog:.06, wind:.2}, sky:['#dfe8f2', .14, 1.03], shapes:[{s:'sunring', c:'#f4f7ff', k:.85}]},
+    'night-clouds':{n:'Night-shining clouds', best:21.4, base:{cloud:.04}, sky:['#16305c', .2, 1], shapes:[{s:'nightcloud', c:'#9fd8ff', k:.85}]},
+    'frost':{n:'Hoarfrost', best:8.1, base:{cloud:.05, fog:.07, wind:.08}, sky:['#cfe6f7', .24, 1.05],
+      air:[{t:'blob', c:'#e6f4ff', k:.45, sx:.002, sy:0, v:[-.15, .14], d:1}],
+      parts:[{p:'glint', n:60, s:[1.2, 2.4], c:'#dff3ff', c2:'#ffffff', v:[0, 0], e:.9, a:1, mode:'blink', band:[.6, 1]}]},
+    'diamond-dust':{n:'Diamond dust', best:10.4, base:{cloud:.04, fog:.1, wind:.1}, sky:['#bfe0f5', .22, 1.05], shapes:[{s:'sunring', c:'#f4f7ff', k:.4}],
+      parts:[{p:'glint', n:110, s:[1, 2.1], c:'#e8f6ff', c2:'#ffffff', v:[3, 5], wob:5, e:.9, a:1, mode:'drift'}]},
+    /* Rain and snow */
+    'flurries':{n:'Flurries', best:12.3, base:{cloud:.55, fog:.06, snow:.38, wind:.45}, sky:['#d3dbe6', .08, 1.02]},
+    'freezing-rain':{n:'Freezing rain', best:12.3, base:{cloud:.95, dark:.3, fog:.2, rain:.8, wind:.35}, sky:['#7f97ad', .28, .95], rainTint:['#cfe9ff', .7],
+      parts:[{p:'glint', n:26, s:[1, 1.9], c:'#d6efff', c2:'#ffffff', v:[0, 0], e:.8, a:.9, mode:'blink', band:[.58, 1]}]},
+    'thundersnow':{n:'Thundersnow', best:16.8, base:{cloud:1, dark:.62, fog:.3, snow:1.35, storm:.9, wind:.9}, sky:['#3d4058', .32, .9], flash:'lightning'},
+    'dry-lightning':{n:'Dry lightning', best:18.3, base:{cloud:.85, dark:.5, fog:.04, storm:1, wind:.8}, sky:['#6a4038', .38, .9], flash:'lightning'},
+    'rain-gold':{n:'Golden rain', best:16, base:{cloud:.6, dark:.08, fog:.1, rain:.8, wind:.3}, sky:['#e2b64a', .32, 1.06], rainTint:['#ffd65a', .95],
+      air:[{t:'haze', c:'#ffd98a', k:.5, v:[-.06, .5], d:0, e:.4}]},
+    'rain-ink':{n:'Ink rain', best:12.3, base:{cloud:1, dark:.5, fog:.2, rain:1.1, wind:.4}, sky:['#1f1b4a', .68, .74], rainTint:['#0d0b1c', .95], grey:.1,
+      parts:[{p:'grain', n:170, s:[1.4, 2.7], c:'#0b0918', c2:'#1d1a3a', v:[14, 190], wob:1, e:0, a:.85, mode:'fall'}]},
+    'snow-glow':{n:'Glowing snow', best:21, base:{cloud:.8, dark:.1, fog:.2, snow:.9, wind:.2}, sky:['#4b3c8a', .32, 1], rainTint:['#c9a8ff', .9],
+      parts:[{p:'mote', n:28, s:[1.2, 2.3], c:'#b48cff', c2:'#efe4ff', v:[4, 16], wob:9, fl:.3, e:1, a:.9, mode:'fall'}]},
+    'cinders':{n:'Cinder rain', best:20, base:{cloud:.85, dark:.55, fog:.22, wind:.35}, sky:['#5a1f14', .5, .8],
+      parts:[{p:'ember', n:80, s:[1.2, 2.3], c:'#ff5a14', c2:'#ffc24a', v:[10, 46], wob:6, fl:.8, e:1, a:1, mode:'fall'},
+        {p:'ash', n:20, s:[1.2, 2.4], c:'#5c5450', c2:'#8a827c', v:[6, 22], wob:6, spin:.6, e:0, a:.8, mode:'fall'}]},
+    'star-rain':{n:'Star rain', best:22.3, base:{cloud:.08}, sky:['#14224a', .25, 1],
+      parts:[{p:'ember', n:44, s:[1.1, 2], c:'#9fc4ff', c2:'#ffffff', v:[-14, 70], wob:2, fl:.3, e:1, a:1, mode:'fall'},
+        {p:'glint', n:16, s:[1, 1.8], c:'#cfe2ff', c2:'#ffffff', v:[0, 0], e:1, a:.9, mode:'blink', band:[.7, 1]}]},
+    'shardfall':{n:'Glass rain', best:12.3, base:{cloud:.9, dark:.5, fog:.1, hail:.3, wind:.35}, sky:['#2f5a66', .45, .9],
+      parts:[{p:'shard', n:70, s:[2, 4], c:'#9fe9f7', c2:'#ffffff', v:[8, 90], wob:2, spin:1.6, e:.8, a:1, mode:'fall'}]},
+    /* Wind and dust */
+    'sea-spray':{n:'Sea spray', best:12.3, base:{cloud:.6, dark:.1, fog:.3, wind:1}, sky:['#7fa0ad', .32, .96],
+      air:[{t:'gust', c:'#f2f8fa', k:1, sx:.25, v:[-.05, .7], d:1}, {t:'blob', c:'#e6f0f3', k:.85, sx:.06, sy:0, v:[-.14, .34], d:2}],
+      parts:[{p:'grain', n:170, s:[1.1, 2.3], c:'#e8f4f8', c2:'#ffffff', v:[160, -6], wob:5, e:.3, a:.85, mode:'blow'}]},
+    'waterspout':{n:'Waterspout', best:16, base:{cloud:1, dark:.55, fog:.2, rain:.7, wind:1}, sky:['#3f5a66', .35, .86], funnel:{c:'#5d7f8c', k:.9, w:.5},
+      parts:[{p:'grain', n:50, s:[.8, 1.5], c:'#cfe3ea', c2:'#ffffff', v:[120, -10], wob:5, e:.1, a:.6, mode:'blow'},
+        {p:'debris', n:30, s:[.8, 1.8], c:'#cfe3ea', c2:'#eef7fa', v:[60, -8], e:.1, a:.8, mode:'vortex'}]},
+    'dust-wall':{n:'Wall of dust', best:16.5, base:{cloud:.75, dark:.45, fog:.8, wind:1}, sky:['#8a5a2c', .7, .78], sun:{tint:'#ff8a3a', dim:.5},
+      air:[{t:'sand', c:'#a56a35', k:1.1, sx:.12, v:[-.15, 1.1], d:2}, {t:'plume', c:'#70441f', k:.6, sx:.03, sy:.01, v:[-.1, .9], d:0}],
+      parts:[{p:'grain', n:150, s:[.8, 1.8], c:'#7a4d22', c2:'#b88348', v:[170, 10], wob:4, e:0, a:.8, mode:'blow'}]},
+    /* Fire and smoke */
+    'firestorm':{n:'Firestorm', best:20.5, base:{cloud:.8, dark:.6, fog:.4, wind:1}, sky:['#7a2410', .6, .8], sun:{tint:'#ff5a2a', dim:.55},
+      air:[{t:'plume', c:'#3a2a24', k:.9, sx:.06, sy:.04, v:[-.1, 1.05], d:0}, {t:'blob', c:'#ff6a22', k:.45, sx:.03, sy:0, v:[-.15, .3], d:1, e:.8}],
+      parts:[{p:'ember', n:120, s:[1.2, 2.6], c:'#ff5a14', c2:'#ffd27a', v:[120, -26], wob:10, fl:1, e:1, a:1, mode:'blow'}]},
+    'horizon-fire':{n:'Fire on the horizon', best:21.5, base:{cloud:.4, dark:.2, fog:.15, wind:.3}, sky:['#6a2010', .46, .9], shapes:[{s:'hglow', c:'#ff4a1a', k:.95}],
+      air:[{t:'plume', c:'#33261f', k:.45, sx:.02, sy:.03, v:[0, 1], d:0}],
+      parts:[{p:'ember', n:24, s:[1.1, 2.2], c:'#ff6a1a', c2:'#ffb347', v:[8, -16], wob:8, fl:1, e:1, a:.9, mode:'rise'}]},
+    'brimstone':{n:'Brimstone', best:14, base:{cloud:.6, dark:.25, fog:.5, wind:.2}, sky:['#a8932a', .55, .86], sun:{tint:'#ffd23a', dim:.3},
+      air:[{t:'haze', c:'#d6c23a', k:.9, v:[-.1, .7], d:0}, {t:'blob', c:'#b8a52e', k:.4, sx:.006, sy:.002, v:[-.15, .35], d:1}],
+      parts:[{p:'ember', n:12, s:[1, 1.9], c:'#e8e04a', c2:'#fff9b0', v:[5, 12], wob:6, fl:.8, e:1, a:.85, mode:'fall'}]},
+    'smog':{n:'Smog', best:9, base:{cloud:.5, dark:.2, fog:.55, wind:.05}, sky:['#7a6a52', .55, .84], sun:{tint:'#ffb070', dim:.45}, grey:.2,
+      air:[{t:'haze', c:'#8a7658', k:.9, v:[-.1, .6], d:0}, {t:'blob', c:'#6e5f4a', k:.5, sx:.003, sy:0, v:[-.15, .3], d:1}]},
+    'witchfire':{n:'Witchfire', best:21.5, base:{cloud:.3, fog:.2, wind:.2}, sky:['#0f3a3c', .4, .92],
+      air:[{t:'blob', c:'#1fd6a8', k:.3, sx:.01, sy:.004, v:[-.15, .3], d:1, e:.6}],
+      parts:[{p:'ember', n:38, s:[1.4, 2.8], c:'#2affc4', c2:'#c8fff0', v:[4, -26], wob:10, fl:1, e:1, a:1, mode:'rise'}]},
+    'lanterns':{n:'Sky lanterns', best:21, base:{cloud:.08}, sky:['#2a2040', .15, 1],
+      parts:[{p:'lantern', n:30, s:[3, 5.6], c:'#ff9a3a', c2:'#ffe2a0', v:[3, -9], wob:6, fl:.25, e:1, a:1, mode:'rise'}]},
+    /* Living things */
+    'fireflies':{n:'Fireflies', best:21, base:{cloud:.12, wind:.05}, sky:['#1c3324', .14, 1],
+      parts:[{p:'mote', n:44, s:[1.2, 2.2], c:'#c8ff5a', c2:'#f4ffc8', v:[3, 0], wob:10, e:1, a:1, mode:'wander', band:[.5, .98], wink:2.6}]},
+    'wings':{n:'Fluttering wings', best:15.5, base:{cloud:.2, wind:.2}, sky:['#f0d9a8', .06, 1.02],
+      parts:[{p:'wing', n:22, s:[2.6, 4.4], c:'#f2a23a', c2:'#fff0c8', v:[10, 0], wob:14, e:0, a:.95, mode:'wander', band:[.18, .9], flap:9}]},
+    'swarm':{n:'Swarm', best:15, base:{cloud:.35, dark:.3, fog:.2, wind:.6}, sky:['#5e4a2a', .45, .82], sun:{tint:'#d9a05a', dim:.4},
+      air:[{t:'blob', c:'#3d2f1c', k:.75, sx:.07, sy:.01, v:[.1, .9], d:0}],
+      parts:[{p:'grain', n:240, s:[1.3, 2.5], c:'#221a0e', c2:'#4a3a22', v:[95, 6], wob:18, e:0, a:1, mode:'blow'}]},
+    'feathers':{n:'Feathers', best:14, base:{cloud:.45, wind:.25}, sky:['#aab6d4', .22, .97],
+      parts:[{p:'feather', n:34, s:[3.8, 6.6], c:'#ffffff', c2:'#b5adc2', v:[12, 16], wob:20, spin:.7, e:0, a:.95, mode:'fall'}]},
+    'pollen':{n:'Pollen', best:15, base:{cloud:.15, fog:.2, wind:.2}, sky:['#e3cf6a', .3, 1.03],
+      air:[{t:'haze', c:'#f0dc7a', k:.7, v:[-.08, .55], d:0}],
+      parts:[{p:'spore', n:60, s:[.9, 1.7], c:'#f2d84a', c2:'#fff4b0', v:[8, 1], wob:9, e:.3, a:.8, mode:'drift'}]},
+    'thistledown':{n:'Thistledown', best:15.5, base:{cloud:.2, wind:.4}, sky:['#dfe9d6', .06, 1.02],
+      parts:[{p:'fluff', n:40, s:[2.8, 4.8], c:'#ffffff', c2:'#e9efe2', v:[24, -3], wob:16, spin:.3, e:.15, a:.9, mode:'drift'}]},
+    'gossamer':{n:'Gossamer', best:9.5, base:{cloud:.12, fog:.1, wind:.15}, sky:['#c4d4e6', .16, 1],
+      parts:[{p:'strand', n:26, s:[12, 26], c:'#f4f9ff', c2:'#ffffff', v:[14, -1], wob:8, e:.6, a:.95, mode:'drift'}]},
+    /* Magic */
+    'wisps':{n:'Will-o’-wisps', best:22, base:{cloud:.3, fog:.4, wind:.05}, sky:['#12303a', .3, .95],
+      air:[{t:'blob', c:'#9fd9d0', k:.35, sx:.004, sy:0, v:[-.15, .25], d:1}],
+      parts:[{p:'wisp', n:11, s:[3, 5.5], c:'#7af2e0', c2:'#eafffb', v:[6, 0], wob:22, e:1, a:.95, mode:'wander', band:[.55, .95], pulse:1}]},
+    'dreamfog':{n:'Dream fog', best:19, base:{cloud:.4, fog:.85, wind:.08}, sky:['#c9a8e0', .35, 1.02],
+      air:[{t:'blob', c:'#ffffff', k:.7, sx:.006, sy:.002, v:[-.1, .8], d:0, rb:1, e:.45}, {t:'veil', c:'#f0d8ff', k:.35, sx:.008, sy:.01, v:[.1, 1], d:0}]},
+    'shadow':{n:'Shadowfall', best:14, base:{cloud:.5, dark:.75, fog:.2, wind:.2}, sky:['#0e0a1c', .7, .42], sun:{dim:.8}, stars:.5, grey:.3,
+      air:[{t:'void', c:'#2a1450', k:.55, v:[-.1, .7], d:0}, {t:'blob', c:'#0a0614', k:.7, sx:.012, sy:.002, v:[-.15, .4], d:1}],
+      parts:[{p:'grain', n:70, s:[1.2, 2.4], c:'#05030a', c2:'#1a0f30', v:[3, 26], wob:6, e:0, a:.8, mode:'fall'}]},
+    'rift':{n:'Sky rift', best:20.5, base:{cloud:.3, dark:.15}, sky:['#3a2470', .35, .95], shapes:[{s:'rift', c:'#b48cff', k:.95}],
+      air:[{t:'rays', c:'#c9a8ff', k:.35, v:[.1, 1.1], d:0, e:.6}],
+      parts:[{p:'mote', n:18, s:[1.2, 2.2], c:'#c9a8ff', c2:'#ffffff', v:[3, -12], wob:8, fl:.5, e:1, a:.9, mode:'rise'}]},
+    'bubbles':{n:'Bubbles', best:15, base:{cloud:.15, wind:.15}, sky:['#bfe6f2', .08, 1.03],
+      parts:[{p:'bubble', n:40, s:[3, 6.6], c:'#ffffff', c2:'#bfefff', v:[5, -11], wob:12, e:.5, a:1, mode:'drift', rb:1}]},
+    'fey-lights':{n:'Fey lights', best:21.5, base:{cloud:.12}, sky:['#1e3a36', .2, 1], aurora:{c0:'#ff9ad6', c1:'#7affc8', k:.35, alt:'low', span:120},
+      parts:[{p:'mote', n:38, s:[1.4, 2.8], c:'#ffffff', c2:'#ffffff', v:[5, 0], wob:14, fl:.4, e:1, a:1, mode:'wander', band:[.15, .9], rb:1}]}
   };
 
   /* ── Colour. An owner's colour keeps its hue; its lightness and chroma are placed in a band tuned for what it colours
@@ -251,7 +370,7 @@
     L.FADE_S = 6;
     L.DIAL_NAMES = L.DIALS.map(function(d){ return d.n; });
     function blank(){
-      var R = {sky:null, fogTint:null, rainTint:null, aurora:[], air:[], parts:[], sigils:[], fire:[], funnel:null, flash:{lightning:0, ley:0}, sun:{dim:0, 'void':0, tint:null}, effects:[]};
+      var R = {sky:null, fogTint:null, rainTint:null, aurora:[], air:[], parts:[], shapes:[], sigils:[], fire:[], funnel:null, flash:{lightning:0, ley:0}, sun:{dim:0, 'void':0, tint:null}, effects:[]};
       L.DIALS.forEach(function(d){ R[d.n] = d.rest; });
       return R;
     }
@@ -285,6 +404,7 @@
       if (E.aurora){ var A = E.aurora; R.aurora.push({c0:hx(A.c0, tint), c1:hx(A.c1, tint), k:A.k * k, alt:A.alt, span:A.span, az:0}); }
       (E.air || []).forEach(function(a){ R.air.push(Object.assign({}, a, {c:hx(a.c, tint), k:a.k * k})); });
       (E.parts || []).forEach(function(p){ R.parts.push(Object.assign({}, p, {c:hx(p.c, tint), c2:hx(p.c2, tint), n:p.n * Math.min(1.25, .35 + .65 * k), a:p.a * Math.min(1, .55 + .45 * k), rb:tint ? 0 : p.rb, fx:id})); });
+      (E.shapes || []).forEach(function(q){ R.shapes.push({s:q.s, c:q.c ? hx(q.c, tint) : null, k:q.k * Math.min(1, k)}); });
       if (E.sigils) R.sigils.push({c:hx(E.sigils.c, tint), k:E.sigils.k * k});
       if (E.fire) R.fire.push({rate:E.fire.rate * Math.min(1.3, .4 + .6 * k), c:hx(E.fire.c, tint)});
       if (E.funnel) R.funnel = {c:hx(E.funnel.c, tint), k:E.funnel.k * Math.min(1.1, k), w:E.funnel.w * (ph && ph[2] < .6 ? .45 : 1)};
@@ -323,7 +443,7 @@
       R.fogTint = A.fogTint && B.fogTint ? [B.fogTint[0], A.fogTint[1] * u + B.fogTint[1] * t] : A.fogTint ? [A.fogTint[0], A.fogTint[1] * u] : B.fogTint ? [B.fogTint[0], B.fogTint[1] * t] : null;
       R.rainTint = (A.rainTint && B.rainTint) ? [t < .5 ? A.rainTint[0] : B.rainTint[0], A.rainTint[1] * u + B.rainTint[1] * t] : A.rainTint ? [A.rainTint[0], A.rainTint[1] * u] : B.rainTint ? [B.rainTint[0], B.rainTint[1] * t] : null;
       function fade(list, k){ return list.map(function(x){ var o = Object.assign({}, x); if (o.k != null) o.k *= k; if (o.a != null) o.a *= k; if (o.rate != null) o.rate *= k; return o; }); }
-      ['aurora', 'air', 'parts', 'sigils', 'fire'].forEach(function(n){ R[n] = fade(A[n], u).concat(fade(B[n], t)); });
+      ['aurora', 'air', 'parts', 'shapes', 'sigils', 'fire'].forEach(function(n){ R[n] = fade(A[n] || [], u).concat(fade(B[n] || [], t)); });
       R.funnel = A.funnel && B.funnel ? Object.assign({}, B.funnel, {k:A.funnel.k * u + B.funnel.k * t}) : A.funnel ? Object.assign({}, A.funnel, {k:A.funnel.k * u}) : B.funnel ? Object.assign({}, B.funnel, {k:B.funnel.k * t}) : null;
       R.flash = {lightning:A.flash.lightning * u + B.flash.lightning * t, ley:A.flash.ley * u + B.flash.ley * t};
       R.sun = {dim:A.sun.dim * u + B.sun.dim * t, 'void':A.sun['void'] * u + B.sun['void'] * t, tint:t < .5 ? A.sun.tint : B.sun.tint};
@@ -371,8 +491,20 @@
       var o = {z:z, a:1, rot:r5 * TAU, flip:1, x:0, y:0};
       if (p.mode === 'blink'){
         var per2 = 1.8 + r4 * 1.6, cyc = Math.floor((t + r5 * per2) / per2), u = (t + r5 * per2) / per2 - cyc;
-        o.x = h(i * 7 + cyc, seed) * W; o.y = h(i * 11 + cyc, seed + 3) * H * .92;
+        o.x = h(i * 7 + cyc, seed) * W; o.y = p.band ? H * (p.band[0] + (p.band[1] - p.band[0]) * h(i * 11 + cyc, seed + 3)) : h(i * 11 + cyc, seed + 3) * H * .92;
         o.a = Math.pow(Math.sin(Math.PI * smooth01(0, .45, u)), 2);
+        return o;
+      }
+      /* Wandering things (fireflies, moths, wisps) keep to a band of the sky and loop about a slow drift; wink is a
+         glow that comes and goes, flap a pair of wings beating. */
+      if (p.mode === 'wander'){
+        var bd = p.band || [.12, .9], Rw = (10 + 22 * r4) * sc * (p.wob || 12) / 12, wv = .3 + .3 * r3, mw = 24 * sc, Ww = W + 2 * mw;
+        o.x = wrap(r2 * Ww + p.v[0] * sc * (.5 + .5 * z) * t + Rw * Math.sin(t * wv + r3 * TAU) + Rw * .4 * Math.sin(t * wv * 2.3 + r5 * TAU), Ww) - mw;
+        o.y = H * (bd[0] + (bd[1] - bd[0]) * r3) + Rw * .5 * Math.cos(t * wv * 1.3 + r2 * TAU);
+        if (p.wink){ var pw = p.wink * (.7 + .6 * r4), uw = wrap(t / pw + r5, 1); o.a = Math.pow(Math.sin(Math.PI * smooth01(0, .6, uw)), 2); }
+        if (p.flap){ o.flip = Math.sin(t * p.flap * (.8 + .4 * r1) + r2 * TAU); o.rot = (r5 - .5) * .9 + .3 * Math.sin(t * wv * 2 + r4 * TAU); }
+        if (p.fl) o.a *= 1 - p.fl * .35 * (.5 + .5 * Math.sin(t * TAU / (TEMPO.flick * (.8 + .5 * r3)) + r4 * TAU));
+        if (p.pulse) o.a *= .7 + .3 * Math.sin(t * TAU / TEMPO.breath + r2 * TAU);
         return o;
       }
       if (p.mode === 'spark'){
@@ -458,6 +590,82 @@
       },
       debris:function(ctx, o, r, A, B, p, i){ DRAW.ash(ctx, o, r, A, B, p, i + 40); },
       pixel:function(ctx, o, r, A, B, p, i){ ctx.fillStyle = LOOKS.srgb(h(i, 2.2) < .6 ? A : B, o.a); ctx.fillRect(Math.round(o.x), Math.round(o.y), Math.max(1, Math.round(r)), Math.max(1, Math.round(r))); },
+      /* A glint: a point of light that turns to the eye and away, as frost and falling ice do. */
+      glint:function(ctx, o, r, A, B, p, i, t){
+        var tw = .25 + .75 * Math.pow(.5 + .5 * Math.sin(t * TAU / (TEMPO.shimmer * (.5 + .9 * h(i, 4.4))) + h(i, 5.5) * TAU), 3), a = o.a * tw;
+        if (a <= .02) return;
+        glow(ctx, o.x, o.y, r * .55, A, B, a * .8);
+        ctx.strokeStyle = LOOKS.srgb(B, a); ctx.lineWidth = Math.max(.5, r * .3); ctx.lineCap = 'round';
+        var l = r * 2.1 * tw; ctx.beginPath(); ctx.moveTo(o.x - l, o.y); ctx.lineTo(o.x + l, o.y); ctx.moveTo(o.x, o.y - l); ctx.lineTo(o.x, o.y + l); ctx.stroke();
+      },
+      /* Thistledown: a seed hanging under a tuft of fine hairs. */
+      fluff:function(ctx, o, r, A, B){
+        ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(Math.sin(o.rot) * .5);
+        ctx.strokeStyle = LOOKS.srgb(A, o.a * .55); ctx.lineWidth = Math.max(.4, r * .1); ctx.lineCap = 'round'; ctx.beginPath();
+        for (var k = 0; k < 9; k++){ var an = -Math.PI * (.08 + .84 * k / 8); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(an) * r * 1.5, Math.sin(an) * r * 1.5); }
+        ctx.stroke();
+        ctx.strokeStyle = LOOKS.srgb(B, o.a * .7); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, r * 1.1); ctx.stroke();
+        ctx.fillStyle = LOOKS.srgb(B.map(function(v){ return v * .55; }), o.a * .9); ctx.beginPath(); ctx.ellipse(0, r * 1.2, r * .16, r * .3, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+      },
+      /* Gossamer: one long thread of spider silk, seen where the light runs along it. */
+      strand:function(ctx, o, r, A, B, p, i, t){
+        var bend = (h(i, 1.9) - .5) * r * .7 + Math.sin(t * TAU / TEMPO.sway + h(i, 2.8) * TAU) * r * .12, tilt = (h(i, 6.1) - .5) * .5;
+        ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(tilt); ctx.lineCap = 'round';
+        ctx.strokeStyle = LOOKS.srgb(A, o.a * .35); ctx.lineWidth = Math.max(.4, r * .02);
+        ctx.beginPath(); ctx.moveTo(-r, 0); ctx.quadraticCurveTo(0, bend, r, 0); ctx.stroke();
+        var u = .5 + .5 * Math.sin(t * TAU / (TEMPO.shimmer * 2.5) + h(i, 7.7) * TAU), x0 = -r + 2 * r * u * .8, g = ctx.createLinearGradient(x0, 0, x0 + r * .4, 0);
+        g.addColorStop(0, LOOKS.srgb(B, 0)); g.addColorStop(.5, LOOKS.srgb(B, o.a)); g.addColorStop(1, LOOKS.srgb(B, 0));
+        ctx.strokeStyle = g; ctx.lineWidth = Math.max(.6, r * .035);
+        ctx.beginPath(); ctx.moveTo(-r, 0); ctx.quadraticCurveTo(0, bend, r, 0); ctx.stroke();
+        ctx.restore();
+      },
+      /* A feather: a curved quill with a soft vane, turning as it falls. */
+      feather:function(ctx, o, r, A, B){
+        ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot); ctx.scale(Math.max(.22, Math.abs(o.flip)), 1);
+        var g = ctx.createLinearGradient(-r * .5, 0, r * .5, 0); g.addColorStop(0, LOOKS.srgb(B, o.a)); g.addColorStop(.5, LOOKS.srgb(A, o.a)); g.addColorStop(1, LOOKS.srgb(B, o.a * .9));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, -r * 1.5); ctx.bezierCurveTo(r * .62, -r * .9, r * .5, r * .5, r * .06, r * 1.05); ctx.bezierCurveTo(-r * .5, r * .5, -r * .58, -r * .8, 0, -r * 1.5); ctx.fill();
+        ctx.strokeStyle = LOOKS.srgb(B.map(function(v){ return v * .7; }), o.a * .8); ctx.lineWidth = Math.max(.4, r * .07); ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(0, -r * 1.35); ctx.quadraticCurveTo(r * .1, 0, r * .05, r * 1.5); ctx.stroke();
+        ctx.restore();
+      },
+      /* A pair of wings: a moth or a butterfly, beating. */
+      wing:function(ctx, o, r, A, B, p, i){
+        var c = h(i, 9.1) < .6 ? A : B, beat = Math.max(.12, Math.abs(o.flip));
+        ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot);
+        [-1, 1].forEach(function(sd){
+          ctx.save(); ctx.scale(sd * beat, 1);
+          ctx.fillStyle = LOOKS.srgb(c, o.a); ctx.beginPath(); ctx.moveTo(0, -r * .1); ctx.bezierCurveTo(r * .5, -r * 1.2, r * 1.5, -r * .9, r * 1.05, 0); ctx.bezierCurveTo(r * 1.3, r * .7, r * .5, r * .95, 0, r * .25); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = LOOKS.srgb(c.map(function(v){ return v * .45; }), o.a * .7); ctx.beginPath(); ctx.arc(r * .82, -r * .35, r * .16, 0, TAU); ctx.fill();
+          ctx.restore();
+        });
+        ctx.strokeStyle = LOOKS.srgb(c.map(function(v){ return v * .3; }), o.a); ctx.lineWidth = Math.max(.6, r * .16); ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(0, -r * .4); ctx.lineTo(0, r * .45); ctx.stroke();
+        ctx.restore();
+      },
+      /* A bubble: a thin film with one bright window on it. */
+      bubble:function(ctx, o, r, A, B){
+        var g = ctx.createRadialGradient(o.x, o.y, r * .55, o.x, o.y, r);
+        g.addColorStop(0, LOOKS.srgb(A, 0)); g.addColorStop(.82, LOOKS.srgb(A, o.a * .22)); g.addColorStop(1, LOOKS.srgb(B, o.a * .7));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, r, 0, TAU); ctx.fill();
+        ctx.strokeStyle = LOOKS.srgb(B, o.a * .9); ctx.lineWidth = Math.max(.5, r * .12); ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(o.x, o.y, r * .68, -2.5, -1.7); ctx.stroke();
+      },
+      /* A paper lantern: a warm body with a dark rim under it, and the glow it carries up. */
+      lantern:function(ctx, o, r, A, B){
+        glow(ctx, o.x, o.y, r * 1.1, A, B, o.a * .55);
+        var g = ctx.createLinearGradient(0, o.y - r, 0, o.y + r); g.addColorStop(0, LOOKS.srgb(A, o.a)); g.addColorStop(.7, LOOKS.srgb(B, o.a)); g.addColorStop(1, LOOKS.srgb(B, o.a));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(o.x - r * .5, o.y + r * .8); ctx.quadraticCurveTo(o.x - r * .95, o.y - r * .2, o.x - r * .45, o.y - r * .9);
+        ctx.lineTo(o.x + r * .45, o.y - r * .9); ctx.quadraticCurveTo(o.x + r * .95, o.y - r * .2, o.x + r * .5, o.y + r * .8); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = LOOKS.srgb(A.map(function(v){ return v * .3; }), o.a * .85); ctx.fillRect(o.x - r * .5, o.y + r * .74, r, Math.max(.6, r * .16));
+      },
+      /* A wisp: a small cold flame with a bright heart, leaning as it wanders. */
+      wisp:function(ctx, o, r, A, B, p, i, t){
+        var lean = Math.sin(t * TAU / TEMPO.sway + h(i, 3.9) * TAU) * r * .5;
+        for (var k = 3; k >= 1; k--) glow(ctx, o.x + lean * k * .4, o.y - k * r * .75, r * (1 - k * .2), A, A, o.a * .22 * (1 - k / 5));
+        glow(ctx, o.x, o.y, r * 1.6, A, A, o.a * .3);
+        glow(ctx, o.x, o.y, r * .7, A, B, o.a);
+      },
       /* A wraith: a faint shape of mist that drifts and coils, palest and widest where it has been and lifting as it
          goes, like breath in cold air; it has no bright head, so it never reads as a comet. */
       wraith:function(ctx, o, r, A, B, p, i, t, W, H, sc, wind, seed){
@@ -586,6 +794,82 @@
       }
     };
     F.SHAPES = SHAPES;
+
+    /* ── Shapes a weather asks for (the look's `shapes`), placed from the sky itself: a rainbow stands opposite the sun,
+       a halo rings the sun or the brightest moon, night clouds hang in the twilight, a rift and a far fire take their
+       place from the land. Each becomes an item on the page's list, drawn with the rest of the far layer. ── */
+    function dirOf(v){ return {alt:Math.asin(clamp(v[1], -1, 1)), az:Math.atan2(v[0], v[2])}; }
+    function cross(a, b){ return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+    function unit(a){ var l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
+    /* The circle of sky `deg` degrees from the direction c, as points on the page; parts under the horizon are left out. */
+    function ringPts(st, c, deg, n){
+      var up = Math.abs(c[1]) > .98 ? [1, 0, 0] : [0, 1, 0], u = unit(cross(up, c)), w = cross(c, u), cr = Math.cos(deg * D2R), sr = Math.sin(deg * D2R), runs = [], run = null;
+      for (var i = 0; i <= n; i++){
+        var th = i / n * TAU, q = [0, 1, 2].map(function(k){ return cr * c[k] + sr * (Math.cos(th) * u[k] + Math.sin(th) * w[k]); }), d = dirOf(q);
+        if (d.alt <= 0){ run = null; continue; }
+        var pt = SW.PROJ.at(st.L, d.alt, d.az);
+        /* A step right across the page is the panorama's seam behind the viewer, not a line to draw. */
+        if (run && Math.abs(pt.x - run[run.length - 1][0]) > st.W * .4) run = null;
+        if (!run){ run = []; runs.push(run); }
+        run.push([pt.x, pt.y, smooth01(0, 5, d.alt / D2R)]);
+      }
+      return runs;
+    }
+    function strokeRuns(ctx, runs, col, a, lw){
+      ctx.lineWidth = lw; ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+      runs.forEach(function(run){
+        for (var j = 0; j + 1 < run.length; j++){
+          ctx.strokeStyle = LOOKS.srgb(col, a * Math.min(run[j][2], run[j + 1][2]));
+          ctx.beginPath(); ctx.moveTo(run[j][0], run[j][1]); ctx.lineTo(run[j + 1][0], run[j + 1][1]); ctx.stroke();
+        }
+      });
+    }
+    var BOW = ['#ff4a4a', '#ff9a3a', '#ffe14a', '#5ad66a', '#4aa8ff', '#7a5cff'];
+    SHAPES.rainbow = function(ctx, it, st){
+      var px = (st.L.hor - st.L.top) / 90, band = Math.max(1, px * .5);
+      BOW.forEach(function(c, k){ strokeRuns(ctx, ringPts(st, it.dir, 42.3 - k * .42, 72), PAL.hexLin(c), .62 * it.k, band * 1.25); });
+      /* The second bow, fainter, wider and the other way round, with the dark band between them left alone. */
+      BOW.forEach(function(c, k){ strokeRuns(ctx, ringPts(st, it.dir, 50.4 + k * .5, 72), PAL.hexLin(c), .17 * it.k, band * 1.4); });
+      strokeRuns(ctx, ringPts(st, it.dir, 38.5, 72), [1, 1, 1], .05 * it.k, px * 6);
+    };
+    /* A halo is drawn round where its body stands on the page: the panorama stretches the sky sideways, and a ring
+       that followed it would come out an oval, which no halo is. */
+    SHAPES.sunring = function(ctx, it, st){
+      var R = (st.L.hor - st.L.top) * .34, c = SW.PROJ.at(st.L, it.alt, it.az);
+      [[R * .11, .09], [R * .035, .3]].forEach(function(q){ ctx.strokeStyle = LOOKS.srgb(it.col, q[1] * it.k); ctx.lineWidth = q[0]; ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, TAU); ctx.stroke(); });
+      ctx.strokeStyle = LOOKS.srgb(it.warm, .22 * it.k); ctx.lineWidth = Math.max(.8, R * .022); ctx.beginPath(); ctx.arc(c.x, c.y, R * .965, 0, TAU); ctx.stroke();
+      /* Sun dogs: a bright patch on the ring at the sun's own height, either side, with a tail pointing away. */
+      [-1, 1].forEach(function(sd){
+        var x = c.x + sd * R, r = R * .11;
+        soft(ctx, x + sd * r * 1.2, c.y, r * 2.6, r * .8, it.col, .22 * it.k * it.dogs);
+        soft(ctx, x, c.y, r, r * .85, it.warm, .55 * it.k * it.dogs);
+      });
+    };
+    F.lookItems = function(st){
+      var R = st.look, sl = st.sl, W = st.W, H = st.H, L = st.L;
+      if (!R || !R.shapes || !R.shapes.length) return;
+      var clear = (1 - st.wx.cloud * .7) * (1 - st.wx.fog * .5), sunAlt = st.sun.alt / D2R, night = smooth01(.25, .75, st.dark);
+      R.shapes.forEach(function(q, n){
+        if (q.k <= .01) return;
+        if (q.s === 'rainbow'){
+          /* A bow needs a low sun behind the viewer: none at night, none under a high sun. */
+          var k = q.k * smooth01(-1, 4, sunAlt) * (1 - smooth01(36, 42, sunAlt));
+          if (k > .01) st.fxItems.push({shape:'rainbow', dir:st.sun.v.map(function(v){ return -v; }), k:k, still:true});
+        } else if (q.s === 'sunring'){
+          var body = sunAlt > -2 ? {v:st.sun.v, k:1, dogs:1} : null;
+          if (!body) st.moons.forEach(function(M){ if (M.up && M.m.alt > 0 && (!body || M.m.lit > body.k)) body = {v:M.m.v, k:M.m.lit, dogs:.4}; });
+          if (body && body.k > .2){ var bd = dirOf(body.v); st.fxItems.push({shape:'sunring', alt:bd.alt, az:bd.az, k:q.k * clamp(body.k, 0, 1), dogs:body.dogs, col:LOOKS.lit(q.c || '#f4f7ff', 'glow', sl), warm:LOOKS.lit('#ffd9b0', 'glow', sl), still:true}); }
+        } else if (q.s === 'nightcloud'){
+          /* Night-shining clouds: seen only in deep twilight and after, low over where the sun went. */
+          for (var j = 0; j < 7; j++) st.fxItems.push({shape:'streak', x:W * (.1 + .13 * j + .05 * h(j, 3.1)), y:L.top + (L.hor - L.top) * (.56 + .22 * h(j, 5.7) + .05 * (j % 2)), sz:.42 + .34 * h(j, 7.3),
+            k:q.k * night * clear * (.55 + .45 * h(j, 9.9)), col:LOOKS.lit(q.c, 'glow', sl), hi:LOOKS.lit('#eaf6ff', 'glow', sl), seed:11 + j * 3.7});
+        } else if (q.s === 'rift'){
+          st.fxItems.push({shape:'doorway', x:W * .5, y:L.top + (L.hor - L.top) * .5, sz:1.25, open:1, k:q.k, col:LOOKS.lit(q.c, 'glow', sl), hi:LOOKS.lit('#f4ecff', 'glow', sl), seed:5 + n});
+        } else if (q.s === 'hglow'){
+          st.fxItems.push({shape:'glow', x:W * .34, y:L.hor, sz:1.3, k:q.k * (.45 + .55 * night), col:LOOKS.lit(q.c, 'glow', sl), hi:LOOKS.lit('#ffd27a', 'glow', sl), seed:3 + n});
+        }
+      });
+    };
 
     /* Sigils: faint glyphs that come and go across the sky, a few at a time; most are barely there. */
     function sigils(ctx, st, set, t){

@@ -333,8 +333,8 @@ func TestGetWeatherSettingsAPI_KindsDefaultToEmptyList(t *testing.T) {
 }
 
 func TestWeatherClimates_ValidClimate(t *testing.T) {
-	if len(WeatherClimates) != 10 {
-		t.Fatalf("got %d climates, want 10", len(WeatherClimates))
+	if len(WeatherClimates) != 20 {
+		t.Fatalf("got %d climates, want 20", len(WeatherClimates))
 	}
 	if !validClimate(DefaultWeatherClimate) {
 		t.Error("the default climate must be listed")
