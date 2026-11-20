@@ -81,10 +81,7 @@ func (p *RulesPages) KindData(ctx context.Context, sys System, category string, 
 			res = append(res, it)
 			continue
 		}
-		props := e.Properties
-		if props == nil {
-			props = map[string]any{}
-		}
+		props := withTwins(e.Properties, findCategory(sys.Info(), category))
 		res = append(res, kindDataEntry{Slug: e.Slug, Name: e.Name, Summary: e.Summary, Description: e.Description,
 			Properties: props, Tags: e.Tags, Source: r.CampaignName, Origin: e.Origin, StandsFor: e.StandsFor,
 			DirectorsOnly: e.DirectorsOnly, ToldRecently: e.ToldRecently})
@@ -109,4 +106,23 @@ func (p *RulesPages) KindData(ctx context.Context, sys System, category string, 
 	}
 	out, err = json.Marshal(res)
 	return out, err == nil, err
+}
+
+// withTwins copies a campaign entry's properties and adds the generated
+// twins the manifest's fields name, so a widget that prints a twin, as it
+// would a package object's, finds the same text the entry page shows.
+func withTwins(props map[string]any, def *CategoryDef) map[string]any {
+	out := make(map[string]any, len(props)+4)
+	for k, v := range props {
+		out[k] = v
+	}
+	if def == nil {
+		return out
+	}
+	for _, f := range def.Fields {
+		if t, ok := twinText(props, f.Key); ok && t != "" {
+			out[f.Key] = t
+		}
+	}
+	return out
 }

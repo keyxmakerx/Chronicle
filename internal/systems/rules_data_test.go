@@ -163,3 +163,55 @@ func TestLeftOutAndReplacedAtOnce(t *testing.T) {
 		})
 	}
 }
+
+// A campaign entry stores its lists alone, with no generated twin, while the
+// manifest's fields point at the twins. The Handbook's index and the data
+// file read the twin's text from the list, as the entry page does, so a
+// campaign entry's column is never blank.
+func TestCampaignEntryTwins(t *testing.T) {
+	p, svc, _, sys := newRulesPages(t)
+	ctx := context.Background()
+	in := CreateSystemEntryInput{FieldKey: "ancestry", Name: "Gillfolk", Properties: map[string]any{
+		"speed":            5.0,
+		"purchased_traits": []any{map[string]any{"name": "Gills", "cost": 1.0}, map[string]any{"name": "Webbed Feet", "cost": 2.0}},
+	}}
+	if _, err := svc.Create(ctx, "c1", dirActor, in); err != nil {
+		t.Fatal(err)
+	}
+	l, err := svc.Catalog(ctx, "c1", "ancestries", dirActor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	def := findCategory(sys.Info(), "ancestries")
+	ie := catalogIndex(l, def, "Therin")
+	var fields []string
+	for _, it := range ie.items {
+		if it.Name != "Gillfolk" {
+			continue
+		}
+		for _, f := range ie.indexEntry(it, true, "").Fields {
+			fields = append(fields, f.Label+"="+f.Value)
+		}
+	}
+	if got := strings.Join(fields, ";"); got != "Speed=5;Purchased Traits=Gills, Webbed Feet" {
+		t.Fatalf("index fields = %s", got)
+	}
+	out, _, err := p.KindData(ctx, sys, "ancestries", []byte(rawAncestries), reader(dirActor))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var items []map[string]any
+	if err := json.Unmarshal(out, &items); err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it["name"] == "Gillfolk" {
+			props, _ := it["properties"].(map[string]any)
+			if props["purchased_traits_display"] != "Gills, Webbed Feet" || props["purchased_traits"] == nil {
+				t.Fatalf("data file properties = %v", props)
+			}
+			return
+		}
+	}
+	t.Fatal("Gillfolk is not in the data file")
+}

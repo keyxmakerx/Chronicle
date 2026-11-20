@@ -404,6 +404,26 @@ type tableKey struct {
 	label string
 }
 
+// twinText is a field's one-line text where the manifest names a generated
+// twin (`<key>_display`) the entry does not carry, as a campaign entry never
+// does: the structured base read as prose, by the rule the table draws an
+// object or a list with. ok is false when key is not a twin, the entry has
+// the twin, or it has no base either.
+func twinText(props map[string]any, key string) (string, bool) {
+	base := strings.TrimSuffix(key, "_display")
+	if base == key {
+		return "", false
+	}
+	if v, has := props[key]; has && v != nil {
+		return "", false
+	}
+	v, has := props[base]
+	if !has || v == nil {
+		return "", false
+	}
+	return readable(v), true
+}
+
 // tableKeys decides what to draw: the category's fields in order, each
 // twin swapped for its structured base when the entry holds one, then, for
 // a campaign entry, every remaining detail.

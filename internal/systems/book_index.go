@@ -427,7 +427,11 @@ func (ie *indexEntries) indexEntry(it ReferenceItem, director bool, groupKey str
 			continue
 		}
 		v := strings.TrimSpace(propString(it.Properties, f.Key))
-		if base := strings.TrimSuffix(f.Key, "_display"); base != f.Key {
+		if t, ok := twinText(it.Properties, f.Key); ok {
+			// A campaign entry has no generated twin; its base reads as
+			// the entry page reads it, so the column is never blank.
+			v = strings.TrimSpace(t)
+		} else if base := strings.TrimSuffix(f.Key, "_display"); base != f.Key {
 			if raw, ok := it.Properties[base].(string); ok && strings.Contains(raw, "{@") {
 				v = refMarkupToTerms(strings.TrimSpace(raw))
 			}
