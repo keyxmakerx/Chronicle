@@ -1027,6 +1027,8 @@
       trackFormChanges(forms[i]);
     }
   }
+  // A form put in the page by script (the new-page sheet) is tracked the same way.
+  Chronicle.initFormTracking = initFormTracking;
 
   document.addEventListener('DOMContentLoaded', function () {
     initFormTracking(document);

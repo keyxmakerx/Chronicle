@@ -7,28 +7,7 @@ import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
-	"strconv"
 )
-
-// EntityNewPage renders the full entity creation page.
-//
-// variants is the set of entity_types offered as layout variants on the
-// "Create as:" picker when the preselect is a top-level parent that has
-// sub-category children. When nil/empty the form falls back to a flat
-// category dropdown.
-templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string, draft NewPageDraft) {
-	@layouts.App("New page - " + cc.Campaign.Name) {
-		<div class="max-w-2xl mx-auto">
-			<nav class="text-sm text-fg-secondary mb-4">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
-				<span class="mx-1">/</span>
-				<span class="text-fg">New</span>
-			</nav>
-			<h1 class="text-2xl font-bold text-fg mb-6">Create page</h1>
-			@EntityCreateFormComponent(cc, entityTypes, preselect, variants, parentEntity, name, csrfToken, errMsg, draft)
-		</div>
-	}
-}
 
 // EntityEditPage renders the full entity edit page.
 templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, entityTypes []EntityType, parentEntity *Entity, csrfToken, errMsg string) {
@@ -45,158 +24,6 @@ templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			@EntityEditFormComponent(cc, entity, entityType, parentEntity, csrfToken, errMsg)
 		</div>
 	}
-}
-
-// EntityCreateFormComponent renders the entity creation form.
-templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string, draft NewPageDraft) {
-	<div id="entity-form">
-		<form
-			class="card p-8 space-y-6"
-			method="POST"
-			action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
-			hx-post={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
-			hx-target="#entity-form"
-			hx-swap="outerHTML"
-			data-track-changes="entity-create"
-		>
-			// Who can see the new page: the page's own chip, at the top right
-			// where the finished page shows it. First in the form, so the
-			// form's spacing doesn't push it down.
-			<div class="flex justify-end -mt-2 -mb-2">
-				@draftVisibilityControl(draft.IsPrivate)
-			</div>
-			<input type="hidden" name="csrf_token" value={ csrfToken }/>
-			if draft.Return != "" {
-				<input type="hidden" name="return" value={ draft.Return }/>
-			}
-
-			if errMsg != "" {
-				<div class="alert-error" role="alert">
-					{ errMsg }
-				</div>
-			}
-
-			if len(variants) > 1 {
-				// Variant picker: preselect is a parent with
-				// sub-category children. Category is fixed; the user
-				// chooses which layout variant the new entity is
-				// created with. The selected radio carries the actual
-				// entity_type_id; variants[0] is the parent (default)
-				// and the rest are its children.
-				//
-				// The native radio is sr-only and used as a `peer` so
-				// the wrapping span gets the Chronicle pill-select
-				// treatment: accent border and tinted background on
-				// peer-checked, and an accent ring on
-				// peer-focus-visible. This is the same pattern used
-				// elsewhere in campaigns/form.templ and
-				// entity_type_config.templ.
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Category</label>
-					<div class="text-sm text-fg-body py-2 px-3 rounded-md bg-surface-alt border border-edge">
-						{ variants[0].Name }
-					</div>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-2">Create as</label>
-					<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Layout variant">
-						for i, v := range variants {
-							<label class="cursor-pointer select-none">
-								<input
-									type="radio"
-									name="entity_type_id"
-									value={ strconv.Itoa(v.ID) }
-									required
-									class="peer sr-only"
-									checked?={ (preselect == v.ID) || (preselect == variants[0].ID && i == 0) }
-								/>
-								<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-edge bg-surface text-fg-body text-sm transition-colors hover:bg-surface-alt peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:font-medium peer-focus-visible:ring-2 peer-focus-visible:ring-accent/40 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-surface peer-disabled:opacity-50 peer-disabled:cursor-not-allowed">
-									{ v.Name }
-									if i == 0 {
-										<span class="text-xs text-fg-muted">(default)</span>
-									}
-								</span>
-							</label>
-						}
-					</div>
-					<p class="mt-1.5 text-xs text-fg-muted">Each variant uses its own page layout.</p>
-				</div>
-			} else {
-				<div>
-					<label for="entity_type_id" class="block text-sm font-medium text-fg-body mb-1">Category</label>
-					<select id="entity_type_id" name="entity_type_id" required class="input w-full">
-						<option value="">Select a category...</option>
-						// Top-level types only — sub-categories are template variants
-						// of their parent and surface through the variant picker above
-						// when that parent is preselected, not as siblings here.
-						for _, et := range entityTypes {
-							if et.Enabled && et.ParentTypeID == nil {
-								<option
-									value={ strconv.Itoa(et.ID) }
-									selected?={ et.ID == preselect }
-								>{ et.Name }</option>
-							}
-						}
-					</select>
-				</div>
-			}
-
-			<div>
-				<label for="name" class="block text-sm font-medium text-fg-body mb-1">Name</label>
-				<input
-					type="text"
-					id="name"
-					name="name"
-					value={ name }
-					required
-					autofocus
-					class="input w-full"
-					placeholder="e.g. Harrowmere, Captain Varn, a moonsteel dagger"
-					maxlength="200"
-				/>
-			</div>
-
-			// Content template picker (loads templates for the selected entity type).
-			<div
-				id="template-picker"
-				data-campaign-id={ cc.Campaign.ID }
-				if draft.TemplateID > 0 {
-					data-selected-template={ strconv.Itoa(draft.TemplateID) }
-				}
-				class="hidden"
-			>
-				<label for="template_id" class="block text-sm font-medium text-fg-body mb-1">
-					<i class="fa-solid fa-file-lines text-fg-muted mr-1"></i>Content Template (optional)
-				</label>
-				<select id="template_id" name="template_id" class="input w-full">
-					<option value="0">Blank — start from scratch</option>
-				</select>
-				<p class="mt-1 text-xs text-fg-secondary">Start the page editor with a structured template.</p>
-			</div>
-
-			<div>
-				<label for="type_label" class="block text-sm font-medium text-fg-body mb-1">Descriptor (optional)</label>
-				<input
-					type="text"
-					id="type_label"
-					name="type_label"
-					value={ draft.TypeLabel }
-					class="input w-full"
-					placeholder="e.g., City, NPC, Artifact"
-					maxlength="100"
-				/>
-				<p class="mt-1 text-xs text-fg-secondary">A short descriptor shown next to the type badge, e.g. "City" for a Location or "Rogue" for a Character.</p>
-			</div>
-
-			@parentSelector(cc.Campaign.ID, parentEntity)
-
-			<div class="flex items-center space-x-4">
-				<button type="submit" class="btn-primary">Create page</button>
-				// Leaving isn't a command, so Cancel is a quiet word.
-				<a href={ templ.SafeURL(newPageCancelURL(cc.Campaign.ID, parentEntity, preselect, draft.Return)) } class="quiet-word">Cancel</a>
-			</div>
-		</form>
-	</div>
 }
 
 // EntityEditFormComponent renders the entity edit form with dynamic fields.
@@ -374,7 +201,13 @@ templ DynamicField(field FieldDefinition, fieldsData map[string]any) {
 
 // parentSelector renders a searchable parent entity picker. Uses Alpine.js
 // for client-side search with the existing entity search JSON endpoint.
+// parentSelector is the Edit form's picker; the Create form labels it its own way.
 templ parentSelector(campaignID string, parentEntity *Entity) {
+	@parentPicker(campaignID, parentEntity, "Parent page (optional)")
+}
+
+// parentPicker is the search-as-you-type parent page field both forms share.
+templ parentPicker(campaignID string, parentEntity *Entity, label string) {
 	<div
 		x-data={ fmt.Sprintf(`{
 			open: false,
@@ -407,7 +240,7 @@ templ parentSelector(campaignID string, parentEntity *Entity) {
 		}`, parentSelectorID(parentEntity), jsEsc(parentSelectorName(parentEntity)), campaignID) }
 		class="relative"
 	>
-		<label class="block text-sm font-medium text-fg-body mb-1">Parent page (optional)</label>
+		<label class="block text-sm font-medium text-fg-body mb-1">{ label }</label>
 		<input type="hidden" name="parent_id" x-bind:value="selectedID"/>
 
 		<!-- Selected parent display -->

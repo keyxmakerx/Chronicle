@@ -415,6 +415,12 @@ type Entity struct {
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`
 
+	// Opening is the page's first words as this reader is served them, set
+	// by the list handler for pages with no picture so the Gallery has
+	// something true to show. Never the stored text: it has had secrets and
+	// links to hidden pages taken out.
+	Opening string `json:"-"`
+
 	// searchFields, when set, is the field values Create indexes for search,
 	// already without the ones only some readers may see; unset, Create
 	// indexes no field values.
@@ -527,8 +533,14 @@ type CreateEntityRequest struct {
 	EntityTypeID int    `json:"entity_type_id" form:"entity_type_id"`
 	TypeLabel    string `json:"type_label" form:"type_label"`
 	ParentID     string `json:"parent_id" form:"parent_id"`
-	IsPrivate    bool   `json:"is_private" form:"is_private"`
-	TemplateID   int    `json:"template_id" form:"template_id"` // Optional content template to pre-fill.
+	// IsPrivate is a pointer so an explicit false ("show it to players")
+	// survives under a campaign whose pages start hidden; nil means the form
+	// said nothing and the campaign default decides.
+	IsPrivate  *bool `json:"is_private" form:"is_private"`
+	TemplateID int   `json:"template_id" form:"template_id"` // Optional content template to pre-fill.
+	// Sheet marks a form posted from the small sheet, so a refused save
+	// redraws the sheet and not the full page.
+	Sheet bool `json:"-" form:"sheet"`
 }
 
 // UpdateEntityRequest holds the data submitted by the entity edit form.

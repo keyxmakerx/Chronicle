@@ -77,6 +77,7 @@ templ catHeader(cc *campaigns.CampaignContext, et *EntityType, total int) {
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
 						class="btn-primary text-sm"
+						onclick={ layouts.NewPageOpenJS() }
 					>
 						<i class="fa-solid fa-plus text-xs"></i> New page
 					</a>
@@ -129,17 +130,18 @@ templ catEntityGrid(cc *campaigns.CampaignContext, et *EntityType, entities []En
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
 					class="btn-primary"
+					onclick={ layouts.NewPageOpenJS() }
 				>
 					<i class="fa-solid fa-plus text-xs"></i> Create { et.Name }
 				</a>
 			}
 		</div>
 	} else {
-		<div class={ catGridClass(config) }>
+		<ul class="el-gallery">
 			for _, entity := range entities {
 				@EntityCard(&entity, cc)
 			}
-		</div>
+		</ul>
 	}
 }
 
@@ -237,12 +239,6 @@ func catColSpan(width int) string {
 		"col-span-1 md:col-span-11", "col-span-1 md:col-span-12",
 	}
 	return classes[width]
-}
-
-// catGridClass returns responsive grid classes for the entity card grid.
-func catGridClass(config map[string]any) string {
-	// Default responsive grid.
-	return "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
 }
 
 // limitCatRecent returns entities sorted by updated_at (newest first), limited
