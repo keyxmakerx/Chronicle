@@ -71,6 +71,63 @@ func startHereFirstLine(entryHTML string) string {
 	return ""
 }
 
+// homePage is a page a home block shows, as one viewer may read it.
+type homePage struct {
+	Entity *Entity
+	// HTML is the entry as this viewer is served it, secrets and hidden page
+	// names already taken out when they must not read them.
+	HTML     string
+	Director bool
+	AsPlayer bool
+	// Gone says the picked page no longer exists here. Entity nil without
+	// Gone means nothing was picked or the viewer can't open it.
+	Gone bool
+}
+
+// loadHomePage resolves the page a home block was pointed at for the
+// viewer. Blocks that show one picked page share it, so they cannot drift on
+// who may open what.
+func (h *Handler) loadHomePage(c *echo.Context, cc *campaigns.CampaignContext, pageID string) homePage {
+	ctx := c.Request().Context()
+	userID := auth.GetUserID(c)
+	asPlayer := campaigns.ViewingAsPlayer(c, cc)
+	hp := homePage{
+		Director: cc.CanAuthorDmOnly() && !asPlayer,
+		AsPlayer: asPlayer,
+	}
+	role := int(cc.VisibilityRole())
+	if asPlayer {
+		role = int(campaigns.RolePlayer)
+	}
+	pageID = strings.TrimSpace(pageID)
+	if pageID == "" {
+		return hp
+	}
+	entity, err := h.service.GetByID(ctx, pageID)
+	if err != nil || entity == nil || entity.CampaignID != cc.Campaign.ID {
+		hp.Gone = true
+		return hp
+	}
+	access, err := h.service.CheckEntityAccess(ctx, entity.ID, role, userID)
+	if err != nil || !access.CanView {
+		return hp
+	}
+	if et, err := h.service.GetEntityTypeByID(ctx, entity.EntityTypeID); err == nil {
+		entity = h.currentEraEntity(ctx, cc, entity, et, userID)
+	}
+	hp.Entity = entity
+	if entity.EntryHTML != nil {
+		_, served, _ := h.servedText(c, cc, nil, entity.EntryHTML)
+		hp.HTML = deref(served)
+		// servedText keeps secrets for the owner; viewing as a player they
+		// must read what a player reads.
+		if asPlayer {
+			hp.HTML = sanitize.StripSecretsHTML(hp.HTML)
+		}
+	}
+	return hp
+}
+
 // StartHere draws the block for the page in ?page=. A page the viewer can't
 // open, or no page at all, is an empty answer that removes the placeholder,
 // except for the owner and co-DMs, who get the slot that says how to pick one.
@@ -80,53 +137,18 @@ func (h *Handler) StartHere(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	ctx := c.Request().Context()
-	userID := auth.GetUserID(c)
-	asPlayer := campaigns.ViewingAsPlayer(c, cc)
-	director := cc.CanAuthorDmOnly() && !asPlayer
-	role := int(cc.VisibilityRole())
-	if asPlayer {
-		role = int(campaigns.RolePlayer)
-	}
-
-	view := startHereView{CampaignID: cc.Campaign.ID, Empty: true}
-	empty := func() error {
-		if !director {
+	hp := h.loadHomePage(c, cc, c.QueryParam("page"))
+	view := startHereView{CampaignID: cc.Campaign.ID, Empty: true, Gone: hp.Gone}
+	if hp.Entity == nil {
+		if !hp.Director {
 			return c.HTML(http.StatusOK, "")
 		}
 		return middleware.Render(c, http.StatusOK, startHereBlock(view))
 	}
-
-	pageID := strings.TrimSpace(c.QueryParam("page"))
-	if pageID == "" {
-		return empty()
-	}
-	entity, err := h.service.GetByID(ctx, pageID)
-	if err != nil || entity == nil || entity.CampaignID != cc.Campaign.ID {
-		view.Gone = true
-		return empty()
-	}
-	access, err := h.service.CheckEntityAccess(ctx, entity.ID, role, userID)
-	if err != nil || !access.CanView {
-		return empty()
-	}
-	if et, err := h.service.GetEntityTypeByID(ctx, entity.EntityTypeID); err == nil {
-		entity = h.currentEraEntity(ctx, cc, entity, et, userID)
-	}
-
 	view.Empty = false
-	view.Name = entity.Name
-	view.Href = "/campaigns/" + cc.Campaign.ID + "/entities/" + entity.ID
-	view.DMOnly = director && entity.IsPrivate
-	if entity.EntryHTML != nil {
-		_, served, _ := h.servedText(c, cc, nil, entity.EntryHTML)
-		text := deref(served)
-		// servedText keeps secrets for the owner; viewing as a player they
-		// must read what a player reads.
-		if asPlayer {
-			text = sanitize.StripSecretsHTML(text)
-		}
-		view.Line = startHereFirstLine(text)
-	}
+	view.Name = hp.Entity.Name
+	view.Href = "/campaigns/" + cc.Campaign.ID + "/entities/" + hp.Entity.ID
+	view.DMOnly = hp.Director && hp.Entity.IsPrivate
+	view.Line = startHereFirstLine(hp.HTML)
 	return middleware.Render(c, http.StatusOK, startHereBlock(view))
 }

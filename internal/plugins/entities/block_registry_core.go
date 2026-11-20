@@ -431,6 +431,16 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
+		Type: "brochure", Label: "Brochure", Icon: "fa-book-open",
+		Description: "A small box that opens a new-player page as a folded brochure",
+		Contexts: []string{"dashboard"},
+		ConfigFields: []ConfigFieldMeta{
+			{Key: "entity_id", Label: "Page", Type: "page", Hint: "Its title and first line make the cover; each heading starts a new panel. Players see it only if they can open the page."},
+			{Key: "content", Label: "Words on the box", Type: "textarea", Hint: "Optional, shown on the small box. Leave empty to use the page's own first line."},
+		},
+	}, nil)
+
+	r.Register(BlockMeta{
 		Type: "at_a_glance", Label: "At a glance", Icon: "fa-list-ul",
 		Description: "The game system, next game, last session and page count",
 		Contexts: []string{"dashboard"},

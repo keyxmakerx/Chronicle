@@ -225,6 +225,11 @@
 
   function open(trigger, content, opts) {
     ensure();
+    // A modal dialog sits in the top layer above every z-index, and the page
+    // behind it is inert; the card has to live inside the dialog to be seen
+    // and reachable.
+    var host = trigger.closest && trigger.closest('dialog[open]') || document.body;
+    if (card.parentNode !== host) host.appendChild(card);
     clearTimeout(openTimer);
     clearTimeout(closeTimer);
     if (current && current !== trigger) detachTrigger(current);

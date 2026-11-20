@@ -83,6 +83,16 @@ func render(b *strings.Builder, n node) {
 			attrs = ` start="` + strconv.Itoa(start) + `"`
 		}
 		wrap(b, "ol", attrs, n.Content)
+	case "taskList":
+		wrap(b, "ul", ` data-type="taskList"`, n.Content)
+	case "taskItem":
+		// The box is drawn from data-checked; the sanitizer drops the editor's
+		// own checkbox input, so this is the form that survives storage.
+		checked := "false"
+		if v, _ := n.Attrs["checked"].(bool); v {
+			checked = "true"
+		}
+		wrap(b, "li", ` data-type="taskItem" data-checked="`+checked+`"`, n.Content)
 	case "codeBlock":
 		b.WriteString("<pre><code>")
 		for _, c := range n.Content {

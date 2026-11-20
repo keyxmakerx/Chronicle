@@ -3191,6 +3191,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "own-entries", Scripts: []string{"js/own_entries.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
+			{Name: "brochure", Scripts: []string{"js/brochure.js"}},
 		},
 	})
 

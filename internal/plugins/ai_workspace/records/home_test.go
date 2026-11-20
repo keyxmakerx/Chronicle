@@ -2,8 +2,11 @@ package records
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 type fakeHome struct {
@@ -15,7 +18,7 @@ type fakeHome struct {
 
 func (f *fakeHome) IsOwner(_ context.Context, _, u string) (bool, error) { return u == f.owner, nil }
 func (f *fakeHome) BlockTypes() []string {
-	return []string{"welcome_banner", "start_here", "recent_pages", "text_block", "party", "activity_feed", "coming_up"}
+	return []string{"welcome_banner", "start_here", "recent_pages", "text_block", "party", "activity_feed", "coming_up", "brochure"}
 }
 func (f *fakeHome) Home(_ context.Context, _, aud string) (HomeLayout, bool, error) {
 	l, ok := f.homes[aud]
@@ -163,5 +166,144 @@ func TestHomeKind_Export(t *testing.T) {
 	}
 	if out, _ := k.Export(context.Background(), "c", Actor{UserID: "own", Role: 1}); out != "" {
 		t.Error("a player's export must show no homes")
+	}
+}
+
+// fakeBrochurePages is one campaign's pages, found by slug and by id.
+type fakeBrochurePages struct{ bySlug map[string]*entities.Entity }
+
+func (f fakeBrochurePages) GetBySlug(_ context.Context, campaignID, slug string) (*entities.Entity, error) {
+	if e, ok := f.bySlug[slug]; ok {
+		return e, nil
+	}
+	return nil, errors.New("not found")
+}
+
+func (f fakeBrochurePages) GetByID(_ context.Context, id string) (*entities.Entity, error) {
+	for _, e := range f.bySlug {
+		if e.ID == id {
+			return e, nil
+		}
+	}
+	return nil, errors.New("not found")
+}
+
+func brochurePages() fakeBrochurePages {
+	return fakeBrochurePages{bySlug: map[string]*entities.Entity{
+		"new-player-brochure": {ID: "page-1", CampaignID: "c", Name: "New player brochure"},
+		"elsewhere":           {ID: "page-9", CampaignID: "other", Name: "Elsewhere"},
+	}}
+}
+
+func brochureBlock(m map[string]any) map[string]any {
+	m["type"] = "brochure"
+	return m
+}
+
+// A brochure block names its page by name and carries the words on the box;
+// a bad name is a clear error, and listing the block again without them keeps
+// what it has.
+func TestHomeKind_Brochure(t *testing.T) {
+	owner := Actor{UserID: "own", Role: 3}
+	ctx := context.Background()
+	tests := []struct {
+		name    string
+		block   any
+		before  map[string]any
+		wantCfg map[string]any
+		err     string
+	}{
+		{"page and words", brochureBlock(map[string]any{"page": "New player brochure", "text": "Read this first."}), nil,
+			map[string]any{"entity_id": "page-1", "content": "Read this first."}, ""},
+		{"page alone", brochureBlock(map[string]any{"page": "new player brochure"}), nil,
+			map[string]any{"entity_id": "page-1"}, ""},
+		{"listed again keeps its page and words", "brochure", map[string]any{"entity_id": "page-1", "content": "Hello."},
+			map[string]any{"entity_id": "page-1", "content": "Hello."}, ""},
+		{"new words keep the page", brochureBlock(map[string]any{"text": "New words."}), map[string]any{"entity_id": "page-1", "content": "Old."},
+			map[string]any{"entity_id": "page-1", "content": "New words."}, ""},
+		{"empty words clear them", brochureBlock(map[string]any{"text": ""}), map[string]any{"entity_id": "page-1", "content": "Old."},
+			map[string]any{"entity_id": "page-1"}, ""},
+		{"page not found", brochureBlock(map[string]any{"page": "Nowhere"}), nil, nil, `no page called "Nowhere"`},
+		{"another campaign's page is not found", brochureBlock(map[string]any{"page": "Elsewhere"}), nil, nil, `no page called "Elsewhere"`},
+		{"page only for a brochure", map[string]any{"type": "party", "page": "New player brochure"}, nil, nil, "only a brochure takes `page`"},
+		{"text only for text and brochure", map[string]any{"type": "party", "text": "x"}, nil, nil, "only a text_block or a brochure takes `text`"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := playersFake()
+			if tt.before != nil {
+				f.homes["player"] = HomeLayout{Rows: []HomeRow{{ID: "r1", Columns: []HomeColumn{{ID: "c1", Width: 12, Blocks: []HomeBlock{{ID: "keep-bro", Type: "brochure", Config: tt.before}}}}}}}
+			}
+			k := HomeKind{Svc: f, Pages: brochurePages()}
+			rec := homeRec(ActionUpdate, "players", []any{row(col(12, tt.block, "party"))})
+			p := k.Plan(ctx, "c", owner, rec)
+			if tt.err != "" {
+				if !strings.Contains(p.Error, tt.err) {
+					t.Fatalf("error = %q, want %q", p.Error, tt.err)
+				}
+				return
+			}
+			if p.Error != "" {
+				t.Fatalf("unexpected error %q", p.Error)
+			}
+			if err := k.Apply(ctx, "c", owner, rec); err != nil {
+				t.Fatal(err)
+			}
+			got := f.saved["player"].Rows[0].Columns[0].Blocks[0]
+			if got.Type != "brochure" || len(got.Config) != len(tt.wantCfg) {
+				t.Fatalf("block = %+v, want config %v", got, tt.wantCfg)
+			}
+			for key, want := range tt.wantCfg {
+				if got.Config[key] != want {
+					t.Errorf("config[%s] = %v, want %v", key, got.Config[key], want)
+				}
+			}
+			if tt.before != nil && got.ID != "keep-bro" {
+				t.Errorf("id = %s, the block's own id should be kept", got.ID)
+			}
+			// the stored home is never edited in place
+			if tt.before != nil && len(f.homes["player"].Rows[0].Columns[0].Blocks[0].Config) != len(tt.before) {
+				t.Error("the stored home was changed in place")
+			}
+		})
+	}
+}
+
+// Changing only a brochure's words is a change; the same words again is not.
+func TestHomeKind_BrochureChangeIsSeen(t *testing.T) {
+	owner := Actor{UserID: "own", Role: 3}
+	f := playersFake()
+	f.homes["player"] = HomeLayout{Rows: []HomeRow{{ID: "r1", Columns: []HomeColumn{{ID: "c1", Width: 12, Blocks: []HomeBlock{
+		{ID: "b", Type: "brochure", Config: map[string]any{"entity_id": "page-1", "content": "Old."}}}}}}}}
+	k := HomeKind{Svc: f, Pages: brochurePages()}
+	same := homeRec(ActionUpdate, "players", []any{row(col(12, brochureBlock(map[string]any{"text": "Old."})))})
+	if p := k.Plan(context.Background(), "c", owner, same); !strings.Contains(p.Error, "already has these blocks") {
+		t.Errorf("same words: error = %q", p.Error)
+	}
+	changed := homeRec(ActionUpdate, "players", []any{row(col(12, brochureBlock(map[string]any{"text": "New."})))})
+	if p := k.Plan(context.Background(), "c", owner, changed); p.Error != "" {
+		t.Errorf("new words: unexpected error %q", p.Error)
+	}
+}
+
+// Export writes the brochure as the same record form it reads back.
+func TestHomeKind_ExportBrochure(t *testing.T) {
+	f := playersFake()
+	f.homes["player"] = HomeLayout{Rows: []HomeRow{{ID: "r1", Columns: []HomeColumn{{ID: "c1", Width: 12, Blocks: []HomeBlock{
+		{ID: "a", Type: "brochure", Config: map[string]any{"entity_id": "page-1", "content": "Read this."}},
+		{ID: "b", Type: "brochure", Config: map[string]any{"entity_id": "page-gone"}},
+		{ID: "c", Type: "brochure"},
+	}}}}}}
+	out, err := HomeKind{Svc: f, Pages: brochurePages()}.Export(context.Background(), "c", Actor{UserID: "own", Role: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`{type: brochure, page: "New player brochure", text: "Read this."}`, "          - brochure\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("export missing %q\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "page-1") || strings.Contains(out, "page-gone") {
+		t.Errorf("an id leaked into the export:\n%s", out)
 	}
 }
