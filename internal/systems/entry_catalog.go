@@ -6,6 +6,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // The catalog is the one per-reader list of a rules category. The hero
@@ -481,20 +484,48 @@ func (s *systemEntryService) loadOldNames(ctx context.Context, campaignID string
 //     a package entry has that name too (a Director who wants the printed
 //     one back under it frees the old name);
 //  4. the package entry of that name, left out or not.
+//
+// Names are matched case-insensitively first, then, only when nothing
+// answers, also ignoring accents and Unicode normal form (sameNameLoose). The
+// first pass is the whole rule as it stands, so no name that resolves today
+// moves; the second keeps finding what the database's collation matched
+// when old names were looked up there ("Eladrin" for "Éladrin").
 func (st *readingState) resolveName(name string) *Resolution {
+	if r := st.resolveNameBy(name, strings.EqualFold); r.Kind != ResolvedNotFound {
+		return r
+	}
+	return st.resolveNameBy(name, sameNameLoose)
+}
+
+// nameKey is a name as utf8mb4_unicode_ci compares it, near enough for
+// names: trimmed, decomposed, accents dropped, lower case.
+func nameKey(s string) string {
+	d := norm.NFD.String(strings.TrimSpace(s))
+	var b strings.Builder
+	for _, r := range d {
+		if !unicode.Is(unicode.Mn, r) {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
+}
+
+func sameNameLoose(a, b string) bool { return nameKey(a) == nameKey(b) }
+
+func (st *readingState) resolveNameBy(name string, same func(a, b string) bool) *Resolution {
 	name = strings.TrimSpace(name)
 	if st.hidden || name == "" {
 		return &Resolution{Kind: ResolvedNotFound}
 	}
 	for j := range st.camp {
-		if strings.EqualFold(st.camp[j].Name, name) {
+		if same(st.camp[j].Name, name) {
 			e := st.campEntry(j)
 			return &Resolution{Kind: ResolvedEntry, Entry: &e}
 		}
 	}
 	std := -1
 	for i := range st.std {
-		if strings.EqualFold(st.std[i].Name, name) {
+		if same(st.std[i].Name, name) {
 			std = i
 			break
 		}
@@ -506,7 +537,7 @@ func (st *readingState) resolveName(name string) *Resolution {
 		}
 	}
 	for _, n := range st.oldNames {
-		if strings.EqualFold(n.Name, name) {
+		if same(n.Name, name) {
 			if r := st.redirectTo(n.EntryID, ViaOldName); r != nil {
 				return r
 			}

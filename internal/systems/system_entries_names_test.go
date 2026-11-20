@@ -276,3 +276,48 @@ func TestRulesPage_ReadsDoNotGrowWithCharacters(t *testing.T) {
 		t.Fatalf("reads grew with characters: %d for one, %d for fifty", reads[0], reads[1])
 	}
 }
+
+// Old names were once looked up in the database, whose collation ignores
+// case, accents, trailing spaces and Unicode normal form. A hero's stored
+// name keeps finding its entry the same way, but only when no name answers
+// exactly, so nothing that resolves exactly moves.
+func TestResolveName_LooseOnlyWhenNothingAnswers(t *testing.T) {
+	svc, _, _ := newReadingSvc(t)
+	ctx := context.Background()
+	e, err := svc.Create(ctx, "c1", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "Éladrin", Visibility: EntryVisibilityEveryone})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Update(ctx, "c1", dirActor, e.ID, UpdateSystemEntryInput{Name: patch.Of("Fey Elf")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Create(ctx, "c1", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "Dwärf Lord", Visibility: EntryVisibilityEveryone}); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name, stored, kind, to string
+	}{
+		{"the old name as written", "Éladrin", ResolvedRedirect, "Fey Elf"},
+		{"without its accent", "Eladrin", ResolvedRedirect, "Fey Elf"},
+		{"another case and a trailing space", "ELADRIN ", ResolvedRedirect, "Fey Elf"},
+		{"decomposed", "Éladrin", ResolvedRedirect, "Fey Elf"},
+		{"a campaign name without its accent", "Dwarf Lord", ResolvedEntry, "Dwärf Lord"},
+		{"an exact package name never moves to a loose campaign one", "Elf", ResolvedEntry, "Elf"},
+		{"nothing answers", "Eladrine", ResolvedNotFound, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := svc.ResolveName(ctx, "c1", "ancestries", tt.stored, playerActor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := ""
+			if r.Entry != nil {
+				got = r.Entry.Name
+			}
+			if r.Kind != tt.kind || got != tt.to {
+				t.Fatalf("%q = %s %q, want %s %q", tt.stored, r.Kind, got, tt.kind, tt.to)
+			}
+		})
+	}
+}
