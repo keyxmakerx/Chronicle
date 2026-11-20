@@ -14,7 +14,7 @@ templ SearchResultsFragment(results []Entity, total int, cc *campaigns.CampaignC
 		if len(results) == 0 {
 			<div class="px-4 py-3 text-sm text-fg-secondary">No results found.</div>
 		} else {
-			for _, entity := range results {
+			for i, entity := range results {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
 					class="flex items-center px-4 py-2 hover:bg-surface-alt text-sm transition-colors"
@@ -25,7 +25,7 @@ templ SearchResultsFragment(results []Entity, total int, cc *campaigns.CampaignC
 						style={ fmt.Sprintf("background-color: %s", entity.TypeColor) }
 					></span>
 					<div class="min-w-0">
-						<div class="font-medium text-fg truncate">{ entity.Name }</div>
+						<div class="flex items-center gap-1.5 min-w-0"><span class="font-medium text-fg truncate">{ entity.Name }</span>@listLock(cc, &results[i])</div>
 						<div class="text-xs text-fg-secondary">{ entity.TypeName }</div>
 					</div>
 				</a>

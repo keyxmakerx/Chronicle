@@ -82,11 +82,20 @@ templ dmOnlyTitleLabel(cc *campaigns.CampaignContext, entity *Entity) {
 	}
 }
 
-// sidebarDMOnly reports whether a sidebar row gets the lock: the page itself
-// is set to DM-only. A DM-only category's rows carry none, since the category
-// row already says so and a lock on every row would say nothing.
+// sidebarDMOnly reports whether a listed page gets the lock: players can't
+// see it, either because the page is set to DM-only or because its category
+// is. Every list marks it the same way, since a drilled-in list or a search
+// shows the rows without the category row above them.
 func sidebarDMOnly(cc *campaigns.CampaignContext, e *Entity) bool {
-	return visibilityGlanceVisible(cc) && e.Visibility != VisibilityCustom && e.IsPrivate && !e.TypeDMOnly
+	return visibilityGlanceVisible(cc) && e.Visibility != VisibilityCustom && (e.IsPrivate || e.TypeDMOnly)
+}
+
+// listLock is the lock a page list puts after a page's name when players
+// can't see it; the sidebar tree draws its own with the menu's colours.
+templ listLock(cc *campaigns.CampaignContext, e *Entity) {
+	if sidebarDMOnly(cc, e) {
+		<i class="cb-dm fa-solid fa-lock shrink-0 text-[10px] text-fg-muted" role="img" aria-label={ visibilityCornerLabel(ctx, VisStateDMOnly) } title={ visibilityCornerLabel(ctx, VisStateDMOnly) }></i>
+	}
 }
 
 // visibilityCornerLabel is the short word the page-corner control shows
