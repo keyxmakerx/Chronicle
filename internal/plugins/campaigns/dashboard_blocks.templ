@@ -211,7 +211,7 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 				</div>
 				if OwnerCardVisible(ctx, cc) {
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="cb-quiet inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm transition-colors">
-						<i class="fa-solid fa-gear text-xs"></i> Settings
+						<i class="fa-solid fa-gear text-xs word-ic"></i> Settings
 					</a>
 				}
 			</div>
@@ -226,7 +226,7 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 			</div>
 			if OwnerCardVisible(ctx, cc) {
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="cb-quiet btn-secondary text-sm">
-					<i class="fa-solid fa-gear text-xs"></i> Settings
+					<i class="fa-solid fa-gear text-xs word-ic"></i> Settings
 				</a>
 			}
 		</div>

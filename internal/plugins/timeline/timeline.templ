@@ -203,7 +203,7 @@ templ createTimelineModal(data TimelineListData) {
 						Cancel
 					</button>
 					<button type="submit" class="btn-primary text-xs">
-						<i class="fa-solid fa-plus"></i> Create Timeline
+						<i class="fa-solid fa-plus word-ic"></i> Create Timeline
 					</button>
 				</div>
 			</form>
@@ -272,14 +272,14 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 							class="btn-primary text-xs"
 							data-opens="create-event-modal"
 						>
-							<i class="fa-solid fa-plus"></i> Create Event
+							<i class="fa-solid fa-plus word-ic"></i> Create Event
 						</button>
 						if data.Timeline.HasCalendar() {
 							<button
 								class="btn-secondary text-xs"
 								data-opens="event-picker-modal"
 							>
-								<i class="fa-solid fa-link"></i> Link Events
+								<i class="fa-solid fa-link word-ic"></i> Link Events
 							</button>
 							<button
 								class="btn-secondary text-xs"
@@ -290,7 +290,7 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 								x-data
 								x-on:htmx:after-request="if ($event.detail.successful) window.location.reload()"
 							>
-								<i class="fa-solid fa-link"></i> Link All
+								<i class="fa-solid fa-link word-ic"></i> Link All
 							</button>
 						}
 					}
@@ -301,7 +301,7 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 								class="btn-secondary text-xs"
 								title="Edit eras in calendar settings"
 							>
-								<i class="fa-solid fa-landmark"></i> Edit Eras
+								<i class="fa-solid fa-landmark word-ic"></i> Edit Eras
 							</a>
 						}
 						<button
@@ -313,7 +313,7 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 							x-data
 							x-on:htmx:after-request={ fmt.Sprintf("if ($event.detail.successful) window.location.href = '/campaigns/%s/timelines'", data.CampaignID) }
 						>
-							<i class="fa-solid fa-trash"></i> Delete
+							<i class="fa-solid fa-trash word-ic"></i> Delete
 						</button>
 					}
 				</div>
@@ -337,14 +337,14 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 					:class="viewMode === 'viz' && 'active'"
 					@click="viewMode = 'viz'; $nextTick(function() { window.dispatchEvent(new Event('resize')) })"
 				>
-					<i class="fa-solid fa-chart-line"></i> Visualization
+					<i class="fa-solid fa-chart-line word-ic"></i> Visualization
 				</button>
 				<button
 					class="tl-view-tab"
 					:class="viewMode === 'list' && 'active'"
 					@click="viewMode = 'list'"
 				>
-					<i class="fa-solid fa-list"></i> Event List
+					<i class="fa-solid fa-list word-ic"></i> Event List
 					<span class="tl-view-tab-count">{ fmt.Sprintf("%d", len(data.Events)) }</span>
 				</button>
 			</div>
@@ -398,14 +398,14 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 							:class="adminTab === 'visibility' && 'active'"
 							@click="adminTab = 'visibility'"
 						>
-							<i class="fa-solid fa-eye mr-1"></i> Visibility
+							<i class="fa-solid fa-eye mr-1 word-ic"></i> Visibility
 						</button>
 						<button
 							class="tl-manage-tab"
 							:class="adminTab === 'groups' && 'active'"
 							@click="adminTab = 'groups'"
 						>
-							<i class="fa-solid fa-layer-group mr-1"></i> Entity Groups ({ fmt.Sprintf("%d", len(data.EntityGroups)) })
+							<i class="fa-solid fa-layer-group mr-1 word-ic"></i> Entity Groups ({ fmt.Sprintf("%d", len(data.EntityGroups)) })
 						</button>
 					</div>
 					<div class="p-4">
@@ -510,7 +510,7 @@ templ entityGroupsInline(data TimelineViewData) {
 				/>
 				<input type="color" class="input w-10 h-8" x-model="newGroupColor" value="#6b7280"/>
 				<button class="btn-primary text-xs" @click="createGroup()" :disabled="!newGroupName.trim()">
-					<i class="fa-solid fa-plus"></i> Add Group
+					<i class="fa-solid fa-plus word-ic"></i> Add Group
 				</button>
 			</div>
 			<!-- Group list -->

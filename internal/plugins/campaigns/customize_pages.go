@@ -106,6 +106,7 @@ var lookSections = []struct{ ID, Name, Words string }{
 	{"colours", "Colours", "colour color accent theme contrast"},
 	{"type", "Type", "font fonts text headings size"},
 	{"buttons", "Buttons", "button shape press"},
+	{"icons", "Icons", "icon icons category colour accent ink names search list"},
 	{"motion", "Motion and depth", "animation calm shadows elevation speed"},
 	{"page", "Pages", "page look style kit material sharp ornate"},
 	{"hover", "Hover cards", "peek preview tooltip popup time line"},

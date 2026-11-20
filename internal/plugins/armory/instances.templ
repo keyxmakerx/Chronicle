@@ -48,7 +48,7 @@ templ InstanceManagePanel(cc *campaigns.CampaignContext, instances []InventoryIn
 								title="Rename"
 								onclick={ renameInstanceOnClick(cc.Campaign.ID, inst.ID, inst.Name) }
 							>
-								<i class="fa-solid fa-pen mr-1"></i>Rename
+								<i class="fa-solid fa-pen mr-1 word-ic"></i>Rename
 							</button>
 							<form
 								hx-delete={ fmt.Sprintf("/campaigns/%s/armory/instances/%d", cc.Campaign.ID, inst.ID) }
@@ -105,7 +105,7 @@ templ InstanceManagePanel(cc *campaigns.CampaignContext, instances []InventoryIn
 				/>
 			</div>
 			<button type="submit" class="btn-primary text-sm shrink-0">
-				<i class="fa-solid fa-plus"></i> Create
+				<i class="fa-solid fa-plus word-ic"></i> Create
 			</button>
 		</form>
 	</div>
